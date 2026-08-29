@@ -112,6 +112,38 @@
       *"expected `[ 'look-source-undeclared' ]` to deeply equal `[]`"* — and there are enough of
       them in every suite
 
+- [x] 4.10 🔴 **THE COMPATIBILITY QUESTION, MEASURED rather than argued** (owner, asked after
+      the first report): does a scene / `.vcg` still carrying `lookGroups[].sources` load, get
+      ignored, or get REJECTED? **It loads, and the field is ignored. Not a blocker.**
+      `packages/vcg-format/tests/roundtrip.test.ts` pins it, on a GENUINE legacy archive — `pack`
+      serialises the INPUT object, so packing a scene that still carries the field writes it into
+      `template.json` and hashes it, giving bytes indistinguishable from an old export with a
+      self-consistent integrity block. Measured, in CG Control's own order
+      (`templateDelivery.ts`: `verify` then `unpack`):
+
+      | step | result |
+      | ---- | ------ |
+      | `template.json` on disk | carries all 3 declared sources |
+      | `verify()` | **ok** |
+      | `unpack()` | **ok** |
+      | `sources` after open | **absent** — stripped by `z.object`, not migrated |
+      | `looks` / `defaultLookId` | survive untouched |
+      | carrier the operator gets | `l1, l2, guest-9` |
+
+      ⚠ **Two behaviour differences on RE-IMPORT, both recorded rather than discovered:**
+      (1) `guest-9` — a plate the file's declaration OMITS — is now an ordinary source. That is
+      the change working: it used to be an export-blocking error, so no such `.vcg` can exist in
+      the field, which makes this case theoretical for already-exported packages. `never-placed`
+      was dropped at export even under the old model, so it never reached an operator either.
+      (2) `dynamic` is RE-DERIVED from FILL bindings, so a hand-written `true` in the file does
+      not survive. It costs nothing: `dynamic` has no reader anywhere downstream, and
+      `addLookSource` only ever wrote `false`, so a stored `true` was never product-written.
+
+      ⇒ **Nothing at the plant breaks.** An already-imported template keeps the
+      `TemplateInfo.sources` it captured at import; a RE-import yields a set identical in content
+      for every package that could legally have been exported, possibly reordered, and assignments
+      key on `{templateId, plateId}` rather than on index.
+
 ## 5. PRD
 
 - [x] 5.1 `B-179` re-scoped and closed with the owner's reasoning written into it — the premise

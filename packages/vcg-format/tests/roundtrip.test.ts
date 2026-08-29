@@ -3,6 +3,8 @@ import type { Element, Scene } from '@cg/shared-schema';
 import { pack } from '../src/pack.js';
 import { unpack } from '../src/unpack.js';
 import { verify } from '../src/verify.js';
+import { buildTemplateLiveSources } from '../src/live-sources.js';
+import { readZip } from '../src/zip.js';
 import {
   fixtureCgCss,
   fixtureCgJs,
@@ -12,6 +14,47 @@ import {
 } from './fixtures.js';
 
 const enc = (s: string): Uint8Array => new TextEncoder().encode(s);
+const dec = (b: Uint8Array): string => new TextDecoder().decode(b);
+
+/** `B-188` helpers — a plate, a full-frame look composition, and its root instance. */
+const elBase = { opacity: 1, visible: true, locked: false, zIndex: 0 };
+const xf = (x: number, y: number, w: number, h: number) => ({
+  position: { x, y },
+  size: { w, h },
+  scale: { x: 1, y: 1 },
+  rotation: 0,
+  anchor: { x: 0, y: 0 },
+});
+const box = (id: string, routeKey: string, x: number, y: number): Element =>
+  ({
+    ...elBase,
+    id,
+    name: id,
+    type: 'video-placeholder',
+    transform: xf(x, y, 640, 360),
+    routeKey,
+  }) as unknown as Element;
+const inst = (id: string, compositionId: string): Element =>
+  ({
+    ...elBase,
+    id,
+    name: id,
+    type: 'composition',
+    compositionId,
+    transform: xf(0, 0, 1920, 1080),
+  }) as unknown as Element;
+const lookComp = (id: string, children: Element[]) => ({
+  id,
+  name: id,
+  resolution: { width: 1920, height: 1080 },
+  frameRange: { in: 0, out: 50 },
+  editorBackdrop: 'transparent',
+  layers: [
+    { id: `${id}-l`, name: 'l', visible: true, locked: false, blendMode: 'normal', children },
+  ],
+  fields: [],
+  bindings: [],
+});
 
 describe('pack → unpack round-trip', () => {
   it('preserves Scene identity and field values', async () => {
@@ -314,5 +357,107 @@ describe('the authored file-source grant round-trips through the `.vcg` exporter
     ]);
     expect(out.fields[0]).toMatchObject({ id: 'items', allowFileSource: true });
     expect((out.fields[0] as { default: unknown }).default).toEqual([{ id: 'i1', text: 'یک' }]);
+  });
+});
+
+/**
+ * 🔴 **`B-188` — A `.vcg` EXPORTED BEFORE THE DECLARATION WAS DELETED STILL OPENS.**
+ *
+ * `LookGroupSchema.sources` is gone. The owner's question, and it is the right one to ask of a
+ * format change while the plant is running builds: does an existing package still load, get
+ * ignored, or get REJECTED?
+ *
+ * 🔴 **The fixture is a GENUINE legacy archive, not a simulated one, and that is what makes this
+ * test worth having.** `pack` serialises the INPUT object (`pack.ts`, `withoutEditorBackdrop(
+ * input.scene)`) rather than the parsed one, so packing a scene that still carries `sources`
+ * writes the field into `template.json` AND hashes it. The bytes are indistinguishable from an
+ * old export, and the integrity block is self-consistent — so `verify()` is exercised for real
+ * rather than reasoned about. CG Control's import runs `verify` and THEN `unpack`
+ * (`templateDelivery.ts`), and this test runs them in that order for that reason.
+ */
+describe('B-188 — a legacy `.vcg` carrying `lookGroups[].sources`', () => {
+  /** `guest-9` is deliberately NOT in the declared list: the old export-blocking case. */
+  const legacyGroup = {
+    id: 'g1',
+    sources: [
+      { routeKey: 'l1', dynamic: false, expectedAspect: 1.7777777777777777 },
+      { routeKey: 'l2', dynamic: true },
+      { routeKey: 'never-placed', dynamic: false },
+    ],
+    looks: [
+      { id: 'look-a', name: 'look-a', instanceId: 'inst-a', entered: { mode: 'cut' } },
+      { id: 'look-b', name: 'look-b', instanceId: 'inst-b', entered: { mode: 'cut' } },
+    ],
+    defaultLookId: 'look-a',
+  };
+
+  const legacyScene = (): Scene =>
+    ({
+      ...fixtureScene,
+      layers: [
+        {
+          id: 'L1',
+          name: 'main',
+          visible: true,
+          locked: false,
+          blendMode: 'normal',
+          children: [inst('inst-a', 'comp-a'), inst('inst-b', 'comp-b')],
+        },
+      ],
+      compositions: [
+        lookComp('comp-a', [box('a1', 'l1', 0, 0), box('a2', 'l2', 900, 0)]),
+        lookComp('comp-b', [box('b1', 'guest-9', 320, 180)]),
+      ],
+      lookGroups: [legacyGroup],
+    }) as unknown as Scene;
+
+  const packLegacy = async (): Promise<Uint8Array> =>
+    pack({
+      scene: legacyScene(),
+      manifestExtras: fixtureManifestExtras,
+      indexHtml: fixtureIndexHtml,
+      cgJs: fixtureCgJs,
+      cgCss: fixtureCgCss,
+    });
+
+  it('🔴 the archive really does carry the retired field — the control for every assertion below', async () => {
+    const onDisk = JSON.parse(
+      dec((await readZip(await packLegacy())).get('template.json') as Uint8Array),
+    ) as { lookGroups: { sources?: unknown[] }[] };
+    // Without this the rest of the describe would be asserting that a field nobody wrote is
+    // absent, which is true of any file and proves nothing.
+    expect(onDisk.lookGroups[0]?.sources).toHaveLength(3);
+  });
+
+  it('🔴 it VERIFIES and OPENS — not rejected, and the field is STRIPPED rather than migrated', async () => {
+    const buf = await packLegacy();
+    const v = await verify(buf);
+    expect(v.ok).toBe(true);
+
+    const { scene } = await unpack(buf);
+    expect('sources' in (scene.lookGroups?.[0] ?? {})).toBe(false);
+    // Everything else about the group survives untouched.
+    expect(scene.lookGroups?.[0]?.looks.map((l) => l.id)).toEqual(['look-a', 'look-b']);
+    expect(scene.lookGroups?.[0]?.defaultLookId).toBe('look-a');
+  });
+
+  it('🔴 the operator gets the DERIVED list, including the plate the file never declared', async () => {
+    const { scene } = await unpack(await packLegacy());
+    const carrier = buildTemplateLiveSources(scene);
+    // The file declared `l1, l2, never-placed`. `guest-9` was an export-blocking error and
+    // `never-placed` was dropped at export even then, so what the operator sees CHANGES by
+    // exactly one entry — the plate that was previously refused.
+    expect(carrier.sources.map((d) => d.sourceId)).toEqual(['l1', 'l2', 'guest-9']);
+    expect(carrier.looks?.map((l) => Object.keys(l.rects))).toEqual([['l1', 'l2'], ['guest-9']]);
+  });
+
+  it('⚠ `dynamic` is RE-DERIVED, so a hand-written `true` in the file does not survive', async () => {
+    const { scene } = await unpack(await packLegacy());
+    const l2 = buildTemplateLiveSources(scene).sources.find((d) => d.sourceId === 'l2');
+    // The file says `dynamic: true` for `l2`. It comes from the FILL field bindings now, and
+    // this scene has none. Recorded rather than hidden: it is the one value a re-import
+    // changes. It costs nothing today — `dynamic` has no reader anywhere downstream, and
+    // `addLookSource` only ever wrote `false`, so a stored `true` was never product-written.
+    expect(l2?.dynamic).toBe(false);
   });
 });
