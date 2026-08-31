@@ -1354,10 +1354,12 @@ applied to a second writer in the same area.
 
 `#planLiveSeating`'s scope was `'all-declarations'`, and its reason was good: _"a plate that is one
 picker click from being on screen cannot refuse DURING a live switch with the previous look already
-leaving."_ **`tasks.md` 7.9 removed that reason** — a refused switch now leaves nothing behind and the
-page was never told, so the previous look is not leaving and the refusal is clean. Refusing a take
-over a hole in a look nobody is showing would block air for a non-reason. The scope values are renamed
-`'entering-look'` / `'already-live'` so the name cannot outlive the rule.
+leaving."_ **`tasks.md` 7.9 removed that reason** — a PLAN-refused switch leaves nothing behind and
+the page is never told (still true under `B-174`'s page-first order: the plan runs before the tell;
+only a WIRE-delivered refusal can arrive after it, and that path re-tells the previous look), so the
+previous look is not leaving and the refusal is clean. Refusing a take over a hole in a look nobody
+is showing would block air for a non-reason. The scope values are renamed `'entering-look'` /
+`'already-live'` so the name cannot outlive the rule.
 
 ##### What a re-point actually costs
 

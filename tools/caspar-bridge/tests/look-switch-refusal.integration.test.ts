@@ -45,8 +45,20 @@ import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
  *   "nothing reached the wire" is literally true and is asserted verb by verb.
  * - **WIRE-time** — the source resolves and CasparCG then refuses the command. The wire
  *   CANNOT be silent: the refusal came from it. What must hold is that the row **ENDS where it
- *   started** — every box back at the previous look's geometry, the ledger unchanged, the page
- *   never told. "Refused" means *changed nothing*, not *sent nothing*.
+ *   started** — every box back at the previous look's geometry and the ledger unchanged.
+ *   "Refused" means *changed nothing*, not *sent nothing*.
+ *
+ *   ⭐ **AMENDED BY `B-174`, and the amendment is the page clause.** This bullet used to end
+ *   "…and the page never told", which was true only while the tell came LAST. The switch now
+ *   tells the page BEFORE the fills (the measured skew: the holes were landing 1–3 fields
+ *   behind), so on a wire-time refusal the page has already moved and the rollback RE-TELLS
+ *   the previous look through the same fused writer — told twice, never zero times. The row
+ *   still ends where it started; it gets there by being put back rather than by never having
+ *   left. The tail where the revert tell is ITSELF refused has its own test below: the record
+ *   then follows the page, because the page is the thing the audience can see.
+ *   ⚠ PLAN-time keeps the absolute — every refusal the bridge can decide without applying
+ *   still fires with the page untouched, which is what makes "nothing reached the wire"
+ *   literally true up there.
  *
  * The owner's plant case is the WIRE-time one: a box that renders black is one whose command
  * was attempted.
@@ -171,7 +183,15 @@ async function boot(): Promise<CasparRuntime> {
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 150, sourceCatalog: catalog(), sourceAssignments: ASSIGNMENTS },
+    {
+      // `B-174` — what this suite pins is WHAT a refusal leaves behind, never how long the
+      // hold is (that has its own tests in `look-switch-hold.integration.test.ts`), so the
+      // hold is off here rather than sleeping 40 ms per switch.
+      lookMixerHoldMs: 0,
+      sweepMs: 150,
+      sourceCatalog: catalog(),
+      sourceAssignments: ASSIGNMENTS,
+    },
   );
   runtime = r;
   r.start();
@@ -232,6 +252,27 @@ function refuseFirstFill(): void {
     return { kind: 'ok', code: 202, verb: 'MIXER' };
   };
   mock?.setHandler('MIXER', handler);
+}
+
+/**
+ * `B-174` — refuse the Nth `CG … UPDATE` (1-based), answering everything else `202`.
+ *
+ * ⚠ Installed AFTER the take (its `CG ADD`/`PLAY` must flow through the default handler), and
+ * like {@link refuseFirstFill} it overrides the verb OUTRIGHT — the mock's own CG bookkeeping
+ * stops, so tests using this assert the BRIDGE's state and the wire, never `layerRenderedRect`
+ * or the mock's CG ledger.
+ */
+function refuseNthUpdate(n: number): void {
+  let updates = 0;
+  const handler: AmcpHandler = (req: AmcpRequest): AmcpResponse => {
+    const sub = (req.args[1] ?? '').toUpperCase();
+    if (sub === 'UPDATE') {
+      updates += 1;
+      if (updates === n) return { kind: 'err', code: 403, verb: 'CG' };
+    }
+    return { kind: 'ok', code: 202, verb: 'CG' };
+  };
+  mock?.setHandler('CG', handler);
 }
 
 afterEach(async () => {
@@ -305,6 +346,58 @@ describe('B-166 / B-167 — a refused look switch', () => {
     expect(second.ok, 'the re-press must not be a silent no-op').toBe(true);
     expect(r.activeLookId('item-1')).toBe('three');
     expect(fits(r), 'the boxes must actually have moved this time').not.toEqual(geometryBefore);
+  });
+
+  it('🔴 B-174: a refused CG UPDATE aborts BEFORE any geometry — nothing moves at all', async () => {
+    /*
+      The page-first order's strengthened tail. Under fills-first a lost `CG UPDATE` left the
+      fills moved under unmoved holes; now the tell comes first and its refusal must cost the
+      wire NOTHING geometric — no `MIXER`, no `PLAY`, the row exactly where it was.
+    */
+    const r = await boot();
+    await onAirOnTwo(r);
+    const geometryBefore = fits(r);
+    const before = (await recvLines()).length;
+
+    refuseNthUpdate(1);
+
+    const res = await r.setActiveLook('item-1', 'three');
+    expect(res.ok, 'the switch must be refused').toBe(false);
+
+    const sent = (await recvLines()).slice(before);
+    expect(
+      sent.filter((l) => l.includes('MIXER') || l.startsWith('PLAY')),
+      'geometry must not have been touched after the refused tell',
+    ).toEqual([]);
+    expect(r.activeLookId('item-1')).toBe('two');
+    expect(fits(r)).toEqual(geometryBefore);
+  });
+
+  it('🔴 B-174: a refused REVERT tell leaves the record on the look the PAGE shows', async () => {
+    /*
+      The worst tail: the page was told 'three', a fill then refused (fills rolled back to
+      'two'), and the revert `CG UPDATE` refuses TOO. The map's one meaning — "which look the
+      page is punching" — must survive even here: the page is on 'three', so the record stays
+      'three', the fills are back at 'two', and the message says the graphic could not be put
+      back. The next reconcile then converges the fills to the RECORDED look, which is the
+      page's — the same self-repair direction 7.9 chose for the old order's failed tell.
+    */
+    const r = await boot();
+    await onAirOnTwo(r);
+    const geometryBefore = fits(r);
+
+    refuseFirstFill();
+    refuseNthUpdate(2); // #1 is the switch's tell ('three'); #2 is the rollback's revert.
+
+    const res = await r.setActiveLook('item-1', 'three');
+    expect(res.ok, 'the switch must be refused').toBe(false);
+    expect(res.message ?? '').toContain('could not be put back');
+
+    expect(fits(r), 'the fills must be rolled back').toEqual(geometryBefore);
+    expect(
+      r.activeLookId('item-1'),
+      'the record follows the PAGE, which ended on the new look',
+    ).toBe('three');
   });
 
   it('a switch that SUCCEEDS still moves everything, and reports it', async () => {

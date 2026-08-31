@@ -182,7 +182,15 @@ async function boot(options: { template?: TemplateInfo } = {}): Promise<CasparRu
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 150, sourceCatalog: catalog(), sourceAssignments: ASSIGNMENTS },
+    {
+      sweepMs: 150,
+      // `B-174` — this suite pins the page-first ORDER, not the hold's duration (that has
+      // its own tests in `look-switch-hold.integration.test.ts`), so 0 keeps the order and
+      // skips a 40 ms sleep on every switch here.
+      lookMixerHoldMs: 0,
+      sourceCatalog: catalog(),
+      sourceAssignments: ASSIGNMENTS,
+    },
   );
   runtime = r;
   r.start();
@@ -231,7 +239,7 @@ it('5.1 — a fresh take publishes the AUTHORED DEFAULT look, so the picker is r
   expect(seated(r)).toEqual(['live-1', 'live-2']);
 });
 
-it('5.1 — the switch drives ONE path: fills move, THEN the page is told, and no PLAY', async () => {
+it('5.1 — the switch drives ONE path: the page is told, THEN fills move (B-174), and no PLAY', async () => {
   const r = await boot();
   await onAir(r);
   const before = (await recvLines()).length;
@@ -242,14 +250,16 @@ it('5.1 — the switch drives ONE path: fills move, THEN the page is told, and n
   const fills = lines.filter((l) => /MIXER .* FILL/.test(l));
   const update = lines.findIndex((l) => l.startsWith('CG '));
   expect(fills.length, 'the two arriving plates get their geometry').toBeGreaterThan(0);
-  // ORDER, not merely presence: a refused reconcile must leave the page on the old look, so
-  // the page is told LAST and only on success. Fills-first also means a lost CG UPDATE
-  // leaves a coherent previous look rather than a new look whose boxes never fill.
+  // ORDER, not merely presence. `B-174` reversed the old fills-first order: the page's
+  // paint clock made the holes trail the fills by 1–3 fields on air (measured,
+  // `tools/skew-harness`), so the switch now validates, tells the page, HOLDS one channel
+  // frame, and then moves the fills. Every refusal detectable without applying still fires
+  // before the tell, and a lost CG UPDATE now aborts before ANY geometry moves.
   expect(update, 'the page is told').toBeGreaterThanOrEqual(0);
   expect(
     lines.findIndex((l) => /MIXER .* FILL/.test(l)),
-    'and it is told AFTER the fills moved',
-  ).toBeLessThan(update);
+    'and it is told BEFORE the fills move',
+  ).toBeGreaterThan(update);
   /*
     🔴 THIS ASSERTION WAS INVERTED TWICE, AND BOTH TIMES FOR A REASON WORTH KEEPING.
 

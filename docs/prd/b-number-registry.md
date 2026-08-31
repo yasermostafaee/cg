@@ -1881,3 +1881,22 @@ space was touched.
 so no number). The phenomenon-had-a-number rule from the 2026-08-29 entry, applied twice.
 
 ⇒ **Next free after this session is `B-190`**, and `B-` stays contiguous `B-001` … `B-189`, no gaps.
+
+### 2026-08-31 (later) — `SKEW-HOLD-01`: NO NUMBER TAKEN
+
+**Claimed: nothing.** This session IMPLEMENTED two existing items — [[B-174]] (the mixer hold:
+page-first order, one-channel-frame hold, `k` re-measured from 20/30/60 ms to −20/0/+20 ms over ten
+runs each) and [[B-189]] (both breaks fixed, the mock moved to the real dialect, the raster shout and
+the true one-shot asserted by value) — and re-judged the `awaitChannelModeRead` flake saga against
+`B-189` (sibling, not root cause; recorded in the item). Headings were edited to `[~]`; none added.
+
+**Derivation, from headings as the rule requires:** highest `B-` HEADING across every ref is
+**`B-189`** (`bugs-runtime.md`, filed earlier this same day); `R-` highest `R-059`, `P-` highest
+`P-037`. **Cross-check against the dated pointer, per the corrected instruction:** the previous
+entry ends _"Next free after this session is `B-190`"_ — headings and pointer AGREE. ⚠ The
+brief's own anchor `[[evidence-and-staging-rules]]` does not exist in this tree or in memory; the
+saga it cited was recovered from commit `5659ca5e` and `tests/support/harness.ts`, and the item
+records that recovery so the dangling name does not send the next reader hunting.
+
+⇒ **Next free after this session is still `B-190`**, and `B-` stays contiguous `B-001` … `B-189`,
+no gaps.

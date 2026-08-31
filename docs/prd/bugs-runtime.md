@@ -4805,8 +4805,19 @@ this paragraph is placed before the mechanism rather than after it.
 
 ### The mechanism, established from the code
 
-The ordering is exactly the _"fills first, page last, only on success"_ doctrine, and it is
-deliberate at every step:
+> ⭐ **2026-08-31 (`SKEW-HOLD-01`) — the DOCTRINE THIS SECTION DOCUMENTS IS GONE for the look
+> switch, and this item's "option (b)" direction is what replaced it.** `B-174`'s fix reordered
+> `setActiveLook` to page-first + a one-channel-frame mixer hold, so the answer to the 🔴 question
+> below ("does anything tell the page BEFORE the fills move? NO") is now **YES — the switch
+> does, by design**, and the fills follow one held frame later. The line anchors in this table are
+> the 2026-08-24 tree's. The CHROME question this item is actually about — whether a leaving
+> look's decoration is briefly drawn around moved plates — should be RE-JUDGED against the new
+> order: the page now paints FIRST, so the chrome and the holes move together and the fills catch
+> up, which is the opposite lag and likely smaller than what the owner saw. Re-observe before
+> spending on this item.
+
+The ordering was exactly the _"fills first, page last, only on success"_ doctrine, deliberate at
+every step:
 
 | half                          | where                                                                                                                                     |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
@@ -4866,9 +4877,11 @@ producer acquisition, no CEF, and no frames at all — it models a `MIXER` chang
 state write and cannot see a rendered pixel. **No test anywhere in this repository can measure
 `k`**: not a unit test, not an integration test, not a Playwright E2E, because every one of them
 observes either the wire or a browser, never the server's composited output. The suites can prove
-the ORDER (and do — `live-look-reconcile.integration.test.ts:1813` asserts `fills first, page
-last` at the wire). Order is not the question here; **the question is how many frames sit between
-the two, and that is a PLANT READING.**
+the ORDER (and do — `live-look-reconcile.integration.test.ts:1813` asserted `fills first, page
+last` at the wire; since `B-174` the same pin asserts the inverted order). Order is not the
+question here; **the question is how many frames sit between the two, and that is a PLANT
+READING** — one that `SKEW-COUNT-01` then took with `tools/skew-harness`, which is how `B-174`
+came to be fixed at all. See the dated note at the top of this section.
 
 Everything about the remedy depends on `k`. At `k = 1` this is arguably not worth changing; at
 `k = 5` at 25 fps it is a fifth of a second of visibly wrong decoration on every switch. **Measure
@@ -5023,11 +5036,13 @@ Three things follow, and the third is the one that gets forgotten:
    switch. A backup whose layout differs from the main **is not a backup**. The failure stays
    invisible until someone cuts to it, which is the moment they least want to discover it, and a
    confidently-wrong surface is this product's worst defect class.
-3. ⚠ **This does NOT overturn _"page last, only on success"_, and here is how the two coexist.**
-   That rule (`caspar-runtime.ts:4719-4726`) is about **ordering within one server**: a page must
-   never show a look whose holes did not move, so the page is told after the fills and only if they
-   moved. This item is about **which servers the decision applies to**. They meet cleanly because
-   they answer different questions:
+3. ⚠ **This does NOT overturn _"only on success"_, and here is how the two coexist.**
+   That rule is about **ordering within one server**: a page must never END on a look whose holes
+   did not move. (Its _"page last"_ half was reversed on 2026-08-31 by [[B-174]] — the page is now
+   told FIRST and the mixer held one channel frame, and a refused switch is answered by re-telling
+   the previous look. The guarantee survives the reversal; only the route to it changed.) This item
+   is about **which servers the decision applies to**. They meet cleanly because they answer
+   different questions:
    - _"Did the LAYOUT apply?"_ decides whether the page is told — **and it must be decided the
      same way on every server**, so a switch is refused everywhere or applied everywhere.
    - _"Did this one INPUT arrive?"_ must NOT feed that decision at all. A missing producer in one
@@ -6540,7 +6555,7 @@ stated so it can be argued with.
   it), [[B-171]] (the wording item — a sentence nobody can finish reading and a sentence that is
   wrong are different defects over the same surface).
 
-## [ ] B-174 — the PAGE/MIXER skew is VISIBLE TO THE NAKED EYE on the plant, and the bench figure that made it look impossible measured a DIFFERENT QUANTITY ⟨priority: high — the page half was never measured to a painted frame, and the parts that WERE measured already predict a 1–2 frame skew⟩ — OPEN, filed 2026-08-24 from the two-server plant run; **RE-SCOPED 2026-08-29 (`SKEW-MEASURE-01`)**; **`k` MEASURED 2026-08-31 (`SKEW-COUNT-01`): 1–3 fields = 20–60 ms at `1080i5000`, median 30 ms, ten recorded runs — see the measurement section at the end**
+## [~] B-174 — the PAGE/MIXER skew is VISIBLE TO THE NAKED EYE on the plant, and the bench figure that made it look impossible measured a DIFFERENT QUANTITY ⟨priority: high — the page half was never measured to a painted frame, and the parts that WERE measured already predict a 1–2 frame skew⟩ — filed 2026-08-24 from the two-server plant run; **RE-SCOPED 2026-08-29 (`SKEW-MEASURE-01`)**; **`k` MEASURED 2026-08-31 (`SKEW-COUNT-01`): 1–3 fields = 20–60 ms**; **FIXED LOCALLY 2026-08-31 (`SKEW-HOLD-01`): page-first + a one-frame mixer hold, `k` re-measured at −20/0/+20 ms — the owner's naked-eye check on the plant is still OWED, see the fix section at the end**
 
 > ⚠ **This heading first read _"against a bench figure that says it is sub-frame … a measured 2.2–8.3 ms
 > is being contradicted by air"_.** That framing is a **category error and is corrected below**: the
@@ -6846,6 +6861,90 @@ a field, which the SAME harness pointed at the plant server would settle from th
 - **Cross-refs (measurement):** [[B-155]] (same harness, `--with-play-switch` — its window
   measured separately, 80 ms locally, plant still owed), [[B-189]] (found by this harness's
   wire tap: the channel-mode read discards every real `INFO` reply and re-sends forever).
+
+### ⭐ FIXED LOCALLY 2026-08-31 (`SKEW-HOLD-01`) — the mixer hold, implemented; `k` re-measured at −20/0/+20 ms
+
+**The order `setActiveLook` now drives, stated exactly** (`tools/caspar-bridge/src/caspar-runtime.ts`,
+the `B-174` order note in the method body):
+
+1. **PLAN** — `#planLiveSeating`, unchanged and still byte-identical to the swap's. Every refusal
+   the bridge can detect without applying (unknown look, unresolvable source through the product's
+   own doors, collision, band) fires HERE, with the page untouched.
+2. **TELL THE PAGE** — `#tellPageLook`, moved BEFORE the apply via a `beforeApply` seam on
+   `reconcileLivePlates` (one injection point on the one path every switch command already flows
+   through, never a second code path). It carries the PLAN's fit facts explicitly — `#plateFits`
+   is still written only when an apply lands — and a refused `CG UPDATE` **aborts the switch
+   before any geometry command**: nothing moves at all, which is STRONGER than the old order's
+   lost-tell tail state (moved fills under unmoved holes).
+3. **HOLD** — the bridge sleeps `lookMixerHoldMs`: **configurable** (`--look-mixer-hold-ms`,
+   `BridgeOptions.lookMixerHoldMs`, the runtime option; `0` = no hold, order kept), **defaulting
+   to ONE CHANNEL FRAME of the channel's OBSERVED video mode** (`videoModeFramePeriodMs`,
+   `@cg/shared-ipc` — readable at all because [[B-189]] is fixed in the same change), 40 ms
+   fallback while the mode is unread. The rate suffix must be 4–5 digits: a custom mode id spelled
+   `1080p50` divides to 0.5 Hz and would have parked the mixer for TWO SECONDS, so a token outside
+   the ×100 convention is UNREAD and takes the fallback. `#withLiveSeatLock` still spans the whole
+   span, so no other GATED verb interleaves — but `take`/`out`/`stopItem`/`clearAll` are
+   deliberately un-gated, which is why step 3 ends with a re-check.
+4. **RE-ASK, THEN MOVE THE FILLS** — before the apply, the hook re-asks the two facts the plan
+   rests on (the row still owns live seats; the ledger still holds the records planned against)
+   and abandons the switch if either was true and is now false. Only that transition aborts, so
+   the off-air path is untouched. Without it, an `out` landing inside the hold left the apply
+   re-`PLAY`ing the whole union pre-seat onto the layers `out` had just cleared and
+   `registerLiveLayers` resurrecting a ledger for a row the stack believes idle — [[B-161]]'s
+   shape, reached with no take. Then `#applyLivePlates`, unchanged. On a wire-refused line,
+   `B-166`'s all-or-nothing geometry rollback runs as before AND `setActiveLook` **re-tells the
+   previous look** through the same fused writer, so the record follows whichever tell last landed
+   and the page does not END on a look the switch did not perform. ⚠ Where that revert tell is
+   itself refused, the record follows the PAGE (what the audience sees) and the message says so;
+   the next reconcile converges the fills. Both tails are pinned in `look-switch-refusal`.
+
+**Why this does not merely shift both halves:** the page's notification moved EARLIER (it no
+longer waits for the fills' ACKs), and only the mixer's application moved later. Measured, same
+harness, same probes, `1080i5000`, ten runs each:
+
+| sweep                                        | `k` per run (fields, 20 ms each)   | min / median / max   |
+| -------------------------------------------- | ---------------------------------- | -------------------- |
+| BEFORE (`SKEW-COUNT-01`, quiet box)          | 1, 1, 1, 1, 1, 2, 3, 3, 3, 3       | **20 / 30 / 60 ms**  |
+| BEFORE (re-run this session, box under load) | 1, 2, 3, 3, 3, 3, 3, 5, 5, 7       | 20 / 60 / 140 ms     |
+| **AFTER (hold in force, quiet box)**         | −1, −1, −1, −1, 0, 0, 0, 0, +1, +1 | **−20 / 0 / +20 ms** |
+
+This session's two sweeps are committed beside the harness, so the numbers can be re-read rather
+than believed: `tools/skew-harness/evidence/2026-08-31-hold-before/report.json` (row 2) and
+`…/2026-08-31-hold-after/report.json` (row 3); `SKEW-COUNT-01`'s own report is the already-tracked
+`…/2026-08-31-i5000/report.json` (row 1).
+
+The fair pairing is quiet-to-quiet; the loaded re-run is kept because it shows `k` is
+load-sensitive on this ungenlocked dev box, which the plant (genlocked, dedicated) is not
+expected to reproduce. The AFTER residual is ±1 FIELD, zero-centred — the page's paint clock
+against the channel tick, which **no fixed hold can remove**; a bigger or adaptive hold buys
+nothing further.
+
+⚠ **The mode caveat, recorded as the brief asks:** the page lag is constant in WALL-CLOCK (the
+two modes agreed in ms, not in ticks), but the hold is denominated in whole channel frames — so
+the derived default is per-mode (40 ms at `1080i5000`, 20 ms at `1080p5000`) and is right for
+`1080i5000` SPECIFICALLY because that is the plant's mode and the measured lag (~20–60 ms) spans
+about one of its frames. ⚠ The switch as a whole now lands ~one frame later on air — expected,
+harmless (nothing compares against a reference), and written here so it is read, not discovered.
+
+⚠ **The stopped/off-air path is byte-untouched** — stated because a separate off-air defect
+(stopped row: switch look, then PLAY → fills at the OLD arrangement under NEW holes) is being
+filed while this change lands. The reorder lives entirely inside the on-air branch's
+reconcile-and-tell; the off-air record-only early return, the take path, and the `CG ADD`
+look payload are unchanged, so the two changes do not collide.
+
+**What is still OWED, and why the box is `[~]`:** the owner's naked-eye check on the PLANT — the
+same two-look switch that was visibly skewed on 2026-08-24, now expected to move together.
+A dev-box distribution is the acceptance criterion this session was given and it is met; the
+plant's genlocked DeckLink chain and its CEF host are still different hardware, and `SKEW-COUNT-01`'s
+caveat that medians may shift by a field there stands until someone looks.
+
+- **Cross-refs (fix):** the spec text moved with the code per spec discipline —
+  `openspec/changes/multibox-layout-switch/specs/runtime-multibox-layout/spec.md` (the switching
+  requirement), `tasks.md` 6.7/7.9 (dated amendments), `design.md` §2.9; [[B-158]] (its
+  fills-first mechanism section carries a dated re-judge note), [[B-166]]/[[B-167]] (the rollback
+  this extends with the revert tell — their end-state guarantees are re-asserted in
+  `look-switch-refusal` and `live-look-reconcile`), `look-switch-hold.integration.test.ts` (the
+  hold's duration, its observed-mode default, an explicit 0 surviving `??`).
 
 ## [ ] B-177 — a DeckLink input admits ONE producer, `CLEAR` returns before the destroy, and the failure arrives disguised as `404 File not found.` ⟨priority: high — the seating path re-`PLAY`s live layers, and the disguise sends the diagnosis to the wrong place⟩ — OPEN, filed 2026-08-25 from the DeckLink plant walk
 
@@ -7358,7 +7457,7 @@ right at the time:**
   and `B-080`; a whole-tree `git grep` for `B-179` returned only [[B-178]]'s own forward reference
   and this file's pointer, never a heading; `B-180` returned nothing at all.
 
-## [ ] B-189 — the channel-mode read DISCARDS every real CasparCG reply, so R-030's raster check is DISARMED on every real install and the "one-shot" `INFO` re-sends forever ⟨priority: medium — a guard that cannot fire, plus a per-sweep command on the wire, invisible to every test because the mock speaks the shape the code expects⟩ — OPEN, filed 2026-08-31 from `SKEW-COUNT-01`'s wire tap
+## [~] B-189 — the channel-mode read DISCARDS every real CasparCG reply, so R-030's raster check is DISARMED on every real install and the "one-shot" `INFO` re-sends forever ⟨priority: medium — a guard that cannot fire, plus a per-sweep command on the wire, invisible to every test because the mock speaks the shape the code expects⟩ — filed 2026-08-31 from `SKEW-COUNT-01`'s wire tap; **FIXED 2026-08-31 (`SKEW-HOLD-01`) — both breaks, plus the MOCK now speaks the real dialect; see the fix section**
 
 **Found on a wire tap, not by reading code.** `B-174`'s harness (`tools/skew-harness`) proxies the
 bridge's AMCP socket, and every recorded switch window carried an ambient `INFO 1` — one per sweep
@@ -7399,7 +7498,7 @@ in question"_ — met on a query verb.
   reuses it off-mock will hang — the harness had to wait on reachability instead
   (`tools/skew-harness/src/run.ts`, `whenServerReachable`).
 
-### The fix shape (not implemented here — `SKEW-COUNT-01` implements nothing)
+### The fix shape (as filed by `SKEW-COUNT-01`, which implemented nothing)
 
 Accept `ok-line` alongside `ok-multi` (joining `data` / `lines` respectively) and parse BOTH
 spellings of the mode tag (`<format>` first, `<video-mode>` kept for the mock and any build that
@@ -7407,10 +7506,56 @@ speaks it) — then make the MOCK answer the measured real shape (`201` + `<form
 way round, so the suite stops vouching for a dialect no server speaks. A regression test belongs at
 the parser level with the REAL reply pasted verbatim.
 
+### ⭐ FIXED 2026-08-31 (`SKEW-HOLD-01`) — exactly that shape, and the FIXTURE is the load-bearing half
+
+- **`#readChannelMode`** accepts `ok-line` and `ok-multi` (`caspar-runtime.ts`, the `B-189` note at
+  the gate); **`parseVideoModeFromInfo`** matches `<format>` first, `<video-mode>` as fallback,
+  `<format>` winning when both appear (`@cg/shared-ipc` `channelSettings.ts`).
+- **The fixture speaks the server, not the code**: the REAL `INFO 1` reply — captured byte-exact
+  with a raw socket from 2.5.0 `69e8ad5` at `127.0.0.1:5250` on 2026-08-31 (`SKEW-HOLD-01`; status
+  line and terminal CRLF stripped, bare-`\n` interior kept) — is pasted VERBATIM into
+  `packages/shared-ipc/tests/channel-settings.test.ts` and must parse to `1080p5000`. That string's
+  provenance is the wire; a parser drifting from the real dialect reddens there first.
+- **`@cg/amcp-mock`'s `handleInfo`** now answers `INFO <ch>` in the captured reply's exact shape
+  (`201`/`ok-line`, one bare-`\n` chunk, `<format>`, terminal `\n\r\n`) with its own mode value —
+  its own suite asserts the envelope (`mock-integration.test.ts`) — so the whole bridge suite now
+  vouches for the dialect a server actually speaks.
+- **Both consequences asserted by value** (`channel-raster.integration.test.ts`): the raster
+  MISMATCH shout fires against the real dialect (`CHANNEL 1 RASTER MISMATCH` on stderr, pushed to
+  browsers), and the new one-shot test drives the latch with its own positive control — the count
+  GROWS while replies are refused (proving sweep and counter live), then FREEZES the tick after
+  one reply parses. **`awaitChannelModeRead` completes against the real dialect** — implicitly
+  re-proven by every bridge boot that drains it (nine suites), all green.
+
+### ⭐ The rule-8 saga (`awaitChannelModeRead`'s origin) — RE-JUDGED with this in hand: sibling, NOT root cause
+
+The question `SKEW-HOLD-01` was asked: the one-shot `INFO 1` intruded across three sessions, was
+twice dismissed as flake, and was remedied by the `awaitChannelModeRead()` drain — is `B-189` the
+root cause of that episode? **No — with the evidence, and with one real connection between them:**
+
+- ⚠ The document the question cites (`evidence-and-staging-rules`) **does not exist in this tree
+  or in memory** — the saga's substance was recovered from commit `5659ca5e` (2026-08-19,
+  _"flake family 3 — a wire-silence baseline needs a proven-quiescent wire"_) and
+  `tests/support/harness.ts`'s own doc. Per that commit: session AW's stop-hook red at
+  `live-seating:331` was "unreproducible then" (dismissal), `:346` struck twice in the fixing
+  session's gate runs, and the mechanism was the DESIGNED one-shot landing between a `before`
+  baseline and its `slice(before) → []` assertion under gate CPU load.
+- **Those flakes ran against the MOCK, where the old dialect PARSED** — the read succeeded, the
+  latch set on the first sweep, and the intruding `INFO 1` really was one command, once. `B-189`
+  (the read never succeeding) is a property of the REAL dialect only, so it cannot have caused a
+  mock-land timing flake. Sibling failures of one latch, not cause and effect.
+- **The real connection:** the saga's remedy was sound in mock-land ONLY. Against a real server
+  the drain waits on a latch that could never set — 15 s, then _"the quiescent-wire baseline
+  cannot be established"_ — which `SKEW-COUNT-01` hit in practice and had to route around
+  (`whenServerReachable`, `tools/skew-harness/src/run.ts`). With `B-189` fixed the drain is valid
+  against both dialects. Corroboration that the real dialect was OBSERVABLE well before the
+  filing: session AS's hardware recon (2026-08-18) already recorded `INFO 1-10` answering `201`.
+
 **Env:** 2.5.0 `69e8ad5` local, 2026-08-31, `SET 1 MODE` between `1080p5000`/`1080i5000` — the reply
 shape is the same in both. Wire evidence in `tools/skew-harness/evidence/2026-08-31-i5000/report.json`
 (`commands` arrays).
 
-- **Cross-refs:** [[B-174]] (the harness whose tap caught it), [[B-155]] (the green-mock trap this
-  repeats on a query verb), [[R-030]] (the check this disarms), [[B-100]]/[[B-101]] (the axis rules
-  the silent-failure branch was written for).
+- **Cross-refs:** [[B-174]] (the harness whose tap caught it, and whose fix's derived-default hold
+  READS the mode this repairs), [[B-155]] (the green-mock trap this repeats on a query verb),
+  [[R-030]] (the check this re-arms), [[B-100]]/[[B-101]] (the axis rules the silent-failure
+  branch was written for).

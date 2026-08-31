@@ -403,11 +403,12 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
  * - **`whenServerHealthy` requires `healthy`.** This CasparCG declares no `<osc>` block and
  *   the default OSC port is held by another process on this host, so the session settles at
  *   `degraded` — AMCP up, OSC silent — which is REACHABLE (`B-100`) but never `healthy`.
- * - **`awaitChannelModeRead`, the bridge's own quiescence helper, NEVER COMPLETES against a
- *   real CasparCG.** `#readChannelMode` discards the reply twice over: it gates on
- *   `kind === 'ok-multi'` while 2.5.0 answers `INFO <ch>` with `201` (`ok-line`), and
- *   `parseVideoModeFromInfo` looks for `<video-mode>` while 2.5.0 emits `<format>`. Filed as
- *   `B-189`, and measured on this harness's own wire tap.
+ * - **`awaitChannelModeRead`, the bridge's own quiescence helper, could not complete against
+ *   a real CasparCG when this harness was written** — `B-189`, found on this harness's own
+ *   wire tap and since FIXED (`SKEW-HOLD-01`: the gate accepts `ok-line`, the parser reads
+ *   `<format>`). The wait below is KEPT on reachability anyway: the degraded-not-healthy
+ *   reason above stands on its own, and the harness should boot even against a build from
+ *   before the fix.
  *
  * So the wait uses the SAME two states `isLiveState` admits, which is what the bridge's own
  * `#noServerReachable` gate reads — the predicate the take actually consults.

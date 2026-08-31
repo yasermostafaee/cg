@@ -607,13 +607,18 @@ candidate shapes.
       `display:none` on the whole instance node, so switching the look switches its titles for
       free. The old A′ note that titles needed a per-source→cell mapping was true of ARRANGEMENTS
       (repositioned instances sharing one title set); it does not carry over. No mapping is sent.
-      **Order:** fills first, then the page — and only on SUCCESS. A refused reconcile leaves the
-      fills where they were, so telling the page anyway would paint the new look's holes over
-      producers still at the old geometry, which nothing would repair. Both commands go
-      back-to-back on ONE connection in the urgent lane; the mismatch window is one AMCP
-      round-trip (`CG UPDATE` → `window.update` measured 2.2–8.3 ms, §9.2 — under a quarter of a
-      20 ms frame at 50i; the cut is ~0.20 frames, §9.3), and what shows through the mismatched
-      hole for that window is black.
+      **Order — REVERSED by `B-174` (2026-08-31), and the superseded text is replaced per spec
+      discipline:** the page first, then the fills after a one-channel-frame mixer hold. The
+      order this task shipped with (fills first, page last, only on success) reasoned from
+      §9.4's `CG UPDATE`→`window.update` figure, which ends at a JS entry point; measured to
+      the painted frame (`tools/skew-harness`) the page's half lands 1–3 FIELDS late, visibly.
+      The switch now validates its plan (every plan-time refusal still fires with the page
+      untold), tells the page WITH the plan's fit facts, holds the mixer
+      (`--look-mixer-hold-ms`, default one frame of the observed mode), then moves the fills; a
+      wire-refused fit rolls the fills back AND re-tells the previous look, and a refused
+      `CG UPDATE` aborts before any geometry moves. Measured: k went from 20/30/60 ms
+      (min/median/max, ten runs) to **−20/0/+20 ms** — the residual is the page-clock/channel-
+      tick quantisation no fixed offset can remove.
       **The same gap by a different verb, also closed:** the `CG ADD` payload carries the look at
       the ONE `#sendAdd` chokepoint. A fresh build enters the AUTHORED DEFAULT synchronously,
       page-side, while the bridge seats the RECORDED look — so a row switched to solo and then
@@ -625,8 +630,11 @@ candidate shapes.
       the payload; holes asserted POSITION AND SIZE together; a DISJOINT-membership switch where
       the outgoing and incoming looks share no source; unknown/absent id leaves the look
       standing); `live-look-reconcile.integration.test.ts` (the emitted payload PARSED off the
-      wire, not merely "a command was sent"; the fills-before-page order; a refused switch tells
-      the page nothing; the `CG ADD` payload); `exporter-vcg-preflight.test.ts` (the refusal).
+      wire, not merely "a command was sent"; the page-before-fills order and the byte-for-byte
+      sequence pin, both updated for `B-174`; a plan-refused switch tells the page nothing while
+      a wire-refused one ends re-told on the old look; the `CG ADD` payload);
+      `look-switch-hold.integration.test.ts` (the hold's duration, its observed-mode default,
+      and that an explicit 0 survives `??`); `exporter-vcg-preflight.test.ts` (the refusal).
       ⚠ **What no test here covers:** a single-process true end-to-end. `@cg/template-runtime`
       cannot import `tools/caspar-bridge` (packages must not depend on tools), so the two halves
       are asserted separately — against the ONE shared codec, which is what makes divergence
@@ -750,6 +758,12 @@ candidate shapes.
       look now travels as an ARGUMENT (`#desiredPlateRects(itemId, look)`) instead of through
       shared mutable state, so a refused switch has nothing to roll back — there is no rollback
       to forget at the next call site.
+      ⚠ **AMENDED by `B-174` (2026-08-31): one rollback now exists, and it is a second call to
+      the same fused writer, not a second statement.** The page-first order means a WIRE-refused
+      fit can arrive after the page was told; `setActiveLook` then re-tells the previous look
+      through `#tellPageLook`, whose success moves the record back. The invariant this task
+      established — the map names which look the page is punching, written only by the fused
+      writer — survives verbatim; only the set of tells grew.
       🔴 **`R-048` IS UNCHANGED, and that is the finding rather than a shortcut.** The
       anticipated fix — make `swapLiveSource` carry an `updateLook` too — was considered and
       REJECTED at the site, in a comment: it treats the symptom (the swap reads state that can
@@ -893,6 +907,13 @@ candidate shapes.
       rule.** What is briefly wrong is the DECORATION (background, box strokes) of the look being
       LEFT, drawn around plates that have already moved. No face is in the wrong hole. It sits
       beside 7.14/7.15 because it is the same switch, not because it is the same defect.
+      ⚠ **RE-JUDGED 2026-08-31 (`B-174`): the order the mechanism below rests on is GONE.**
+      The switch now tells the page FIRST and holds the mixer one channel frame, so the page
+      no longer trails; `k` was measured at 1–3 fields before and −1/0/+1 field after
+      (`tools/skew-harness`). Whether that removes B-158's cosmetic tear entirely is an
+      OWNER'S EYES question on the plant — the item stays open for that reading, but the
+      paragraph below describes the code as it WAS. Same note on `docs/prd/bugs-runtime.md`
+      `B-158`.
       **Mechanism (established from code, not inherited):** it is exactly this change's own
       _"fills first, page last, only on success"_ — `caspar-runtime.ts:4702` reconciles the
       `MIXER FILL`/`CLIP`, `:4744` → `:4561` then sends `updateLook`; the page CUTS at
@@ -923,9 +944,12 @@ candidate shapes.
       never become a per-SERVER divergence. The switch happens on EVERY server, the box count and
       geometry are identical everywhere, and only the hole whose input failed is BLACK — black and
       not the previous content, inheriting `B-155`'s rule unchanged.
-      ⚠ **It does not overturn 7.9's _"page last, only on success"_**, and the items say how they
+      ⚠ **It does not overturn 7.9's _"only on success"_**, and the items say how they
       coexist: that rule orders things WITHIN a server (a page never shows a look whose holes did
-      not move); this one says the SAME decision must be reached on every server. Success is
+      not move); this one says the SAME decision must be reached on every server. (The _"page
+      last"_ half of 7.9 was itself reversed on 2026-08-31 by `B-174` — page first, mixer held
+      one frame — which changes nothing about THIS item: a per-input failure still must not
+      become a per-look or per-server one, and the rollback re-tells the page either way.) Success is
       redefined as STRUCTURAL — the fills moved — and a per-input failure never feeds it.
       🔴 **§1's shape did NOT survive contact with the code, which is the filing's headline.**
       Default strategy is `mirror-sync` (`bridge.ts:342`); `enqueue` RESOLVES on a non-2xx
@@ -1002,12 +1026,16 @@ candidate shapes.
 
       ⭐ **2026-08-22 (session BT) — THE RESIDUAL PATHS ENUMERATED FROM THE CODE, one fixed, the
       rest measured-only.** Per case, the AMCP sequence a switch emits (anchors at this date's
-      tree):
+      tree; ⚠ the ORDER inside each case reversed 2026-08-31 — `B-174` moved the page flip
+      FIRST with the geometry after the mixer hold, and the byte-for-byte pin was updated with
+      it — the CASE ENUMERATION below still stands):
 
       1. **COMMON path (seats already seated):** `setActiveLook` → `reconcileLivePlates('live')` →
          `#applyLivePlates` — per punched plate whose geometry moved, `MIXER FILL`+`CLIP` only
          (`caspar-runtime.ts:5068` `seatUnchanged`); departing seats `MIXER VOLUME 0` + the B-154
-         park; then the page flip `CG … UPDATE` LAST (fills-first-page-last-and-only-on-success).
+         park; the page flip `CG … UPDATE` — FIRST since `B-174` (2026-08-31), with the geometry
+         following one channel frame later; still only on success, in the sense that a refused
+         tell now aborts before any geometry at all.
          **No `PLAY`, no `CLEAR`** — pure geometry, as asserted. Now pinned BYTE-FOR-BYTE:
          `live-look-reconcile` _"the common path's exact wire sequence"_ asserts the full ordered
          line list.

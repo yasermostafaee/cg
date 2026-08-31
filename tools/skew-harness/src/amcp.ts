@@ -1,4 +1,5 @@
 import * as net from 'node:net';
+import { videoModeFramePeriodMs } from '@cg/shared-ipc';
 
 /**
  * A minimal AMCP client for the harness's OWN commands — the file consumer, the channel
@@ -130,18 +131,17 @@ export async function readChannelMode(client: AmcpClient, channel: number): Prom
  *
  * 🔴 **This is the distinction the whole measurement turns on, and it is a fact about the
  * SERVER, not about the file.** `stage.cpp` pulls BOTH fields inside a single tick under
- * `field_count == 2`, with the comment _"it lets us tick at 25hz and avoids amcp changes
- * starting on the second field"_. So at `1080i5000` a producer is sampled and an AMCP
- * transform lands **once per 40 ms**, while at `1080p5000` it is once per 20 ms. The two
- * modes are NOT the same measurement wearing different packaging, and a `k` taken at
- * `1080p5000` cannot be quoted for a plant running `1080i5000`.
+ * `field_count == 2`, so at `1080i5000` an AMCP transform lands **once per 40 ms** while at
+ * `1080p5000` it is once per 20 ms — and a `k` taken at one mode cannot be quoted for the
+ * other.
+ *
+ * `SKEW-HOLD-01` moved the arithmetic itself into `@cg/shared-ipc`
+ * (`videoModeFramePeriodMs`) because the BRIDGE now needs it too, for the mixer hold this
+ * harness's number selected — two spellings of the interlace-halving rule is how the
+ * instrument and the fix come to disagree about the unit. This wrapper keeps the harness's
+ * NaN-for-unreadable contract (its callers arithmetic on the result and report `NaN`
+ * loudly; the shared helper answers `null`).
  */
 export function framePeriodMs(format: string): number {
-  const match = /^\d+([ip])(\d{4})$/.exec(format.trim().toLowerCase());
-  if (match === null) return Number.NaN;
-  const interlaced = match[1] === 'i';
-  const rate = Number(match[2]) / 100;
-  if (!Number.isFinite(rate) || rate <= 0) return Number.NaN;
-  // The mode name always carries the FIELD rate; an interlaced channel ticks at half of it.
-  return interlaced ? 2000 / rate : 1000 / rate;
+  return videoModeFramePeriodMs(format) ?? Number.NaN;
 }

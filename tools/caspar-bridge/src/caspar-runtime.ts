@@ -40,6 +40,7 @@ import {
   // the browser's MockRuntime can read the SAME map without dragging `node:net`
   // into the SPA bundle (see channelSettings.ts for the full reasoning).
   parseVideoModeFromInfo,
+  videoModeFramePeriodMs,
   videoModeRaster,
   type LayerClearReason,
   type PLAYOUT_CLEAR_REASONS,
@@ -588,6 +589,20 @@ const OCCUPANCY_STALE_MS = 2500;
  * stoppage, short enough that an operator learns of a dead channel within a breath.
  */
 const CHANNEL_TICK_STALE_MS = 3000;
+
+/**
+ * `B-174` — the mixer hold while the channel's video mode is UNREAD: one frame of the
+ * plant's `1080i5000` (40 ms). Only a fallback — the real default is one frame of the
+ * OBSERVED mode, per `#lookMixerHoldMsFor` — and 40 rather than 20 because over-holding
+ * by a field costs a field of the OPPOSITE skew while under-holding leaves half the
+ * measured skew standing, and the plant this exists for runs interlaced.
+ */
+const LOOK_MIXER_HOLD_FALLBACK_MS = 40;
+
+/** The one timer this file sleeps on (`B-174`'s mixer hold). Not cancellable on purpose:
+ * the hold is at most a frame or two, far inside every teardown bound, and a cancellation
+ * path would be a second way for the fills to go out early. */
+const sleepMs = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * R-021 stage 2a (D7) — is a FIXED slot busy (a resident item or retained
@@ -1163,6 +1178,11 @@ export class CasparRuntime {
   #started = false;
   readonly #intentTimeoutMs: number;
   /**
+   * `B-174` — the configured mixer hold, or `undefined` to derive one channel frame from
+   * the observed video mode at each switch. See the constructor option of the same name.
+   */
+  readonly #lookMixerHoldMs: number | undefined;
+  /**
    * TEST-ONLY seam (B-100): per-`ServerSession` health-timer overrides. Empty in
    * production, so the ServerSession defaults apply. A test uses it to drive and
    * HOLD a session in `degraded` (OSC-silent, AMCP up) deterministically — the
@@ -1182,6 +1202,19 @@ export class CasparRuntime {
       sweepMs?: number;
       occupancyStaleMs?: number;
       channelTickStaleMs?: number;
+      /**
+       * `B-174` — how long a look switch HOLDS its `MIXER FILL`/`CLIP` batch after the
+       * page has been told, in ms, so the fills land with the holes instead of 1–3 fields
+       * ahead of them (measured, `tools/skew-harness`).
+       *
+       * ABSENT means ONE CHANNEL FRAME of the channel's OBSERVED video mode (40 ms at the
+       * plant's `1080i5000`; 20 ms at `1080p5000`), falling back to 40 ms while the mode
+       * is unread — see {@link #lookMixerHoldMsFor}. `0` is a REAL value meaning no hold
+       * (the page-first order is kept; only the sleep is skipped), which is also what the
+       * wire-order tests pass so they do not spend 40 ms per switch. Resolved with `??`,
+       * never `||`, so that 0 survives.
+       */
+      lookMixerHoldMs?: number;
       /** TEST-ONLY seam: inject a template server (e.g. one whose start() fails). */
       templateServer?: TemplateHttpServer;
       /** TEST-ONLY seam (B-100): override each session's OSC health timers. */
@@ -1272,6 +1305,9 @@ export class CasparRuntime {
       this.#auditWriter = new AuditWriter({ filePath: options.auditLogPath });
     }
     this.#intentTimeoutMs = options.intentTimeoutMs ?? INTENT_TIMEOUT_MS;
+    // `undefined` is MEANINGFUL here (derive from the observed mode per switch), so this
+    // one is not defaulted at construction the way its siblings below are.
+    this.#lookMixerHoldMs = options.lookMixerHoldMs;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
     this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
@@ -3985,9 +4021,12 @@ export class CasparRuntime {
      * 🔴 **RENAMED FROM `'all-declarations'`, AND THE BEHAVIOUR CHANGED WITH IT (§2.9).** It
      * used to answer for every plate of every look the template could reach, so that a plate
      * one picker click from the screen could not refuse DURING a live switch with the
-     * previous look already leaving. `tasks.md` 7.9 removed that reason: a refused switch
-     * now leaves nothing behind and the page was never told, so the previous look is NOT
-     * leaving and the refusal is clean. Refusing a take because a look nobody is showing has
+     * previous look already leaving. `tasks.md` 7.9 removed that reason: a PLAN-refused
+     * switch leaves nothing behind and the page is never told, so the previous look is NOT
+     * leaving and the refusal is clean. (`B-174` moved the page-tell ahead of the fills, so
+     * a WIRE-delivered refusal can now arrive after the page moved — that path re-tells the
+     * previous look; every refusal decided HERE still fires with the page untouched, which
+     * is the property this scope rests on.) Refusing a take because a look nobody is showing has
      * a hole would block air for a non-reason, so it no longer does; the hole is surfaced in
      * CG Control and refuses at the moment somebody tries to SWITCH into it.
      *
@@ -4589,6 +4628,14 @@ export class CasparRuntime {
    * `swapLiveSource` deliberately tells it nothing (`R-048` sends only its own producer's
    * commands), while `update` sends the `CG UPDATE` **after** this returns ok — BD's
    * fills-first-page-last-and-only-on-success, which is why the page half cannot live here.
+   *
+   * ⚠ **`B-174` reversed that order for the LOOK SWITCH ONLY** (page first, mixer held one
+   * frame — the measured skew is a property of a GEOMETRY CUT the eye watches both halves
+   * of). This binding path keeps fills-first deliberately: its `CG UPDATE` carries text and
+   * bindings, not a hole move, so there is no visible page/mixer seam to align — and its
+   * failure semantics ("a refused change records nothing, page untold") stay the simple
+   * ones. If a skew is ever MEASURED on this path, align it the same way, at the same
+   * `beforeApply` seam — do not invent a second spelling of the hold.
    */
   /**
    * 🔴 **`B-161` — DOES THIS ROW OWN LIVE LAYERS RIGHT NOW?** The question a
@@ -4909,10 +4956,19 @@ export class CasparRuntime {
    *
    * Fusing them is what makes that unrepresentable rather than merely unlikely. The record is a
    * SIDE EFFECT of the successful send, so there is no second statement for a future caller to
-   * forget, no rollback to remember, and no window in which the map claims a look the page has
-   * not been given. `design.md` §6/§12.2 — the hole the page punches and the hole the bridge
-   * fills are ONE computation — now holds by construction of the writer rather than by the
-   * discipline of each caller.
+   * forget, and no window in which the map claims a look the page has not been given.
+   * `design.md` §6/§12.2 — the hole the page punches and the hole the bridge fills are ONE
+   * computation — now holds by construction of the writer rather than by the discipline of
+   * each caller.
+   *
+   * ⚠ **`B-174` amended one sentence of the old argument: there IS now one revert to
+   * remember, and it is a SECOND CALL to this same writer, not a second statement.** Under
+   * the mixer hold the page is told BEFORE the fills move, so a fit the server then refuses
+   * leaves the page punching a look the fills never entered. `setActiveLook`'s rollback
+   * re-tells the PREVIOUS look through this function — the record follows that send exactly
+   * as it followed the first, so the fused invariant ("the map names what the page is
+   * punching") survives the reorder untouched; what changed is only WHICH look the page ends
+   * on when the wire refuses mid-switch.
    *
    * ⚠ Bounded by the same B-070 rule `update()` states: `CG UPDATE` needs a live PRODUCER, and
    * real CasparCG 403s it on an empty layer. A row whose producer was destroyed has no page to
@@ -4922,6 +4978,17 @@ export class CasparRuntime {
     itemId: string,
     slot: CommandSlot,
     lookId: string,
+    /**
+     * `B-174` — the ENTERING look's fits, when the caller holds them ahead of the apply.
+     *
+     * The map (`#plateFits`) is written only when an apply LANDS, and under the hold the
+     * page is told before the apply runs — so the pre-apply tell must carry the PLAN's fits
+     * or it would pair the new look's holes with the OUTGOING look's aspects (`B-149`'s
+     * divergence, arriving through the hold). Absent means "the map is current": the revert
+     * tell after a refused apply reads it and gets the outgoing look's fits, which is
+     * exactly what a page being put back needs.
+     */
+    fitsOverride?: Readonly<Record<string, CgPlateFit>>,
   ): Promise<{ ok: boolean; errorCode?: string }> {
     /*
       ⭐ `C-028` — THE FIT FACTS TRAVEL WITH THE LOOK ID, in the one payload.
@@ -4936,7 +5003,7 @@ export class CasparRuntime {
       One payload, not two: a second `CG UPDATE` would put a frame between the two halves
       in which the page is punching for a state the bridge has left.
     */
-    const fits = this.#plateFits.get(itemId);
+    const fits = fitsOverride ?? this.#plateFits.get(itemId);
     const told = await this.#send(
       this.#builder.updateLook(slot, lookId, {}, fits),
       this.#nextSeq(),
@@ -4949,21 +5016,51 @@ export class CasparRuntime {
   }
 
   /**
+   * `B-174` — **the mixer hold for one look switch, in ms: the configured value, else ONE
+   * CHANNEL FRAME of the channel's observed video mode, else one frame of the plant's
+   * `1080i5000` while the mode is unread.**
+   *
+   * One frame is what `SKEW-COUNT-01` measured the page lagging by (holes 1–3 fields after
+   * the fills; wall-clock-constant across modes, so the RIGHT hold genuinely differs per
+   * mode — 40 ms at `1080i5000`, 20 ms at `1080p5000` — which is why the default derives
+   * from the OBSERVED mode rather than compiling either number in). The residual after a
+   * one-frame hold is ±1 field of CLOCK QUANTISATION — the page's paint clock against the
+   * channel tick — which no fixed offset can remove.
+   *
+   * The observed mode is readable at all because `B-189` is fixed in the same change: until
+   * then every real install's mode read failed and this would have fallen back forever.
+   */
+  #lookMixerHoldMsFor(channel: number): number {
+    if (this.#lookMixerHoldMs !== undefined) return this.#lookMixerHoldMs;
+    const observed = this.#channelSettings
+      .state()
+      .observed.find((reading) => reading.channel === channel);
+    if (observed !== undefined) {
+      const period = videoModeFramePeriodMs(observed.mode);
+      if (period !== null) return period;
+    }
+    return LOOK_MIXER_HOLD_FALLBACK_MS;
+  }
+
+  /**
    * `multibox-layout-switch` §14.5 / `tasks.md` 6.1 — **SWITCH A ROW TO A DIFFERENT LOOK,
    * while it is on air.**
    *
    * The door stage E's look picker calls. A look switch is TWO mutations on two machines:
    * the bridge moves the producers' `MIXER FILL`/`CLIP` (the reconcile), and the PAGE flips
    * which look's instance is visible and re-punches its holes (`@cg/template-runtime`'s own
-   * `setActiveLook`). Both halves are here, in that order, and the transport between them is
-   * the reserved `__cg` key on a `CG UPDATE` (`tasks.md` 6.7 — this method's header used to
-   * say the transport did not exist, which stopped being true when 6.7 landed).
+   * `setActiveLook`). Both halves are here — 🔴 **PAGE FIRST since `B-174`: plan, tell the
+   * page, hold one channel frame, then move the fills** (the order note at the body says
+   * why, with the measurement) — and the transport between them is the reserved `__cg` key
+   * on a `CG UPDATE` (`tasks.md` 6.7 — this method's header used to say the transport did
+   * not exist, which stopped being true when 6.7 landed).
    *
    * 🔴 **AND THE ORDER OF THE THIRD STEP — recording it — IS THE SUBJECT OF `tasks.md` 7.9.**
    * The record is written by {@link #tellPageLook} as a side effect of the page being
-   * successfully told, never up front, so a refused switch leaves the row on the look it is
-   * genuinely showing. The long note at the old write site says why that reverses a decision
-   * this method shipped with; read it before moving the write back.
+   * successfully told, never up front, so a refused switch leaves the row on the look the
+   * page genuinely shows — under `B-174` that includes the rollback's revert tell, whose
+   * success moves the record BACK. The long note at the old write site says why that
+   * reverses a decision this method shipped with; read it before moving the write back.
    *
    * An OFF-AIR item with nothing seated is a legal target, exactly as `swapLiveSource`'s
    * is: the look is recorded, nothing is sent, and the next take enters it. Deliberately not
@@ -5023,12 +5120,12 @@ export class CasparRuntime {
     */
     /*
       🔴 `B-155` §B — THE WHOLE ON-AIR BRANCH RUNS UNDER THE ITEM'S LIVE-SEAT LOCK
-      (see {@link #withLiveSeatLock}): from the on-air read through the reconcile to the
-      page flip is ONE critical section, so a swap or an update arriving mid-switch runs
-      AFTER the page has been told and therefore plans against the look the page is
-      actually punching. The reads below (`#reconciler`, `#liveLayers`) are inside the
-      lock for the same reason the plan is — read on the near side of a queue, they
-      could describe a row a queued action has since changed.
+      (see {@link #withLiveSeatLock}): from the on-air read through the page flip to the
+      HELD fills (`B-174`) is ONE critical section, so a swap or an update arriving
+      mid-switch runs after the fills have landed too and therefore plans against the
+      look the row has fully entered. The reads below (`#reconciler`, `#liveLayers`) are
+      inside the lock for the same reason the plan is — read on the near side of a
+      queue, they could describe a row a queued action has since changed.
     */
     return this.#withLiveSeatLock(itemId, async () => {
       /*
@@ -5085,11 +5182,136 @@ export class CasparRuntime {
         byte-identical to `'live'`'s (same `already-live` scope, same `pinned` level 2, same
         UNION pre-seat) — only what a failure MEANS differs. See `#applyLivePlates`.
       */
+      /*
+      🔴 `B-174` — **THE ORDER: plan → tell the page → HOLD one channel frame → move the
+      fills.** This REVERSES a decision the old text here called "tell it LAST", and the
+      measurement is what reversed it.
+
+      The page's holes were landing 1–3 FIELDS (20–60 ms) after the fills — visible to the
+      naked eye on the plant, measured to the frame by `tools/skew-harness`: the page's half
+      is quantised to its own paint clock, so it ALWAYS trails a fills-first order by about
+      a frame. Telling the page first and holding the `MIXER FILL`/`CLIP` batch one channel
+      frame (`#lookMixerHoldMsFor` — configurable, derived from the observed mode by
+      default) lands the two halves together. The hold delays the mixer's APPLICATION only:
+      the page's notification moves EARLIER (it no longer waits for the fills' ACKs), which
+      is what makes this a closing of the gap rather than a shifting of both halves.
+
+      🔴 **What survives of the old order's safety argument — each clause, re-earned:**
+
+      - **"never tell the page about a look a reconcile refused"** — every refusal the
+        bridge can detect WITHOUT applying (plan-time: unknown look, unresolvable source,
+        collision, band) fires before `beforeApply`, so the page is untouched by all of
+        them. The one refusal that only the wire can deliver — CasparCG refusing a `MIXER`
+        line it has already been sent — now arrives after the page moved, and is answered
+        by the rollback below RE-TELLING the previous look through the same fused writer:
+        the page does not END on a look the switch did not perform. ⚠ Where that revert tell
+        is ITSELF refused there is nothing left to put the page back with, so the record
+        follows the PAGE — the thing the audience can see — and the message says exactly
+        that; the next reconcile converges the fills onto it. (On real 2.5.0 a `MIXER
+        FILL` on any owned layer answers `202`; the wire-time refusal is a defensive path,
+        exercised in anger only by `B-166`'s injected mock.)
+      - **"a lost `CG UPDATE` leaves the page on a coherent previous look"** — STRONGER
+        now: a refused tell aborts the reconcile before ANY geometry command, so the fills
+        never move either. The old order left moved fills under unmoved holes there.
+
+      Both halves still ride ONE connection's urgent lane, and the whole span — plan, tell,
+      hold, fills — sits inside `#withLiveSeatLock`, so no OTHER GATED VERB can interleave
+      into the window the hold opens: a swap or an update arriving mid-switch runs after it
+      (`B-155` §B). The switch as a whole lands one hold later than it used to, which nobody
+      can compare against; the two halves landing TOGETHER is the entire point.
+
+      🔴 **The lock does NOT exclude the EMERGENCY verbs, and the hold is what makes that
+      worth stating here.** `take`, `out`, `stopItem`, `clearLayer` and `clearAll` are
+      DELIBERATELY un-gated ({@link #withLiveSeatLock}, and the panic note on `clearAll`) —
+      an emergency verb must never queue behind the thing it may be repairing. Before the
+      hold, that race was a microtask-narrow suffix of the apply; the hold turns it into a
+      deterministic ≈40 ms window in which a row can be taken off air between the plan and
+      its first fill. So the hook RE-ASKS, after the hold, whether the row still owns its
+      live seats, and abandons the apply if it does not — the window this change opened is
+      closed by the change that opened it, rather than being left for the next reader to
+      discover from a re-lit producer on a row the operator had just cleared (`B-161`'s
+      shape). The re-ask is a BEFORE/AFTER comparison, deliberately not a new gate: a row
+      that did not own seats to begin with is untouched by it, so the off-air/stopped path
+      keeps its existing behaviour exactly.
+
+      ⚠ Bounded by the same B-070 rule `update()` states: `CG UPDATE` needs a live PRODUCER,
+      and real CasparCG 403s it on an empty layer. A row whose template producer was
+      destroyed has nothing to tell — case 2 of {@link #recordActiveLook} — so the hook
+      skips both the tell and the hold, and the look is recorded after the apply lands, for
+      the next take's re-ADD path to carry into the rebuilt page.
+    */
+      const previousLookId = this.activeLookId(itemId);
+      let pageTold = false;
+      /*
+      🔴 **GOLDEN RULE 7 — ONE READING OF `#loaded` DECIDES BOTH THE TELL AND THE RECORD.**
+
+      The old order read it once, after the apply, and that single evaluation chose between
+      "tell the page" and "record it for the next `CG ADD` to carry". The reorder put a tell,
+      a hold and the whole apply between the two uses — and `#loaded` is written by paths
+      that deliberately do NOT hold the seat lock: `take`'s `B-039` pre-roll re-ADD adds to
+      it, `out`/`remove` delete from it, and the session-healthy reconnect handler CLEARS it
+      with no operator action at all. Read twice, a flip inside that window returns `ok` with
+      the look neither told nor recorded (false→true), or records a look on a row `remove`
+      has just forgotten (true→false). One reading, captured where the decision is made.
+    */
+      let pageLoaded = false;
       const reconciled = await this.reconcileLivePlates(itemId, {
         mode: 'switch',
         lookId: look.id,
+        beforeApply: async (planFits) => {
+          pageLoaded = this.#loaded.has(itemId);
+          if (!pageLoaded) return { ok: true };
+          const told = await this.#tellPageLook(itemId, slot, lookId, planFits);
+          if (!told.ok) {
+            return {
+              ok: false,
+              errorCode: told.errorCode ?? 'amcp-error',
+              message:
+                'CasparCG refused the look command — nothing was changed: the holes and the ' +
+                'fills are both still on the previous look. Re-issue the switch.',
+            };
+          }
+          pageTold = true;
+          const ownedSeats = this.#ownsLiveSeats(itemId);
+          const heldSeats = this.#liveLayers.has(itemId);
+          const holdMs = this.#lookMixerHoldMsFor(slot.channel);
+          if (holdMs > 0) await sleepMs(holdMs);
+          /*
+            The re-ask the note above promises, asked as a BEFORE→AFTER transition on the two
+            facts the plan rests on: the row owns live seats, and the ledger still holds the
+            records the plan was computed against. Only a row that HAD them and lost them
+            aborts — a row that never owned seats is not gated by this at all, so the
+            off-air/stopped path keeps its behaviour byte for byte.
+
+            Losing the ledger entry is precisely what `teardownLiveLayers` does (`out`,
+            `stopItem`, `clearAll`'s loop, `remove`), and nothing in an ordinary switch
+            touches it: the apply has not run, and every other ledger writer is either this
+            apply or gated by the same lock. Without this, an `out` landing inside the hold
+            left the apply re-`PLAY`ing the whole union pre-seat onto the layers that `out`
+            had just cleared, and `registerLiveLayers` resurrecting a ledger for a row the
+            stack believes idle — `B-161`'s shape, reached with no take.
+          */
+          if (
+            (ownedSeats && !this.#ownsLiveSeats(itemId)) ||
+            (heldSeats && !this.#liveLayers.has(itemId))
+          ) {
+            return {
+              ok: false,
+              errorCode: 'not-live',
+              message:
+                'The row left the air while the switch was in flight — nothing was moved. ' +
+                'Re-issue the look once it is back on air.',
+            };
+          }
+          return { ok: true };
+        },
       });
-      if (!reconciled.ok) {
+      if (reconciled.ok) {
+        if (!pageLoaded) this.#recordActiveLook(itemId, lookId);
+        return { ok: true };
+      }
+      if (!pageTold) {
+        // Plan-time refusal, or the tell itself was refused: nothing anywhere moved.
         return {
           ok: false,
           ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
@@ -5097,56 +5319,43 @@ export class CasparRuntime {
         };
       }
       /*
-      `tasks.md` 6.7 — TELL THE PAGE, and tell it LAST.
-
-      The fills have just moved; this is the command that moves the HOLES they sit behind.
-      Both halves are now driven off the SAME look id — `#desiredPlateRects` resolved the
-      rects from it and this sends it verbatim — so they cannot disagree about which look is
-      on air (`design.md` §6/§12.2: the hole the page punches and the hole the bridge fills
-      are ONE computation).
-
-      🔴 **AFTER the reconcile, and only on success** — this ordering is a decision, not an
-      accident:
-
-      - **Only on success** is the decisive half. A refused reconcile leaves the fills where
-        they were, so telling the page to switch anyway would paint the NEW look's holes over
-        producers still at the OLD geometry — a broken layout that nothing would repair. The
-        old look, intact, is the honest outcome of a refused switch.
-      - **After** is the smaller call, and both orders have the same sub-frame window: between
-        the two commands the fills and the holes disagree, and what shows through the
-        mismatched hole is black. `CG UPDATE` → `window.update` was measured at 2.2–8.3 ms
-        (median ≈5 ms, §9.2) — under a quarter of a 20 ms frame at 50i — and both commands go
-        out back-to-back on ONE connection in the urgent lane, so nothing queues between them.
-        The cut itself is ~0.20 frames (§9.3). Fills-first also means a lost `CG UPDATE`
-        leaves the page on a coherent previous look rather than on a new look whose boxes
-        would never fill.
-
-      ⚠ Bounded by the same B-070 rule `update()` states: `CG UPDATE` needs a live PRODUCER,
-      and real CasparCG 403s it on an empty layer. A row whose template producer was destroyed
-      has nothing to tell — case 2 of {@link #recordActiveLook} — so the look is recorded here
-      and the next take's re-ADD path carries it into the rebuilt page.
+      The row was taken off air INSIDE the hold (the re-ask above). Nothing was applied, so
+      there is no geometry to roll back — only the page to put back, and its own message to
+      report: blaming CasparCG for a refusal that never happened would send the operator
+      looking at the server for an out THEY pressed. If the page has already been torn down
+      with the row, the tell simply fails and the record stays on the look it last landed —
+      which the next take re-plans from anyway.
     */
-      if (!this.#loaded.has(itemId)) {
-        this.#recordActiveLook(itemId, lookId);
-        return { ok: true };
+      if (reconciled.errorCode === 'not-live') {
+        if (previousLookId !== undefined) await this.#tellPageLook(itemId, slot, previousLookId);
+        return {
+          ok: false,
+          reason: 'not-live',
+          ...(reconciled.message === undefined ? {} : { message: reconciled.message }),
+        };
       }
-      const told = await this.#tellPageLook(itemId, slot, lookId);
-      if (told.ok) return { ok: true };
+      /*
+      🔴 The wire refused a geometry command AFTER the page moved. `#applyLivePlates`'s
+      `'switch'` branch has already put every fill back (`B-166`'s all-or-nothing); this is
+      the page's half of the same rollback: re-tell the PREVIOUS look, through the same
+      fused writer, so the record follows whichever tell last landed. `fitsOverride` is
+      deliberately absent — `#plateFits` was never rewritten (the apply did not land), so
+      the map still carries the outgoing look's fits, which are exactly what a page being
+      put back must punch with.
+    */
+      const reverted =
+        previousLookId === undefined
+          ? { ok: false as const }
+          : await this.#tellPageLook(itemId, slot, previousLookId);
       return {
         ok: false,
-        reason: told.errorCode ?? 'amcp-error',
-        /*
-        7.9 — the LAST sentence is the one that changed, and it is a statement about state
-        rather than a nicety. The fills did move; the holes did not; and the row stays
-        RECORDED on the look the page is actually punching, so the next ordinary reconcile
-        (a source swap, a re-take) pulls the fills back to it instead of spreading the
-        half-switch. The picture is wrong until the operator re-issues, and it converges on
-        its own rather than waiting for them to.
-      */
-        message:
-          `the live sources moved to look "${lookId}", but CasparCG refused the command that ` +
-          `tells the graphic to switch — its holes are still on the previous look, and the row ` +
-          `is still recorded on it. Re-issue the switch.`,
+        ...(reconciled.errorCode === undefined ? {} : { reason: reconciled.errorCode }),
+        message: reverted.ok
+          ? 'CasparCG refused the switch part-way; everything was put back — the row is ' +
+            'still on its previous look. Re-issue the switch.'
+          : `CasparCG refused the switch, and the graphic could not be put back: its holes ` +
+            `are on "${lookId}" while the pictures kept the previous geometry. The row is ` +
+            `recorded on the look the page shows; re-issue the switch to converge.`,
       };
     });
   }
@@ -5160,15 +5369,16 @@ export class CasparRuntime {
    * The bridge dispatches WebSocket requests without awaiting the previous one
    * (`bridge.ts` — `void handleMessage(...)`; the actor-context note there names two
    * browsers interleaving as a design fact). Sequentially, the switch is safe by its own
-   * ordering: fills move, departing seats are PARKED, and only then is the page told to
-   * open the new look's holes. INTERLEAVED, that ordering is no longer one ordering:
-   * a `swapLiveSource` or an `update` arriving while a `setActiveLook` is parked on an
-   * AMCP ack plans against the OUTGOING look (`#activeLooks` is written only when the
-   * page has been told — `tasks.md` 7.9) and against the PRE-SWITCH ledger (written only
-   * at the end of `#applyLivePlates`), so its `PLAY` and its `MIXER FILL` at the OLD
-   * look's geometry can land between the switch's fills and its page flip — a producer
-   * change inside a moving hole, which is `B-155`'s shape arriving by concurrency
-   * instead of by the (closed) assignment lurk. And the two actions' final
+   * ordering (since `B-174`: page told, mixer HELD one frame, fills moved — with a
+   * deliberate hold inside the window, which makes this lock MORE load-bearing, not
+   * less). INTERLEAVED, that ordering is no longer one ordering: a `swapLiveSource` or
+   * an `update` arriving while a `setActiveLook` is parked on an AMCP ack — or now on
+   * the hold itself — plans against a look mid-transition (`#activeLooks` is written
+   * when the page is told — `tasks.md` 7.9) and against a ledger `#applyLivePlates` has
+   * not yet rewritten, so its `PLAY` and its `MIXER FILL` at stale geometry can land
+   * between the switch's page flip and its held fills — a producer change inside a
+   * moving hole, which is `B-155`'s shape arriving by concurrency instead of by the
+   * (closed) assignment lurk. And the two actions' final
    * `registerLiveLayers` writes are each computed from the SAME `previous` snapshot, so
    * whichever finishes last erases the other's records: golden rule 7's two-reads-with-
    * an-await-between, at the ledger instead of at a boolean.
@@ -5298,6 +5508,30 @@ export class CasparRuntime {
        * carrier and this id, so there is now one input and nothing left to disagree.
        */
       lookId?: string | undefined;
+      /**
+       * 🔴 `B-174` — **the seam between "will this reconcile succeed" and "apply it".**
+       *
+       * Runs AFTER the plan has validated (every plan-time refusal has already fired,
+       * without this hook ever being called) and BEFORE the first wire command of the
+       * apply. `setActiveLook` is its one caller and passes the page-tell + the mixer
+       * hold, so the page starts painting the new holes while the fills wait one channel
+       * frame — the measured skew (`tools/skew-harness`: holes 1–3 fields late) closed at
+       * the ONE injection point every switch-mode command already flows through, rather
+       * than by a second code path (`B-100`/`P-012`: a copy is how orders drift apart).
+       *
+       * Receives the plan's OWN `plateFits`, because the page must be told the ENTERING
+       * look's fits and `#plateFits` is deliberately not written until the apply lands
+       * (see the note below) — reading the map here would pair new holes with the
+       * OUTGOING look's aspects, which is `B-149`'s divergence arriving through the hold.
+       *
+       * A refusal from the hook aborts the reconcile with NOTHING applied: no fill has
+       * moved, no producer has been touched by the apply. (Plan-mandated SEATING also
+       * has not happened yet — a parked preset missing its producer stays missing until
+       * the apply, exactly as a refused plan leaves it.)
+       */
+      beforeApply?: (
+        planFits: Readonly<Record<string, CgPlateFit>>,
+      ) => Promise<{ ok: boolean; errorCode?: string; message?: string }>;
     },
   ): Promise<{ ok: boolean; errorCode?: string; message?: string }> {
     const slot = this.#slots.get(itemId);
@@ -5311,6 +5545,16 @@ export class CasparRuntime {
       opts.mode === 'take' ? 'fresh' : 'pinned',
     );
     if (!plan.ok) return { ok: false, errorCode: plan.errorCode, message: plan.message };
+    if (opts.beforeApply !== undefined) {
+      const gate = await opts.beforeApply(plan.plateFits);
+      if (!gate.ok) {
+        return {
+          ok: false,
+          ...(gate.errorCode === undefined ? {} : { errorCode: gate.errorCode }),
+          ...(gate.message === undefined ? {} : { message: gate.message }),
+        };
+      }
+    }
     const applied = await this.#applyLivePlates(itemId, plan, opts.mode);
     /*
       ⭐ `B-178` — **RE-RECORD WHAT THE PAGE MUST BE TOLD, ON EVERY SUCCESSFUL RECONCILE.**
@@ -5323,23 +5567,24 @@ export class CasparRuntime {
 
       Written from THIS plan and only when the apply succeeded, so the record can never claim a
       geometry the wire did not perform — the same rule `#tellPageLook` states for the look id
-      itself. It runs BEFORE `setActiveLook` sends, because that send reads this map.
+      itself. ⚠ `B-174` moved the switch's page-tell BEFORE the apply, so that send can no
+      longer read this map: it receives the plan's fits DIRECTLY (`beforeApply(planFits)` →
+      `#tellPageLook`'s `fitsOverride`), and this write keeps its only meaning — the fits the
+      WIRE actually carries. The two therefore agree by sharing one plan object, not by one
+      reading the other's map through a window.
 
       ⚠ **AND IT IS DELIBERATELY NOT FUSED TO THE SEND, where the look ID is** (`7.9`:
-      `#recordActiveLook` fires only on `told.ok`). The two records answer different questions
-      and a failed page-tell wants different things of them:
+      `#recordActiveLook` fires only on `told.ok`). The two records answer different questions:
 
       - the LOOK ID says WHICH LOOK THE PAGE IS PUNCHING. A tell that never landed leaves the
         page on the old look, so recording the new one would make the map lie about the page —
         that is exactly what `7.9` closed.
-      - these FITS say WHAT THE WIRE WAS FILLED WITH, and the fills DID move: the apply
-        succeeded. Rolling them back would make this map disagree with the geometry actually on
-        the layers, and the very next payload — the re-ADD after a producer teardown, or the
-        next successful switch — would carry facts for a look the bridge has left.
+      - these FITS say WHAT THE WIRE WAS FILLED WITH. Under `B-174`'s order a refused apply
+        leaves this map UNwritten — the fills were rolled back to the outgoing look, the map
+        still describes exactly that geometry, and the rollback's revert tell deliberately
+        reads it (no override) to put the page back with the right aspects.
 
-      A failed tell therefore leaves the page punching the OLD look's holes behind the NEW
-      look's fills, which is the outcome `7.9` chose knowingly: the switch is reported refused,
-      and the next reconcile repairs it. This map follows the FILLS because it describes them.
+      This map follows the FILLS because it describes them.
     */
     if (applied.ok) this.#plateFits.set(itemId, { ...plan.plateFits });
     return applied;
@@ -5724,9 +5969,12 @@ export class CasparRuntime {
           it either works or refuses again. **A guaranteed no-op that answers `ok` stops being
           representable**, rather than being defended against.
 
-          ⚠ The page was never told (`setActiveLook` calls `#tellPageLook` only on `ok`), so
-          the holes never left the previous look. Restoring the fills to that same look is what
-          makes the two agree again — which is the definition of "the switch did not happen".
+          ⚠ Under `B-174`'s order the page HAS usually been told by the time a fill can
+          refuse (the tell precedes the held fills), so restoring the fills is HALF the
+          rollback: `setActiveLook` re-tells the previous look when this branch reports the
+          refusal, and the record follows that send. The two agree again at the END — which
+          is the definition of "the switch did not happen" — with a transient, hold-bounded
+          window in which the holes led the fills.
         */
         for (const m of moved) {
           // Line by line, the same way every other `mixerFit` on this path is sent — the pair
@@ -8646,8 +8894,25 @@ export class CasparRuntime {
         target: 'primary',
       });
       const response = result.response;
-      if (response.kind !== 'ok-multi') return;
-      const mode = parseVideoModeFromInfo(response.lines.join('\n'));
+      /*
+        🔴 `B-189` — REAL CasparCG answers `INFO <channel>` with `201 INFO OK` plus ONE
+        payload chunk (bare `\n` inside it), which the parser classifies `ok-line`. This
+        used to accept `ok-multi` ALONE, so every real reply was discarded here, the latch
+        below never set, the sweep re-sent `INFO` forever, and `rasterVerdict` answered
+        `unreadable` on every real install — R-030's whole check disarmed. It was green in
+        every suite because `@cg/amcp-mock` answered `ok-multi`, i.e. the mock spoke this
+        line's expectation rather than the server's dialect (the reply shape is captured
+        verbatim in `channel-settings.test.ts`; the mock now speaks it). Both kinds are
+        accepted: a reply's framing class must not decide whether a fact is recorded.
+      */
+      const xml =
+        response.kind === 'ok-line'
+          ? response.data
+          : response.kind === 'ok-multi'
+            ? response.lines.join('\n')
+            : null;
+      if (xml === null) return;
+      const mode = parseVideoModeFromInfo(xml);
       if (mode === null) return;
       // Attributed to the server that actually ANSWERED, never to whoever was
       // primary when the send started: a failover mid-flight would otherwise

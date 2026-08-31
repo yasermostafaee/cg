@@ -268,6 +268,10 @@ async function boot(options: { template?: TemplateInfo; assignments?: SourceAssi
     {},
     {
       sweepMs: 150,
+      // `B-174` — 0 keeps the page-first ORDER (which this suite pins) while skipping the
+      // 40 ms sleep on each of this file's dozens of switches; the hold's DURATION has its
+      // own timing tests in `look-switch-hold.integration.test.ts`.
+      lookMixerHoldMs: 0,
       sourceCatalog: catalog(),
       sourceAssignments: options.assignments ?? DEFAULT_ASSIGNMENTS,
     },
@@ -864,11 +868,15 @@ it('🔴 a failure mid-SWITCH blacks nothing that was working — only the faili
     about the operator's wish — it is the geometry the NEXT reconcile will seat, from any
     caller, including a `swapLiveSource` that never mentioned looks.
 
-    The page was never told `'both'` (the switch died before the `CG UPDATE`), so `'six'` is
-    the look whose holes are on air, and it is the only answer that keeps the fills and the
-    holes resolvable from one fact.
+    ⭐ `B-174` — WHY `'six'` IS STILL THE ANSWER, BY A DIFFERENT ROUTE. This used to read
+    "the page was never told `'both'` (the switch died before the `CG UPDATE`)". Under the
+    page-first order it IS told: the refusal here comes from the mock's WIRE (the `src-bad`
+    fixture refuses at the `PLAY`), which can only arrive after the tell. The rollback then
+    re-tells `'six'` through the same fused writer, so the record follows the last tell that
+    landed — same answer, and now for the reason the code actually gives. Debugging a red
+    here means looking at the REVERT tell, not for a path that skips the first one.
   */
-  expect(r.activeLookId('item-1'), 'the page was never told "both"').toBe('six');
+  expect(r.activeLookId('item-1'), 'the rollback put the page back on "six"').toBe('six');
 });
 
 it('🔴 the TAKE keeps its all-or-nothing rollback — the graphic never plays half-placed', async () => {
@@ -1193,16 +1201,21 @@ it('🔴 the switch tells the PAGE which look — the payload carries the id, be
   expect(control?.plates?.['live-1']).toEqual({ aspect: 16 / 9, mode: 'cover' });
 
   /*
-    ORDER: the fills move FIRST, then the page is told. Between the two commands the fills and
-    the holes disagree and the mismatched hole shows black — bounded by one AMCP round-trip on
-    ONE connection in the urgent lane (`CG UPDATE` → `window.update` measured at 2.2–8.3 ms,
-    §9.2: under a quarter of a 20 ms frame at 50i; the cut itself is ~0.20 frames, §9.3).
-    Fills-first also means a lost `CG UPDATE` leaves the page on a coherent previous look
-    rather than on a new look whose boxes would never fill.
+    🔴 ORDER — `B-174` REVERSED THIS: the page is told FIRST, then the fills move after the
+    mixer hold. The old fills-first order put the holes 1–3 FIELDS behind the fills on air
+    (the page's half is quantised to its own paint clock — measured by `tools/skew-harness`,
+    20–60 ms, visible to the naked eye on the plant), so the switch now validates its plan,
+    tells the page, holds one channel frame, and only then moves the fills. A lost
+    `CG UPDATE` under this order aborts BEFORE any geometry command — nothing moves at all,
+    which is strictly tighter than what fills-first left behind (moved fills under unmoved
+    holes).
   */
-  const lastFill = lines.map((l) => /^MIXER 1-\d+ FILL /.test(l)).lastIndexOf(true);
-  expect(lastFill, 'the fills must have moved').toBeGreaterThanOrEqual(0);
-  expect(lines.indexOf(updates[0] as string)).toBeGreaterThan(lastFill);
+  const firstFill = lines.findIndex((l) => /^MIXER 1-\d+ FILL /.test(l));
+  expect(firstFill, 'the fills must have moved').toBeGreaterThanOrEqual(0);
+  expect(
+    lines.indexOf(updates[0] as string),
+    'B-174: the page is told BEFORE any fill moves',
+  ).toBeLessThan(firstFill);
 });
 
 /**
@@ -1435,12 +1448,24 @@ it('🔴 B-178 — the DECLARATION’s fitMode is IGNORED under a look group', a
   expect(state?.fill).toEqual(state?.clip);
 });
 
-it('🔴 a REFUSED switch tells the page NOTHING — the old look stays whole', async () => {
+it('🔴 a REFUSED switch leaves the page ON THE OLD LOOK — told back if it was told at all', async () => {
   /*
-    The decisive half of the ordering, and the reason it is "after AND only on success". A
-    refused reconcile leaves the fills where they were, so telling the page to switch anyway
-    would paint the NEW look's holes over producers still at the OLD geometry — a broken layout
-    nothing would repair. The old look, intact, is the honest outcome of a refused switch.
+    🔴 `B-174` re-drew the line this test pins. The safety property is unchanged in
+    substance — a refused switch ends with the old look whole, holes and fills agreeing —
+    but the page-first order splits its enforcement in two:
+
+    - every refusal the bridge can detect WITHOUT applying (an unassigned plate through the
+      product's own doors, an unknown look, a collision) fires at the PLAN, before
+      `beforeApply`, and the page hears nothing — that case is pinned by the plan-time test
+      in look-switch-refusal ("NOTHING reaches the wire — every moving verb, enumerated");
+    - a refusal only the WIRE can deliver arrives after the page moved, and the rollback
+      RE-TELLS the previous look, so the page ENDS where the fills ended: on the old look.
+
+    This fixture is the second kind by construction: `src-bad` is injected through the
+    CONSTRUCTOR, bypassing both product doors that make it unrepresentable
+    (`setSourceAssignments` refuses an unknown source; `createBridge` prunes one), so the
+    plan sees a resolvable-looking binding and the refusal arrives from the mock's wire.
+    What must hold is the END STATE, and the wire must SHOW the revert.
   */
   const r = await boot({
     template: sixBoxTemplate({
@@ -1463,7 +1488,10 @@ it('🔴 a REFUSED switch tells the page NOTHING — the old look stays whole', 
 
   expect((await r.setActiveLook('item-1', 'both')).ok).toBe(false);
 
-  expect(updateLines(await since(before)), 'the page must not be told').toEqual([]);
+  const updates = updateLines(await since(before));
+  const lastLook = readCgControl(dataArgOf(updates[updates.length - 1] as string, 'UPDATE'))?.look;
+  expect(lastLook, 'whatever was said in between, the page ENDS on the old look').toBe('six');
+  expect(r.activeLookId('item-1'), 'and the record agrees with the page').toBe('six');
 });
 
 it('a switch whose PRODUCER is gone records the look and sends no UPDATE', async () => {
@@ -1569,7 +1597,10 @@ it('🔴 7.9 — a REFUSED switch leaves no intent, and the next swap does ONLY 
   const sixFill = recordOf(r, 'live-1')?.fill;
 
   expect((await r.setActiveLook('item-1', 'both')).ok, 'src-bad cannot play').toBe(false);
-  expect(r.activeLookId('item-1'), 'the page was never told "both"').toBe('six');
+  // `B-174` — the wire refuses at the `PLAY`, i.e. after the page-first tell, so `'six'` is
+  // here because the rollback RE-TOLD it, not because the page went untold. See the sibling
+  // assertion above for the full note.
+  expect(r.activeLookId('item-1'), 'the rollback put the page back on "six"').toBe('six');
 
   /*
     ── the UNRELATED action, at a time when the operator has forgotten the refusal ──
@@ -2493,10 +2524,13 @@ it("🔴 B-155 §B — the common path's exact wire sequence: a plain switch, by
     common path goes red — including the serialization itself, which is only acceptable
     because this test was GREEN BEFORE the lock existed and is green after.
 
-    The sequence, derived in `#applyLivePlates`'s own order: the punched plate's re-fit
-    first (FILL then CLIP, one geometry), then each departing seat in ledger order —
-    mute, then the B-154 park (FILL moved off-raster, CLIP opened to the full frame) —
-    and the page flip LAST, only after every fill is where the new look's holes expect it.
+    🔴 The sequence since `B-174`: the page flip FIRST (it carries the look id and the
+    plan's fits), then — after the mixer hold, which `boot()` sets to 0 so this suite does
+    not sleep per switch — the geometry in `#applyLivePlates`'s own order: the punched
+    plate's re-fit (FILL then CLIP, one geometry), then each departing seat in ledger
+    order — mute, then the B-154 park (FILL moved off-raster, CLIP opened to the full
+    frame). The measured reason the flip moved to the front is in `setActiveLook`'s order
+    note; the byte-for-byte pin is unchanged in spirit — one path, one order, any drift red.
   */
   const r = await boot();
   await onAir(r);
@@ -2514,12 +2548,12 @@ it("🔴 B-155 §B — the common path's exact wire sequence: a plain switch, by
       `MIXER 1-${String(layer)} CLIP 0 0 1 1`,
     ]),
   ];
-  expect(lines.slice(0, expected.length)).toEqual(expected);
-  // The page flip is the LAST line, and it carries the look id the fills were derived from.
+  // The page flip is the FIRST line, and it carries the look id the fills were derived from.
   expect(lines).toHaveLength(expected.length + 1);
-  const flip = lines[expected.length] as string;
+  const flip = lines[0] as string;
   expect(flip).toMatch(/^CG 1-\d+ UPDATE 0 /);
   expect(readCgControl(dataArgOf(flip, 'UPDATE'))?.look).toBe('solo');
+  expect(lines.slice(1)).toEqual(expected);
 });
 
 it('🔴 B-155 §B — a swap arriving MID-SWITCH is serialized after it and resolves the ENTERED look', async () => {

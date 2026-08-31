@@ -13,9 +13,14 @@ import { HEALTH_MS } from './support/harness.js';
  *  2. the REAL video mode is read off `INFO <channel>` and compared with what
  *     config claims — the check that stops a wrong raster being silent.
  *
- * The mock reports `<video-mode>1080i5000</video-mode>`, which is the real
- * plant's mode (the owner's `casparcg.config`), so the default 1920×1080 config
- * agrees with it and a deliberately-wrong 1280×720 config does not.
+ * 🔴 `B-189` — the mock now answers `INFO <channel>` in the REAL 2.5.0 dialect
+ * (`201`/one chunk, `<format>1080i5000</format>` — the plant's mode), because the
+ * old stub's dialect (`200`/`ok-multi`, `<video-mode>`) was written from the
+ * parser's expectation and kept this whole suite green while every real install
+ * discarded every real reply and `rasterVerdict` answered `unreadable` for ever.
+ * These tests therefore now assert the check WORKS AGAINST WHAT THE SERVER
+ * ACTUALLY SENDS, and the one-shot test below pins the latch that the un-latching
+ * bug turned into a per-sweep re-send.
  */
 
 const SLOT = { channel: 1, layer: 10 };
@@ -171,6 +176,78 @@ it('surfaces a CONFIGURED raster that contradicts the server, loudly and on the 
   );
   expect(stderr.mock.calls.length).toBeGreaterThan(before);
   stderr.mockRestore();
+}, 30000);
+
+/**
+ * 🔴 `B-189` — **the mode read is ONE-SHOT once it succeeds, and re-sends only until then.**
+ *
+ * The latch (`#modeReadFrom`) is set only on a PARSED reply, which is the design — an
+ * unreadable mode stays absent and the sweep keeps asking. `B-189` made success impossible
+ * against real CasparCG, which turned the one-shot into a permanent per-sweep `INFO <ch>`
+ * (measured at one per 250 ms on `SKEW-COUNT-01`'s wire tap). This test drives both halves
+ * of the contract through one counter:
+ *
+ *  - while the server refuses, the count GROWS across sweeps — which is also the POSITIVE
+ *    CONTROL: it proves the counter and the sweep are live, so the stillness asserted next
+ *    is a measurement rather than a dead instrument reading zero
+ *    (`negative-observation-needs-positive-control`);
+ *  - the moment one reply parses, the count freezes: later sweeps send NOTHING.
+ */
+it('B-189 — re-sends while unreadable, then latches on the FIRST parsed reply', async () => {
+  const oscPort = await freeUdpPort();
+  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
+
+  let channelInfoSends = 0;
+  let speakable = false;
+  mock.setHandler('INFO', (req) => {
+    // The bare `INFO` (no args) is the session handshake's channel list — not this read.
+    if (req.args.length === 0) {
+      return { kind: 'ok-multi', code: 200, verb: 'INFO', lines: ['1 1080i5000 PLAYING'] };
+    }
+    channelInfoSends += 1;
+    if (!speakable) return { kind: 'err', code: 501, verb: 'INFO' };
+    return {
+      kind: 'ok-line',
+      code: 201,
+      verb: 'INFO',
+      data: '<?xml version="1.0" encoding="utf-8"?>\n<channel>\n   <format>1080i5000</format>\n</channel>\n',
+    };
+  });
+
+  runtime = new CasparRuntime(singleServer(mock.amcpPort, oscPort), {}, { sweepMs: 60 });
+  runtime.start();
+  await runtime.startServing();
+  await runtime.whenServerHealthy(HEALTH_MS);
+
+  // Positive control: with every reply refused, the sweep keeps asking.
+  await vi.waitFor(
+    () => {
+      expect(channelInfoSends).toBeGreaterThanOrEqual(3);
+    },
+    { timeout: HEALTH_MS, interval: 25 },
+  );
+
+  // Let exactly one reply parse; the read completes and the latch sets.
+  speakable = true;
+  await waitForModeReading(1);
+  expect(runtime.channelSettingsState().observed.find((o) => o.channel === 1)?.mode).toBe(
+    '1080i5000',
+  );
+
+  /*
+    The stillness half: across many further sweep ticks, not one more INFO <ch> goes out.
+
+    ⚠ SETTLE BEFORE SNAPSHOTTING. The latch sets when a reply PARSES, but the sweep decides
+    at SEND time, so a tick that fired between `speakable = true` and the reading landing has
+    an INFO already in flight. Snapshotting immediately would count that straggler's
+    increment as a post-latch send and red a bridge that is latching correctly. Two sweep
+    periods of settle costs nothing and keeps the assertion EXACT (zero further sends) rather
+    than fudging it to "at most one".
+  */
+  await new Promise((resolve) => setTimeout(resolve, 60 * 2));
+  const atLatch = channelInfoSends;
+  await new Promise((resolve) => setTimeout(resolve, 60 * 8));
+  expect(channelInfoSends).toBe(atLatch);
 }, 30000);
 
 it('refuses a raster change while anything is on air — it would move what is live', async () => {

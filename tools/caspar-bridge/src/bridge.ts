@@ -254,6 +254,15 @@ export interface BridgeOptions {
    */
   auditLogPath?: string;
   /**
+   * `B-174` — the look switch's mixer hold, in ms (`--look-mixer-hold-ms`). ABSENT means
+   * ONE CHANNEL FRAME of the channel's observed video mode (40 ms at the plant's
+   * `1080i5000`), which is the measured page lag; `0` disables the hold while keeping the
+   * page-first order. A FIRST-CLASS operator knob, not test tuning: the right value is a
+   * property of the installation (its mode, its page hardware), so the plant must be able
+   * to retune it without a rebuild.
+   */
+  lookMixerHoldMs?: number;
+  /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
    */
@@ -535,6 +544,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     sourceCatalog: sourceCatalog.value,
     sourceAssignments: prunedAssignments.value,
     ...(options.auditLogPath !== undefined ? { auditLogPath: options.auditLogPath } : {}),
+    ...(options.lookMixerHoldMs !== undefined ? { lookMixerHoldMs: options.lookMixerHoldMs } : {}),
     ...(options.runtimeTuning ?? {}),
   });
   // B-145 — adopt the persisted ledger, then keep it written.
@@ -912,8 +922,9 @@ export function buildRoutes(
         b.swapLiveSource(r.itemId, r.plateId, r.sourceId, r.lookId),
     ),
     // §14 (LOOKS) Stage E — the operator picks a look on the row. ONE seam: the bridge
-    // records it, reconciles the FILLS, then tells the page on the CG UPDATE payload so it
-    // moves the HOLES. Both halves off the same look id; nothing else switches a look.
+    // validates the plan, tells the page on the CG UPDATE payload so it moves the HOLES,
+    // then moves the FILLS after the B-174 mixer hold. Both halves off the same look id;
+    // nothing else switches a look.
     route(StackSetActiveLookChannel, (r: { itemId: string; lookId: string }) =>
       b.setActiveLook(r.itemId, r.lookId),
     ),

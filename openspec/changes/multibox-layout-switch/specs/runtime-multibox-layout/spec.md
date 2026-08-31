@@ -560,20 +560,32 @@ would go to air empty. **Having no look group and having a group with no looks S
 distinguishable**, because the first describes every template authored before looks existed and
 refusing those would take an installation's whole existing rundown off air.
 
-Switching SHALL drive one path: the seated live sources are reconciled against the chosen look's
-geometry, the page is told which look on the same payload that carries its data, and only then is
-the look recorded — so the holes it punches and the fills behind them are one computation. The page
-SHALL be told only after the reconcile succeeds, so a refused switch leaves the previous look intact
-rather than painting new holes over producers at the old geometry.
+Switching SHALL drive one path: the plan is validated, the page is told which look — on the same
+payload that carries its data and the entering look's fit facts — the bridge HOLDS the mixer for
+one channel frame (configurable, `B-174`), and only then are the fills moved to the chosen look's
+geometry, so the holes the page punches and the fills behind them are one computation AND land on
+air together. The hold SHALL delay the mixer's application without delaying the page's
+notification: the page's half is quantised to its own paint clock and was measured landing 1–3
+fields behind a fills-first order (`tools/skew-harness`), which is what this order closes. Every
+refusal the bridge can detect without applying SHALL fire before the page is told; a refusal only
+the wire can deliver after the page has moved SHALL be answered by restoring the fills AND
+re-telling the page the previous look, so the page does not END on a look the switch did not
+perform. A `CG UPDATE` that is refused SHALL abort the switch before any geometry command moves.
+Where that revert tell is ITSELF refused, the record SHALL follow the PAGE — the look the audience
+can see — rather than the fills, and the message SHALL say so; the next reconcile converges the
+fills onto it. A row taken OFF AIR while the hold is waiting SHALL abandon the switch with no
+geometry applied and SHALL NOT re-seat what took it off air: the emergency verbs are deliberately
+not serialised behind the switch, so the window the hold opens SHALL be re-checked at its end.
 
 **A REFUSED SWITCH SHALL LEAVE NOTHING BEHIND.** The record of which look a row is on is what every
 later reconcile resolves its geometry from — including a source swap, which changes one plate and
 tells the page nothing. A look recorded but never delivered to the page is therefore not an inert
 note of intent; it is the geometry the next unrelated action will seat. So the record SHALL name the
 look the PAGE IS PUNCHING and nothing else: it SHALL be written only where that is true, which is
-when the page has been successfully told, or when there is no page yet and the next build will enter
-that look from its own payload. A refused switch SHALL leave the row on the look it is showing, and
-the control SHALL go on marking that look rather than the one that did not happen.
+when the page has been successfully told — the rollback's revert tell included, whose success moves
+the record back — or when there is no page yet and the next build will enter that look from its own
+payload. A refused switch SHALL end with the row on the look it is showing, and the control SHALL
+go on marking that look rather than the one that did not happen.
 
 The switch SHALL be a cut, and therefore SHALL itself be the immediate action: v1 offers no other
 transition mode, so there is no mode to choose and none to escape.
@@ -603,8 +615,8 @@ is on air now.
 #### Scenario: One action switches, and the readout follows
 
 - **WHEN** the operator picks a different look
-- **THEN** the live sources move to that look's geometry, the page is told which look, and the
-  control marks the new look
+- **THEN** the page is told which look, the live sources move to that look's geometry after the
+  mixer hold, and the control marks the new look
 
 #### Scenario: A switch between looks sharing no sources
 
@@ -618,6 +630,13 @@ is on air now.
 - **WHEN** the operator later re-points one source, an action that mentions no look
 - **THEN** only that source's producer changes, every other box stays where the page is punching
   its hole, and the row is still on the look it was showing
+
+#### Scenario: The row is taken off air while the mixer hold is waiting
+
+- **GIVEN** a row on air whose look switch has told the page and is holding the mixer
+- **WHEN** the operator takes that row off air inside the hold
+- **THEN** the switch is abandoned with no geometry applied, nothing re-seats the layers the out
+  cleared, and the switch reports that the row left the air rather than blaming the server
 
 #### Scenario: A preset applies on the switch, not before
 

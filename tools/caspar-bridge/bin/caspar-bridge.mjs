@@ -18,6 +18,8 @@
 //   caspar-bridge --no-live-layers                    # B-145: deliberately DO NOT persist it
 //   caspar-bridge --template-serve-host 192.168.21.93 # B-162/C-024: the address CasparCG fetches templates from
 //   caspar-bridge --template-serve-port 7911          # B-162: pin the template HTTP port (default: ephemeral)
+//   caspar-bridge --look-mixer-hold-ms 40             # B-174: the look switch's mixer hold (default: one
+//                                                     #   channel frame of the observed mode; 0 disables)
 //
 // R-010 boot precedence: explicit --caspar-*/--backup-* flags > the persisted
 // config file (~/.cg-runtime/bridge-connection.json by default) > built-in
@@ -211,6 +213,31 @@ const templateServe = {
   ...(templateServePort !== undefined ? { port: templateServePort } : {}),
 };
 
+// B-174 — the look switch's mixer hold. ABSENT = one channel frame of the observed video
+// mode (the measured page lag); an explicit value is the plant's own retune, so a flag with
+// no value or a non-integer is a hard boot error, never a silent fallback — the operator
+// believes they configured playout timing.
+const lookMixerHoldArg = args['look-mixer-hold-ms'];
+// A BLANK value is a missing one, not a zero. `Number('')` and `Number(' ')` are both 0, so
+// a wrapper script passing an unset shell variable (`--look-mixer-hold-ms "$CG_HOLD"`) would
+// otherwise DISABLE the hold silently — the same never-silent contract the message states,
+// arriving through the value rather than through the spelling.
+if (
+  lookMixerHoldArg === true ||
+  (typeof lookMixerHoldArg === 'string' && lookMixerHoldArg.trim() === '')
+) {
+  console.error(
+    '[caspar-bridge] --look-mixer-hold-ms needs a value in ms (0 disables the hold). ' +
+      'Omit the flag entirely for the default of one channel frame.',
+  );
+  process.exit(1);
+}
+const lookMixerHoldMs = typeof lookMixerHoldArg === 'string' ? Number(lookMixerHoldArg) : undefined;
+if (lookMixerHoldMs !== undefined && (!Number.isInteger(lookMixerHoldMs) || lookMixerHoldMs < 0)) {
+  console.error('[caspar-bridge] --look-mixer-hold-ms must be a non-negative integer (ms).');
+  process.exit(1);
+}
+
 // Build the CasparCG connection from flags, falling back to defaults.
 // B-046 — server B exists ONLY when a --backup-* flag declares it; the
 // default is single-server (a phantom backup diverges every send, replays
@@ -266,6 +293,7 @@ const handle = await createBridge({
   ...(liveLayersPath !== null ? { liveLayersPath } : {}),
   auditLogPath,
   templateServe,
+  ...(lookMixerHoldMs !== undefined ? { lookMixerHoldMs } : {}),
 });
 
 console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);
@@ -275,6 +303,30 @@ console.error(
   `[caspar-bridge] plate assignments: ${describeAssignments(handle.sourceAssignments)}`,
 );
 console.error(`[caspar-bridge] live layer ledger: ${describeLiveLayers(handle.liveLayers)}`);
+// Longer than any real channel frame (the slowest, 1080p2398, is ~41.7 ms; an interlaced
+// 24p-family mode ~83). Not a limit — a threshold for saying so out loud on the boot line.
+const LOOK_MIXER_HOLD_IMPLAUSIBLE_MS = 200;
+/*
+  B-174 — the hold is READ BACK, and an implausible one is called out rather than clamped.
+  It is a real playout timing knob, so the operator's number is honoured whatever it is;
+  but the value sleeps inside the row's seat lock with the page already flipped, so a
+  mistyped 4000 is four seconds of new holes over old fills on air, with every swap and
+  update on that row queued behind it. A digit slip is silent otherwise — nothing else in
+  the bridge ever mentions the number again.
+*/
+console.error(
+  `[caspar-bridge] look-switch mixer hold: ` +
+    (lookMixerHoldMs === undefined
+      ? 'one channel frame of the observed video mode (40 ms until it is read)'
+      : `${lookMixerHoldMs} ms (configured)`),
+);
+if (lookMixerHoldMs !== undefined && lookMixerHoldMs > LOOK_MIXER_HOLD_IMPLAUSIBLE_MS) {
+  console.error(
+    `[caspar-bridge] !! ${lookMixerHoldMs} ms is far longer than any channel frame (the slowest ` +
+      'is about 42) - every look switch will show the new holes over the old pictures for that ' +
+      'long, on air, with swaps and updates on that row waiting behind it.',
+  );
+}
 console.error(
   `[caspar-bridge] template HTTP server on ${handle.templateServe.url}/template/<id>` +
     (handle.templateServe.exposed ? ' (LAN-exposed)' : ' (loopback)') +
@@ -453,6 +505,24 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a.startsWith('--')) {
+      /*
+        B-174 — `--flag=value` is accepted, because the alternative is SILENCE. This parser
+        split on whitespace only, so `--look-mixer-hold-ms=40` was stored under the key
+        `look-mixer-hold-ms=40`, every guard below read `undefined`, and the bridge booted on
+        the default without a word — the exact "never a silent fallback" promise those guards
+        make, broken by a spelling half the world types by muscle memory. It is fixed at the
+        parser, once, for every flag: --reserved-layers and --template-serve-* make the same
+        promise and shared the same hole.
+      */
+      const eq = a.indexOf('=');
+      if (eq > 2) {
+        const value = a.slice(eq + 1);
+        // `--flag=` with nothing after it is a MISSING value, not the empty string — it takes
+        // the `true` path so the per-flag "needs a value" error fires rather than Number('')
+        // quietly resolving to 0.
+        out[a.slice(2, eq)] = value === '' ? true : value;
+        continue;
+      }
       const key = a.slice(2);
       const next = argv[i + 1];
       if (next !== undefined && !next.startsWith('--')) {

@@ -128,21 +128,40 @@ function handleInfo(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
     }
     return { kind: 'ok-multi', code: 200, verb: 'INFO', lines };
   }
-  // INFO <channel>: minimal XML stub — caspar-client parses INFO only loosely.
+  /*
+    🔴 `B-189` — `INFO <channel>` answers in the REAL server's dialect, because the old
+    stub's dialect is how a broken parser stayed green for its whole life.
+
+    The real 2.5.0 `69e8ad5` (captured on the wire 2026-08-31, quoted verbatim in
+    `@cg/shared-ipc`'s `channel-settings.test.ts`) answers `201 INFO OK` followed by ONE
+    payload chunk — an XML document whose internal newlines are bare `\n`, whose mode tag
+    is `<format>`, terminated by a single `\r\n`. The old stub answered `200`/`ok-multi`
+    with a `<video-mode>` tag: both axes matched the CODE's expectation instead of the
+    server's, so `#readChannelMode` discarded every real reply while every test passed.
+    **A mock that agrees with the code only proves the code agrees with itself** — this
+    handler now mirrors the captured reply's shape exactly (status class, one-chunk body,
+    bare-`\n` interior, tag names, 3-space indent), with the mock's own mode value.
+  */
   const ch = Number(req.args[0]);
   if (!Number.isInteger(ch) || ch < 1 || ch > ctx.channelCount) {
     return { kind: 'err', code: 404, verb: 'INFO' };
   }
   const xml = [
+    '<?xml version="1.0" encoding="utf-8"?>',
     '<channel>',
-    `  <index>${String(ch)}</index>`,
-    '  <video-mode>1080i5000</video-mode>',
-    '  <stage>',
-    '    <layers/>',
-    '  </stage>',
+    '   <format>1080i5000</format>',
+    '   <framerate>50</framerate>',
+    '   <framerate>1</framerate>',
+    '   <mixer>',
+    '      <audio/>',
+    '   </mixer>',
+    '   <output>',
+    '      <port/>',
+    '   </output>',
     '</channel>',
-  ];
-  return { kind: 'ok-multi', code: 200, verb: 'INFO', lines: xml };
+    '',
+  ].join('\n');
+  return { kind: 'ok-line', code: 201, verb: 'INFO', data: xml };
 }
 
 /** A classified producer argument, or the reason the mock refuses to build one. */

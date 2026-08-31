@@ -185,15 +185,67 @@ export function videoModeRaster(mode: string): ChannelRaster | null {
 }
 
 /**
- * Pull the `<video-mode>` token out of an `INFO <channel>` XML body, or null
- * when the element is absent.
+ * `B-174` — **the period of ONE CHANNEL FRAME for a CasparCG mode token, in ms — or null
+ * for a token this build cannot read.** The unit the look-switch mixer hold is denominated
+ * in, and the ONE place the interlace subtlety is spelled:
+ *
+ * 🔴 **An interlaced channel ticks at HALF the rate its name carries.** The mode token
+ * always names the FIELD rate (`1080i5000` = 50 fields/s), but `stage.cpp` pulls BOTH
+ * fields inside a single tick — _"it lets us tick at 25hz and avoids amcp changes starting
+ * on the second field"_ (v2.5.0-stable) — so an AMCP transform lands once per 40 ms there,
+ * while `1080p5000` genuinely ticks every 20 ms. Measured on the wire by `SKEW-COUNT-01`
+ * (`tools/skew-harness`), whose own copy of this arithmetic delegates here now that the
+ * bridge needs it too: two spellings of a halving rule is how one of them comes to lie.
+ *
+ * `null` — never a guess — for an unreadable token, the same honesty contract as
+ * {@link videoModeRaster}: a guessed period would silently misplace the hold on exactly
+ * the installs whose mode string this build has not met.
+ *
+ * ⚠ **The rate suffix is required to be 4–5 digits, and that width IS the convention check.**
+ * CasparCG spells the rate ×100 (`5000` → 50 Hz, `2398` → 23.98 Hz; five digits only for a
+ * future ≥100 Hz mode), but a `casparcg.config` may define a CUSTOM mode id — a free-form
+ * string that `INFO`'s `<format>` echoes verbatim — and the human spelling of one is
+ * `1080p50`. Under a looser `\d{2,5}` that token divided to 0.5 Hz and answered **2000 ms**:
+ * a plausible-looking number that would have parked the mixer hold for two seconds of
+ * holes-without-fills on air, with every swap and update queued behind the seat lock. A
+ * token outside the convention is not a slow mode, it is an UNREAD one — so it takes the
+ * `null` path to `#lookMixerHoldMsFor`'s honest 40 ms fallback.
+ */
+export function videoModeFramePeriodMs(mode: string): number | null {
+  const match = /^(?:dci)?\d+([ip])(\d{4,5})$/.exec(mode.trim().toLowerCase());
+  if (match === null) return null;
+  // The trailing digits are the rate × 100 (`5000` → 50 Hz, `5994` → 59.94 Hz, `2398` →
+  // 23.98 Hz). PAL/NTSC and other named modes carry no rate and answer null.
+  const rate = Number(match[2]) / 100;
+  if (!Number.isFinite(rate) || rate <= 0) return null;
+  return match[1] === 'i' ? 2000 / rate : 1000 / rate;
+}
+
+/**
+ * Pull the video-mode token out of an `INFO <channel>` XML body, or null when
+ * no mode element is present.
+ *
+ * 🔴 **`B-189` — the tag the REAL server emits is `<format>`, and this function
+ * spent its whole life looking for one it does not.** A reply captured verbatim
+ * from CasparCG 2.5.0 `69e8ad5` (2026-08-31, `INFO 1` on the wire) begins:
+ *
+ *   `<?xml version="1.0" encoding="utf-8"?>\n<channel>\n   <format>1080p5000</format>\n   <framerate>50</framerate>…`
+ *
+ * — no `<video-mode>` anywhere in the document. That spelling came from
+ * `@cg/amcp-mock`, which was written from this code's expectation rather than
+ * from a real reply, so every test proved the two halves of one guess agreed
+ * with each other. `<format>` is matched FIRST because it is the measured
+ * dialect; `<video-mode>` is kept so any build or fixture that speaks it keeps
+ * parsing — accepting both costs one alternation and closes the gap either way.
  *
  * Deliberately a targeted extraction and not an XML parse: the bridge needs ONE
  * leaf out of a document whose shape differs across CasparCG versions, and an
  * unexpected surrounding structure should still yield the mode rather than throw.
  */
 export function parseVideoModeFromInfo(xml: string): string | null {
-  const match = /<video-mode>\s*([^<\s]+)\s*<\/video-mode>/i.exec(xml);
+  const match =
+    /<format>\s*([^<\s]+)\s*<\/format>/i.exec(xml) ??
+    /<video-mode>\s*([^<\s]+)\s*<\/video-mode>/i.exec(xml);
   if (match === null) return null;
   const token = (match[1] ?? '').trim();
   return token === '' ? null : token;
