@@ -4592,6 +4592,38 @@ no plant access, so the number is not in this entry.** The MECHANISM needed no h
 established; the CHOICE between the candidates needs the measurement, because it decides whether the
 gap is one frame or twelve.
 
+### ⭐ MEASURED LOCALLY 2026-08-31 (`SKEW-COUNT-01`) — the window recorded on the owner's machine, with the PLAY inside it; the PLANT measurement above stays owed
+
+Ran on the owner's dev machine against the real 2.5.0 `69e8ad5` at `1080i5000`, with
+[[B-174]]'s harness (`tools/skew-harness`, `--with-play-switch`) — the channel recorded to a
+file, the switch driven through `setActiveLook`, the verbs read off a wire tap. **This is a
+LOCAL reading of the window's shape and does not discharge the plant measurement above** — no
+DeckLink, no genlock, and the flash the owner saw was on plant hardware.
+
+🔴 **How a `PLAY` gets into a switch TODAY, post-freeze — the general gap has a concrete
+door, and it is LEVEL 1.** Session BP froze the ASSIGNMENT (level 2) at take, but the CATALOG
+is deliberately not frozen (_"if the installation re-points that entry, the row follows"_) —
+and `setSourceCatalog` validates, applies and emits **without reconciling**. So a catalog
+re-point LURKS exactly the way the assignment used to, and the next look press applies it
+mid-switch: measured on the wire as `PLAY` → `MIXER VOLUME 0` → `MIXER FILL`/`CLIP` ×4 →
+`CG UPDATE`, all inside one `setActiveLook`. This is the mechanism at the top of this item,
+alive one precedence level down; it is within patch A6's already-recorded scope ("a re-point
+landing in the same action as a switch"), so it takes no new number.
+
+**The window, in recorded fields (20 ms each), four runs, all four carrying the `PLAY`:**
+
+| event                                | field offset, relative to the fills |
+| ------------------------------------ | ----------------------------------- |
+| `MIXER FILL` lands (geometry moves)  | 0                                   |
+| page repunches (holes move)          | +1 … +3 (the [[B-174]] skew)        |
+| the replacing producer's FIRST frame | **+4, every run (80 ms)**           |
+
+So locally the wrong-content exposure is bounded by the REPLACE, not by the skew: the `PLAY`
+is issued first on the wire but its first frame lands last, ~2 fields after the holes — the
+old source sits inside the moving window for ~4 fields (~80 ms) end to end. A media producer
+opens faster than a DeckLink input initialises (see [[B-177]]), so **treat 80 ms as a floor,
+not an estimate, for the plant**.
+
 **Acceptance**
 
 - WHEN a source is changed and applied THEN it reaches the wire at that moment, not at the next
@@ -6508,7 +6540,7 @@ stated so it can be argued with.
   it), [[B-171]] (the wording item — a sentence nobody can finish reading and a sentence that is
   wrong are different defects over the same surface).
 
-## [ ] B-174 — the PAGE/MIXER skew is VISIBLE TO THE NAKED EYE on the plant, and the bench figure that made it look impossible measured a DIFFERENT QUANTITY ⟨priority: high — the page half was never measured to a painted frame, and the parts that WERE measured already predict a 1–2 frame skew⟩ — OPEN, filed 2026-08-24 from the two-server plant run; **RE-SCOPED 2026-08-29 (`SKEW-MEASURE-01`) — see the re-scope section below before reading the original framing**
+## [ ] B-174 — the PAGE/MIXER skew is VISIBLE TO THE NAKED EYE on the plant, and the bench figure that made it look impossible measured a DIFFERENT QUANTITY ⟨priority: high — the page half was never measured to a painted frame, and the parts that WERE measured already predict a 1–2 frame skew⟩ — OPEN, filed 2026-08-24 from the two-server plant run; **RE-SCOPED 2026-08-29 (`SKEW-MEASURE-01`)**; **`k` MEASURED 2026-08-31 (`SKEW-COUNT-01`): 1–3 fields = 20–60 ms at `1080i5000`, median 30 ms, ten recorded runs — see the measurement section at the end**
 
 > ⚠ **This heading first read _"against a bench figure that says it is sub-frame … a measured 2.2–8.3 ms
 > is being contradicted by air"_.** That framing is a **category error and is corrected below**: the
@@ -6718,6 +6750,102 @@ Same visit, same capture, channel read EMPTY before and after, `2.5.0` build ass
 **Env for the measurements above:** local, 2026-08-29. jsdom for the compute table; system Chrome
 (Playwright, `channel: 'chrome'`) for the paint table, at 60 Hz — **not CEF, and not at the channel
 rate**, which is exactly why (e) and (f) remain unmeasured.
+
+### ⭐ MEASURED 2026-08-31 (`SKEW-COUNT-01`) — `k` = 1–3 fields (20–60 ms) at `1080i5000`, median 30 ms, from TEN recorded switches on the owner's machine
+
+The frame count this item owed now exists, produced automatically by a committed harness
+(**`tools/skew-harness`** — one command, see its README) against the real local
+2.5.0 `69e8ad5`: the CHANNEL recorded to a file through a second consumer, ONE look switch
+per run driven through `setActiveLook` (never hand-typed AMCP), the two transitions found by
+pixel comparison, and every run's window classified by a transparent TCP tap on the AMCP
+socket. `report.json` per sweep is committed under `tools/skew-harness/evidence/`.
+
+**Why recording the channel to a file measures `k` exactly — verified, not assumed.** In
+`v2.5.0-stable` source, `video_channel.cpp`'s tick calls the stage once, composites EVERY
+layer's frame in `mixer_(stage_frames.frames, …)` into ONE `const_frame`, and hands that same
+frame to `output_(…)`, which fans it to ALL consumers; the DeckLink/SDI hop is strictly
+downstream of compositing. So the skew is fully formed in the composited sequence and any
+consumer replays it. Confirmed empirically here too: **two file consumers attached at once
+recorded 75/75 frames byte-identical** over a 1.5 s window.
+
+**The channel mode, and the interlace fact that sets `k`'s unit.** This machine's config is
+`1080p5000`; the harness flips it to **`1080i5000` at runtime (`SET 1 MODE` → `202 OK`),
+measures there, and restores it**. Two server facts matter and were verified in source +
+on the wire:
+
+- `INFO <ch>` reports `framerate` **50 in BOTH modes** — `video_channel` publishes
+  `framerate × field_count`, i.e. the FIELD rate. Never derive the frame period from it.
+- `stage.cpp` pulls BOTH fields inside one 25 Hz tick — _"it lets us tick at 25hz and avoids
+  amcp changes starting on the second field"_ — so a `MIXER FILL` lands **tick-aligned
+  (40 ms granularity)**, while the recorded file carries both fields at 50 fps. Measured:
+  the mixer transition always lands on one parity; **the page's repunch can land on the OFF
+  field** (odd offsets observed), because the html producer pops a fresh CEF buffer per
+  field. `k` is therefore counted in 20 ms FIELDS below, the finest unit air actually shows.
+
+**The distribution — min / median / max, never a single value:**
+
+| mode                  | `k` per run (fields = 20 ms each) | ms             | min / median / max  |
+| --------------------- | --------------------------------- | -------------- | ------------------- |
+| `1080i5000` (10 runs) | 1, 1, 1, 1, 1, 2, 3, 3, 3, 3      | 20×5, 40, 60×4 | **20 / 30 / 60 ms** |
+| `1080p5000` (6 runs)  | 1, 1, 1, 1, 2, 2 (frames = 20 ms) | 20×4, 40×2     | **20 / 20 / 40 ms** |
+
+Every run's wire window was verified `PLAY`-free — exactly `MIXER FILL`+`CLIP` per plate then
+one `CG UPDATE` — and every recording passed a per-run cadence guard (frames = wall-clock ÷
+period; a run that slips is DISCARDED, never rounded). **The two modes agree in WALL-CLOCK
+terms (~20–60 ms) rather than in tick counts** — the page half lags by its own frame clock
+plus the command gap, which is the §-hop prediction of the re-scope section confirmed at its
+small end: mixer on frame N, holes one-to-two frame periods later.
+
+**The probes, and what would make them wrong.** Probe A sits strictly inside the
+INTERSECTION of one plate's hole across both looks (≥60 px from every hole edge of either
+look), over a static high-contrast pattern whose mapping changes wildly with the box shape
+(`cover`, wide-banner → tall-column) — it fires when the FILLS move. Probe B sits inside the
+entering look's hole and ≥60 px clear of EVERY hole of the outgoing look, over the painted
+background — it fires when the PAGE repunches. A probe touching a hole edge would fire on
+both transitions and read `k = 0`; placement is machine-checked (`probePlacementIssues`,
+asserted in unit tests AND re-run before each sweep). The source clips are STATIC because a
+moving source changes probe A every frame and destroys first-change detection. Frame 44 of
+run 00 (`evidence/2026-08-31-i5000`) is the artefact itself, on disk: holes at the banner
+look, fills at the column look, black through the mismatch.
+
+**Caveats, stated rather than hidden.** This machine has no DeckLink and no genlock (the
+channel demonstrably slips on >2 s recording windows — the harness stays inside the verified
+regime); CEF here shares a desktop GPU with the recording encoder. The mechanism and the
+quantisation are the server's own and transfer; the exact medians on the plant may shift by
+a field, which the SAME harness pointed at the plant server would settle from the studio.
+
+### 🔴 What the measured `k` SELECTS — argued, NOT implemented; the owner chooses
+
+- ⭐ **Mixer delay, parameter = 1 channel frame.** `k` is literally its parameter, and the
+  measured `k` clusters at one frame period (median 30 ms at `1080i5000`, i.e. between one
+  field and one frame). A one-frame hold on the mixer pair centres the distribution on zero:
+  worst-case misalignment drops from 3 fields to 1, in either direction. It cannot reach
+  zero — the residual ±1-field jitter is CLOCK QUANTISATION (the page's paint clock vs the
+  channel tick), which no fixed offset removes.
+  **How a real delay would be expressed:** 🔴 a tween is NOT a delay (`MIXER FILL … <frames>
+<tween>` animates; the looks are entered with a cut), and mainline 2.5.0 has **no
+  scheduling verb at all** — verified against `v2.5.0-stable`'s `AMCPCommandsImpl.cpp`: zero
+  matches for "schedule"; `MIXER … DEFER`/`COMMIT` exists but is ATOMICITY (a
+  `deferred_transforms_` list applied on `COMMIT`), not timing. So the delay lives in the
+  BRIDGE: `setActiveLook` holds the `MIXER FILL`/`CLIP` pair one frame period on its own
+  timer while keeping the fills-only-on-success semantics. (`DEFER` the fills + `COMMIT`
+  after the page paints is a viable spelling of the ACK candidate, not of this one — §3b's
+  COMMIT-scope question still gates it.)
+- **Page-acknowledgement gating the mixer** — the measurement WEAKENS this candidate: its
+  own costing said _"at `k=1` it may cost more than it saves"_, and `k` IS ~1. The ack
+  cannot be sent before the page's committed frame (double-rAF ≈ 1–2 page frames) plus a
+  page→bridge trip that does not exist today, so the fills would land 1–2 frames AFTER the
+  holes — the same artefact, mirrored.
+- **One tweened timeline driving both** — unchanged by the number: structurally right, most
+  expensive, and turns the cut into an animation, which is a product decision rather than a
+  fix.
+
+**Nothing was implemented.** The number, the harness and this argument are the whole of
+`SKEW-COUNT-01`'s deliverable.
+
+- **Cross-refs (measurement):** [[B-155]] (same harness, `--with-play-switch` — its window
+  measured separately, 80 ms locally, plant still owed), [[B-189]] (found by this harness's
+  wire tap: the channel-mode read discards every real `INFO` reply and re-sends forever).
 
 ## [ ] B-177 — a DeckLink input admits ONE producer, `CLEAR` returns before the destroy, and the failure arrives disguised as `404 File not found.` ⟨priority: high — the seating path re-`PLAY`s live layers, and the disguise sends the diagnosis to the wrong place⟩ — OPEN, filed 2026-08-25 from the DeckLink plant walk
 
@@ -7229,3 +7357,60 @@ right at the time:**
   `B-178` (filed in the same session, directly above); the duplicate audit printed exactly `B-056`
   and `B-080`; a whole-tree `git grep` for `B-179` returned only [[B-178]]'s own forward reference
   and this file's pointer, never a heading; `B-180` returned nothing at all.
+
+## [ ] B-189 — the channel-mode read DISCARDS every real CasparCG reply, so R-030's raster check is DISARMED on every real install and the "one-shot" `INFO` re-sends forever ⟨priority: medium — a guard that cannot fire, plus a per-sweep command on the wire, invisible to every test because the mock speaks the shape the code expects⟩ — OPEN, filed 2026-08-31 from `SKEW-COUNT-01`'s wire tap
+
+**Found on a wire tap, not by reading code.** `B-174`'s harness (`tools/skew-harness`) proxies the
+bridge's AMCP socket, and every recorded switch window carried an ambient `INFO 1` — one per sweep
+tick, forever. The "one-shot" channel-mode read never latches, because it never succeeds.
+
+### Two independent breaks, each sufficient, mutually masking
+
+`CasparRuntime.#readChannelMode` sends `INFO <channel>` and then:
+
+1. 🔴 **It gates on the wrong response KIND.** It requires `response.kind === 'ok-multi'` (a `200`
+   multi-line block). The real 2.5.0 `69e8ad5` answers `INFO <channel>` with **`201 INFO OK`** plus
+   ONE payload chunk — measured on the tap — which `@cg/caspar-client`'s parser correctly classifies
+   as **`ok-line`**. The read returns early and records nothing.
+2. 🔴 **Even past that gate, the parse looks for a tag the server does not emit.**
+   `parseVideoModeFromInfo` (`@cg/shared-ipc`) matches `<video-mode>…</video-mode>`; the real reply
+   carries **`<format>1080p5000</format>`**. Zero matches, `null`, nothing recorded.
+
+**Why every test is green while both are broken:** `@cg/amcp-mock`'s `handleInfo` answers
+`INFO <ch>` as **`ok-multi` 200** with a **`<video-mode>`** tag — the expected shape on BOTH axes at
+once. The suites (and `awaitChannelModeRead`, the bridge tests' own quiescence helper) therefore
+prove the code agrees with the mock, and nothing anywhere had ever read the real server's reply
+until this tap did. The `B-155` lesson — _"the mock is precisely the thing that models the behaviour
+in question"_ — met on a query verb.
+
+### Consequences, in order of harm
+
+- **R-030's raster-mismatch check can never fire on a real install.** Its own doc says the
+  disagreement is "shouted on stderr and pushed to every browser"; in fact `observed` stays absent
+  for ever and `rasterVerdict` reports `unreadable` — "the check could not be performed" — which
+  reads as a shrug, not as a defect. A channel configured `1080i5000` against a server running
+  `1080p5000` mis-places every graphic with no warning anywhere. (`CLAUDE.md` golden rule 6: the
+  failure-silent branch was designed for an UNREACHABLE server, and a reply in the wrong dialect
+  lands in it indistinguishably.)
+- **The latch (`#modeReadFrom`) is set only on success, so the sweep re-sends `INFO <ch>` every
+  tick, indefinitely** — measured at one per 250 ms under the harness's sweep. Low priority, small,
+  but it is a permanent background command the design says should happen once per primary.
+- **`awaitChannelModeRead` never completes against a real server**, so any future test or tool that
+  reuses it off-mock will hang — the harness had to wait on reachability instead
+  (`tools/skew-harness/src/run.ts`, `whenServerReachable`).
+
+### The fix shape (not implemented here — `SKEW-COUNT-01` implements nothing)
+
+Accept `ok-line` alongside `ok-multi` (joining `data` / `lines` respectively) and parse BOTH
+spellings of the mode tag (`<format>` first, `<video-mode>` kept for the mock and any build that
+speaks it) — then make the MOCK answer the measured real shape (`201` + `<format>`), not the other
+way round, so the suite stops vouching for a dialect no server speaks. A regression test belongs at
+the parser level with the REAL reply pasted verbatim.
+
+**Env:** 2.5.0 `69e8ad5` local, 2026-08-31, `SET 1 MODE` between `1080p5000`/`1080i5000` — the reply
+shape is the same in both. Wire evidence in `tools/skew-harness/evidence/2026-08-31-i5000/report.json`
+(`commands` arrays).
+
+- **Cross-refs:** [[B-174]] (the harness whose tap caught it), [[B-155]] (the green-mock trap this
+  repeats on a query verb), [[R-030]] (the check this disarms), [[B-100]]/[[B-101]] (the axis rules
+  the silent-failure branch was written for).

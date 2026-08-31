@@ -1860,3 +1860,24 @@ crashes, not behavioural disagreements**: the reverted preflight indexes a `sour
 fixtures no longer write, so three POSITIVE CONTROLS died on a `TypeError` rather than on a value.
 Those three prove nothing either way and are excluded from the evidence. A rounded "42 red, all
 controls green" would have been the easy sentence and the false one.
+
+### 2026-08-31 — `SKEW-COUNT-01`: `B-189` CLAIMED, from the harness's own wire tap
+
+**Claimed: `B-189`** — the channel-mode read discards every real CasparCG `INFO <channel>` reply
+(gates on `ok-multi` where the real server answers `201`/`ok-line`, then parses `<video-mode>` where
+the real server emits `<format>`), so R-030's raster check is disarmed on every real install and the
+"one-shot" re-sends every sweep tick forever. Filed in
+[bugs-runtime.md](bugs-runtime.md). Found by `tools/skew-harness`'s AMCP tap while measuring
+[[B-174]]'s `k` — a genuinely NEW defect, not a re-scope: no existing item covers the mode read.
+
+**Derivation, from headings as the rule requires:** highest `B-` HEADING across every ref before this
+claim was **`B-188`** (`bugs-designer.md`); `git grep` for `B-189` returned only the registry's own
+two forward pointers and never a heading. `R-` highest is `R-059`, `P-` highest `P-037` — neither
+space was touched.
+
+**NOT claimed, deliberately:** `B-174` was UPDATED IN PLACE with the measured `k` (1–3 fields =
+20–60 ms at `1080i5000`, median 30 ms, ten runs) and `B-155` with its `PLAY`-carrying window
+(~80 ms locally, via the LEVEL-1 catalog-re-point lurk — inside patch A6's already-recorded scope,
+so no number). The phenomenon-had-a-number rule from the 2026-08-29 entry, applied twice.
+
+⇒ **Next free after this session is `B-190`**, and `B-` stays contiguous `B-001` … `B-189`, no gaps.
