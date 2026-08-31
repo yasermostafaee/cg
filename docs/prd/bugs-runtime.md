@@ -7066,6 +7066,11 @@ instinct**: on a light page the distribution straddles zero (a bigger hold would
 certain), while on a video-backed page it is already a frame short. A constant cannot serve both —
 which is the argument for (1) and against tuning.
 
+**CI, on the commit that carries these measurements (`41cd9dc6`):**
+[run 33419204741](https://github.com/yasermostafaee/cg/actions/runs/33419204741) — `conclusion:
+success`, with the `E2E (Playwright)` job's own conclusion `success` (it RAN; it was not skipped),
+alongside `Lint • Typecheck • Test • Build`. The Linux `e2e` debt for this session is DISCHARGED.
+
 **Evidence:** `tools/skew-harness/evidence/2026-08-31-residue-*/report.json` — `flat-2looks`,
 `video-2looks`, `flat-3looks`, `flat-4looks`, `flat-4looks-heavy`, `visibility-4looks`,
 `empty-intersection`. ⚠ The `.png` frames named above sit beside those reports and are GITIGNORED,
