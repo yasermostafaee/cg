@@ -795,6 +795,46 @@ importers:
         specifier: ^2.1.8
         version: 2.1.9(@types/node@22.19.19)(happy-dom@15.11.7)(jsdom@25.0.1)(lightningcss@1.32.0)
 
+  tools/skew-harness:
+    dependencies:
+      '@cg/caspar-bridge':
+        specifier: workspace:*
+        version: link:../caspar-bridge
+      '@cg/shared-ipc':
+        specifier: workspace:*
+        version: link:../../packages/shared-ipc
+      '@cg/shared-schema':
+        specifier: workspace:*
+        version: link:../../packages/shared-schema
+      '@cg/template-runtime':
+        specifier: workspace:*
+        version: link:../../packages/template-runtime
+      '@cg/vcg-format':
+        specifier: workspace:*
+        version: link:../../packages/vcg-format
+    devDependencies:
+      '@cg/eslint-config':
+        specifier: workspace:*
+        version: link:../../packages/eslint-config
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.19
+      esbuild:
+        specifier: ^0.24.0
+        version: 0.24.2
+      eslint:
+        specifier: ^9.17.0
+        version: 9.39.4
+      rimraf:
+        specifier: ^6.0.1
+        version: 6.1.3
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.8
+        version: 2.1.9(@types/node@22.19.19)(happy-dom@15.11.7)(jsdom@25.0.1)(lightningcss@1.32.0)
+
   tools/soak-runner:
     dependencies:
       '@cg/amcp-mock':
