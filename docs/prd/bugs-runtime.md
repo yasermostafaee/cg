@@ -6943,6 +6943,138 @@ A dev-box distribution is the acceptance criterion this session was given and it
 plant's genlocked DeckLink chain and its CEF host are still different hardware, and `SKEW-COUNT-01`'s
 caveat that medians may shift by a field there stands until someone looks.
 
+### MEASURED 2026-08-31 (`SKEW-RESIDUE-01`) — what the residue IS, and the two axes swept. NOTHING implemented
+
+The owner, after the hold shipped: _"There's still a small delay when switching looks. Sometimes it
+isn't there at all; repeating it several times, sometimes yes and sometimes no, but very small."_ and
+_"Both directions are bad. When there is no black, the hole appears quickly but the previous boxes are
+still there. When the hole goes later, black is visible."_
+
+The first half is the measured distribution in words: `-20/0/+20 ms` means a field early, exact, or a
+field late, **random per switch**, because the page's paint clock has no fixed phase against the
+channel tick. **No constant hold can remove that.** The second half is what this session quantified.
+
+#### 1. What is on screen during the mismatch, by direction
+
+`tools/skew-harness --classify` now reads the WHOLE frame, not two probes, and classifies every pixel
+of the window against the recording's own settled states: **transient black** (an open mask over no
+picture), **misplaced picture** (still showing the outgoing look where the entering look shows
+otherwise) and **other** (neither — hole edges, codec, anything the rule does not cover). Ten runs,
+`1080i5000`, two looks, flat background; the per-run CONTROL (the classifier run on the settled
+frames either side) came back **≤ 0.04 %** on every run, which is what says these numbers describe
+the switch rather than the instrument.
+
+| direction                   | runs | BLACK, peak % of frame | BLACK visible | MISPLACED, peak % of frame | MISPLACED visible |
+| --------------------------- | ---- | ---------------------- | ------------- | -------------------------- | ----------------- |
+| **hole-early** (k = −20 ms) | 6/10 | **15.9 %**             | 20 ms         | **37.4 %**                 | 20 ms             |
+| **exact** (k = 0)           | 2/10 | 0                      | —             | 0                          | —                 |
+| **hole-late** (k = +20 ms)  | 2/10 | **2.3 %**              | 20 ms         | **15.8 %**                 | 20 ms             |
+
+🔴 **The two directions are NOT equally bad, and the worse one is the one this fixture produces most
+often.** Hole-early puts **seven times** the black on air (15.9 % against 2.3 %) and more than twice
+the misplaced picture. Frames on disk, both opened and confirmed by eye:
+`evidence/2026-08-31-residue-flat-2looks/skew-02-black.png` (hole-early: the column holes open with
+the banner pictures still in them — the top strip of each hole is picture, the bottom two-thirds is
+BLACK) and `.../skew-00-black.png` (hole-late: the banner holes still open with the column pictures
+inside them — a black bar between the two, no black anywhere else).
+
+⚠ `k = 0` is not "small"; it is **nothing at all**. The mismatch window is `[min, max − 1]` frames,
+which is EMPTY when both halves land on one frame — measured, not assumed (the classifier's own
+`k = 0` runs report zero of every class).
+
+#### 2. The two axes nobody had swept
+
+**PAGE CONTENT — real, and it is where the residue lives.** A full-frame `<video>` decoding every
+frame behind the same scene (a real scene element through the runtime's own `assetUrls` seam, still
+content plus one moving patch as the decoder's positive control — visible in every recorded frame):
+
+| scene                                    | k min / median / max   |
+| ---------------------------------------- | ---------------------- |
+| flat background, 2 looks                 | **−20 / −20 / +20 ms** |
+| **full-frame video background**, 2 looks | **0 / +20 / +60 ms**   |
+
+The whole distribution moves LATE by about one channel frame, and the hole-early half disappears:
+4 runs exact, 4 hole-late, none early. **The 40 ms hold was tuned against a page with nothing to do;
+a page with a video behind it lands one to one-and-a-half frames after the fills.**
+
+**NUMBER OF LOOKS — no effect, and this contradicts the owner's report.** Filler looks are built from
+the SAME two plates (so the union pre-seat and every wire command are identical) and are never
+entered; the measured switch is always banner → column:
+
+| looks                                                | k min / median / max |
+| ---------------------------------------------------- | -------------------- |
+| 2                                                    | −20 / −20 / +20 ms   |
+| 3                                                    | −20 / −20 / +20 ms   |
+| 4                                                    | −20 / −10 / +20 ms   |
+| 4, each filler carrying a full-frame panel + 8 boxes | −20 / −20 / +20 ms   |
+
+⇒ **`k` does not grow with look count**, even when the extra looks carry real content. The owner's
+1-box/2-box/3-box template most likely got worse for the axis ABOVE — its looks carry page content —
+rather than for the count. ⚠ Worth re-asking him what those looks contained before spending on this.
+
+#### 3. How an inactive look is hidden, and what `display:none` is worth
+
+**It is already `display: none`** — `applyArrangementToNodes` writes `node.style.display = on ? '' :
+'none'` (`packages/template-runtime/src/arrangement-view.ts`), driven by the one `resolveVisibilityOf`
+predicate, and `B-150`'s `LookMediaPark` additionally pauses and silences the drivers inside a hidden
+look. So an inactive look is out of the layout and paint cycle entirely: the premise that the page
+"carries every look's full-frame subtree at once" is true of the DOM and false of the frame budget.
+
+Measured rather than argued: with the hiding switched to `visibility: hidden` (a TEMPORARY local
+patch, reverted — `git diff` on that file is empty) and four heavy looks, `k` read
+**−20 / −10 / +20 ms** against `display: none`'s **−20 / −20 / +20**. No measurable difference on this
+fixture: at four looks the page has headroom either way, which is the same reason the look-count
+sweep is flat.
+
+⚠ **The repunch traverses ALL looks**: `sceneMaskHoles` calls `flattenElements(scene, 'paint')` over
+the whole scene and only then filters by on-screen-ness, so its cost grows with look count — but the
+sweep says that cost stays under one field at four looks.
+
+#### 4. Which remedy the data supports
+
+1. 🥇 **INTERSECTION MASK during the transition window** — punch `old ∩ new` for the window so every
+   open pixel is backed by a picture in both arrangements. It is the only candidate that removes BOTH
+   classes in BOTH directions, and the data says the worst direction costs **15.9 % of the frame
+   black plus 37.4 % misplaced** for one field. Its cost is a smaller picture for that same field.
+   ⚠ **The empty-intersection edge case, captured rather than reasoned about**: two looks that do not
+   overlap punch nothing, and the frame is the template alone —
+   `evidence/2026-08-31-residue-empty-intersection/empty-00-after.png`, a flat field with every box
+   gone. That is one field of "the boxes blinked", against today's one field of black rectangles
+   (`empty-00.png`, the same capture one frame earlier).
+   ⚠ **NOT the union**: it enlarges the open area, so the late-hole case gains black rather than
+   losing it. Recorded so the idea is not revived.
+2. 🥈 **A protocol variant** — _"close to the intersection now, open the new look in N ms"_. The tell
+   CAN carry it: `__cg` is a namespace object designed to be extended, one shared codec
+   (`packages/shared-schema/src/control-payload.ts`), and unknown members are silently dropped by the
+   reader, so an older page ignores a new field instead of failing. But the page does nothing
+   time-delayed today — `update()` is `async` with no `await` in its body — and no intersection
+   concept exists anywhere in the tree. It is candidate 1 PLUS a timer and a schema change.
+3. ❌ **PHASE-LOCK — dead, and the repo already measured why.** Nothing carries a channel frame
+   number: OSC's `/channel/N/framerate` is parsed as a RATE, `/foreground/file/frame` was measured
+   ABSENT (ADR 0004), `INFO` has no tick index, the bridge's tick tap keeps only a last-arrival
+   timestamp and throttles that event to 1 Hz, and the page's whole time base is `rAF` /
+   `performance.now()`. 2.5.0 has no scheduling verb. Phase-lock needs a mechanism that exists on
+   neither side.
+
+**RECOMMENDATION, in two lines:** take the intersection mask (1). It is the only option that removes
+black AND misplaced picture in BOTH directions without inventing a clock, and the number that decides
+it is `15.9 % black + 37.4 % misplaced for 20 ms` in the direction this fixture produced six times in
+ten — against a cost of one field at the intersection's smaller area.
+
+⚠ **And the hold's default should be re-judged against the page-content number rather than raised on
+instinct**: on a light page the distribution straddles zero (a bigger hold would make hole-late
+certain), while on a video-backed page it is already a frame short. A constant cannot serve both —
+which is the argument for (1) and against tuning.
+
+**Evidence:** `tools/skew-harness/evidence/2026-08-31-residue-*/report.json` — `flat-2looks`,
+`video-2looks`, `flat-3looks`, `flat-4looks`, `flat-4looks-heavy`, `visibility-4looks`,
+`empty-intersection`. ⚠ The `.png` frames named above sit beside those reports and are GITIGNORED,
+like the `.mkv` recordings and for the same reason (a pattern frame is ~750 KB): they are on the
+machine that took them. The `report.json` files carry every number, including the per-frame series. The instrument gained a SEPARATION GUARD in this session: a crossing must reach
+40 % of what that probe settled between its two states, because the video background's own codec
+noise produced a crossing of 6.3 against a settled delta of 74 and reported `k = −340 ms` beside nine
+runs at +40.
+
 - **Cross-refs (fix):** the spec text moved with the code per spec discipline —
   `openspec/changes/multibox-layout-switch/specs/runtime-multibox-layout/spec.md` (the switching
   requirement), `tasks.md` 6.7/7.9 (dated amendments), `design.md` §2.9; [[B-158]] (its
