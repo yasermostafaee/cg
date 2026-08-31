@@ -6805,7 +6805,10 @@ on the wire:
 | `1080p5000` (6 runs)  | 1, 1, 1, 1, 2, 2 (frames = 20 ms) | 20×4, 40×2     | **20 / 20 / 40 ms** |
 
 Every run's wire window was verified `PLAY`-free — exactly `MIXER FILL`+`CLIP` per plate then
-one `CG UPDATE` — and every recording passed a per-run cadence guard (frames = wall-clock ÷
+one `CG UPDATE` (⚠ **the ORDER reversed and the COUNT changed later the same day**: `SKEW-HOLD-01`
+put the `CG UPDATE` first, and `SKEW-INTERSECT-01` made it two — a narrowing tell and a settling
+one. This paragraph describes the wire as it was WHEN THIS WAS MEASURED) — and every recording
+passed a per-run cadence guard (frames = wall-clock ÷
 period; a run that slips is DISCARDED, never rounded). **The two modes agree in WALL-CLOCK
 terms (~20–60 ms) rather than in tick counts** — the page half lags by its own frame clock
 plus the command gap, which is the §-hop prediction of the re-scope section confirmed at its
@@ -7264,6 +7267,14 @@ read back on the boot line.
 GITIGNORED for the same reason as every earlier sweep's (a pattern frame is ~750 KB); the
 `report.json` files carry every number, including the per-frame series and the wire commands of
 each window.
+
+**CI, on the commit that carries the fix and the measurements (`a7656b05`):**
+[run 33437892406](https://github.com/yasermostafaee/cg/actions/runs/33437892406) — `conclusion: success`, with the `E2E (Playwright)` job's own
+conclusion `success` (it RAN; it was not skipped), alongside `Lint • Typecheck • Test • Build`.
+The Linux `e2e` debt for this change is DISCHARGED. The local `pnpm gate` was green at
+**93 successful / 93 total, 0 cached**, and both apps' Playwright suites were run on this host
+before the push (275 + 93 passed) — a Windows pass, which is a reason to push and never a
+discharge.
 
 **Instrument changes in this session, all measurement-only:** a third probe (probe C) inside the
 arriving/departing plate's box, from which terms (b) and (c) are read as differences WITHIN one

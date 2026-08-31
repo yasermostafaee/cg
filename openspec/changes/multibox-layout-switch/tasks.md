@@ -1075,6 +1075,9 @@ candidate shapes.
   **+3…+5 fields** after the outgoing picture leaves, by construction of the tail).
   **Evidence:** `tools/skew-harness/evidence/2026-08-31-intersect-*/report.json` (thirteen sweeps).
   Full numbers, the four decisions and the trade in `docs/prd/bugs-runtime.md` **`B-174`**.
+  ✅ **Linux `e2e` DISCHARGED for the commit that carries this, `a7656b05`:**
+  <https://github.com/yasermostafaee/cg/actions/runs/33437892406> — run `conclusion: success`, with the `E2E (Playwright)` job's OWN conclusion
+  `success` (it RAN; it was not skipped), alongside `Lint • Typecheck • Test • Build` = success.
 
 - [ ] 7.15 🔴 **`B-155` — THE SWITCH FLASH. OPEN, AND NOTHING ABOUT IT IS VERIFIED ON THE PLANT.**
       The owner, on air: _"change `l-1`'s source and press look-1, then when we go to solo it shows
