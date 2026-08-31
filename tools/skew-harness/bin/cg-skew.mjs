@@ -69,6 +69,11 @@ const options = {
   settleMs: numeric(args['settle-ms'], DEFAULT_OPTIONS.settleMs),
   tailMs: numeric(args['tail-ms'], DEFAULT_OPTIONS.tailMs),
   withPlaySwitch: args['with-play-switch'] === true,
+  // `SKEW-RESIDUE-01` — the two scene axes and the artefact classifier.
+  looks: numeric(args.looks, DEFAULT_OPTIONS.looks),
+  background: args.background === 'video' ? 'video' : DEFAULT_OPTIONS.background,
+  classify: args.classify === true,
+  emptyLook: args['empty-look'] === true,
 };
 
 function numeric(value, fallback) {
@@ -126,8 +131,33 @@ print(`recorded frame      : 1 channel frame = ${report.fieldsPerChannelFrame} r
 print('');
 for (const run of report.runs) print(line(run));
 print('');
+print(`scene               : ${report.scene.looks} looks, ${report.scene.background} background`);
 print(`k, in CHANNEL FRAMES : ${fmt(report.kChannelFrames)}`);
 print(`k, in MILLISECONDS   : ${fmt(report.kMilliseconds)}`);
+
+if (report.artefactsByDirection !== undefined) {
+  print('');
+  print('== SKEW-RESIDUE-01 -- WHAT IS ON SCREEN IN THE MISMATCH WINDOW =======');
+  print('(peak share of the frame; ms = frames in which the class was visible)');
+  for (const g of report.artefactsByDirection) {
+    print('');
+    print(`${g.direction}  (${g.runs} run(s))`);
+    print(`  BLACK      peak % of frame : ${fmt(g.peakBlackPct)}`);
+    print(`  BLACK      visible for ms  : ${fmt(g.blackMs)}`);
+    print(`  MISPLACED  peak % of frame : ${fmt(g.peakMisplacedPct)}`);
+    print(`  MISPLACED  visible for ms  : ${fmt(g.misplacedMs)}`);
+    print(`  CONTROL    settled frames  : ${fmt(g.settledResidualPct)}  (must be ~0)`);
+  }
+}
+
+// Outside the classifier's block on purpose: the empty-look capture writes frames and has no
+// classification at all, and a frame nobody is told about is a frame nobody opens.
+const named = report.runs.flatMap((r) => r.artefactFrames ?? []);
+if (named.length > 0) {
+  print('');
+  print('frames on disk (open these — the numbers are only as good as they are):');
+  for (const f of named) print(`  ${f}`);
+}
 
 if (report.playSwitch !== undefined) {
   print('');

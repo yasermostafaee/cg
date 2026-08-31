@@ -109,6 +109,29 @@ export function firstChangeIndex(series: readonly number[], baselineFrames: numb
 }
 
 /**
+ * 🔴 **`SKEW-RESIDUE-01` — THE SEPARATION GUARD, which the doctrine above demanded and the
+ * code did not enforce.**
+ *
+ * `firstChangeIndex` takes the first crossing of a threshold derived from the QUIET baseline.
+ * That is sound while the picture is still, and it broke the moment the page carried a
+ * full-frame video: the clip's own compression noise produced a crossing of **6.3** against a
+ * threshold of 4.0 seventeen frames before the switch, and the run reported `k = −340 ms`
+ * beside nine runs at +40. A weak crossing is not a transition, and the file's own header
+ * already said so — _"a run with no clear separation must be DISCARDED, not rounded"_.
+ *
+ * The bar is DERIVED from the run rather than picked: the transition this switch actually
+ * performed is the difference between the two SETTLED states at that probe, and a crossing
+ * that is not at least {@link SETTLED_FRACTION} of it is not that transition. A fixed
+ * magnitude would have been a guess about an encoder; this is a comparison with the answer.
+ */
+export const SETTLED_FRACTION = 0.4;
+
+/** Whether a crossing is big enough to BE the transition, given what the run settled between. */
+export function separationOk(magnitude: number, settledDelta: number): boolean {
+  return magnitude >= settledDelta * SETTLED_FRACTION;
+}
+
+/**
  * EVERY distinct change event in the series — rising edges over `threshold` — not just the
  * first. `B-155`'s window has THREE moving parts (the producer replace, the fills, the
  * holes), so one probe can legitimately change twice; reducing that to a single index would

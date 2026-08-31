@@ -5,6 +5,8 @@ import {
   distribution,
   firstChangeIndex,
   meanAbsDiff,
+  separationOk,
+  SETTLED_FRACTION,
   splitFrames,
   THRESHOLD_FLOOR,
 } from '../src/analyse.js';
@@ -119,5 +121,25 @@ describe('distribution', () => {
     expect(d.min).toBe(1);
     expect(d.max).toBe(3);
     expect(d.values).toEqual([1, 2, 3]);
+  });
+});
+
+describe('separationOk — a crossing has to LOOK like the transition the run performed', () => {
+  it('accepts a crossing at the scale of the settled difference', () => {
+    expect(separationOk(74, 74)).toBe(true);
+    expect(separationOk(30, 74)).toBe(true);
+  });
+
+  it('🔴 rejects the video-noise crossing that reported k = −340 ms', () => {
+    // The measured numbers from the video-background sweep, run 04: a crossing of 6.3 while
+    // that probe settled 74 between its two states. Nine sibling runs read +40 ms.
+    expect(separationOk(6.3, 74)).toBe(false);
+  });
+
+  it('is a FRACTION of what the run settled, not a fixed magnitude', () => {
+    // A quiet probe that legitimately moves only a little is still accepted, because the bar
+    // moves with it — the point of deriving the bar rather than picking one.
+    expect(separationOk(5, 10)).toBe(true);
+    expect(SETTLED_FRACTION).toBeLessThan(1);
   });
 });

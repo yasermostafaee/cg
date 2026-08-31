@@ -8,20 +8,27 @@ import {
   changeSeries,
   distribution,
   firstChangeIndex,
+  meanAbsDiff,
+  separationOk,
   splitFrames,
   type ChangePoint,
   type Distribution,
 } from './analyse.js';
 import { connectAmcp, framePeriodMs, readChannelMode, type AmcpClient } from './amcp.js';
+import { classifyWindow, directionOf, excludeMask, type ArtefactSummary } from './artefact.js';
 import {
   describeRecording,
+  dumpFramePng,
+  ensureBackgroundClip,
   ensureSourceClips,
   extractProbe,
+  extractScaledFrames,
   probeFrameBytes,
   SOURCE_CLIPS,
   SWAP_CLIP,
 } from './ffmpeg.js';
 import {
+  BACKGROUND_MOTION_PATCH,
   LOOK_BANNER,
   LOOK_COLUMN,
   PLATE_A,
@@ -29,8 +36,9 @@ import {
   probePlacementIssues,
   SKEW_PROBE_A,
   SKEW_PROBE_B,
+  SKEW_SCENE,
 } from './geometry.js';
-import { buildSkewScene } from './scene.js';
+import { buildSkewScene, LOOK_EMPTY } from './scene.js';
 import { bundleTemplateRuntime, buildTemplateHtml } from './template.js';
 import { openWireTap, sentCommands, windowContainsPlay, type WireTap } from './wire-tap.js';
 
@@ -51,6 +59,21 @@ export interface SkewOptions {
   readonly tailMs: number;
   /** `B-155` — also run a switch that carries a PRODUCER CHANGE, reported SEPARATELY. */
   readonly withPlaySwitch: boolean;
+  /**
+   * `SKEW-RESIDUE-01` — how many looks the SCENE carries. Only the first two are ever
+   * entered; the rest are filler that grows the page and nothing else (`fillerLookRects`).
+   */
+  readonly looks: number;
+  /** `flat` (a painted rect) or `video` (a full-frame clip, decoding every frame). */
+  readonly background: 'flat' | 'video';
+  /** Classify what is on screen during each run's mismatch window (`artefact.ts`). */
+  readonly classify: boolean;
+  /**
+   * `SKEW-RESIDUE-01` — switch into {@link LOOK_EMPTY} instead of the column look, to capture
+   * what an EMPTY INTERSECTION would look like. Every k is expected to be DISCARDED here (the
+   * holes never move into probe B by construction) — the deliverable is the frames.
+   */
+  readonly emptyLook: boolean;
 }
 
 /**
@@ -83,7 +106,17 @@ export const DEFAULT_OPTIONS: SkewOptions = {
   settleMs: 800,
   tailMs: 650,
   withPlaySwitch: false,
+  looks: 2,
+  background: 'flat',
+  classify: false,
+  emptyLook: false,
 };
+
+/**
+ * The size the whole frame is classified at. A 4×4 block of real pixels per classified pixel:
+ * enough for an AREA FRACTION, far too coarse for an edge, which is what `artefact.ts` says.
+ */
+export const CLASSIFY_SIZE = { width: 480, height: 270 } as const;
 
 /** A recorded run must reach this fraction of `window ÷ recorded frame period` to be used. */
 export const CADENCE_TOLERANCE = 0.96;
@@ -110,6 +143,22 @@ export interface RunResult {
   readonly probeBEvents: readonly number[];
   readonly commands: readonly string[];
   readonly containedPlay: boolean;
+  /** `SKEW-RESIDUE-01` — what was on screen during the mismatch, when `classify` is on. */
+  readonly artefact?: ArtefactSummary;
+  /** Full-size PNGs of the peak frames, written beside the recording. */
+  readonly artefactFrames?: readonly string[];
+}
+
+/** `SKEW-RESIDUE-01` — the artefact numbers grouped the way the decision needs them. */
+export interface ArtefactByDirection {
+  readonly direction: ArtefactSummary['direction'];
+  readonly runs: number;
+  readonly peakBlackPct: Distribution;
+  readonly peakMisplacedPct: Distribution;
+  readonly blackMs: Distribution;
+  readonly misplacedMs: Distribution;
+  /** The control: what the classifier reports on the SETTLED frames. Must be ≈ 0. */
+  readonly settledResidualPct: Distribution;
 }
 
 export interface SkewReport {
@@ -118,9 +167,12 @@ export interface SkewReport {
   readonly reportedFramerate: number;
   readonly fieldsPerChannelFrame: number;
   readonly probePlacement: readonly string[];
+  /** The scene axes this sweep ran with — a report that cannot say is not evidence. */
+  readonly scene: { readonly looks: number; readonly background: 'flat' | 'video' };
   readonly runs: readonly RunResult[];
   readonly kChannelFrames: Distribution;
   readonly kMilliseconds: Distribution;
+  readonly artefactsByDirection?: readonly ArtefactByDirection[];
   readonly playSwitch?: {
     readonly runs: readonly RunResult[];
     readonly kChannelFrames: Distribution;
@@ -211,6 +263,34 @@ async function analyseRecording(
       eventsB,
     };
   }
+  /*
+    `SKEW-RESIDUE-01` — THE SEPARATION GUARD. What this switch actually did to each probe is
+    the difference between its two SETTLED states, and a crossing far below that is codec
+    noise wearing a transition's clothes. Measured on the video-background sweep: one run
+    crossed at 6.3 against a settled delta of ~74 and reported `k = −340 ms` beside nine runs
+    at +40.
+  */
+  for (const [name, frames, point] of [
+    ['A (the picture)', framesA, probeA],
+    ['B (the holes)', framesB, probeB],
+  ] as const) {
+    const first = frames[Math.max(0, baselineFrames - 1)];
+    const last = frames[frames.length - 1];
+    if (first === undefined || last === undefined) continue;
+    const settledDelta = meanAbsDiff(first, last);
+    if (!separationOk(point.magnitude, settledDelta)) {
+      return {
+        k: null,
+        reason:
+          `probe ${name} crossed at ${point.magnitude.toFixed(1)} but this run settled ` +
+          `${settledDelta.toFixed(1)} between its two states — too weak to be the transition`,
+        probeA,
+        probeB,
+        eventsA,
+        eventsB,
+      };
+    }
+  }
   return { k: probeB.index - probeA.index, probeA, probeB, eventsA, eventsB };
 }
 
@@ -252,8 +332,25 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
     const fieldsPerChannelFrame = /^\d+i/.test(mode.format) ? 2 : 1;
 
     tap = await openWireTap(options.casparHost, options.amcpPort);
-    const scene = buildSkewScene();
-    const html = buildTemplateHtml(scene, await bundleTemplateRuntime());
+    /*
+      `SKEW-RESIDUE-01` — the two axes the owner's report points at. The clip is inlined as a
+      DATA URI through the runtime's own `assetUrls` seam: the bridge serves exactly one HTML
+      document per template (`TemplateHttpServer`), so a second fetchable asset would need a
+      second server, and the point of the axis is the page's per-frame work, not its plumbing.
+    */
+    const assetId = 'skew-bg-asset';
+    const assetUrls: Record<string, string> = {};
+    if (options.background === 'video') {
+      const clip = await ensureBackgroundClip(options.mediaDir, BACKGROUND_MOTION_PATCH);
+      assetUrls[assetId] = `data:video/webm;base64,${fs.readFileSync(clip).toString('base64')}`;
+    }
+    const scene = buildSkewScene({
+      looks: options.looks,
+      background: options.background,
+      videoAssetId: assetId,
+      withEmptyLook: options.emptyLook,
+    });
+    const html = buildTemplateHtml(scene, await bundleTemplateRuntime(), assetUrls);
     const templateId = 'skew-harness';
     const template = {
       templateId,
@@ -294,9 +391,9 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
         await recordOneSwitch({
           ...shared,
           index: i,
-          label: 'skew',
+          label: options.emptyLook ? 'empty' : 'skew',
           from: LOOK_BANNER,
-          to: LOOK_COLUMN,
+          to: options.emptyLook ? LOOK_EMPTY : LOOK_COLUMN,
         }),
       );
     }
@@ -308,9 +405,11 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
       reportedFramerate: mode.reportedFramerate,
       fieldsPerChannelFrame,
       probePlacement: placement,
+      scene: { looks: options.looks, background: options.background },
       runs,
       kChannelFrames: distribution(runs.filter(usable).map((r) => r.kChannel as number)),
       kMilliseconds: distribution(runs.filter(usable).map((r) => r.kMs as number)),
+      ...(options.classify ? { artefactsByDirection: groupArtefacts(runs.filter(usable)) } : {}),
     };
 
     if (!options.withPlaySwitch) return report;
@@ -510,6 +609,37 @@ async function recordOneSwitch(spec: OneSwitch): Promise<RunResult> {
   });
 
   if (!switched.ok) return discard(`the switch was refused: ${JSON.stringify(switched)}`);
+
+  /*
+    `SKEW-RESIDUE-01` — the EMPTY-INTERSECTION capture. This switch has no `k` to find (the
+    entering look punches nothing, so probe B never sees a hole) and the run is expected to be
+    discarded below. What it is for is the FRAMES: the first change probe A sees is the moment
+    every box vanishes under the template, which is what an empty intersection would show for
+    one field. Dumped before the discard so the evidence survives it.
+  */
+  if (options.emptyLook) {
+    const raw = await extractProbe(kept, SKEW_PROBE_A);
+    const probeFrames = splitFrames(raw, probeFrameBytes(SKEW_PROBE_A)).slice(LEAD_SKIP_FRAMES);
+    const point = firstChangeIndex(
+      changeSeries(probeFrames),
+      Math.max(4, Math.floor((options.settleMs * 0.6) / period) - LEAD_SKIP_FRAMES),
+    );
+    const dumped: string[] = [];
+    if (point.index !== null) {
+      for (const offset of [-1, 0, 1]) {
+        const png = path.join(
+          options.outDir,
+          `empty-${String(spec.index).padStart(2, '0')}${offset === 0 ? '' : offset > 0 ? '-after' : '-before'}.png`,
+        );
+        await dumpFramePng(kept, point.index + LEAD_SKIP_FRAMES + offset, png);
+        dumped.push(png);
+      }
+    }
+    return {
+      ...discard('the empty look punches nothing — this run is a FRAME capture'),
+      artefactFrames: dumped,
+    };
+  }
   // 🔴 A dropped channel tick inside the window would silently shorten `k`. A run that did
   // not sustain cadence is DISCARDED, never rounded.
   if (facts.frames < expectedFrames * CADENCE_TOLERANCE) {
@@ -528,6 +658,20 @@ async function recordOneSwitch(spec: OneSwitch): Promise<RunResult> {
   const analysis = await analyseRecording(kept, baselineFrames);
   if (analysis.k === null) return discard(analysis.reason ?? 'no transition found');
 
+  let classified: { artefact: ArtefactSummary; frames: string[] } | null = null;
+  if (options.classify && analysis.probeA.index !== null && analysis.probeB.index !== null) {
+    classified = await classifyRun(
+      kept,
+      analysis.probeA.index,
+      analysis.probeB.index,
+      period,
+      baselineFrames,
+      options.background === 'video',
+      options.outDir,
+      `${spec.label}-${String(spec.index).padStart(2, '0')}`,
+    );
+  }
+
   return {
     ...base,
     kRecorded: analysis.k,
@@ -537,11 +681,92 @@ async function recordOneSwitch(spec: OneSwitch): Promise<RunResult> {
     probeB: analysis.probeB,
     probeAEvents: analysis.eventsA,
     probeBEvents: analysis.eventsB,
+    ...(classified !== null
+      ? { artefact: classified.artefact, artefactFrames: classified.frames }
+      : {}),
   };
 }
 
 function emptyPoint(): ChangePoint {
   return { index: null, threshold: 0, noiseFloor: 0, magnitude: 0, series: [] };
+}
+
+/**
+ * `SKEW-RESIDUE-01` — the artefact numbers per DIRECTION, which is the split the decision
+ * turns on: the owner reports the two directions as looking different, and a pooled average
+ * over a distribution that straddles zero would describe neither.
+ */
+function groupArtefacts(runs: readonly RunResult[]): ArtefactByDirection[] {
+  const directions: ArtefactSummary['direction'][] = ['hole-early', 'exact', 'hole-late'];
+  const out: ArtefactByDirection[] = [];
+  for (const direction of directions) {
+    const withArtefact = runs
+      .map((r) => r.artefact)
+      .filter((a): a is ArtefactSummary => a !== undefined && a.direction === direction);
+    if (withArtefact.length === 0) continue;
+    out.push({
+      direction,
+      runs: withArtefact.length,
+      peakBlackPct: distribution(withArtefact.map((a) => a.peakBlackPct)),
+      peakMisplacedPct: distribution(withArtefact.map((a) => a.peakMisplacedPct)),
+      blackMs: distribution(withArtefact.map((a) => a.blackMs)),
+      misplacedMs: distribution(withArtefact.map((a) => a.misplacedMs)),
+      settledResidualPct: distribution(withArtefact.map((a) => a.settledResidualPct)),
+    });
+  }
+  return out;
+}
+
+/**
+ * Classify one recording's mismatch window.
+ *
+ * The window is `[min(A,B) − 1 … max(A,B) + 1]`: the transition frames themselves are part of
+ * what a viewer sees, and one frame either side is what shows that the classifier returns to
+ * ZERO outside the window — a classifier that reported artefacts in the settled state would be
+ * measuring its own tolerance.
+ */
+async function classifyRun(
+  file: string,
+  aIndex: number,
+  bIndex: number,
+  periodMs: number,
+  baselineFrames: number,
+  excludeMotionPatch: boolean,
+  outDir: string,
+  name: string,
+): Promise<{ artefact: ArtefactSummary; frames: string[] }> {
+  const raw = await extractScaledFrames(file, CLASSIFY_SIZE.width, CLASSIFY_SIZE.height);
+  const frames = splitFrames(raw, CLASSIFY_SIZE.width * CLASSIFY_SIZE.height * 3).slice(
+    LEAD_SKIP_FRAMES,
+  );
+  const exclude = excludeMotionPatch
+    ? excludeMask(CLASSIFY_SIZE, SKEW_SCENE, [BACKGROUND_MOTION_PATCH])
+    : undefined;
+  const artefact = classifyWindow({
+    frames,
+    // The settled states, read from this same recording: the last quiet baseline frame and the
+    // last frame of the tail.
+    beforeIndex: Math.max(0, Math.min(baselineFrames - 1, frames.length - 1)),
+    afterIndex: frames.length - 1,
+    from: Math.min(aIndex, bIndex),
+    to: Math.max(aIndex, bIndex) - 1,
+    direction: directionOf(bIndex - aIndex),
+    periodMs,
+    ...(exclude !== undefined ? { exclude } : {}),
+  });
+  const written: string[] = [];
+  for (const [label, index] of [
+    ['black', artefact.peakBlackFrame],
+    ['misplaced', artefact.peakMisplacedFrame],
+  ] as const) {
+    if (index === null) continue;
+    const png = path.join(outDir, `${name}-${label}.png`);
+    // +LEAD_SKIP_FRAMES: the classifier's indices are into the sliced series, the dump reads
+    // the file. Off by that much and the frame a report names is not the frame it measured.
+    await dumpFramePng(file, index + LEAD_SKIP_FRAMES, png);
+    written.push(png);
+  }
+  return { artefact, frames: written };
 }
 
 async function settleFile(file: string, stepMs = 120): Promise<void> {

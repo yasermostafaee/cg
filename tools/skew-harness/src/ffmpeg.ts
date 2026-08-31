@@ -103,6 +103,69 @@ export async function ensureSourceClips(mediaDir: string, seconds = 20): Promise
   return made;
 }
 
+/**
+ * `SKEW-RESIDUE-01` — **the full-frame background CLIP, still except for one moving patch.**
+ *
+ * The page-content axis needs the page to be doing real per-frame work: decoding and painting
+ * a 1920×1080 video is exactly the work the owner's own template does. Two constraints pull
+ * against each other and both are met here:
+ *
+ * - **STILL**, because the first-change detector reads "the first frame that differs from its
+ *   predecessor" and a moving background makes every frame differ.
+ * - **NOT ENTIRELY STILL**, because "the decoder is running" would otherwise be an assumption.
+ *   One small patch (`BACKGROUND_MOTION_PATCH`) carries a bar that moves every frame — the
+ *   positive control for the whole axis, placed where `probePlacementIssues` proves it touches
+ *   neither probe nor any hole.
+ *
+ * The still content is the same `#1040C0` the painted background uses, so the two variants
+ * differ in DECODE COST and in nothing the measurement reads.
+ */
+export async function ensureBackgroundClip(
+  mediaDir: string,
+  patch: Rect,
+  seconds = 10,
+): Promise<string> {
+  const { ffmpeg } = ffmpegBinaries();
+  const clip = path.join(mediaDir, 'skew-bg-video.webm');
+  if (fs.existsSync(clip)) return clip;
+  const x = String(patch.x);
+  const y = String(patch.y);
+  const h = String(patch.height);
+  const span = String(Math.max(20, patch.width - 20));
+  await run(
+    ffmpeg,
+    [
+      '-y',
+      '-v',
+      'error',
+      '-f',
+      'lavfi',
+      '-i',
+      `color=c=0x1040C0:s=1920x1080:d=${String(seconds)}:r=50`,
+      '-vf',
+      // A white bar that walks across the patch and wraps — one moving thing, everywhere else
+      // byte-identical frame to frame.
+      `drawbox=x='${x}+mod(t*260\\,${span})':y=${y}:w=20:h=${h}:color=white:t=fill`,
+      '-c:v',
+      'libvpx',
+      '-pix_fmt',
+      'yuv420p',
+      // Low, deliberately: the content is one still plus a 20 px bar, so the bitrate decides
+      // the size of the DATA URI the page carries rather than the picture's fidelity.
+      '-b:v',
+      '800k',
+      '-deadline',
+      'realtime',
+      '-cpu-used',
+      '8',
+      '-an',
+      clip,
+    ],
+    { maxBuffer: 32 * 1024 * 1024 },
+  );
+  return clip;
+}
+
 /** What ffprobe says the recording actually contains — the cadence positive control. */
 export interface RecordingFacts {
   readonly frames: number;
@@ -157,4 +220,66 @@ export async function extractProbe(file: string, probe: Rect): Promise<Uint8Arra
 /** Bytes one probe frame occupies in the raw RGB24 stream. */
 export function probeFrameBytes(probe: Rect): number {
   return probe.width * probe.height * 3;
+}
+
+/**
+ * `SKEW-RESIDUE-01` — **the WHOLE frame, scaled down, for classifying what is on screen.**
+ *
+ * `k` says WHEN the two halves land; it says nothing about what the mismatch looks like, and
+ * the owner reports two different-looking artefacts ("black" and "the previous boxes are
+ * still there"). Telling those apart needs pixels everywhere, not two 100×100 probes.
+ *
+ * Scaled because area is a FRACTION and does not need 1080 lines to be measured: at 480×270 a
+ * whole 4-second recording is ~78 MB of RGB rather than 1.2 GB, and one classified pixel is a
+ * 4×4 block whose edges are the only thing lost. ⚠ `neighbor` scaling deliberately — a
+ * smoothing filter would blend the boundary between a hole and its surround into colours that
+ * belong to neither class, which is precisely the distinction being measured.
+ */
+export async function extractScaledFrames(
+  file: string,
+  width: number,
+  height: number,
+): Promise<Uint8Array> {
+  const { ffmpeg } = ffmpegBinaries();
+  const { stdout } = await run(
+    ffmpeg,
+    [
+      '-v',
+      'error',
+      '-i',
+      file,
+      '-vf',
+      `scale=${String(width)}:${String(height)}:flags=neighbor`,
+      '-pix_fmt',
+      'rgb24',
+      '-f',
+      'rawvideo',
+      '-',
+    ],
+    { encoding: 'buffer', maxBuffer: 1024 * 1024 * 1024 },
+  );
+  return new Uint8Array(stdout);
+}
+
+/**
+ * Write ONE frame of a recording out as a PNG, full size — the frame a report names so a
+ * human can open it. The classifier's numbers are only as good as the frames behind them, and
+ * "go and look at frame 137" is not a check anyone performs without the file.
+ */
+export async function dumpFramePng(file: string, index: number, out: string): Promise<void> {
+  const { ffmpeg } = ffmpegBinaries();
+  await run(ffmpeg, [
+    '-y',
+    '-v',
+    'error',
+    '-i',
+    file,
+    '-vf',
+    `select=eq(n\\,${String(index)})`,
+    '-vsync',
+    '0',
+    '-frames:v',
+    '1',
+    out,
+  ]);
 }

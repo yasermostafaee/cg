@@ -52,8 +52,20 @@ export async function bundleTemplateRuntime(): Promise<string> {
  * played itself on a timer would put content on the channel at a moment no command chose —
  * which would land inside a recording window and read as a transition.
  */
-export function buildTemplateHtml(scene: Scene, runtimeBundle: string): string {
+export function buildTemplateHtml(
+  scene: Scene,
+  runtimeBundle: string,
+  /**
+   * `SKEW-RESIDUE-01` — asset id → URL, handed to the runtime's OWN `assetUrls` seam (the one
+   * both exporters use for `img`/`video[data-cg-asset-id]`). A `<video>` injected into the
+   * page beside the stage would have been measured against itself: it would show through the
+   * mask holes instead of the CasparCG layer. Going through the product's seam keeps the clip
+   * a scene element, punched like every other element below a plate.
+   */
+  assetUrls: Readonly<Record<string, string>> = {},
+): string {
   const sceneJson = JSON.stringify(scene);
+  const assetJson = JSON.stringify(assetUrls);
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -67,10 +79,26 @@ export function buildTemplateHtml(scene: Scene, runtimeBundle: string): string {
     <script type="module">
 ${runtimeBundle}
       const scene = ${sceneJson};
-      const runtime = createRuntime(scene, { mode: 'output' });
+      const assetUrls = ${assetJson};
+      const runtime = createRuntime(scene, { mode: 'output', assetUrls: assetUrls });
       installCasparGlobals(runtime);
       window.__cgSkewReady = false;
       runtime.ready.then(function () { window.__cgSkewReady = true; });
+      /*
+        The background clip must be RUNNING for the page-content axis to mean anything, and
+        the poster/driver lifecycle is not this harness's subject. Kept crude on purpose: it
+        loops and plays every video the scene carries, and the recording's moving patch is
+        what says whether it worked — not this line.
+      */
+      setInterval(function () {
+        var vs = document.querySelectorAll('video[data-cg-asset-id]');
+        for (var i = 0; i < vs.length; i += 1) {
+          var v = vs[i];
+          v.loop = true;
+          v.muted = true;
+          if (v.paused) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
+        }
+      }, 500);
     </script>
   </body>
 </html>

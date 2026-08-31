@@ -2,6 +2,7 @@ import { SceneSchema, type Element, type Scene } from '@cg/shared-schema';
 import {
   BANNER_RECTS,
   COLUMN_RECTS,
+  fillerLookRects,
   LOOK_BANNER,
   LOOK_COLUMN,
   PLATE_A,
@@ -59,10 +60,56 @@ function plate(id: string, routeKey: string, rect: Rect): Element {
   } as unknown as Element;
 }
 
-function composition(id: string, rects: Readonly<Record<string, Rect>>): unknown {
-  const children: Element[] = Object.entries(rects).map(([routeKey, rect]) =>
-    plate(`${id}-${routeKey}`, routeKey, rect),
-  );
+/**
+ * `SKEW-RESIDUE-01` — WEIGHT for a filler look, so the look-count axis is not measured against
+ * empty rooms.
+ *
+ * A look that holds two plates and nothing else is a handful of DOM nodes; the owner's looks
+ * hold a designed layout. These are full-frame painted panels plus a row of boxes — real style
+ * recalc, real layout, real paint, and (crucially) real work for `sceneMaskHoles`, which
+ * flattens the WHOLE scene on every repunch whether a look is on screen or not.
+ */
+function filler(id: string, index: number): Element[] {
+  const shades = ['#203040', '#304050', '#405060', '#506070', '#607080', '#708090'];
+  const panels: Element[] = [
+    {
+      ...BASE,
+      id: `${id}-panel`,
+      name: 'panel',
+      type: 'shape',
+      shape: 'rect',
+      transform: transform({ x: 0, y: 0, width: SKEW_SCENE.width, height: SKEW_SCENE.height }),
+      fill: { kind: 'solid', color: shades[index % shades.length] ?? '#203040' },
+    } as unknown as Element,
+  ];
+  for (let i = 0; i < 8; i += 1) {
+    panels.push({
+      ...BASE,
+      id: `${id}-box-${String(i)}`,
+      name: `box-${String(i)}`,
+      type: 'shape',
+      shape: 'rect',
+      transform: transform({
+        x: 40 + i * 230,
+        y: 820 - index * 30,
+        width: 200,
+        height: 180,
+      }),
+      fill: { kind: 'solid', color: shades[(i + index) % shades.length] ?? '#405060' },
+    } as unknown as Element);
+  }
+  return panels;
+}
+
+function composition(
+  id: string,
+  rects: Readonly<Record<string, Rect>>,
+  weight?: { readonly index: number },
+): unknown {
+  const children: Element[] = [
+    ...(weight === undefined ? [] : filler(id, weight.index)),
+    ...Object.entries(rects).map(([routeKey, rect]) => plate(`${id}-${routeKey}`, routeKey, rect)),
+  ];
   return {
     id,
     name: id,
@@ -117,10 +164,85 @@ function background(): Element {
 }
 
 /**
+ * `SKEW-RESIDUE-01` — the FULL-FRAME VIDEO the owner's own template carries, as a real scene
+ * element rather than a `<video>` bolted onto the page.
+ *
+ * 🔴 It sits at the BOTTOM of paint order, so `sceneMaskHoles` punches it exactly as it
+ * punches the painted background: a hole is transparent through BOTH and the CasparCG layer
+ * shows through. A `<video>` placed behind the stage in the page's own DOM would show through
+ * the holes instead of the plates, and the measurement would read the page against itself.
+ *
+ * The clip's content is STILL except for one small patch (`BACKGROUND_MOTION_PATCH`) — see
+ * `ffmpeg.ts`. Still, because a moving background destroys the first-change detector; ONE
+ * moving patch, because "the decoder is running" is otherwise an assumption, and an
+ * unverified load axis measures nothing.
+ */
+function videoBackground(assetId: string, durationMs: number): Element {
+  return {
+    ...BASE,
+    id: 'skew-video-bg',
+    name: 'video background',
+    type: 'video',
+    assetId,
+    durationMs,
+    holdBehavior: 'loop',
+    transform: transform({ x: 0, y: 0, width: SKEW_SCENE.width, height: SKEW_SCENE.height }),
+  } as unknown as Element;
+}
+
+/**
+ * `SKEW-RESIDUE-01` — **the look that punches NOTHING, and what it is for.**
+ *
+ * Candidate 1 of the remedies is an INTERSECTION mask for the transition window: punch
+ * `old ∩ new`, so every open pixel is backed by a picture in both arrangements. Its edge case
+ * is two looks that barely overlap, where the intersection is EMPTY — and the question asked
+ * of this session is what that LOOKS like, with a frame on disk, rather than a paragraph
+ * reasoning about it.
+ *
+ * An empty intersection punches no holes, so its appearance is the appearance of a look whose
+ * plates are off-frame: the template alone, every box gone, for one field. That is produced
+ * HERE by the product's own mask code (`sceneMaskHoles` sees plates outside every element it
+ * could punch) rather than by drawing a mock-up — the frame is a capture, not an illustration.
+ */
+export const LOOK_EMPTY = 'look-empty';
+
+export interface SkewSceneOptions {
+  /**
+   * How many looks the scene carries. The first two are the measured pair; the rest are
+   * filler (`fillerLookRects`) and are never entered — see there for why that isolates the
+   * page axis.
+   */
+  readonly looks?: number;
+  /** `video` adds a full-frame clip beneath the painted background. */
+  readonly background?: 'flat' | 'video';
+  /** The asset id the host will resolve to the clip's URL, when `background: 'video'`. */
+  readonly videoAssetId?: string;
+  readonly videoDurationMs?: number;
+  /** Append {@link LOOK_EMPTY} — a look whose plates are off-frame, so it punches nothing. */
+  readonly withEmptyLook?: boolean;
+}
+
+/**
  * Build the scene, PARSED through `SceneSchema` so a shape error is a loud failure here
  * rather than a mystery three stages downstream in CEF.
  */
-export function buildSkewScene(): Scene {
+export function buildSkewScene(options: SkewSceneOptions = {}): Scene {
+  const lookCount = Math.max(2, options.looks ?? 2);
+  const fillers = Array.from({ length: lookCount - 2 }, (_, i) => ({
+    id: `look-filler-${String(i + 1)}`,
+    compositionId: `comp-filler-${String(i + 1)}`,
+    instanceId: `inst-filler-${String(i + 1)}`,
+    rects: fillerLookRects(i),
+  }));
+  const wantsVideo = options.background === 'video';
+  const wantsEmpty = options.withEmptyLook === true;
+  // Off the bottom-right corner: inside the scene's coordinate space (so the schema is happy)
+  // and outside every element the mask could punch.
+  const EMPTY_RECTS: Readonly<Record<string, Rect>> = {
+    [PLATE_A]: { x: 1918, y: 1078, width: 2, height: 2 },
+    [PLATE_B]: { x: 1916, y: 1078, width: 2, height: 2 },
+  };
+  const assetId = options.videoAssetId ?? 'skew-bg-asset';
   const raw = {
     schemaVersion: 1,
     id: 'skew-harness-scene',
@@ -140,15 +262,29 @@ export function buildSkewScene(): Scene {
         blendMode: 'normal',
         // 🔴 ORDER IS PAINT ORDER, and the background must come FIRST or nothing punches it.
         children: [
-          background(),
+          /*
+            🔴 The video REPLACES the painted shape rather than sitting under it. Covered, it
+            would still decode but paint nothing — and the moving patch that proves the
+            decoder is running would be hidden behind the very element it exists to be seen
+            through. The clip's still content is the same `#1040C0`, so probe B's
+            background-to-picture step is identical in both variants and only the DECODE and
+            PAINT of a full-frame video is added.
+          */
+          ...(wantsVideo
+            ? [videoBackground(assetId, options.videoDurationMs ?? 10_000)]
+            : [background()]),
           instance('inst-banner', 'comp-banner'),
           instance('inst-column', 'comp-column'),
+          ...fillers.map((f) => instance(f.instanceId, f.compositionId)),
+          ...(wantsEmpty ? [instance('inst-empty', 'comp-empty')] : []),
         ],
       },
     ],
     compositions: [
       composition('comp-banner', BANNER_RECTS),
       composition('comp-column', COLUMN_RECTS),
+      ...fillers.map((f, i) => composition(f.compositionId, f.rects, { index: i })),
+      ...(wantsEmpty ? [composition('comp-empty', EMPTY_RECTS)] : []),
     ],
     fonts: [],
     fields: [],
@@ -159,6 +295,22 @@ export function buildSkewScene(): Scene {
         looks: [
           { id: LOOK_BANNER, name: 'banner', instanceId: 'inst-banner', entered: { mode: 'cut' } },
           { id: LOOK_COLUMN, name: 'column', instanceId: 'inst-column', entered: { mode: 'cut' } },
+          ...fillers.map((f) => ({
+            id: f.id,
+            name: f.id,
+            instanceId: f.instanceId,
+            entered: { mode: 'cut' as const },
+          })),
+          ...(wantsEmpty
+            ? [
+                {
+                  id: LOOK_EMPTY,
+                  name: LOOK_EMPTY,
+                  instanceId: 'inst-empty',
+                  entered: { mode: 'cut' as const },
+                },
+              ]
+            : []),
         ],
         defaultLookId: LOOK_BANNER,
       },

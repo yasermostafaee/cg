@@ -103,6 +103,45 @@ export const SKEW_PROBE_B: Rect = { x: 340, y: 620, width: 100, height: 100 };
 /** The clearance every probe must keep from any hole edge it is not meant to straddle. */
 export const PROBE_EDGE_CLEARANCE = 60;
 
+/**
+ * `SKEW-RESIDUE-01` — **FILLER LOOKS: more of the page, and deliberately nothing else.**
+ *
+ * The owner's report is that a template carrying 1-box, 2-box and 3-box looks skews WORSE than
+ * a two-look one. The axis that claim is about is the PAGE's — every look's subtree is built
+ * and lives in the DOM at once, and `sceneMaskHoles` re-flattens the whole scene on every
+ * repunch — so a sweep that also changed what the BRIDGE does would answer a different
+ * question.
+ *
+ * These looks are therefore built from the SAME TWO PLATES at other rects. The union pre-seat
+ * is both plates whatever the look count is, so the wire work is identical run to run and the
+ * only thing that grows is the page. They are never entered: every measured switch is still
+ * `banner → column`, which is what keeps {@link probePlacementIssues} the whole soundness
+ * argument rather than one that has to be re-made per variant.
+ */
+export function fillerLookRects(index: number): Readonly<Record<string, Rect>> {
+  // Deterministic, and deliberately different from both measured looks so the subtree is real
+  // layout rather than a copy the browser might share.
+  const inset = 60 + index * 40;
+  return {
+    [PLATE_A]: { x: inset, y: inset, width: 900 - index * 50, height: 500 - index * 30 },
+    [PLATE_B]: {
+      x: 960 + index * 20,
+      y: 560 - index * 20,
+      width: 880 - index * 40,
+      height: 460 - index * 20,
+    },
+  };
+}
+
+/**
+ * The region the background clip animates in the VIDEO-background variant — the positive
+ * control that says the decoder is actually running, since a still clip cannot prove it.
+ *
+ * Chosen to be clear of both probes AND of every plate rect in both measured looks, so it
+ * changes nothing the measurement reads. {@link probePlacementIssues} asserts that.
+ */
+export const BACKGROUND_MOTION_PATCH: Rect = { x: 1700, y: 970, width: 200, height: 100 };
+
 function intersects(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
 }
@@ -168,6 +207,28 @@ export function probePlacementIssues(): readonly string[] {
   // The two probes must not overlap, or one transition would be read twice.
   if (intersects(SKEW_PROBE_A, SKEW_PROBE_B)) {
     issues.push('probe A and probe B overlap');
+  }
+
+  // `SKEW-RESIDUE-01` — the background clip's moving patch is the load positive control, and
+  // it must be invisible to every reading: not under a probe, and not inside any hole either
+  // look punches (where it would sit under a picture and change the classifier's regions).
+  for (const [name, probe] of [
+    ['A', SKEW_PROBE_A],
+    ['B', SKEW_PROBE_B],
+  ] as const) {
+    if (intersects(BACKGROUND_MOTION_PATCH, probe)) {
+      issues.push(`the background motion patch overlaps probe ${name}`);
+    }
+  }
+  for (const [look, rects] of [
+    ['BANNER', BANNER_RECTS],
+    ['COLUMN', COLUMN_RECTS],
+  ] as const) {
+    for (const [plate, rect] of Object.entries(rects)) {
+      if (intersects(rect, BACKGROUND_MOTION_PATCH)) {
+        issues.push(`the background motion patch overlaps the ${plate} hole in the ${look} look`);
+      }
+    }
   }
 
   // Both must be inside the raster the recording is read back in.
