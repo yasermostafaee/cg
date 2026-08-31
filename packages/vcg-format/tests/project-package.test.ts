@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ProjectAssetEntry, Scene } from '@cg/shared-schema';
 import { pack } from '../src/pack.js';
 import {
@@ -105,6 +105,27 @@ describe('project package — pack/unpack round trip', () => {
 
   it('re-packing the same input is byte-identical', async () => {
     expect(await packFixture()).toEqual(await packFixture());
+  });
+
+  it('B-190 — the CLOCK moving between two packs does not change one byte', async () => {
+    /*
+      The test above is the property; this one is why it used to fail about once in a few
+      hundred gate runs. `zip.file('assets/image/x.png', …)` pins the FILE's date and lets
+      JSZip materialise `assets/` and `assets/image/` behind it, stamped with the live clock —
+      first in sort order, so byte 10 of the archive (the DOS time field) tracked wall time at
+      2-second resolution. Adjacent packs agreed unless they straddled a tick. Faking only
+      `Date` (never the timers JSZip's own pipeline runs on) turns that coin-flip into a
+      statement: move the clock four seconds and the bytes must not notice.
+    */
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-08-31T12:00:00.000Z'));
+      const first = await packFixture();
+      vi.setSystemTime(new Date('2026-08-31T12:00:04.000Z'));
+      expect(await packFixture()).toEqual(first);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('refuses to write an index entry whose bytes are absent', async () => {

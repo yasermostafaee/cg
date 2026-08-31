@@ -3671,3 +3671,53 @@ deliberately, and `live-source-unset` is document-scoped and needs no group.
 - **Number:** highest `B-` HEADING across every ref was `B-187`; `B-188` … `B-195` returned **no
   headings anywhere** and no forward references (the only tree-wide hits are this registry's own prose
   about the range being clear). `git stash list` empty; one worktree. **Nothing is implemented.**
+
+## [x] B-190 — every project package carries the WALL CLOCK in its first zip header, so "byte-identical re-export" is a guarantee that holds about 99 % of the time ⟨priority: medium — a determinism guarantee that fails at random, and the failure surfaces as an unrelated gate red⟩ — filed AND FIXED 2026-08-31 (`SKEW-HOLD-01`, found as a gate red)
+
+**Observed 2026-08-31** as a red `pnpm gate` on a commit that touched neither `@cg/vcg-format` nor
+anything it depends on: `packages/vcg-format/tests/project-package.test.ts` — _"re-packing the same
+input is byte-identical"_ — failed with two 2033-byte archives differing at **byte 10**, which is the
+DOS **last-modified time** field of the archive's FIRST local file header. It passed on the next run,
+and CI passed on the same tree, which is exactly the shape of the defect.
+
+**Mechanism, established from the code and reproduced.** `writeZip` (`packages/vcg-format/src/zip.ts`)
+pins `date: FIXED_DATE` on every entry it adds — and JSZip then materialises the intermediate
+DIRECTORIES of every asset path (`assets/`, `assets/image/`) as entries of its own, stamped with
+`new Date()`:
+
+```
+assets/            dir=true   date=<now>
+assets/image/      dir=true   date=<now>
+assets/image/x.png dir=false  date=2024-01-01T00:00:00.000Z
+```
+
+Those directory entries sort FIRST, so the wall clock sits at the top of the file. DOS time has
+**2-second** resolution, so two packs of identical input agree whenever they fall inside the same
+tick and differ whenever they straddle one — a probe that packed the same fixture 200 times found
+**189 of them** differing from the first, all at byte 10, the difference appearing at the moment the
+clock crossed an even second.
+
+🔴 **The product consequence is not the flaky test.** `docs/designer-guide/README.md` promises
+_"re-exporting the same scene produces a byte-identical archive"_ and `phase-4` names it a CI-verified
+property; a `.vcg` or `.cgproj` whose bytes change with the clock breaks content-hash dedupe, makes
+two exports of one scene look like two different files to any store keyed on the hash, and turns a
+signature over the archive bytes into something that depends on WHEN it was packed. Only the flake
+was ever visible, because nothing else compared two packs.
+
+**Fixed** by pinning after the fact rather than at each `file()` call — the loop reaches every entry
+the archive will actually contain, including the ones nobody asked for:
+
+```ts
+for (const entry of Object.values(zip.files)) entry.date = FIXED_DATE;
+```
+
+**Pinned** by a test that turns the coin-flip into a statement — `B-190` in `project-package.test.ts`
+fakes ONLY `Date` (never the timers JSZip's own async pipeline runs on), moves the clock four seconds
+between two packs, and asserts the bytes do not notice. Verified RED against the unfixed writer and
+green after, with the whole package suite run three times.
+
+- **Cross-refs:** [[B-104]] / `D-150` (the project package this guarantees), [[B-188]] (the previous
+  `@cg/vcg-format` item — unrelated mechanism, same file family).
+- **Number:** highest `B-` HEADING across every ref was `B-189`; the registry's dated pointer said
+  _"Next free after this session is `B-190`"_ — headings and pointer agreed, so `B-190` is taken here
+  and the next free becomes `B-191`.

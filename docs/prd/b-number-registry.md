@@ -1900,3 +1900,19 @@ records that recovery so the dangling name does not send the next reader hunting
 
 ⇒ **Next free after this session is still `B-190`**, and `B-` stays contiguous `B-001` … `B-189`,
 no gaps.
+
+### 2026-08-31 (latest) — `SKEW-HOLD-01`, second half: `B-190` TAKEN
+
+**Claimed: `B-190`** — _every project package carries the wall clock in its first zip header_
+([bugs-designer.md](bugs-designer.md)). Found the way this registry keeps warning about: as a RED
+GATE on a commit that touched neither `@cg/vcg-format` nor anything it depends on, one run after the
+same tree went green. The number is taken because the defect is real and product-visible (the
+documented byte-identical re-export), not because a test flaked — the flake was the only symptom
+anyone had ever seen.
+
+**Derivation, from headings as the rule requires:** highest `B-` HEADING across every ref was
+**`B-189`**; `B-190` … `B-196` returned **no headings anywhere**. **Cross-check against the dated
+pointer:** the entry above ends _"Next free after this session is still `B-190`"_ — headings and
+pointer AGREE, and `B-190` is what this entry takes.
+
+⇒ **Next free after this session is `B-191`**, and `B-` stays contiguous `B-001` … `B-190`, no gaps.
