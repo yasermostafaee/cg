@@ -1917,7 +1917,7 @@ pointer AGREE, and `B-190` is what this entry takes.
 
 ⇒ **Next free after this session is `B-191`**, and `B-` stays contiguous `B-001` … `B-190`, no gaps.
 
-### 2026-08-31 (last) — `RUNTIME-RECONCILE-01` S3: `B-191` TAKEN
+### 2026-08-31 (fourth) — `RUNTIME-RECONCILE-01` S3: `B-191` TAKEN
 
 **Claimed: `B-191`** — _a look switched while the row is STOPPED is recorded but never told_
 ([bugs-runtime.md](bugs-runtime.md)). Filed and fixed in the same session, from the owner's own
@@ -1930,3 +1930,23 @@ returned **no headings anywhere**. **Cross-check against the dated pointer:** th
 _"Next free after this session is `B-191`"_ — headings and pointer AGREE.
 
 ⇒ **Next free after this session is `B-192`**, and `B-` stays contiguous `B-001` … `B-191`, no gaps.
+
+### 2026-08-31 (last) — `SKEW-INTERSECT-01` §2: `B-192` AND `B-193` TAKEN
+
+**Claimed: `B-192`** — _a plate PARKED by a look switch does not survive on the plant_
+([bugs-runtime.md](bugs-runtime.md)) — and **`B-193`** — _the new hole and the outgoing plate's
+picture do not change together_ (same file). Both are §2's deliverable: the two terms the
+transition mask does NOT address, measured and filed rather than fixed, so that no future report
+can collapse the three again.
+
+⚠ **Two numbers in one session, and the second is derived AFTER the first is written**, which is the
+only ordering that keeps the rule honest: `B-193`'s own derivation names `B-192` as the highest
+heading it found, because by then it was one.
+
+**Derivation, from headings as the rule requires:** highest `B-` HEADING across every ref was
+**`B-191`** (taken earlier the same day by the stopped-look item); `B-192` … `B-198` returned **no
+headings anywhere**. **Cross-check against the dated pointer:** the entry above ends _"Next free
+after this session is `B-192`"_ — headings and pointer AGREE, and `B-192`/`B-193` are what this
+entry takes.
+
+⇒ **Next free after this session is `B-194`**, and `B-` stays contiguous `B-001` … `B-193`, no gaps.

@@ -1056,6 +1056,25 @@ candidate shapes.
   and inside the TAIL, a wire refusal, and a second switch pressed inside the window);
   `live-look-reconcile.integration.test.ts` (the two tells and the byte-for-byte sequence,
   updated).
+  **MEASURED, before and after, ten runs each at `1080i5000` on the plant** (the control is
+  `--no-transition-mask`, i.e. the SAME binary with the single-tell switch — a discrimination claim
+  must not rest on a build that was never exercised):
+  **BLACK 0 % in 0 of 10 runs in BOTH directions** on the owner's geometry and on the banner/column
+  pair, against **54.4 % / 54.3 % / 15.9 %** before it; and on a page carrying a decoding full-frame
+  video — which is what his template is — the pre-fix switch put **54–77 % of the frame black on
+  NINE switches out of ten**, which the mask takes to one (and to zero at a two-frame lead).
+  ⚠ **The acceptance is NOT met as written and that is stated in the item rather than rounded to:**
+  zero black is delivered, zero MISPLACED is not and cannot be — a frame with none of it is a frame
+  in which the holes AND the fills have both already changed, i.e. `k = 0` on every run, which is
+  the phase lock `SKEW-RESIDUE-01` measured impossible. What the mask changes is WHAT those pixels
+  are: the outgoing LOOK still standing, rather than the outgoing PICTURE through the entering
+  look's holes.
+  **Terms (b) and (c) are measured, reported SEPARATELY and filed** — `B-192` (a parked plate does
+  not survive on the plant, so nine switches in ten had to `PLAY` it, and the box is empty for
+  **+2…+4 fields**; the mock keeps it seated and emits nothing) and `B-193` (the new hole opens
+  **+3…+5 fields** after the outgoing picture leaves, by construction of the tail).
+  **Evidence:** `tools/skew-harness/evidence/2026-08-31-intersect-*/report.json` (thirteen sweeps).
+  Full numbers, the four decisions and the trade in `docs/prd/bugs-runtime.md` **`B-174`**.
 
 - [ ] 7.15 🔴 **`B-155` — THE SWITCH FLASH. OPEN, AND NOTHING ABOUT IT IS VERIFIED ON THE PLANT.**
       The owner, on air: _"change `l-1`'s source and press look-1, then when we go to solo it shows

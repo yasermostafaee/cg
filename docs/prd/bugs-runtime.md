@@ -6555,7 +6555,7 @@ stated so it can be argued with.
   it), [[B-171]] (the wording item — a sentence nobody can finish reading and a sentence that is
   wrong are different defects over the same surface).
 
-## [~] B-174 — the PAGE/MIXER skew is VISIBLE TO THE NAKED EYE on the plant, and the bench figure that made it look impossible measured a DIFFERENT QUANTITY ⟨priority: high — the page half was never measured to a painted frame, and the parts that WERE measured already predict a 1–2 frame skew⟩ — filed 2026-08-24 from the two-server plant run; **RE-SCOPED 2026-08-29 (`SKEW-MEASURE-01`)**; **`k` MEASURED 2026-08-31 (`SKEW-COUNT-01`): 1–3 fields = 20–60 ms**; **FIXED LOCALLY 2026-08-31 (`SKEW-HOLD-01`): page-first + a one-frame mixer hold, `k` re-measured at −20/0/+20 ms — the owner's naked-eye check on the plant is still OWED, see the fix section at the end**
+## [~] B-174 — the PAGE/MIXER skew is VISIBLE TO THE NAKED EYE on the plant, and the bench figure that made it look impossible measured a DIFFERENT QUANTITY ⟨priority: high — the page half was never measured to a painted frame, and the parts that WERE measured already predict a 1–2 frame skew⟩ — filed 2026-08-24 from the two-server plant run; **RE-SCOPED 2026-08-29 (`SKEW-MEASURE-01`)**; **`k` MEASURED 2026-08-31 (`SKEW-COUNT-01`): 1–3 fields = 20–60 ms**; **FIXED LOCALLY 2026-08-31 (`SKEW-HOLD-01`): page-first + a one-frame mixer hold, `k` re-measured at −20/0/+20 ms — the owner's naked-eye check on the plant is still OWED, see the fix section at the end**; **EXTENDED 2026-08-31 (`SKEW-INTERSECT-01`): the residual is COVERED by an intersection mask for the transition window — BLACK measured 0 of 10 in both directions on the owner’s own geometry, against 54 % on 9 of 10 switches before it on a video-backed page**
 
 > ⚠ **This heading first read _"against a bench figure that says it is sub-frame … a measured 2.2–8.3 ms
 > is being contradicted by air"_.** That framing is a **category error and is corrected below**: the
@@ -7087,6 +7087,193 @@ runs at +40.
   this extends with the revert tell — their end-state guarantees are re-asserted in
   `look-switch-refusal` and `live-look-reconcile`), `look-switch-hold.integration.test.ts` (the
   hold's duration, its observed-mode default, an explicit 0 surviving `??`).
+
+---
+
+## 🔴 `SKEW-INTERSECT-01` (2026-08-31) — THE RESIDUAL IS COVERED RATHER THAN CHASED: while the two halves can disagree, the page punches `outgoing ∩ entering`
+
+`SKEW-RESIDUE-01` ended with a ranking and a recommendation and built nothing. This is candidate
+(1) built, measured before and after on the owner's own geometry, with the two terms it does NOT
+address measured separately and filed as [[B-192]] and [[B-193]].
+
+### Why the earlier numbers were measured on a fixture that could not see it
+
+The banner/column pair's two looks are both mid-sized boxes, so the region one look punches and the
+other does not is 15.9 % of the frame one way and 2.3 % the other. **The owner's `3-ghab` is not
+like that**: `look-1` is ONE 1920×1080 plate over a full-frame JPG, so **every switch into or out
+of it opens or closes a FULL-FRAME hole** and the exclusive region is ~55 %. Two similarly-sized
+boxes cannot tell an intersection mask from an entering-look mask at all, because their
+intersection IS most of both.
+
+His geometry is now a committed fixture (`GHAB_FIXTURE` in `tools/skew-harness/src/geometry.ts`,
+read off `template.json` in the export he dropped at `fixtures/owner/`). **His `.vcg` and `.cgproj`
+are NOT committed** — undiffable binary, one of them a photograph of a person, re-exportable from
+his Designer at any time, and nothing in the gate reads them. The SHAPE is what discriminates and
+the shape is in the repo; `fixtures/README.md` carries the decision and the rects.
+
+### What was built
+
+The bridge tells the page the entering look TWICE: once with `from` — the look being left, so the
+page punches `outgoing ∩ entering` — and once without it, once the fills are in place. Every open
+pixel of the intersection is inside a hole of BOTH looks, so it is backed by a picture whether the
+`MIXER FILL` batch has landed yet or not. The mixer's move is aimed at the MIDDLE of that window: a
+LEAD (one channel frame) before it, a TAIL (one channel frame) after.
+
+⚠ **The UNION is the exact inverse and is now a test so it cannot come back**: it opens every pixel
+EITHER look punches, i.e. both failure directions at once.
+
+### The four decisions, stated rather than taken quietly
+
+**(1) WHERE the intersection is computed — in `sceneMaskHoles`, not in the applier.** It already
+flattens the whole scene and owns the pull-back into each element's local box; the same walk is
+asked about two visibility states (`ArrangementView.transitionFrom`) and the punches are
+intersected in SCENE pixels, once. A caller intersecting afterwards would be a second answer to
+_"which holes does this element punch"_, a package away from the first.
+
+**(2) HOW LONG the window lasts — long enough to strictly CONTAIN the mixer's move, and it is NOT
+the hold.** The hold aims the fills at the page's commit; the window covers the ±1 FIELD the aiming
+cannot remove. They share a UNIT (one channel frame of the observed mode) and a derivation
+(`#channelFrameMsFor`), and **neither reads the other's value**: the hold answers _how far behind
+does the page commit_, the window answers _how far apart can the two land_. A hold retuned for a
+heavier page must not drag the window with it. The hold's default is untouched.
+
+**(3) THE EMPTY INTERSECTION — accepted, no special case.** Two looks whose plates barely overlap
+show the template's own backdrop where both pictures will be, for the window (`empty-00-after.png`,
+captured in `SKEW-RESIDUE-01`). Today's alternative one frame earlier is two large black
+rectangles. A picture the author drew, held for a field or two, beats the channel.
+
+**(4) AN INTERRUPTED TRANSITION — the tail is a SECOND deterministic span an un-gated emergency
+verb can land in.** `B-174`'s hold opened the first one and `B-161`'s shape is what it risked. The
+answer is that the only thing scheduled after the fills is ONE `CG … UPDATE`: a payload for a page,
+carrying no playout verb, unable to seat anything. Pinned RED-FIRST — a `reconcileLivePlates`
+planted in the tail puts `PLAY 1-30 DECKLINK DEVICE 1` on the wire after the `out`, and the test
+reddens.
+
+**The invariant underneath all four:** the intersection is a SUBSET of the entering look's holes, so
+every exit ends with a tell carrying no transition — the entering look on success, the previous look
+on refusal or abandonment. `from` is an instruction about ONE payload that neither machine stores
+(red-first: retaining it on the page's view reddens _"the narrowing is NEVER STICKY"_). ONE reading
+of `narrowedFrom` gates the narrow and the settle, per golden rule 7.
+
+### TERM (a) — BEFORE / AFTER, ten runs each, `1080i5000`, whole-frame classification
+
+`--no-transition-mask` is the control: the SAME binary with the single-tell switch, so nothing here
+compares two compilations. Every window was confirmed `PLAY`-free on the wire, every run passed the
+cadence check, and the per-run positive control (the classifier run on the settled frames either
+side) is reported beside each row.
+
+| fixture · direction · page          | mask | **BLACK** peak % (runs showing any) | **MISPLACED** peak % | artefact ms (median) | control  |
+| ----------------------------------- | ---- | ----------------------------------- | -------------------- | -------------------- | -------- |
+| `ghab` full → boxes, flat page      | OFF  | **54.4 %** (2/10)                   | 45.3 % (7/10)        | 20                   | ≤ 0.06 % |
+| `ghab` full → boxes, flat page      | ON   | **0 % (0/10)**                      | 45.3 % (10/10)       | 60                   | ≤ 0.02 % |
+| `ghab` boxes → full, flat page      | OFF  | **54.3 %** (3/10)                   | 45.2 / 54.2 % (6/10) | 20                   | ≤ 0.03 % |
+| `ghab` boxes → full, flat page      | ON   | **0 % (0/10)**                      | 54.3 % (10/10)       | 80                   | ≤ 0.01 % |
+| banner → column, flat page          | OFF  | **15.9 %** (8/10)                   | 37.4 % (8/10)        | 20                   | ≤ 0.04 % |
+| banner → column, flat page          | ON   | **0 % (0/10)**                      | 15.9 % (10/10)       | 100                  | ≤ 0.04 % |
+| `ghab` full → boxes, **VIDEO** page | OFF  | **53.9 – 76.9 %** (9/10)            | ~0                   | 40 – 80              | ≤ 0.28 % |
+| `ghab` full → boxes, **VIDEO** page | ON   | **53.9 % (1/10)**                   | 45.8 % (6/10)        | 40 (that one run)    | ≤ 0.37 % |
+
+🔴 **The headline, and it is the owner's own case.** On a page carrying a decoding full-frame video
+— which is what his template is — the PRE-FIX switch put **54–77 % of the frame BLACK on nine
+switches out of ten**, for 40–80 ms. That is the "occasional near-full-frame black flash", and it
+is not occasional on that page. With the mask in force it is **one run in ten**.
+
+⚠ **AND THE ACCEPTANCE IS NOT MET AS WRITTEN, so it is stated plainly rather than rounded to.** The
+target was zero black AND zero misplaced. **Zero black is delivered** — 0 of 10, both directions,
+on both flat-page fixtures, and 1 of 10 on the heavy page (see the lead, below). **Zero misplaced
+is not, and cannot be**, and the reason is arithmetic rather than effort: "misplaced" is defined as
+_matches the outgoing settled frame while the entering one says otherwise_, so a frame with zero of
+it is a frame in which the hole set AND the fill set have both already changed. That is `k = 0` on
+every run — phase lock — which `SKEW-RESIDUE-01` measured impossible on every transport this
+version speaks (no channel frame number anywhere; `/foreground/file/frame` absent, ADR 0004; no
+scheduling verb on 2.5.0). What the mask does is **change what the misplaced pixels ARE**: before,
+they were the outgoing PICTURE showing through the entering look's holes; after, they are the
+outgoing LOOK still standing, whole, until its replacement is behind the hole.
+
+⚠ **The other half of the trade, stated too:** the artefact's DURATION grows from one field to
+2–5 fields, because the mask is deliberately narrowed a frame early and widened a frame late. An
+intermittent 54 % black flash becomes a deterministic 45–54 % "previous look still there" for
+60–100 ms. On banner/column even the magnitude improves (37.4 % → 15.9 %), because there the window
+sits AFTER the fills have moved; on the `ghab` forward direction it does not, because there the
+entering holes are a subset of the outgoing ones and the window sits BEFORE the fills move.
+
+### What each half of the window BUYS — measured by removing it
+
+| configuration                                          | BLACK peak % (runs)  | artefact ms |
+| ------------------------------------------------------ | -------------------- | ----------- |
+| `ghab` full → boxes, flat, lead = one frame (default)  | **0 % (0/10)**       | 60          |
+| `ghab` full → boxes, flat, **lead = 0**                | 54.4 – 75.7 % (2/10) | 20          |
+| `ghab` full → boxes, VIDEO page, lead = one frame      | 53.9 % (1/10)        | 40          |
+| `ghab` full → boxes, VIDEO page, **lead = two frames** | **0 % (0/10)**       | 20 – 220    |
+| `ghab` boxes → full, flat, tail = one frame (default)  | **0 % (0/10)**       | 80          |
+| `ghab` boxes → full, flat, **tail = 0**                | **0 % (0/10)**       | 60          |
+
+**The LEAD is load-bearing, proven by removing it**: without it the narrowing is a coin flip against
+the mixer and the black comes back on a fifth of presses on a light page. It is also the knob the
+HEAVY page needs — at two channel frames the video-backed page reaches 0 of 10 as well, which is the
+measured answer to "the default may not be enough there".
+
+**The TAIL, on this host, buys nothing measurable and costs duration**: at `0` the black is still 0
+of 10 and the artefact shortens from a median of 80 ms to 60 ms (term (c) from 3–5 fields to 1–3).
+That is because the page's own commit latency already puts the widening after the mixer — the tail
+is margin against a mixer that APPLIES a tick after it acknowledges, which this host did not
+exhibit in ten runs. **The default keeps the frame** rather than banking on one host's ordering, and
+an operator who wants the snappier switch now has a measured basis for `--look-transition-tail-ms 0`.
+
+⚠ **Two of the ten lead-two-frames runs FAILED the per-run control** (51.8 %, 53.6 % where it must
+be ~0). Read before quoting that row: the failure is at the control FRAMES either side, not inside
+the window — the background clip's loop point landing on one of them, which changes most of the
+picture. The classified windows themselves carry **0.0 % black in every frame**, which the
+`perFrame` series in that report states run by run.
+
+### TERMS (b) AND (c) — measured, reported SEPARATELY, and filed
+
+They are separate quantities and the whole point of reporting them apart is that no future report
+collapses the three again.
+
+- **(a) the mask/fill disagreement** — the tables above. Removed for black; converted for misplaced.
+- **(b) first-frame latency of a producer the switch had to START** — **+2 … +4 fields (40–80 ms)**
+  for a media clip; **0** when the producer was already seated. Filed as **[[B-192]]**, together
+  with the finding that made it reachable: on the plant a PARKED plate does not survive, so nine
+  switches in ten had to `PLAY` it — while `@cg/amcp-mock` keeps it seated and emits nothing.
+  ⚠ The "already-running LIVE input" half of the comparison is **OWED**: this host has one channel
+  and no usable DeckLink.
+- **(c) the gap between the new hole opening and the outgoing plate's picture leaving** —
+  **+3 … +5 fields (60–100 ms)** with the mask in force, **−1 … 0** without it. Filed as
+  **[[B-193]]**. With the mask it is the window's trailing half by construction: a designed wait
+  rather than a race.
+
+### ⚠ What this does NOT fix, so the owner is not misled
+
+**Going `look-1 → look-2` or `look-1 → look-3` with MEDIA sources may still show black at the
+newly-started boxes.** That is term (b) — the producer has no frame yet — and no mask can put a
+picture where there is none. It is [[B-192]], not this. On his template it will look like the two
+right-hand boxes arriving a frame or two after the layout does.
+
+**And on a heavy page the lead may need raising.** One video-page run in ten still blacked with the
+default one-frame lead, because that page commits later than a light one (`SKEW-RESIDUE-01` measured
+the video background moving `k` by a whole frame). `--look-transition-lead-ms` is the knob and it is
+read back on the boot line.
+
+### Evidence
+
+`tools/skew-harness/evidence/2026-08-31-intersect-*/report.json` — `ghab-fwd-before`,
+`ghab-fwd-after`, `ghab-rev-before`, `ghab-rev-after`, `bc-before`, `bc-after`,
+`ghab-video-before`, `ghab-video-after`, `ghab-play-fwd`, `ghab-play-rev`, plus `lead0`,
+`video-lead80` and `tail0`. ⚠ The `.mkv` recordings and the `.png` peak frames beside them are
+GITIGNORED for the same reason as every earlier sweep's (a pattern frame is ~750 KB); the
+`report.json` files carry every number, including the per-frame series and the wire commands of
+each window.
+
+**Instrument changes in this session, all measurement-only:** a third probe (probe C) inside the
+arriving/departing plate's box, from which terms (b) and (c) are read as differences WITHIN one
+recording; `probePlacementIssues` now takes the FIXTURE it is asked about and gained two conditions
+— probe A must sit under a plate whose rect actually DIFFERS between the looks (a probe over an
+unmoved plate reads `k = 0` by construction and looks healthy), and probe C must be inside a hole in
+both looks. The background motion patch's rule was WEAKENED on purpose, from "outside every hole of
+both looks" to "outside every hole of at least one": the first is unsatisfiable for a fixture whose
+look punches the whole raster, and it would have refused the only fixture that can discriminate the
+fix. Both forms are asserted, including what the check must REJECT.
 
 ## [ ] B-177 — a DeckLink input admits ONE producer, `CLEAR` returns before the destroy, and the failure arrives disguised as `404 File not found.` ⟨priority: high — the seating path re-`PLAY`s live layers, and the disguise sends the diagnosis to the wrong place⟩ — OPEN, filed 2026-08-25 from the DeckLink plant walk
 
@@ -7774,3 +7961,102 @@ that was already broken. This session's change is the first touch that path has 
   looks like on air).
 - **Number:** highest `B-` HEADING across every ref was `B-190` (taken earlier today by the
   `@cg/vcg-format` determinism fix); `B-191` … `B-197` returned no headings anywhere.
+
+## [ ] B-192 — a plate PARKED by a look switch does not survive on the plant: re-entering the look that shows it emits a `PLAY`, and the box is EMPTY for that producer's first frame ⟨priority: high — it is `B-155` case 3 arriving through the park, on the owner's own template, and it is why term (b) is reachable at all⟩ — OPEN, filed 2026-08-31 from `SKEW-INTERSECT-01`'s §2 measurement
+
+**Measured, not reasoned about.** `tools/skew-harness --fixture ghab` reproduces the owner's
+membership exactly: `look-1` holds ONE plate (`guest-1`) and `guest-2` exists only in `look-2`. Ten
+switches `look-1 → look-2`, `1080i5000`, the transition mask in force:
+
+| run               | what the wire carried                                     | probe C (guest-2's box)                                  |
+| ----------------- | --------------------------------------------------------- | -------------------------------------------------------- |
+| 00 (first)        | `MIXER FILL`/`CLIP` only                                  | changes ONCE, with the fills                             |
+| 01 … 09 (9 of 10) | **`PLAY 1-31 "skew-src-2"`** + `VOLUME 0` + `FILL`/`CLIP` | changes TWICE: at the fills, then again 2–4 fields later |
+
+The first switch after the take is clean because the take's UNION PRE-SEAT put both producers on
+their layers. Every switch after it carries a `PLAY`, because the intervening switch back to
+`look-1` **parked** `guest-2` and the parked seat did not survive.
+
+🔴 **`@cg/amcp-mock` DISAGREES, and the disagreement is the finding.** The same sequence against the
+mock (`look-transition-window.integration.test.ts`'s fixture has the same membership) keeps both
+plates in the ledger across the park and emits **no `PLAY`** on the way back — asserted directly
+while investigating this. So the union pre-seat is correct in the product's own model and something
+about the plant's park does not hold. What that something is has NOT been established here; this
+item records the observation and the number, and does not guess at the cause.
+
+### Term (b) — the number the `PLAY` costs, which is what the owner would SEE
+
+From the fills landing (probe A) to `guest-2`'s box settling on its OWN picture (probe C's last
+change), in RECORDED FRAMES — a FIELD each at `1080i5000`:
+
+| case                                     | fields               | ms      |
+| ---------------------------------------- | -------------------- | ------- |
+| the producer was ALREADY seated (run 00) | **0**                | 0       |
+| the switch had to `PLAY` a media clip    | **2 … 4** (median 4) | 40 … 80 |
+
+Until then the box is open with nothing behind it: **black, in the shape of the box that just
+arrived.** `SKEW-COUNT-01` measured **+4 fields** for a REPLACING producer in the `B-155` context;
+this is the same quantity for a producer that is being STARTED, and it agrees.
+
+⚠ **The comparison the measurement could NOT complete: an already-running LIVE input.** This host's
+CasparCG reports ONE channel (`INFO` → `1 1080p5000 PLAYING`) and has no usable DeckLink, so
+`route://` would self-route and there is no second signal to point at. The "already seated" row
+above is the nearest honest stand-in — it isolates the START, which is the term's subject — but the
+live-input half is **OWED** and is a hardware run.
+
+### What this is NOT
+
+It is **not** the mask/fill disagreement (term a), which `SKEW-INTERSECT-01`'s transition mask
+removes: with the mask in force and every plate seated, black is **0 % in 10 runs of 10** in both
+directions. It is **not** term (c) either. The three are separate and are reported separately in
+[[B-174]] so that no future report can collapse them again — this one is the only one of the three
+that a mask cannot touch, because the pixel genuinely has no picture behind it yet.
+
+### Candidate remedies — RECORDED, NOT BUILT
+
+1. **Pre-roll the incoming producers before the switch.** This is what the union pre-seat already
+   intends; the finding is that it does not survive a park on the plant. Making it survive costs
+   nothing new in layers (they are already allocated) and is the smallest change if the park is
+   what breaks it.
+2. **Gate each hole on its own producer reporting a frame.** Correct per box, and it reintroduces
+   skew — per HOLE rather than per look — so the boxes would no longer arrive together. It also
+   needs a per-layer frame signal the OSC tap does not carry today (`/foreground/file/frame` was
+   measured ABSENT, ADR 0004).
+
+- **Cross-refs:** [[B-174]] (§2's measurement and the three terms), [[B-155]] (case 3 — a `PLAY`
+  inside a switch, which the union pre-seat exists to prevent), [[B-154]] (the park itself),
+  [[B-177]] (a DeckLink input admits one producer — why re-seating is not free on real hardware).
+- **Number:** highest `B-` HEADING across every ref was `B-191`; `B-192` … `B-198` returned no
+  headings anywhere. Cross-checked against the registry's dated pointer — _"Next free after this
+  session is `B-192`"_ — headings and pointer AGREE.
+
+## [ ] B-193 — the new hole and the outgoing plate's picture do not change together: measured at 3–5 fields apart with the transition mask, 0–1 without it ⟨priority: medium — it is a DURATION, not a black frame: the transition mask converts it from a race into a deliberate wait⟩ — OPEN, filed 2026-08-31 from `SKEW-INTERSECT-01`'s §2 measurement
+
+**Term (c) of the three.** A switch that drops a plate does two things the operator sees as one: the
+ENTERING look's hole opens, and the OUTGOING plate's picture leaves the box it was in. The gap
+between them, measured from probe B (the mask) and probe C (that box's content) in the same
+recording, in RECORDED FRAMES:
+
+| configuration                                 | fields (min … max)     | ms       |
+| --------------------------------------------- | ---------------------- | -------- |
+| `ghab`, `look-2 → look-1`, transition mask ON | **+3 … +5** (median 4) | 60 … 100 |
+| `ghab-seated`, `look-1 → look-2`, mask OFF    | **−1 … 0**             | −20 … 0  |
+
+Positive means the hole opened AFTER the picture left. **With the mask in force the gap is the
+window's trailing half by construction** — the fills move at the mixer and the mask widens a
+channel frame later — so it is a designed quantity rather than a race, and it is the reason the
+same runs report 54 % "misplaced" for 60–100 ms: that is the OUTGOING look still standing, exactly
+as intended, until its replacement is behind the hole. Without the mask the two are within a field
+of each other and the same span is a coin flip between that and a black frame.
+
+**So this is filed as a DURATION to be judged, not as a defect to be fixed.** The judgement is the
+owner's: a switch that takes ~2 extra channel frames and never shows black, against one that is
+immediate and shows black on a third to nine tenths of presses depending on the page. The two knobs
+that move it are `--look-transition-lead-ms` and `--look-transition-tail-ms`, and dropping either to
+`0` shortens the span and gives some of the black back — measured both ways, in [[B-174]].
+
+- **Cross-refs:** [[B-174]] (the mask, the window, and the before/after tables), [[B-192]] (term b —
+  the other half of §2), [[B-158]] (the switch's visual atomicity, which this quantifies one axis
+  of).
+- **Number:** highest `B-` HEADING across every ref was `B-192` (taken immediately above in this
+  same session); `B-193` … `B-199` returned no headings anywhere.
