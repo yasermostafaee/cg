@@ -421,3 +421,86 @@ describe('🔴 the PLAY path honours the control payload too — the re-take sea
     expect(root.innerHTML).not.toContain(CG_CONTROL_KEY);
   });
 });
+
+/**
+ * 🔴 **`SKEW-INTERSECT-01` — the page half of the transition mask.**
+ *
+ * The bridge tells the page the entering look TWICE: once with `from` while the fills are
+ * still moving, and once without it when they are in place. The first punches
+ * `outgoing ∩ entering` so no hole can be open over a geometry that does not fill it; the
+ * second is an ordinary re-punch. Everything here is asserted through `update()` — the real
+ * door the bridge uses — rather than through a test-only seam.
+ */
+describe('SKEW-INTERSECT-01 — the transition mask on the page', () => {
+  /** `look-six`'s cells that lie inside `look-big`'s 1280×1080 plate. */
+  const SIX_IN_BIG = SIX_HOLES.filter((h) => h.x + h.w <= 1280);
+  const BIG_HOLE = [{ x: 0, y: 0, w: 1280, h: 1080 }];
+
+  it('🔴 punches the INTERSECTION, not the entering look, while `from` is present', async () => {
+    const { runtime, root } = boot();
+    await runtime.update(
+      withCgControl({}, { look: 'look-big', from: 'look-six' }) as Record<string, never>,
+    );
+    // Four cells, not one 1280×1080 hole. The two cells `look-big` does not reach are CLOSED
+    // rather than left open: the outgoing fills covered them and the entering ones do not.
+    expect(holes(root)).toEqual(SIX_IN_BIG);
+    expect(holes(root)).not.toEqual(BIG_HOLE);
+  });
+
+  it('the look is fully ENTERED during the transition — only the mask is conservative', async () => {
+    const { runtime, root } = boot();
+    await runtime.update(
+      withCgControl({}, { look: 'look-big', from: 'look-six' }) as Record<string, never>,
+    );
+    // The instance flip, the active id and the media park all follow the ENTERING look. A
+    // half-entered look would be a second answer to "which look is on", which §14 forbids.
+    expect(runtime.activeLookId()).toBe('look-big');
+    expect(displayOf(root, 'inst-big')).not.toBe('none');
+    expect(displayOf(root, 'inst-six')).toBe('none');
+  });
+
+  it('the SETTLING tell — the same look without `from` — widens to its own holes', async () => {
+    const { runtime, root } = boot();
+    await runtime.update(
+      withCgControl({}, { look: 'look-big', from: 'look-six' }) as Record<string, never>,
+    );
+    await runtime.update(withCgControl({}, { look: 'look-big' }) as Record<string, never>);
+    expect(holes(root)).toEqual(BIG_HOLE);
+  });
+
+  it('🔴 the narrowing is NEVER STICKY: any later re-punch is a full one', async () => {
+    /*
+      The transition mask is a SUBSET of the look's own holes, so a page that RETAINED it
+      would show less picture than the look asks for with nothing scheduled to widen it — and
+      the next innocent field update would re-assert it rather than repair it. `update()` with
+      no control data re-punches the stored view; the stored view must never carry `from`.
+    */
+    const { runtime, root } = boot();
+    await runtime.update(
+      withCgControl({}, { look: 'look-big', from: 'look-six' }) as Record<string, never>,
+    );
+    await runtime.update({ headline: 'Tehran' } as Record<string, never>);
+    expect(holes(root)).toEqual(BIG_HOLE);
+  });
+
+  it('a `from` that names no second geometry states no transition', async () => {
+    const { runtime, root } = boot();
+    // The look being entered, and a look this template does not have. Both mean "nothing to
+    // intersect with", which is the entering look's own holes — never an empty mask.
+    await runtime.update(
+      withCgControl({}, { look: 'look-big', from: 'look-big' }) as Record<string, never>,
+    );
+    expect(holes(root)).toEqual(BIG_HOLE);
+    await runtime.update(withCgControl({}, { look: 'look-six' }) as Record<string, never>);
+    await runtime.update(
+      withCgControl({}, { look: 'look-big', from: 'no-such-look' }) as Record<string, never>,
+    );
+    expect(holes(root)).toEqual(BIG_HOLE);
+  });
+
+  it('a TAKE ignores `from` — there is no outgoing geometry to catch up with', async () => {
+    const { runtime, root } = boot();
+    await runtime.play(withCgControl({}, { look: 'look-big', from: 'look-six' }) as never);
+    expect(holes(root)).toEqual(BIG_HOLE);
+  });
+});

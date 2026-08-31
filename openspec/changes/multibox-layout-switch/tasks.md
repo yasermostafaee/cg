@@ -1001,6 +1001,62 @@ candidate shapes.
       neighbours), RED-then-GREEN with the chain rebuilt between readings; 612 tests / 78 files
       green. Full item: `docs/prd/bugs-runtime.md` **`B-161`**.
 
+- [~] 7.14e 🔴 **`SKEW-INTERSECT-01` — THE TRANSITION MASK: for as long as the two halves can
+  disagree, the page punches `outgoing ∩ entering` (2026-08-31).**
+  `B-174`'s hold took `k` to −20 / 0 / +20 ms and stopped there: the page's paint clock and the
+  channel tick are not phase-locked, and `SKEW-RESIDUE-01` established that NO transport this
+  version speaks carries a channel frame number to lock them with. So the residual is COVERED
+  instead of chased.
+  🔴 **What the owner's own template made unmissable.** `3-ghab` (his file, read at
+  `tools/skew-harness/fixtures/owner/`) has `look-1` = ONE 1920×1080 plate over a full-frame
+  JPG, so **every switch into or out of it opens or closes a FULL-FRAME hole** — up to ~55 % of
+  the frame showing the channel for a field, far beyond the 15.9 % the banner/column fixture
+  could ever produce. Two similarly-sized boxes cannot discriminate this, which is why the
+  harness never saw it.
+  **THE FOUR DECISIONS IT FORCED, stated rather than chosen quietly:**
+  **(1) WHERE the intersection is computed** — inside `sceneMaskHoles` (`@cg/shared-schema`), not
+  in the applier. It already flattens the whole scene and owns the pull-back into each element's
+  local box; the same walk is asked about two visibility states
+  (`ArrangementView.transitionFrom`) and the punches are intersected in SCENE pixels. A caller
+  intersecting afterwards would be a second answer to "which holes does this element punch", one
+  package away from the first.
+  **(2) HOW LONG the window lasts** — long enough to strictly CONTAIN the mixer's move: a LEAD
+  before the fills are due and a TAIL after they are acknowledged, one channel frame of the
+  observed mode each (`--look-transition-lead-ms` / `--look-transition-tail-ms`). ⚠ **Not the
+  hold, and neither derives from the other's value.** The hold measures how far behind the page
+  COMMITS; these measure how far apart the two can LAND. Sharing a unit is not sharing a quantity
+  — a hold retuned for a heavier page (the video-background sweep moved `k` by a whole frame)
+  must not drag the window with it. The hold's default is untouched.
+  **(3) THE EMPTY INTERSECTION** — ACCEPTED, with no special case. Two looks that barely
+  overlap show the template's own backdrop where both pictures will be, for the window
+  (`empty-00-after.png`); today's alternative one frame earlier is two large black rectangles.
+  **(4) AN INTERRUPTED TRANSITION** — the window's trailing half is a SECOND deterministic
+  span an un-gated emergency verb can land in (`B-161`'s shape, which `B-174`'s hold first made
+  reachable). The answer is that the only thing scheduled after the fills is ONE `CG … UPDATE`:
+  a payload for a page, carrying no playout verb, unable to seat anything. Pinned RED-FIRST — a
+  `reconcileLivePlates` planted in the tail puts `PLAY 1-30 DECKLINK DEVICE 1` on the wire after
+  the `out`, and the test reddens.
+  **The invariant that makes it safe:** the intersection is a SUBSET of the entering look's
+  holes, so every exit ends with a tell carrying no transition — the entering look on success,
+  the previous look on refusal or abandonment — and `from` is an instruction about ONE payload
+  that neither machine stores (also pinned red-first: retaining it on the page's view reddens
+  "the narrowing is NEVER STICKY").
+  **Shipped:** `sceneMaskHoles` + `intersectPunches` + `ArrangementView.transitionFrom`;
+  `CgControl.from` through the one shared codec (dropped without a `look`, so a half-payload is
+  unrepresentable); `enterLook(id, from)` page-side; `updateLook(..., from)` and the
+  narrow/lead/apply/tail/settle order in `setActiveLook`, with ONE reading of `narrowedFrom`
+  gating both halves (golden rule 7); `--no-look-transition-mask` as the measurement CONTROL,
+  so before/after runs the same binary twice.
+  **Tests:** `packages/shared-schema/tests/transition-mask.test.ts` (the SUBSET property in
+  both directions on the owner's geometry, the empty intersection, and the union recorded as
+  what this is not); `control-payload.test.ts`; `looks-switch.test.ts` (the page punches the
+  intersection, the settle widens, the narrowing is never sticky, a take ignores it);
+  `look-transition-window.integration.test.ts` (the window's duration and its observed-mode
+  default, the control, the happy path's `narrow → fills → settle`, an `out` inside the LEAD
+  and inside the TAIL, a wire refusal, and a second switch pressed inside the window);
+  `live-look-reconcile.integration.test.ts` (the two tells and the byte-for-byte sequence,
+  updated).
+
 - [ ] 7.15 🔴 **`B-155` — THE SWITCH FLASH. OPEN, AND NOTHING ABOUT IT IS VERIFIED ON THE PLANT.**
       The owner, on air: _"change `l-1`'s source and press look-1, then when we go to solo it shows
       the OLD source for a moment and then switches to the new one."_

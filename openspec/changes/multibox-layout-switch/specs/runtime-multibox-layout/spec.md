@@ -577,6 +577,34 @@ fills onto it. A row taken OFF AIR while the hold is waiting SHALL abandon the s
 geometry applied and SHALL NOT re-seat what took it off air: the emergency verbs are deliberately
 not serialised behind the switch, so the window the hold opens SHALL be re-checked at its end.
 
+**AND FOR AS LONG AS THE TWO HALVES CAN DISAGREE, THE PAGE SHALL PUNCH ONLY WHERE BOTH LOOKS
+PUNCH.** Aiming the fills at the page's commit closes the gap to about one FIELD and no further —
+the page's paint clock and the channel tick are not phase-locked, and no transport this version
+speaks carries a channel frame number to lock them with — so the residual SHALL be COVERED rather
+than chased. For the length of a TRANSITION WINDOW that strictly contains the mixer's move, the
+page SHALL punch the INTERSECTION of the outgoing and entering looks' holes: every open pixel is
+then backed by a picture in BOTH geometries, so no hole can be open over a geometry that does not
+fill it, whichever half lands first. The window SHALL be bounded on both sides — opened before the
+fills are due and closed after they are acknowledged — and its two halves SHALL be their own
+quantities rather than the hold's: the hold measures how far behind the page COMMITS, while these
+measure how far apart the two can LAND, and retuning one for a heavier page must not silently
+retune the other. The UNION SHALL NOT be used: it opens every pixel either look punches, which is
+the failure this exists to prevent, in both directions at once.
+
+An EMPTY intersection SHALL punch nothing, and SHALL NOT be treated as a special case: two looks
+whose plates barely overlap show the template's own backdrop where both pictures will be, for the
+length of the window, which is a picture the author drew rather than the channel.
+
+**A SWITCH THAT NARROWED THE MASK SHALL ALWAYS WIDEN IT AGAIN.** The intersection is a SUBSET of
+the entering look's holes, so a page left in it shows less picture than the look asks for with
+nothing scheduled to end that. Every exit SHALL therefore end with the page told a look and no
+transition — the entering look where the switch landed, the previous look where it was refused or
+abandoned — and the narrowing SHALL be an instruction about one payload rather than a state either
+machine stores, so that any later re-punch from any cause is a full one. Nothing SHALL be scheduled
+inside the window's trailing half except that one telling: an emergency verb can land there exactly
+as it can land inside the hold, and what follows it must be incapable of putting content on air or
+re-seating a layer that verb has just cleared.
+
 A look picked while the row is OFF AIR SHALL reach the page at the next play, whichever way that
 play reaches air. The switch itself SHALL send nothing — an off-air row with nothing seated has no
 picture to move, and a rehearsal control must reach no plant — so the play is what makes the page
@@ -647,6 +675,41 @@ is on air now.
 - **WHEN** the operator picks a different look and then plays the row
 - **THEN** the switch itself moves nothing and reaches no plant, and the play tells the page that
   look before seating the pictures, so the row comes up with its holes and its fills on one look
+
+#### Scenario: A switch between a full-frame look and a multi-box look shows no black
+
+- **GIVEN** a row on air showing one source across the whole frame, and another look showing two
+  boxes over the template's backdrop
+- **WHEN** the operator switches either way
+- **THEN** no part of the frame goes black at any point in the switch: while the two halves are
+  still disagreeing the page punches only the two boxes, which both geometries fill
+
+#### Scenario: The mask is widened once the fills are in place
+
+- **WHEN** a switch completes
+- **THEN** the page is told the entering look a second time, with no transition, so it punches that
+  look's own holes rather than the narrowed set it was given while the fills were moving
+
+#### Scenario: A refused switch leaves the page punching a whole look, not an intersection
+
+- **GIVEN** a switch that narrowed the page's mask and was then refused by the server
+- **WHEN** the fills are put back
+- **THEN** the page is told the previous look with no transition, so the row ends showing that
+  look's own holes
+
+#### Scenario: Two looks that barely overlap
+
+- **GIVEN** two looks whose plates do not share any part of the frame
+- **WHEN** the operator switches between them
+- **THEN** the boxes vanish under the template's own backdrop for the length of the window, and
+  nothing shows the channel
+
+#### Scenario: The row is taken off air while the mask is waiting to widen
+
+- **GIVEN** a row whose look switch has moved its fills and is waiting to widen the page's mask
+- **WHEN** the operator takes that row off air inside that wait
+- **THEN** nothing re-seats the layers the out cleared, and the switch reports the geometry it did
+  move rather than a failure
 
 #### Scenario: The row is taken off air while the mixer hold is waiting
 

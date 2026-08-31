@@ -1174,10 +1174,22 @@ it('🔴 the switch tells the PAGE which look — the payload carries the id, be
 
   const lines = await since(before);
   const updates = updateLines(lines);
-  expect(updates, 'exactly one CG UPDATE — the page is told once').toHaveLength(1);
+  /*
+    🔴 `SKEW-INTERSECT-01` REPLACED "the page is told ONCE" with "the page is told TWICE, and
+    the two say different things". The first tell carries `from`, so the page punches
+    `outgoing ∩ entering` while the fills are in flight — no hole open over a geometry that
+    does not fill it, in either direction. The second settles the mask onto the entering
+    look's own holes once they are in place. Both are asserted, in order, because a switch
+    that narrowed and never widened would leave the row showing less than the look asks for.
+  */
+  expect(updates, 'two CG UPDATEs — the transition mask, then the settle').toHaveLength(2);
   const payload = dataArgOf(updates[0] as string, 'UPDATE');
   // …read back through the SAME codec the page uses, so the two halves cannot drift.
   expect(readCgControl(payload)?.look).toBe('solo');
+  expect(readCgControl(payload)?.from, 'the narrowing tell names the look being left').toBe('six');
+  const settle = readCgControl(dataArgOf(updates[1] as string, 'UPDATE'));
+  expect(settle?.look, 'the settling tell names the same look').toBe('solo');
+  expect(settle?.from, 'and carries NO transition — this is the widening').toBeUndefined();
 
   /*
     ⭐ `C-028` — AND THE FIT FACTS RIDE THE SAME PAYLOAD, in the same ONE command.
@@ -2548,12 +2560,29 @@ it("🔴 B-155 §B — the common path's exact wire sequence: a plain switch, by
       `MIXER 1-${String(layer)} CLIP 0 0 1 1`,
     ]),
   ];
-  // The page flip is the FIRST line, and it carries the look id the fills were derived from.
-  expect(lines).toHaveLength(expected.length + 1);
+  /*
+    🔴 `SKEW-INTERSECT-01` — the sequence gained ONE line, at the END, and it is the whole
+    of the fix on the wire: `narrow → geometry → settle`. The narrowing flip is still first
+    and still carries the look id the fills were derived from; the settling flip is the LAST
+    thing sent, so the page widens onto the entering look's own holes only once every fill
+    has landed.
+
+    ⚠ **The tail between the geometry and the settle is where an emergency verb can land, and
+    the shape of what follows it is the guard**: exactly one `CG … UPDATE`, and nothing else.
+    No `PLAY`, no `CG ADD`, no `MIXER` — nothing that can put content on air or resurrect a
+    seat on a row that a `stop` has just cleared (`B-161`'s shape, which `B-174`'s hold first
+    made reachable). Pinned as a WHOLE-LIST equality so an added command there goes red.
+  */
+  expect(lines).toHaveLength(expected.length + 2);
   const flip = lines[0] as string;
   expect(flip).toMatch(/^CG 1-\d+ UPDATE 0 /);
   expect(readCgControl(dataArgOf(flip, 'UPDATE'))?.look).toBe('solo');
-  expect(lines.slice(1)).toEqual(expected);
+  expect(readCgControl(dataArgOf(flip, 'UPDATE'))?.from, 'the narrowing half').toBe('six');
+  expect(lines.slice(1, -1)).toEqual(expected);
+  const settle = lines[lines.length - 1] as string;
+  expect(settle).toMatch(/^CG 1-\d+ UPDATE 0 /);
+  expect(readCgControl(dataArgOf(settle, 'UPDATE'))?.look).toBe('solo');
+  expect(readCgControl(dataArgOf(settle, 'UPDATE'))?.from, 'the widening half').toBeUndefined();
 });
 
 it('🔴 B-155 §B — a swap arriving MID-SWITCH is serialized after it and resolves the ENTERED look', async () => {

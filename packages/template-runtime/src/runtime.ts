@@ -482,7 +482,20 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     // them — one source of truth for the geometry, which is the same rule that keeps the
     // hole the page punches and the hole the bridge fills a single computation.
     applyArrangementToNodes(scene, built.elementMap, view, arrangementView);
-    arrangementView = view;
+    /*
+      🔴 `SKEW-INTERSECT-01` — **THE TRANSITION MASK IS NEVER RETAINED.** The stored view is
+      the one every later re-punch re-applies (`repunch(arrangementView)` is what an ordinary
+      `update()` calls), and `transitionFrom` narrows the mask to `outgoing ∩ entering` — a
+      SUBSET of what this look should punch. Retained, a switch would leave the page showing
+      less picture than the look asks for, indefinitely, with nothing scheduled to widen it,
+      and the next innocent field update would re-assert it rather than repair it.
+
+      So it is one-shot by construction: in force for exactly the punch below, gone from the
+      state the moment that punch is done. The bridge's settling tell then produces the same
+      mask a re-punch from any other cause would.
+    */
+    arrangementView =
+      view?.transitionFrom === undefined ? view : { ...view, transitionFrom: undefined };
     const live = liveArrangementView(scene, built.elementMap, view);
     // `C-028` — the third input, and the one the page cannot derive. `plateFits` is
     // whatever the bridge last told us (see `applyPlateFits`); `undefined` until it has
@@ -574,14 +587,41 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * boxes that go dark and the drivers that go quiet can never be decided from two facts.
    */
   const lookMediaPark = new LookMediaPark();
-  const applyLook = (look: Look): void => {
-    if (lookGroup === undefined) return;
+  /**
+   * The visibility map for ONE look — "this instance, and no other". The one place a look id
+   * becomes a visibility statement, so the entering look and (during a switch) the outgoing
+   * look are spelled the same way.
+   */
+  const visibilityOfLook = (lookId: string): Record<string, boolean> => {
     const visibility: Record<string, boolean> = {};
-    for (const l of lookGroup.looks) visibility[l.instanceId] = l.id === look.id;
+    for (const l of lookGroup?.looks ?? []) visibility[l.instanceId] = l.id === lookId;
+    return visibility;
+  };
+  const applyLook = (look: Look, from?: string | undefined): void => {
+    if (lookGroup === undefined) return;
     currentLookId = look.id;
+    /*
+      🔴 `SKEW-INTERSECT-01` — **`from` NARROWS THE MASK; it does not change which look is
+      active.** `currentLookId` is set above, the look's own subtree is what becomes visible,
+      and the media park follows the entering look exactly as before — the outgoing look is
+      hidden and parked at this instant, as it always was. The ONLY thing `from` changes is
+      which holes are punched through everything below: `outgoing ∩ entering` instead of
+      `entering`, for this one punch.
+
+      A `from` naming the look being entered, or one this template does not have, states no
+      second geometry and is dropped — the mask is then the entering look's own, which is
+      what "no transition" means.
+    */
+    const outgoing =
+      from === undefined || from === look.id || !lookGroup.looks.some((l) => l.id === from)
+        ? undefined
+        : visibilityOfLook(from);
     // The park follows from INSIDE `repunch`, off this same `visibility` map — see the note
     // there for why it cannot be done at this line without acquiring a second answer.
-    repunch({ visibility });
+    repunch({
+      visibility: visibilityOfLook(look.id),
+      ...(outgoing === undefined ? {} : { transitionFrom: outgoing }),
+    });
   };
   /**
    * `tasks.md` 6.7 — ENTER A LOOK BY ID. **The one implementation, two entry points.**
@@ -597,11 +637,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * short-circuited — a re-punch is how the page RECOVERS if a previous one was lost, and the
    * bridge re-asserts the look on a re-take for exactly that reason.
    */
-  const enterLook = (lookId: string): boolean => {
+  const enterLook = (lookId: string, from?: string | undefined): boolean => {
     if (lookGroup === undefined) return false;
     const look = lookGroup.looks.find((l) => l.id === lookId);
     if (look === undefined) return false;
-    applyLook(look);
+    applyLook(look, from);
     return true;
   };
   {
@@ -2444,6 +2484,12 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         active look already has.
       */
       const fitsChanged = applyPlateFits(control?.plates);
+      /*
+        ⚠ `SKEW-INTERSECT-01` — deliberately WITHOUT `control.from`. The transition mask exists
+        to cover the frames in which the fills have not caught up with the holes; a take has no
+        outgoing geometry on screen to catch up with, and the bridge does not send `from` here.
+        Honouring it anyway would open a graphic on a SUBSET of its own look's holes.
+      */
       if (control?.look !== undefined) enterLook(control.look);
       else if (fitsChanged) repunch(arrangementView);
       bus.emit('play.end');
@@ -2500,7 +2546,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       // unused here: `update()` re-punches unconditionally when no look is named, and a
       // second condition would only be able to SUPPRESS a punch this method already owes.
       applyPlateFits(control?.plates);
-      if (control?.look === undefined || !enterLook(control.look)) repunch(arrangementView);
+      if (control?.look === undefined || !enterLook(control.look, control.from)) {
+        repunch(arrangementView);
+      }
       bus.emit('update');
     },
 

@@ -79,6 +79,27 @@ export interface CgControl {
    */
   look?: string;
   /**
+   * 🔴 `B-174` / `SKEW-INTERSECT-01` — **the look the row is switching AWAY FROM, sent only
+   * while the two machines are still disagreeing about the geometry.**
+   *
+   * Present ⇒ the page punches `from ∩ look` — every open pixel is one BOTH looks punch, so
+   * it is backed by a picture whether the bridge's `MIXER FILL` batch has landed yet or not.
+   * Absent ⇒ the page punches `look`'s own holes, which is both the ordinary case and the
+   * SETTLING half of a switch: the bridge sends a second payload without this member once
+   * the fills are in place.
+   *
+   * ⚠ **It is an instruction about THIS payload, never a state the page stores.** A page
+   * that kept it would keep showing a subset of the entering look's holes with nothing
+   * scheduled to widen it. Every re-punch after this payload — including the settling one —
+   * is a full one unless it too carries `from`.
+   *
+   * A page that does not understand this member drops it (`readCgControl` validates member
+   * by member) and punches the entering look's holes immediately, which is exactly the
+   * behaviour that shipped before this existed. That is why an older page paired with a
+   * newer bridge degrades to the old artefact rather than to a new one.
+   */
+  from?: string;
+  /**
    * ⭐ `C-028` — **each plate's resolved fit facts, keyed by PLATE ID** (the template's
    * declared `sourceId`, which is the element's `routeKey`).
    *
@@ -130,9 +151,18 @@ export function readCgControl(payload: unknown): CgControl | undefined {
   const raw = (payload as Record<string, unknown>)[CG_CONTROL_KEY];
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
   const look = (raw as Record<string, unknown>)['look'];
+  const from = (raw as Record<string, unknown>)['from'];
   const plates = readPlateFits((raw as Record<string, unknown>)['plates']);
   return {
     ...(typeof look === 'string' && look !== '' ? { look } : {}),
+    /*
+      ⚠ `from` is meaningless without `look` — it names the state a switch is LEAVING, and
+      there is no switch without the one it is entering. Dropping it in that case keeps the
+      pair inseparable at the READER, so no downstream branch has to consider a half-payload.
+    */
+    ...(typeof look === 'string' && look !== '' && typeof from === 'string' && from !== ''
+      ? { from }
+      : {}),
     ...(plates === undefined ? {} : { plates }),
   };
 }

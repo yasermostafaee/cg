@@ -100,9 +100,19 @@ export class CommandBuilder {
     lookId: string,
     fields: FieldValues = {},
     plates?: Readonly<Record<string, CgPlateFit>> | undefined,
+    /**
+     * 🔴 `B-174` / `SKEW-INTERSECT-01` — the look this switch is LEAVING, which makes this
+     * payload the NARROWING half of a switch: the page punches `from ∩ lookId` until a
+     * second payload without it settles the mask onto `lookId`'s own holes.
+     *
+     * Absent is the ordinary form and every existing caller's — a take, a re-assert, the
+     * rollback's revert tell, and the settling half itself.
+     */
+    from?: string | undefined,
   ): string {
     const control: CgControl = {
       look: lookId,
+      ...(from !== undefined && from !== lookId && { from }),
       ...(plates !== undefined && Object.keys(plates).length > 0 && { plates: { ...plates } }),
     };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(

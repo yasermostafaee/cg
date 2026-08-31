@@ -1183,6 +1183,14 @@ export class CasparRuntime {
    */
   readonly #lookMixerHoldMs: number | undefined;
   /**
+   * `SKEW-INTERSECT-01` — the configured transition-window halves, or `undefined` to derive
+   * one channel frame each from the observed mode. See the constructor options.
+   */
+  readonly #lookTransitionLeadMs: number | undefined;
+  readonly #lookTransitionTailMs: number | undefined;
+  /** `SKEW-INTERSECT-01` — whether a switch narrows the page's mask at all. */
+  readonly #lookTransitionMask: boolean;
+  /**
    * TEST-ONLY seam (B-100): per-`ServerSession` health-timer overrides. Empty in
    * production, so the ServerSession defaults apply. A test uses it to drive and
    * HOLD a session in `degraded` (OSC-silent, AMCP up) deterministically — the
@@ -1215,6 +1223,33 @@ export class CasparRuntime {
        * never `||`, so that 0 survives.
        */
       lookMixerHoldMs?: number;
+      /**
+       * 🔴 `SKEW-INTERSECT-01` — **the TRANSITION WINDOW's two halves, in ms: how long the
+       * page holds `outgoing ∩ entering` BEFORE the fills move and AFTER they have.**
+       *
+       * ⚠ **NOT the hold, and neither derives from the other's value.** The hold AIMS the
+       * mixer at the page's commit; these cover the ±1 FIELD of residual the aiming cannot
+       * remove, so that the mixer's move is strictly INSIDE the window whichever side of
+       * the aim point it lands on. A hold retuned for a slow page (a heavier scene commits
+       * later — `B-174`'s page-content measurement) does not want these retuned with it:
+       * they are sized by the JITTER, not by the LAG.
+       *
+       * ABSENT means ONE CHANNEL FRAME of the channel's OBSERVED video mode each — the same
+       * unit and the same derivation the hold's default uses ({@link #lookTransitionMsFor}).
+       * `0` is a REAL value: the mask still narrows for the hold and widens as soon as the
+       * fills are acknowledged, which is most of the benefit and none of the added latency.
+       * Resolved with `??`, never `||`, so 0 survives.
+       */
+      lookTransitionLeadMs?: number;
+      lookTransitionTailMs?: number;
+      /**
+       * 🔴 `SKEW-INTERSECT-01` — **the CONTROL, and the reason it is a flag rather than a
+       * `git revert`.** `false` sends no `from` and no settling tell, i.e. exactly the
+       * single-tell switch that shipped before this — so a before/after measurement runs the
+       * SAME binary twice and a discrimination claim cannot rest on a build that was never
+       * exercised. Default `true`.
+       */
+      lookTransitionMask?: boolean;
       /** TEST-ONLY seam: inject a template server (e.g. one whose start() fails). */
       templateServer?: TemplateHttpServer;
       /** TEST-ONLY seam (B-100): override each session's OSC health timers. */
@@ -1308,6 +1343,9 @@ export class CasparRuntime {
     // `undefined` is MEANINGFUL here (derive from the observed mode per switch), so this
     // one is not defaulted at construction the way its siblings below are.
     this.#lookMixerHoldMs = options.lookMixerHoldMs;
+    this.#lookTransitionLeadMs = options.lookTransitionLeadMs;
+    this.#lookTransitionTailMs = options.lookTransitionTailMs;
+    this.#lookTransitionMask = options.lookTransitionMask ?? true;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
     this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
@@ -5030,6 +5068,17 @@ export class CasparRuntime {
      * exactly what a page being put back needs.
      */
     fitsOverride?: Readonly<Record<string, CgPlateFit>>,
+    /**
+     * 🔴 `SKEW-INTERSECT-01` — the look being LEFT, present only on the NARROWING tell of a
+     * switch. The page then punches `from ∩ lookId` until the settling tell (this same
+     * function, without it) widens the mask onto the entering look's own holes.
+     *
+     * ⚠ Every OTHER caller of this function is a settling caller by nature — the take's
+     * re-assert, the rollback's revert, the second half of a switch — and passes nothing.
+     * That is what makes "the page is never left narrowed" a property of the writer rather
+     * than of each call site remembering.
+     */
+    transitionFrom?: string,
   ): Promise<{ ok: boolean; errorCode?: string }> {
     /*
       ⭐ `C-028` — THE FIT FACTS TRAVEL WITH THE LOOK ID, in the one payload.
@@ -5046,7 +5095,7 @@ export class CasparRuntime {
     */
     const fits = fitsOverride ?? this.#plateFits.get(itemId);
     const told = await this.#send(
-      this.#builder.updateLook(slot, lookId, {}, fits),
+      this.#builder.updateLook(slot, lookId, {}, fits, transitionFrom),
       this.#nextSeq(),
       'urgent',
     );
@@ -5072,7 +5121,50 @@ export class CasparRuntime {
    * then every real install's mode read failed and this would have fallen back forever.
    */
   #lookMixerHoldMsFor(channel: number): number {
-    if (this.#lookMixerHoldMs !== undefined) return this.#lookMixerHoldMs;
+    return this.#lookMixerHoldMs ?? this.#channelFrameMsFor(channel);
+  }
+
+  /**
+   * 🔴 `SKEW-INTERSECT-01` — **the two halves of the TRANSITION WINDOW for one switch, in ms.**
+   *
+   * ── THE WINDOW, AND WHY IT IS NOT THE HOLD ──────────────────────────────────
+   *
+   * The hold aims the `MIXER FILL` batch at the moment the page commits its repunch, and
+   * `SKEW-RESIDUE-01` measured what aiming can achieve: `k` came down to −20 / 0 / +20 ms at
+   * `1080i5000` — ±1 FIELD of clock quantisation, the page's paint clock against the channel
+   * tick, which no fixed offset removes. The window is what covers that residual: the mask is
+   * narrowed to `outgoing ∩ entering` one channel frame BEFORE the fills are due and widened
+   * one channel frame AFTER they are acknowledged, so the move is strictly inside a window in
+   * which every open pixel is backed by a picture in BOTH geometries.
+   *
+   * ⚠ **Sharing a UNIT is not deriving a VALUE.** Both quantities are counted in channel
+   * frames of the same observed mode, and both fall back to the same 40 ms while the mode is
+   * unread — but the hold answers *how far behind does the page commit?* and these answer
+   * *how far can the two land apart?*. Retuning the hold for a heavier page (the video
+   * background moved `k` by a whole frame) must not drag these with it, so neither reads the
+   * other. `LOOK_MIXER_HOLD_FALLBACK_MS`'s own argument for 40-not-20 applies unchanged here:
+   * the residual is expressed in fields and the plant runs interlaced.
+   */
+  #lookTransitionLeadMsFor(channel: number): number {
+    return this.#lookTransitionLeadMs ?? this.#channelFrameMsFor(channel);
+  }
+
+  #lookTransitionTailMsFor(channel: number): number {
+    return this.#lookTransitionTailMs ?? this.#channelFrameMsFor(channel);
+  }
+
+  /**
+   * ONE CHANNEL FRAME of a channel's observed video mode, in ms, or
+   * {@link LOOK_MIXER_HOLD_FALLBACK_MS} while the mode is unread.
+   *
+   * Factored out because three quantities are counted in this unit and a second spelling of
+   * "one frame of the observed mode" is how one of them would come to answer for a mode the
+   * others had stopped believing (golden rule 6, one layer down).
+   *
+   * The observed mode is readable at all because `B-189` is fixed: until then every real
+   * install's mode read failed and every caller here would have fallen back forever.
+   */
+  #channelFrameMsFor(channel: number): number {
     const observed = this.#channelSettings
       .state()
       .observed.find((reading) => reading.channel === channel);
@@ -5294,6 +5386,22 @@ export class CasparRuntime {
       the next take's re-ADD path to carry into the rebuilt page.
     */
       const previousLookId = this.activeLookId(itemId);
+      /**
+       * 🔴 `SKEW-INTERSECT-01` — **THE ONE READING that decides BOTH halves of the window.**
+       *
+       * The narrowing tell and the settling tell are a pair: whatever narrows the page must
+       * widen it again, and golden rule 7's shape is exactly this — one condition gating a
+       * subtractive step (`from`, which CLOSES holes) and the constructive step that undoes
+       * it. Evaluated once, here, so no `await` between the two can change the answer and
+       * leave the page narrowed with nothing scheduled to widen it.
+       *
+       * `undefined` — the mask is off, or the bridge does not know which look the page is
+       * on, or it is already on this one — means today's single tell, byte for byte.
+       */
+      const narrowedFrom =
+        this.#lookTransitionMask && previousLookId !== undefined && previousLookId !== lookId
+          ? previousLookId
+          : undefined;
       let pageTold = false;
       /*
       🔴 **GOLDEN RULE 7 — ONE READING OF `#loaded` DECIDES BOTH THE TELL AND THE RECORD.**
@@ -5314,7 +5422,7 @@ export class CasparRuntime {
         beforeApply: async (planFits) => {
           pageLoaded = this.#loaded.has(itemId);
           if (!pageLoaded) return { ok: true };
-          const told = await this.#tellPageLook(itemId, slot, lookId, planFits);
+          const told = await this.#tellPageLook(itemId, slot, lookId, planFits, narrowedFrom);
           if (!told.ok) {
             return {
               ok: false,
@@ -5327,7 +5435,23 @@ export class CasparRuntime {
           pageTold = true;
           const ownedSeats = this.#ownsLiveSeats(itemId);
           const heldSeats = this.#liveLayers.has(itemId);
-          const holdMs = this.#lookMixerHoldMsFor(slot.channel);
+          /*
+            🔴 `SKEW-INTERSECT-01` — the hold PLUS the window's leading half, as one sleep.
+
+            The hold aims the fills at the page's commit; the LEAD moves that aim a further
+            channel frame out so the narrowed mask is provably in force BEFORE the fills
+            move, whichever side of the aim the page's ±1-field residual falls on. Without
+            it the narrowing would itself be a coin flip and the late half would be exactly
+            the artefact this replaces: the OUTGOING look's holes standing open over the
+            ENTERING look's fills, i.e. the channel, in the shape of the boxes that left.
+
+            Added rather than substituted, and the two are read from their own accessors:
+            the lead is not a bigger hold, and a hold retuned for a slow page must not carry
+            the window with it. `0` for either is a real value and is honoured.
+          */
+          const holdMs =
+            this.#lookMixerHoldMsFor(slot.channel) +
+            (narrowedFrom === undefined ? 0 : this.#lookTransitionLeadMsFor(slot.channel));
           if (holdMs > 0) await sleepMs(holdMs);
           /*
             The re-ask the note above promises, asked as a BEFORE→AFTER transition on the two
@@ -5361,6 +5485,40 @@ export class CasparRuntime {
       });
       if (reconciled.ok) {
         if (!pageLoaded) this.#recordActiveLook(itemId, lookId);
+        /*
+          🔴 `SKEW-INTERSECT-01` — **THE SETTLING TELL: the window's trailing half, and the
+          only thing that widens a page this switch narrowed.**
+
+          The fills are in place. The mask is still `outgoing ∩ entering`, which is a SUBSET
+          of what this look asks for — correct while the fills were moving, wrong the moment
+          they have. The tail holds it one channel frame longer so the widening is provably
+          on the far side of the mixer's move, then this puts the page on the entering look's
+          own holes through the SAME writer as every other tell.
+
+          ⚠ **No `fitsOverride`.** The apply LANDED, so `#plateFits` now holds this look's
+          fits — the map is current, which is exactly the case that member documents as its
+          absent meaning. Passing the plan's copy would be a second source for a fact that
+          now has a settled one.
+
+          ⚠ **No second gate, and that is deliberate.** This sends ONE `CG UPDATE` — no
+          `PLAY`, no `MIXER`, nothing destructive and nothing that puts content on air — so
+          an emergency verb landing in the tail cannot be answered wrongly by it: on a row
+          that was cleared it simply 403s (`B-070`) and there is no page left to widen. A
+          re-ask here would be a gate whose only power is to SUPPRESS a repair.
+
+          🔴 **And if it fails anyway, the failure is BOUNDED and never black.** The page is
+          left punching `outgoing ∩ entering`: every open pixel is still inside a hole of the
+          look now on air, so it is backed by a picture — the row shows LESS than it should,
+          not the channel. Any later re-punch (a field update, the next take, the next
+          switch) is a full one, because `from` is never stored on either machine. The switch
+          itself succeeded and is reported as such: the operator asked for a geometry and got
+          it, and inventing a refusal here would send them looking for a fault on the wire.
+        */
+        if (narrowedFrom !== undefined && pageLoaded) {
+          const tailMs = this.#lookTransitionTailMsFor(slot.channel);
+          if (tailMs > 0) await sleepMs(tailMs);
+          await this.#tellPageLook(itemId, slot, lookId);
+        }
         return { ok: true };
       }
       if (!pageTold) {

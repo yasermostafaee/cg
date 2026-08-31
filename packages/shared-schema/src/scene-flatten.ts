@@ -397,6 +397,27 @@ export interface ArrangementView {
   readonly currentVisible?: Readonly<Record<string, boolean>> | undefined;
   /** Whether a transition into this arrangement is running. Half of input 3. */
   readonly transitioning?: boolean | undefined;
+  /**
+   * 🔴 **`B-174` / `SKEW-INTERSECT-01` — the state this view is switching AWAY FROM, for as
+   * long as the two machines disagree.** Present ⇒ {@link sceneMaskHoles} punches
+   * `outgoing ∩ entering` instead of `entering`; absent ⇒ exactly today's mask.
+   *
+   * ── WHY IT IS A VISIBILITY MAP AND NOT A LOOK ID ────────────────────────────
+   *
+   * This module knows nothing about looks — it is given a scene and told what is on screen.
+   * A look id here would make the flattener learn the look model, and the same transition
+   * would then be inexpressible for anything else that changes which plates are visible.
+   * A second visibility map says the same thing in the vocabulary this function already has.
+   *
+   * ── WHY IT IS AN ARGUMENT AND NEVER STORED STATE ────────────────────────────
+   *
+   * ⚠ The transition mask is a SUBSET of the entering look's holes, so a page left in it
+   * shows LESS picture than it should, forever, with no event scheduled to end it. It is
+   * therefore one-shot by construction: `@cg/template-runtime` deliberately does not retain
+   * it on the view it keeps, so the very next re-punch — a field update, a take, the
+   * bridge's own settling tell — returns the page to the entering look's own holes.
+   */
+  readonly transitionFrom?: Readonly<Record<string, boolean>> | undefined;
 }
 
 /**
@@ -540,10 +561,6 @@ export function sceneMaskHoles(
   fits: PlateFits | undefined = undefined,
 ): Map<string, MaskHole[]> {
   const flat = applyArrangementGeometry(flattenElements(scene, 'paint'), view?.geometry);
-  const context = {
-    arrangementVisibility: view?.visibility,
-    transitioning: view?.transitioning,
-  };
   /**
    * 🔴 `tasks.md` 4.1 + 4.5 — visibility comes from the ONE function, and it is asked about
    * the plate AND about everything that can hide it.
@@ -561,9 +578,34 @@ export function sceneMaskHoles(
     const override = view?.currentVisible?.[subject.id];
     return override === undefined ? subject : { ...subject, visible: override };
   };
-  const onScreen = (f: FlatElement): boolean =>
-    resolveVisibilityOf(live({ ...f.element }), context) &&
-    f.ancestry.every((a) => resolveVisibilityOf(live(a), context));
+  /**
+   * ⭐ `B-174` / `SKEW-INTERSECT-01` — **the plate set UNDER ONE STATED VISIBILITY, so the
+   * SAME walk can be asked about two look states instead of one.**
+   *
+   * The transition mask needs the outgoing look's plates and the entering look's plates, and
+   * the one thing it must never do is derive them two different ways: the whole of §6/§12.2
+   * is that the hole the page punches and the hole the bridge fills are ONE computation, and
+   * a second, "just for the transition" plate walk beside this one is precisely how the two
+   * would come to disagree about a hidden ancestor, a fit mode or a paint-order tie.
+   *
+   * ⚠ The arrangement map is passed IN rather than read from `view`, and that is the whole
+   * mechanism: `resolveVisibility` ranks the arrangement's opinion ABOVE the authored value,
+   * so handing it the outgoing look's map makes this walk answer for that look even though
+   * `currentVisible` (read back from the DOM by `liveArrangementView`) already says the
+   * outgoing instance is `display: none`.
+   */
+  const platesUnder = (
+    arrangementVisibility: Readonly<Record<string, boolean>> | undefined,
+  ): { f: FlatElement; index: number; punch: LiveSourceRect }[] => {
+    const context = { arrangementVisibility, transitioning: view?.transitioning };
+    const onScreen = (f: FlatElement): boolean =>
+      resolveVisibilityOf(live({ ...f.element }), context) &&
+      f.ancestry.every((a) => resolveVisibilityOf(live(a), context));
+    return flat
+      .map((f, index) => ({ f, index }))
+      .filter(({ f }) => f.element.type === 'video-placeholder' && onScreen(f))
+      .map(({ f, index }) => ({ f, index, punch: punchRect(f) }));
+  };
 
   // Paint order is the array order of `flat`: `flattenElements` emits an element
   // before its children and sorts siblings by `zIndex`, which is exactly what
@@ -603,10 +645,14 @@ export function sceneMaskHoles(
     return fitPictureToBox(f.rect, aspect, mode).visible;
   };
 
-  const plates = flat
-    .map((f, index) => ({ f, index }))
-    .filter(({ f }) => f.element.type === 'video-placeholder' && onScreen(f))
-    .map(({ f, index }) => ({ f, index, punch: punchRect(f) }));
+  const plates = platesUnder(view?.visibility);
+  /**
+   * 🔴 `SKEW-INTERSECT-01` — **the OUTGOING look's plates, present only while a switch is in
+   * flight.** `undefined` is the ordinary case and every line below falls back to exactly
+   * today's behaviour for it.
+   */
+  const outgoing =
+    view?.transitionFrom === undefined ? undefined : platesUnder(view.transitionFrom);
 
   const holes = new Map<string, MaskHole[]>();
   if (plates.length === 0) return holes;
@@ -620,13 +666,43 @@ export function sceneMaskHoles(
     if (target.element.type === 'container' || target.element.type === 'composition') continue;
     const above = plates.filter((p) => p.index > i && intersects(p.f.rect, target.rect));
     if (above.length === 0) continue;
+    /*
+      🔴 `SKEW-INTERSECT-01` — **THE TRANSITION MASK, computed in SCENE pixels and pulled
+      back ONCE, exactly as the ordinary mask is.**
+
+      Every pixel this leaves open is inside a hole of BOTH looks, so it is backed by a
+      picture whether the fills have moved yet or not — which is the entire guarantee. The
+      UNION was the other candidate and is the opposite: it opens every pixel EITHER look
+      punches, and a pixel the outgoing look does not fill is the channel showing through.
+      Black on air, in the shape of the entering look's boxes.
+
+      Pairwise, because a hole set is a UNION of rects and `(A ∪ B) ∩ (C ∪ D)` is the union
+      of the four pairwise intersections. `intersects` is the same noise-aware predicate the
+      z-order filter uses, so a pair that merely touches produces no sliver.
+    */
+    const punches =
+      outgoing === undefined
+        ? above.map((p) => p.punch)
+        : intersectPunches(
+            above.map((p) => p.punch),
+            outgoing
+              .filter((p) => p.index > i && intersects(p.f.rect, target.rect))
+              .map((p) => p.punch),
+          );
+    /*
+      An EMPTY result is a real answer and is NOT a special case: two looks whose plates
+      barely overlap leave this element with no hole at all for the length of the window, so
+      the template's own backdrop covers where both pictures will be. That is a picture the
+      author drew, held for a field or two — the alternative it replaces is the channel.
+    */
+    if (punches.length === 0) continue;
     const toLocal = invertAffine(target.toScene);
     // A collapsed element (scaled to zero on an axis) paints nothing, so there is no
     // space to express a hole in. `null` here means NO MASK, not an empty one.
     if (toLocal === null) continue;
     holes.set(
       target.key,
-      above.map(({ punch }) => {
+      punches.map((punch) => {
         // `punch`, not `f.rect` — the FITTED rect (C-028). Pulled back through the same
         // inverse as before: the fit happens in SCENE px and the pull-back is a plain
         // affine, so the two compose in either order.
@@ -636,6 +712,32 @@ export function sceneMaskHoles(
     );
   }
   return holes;
+}
+
+/**
+ * `SKEW-INTERSECT-01` — every non-empty pairwise intersection of two hole sets, in the space
+ * they are both expressed in.
+ *
+ * Exported so the geometry can be asserted directly rather than only through a rendered
+ * scene: the whole claim of the transition mask is that its output is a SUBSET of both
+ * inputs, and a subset claim wants a test that can name the rects.
+ */
+export function intersectPunches(
+  entering: readonly LiveSourceRect[],
+  outgoing: readonly LiveSourceRect[],
+): LiveSourceRect[] {
+  const out: LiveSourceRect[] = [];
+  for (const a of entering) {
+    for (const b of outgoing) {
+      if (!intersects(a, b)) continue;
+      const x = Math.max(a.x, b.x);
+      const y = Math.max(a.y, b.y);
+      const right = Math.min(a.x + a.width, b.x + b.width);
+      const bottom = Math.min(a.y + a.height, b.y + b.height);
+      out.push({ x, y, width: right - x, height: bottom - y });
+    }
+  }
+  return out;
 }
 
 // ───────────────── STAMPED SCOPES: the plates the walk deliberately never sees ─────────────────
