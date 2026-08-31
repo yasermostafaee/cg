@@ -1,3 +1,9 @@
 evidence/**
 !evidence/*/
 !evidence/*/report.json
+
+# SKEW-INTERSECT-01 — the owner's own template (`3-ghab.vcg` / `.cgproj` and the photograph it
+# carries). Undiffable binary, one of them a picture of a person, and re-exportable from his
+# Designer at any time. What the harness needs from it is the SHAPE, which is committed in
+# `src/geometry.ts` as `GHAB_FIXTURE`. See `fixtures/README.md` for the whole decision.
+fixtures/owner/**

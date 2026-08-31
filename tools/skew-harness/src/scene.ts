@@ -1,14 +1,12 @@
 import { SceneSchema, type Element, type Scene } from '@cg/shared-schema';
 import {
-  BANNER_RECTS,
-  COLUMN_RECTS,
+  BANNER_COLUMN_FIXTURE,
   fillerLookRects,
-  LOOK_BANNER,
-  LOOK_COLUMN,
   PLATE_A,
   PLATE_B,
   SKEW_SCENE,
   type Rect,
+  type SkewFixture,
 } from './geometry.js';
 
 /**
@@ -220,6 +218,12 @@ export interface SkewSceneOptions {
   readonly videoDurationMs?: number;
   /** Append {@link LOOK_EMPTY} — a look whose plates are off-frame, so it punches nothing. */
   readonly withEmptyLook?: boolean;
+  /**
+   * `SKEW-INTERSECT-01` — WHICH measured pair to build. The default is the banner/column pair
+   * every earlier measurement used; `GHAB_FIXTURE` is the owner's own full-frame-vs-boxes
+   * shape, which is the one that discriminates an intersection mask from an entering-look mask.
+   */
+  readonly fixture?: SkewFixture;
 }
 
 /**
@@ -233,6 +237,18 @@ export function buildSkewScene(options: SkewSceneOptions = {}): Scene {
     compositionId: `comp-filler-${String(i + 1)}`,
     instanceId: `inst-filler-${String(i + 1)}`,
     rects: fillerLookRects(i),
+  }));
+  const fixture = options.fixture ?? BANNER_COLUMN_FIXTURE;
+  /*
+    The two MEASURED looks, named by the fixture. Instance ids are derived from the look ids so
+    two fixtures can never collide in one scene and a probe-placement check made against one
+    fixture can never be silently satisfied by the other's geometry.
+  */
+  const measured = fixture.looks.map((id) => ({
+    id,
+    instanceId: `inst-${id}`,
+    compositionId: `comp-${id}`,
+    rects: fixture.rects[id] ?? {},
   }));
   const wantsVideo = options.background === 'video';
   const wantsEmpty = options.withEmptyLook === true;
@@ -273,16 +289,14 @@ export function buildSkewScene(options: SkewSceneOptions = {}): Scene {
           ...(wantsVideo
             ? [videoBackground(assetId, options.videoDurationMs ?? 10_000)]
             : [background()]),
-          instance('inst-banner', 'comp-banner'),
-          instance('inst-column', 'comp-column'),
+          ...measured.map((m) => instance(m.instanceId, m.compositionId)),
           ...fillers.map((f) => instance(f.instanceId, f.compositionId)),
           ...(wantsEmpty ? [instance('inst-empty', 'comp-empty')] : []),
         ],
       },
     ],
     compositions: [
-      composition('comp-banner', BANNER_RECTS),
-      composition('comp-column', COLUMN_RECTS),
+      ...measured.map((m) => composition(m.compositionId, m.rects)),
       ...fillers.map((f, i) => composition(f.compositionId, f.rects, { index: i })),
       ...(wantsEmpty ? [composition('comp-empty', EMPTY_RECTS)] : []),
     ],
@@ -293,8 +307,12 @@ export function buildSkewScene(options: SkewSceneOptions = {}): Scene {
       {
         id: 'skew-group',
         looks: [
-          { id: LOOK_BANNER, name: 'banner', instanceId: 'inst-banner', entered: { mode: 'cut' } },
-          { id: LOOK_COLUMN, name: 'column', instanceId: 'inst-column', entered: { mode: 'cut' } },
+          ...measured.map((m) => ({
+            id: m.id,
+            name: m.id,
+            instanceId: m.instanceId,
+            entered: { mode: 'cut' as const },
+          })),
           ...fillers.map((f) => ({
             id: f.id,
             name: f.id,
@@ -312,7 +330,7 @@ export function buildSkewScene(options: SkewSceneOptions = {}): Scene {
               ]
             : []),
         ],
-        defaultLookId: LOOK_BANNER,
+        defaultLookId: measured[0]?.id ?? fixture.looks[0],
       },
     ],
     metadata: { createdAt: '2026-08-31T00:00:00.000Z', updatedAt: '2026-08-31T00:00:00.000Z' },

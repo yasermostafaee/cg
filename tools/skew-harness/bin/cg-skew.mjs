@@ -6,6 +6,11 @@
 //   cg-skew --media-dir "D:\programs\casparcg-server-v2.5.0-stable-windows\media"
 //   cg-skew --media-dir <dir> --mode 1080i5000 --runs 10 --out evidence/2026-08-31
 //   cg-skew --media-dir <dir> --with-play-switch      # ALSO measure B-155's window
+//   cg-skew --media-dir <dir> --fixture ghab --classify          # the owner's full-frame-vs-boxes pair
+//   cg-skew --media-dir <dir> --fixture ghab --reverse           # ...the other way round
+//   cg-skew --media-dir <dir> --fixture ghab --no-transition-mask # the CONTROL: the pre-fix switch
+//   cg-skew --media-dir <dir> --transition-lead-ms 0   # what the window's LEADING half buys
+//   cg-skew --media-dir <dir> --transition-tail-ms 0   # ...and what its TRAILING half costs
 //
 // It changes NOTHING about the product. It records the channel through a second consumer,
 // drives ONE look switch through `CasparRuntime.setActiveLook`, and reads the two
@@ -74,6 +79,17 @@ const options = {
   background: args.background === 'video' ? 'video' : DEFAULT_OPTIONS.background,
   classify: args.classify === true,
   emptyLook: args['empty-look'] === true,
+  // `SKEW-INTERSECT-01` — which measured pair, which direction, and whether the fix is on.
+  fixture: typeof args.fixture === 'string' ? args.fixture : DEFAULT_OPTIONS.fixture,
+  reverse: args.reverse === true,
+  transitionMask: args['no-transition-mask'] !== true,
+  // Undefined leaves the bridge's own derived default (one channel frame each).
+  ...(args['transition-lead-ms'] === undefined
+    ? {}
+    : { transitionLeadMs: Number(args['transition-lead-ms']) }),
+  ...(args['transition-tail-ms'] === undefined
+    ? {}
+    : { transitionTailMs: Number(args['transition-tail-ms']) }),
 };
 
 function numeric(value, fallback) {
@@ -112,7 +128,9 @@ function line(run, playExpected = false) {
         : `k = ${run.kChannel} channel frames (${run.kRecorded} recorded, ${run.kMs} ms)`;
   const events = playExpected
     ? `  events A=[${run.probeAEvents.join(',')}] B=[${run.probeBEvents.join(',')}]`
-    : '';
+    : run.probeCEvents === undefined
+      ? ''
+      : `  C=[${run.probeCEvents.join(',')}]`;
   return (
     `run ${String(run.index).padStart(2, '0')}  ` +
     `frames=${run.frames}/${run.expectedFrames} @ ${run.frameRate} over ${run.windowMs}ms  ` +
@@ -132,8 +150,26 @@ print('');
 for (const run of report.runs) print(line(run));
 print('');
 print(`scene               : ${report.scene.looks} looks, ${report.scene.background} background`);
+print(
+  `fixture             : ${report.scene.fixture}  ${report.scene.from} -> ${report.scene.to}` +
+    `   transition mask ${report.scene.transitionMask ? 'ON' : 'OFF (the pre-fix control)'}` +
+    (report.scene.transitionLeadMs === undefined
+      ? ''
+      : `   lead ${report.scene.transitionLeadMs} ms`) +
+    (report.scene.transitionTailMs === undefined
+      ? ''
+      : `   tail ${report.scene.transitionTailMs} ms`),
+);
 print(`k, in CHANNEL FRAMES : ${fmt(report.kChannelFrames)}`);
 print(`k, in MILLISECONDS   : ${fmt(report.kMilliseconds)}`);
+
+if (report.pictureArrivalFields !== undefined) {
+  print('');
+  print('== SKEW-INTERSECT-01 SECTION 2 -- the two terms that are NOT the mask =');
+  print('(RECORDED frames; at 1080i5000 a recorded frame is a FIELD)');
+  print(`  (b) fills moved -> the box shows its OWN picture : ${fmt(report.pictureArrivalFields)}`);
+  print(`  (c) new hole opened -> outgoing picture left     : ${fmt(report.clearGapFields)}`);
+}
 
 if (report.artefactsByDirection !== undefined) {
   print('');

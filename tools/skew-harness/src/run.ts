@@ -29,14 +29,13 @@ import {
 } from './ffmpeg.js';
 import {
   BACKGROUND_MOTION_PATCH,
-  LOOK_BANNER,
-  LOOK_COLUMN,
+  BANNER_COLUMN_FIXTURE,
   PLATE_A,
   PLATE_B,
   probePlacementIssues,
-  SKEW_PROBE_A,
-  SKEW_PROBE_B,
+  SKEW_FIXTURES,
   SKEW_SCENE,
+  type SkewFixture,
 } from './geometry.js';
 import { buildSkewScene, LOOK_EMPTY } from './scene.js';
 import { bundleTemplateRuntime, buildTemplateHtml } from './template.js';
@@ -74,6 +73,29 @@ export interface SkewOptions {
    * holes never move into probe B by construction) — the deliverable is the frames.
    */
   readonly emptyLook: boolean;
+  /**
+   * `SKEW-INTERSECT-01` — WHICH measured pair. `banner-column` is every earlier measurement's
+   * fixture; `ghab` is the owner's own full-frame-vs-boxes shape, which is the one that can
+   * discriminate an intersection mask from an entering-look mask.
+   */
+  readonly fixture: string;
+  /** Switch the OTHER way — `to → from`. Both directions matter and they are not symmetric. */
+  readonly reverse: boolean;
+  /**
+   * 🔴 The CONTROL. `false` boots the bridge with `lookTransitionMask: false`, i.e. the
+   * single-tell switch that shipped before `SKEW-INTERSECT-01` — the SAME binary, so a
+   * before/after comparison cannot rest on a build that was never exercised.
+   */
+  readonly transitionMask: boolean;
+  /**
+   * The transition window's two halves, in ms, when the sweep wants to vary them. `undefined`
+   * leaves the bridge's own default — one channel frame of the observed mode each — which is
+   * what every acceptance sweep runs with. Set to `0` to measure what each half BUYS: the lead
+   * is what makes the narrowing provably precede the fills, and the tail is what the artefact's
+   * duration is paid in.
+   */
+  readonly transitionLeadMs?: number;
+  readonly transitionTailMs?: number;
 }
 
 /**
@@ -110,6 +132,9 @@ export const DEFAULT_OPTIONS: SkewOptions = {
   background: 'flat',
   classify: false,
   emptyLook: false,
+  fixture: BANNER_COLUMN_FIXTURE.id,
+  reverse: false,
+  transitionMask: true,
 };
 
 /**
@@ -141,6 +166,12 @@ export interface RunResult {
   /** EVERY distinct change event per probe — `B-155`'s window legitimately has several. */
   readonly probeAEvents: readonly number[];
   readonly probeBEvents: readonly number[];
+  /**
+   * `SKEW-INTERSECT-01` §2 — the ARRIVING/DEPARTING plate's own box, when the fixture places
+   * one. Terms (b) and (c) are the two differences read off it; see {@link SkewFixture.probeC}.
+   */
+  readonly probeC?: ChangePoint;
+  readonly probeCEvents?: readonly number[];
   readonly commands: readonly string[];
   readonly containedPlay: boolean;
   /** `SKEW-RESIDUE-01` — what was on screen during the mismatch, when `classify` is on. */
@@ -168,10 +199,37 @@ export interface SkewReport {
   readonly fieldsPerChannelFrame: number;
   readonly probePlacement: readonly string[];
   /** The scene axes this sweep ran with — a report that cannot say is not evidence. */
-  readonly scene: { readonly looks: number; readonly background: 'flat' | 'video' };
+  readonly scene: {
+    readonly looks: number;
+    readonly background: 'flat' | 'video';
+    /** `SKEW-INTERSECT-01` — the fixture, the direction, and whether the fix was in force. */
+    readonly fixture: string;
+    readonly from: string;
+    readonly to: string;
+    readonly transitionMask: boolean;
+    readonly transitionLeadMs?: number;
+    readonly transitionTailMs?: number;
+  };
   readonly runs: readonly RunResult[];
   readonly kChannelFrames: Distribution;
   readonly kMilliseconds: Distribution;
+  /**
+   * 🔴 `SKEW-INTERSECT-01` §2 — **the two terms that are NOT the mask/fill disagreement, kept
+   * apart from it and from each other so no future report can collapse the three again.**
+   *
+   * - `pictureArrivalFields` — **term (b)**: RECORDED FRAMES from the fills moving (probe A) to
+   *   the arriving plate's box settling on its OWN picture (probe C's last change). On a plate
+   *   the switch had to `PLAY`, that is the producer's first-frame latency; on one already
+   *   seated it is zero, which is the comparison that isolates the start.
+   * - `clearGapFields` — **term (c)**: RECORDED FRAMES between the new hole opening (probe B)
+   *   and the outgoing plate's picture leaving its box (probe C's first change). Signed: a
+   *   positive value means the hole opened AFTER the picture left.
+   *
+   * At `1080i5000` a recorded frame is a FIELD (the file consumer writes one per field), which
+   * is the unit `SKEW-COUNT-01`'s +4 was reported in.
+   */
+  readonly pictureArrivalFields?: Distribution;
+  readonly clearGapFields?: Distribution;
   readonly artefactsByDirection?: readonly ArtefactByDirection[];
   readonly playSwitch?: {
     readonly runs: readonly RunResult[];
@@ -230,6 +288,7 @@ function recordedPeriodMs(frameRate: string): number {
 async function analyseRecording(
   file: string,
   baselineFrames: number,
+  fixture: SkewFixture,
 ): Promise<{
   k: number | null;
   reason?: string;
@@ -237,31 +296,54 @@ async function analyseRecording(
   probeB: ChangePoint;
   eventsA: readonly number[];
   eventsB: readonly number[];
+  probeC?: ChangePoint;
+  eventsC?: readonly number[];
 }> {
   const [rawA, rawB] = await Promise.all([
-    extractProbe(file, SKEW_PROBE_A),
-    extractProbe(file, SKEW_PROBE_B),
+    extractProbe(file, fixture.probeA),
+    extractProbe(file, fixture.probeB),
   ]);
-  const framesA = splitFrames(rawA, probeFrameBytes(SKEW_PROBE_A)).slice(LEAD_SKIP_FRAMES);
-  const framesB = splitFrames(rawB, probeFrameBytes(SKEW_PROBE_B)).slice(LEAD_SKIP_FRAMES);
+  const framesA = splitFrames(rawA, probeFrameBytes(fixture.probeA)).slice(LEAD_SKIP_FRAMES);
+  const framesB = splitFrames(rawB, probeFrameBytes(fixture.probeB)).slice(LEAD_SKIP_FRAMES);
   const seriesA = changeSeries(framesA);
   const seriesB = changeSeries(framesB);
   const probeA = firstChangeIndex(seriesA, baselineFrames);
   const probeB = firstChangeIndex(seriesB, baselineFrames);
   const eventsA = changeEvents(seriesA, baselineFrames, probeA.threshold);
   const eventsB = changeEvents(seriesB, baselineFrames, probeB.threshold);
+  /*
+    `SKEW-INTERSECT-01` §2 — probe C is read on its OWN terms and is deliberately outside every
+    guard below. It plays no part in `k`, so a run whose C is unreadable is still a perfectly
+    good `k` run; and terms (b) and (c) are differences within one recording, so nothing about
+    them depends on the separation guard `k` needs.
+  */
+  let probeC: ChangePoint | undefined;
+  let eventsC: readonly number[] | undefined;
+  if (fixture.probeC !== undefined) {
+    const rawC = await extractProbe(file, fixture.probeC);
+    const framesC = splitFrames(rawC, probeFrameBytes(fixture.probeC)).slice(LEAD_SKIP_FRAMES);
+    const seriesC = changeSeries(framesC);
+    probeC = firstChangeIndex(seriesC, baselineFrames);
+    eventsC = changeEvents(seriesC, baselineFrames, probeC.threshold);
+  }
+  const withC = <T extends object>(o: T): T =>
+    ({
+      ...o,
+      ...(probeC === undefined ? {} : { probeC }),
+      ...(eventsC === undefined ? {} : { eventsC }),
+    }) as T;
 
   if (probeA.index === null || probeB.index === null) {
     const which =
       probeA.index === null ? 'A (the picture never moved)' : 'B (the holes never moved)';
-    return {
+    return withC({
       k: null,
       reason: `probe ${which} found no transition above its noise floor`,
       probeA,
       probeB,
       eventsA,
       eventsB,
-    };
+    });
   }
   /*
     `SKEW-RESIDUE-01` — THE SEPARATION GUARD. What this switch actually did to each probe is
@@ -279,7 +361,7 @@ async function analyseRecording(
     if (first === undefined || last === undefined) continue;
     const settledDelta = meanAbsDiff(first, last);
     if (!separationOk(point.magnitude, settledDelta)) {
-      return {
+      return withC({
         k: null,
         reason:
           `probe ${name} crossed at ${point.magnitude.toFixed(1)} but this run settled ` +
@@ -288,10 +370,10 @@ async function analyseRecording(
         probeB,
         eventsA,
         eventsB,
-      };
+      });
     }
   }
-  return { k: probeB.index - probeA.index, probeA, probeB, eventsA, eventsB };
+  return withC({ k: probeB.index - probeA.index, probeA, probeB, eventsA, eventsB });
 }
 
 /**
@@ -303,7 +385,18 @@ async function analyseRecording(
  * pair would be a measurement of this file rather than of the product.
  */
 export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
-  const placement = probePlacementIssues();
+  const fixture = SKEW_FIXTURES[options.fixture];
+  if (fixture === undefined) {
+    throw new Error(
+      `unknown fixture "${options.fixture}" — known: ${Object.keys(SKEW_FIXTURES).join(', ')}`,
+    );
+  }
+  /*
+    🔴 Asked about THIS fixture. A second measured pair whose probe placement was checked
+    against the first pair's constants would be a measurement with no soundness argument at
+    all — and `k` is exactly as trustworthy as this check.
+  */
+  const placement = probePlacementIssues(fixture);
   if (placement.length > 0) {
     throw new Error(
       `probe placement is unsound, refusing to measure:\n  - ${placement.join('\n  - ')}`,
@@ -349,6 +442,7 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
       background: options.background,
       videoAssetId: assetId,
       withEmptyLook: options.emptyLook,
+      fixture,
     });
     const html = buildTemplateHtml(scene, await bundleTemplateRuntime(), assetUrls);
     const templateId = 'skew-harness';
@@ -370,6 +464,18 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
         sweepMs: 250,
         sourceCatalog: catalog() as never,
         sourceAssignments: assignments(templateId) as never,
+        /*
+          🔴 `SKEW-INTERSECT-01`'s CONTROL rides the product's own option rather than a build:
+          `--no-transition-mask` runs the SAME binary with the single-tell switch, so a
+          before/after claim compares two behaviours and not two compilations.
+        */
+        lookTransitionMask: options.transitionMask,
+        ...(options.transitionLeadMs === undefined
+          ? {}
+          : { lookTransitionLeadMs: options.transitionLeadMs }),
+        ...(options.transitionTailMs === undefined
+          ? {}
+          : { lookTransitionTailMs: options.transitionTailMs }),
       } as never,
     );
     runtime.start();
@@ -384,7 +490,12 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
     // The page has to have fetched, parsed, built and painted before anything is timed.
     await sleep(3500);
 
-    const shared = { runtime, control, tap, options, fieldsPerChannelFrame };
+    // The measured direction. `reverse` is not cosmetic: on the owner's shape one direction
+    // OPENS a full-frame hole and the other CLOSES one, and they fail differently.
+    const [authoredFirst, authoredSecond] = fixture.looks;
+    const measuredFrom = options.reverse ? authoredSecond : authoredFirst;
+    const measuredTo = options.reverse ? authoredFirst : authoredSecond;
+    const shared = { runtime, control, tap, options, fieldsPerChannelFrame, fixture };
     const runs: RunResult[] = [];
     for (let i = 0; i < options.runs; i += 1) {
       runs.push(
@@ -392,8 +503,8 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
           ...shared,
           index: i,
           label: options.emptyLook ? 'empty' : 'skew',
-          from: LOOK_BANNER,
-          to: options.emptyLook ? LOOK_EMPTY : LOOK_COLUMN,
+          from: measuredFrom,
+          to: options.emptyLook ? LOOK_EMPTY : measuredTo,
         }),
       );
     }
@@ -405,10 +516,29 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
       reportedFramerate: mode.reportedFramerate,
       fieldsPerChannelFrame,
       probePlacement: placement,
-      scene: { looks: options.looks, background: options.background },
+      scene: {
+        looks: options.looks,
+        background: options.background,
+        fixture: fixture.id,
+        from: measuredFrom,
+        to: options.emptyLook ? LOOK_EMPTY : measuredTo,
+        transitionMask: options.transitionMask,
+        ...(options.transitionLeadMs === undefined
+          ? {}
+          : { transitionLeadMs: options.transitionLeadMs }),
+        ...(options.transitionTailMs === undefined
+          ? {}
+          : { transitionTailMs: options.transitionTailMs }),
+      },
       runs,
       kChannelFrames: distribution(runs.filter(usable).map((r) => r.kChannel as number)),
       kMilliseconds: distribution(runs.filter(usable).map((r) => r.kMs as number)),
+      /*
+        ⚠ Computed over runs whose THREE probes all read, and NOT filtered by `usable`: a run
+        excluded from `k` because a `PLAY` was in its window is precisely the run term (b) is
+        about, and dropping it here would leave the term measurable only where it cannot occur.
+      */
+      ...(fixture.probeC === undefined ? {} : termsBAndC(runs)),
       ...(options.classify ? { artefactsByDirection: groupArtefacts(runs.filter(usable)) } : {}),
     };
 
@@ -442,8 +572,8 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
           ...shared,
           index: i,
           label: 'b155',
-          from: LOOK_BANNER,
-          to: LOOK_COLUMN,
+          from: measuredFrom,
+          to: measuredTo,
           beforeRecording: () => {
             const verdict = runtime?.setSourceCatalog(catalogPointing(target ?? '') as never);
             if (verdict?.ok !== true) {
@@ -529,6 +659,7 @@ interface OneSwitch {
   readonly label: string;
   readonly from: string;
   readonly to: string;
+  readonly fixture: SkewFixture;
   readonly runtime: CasparRuntime;
   readonly control: AmcpClient;
   readonly tap: WireTap;
@@ -618,8 +749,10 @@ async function recordOneSwitch(spec: OneSwitch): Promise<RunResult> {
     one field. Dumped before the discard so the evidence survives it.
   */
   if (options.emptyLook) {
-    const raw = await extractProbe(kept, SKEW_PROBE_A);
-    const probeFrames = splitFrames(raw, probeFrameBytes(SKEW_PROBE_A)).slice(LEAD_SKIP_FRAMES);
+    const raw = await extractProbe(kept, spec.fixture.probeA);
+    const probeFrames = splitFrames(raw, probeFrameBytes(spec.fixture.probeA)).slice(
+      LEAD_SKIP_FRAMES,
+    );
     const point = firstChangeIndex(
       changeSeries(probeFrames),
       Math.max(4, Math.floor((options.settleMs * 0.6) / period) - LEAD_SKIP_FRAMES),
@@ -655,7 +788,7 @@ async function recordOneSwitch(spec: OneSwitch): Promise<RunResult> {
     4,
     Math.floor((options.settleMs * 0.6) / period) - LEAD_SKIP_FRAMES,
   );
-  const analysis = await analyseRecording(kept, baselineFrames);
+  const analysis = await analyseRecording(kept, baselineFrames, spec.fixture);
   if (analysis.k === null) return discard(analysis.reason ?? 'no transition found');
 
   let classified: { artefact: ArtefactSummary; frames: string[] } | null = null;
@@ -681,10 +814,38 @@ async function recordOneSwitch(spec: OneSwitch): Promise<RunResult> {
     probeB: analysis.probeB,
     probeAEvents: analysis.eventsA,
     probeBEvents: analysis.eventsB,
+    ...(analysis.probeC === undefined ? {} : { probeC: analysis.probeC }),
+    ...(analysis.eventsC === undefined ? {} : { probeCEvents: analysis.eventsC }),
     ...(classified !== null
       ? { artefact: classified.artefact, artefactFrames: classified.frames }
       : {}),
   };
+}
+
+/**
+ * `SKEW-INTERSECT-01` §2 — terms (b) and (c), as distributions over the runs that carry all
+ * three probe readings.
+ *
+ * Both are differences WITHIN one recording, so neither crosses a clock and neither needs the
+ * wire tap: probe A is the fills landing, probe B the mask changing, probe C the content of the
+ * arriving/departing box changing. That is why they can be read off the same recordings the
+ * mask measurement uses rather than needing a run of their own.
+ */
+function termsBAndC(runs: readonly RunResult[]): {
+  pictureArrivalFields: Distribution;
+  clearGapFields: Distribution;
+} {
+  const arrival: number[] = [];
+  const clear: number[] = [];
+  for (const run of runs) {
+    const events = run.probeCEvents ?? [];
+    if (events.length === 0 || run.probeA.index === null || run.probeB.index === null) continue;
+    const first = events[0] as number;
+    const last = events[events.length - 1] as number;
+    arrival.push(last - run.probeA.index);
+    clear.push(run.probeB.index - first);
+  }
+  return { pictureArrivalFields: distribution(arrival), clearGapFields: distribution(clear) };
 }
 
 function emptyPoint(): ChangePoint {

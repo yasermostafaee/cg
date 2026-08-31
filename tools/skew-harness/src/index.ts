@@ -25,18 +25,30 @@ export {
   SOURCE_CLIPS,
 } from './ffmpeg.js';
 export {
+  BANNER_COLUMN_FIXTURE,
   BANNER_RECTS,
   COLUMN_RECTS,
+  GHAB_BOXES_RECTS,
+  GHAB_FIXTURE,
+  GHAB_FULL_RECTS,
+  GHAB_PROBE_A,
+  GHAB_PROBE_B,
+  GHAB_SEATED_FIXTURE,
+  GHAB_SEATED_FULL_RECTS,
   LOOK_BANNER,
   LOOK_COLUMN,
+  LOOK_GHAB_BOXES,
+  LOOK_GHAB_FULL,
   PLATE_A,
   PLATE_B,
   PROBE_EDGE_CLEARANCE,
   probePlacementIssues,
+  SKEW_FIXTURES,
   SKEW_PROBE_A,
   SKEW_PROBE_B,
   SKEW_SCENE,
   type Rect,
+  type SkewFixture,
 } from './geometry.js';
 export { buildSkewScene, SKEW_PLATES } from './scene.js';
 export { buildTemplateHtml, bundleTemplateRuntime } from './template.js';
