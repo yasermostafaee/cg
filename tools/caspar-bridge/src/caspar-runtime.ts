@@ -2781,6 +2781,8 @@ export class CasparRuntime {
     const seq = this.#nextSeq();
     this.#reconciler.applyIntent({ kind: 'take', itemId }, seq);
 
+    /** `B-191` — the look whose tell was refused, so the landed take can SAY so. */
+    let lookTellFailed: string | undefined;
     // B-039 — PRESCRIPTIVE: `CG PLAY` only renders if a live producer exists on the
     // slot. If a prior out destroyed it, re-issue `CG ADD` (a fresh load) FIRST so
     // the take re-renders instead of playing an empty layer. The re-ADD recovers the
@@ -2817,6 +2819,34 @@ export class CasparRuntime {
         const code = added.errorCode ?? 'amcp-error';
         this.#reconciler.applyAck(seq, false, code);
         return { accepted: false, errorCode: code };
+      }
+    } else {
+      /*
+        🔴 **`B-191` — THE OTHER HALF OF THE RE-ADD, AND THE ONLY PLACE BOTH ROUTES INTO AIR
+        MEET.** The branch above rebuilds a destroyed page, and `#sendAdd`'s payload carries
+        the recorded look into it by construction. This branch is the case that had nothing:
+        the producer is RESIDENT — a `stop` leaves it so, and so does a rehearsal — while the
+        look may have been changed since it was last told. `setActiveLook` records and stays
+        silent on an off-air row with nothing seated (`B-151`: a rehearse control must reach
+        no plant), so the page can be a whole look behind, and the take below seats the plates
+        from the RECORDED look. Measured on the wire before this existed: `MIXER FILL 0 0 1 1`
+        (the new look) under a `CG … PLAY` carrying no payload at all — pictures on one look,
+        holes on another, until a further switch or another stop-and-play.
+
+        Told HERE, before the seating and the play, for the same reason the re-ADD is here: it
+        is the last moment at which the page can be made to agree BEFORE anything is on air.
+        The fits are already this take's (`#plateFits` was written from the plan above), so the
+        page punches what the bridge is about to fill.
+
+        ⚠ **A failed tell does NOT refuse the take.** The graphic is mid-way to air with its
+        plates about to be seated, and a row that comes up looking wrong is a smaller failure
+        than a take the operator was told did not happen while the wire had already moved. It
+        is reported instead — the take says what is wrong with what it just did.
+      */
+      const lookId = this.activeLookId(itemId);
+      if (lookId !== undefined) {
+        const told = await this.#tellPageLook(itemId, slot, lookId);
+        if (!told.ok) lookTellFailed = lookId;
       }
     }
 
@@ -2905,7 +2935,18 @@ export class CasparRuntime {
     // pointing at different machines, and flattening both to `amcp-error` told the
     // operator neither.
     const { ok, errorCode } = await this.#send(this.#builder.take(slot), seq, 'normal');
-    return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
+    if (!ok) return { accepted: false, errorCode: errorCode ?? 'amcp-error' };
+    // `B-191` — the take LANDED, and the one thing that may still be wrong about it is said
+    // rather than swallowed: the pictures are on the recorded look, the holes are not.
+    return lookTellFailed === undefined
+      ? { accepted: true }
+      : {
+          accepted: true,
+          message:
+            `The graphic is on air, but CasparCG refused the command that tells it to punch ` +
+            `look "${lookTellFailed}" — the pictures are in that look's places while the holes ` +
+            `are wherever the graphic last put them. Re-issue the look to converge.`,
+        };
   }
 
   /**
@@ -5151,8 +5192,20 @@ export class CasparRuntime {
       const item = this.#reconciler.get(itemId);
       const onAir = item != null && isOnAirStatus(item.status, item.pending);
       if (!onAir && (this.#liveLayers.get(itemId) ?? []).length === 0) {
-        // Case 2 of `#recordActiveLook`: there is no page to disagree, and the next `CG ADD`
-        // carries this look into the build. Recording it IS the whole action.
+        /*
+          Case 2 of `#recordActiveLook`: nothing is seated and nothing reaches the plant —
+          `B-151`'s pin, which the rehearse control's safety rests on. Recording it IS the
+          whole action HERE.
+
+          ⚠ **`B-191` — what makes that safe is the TAKE, not this line, and case 2's own
+          justification used to overstate it.** It said the look is carried into the next
+          build by `#sendAdd`'s payload, which is true after `out` (the producer is destroyed)
+          and FALSE after `stop` (the producer stays resident, so the take skips the re-ADD
+          and sends a bare `CG PLAY` carrying nothing). The look was recorded against a build
+          that never happened, and the row came up with its holes on the old look and its
+          pictures on the new one. The repair is in `#takeImpl`, where BOTH routes into air
+          converge and where telling a page is a playout verb's business — see it there.
+        */
         this.#recordActiveLook(itemId, lookId);
         return { ok: true };
       }

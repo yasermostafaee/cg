@@ -7564,3 +7564,76 @@ shape is the same in both. Wire evidence in `tools/skew-harness/evidence/2026-08
   READS the mode this repairs), [[B-155]] (the green-mock trap this repeats on a query verb),
   [[R-030]] (the check this re-arms), [[B-100]]/[[B-101]] (the axis rules the silent-failure
   branch was written for).
+
+## [~] B-191 — a look switched while the row is STOPPED is recorded but never TOLD, so the next PLAY comes up with the pictures on one look and the holes on another ⟨priority: high — a wrong layout on air, reached by an ordinary operator sequence, with no refusal and no message⟩ — filed AND FIXED 2026-08-31 (`RUNTIME-RECONCILE-01` S3)
+
+**The owner's sequence, 2026-08-31:** on air on the two-box look → **STOP** → while stopped, switch to
+the single-box look → **PLAY** → the fills and the holes come up on DIFFERENT looks. Two recoveries,
+both reported and both diagnostic: switching to another look and back repairs it (the on-air path
+reconciles correctly), and a further stop-and-play repairs it.
+
+### Answered BY VALUE, on the wire, not by reading
+
+`tools/caspar-bridge/tests/look-switch-stopped.integration.test.ts` drives exactly that sequence
+against the mock and reads the trace. The take after the stopped switch sends:
+
+```
+MIXER 1-60 VOLUME 1 | PLAY 1-30 DECKLINK DEVICE 1 | MIXER 1-30 VOLUME 0 |
+MIXER 1-30 FILL 0 0 1 1 | MIXER 1-30 CLIP 0 0 1 1 | PLAY 1-31 … | CG 1-60 PLAY 0
+```
+
+🔴 **`FILL 0 0 1 1` is the NEW look — the pictures are right — and `CG 1-60 PLAY 0` carries NOTHING.**
+No `CG ADD`, no `CG UPDATE`, no `__cg` payload: the page is never told, so it comes back up punching
+the look it was showing when it was stopped. (The parse is proven by a positive control in the same
+test: the same reader answers `two` for the first take's `CG ADD`.) So the decisive question — _does
+`#tellPageLook` run on the stopped path?_ — is answered **NO**, and the half that is stale is the
+PAGE, not the fills.
+
+### The mechanism: "off air" was used as a proxy for "no page"
+
+`setActiveLook` short-circuits when the row is off air with nothing seated, and records the look on
+case 2 of `#recordActiveLook`: _"there is no page to disagree… both re-enter through `#sendAdd`,
+which puts the look in the `CG ADD` payload."_ That justification is sound after **`out`** — the
+producer is destroyed, `#loaded` is cleared, and the next take really does rebuild the page. It is
+**false after `stop`**: `stopItem` leaves the producer RESIDENT (its own comment says so), `#loaded`
+stays set, and the take's `B-039` re-ADD is therefore skipped. The look is recorded against a build
+that never happens.
+
+**Fixed at the TAKE, and the first attempt at the fix is worth recording because it was wrong.**
+The obvious repair — tell the page from `setActiveLook` whenever a producer is resident — turns
+the picker into a verb that reaches the plant on an OFF-AIR row, and the suite said so immediately:
+[[B-151]]'s _"switching the look of a REHEARSING row sends NOTHING to CasparCG"_ went red, a pin the
+OWNER asked for because the same control drives PVW. It is also not enough on its own: the rehearse
+route reaches the identical mismatch by a different door (load → rehearse → switch → exit → play).
+
+So the repair sits in `#takeImpl`, in the `else` of the `B-039` re-ADD guard — **the one place both
+routes into air converge**: no producer ⇒ the re-ADD's payload carries the look, as it always did; a
+resident producer ⇒ the take TELLS the page the recorded look, before it seats the plates, so the
+holes and the fills land on one look. `setActiveLook`'s off-air branch is unchanged and still sends
+nothing, and case 2's justification in `#recordActiveLook` now names the take rather than overstating
+what `#sendAdd` can promise.
+
+⚠ **A refused tell does NOT refuse the take** (`B-161`, golden rule 10, in the direction that
+matters here): the plates are about to be seated and a take the operator was told did not happen —
+while the wire had already moved — is the worse outcome. It lands and SAYS what disagrees.
+
+### DATED FROM `git`, and the answer is "not a regression"
+
+`git log -S` on the early return: it entered with **`1f76edb0` (2026-08-20)**, LOOKS phase 3 — the
+first implementation already recorded the look and returned when nothing was seated — and
+**`c3425891` (2026-08-21)** only moved the write into `#recordActiveLook` and wrote case 2's
+justification. **No commit was found in which this sequence worked**, so the owner's memory of it
+working is most likely of the `out`-then-load path (which does rebuild the page) rather than
+stop-then-play. Stated plainly rather than guessed at.
+
+⚠ **`SKEW-HOLD-01`'s claim is CONFIRMED, not merely repeated:** its reorder is entirely inside the
+on-air branch's reconcile-and-tell, and the stopped path it left byte-untouched is precisely the one
+that was already broken. This session's change is the first touch that path has had since `B-178`.
+
+- **Cross-refs:** [[B-039]] (the re-ADD guard whose absence-after-stop is the other half of the
+  mechanism, and where the fix now lives), [[B-151]] (the rehearse pin the first attempt broke — it
+  is why the repair is at the take), [[B-161]] / golden rule 10 (why nothing is played or filled),
+  [[B-174]] (the on-air order, untouched by this), [[B-149]] (what a hole and a picture disagreeing
+  looks like on air).
+- **Number:** highest `B-` HEADING across every ref was `B-190` (taken earlier today by the
+  `@cg/vcg-format` determinism fix); `B-191` … `B-197` returned no headings anywhere.

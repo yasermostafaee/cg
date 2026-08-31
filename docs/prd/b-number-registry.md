@@ -1916,3 +1916,17 @@ pointer:** the entry above ends _"Next free after this session is still `B-190`"
 pointer AGREE, and `B-190` is what this entry takes.
 
 ⇒ **Next free after this session is `B-191`**, and `B-` stays contiguous `B-001` … `B-190`, no gaps.
+
+### 2026-08-31 (last) — `RUNTIME-RECONCILE-01` S3: `B-191` TAKEN
+
+**Claimed: `B-191`** — _a look switched while the row is STOPPED is recorded but never told_
+([bugs-runtime.md](bugs-runtime.md)). Filed and fixed in the same session, from the owner's own
+sequence, and answered on the wire rather than by reading: the take after a stopped switch sends
+`CG … PLAY` carrying no payload at all.
+
+**Derivation, from headings as the rule requires:** highest `B-` HEADING across every ref was
+**`B-190`** (taken earlier the same day by the `@cg/vcg-format` determinism item); `B-191` … `B-197`
+returned **no headings anywhere**. **Cross-check against the dated pointer:** the entry above ends
+_"Next free after this session is `B-191`"_ — headings and pointer AGREE.
+
+⇒ **Next free after this session is `B-192`**, and `B-` stays contiguous `B-001` … `B-191`, no gaps.

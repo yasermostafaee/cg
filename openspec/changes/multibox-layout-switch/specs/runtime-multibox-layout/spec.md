@@ -577,6 +577,15 @@ fills onto it. A row taken OFF AIR while the hold is waiting SHALL abandon the s
 geometry applied and SHALL NOT re-seat what took it off air: the emergency verbs are deliberately
 not serialised behind the switch, so the window the hold opens SHALL be re-checked at its end.
 
+A look picked while the row is OFF AIR SHALL reach the page at the next play, whichever way that
+play reaches air. The switch itself SHALL send nothing — an off-air row with nothing seated has no
+picture to move, and a rehearsal control must reach no plant — so the play is what makes the page
+agree: where it rebuilds a destroyed page the look rides its build payload, and where the producer
+is still resident (a stopped row, a rehearsed one) the play SHALL tell the page the recorded look
+before it seats the pictures. A play SHALL NOT put a graphic on air punching one look while the
+pictures beside it are placed by another, and where that telling is refused the play SHALL still
+happen and SHALL say what disagrees.
+
 **A REFUSED SWITCH SHALL LEAVE NOTHING BEHIND.** The record of which look a row is on is what every
 later reconcile resolves its geometry from — including a source swap, which changes one plate and
 tells the page nothing. A look recorded but never delivered to the page is therefore not an inert
@@ -630,6 +639,14 @@ is on air now.
 - **WHEN** the operator later re-points one source, an action that mentions no look
 - **THEN** only that source's producer changes, every other box stays where the page is punching
   its hole, and the row is still on the look it was showing
+
+#### Scenario: The look is switched while the row is STOPPED
+
+- **GIVEN** a row that was taken and then stopped, so its graphic is off air but its producer is
+  still resident
+- **WHEN** the operator picks a different look and then plays the row
+- **THEN** the switch itself moves nothing and reaches no plant, and the play tells the page that
+  look before seating the pictures, so the row comes up with its holes and its fills on one look
 
 #### Scenario: The row is taken off air while the mixer hold is waiting
 
