@@ -634,7 +634,15 @@ candidate shapes.
       sequence pin, both updated for `B-174`; a plan-refused switch tells the page nothing while
       a wire-refused one ends re-told on the old look; the `CG ADD` payload);
       `look-switch-hold.integration.test.ts` (the hold's duration, its observed-mode default,
-      and that an explicit 0 survives `??`); `exporter-vcg-preflight.test.ts` (the refusal).
+      the unread-mode fallback, that an explicit 0 survives `??`, and that a row taken off air
+      INSIDE the hold abandons the switch with nothing applied);
+      `look-switch-refusal.integration.test.ts` (a refused `CG UPDATE` aborts before any
+      geometry; a refused REVERT tell leaves the record on the look the page shows);
+      `exporter-vcg-preflight.test.ts` (the refusal).
+      ✅ **Linux `e2e` DISCHARGED for the `B-174`/`B-189` commit `e3c60f00`:**
+      https://github.com/yasermostafaee/cg/actions/runs/33403122456 — run `conclusion: success`,
+      with the `E2E (Playwright)` job's OWN conclusion `success` (it RAN; it was not skipped),
+      alongside `Lint • Typecheck • Test • Build` = success.
       ⚠ **What no test here covers:** a single-process true end-to-end. `@cg/template-runtime`
       cannot import `tools/caspar-bridge` (packages must not depend on tools), so the two halves
       are asserted separately — against the ONE shared codec, which is what makes divergence

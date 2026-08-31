@@ -6932,6 +6932,11 @@ filed while this change lands. The reorder lives entirely inside the on-air bran
 reconcile-and-tell; the off-air record-only early return, the take path, and the `CG ADD`
 look payload are unchanged, so the two changes do not collide.
 
+**CI, on the commit that carries the change (`e3c60f00`):**
+[run 33403122456](https://github.com/yasermostafaee/cg/actions/runs/33403122456) — `conclusion:
+success`, with the `E2E (Playwright)` job's own conclusion `success` (it RAN, it was not skipped).
+The Linux `e2e` debt is DISCHARGED; what remains below is a HARDWARE reading, which no CI can take.
+
 **What is still OWED, and why the box is `[~]`:** the owner's naked-eye check on the PLANT — the
 same two-look switch that was visibly skewed on 2026-08-24, now expected to move together.
 A dev-box distribution is the acceptance criterion this session was given and it is met; the
