@@ -1931,7 +1931,7 @@ _"Next free after this session is `B-191`"_ — headings and pointer AGREE.
 
 ⇒ **Next free after this session is `B-192`**, and `B-` stays contiguous `B-001` … `B-191`, no gaps.
 
-### 2026-08-31 (last) — `SKEW-INTERSECT-01` §2: `B-192` AND `B-193` TAKEN
+### 2026-08-31 (fifth) — `SKEW-INTERSECT-01` §2: `B-192` AND `B-193` TAKEN
 
 **Claimed: `B-192`** — _a plate PARKED by a look switch does not survive on the plant_
 ([bugs-runtime.md](bugs-runtime.md)) — and **`B-193`** — _the new hole and the outgoing plate's
@@ -1950,3 +1950,24 @@ after this session is `B-192`"_ — headings and pointer AGREE, and `B-192`/`B-1
 entry takes.
 
 ⇒ **Next free after this session is `B-194`**, and `B-` stays contiguous `B-001` … `B-193`, no gaps.
+
+### 2026-09-01 — `PLATES-OVER-PAGE-01`: `B-194` TAKEN, for a VERDICT rather than a defect
+
+**Claimed: `B-194`** — _can the plates sit ABOVE the page, so that no mask exists?_
+([bugs-runtime.md](bugs-runtime.md)). A feasibility study that implements nothing and ends REJECTED,
+filed so the question is CLOSED rather than deferred.
+
+⚠ **The prefix is worth a sentence, because `C-` was the other candidate and is not obviously wrong.**
+The subject is CasparCG compositing, and [caspar.md](caspar.md)'s `C-015` is literally _"composite
+them behind the template"_ — so a `C-` reading is defensible. `B-` was chosen because the item is the
+end of [[B-174]]'s saga and answers a question the owner asked about it: the three rejected skew
+outcomes, the two terms `B-192`/`B-193` file, and this verdict are one record and belong in one file.
+`C-015` carries a pointer to it rather than a copy.
+
+**Derivation, from headings as the rule requires:** highest `B-` HEADING across every ref was
+**`B-193`** (taken the previous day by `SKEW-INTERSECT-01` §2); `B-194` … `B-200` returned **no
+headings anywhere**, and the duplicate audit printed exactly the two accepted duplicates (`B-056`,
+`B-080`). **Cross-check against the dated pointer:** the entry above ends _"Next free after this
+session is `B-194`"_ — headings and pointer AGREE.
+
+⇒ **Next free after this session is `B-195`**, and `B-` stays contiguous `B-001` … `B-194`, no gaps.

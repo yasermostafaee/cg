@@ -8071,3 +8071,238 @@ that move it are `--look-transition-lead-ms` and `--look-transition-tail-ms`, an
   of).
 - **Number:** highest `B-` HEADING across every ref was `B-192` (taken immediately above in this
   same session); `B-193` … `B-199` returned no headings anywhere.
+
+## [x] B-194 — CAN THE PLATES SIT ABOVE THE PAGE, so that no mask exists and the skew class is structurally impossible? ⟨priority: high — the owner rejected all three skew outcomes and asked for zero "even if we change everything"⟩ — **FEASIBILITY STUDY, 2026-09-01 (`PLATES-OVER-PAGE-01`). VERDICT: REJECTED AS THINGS STAND. Nothing implemented.**
+
+**The question.** The switch is split across two independent clocks — the page draws the holes on the
+browser's paint clock, CasparCG moves the pictures on the channel tick — and no constant aligns two
+clocks that drift. Phase-lock is dead (no channel frame number reaches the page on any transport;
+`/foreground/file/frame` absent per ADR 0004; no scheduling verb on 2.5.0). **While the page is above
+the plates and punches holes, this class can only be reshaped, never removed.** Putting the plates on
+layers ABOVE the CEF producer would mean **there is no hole**: the picture covers the page, a switch
+becomes `MIXER FILL`/`CLIP` only, the page is not involved, and misalignment becomes
+**unrepresentable**. [[B-174]], [[B-193]] and the whole `SKEW-*` family would dissolve.
+
+🔴 **This item exists so the question is CLOSED rather than deferred.** It is rejected for ONE
+measured reason, and the item states exactly what would reopen it.
+
+---
+
+### 1. Why the page is on top — the written reason, quoted, and it still holds
+
+Three documents converge, and none of them is an accident of implementation.
+
+**(a) The mechanism, from `live-source-multibox/design.md` §9a:**
+
+> "The whole HTML page is **ONE CasparCG layer**, sitting above the Live Source layers. Inside that
+> page the backdrop is an ordinary element beneath the plates. §9's `mode` seam makes a Live Source
+> paint **zero pixels** in `'output'` — but **painting nothing is not the same as ERASING what is
+> beneath it in the same page.**"
+
+**(b) The purpose, from `C-015` (`caspar.md`), which is where "below" was decided:**
+
+> "**Why at all:** An HTML template cannot render live video; CasparCG composites layers."
+
+and its acceptance: _"the bridge allocates a dedicated layer **below the template's layer** … so the
+source sits exactly behind the hole."_ `design.md` §4 states the constraint in one line —
+_"Templates sit on 70–99; \*\*C-015 needs sources \_below_ the template's layer\*\*."\_
+
+**(c) 🔴 THE REASON THAT ACTUALLY DECIDES IT — the owner's own ruling, `design.md` §9a-Z,
+2026-08-15**, recorded as the specification for which element carries the holes:
+
+> "**Mask by Z-ORDER, not by a declared role.** Each element is masked with the union of the rects of
+> the plates that sit **above it** … Elements above all plates are not masked at all."
+>
+> — chosen over the simpler rule because _"It fixes the correctness bug in 'mask everything below the
+> plate'. A caption authored ABOVE a guest box survives, because it is above the plate in z-order.
+> **Name supers over a live guest are ordinary broadcast, not an edge case.**"_
+
+**The page is on top so that the template can paint OVER the live picture.** That is the reason, it is
+the owner's, and **it was re-confirmed by the owner on 2026-09-01, in this session, when asked
+directly**: supers over a guest are coming, even though nothing exercises the capability yet.
+
+⚠ **What was checked and is worth recording, because it cuts the other way.** The only real multi-box
+template in evidence — the owner's `3-ghab`, read from `template.json` in his own export — draws
+**nothing** over a plate: the full-frame 1920×1103 JPG sits at `zIndex 0` on the ROOT layer, BELOW all
+three look instances, and `comp-2`/`comp-3`/`comp-4` contain **only** `video-placeholder` elements.
+The repo's one committed template fixture (`fixtures/templates/persian-lower-third`) has no live
+plates at all. **So the requirement is stated and standing, not yet exercised.**
+
+---
+
+### 2. What the overlay costs — MEASURED on this host, 2026-09-01
+
+Because the requirement stands, plates-over-page needs a **SECOND CEF layer above the plates** for
+anything that draws over a picture: two browser instances per row. CasparCG 2.5.0 `69e8ad5`,
+12 cores, `1080p5000`, the whole `casparcg.exe` process tree sampled over 15 s per state, with a
+representative overlay page (a lower-third, a bug, a `requestAnimationFrame` clock) served over HTTP
+exactly as the bridge serves a template.
+
+| state         | procs | working set | private | CPU (% of ONE core) |
+| ------------- | ----- | ----------- | ------- | ------------------- |
+| idle, no page | 9     | 969 MB      | 1066 MB | 17.6                |
+| 1 page        | 10    | 1074 MB     | 1141 MB | 133.9               |
+| 2 pages       | 11    | 1234 MB     | 1272 MB | 137.7               |
+| 3 pages       | 12    | 1503 MB     | 1513 MB | 300.5               |
+| 5 pages       | 14    | 1879 MB     | 1835 MB | 426.8               |
+
+⇒ **marginal cost of one CEF page: +1 process, ≈ +200 MB working set, ≈ +73 % of one core** (the
+mean over pages 1 → 5; ≈ 6 % of this 12-core machine each). Nine `casparcg.exe` processes exist
+before any page — CEF spawns its pool at startup — so a page's cost is a renderer process on top of
+that, not the whole browser.
+
+🔴 **And it is not only memory. The skew harness, run against each load** (`ghab-seated`,
+`1080i5000`, 10 runs each, the transition mask in force):
+
+| extra CEF pages | usable runs              | `k` median | black seen              |
+| --------------- | ------------------------ | ---------- | ----------------------- |
+| 0               | 10 / 10                  | −60 ms     | 1 / 10 (54.4 %)         |
+| 1               | 10 / 10                  | **−20 ms** | 2 / 10 (22.8 %, 48.1 %) |
+| 3               | **6 / 10** — 4 DISCARDED | −20 ms     | 1 / 6 (69.4 %)          |
+
+- **ONE extra page moves the page's commit two FIELDS later.** The quantity `B-174` spent three
+  sessions on is moved by 40 ms by adding a single browser to the channel.
+- **THREE extra pages made the channel stop sustaining cadence in 4 recordings out of 10** — one
+  captured **54 frames where 85 were due, 36 % of them lost.** With zero or one extra page: no
+  discards at all. Dropped channel ticks are dropped frames on air.
+
+**Multiply by the station.** The operator bank is **30 declared rows (70–99) with 5 ticked** by
+default (`DEFAULT_FIXED_BANK_COUNT = 30`, `DEFAULT_FIXED_BANK_VISIBLE_ROWS = 5`). Five rows able to
+draw over a picture is **five overlay pages on top of the five template pages the rows already
+carry** — ≈ +1.0 GB and ≈ +365 % of one core, on a channel where **three** extra pages already broke
+cadence. **That is the number this verdict rests on.**
+
+---
+
+### 3. What was measured IN FAVOUR — the premise holds, and it is worth keeping
+
+🔴 **`C-028`'s client criterion SURVIVES, measured directly rather than inferred.** Under `contain`,
+`FILL === CLIP`, so the producer should draw only the picture's own area and the margin should show
+the page. That is the whole reason this route looks free, and it had never been tested with the plate
+genuinely ABOVE a page. Run on 2026-09-01: layer **10** = an opaque full-frame CEF page (`#1040C0`
+with a `#F0C000` mark), layer **20** = a media producer with `FILL 0.25 0.25 0.5 0.5` and `CLIP` the
+same, recorded off the channel:
+
+```
+(1800, 1000)  rgb=( 16, 64,191)   OUTSIDE the plate, far corner  -> the PAGE
+( 100,  100)  rgb=(240,191,  0)   OUTSIDE, over the page's mark  -> the PAGE
+( 960,  540)  rgb=(126,126, 74)   INSIDE the plate               -> the PICTURE
+```
+
+**A clipped producer above a CEF page composites over it and leaves every other pixel to the page.**
+No black anywhere. So the architecture renders correctly, and the `contain` margin would still show
+the template — the client's requirement of 2026-08-23, preserved.
+
+⚠ The earlier evidence did NOT establish this. `C-028`'s on-air confirmation was taken with the page
+ABOVE and the hole already at the fitted rect, where the margin is un-punched page either way; and
+`design.md` §3's `CLIP` measurement (a fill moved out from under its clip "renders NOTHING AT ALL")
+proves `CLIP` bounds the layer without saying whether the area outside it is transparent or opaque
+black. The reading above is the one that answers it.
+
+**The plate's STROKE also survives.** It is rendered as a CSS `outline`, painted outside the declared
+rect and occupying no layout (`design.md` §9a.1, corrected 2026-08-14), so a frame drawn around a box
+is not covered by a picture that fills only the box.
+
+---
+
+### 4. What breaks — enumerated
+
+**4.1 The layer model cannot express the overlay-preserving form.** Plates would have to sit above
+THEIR row's template and below the NEXT row's, so every row needs an interleaved block. Today the
+Live Source band is ONE contiguous range (`layerRange {start,end}`, suggested 10–59) **validated
+DISJOINT** from the operator bank and the reserved range (`sources.ts`'s `overlaps-fixed-bank` /
+`overlaps-reserved`). Interleaving is not expressible in that model, and the bank's row numbers are
+operator-visible. Layer NUMBERS are not the constraint (`MAX_LIVE_SOURCE_LAYER = 9999`); the
+addressing model is.
+⭐ **The no-overlay form does NOT have this problem** — one band above the bank (say 110–159) is still
+contiguous and still disjoint, and "another row's graphic cannot draw over this row's guest" is
+exactly what that form means anyway.
+
+**4.2 `border-radius` on a plate becomes unachievable again.** `design.md`'s own words for the
+lone-plate case: _"the corners have nothing to hide them, and `MIXER FILL`/`CLIP` are rectangular, so
+a rounded plate floating over the programme **stays unachievable in v1 either way**."_ Today the punch
+makes it honest — _"the CSS hole rounds, and the live rectangle's square corners are covered by the
+backdrop that is being punched"_ — and that is exactly what putting the plate on top gives away.
+(⚠ Anchor note: this brief attributed the border-radius question to [[D-155]]; D-155 is the
+aspect-lock item. The border-radius reasoning is in `live-source-multibox/design.md`, §9a.1's closing
+section.)
+
+**4.3 The export, and a SILENT migration.** `template.json`'s shape does not change — the mask is
+computed at runtime by `cg.js`, not baked into the scene — but `cg.js` does, and every `.vcg` carries
+it with a sha256 in `manifest.integrity`. **Every template must be re-exported and re-imported.**
+🔴 And nothing would refuse a stale one: `minRuntimeVersion` is written `'0.0.0'` by the exporter and
+is **never read anywhere in the tree**. An un-migrated template keeps punching, and under the new
+layering its hole shows the channel wherever the picture does not cover it — **black in the `contain`
+margin**, on air, with nothing said.
+
+**4.4 What is DELETED, and what survives.** The seam is clean, which is the one structural argument
+in this route's favour: **the bridge contains no mask code at all**, and `collectLiveSources`
+declares plate rects without it.
+_Deleted:_ `MaskHole` + `liveSourceMask` (`shared-schema/scene.ts`); `sceneMaskHoles`,
+`intersectPunches`, `ArrangementView.transitionFrom` (`scene-flatten.ts`); the whole of
+`template-runtime/src/live-source-punch.ts`; `scene-builder`'s build-time punch and `punchTargets`;
+`runtime.ts`'s re-punch (UNIT B′); `CgControl.from` **and `CgControl.plates`** — the fit facts cross
+the wire only so the page can punch at the FITTED rect, and a page that punches nothing does not need
+them. `CgControl.look` survives: the page still flips which look's CHROME is visible.
+_Survives untouched:_ `collectLiveSources` / `buildTemplateLiveSources`, `fitPictureToBox`
+(bridge-side, for `MIXER FILL`/`CLIP`), layer allocation, seating, the ledger, volumes, looks.
+
+**4.5 PVW / rehearse.** [[B-151]] established that PVW's plate placeholders are Runtime-side chrome
+drawn on top of the page frame, not a CasparCG layer. Under plates-over-page the page has no plate
+REGION at all, so [[R-049]]'s placeholder becomes the only representation and must be opaque and at
+the **fitted** rect to stay faithful — a change to that work, not a break. §9a-Z's "no preview/air
+divergence" rule gets easier, not harder: on air the picture really would be on top.
+
+**4.6 [[B-192]] survives this change untouched, and the owner must not be promised otherwise.** A
+plate whose producer the switch had to `PLAY` still has no first frame for **+2 … +4 fields**, and no
+compositing order puts a picture where there is none. Plates-over-page removes the mask/fill
+disagreement; it does not remove the black at a newly-started box.
+
+**4.7 The intersection mask shipped at `a7656b05` stays as it is.** Under this verdict there is
+nothing to fall back from. Had the route been adopted, the mask would not have been kept behind
+`--no-look-transition-mask` as a fallback but **deleted with the rest** — with no holes there is
+nothing to intersect, and `from` would be inert rather than optional.
+
+---
+
+### 5. 🔴 THE VERDICT — REJECTED, and the one thing that would reopen it
+
+**Rejected**, on the measurement in §2 and not on preference: the requirement that the template can
+paint over a live picture is standing and owner-confirmed, meeting it under plates-over-page costs a
+second CEF page per row, and **three extra pages already cost this channel 36 % of its frames in one
+recording out of ten.** Five rows is past that. The architecture is sound — §3 measured it — and the
+station cannot afford the thing that makes it usable.
+
+⭐ **THE ONE THING THAT WOULD REOPEN IT: retiring §9a-Z's over-the-picture requirement.** With "nothing
+in a template may ever draw over a live picture" accepted, the overlay disappears and with it §2
+entirely; the layer model works unchanged (§4.1); the deletion is clean (§4.4); and the skew class
+becomes structurally impossible. What would still be paid: `border-radius` on plates (§4.2), the
+re-export of every template with no gate against a stale one (§4.3), and the PVW rework (§4.5). That
+is a real option and a cheap one — it is simply not the one the owner has asked for.
+
+⚠ **What is NOT a reason to revisit this:** a faster machine. The cadence failure is a per-channel
+frame budget shared with the DeckLink consumer and the encoder, and the plant runs several Runtime
+stations against one CasparCG (`design.md` §9b.3). Doubling the cores does not make two browsers per
+row free; it moves the row count at which they stop being free.
+
+**Evidence.** `tools/skew-harness/evidence/2026-09-01-overpage-cef{0,1,3}/report.json` — the three
+harness sweeps of §2, ten runs each, with the per-run cadence figures the discards were read from.
+The CEF footprint table and the §3 compositing reading were taken by hand at the wire and are quoted
+here in full rather than left in a file; the `.mkv` recordings and `.png` frames beside those reports
+are GITIGNORED as every earlier sweep's are.
+
+⚠ **The plant was STARTED for this study and stopped again.** CasparCG was not running; channel 1
+declares a DeckLink SDI consumer and the config's own comment calls it PGM, so it was started only
+after the owner authorised it, and the machine was put back as found — channel cleared, mode returned
+to `1080p5000`, the two probe templates and the recording deleted, the server stopped.
+
+- **Cross-refs:** [[B-174]] (the skew and its three rejected outcomes), [[B-192]] / [[B-193]] (the two
+  terms a mask cannot touch), [[B-151]] / [[R-049]] (PVW), [[C-015]] (where "below the template's
+  layer" was decided), [[C-028]] (the `contain` margin), [[C-020]] (the air path, and why this host's
+  channel could not simply be started unattended — the owner authorised it for this study),
+  `live-source-multibox/design.md` §9a / §9a-Z / §9a.1 / §9a.2 / §9b (the dedicated-channel model,
+  evaluated and not adopted, whose §9b.5 is the nearest prior art to this question).
+- **Number:** highest `B-` HEADING across every ref was `B-193`; `B-194` … `B-200` returned no
+  headings anywhere, and the duplicate audit printed exactly the two accepted duplicates (`B-056`,
+  `B-080`). Cross-checked against the registry's dated pointer — _"Next free after this session is
+  `B-194`"_ — headings and pointer AGREE.

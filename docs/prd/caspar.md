@@ -390,6 +390,14 @@ the id is DYNAMIC/field-bound). When an item whose template declares Live Source
 BRIDGE places each plate's ASSIGNED source on its own CasparCG layer BELOW the template's layer,
 geometrically behind the hole.
 
+> **Pointer — "could the sources go ABOVE the template instead?" is [[B-194]], in
+> `bugs-runtime.md`.** Asked on 2026-09-01 after the owner rejected all three outcomes of the
+> page/mixer skew, studied to a verdict, and **REJECTED**: the architecture renders correctly (a
+> clipped producer above a CEF page was measured leaving every other pixel to the page), but the
+> template must still be able to paint OVER a live picture, which costs a second CEF layer per row —
+> and three extra CEF pages cost this channel 36 % of its frames in one recording out of ten. The one
+> thing that would reopen it is retiring that requirement; the item says so in full.
+
 > **Pointer — the aspect-mismatch consent is [[R-053]], in `runtime.md`.** The refusal
 > (`live-source-aspect-mismatch`), the `ASPECT_MATCH_TOLERANCE` and the whole fit chain live here,
 > in `tools/caspar-bridge/src/live-plate-fit.ts` — but the WORK is Runtime: the consent affordance
