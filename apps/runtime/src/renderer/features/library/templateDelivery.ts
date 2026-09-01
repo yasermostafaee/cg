@@ -8,6 +8,8 @@ import type {
 import {
   aggregateCompositionFields,
   hasNextStep,
+  runtimeShortfall,
+  runtimeShortfallMessage,
   type Manifest,
   type Position,
 } from '@cg/shared-schema';
@@ -154,6 +156,30 @@ export async function produceTemplateDelivery(
     ({ scene, manifest, files } = await unpack(bytes));
   } catch (err) {
     throw new Error(`could not be unpacked: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  /*
+    🔴 `B-196` — THE ONE PLACE A PACKAGE FROM A NEWER BUILD IS REFUSED, WITH A SENTENCE.
+
+    ⚠ It is not the only thing that refuses one, and that is the point. `SceneSchema`'s
+    `schemaVersion: z.literal(1)` already rejects a bumped document, and `ElementSchema` is a
+    `z.union`, so an element kind this build does not know already fails to parse — but what
+    the operator gets from those is a zod error with a path into an element array, at import,
+    with nothing saying that the STATION is the thing that is behind. This runs BEFORE the
+    render for exactly that reason: the message is the feature, not the refusal.
+
+    Placed after `unpack` because the manifest is what declares the requirement, and before
+    the render because there is no value in rendering a package that must be refused. Fails
+    OPEN on an unreadable version — see `runtimeShortfall`, which states why.
+  */
+  const shortfall = runtimeShortfall(manifest.compatibility.minRuntimeVersion);
+  if (shortfall !== null) {
+    throw new Error(
+      runtimeShortfallMessage(
+        pickTemplateName(manifest.name, scene.name) ?? 'This template',
+        shortfall,
+      ),
+    );
   }
 
   // B-067 — the operator's field form must be the template's FULL field closure, not the

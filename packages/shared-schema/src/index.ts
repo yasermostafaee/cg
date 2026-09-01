@@ -23,5 +23,6 @@ export * from './look-sources.js';
 export * from './composition-fields.js';
 export * from './path-migration.js';
 export * from './manifest.js';
+export * from './runtime-version.js';
 export * from './project-package.js';
 export * from './runtime/index.js';

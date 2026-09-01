@@ -1,6 +1,7 @@
 import { pack, sha256Hex } from '@cg/vcg-format';
 import {
   CG_CONTROL_KEY,
+  CG_RUNTIME_VERSION,
   aggregateCompositionFields,
   isPathKeyframeValue,
   type AnchorPoint,
@@ -407,7 +408,14 @@ export class Exporter {
           exportedAt: nowIso,
           ...(scene.metadata.author !== undefined ? { author: scene.metadata.author } : {}),
         },
-        compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+        /*
+          🔴 `B-196` — the RENDERING CONTRACT this build implements, not the literal `'0.0.0'`
+          that stood here. A floor of zero is a floor nothing can fail: it parses, it compares
+          below everything, and an importer reading it could never refuse anything — so the
+          field advertised a gate while guaranteeing it never fired. See `runtime-version.ts`
+          for what the number means and the narrow rule for bumping it.
+        */
+        compatibility: { minRuntimeVersion: CG_RUNTIME_VERSION, minCasparCGVersion: '2.3.0' },
         fontDeps: scene.fonts,
         // Fonts join the asset index so a host re-rendering the package resolves a
         // face BY ASSET ID — the lookup the Runtime's re-render already performs.
