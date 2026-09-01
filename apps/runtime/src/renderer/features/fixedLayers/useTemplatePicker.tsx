@@ -1,5 +1,10 @@
 import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
-import { liveSourceCarrierState, unassignedPlateIds, type TemplateInfo } from '@cg/shared-ipc';
+import {
+  liveSourceCarrierState,
+  requiredBankFor,
+  unassignedPlateIds,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
@@ -159,6 +164,16 @@ const UNASSIGNED_TITLE =
 interface PickRequest {
   title: string;
   templates: readonly TemplateInfo[];
+  /**
+   * `single-clock-look-switch` — which half of the bank the row asking belongs to, so a
+   * template the bridge would refuse (`wrong-bank`) is shown REFUSED here instead of being
+   * offered and then bounced.
+   *
+   * The surface and the bridge read the SAME `requiredBankFor`, so they cannot disagree
+   * about what is offerable. The template is still LISTED — a template that vanished from
+   * the picker would leave the operator with no way to see why — it just cannot be chosen.
+   */
+  accepts: 'low' | 'high';
 }
 
 /**
@@ -172,7 +187,7 @@ interface PickRequest {
 export type TemplateChoice = TemplateInfo | 'import' | null;
 
 export function useTemplatePicker(): {
-  pickTemplate: (title: string) => Promise<TemplateChoice>;
+  pickTemplate: (title: string, accepts: 'low' | 'high') => Promise<TemplateChoice>;
   pickerDialog: JSX.Element | null;
 } {
   const [request, setRequest] = useState<PickRequest | null>(null);
@@ -199,13 +214,16 @@ export function useTemplatePicker(): {
     [],
   );
 
-  const pickTemplate = useCallback(async (title: string): Promise<TemplateChoice> => {
-    const templates = await window.cg.templates.list();
-    return new Promise<TemplateChoice>((resolve) => {
-      resolver.current = resolve;
-      setRequest({ title, templates });
-    });
-  }, []);
+  const pickTemplate = useCallback(
+    async (title: string, accepts: 'low' | 'high'): Promise<TemplateChoice> => {
+      const templates = await window.cg.templates.list();
+      return new Promise<TemplateChoice>((resolve) => {
+        resolver.current = resolve;
+        setRequest({ title, templates, accepts });
+      });
+    },
+    [],
+  );
 
   /**
    * R-005, re-homed. The BRIDGE decides whether a removal is allowed (it
@@ -329,6 +347,8 @@ export function useTemplatePicker(): {
               const label = templateDisplayName(t);
               const carrier = liveSourceCarrierState(t);
               const needsSource = unassigned(t);
+              // `single-clock-look-switch` — the SAME predicate the bridge refuses on.
+              const wrongBank = requiredBankFor(t) !== request.accepts;
               return (
                 <div key={t.templateId} style={styles.row} data-template-id={t.templateId}>
                   <div style={styles.rowActions}>
@@ -336,6 +356,7 @@ export function useTemplatePicker(): {
                       variant="secondary"
                       aria-label={`Load ${label} onto this layer`}
                       title={t.templateId}
+                      disabled={wrongBank}
                       onClick={() => settle(t)}
                     >
                       {label}
@@ -349,6 +370,19 @@ export function useTemplatePicker(): {
                     </Button>
                   </div>
                   <span style={styles.meta}>{t.templateType}</span>
+                  {/*
+                    THE REASON, on the row, beside the control it disabled. A greyed button
+                    with nothing beside it is a dead end — and this one is not about the
+                    template being unfinished (the amber rows below are), it is about THIS
+                    ROW being the wrong kind of home for it.
+                  */}
+                  {wrongBank && (
+                    <span style={styles.stale} data-wrong-bank="">
+                      {request.accepts === 'low'
+                        ? 'This row is a graphics bed — it sits BELOW the live plates, so only a template that declares plates belongs here. Load this one onto an operator row.'
+                        : 'This template declares live plates, so it is a graphics bed and must sit BELOW them. Load it onto one of the bed rows at the bottom of the list.'}
+                    </span>
+                  )}
                   {/*
                     D-137 / C-015 — said on the row, not hidden behind a hover.
                     `data-live-sources` carries the state machine-readably so the

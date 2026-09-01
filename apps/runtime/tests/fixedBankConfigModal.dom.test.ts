@@ -39,7 +39,13 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-const BANK: FixedLayerBank = { channel: 1, start: 70, count: 2, aliases: { '70': 'CLOCK' } };
+const BANK: FixedLayerBank = {
+  channel: 1,
+  low: { start: 1, count: 9 },
+  start: 70,
+  count: 2,
+  aliases: { '70': 'CLOCK' },
+};
 
 function slot(layer: number, binding: FixedSlotState['binding'] = null): FixedSlotState {
   return { channel: 1, layer, observed: { kind: 'unknown' }, binding };
@@ -102,9 +108,17 @@ describe('FixedBankConfigModal', () => {
     expect(dialog?.textContent).toContain('layers 70–71');
     expect(dialog?.textContent).toContain('fixed at install');
     // No count spinner any more — the ceiling never changes mid-session. Per
-    // layer: one visibility checkbox and one alias field.
+    // layer: one visibility checkbox and one alias field, for BOTH halves of the bank
+    // (`single-clock-look-switch`) — the two operator rows here plus the nine declared
+    // bed rows. The claim is the SHAPE of the controls, not the arithmetic, so it is
+    // stated as a composition rather than as one sorted list.
     const inputs = [...(dialog?.querySelectorAll('input') ?? [])];
-    expect(inputs.map((i) => i.type).sort()).toEqual(['checkbox', 'checkbox', 'text', 'text']);
+    expect(inputs.filter((i) => i.type === 'number')).toHaveLength(0);
+    expect(inputs.filter((i) => i.type === 'checkbox')).toHaveLength(11);
+    expect(inputs.filter((i) => i.type === 'text')).toHaveLength(11);
+    // …and the bed group announces itself, or the operator has no way to see which
+    // rows the load refusal is talking about.
+    expect(dialog?.textContent).toContain('Graphics beds');
   });
 
   it('a refused change surfaces the mapped reason AND the bridge message, and stays open', async () => {
@@ -156,6 +170,7 @@ describe('FixedBankConfigModal', () => {
     expect(setConfig).toHaveBeenCalledTimes(1);
     expect(setConfig).toHaveBeenCalledWith({
       channel: 1,
+      low: { start: 1, count: 9 },
       start: 70,
       count: 2, // NEVER edited here — the ceiling is fixed at install
       aliases: { '70': 'CLOCK' },

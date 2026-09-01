@@ -87,6 +87,7 @@ function stubBridge(
       // B-108 — the restore-skip report. A healthy session reports NOTHING,
       // which is what this panel renders for every spec not about that surface.
       onRestoreSkips: () => () => undefined,
+      onRestoreMigrations: () => () => undefined,
     },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
@@ -243,6 +244,7 @@ describe('StackPanel Remove-All — R-010', () => {
         // B-108 — the restore-skip report. A healthy session reports NOTHING,
         // which is what this panel renders for every spec not about that surface.
         onRestoreSkips: () => () => undefined,
+        onRestoreMigrations: () => () => undefined,
       },
     };
     (window as unknown as { cg: typeof stub }).cg = stub;

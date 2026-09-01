@@ -244,6 +244,7 @@ export async function renderLayerRow(options: {
         null,
         createElement(LayerRow, {
           slot,
+          acceptsBank: 'high' as const,
           // The row takes its item OUT of the binding now — there is no `item` prop
           // to pass, which is what stops a verb asking a nullable what it carries.
           binding,

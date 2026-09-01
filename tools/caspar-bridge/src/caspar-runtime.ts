@@ -23,7 +23,6 @@ import {
 import type {
   AuditEntry,
   CgControl,
-  CgPlateFit,
   FieldValues,
   LiveFitMode,
   LivePlateVolumes,
@@ -36,6 +35,10 @@ import type {
 import { isRetainedOnAir, withCgControl } from '@cg/shared-schema';
 import {
   isLayerVisible,
+  isLowBankLayer,
+  layerAlias,
+  lowBankEnd,
+  requiredBankFor,
   // R-030 — the video-mode token map lives in shared-ipc, not caspar-client, so
   // the browser's MockRuntime can read the SAME map without dragging `node:net`
   // into the SPA bundle (see channelSettings.ts for the full reasoning).
@@ -44,6 +47,7 @@ import {
   videoModeRaster,
   type LayerClearReason,
   type PLAYOUT_CLEAR_REASONS,
+  type RestoreMigration,
   type RestoreSkip,
   type RestoreSkipReason,
   type PlayoutLayerState,
@@ -154,7 +158,17 @@ type SetConfigResult = ChannelResponse<typeof ConnectionsSetConfigChannel>;
  * taken" and "the dynamic range is exhausted" send the operator to two different
  * places, and only one of them can be fixed by removing something.
  */
-type RestorePlacement = { slot: CommandSlot } | { skip: RestoreSkipReason };
+type RestorePlacement =
+  | {
+      slot: CommandSlot;
+      /**
+       * `single-clock-look-switch` — set when the retained coordinate was an OPERATOR row and
+       * the package turned out to be a graphics BED, so the row was re-homed onto a bed row.
+       * Present ONLY for that migration; every other placement leaves it absent.
+       */
+      migratedFrom?: CommandSlot;
+    }
+  | { skip: RestoreSkipReason };
 
 /**
  * C-015 phase 6 (task 6.0) — ONE plate, fully resolved and ready to seat.
@@ -277,27 +291,6 @@ type LiveSeatingPlan =
        * edited default.
        */
       readonly resolvedFrom: Readonly<Record<string, string>>;
-      /**
-       * ⭐ `C-028` — **the fit facts THIS PLAN resolved, for the PAGE to punch its holes
-       * with.** Plate id → `{ aspect, mode }`.
-       *
-       * 🔴 **Returned by the plan rather than re-derived at the send site, and that is
-       * golden rule 7's shape applied to a value.** The mask the page punches and the
-       * `MIXER FILL` the bridge sends must be ONE computation; they already are, because
-       * both are `fitPictureToBox` — but only if both are fed the SAME aspect and the
-       * SAME mode. A send site that walked the chains again would be a second
-       * evaluation, with this method's own `await`s available to interleave between
-       * them, and the page would punch for an assignment the plan never seated.
-       *
-       * Carries EVERY seat, parked ones included: a parked plate is one a look switch is
-       * about to reveal, and the page needs its facts before the switch rather than one
-       * payload after it.
-       *
-       * ⚠ Includes plates whose aspect is `null` (nothing states one). That is a real
-       * fact — "no fit" — and omitting it would let the page fall back to the AUTHOR's
-       * `expectedAspect` for a plate the bridge deliberately does not fit.
-       */
-      readonly plateFits: Readonly<Record<string, CgPlateFit>>;
       /**
        * ⭐ `B-178` — **each plate's fit mode WITH WHERE IT CAME FROM**, for the operator-facing
        * report. One entry per resolved frame, in binding order.
@@ -838,23 +831,18 @@ export class CasparRuntime {
    * facts cannot share one store without one of them becoming unrepresentable.
    */
   readonly #activeLooks = new Map<string, string>();
-  /**
-   * ⭐ `C-028` — **itemId → the fit facts the last successful plan resolved for its
-   * plates**, which is what the PAGE is told so its holes are punched where the picture is.
-   *
-   * ABSENT means "no plan has resolved this item's plates yet", never "no fits". A page
-   * that is told nothing falls back to the scene's own statement, which is the honest
-   * answer for a template the bridge has not seated.
-   *
-   * 🔴 **Written from the PLAN's own `plateFits`, never re-derived at the send site.** The
-   * hole the page punches and the fill the bridge sends must be one computation
-   * (`design.md` §6/§12.2); they are, because both call `fitPictureToBox` — but only while
-   * both are fed the same aspect and the same mode. Re-walking the chains here would be a
-   * second evaluation with `await`s available to interleave, and the page would punch for
-   * an assignment the plan never seated. Same rule `#tellPageLook` already enforces for
-   * the look id, on a value instead of an id.
-   */
-  readonly #plateFits = new Map<string, Readonly<Record<string, CgPlateFit>>>();
+  /*
+    🔴 **`single-clock-look-switch` — `#plateFits` IS GONE, and its rule survives it.**
+
+    `C-028` kept each plan's resolved `{ aspect, mode }` so the PAGE could be told what to
+    punch its holes with, and the rule it enforced was that the hole and the fill must be ONE
+    computation. That rule now has one consumer instead of two: the page has no holes, and the
+    only `fitPictureToBox` that reaches air is the one behind `MIXER FILL` / `CLIP`. Two
+    evaluations cannot disagree when there is only one.
+
+    `B-178`'s `fitProvenance` is UNTOUCHED and is a different thing: it is the operator-facing
+    report of where each mode came from, which is still worth saying out loud.
+  */
   /**
    * B-039 — itemIds whose slot currently has a LIVE producer (a `CG ADD` succeeded
    * and no later `CLEAR` destroyed it). The prescriptive signal: `take` plays when
@@ -1183,14 +1171,6 @@ export class CasparRuntime {
    */
   readonly #lookMixerHoldMs: number | undefined;
   /**
-   * `SKEW-INTERSECT-01` — the configured transition-window halves, or `undefined` to derive
-   * one channel frame each from the observed mode. See the constructor options.
-   */
-  readonly #lookTransitionLeadMs: number | undefined;
-  readonly #lookTransitionTailMs: number | undefined;
-  /** `SKEW-INTERSECT-01` — whether a switch narrows the page's mask at all. */
-  readonly #lookTransitionMask: boolean;
-  /**
    * TEST-ONLY seam (B-100): per-`ServerSession` health-timer overrides. Empty in
    * production, so the ServerSession defaults apply. A test uses it to drive and
    * HOLD a session in `degraded` (OSC-silent, AMCP up) deterministically — the
@@ -1223,33 +1203,6 @@ export class CasparRuntime {
        * never `||`, so that 0 survives.
        */
       lookMixerHoldMs?: number;
-      /**
-       * 🔴 `SKEW-INTERSECT-01` — **the TRANSITION WINDOW's two halves, in ms: how long the
-       * page holds `outgoing ∩ entering` BEFORE the fills move and AFTER they have.**
-       *
-       * ⚠ **NOT the hold, and neither derives from the other's value.** The hold AIMS the
-       * mixer at the page's commit; these cover the ±1 FIELD of residual the aiming cannot
-       * remove, so that the mixer's move is strictly INSIDE the window whichever side of
-       * the aim point it lands on. A hold retuned for a slow page (a heavier scene commits
-       * later — `B-174`'s page-content measurement) does not want these retuned with it:
-       * they are sized by the JITTER, not by the LAG.
-       *
-       * ABSENT means ONE CHANNEL FRAME of the channel's OBSERVED video mode each — the same
-       * unit and the same derivation the hold's default uses ({@link #lookTransitionMsFor}).
-       * `0` is a REAL value: the mask still narrows for the hold and widens as soon as the
-       * fills are acknowledged, which is most of the benefit and none of the added latency.
-       * Resolved with `??`, never `||`, so 0 survives.
-       */
-      lookTransitionLeadMs?: number;
-      lookTransitionTailMs?: number;
-      /**
-       * 🔴 `SKEW-INTERSECT-01` — **the CONTROL, and the reason it is a flag rather than a
-       * `git revert`.** `false` sends no `from` and no settling tell, i.e. exactly the
-       * single-tell switch that shipped before this — so a before/after measurement runs the
-       * SAME binary twice and a discrimination claim cannot rest on a build that was never
-       * exercised. Default `true`.
-       */
-      lookTransitionMask?: boolean;
       /** TEST-ONLY seam: inject a template server (e.g. one whose start() fails). */
       templateServer?: TemplateHttpServer;
       /** TEST-ONLY seam (B-100): override each session's OSC health timers. */
@@ -1343,9 +1296,6 @@ export class CasparRuntime {
     // `undefined` is MEANINGFUL here (derive from the observed mode per switch), so this
     // one is not defaulted at construction the way its siblings below are.
     this.#lookMixerHoldMs = options.lookMixerHoldMs;
-    this.#lookTransitionLeadMs = options.lookTransitionLeadMs;
-    this.#lookTransitionTailMs = options.lookTransitionTailMs;
-    this.#lookTransitionMask = options.lookTransitionMask ?? true;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
     this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
@@ -1825,6 +1775,35 @@ export class CasparRuntime {
       return { accepted: false, errorCode: 'not-fixed' };
     }
     /*
+      🔴 `single-clock-look-switch` — THE WRONG-BANK REFUSAL, in BOTH directions.
+
+      A plate-bearing package on an OPERATOR row composites its own background OVER every
+      plate it declares; a furniture package on a BED row composites the logo or super UNDER
+      any live picture. Both are on-air faults and both are silent — the first shows a
+      designed layout with the guests missing, the second shows nothing at all — so neither
+      may be accepted and left for the operator to notice.
+
+      ⚠ THE CLASSIFICATION IS NOT RE-DERIVED HERE. `requiredBankFor` is the one function
+      that answers it (from the carrier `collectLiveSources` produced at import), and the
+      template picker calls the SAME one to decide what to offer — so the surface can never
+      offer a placement this refuses, and this can never refuse one the surface offered.
+      A second local `sources.length > 0` is how that agreement would end (golden rule 6).
+
+      FAIL-OPEN WITH NO DECLARED BANK, deliberately: `#fixedBank` is null only when slots were
+      fenced without a bank being declared (the harnesses and the unit fixtures do this), and
+      with no bank there are no two groups to be on the wrong side of.
+    */
+    const declaredBank = this.#fixedBank;
+    if (declaredBank !== null) {
+      const info = this.#templates.get(templateId);
+      const wanted = info === null ? 'high' : requiredBankFor(info);
+      const actual = isLowBankLayer(declaredBank, slot.layer) ? 'low' : 'high';
+      if (wanted !== actual) {
+        this.#reconciler.applyAck(seq, false, 'wrong-bank');
+        return { accepted: false, errorCode: 'wrong-bank' };
+      }
+    }
+    /*
      * THE REHEARSE INTERLOCK ON LOAD IS GONE, AND ITS ABSENCE IS THE STRONGER
      * FORM — do not add it back.
      *
@@ -2057,6 +2036,7 @@ export class CasparRuntime {
   async restore(items: readonly RetainedStackItem[]): Promise<{
     restored: number;
     skipped: RestoreSkip[];
+    migrated: RestoreMigration[];
   }> {
     // B-086 honesty, applied to seeded records: the reconciler learns `linkDown`
     // from session TRANSITIONS, and a bridge whose CasparCG session has never
@@ -2076,6 +2056,7 @@ export class CasparRuntime {
 
     let restored = 0;
     const skipped: RestoreSkip[] = [];
+    const migrated: RestoreMigration[] = [];
     for (const item of items) {
       // The live bridge wins over the retained copy — never clobber. BENIGN: the row
       // is still there, backed by the live bridge, so nothing is lost and B-108's
@@ -2095,6 +2076,27 @@ export class CasparRuntime {
       }
       const { slot } = placement;
       /*
+        `single-clock-look-switch` — THE MIGRATED ROW'S STATE, RESOLVED ONCE, HERE.
+
+        A bed re-homed off an operator row comes back present but NOT on air (see
+        `#migrateRetainedBed` for why the air claim cannot travel with it). Golden rule 7
+        applies literally: this one value gates the exclusivity refusal, the looks refusal,
+        what the reconciler is told, and whether a producer may be seated — so it is
+        evaluated ONCE and every reader below takes it, rather than four sites each
+        re-asking `isRetainedOnAir(item.state)` and one of them forgetting the migration.
+      */
+      const migratedFrom = 'migratedFrom' in placement ? placement.migratedFrom : undefined;
+      const restoredState: RetainedStackItem['state'] =
+        migratedFrom !== undefined && isRetainedOnAir(item.state) ? 'loaded' : item.state;
+      if (migratedFrom !== undefined) {
+        migrated.push({
+          itemId: item.itemId,
+          from: { channel: migratedFrom.channel, layer: migratedFrom.layer },
+          to: { channel: slot.channel, layer: slot.layer },
+          demoted: restoredState !== item.state,
+        });
+      }
+      /*
         🔴 §12.6 — DOOR 2 OF 2: EXCLUSIVITY, on the door that has NO OTHER COVER.
 
         A restore never passes through `take()` (`design.md` §8), and it adopts every
@@ -2111,7 +2113,7 @@ export class CasparRuntime {
         Refused BEFORE `restoreItem`, so a refused restore mutates nothing — the same
         discipline the take door keeps, and the same as the three skips above it.
       */
-      if (isRetainedOnAir(item.state)) {
+      if (isRetainedOnAir(restoredState)) {
         const exclusivity = this.#refuseSecondMultiBox(item.itemId, item.templateId, slot.channel);
         if (exclusivity !== null) {
           // B-114 — release by the SAME door the slot was taken through (see below).
@@ -2156,7 +2158,7 @@ export class CasparRuntime {
           itemId: item.itemId,
           templateId: item.templateId,
           fields: item.fields,
-          state: item.state,
+          state: restoredState,
           ...(item.errorCode !== undefined && { errorCode: item.errorCode }),
         }) === null
       ) {
@@ -2284,7 +2286,7 @@ export class CasparRuntime {
         this.#adapter.primarySession.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs),
       );
     }
-    return { restored, skipped };
+    return { restored, skipped, migrated };
   }
 
   /**
@@ -2360,6 +2362,11 @@ export class CasparRuntime {
       // exhausted-range case; the survivor is the playout team's to deal with.
       if (this.#reservedSet.has(item.slot.layer)) return { skip: 'no-layer' };
       const slot = { channel: item.slot.channel, layer: item.slot.layer };
+      // 🔴 `single-clock-look-switch` — THE BED MIGRATION, before either door below,
+      // because a retained coordinate that is no longer a legal home for THIS package must
+      // not be taken exactly.
+      const migration = this.#migrateRetainedBed(item, slot);
+      if (migration !== null) return migration;
       // ── A DECLARED OPERATOR ROW — the exact slot or nothing. ───────────────
       //
       // B-114's reason for `bindFixed` stands and is why the branch exists at
@@ -2383,6 +2390,52 @@ export class CasparRuntime {
     } catch {
       return { skip: 'no-layer' };
     }
+  }
+
+  /**
+   * 🔴 `single-clock-look-switch` — **A RETAINED GRAPHICS BED HELD AGAINST AN OPERATOR ROW
+   * IS RE-HOMED ONTO A BED ROW — THE ROW MOVES, THE AIR DOES NOT.**
+   *
+   * Reachable only across the upgrade that introduced the bed bank: a retention file written
+   * by an older build can hold a plate-bearing package against layer 95, and restoring it
+   * there would render its background OVER every plate it declares. `null` means "not this
+   * case", which is every ordinary restore.
+   *
+   * ⚠ **THE MIGRATED ROW COMES BACK NOT ON AIR, AND THAT IS THE WHOLE SAFETY ARGUMENT.**
+   * `#slotForRestore`'s contract is that the retained slot is taken EXACTLY because it is the
+   * layer whose occupancy decides adopt-vs-re-ADD — "re-allocating some other free layer would
+   * consult the wrong layer's occupancy and could ADD a second producer beside a live one".
+   * A migration cannot honour that: the surviving producer is on 95 and the row's new home is
+   * layer 9. So the migration deliberately does not carry the air claim across. The caller
+   * demotes an `on-air` retained state to `loaded`, LOAD is list-only and emits no AMCP, and
+   * the wire is therefore touched NOT AT ALL — the same property the reserved-layer skip above
+   * relies on, with the row kept instead of lost.
+   *
+   * WHY MIGRATE RATHER THAN SKIP. `B-092` exists because a restore that drops rows leaves the
+   * operator's rundown short of the thing they were looking at. A bed is the one row a
+   * programme cannot work without, so losing it is the worst available outcome; coming back
+   * one row along, not on air, and SAID OUT LOUD, is the least bad.
+   *
+   * The highest free bed row is chosen — `Bed 1`, the top of the bed group on the operator's
+   * surface — so the row lands where they will look for it.
+   */
+  #migrateRetainedBed(item: RetainedStackItem, slot: CommandSlot): RestorePlacement | null {
+    const bank = this.#fixedBank;
+    if (bank === null) return null;
+    if (!this.#layers.isFixed(slot)) return null;
+    if (isLowBankLayer(bank, slot.layer)) return null;
+    const info = this.#templates.get(item.templateId);
+    // ONE predicate, the same one the load refusal and the picker read (golden rule 6).
+    if (info === null || requiredBankFor(info) !== 'low') return null;
+    const templateType = info.templateType;
+    for (let layer = lowBankEnd(bank); layer >= bank.low.start; layer--) {
+      const bed = { channel: bank.channel, layer };
+      if (this.#layers.bindFixed(bed, templateType)) return { slot: bed, migratedFrom: slot };
+    }
+    // Every bed row is taken. Reported with its own reason rather than folded into
+    // `no-layer`: nothing is exhausted in the dynamic sense and freeing a dynamic layer
+    // would not help — the operator has to clear a bed row.
+    return { skip: 'no-bed-row' };
   }
 
   /**
@@ -2800,18 +2853,7 @@ export class CasparRuntime {
       product than the defect this closes.
     */
     this.#frozenAssignments.set(itemId, { ...plan.resolvedFrom });
-    /*
-      ⭐ `C-028` — THE PAGE'S HALF OF THE SAME FREEZE, recorded HERE and for the same
-      reason the line above is: from `plan`, once, on the far side of the refusal.
-
-      It must be written BEFORE the pre-roll `CG ADD` below, because that ADD is what
-      CARRIES these facts to the page (`#add`'s `__cg` payload). Recorded after it, the
-      first payload of a fresh take would go out without them and the page would punch its
-      holes from the AUTHOR's `expectedAspect` until some later update corrected it — the
-      hole in one place and the picture in another, which is `B-149`.
-    */
-    this.#plateFits.set(itemId, { ...plan.plateFits });
-    // `B-178` — and SAY what each plate is running, where anything fell through to the
+    // `B-178` — SAY what each plate is running, where anything fell through to the
     // default. At the take, off the same plan the wire is built from, so the log can never
     // describe a resolution the payload did not carry.
     this.#reportPlateFits(itemId, plan.fitProvenance);
@@ -3659,7 +3701,10 @@ export class CasparRuntime {
   #computeFixedState(): FixedSlotState[] {
     const slots = this.#layers.fixedSlots();
     if (slots.length === 0) return [];
-    const aliases = this.#fixedBank?.aliases ?? {};
+    // `single-clock-look-switch` — read through `layerAlias`, the ONE helper that knows
+    // which half of the bank a layer belongs to. `bank.aliases` alone would silently drop
+    // every bed row's alias, since those live in `bank.low.aliases`.
+    const bank = this.#fixedBank;
     const itemBySlot = new Map<string, string>();
     for (const [itemId, s] of this.#slots) {
       itemBySlot.set(`${String(s.channel)}:${String(s.layer)}`, itemId);
@@ -3677,7 +3722,7 @@ export class CasparRuntime {
       .sort((a, b) => a.channel - b.channel || a.layer - b.layer)
       .map((slot) => {
         const key = `${String(slot.channel)}:${String(slot.layer)}`;
-        const alias = aliases[String(slot.layer)];
+        const alias = bank === null ? undefined : layerAlias(bank, slot.layer);
         const producer = occupiedBy.get(key);
         const observed: FixedSlotState['observed'] = !hearing
           ? { kind: 'unknown' }
@@ -4141,10 +4186,6 @@ export class CasparRuntime {
         // EMPTY freeze, not the absent one, and it is the honest answer: this row's level 2
         // is "nothing", permanently, and pinning it costs nothing.
         resolvedFrom: {},
-        // Same reading for `C-028`'s fits: no plates, so no facts. An EMPTY map, never
-        // absent — `withCgControl` declines to attach an empty control object, so a
-        // plateless template's payload stays exactly as it is today.
-        plateFits: {},
         // `B-178` — no plates, so nothing to report. Empty, never absent.
         fitProvenance: [],
       };
@@ -4236,16 +4277,17 @@ export class CasparRuntime {
     const resolved = new Map<string, SourceProducer>();
     const declared = new Set<string>();
     const offFrame = new Set<string>();
-    // `C-028` — accumulated as each frame's aspect and mode are resolved, so what the
-    // page is told is what this plan actually fitted with. See `LiveSeatingPlan.plateFits`.
-    const plateFits: Record<string, CgPlateFit> = {};
-    // `B-178` — the same resolutions, with WHERE EACH CAME FROM, for the operator-facing
-    // report. Kept beside `plateFits` rather than folded into it: the page has no use for
-    // provenance and putting it on the wire would widen a payload nothing would read.
-    //
-    // A MAP keyed by plateId, not an array, and for the same reason `plateFits` is: one plateId
-    // can own two seats, and the readout must name each plate once — with the seat that is
-    // actually on screen.
+    /*
+      `B-178` — each frame's resolution WITH WHERE IT CAME FROM, for the operator-facing report.
+
+      🔴 A MAP keyed by plateId, not an array, and the reason is the one `C-028`'s own
+      accumulator used to state here: ONE plateId can own TWO SEATS. A level-3 per-look binding
+      (`swapLiveSource(item, plate, source, lookId)`) points one plate at a different input in
+      another look, and `resolveLookBindings` emits seats looks-major — so a foreign look's
+      frame can be visited AFTER the punched one, and an unguarded write would report the plate
+      under a look nobody is showing. **The punched seat wins, and a parked seat only fills a
+      gap** (the `rect !== undefined` test below).
+    */
     const fitProvenance = new Map<string, PlateFitReport>();
     const seated: {
       plateId: string;
@@ -4321,26 +4363,9 @@ export class CasparRuntime {
         has no fit, and telling the page about a plate the plan did not seat would put a
         hole where nothing is going to be filled.
       */
-      /*
-        🔴 **A PARKED SEAT MUST NOT OVERWRITE A PUNCHED ONE.** `plateFits` is keyed by plateId,
-        and ONE plateId can own TWO SEATS: a level-3 per-look binding (`swapLiveSource(item,
-        plate, source, lookId)`) points one plate at a different input in another look, and
-        `resolveLookBindings` emits seats looks-major, so a foreign look's frame can be visited
-        AFTER the punched one. Its `frame` is `seat.frames[0]` — the OTHER look's frame, carrying
-        the same plateId — so an unguarded write replaced the on-screen plate's facts with a
-        look nobody is showing.
-
-        Before `B-178` both frames read one shared `declaration.fitMode`, so the MODE could not
-        diverge and the clobber was invisible; making the mode per-look is exactly what gives it
-        something to differ about. The consequence is `B-149`'s: the wire fills at the punched
-        look's mode while the page punches its hole at the parked look's, so the margin is a
-        transparent hole onto the channel — BLACK on air.
-
-        ⚠ The ASPECT was clobbered the same way before this change, for the same reason. One
-        guard fixes both: **the punched seat wins, and a parked seat only fills a gap.**
-      */
-      if (rect !== undefined || !(frame.plateId in plateFits)) {
-        plateFits[frame.plateId] = { aspect: aspect.aspect, mode: fitMode.mode };
+      // 🔴 THE PUNCHED SEAT WINS — see the accumulator's own note above for why one plateId
+      // can arrive twice and why a parked seat may only fill a gap.
+      if (rect !== undefined || !fitProvenance.has(frame.plateId)) {
         /*
           ⭐ `B-178` half two — **THE PROVENANCE, KEPT so a human can be told.** `contain` is both
           the shipped default and a legitimate authored choice, so the mode alone is not evidence
@@ -4439,7 +4464,6 @@ export class CasparRuntime {
         declared,
         unresolved,
         resolvedFrom,
-        plateFits,
         fitProvenance: [...fitProvenance.values()],
       };
 
@@ -4554,7 +4578,6 @@ export class CasparRuntime {
       placements: allocated.filter((p) => !p.held),
       parked: allocated.filter((p) => p.held),
       resolvedFrom,
-      plateFits,
       fitProvenance: [...fitProvenance.values()],
     };
   }
@@ -5057,45 +5080,24 @@ export class CasparRuntime {
     itemId: string,
     slot: CommandSlot,
     lookId: string,
-    /**
-     * `B-174` — the ENTERING look's fits, when the caller holds them ahead of the apply.
-     *
-     * The map (`#plateFits`) is written only when an apply LANDS, and under the hold the
-     * page is told before the apply runs — so the pre-apply tell must carry the PLAN's fits
-     * or it would pair the new look's holes with the OUTGOING look's aspects (`B-149`'s
-     * divergence, arriving through the hold). Absent means "the map is current": the revert
-     * tell after a refused apply reads it and gets the outgoing look's fits, which is
-     * exactly what a page being put back needs.
-     */
-    fitsOverride?: Readonly<Record<string, CgPlateFit>>,
-    /**
-     * 🔴 `SKEW-INTERSECT-01` — the look being LEFT, present only on the NARROWING tell of a
-     * switch. The page then punches `from ∩ lookId` until the settling tell (this same
-     * function, without it) widens the mask onto the entering look's own holes.
-     *
-     * ⚠ Every OTHER caller of this function is a settling caller by nature — the take's
-     * re-assert, the rollback's revert, the second half of a switch — and passes nothing.
-     * That is what makes "the page is never left narrowed" a property of the writer rather
-     * than of each call site remembering.
-     */
-    transitionFrom?: string,
   ): Promise<{ ok: boolean; errorCode?: string }> {
     /*
-      ⭐ `C-028` — THE FIT FACTS TRAVEL WITH THE LOOK ID, in the one payload.
+      🔴 **`single-clock-look-switch` — ONE ARGUMENT NOW, and that is the whole of what a page
+      needs to be told.**
 
-      A switch changes WHICH plates are punched, and may change a plate's fit outright: two
-      looks can bind one input to different boxes and assert different shapes for it, so the
-      entering look's aspects are not necessarily the outgoing look's. Sending the look
-      without them would move the fills to the new look's geometry while the page punched
-      the new look's holes at the OLD look's aspects — the switch-specific half of the same
-      divergence 6.7 closed for the look id itself.
+      This send used to carry two more things, and both were about a MASK. `C-028`'s fit facts
+      let the page compute the same fit the bridge did, so its holes landed where the picture
+      would; `SKEW-INTERSECT-01`'s `from` narrowed those holes to `outgoing ∩ entering` while
+      the two clocks disagreed. The page has no holes now — it is composited BELOW its plates —
+      so it needs neither, and the only `fitPictureToBox` that reaches air is the one behind
+      `MIXER FILL` / `CLIP`.
 
-      One payload, not two: a second `CG UPDATE` would put a frame between the two halves
-      in which the page is punching for a state the bridge has left.
+      ⚠ **The look id itself is unchanged and still matters**: the page flips its own per-look
+      DECORATION on it. What changed is that it no longer has to land on any particular frame,
+      because nothing composited over a picture depends on when it arrives.
     */
-    const fits = fitsOverride ?? this.#plateFits.get(itemId);
     const told = await this.#send(
-      this.#builder.updateLook(slot, lookId, {}, fits, transitionFrom),
+      this.#builder.updateLook(slot, lookId),
       this.#nextSeq(),
       'urgent',
     );
@@ -5122,35 +5124,6 @@ export class CasparRuntime {
    */
   #lookMixerHoldMsFor(channel: number): number {
     return this.#lookMixerHoldMs ?? this.#channelFrameMsFor(channel);
-  }
-
-  /**
-   * 🔴 `SKEW-INTERSECT-01` — **the two halves of the TRANSITION WINDOW for one switch, in ms.**
-   *
-   * ── THE WINDOW, AND WHY IT IS NOT THE HOLD ──────────────────────────────────
-   *
-   * The hold aims the `MIXER FILL` batch at the moment the page commits its repunch, and
-   * `SKEW-RESIDUE-01` measured what aiming can achieve: `k` came down to −20 / 0 / +20 ms at
-   * `1080i5000` — ±1 FIELD of clock quantisation, the page's paint clock against the channel
-   * tick, which no fixed offset removes. The window is what covers that residual: the mask is
-   * narrowed to `outgoing ∩ entering` one channel frame BEFORE the fills are due and widened
-   * one channel frame AFTER they are acknowledged, so the move is strictly inside a window in
-   * which every open pixel is backed by a picture in BOTH geometries.
-   *
-   * ⚠ **Sharing a UNIT is not deriving a VALUE.** Both quantities are counted in channel
-   * frames of the same observed mode, and both fall back to the same 40 ms while the mode is
-   * unread — but the hold answers *how far behind does the page commit?* and these answer
-   * *how far can the two land apart?*. Retuning the hold for a heavier page (the video
-   * background moved `k` by a whole frame) must not drag these with it, so neither reads the
-   * other. `LOOK_MIXER_HOLD_FALLBACK_MS`'s own argument for 40-not-20 applies unchanged here:
-   * the residual is expressed in fields and the plant runs interlaced.
-   */
-  #lookTransitionLeadMsFor(channel: number): number {
-    return this.#lookTransitionLeadMs ?? this.#channelFrameMsFor(channel);
-  }
-
-  #lookTransitionTailMsFor(channel: number): number {
-    return this.#lookTransitionTailMs ?? this.#channelFrameMsFor(channel);
   }
 
   /**
@@ -5386,22 +5359,6 @@ export class CasparRuntime {
       the next take's re-ADD path to carry into the rebuilt page.
     */
       const previousLookId = this.activeLookId(itemId);
-      /**
-       * 🔴 `SKEW-INTERSECT-01` — **THE ONE READING that decides BOTH halves of the window.**
-       *
-       * The narrowing tell and the settling tell are a pair: whatever narrows the page must
-       * widen it again, and golden rule 7's shape is exactly this — one condition gating a
-       * subtractive step (`from`, which CLOSES holes) and the constructive step that undoes
-       * it. Evaluated once, here, so no `await` between the two can change the answer and
-       * leave the page narrowed with nothing scheduled to widen it.
-       *
-       * `undefined` — the mask is off, or the bridge does not know which look the page is
-       * on, or it is already on this one — means today's single tell, byte for byte.
-       */
-      const narrowedFrom =
-        this.#lookTransitionMask && previousLookId !== undefined && previousLookId !== lookId
-          ? previousLookId
-          : undefined;
       let pageTold = false;
       /*
       🔴 **GOLDEN RULE 7 — ONE READING OF `#loaded` DECIDES BOTH THE TELL AND THE RECORD.**
@@ -5419,10 +5376,10 @@ export class CasparRuntime {
       const reconciled = await this.reconcileLivePlates(itemId, {
         mode: 'switch',
         lookId: look.id,
-        beforeApply: async (planFits) => {
+        beforeApply: async () => {
           pageLoaded = this.#loaded.has(itemId);
           if (!pageLoaded) return { ok: true };
-          const told = await this.#tellPageLook(itemId, slot, lookId, planFits, narrowedFrom);
+          const told = await this.#tellPageLook(itemId, slot, lookId);
           if (!told.ok) {
             return {
               ok: false,
@@ -5436,22 +5393,19 @@ export class CasparRuntime {
           const ownedSeats = this.#ownsLiveSeats(itemId);
           const heldSeats = this.#liveLayers.has(itemId);
           /*
-            🔴 `SKEW-INTERSECT-01` — the hold PLUS the window's leading half, as one sleep.
+            🔴 **`single-clock-look-switch` — THE HOLD STAYS, AND ITS LEAD IS GONE.**
 
-            The hold aims the fills at the page's commit; the LEAD moves that aim a further
-            channel frame out so the narrowed mask is provably in force BEFORE the fills
-            move, whichever side of the aim the page's ±1-field residual falls on. Without
-            it the narrowing would itself be a coin flip and the late half would be exactly
-            the artefact this replaces: the OUTGOING look's holes standing open over the
-            ENTERING look's fills, i.e. the channel, in the shape of the boxes that left.
+            The hold aims the fills at the page's commit and is `B-174`'s, unchanged: a page
+            still has per-look DECORATION to flip, and a switch that moved the pictures a frame
+            before the page redrew its furniture would show the old furniture over the new
+            layout. What went with the mask is the LEAD — a further channel frame bought only to
+            get a NARROWED MASK provably in force before the fills moved. With no mask there is
+            nothing to get in force early.
 
-            Added rather than substituted, and the two are read from their own accessors:
-            the lead is not a bigger hold, and a hold retuned for a slow page must not carry
-            the window with it. `0` for either is a real value and is honoured.
+            ⚠ The default is untouched. `--look-mixer-hold-ms` still resolves the same way and
+            still defaults to one channel frame of the observed mode.
           */
-          const holdMs =
-            this.#lookMixerHoldMsFor(slot.channel) +
-            (narrowedFrom === undefined ? 0 : this.#lookTransitionLeadMsFor(slot.channel));
+          const holdMs = this.#lookMixerHoldMsFor(slot.channel);
           if (holdMs > 0) await sleepMs(holdMs);
           /*
             The re-ask the note above promises, asked as a BEFORE→AFTER transition on the two
@@ -5485,40 +5439,6 @@ export class CasparRuntime {
       });
       if (reconciled.ok) {
         if (!pageLoaded) this.#recordActiveLook(itemId, lookId);
-        /*
-          🔴 `SKEW-INTERSECT-01` — **THE SETTLING TELL: the window's trailing half, and the
-          only thing that widens a page this switch narrowed.**
-
-          The fills are in place. The mask is still `outgoing ∩ entering`, which is a SUBSET
-          of what this look asks for — correct while the fills were moving, wrong the moment
-          they have. The tail holds it one channel frame longer so the widening is provably
-          on the far side of the mixer's move, then this puts the page on the entering look's
-          own holes through the SAME writer as every other tell.
-
-          ⚠ **No `fitsOverride`.** The apply LANDED, so `#plateFits` now holds this look's
-          fits — the map is current, which is exactly the case that member documents as its
-          absent meaning. Passing the plan's copy would be a second source for a fact that
-          now has a settled one.
-
-          ⚠ **No second gate, and that is deliberate.** This sends ONE `CG UPDATE` — no
-          `PLAY`, no `MIXER`, nothing destructive and nothing that puts content on air — so
-          an emergency verb landing in the tail cannot be answered wrongly by it: on a row
-          that was cleared it simply 403s (`B-070`) and there is no page left to widen. A
-          re-ask here would be a gate whose only power is to SUPPRESS a repair.
-
-          🔴 **And if it fails anyway, the failure is BOUNDED and never black.** The page is
-          left punching `outgoing ∩ entering`: every open pixel is still inside a hole of the
-          look now on air, so it is backed by a picture — the row shows LESS than it should,
-          not the channel. Any later re-punch (a field update, the next take, the next
-          switch) is a full one, because `from` is never stored on either machine. The switch
-          itself succeeded and is reported as such: the operator asked for a geometry and got
-          it, and inventing a refusal here would send them looking for a fault on the wire.
-        */
-        if (narrowedFrom !== undefined && pageLoaded) {
-          const tailMs = this.#lookTransitionTailMsFor(slot.channel);
-          if (tailMs > 0) await sleepMs(tailMs);
-          await this.#tellPageLook(itemId, slot, lookId);
-        }
         return { ok: true };
       }
       if (!pageTold) {
@@ -5730,19 +5650,15 @@ export class CasparRuntime {
        * the ONE injection point every switch-mode command already flows through, rather
        * than by a second code path (`B-100`/`P-012`: a copy is how orders drift apart).
        *
-       * Receives the plan's OWN `plateFits`, because the page must be told the ENTERING
-       * look's fits and `#plateFits` is deliberately not written until the apply lands
-       * (see the note below) — reading the map here would pair new holes with the
-       * OUTGOING look's aspects, which is `B-149`'s divergence arriving through the hold.
+       * Receives no argument: the page is told the LOOK ID and nothing else
+       * (`single-clock-look-switch` — the fit facts went with the mask that consumed them).
        *
        * A refusal from the hook aborts the reconcile with NOTHING applied: no fill has
        * moved, no producer has been touched by the apply. (Plan-mandated SEATING also
        * has not happened yet — a parked preset missing its producer stays missing until
        * the apply, exactly as a refused plan leaves it.)
        */
-      beforeApply?: (
-        planFits: Readonly<Record<string, CgPlateFit>>,
-      ) => Promise<{ ok: boolean; errorCode?: string; message?: string }>;
+      beforeApply?: () => Promise<{ ok: boolean; errorCode?: string; message?: string }>;
     },
   ): Promise<{ ok: boolean; errorCode?: string; message?: string }> {
     const slot = this.#slots.get(itemId);
@@ -5757,7 +5673,7 @@ export class CasparRuntime {
     );
     if (!plan.ok) return { ok: false, errorCode: plan.errorCode, message: plan.message };
     if (opts.beforeApply !== undefined) {
-      const gate = await opts.beforeApply(plan.plateFits);
+      const gate = await opts.beforeApply();
       if (!gate.ok) {
         return {
           ok: false,
@@ -5767,37 +5683,6 @@ export class CasparRuntime {
       }
     }
     const applied = await this.#applyLivePlates(itemId, plan, opts.mode);
-    /*
-      ⭐ `B-178` — **RE-RECORD WHAT THE PAGE MUST BE TOLD, ON EVERY SUCCESSFUL RECONCILE.**
-
-      🔴 The take used to be the only writer of `#plateFits`, and a LOOK SWITCH is precisely
-      where that breaks: the switch re-plans against the ENTERING look, moves the fills to that
-      look's modes — and then `#tellPageLook` sent the fits the TAKE had recorded, i.e. the
-      OUTGOING look's. The bridge filled at `cover` while the page punched at `contain`: the
-      fill in one shape and the hole in another, which is `B-149` arriving through the switch.
-
-      Written from THIS plan and only when the apply succeeded, so the record can never claim a
-      geometry the wire did not perform — the same rule `#tellPageLook` states for the look id
-      itself. ⚠ `B-174` moved the switch's page-tell BEFORE the apply, so that send can no
-      longer read this map: it receives the plan's fits DIRECTLY (`beforeApply(planFits)` →
-      `#tellPageLook`'s `fitsOverride`), and this write keeps its only meaning — the fits the
-      WIRE actually carries. The two therefore agree by sharing one plan object, not by one
-      reading the other's map through a window.
-
-      ⚠ **AND IT IS DELIBERATELY NOT FUSED TO THE SEND, where the look ID is** (`7.9`:
-      `#recordActiveLook` fires only on `told.ok`). The two records answer different questions:
-
-      - the LOOK ID says WHICH LOOK THE PAGE IS PUNCHING. A tell that never landed leaves the
-        page on the old look, so recording the new one would make the map lie about the page —
-        that is exactly what `7.9` closed.
-      - these FITS say WHAT THE WIRE WAS FILLED WITH. Under `B-174`'s order a refused apply
-        leaves this map UNwritten — the fills were rolled back to the outgoing look, the map
-        still describes exactly that geometry, and the rollback's revert tell deliberately
-        reads it (no override) to put the page back with the right aspects.
-
-      This map follows the FILLS because it describes them.
-    */
-    if (applied.ok) this.#plateFits.set(itemId, { ...plan.plateFits });
     return applied;
   }
 
@@ -8168,7 +8053,6 @@ export class CasparRuntime {
     // PREVIOUS template's aspects would tell its page to punch holes for a picture that is
     // not there: the stale-mask failure `clearLiveSourceMask` exists for, arriving from the
     // bridge instead of from the page.
-    this.#plateFits.delete(itemId);
     // B-092 — a restore awaiting its occupancy decision dies with the item too:
     // the operator removed it, so there is nothing left to adopt or re-ADD (the
     // urgent CLEAR below is the removal's own, and it is unconditional).
@@ -9613,11 +9497,7 @@ export class CasparRuntime {
       payload is byte-for-byte what it is today.
     */
     const activeLook = this.#activeLookOf(itemId);
-    const fits = this.#plateFits.get(itemId);
-    const control: CgControl = {
-      ...(activeLook !== undefined && { look: activeLook.id }),
-      ...(fits !== undefined && Object.keys(fits).length > 0 && { plates: { ...fits } }),
-    };
+    const control: CgControl = { ...(activeLook !== undefined && { look: activeLook.id }) };
     const addFields = withCgControl(fields, control);
     const { ok, errorCode } = await this.#send(
       this.#builder.load(slot, templateArg, addFields),

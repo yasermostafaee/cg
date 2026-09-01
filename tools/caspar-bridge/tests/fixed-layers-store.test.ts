@@ -42,7 +42,7 @@ void _validatorCoversWire;
 const POLICY = DEFAULT_LAYER_POLICY;
 
 function bank(overrides: Partial<FixedLayerBank> = {}): FixedLayerBank {
-  return { channel: 1, start: 70, count: 10, ...overrides };
+  return { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10, ...overrides };
 }
 
 function codeOf(fn: () => unknown): { code: string; message: string } {
@@ -58,9 +58,16 @@ function codeOf(fn: () => unknown): { code: string; message: string } {
 describe('validateFixedBank', () => {
   it('accepts the default bank (70–79) against the default policy and returns its slots', () => {
     const slots = validateFixedBank(bank(), { policy: POLICY, reservedLayers: [] });
-    expect(slots).toHaveLength(10);
+    // TEN operator rows FIRST, then the nine BED rows (`single-clock-look-switch`): the
+    // validator returns the UNION, because the LayerManager fences every slot it yields
+    // and both halves must be fenced. Operator rows keep their positions, which is why
+    // the index reads below are unchanged.
+    expect(slots).toHaveLength(19);
     expect(slots[0]).toEqual({ channel: 1, layer: 70 });
     expect(slots[9]).toEqual({ channel: 1, layer: 79 });
+    expect(slots.slice(10)).toEqual(
+      Array.from({ length: 9 }, (_, i) => ({ channel: 1, layer: i + 1 })),
+    );
   });
 
   it('T8 — overlap with a policy range is refused, naming BOTH ranges', () => {
@@ -111,13 +118,13 @@ describe('validateFixedBank', () => {
       destruction the disjointness rules exist to prevent.
     */
     const slots = validateFixedBank(
-      { channel: 1, start: 70, count: 30 },
+      { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 30 },
       {
         policy: DEFAULT_LAYER_POLICY,
         reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69],
       },
     );
-    expect(slots).toHaveLength(30);
+    expect(slots).toHaveLength(39); // 30 operator rows + 9 bed rows
     expect(slots[0]).toEqual({ channel: 1, layer: 70 });
     expect(slots[29]).toEqual({ channel: 1, layer: 99 });
     // Stated independently of the bank, so a future range edit that collides is caught
@@ -139,7 +146,7 @@ describe('validateFixedBank', () => {
       policy: DEFAULT_LAYER_POLICY,
       reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69],
     });
-    expect(slots).toHaveLength(30);
+    expect(slots).toHaveLength(39); // 30 operator rows + 9 bed rows
     expect(slots[0]).toEqual({ channel: 1, layer: 70 });
     expect(slots[29]).toEqual({ channel: 1, layer: 99 });
   });
@@ -165,7 +172,7 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
       bank({ aliases: { '71': 'ساعت' }, visibility: { '72': false } }),
       { policy: POLICY, reservedLayers: [], slotOccupancy: ALL_EMPTY },
     );
-    expect(slots).toHaveLength(10);
+    expect(slots).toHaveLength(19); // 10 operator rows + 9 bed rows
   });
 
   it('R-028 (2.1) — grow AND shrink are BOTH refused mid-session: the ceiling is fixed at install', () => {
@@ -250,7 +257,7 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
         slotOccupancy: () => 'unknown',
       },
     );
-    expect(slots).toHaveLength(10);
+    expect(slots).toHaveLength(19); // 10 operator rows + 9 bed rows
   });
 
   it('R-028 (2.5) — reserved-range overlap is refused AT CHANGE too, naming both ranges', () => {
@@ -288,7 +295,7 @@ describe('R-028 — visibility shape validation', () => {
     // The whole ceiling is returned — the LayerManager fences every slot the
     // validator yields, so an unticked layer can never re-enter the
     // allocatable pool (visibility is display-only by construction).
-    expect(slots).toHaveLength(10);
+    expect(slots).toHaveLength(19); // 10 operator rows + 9 bed rows
     expect(slots.map((s) => s.layer)).toContain(72);
     expect(slots.map((s) => s.layer)).toContain(73);
   });

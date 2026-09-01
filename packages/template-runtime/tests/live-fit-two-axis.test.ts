@@ -5,13 +5,9 @@ import {
   outputLetterbox,
   outputScale,
   outputTranslate,
-  sceneMaskHoles,
-  type Element,
   type LiveFitMode,
-  type PlateFitFacts,
   type Position,
   type Raster,
-  type Scene,
 } from '@cg/shared-schema';
 
 /**
@@ -52,55 +48,7 @@ const box = (x: number, y: number, w: number, h: number) => ({
   anchor: { x: 0, y: 0 },
 });
 
-const baseProps = { opacity: 1, visible: true, locked: false };
-
-function plate(id: string, t: ReturnType<typeof box>, zIndex: number, over = {}): Element {
-  return {
-    ...baseProps,
-    id,
-    name: id,
-    type: 'video-placeholder',
-    routeKey: id,
-    transform: t,
-    zIndex,
-    ...over,
-  } as unknown as Element;
-}
-
-function backdrop(id: string, t: ReturnType<typeof box>, zIndex: number): Element {
-  return {
-    ...baseProps,
-    id,
-    name: id,
-    type: 'shape',
-    shape: 'rectangle',
-    fill: { kind: 'solid', color: '#101820' },
-    transform: t,
-    zIndex,
-  } as unknown as Element;
-}
-
 const SCENE_RES = { width: 1920, height: 1080 };
-
-function sceneWith(children: Element[]): Scene {
-  return {
-    schemaVersion: 1,
-    id: 'scene-c028',
-    name: 'two-axis',
-    templateType: 'custom',
-    resolution: SCENE_RES,
-    frameRate: 50,
-    safeAreas: { title: 10, action: 5 },
-    frameRange: { in: 0, out: 50 },
-    editorBackdrop: 'transparent',
-    layers: [
-      { id: 'L1', name: 'main', visible: true, locked: false, blendMode: 'normal', children },
-    ],
-    fonts: [],
-    fields: [],
-    bindings: [],
-  } as unknown as Scene;
-}
 
 /**
  * 🔴 **THE DIVERGING FIXTURE.** A 4:3 BOX with a 16:9 SOURCE — chosen so `contain` and
@@ -162,51 +110,48 @@ const expectRect = (
   }
 };
 
-/** The hole the PAGE punches for `guest-1`, in scene px. */
-function pageHole(
-  mode: LiveFitMode,
-  aspect: number | null,
-): {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-} {
-  const scene = sceneWith([
-    backdrop('bg', box(0, 0, SCENE_RES.width, SCENE_RES.height), 0),
-    plate('guest-1', PLATE_BOX, 1),
-  ]);
-  const fits = new Map<string, PlateFitFacts>([['guest-1', { aspect, mode }]]);
-  const holes = sceneMaskHoles(scene, undefined, fits);
-  const forBackdrop = holes.get('bg');
-  // The positive control this whole file rests on: a negative or a comparison against an
-  // absent hole is VOID until the instrument is proven live.
-  expect(forBackdrop, 'the backdrop must actually be punched').toHaveLength(1);
-  return forBackdrop?.[0] as { x: number; y: number; width: number; height: number };
-}
+/*
+ * 🔴 **`single-clock-look-switch` — `pageHole` IS GONE, and with it the AGREEMENT half of
+ * this file.**
+ *
+ * `C-028`'s claim was that the hole the PAGE punched and the `MIXER CLIP` the BRIDGE sent
+ * were one computation, and it was proved by computing both and comparing them. The page has
+ * no holes now — a plate-bearing package is composited BELOW its plates — so there is ONE
+ * computation left and nothing for it to agree with.
+ *
+ * ⚠ **What must NOT be lost with it is the VALUES**, and that is why this file survives
+ * rather than being deleted: the wire-side assertions below still pin `contain` against
+ * `cover` on BOTH position and size, at four rasters, which is the D.4 one-axis
+ * discrimination this suite exists for. The `fitPictureToBox` equivariance at the end is the
+ * property that lets the fit be computed in either space at all.
+ */
+describe('C-028 — the fit the WIRE carries, pinned per mode and per raster', () => {
+  /*
+    🔴 **PER RASTER, and this is the coverage `single-clock-look-switch` had to KEEP.**
 
-describe('C-028 — the mask hole and the wire geometry are ONE computation', () => {
+    The agreement test that stood here compared the page's hole with the wire's clip at four
+    rasters, two of them non-16:9 where the scene→raster scale and the pillar/letterbox pad do
+    not vanish. The page half is gone; the RASTERS are not, because the mapping they exercise
+    is the one that reaches air. `contain` and `cover` must disagree on BOTH position and size
+    at every one of them — a suite that only ran 1920×1080 would pass with `pad` dropped.
+  */
   describe.each(RASTERS)('$name', ({ raster }) => {
-    it.each(['contain', 'cover'] as const)(
-      '%s — the PAGE’s hole and the BRIDGE’s CLIP are the same rect',
-      (mode) => {
-        const hole = pageHole(mode, SOURCE_ASPECT);
-        const wire = liveSourceFit({
-          rect: { x: PLATE_BOX.position.x, y: PLATE_BOX.position.y, ...sizeOf(PLATE_BOX) },
-          sceneResolution: SCENE_RES,
-          raster,
-          position: CENTRED,
-          sourceAspect: SOURCE_ASPECT,
-          fitMode: mode,
-        });
-        expect(wire.clip, 'the plate is on the frame, so there IS a clip').not.toBeNull();
-        expectRect(
-          denormalize(wire.clip as NonNullable<typeof wire.clip>, raster),
-          sceneRectToRaster(hole, raster, CENTRED),
-          `${mode} clip vs hole`,
-        );
-      },
-    );
+    it('contain and cover differ on BOTH position and size, on the wire', () => {
+      const rect = { x: PLATE_BOX.position.x, y: PLATE_BOX.position.y, ...sizeOf(PLATE_BOX) };
+      const common = { rect, sceneResolution: SCENE_RES, raster, position: CENTRED } as const;
+      const contain = liveSourceFit({ ...common, sourceAspect: SOURCE_ASPECT, fitMode: 'contain' });
+      const cover = liveSourceFit({ ...common, sourceAspect: SOURCE_ASPECT, fitMode: 'cover' });
+      // `contain` fits the picture inside the box; `cover` overfills it and clips back.
+      expect(denormalize(contain.fill, raster).height).toBeLessThan(
+        denormalize(cover.fill, raster).height,
+      );
+      expect(denormalize(contain.fill, raster).y).not.toBeCloseTo(
+        denormalize(cover.fill, raster).y,
+        3,
+      );
+      // …and under `cover` the CLIP is what holds the picture at the box.
+      expect(contain.clip).not.toEqual(cover.clip);
+    });
   });
 
   /**
@@ -217,15 +162,34 @@ describe('C-028 — the mask hole and the wire geometry are ONE computation', ()
    * that differ between the modes on every component.
    */
   it('the values themselves differ per mode, on BOTH position and size', () => {
+    /*
+      Read off the WIRE's `CLIP`, which is the rect the picture actually occupies on the
+      channel, rather than off a hole. Same numbers as before, same discrimination: a suite
+      that only compared two implementations would pass with both of them wrong.
+    */
+    const raster: Raster = { width: 1920, height: 1080 };
+    const rect = { x: PLATE_BOX.position.x, y: PLATE_BOX.position.y, ...sizeOf(PLATE_BOX) };
+    const common = { rect, sceneResolution: SCENE_RES, raster, position: CENTRED } as const;
+    const visibleOf = (
+      mode: LiveFitMode,
+    ): { x: number; y: number; width: number; height: number } =>
+      sceneRectToRaster(fitPictureToBox(rect, SOURCE_ASPECT, mode).visible, raster, CENTRED);
     // 800×600 box (4:3) with a 16:9 source. `contain` ⇒ 800×450, centred: y 240+75=315.
-    const contain = pageHole('contain', SOURCE_ASPECT);
-    expectRect(contain, { x: 460, y: 315, width: 800, height: 450 }, 'contain hole');
-    // `cover` ⇒ the picture is 1066.67×600 and the HOLE stays at the box.
-    const cover = pageHole('cover', SOURCE_ASPECT);
-    expectRect(cover, { x: 460, y: 240, width: 800, height: 600 }, 'cover hole — the box itself');
+    const contain = visibleOf('contain');
+    expectRect(contain, { x: 460, y: 315, width: 800, height: 450 }, 'contain visible');
+    // `cover` ⇒ the picture is 1066.67×600 and what is SEEN stays at the box.
+    const cover = visibleOf('cover');
+    expectRect(
+      cover,
+      { x: 460, y: 240, width: 800, height: 600 },
+      'cover visible — the box itself',
+    );
     // …so a test that passed under both would have tested nothing.
     expect(contain.y).not.toBeCloseTo(cover.y, 3);
     expect(contain.height).not.toBeCloseTo(cover.height, 3);
+    // And the wire agrees with it, which is the claim that reaches air.
+    const wire = liveSourceFit({ ...common, sourceAspect: SOURCE_ASPECT, fitMode: 'contain' });
+    expectRect(denormalize(wire.clip as NonNullable<typeof wire.clip>, raster), contain, 'clip');
   });
 
   it('the FILL is what differs on the wire — oversized under cover, fitted under contain', () => {
@@ -254,35 +218,26 @@ describe('C-028 — the mask hole and the wire geometry are ONE computation', ()
    * same fill, same clip, in both modes. This is what makes the default flip safe for
    * every scene the change promised not to touch, and it is not optional.
    */
-  it('a MATCHING aspect is identical in both modes, on the surface AND on the wire', () => {
+  it('a MATCHING aspect is identical in both modes, on the wire', () => {
     const raster: Raster = { width: 1920, height: 1080 };
     // The box is 800×600 — a 4:3 box. Feed it a 4:3 source.
     const matched = 4 / 3;
-    const holeContain = pageHole('contain', matched);
-    const holeCover = pageHole('cover', matched);
-    expect(holeContain).toEqual(holeCover);
-    expectRect(
-      holeContain,
-      { x: 460, y: 240, width: 800, height: 600 },
-      'a matching aspect leaves the box alone',
-    );
-
     const rect = { x: PLATE_BOX.position.x, y: PLATE_BOX.position.y, ...sizeOf(PLATE_BOX) };
     const common = { rect, sceneResolution: SCENE_RES, raster, position: CENTRED } as const;
     const wireContain = liveSourceFit({ ...common, sourceAspect: matched, fitMode: 'contain' });
     const wireCover = liveSourceFit({ ...common, sourceAspect: matched, fitMode: 'cover' });
     expect(wireContain).toEqual(wireCover);
+    expectRect(
+      denormalize(wireContain.fill, raster),
+      { x: 460, y: 240, width: 800, height: 600 },
+      'a matching aspect leaves the box alone',
+    );
   });
 
   it('NO stated aspect ⇒ no fit on either axis, in either mode (D-147, unchanged)', () => {
     const raster: Raster = { width: 1920, height: 1080 };
     const rect = { x: PLATE_BOX.position.x, y: PLATE_BOX.position.y, ...sizeOf(PLATE_BOX) };
     for (const mode of ['contain', 'cover'] as const) {
-      expectRect(
-        pageHole(mode, null),
-        { x: 460, y: 240, width: 800, height: 600 },
-        `${mode} hole with no aspect`,
-      );
       const wire = liveSourceFit({
         rect,
         sceneResolution: SCENE_RES,
@@ -299,60 +254,15 @@ describe('C-028 — the mask hole and the wire geometry are ONE computation', ()
     }
   });
 
-  /**
-   * The page's fall-back, asserted at the seam rather than in a comment: with NO facts
-   * from the bridge, the hole comes from the SCENE's own statement — the author's
-   * `expectedAspect` and `fitMode`. That is what a Designer preview and a page the
-   * bridge has not yet spoken to are looking at.
+  /*
+   * 🔴 **`single-clock-look-switch` — the two PAGE-FALLBACK tests are GONE with the fallback.**
+   *
+   * They asserted that a page with no bridge facts punched from the AUTHOR's `expectedAspect`,
+   * and that bridge facts outranked it. Both were properties of `CgControl.plates`, which
+   * existed so the page could fit its own holes; the page has no holes and is told no fits.
+   * `D-147`'s precedence itself is unchanged and is enforced where it now matters — in the
+   * bridge's own plan (`resolvePlateAspect`), tested in `@cg/caspar-bridge`.
    */
-  it('with no bridge facts, the page falls back to what the AUTHOR declared', () => {
-    const scene = sceneWith([
-      backdrop('bg', box(0, 0, SCENE_RES.width, SCENE_RES.height), 0),
-      plate('guest-1', PLATE_BOX, 1, { expectedAspect: SOURCE_ASPECT, fitMode: 'contain' }),
-    ]);
-    const hole = sceneMaskHoles(scene, undefined, undefined).get('bg')?.[0];
-    expectRect(
-      hole as NonNullable<typeof hole>,
-      { x: 460, y: 315, width: 800, height: 450 },
-      'authored contain',
-    );
-
-    // …and a plate that declares NOTHING gets no fit at all — the box, exactly as today.
-    const bare = sceneWith([
-      backdrop('bg', box(0, 0, SCENE_RES.width, SCENE_RES.height), 0),
-      plate('guest-1', PLATE_BOX, 1),
-    ]);
-    const bareHole = sceneMaskHoles(bare, undefined, undefined).get('bg')?.[0];
-    expectRect(
-      bareHole as NonNullable<typeof bareHole>,
-      { x: 460, y: 240, width: 800, height: 600 },
-      'undeclared plate',
-    );
-  });
-
-  /**
-   * 🔴 The BRIDGE's facts OUTRANK the author's, and this is the `B-149` guard in one
-   * assertion: when the two disagree, the page must punch for the ASSIGNED source, not
-   * for what the author guessed. A page that preferred the element would put the hole in
-   * one place and the picture in another.
-   */
-  it('bridge facts OUTRANK the element’s own declaration', () => {
-    const scene = sceneWith([
-      backdrop('bg', box(0, 0, SCENE_RES.width, SCENE_RES.height), 0),
-      // The author designed for a 4:3 feed and asked for `cover`…
-      plate('guest-1', PLATE_BOX, 1, { expectedAspect: 4 / 3, fitMode: 'cover' }),
-    ]);
-    // …but the installation delivers 16:9 and the operator overrode to `contain`.
-    const fits = new Map<string, PlateFitFacts>([
-      ['guest-1', { aspect: SOURCE_ASPECT, mode: 'contain' }],
-    ]);
-    const hole = sceneMaskHoles(scene, undefined, fits).get('bg')?.[0];
-    expectRect(
-      hole as NonNullable<typeof hole>,
-      { x: 460, y: 315, width: 800, height: 450 },
-      'the bridge’s answer',
-    );
-  });
 
   /**
    * The equivariance that lets the two sides work in two spaces at all, asserted here

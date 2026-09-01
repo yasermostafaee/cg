@@ -106,7 +106,7 @@ async function boot(): Promise<BridgeHandle> {
     port: 0,
     connection: singleServer(mock.amcpPort, oscPort),
     reservedLayers: RESERVED,
-    fixedLayers: { channel: 1, start: BANK_START, count: BANK_COUNT },
+    fixedLayers: { channel: 1, low: { start: 1, count: 9 }, start: BANK_START, count: BANK_COUNT },
     runtimeTuning: { sweepMs: 150, occupancyStaleMs: 800 },
   });
   bridge.runtime.templateImport(

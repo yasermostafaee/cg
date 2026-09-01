@@ -1,5 +1,4 @@
 import type { ArrangementView } from '@cg/shared-schema';
-import type { PunchTarget } from './live-source-punch.js';
 import type {
   ClockElement,
   LottieElement,
@@ -394,15 +393,6 @@ export interface BuildSceneResult {
    * values route to the right copy even when a child is instanced more than once.
    */
   scopeTree: FieldScope;
-  /**
-   * `multibox-layout-switch` `tasks.md` 4.3 — every built element by MASK KEY, so the
-   * re-punch pass can reassign mask properties on the live nodes instead of rebuilding.
-   *
-   * Keyed by mask key (the composition-instance path + element id) rather than by element
-   * id, because the same authored element inside a composition instanced twice has two DOM
-   * copies at two different scene positions — and they punch different holes.
-   */
-  punchTargets: Map<string, PunchTarget>;
 }
 
 /**

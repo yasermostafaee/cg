@@ -97,6 +97,7 @@ import {
   type PendingUpdate,
   type PlayoutLayerState,
   type LiveLayerState,
+  type RestoreMigration,
   type RestoreSkip,
   type Settings,
   type TemplateInfo,
@@ -284,8 +285,10 @@ export class WebSocketRuntime implements RuntimeBridge {
    * failed to restore.
    */
   readonly #restoreSkipSubs = new Subs<readonly RestoreSkip[]>();
+  readonly #restoreMigrationSubs = new Subs<readonly RestoreMigration[]>();
   /** The latest report, so a late subscriber (the panel mounts after boot) sees it. */
   #lastRestoreSkips: readonly RestoreSkip[] = [];
+  #lastRestoreMigrations: readonly RestoreMigration[] = [];
   readonly #healthSubs = new Subs<ConnectionHealth>();
   readonly #configSubs = new Subs<ConnectionConfig>();
   readonly #orphanSubs = new Subs<OrphanLayer[]>();
@@ -582,6 +585,15 @@ export class WebSocketRuntime implements RuntimeBridge {
          * would be an alarm on the most ordinary event there is.
          */
         this.#emitRestoreSkips(result.skipped.filter((s) => s.reason !== 'already-held'));
+        /*
+          `single-clock-look-switch` — and the MIGRATIONS, on their own seam.
+
+          No benign filter here, and there is nothing to filter: a migration only ever
+          happens when the bridge could not honour the retained coordinate, which the
+          operator always needs to hear. Emitted unconditionally for the same reason the
+          skips are — an empty report is what clears a stale notice.
+        */
+        this.#emitRestoreMigrations(result.migrated);
       }
     } catch (err) {
       restoreOk = false;
@@ -631,6 +643,12 @@ export class WebSocketRuntime implements RuntimeBridge {
   #emitRestoreSkips(skips: readonly RestoreSkip[]): void {
     this.#lastRestoreSkips = skips;
     this.#restoreSkipSubs.emit(skips);
+  }
+
+  /** The migrations half of the same report — see `#emitRestoreSkips` for the empty rule. */
+  #emitRestoreMigrations(migrations: readonly RestoreMigration[]): void {
+    this.#lastRestoreMigrations = migrations;
+    this.#restoreMigrationSubs.emit(migrations);
   }
 
   /**
@@ -912,6 +930,11 @@ export class WebSocketRuntime implements RuntimeBridge {
     onRestoreSkips: (handler: (skips: readonly RestoreSkip[]) => void) => {
       const unsubscribe = this.#restoreSkipSubs.add(handler);
       handler(this.#lastRestoreSkips);
+      return unsubscribe;
+    },
+    onRestoreMigrations: (handler: (migrations: readonly RestoreMigration[]) => void) => {
+      const unsubscribe = this.#restoreMigrationSubs.add(handler);
+      handler(this.#lastRestoreMigrations);
       return unsubscribe;
     },
   };

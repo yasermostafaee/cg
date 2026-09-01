@@ -179,6 +179,12 @@ export function createMockBridge(): RuntimeBridge {
         handler([]);
         return () => undefined;
       },
+      // Same shape, same reasoning: no retention means no restore, so no row can have
+      // been re-homed, and the truthful report is an empty one delivered once.
+      onRestoreMigrations: (handler) => {
+        handler([]);
+        return () => undefined;
+      },
     },
 
     connections: {

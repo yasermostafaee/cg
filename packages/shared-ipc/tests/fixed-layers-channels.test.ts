@@ -85,10 +85,16 @@ describe('FixedSlotState (S1)', () => {
 
 describe('R-028 — visibility ticks + the canonical isLayerVisible predicate', () => {
   it('absent record and absent key both mean VISIBLE; only an explicit false hides', () => {
-    const bare = FixedLayerBankSchema.parse({ channel: 1, start: 70, count: 4 });
+    const bare = FixedLayerBankSchema.parse({
+      channel: 1,
+      low: { start: 1, count: 9 },
+      start: 70,
+      count: 4,
+    });
     expect(isLayerVisible(bare, 70)).toBe(true);
     const ticked = FixedLayerBankSchema.parse({
       channel: 1,
+      low: { start: 1, count: 9 },
       start: 70,
       count: 4,
       visibility: { '71': false, '72': true },
@@ -102,6 +108,7 @@ describe('R-028 — visibility ticks + the canonical isLayerVisible predicate', 
     expect(
       FixedLayerBankSchema.safeParse({
         channel: 1,
+        low: { start: 1, count: 9 },
         start: 70,
         count: 4,
         visibility: { 'layer-71': false },

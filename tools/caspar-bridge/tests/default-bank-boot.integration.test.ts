@@ -73,7 +73,9 @@ it('no config file: the station comes up on channel 1, layers 70–99, thirty ro
   // All thirty are FENCED from automatic allocation, not just the five shown —
   // fencing derives from start/count, never from the ticks.
   const slots = bridge.runtime.fixedSlots();
-  expect(slots).toHaveLength(30);
+  // Thirty operator rows plus the nine BED rows the default bank also declares
+  // (`single-clock-look-switch`) — both halves fenced, for the same reason.
+  expect(slots).toHaveLength(39);
   expect(slots[0]).toEqual({ channel: 1, layer: 70 });
   expect(slots[29]).toEqual({ channel: 1, layer: 99 });
 
@@ -88,6 +90,7 @@ it('a config file still wins: a station that declared 70–73 gets 70–73, not 
   const fixedLayersPath = path.join(freshConfigDir(), 'bridge-fixed-layers.json');
   const declared: FixedLayerBank = {
     channel: 1,
+    low: { start: 1, count: 9 },
     start: 70,
     count: 4,
     aliases: { '70': 'logo22', '71': 'clock' },
@@ -103,7 +106,7 @@ it('a config file still wins: a station that declared 70–73 gets 70–73, not 
   // The bank the operator wrote, verbatim — the default does not merge into it,
   // does not extend it, and does not overwrite the file.
   expect(bridge.runtime.fixedLayersConfig()).toEqual(declared);
-  expect(bridge.runtime.fixedSlots()).toHaveLength(4);
+  expect(bridge.runtime.fixedSlots()).toHaveLength(13); // 4 operator rows + 9 bed rows
   expect(JSON.parse(fs.readFileSync(fixedLayersPath, 'utf8'))).toEqual(declared);
 });
 
@@ -113,6 +116,7 @@ it('a deliberately narrow bank is not widened by the default, ticks and all', as
   // field the default has an opinion about is set to something else here.
   const declared: FixedLayerBank = {
     channel: 2,
+    low: { start: 1, count: 9 },
     start: 80,
     count: 2,
     visibility: { '80': false, '81': true },
@@ -128,6 +132,9 @@ it('a deliberately narrow bank is not widened by the default, ticks and all', as
   expect(bridge.runtime.fixedSlots()).toEqual([
     { channel: 2, layer: 80 },
     { channel: 2, layer: 81 },
+    // The BED rows ride the same channel as the bank that declares them, and the file
+    // said nothing about them — so they come from the schema default, on channel 2.
+    ...Array.from({ length: 9 }, (_, i) => ({ channel: 2, layer: i + 1 })),
   ]);
 });
 

@@ -3,6 +3,8 @@ import {
   bankPosition,
   defaultLayerAlias,
   isLayerVisible,
+  isLowBankLayer,
+  lowBankEnd,
   type FixedLayerBank,
   type FixedSlotState,
 } from '@cg/shared-ipc';
@@ -79,6 +81,21 @@ const styles = {
     textTransform: 'uppercase' as const,
     color: colors.textMuted,
     whiteSpace: 'nowrap' as const,
+  },
+  /**
+   * The BED group's heading — spans the whole grid so the split reads as a break in the
+   * list rather than as a value in the first column.
+   */
+  groupHead: {
+    gridColumn: '1 / -1',
+    marginTop: '0.55rem',
+    paddingTop: '0.45rem',
+    borderTop: `1px solid ${colors.border}`,
+    fontSize: '0.62rem',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase' as const,
+    color: colors.textMuted,
   },
   needsConfig: {
     display: 'flex',
@@ -208,11 +225,21 @@ function BankEditor({
   slots: FixedSlotState[];
   onClose: () => void;
 }): JSX.Element {
-  const [aliases, setAliases] = useState<Record<string, string>>({ ...(bank.aliases ?? {}) });
+  // ONE edit model across BOTH halves, keyed by layer. The split back into the two
+  // sub-banks happens once, in `apply`, through `isLowBankLayer` — the same predicate the
+  // bridge refuses on — so the dialog can never write a bed row's alias into the operator
+  // half's record.
+  const [aliases, setAliases] = useState<Record<string, string>>({
+    ...(bank.aliases ?? {}),
+    ...(bank.low.aliases ?? {}),
+  });
   // Checkbox model: layer → VISIBLE. Absent key in the bank means visible.
   const [visible, setVisible] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     for (let layer = bank.start; layer <= bank.start + bank.count - 1; layer++) {
+      initial[String(layer)] = isLayerVisible(bank, layer);
+    }
+    for (let layer = bank.low.start; layer <= lowBankEnd(bank); layer++) {
       initial[String(layer)] = isLayerVisible(bank, layer);
     }
     return initial;
@@ -232,6 +259,10 @@ function BankEditor({
    */
   const layers: number[] = [];
   for (let layer = bank.start + bank.count - 1; layer >= bank.start; layer--) layers.push(layer);
+  // Then the BED rows, still highest-first, as their own group below — which is also where
+  // they sit on air. The list's order is the z-order, and the beds are underneath.
+  const bedLayers: number[] = [];
+  for (let layer = lowBankEnd(bank); layer >= bank.low.start; layer--) bedLayers.push(layer);
 
   function apply(): void {
     // Empty alias inputs mean "no alias" — dropped, never sent as ''.
@@ -254,6 +285,17 @@ function BankEditor({
         hidden[key] = false;
       }
     }
+    // The BED half's edits, split out by the canonical predicate rather than by a local
+    // `layer <= 9`. Its `start`/`count` are carried through untouched: like the operator
+    // half's, they are fixed at install and the validator refuses a change.
+    const bedAliases: Record<string, string> = {};
+    const bedHidden: Record<string, boolean> = {};
+    for (const [key, value] of Object.entries(aliases)) {
+      if (isLowBankLayer(bank, Number(key)) && value.trim() !== '') bedAliases[key] = value.trim();
+    }
+    for (const [key, isVisible] of Object.entries(visible)) {
+      if (isLowBankLayer(bank, Number(key)) && !isVisible) bedHidden[key] = false;
+    }
     setBusy(true);
     window.cg.fixedLayers
       .setConfig({
@@ -262,6 +304,12 @@ function BankEditor({
         count: bank.count,
         ...(Object.keys(cleaned).length > 0 ? { aliases: cleaned } : {}),
         ...(Object.keys(hidden).length > 0 ? { visibility: hidden } : {}),
+        low: {
+          start: bank.low.start,
+          count: bank.low.count,
+          ...(Object.keys(bedAliases).length > 0 ? { aliases: bedAliases } : {}),
+          ...(Object.keys(bedHidden).length > 0 ? { visibility: bedHidden } : {}),
+        },
       })
       .then(
         (res) => {
@@ -407,7 +455,25 @@ function BankEditor({
           <span style={styles.aliasHead}>Name</span>
           <span style={styles.aliasHead}>Template</span>
           <span />
-          {layers.map((layer) => {
+          {[
+            ...layers.map((layer) => ({ head: null, layer })),
+            /*
+              THE GROUP HEADING, and it is not decoration. The two halves are refused
+              against each other at load time (`wrong-bank`), so an operator who cannot see
+              which rows are which meets that refusal with no way to tell what to do about
+              it. It says what the group IS — where it sits on air — rather than naming
+              the layer numbers, because the numbers are already in the hint column.
+            */
+            { head: 'Graphics beds — composited BELOW the live plates', layer: -1 },
+            ...bedLayers.map((layer) => ({ head: null, layer })),
+          ].map(({ head, layer }) => {
+            if (head !== null) {
+              return (
+                <span key="bed-head" style={styles.groupHead}>
+                  {head}
+                </span>
+              );
+            }
             const slot = slotFor(layer);
             const bound = slot?.binding ?? null;
             // The SAME canonical position the `#` column and the row's default name

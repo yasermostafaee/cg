@@ -190,7 +190,7 @@ describe('nextSourceId — an id is NEVER reused', () => {
 
 describe('validateSourceCatalog — at load AND at change', () => {
   function bank(overrides: Partial<FixedLayerBank> = {}): FixedLayerBank {
-    return { channel: 1, start: 70, count: 30, ...overrides };
+    return { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 30, ...overrides };
   }
 
   const studioA = source('src-aaa', 'Studio A');
@@ -524,7 +524,7 @@ describe('the STREAM arm — C-025, the URL the owner proved by hand', () => {
 });
 
 describe('the refusal codes are ONE definition', () => {
-  it('names the five the catalog can raise and the two the assignments can', () => {
+  it('names the six the catalog can raise and the two the assignments can', () => {
     // The stores DERIVE their error types from these arrays. A code added on one
     // side and not the other is exactly the drift the shared const prevents.
     expect([...SOURCES_SET_CONFIG_REASONS]).toEqual([
@@ -533,6 +533,9 @@ describe('the refusal codes are ONE definition', () => {
       'overlaps-fixed-bank',
       'overlaps-reserved',
       'stream-scheme-not-allowed',
+      // `single-clock-look-switch` — the bed rows must lie BELOW the band. A separate code
+      // from `overlaps-fixed-bank` because the test is strictly-below rather than disjoint.
+      'low-bank-not-below-band',
     ]);
     expect([...SOURCES_SET_ASSIGNMENTS_REASONS]).toEqual(['duplicate-plate', 'unknown-source']);
   });

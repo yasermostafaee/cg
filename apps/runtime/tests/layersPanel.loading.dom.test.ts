@@ -47,7 +47,13 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-const BANK: FixedLayerBank = { channel: 1, start: 70, count: 2, aliases: {} };
+const BANK: FixedLayerBank = {
+  channel: 1,
+  low: { start: 1, count: 9 },
+  start: 70,
+  count: 2,
+  aliases: {},
+};
 const SLOTS: FixedSlotState[] = [
   { channel: 1, layer: 70, observed: { kind: 'empty' }, binding: null },
   { channel: 1, layer: 71, observed: { kind: 'empty' }, binding: null },
@@ -119,6 +125,7 @@ function stubBridge(link: 'live' | 'disconnected' = 'live'): {
       // B-108 — the restore-skip report. A healthy session reports NOTHING,
       // which is what this panel renders for every spec not about that surface.
       onRestoreSkips: () => () => undefined,
+      onRestoreMigrations: () => () => undefined,
     },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;

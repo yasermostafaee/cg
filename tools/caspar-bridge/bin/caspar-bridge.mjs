@@ -20,10 +20,6 @@
 //   caspar-bridge --template-serve-port 7911          # B-162: pin the template HTTP port (default: ephemeral)
 //   caspar-bridge --look-mixer-hold-ms 40             # B-174: the look switch's mixer hold (default: one
 //                                                     #   channel frame of the observed mode; 0 disables)
-//   caspar-bridge --look-transition-lead-ms 40        # SKEW-INTERSECT-01: how long the page holds
-//   caspar-bridge --look-transition-tail-ms 40        #   `outgoing n entering` before / after the fills
-//                                                     #   move (default: one channel frame each)
-//   caspar-bridge --no-look-transition-mask           # SKEW-INTERSECT-01: switch with ONE tell, as before
 //
 // R-010 boot precedence: explicit --caspar-*/--backup-* flags > the persisted
 // config file (~/.cg-runtime/bridge-connection.json by default) > built-in
@@ -251,18 +247,13 @@ function readMsFlag(name, zeroMeans) {
   return ms;
 }
 const lookMixerHoldMs = readMsFlag('look-mixer-hold-ms', 'disables the hold');
-// SKEW-INTERSECT-01 — the transition window's two halves. See `#lookTransitionLeadMsFor` for
-// why these are their own knobs and not a bigger hold.
-const lookTransitionLeadMs = readMsFlag(
-  'look-transition-lead-ms',
-  'narrows the mask no earlier than the hold already does',
-);
-const lookTransitionTailMs = readMsFlag(
-  'look-transition-tail-ms',
-  'widens as soon as the fills are acknowledged',
-);
-// The window is ON by default; `--no-look-transition-mask` restores the single-tell switch.
-const lookTransitionMask = args['no-look-transition-mask'] === undefined ? undefined : false;
+/*
+  `single-clock-look-switch` — `--look-transition-lead-ms`, `--look-transition-tail-ms` and
+  `--no-look-transition-mask` are GONE with the mask they steered. A plate-bearing package
+  loads onto the LOW bank and its pictures are composited over it, so there are no holes to
+  narrow and nothing to widen again. `--look-mixer-hold-ms` SURVIVES and is unchanged: the
+  page still flips its per-look decoration, and the hold is what aims the fills at that.
+*/
 
 // Build the CasparCG connection from flags, falling back to defaults.
 // B-046 — server B exists ONLY when a --backup-* flag declares it; the
@@ -320,9 +311,6 @@ const handle = await createBridge({
   auditLogPath,
   templateServe,
   ...(lookMixerHoldMs !== undefined ? { lookMixerHoldMs } : {}),
-  ...(lookTransitionLeadMs !== undefined ? { lookTransitionLeadMs } : {}),
-  ...(lookTransitionTailMs !== undefined ? { lookTransitionTailMs } : {}),
-  ...(lookTransitionMask !== undefined ? { lookTransitionMask } : {}),
 });
 
 console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);
@@ -354,30 +342,6 @@ if (lookMixerHoldMs !== undefined && lookMixerHoldMs > LOOK_MIXER_HOLD_IMPLAUSIB
     `[caspar-bridge] !! ${lookMixerHoldMs} ms is far longer than any channel frame (the slowest ` +
       'is about 42) - every look switch will show the new holes over the old pictures for that ' +
       'long, on air, with swaps and updates on that row waiting behind it.',
-  );
-}
-/*
-  SKEW-INTERSECT-01 — the transition window is read back for exactly the reason the hold is:
-  it is playout timing, it sleeps inside the row's seat lock, and nothing else in the bridge
-  ever mentions the numbers again. The OFF line is the loudest of the three: a plant running
-  without the mask is the one that can still put the channel on air through a hole.
-*/
-const describeWindowHalf = (ms) =>
-  ms === undefined ? 'one channel frame of the observed video mode' : `${ms} ms (configured)`;
-console.error(
-  lookTransitionMask === false
-    ? '[caspar-bridge] !! look-switch transition mask: OFF - a switch tells the page once, so ' +
-        'the holes and the fills can be a field apart and a hole can open over no picture'
-    : `[caspar-bridge] look-switch transition mask: on, lead ` +
-        `${describeWindowHalf(lookTransitionLeadMs)}, tail ${describeWindowHalf(lookTransitionTailMs)}`,
-);
-if (
-  (lookTransitionLeadMs !== undefined && lookTransitionLeadMs > LOOK_MIXER_HOLD_IMPLAUSIBLE_MS) ||
-  (lookTransitionTailMs !== undefined && lookTransitionTailMs > LOOK_MIXER_HOLD_IMPLAUSIBLE_MS)
-) {
-  console.error(
-    '[caspar-bridge] !! a transition-window half far longer than a channel frame holds the ' +
-      'switch part-done on air for that long - both pictures present, in the shape they share.',
   );
 }
 console.error(

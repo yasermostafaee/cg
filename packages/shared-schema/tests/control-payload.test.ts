@@ -83,30 +83,15 @@ describe('readCgControl — defensive, because this arrives over AMCP', () => {
   });
 });
 
-describe('SKEW-INTERSECT-01 — `from`, the transition half of a switch', () => {
-  it('rides the same payload as the look it is leaving', () => {
-    const payload = withCgControl({ headline: 'Tehran' }, { look: 'two', from: 'one' }) as Record<
-      string,
-      unknown
-    >;
-    expect(readCgControl(payload)).toEqual({ look: 'two', from: 'one' });
-    // The field half is untouched: one command carries both, so the two cannot land apart.
-    expect(stripCgControl(payload)).toEqual({ headline: 'Tehran' });
-  });
-
-  it('🔴 is DROPPED without a look — a switch has no "from" with no "to"', () => {
-    expect(readCgControl({ [CG_CONTROL_KEY]: { from: 'one' } })).toEqual({});
-  });
-
-  it('a malformed `from` degrades to no transition, never to a throw', () => {
-    // The page then punches the entering look's own holes immediately — the behaviour that
-    // shipped before this member existed, which is the right thing to degrade to.
-    expect(readCgControl({ [CG_CONTROL_KEY]: { look: 'two', from: 42 } })).toEqual({ look: 'two' });
-    expect(readCgControl({ [CG_CONTROL_KEY]: { look: 'two', from: '' } })).toEqual({ look: 'two' });
-  });
-
-  it('an absent `from` puts NO key on the wire', () => {
-    const payload = withCgControl({}, { look: 'two' }) as Record<string, unknown>;
-    expect(Object.keys(payload[CG_CONTROL_KEY] as object)).toEqual(['look']);
-  });
-});
+/*
+ * 🔴 **`single-clock-look-switch` — the `from` block is GONE, with the member it tested.**
+ *
+ * `from` named the look a switch was LEAVING so the page could punch `outgoing ∩ entering`
+ * while the two clocks disagreed. There are no holes now — the page sits BELOW its plates —
+ * so there is nothing to narrow. `C-028`'s `plates` went the same way and for the same
+ * reason: only the mask consumed it.
+ *
+ * ⚠ What SURVIVES, and is still covered above, is the look id itself and the codec's
+ * defensiveness: an unknown member is DROPPED rather than carried, which is what lets a page
+ * from an older build read a payload from a newer bridge (and the reverse) without throwing.
+ */

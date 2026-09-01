@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import { Fragment, useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import {
   CircleArrowOutDownRight,
@@ -22,13 +22,17 @@ import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.js';
 import { useStackSnapshot } from '../../hooks/useStack.js';
-import { restoreSkipReason, useRestoreSkips } from '../../hooks/useRestoreSkips.js';
+import {
+  restoreSkipReason,
+  useRestoreMigrations,
+  useRestoreSkips,
+} from '../../hooks/useRestoreSkips.js';
 import { useFixedBankState, useFixedSlotsState } from '../../hooks/useFixedLayers.js';
 import { useStationLayers } from '../../hooks/useStationLayers.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { useStackDeliveryPending } from '../../hooks/useStackDeliveryPending.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
-import { bankPosition, isLayerVisible, isRehearsing } from '@cg/shared-ipc';
+import { bankPosition, isLayerVisible, isLowBankLayer, isRehearsing } from '@cg/shared-ipc';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import { isOnAir } from '../stack/onAir.js';
 import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftStore.js';
@@ -117,6 +121,20 @@ const styles = {
     background: colors.panelMuted,
     borderBottom: `1px solid ${colors.border}`,
     overflow: 'hidden',
+  },
+  /**
+   * The break between the operator rows and the graphics beds. Quiet on purpose — it is a
+   * label for a boundary, not a warning about one — and it uses the same uppercase-muted
+   * treatment the table header does, so it reads as structure rather than as a row.
+   */
+  bedGroupHead: {
+    padding: '0.5rem 0.6rem 0.25rem',
+    fontSize: '0.62rem',
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase' as const,
+    color: colors.textMuted,
+    borderTop: `1px solid ${colors.border}`,
   },
   awaitingStrip: {
     height: '1.65rem',
@@ -230,6 +248,17 @@ export function LayersPanel({
   // is a surface that eventually lies.
   const skipsKey = restoreSkips.map((s) => `${s.itemId}:${s.reason}`).join('|');
   const showSkips = skipsKey.length > 0 && skipsKey !== dismissedSkips;
+  /*
+    `single-clock-look-switch` — the rows that came back SOMEWHERE ELSE.
+
+    A separate notice from the skips one, with the same content-keyed dismissal, because
+    the two say opposite things about whether the row is there. Folding a migration into
+    "did not come back" would send the operator looking for a row that is on screen.
+  */
+  const restoreMigrations = useRestoreMigrations();
+  const [dismissedMigrations, setDismissedMigrations] = useState('');
+  const migrationsKey = restoreMigrations.map((m) => `${m.itemId}:${String(m.to.layer)}`).join('|');
+  const showMigrations = migrationsKey.length > 0 && migrationsKey !== dismissedMigrations;
   const linkDown = useLink() === 'disconnected';
   // THE SECOND HOP — a live bridge says nothing about the playout machine.
   const casparReach = useCasparReach();
@@ -794,6 +823,43 @@ export function LayersPanel({
                   </Button>
                 </div>
               )}
+              {showMigrations && (
+                /*
+                  `role="alert"` as well, and for the harder half of the same reason: the
+                  row IS there, so nothing on screen looks wrong — which is exactly why a
+                  quiet `status` would go unread. The operator has to be told that a bed
+                  came back idle, or they will take it and wonder why the old graphic is
+                  still on top.
+                */
+                <div style={styles.restoreSkipStrip} role="alert" data-restore-migrations="">
+                  <Icon icon={TriangleAlert} size={13} />
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <strong>
+                      {restoreMigrations.length} {restoreMigrations.length === 1 ? 'row' : 'rows'}{' '}
+                      came back on a different row
+                    </strong>{' '}
+                    after the bridge restarted:{' '}
+                    {restoreMigrations
+                      .map(
+                        (m) =>
+                          `${m.itemId} — it declares live plates, so it moved from layer ` +
+                          `${String(m.from.layer)} to bed layer ${String(m.to.layer)}` +
+                          (m.demoted
+                            ? ', and came back NOT on air — clear its old layer before taking it'
+                            : ''),
+                      )
+                      .join('; ')}
+                    .
+                  </span>
+                  <Button
+                    variant="ghost"
+                    aria-label="Dismiss the migrated-row notice"
+                    onClick={() => setDismissedMigrations(migrationsKey)}
+                  >
+                    <Icon icon={X} size={13} />
+                  </Button>
+                </div>
+              )}
               <div style={styles.awaitingStrip} role="status">
                 {awaitingRows > 0 && (
                   <>
@@ -846,7 +912,25 @@ export function LayersPanel({
                   */
                   const item = binding.kind === 'bound' ? binding.item : null;
                   const template = item !== null ? (templates.get(item.templateId) ?? null) : null;
-                  return (
+                  /*
+                    `single-clock-look-switch` — THE GROUP BREAK, drawn once, at the first
+                    bed row.
+
+                    The list is descending by layer and the beds are the lowest layers, so
+                    they already fall at the bottom — which is also where they are on air.
+                    What is missing without this is any statement that the bottom of the
+                    list is a DIFFERENT KIND of row: `wrong-bank` refuses a load across the
+                    line, and a refusal about a boundary nobody can see is not actionable.
+
+                    Derived from the canonical predicate against the previous row rather
+                    than from a layer number, so it stays correct for a station whose bed
+                    rows are not 1–9.
+                  */
+                  const previous = rowBindings[index - 1];
+                  const startsBedGroup =
+                    isLowBankLayer(bank, slot.layer) &&
+                    (previous === undefined || !isLowBankLayer(bank, previous.slot.layer));
+                  const row = (
                     <LayerRow
                       key={slot.layer}
                       slot={slot}
@@ -858,6 +942,9 @@ export function LayersPanel({
                       // bank, which ticking and unticking must never renumber. See
                       // `bankPosition` for why the two are deliberately separate.
                       bankPosition={bankPosition(bank, slot.layer)}
+                      // The SAME predicate the group break above is drawn from, and the
+                      // same one the bridge refuses on — one derivation, three readers.
+                      acceptsBank={isLowBankLayer(bank, slot.layer) ? 'low' : 'high'}
                       density={density}
                       selected={item !== null && item.itemId === selectedId}
                       /*
@@ -908,6 +995,15 @@ export function LayersPanel({
                       onSelect={onSelectionChange}
                       onUpdate={onUpdate}
                     />
+                  );
+                  if (!startsBedGroup) return row;
+                  return (
+                    <Fragment key={slot.layer}>
+                      <div style={styles.bedGroupHead} data-bed-group-head="">
+                        Graphics beds — below the live plates
+                      </div>
+                      {row}
+                    </Fragment>
                   );
                 })}
               </div>

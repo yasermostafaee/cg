@@ -128,7 +128,13 @@ describe('the census — every Runtime dialog that can speak, speaks through the
     // `visibility`, a record, whose ABSENCE means every row is visible). It asserted nothing
     // and its removal is behaviour-identical: absent still means all thirty rows show, which
     // is what this spec needs in order to scroll.
-    const bank: FixedLayerBank = { channel: 1, start: 70, count: 30, aliases: {} };
+    const bank: FixedLayerBank = {
+      channel: 1,
+      low: { start: 1, count: 9 },
+      start: 70,
+      count: 30,
+      aliases: {},
+    };
     const slots: FixedSlotState[] = Array.from({ length: 30 }, (_, i) => ({
       channel: 1,
       layer: 70 + i,

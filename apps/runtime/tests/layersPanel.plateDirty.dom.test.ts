@@ -110,7 +110,18 @@ function stubBridge(): void {
     connections: connectionsStub('both-up'),
     templates: { list: () => Promise.resolve([TEMPLATE]), onChanged: () => () => undefined },
     fixedLayers: {
-      config: () => Promise.resolve({ channel: 1, layers: [{ layer: LAYER, alias: 'BOX' }] }),
+      // A REAL bank shape. It carried a long-obsolete `layers: [...]` form that nothing
+      // read, so it went unnoticed until `isLowBankLayer` needed the bed half. One
+      // operator row (the one under test) and one DECLARED-but-hidden bed row, so the
+      // table still shows exactly the row this test is about.
+      config: () =>
+        Promise.resolve({
+          channel: 1,
+          start: LAYER,
+          count: 1,
+          aliases: { [String(LAYER)]: 'BOX' },
+          low: { start: 1, count: 1, visibility: { '1': false } },
+        }),
       state: () =>
         Promise.resolve([
           {
@@ -146,6 +157,7 @@ function stubBridge(): void {
       snapshot: () => Promise.resolve([ITEM]),
       onStateChanged: () => () => undefined,
       onRestoreSkips: () => () => undefined,
+      onRestoreMigrations: () => () => undefined,
       clearAll: () => Promise.resolve({ ok: true, cleared: 0, attempted: 0, refused: [] }),
       removeAll: () => Promise.resolve({ ok: true, removed: 0 }),
       take: () => Promise.resolve({ accepted: true }),

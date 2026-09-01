@@ -1891,6 +1891,9 @@ function seedFixedBank(): FixedLayerBank | null {
   return fixedBankSeedArmed()
     ? {
         channel: 1,
+        // `single-clock-look-switch` — the BED half, seeded at its default so the offline
+        // Playwright flow shows both groups exactly as a real station does.
+        low: { start: 1, count: 9 },
         start: 70,
         // R-028 — EIGHTEEN rows, not four. 70–73 keep the four documented
         // display cases (html / non-html / empty / unknown); 74–85 are seeded

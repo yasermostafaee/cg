@@ -9,7 +9,6 @@ import {
   flattenElements,
   invertAffine,
   localToParent,
-  sceneMaskHoles,
   sceneRect,
   transformToParent,
   IDENTITY_AFFINE,
@@ -167,18 +166,6 @@ const box = (x: number, y: number, w: number, h: number): Transform => ({
 
 const base = { opacity: 1, visible: true, locked: false };
 
-const plate = (id: string, t: Transform, zIndex: number, over = {}): Element =>
-  ({
-    ...base,
-    id,
-    name: id,
-    type: 'video-placeholder',
-    routeKey: id,
-    transform: t,
-    zIndex,
-    ...over,
-  }) as unknown as Element;
-
 const rect = (id: string, t: Transform, zIndex: number): Element =>
   ({
     ...base,
@@ -315,58 +302,16 @@ describe('1.5c — flattenElements: ONE walk, two sibling orders', () => {
   });
 });
 
-describe('1.5c — sceneMaskHoles: §9a-Z, without a DOM', () => {
-  it('a container is NOT masked — its children are, individually', () => {
-    // 🔴 Masking a container would mask its whole SUBTREE, including anything the
-    // author placed ABOVE the plate inside it. That is the same bug §9a-Z's z-order
-    // rule exists to avoid, one level down.
-    const scene = sceneWith([
-      container('c', box(0, 0, 1920, 1080), 0, [
-        rect('below', box(0, 0, 1920, 1080), 0),
-        rect('above', box(200, 150, 100, 100), 20),
-      ]),
-      plate('p', box(200, 150, 640, 360), 10),
-    ]);
-    const holes = sceneMaskHoles(scene);
-    expect(holes.has('c')).toBe(false);
-    expect(holes.get('below')).toHaveLength(1);
-    // `above` is inside the container but still BELOW the root-level plate in paint
-    // order — the container's own position in the z-stack is what places its subtree.
-    expect(holes.get('above')).toHaveLength(1);
-  });
-
-  it('a plate BELOW another plate is punched by it; a plate above is not', () => {
-    const scene = sceneWith([
-      plate('low', box(0, 0, 600, 400), 0),
-      plate('high', box(100, 100, 200, 200), 9),
-    ]);
-    const holes = sceneMaskHoles(scene);
-    expect(holes.get('low')).toHaveLength(1);
-    expect(holes.has('high')).toBe(false);
-  });
-
-  it('touching edges do not count as an overlap', () => {
-    // Zero-area intersection is NOT an intersection: a backdrop that merely abuts a
-    // plate must not acquire a mask it does not need.
-    const abut = sceneWith([
-      rect('r', box(0, 0, 200, 200), 0),
-      plate('p', box(200, 0, 200, 200), 9),
-    ]);
-    const overlap = sceneWith([
-      rect('r', box(0, 0, 201, 200), 0),
-      plate('p', box(200, 0, 200, 200), 9),
-    ]);
-    expect(sceneMaskHoles(abut).has('r')).toBe(false);
-    expect(sceneMaskHoles(overlap).get('r')).toHaveLength(1);
-  });
-
-  it('a scene with NO plates produces an empty map, not a map of empty arrays', () => {
-    expect(sceneMaskHoles(sceneWith([rect('r', box(0, 0, 10, 10), 0)])).size).toBe(0);
-  });
-
-  it('a COLLAPSED element gets no mask — it cannot express a hole', () => {
-    const flat = { ...box(0, 0, 1920, 1080), scale: { x: 0, y: 1 } };
-    const scene = sceneWith([rect('r', flat, 0), plate('p', box(10, 10, 100, 100), 9)]);
-    expect(sceneMaskHoles(scene).has('r')).toBe(false);
-  });
-});
+/*
+ * 🔴 **`single-clock-look-switch` — the mask block that stood here is GONE with `sceneMaskHoles`.**
+ *
+ * It pinned §9a-Z's z-order punch: which element carries which holes, that a container is
+ * masked through its children, that touching edges do not count, that a collapsed element
+ * expresses none. The rule is not refuted — it was correct for a page composited ON TOP of
+ * its plates — but a plate-bearing package now loads onto the LOW bank and its pictures are
+ * composited over it, so no element of the page is ever in front of a plate.
+ *
+ * ⚠ What the block ALSO covered and is still tested elsewhere: `flattenElements`' own walk
+ * and sibling orders (the two blocks above), and the geometry a plate reports to the bridge
+ * (`collectLiveSources`, in `@cg/vcg-format`).
+ */

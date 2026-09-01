@@ -54,7 +54,7 @@ const BANK_LAYER = 71; // class 1 — a declared operator row, left UNBOUND
 const UNDECLARED_LAYER = 45; // no class at all — the control
 
 const RESERVED = [60, 61, 62, 63, 64, 65, 66, 67, 68, 69];
-const BANK = { channel: 1, start: 70, count: 4 };
+const BANK = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 };
 const FIXED_SLOTS = [
   { channel: 1, layer: 70 },
   { channel: 1, layer: 71 },
@@ -264,7 +264,7 @@ it('R-028 (7.1) — an item on an OLD DYNAMIC layer is not auto-relocated onto a
         slot: { channel: 1, layer: 15, server: 'primary' },
       },
     ]),
-  ).toEqual({ restored: 1, skipped: [] });
+  ).toEqual({ restored: 1, skipped: [], migrated: [] });
 
   // It came back on ITS OWN old layer…
   expect(r.stackSnapshot().find((i) => i.itemId === 'legacy')?.slot).toMatchObject({

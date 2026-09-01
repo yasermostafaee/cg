@@ -1,10 +1,8 @@
-import type { Composition, Layer, MaskHole, Scene } from './scene.js';
+import type { Composition, Layer, Scene } from './scene.js';
 import type { Element } from './elements.js';
 import type { Transform } from './primitives.js';
 import type { LiveSourceRect } from './live-source.js';
-import { lessThanBeyondNoise } from './float-noise.js';
-import { DEFAULT_LIVE_FIT_MODE, fitPictureToBox, type LiveFitMode } from './live-fit.js';
-import { resolveVisibilityOf, type VisibilitySubject } from './visibility.js';
+import type { VisibilitySubject } from './visibility.js';
 
 /**
  * C-015 phase 6 / 1.5c — **the ONE walk that flattens a scene's elements to SCENE
@@ -344,23 +342,13 @@ export function flattenElements(scene: Scene, order: SiblingOrder = 'document'):
   return out;
 }
 
-/**
- * Do two axis-aligned rects share any AREA? Touching edges do not count.
- *
- * ⚠ `B-180` — the strict `<` is spelled through {@link lessThanBeyondNoise}, so arithmetic dust
- * from the flattener's own divisions cannot register as a share. The OPERATOR is unchanged
- * (touching is still not sharing); only inputs that differ by less than the double's own noise
- * floor are treated as equal. One guard, used by all three copies of this predicate — this one,
- * and the two in the Designer's export preflight.
+/*
+ * ⚠ **`single-clock-look-switch` — the local `intersects` went with `sceneMaskHoles`, which
+ * was its only caller here.** Its rule is not withdrawn and its two other copies are
+ * untouched: `B-180`'s `lessThanBeyondNoise` spelling of the strict `<` still guards the
+ * Designer's export preflight, which is where the arithmetic-dust case was found. What is
+ * gone is a third copy with nothing left to test.
  */
-function intersects(a: LiveSourceRect, b: LiveSourceRect): boolean {
-  return (
-    lessThanBeyondNoise(a.x, b.x + b.width) &&
-    lessThanBeyondNoise(b.x, a.x + a.width) &&
-    lessThanBeyondNoise(a.y, b.y + b.height) &&
-    lessThanBeyondNoise(b.y, a.y + a.height)
-  );
-}
 
 /**
  * 🔴 **`tasks.md` 4.2 — the ACTIVE arrangement, as the context every geometry and
@@ -397,27 +385,6 @@ export interface ArrangementView {
   readonly currentVisible?: Readonly<Record<string, boolean>> | undefined;
   /** Whether a transition into this arrangement is running. Half of input 3. */
   readonly transitioning?: boolean | undefined;
-  /**
-   * 🔴 **`B-174` / `SKEW-INTERSECT-01` — the state this view is switching AWAY FROM, for as
-   * long as the two machines disagree.** Present ⇒ {@link sceneMaskHoles} punches
-   * `outgoing ∩ entering` instead of `entering`; absent ⇒ exactly today's mask.
-   *
-   * ── WHY IT IS A VISIBILITY MAP AND NOT A LOOK ID ────────────────────────────
-   *
-   * This module knows nothing about looks — it is given a scene and told what is on screen.
-   * A look id here would make the flattener learn the look model, and the same transition
-   * would then be inexpressible for anything else that changes which plates are visible.
-   * A second visibility map says the same thing in the vocabulary this function already has.
-   *
-   * ── WHY IT IS AN ARGUMENT AND NEVER STORED STATE ────────────────────────────
-   *
-   * ⚠ The transition mask is a SUBSET of the entering look's holes, so a page left in it
-   * shows LESS picture than it should, forever, with no event scheduled to end it. It is
-   * therefore one-shot by construction: `@cg/template-runtime` deliberately does not retain
-   * it on the view it keeps, so the very next re-punch — a field update, a take, the
-   * bridge's own settling tell — returns the page to the entering look's own holes.
-   */
-  readonly transitionFrom?: Readonly<Record<string, boolean>> | undefined;
 }
 
 /**
@@ -487,258 +454,30 @@ export function applyArrangementGeometry(
   });
 }
 
-/**
- * ⭐ **§9a-Z — WHICH ELEMENT CARRIES WHICH HOLES.** `scene → key → the holes that
- * element must punch, in ITS OWN local box coordinates.`
+/*
+ * 🔴 **`single-clock-look-switch` — `sceneMaskHoles`, `intersectPunches`, `PlateFits` and
+ * `PlateFitFacts` ARE GONE, and the §9a-Z rule they implemented is not refuted.**
  *
- * ── THE RULE, WHICH IS THE OWNER'S AND NOT A DERIVATION ─────────────────────
+ * The rule was the owner's: _"Mask by Z-ORDER, not by a declared role. Each element is masked
+ * with the union of the rects of the plates ABOVE it in the scene's existing element order."_
+ * It was correct for a page composited ON TOP of its plates, which is what every reading of it
+ * assumed. A plate-bearing package now loads onto the LOW bank and its pictures are composited
+ * over it, so no element of the page is ever in front of a plate and there is nothing left to
+ * punch through.
  *
- * > Mask by Z-ORDER, not by a declared role. Each element is masked with the union
- * > of the rects of the plates ABOVE it in the scene's existing element order.
- * > Elements above all plates are not masked.
+ * `intersectPunches` (`SKEW-INTERSECT-01`) went with it for the same reason, one step further
+ * along: it existed to narrow the holes to `outgoing ∩ entering` while the two clocks
+ * disagreed, and with no holes there is nothing to intersect. `ArrangementView.transitionFrom`,
+ * its only input, is gone from this file too.
  *
- * It needs no new schema concept and no Designer control — *"a declared-backdrop
- * flag that someone forgets to set is a silent black plate on air"* — and it fixes
- * the real bug in the naive "mask everything below a plate" reading: **a caption
- * authored ABOVE a guest box survives**, because it is above the plate in z-order.
- * A name super over a live guest is ordinary broadcast, and the simpler rule ate it.
+ * ⚠ **Nothing about the `.vcg` format changes with them.** These functions ran in the BROWSER,
+ * at build and at re-punch; `collectLiveSources` — the thing that does cross into the package —
+ * records plate rects and never held a hole.
  *
- * ── THE PUNCH IS UNCONDITIONAL (§9a-Z, as CORRECTED) ────────────────────────
- *
- * Every DECLARED plate punches. Whether a plate is ASSIGNED a live source is an
- * INSTALLATION fact — the element carries only a symbolic `routeKey`, and this mask
- * is baked at export, before any installation is known. A condition belongs in the
- * mask ONLY IF it can be evaluated from the SCENE ALONE: visibility, lifecycle
- * range, geometry and z-order qualify; assignment does not. 6.7's named refusal is
- * the single authority on an unsourced plate.
- *
- * `visible: false` therefore DOES suppress a plate's hole (a scene fact), while an
- * unassigned plate still punches (an installation fact).
- *
- * ── THE COORDINATE SPACE, AND WHY IT IS THE ELEMENT'S OWN ───────────────────
- *
- * A CSS mask applies in the element's OWN box, BEFORE its transform and before
- * every ancestor's — so those transforms map the mask exactly as they map the paint
- * and must not be applied twice. Each hole is therefore the plate's SCENE rect
- * pulled back through `invert(element.toScene)`.
- *
- * That pull-back is EXACT for every axis-aligned chain at any nesting depth or
- * scale. ⚠ Where the masked element's chain ROTATES, the pulled-back scene AABB is
- * a rotated quad and is re-bounded — an OVER-punch, never an under-punch, so the
- * live picture is never cropped by it.
+ * `applyArrangementGeometry` above SURVIVES and is unchanged: a moved plate still has to take
+ * its geometry with it, and that is now read by `collectLiveSources` for the bridge's
+ * `MIXER FILL` rather than by a mask.
  */
-/**
- * ⭐ `C-028` — **what one plate's fit is driven by, as the PAGE receives it.**
- *
- * Structurally the bridge's `CgPlateFit`, and deliberately declared here as its own
- * type: this module is below `control-payload.ts` in every sense that matters (it is
- * pure geometry and knows nothing about a wire), and a mask that imported the transport's
- * type would be a mask coupled to the transport.
- */
-export interface PlateFitFacts {
-  /** The source's display aspect, or `null` for NO FIT — the hole stays at the box. */
-  readonly aspect: number | null;
-  /** The resolved mode. */
-  readonly mode: LiveFitMode;
-}
-
-/**
- * `C-028` — plate id (`routeKey`) → the facts its fit is driven by.
- *
- * 🔴 **This is the one thing the mask CANNOT derive from the scene**, and saying so is
- * the point of the type. `sceneMaskHoles`'s own rule is that a condition belongs in the
- * mask only if it can be evaluated from the SCENE ALONE — which is why the aspect and
- * the mode arrive as an ARGUMENT rather than being read off the element here. Under
- * `D-147` the ASSIGNED source outranks the author for the aspect, and the assignment is
- * an installation fact; deriving it from the element here while the bridge derives it
- * from the source is `B-149` exactly: two machines, two aspects, one hole.
- */
-export type PlateFits = ReadonlyMap<string, PlateFitFacts>;
-
-export function sceneMaskHoles(
-  scene: Scene,
-  view: ArrangementView | undefined = undefined,
-  fits: PlateFits | undefined = undefined,
-): Map<string, MaskHole[]> {
-  const flat = applyArrangementGeometry(flattenElements(scene, 'paint'), view?.geometry);
-  /**
-   * 🔴 `tasks.md` 4.1 + 4.5 — visibility comes from the ONE function, and it is asked about
-   * the plate AND about everything that can hide it.
-   *
-   * **AO's first inherited question, answered as a MECHANISM (`design.md` §6b):** an
-   * INVISIBLE ANCESTOR now suppresses the punch. It did not before — the filter tested
-   * `visible` on the PLATE alone, so a plate on a hidden LAYER, in a hidden container, or
-   * inside a hidden box still punched a hole through everything below it. AO left that
-   * alone because the page and the bridge still AGREED (both acted on the hidden plate).
-   * An arrangement that hides a whole BOX is precisely the case where they stop agreeing:
-   * the box is gone, its hole is not, and what shows through the hole is nothing at all —
-   * §1's crosstalk arriving from inside one template.
-   */
-  const live = (subject: VisibilitySubject): VisibilitySubject => {
-    const override = view?.currentVisible?.[subject.id];
-    return override === undefined ? subject : { ...subject, visible: override };
-  };
-  /**
-   * ⭐ `B-174` / `SKEW-INTERSECT-01` — **the plate set UNDER ONE STATED VISIBILITY, so the
-   * SAME walk can be asked about two look states instead of one.**
-   *
-   * The transition mask needs the outgoing look's plates and the entering look's plates, and
-   * the one thing it must never do is derive them two different ways: the whole of §6/§12.2
-   * is that the hole the page punches and the hole the bridge fills are ONE computation, and
-   * a second, "just for the transition" plate walk beside this one is precisely how the two
-   * would come to disagree about a hidden ancestor, a fit mode or a paint-order tie.
-   *
-   * ⚠ The arrangement map is passed IN rather than read from `view`, and that is the whole
-   * mechanism: `resolveVisibility` ranks the arrangement's opinion ABOVE the authored value,
-   * so handing it the outgoing look's map makes this walk answer for that look even though
-   * `currentVisible` (read back from the DOM by `liveArrangementView`) already says the
-   * outgoing instance is `display: none`.
-   */
-  const platesUnder = (
-    arrangementVisibility: Readonly<Record<string, boolean>> | undefined,
-  ): { f: FlatElement; index: number; punch: LiveSourceRect }[] => {
-    const context = { arrangementVisibility, transitioning: view?.transitioning };
-    const onScreen = (f: FlatElement): boolean =>
-      resolveVisibilityOf(live({ ...f.element }), context) &&
-      f.ancestry.every((a) => resolveVisibilityOf(live(a), context));
-    return flat
-      .map((f, index) => ({ f, index }))
-      .filter(({ f }) => f.element.type === 'video-placeholder' && onScreen(f))
-      .map(({ f, index }) => ({ f, index, punch: punchRect(f) }));
-  };
-
-  // Paint order is the array order of `flat`: `flattenElements` emits an element
-  // before its children and sorts siblings by `zIndex`, which is exactly what
-  // `buildLayer` appends. So "above" is simply "at a higher index".
-  /**
-   * ⭐ `C-028` — **THE HOLE IS THE PICTURE, NOT THE BOX.**
-   *
-   * 🔴 Under `contain` the picture covers only part of its box. A hole left at the BOX
-   * rect would leave the margin a TRANSPARENT HOLE with no picture behind it — and what
-   * shows through is the channel behind the CG layer: **BLACK, which is exactly what the
-   * client rejected.** The feature would deliver the opposite of its own requirement.
-   * Punching at the fitted rect makes the template's own background fill the margin for
-   * free: no new compositing, no second layer, no extra command.
-   *
-   * ⚠ And under `cover` this must give back the BOX unchanged — `fitPictureToBox`'s
-   * `visible` is `picture ∩ box`, which is the box itself when the picture covers it.
-   * The same call therefore serves both modes without a branch here, which is what stops
-   * a `cover` hole drifting from what shipped.
-   *
-   * The `intersects` test above still runs on the BOX rect, deliberately: which elements
-   * a plate masks is a z-order-and-overlap question about the authored layout, and
-   * narrowing it to the fitted picture would un-mask a backdrop the plate still sits on
-   * top of the moment a source's aspect changed.
-   */
-  const punchRect = (f: FlatElement): LiveSourceRect => {
-    const el = f.element;
-    if (el.type !== 'video-placeholder') return f.rect;
-    // `B-183` — an UNASSIGNED plate names no source, so no bridge fact can be keyed to it.
-    // Absent reads exactly like "no facts for this plate", which is the branch below.
-    const fit = el.routeKey === undefined ? undefined : fits?.get(el.routeKey);
-    // No facts for this plate ⇒ the SCENE's own statement. `expectedAspect` is what the
-    // author declared this hole is designed for, which is the honest answer for an
-    // authoring preview and for a page the bridge has not spoken to yet; absent, the
-    // aspect is `null` and there is no fit at all — the hole is the box, as today.
-    const aspect = fit?.aspect ?? el.expectedAspect ?? null;
-    const mode = fit?.mode ?? el.fitMode ?? DEFAULT_LIVE_FIT_MODE;
-    return fitPictureToBox(f.rect, aspect, mode).visible;
-  };
-
-  const plates = platesUnder(view?.visibility);
-  /**
-   * 🔴 `SKEW-INTERSECT-01` — **the OUTGOING look's plates, present only while a switch is in
-   * flight.** `undefined` is the ordinary case and every line below falls back to exactly
-   * today's behaviour for it.
-   */
-  const outgoing =
-    view?.transitionFrom === undefined ? undefined : platesUnder(view.transitionFrom);
-
-  const holes = new Map<string, MaskHole[]>();
-  if (plates.length === 0) return holes;
-
-  for (let i = 0; i < flat.length; i++) {
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const target = flat[i]!;
-    // A container / composition paints NOTHING itself, and masking one would mask
-    // its whole subtree — including any element the author put ABOVE the plate
-    // inside it. Their children are enumerated separately and masked on their own.
-    if (target.element.type === 'container' || target.element.type === 'composition') continue;
-    const above = plates.filter((p) => p.index > i && intersects(p.f.rect, target.rect));
-    if (above.length === 0) continue;
-    /*
-      🔴 `SKEW-INTERSECT-01` — **THE TRANSITION MASK, computed in SCENE pixels and pulled
-      back ONCE, exactly as the ordinary mask is.**
-
-      Every pixel this leaves open is inside a hole of BOTH looks, so it is backed by a
-      picture whether the fills have moved yet or not — which is the entire guarantee. The
-      UNION was the other candidate and is the opposite: it opens every pixel EITHER look
-      punches, and a pixel the outgoing look does not fill is the channel showing through.
-      Black on air, in the shape of the entering look's boxes.
-
-      Pairwise, because a hole set is a UNION of rects and `(A ∪ B) ∩ (C ∪ D)` is the union
-      of the four pairwise intersections. `intersects` is the same noise-aware predicate the
-      z-order filter uses, so a pair that merely touches produces no sliver.
-    */
-    const punches =
-      outgoing === undefined
-        ? above.map((p) => p.punch)
-        : intersectPunches(
-            above.map((p) => p.punch),
-            outgoing
-              .filter((p) => p.index > i && intersects(p.f.rect, target.rect))
-              .map((p) => p.punch),
-          );
-    /*
-      An EMPTY result is a real answer and is NOT a special case: two looks whose plates
-      barely overlap leave this element with no hole at all for the length of the window, so
-      the template's own backdrop covers where both pictures will be. That is a picture the
-      author drew, held for a field or two — the alternative it replaces is the channel.
-    */
-    if (punches.length === 0) continue;
-    const toLocal = invertAffine(target.toScene);
-    // A collapsed element (scaled to zero on an axis) paints nothing, so there is no
-    // space to express a hole in. `null` here means NO MASK, not an empty one.
-    if (toLocal === null) continue;
-    holes.set(
-      target.key,
-      punches.map((punch) => {
-        // `punch`, not `f.rect` — the FITTED rect (C-028). Pulled back through the same
-        // inverse as before: the fit happens in SCENE px and the pull-back is a plain
-        // affine, so the two compose in either order.
-        const local = rectThrough(toLocal, punch);
-        return { x: local.x, y: local.y, width: local.width, height: local.height };
-      }),
-    );
-  }
-  return holes;
-}
-
-/**
- * `SKEW-INTERSECT-01` — every non-empty pairwise intersection of two hole sets, in the space
- * they are both expressed in.
- *
- * Exported so the geometry can be asserted directly rather than only through a rendered
- * scene: the whole claim of the transition mask is that its output is a SUBSET of both
- * inputs, and a subset claim wants a test that can name the rects.
- */
-export function intersectPunches(
-  entering: readonly LiveSourceRect[],
-  outgoing: readonly LiveSourceRect[],
-): LiveSourceRect[] {
-  const out: LiveSourceRect[] = [];
-  for (const a of entering) {
-    for (const b of outgoing) {
-      if (!intersects(a, b)) continue;
-      const x = Math.max(a.x, b.x);
-      const y = Math.max(a.y, b.y);
-      const right = Math.min(a.x + a.width, b.x + b.width);
-      const bottom = Math.min(a.y + a.height, b.y + b.height);
-      out.push({ x, y, width: right - x, height: bottom - y });
-    }
-  }
-  return out;
-}
 
 // ───────────────── STAMPED SCOPES: the plates the walk deliberately never sees ─────────────────
 

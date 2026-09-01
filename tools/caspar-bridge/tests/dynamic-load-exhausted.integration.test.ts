@@ -115,7 +115,7 @@ it('the EXACT-SLOT path is unaffected — R-028 rows load onto their own declare
       occupancyStaleMs: 800,
       reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69],
       fixedSlots: [70, 71].map((layer) => ({ channel: 1, layer })),
-      fixedBank: { channel: 1, start: 70, count: 2 },
+      fixedBank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 2 },
     },
   );
   runtime.start();

@@ -193,7 +193,7 @@ it('B-092: a STOPPED item restored across a bridge restart is adopted WITHOUT be
   runtime = r2;
   await r2.startServing();
   r2.templateImport(TEMPLATE, HTML);
-  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [] });
+  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [], migrated: [] });
   r2.start();
   await r2.whenServerHealthy(HEALTH_MS);
   await delay(1200);

@@ -98,6 +98,7 @@ async function boot(
       : {
           fixedLayers: {
             channel: 1,
+            low: { start: 1, count: 9 },
             start: BANK_START,
             count: BANK_COUNT,
             ...(over.visibility !== undefined ? { visibility: over.visibility } : {}),
@@ -336,7 +337,12 @@ it('a bank OVERLAPPING the reservation cannot boot at all — the two sets can n
       // onto the reservation: 55–64 would have tripped the DYNAMIC-POLICY overlap
       // first and proved a different refusal. This isolates `overlaps-reserved`.
       reservedLayers: { ranges: [{ from: 75, to: 84 }] },
-      fixedLayers: { channel: 1, start: BANK_START, count: BANK_COUNT },
+      fixedLayers: {
+        channel: 1,
+        low: { start: 1, count: 9 },
+        start: BANK_START,
+        count: BANK_COUNT,
+      },
       runtimeTuning: { sweepMs: 150, occupancyStaleMs: 800 },
     }),
   ).rejects.toThrow(/reserved/i);

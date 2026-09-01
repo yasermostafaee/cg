@@ -1,5 +1,5 @@
 import type { FieldValues } from './fields.js';
-import { LIVE_FIT_MODES, type LiveFitMode } from './live-fit.js';
+import type { LiveFitMode } from './live-fit.js';
 
 /**
  * `multibox-layout-switch` `tasks.md` 6.7 — **the BRIDGE→PAGE control channel, carried inside
@@ -78,45 +78,23 @@ export interface CgControl {
    * changes nothing.
    */
   look?: string;
-  /**
-   * 🔴 `B-174` / `SKEW-INTERSECT-01` — **the look the row is switching AWAY FROM, sent only
-   * while the two machines are still disagreeing about the geometry.**
-   *
-   * Present ⇒ the page punches `from ∩ look` — every open pixel is one BOTH looks punch, so
-   * it is backed by a picture whether the bridge's `MIXER FILL` batch has landed yet or not.
-   * Absent ⇒ the page punches `look`'s own holes, which is both the ordinary case and the
-   * SETTLING half of a switch: the bridge sends a second payload without this member once
-   * the fills are in place.
-   *
-   * ⚠ **It is an instruction about THIS payload, never a state the page stores.** A page
-   * that kept it would keep showing a subset of the entering look's holes with nothing
-   * scheduled to widen it. Every re-punch after this payload — including the settling one —
-   * is a full one unless it too carries `from`.
-   *
-   * A page that does not understand this member drops it (`readCgControl` validates member
-   * by member) and punches the entering look's holes immediately, which is exactly the
-   * behaviour that shipped before this existed. That is why an older page paired with a
-   * newer bridge degrades to the old artefact rather than to a new one.
-   */
-  from?: string;
-  /**
-   * ⭐ `C-028` — **each plate's resolved fit facts, keyed by PLATE ID** (the template's
-   * declared `sourceId`, which is the element's `routeKey`).
-   *
-   * 🔴 **THE FACTS CROSS THE WIRE, NEVER THE RECT.** Each side then calls the SAME
-   * `fitPictureToBox` on the box rect IT holds. That is deliberate and it is the shape
-   * {@link CgControl.look} already has — *"one id, sent once, read by one function on
-   * each side"*. Sending the fitted rect instead would fight a rule the page already
-   * enforces: `liveArrangementView` reads the page's CURRENT layout back so the mask is
-   * computed against where the nodes now ARE, and a plate moved by an arrangement has a
-   * box the bridge's rect would be stale about. **The box is the page's fact; the
-   * aspect and the mode are the bridge's; the fit is one function applied to both.**
-   *
-   * Absent means "this payload says nothing about fits" — never "no plates". A page that
-   * receives none keeps whatever it was last told, and a page that has never been told
-   * falls back to the scene's own statement.
-   */
-  plates?: Record<string, CgPlateFit>;
+  /*
+    🔴 **`single-clock-look-switch` — `from` AND `plates` ARE GONE, and each for its own reason.**
+
+    `from` (`SKEW-INTERSECT-01`) narrowed the page's holes to `outgoing ∩ entering` while the
+    two clocks disagreed. There are no holes now — the page sits BELOW its plates — so there is
+    nothing to narrow, and a member whose only effect was on a mask cannot survive the mask.
+
+    `plates` (`C-028`) carried each plate's resolved aspect and mode so the PAGE could compute
+    the same fit the bridge did. Only the mask consumed that; the fit that reaches air is the
+    bridge's `MIXER FILL` / `CLIP`, computed from the same facts on its own side. The rule the
+    member was built on — *"the facts cross the wire, never the rect"* — is unchanged and is
+    now satisfied with ONE consumer instead of two, which is what it was always for.
+
+    ⚠ A page from an older build receiving a payload without them punches the entering look's
+    holes on its own clock, exactly as it did before either member existed — over plates that
+    are now on top of it, so the punch has no visible effect. Degradation, not a new artefact.
+  */
 }
 
 /** Attach control data to a field payload. The ONE writer — the bridge calls this. */
@@ -151,50 +129,10 @@ export function readCgControl(payload: unknown): CgControl | undefined {
   const raw = (payload as Record<string, unknown>)[CG_CONTROL_KEY];
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
   const look = (raw as Record<string, unknown>)['look'];
-  const from = (raw as Record<string, unknown>)['from'];
-  const plates = readPlateFits((raw as Record<string, unknown>)['plates']);
-  return {
-    ...(typeof look === 'string' && look !== '' ? { look } : {}),
-    /*
-      ⚠ `from` is meaningless without `look` — it names the state a switch is LEAVING, and
-      there is no switch without the one it is entering. Dropping it in that case keeps the
-      pair inseparable at the READER, so no downstream branch has to consider a half-payload.
-    */
-    ...(typeof look === 'string' && look !== '' && typeof from === 'string' && from !== ''
-      ? { from }
-      : {}),
-    ...(plates === undefined ? {} : { plates }),
-  };
-}
-
-/**
- * `C-028` — the plate fit map, validated MEMBER BY MEMBER.
- *
- * Same defensive standard as the rest of this module and for the same reason: this
- * arrives over AMCP from a process that may be a different version, and a page that
- * throws inside `update()` takes the whole graphic off air. A malformed entry is DROPPED
- * rather than thrown on or coerced — the page then falls back to the scene's own
- * statement for that plate, which is a worse picture than the truth but is still a
- * picture.
- *
- * ⚠ `aspect` accepts `null` and rejects a non-finite number. `null` is a MEANINGFUL
- * value here ("nothing states an aspect ⇒ no fit"), so it must survive the walk, while a
- * `NaN` arriving from a bad serialization must not: `NaN` would flow into the fit as a
- * legal-looking number and produce a rect of `NaN`, i.e. a hole nothing can see.
- */
-function readPlateFits(raw: unknown): Record<string, CgPlateFit> | undefined {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
-  const out: Record<string, CgPlateFit> = {};
-  for (const [plateId, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue;
-    const entry = value as Record<string, unknown>;
-    const mode = entry['mode'];
-    if (typeof mode !== 'string' || !(LIVE_FIT_MODES as readonly string[]).includes(mode)) continue;
-    const aspect = entry['aspect'];
-    if (aspect !== null && (typeof aspect !== 'number' || !Number.isFinite(aspect))) continue;
-    out[plateId] = { aspect: aspect as number | null, mode: mode as LiveFitMode };
-  }
-  return Object.keys(out).length === 0 ? undefined : out;
+  // Unknown members are DROPPED rather than carried through, which is what lets a newer
+  // bridge talk to an older page and the reverse: a payload from a build that still sends
+  // `from` or `plates` is read for its `look` and the rest is ignored.
+  return { ...(typeof look === 'string' && look !== '' ? { look } : {}) };
 }
 
 /**

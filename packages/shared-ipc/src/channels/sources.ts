@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { IdSchema, LiveFitModeSchema, LiveSourceIdSchema } from '@cg/shared-schema';
-import type { FixedLayerBank } from './fixedLayers.js';
+import { lowBankEnd, type FixedLayerBank } from './fixedLayers.js';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 
@@ -490,6 +490,17 @@ export const SOURCES_SET_CONFIG_REASONS = [
   'overlaps-fixed-bank',
   'overlaps-reserved',
   'stream-scheme-not-allowed',
+  /**
+   * 🔴 `single-clock-look-switch` — **the bed rows are not BELOW this band.**
+   *
+   * DISJOINTNESS IS NOT ENOUGH HERE, and that is the entire reason this code is separate
+   * from `overlaps-fixed-bank`. A bed's whole purpose is to be composited UNDER the plates
+   * it declares; a bed bank that merely fails to collide with the band — sitting above it,
+   * say — is a bank that cannot do its job, and it fails INVISIBLY, as a background drawn
+   * over the pictures it was meant to back. The operator bank has the opposite requirement
+   * and keeps the opposite check.
+   */
+  'low-bank-not-below-band',
 ] as const;
 export type SourcesSetConfigReason = (typeof SOURCES_SET_CONFIG_REASONS)[number];
 
@@ -653,6 +664,25 @@ export function validateSourceCatalog(
         `the Live Source layer band ${rangeText} overlaps the operator's candidate layer ` +
           `bank ${String(bank.start)}-${String(bankEnd)} (channel ${String(bank.channel)}) — ` +
           `the two must be disjoint; move the band or the bank`,
+      );
+    }
+    /*
+      `single-clock-look-switch` — THE BED HALF, and it is a STRICTLY-BELOW test rather
+      than a disjointness test. See `low-bank-not-below-band` for why the two are different
+      questions. Checked HERE and not in the bank validator because this is the side that
+      can MOVE: the bed range is fixed at install (`renumber-refused` / `resize-refused`),
+      the band is edited from the Sources surface, so the band's own validator is the door
+      every change to this relationship passes through.
+    */
+    const lowEnd = lowBankEnd(bank);
+    if (range.start <= lowEnd) {
+      throw new SourceCatalogConfigError(
+        'low-bank-not-below-band',
+        `the graphics-bed rows ${String(bank.low.start)}-${String(lowEnd)} must lie BELOW the ` +
+          `Live Source layer band ${rangeText}, and they do not — a bed is composited UNDER ` +
+          `the plates it declares, so a bed row at or above layer ${String(range.start)} would ` +
+          `draw its background OVER the live pictures instead of behind them; move the band up ` +
+          `or the bed rows down`,
       );
     }
   }

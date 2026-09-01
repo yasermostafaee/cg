@@ -36,7 +36,7 @@ let tracePath: string | null = null;
 const SWEEP_MS = 150;
 const STALE_MS = 800;
 const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>سلام</body></html>';
-const BANK = { channel: 1, start: 70, count: 4 };
+const BANK = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 };
 const FIXED_SLOTS = [
   { channel: 1, layer: 70 },
   { channel: 1, layer: 71 },
@@ -197,7 +197,7 @@ async function stageProducer(r: CasparRuntime, layer: number, kind: string): Pro
 it('a declared row restores ON ITS OWN LAYER — never re-allocated elsewhere', async () => {
   const r = await boot();
 
-  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [], migrated: [] });
 
   // The row it was retained on is the row it came back on. Asserted on the WIRE as
   // well as on the binding: a hearing tap saw layer 72 silent, so the ordinary
@@ -217,7 +217,7 @@ it('a declared row held by a FOREIGN producer parks in restore-blocked — zero 
   const r = await boot();
   await stageProducer(r, 72, 'decklink');
 
-  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [], migrated: [] });
 
   // THE STATE: named, visible, and carrying BOTH facts the operator needs — the
   // item that is waiting, and what is actually on its layer.
@@ -243,7 +243,7 @@ it('a declared row holding OUR OWN surviving html producer is adopted WITHOUT a 
   const r = await boot();
   await stageProducer(r, 72, 'html');
 
-  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [], migrated: [] });
 
   // Adopted in place: a producer survived the bridge's death, so the correct
   // action is to touch NOTHING at all.
@@ -260,7 +260,7 @@ it('a declared row holding OUR OWN surviving html producer is adopted WITHOUT a 
 it('a BLIND tap DEFERS a declared row rather than blocking it — and sends nothing', async () => {
   const r = await boot({ blind: true });
 
-  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [], migrated: [] });
   await delay(1200); // several sweep ticks: every chance for a decision to fire
 
   // Nothing was sent — the blind-tap contract (B-093), unchanged by this stage.
@@ -286,7 +286,11 @@ it('REGRESSION — a DYNAMIC retained slot keeps #368: exact slot first, then el
   // declared row and silently cost every dynamic row its exact-slot restore —
   // consulting the wrong layer's occupancy, which is precisely the hazard
   // `#slotForRestore`'s own contract forbids.
-  expect(await r.restore(retainedOn(15, 'dyn-exact'))).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retainedOn(15, 'dyn-exact'))).toEqual({
+    restored: 1,
+    skipped: [],
+    migrated: [],
+  });
   expect(itemSlot(r, 'dyn-exact')).toEqual({ channel: 1, layer: 15 });
 
   // (b) THE FALL-THROUGH HALF, unchanged and deliberately NOT extended to declared
@@ -294,7 +298,11 @@ it('REGRESSION — a DYNAMIC retained slot keeps #368: exact slot first, then el
   // is re-homed rather than skipped (#368's hardware-validated check #2). An
   // anonymous layer costs the operator nothing to swap; a declared row is a
   // promise, which is the entire reason only this half falls through.
-  expect(await r.restore(retainedOn(15, 'dyn-taken'))).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retainedOn(15, 'dyn-taken'))).toEqual({
+    restored: 1,
+    skipped: [],
+    migrated: [],
+  });
   const rehomed = itemSlot(r, 'dyn-taken');
   expect(rehomed).not.toEqual({ channel: 1, layer: 15 });
   expect(rehomed?.layer).toBeGreaterThanOrEqual(10);
@@ -304,7 +312,11 @@ it('REGRESSION — a DYNAMIC retained slot keeps #368: exact slot first, then el
 it('a declared row already bound by another restored item is SKIPPED, never re-homed', async () => {
   const r = await boot();
 
-  expect(await r.restore(retainedOn(72, 'first'))).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retainedOn(72, 'first'))).toEqual({
+    restored: 1,
+    skipped: [],
+    migrated: [],
+  });
   // The second item names the same declared row. `#allocate()` would happily give
   // it a dynamic layer — the exact outcome R-021 forbids — so the only honest
   // answer is to skip it, and to say WHY (B-108) in terms the operator can act on:
@@ -313,6 +325,7 @@ it('a declared row already bound by another restored item is SKIPPED, never re-h
   expect(await r.restore(retainedOn(72, 'second'))).toEqual({
     restored: 0,
     skipped: [{ itemId: 'second', reason: 'fixed-slot-taken' }],
+    migrated: [],
   });
   expect(r.stackSnapshot().some((i) => i.itemId === 'second')).toBe(false);
   expect(slotState(r, 72)?.binding?.itemId).toBe('first');
@@ -322,7 +335,7 @@ it('a declared row already bound by another restored item is SKIPPED, never re-h
 it('restore-blocked EXITS when the foreign producer vacates — the deferred re-ADD proceeds', async () => {
   const r = await boot();
   await stageProducer(r, 72, 'decklink');
-  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [], migrated: [] });
   expect(slotState(r, 72)?.binding?.restoreBlocked).toBe(true);
 
   // The playout side takes its feed off 72. Nothing tells the bridge; the next
@@ -350,7 +363,7 @@ it('restore-blocked EXITS when the foreign producer vacates — the deferred re-
 it('restore-blocked EXITS on the operator’s own Clear, then take — and never re-blocks', async () => {
   const r = await boot();
   await stageProducer(r, 72, 'decklink');
-  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [], migrated: [] });
   expect(slotState(r, 72)?.binding?.restoreBlocked).toBe(true);
 
   // d1's FIRST exit: the operator's explicit, confirm-gated hard Clear, and THEN a
@@ -378,7 +391,7 @@ it('restore-blocked EXITS on the operator’s own Clear, then take — and never
 it('a REMOVED item takes its block with it — no row publishes a block for a departed item', async () => {
   const r = await boot();
   await stageProducer(r, 72, 'decklink');
-  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retainedOn(72))).toEqual({ restored: 1, skipped: [], migrated: [] });
   expect(slotState(r, 72)?.binding?.restoreBlocked).toBe(true);
 
   await r.remove('item1');

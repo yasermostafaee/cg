@@ -155,7 +155,9 @@ it('SITE 1b — loadFixed emits NOTHING at all, so it needs no mute and no guard
   // The stronger form, and the reason the filed per-site table is stale: LOAD is
   // LIST-ONLY. A path that cannot emit beats a guard that has to be remembered.
   const r = await boot();
-  expect(r.setFixedLayers({ channel: 1, start: 70, count: 4 }).ok).toBe(true);
+  expect(
+    r.setFixedLayers({ channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 }).ok,
+  ).toBe(true);
   const before = (await recvLines()).length;
 
   expect((await r.loadFixed({ channel: 1, layer: 70 }, 'item1', 'lower-third', {})).accepted).toBe(

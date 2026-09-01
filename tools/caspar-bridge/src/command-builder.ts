@@ -1,11 +1,6 @@
 import { quote } from '@cg/caspar-client';
 import type { SourceProducer } from '@cg/shared-ipc';
-import {
-  withCgControl,
-  type CgControl,
-  type CgPlateFit,
-  type FieldValues,
-} from '@cg/shared-schema';
+import { withCgControl, type CgControl, type FieldValues } from '@cg/shared-schema';
 import type { NormalizedRect } from './live-layers.js';
 
 /** A CasparCG `(channel, layer)` coordinate. */
@@ -95,26 +90,21 @@ export class CommandBuilder {
    * holes at the old look's aspects. Absent — a non-`C-028` caller, or a template with no
    * plates — leaves the payload byte-for-byte what it was.
    */
-  updateLook(
-    slot: CommandSlot,
-    lookId: string,
-    fields: FieldValues = {},
-    plates?: Readonly<Record<string, CgPlateFit>> | undefined,
-    /**
-     * 🔴 `B-174` / `SKEW-INTERSECT-01` — the look this switch is LEAVING, which makes this
-     * payload the NARROWING half of a switch: the page punches `from ∩ lookId` until a
-     * second payload without it settles the mask onto `lookId`'s own holes.
-     *
-     * Absent is the ordinary form and every existing caller's — a take, a re-assert, the
-     * rollback's revert tell, and the settling half itself.
-     */
-    from?: string | undefined,
-  ): string {
-    const control: CgControl = {
-      look: lookId,
-      ...(from !== undefined && from !== lookId && { from }),
-      ...(plates !== undefined && Object.keys(plates).length > 0 && { plates: { ...plates } }),
-    };
+  updateLook(slot: CommandSlot, lookId: string, fields: FieldValues = {}): string {
+    /*
+      🔴 **`single-clock-look-switch` — the `plates` and `from` arguments are GONE.**
+
+      `plates` (`C-028`) sent each plate's resolved aspect and mode so the PAGE could compute
+      the same fit; `from` (`SKEW-INTERSECT-01`) named the look being left so the page could
+      narrow its holes to `outgoing ∩ entering`. Both existed to steer a MASK, and a
+      plate-bearing page now sits BELOW its plates and punches nothing. The fit that reaches
+      air is the bridge's own `MIXER FILL` / `CLIP`, from the same facts, on the side that
+      owns the picture.
+
+      ⚠ What SURVIVES is the look id, and the reason it survives is unchanged: the page still
+      flips its own per-look decoration, and it still has to be told which look that is.
+    */
+    const control: CgControl = { look: lookId };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
       serialize(withCgControl(fields, control)),
     )}`;

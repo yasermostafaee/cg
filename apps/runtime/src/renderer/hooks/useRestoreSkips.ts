@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { RestoreSkip } from '@cg/shared-ipc';
+import type { RestoreMigration, RestoreSkip } from '@cg/shared-ipc';
 
 /**
  * B-108 — the rows the last restore could NOT bring back.
@@ -28,6 +28,20 @@ export function useRestoreSkips(): readonly RestoreSkip[] {
   const [skips, setSkips] = useState<readonly RestoreSkip[]>([]);
   useEffect(() => window.cg.stack.onRestoreSkips(setSkips), []);
   return skips;
+}
+
+/**
+ * `single-clock-look-switch` — the rows the last restore brought back on a DIFFERENT row.
+ *
+ * The sibling of {@link useRestoreSkips}, kept apart for the reason `RestoreMigrationSchema`
+ * gives: these rows came back, and reporting them in a list headed "did not come back" would
+ * send the operator hunting for something that is on screen. Same subscription contract —
+ * replayed on subscribe, empty clears the notice.
+ */
+export function useRestoreMigrations(): readonly RestoreMigration[] {
+  const [migrations, setMigrations] = useState<readonly RestoreMigration[]>([]);
+  useEffect(() => window.cg.stack.onRestoreMigrations(setMigrations), []);
+  return migrations;
 }
 
 /**
@@ -84,5 +98,12 @@ export function restoreSkipReason(skip: RestoreSkip): string {
      */
     case 'multibox-already-on-air':
       return 'another multi-box template is already on air on its channel — take that one off air, then load this row again';
+    /*
+     * `single-clock-look-switch` — a graphics BED with nowhere to land. Worded away from
+     * `no-layer`'s "free something up", which points at the dynamic ranges: the rows that
+     * matter here are the bed rows, and the whole group is full.
+     */
+    case 'no-bed-row':
+      return 'it is a graphics bed and every bed row is taken — remove a template from one of the bed rows, then load it again';
   }
 }

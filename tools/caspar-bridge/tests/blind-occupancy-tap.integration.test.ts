@@ -140,7 +140,7 @@ it('THE REGRESSION: a BLIND tap over a LIVE layer sends NOTHING and says so hone
   runtime = r;
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
-  expect(await r.restore(retained())).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retained())).toEqual({ restored: 1, skipped: [], migrated: [] });
   r.start();
   await r.whenServerHealthy(HEALTH_MS);
   await delay(1500); // give the (absent) OSC every chance to arrive
@@ -184,7 +184,7 @@ it('UNCHANGED: a HEARING tap over an occupied layer still adopts, sending nothin
   runtime = r;
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
-  expect(await r.restore(retained())).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retained())).toEqual({ restored: 1, skipped: [], migrated: [] });
   r.start();
   await r.whenServerHealthy(HEALTH_MS);
 
@@ -218,7 +218,7 @@ it('UNCHANGED: a HEARING tap over a genuinely SILENT layer still re-ADDs as load
   runtime = r;
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
-  expect(await r.restore(retained())).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retained())).toEqual({ restored: 1, skipped: [], migrated: [] });
   r.start();
   await r.whenServerHealthy(HEALTH_MS);
 
@@ -246,7 +246,7 @@ it('a blind restore RECOVERS: once OSC starts arriving, the sweep decides the it
   runtime = r;
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
-  expect(await r.restore(retained())).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retained())).toEqual({ restored: 1, skipped: [], migrated: [] });
   r.start();
   await r.whenServerHealthy(HEALTH_MS);
   await waitFor(() => status(r, 'item1') === 'unverified', 8000, 'refuses while deaf');
@@ -276,7 +276,7 @@ it('an operator action RETIRES a parked restore — a later decision cannot repl
   runtime = r;
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
-  expect(await r.restore(retained())).toEqual({ restored: 1, skipped: [] });
+  expect(await r.restore(retained())).toEqual({ restored: 1, skipped: [], migrated: [] });
   r.start();
   await r.whenServerHealthy(HEALTH_MS);
   await waitFor(() => status(r, 'item1') === 'unverified', 8000, 'refuses while deaf');

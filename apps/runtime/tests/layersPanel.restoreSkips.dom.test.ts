@@ -46,7 +46,13 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-const BANK: FixedLayerBank = { channel: 1, start: 70, count: 2, aliases: {} };
+const BANK: FixedLayerBank = {
+  channel: 1,
+  low: { start: 1, count: 9 },
+  start: 70,
+  count: 2,
+  aliases: {},
+};
 const SLOTS: FixedSlotState[] = [
   { channel: 1, layer: 70, observed: { kind: 'empty' }, binding: null },
   { channel: 1, layer: 71, observed: { kind: 'empty' }, binding: null },
@@ -88,6 +94,7 @@ function stubBridge(skips: RestoreSkip[]): void {
         handler(skips);
         return () => undefined;
       },
+      onRestoreMigrations: () => () => undefined,
       clearAll: () => Promise.resolve({ ok: true, cleared: 0 }),
       removeAll: () => Promise.resolve({ ok: true, removed: 0 }),
       take: () => Promise.resolve({ accepted: true }),

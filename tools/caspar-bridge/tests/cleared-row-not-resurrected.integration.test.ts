@@ -168,7 +168,7 @@ it('🔴 B-109: a deliberately CLEARed graphic is NOT re-ADDed by a bridge resta
   // "this layer is empty" from "I have never heard anything". Without a warm tap the
   // bridge would refuse to decide and this test would pass for the wrong reason.
   await r2.whenServerHealthy(HEALTH_MS);
-  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [] });
+  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [], migrated: [] });
 
   // Give a re-ADD every chance to appear: the ADD in the loaded case is issued off
   // this same path and lands well inside this window (the loaded-restore test waits
@@ -248,7 +248,7 @@ it('🔴 B-107: an ERRORED row is restored as ERRORED, never promoted to loaded'
   // explains the state below — it is the retained state doing the work.
   r2.templateImport(TEMPLATE, HTML);
   await r2.whenServerHealthy(HEALTH_MS);
-  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [] });
+  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [], migrated: [] });
   await delay(1500);
 
   // The row is BACK and still says it failed, with its cause.
@@ -305,7 +305,7 @@ it('FROZEN: a LOADED row IS still re-ADDed — the fix narrows the branch, it do
   await r2.startServing();
   r2.templateImport(TEMPLATE, HTML);
   await r2.whenServerHealthy(HEALTH_MS);
-  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [] });
+  expect(await r2.restore(retained)).toEqual({ restored: 1, skipped: [], migrated: [] });
 
   // Identical silence, OPPOSITE action — because the retained STATE differs.
   await expect(mock.waitForCgAddResolution(SLOT, 10_000)).resolves.toBe('resolved');

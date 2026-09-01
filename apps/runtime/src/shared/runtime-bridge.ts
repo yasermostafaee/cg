@@ -66,6 +66,7 @@ import type {
   ChannelSettingsSetChannel,
   ChannelSettingsState,
   Rehearsal,
+  RestoreMigration,
   RestoreSkip,
   RehearseEnterChannel,
   RehearseExitChannel,
@@ -285,6 +286,17 @@ export interface RuntimeBridge {
      * seeing. An EMPTY report is meaningful — it clears a stale notice.
      */
     onRestoreSkips(handler: (skips: readonly RestoreSkip[]) => void): Unsubscribe;
+    /**
+     * `single-clock-look-switch` — the rows the last restore brought back on a DIFFERENT
+     * row than the one retained.
+     *
+     * A SEPARATE seam from `onRestoreSkips`, for the reason `RestoreMigrationSchema` gives:
+     * these rows DID come back, and folding them into a list the panel introduces with
+     * "did not come back" would be a plainer lie than saying nothing. Same delivery
+     * contract as its sibling — replayed on subscribe, and an EMPTY report clears a stale
+     * notice.
+     */
+    onRestoreMigrations(handler: (migrations: readonly RestoreMigration[]) => void): Unsubscribe;
   };
 
   connections: {

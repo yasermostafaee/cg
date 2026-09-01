@@ -323,6 +323,33 @@ export function liveSourceCarrierState(
   return template.liveSources.sources.length > 0 ? 'declared' : 'none';
 }
 
+/**
+ * 🔴 `single-clock-look-switch` — **WHICH HALF OF THE BANK THIS PACKAGE BELONGS ON, DERIVED.**
+ *
+ * A package that declares live plates is a graphics BED and must be composited BELOW them
+ * (`'low'`); anything else is furniture and belongs on an operator row above them
+ * (`'high'`). This is the ONE place the question is answered — the load refusal, the restore
+ * migration and the template picker all call it, so an operator can never be offered a
+ * placement the bridge will refuse, and the bridge can never refuse one the picker offered.
+ *
+ * ⚠ **IT IS DERIVED AT IMPORT, NEVER TICKED.** The input is `liveSources`, which
+ * `collectLiveSources` produces from the scene at import; no operator sees this decision and
+ * none can get it wrong. `design.md` §9a-Z states the objection to the alternative in its own
+ * words: _"a declared-backdrop flag that someone forgets to set is a silent black plate on
+ * air"_.
+ *
+ * 🔴 **`'unknown'` RESOLVES TO `'high'`, AND THAT IS A POSITIVE ARGUMENT, NOT A SHRUG.**
+ * An absent carrier means the record was written by a build that predates Live Sources
+ * entirely — so the bridge can seat no plates for it whatever the scene contains
+ * (`reconcileLivePlates` has only the carrier to act on), and its page therefore renders
+ * alone with nothing composited over it, exactly as it does today. `'high'` is where it has
+ * always been and where it still behaves correctly. Sending it low would put a graphic the
+ * bridge cannot reason about underneath every live picture.
+ */
+export function requiredBankFor(template: Pick<TemplateInfo, 'liveSources'>): 'low' | 'high' {
+  return liveSourceCarrierState(template) === 'declared' ? 'low' : 'high';
+}
+
 export const TemplatesGetChannel = defineChannel(
   'templates.get',
   z.object({ templateId: IdSchema }),

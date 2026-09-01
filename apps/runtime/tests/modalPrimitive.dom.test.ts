@@ -222,6 +222,7 @@ describe('§2 — each role resolves to exactly ONE treatment', () => {
 describe('§3 — a refusal is pinned beside the action row, never appended to the scroll', () => {
   const BANK: FixedLayerBank = {
     channel: 1,
+    low: { start: 1, count: 9 },
     // THIRTY layers, so the list genuinely scrolls and a refusal about a row far
     // down is genuinely off-screen when the list is at the top. Four would not
     // reproduce the operator's situation at all.
@@ -331,6 +332,8 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
     // the operator's edits intact, exactly as before.
     const dialog = await openAndRefuse();
     expect(openDialog()).not.toBeNull();
-    expect(dialog.querySelectorAll('input[type="checkbox"]').length).toBe(30);
+    // Thirty operator rows plus the nine declared bed rows (`single-clock-look-switch`) —
+    // the dialog lists every candidate layer of BOTH halves.
+    expect(dialog.querySelectorAll('input[type="checkbox"]').length).toBe(39);
   });
 });

@@ -91,7 +91,7 @@ async function openPicker(): Promise<HTMLElement> {
   let open: (() => void) | null = null;
   function Host(): JSX.Element {
     const { pickTemplate, pickerDialog } = useTemplatePicker();
-    open = () => void pickTemplate('Load onto Layer 99');
+    open = () => void pickTemplate('Load onto Layer 99', 'high');
     return createElement('div', null, pickerDialog);
   }
   await act(async () => {

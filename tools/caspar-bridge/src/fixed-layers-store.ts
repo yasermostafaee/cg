@@ -3,7 +3,9 @@ import * as path from 'node:path';
 import {
   type FIXED_LAYERS_SET_CONFIG_REASONS,
   FixedLayerBankSchema,
+  fixedBankSlots,
   isLayerVisible,
+  lowBankEnd,
   type FixedLayerBank,
 } from '@cg/shared-ipc';
 import type { LayerPolicy, LayerSlot } from '@cg/caspar-client';
@@ -116,14 +118,6 @@ function bankEnd(bank: FixedLayerBank): number {
   return bank.start + bank.count - 1;
 }
 
-function bankSlots(bank: FixedLayerBank): readonly LayerSlot[] {
-  const out: LayerSlot[] = [];
-  for (let layer = bank.start; layer <= bankEnd(bank); layer++) {
-    out.push({ channel: bank.channel, layer });
-  }
-  return out;
-}
-
 /**
  * Validate a bank against the ceiling, the dynamic policy ranges, the reserved
  * (C-015) layers, and its own aliases. Returns the bank's slots; throws
@@ -183,7 +177,72 @@ export function validateFixedBank(
       );
     }
   }
-  return bankSlots(bank);
+  validateLowBank(bank, options, range);
+  return fixedBankSlots(bank);
+}
+
+/**
+ * `single-clock-look-switch` — the BED half, against everything the operator half is
+ * checked against PLUS the operator half itself.
+ *
+ * Its own ceiling is the schema's (`MAX_LOW_FIXED_LAYER`), so there is no `exceeds-ceiling`
+ * arm here: a bed range that ran past 9 could not have parsed. What the schema cannot see
+ * is the rest of the installation, and that is exactly what this checks.
+ *
+ * ⚠ THE ONE RULE THAT IS NOT HERE is "beds sit below the Live Source band", and its
+ * absence is deliberate: the bed range is fixed at install while the BAND is edited from
+ * the Sources surface, so that relationship is policed by the door the change actually
+ * passes through (`validateSourceCatalog`, `low-bank-not-below-band`). Putting a copy here
+ * would be a second spelling of one rule — and the copy in the door that cannot fire.
+ */
+function validateLowBank(bank: FixedLayerBank, options: ValidateOptions, highRange: string): void {
+  const lowEnd = lowBankEnd(bank);
+  const lowRange = `${String(bank.low.start)}–${String(lowEnd)}`;
+  if (bank.low.start <= bankEnd(bank) && lowEnd >= bank.start) {
+    throw new FixedLayersConfigError(
+      'banks-overlap',
+      `the graphics-bed rows ${lowRange} overlap the operator's candidate layer bank ` +
+        `${highRange} — a layer cannot be both, because the two answer opposite questions ` +
+        `about whether a template composites above the live plates or below them`,
+    );
+  }
+  for (const [templateType, [low, high]] of Object.entries(options.policy)) {
+    if (bank.low.start <= high && lowEnd >= low) {
+      throw new FixedLayersConfigError(
+        'overlaps-policy',
+        `the graphics-bed rows ${lowRange} overlap the '${templateType}' dynamic range ` +
+          `${String(low)}–${String(high)} — the two must be disjoint`,
+      );
+    }
+  }
+  const reservedHits = options.reservedLayers.filter((l) => l >= bank.low.start && l <= lowEnd);
+  if (reservedHits.length > 0) {
+    throw new FixedLayersConfigError(
+      'overlaps-reserved',
+      `the graphics-bed rows ${lowRange} overlap the reserved playout range ` +
+        `${formatRanges(options.reservedLayers)} (C-015) on layer(s) ` +
+        `${reservedHits.map(String).join(', ')} — the two must be disjoint; move the bed rows ` +
+        `or the reservation`,
+    );
+  }
+  for (const key of Object.keys(bank.low.aliases ?? {})) {
+    const layer = Number(key);
+    if (layer < bank.low.start || layer > lowEnd) {
+      throw new FixedLayersConfigError(
+        'alias-out-of-bank',
+        `alias key ${key} is outside the graphics-bed rows ${lowRange}`,
+      );
+    }
+  }
+  for (const key of Object.keys(bank.low.visibility ?? {})) {
+    const layer = Number(key);
+    if (layer < bank.low.start || layer > lowEnd) {
+      throw new FixedLayersConfigError(
+        'visibility-out-of-bank',
+        `visibility key ${key} is outside the graphics-bed rows ${lowRange}`,
+      );
+    }
+  }
 }
 
 /** Compress a layer list into human-readable inclusive ranges (`60–69, 105`). */

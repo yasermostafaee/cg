@@ -6,7 +6,6 @@ import {
   defaultArrangementForCount,
   liveSourcesInStampedScopes,
   resolveVisibility,
-  sceneMaskHoles,
   type Arrangement,
   type Element,
   type Scene,
@@ -39,13 +38,6 @@ function el(type: string, id: string, t = box(0, 0, 100, 100), over = {}): Eleme
 }
 const plate = (id: string, t = box(200, 150, 640, 360), over = {}): Element =>
   el('video-placeholder', id, t, { routeKey: id, zIndex: 10, ...over });
-const backdrop = (id: string, over = {}): Element =>
-  el('shape', id, box(0, 0, 1920, 1080), {
-    shape: 'rectangle',
-    fill: { kind: 'solid', color: '#111' },
-    zIndex: 0,
-    ...over,
-  });
 
 function sceneWith(children: Element[], over: Partial<Scene> = {}): Scene {
   return {
@@ -124,53 +116,15 @@ describe('4.1 — resolveVisibility: three inputs, and a PRECEDENCE rather than 
   });
 });
 
-// ── 4.5 Q1 — an invisible ANCESTOR suppresses the punch ─────────────────────
-
-describe('4.5 Q1 — an INVISIBLE ANCESTOR suppresses the punch', () => {
-  it('POSITIVE CONTROL — the plate punches when everything above it is visible', () => {
-    const holes = sceneMaskHoles(sceneWith([backdrop('bg'), plate('guest-1')]));
-    expect(holes.get('bg'), 'the instrument is dead; the negatives below are void').toBeDefined();
-  });
-
-  it('🔴 a plate on a HIDDEN LAYER punches nothing — it used to punch regardless', () => {
-    const scene = sceneWith([backdrop('bg'), plate('guest-1')]);
-    const hidden = {
-      ...scene,
-      layers: scene.layers.map((l) => ({ ...l, visible: false })),
-    } as unknown as Scene;
-    expect(sceneMaskHoles(hidden).get('bg')).toBeUndefined();
-  });
-
-  it('🔴 a plate inside a HIDDEN CONTAINER punches nothing', () => {
-    const container = el('container', 'group', box(0, 0, 1920, 1080), {
-      visible: false,
-      children: [plate('guest-1')],
-      zIndex: 5,
-    });
-    expect(sceneMaskHoles(sceneWith([backdrop('bg'), container])).get('bg')).toBeUndefined();
-  });
-
-  it('…and the SAME container visible does punch — the control for the two negatives above', () => {
-    const container = el('container', 'group', box(0, 0, 1920, 1080), {
-      visible: true,
-      children: [plate('guest-1')],
-      zIndex: 5,
-    });
-    expect(sceneMaskHoles(sceneWith([backdrop('bg'), container])).get('bg')).toBeDefined();
-  });
-
-  it('🔴 an ARRANGEMENT that hides a BOX hides the plate inside it', () => {
-    // The case that made Q1 load-bearing: hiding a group must take its holes with it, or the
-    // box is gone and its hole is not — §1's crosstalk arriving inside one template.
-    const container = el('container', 'box-1', box(0, 0, 1920, 1080), {
-      children: [plate('guest-1')],
-      zIndex: 5,
-    });
-    const scene = sceneWith([backdrop('bg'), container]);
-    expect(sceneMaskHoles(scene).get('bg'), 'control').toBeDefined();
-    expect(sceneMaskHoles(scene, { visibility: { 'box-1': false } }).get('bg')).toBeUndefined();
-  });
-});
+/*
+ * 🔴 **`single-clock-look-switch` — 4.5 Q1's block is GONE, and the FACT it tested is not.**
+ *
+ * It asked whether an invisible ANCESTOR suppresses a plate's punch — a hidden layer, a hidden
+ * container, an arrangement that hides a box. The punch no longer exists, but the underlying
+ * rule (a plate nothing can see is not on screen) still governs what the bridge SEATS, and
+ * that is where it is now tested: `resolveVisibilityOf` is pinned directly in the 4.1 block
+ * above, and `@cg/vcg-format`'s `hidden-look-suppression` covers the carrier's half.
+ */
 
 // ── 5.1 / 5.4 — the arrangement schema ──────────────────────────────────────
 
@@ -331,17 +285,8 @@ describe('4.6 — a Live Source plate inside a stamped scope is detected', () =>
     expect(found[0]?.scope).toBe('repeater');
   });
 
-  it('⚠ the two failures really do cancel — the flagged plate declares nothing AND punches nothing', () => {
-    // The reason this needs refusing rather than documenting: neither side complains.
-    const sequence = el('sequence', 'seq-1', box(0, 0, 960, 540), {
-      items: [{ kind: 'composition', id: 'i1', compositionId: 'comp-box' }],
-    });
-    const scene = sceneWith([backdrop('bg'), sequence], {
-      compositions: [boxComp],
-    } as unknown as Partial<Scene>);
-    expect(sceneMaskHoles(scene).get('bg'), 'nothing punched, so the page looks intact').toBe(
-      undefined,
-    );
-    expect(liveSourcesInStampedScopes(scene)).toHaveLength(1);
-  });
+  // ⚠ `single-clock-look-switch` — the "AND punches nothing" half of this pair went with the
+  // punch. The half that matters is the one above: a stamped plate DECLARES nothing, so the
+  // bridge seats nothing for it, which is what makes the template broken rather than merely
+  // unmasked.
 });

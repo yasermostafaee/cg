@@ -151,7 +151,7 @@ it('S3 — a band overlapping the candidate bank throws BEFORE binding, naming b
     createBridge({
       port: wsPort,
       connection: singleServer(mock.amcpPort, oscPort),
-      fixedLayers: { channel: 1, start: 70, count: 30 },
+      fixedLayers: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 30 },
       // 50–75 reaches into the operator's candidate bank.
       sourceCatalog: { sources: [], layerRange: { start: 50, end: 75 } },
     }),
@@ -212,7 +212,7 @@ it('S6 — a change is validated against the SAME bank and reservation the boot 
   bridge = await createBridge({
     port: 0,
     connection: singleServer(mock.amcpPort, oscPort),
-    fixedLayers: { channel: 1, start: 70, count: 30 },
+    fixedLayers: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 30 },
     reservedLayers: { ranges: [{ from: 60, to: 69 }] },
     sourceCatalog: { sources: [], layerRange: { start: 10, end: 59 } },
   });

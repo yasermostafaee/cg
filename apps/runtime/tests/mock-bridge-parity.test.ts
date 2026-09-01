@@ -155,6 +155,9 @@ const BRIDGE_SURFACE: {
       // bridge and so no restore; it answers the contract with the true value for
       // such a session (an empty report), which is why parity holds here.
       'onRestoreSkips',
+      // `single-clock-look-switch` — and its sibling, the rows a restore brought back on a
+      // DIFFERENT row. Same reasoning: no restore, so an empty report is the true one.
+      'onRestoreMigrations',
     ],
     connections: [
       'config',

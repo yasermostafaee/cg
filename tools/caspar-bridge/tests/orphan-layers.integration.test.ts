@@ -218,7 +218,7 @@ it('§1 — a foreign producer on an UNBOUND BANK layer surfaces as an orphan', 
       occupancyStaleMs: STALE_MS,
       // A declared bank, AND a declared playout reservation — the two exclusions
       // that must now behave differently from each other.
-      fixedBank: { channel: 1, start: 70, count: 4 },
+      fixedBank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 },
       fixedSlots: [
         { channel: 1, layer: 70 },
         { channel: 1, layer: 71 },
@@ -259,7 +259,7 @@ it('§1 GUARD — a producer on a RESERVED playout layer is never an orphan, and
     {
       sweepMs: SWEEP_MS,
       occupancyStaleMs: STALE_MS,
-      fixedBank: { channel: 1, start: 70, count: 4 },
+      fixedBank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 },
       fixedSlots: [
         { channel: 1, layer: 70 },
         { channel: 1, layer: 71 },

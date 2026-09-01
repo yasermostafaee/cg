@@ -538,8 +538,48 @@ export const RestoreSkipReasonSchema = z.enum([
    * sites — the same rule `multibox-already-on-air` above is here for.
    */
   'looks-none-authored',
+  /**
+   * `single-clock-look-switch` — the retained row is a graphics BED whose old operator-row
+   * coordinate is no longer a legal home for it, and **every bed row is already taken**, so
+   * there was nowhere to migrate it to.
+   *
+   * Distinct from `no-layer` because the remedies are opposite: nothing is exhausted in the
+   * dynamic sense and freeing a dynamic layer would not help — the operator has to clear a
+   * bed row. Distinct from `fixed-slot-taken` because that names ONE row the operator can go
+   * and look at, while this one says the whole low group is full.
+   */
+  'no-bed-row',
 ]);
 export type RestoreSkipReason = z.infer<typeof RestoreSkipReasonSchema>;
+
+/**
+ * 🔴 `single-clock-look-switch` — **ONE ROW THAT CAME BACK SOMEWHERE ELSE.**
+ *
+ * A retained graphics bed held against an operator row (a retention file written before the
+ * bed bank existed) is re-homed onto a bed row rather than restored where it would render its
+ * background OVER its own plates. That is a change the operator did not ask for and cannot
+ * see the reason for, so it is REPORTED — `B-108`'s rule that every skip carries its reason,
+ * applied to a move, which is a skip's near relative.
+ *
+ * It is a SEPARATE list from `skipped` and not a new skip reason: the row DID come back, and
+ * putting it in a list the surface introduces with "did not come back" would be a plainer lie
+ * than saying nothing.
+ */
+export const RestoreMigrationSchema = z.object({
+  itemId: IdSchema,
+  /** The retained coordinate — where the operator last saw the row. */
+  from: z.object({ channel: z.number().int().positive(), layer: z.number().int().nonnegative() }),
+  /** The bed row it came back on. */
+  to: z.object({ channel: z.number().int().positive(), layer: z.number().int().nonnegative() }),
+  /**
+   * True when the row's retained state claimed AIR and the migration could not carry that
+   * claim across (it always can, today — see `#migrateRetainedBed`). The operator needs this
+   * because it is the half that changes what they must DO: a demoted row is present and idle,
+   * and whatever was on the old row before the upgrade may still be on air there.
+   */
+  demoted: z.boolean(),
+});
+export type RestoreMigration = z.infer<typeof RestoreMigrationSchema>;
 
 export const RestoreSkipSchema = z.object({
   itemId: IdSchema,
@@ -584,6 +624,13 @@ export const StackRestoreChannel = defineChannel(
   z.object({
     restored: z.number().int().nonnegative(),
     skipped: z.array(RestoreSkipSchema),
+    /**
+     * Rows that came back on a DIFFERENT row than the one retained (see
+     * {@link RestoreMigrationSchema}). Defaulted rather than required so a bridge that
+     * predates the bed bank still parses against this contract — the additive rule
+     * `TemplateLook.fits` states in full.
+     */
+    migrated: z.array(RestoreMigrationSchema).default([]),
   }),
 );
 

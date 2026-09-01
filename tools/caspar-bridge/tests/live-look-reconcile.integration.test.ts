@@ -1182,35 +1182,26 @@ it('🔴 the switch tells the PAGE which look — the payload carries the id, be
     look's own holes once they are in place. Both are asserted, in order, because a switch
     that narrowed and never widened would leave the row showing less than the look asks for.
   */
-  expect(updates, 'two CG UPDATEs — the transition mask, then the settle').toHaveLength(2);
-  const payload = dataArgOf(updates[0] as string, 'UPDATE');
-  // …read back through the SAME codec the page uses, so the two halves cannot drift.
-  expect(readCgControl(payload)?.look).toBe('solo');
-  expect(readCgControl(payload)?.from, 'the narrowing tell names the look being left').toBe('six');
-  const settle = readCgControl(dataArgOf(updates[1] as string, 'UPDATE'));
-  expect(settle?.look, 'the settling tell names the same look').toBe('solo');
-  expect(settle?.from, 'and carries NO transition — this is the widening').toBeUndefined();
-
   /*
-    ⭐ `C-028` — AND THE FIT FACTS RIDE THE SAME PAYLOAD, in the same ONE command.
+    🔴 **`single-clock-look-switch` — ONE `CG UPDATE`, carrying ONE thing: the look id.**
 
-    A switch can change a plate's fit outright — two looks may bind one input to
-    different boxes and assert different shapes for it — so the id and the facts must
-    land together. Sent separately, there would be a frame in which the page punches the
-    NEW look's holes at the OLD look's aspects: the switch-specific spelling of the
-    divergence 6.7 closed for the look id itself.
+    It used to be two, and both extras were about a MASK. The first tell carried `from` so the
+    page could punch `outgoing ∩ entering` while the fills were in flight; the second settled
+    it onto the entering look's own holes. `C-028`'s fit facts rode the same payload so the
+    page could cut its holes where the picture would be. The page has no holes now — a
+    plate-bearing package is composited BELOW its plates — so the fit that reaches air is the
+    bridge's `MIXER FILL` / `CLIP` alone, and the page needs only to know which look to show.
 
-    Asserted through `readCgControl` rather than on the raw object, because that is the
-    function the PAGE reads with — a payload the page cannot parse would satisfy a raw
-    deep-equal and reach air punching nothing.
+    ⚠ **The tell is still SENT, and still FIRST**, because the page still flips its own
+    per-look decoration. What is gone is the requirement that it land on a particular frame.
+
+    Read back through the SAME codec the page uses, so the two halves cannot drift.
   */
-  const control = readCgControl(payload);
-  expect(Object.keys(control?.plates ?? {}), 'every seated plate’s facts travel').toEqual(
-    expect.arrayContaining(['live-1']),
-  );
-  // This fixture's sources are `1080i5000` (16:9) and authored `cover`, so that is what
-  // the page must be told — the RESOLVED values, not the schema's defaults.
-  expect(control?.plates?.['live-1']).toEqual({ aspect: 16 / 9, mode: 'cover' });
+  expect(updates, 'exactly ONE CG UPDATE — the look, told once').toHaveLength(1);
+  const control = readCgControl(dataArgOf(updates[0] as string, 'UPDATE'));
+  expect(control?.look).toBe('solo');
+  // Nothing else rides the payload: `from` and `plates` went with the mask that read them.
+  expect(Object.keys(control ?? {})).toEqual(['look']);
 
   /*
     🔴 ORDER — `B-174` REVERSED THIS: the page is told FIRST, then the fills move after the
@@ -1331,12 +1322,16 @@ it('🔴 B-178 — the same source in TWO looks is fitted per look, and the swit
   // The SAME plate, in the SAME box, is now fitted the way the SOLO look authored it.
   const after = mock?.layerState({ channel: 1, layer });
   expect(after?.fill).not.toEqual(after?.clip);
-  // …and the page is told the new mode in the SAME payload as the new look id, so the hole it
-  // punches and the fill the bridge sent can never describe different looks.
+  /*
+    …and the page is told the new LOOK. `single-clock-look-switch` — the resolved MODE no
+    longer rides the payload: it used to, so the page could cut its hole at the same shape,
+    and the page has no holes. The mode's effect is asserted where it now lands in full — on
+    the wire, two lines up: `cover` is exactly the case in which `FILL` and `CLIP` differ.
+  */
   const updates = updateLines(await since(before));
   const control = readCgControl(dataArgOf(updates[0] as string, 'UPDATE'));
   expect(control?.look).toBe('solo');
-  expect(control?.plates?.['live-1']?.mode).toBe('cover');
+  expect(Object.keys(control ?? {})).toEqual(['look']);
 });
 
 it('🔴 B-178 — "nobody said" resolves to the DEFAULT, and the take SAYS SO as `default`', async () => {
@@ -1955,17 +1950,21 @@ it('🔴 B-178 — a PARKED seat must NOT overwrite the punched plate’s facts 
   // A second seat for `live-2`, bound only in the look that is NOT showing.
   expect(await r.swapLiveSource('item-1', 'live-2', 'src-4', 'two')).toEqual({ ok: true });
 
-  const before = (await recvLines()).length;
   // Enter the look whose seat is visited FIRST, so the parked seat writes after it.
   expect(await r.setActiveLook('item-1', 'three')).toEqual({ ok: true });
-  const updates = updateLines(await since(before));
-  const control = readCgControl(dataArgOf(updates[0] as string, 'UPDATE'));
 
-  // 🔴 The PUNCHED look's answer, not the parked look's. Without the guard this reads `cover`.
-  expect(control?.plates?.['live-2']?.mode).toBe('contain');
-  // …and the wire agrees with it: contain keeps FILL === CLIP, so page and wire describe ONE look.
+  /*
+    🔴 **THE PUNCHED LOOK'S ANSWER, NOT THE PARKED LOOK'S — asserted on the WIRE.**
+
+    `single-clock-look-switch` — this used to be read off the page payload's `plates`, because
+    the clobber's consequence was that the page punched at one look's mode while the wire
+    filled at another's. The payload is gone and so is that half of the divergence; what
+    remains is the half that reaches air, and it is the one worth pinning: the ACTIVE look
+    authored `contain`, and `contain` is exactly the case in which `FILL === CLIP`. Without the
+    guard the parked look's `cover` wins and the two differ.
+  */
   const state = mock?.layerState({ channel: 1, layer: layerOf(r, 'live-2') });
-  expect(state?.fill, 'the page and the wire describe ONE look').toEqual(state?.clip);
+  expect(state?.fill, 'the ACTIVE look authored contain, so FILL === CLIP').toEqual(state?.clip);
 });
 
 it('🔴 §8.1 — a PER-LOOK binding moves ONE frame of ONE look, and nothing else', async () => {
@@ -2561,28 +2560,24 @@ it("🔴 B-155 §B — the common path's exact wire sequence: a plain switch, by
     ]),
   ];
   /*
-    🔴 `SKEW-INTERSECT-01` — the sequence gained ONE line, at the END, and it is the whole
-    of the fix on the wire: `narrow → geometry → settle`. The narrowing flip is still first
-    and still carries the look id the fills were derived from; the settling flip is the LAST
-    thing sent, so the page widens onto the entering look's own holes only once every fill
-    has landed.
+    🔴 **`single-clock-look-switch` — the sequence is `flip → geometry`, and NOTHING follows it.**
 
-    ⚠ **The tail between the geometry and the settle is where an emergency verb can land, and
-    the shape of what follows it is the guard**: exactly one `CG … UPDATE`, and nothing else.
-    No `PLAY`, no `CG ADD`, no `MIXER` — nothing that can put content on air or resurrect a
-    seat on a row that a `stop` has just cleared (`B-161`'s shape, which `B-174`'s hold first
-    made reachable). Pinned as a WHOLE-LIST equality so an added command there goes red.
+    `SKEW-INTERSECT-01` had added a second `CG UPDATE` at the END: the switch narrowed the
+    page's mask, moved the fills, then settled the mask onto the entering look's own holes.
+    Both extra steps existed to keep a hole from standing open over a geometry that had not
+    filled it yet, and there are no holes — the page is composited BELOW its plates.
+
+    ⚠ **The whole-list equality is KEPT and is the guard**: the flip is first and carries the
+    look id the fills were derived from, and after the geometry there is nothing at all. No
+    `PLAY`, no `CG ADD`, no second `UPDATE` — a command appearing there goes red.
   */
-  expect(lines).toHaveLength(expected.length + 2);
+  expect(lines).toHaveLength(expected.length + 1);
   const flip = lines[0] as string;
   expect(flip).toMatch(/^CG 1-\d+ UPDATE 0 /);
-  expect(readCgControl(dataArgOf(flip, 'UPDATE'))?.look).toBe('solo');
-  expect(readCgControl(dataArgOf(flip, 'UPDATE'))?.from, 'the narrowing half').toBe('six');
-  expect(lines.slice(1, -1)).toEqual(expected);
-  const settle = lines[lines.length - 1] as string;
-  expect(settle).toMatch(/^CG 1-\d+ UPDATE 0 /);
-  expect(readCgControl(dataArgOf(settle, 'UPDATE'))?.look).toBe('solo');
-  expect(readCgControl(dataArgOf(settle, 'UPDATE'))?.from, 'the widening half').toBeUndefined();
+  const flipControl = readCgControl(dataArgOf(flip, 'UPDATE'));
+  expect(flipControl?.look).toBe('solo');
+  expect(Object.keys(flipControl ?? {}), 'the id alone rides the payload').toEqual(['look']);
+  expect(lines.slice(1)).toEqual(expected);
 });
 
 it('🔴 B-155 §B — a swap arriving MID-SWITCH is serialized after it and resolves the ENTERED look', async () => {

@@ -19,7 +19,7 @@ import { ShellLayoutProvider } from '../src/renderer/hooks/shellLayoutContext.js
  * The frame COUNT is therefore asserted directly: it is the bug.
  */
 
-const BANK: FixedLayerBank = { channel: 1, start: 70, count: 30 };
+const BANK: FixedLayerBank = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 30 };
 const PAGE = '<!doctype html><html><head></head><body></body></html>';
 
 let root: Root | null = null;

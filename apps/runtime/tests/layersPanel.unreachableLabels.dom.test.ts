@@ -49,6 +49,7 @@ afterEach(async () => {
 
 const BANK: FixedLayerBank = {
   channel: 1,
+  low: { start: 1, count: 9 },
   start: 70,
   count: 3,
   aliases: {},
@@ -116,6 +117,7 @@ function stubBridge(reach: Reachability): void {
       // B-108 — the restore-skip report. A healthy session reports NOTHING,
       // which is what this panel renders for every spec not about that surface.
       onRestoreSkips: () => () => undefined,
+      onRestoreMigrations: () => () => undefined,
     },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;

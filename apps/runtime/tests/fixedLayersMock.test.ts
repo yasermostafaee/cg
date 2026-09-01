@@ -16,7 +16,13 @@ import { createMockBridge } from '../src/platform/createRuntimeBridge.js';
  * every slot — never 'empty' (B-094).
  */
 
-const BANK = { channel: 1, start: 70, count: 10, aliases: { '72': 'ساعت' } };
+const BANK = {
+  channel: 1,
+  low: { start: 1, count: 9 },
+  start: 70,
+  count: 10,
+  aliases: { '72': 'ساعت' },
+};
 
 describe('MockRuntime fixed-bank parity (S12)', () => {
   it('config: null before any bank; the applied bank after; schema-valid both ways', async () => {

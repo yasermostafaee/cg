@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import type { Element, Scene } from '@cg/shared-schema';
-import { sceneMaskHoles } from '@cg/shared-schema';
 import { collectLookCarrier } from '../src/live-sources.js';
 
 /**
@@ -118,25 +117,22 @@ function scene(instanceOverrides: Record<string, unknown> = {}): Scene {
   } as unknown as Scene;
 }
 
-const backdropHoles = (s: Scene, view?: { visibility: Record<string, boolean> }) => {
-  return sceneMaskHoles(s, view).get('backdrop') ?? [];
-};
+/*
+ * 🔴 **`single-clock-look-switch` — the three PUNCH assertions are GONE with the punch.**
+ *
+ * They said that a plate inside a hidden composition instance — hidden by its own `visible`,
+ * by an ancestor's, or by the runtime's look switch — punched no hole in the backdrop. The
+ * page cuts no holes now: a plate-bearing package is composited BELOW its plates.
+ *
+ * ⚠ **The other half of this file's title is the half that survives, and it is the one that
+ * was always the harder claim**: a plate the page does not SHOW must nevertheless stay
+ * DECLARED in the carrier, with its per-look rect intact, or the bridge would stop seating a
+ * guest the moment a look hid their box — and the switch back would have nothing to reveal.
+ * `resolveVisibilityOf` itself is pinned directly in `@cg/shared-schema`'s arrangements
+ * suite; what this file tests is that the CARRIER does not follow it.
+ */
 
-describe('a plate inside a HIDDEN composition instance stops punching AND stays declared', () => {
-  it('POSITIVE CONTROL — visible instance: the plate punches at the chain-composed rect', () => {
-    // If the instance transform were ignored, the hole would sit at (320,180,1280,720);
-    // the assertion pins the composed (280,150,640,360).
-    expect(backdropHoles(scene())).toEqual([EXPECTED_HOLE]);
-  });
-
-  it('🔴 the instance AUTHORED invisible ⇒ the plate punches NOTHING', () => {
-    expect(backdropHoles(scene({ visible: false }))).toEqual([]);
-  });
-
-  it('🔴 the instance hidden by a VIEW (the runtime switch path) ⇒ the plate punches NOTHING', () => {
-    expect(backdropHoles(scene(), { visibility: { 'inst-look': false } })).toEqual([]);
-  });
-
+describe('a plate inside a HIDDEN composition instance STAYS DECLARED', () => {
   it('🔴 …and in BOTH hidden cases the source STAYS DECLARED, with its per-look rect intact', () => {
     for (const s of [scene({ visible: false }), scene()]) {
       const carrier = collectLookCarrier(s);
@@ -145,11 +141,15 @@ describe('a plate inside a HIDDEN composition instance stops punching AND stays 
     }
   });
 
-  it('the PLATE own authored visible suppresses too — the third input axis, beside the two ancestor ones', () => {
+  it('🔴 …and a plate hidden by its OWN `visible` stays declared as well', () => {
+    // The third input axis, beside the two ancestor ones. Same claim, one level in: the
+    // carrier is what the bridge seats from, and it must not follow the page's visibility.
     const s = scene();
     const comps = (s as unknown as { compositions: (typeof LOOK_COMP)[] }).compositions;
     const plate = comps[0]?.layers[0]?.children[0] as unknown as { visible: boolean };
     plate.visible = false;
-    expect(backdropHoles(s)).toEqual([]);
+    const carrier = collectLookCarrier(s);
+    expect(carrier?.sources.map((d) => d.sourceId)).toEqual(['guest-1']);
+    expect(carrier?.looks[0]?.rects['guest-1']).toEqual(EXPECTED_HOLE);
   });
 });

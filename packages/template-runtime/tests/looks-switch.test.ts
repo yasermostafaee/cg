@@ -10,8 +10,16 @@ import { createRuntime } from '../src/runtime.js';
  * Six sources; a 6-box look (3×2), a solo look, and two single-purpose looks that differ
  * from the 6-box CELL 1 on exactly one axis each — so a one-axis-blind reader cannot pass
  * (D.4: three defects in four sessions came from one-axis suites). Every switch test
- * asserts BOTH halves: where the plates are (instance visibility; nothing inside moved)
- * AND where the holes are (the backdrop's mask).
+ * asserts BOTH halves: which look is SHOWN (instance visibility; nothing inside moved) and
+ * WHERE ITS PLATES ARE.
+ *
+ * 🔴 **`single-clock-look-switch` — the second half used to be read off the backdrop's MASK,
+ * and is now read off the PLATE ELEMENTS themselves.** The page no longer punches holes: a
+ * plate-bearing package is composited BELOW its plates, so where a plate IS is the fact that
+ * matters, and it is the same fact `collectLiveSources` reports to the bridge for its
+ * `MIXER FILL`. Every rect asserted below is unchanged — the fixture's instances are at
+ * identity, so a plate's own box and the hole that used to be cut for it are the same
+ * numbers. The D.4 one-axis discrimination therefore survives intact.
  */
 
 const baseElProps = { opacity: 1, visible: true, locked: false };
@@ -136,16 +144,25 @@ function boot(sceneOverride?: Scene): {
   return { runtime, root: host.querySelector('.cg-stage') as HTMLElement };
 }
 
-/** ALL holes punched into the backdrop, sorted (y, then x) for stable comparison. */
-function holes(root: HTMLElement): { x: number; y: number; w: number; h: number }[] {
-  const node = root.querySelector<HTMLElement>('[data-cg-element-id="backdrop"]');
-  const svg = decodeURIComponent(node?.style.getPropertyValue('mask-image') ?? '');
-  if (svg === '') return [];
-  const num = (rect: string, k: string): number =>
-    Number(new RegExp(`${k}='(-?[\\d.]+)'`).exec(rect)?.[1] ?? NaN);
-  return [...svg.matchAll(/<rect [^>]*fill='#000'[^>]*\/>/g)]
-    .map((m) => m[0])
-    .map((r) => ({ x: num(r, 'x'), y: num(r, 'y'), w: num(r, 'width'), h: num(r, 'height') }))
+/**
+ * Every plate the ACTIVE look actually shows, sorted (y, then x) for stable comparison.
+ *
+ * ⚠ **Scoped to the visible instances, which is what makes it a switch assertion.** A hidden
+ * look's plates are still in the DOM — the switch is a visibility flip, not a rebuild — so a
+ * helper that read every `video-placeholder` in the tree would report the same six rects
+ * whatever look was on, and every test below would pass without the switch working at all.
+ */
+function plates(root: HTMLElement): { x: number; y: number; w: number; h: number }[] {
+  const px = (v: string): number => Number(v.replace('px', ''));
+  return [...root.querySelectorAll<HTMLElement>('[data-cg-element-id]')]
+    .filter((n) => /-p\d+$/.test(n.dataset['cgElementId'] ?? ''))
+    .filter((n) => n.closest<HTMLElement>('[data-cg-composition-id]')?.style.display !== 'none')
+    .map((n) => ({
+      x: px(n.style.left),
+      y: px(n.style.top),
+      w: px(n.style.width),
+      h: px(n.style.height),
+    }))
     .sort((a, b) => a.y - b.y || a.x - b.x);
 }
 
@@ -154,7 +171,7 @@ function displayOf(root: HTMLElement, id: string): string {
 }
 
 const INSTANCES = ['inst-six', 'inst-pair', 'inst-big', 'inst-solo'];
-const SIX_HOLES = GRID.map((c) => ({ x: c.x, y: c.y, w: 640, h: 540 }));
+const SIX_PLATES = GRID.map((c) => ({ x: c.x, y: c.y, w: 640, h: 540 }));
 
 describe('boot — a fresh build enters the DEFAULT look', () => {
   it('exactly one look visible from the start: six shown, the other three display:none', () => {
@@ -168,7 +185,7 @@ describe('boot — a fresh build enters the DEFAULT look', () => {
 
   it('only the ACTIVE look punches: exactly the six grid holes, none from the hidden looks', () => {
     const { root } = boot();
-    expect(holes(root)).toEqual(SIX_HOLES);
+    expect(plates(root)).toEqual(SIX_PLATES);
   });
 });
 
@@ -193,7 +210,7 @@ describe('the switch — a visibility flip + re-punch, and nothing else', () => 
     expect(runtime.setActiveLook('look-solo')).toBe(true);
 
     expect(runtime.activeLookId()).toBe('look-solo');
-    expect(holes(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
+    expect(plates(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
     expect(displayOf(root, 'inst-solo')).not.toBe('none');
     expect(displayOf(root, 'inst-six')).toBe('none');
     expect(geomOf()).toEqual(geomBefore);
@@ -203,14 +220,14 @@ describe('the switch — a visibility flip + re-punch, and nothing else', () => 
 
   it('🔴 solo-and-back RESTORES EXACTLY — holes, visibility AND the whole subtree, byte-identical', () => {
     const { runtime, root } = boot();
-    const holesBefore = holes(root);
+    const platesBefore = plates(root);
     const displaysBefore = INSTANCES.map((id) => displayOf(root, id));
     const sixBefore = root.querySelector('[data-cg-element-id="inst-six"]')?.innerHTML;
 
     runtime.setActiveLook('look-solo');
     runtime.setActiveLook('look-six');
 
-    expect(holes(root)).toEqual(holesBefore);
+    expect(plates(root)).toEqual(platesBefore);
     expect(INSTANCES.map((id) => displayOf(root, id))).toEqual(displaysBefore);
     expect(runtime.activeLookId()).toBe('look-six');
     // The transient masks the solo plate punched into six's hidden plates are CLEARED
@@ -220,10 +237,10 @@ describe('the switch — a visibility flip + re-punch, and nothing else', () => 
 
   it('an UNKNOWN look id returns false and changes nothing', () => {
     const { runtime, root } = boot();
-    const before = holes(root);
+    const before = plates(root);
     expect(runtime.setActiveLook('look-nope')).toBe(false);
     expect(runtime.activeLookId()).toBe('look-six');
-    expect(holes(root)).toEqual(before);
+    expect(plates(root)).toEqual(before);
   });
 
   it('a scene with NO multi-frame group: setActiveLook is a refused no-op, activeLookId undefined', () => {
@@ -241,7 +258,7 @@ describe('🔴 D.4 axes — the SAME source, one axis at a time (vs the 6-box ce
   it('MOVED only — position changes, size does not', () => {
     const { runtime, root } = boot();
     runtime.setActiveLook('look-pair');
-    const [hole] = holes(root);
+    const [hole] = plates(root);
     expect(hole).toEqual({ x: 640, y: 0, w: 640, h: 540 });
     expect({ w: hole?.w, h: hole?.h }).toEqual({ w: cell1.w, h: cell1.h });
   });
@@ -249,7 +266,7 @@ describe('🔴 D.4 axes — the SAME source, one axis at a time (vs the 6-box ce
   it('RESIZED only — size changes, position does not', () => {
     const { runtime, root } = boot();
     runtime.setActiveLook('look-big');
-    const [hole] = holes(root);
+    const [hole] = plates(root);
     expect(hole).toEqual({ x: 0, y: 0, w: 1280, h: 1080 });
     expect({ x: hole?.x, y: hole?.y }).toEqual({ x: cell1.x, y: cell1.y });
   });
@@ -257,7 +274,7 @@ describe('🔴 D.4 axes — the SAME source, one axis at a time (vs the 6-box ce
   it('BOTH — position and size change together', () => {
     const { runtime, root } = boot();
     runtime.setActiveLook('look-solo');
-    expect(holes(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
+    expect(plates(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
   });
 });
 
@@ -273,13 +290,13 @@ describe('🔴 tasks.md 6.7 — the BRIDGE→PAGE control payload switches the l
 
   it('an update carrying the look id moves the holes — POSITION and SIZE together', async () => {
     const { runtime, root } = boot();
-    expect(holes(root)).toEqual(SIX_HOLES);
+    expect(plates(root)).toEqual(SIX_PLATES);
 
     await runtime.update(withCgControl({}, { look: 'look-solo' }) as Record<string, never>);
 
     expect(runtime.activeLookId()).toBe('look-solo');
     // Both components, in one assertion — a rect is never checked one axis at a time.
-    expect(holes(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
+    expect(plates(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
     expect(displayOf(root, 'inst-solo')).not.toBe('none');
     expect(displayOf(root, 'inst-six')).toBe('none');
   });
@@ -288,13 +305,13 @@ describe('🔴 tasks.md 6.7 — the BRIDGE→PAGE control payload switches the l
     const { runtime, root } = boot();
     await runtime.update(withCgControl({}, { look: 'look-pair' }) as Record<string, never>);
     // vs the 6-box cell 1 (0,0,640,540): x changed, w/h did not.
-    expect(holes(root)).toEqual([{ x: 640, y: 0, w: 640, h: 540 }]);
+    expect(plates(root)).toEqual([{ x: 640, y: 0, w: 640, h: 540 }]);
   });
 
   it('AXIS resized-only — the hole resizes in place', async () => {
     const { runtime, root } = boot();
     await runtime.update(withCgControl({}, { look: 'look-big' }) as Record<string, never>);
-    expect(holes(root)).toEqual([{ x: 0, y: 0, w: 1280, h: 1080 }]);
+    expect(plates(root)).toEqual([{ x: 0, y: 0, w: 1280, h: 1080 }]);
   });
 
   it('🔴 a DISJOINT switch — the outgoing look shares NO source with the incoming one', async () => {
@@ -319,14 +336,14 @@ describe('🔴 tasks.md 6.7 — the BRIDGE→PAGE control payload switches the l
     const { runtime, root } = boot(s);
 
     await runtime.update(withCgControl({}, { look: 'look-pair' }) as Record<string, never>);
-    expect(holes(root)).toEqual([{ x: 640, y: 0, w: 640, h: 540 }]);
+    expect(plates(root)).toEqual([{ x: 640, y: 0, w: 640, h: 540 }]);
 
     await runtime.update(withCgControl({}, { look: 'look-fifth' }) as Record<string, never>);
 
     // Exactly ONE hole, and it is the incoming look's — the outgoing plate's hole is gone
     // rather than lingering beside it.
     expect(runtime.activeLookId()).toBe('look-fifth');
-    expect(holes(root)).toEqual([{ x: 100, y: 60, w: 800, h: 450 }]);
+    expect(plates(root)).toEqual([{ x: 100, y: 60, w: 800, h: 450 }]);
     expect(displayOf(root, 'inst-pair')).toBe('none');
     expect(displayOf(root, 'inst-fifth')).not.toBe('none');
   });
@@ -334,12 +351,12 @@ describe('🔴 tasks.md 6.7 — the BRIDGE→PAGE control payload switches the l
   it('a payload with NO look id changes nothing about the look', async () => {
     const { runtime, root } = boot();
     await runtime.update(withCgControl({}, { look: 'look-solo' }) as Record<string, never>);
-    const before = holes(root);
+    const before = plates(root);
 
     await runtime.update({} as Record<string, never>);
 
     expect(runtime.activeLookId()).toBe('look-solo');
-    expect(holes(root)).toEqual(before);
+    expect(plates(root)).toEqual(before);
   });
 
   it('an UNKNOWN look id leaves the current look standing', async () => {
@@ -351,7 +368,7 @@ describe('🔴 tasks.md 6.7 — the BRIDGE→PAGE control payload switches the l
     await runtime.update(withCgControl({}, { look: 'no-such-look' }) as Record<string, never>);
 
     expect(runtime.activeLookId()).toBe('look-solo');
-    expect(holes(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
+    expect(plates(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
   });
 
   it('🔴 the reserved key is never applied as a FIELD VALUE, and travels beside real fields', async () => {
@@ -365,7 +382,7 @@ describe('🔴 tasks.md 6.7 — the BRIDGE→PAGE control payload switches the l
     );
 
     expect(runtime.activeLookId()).toBe('look-solo');
-    expect(holes(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
+    expect(plates(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
     // Nothing anywhere in the rendered stage names the reserved key.
     expect(root.innerHTML).not.toContain(CG_CONTROL_KEY);
   });
@@ -390,7 +407,7 @@ describe('🔴 the PLAY path honours the control payload too — the re-take sea
     expect(runtime.activeLookId(), 'the payload must win over the authored default').toBe(
       'look-solo',
     );
-    expect(holes(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
+    expect(plates(root)).toEqual([{ x: 320, y: 180, w: 1280, h: 720 }]);
     expect(displayOf(root, 'inst-solo')).not.toBe('none');
     expect(displayOf(root, 'inst-six')).toBe('none');
   });
@@ -401,7 +418,7 @@ describe('🔴 the PLAY path honours the control payload too — the re-take sea
     await runtime.play({} as never);
 
     expect(runtime.activeLookId()).toBe('look-six');
-    expect(holes(root)).toEqual(SIX_HOLES);
+    expect(plates(root)).toEqual(SIX_PLATES);
   });
 
   it('🔴 the reserved key never lands in the field values on the play path', async () => {
@@ -422,85 +439,16 @@ describe('🔴 the PLAY path honours the control payload too — the re-take sea
   });
 });
 
-/**
- * 🔴 **`SKEW-INTERSECT-01` — the page half of the transition mask.**
+/*
+ * 🔴 **`single-clock-look-switch` — the transition-mask block that stood here is GONE.**
  *
- * The bridge tells the page the entering look TWICE: once with `from` while the fills are
- * still moving, and once without it when they are in place. The first punches
- * `outgoing ∩ entering` so no hole can be open over a geometry that does not fill it; the
- * second is an ordinary re-punch. Everything here is asserted through `update()` — the real
- * door the bridge uses — rather than through a test-only seam.
+ * It pinned the page half of `SKEW-INTERSECT-01`: while `from` was present the page punched
+ * `outgoing ∩ entering`, the settling tell widened it, and the narrowing was never sticky.
+ * All three properties were about a MASK, and the page has none: a plate-bearing package is
+ * composited BELOW its plates. `CgControl.from` went with it.
+ *
+ * ⚠ The one claim in that block that was NOT about the mask — that the look is FULLY entered
+ * during a switch, so the page is never left half-way — is what every test above now asserts
+ * directly: the entering look’s instance is shown, the outgoing one is hidden, and the plates
+ * reported are the entering look’s own.
  */
-describe('SKEW-INTERSECT-01 — the transition mask on the page', () => {
-  /** `look-six`'s cells that lie inside `look-big`'s 1280×1080 plate. */
-  const SIX_IN_BIG = SIX_HOLES.filter((h) => h.x + h.w <= 1280);
-  const BIG_HOLE = [{ x: 0, y: 0, w: 1280, h: 1080 }];
-
-  it('🔴 punches the INTERSECTION, not the entering look, while `from` is present', async () => {
-    const { runtime, root } = boot();
-    await runtime.update(
-      withCgControl({}, { look: 'look-big', from: 'look-six' }) as Record<string, never>,
-    );
-    // Four cells, not one 1280×1080 hole. The two cells `look-big` does not reach are CLOSED
-    // rather than left open: the outgoing fills covered them and the entering ones do not.
-    expect(holes(root)).toEqual(SIX_IN_BIG);
-    expect(holes(root)).not.toEqual(BIG_HOLE);
-  });
-
-  it('the look is fully ENTERED during the transition — only the mask is conservative', async () => {
-    const { runtime, root } = boot();
-    await runtime.update(
-      withCgControl({}, { look: 'look-big', from: 'look-six' }) as Record<string, never>,
-    );
-    // The instance flip, the active id and the media park all follow the ENTERING look. A
-    // half-entered look would be a second answer to "which look is on", which §14 forbids.
-    expect(runtime.activeLookId()).toBe('look-big');
-    expect(displayOf(root, 'inst-big')).not.toBe('none');
-    expect(displayOf(root, 'inst-six')).toBe('none');
-  });
-
-  it('the SETTLING tell — the same look without `from` — widens to its own holes', async () => {
-    const { runtime, root } = boot();
-    await runtime.update(
-      withCgControl({}, { look: 'look-big', from: 'look-six' }) as Record<string, never>,
-    );
-    await runtime.update(withCgControl({}, { look: 'look-big' }) as Record<string, never>);
-    expect(holes(root)).toEqual(BIG_HOLE);
-  });
-
-  it('🔴 the narrowing is NEVER STICKY: any later re-punch is a full one', async () => {
-    /*
-      The transition mask is a SUBSET of the look's own holes, so a page that RETAINED it
-      would show less picture than the look asks for with nothing scheduled to widen it — and
-      the next innocent field update would re-assert it rather than repair it. `update()` with
-      no control data re-punches the stored view; the stored view must never carry `from`.
-    */
-    const { runtime, root } = boot();
-    await runtime.update(
-      withCgControl({}, { look: 'look-big', from: 'look-six' }) as Record<string, never>,
-    );
-    await runtime.update({ headline: 'Tehran' } as Record<string, never>);
-    expect(holes(root)).toEqual(BIG_HOLE);
-  });
-
-  it('a `from` that names no second geometry states no transition', async () => {
-    const { runtime, root } = boot();
-    // The look being entered, and a look this template does not have. Both mean "nothing to
-    // intersect with", which is the entering look's own holes — never an empty mask.
-    await runtime.update(
-      withCgControl({}, { look: 'look-big', from: 'look-big' }) as Record<string, never>,
-    );
-    expect(holes(root)).toEqual(BIG_HOLE);
-    await runtime.update(withCgControl({}, { look: 'look-six' }) as Record<string, never>);
-    await runtime.update(
-      withCgControl({}, { look: 'look-big', from: 'no-such-look' }) as Record<string, never>,
-    );
-    expect(holes(root)).toEqual(BIG_HOLE);
-  });
-
-  it('a TAKE ignores `from` — there is no outgoing geometry to catch up with', async () => {
-    const { runtime, root } = boot();
-    await runtime.play(withCgControl({}, { look: 'look-big', from: 'look-six' }) as never);
-    expect(holes(root)).toEqual(BIG_HOLE);
-  });
-});

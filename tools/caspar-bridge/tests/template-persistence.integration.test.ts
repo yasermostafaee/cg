@@ -36,7 +36,7 @@ let foreignTransport: AmcpTransport | null = null;
 const SWEEP_MS = 150;
 const STALE_MS = 800;
 const HTML = '<!doctype html><html><body>پایین‌ثلث</body></html>';
-const BANK = { channel: 1, start: 70, count: 4 };
+const BANK = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 };
 const FIXED_SLOTS = [70, 71, 72, 73].map((layer) => ({ channel: 1, layer }));
 
 afterEach(async () => {
@@ -244,6 +244,7 @@ it('R-028 / C-015 — a retained item whose slot is now RESERVED is skipped at r
     // B-108 — named, so the SPA can tell the operator this row is GONE (a reserved
     // playout coordinate yields no layer of ours) rather than letting it vanish.
     skipped: [{ itemId: 'item-old', reason: 'no-layer' }],
+    migrated: [],
   });
   expect(r.stackSnapshot().some((i) => i.itemId === 'item-old')).toBe(false);
   expect(mock.lastCgAdd({ channel: 1, layer: 61 })).toBeUndefined();
@@ -254,6 +255,7 @@ it('R-028 (2.3) — installing a bank LIVE with pre-hidden layers fails closed o
   // BEFORE the session is healthy the tap has never heard: unknown → refuse.
   const blind = r.setFixedLayers({
     channel: 1,
+    low: { start: 1, count: 9 },
     start: 70,
     count: 4,
     visibility: { '71': false },
@@ -267,6 +269,7 @@ it('R-028 (2.3) — installing a bank LIVE with pre-hidden layers fails closed o
   await waitFor(() => {
     const probe = r.setFixedLayers({
       channel: 1,
+      low: { start: 1, count: 9 },
       start: 70,
       count: 4,
       visibility: { '71': false },
@@ -283,7 +286,7 @@ it('R-028 (2.5) — a candidate ceiling intersecting the reserved playout range 
     createBridge({
       port: 0,
       connection: singleServer(mock.amcpPort, oscPort),
-      fixedLayers: { channel: 1, start: 70, count: 10 },
+      fixedLayers: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 },
       reservedLayers: { ranges: [{ from: 75, to: 84 }] },
     }),
   ).rejects.toThrow(/70–79.*75–84|75–84.*70–79/s);

@@ -75,6 +75,13 @@ interface Props {
    * handle that renumbers is worse than none.
    */
   bankPosition: number;
+  /**
+   * `single-clock-look-switch` — which half of the bank this row belongs to, resolved by
+   * the PANEL through the canonical `isLowBankLayer` (the row is handed no bank of its own,
+   * exactly like `bankPosition`). The template picker refuses the other half's packages with
+   * a reason, so the operator meets `wrong-bank` on the surface rather than at the bridge.
+   */
+  acceptsBank: 'low' | 'high';
   selected: boolean;
   dirty: boolean;
   /**
@@ -265,6 +272,7 @@ export function LayerRow({
   template,
   displayPosition,
   bankPosition,
+  acceptsBank,
   selected,
   dirty,
   rehearsing,
@@ -425,7 +433,7 @@ export function LayerRow({
      * with two sources for the template, not two loads sharing a button.
      */
     load: async () => {
-      const chosen = await pickTemplate(`Load onto ${rowName}`);
+      const chosen = await pickTemplate(`Load onto ${rowName}`, acceptsBank);
       // The operator's own dismissal: not a success, not a refusal to report.
       if (chosen === null) return { accepted: false, cancelled: true };
       if (chosen !== 'import') return loadTemplateOntoFixedSlot(coord, chosen);

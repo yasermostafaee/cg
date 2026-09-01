@@ -101,14 +101,16 @@ it('T16 — a valid bank: fixedSlots() matches; a foreign producer on a bank lay
   bridge = await createBridge({
     port: 0,
     connection: singleServer(mock.amcpPort, oscPort),
-    fixedLayers: { channel: 1, start: 70, count: 10 },
+    fixedLayers: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 },
     runtimeTuning: { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS },
   });
   await bridge.runtime.whenServerHealthy(HEALTH_MS);
 
   // The declared bank, verbatim, from the LayerManager via the runtime.
   const slots = bridge.runtime.fixedSlots();
-  expect(slots).toHaveLength(10);
+  // Ten operator rows, then the nine BED rows the bank also declares
+  // (`single-clock-look-switch`). Both halves are fenced identically.
+  expect(slots).toHaveLength(19);
   expect(slots[0]).toEqual({ channel: 1, layer: 70 });
   expect(slots[9]).toEqual({ channel: 1, layer: 79 });
 
@@ -151,7 +153,7 @@ it('T17 — a conflicting bank throws BEFORE binding, and no port is left listen
       port: wsPort,
       connection: singleServer(mock.amcpPort, oscPort),
       // 65–74 overlaps the 'custom' 60–69 dynamic range → refused at boot.
-      fixedLayers: { channel: 1, start: 65, count: 10 },
+      fixedLayers: { channel: 1, low: { start: 1, count: 9 }, start: 65, count: 10 },
     }),
   ).rejects.toThrow(/overlaps/);
 

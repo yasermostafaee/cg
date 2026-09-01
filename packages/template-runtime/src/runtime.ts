@@ -15,9 +15,6 @@ import {
   type NestedFieldValues,
   type Playout,
   type Scene,
-  sceneMaskHoles,
-  type PlateFitFacts,
-  type PlateFits,
   type ArrangementView,
   defaultLookOf,
   lookGroupOf,
@@ -31,8 +28,7 @@ import {
   type AnimatedElement,
 } from './animation-applier.js';
 import { applyScopedFieldValues, isNamespace, type FieldDocLite } from './bindings.js';
-import { applyArrangementToNodes, liveArrangementView } from './arrangement-view.js';
-import { repunchLiveSourceHoles } from './live-source-punch.js';
+import { applyArrangementToNodes } from './arrangement-view.js';
 import { LookMediaPark } from './look-media.js';
 
 /**
@@ -482,25 +478,16 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     // them — one source of truth for the geometry, which is the same rule that keeps the
     // hole the page punches and the hole the bridge fills a single computation.
     applyArrangementToNodes(scene, built.elementMap, view, arrangementView);
+    arrangementView = view;
     /*
-      🔴 `SKEW-INTERSECT-01` — **THE TRANSITION MASK IS NEVER RETAINED.** The stored view is
-      the one every later re-punch re-applies (`repunch(arrangementView)` is what an ordinary
-      `update()` calls), and `transitionFrom` narrows the mask to `outgoing ∩ entering` — a
-      SUBSET of what this look should punch. Retained, a switch would leave the page showing
-      less picture than the look asks for, indefinitely, with nothing scheduled to widen it,
-      and the next innocent field update would re-assert it rather than repair it.
-
-      So it is one-shot by construction: in force for exactly the punch below, gone from the
-      state the moment that punch is done. The bridge's settling tell then produces the same
-      mask a re-punch from any other cause would.
+      🔴 **`single-clock-look-switch` — THE RE-PUNCH IS GONE, and `liveArrangementView` with
+      it.** The page no longer cuts holes in itself: a plate-bearing package is composited
+      BELOW its plates, so there is nothing of the page in front of a picture to remove. What
+      REMAINS in this function is everything else it always did — the arrangement geometry is
+      still applied to the nodes above, and `B-150`'s media park still follows from the same
+      `view` below, which is why the function itself survives rather than being deleted with
+      the punch it used to end in.
     */
-    arrangementView =
-      view?.transitionFrom === undefined ? view : { ...view, transitionFrom: undefined };
-    const live = liveArrangementView(scene, built.elementMap, view);
-    // `C-028` — the third input, and the one the page cannot derive. `plateFits` is
-    // whatever the bridge last told us (see `applyPlateFits`); `undefined` until it has
-    // spoken, which `sceneMaskHoles` answers from the scene's own statement.
-    repunchLiveSourceHoles(built.punchTargets, sceneMaskHoles(scene, live, plateFits));
     /*
       🔴 `B-150` — THE MEDIA PARK IS DERIVED FROM THE SAME `view`, HERE, and not at
       `applyLook`. Both statements of visibility flow through this one function — the look
@@ -529,43 +516,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   };
   let arrangementView: ArrangementView | undefined;
 
-  /**
-   * ⭐ `C-028` — **the fit facts the bridge has told this page, or `undefined`.**
-   *
-   * 🔴 The page CANNOT derive these. The fitted rect depends on the assigned source's
-   * aspect (an installation fact `D-147` puts above the author's declaration) and on the
-   * operator's mode override — neither of which is in the scene. Deriving them here from
-   * the element while the bridge derives them from the assigned source is `B-149`: two
-   * machines, two aspects, ONE hole, and a live layer open where no picture is.
-   *
-   * `undefined` is a real state, not a missing value: a Designer preview, a rehearsal
-   * frame and a freshly-built page have never been told, and `sceneMaskHoles` answers
-   * them from the scene's own statement instead.
-   */
-  let plateFits: PlateFits | undefined;
+  /*
+    🔴 **`single-clock-look-switch` — `plateFits` and `applyPlateFits` ARE GONE.**
 
-  /**
-   * Record what a control payload said about plate fits, and answer whether anything
-   * CHANGED — so a caller re-punches only when there is something to re-punch.
-   *
-   * ⚠ MERGED, never replaced. A payload carries the plates the bridge resolved for THIS
-   * take or THIS look; a plate absent from it is one this payload says nothing about, not
-   * one whose fit has been retracted. Replacing would drop a parked look's plates on
-   * every update and re-punch their holes at the box.
-   */
-  const applyPlateFits = (plates: Record<string, PlateFitFacts> | undefined): boolean => {
-    if (plates === undefined) return false;
-    const next = new Map(plateFits);
-    let changed = false;
-    for (const [plateId, fit] of Object.entries(plates)) {
-      const prev = next.get(plateId);
-      if (prev?.aspect === fit.aspect && prev.mode === fit.mode) continue;
-      next.set(plateId, fit);
-      changed = true;
-    }
-    if (changed) plateFits = next;
-    return changed;
-  };
+    `C-028` had the bridge send each plate's resolved aspect and mode so the PAGE could
+    compute the same fit its holes had to be cut at. The page has no holes now, and the only
+    `fitPictureToBox` that reaches air is the one behind the bridge's `MIXER FILL` / `CLIP`.
+    The rule the payload existed to serve — the hole and the fill are ONE computation — is
+    kept by there being one computation left, rather than by two that agree.
+  */
 
   // ── LOOKS (`design.md` §14, phase 1D) — the look-state driver ─────────────────────────
   //
@@ -597,7 +556,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     for (const l of lookGroup?.looks ?? []) visibility[l.instanceId] = l.id === lookId;
     return visibility;
   };
-  const applyLook = (look: Look, from?: string | undefined): void => {
+  const applyLook = (look: Look): void => {
     if (lookGroup === undefined) return;
     currentLookId = look.id;
     /*
@@ -612,16 +571,9 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       second geometry and is dropped — the mask is then the entering look's own, which is
       what "no transition" means.
     */
-    const outgoing =
-      from === undefined || from === look.id || !lookGroup.looks.some((l) => l.id === from)
-        ? undefined
-        : visibilityOfLook(from);
     // The park follows from INSIDE `repunch`, off this same `visibility` map — see the note
     // there for why it cannot be done at this line without acquiring a second answer.
-    repunch({
-      visibility: visibilityOfLook(look.id),
-      ...(outgoing === undefined ? {} : { transitionFrom: outgoing }),
-    });
+    repunch({ visibility: visibilityOfLook(look.id) });
   };
   /**
    * `tasks.md` 6.7 — ENTER A LOOK BY ID. **The one implementation, two entry points.**
@@ -637,11 +589,11 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * short-circuited — a re-punch is how the page RECOVERS if a previous one was lost, and the
    * bridge re-asserts the look on a re-take for exactly that reason.
    */
-  const enterLook = (lookId: string, from?: string | undefined): boolean => {
+  const enterLook = (lookId: string): boolean => {
     if (lookGroup === undefined) return false;
     const look = lookGroup.looks.find((l) => l.id === lookId);
     if (look === undefined) return false;
-    applyLook(look, from);
+    applyLook(look);
     return true;
   };
   {
@@ -2470,28 +2422,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         implementation, three entry points, so the page cannot grow a second answer to "which
         look is active".
       */
-      /*
-        `C-028` — THE FIT FACTS ARE RECORDED BEFORE THE LOOK IS ENTERED, so the re-punch
-        `enterLook` performs already has them. Recorded FIRST and re-punched at most once:
-        `enterLook` re-punches on its own, and a plain `repunch` here as well would paint
-        the holes twice — work that can only be seen if it goes wrong.
-
-        🔴 This is the payload that closes the build-time window. A fresh build punched
-        from the SCENE's statement (the author's `expectedAspect`), because that is all it
-        had; the bridge's `CG ADD` carries the ASSIGNED source's aspect, and this is where
-        the page learns it. The window is entirely inside the bridge's own
-        `ADD → (muted) → PLAY` sequence, so nothing wrong reaches air — the same shape the
-        active look already has.
-      */
-      const fitsChanged = applyPlateFits(control?.plates);
-      /*
-        ⚠ `SKEW-INTERSECT-01` — deliberately WITHOUT `control.from`. The transition mask exists
-        to cover the frames in which the fills have not caught up with the holes; a take has no
-        outgoing geometry on screen to catch up with, and the bridge does not send `from` here.
-        Honouring it anyway would open a graphic on a SUBSET of its own look's holes.
-      */
       if (control?.look !== undefined) enterLook(control.look);
-      else if (fitsChanged) repunch(arrangementView);
       bus.emit('play.end');
     },
 
@@ -2541,12 +2472,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         can only be seen if it goes wrong. When the payload names no look, or names one this
         template does not have, the ordinary re-punch is what happens, exactly as before.
       */
-      // `C-028` — recorded BEFORE the dispatch below, so whichever re-punch runs sees the
-      // new facts. `applyPlateFits` returns whether anything changed but the answer is
-      // unused here: `update()` re-punches unconditionally when no look is named, and a
-      // second condition would only be able to SUPPRESS a punch this method already owes.
-      applyPlateFits(control?.plates);
-      if (control?.look === undefined || !enterLook(control.look, control.from)) {
+      if (control?.look === undefined || !enterLook(control.look)) {
         repunch(arrangementView);
       }
       bus.emit('update');

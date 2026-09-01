@@ -28,7 +28,7 @@ let runtime: CasparRuntime | null = null;
 const SWEEP_MS = 150;
 const STALE_MS = 800;
 const HTML = '<!doctype html><html><body>served</body></html>';
-const BANK = { channel: 1, start: 70, count: 4 };
+const BANK = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 };
 const FIXED_SLOTS = [
   { channel: 1, layer: 70 },
   { channel: 1, layer: 71 },

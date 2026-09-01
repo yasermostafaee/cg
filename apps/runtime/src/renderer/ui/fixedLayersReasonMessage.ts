@@ -33,6 +33,8 @@ const MESSAGES = {
     'That row is occupied — remove its template first (removal implies clear), then untick.',
   'untick-unknown':
     'That row’s occupancy cannot be verified right now — unknown is never treated as empty, so the row cannot be hidden.',
+  'banks-overlap':
+    'The graphics-bed rows and the operator’s candidate layers claim a layer in common — a layer cannot be both, because one composites above the live plates and the other below them. Edit the bridge’s fixed-layers config and restart it.',
 } satisfies Record<FixedLayersSetConfigReason, string>;
 
 /**

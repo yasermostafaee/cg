@@ -282,7 +282,7 @@ it('re-asserts every declared row’s volume at startup — a bridge that died m
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 60, fixedBank: { channel: 1, start: 70, count: 2 } },
+    { sweepMs: 60, fixedBank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 2 } },
   );
   runtime.start();
   await runtime.startServing();
@@ -355,7 +355,7 @@ it('mutes and restores EACH of several rehearsing rows independently', async () 
 it('the startup re-assert covers EVERY declared row, with no rehearse bookkeeping at all', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  const bank = { channel: 1, start: 70, count: 6 };
+  const bank = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 6 };
   const layers = Array.from({ length: bank.count }, (_, i) => bank.start + i);
   // Every row muted, and nothing anywhere recording that — the state a crash
   // mid-multi-row-rehearse leaves behind. Mixer state is CHANNEL state and

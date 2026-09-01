@@ -1,11 +1,5 @@
-import {
-  followsComposition,
-  liveSourceMask,
-  pathVisualBBox,
-  sceneMaskHoles,
-} from '@cg/shared-schema';
+import { followsComposition, pathVisualBBox } from '@cg/shared-schema';
 import type {
-  MaskHole,
   AnchorPoint,
   BoxStyle,
   ClockElement,
@@ -32,7 +26,6 @@ import type {
 } from '@cg/shared-schema';
 import type { BuildSceneResult, FieldScope, LifecycleSource, RenderMode } from './types.js';
 import { clockInitialText } from './clock-driver.js';
-import { applyLiveSourceMask, type PunchTarget } from './live-source-punch.js';
 import { makeSequenceItemNode } from './sequence-driver.js';
 import { TEXT_NODE_DATASET } from './text-render-node.js';
 import { populateTickerStaticRow } from './ticker-driver.js';
@@ -79,31 +72,6 @@ interface BuildCtx {
    * surface above it suppressed.
    */
   paintEditorBackdrop: boolean;
-  /**
-   * ⭐ 1.5c / §9a-Z — the z-order punch, computed ONCE for the whole scene by
-   * {@link sceneMaskHoles} and read here per element. Keyed by the flattener's
-   * composition-instance PATH, not by the bare element id: the same authored child
-   * inside a composition instanced twice has two DOM copies at two different scene
-   * positions, and one hole cannot be right for both.
-   *
-   * Carried on the ctx for the same reason `mode` and `paintEditorBackdrop` are — a
-   * nested instance inherits it by construction, so an element three compositions
-   * deep is punched by the same map as one at the root.
-   */
-  masks: ReadonlyMap<string, MaskHole[]>;
-  /** The instance path this scope renders under — `''` at the root, `id/` per level. */
-  maskKeyPrefix: string;
-  /**
-   * `tasks.md` 4.3 — every built element, by mask key, so the RE-PUNCH pass can reach the
-   * live nodes without rebuilding the scene.
-   *
-   * 🔴 **EVERY element is registered, not only the ones punched at build time.** An element
-   * that carries no hole today can acquire one when a plate moves over it, an arrangement
-   * changes, or a `visible` binding reveals a plate above it — and one registered only when
-   * it was punched is one the re-punch can never reach. The map is also what makes the
-   * "had a hole, has none now" case reachable, which is the one that puts black on air.
-   */
-  punchTargets: Map<string, PunchTarget>;
 }
 
 function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
@@ -125,24 +93,6 @@ function newScope(container: HTMLElement, source: LifecycleSource): FieldScope {
 }
 
 const MAX_COMPOSITION_DEPTH = 8;
-
-/**
- * 1.5c — what a STAMPED scope (a sequence item, a repeater row) carries: NO per-element
- * punch of its own.
- *
- * That is correct rather than a gap, and the reason is worth stating because the
- * opposite reading looks safer. A stamped row's positions are computed at RUN time, so
- * nothing inside one has a static scene-px rect for `sceneMaskHoles` to pull a hole
- * back into — it is the same fact that keeps `flattenElements` out of a `repeater`
- * subtree. But the sequence / repeater ELEMENT ITSELF is an ordinary element in its
- * layer, so it is punched at the one funnel like everything else, and **a CSS mask
- * applies to the whole subtree** — every stamp inside it inherits the punch. Masking
- * the generated content a second time, per stamp, would be the double-count.
- */
-const STAMPED_SCOPE_MASKS = {
-  masks: new Map<string, MaskHole[]>(),
-  maskKeyPrefix: '',
-} as const;
 
 export function buildScene(
   scene: Scene,
@@ -180,9 +130,6 @@ export function buildScene(
     resolutionWidth: scene.resolution.width,
     mode,
     paintEditorBackdrop,
-    masks: sceneMaskHoles(scene),
-    maskKeyPrefix: '',
-    punchTargets: new Map<string, PunchTarget>(),
   };
 
   for (const layer of scene.layers) {
@@ -194,7 +141,6 @@ export function buildScene(
     elementMap: rootScope.elementMap,
     textOriginals: rootScope.textOriginals,
     scopeTree: rootScope,
-    punchTargets: ctx.punchTargets,
   };
 }
 
@@ -215,7 +161,6 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
   for (const element of sorted) {
     const elementNode = buildElement(element, ctx);
     if (elementNode === null) continue;
-    punchLiveSourceHoles(element, elementNode, ctx);
     node.appendChild(elementNode);
     const zoneIndex = zoneIndices.get(element.id);
     if (zoneIndex !== undefined) elementNode.dataset['cgZoneEl'] = String(zoneIndex);
@@ -257,41 +202,19 @@ function buildLayer(layer: Layer, ctx: BuildCtx): HTMLElement {
   return node;
 }
 
-/**
- * ⭐ **1.5c / §9a-Z — the punch, applied at the ONE point every element passes
- * through.** `buildLayer` is the single funnel: every element kind, at every
- * composition depth, is built and appended here, so a new element kind is punched
- * by construction rather than by remembering to add it.
+/*
+ * 🔴 **`single-clock-look-switch` — `punchLiveSourceHoles` IS GONE from the build funnel.**
  *
- * The mask is built in the element's OWN box coordinates — `transform.size`, the
- * space `sceneMaskHoles` already pulled the holes back into — because a CSS mask
- * applies BEFORE the element's transform and before every ancestor's. Passing the
- * scene resolution here instead would double-count every scale in the chain.
+ * `buildLayer` remains the single funnel every element kind passes through at every
+ * composition depth; what it no longer does there is cut a hole. A plate-bearing package is
+ * composited BELOW its plates, so no part of the page is ever in front of a picture, and an
+ * element that carries no mask property is exactly right rather than a case to reason about.
  *
- * 🔴 **No entry in the map means NO MASK PROPERTY IS EMITTED AT ALL** — not an
- * all-white mask, not an empty one. `liveSourceMask` returns `null` for an empty
- * hole list and that `null` is honoured here, so an element nothing punches carries
- * no mask property and nothing downstream has to decide whether a full-keep mask is
- * equivalent to absence.
+ * ⚠ `ctx.punchTargets` went with it, and that is the half worth naming: it registered EVERY
+ * built element — not only the punched ones — so a later re-punch could reach an element that
+ * ACQUIRED a hole. With no punch there is nothing to re-reach, and keeping the registry would
+ * be a map nothing reads, built on every element of every scene.
  */
-function punchLiveSourceHoles(element: SceneElement, node: HTMLElement, ctx: BuildCtx): void {
-  const key = `${ctx.maskKeyPrefix}${element.id}`;
-  // Registered BEFORE the early return, and that ordering is the point: an element with no
-  // hole today is exactly the one that acquires one when a plate moves over it.
-  ctx.punchTargets.set(key, {
-    node,
-    width: element.transform.size.w,
-    height: element.transform.size.h,
-  });
-  const holes = ctx.masks.get(key);
-  if (holes === undefined) return;
-  const mask = liveSourceMask(holes, {
-    width: element.transform.size.w,
-    height: element.transform.size.h,
-  });
-  if (mask === null) return;
-  applyLiveSourceMask(node.style, mask);
-}
 
 function buildElement(element: SceneElement, ctx: BuildCtx): HTMLElement | null {
   switch (element.type) {
@@ -417,7 +340,6 @@ function buildComposition(element: CompositionElement, ctx: BuildCtx): HTMLEleme
     // 1.5c — extend the instance PATH, matching `flattenElements`' key exactly. The
     // bare element id would collide across two instances of the same composition,
     // and a hole computed for one instance's scene position is wrong for the other's.
-    maskKeyPrefix: `${ctx.maskKeyPrefix}${element.id}/`,
   };
   for (const layer of comp.layers) {
     inner.appendChild(buildLayer(layer, childCtx));
@@ -1033,7 +955,6 @@ export function buildSequenceCompositionItem(
     // same mask key, so one shared map would have the last stamp silently stand for all of
     // them. Registering nothing is the honest answer, and 4.6 refuses the case that would
     // have made it matter.
-    punchTargets: new Map<string, PunchTarget>(),
     doc,
     scene,
     scope: itemScope,
@@ -1042,7 +963,6 @@ export function buildSequenceCompositionItem(
     resolutionWidth: comp.resolution.width,
     mode,
     paintEditorBackdrop,
-    ...STAMPED_SCOPE_MASKS,
   };
   for (const layer of comp.layers) {
     inner.appendChild(buildLayer(layer, itemCtx));
@@ -1182,7 +1102,6 @@ export function buildRepeaterRows(
     const rowScope = newScope(inner, comp);
     const rowCtx: BuildCtx = {
       // Its OWN empty map — see the identical note on the sequence item context above.
-      punchTargets: new Map<string, PunchTarget>(),
       doc,
       scene,
       scope: rowScope,
@@ -1191,7 +1110,6 @@ export function buildRepeaterRows(
       resolutionWidth: comp.resolution.width,
       mode,
       paintEditorBackdrop,
-      ...STAMPED_SCOPE_MASKS,
     };
     for (const layer of comp.layers) {
       inner.appendChild(buildLayer(layer, rowCtx));

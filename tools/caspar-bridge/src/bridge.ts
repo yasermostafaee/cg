@@ -263,23 +263,6 @@ export interface BridgeOptions {
    */
   lookMixerHoldMs?: number;
   /**
-   * 🔴 `SKEW-INTERSECT-01` — the TRANSITION WINDOW's two halves, in ms
-   * (`--look-transition-lead-ms` / `--look-transition-tail-ms`), and the switch that turns
-   * the window off (`--no-look-transition-mask`).
-   *
-   * During the window the page punches `outgoing ∩ entering`, so every open pixel is backed
-   * by a picture in BOTH geometries and the mixer's move can land anywhere inside it without
-   * putting the channel on air through a hole. ABSENT means one channel frame of the observed
-   * mode for each half — the same unit the hold's default uses, and deliberately not the same
-   * QUANTITY: the hold aims the fills, these cover the ±1 field the aim cannot remove.
-   *
-   * Operator knobs for the same reason the hold is one: the right values are properties of
-   * the installation. `lookTransitionMask: false` restores the single-tell switch exactly.
-   */
-  lookTransitionLeadMs?: number;
-  lookTransitionTailMs?: number;
-  lookTransitionMask?: boolean;
-  /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
    */
@@ -562,15 +545,6 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     sourceAssignments: prunedAssignments.value,
     ...(options.auditLogPath !== undefined ? { auditLogPath: options.auditLogPath } : {}),
     ...(options.lookMixerHoldMs !== undefined ? { lookMixerHoldMs: options.lookMixerHoldMs } : {}),
-    ...(options.lookTransitionLeadMs !== undefined
-      ? { lookTransitionLeadMs: options.lookTransitionLeadMs }
-      : {}),
-    ...(options.lookTransitionTailMs !== undefined
-      ? { lookTransitionTailMs: options.lookTransitionTailMs }
-      : {}),
-    ...(options.lookTransitionMask !== undefined
-      ? { lookTransitionMask: options.lookTransitionMask }
-      : {}),
     ...(options.runtimeTuning ?? {}),
   });
   // B-145 — adopt the persisted ledger, then keep it written.

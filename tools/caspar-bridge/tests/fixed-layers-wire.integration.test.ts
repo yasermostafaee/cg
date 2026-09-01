@@ -5,7 +5,7 @@ import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
-import type { ConnectionConfig, FixedSlotState } from '@cg/shared-ipc';
+import type { ConnectionConfig, FixedLayerBank, FixedSlotState } from '@cg/shared-ipc';
 import { buildRoutes, createBridge, type BridgeHandle } from '../src/bridge.js';
 import { HEALTH_MS } from './support/harness.js';
 
@@ -90,7 +90,7 @@ async function foreignPlay(target: MockHandle, line: string): Promise<void> {
 }
 
 async function boot(options: {
-  bank?: { channel: number; start: number; count: number; aliases?: Record<string, string> };
+  bank?: FixedLayerBank;
   fixedLayersPath?: string;
 }): Promise<BridgeHandle> {
   const oscPort = await freeUdpPort();
@@ -111,9 +111,18 @@ function tmpFile(name: string): string {
 }
 
 it('S4 — fixedLayers.config returns the booted bank, and null with no bank', async () => {
-  const b = await boot({ bank: { channel: 1, start: 70, count: 10, aliases: { '72': 'ساعت' } } });
+  const b = await boot({
+    bank: {
+      channel: 1,
+      low: { start: 1, count: 9 },
+      start: 70,
+      count: 10,
+      aliases: { '72': 'ساعت' },
+    },
+  });
   expect(b.runtime.fixedLayersConfig()).toEqual({
     channel: 1,
+    low: { start: 1, count: 9 },
     start: 70,
     count: 10,
     aliases: { '72': 'ساعت' },
@@ -129,21 +138,27 @@ it('S4 — fixedLayers.config returns the booted bank, and null with no bank', a
 });
 
 it('S5 — R-028: the ceiling is FIXED live — resize refuses (nothing applied); alias changes apply + publish', async () => {
-  const b = await boot({ bank: { channel: 1, start: 70, count: 10 } });
+  const b = await boot({ bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 } });
   const published: FixedSlotState[][] = [];
   b.runtime.fixedStateChanged.subscribe((s) => published.push(s));
 
   // Grow AND shrink both refuse: the candidate ceiling never changes at runtime.
   for (const count of [12, 8]) {
-    const refused = b.runtime.setFixedLayers({ channel: 1, start: 70, count });
+    const refused = b.runtime.setFixedLayers({
+      channel: 1,
+      low: { start: 1, count: 9 },
+      start: 70,
+      count,
+    });
     expect(refused.ok).toBe(false);
     expect(refused.reason).toBe('resize-refused');
   }
-  expect(b.runtime.fixedSlots()).toHaveLength(10); // unchanged — fenced ceiling intact
+  expect(b.runtime.fixedSlots()).toHaveLength(19); // unchanged — 10 operator + 9 bed rows
 
   // An alias change is a legitimate live change and publishes.
   const ok = b.runtime.setFixedLayers({
     channel: 1,
+    low: { start: 1, count: 9 },
     start: 70,
     count: 10,
     aliases: { '71': 'LOWER THIRD' },
@@ -157,7 +172,7 @@ it('S5 — R-028: the ceiling is FIXED live — resize refuses (nothing applied)
 it('S6 — renumber and channel-change refuse with their codes; nothing applied/persisted/published', async () => {
   const file = tmpFile('bank.json');
   const b = await boot({
-    bank: { channel: 1, start: 70, count: 10 },
+    bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 },
     fixedLayersPath: file,
   });
   let configPublishes = 0;
@@ -168,7 +183,7 @@ it('S6 — renumber and channel-change refuse with their codes; nothing applied/
   const renumber = (await invokeRoute(
     b,
     'fixedLayers.set-config',
-    { channel: 1, start: 71, count: 9 },
+    { channel: 1, low: { start: 1, count: 9 }, start: 71, count: 9 },
     file,
   )) as { ok: boolean; reason?: string };
   expect(renumber.ok).toBe(false);
@@ -177,13 +192,18 @@ it('S6 — renumber and channel-change refuse with their codes; nothing applied/
   const channelChange = (await invokeRoute(
     b,
     'fixedLayers.set-config',
-    { channel: 2, start: 70, count: 10 },
+    { channel: 2, low: { start: 1, count: 9 }, start: 70, count: 10 },
     file,
   )) as { ok: boolean; reason?: string };
   expect(channelChange.ok).toBe(false);
   expect(channelChange.reason).toBe('channel-change-refused');
 
-  expect(b.runtime.fixedLayersConfig()).toEqual({ channel: 1, start: 70, count: 10 }); // unchanged
+  expect(b.runtime.fixedLayersConfig()).toEqual({
+    channel: 1,
+    low: { start: 1, count: 9 },
+    start: 70,
+    count: 10,
+  }); // unchanged
   expect(fs.existsSync(file)).toBe(false); // nothing persisted (boot bank was an explicit option)
   expect(configPublishes).toBe(0);
   expect(statePublishes).toBe(0);
@@ -192,7 +212,7 @@ it('S6 — renumber and channel-change refuse with their codes; nothing applied/
 it('S7 — an applied set-config persists, and a fresh boot on that path loads the new bank', async () => {
   const file = tmpFile('bank.json');
   const b = await boot({
-    bank: { channel: 1, start: 70, count: 10 },
+    bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 },
     fixedLayersPath: file,
   });
   await b.runtime.whenServerHealthy(HEALTH_MS);
@@ -202,7 +222,7 @@ it('S7 — an applied set-config persists, and a fresh boot on that path loads t
   const result = (await invokeRoute(
     b,
     'fixedLayers.set-config',
-    { channel: 1, start: 70, count: 10, aliases: { '72': 'ساعت' } },
+    { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10, aliases: { '72': 'ساعت' } },
     file,
   )) as { ok: boolean };
   expect(result.ok).toBe(true);
@@ -216,20 +236,21 @@ it('S7 — an applied set-config persists, and a fresh boot on that path loads t
   const b2 = await boot({ fixedLayersPath: file });
   expect(b2.runtime.fixedLayersConfig()).toEqual({
     channel: 1,
+    low: { start: 1, count: 9 },
     start: 70,
     count: 10,
     aliases: { '72': 'ساعت' },
   });
-  expect(b2.runtime.fixedSlots()).toHaveLength(10);
+  expect(b2.runtime.fixedSlots()).toHaveLength(19); // 10 operator + 9 bed rows
 });
 
 it('S8 — occupancy honesty: unknown before healthy; producer/empty on a hearing tap', async () => {
-  const b = await boot({ bank: { channel: 1, start: 70, count: 10 } });
+  const b = await boot({ bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 } });
   if (mock === null) throw new Error('mock not booted');
 
   // BEFORE the session is healthy: every slot honestly UNKNOWN, never 'empty'.
   const early = b.runtime.fixedLayersState();
-  expect(early).toHaveLength(10);
+  expect(early).toHaveLength(19); // 10 operator + 9 bed rows
   expect(early.every((s) => s.observed.kind === 'unknown')).toBe(true);
 
   await b.runtime.whenServerHealthy(HEALTH_MS);
@@ -250,7 +271,7 @@ it('S8 — occupancy honesty: unknown before healthy; producer/empty on a hearin
 });
 
 it('S9 — two identical sweeps publish ZERO; a real occupancy change publishes exactly one', async () => {
-  const b = await boot({ bank: { channel: 1, start: 70, count: 10 } });
+  const b = await boot({ bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 } });
   if (mock === null) throw new Error('mock not booted');
   await b.runtime.whenServerHealthy(HEALTH_MS);
 
@@ -281,11 +302,12 @@ it('S9 — two identical sweeps publish ZERO; a real occupancy change publishes 
 });
 
 it('S10 — R-028 fail-closed untick over the REAL occupancy: unknown refuses, empty applies, producer refuses', async () => {
-  const b = await boot({ bank: { channel: 1, start: 70, count: 10 } });
+  const b = await boot({ bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 } });
   if (mock === null) throw new Error('mock not booted');
   const untick = (layer: number): { ok: boolean; reason?: string; message?: string } =>
     b.runtime.setFixedLayers({
       channel: 1,
+      low: { start: 1, count: 9 },
       start: 70,
       count: 10,
       visibility: { [String(layer)]: false },
@@ -313,6 +335,7 @@ it('S10 — R-028 fail-closed untick over the REAL occupancy: unknown refuses, e
   );
   const occupied = b.runtime.setFixedLayers({
     channel: 1,
+    low: { start: 1, count: 9 },
     start: 70,
     count: 10,
     visibility: { '74': false, '75': false },
