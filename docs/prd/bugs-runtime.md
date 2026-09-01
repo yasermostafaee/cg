@@ -8539,7 +8539,7 @@ that re-imposes frame alignment, and a super at a fixed place on its own row nev
   `B-080`). Cross-checked against the registry's dated pointer — _"Next free after this session is
   `B-195`"_ — headings and pointer AGREE.
 
-## [ ] B-196 — `minRuntimeVersion` is a compatibility gate with a WRITER, a SCHEMA and NO READER, and the value written could not gate anything even if one existed ⟨priority: medium — it advertises a check nobody performs, which is `P-031`'s shape one field over⟩ — OPEN, filed 2026-09-01 from `TEMPLATE-OVERLAY-AUDIT-01` §5
+## [~] B-196 — `minRuntimeVersion` is a compatibility gate with a WRITER, a SCHEMA and NO READER, and the value written could not gate anything even if one existed ⟨priority: medium — it advertises a check nobody performs, which is `P-031`'s shape one field over⟩ — filed 2026-09-01 (`TEMPLATE-OVERLAY-AUDIT-01` §5), **WIRED the same day (`SINGLE-CLOCK-SWITCH-01` §5): `P-031` forces wire-or-delete and the owner chose WIRE**
 
 **Confirmed by reading the writer and every reader**, as asked, rather than by inference.
 
@@ -8588,8 +8588,109 @@ compatibility-floor policy. What it must not do is keep declaring a floor nobody
 - WHEN a package is refused on that comparison THEN the surface names the package, the version it
   needs and the version this station has — a refusal an operator can act on
 
+### ✅ WIRED 2026-09-01 — what was built, and the objection it has to answer
+
+- **`packages/shared-schema/src/runtime-version.ts`** — `CG_RUNTIME_VERSION` (a CONTRACT version,
+  starting `1.0.0`), `parseSemver`, `compareSemver`, `runtimeShortfall` and
+  `runtimeShortfallMessage`. ONE comparison, with `available` defaulting to the constant so no caller
+  supplies its own idea of "current".
+- **`apps/designer/src/platform/Exporter.ts`** now writes `CG_RUNTIME_VERSION` instead of `'0.0.0'`.
+- **`apps/runtime/src/renderer/features/library/templateDelivery.ts`** compares after `unpack` and
+  BEFORE the render, and throws one sentence naming the package and both versions.
+
+**It FAILS OPEN on an unreadable version**, deliberately: every package written before this field
+meant anything carries `'0.0.0'`, which parses and compares below everything, so they all still
+import; a value that does not parse at all is a malformed manifest, which is `verify`'s job, and
+refusing on it here would put two authorities on one fact.
+
+🔴 **The honest caveat, recorded because `capabilities.ts` already rejected this shape once.** Its
+argument against a version compare — _"a number somebody must REMEMBER to bump, which is the class of
+guard that is already stale by the time it matters"_ — applies here too. What differs is that no
+DERIVED answer exists: the bridge case could compare a routed channel list against an exported one,
+because the unit of failure is enumerable; "this renderer does not do what this package assumes" is
+not. The mitigation is to make the number do as little as possible — it is a contract version, not a
+build version, and an ordinary release does not touch it.
+
+⚠ **And what it adds is the MESSAGE, not the refusal.** `SceneSchema`'s `schemaVersion: z.literal(1)`
+already rejects a bumped document and `ElementSchema` is a `z.union`, so an unknown element kind
+already fails to parse — as a zod error with a path into an element array. This turns that into a
+sentence that names the station as the thing that is behind.
+
+**Tests, red-first:** `packages/shared-schema/tests/runtime-version.test.ts` (12) and four in
+`apps/runtime/tests/template-delivery.test.ts` — neutering the comparison reddens the two guard tests
+while the legacy-`'0.0.0'` and current-version imports stay green.
+
 - **Cross-refs:** [[P-031]] (the decided precedent — dead compatibility machinery is deleted, not
   left), [[B-195]] (the audit that found this), [[D-150]] (the self-contained package this field
   travels in), [[B-190]] (the other manifest-level determinism defect).
 - **Number:** highest `B-` HEADING was `B-195`, taken immediately above in this same session;
   `B-196` … `B-202` returned no headings anywhere.
+
+## [ ] B-197 — a rounded live plate loses the only home it had: with the plates composited ABOVE the page there is nothing left to hide their square corners ⟨priority: low — nothing offers the control today, but `design.md` §9a.1 records a PROMISE the reorder silently breaks⟩ — OPEN, filed 2026-09-01 from `SINGLE-CLOCK-SWITCH-01` §6
+
+**Written answer, not an implementation.** `single-clock-look-switch` moves the plate-bearing page
+BELOW its plates and retires the mask. That removes the mechanism `design.md`'s border-radius note
+(the unnumbered sub-heading at `:1876`, inside §9a.1) was counting on, and the note would otherwise
+stand as a promise nobody can keep.
+
+⚠ **[[D-155]] is NOT this.** D-155 is aspect-lock-on-resize — a Live Source keeping its declared
+aspect while the author drags a handle. The border-radius reasoning has never had an item; it lives
+only in that design sub-heading, which is why this one exists.
+
+### What the design promised, and why it stops being true
+
+Quoted:
+
+> - **Once a punch mechanism exists, `border-radius` becomes MEANINGFUL AND HONEST in the multi-box
+>   case** — the CSS hole rounds, and the live rectangle's square corners are covered by the backdrop
+>   that is being punched. The author gets exactly what they drew.
+> - **The earlier framing — "rounding is impossible" — was reasoning about the LONE-PLATE case:** a
+>   plate over the programme feed with NOTHING opaque behind it. There, the corners have nothing to
+>   hide them, and `MIXER FILL`/`CLIP` are rectangular, so a rounded plate floating over the programme
+>   **stays unachievable in v1 either way.**
+
+**Under the reorder every plate becomes the second case.** The picture is composited ON TOP of the
+page, so there is no longer anything opaque in front of its corners; `MIXER FILL` and `MIXER CLIP`
+remain rectangular. The multi-box case and the lone-plate case collapse into one, and it is the
+unachievable one.
+
+### The three candidate homes, and which survives
+
+1. **Producer-side, via a KEYER layer — the only home that does not re-impose frame alignment, and it
+   is UNMEASURED.** CasparCG's mixer offers `FILL`, `CLIP`, `CROP`, `PERSPECTIVE`, `OPACITY`,
+   `CHROMA`, `LEVELS`, `BLEND` and `KEYER`; none is a rounded mask, but `KEYER` makes a layer the key
+   for the one beneath it, and the fill+key pair is already in this design's vocabulary
+   (`live-source-multibox/design.md` §1a). A rounded-rectangle key on the layer above a plate would
+   round that plate's picture. **Cost:** one extra layer AND one extra producer per rounded plate, on
+   a band that has to stay above the plate and below the furniture. **Status: NOT VERIFIED.** This
+   project's rule is that the exact CasparCG mechanism is measured at recon and never assumed
+   (C-015 §1a says so in those words for the fill+key pair), and no such recon has run for a rounded
+   key.
+2. **Overlay-row-side, four corner patches drawn over the picture — REFUSED.** Its geometry is the
+   plate's rect, so it is CLASS 1 by `B-195`'s definition: it must move on the frame the fills move,
+   which re-imposes the exact frame-alignment requirement the single-clock switch exists to abolish.
+   Using it would trade a defect for the same defect in smaller pieces.
+3. **Dead — and this is where it already is.** The Inspector offers no `border-radius` on a
+   `video-placeholder`: the type is a "bare" kind in `field-registry.ts` and never carried
+   `BOX_DESCS`. Nothing shipped, so nothing regresses; what changes is that the reason moves from
+   "withheld pending the mechanism" to "withheld because the mechanism it was waiting for is gone".
+
+### The verdict, so this is not re-opened as a bug
+
+**Border-radius on a live plate is DEAD under the reorder, and stays dead until (1) is measured.** It
+should be re-opened by a recon that answers one question on real hardware — _does a rounded key layer
+above a plate round that plate's picture, and at what cost per plate?_ — not by an authoring request.
+If the answer is yes, it becomes a producer-side feature with a layer budget; if no, the control is
+withdrawn permanently and `design.md` §9a.1's sub-heading should say so.
+
+⚠ **What must NOT happen** is a rounded corner drawn from a row above, because it looks like the
+cheap answer and is the one shape that puts the two clocks back.
+
+- **Cross-refs:** `single-clock-look-switch` (the change that removes the punch), [[B-195]] (the
+  CLASS 1 / CLASS 2 split this verdict rests on), [[B-194]] (where the corner loss was first named),
+  [[D-155]] (aspect-lock — a different item, recorded here because this brief conflated them),
+  [[C-021]] (the DECKLINK / NDI / fill+key producer arms, where a keyer recon would belong).
+- **Number:** highest `B-` HEADING across every ref was `B-196`; `B-197` … `B-203` returned no
+  headings anywhere, and the duplicate audit printed exactly the two accepted duplicates (`B-056`,
+  `B-080`). Cross-checked against the registry's dated pointer — _"Next free after this session is
+  `B-197`"_ — headings and pointer AGREE.

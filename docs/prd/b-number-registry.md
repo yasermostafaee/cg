@@ -1990,3 +1990,22 @@ the dated pointer:** the entry above ends _"Next free after this session is `B-1
 pointer AGREE, and `B-195`/`B-196` are what this entry takes.
 
 ⇒ **Next free after this session is `B-197`**, and `B-` stays contiguous `B-001` … `B-196`, no gaps.
+
+### 2026-09-01 (third) — `SINGLE-CLOCK-SWITCH-01` §6: `B-197` TAKEN
+
+**Claimed: `B-197`** — _a rounded live plate loses the only home it had_
+([bugs-runtime.md](bugs-runtime.md)). A written verdict with nothing implemented, filed because the
+reorder in `openspec/changes/single-clock-look-switch` removes the mechanism `design.md` §9a.1's
+border-radius sub-heading was counting on — a promise that would otherwise stand unqualified.
+
+⚠ **The brief that ordered it attributed border-radius to `D-155`, which is aspect-lock-on-resize.**
+The reasoning has never had an item at all; it lives only in an unnumbered sub-heading at
+`live-source-multibox/design.md:1876`. That is the reason for filing rather than amending.
+
+**Derivation, from headings as the rule requires:** highest `B-` HEADING across every ref was
+**`B-196`** (taken earlier the same day); `B-197` … `B-203` returned **no headings anywhere**, and the
+duplicate audit printed exactly the two accepted duplicates (`B-056`, `B-080`). **Cross-check against
+the dated pointer:** the entry above ends _"Next free after this session is `B-197`"_ — headings and
+pointer AGREE.
+
+⇒ **Next free after this session is `B-198`**, and `B-` stays contiguous `B-001` … `B-197`, no gaps.
