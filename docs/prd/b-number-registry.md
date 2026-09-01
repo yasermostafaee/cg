@@ -1951,7 +1951,7 @@ entry takes.
 
 ⇒ **Next free after this session is `B-194`**, and `B-` stays contiguous `B-001` … `B-193`, no gaps.
 
-### 2026-09-01 — `PLATES-OVER-PAGE-01`: `B-194` TAKEN, for a VERDICT rather than a defect
+### 2026-09-01 (first) — `PLATES-OVER-PAGE-01`: `B-194` TAKEN, for a VERDICT rather than a defect
 
 **Claimed: `B-194`** — _can the plates sit ABOVE the page, so that no mask exists?_
 ([bugs-runtime.md](bugs-runtime.md)). A feasibility study that implements nothing and ends REJECTED,
@@ -1971,3 +1971,22 @@ headings anywhere**, and the duplicate audit printed exactly the two accepted du
 session is `B-194`"_ — headings and pointer AGREE.
 
 ⇒ **Next free after this session is `B-195`**, and `B-` stays contiguous `B-001` … `B-194`, no gaps.
+
+### 2026-09-01 (second) — `TEMPLATE-OVERLAY-AUDIT-01`: `B-195` AND `B-196` TAKEN
+
+**Claimed: `B-195`** — _the template audit: nothing in any real template draws over a live picture_
+([bugs-runtime.md](bugs-runtime.md)) — and **`B-196`** — _`minRuntimeVersion` has a writer, a schema
+and no reader_ (same file). The first is an AUDIT with a verdict and nothing implemented; the second
+is a defect the audit found on the way past and which was to be filed regardless of that verdict.
+
+⚠ **`B-195` amends `B-194`, filed hours earlier, rather than superseding it** — its cost number, its
+layer argument and its export claim each gained a dated correction in place, per spec discipline. A
+verdict that is wrong in three places and left standing is worse than no verdict.
+
+**Derivation, from headings as the rule requires:** highest `B-` HEADING across every ref was
+**`B-194`** (taken earlier the same day); `B-195` … `B-201` returned **no headings anywhere**, and the
+duplicate audit printed exactly the two accepted duplicates (`B-056`, `B-080`). **Cross-check against
+the dated pointer:** the entry above ends _"Next free after this session is `B-195`"_ — headings and
+pointer AGREE, and `B-195`/`B-196` are what this entry takes.
+
+⇒ **Next free after this session is `B-197`**, and `B-` stays contiguous `B-001` … `B-196`, no gaps.

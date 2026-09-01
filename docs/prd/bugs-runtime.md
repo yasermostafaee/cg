@@ -8072,7 +8072,7 @@ that move it are `--look-transition-lead-ms` and `--look-transition-tail-ms`, an
 - **Number:** highest `B-` HEADING across every ref was `B-192` (taken immediately above in this
   same session); `B-193` … `B-199` returned no headings anywhere.
 
-## [x] B-194 — CAN THE PLATES SIT ABOVE THE PAGE, so that no mask exists and the skew class is structurally impossible? ⟨priority: high — the owner rejected all three skew outcomes and asked for zero "even if we change everything"⟩ — **FEASIBILITY STUDY, 2026-09-01 (`PLATES-OVER-PAGE-01`). VERDICT: REJECTED AS THINGS STAND. Nothing implemented.**
+## [x] B-194 — CAN THE PLATES SIT ABOVE THE PAGE, so that no mask exists and the skew class is structurally impossible? ⟨priority: high — the owner rejected all three skew outcomes and asked for zero "even if we change everything"⟩ — **FEASIBILITY STUDY, 2026-09-01 (`PLATES-OVER-PAGE-01`). VERDICT: REJECTED AS THINGS STAND. Nothing implemented.** ⚠ **AMENDED 2026-09-01 by [[B-195]]: the cost number below was measured with a probe far heavier than any real row, the layer argument has a cheaper shape, and the re-export claim is wrong. Read B-195 before acting on this item.**
 
 **The question.** The switch is split across two independent clocks — the page draws the holes on the
 browser's paint clock, CasparCG moves the pictures on the channel tick — and no constant aligns two
@@ -8166,6 +8166,14 @@ that, not the whole browser.
   captured **54 frames where 85 were due, 36 % of them lost.** With zero or one extra page: no
   discards at all. Dropped channel ticks are dropped frames on air.
 
+⚠ **CORRECTED 2026-09-01 ([[B-195]] §4.d).** Both the cadence figures above were taken with a
+**full-frame 50 fps `requestAnimationFrame`** probe page, and the control that was owed was not run
+here. Run since: FIVE such pages break cadence 10/10 — but five STATIC pages of the same furniture,
+same settle, break **0/10** with `k` unchanged. **The cost measured was per-frame full-frame
+REPAINTING, not the page count**, and the client's real rows are strips of 448×144 … 1920×282 with a
+ticker at most. The "+3 breaks cadence" line must not be quoted as a page-count limit. Both sessions
+also ran the harness's own libx264 file consumer alongside, which the plant does not carry.
+
 **Multiply by the station.** The operator bank is **30 declared rows (70–99) with 5 ticked** by
 default (`DEFAULT_FIXED_BANK_COUNT = 30`, `DEFAULT_FIXED_BANK_VISIBLE_ROWS = 5`). Five rows able to
 draw over a picture is **five overlay pages on top of the five template pages the rows already
@@ -8214,6 +8222,12 @@ DISJOINT** from the operator bank and the reserved range (`sources.ts`'s `overla
 `overlaps-reserved`). Interleaving is not expressible in that model, and the bank's row numbers are
 operator-visible. Layer NUMBERS are not the constraint (`MAX_LIVE_SOURCE_LAYER = 9999`); the
 addressing model is.
+⚠ **AND THE PREMISE IS NARROWER THAN THIS PARAGRAPH ASSUMES ([[B-195]] §4.b).** Interleaving is
+only forced if the plates must go ABOVE the operator bank. Put the plate-bearing template's PAGE
+BELOW the live band instead — layers 1–9 are free — and the live band (10–59) and the bank (70–99)
+both stay exactly where they are, contiguous and disjoint. What that costs is one mapping: a bank
+row's layer is today the layer its template renders on.
+
 ⭐ **The no-overlay form does NOT have this problem** — one band above the bank (say 110–159) is still
 contiguous and still disjoint, and "another row's graphic cannot draw over this row's guest" is
 exactly what that form means anyway.
@@ -8226,6 +8240,13 @@ backdrop that is being punched"_ — and that is exactly what putting the plate 
 (⚠ Anchor note: this brief attributed the border-radius question to [[D-155]]; D-155 is the
 aspect-lock item. The border-radius reasoning is in `live-source-multibox/design.md`, §9a.1's closing
 section.)
+
+⚠ **4.3 IS WRONG AND IS REPLACED — see [[B-195]] §5.** The Runtime app REBUILDS the served HTML
+from the scene at IMPORT using its OWN bundled runtime
+(`apps/runtime/src/renderer/features/library/templateDelivery.ts:15-21`, `:202-211`); the `cg.js`
+inside a `.vcg` is never served. So a runtime change costs a **re-IMPORT**, not a re-export, and the
+`.vcg` files on disk stay valid. The `minRuntimeVersion` half of the paragraph survives as a real
+defect and is filed as [[B-196]] — in the OPPOSITE direction: a NEWER package in an OLDER app.
 
 **4.3 The export, and a SILENT migration.** `template.json`'s shape does not change — the mask is
 computed at runtime by `cg.js`, not baked into the scene — but `cg.js` does, and every `.vcg` carries
@@ -8306,3 +8327,269 @@ to `1080p5000`, the two probe templates and the recording deleted, the server st
   headings anywhere, and the duplicate audit printed exactly the two accepted duplicates (`B-056`,
   `B-080`). Cross-checked against the registry's dated pointer — _"Next free after this session is
   `B-194`"_ — headings and pointer AGREE.
+
+## [x] B-195 — THE TEMPLATE AUDIT: **nothing in any real template draws over a live picture**, and the over-the-picture furniture is already SEPARATE ROWS ⟨priority: high — it re-scopes §9a-Z and corrects the affordability number [[B-194]] was rejected on⟩ — **AUDIT, 2026-09-01 (`TEMPLATE-OVERLAY-AUDIT-01`). VERDICT: §9a-Z RE-SCOPED. Nothing implemented.**
+
+[[B-194]] rejected plates-over-page on the cost of a second CEF page per row, and its closing line
+said the one thing that would reopen it is retiring the over-the-picture requirement. **Before
+retiring or re-scoping anything, the real templates had to be counted.** This is that count, plus the
+control measurement that corrects `B-194`'s own number.
+
+🔴 **THE TWO POPULATIONS ARE REPORTED APART AND THEIR COUNTS ARE NEVER MERGED.** A repo fixture is
+not evidence about the client's designs.
+
+---
+
+### 1. The framing — the split that decides everything
+
+- **CLASS 1 — SWITCH-BOUND.** Its geometry is tied to a plate's rect, so it must change on the SAME
+  FRAME the fills move. Per-look decoration, a frame around a box, rounded corners on the picture.
+- **CLASS 2 — SWITCH-FREE.** It appears, moves and disappears on its own trigger, independent of the
+  look switch. Logo, name super, clock, ticker, credits.
+
+CLASS 2 can live on a second page composited ABOVE the plates carrying **no mask at all**; with both
+pages maskless a look switch is `MIXER FILL`/`CLIP` only — one clock — and the [[B-174]] defect class
+is unrepresentable. **CLASS 1 is the only class that puts a frame-alignment requirement back.**
+
+---
+
+### 2. POPULATION A — the client's own exports (12 packages)
+
+`C:\Users\yaser\OneDrive\Desktop\temp\cg templates exports`, read as ZIPs: `manifest.json` +
+`template.json`, flattened with the PRODUCT'S OWN `flattenElements(scene,'paint')` +
+`applyArrangementGeometry` + `fitPictureToBox`, so the audit cannot disagree with what the page
+actually punches. Per LOOK, every non-plate element was intersected with every plate's FITTED rect
+and classified by paint order.
+
+**A.1 — the only package with live plates at all: `3ghab.vcg`** (re-exported **2026-09-01 14:32**,
+newer than the copy in the repo). Three looks; **exactly one** non-plate element in the whole scene:
+
+| element                            | rect                | paint position                                        | verdict per look                           |
+| ---------------------------------- | ------------------- | ----------------------------------------------------- | ------------------------------------------ |
+| `image "Image"` `el-1788260401106` | `0, −17  1920×1112` | root layer, `z=0`, **below all three look instances** | **PUNCHED** by `l1` / `l1,l2` / `l1,l2,l3` |
+
+**OVER = 0. AROUND = 0.** The one element that touches a plate is the backdrop the punch exists FOR.
+Its plate rects also moved with the re-export (`look-2` is now `32,258 887×498.94` and
+`1006,258 887×498.94`, against `23,301 916×515.27` in yesterday's copy).
+
+**A.2 — the other ELEVEN packages carry no live plate at all**, and this is the finding rather than a
+null result: **they ARE the over-the-picture furniture**, authored as separate templates.
+
+| package                                  | scene size | elements (named)                                                                                                          |
+| ---------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `ارم-روی-انتن.vcg` (logo, on air)        | 448×144    | `disc`, `mark`, `centre-dot`, `separator`, `wordmark`, `sub-tag`                                                          |
+| `زیرنویس-روی-انتن.vcg` (lower third)     | 1000×190   | `name-plate`, `role-plate`, `brand-square`, `star-mark`, `name`, `role`                                                   |
+| `نوار-خبر-روی-انتن.vcg` (news bar)       | 1920×136   | `bar`, `crawl` (ticker), `label-plate`, `live-dot` (comp), `label`                                                        |
+| `توالی-خبر-روی-انتن.vcg` (news sequence) | 1920×136   | `bar`, `rotator` (sequence), `label-plate`, `star-mark`, `label`                                                          |
+| `میانبرنامه-روی-انتن.vcg` (interstitial) | 1920×190   | `crawl-bar`, `crawl` (ticker), `program-slab`, `program-title`, `star-mark`, `panel`, `rotator` + three clock/brand comps |
+| `zirnevis-white.vcg`                     | 1920×282   | `Video`, `Ticker`                                                                                                         |
+| `zirnevis-white.cgproj`                  | 1920×1080  | comp `main`: `Video`, `Ticker`                                                                                            |
+| `logo1.vcg`                              | 200×226    | `Video`                                                                                                                   |
+| `parcham.vcg` (flag)                     | 200×200    | `Video`                                                                                                                   |
+| `pen.vcg`                                | 1920×1080  | `Path`                                                                                                                    |
+| `text.vcg`                               | 1920×1080  | `Text`, `Text`                                                                                                            |
+
+**CLASS EVIDENCE, stated per the rule rather than asserted.** Every one of these is **CLASS 2**, on
+three independent grounds each: (a) it contains **no plate**, so no geometry in it can reference one;
+(b) it is its own template with its own `lifecycle` / `playout` block and its own `fields` +
+`bindings` (2 and 2 in each of the five `روی آنتن` packages), so it is **operator-triggered**, not
+look-triggered; (c) it exists in no look, so it cannot exist "in more than one look at a different
+geometry".
+
+⇒ **CLASS 1 elements found in population A: ZERO. CLASS 2 elements inside a plate-bearing template:
+ZERO. CLASS 2 as separate rows: TEN templates.**
+
+**2.e — the re-authoring question is VACUOUS for what exists, and pointed for what does not.** No
+CLASS 1 element exists to re-author. The one that WOULD be CLASS 1 is a rounded corner on a picture
+(`design.md` §9a.1): it cannot be re-authored onto a background page, because a corner is hidden by
+covering it FROM ABOVE and a background page is below; and on an overlay page it would need the
+plate's rect, which is the definition of CLASS 1. It is also unavailable today — the Inspector offers
+no `border-radius` on a `video-placeholder` — so nothing is lost that anyone has.
+
+---
+
+### 3. POPULATION B — everything the repo can reach (9 packages + 1 synthetic)
+
+| package                                                                                 | plates  | result                                        |
+| --------------------------------------------------------------------------------------- | ------- | --------------------------------------------- |
+| `tools/skew-harness/fixtures/owner/3-ghab.vcg` (untracked; the owner's own, 2026-08-31) | 3 looks | 1 element, **PUNCHED** in all three. OVER = 0 |
+| `tools/skew-harness/fixtures/owner/3-ghab.cgproj`                                       | —       | project document, no rendered scene rows      |
+| `fixtures/templates/persian-lower-third.vcg`                                            | none    | 4 elements, no plate to be over               |
+| `fixtures/d121/crawl-*.vcg` (×4)                                                        | none    | 1 element each                                |
+| `fixtures/b034/hidden-*.vcg` (×2)                                                       | none    | 0–2 elements                                  |
+| `GHAB_FIXTURE` (synthetic, `tools/skew-harness/src/geometry.ts`)                        | 2 looks | **OVER = 0 by construction**                  |
+
+`GHAB_FIXTURE`'s zero is structural rather than measured: `scene.ts:107-110` builds each look's
+children as `[...filler, ...plates]` with every element at `zIndex: 0`, and `scene-flatten.ts:232-234`
+records that an equal `zIndex` "falls back to document order" through a stable sort (`:290`) — so the
+plates are always LAST, i.e. above the filler, which is therefore punched and never over.
+
+⇒ **Population B contains no element over a live picture either.**
+
+---
+
+### 4. THE SANDWICH, PRICED — and the measurement that CORRECTS `B-194`
+
+**4.a The shape.** Background page below the plates / plates / one overlay page above them.
+
+**4.b Is ONE shared overlay page enough, or does the preload model force one per ticked row?**
+**Neither, and the audit is why.** Quoting the code:
+
+- `tools/caspar-bridge/src/caspar-runtime.ts:2007-2009` — `#loadOnto` ends with
+  `const added = await this.#sendAdd(itemId, slot, templateId, fields, seq);`, under
+  _"B-039 — `CG ADD` only (play-on-load OFF in the builder): the producer is loaded, NOT playing."_
+  **A LOADED row already holds a live CEF producer, before any take.**
+- `packages/shared-ipc/src/channels/fixedLayers.ts:33-43` — `DEFAULT_FIXED_BANK_START = 70`,
+  `DEFAULT_FIXED_BANK_COUNT = 30`, `DEFAULT_FIXED_BANK_VISIBLE_ROWS = 5`.
+
+So the station already runs **one CEF page per loaded row, five ticked**. And §2 found nothing inside
+a plate-bearing template that would need moving to an overlay page — the furniture is already those
+rows. ⇒ **the sandwich needs ZERO additional CEF pages.** What it needs is an ORDER: the
+plate-bearing template's page BELOW the live band, everything else where it is.
+
+⭐ **And that order does NOT require the interleaving `B-194` §4.1 said was inexpressible.** With the
+background page below the live band, the live band (10–59) and the operator bank (70–99) both stay
+exactly as they are, still contiguous and still disjoint. Layers **1–9 are free** — the recon's own
+"1–9 is the only free band" under today's policy — which is where a background page would sit. The
+open question is not the numbering but that a bank row's layer is today the layer its template
+renders on (`FixedLayerBankSchema` is one `start` + `count`), so a plate-bearing row would need its
+page placed outside its own bank row. That is ONE mapping to change, not an addressing model.
+
+**4.c** `B-194`'s measured CEF table is used as-is and not re-measured.
+
+**4.d THE MEASUREMENT — and it overturned its own first reading.** Section 2 concluded "no CLASS 1 at
+all", so the measurement was owed. `1080i5000`, `ghab-seated`, ten recordings per configuration:
+
+| configuration (CEF pages incl. the harness's own template) | discards  | `k` median     | black    |
+| ---------------------------------------------------------- | --------- | -------------- | -------- |
+| 5 pages, ANIMATED probe, 10 s settle                       | **10/10** | no usable runs | —        |
+| 6 pages, ANIMATED probe (+1), 3 min later                  | **1/10**  | −60 ms         | —        |
+| 5 pages, ANIMATED probe, **60 s settle**                   | **10/10** | no usable runs | —        |
+| 5 pages, **STATIC probe**, 60 s settle                     | **0/10**  | −50 ms         | **0/10** |
+
+🔴 **A cost that FALLS as load rises is not a cost.** Six animated pages passed where five failed, so
+the first reading was not page count. The settled re-run then reproduced the five-page failure — and
+the STATIC control, same five pages, same furniture, same settle, **passed ten of ten with no black
+at all**. ⇒ **The measured cost is per-frame FULL-FRAME REPAINTING, not the number of pages.**
+
+⚠ **This corrects `B-194` §2.** Its "three extra pages break cadence" was taken with the SAME
+full-frame 50 fps `requestAnimationFrame` probe, so it measured a page far heavier than anything the
+client runs: the real rows are strips (448×144 … 1920×282), about half of them animated, and a
+ticker's per-frame work is a transform on one element rather than a full-frame repaint plus a text
+rewrite. **The number `B-194` was rejected on does not describe this station's load.**
+
+⚠ **Also confounded in both sessions:** the harness's cadence check is a SECOND file consumer doing a
+libx264 encode of `1080i5000` alongside the screen consumer — load the plant does not carry. Every
+"dropped frames" figure here and in `B-194` includes it.
+
+**4.e Affordability.** **+1 page is affordable.** Five static pages cost this channel nothing
+measurable (0/10 discards, `k` unchanged at −50 ms, black 0/10), and the +3 break `B-194` rested on
+did not survive its control. What is NOT affordable on this host is five full-frame 50 fps repainting
+pages — which is a statement about page CONTENT, and belongs in an authoring guideline rather than in
+an architecture verdict.
+
+---
+
+### 5. What changes and what dies under the sandwich — written answers, not a change
+
+| thing                                        | fate                                           | reason (one sentence)                                                                                                                                                                                                 |
+| -------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `liveSourceMask` + `MaskHole[]` (`scene.ts`) | **REMOVED**                                    | Nothing punches, so the mask value and the hole type have neither a producer nor a consumer.                                                                                                                          |
+| `sceneMaskHoles` (`scene-flatten.ts`)        | **REMOVED**                                    | Its only outputs are holes; the plate RECTS the bridge fills from come from `collectLiveSources`, which never calls it.                                                                                               |
+| `live-source-punch.ts`                       | **REMOVED** (whole file)                       | Apply / clear / re-punch exist only to write mask CSS onto live nodes.                                                                                                                                                |
+| the intersection mask shipped at `a7656b05`  | **REMOVED, not flagged**                       | With no holes there is nothing to intersect, so `--no-look-transition-mask` would be a flag whose both positions do nothing.                                                                                          |
+| `border-radius` per `design.md` §9a.1        | **NEEDS A NEW HOME — and there is none in v1** | A rounded picture needs its corners covered FROM ABOVE, and `MIXER FILL`/`CLIP` are rectangular; §9a.1 already calls this case "unachievable in v1 either way".                                                       |
+| the export format                            | **UNCHANGED**, and see §6                      | `template.json`'s shape does not change (the mask is computed at runtime), and the served page is rebuilt at IMPORT from the app's own runtime — so a **re-import**, not a re-export, is what a runtime change costs. |
+| layer numbering under `C-015`                | **ONE band added, none moved**                 | The live band and the operator bank stay; a background band below 10 is added, and C-015's "a dedicated layer BELOW the template's layer" inverts and must be rewritten.                                              |
+
+---
+
+### 6. 🔴 THE OUTCOME, recorded against `§9a-Z` and `B-194`
+
+**RE-SCOPED.** Over-the-picture is **CLASS 2 only**, and it is satisfied **today** — not by an overlay
+page but by the separate rows the client already authors and the bank already runs. §9a-Z's z-order
+rule ("elements above all plates are not masked") is what makes an over-the-picture element
+expressible INSIDE a plate-bearing template, and **no client template uses it**.
+
+**What §9a-Z's ruling got right and keeps:** _"Name supers over a live guest are ordinary broadcast,
+not an edge case."_ True of the plant — `زیرنویس (روی آنتن)` is exactly that super — and it is
+delivered by a row, not by an element inside the multibox template.
+
+⚠ **THE ONE THING THAT WOULD FLIP THIS BACK TO RE-CONFIRMED, and it is not hypothetical.** A name
+super **positioned under a particular guest BOX** is CLASS 1: its geometry follows the box, so it must
+move on the frame the fills move. Nothing in the client's set does that today — `زیرنویس` is a
+full-width card at a fixed place — but it is the obvious next thing to author for a multibox layout,
+and the owner confirmed on 2026-09-01 that supers over a guest are coming. **Authoring guidance
+follows from this audit rather than from taste: a super that must sit under a box is the one shape
+that re-imposes frame alignment, and a super at a fixed place on its own row never does.**
+
+- **Cross-refs:** [[B-194]] (whose §2 cost number and §4.1 layer argument this corrects, and whose
+  §4.3 re-export claim §5 above replaces), [[B-174]] / [[B-192]] / [[B-193]] (the skew class the
+  sandwich would make unrepresentable, and the two terms it would not), [[B-196]] (the compatibility
+  field this audit checked on the way past), [[C-015]] (sources below the template's layer),
+  [[C-028]] (the `contain` margin), `live-source-multibox/design.md` §9a / §9a-Z / §9a.1 / §9b.5.
+- **Evidence:** `tools/skew-harness/evidence/2026-09-01-sandwich-rows{5,6,5-settled,5-static}/report.json`.
+  The package audit itself was run with a scratch script over the two populations and is NOT
+  committed — its inputs are the client's own files, which are not in the repo, and its method is the
+  product's own flattener named above rather than a second geometry.
+- **The plant** was started for §4.d with the owner's standing authorisation, and put back as found:
+  channel cleared, mode returned to `1080p5000`, probe servers stopped, server stopped.
+- **Number:** highest `B-` HEADING across every ref was `B-194`; `B-195` … `B-201` returned no
+  headings anywhere, and the duplicate audit printed exactly the two accepted duplicates (`B-056`,
+  `B-080`). Cross-checked against the registry's dated pointer — _"Next free after this session is
+  `B-195`"_ — headings and pointer AGREE.
+
+## [ ] B-196 — `minRuntimeVersion` is a compatibility gate with a WRITER, a SCHEMA and NO READER, and the value written could not gate anything even if one existed ⟨priority: medium — it advertises a check nobody performs, which is `P-031`'s shape one field over⟩ — OPEN, filed 2026-09-01 from `TEMPLATE-OVERLAY-AUDIT-01` §5
+
+**Confirmed by reading the writer and every reader**, as asked, rather than by inference.
+
+- **Writer — exactly one, and it is a literal.** `apps/designer/src/platform/Exporter.ts:410`:
+  `compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' }`.
+- **Schema.** `packages/shared-schema/src/manifest.ts:37-38` declares both as `z.string().min(1)`,
+  carried into `CompatibilitySchema` (`:75`) and copied verbatim into every package by
+  `packages/vcg-format/src/pack.ts:114`.
+- **Readers — NONE.** `git grep` over `packages apps tools` finds the field only at the writer, the
+  schema and the pack site. There is no semver comparison anywhere in the tree, and **no runtime
+  version constant exists at all** — the project deliberately maintains no semver
+  (`apps/designer/tests/splashCss.test.ts:334`: _"printing a semver the project does not maintain is
+  a false claim"_).
+- **And the value is inert by construction.** `'0.0.0'` is the minimum possible version, so even a
+  reader could never refuse anything on it.
+
+### What the hazard actually is — the framing this audit CORRECTS
+
+The obvious reading is "a stale `.vcg` runs stale page code". **That is wrong, and the code says so:**
+`apps/runtime/src/renderer/features/library/templateDelivery.ts:15-21` imports `cgCss`, `cgJsIife`
+and `cgJsLottieIife` from `@cg/single-file-export` — **the Runtime app's OWN bundled runtime** — and
+`:202-211` re-produces the served HTML from the scene with them. The `cg.js` inside the `.vcg` is
+never served. So a package exported a year ago and imported today is rendered by TODAY's runtime.
+
+⇒ **The real, unguarded direction is the opposite one: a NEWER package imported into an OLDER Runtime
+app.** The scene may declare a feature that app's runtime does not implement, and nothing compares
+anything — the import succeeds, the element renders as whatever the older code makes of it, and no
+surface says why. `minRuntimeVersion` is precisely the field that would catch it, and it is inert.
+
+### Precedent — the owner has already decided this exact shape
+
+[[P-031]] (`docs/prd/platform.md:1622`) is the schema-migration registry: _"DEAD CODE that advertises
+itself as the migration path"_, and the decision was **DELETE**, because _"it must stop presenting
+itself as the place a schema conversion goes, because a migration registered there is a conversion
+that never runs."_ **This is the same object one field over.** Either wire it — write the app's real
+runtime version at export and compare it at import — or delete it from the manifest under the same
+compatibility-floor policy. What it must not do is keep declaring a floor nobody enforces.
+
+**Acceptance:**
+
+- WHEN a `.vcg` is imported THEN either its declared `minRuntimeVersion` is compared against a real
+  runtime version and a package the app cannot render is REFUSED by name, or the field is gone from
+  the manifest schema and from the exporter
+- WHEN the field is kept THEN the exporter writes the app's actual version rather than `'0.0.0'`,
+  because a floor of zero is a floor nothing can fail
+- WHEN a package is refused on that comparison THEN the surface names the package, the version it
+  needs and the version this station has — a refusal an operator can act on
+
+- **Cross-refs:** [[P-031]] (the decided precedent — dead compatibility machinery is deleted, not
+  left), [[B-195]] (the audit that found this), [[D-150]] (the self-contained package this field
+  travels in), [[B-190]] (the other manifest-level determinism defect).
+- **Number:** highest `B-` HEADING was `B-195`, taken immediately above in this same session;
+  `B-196` … `B-202` returned no headings anywhere.
