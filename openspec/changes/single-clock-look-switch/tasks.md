@@ -46,51 +46,85 @@
       rejects the "item's slot ≠ its row" shape, which would put one layer coordinate in two places.
 - [x] 1.5 `openspec validate --all --strict` clean.
 
-## 2. THE REORDER — NOT STARTED (next session)
+## 2. THE REORDER — BUILT 2026-09-01, NOT LANDED (see §4)
 
-- [ ] 2.1 A second declared bank, low, defaulting to 1–9: schema, validation disjoint from the
-      existing bank, the live band and the reserved range, and the boot read-back.
-- [ ] 2.2 Classification at import, derived from whether the package declares plates. No operator
-      choice, no flag.
-- [ ] 2.3 Refusal by name on the wrong bank, both directions.
-- [ ] 2.4 Restore: MIGRATE a retained plate-bearing item to a low slot and report it; refuse with a
-      reason only when none is free.
-- [ ] 2.5 `B-039`'s pre-roll `CG ADD` (`caspar-runtime.ts:2008-2011`), the union pre-seat, the take
-      path, `setActiveLook`, `#tellPageLook`, `#recordActiveLook`, the level-2 freeze and
-      `reconcileLivePlates` all keep working — the page is still told the look, it just no longer has
-      to land on any particular frame.
-- [ ] 2.6 `C-028` re-proved with a pixel probe on the real template, not inherited from `B-194` §3.
+- [x] 2.1 A second declared bank, low, defaulting to 1–9: `LowFixedLayerBankSchema` on
+      `FixedLayerBankSchema` (DEFAULTED, so a bank written before it parses into 1–9 and no reader
+      branches on absence), validated disjoint from the operator half (`banks-overlap`), the policy
+      ranges and the reservation, and BELOW the Live Source band (`low-bank-not-below-band`, checked
+      in `validateSourceCatalog` because the BAND is the side that can move).
+- [x] 2.2 Classification at import: `requiredBankFor`, off the carrier `collectLiveSources`
+      produces. No operator choice, no flag. An ABSENT carrier resolves `high`, with the positive
+      argument written at the function.
+- [x] 2.3 Refusal by name on the wrong bank, BOTH directions (`wrong-bank`), and the template picker
+      reads the SAME predicate so the surface can never offer a placement the bridge refuses.
+- [x] 2.4 Restore: MIGRATE a retained bed to the highest free bed row and REPORT it
+      (`stack.restore`'s `migrated`, its own panel notice). The ROW moves and the AIR does not — the
+      migrated row comes back `loaded`, so the wire is untouched; `no-bed-row` when the group is full.
+- [x] 2.5 `B-039`'s pre-roll `CG ADD`, the union pre-seat, the take path, `setActiveLook`,
+      `#tellPageLook`, `#recordActiveLook`, the level-2 freeze and `reconcileLivePlates` all keep
+      working — 723 bridge tests green, including the whole-list wire-sequence pin.
+- [x] 2.6 `C-028` re-proved on the plant: measured in §4's campaign rather than inherited. Under
+      `contain` the fills and clips are equal on the wire, and the frame outside a plate is the BED
+      PAGE — the classifier's BLACK class is exactly "belonging to neither look", and it read **0 %
+      in 100 recordings of 100**. Black behind a plate would have been the loudest reading it has.
 
-## 3. RETIRE THE MASK — NOT STARTED, and it lands WITH section 2
+🔴 **THE IDENTITY DID NOT SPLIT, which is what `design.md` §1 made the condition.** Sites touched:
+`#slotForRestore` (the migration branch) and the fixed-state publish (`layerAlias`, so a bed row's
+alias is not dropped). Sites NOT touched, because they key on the `(channel, layer)` coordinate and
+never ask which half it came from: **`#layers.bindFixed` / `isFixed` / `fixedSlots` / `unbindFixed`,
+`#slots` and all 43 of its read sites, occupancy, quarantine, `clearLayer`, `#reassertDeclaredVolumes`
+and the LayerManager itself.** `fixedBankSlots` hands them one union; that is the whole trick.
 
-🔴 **It must not land alone.** A maskless page under plates that are still BELOW it puts black on air
-for every plate.
+## 3. RETIRE THE MASK — DONE 2026-09-01, and it lands WITH section 2
 
-- [ ] 3.1 Remove `liveSourceMask` and `MaskHole[]` (`scene.ts`), `sceneMaskHoles` and
-      `intersectPunches` and `ArrangementView.transitionFrom` (`scene-flatten.ts`),
-      `live-source-punch.ts` entire, `scene-builder`'s build-time punch and `punchTargets`,
-      `runtime.ts`'s re-punch.
-- [ ] 3.2 Remove the intersection-mask work shipped at `a7656b05`: `CgControl.from`, the narrow /
-      settle pair in `setActiveLook`, `--look-transition-lead-ms`, `--look-transition-tail-ms` and
+- [x] 3.1 Removed: `liveSourceMask` / `LiveSourceMask` / `MaskHole` (`scene.ts`), `sceneMaskHoles`,
+      `intersectPunches`, `PlateFits`, `PlateFitFacts` and `ArrangementView.transitionFrom`
+      (`scene-flatten.ts`), `live-source-punch.ts` entire, the build funnel's `punchLiveSourceHoles`
+      and `ctx.punchTargets`, `runtime.ts`'s re-punch, and `liveArrangementView`.
+- [x] 3.2 Removed: `CgControl.from` and `CgControl.plates` with `readPlateFits`, the bridge's
+      `#plateFits` / `fitsOverride` / `planFits`, `updateLook`'s two extra arguments, the narrow /
+      settle pair in `setActiveLook`, and `--look-transition-lead-ms` / `--look-transition-tail-ms` /
       `--no-look-transition-mask`. ⚠ `CgControl.look` SURVIVES — the page still flips its own
-      decoration. `CgControl.plates` goes with the mask, since the fit is applied by the bridge.
-- [ ] 3.3 Name any second consumer found and keep only that.
-- [ ] 3.4 Prove the export format is unchanged by round-tripping one package.
+      decoration — and so does `--look-mixer-hold-ms`, at its untouched default.
+- [x] 3.3 Second consumers named and kept: `B-178`'s `fitProvenance` (the operator-facing report of
+      where each mode came from) is untouched and now carries the punched-seat-wins guard on its own;
+      `applyArrangementGeometry` is untouched (a moved plate still takes its geometry with it, read by
+      `collectLiveSources` for `MIXER FILL` instead of by a mask); the two Designer copies of
+      `intersects` are untouched, only the third with nothing left to test went.
+- [x] 3.4 The export format is unchanged, and it is checkable rather than asserted: `sceneMaskHoles`
+      ran in the BROWSER at build and at re-punch, and `collectLiveSources` — the thing that crosses
+      into the package — records plate rects and never held a hole. `@cg/vcg-format`'s 155 tests,
+      including the pack/unpack/verify round trip, are green with no fixture edited.
 
-## 4. PROVE ZERO — NOT STARTED. This decides whether the change ships.
+## 4. 🔴 PROVE ZERO — MEASURED 2026-09-01, AND IT DID NOT PASS. NOTHING WAS PUSHED.
 
-- [ ] 4.1 Same file-consumer harness that produced the 20 / 30 / 60 ms numbers. No new probe.
-- [ ] 4.2 `1↔2`, `1↔3`, `1→2→3`, `3→2→1`; ≥10 recordings each; per recording report BLACK frames,
-      HOLE-misalignment frames and DROPPED frames.
-- [ ] 4.3 **Acceptance: zero black and zero hole-misalignment in EVERY recording.** Any non-zero
-      recording STOPS the change and is reported as a failure. An improvement is not a fix.
-- [ ] 4.4 Reported separately, NOT folded into the acceptance: per-look decoration skew on the
-      plate-bearing page. `B-195`'s audit found `3ghab`'s decoration is one shared ROOT image below
-      all three looks, so it should be zero for the real template — verify from the audit data, and
-      give a measured frame count for any per-look-decoration case found anywhere.
-- [ ] 4.5 State that term (b), producer start latency (`B-192`), survives untouched, with its current
-      measured value (**+2 … +4 fields, 40–80 ms**), so the owner is not told a residual he can still
-      see was fixed.
+- [x] 4.1 The SAME file-consumer harness that produced the 20 / 30 / 60 ms numbers, same probes, same
+      artefact classifier, at `1080i5000`. The only harness change is WHERE THE PAGE SITS: the
+      template is taken onto bed row 9 through `loadFixed`, with the live band at 30–39 above it.
+      A third look and a third plate were added to match the owner's real template (`B-164` records
+      his as 1 box / 2 boxes / 3 boxes), and the probe-placement check now runs over EVERY ORDERED
+      PAIR of a multi-look fixture rather than only the first two.
+- [x] 4.2 `1↔2`, `1↔3`, `1→2→3`, `3→2→1`, ten recordings each, plus forty more of the leg that
+      failed. **100 recordings.** Per recording: BLACK frames, MISPLACED frames, DROPPED frames.
+- [ ] 4.3 **ACCEPTANCE: NOT MET.** BLACK: **0 in 100 of 100.** DROPPED: **none — no recording was
+      discarded and the worst cadence deficit anywhere was 2 frames of ~76.** `k`, the page-against-
+      mixer skew this whole change targets: **0 channel frames in 100 of 100**, which is the first
+      zero any `B-174` campaign has produced. MISPLACED: **0 in 99 recordings and 2 frames (40 ms,
+      one channel frame) in one** — `seq-3-2-1` run 06, where `MIXER 1-30 FILL` landed a frame before
+      `MIXER 1-31 FILL` and the departing box was drawn over the arriving plate. Filed as **`B-198`**.
+      An improvement is not a fix: the change is NOT pushed.
+- [x] 4.4 Per-look decoration skew on the bed page: **zero, and verified rather than assumed.**
+      `B-195`'s audit of the owner's own package found ONE non-plate element in the whole scene — a
+      full-frame image on the ROOT layer, below all three look instances — so no decoration changes
+      with the look and there is nothing to skew. No per-look-decoration case exists in either
+      population (the client's twelve packages or the repo's nine), so no frame count can be given
+      for one; that is a statement about the corpus, not a measurement that was skipped.
+- [x] 4.5 Term (b), producer start latency (`B-192`), is **UNTOUCHED by this change** and its
+      measured value stands at **+2 … +4 fields (40–80 ms)**. It is invisible in this campaign only
+      because the `ghab3` fixture seats every plate in every look on purpose, so no producer is ever
+      started inside a window. On the owner's real template a look that reveals a box whose producer
+      was parked will still show that box dark for 40–80 ms, and no compositing order changes it.
 
 ## 5. `B-196` — WIRE `minRuntimeVersion` (landed 2026-09-01)
 

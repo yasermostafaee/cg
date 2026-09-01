@@ -38,10 +38,19 @@ const PATTERN_EXPR: Readonly<Record<string, readonly [string, string, string]>> 
   // `B-155` — the SWAP TARGET: the clip a catalog re-point retargets `src-1` at, inverted
   // from skew-src-1 so the replace landing is as loud as the geometry moving.
   'skew-src-3': ['255-255*X/1920', '255-255*Y/1080', '128-127*sin(X/30)*sin(Y/30)'],
+  // `single-clock-look-switch` — the THIRD plate's clip. Permuted again, and NOT `skew-src-3`:
+  // that one is the swap target, and a source that doubled as it would make a `--with-play-switch`
+  // run unreadable — the re-point and the third box would be the same picture.
+  'skew-src-4': ['255*Y/1080', '128+127*sin(X/30)*sin(Y/30)', '255*X/1920'],
 };
 
 /** The clips the CATALOG declares as sources, in CasparCG media-relative form. */
-export const SOURCE_CLIPS = ['skew-src-1', 'skew-src-2'];
+/**
+ * ⚠ THREE since `single-clock-look-switch`: the owner's template declares three plates, and an
+ * UNASSIGNED plate refuses the take outright (`C-015`'s named refusal) — so a three-plate scene
+ * needs a third catalog entry or it could never go on air to be measured.
+ */
+export const SOURCE_CLIPS = ['skew-src-1', 'skew-src-2', 'skew-src-4'];
 
 /** `B-155` — the clip the catalog re-point retargets `src-1` at, mid-run, while on air. */
 export const SWAP_CLIP = 'skew-src-3';

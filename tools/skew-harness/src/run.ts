@@ -32,7 +32,10 @@ import {
   BANNER_COLUMN_FIXTURE,
   PLATE_A,
   PLATE_B,
+  PLATE_C,
   probePlacementIssues,
+  measuredPair,
+  probeBFor,
   SKEW_FIXTURES,
   SKEW_SCENE,
   type SkewFixture,
@@ -82,20 +85,33 @@ export interface SkewOptions {
   /** Switch the OTHER way — `to → from`. Both directions matter and they are not symmetric. */
   readonly reverse: boolean;
   /**
-   * 🔴 The CONTROL. `false` boots the bridge with `lookTransitionMask: false`, i.e. the
-   * single-tell switch that shipped before `SKEW-INTERSECT-01` — the SAME binary, so a
-   * before/after comparison cannot rest on a build that was never exercised.
+   * 🔴 `single-clock-look-switch` — **WHICH pair of the fixture's looks this campaign measures,
+   * and what the row goes through FIRST.**
+   *
+   * A fixture may declare three looks (`ghab3` does), and the four transitions the acceptance
+   * asks for are four different pairs of them. Absent ⇒ the fixture's first two, which is every
+   * earlier measurement's default and keeps those campaigns reproducible.
+   *
+   * ⚠ `via` is what makes a SEQUENCE a sequence rather than two unrelated switches. Each run
+   * resets the row to `from` and settles before recording; with `via` set, the reset goes
+   * `via → from` — so `1→2→3` is measured as the `2→3` step **with the row genuinely having
+   * come from 1**, which is where a state carried across a switch would show. Measuring the
+   * whole sequence inside one recording would instead need the classifier to hold three settled
+   * references, and its whole soundness argument rests on there being exactly two.
    */
-  readonly transitionMask: boolean;
-  /**
-   * The transition window's two halves, in ms, when the sweep wants to vary them. `undefined`
-   * leaves the bridge's own default — one channel frame of the observed mode each — which is
-   * what every acceptance sweep runs with. Set to `0` to measure what each half BUYS: the lead
-   * is what makes the narrowing provably precede the fills, and the tail is what the artefact's
-   * duration is paid in.
-   */
-  readonly transitionLeadMs?: number;
-  readonly transitionTailMs?: number;
+  readonly fromLook?: string;
+  readonly toLook?: string;
+  readonly viaLook?: string;
+  /*
+    `single-clock-look-switch` — `transitionMask`, `transitionLeadMs` and `transitionTailMs`
+    are GONE with the product options they set. The mask they steered no longer exists: a
+    plate-bearing package is composited BELOW its plates, so there are no holes to narrow.
+
+    ⚠ **The before/after CONTROL they existed to provide is not lost — it moved.** It is no
+    longer a flag on this binary but the earlier evidence in `evidence/2026-08-31-intersect-*`,
+    measured by THIS SAME classifier on THIS SAME fixture, where black and misplaced read
+    non-zero. A zero here is read against those.
+  */
 }
 
 /**
@@ -134,7 +150,6 @@ export const DEFAULT_OPTIONS: SkewOptions = {
   emptyLook: false,
   fixture: BANNER_COLUMN_FIXTURE.id,
   reverse: false,
-  transitionMask: true,
 };
 
 /**
@@ -206,9 +221,11 @@ export interface SkewReport {
     readonly fixture: string;
     readonly from: string;
     readonly to: string;
-    readonly transitionMask: boolean;
-    readonly transitionLeadMs?: number;
-    readonly transitionTailMs?: number;
+    /** `single-clock-look-switch` — WHERE THE PAGE SITS, which is the whole of the change. */
+    readonly bedLayer: number;
+    readonly liveBand: string;
+    /** The look the row passes through on its way to `from` — a SEQUENCE's first leg. */
+    readonly via?: string;
   };
   readonly runs: readonly RunResult[];
   readonly kChannelFrames: Distribution;
@@ -250,6 +267,26 @@ async function freeUdpPort(): Promise<number> {
 }
 
 /** The two catalog entries, both `media` — the one producer kind that needs no signal. */
+/**
+ * 🔴 **`single-clock-look-switch` — THE BED ROW, and it is the whole point of the measurement.**
+ *
+ * A plate-bearing package is a graphics BED: it loads onto the LOW half of the bank and its
+ * pictures are composited ON TOP of it. The harness declares the bank the product declares —
+ * operator rows at 70–79, bed rows at 1–9 — and takes the template onto a bed row, so what is
+ * recorded is the layer order the product actually runs.
+ *
+ * ⚠ The live band stays at 30–39 (`catalog`), which is ABOVE the beds and BELOW the operator
+ * rows — the arrangement `validateSourceCatalog` enforces at boot.
+ */
+const HARNESS_BANK = {
+  channel: 1,
+  start: 70,
+  count: 10,
+  low: { start: 1, count: 9 },
+} as const;
+/** The bed row the measured template is taken onto — `Bed 1`, the top of the bed group. */
+const BED_LAYER = 9;
+
 function catalog(): unknown {
   return {
     layerRange: { start: 30, end: 39 },
@@ -266,6 +303,9 @@ function assignments(templateId: string): unknown {
     assignments: [
       { templateId, plateId: PLATE_A, sourceId: 'src-1' },
       { templateId, plateId: PLATE_B, sourceId: 'src-2' },
+      // `single-clock-look-switch` — the third plate the owner's three-box look shows. An
+      // unassigned plate refuses the take, so this is required for the scene to run at all.
+      { templateId, plateId: PLATE_C, sourceId: 'src-3' },
     ],
   };
 }
@@ -289,6 +329,12 @@ async function analyseRecording(
   file: string,
   baselineFrames: number,
   fixture: SkewFixture,
+  /**
+   * The pair this run measures — probe B is resolved FROM IT (`probeBFor`), because on a
+   * three-look fixture one rect cannot be inside exactly one look for every pair. Passing the
+   * pair rather than the rect keeps the placement CHECK and the READING on one resolution.
+   */
+  pair: readonly [string, string],
 ): Promise<{
   k: number | null;
   reason?: string;
@@ -299,12 +345,13 @@ async function analyseRecording(
   probeC?: ChangePoint;
   eventsC?: readonly number[];
 }> {
+  const probeBRect = probeBFor(fixture, pair);
   const [rawA, rawB] = await Promise.all([
     extractProbe(file, fixture.probeA),
-    extractProbe(file, fixture.probeB),
+    extractProbe(file, probeBRect),
   ]);
   const framesA = splitFrames(rawA, probeFrameBytes(fixture.probeA)).slice(LEAD_SKIP_FRAMES);
-  const framesB = splitFrames(rawB, probeFrameBytes(fixture.probeB)).slice(LEAD_SKIP_FRAMES);
+  const framesB = splitFrames(rawB, probeFrameBytes(probeBRect)).slice(LEAD_SKIP_FRAMES);
   const seriesA = changeSeries(framesA);
   const seriesB = changeSeries(framesB);
   const probeA = firstChangeIndex(seriesA, baselineFrames);
@@ -396,7 +443,10 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
     against the first pair's constants would be a measurement with no soundness argument at
     all — and `k` is exactly as trustworthy as this check.
   */
-  const placement = probePlacementIssues(fixture);
+  const placement = probePlacementIssues(
+    fixture,
+    measuredPair(fixture, options.fromLook, options.toLook),
+  );
   if (placement.length > 0) {
     throw new Error(
       `probe placement is unsound, refusing to measure:\n  - ${placement.join('\n  - ')}`,
@@ -462,20 +512,23 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
       {},
       {
         sweepMs: 250,
+        // Both halves of the bank, fenced — the union the product's boot validator returns.
+        fixedSlots: [
+          ...Array.from({ length: HARNESS_BANK.count }, (_, i) => ({
+            channel: HARNESS_BANK.channel,
+            layer: HARNESS_BANK.start + i,
+          })),
+          ...Array.from({ length: HARNESS_BANK.low.count }, (_, i) => ({
+            channel: HARNESS_BANK.channel,
+            layer: HARNESS_BANK.low.start + i,
+          })),
+        ],
+        fixedBank: HARNESS_BANK,
         sourceCatalog: catalog() as never,
         sourceAssignments: assignments(templateId) as never,
-        /*
-          🔴 `SKEW-INTERSECT-01`'s CONTROL rides the product's own option rather than a build:
-          `--no-transition-mask` runs the SAME binary with the single-tell switch, so a
-          before/after claim compares two behaviours and not two compilations.
-        */
-        lookTransitionMask: options.transitionMask,
-        ...(options.transitionLeadMs === undefined
-          ? {}
-          : { lookTransitionLeadMs: options.transitionLeadMs }),
-        ...(options.transitionTailMs === undefined
-          ? {}
-          : { lookTransitionTailMs: options.transitionTailMs }),
+        // `single-clock-look-switch` — the transition window's options are GONE with the mask
+        // they steered. `--look-mixer-hold-ms` survives on the product and is left at its
+        // default here, which is one channel frame of the observed mode.
       } as never,
     );
     runtime.start();
@@ -484,7 +537,23 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
     await whenServerReachable(runtime);
 
     const itemId = 'skew-item';
-    await runtime.load(itemId, templateId, {});
+    /*
+      🔴 `loadFixed` ONTO A BED ROW, not `load`.
+
+      `load` allocates from the dynamic policy, which for `custom` is 60–69 — ABOVE the live
+      band at 30–39, i.e. the old order in which the page sat over its own plates and had to
+      punch holes in itself. The measurement is of the NEW order, so it goes through the door
+      the product now sends a plate-bearing package through, and the bridge's own `wrong-bank`
+      refusal is what proves it: a bed on an operator row is refused, so a harness that had
+      this backwards could not have run at all.
+    */
+    const loaded = await runtime.loadFixed(
+      { channel: options.channel, layer: BED_LAYER },
+      itemId,
+      templateId,
+      {},
+    );
+    if (!loaded.accepted) throw new Error(`the bed load was refused: ${JSON.stringify(loaded)}`);
     const taken = await runtime.take(itemId);
     if (!taken.accepted) throw new Error(`take was refused: ${JSON.stringify(taken)}`);
     // The page has to have fetched, parsed, built and painted before anything is timed.
@@ -492,9 +561,9 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
 
     // The measured direction. `reverse` is not cosmetic: on the owner's shape one direction
     // OPENS a full-frame hole and the other CLOSES one, and they fail differently.
-    const [authoredFirst, authoredSecond] = fixture.looks;
-    const measuredFrom = options.reverse ? authoredSecond : authoredFirst;
-    const measuredTo = options.reverse ? authoredFirst : authoredSecond;
+    const [pairFrom, pairTo] = measuredPair(fixture, options.fromLook, options.toLook);
+    const measuredFrom = options.reverse ? pairTo : pairFrom;
+    const measuredTo = options.reverse ? pairFrom : pairTo;
     const shared = { runtime, control, tap, options, fieldsPerChannelFrame, fixture };
     const runs: RunResult[] = [];
     for (let i = 0; i < options.runs; i += 1) {
@@ -522,13 +591,11 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
         fixture: fixture.id,
         from: measuredFrom,
         to: options.emptyLook ? LOOK_EMPTY : measuredTo,
-        transitionMask: options.transitionMask,
-        ...(options.transitionLeadMs === undefined
-          ? {}
-          : { transitionLeadMs: options.transitionLeadMs }),
-        ...(options.transitionTailMs === undefined
-          ? {}
-          : { transitionTailMs: options.transitionTailMs }),
+        // `single-clock-look-switch` — where the page SITS is now the fact worth recording,
+        // and it is the whole of what this measurement varies from the earlier arc.
+        bedLayer: BED_LAYER,
+        liveBand: '30-39',
+        ...(options.viaLook === undefined ? {} : { via: options.viaLook }),
       },
       runs,
       kChannelFrames: distribution(runs.filter(usable).map((r) => r.kChannel as number)),
@@ -677,9 +744,22 @@ async function recordOneSwitch(spec: OneSwitch): Promise<RunResult> {
   const { runtime, control, tap, options } = spec;
   const itemId = 'skew-item';
 
-  // Start from the OUTGOING look, settled, every time — a run that began mid-transition
-  // would carry the previous switch into its own baseline.
-  if (runtime.activeLookId(itemId) !== spec.from) {
+  /*
+    Start from the OUTGOING look, SETTLED, every time — a run that began mid-transition would
+    carry the previous switch into its own baseline.
+
+    🔴 `single-clock-look-switch` — and when the campaign is a SEQUENCE, the reset goes THROUGH
+    `via` first, so the row arrives at `from` the way the sequence says it does. It is done
+    UNCONDITIONALLY rather than only when the active look differs, because the point of a
+    sequence is the leg that precedes the measured switch: skipping it on a row that happens to
+    be sitting on `from` already would silently measure the plain two-look case instead.
+  */
+  if (options.viaLook !== undefined) {
+    await runtime.setActiveLook(itemId, options.viaLook);
+    await sleep(1200);
+    await runtime.setActiveLook(itemId, spec.from);
+    await sleep(1500);
+  } else if (runtime.activeLookId(itemId) !== spec.from) {
     await runtime.setActiveLook(itemId, spec.from);
     await sleep(1500);
   }
@@ -788,7 +868,7 @@ async function recordOneSwitch(spec: OneSwitch): Promise<RunResult> {
     4,
     Math.floor((options.settleMs * 0.6) / period) - LEAD_SKIP_FRAMES,
   );
-  const analysis = await analyseRecording(kept, baselineFrames, spec.fixture);
+  const analysis = await analyseRecording(kept, baselineFrames, spec.fixture, [spec.from, spec.to]);
   if (analysis.k === null) return discard(analysis.reason ?? 'no transition found');
 
   let classified: { artefact: ArtefactSummary; frames: string[] } | null = null;

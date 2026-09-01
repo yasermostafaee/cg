@@ -2009,3 +2009,20 @@ the dated pointer:** the entry above ends _"Next free after this session is `B-1
 pointer AGREE.
 
 ⇒ **Next free after this session is `B-198`**, and `B-` stays contiguous `B-001` … `B-197`, no gaps.
+
+### 2026-09-01 — `B-198` (`SINGLE-CLOCK-SWITCH-02` §3: the measurement that did NOT reach zero)
+
+`B-198` — **one `MIXER` batch is not atomic**: in 1 recording of 100, the arriving plate's
+`MIXER … FILL` took effect a whole channel frame before the departing box's, so the outgoing box was
+drawn over the incoming picture for 40 ms. Filed in `bugs-runtime.md`. It is the residual that
+blocks `single-clock-look-switch`'s all-or-nothing acceptance — the term that change targets, the
+page/mixer skew `k`, measured **0 in 100 of 100**.
+
+**Derivation, from headings as the rule requires:** highest `B-` HEADING across every ref was
+**`B-197`** (taken earlier the same day by the border-radius item); `B-198` … `B-201` returned **no
+headings anywhere** — every occurrence is a provenance sentence in an earlier item or this file's own
+forward-reference pointer, the documented false positive. The duplicate audit printed exactly the two
+accepted duplicates (`B-056`, `B-080`). **Cross-check against the dated pointer:** the entry above
+ends _"Next free after this session is `B-198`"_ — headings and pointer AGREE.
+
+⇒ **Next free after this session is `B-199`**, and `B-` stays contiguous `B-001` … `B-198`, no gaps.

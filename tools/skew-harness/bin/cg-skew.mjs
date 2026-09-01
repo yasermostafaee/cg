@@ -7,6 +7,8 @@
 //   cg-skew --media-dir <dir> --mode 1080i5000 --runs 10 --out evidence/2026-08-31
 //   cg-skew --media-dir <dir> --with-play-switch      # ALSO measure B-155's window
 //   cg-skew --media-dir <dir> --fixture ghab --classify          # the owner's full-frame-vs-boxes pair
+//   cg-skew --media-dir <dir> --fixture ghab3 --from look-ghab-full --to look-ghab-three
+//   cg-skew --media-dir <dir> --fixture ghab3 --via look-ghab-full --from look-ghab-boxes --to look-ghab-three
 //   cg-skew --media-dir <dir> --fixture ghab --reverse           # ...the other way round
 //   cg-skew --media-dir <dir> --fixture ghab --no-transition-mask # the CONTROL: the pre-fix switch
 //   cg-skew --media-dir <dir> --transition-lead-ms 0   # what the window's LEADING half buys
@@ -82,14 +84,11 @@ const options = {
   // `SKEW-INTERSECT-01` — which measured pair, which direction, and whether the fix is on.
   fixture: typeof args.fixture === 'string' ? args.fixture : DEFAULT_OPTIONS.fixture,
   reverse: args.reverse === true,
-  transitionMask: args['no-transition-mask'] !== true,
+  // `single-clock-look-switch` — which pair of a multi-look fixture, and the leg before it.
+  ...(typeof args.from === 'string' ? { fromLook: args.from } : {}),
+  ...(typeof args.to === 'string' ? { toLook: args.to } : {}),
+  ...(typeof args.via === 'string' ? { viaLook: args.via } : {}),
   // Undefined leaves the bridge's own derived default (one channel frame each).
-  ...(args['transition-lead-ms'] === undefined
-    ? {}
-    : { transitionLeadMs: Number(args['transition-lead-ms']) }),
-  ...(args['transition-tail-ms'] === undefined
-    ? {}
-    : { transitionTailMs: Number(args['transition-tail-ms']) }),
 };
 
 function numeric(value, fallback) {
@@ -152,13 +151,7 @@ print('');
 print(`scene               : ${report.scene.looks} looks, ${report.scene.background} background`);
 print(
   `fixture             : ${report.scene.fixture}  ${report.scene.from} -> ${report.scene.to}` +
-    `   transition mask ${report.scene.transitionMask ? 'ON' : 'OFF (the pre-fix control)'}` +
-    (report.scene.transitionLeadMs === undefined
-      ? ''
-      : `   lead ${report.scene.transitionLeadMs} ms`) +
-    (report.scene.transitionTailMs === undefined
-      ? ''
-      : `   tail ${report.scene.transitionTailMs} ms`),
+    `   bed layer ${report.scene.bedLayer}   live band ${report.scene.liveBand}`,
 );
 print(`k, in CHANNEL FRAMES : ${fmt(report.kChannelFrames)}`);
 print(`k, in MILLISECONDS   : ${fmt(report.kMilliseconds)}`);

@@ -52,14 +52,30 @@ already used once, in `design.md §9b.5`.
 
 ## Status
 
-**The two-bank shape is ADOPTED. The zero-skew result is PENDING MEASUREMENT.** This change carries
-the spec; the reorder, the mask removal and the measurement campaign land together as one commit,
-because a maskless page under plates that are still BELOW it puts black on air for every plate.
+🔴 **THE SHAPE IS BUILT. THE ACCEPTANCE IS NOT MET, AND NOTHING WAS PUSHED.**
 
-Acceptance for that campaign is unchanged and is all-or-nothing: **zero black and zero
-hole-misalignment in EVERY recording**, both directions, `1↔2` and `1↔3` separately plus `1→2→3` and
-`3→2→1`, at least ten recordings per transition, measured with the same file-consumer harness that
-produced the 20 / 30 / 60 ms numbers. A partial win is reported as a failure.
+The reorder and the mask retirement are implemented and green (one local commit, `a7976e14`, not on
+the remote). The campaign that gates them ran on the plant on 2026-09-01 — **100 recordings**, the
+same file-consumer harness and the same artefact classifier that produced the 20 / 30 / 60 ms
+numbers, at `1080i5000`:
+
+| term                                             | result                                               |
+| ------------------------------------------------ | ---------------------------------------------------- |
+| `k` — the PAGE against the MIXER, `B-174`'s term | **0 channel frames in 100 of 100**                   |
+| BLACK frames                                     | **0 in 100 of 100**                                  |
+| DROPPED frames                                   | **none; no recording discarded, worst deficit 2/76** |
+| MISPLACED frames                                 | 0 in 99 — **2 frames (40 ms) in ONE**                |
+
+**The one non-zero is a different disagreement and it is filed as `B-198`:** in that recording the
+arriving plate's `MIXER … FILL` took effect a whole channel frame before the departing box's, so the
+outgoing box was drawn over the incoming picture for 40 ms. The page and the fills were exactly
+together in that run as in every other (`k = 0`); what split was two `MIXER` commands of ONE batch.
+
+The acceptance is all-or-nothing by instruction — _"Any non-zero recording is a failure — stop,
+report it, land nothing"_ — so it is reported as a failure. ⚠ **That is not a report that the reorder
+failed:** the term it targets read zero in every recording, which no `B-174` campaign had achieved
+before. `B-198` has to be closed, or the acceptance re-scoped by the owner with these numbers in
+front of him, before this ships.
 
 ## What this does NOT fix
 

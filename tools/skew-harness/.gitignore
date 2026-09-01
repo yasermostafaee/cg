@@ -1,6 +1,11 @@
 evidence/**
 !evidence/*/
 !evidence/*/report.json
+# \SINGLE-CLOCK-SWITCH-02\ — a campaign is now a DIRECTORY OF RUNS (one per measured pair), so the
+# report of record sits one level deeper. The recordings themselves stay ignored; only the numbers
+# are committed, which is the same rule one nesting level along.
+!evidence/*/*/
+!evidence/*/*/report.json
 
 # SKEW-INTERSECT-01 — the owner's own template (`3-ghab.vcg` / `.cgproj` and the photograph it
 # carries). Undiffable binary, one of them a picture of a person, and re-exportable from his

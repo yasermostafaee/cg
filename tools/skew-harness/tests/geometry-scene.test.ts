@@ -11,6 +11,7 @@ import {
   GHAB_PROBE_A,
   GHAB_PROBE_B,
   GHAB_SEATED_FIXTURE,
+  GHAB3_FIXTURE,
   GHAB_SEATED_FULL_RECTS,
   LOOK_BANNER,
   LOOK_COLUMN,
@@ -231,13 +232,26 @@ describe('probePlacementIssues — the check itself', () => {
   it('every registered fixture is sound', () => {
     // The registry is what the CLI resolves `--fixture` against, so a fixture that is
     // reachable but unsound is the one nobody would think to check.
+    /*
+      🔴 `single-clock-look-switch` — EVERY ORDERED PAIR, not just the fixture's first two.
+
+      A three-look fixture is measured on a pair chosen at run time (`--from` / `--to`), so a
+      check that only asked about the default pair would leave `1↔3` and both sequences resting
+      on a placement nobody validated — which is the exact shape of "a measurement with no
+      soundness argument" this function exists to refuse.
+    */
     for (const [id, fixture] of Object.entries(SKEW_FIXTURES)) {
-      expect(probePlacementIssues(fixture), `${id} placement`).toEqual([]);
+      for (const from of fixture.looks) {
+        for (const to of fixture.looks) {
+          if (from === to) continue;
+          expect(probePlacementIssues(fixture, [from, to]), `${id} ${from} -> ${to}`).toEqual([]);
+        }
+      }
     }
-    // The three the CLI can name, listed so a fixture added without a placement argument is
+    // The four the CLI can name, listed so a fixture added without a placement argument is
     // an edit to this line rather than a silent new measurement.
     expect(Object.keys(SKEW_FIXTURES).sort()).toEqual(
-      [BANNER_COLUMN_FIXTURE.id, GHAB_FIXTURE.id, GHAB_SEATED_FIXTURE.id].sort(),
+      [BANNER_COLUMN_FIXTURE.id, GHAB_FIXTURE.id, GHAB_SEATED_FIXTURE.id, GHAB3_FIXTURE.id].sort(),
     );
   });
 });

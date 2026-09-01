@@ -53,6 +53,16 @@ export const SKEW_SCENE = { width: 1920, height: 1080 } as const;
 /** The two plates. Both exist in both looks, so a switch changes geometry and nothing else. */
 export const PLATE_A = 'guest-1';
 export const PLATE_B = 'guest-2';
+/**
+ * 🔴 `single-clock-look-switch` — **the THIRD plate, which the owner's template has and the
+ * two-look fixtures did not.**
+ *
+ * `B-164`'s own record of his file is `ghab-1` → 1 box, `ghab-2` → 2 boxes, `ghab-3` → 3 boxes,
+ * over ONE row declaring three plates. A measurement that stopped at two looks could not run
+ * `1↔3` or either three-step sequence at all — and those are the switches in which a state
+ * carried from the previous look would show.
+ */
+export const PLATE_C = 'guest-3';
 
 /**
  * **Look "banner"** — `guest-1` is a wide strip across the top; `guest-2` sits bottom-RIGHT,
@@ -152,6 +162,22 @@ export const GHAB_BOXES_RECTS: Readonly<Record<string, Rect>> = {
  * `u ≈ 0.30` in the boxes look, so a horizontal ramp makes the mixer move unmissable — the same
  * argument {@link SKEW_PROBE_A} rests on, re-earned for this geometry rather than assumed.
  */
+/**
+ * 🔴 **The owner's `look-3` — THREE boxes**, the third of his authored looks.
+ *
+ * `l1` and `l2` keep the two-box geometry the re-export measured (`B-195`: `32,258 887×498.94`
+ * and `1006,258 887×498.94`, rounded to whole pixels here because the harness's own scene is
+ * authored in integers); `l3` takes the strip beneath them. The shape matters more than the
+ * exact pixels: what a three-box look has to exercise is a plate ARRIVING while two others
+ * MOVE, which is the case a two-look pair cannot produce.
+ */
+export const LOOK_GHAB_THREE = 'look-ghab-three';
+export const GHAB_THREE_RECTS: Readonly<Record<string, Rect>> = {
+  [PLATE_A]: { x: 23, y: 301, width: 600, height: 340 },
+  [PLATE_B]: { x: 1000, y: 301, width: 600, height: 340 },
+  [PLATE_C]: { x: 660, y: 700, width: 600, height: 300 },
+};
+
 export const GHAB_PROBE_A: Rect = { x: 300, y: 450, width: 100, height: 100 };
 
 /**
@@ -188,8 +214,14 @@ export interface SkewFixture {
   readonly id: string;
   /** `lookId → plate → rect`, for exactly the two looks a run switches between. */
   readonly rects: Readonly<Record<string, Readonly<Record<string, Rect>>>>;
-  /** The two look ids, in the order the fixture is authored (the default is entered first). */
-  readonly looks: readonly [string, string];
+  /**
+   * The look ids this fixture's scene carries, in authoring order (the first is the default).
+   *
+   * ⚠ **AT LEAST TWO, and possibly more.** A fixture with three looks measures a PAIR chosen at
+   * run time; the placement check is therefore asked about that pair rather than about the
+   * fixture, because a probe that is sound for `1↔2` says nothing about `2↔3`.
+   */
+  readonly looks: readonly string[];
   /** Inside a hole of BOTH looks: it sees the FILL move and nothing else. */
   readonly probeA: Rect;
   /** Inside a hole of EXACTLY ONE look: it sees the PAGE repunch, opening or closing. */
@@ -208,6 +240,28 @@ export interface SkewFixture {
    * where no plate arrives or departs at all.
    */
   readonly probeC?: Rect;
+  /**
+   * 🔴 `single-clock-look-switch` — **probe B PER MEASURED PAIR, where one rectangle cannot
+   * serve them all.**
+   *
+   * Probe B must be inside a hole in EXACTLY ONE of the two looks, and on a three-look fixture
+   * that is a property of the PAIR rather than of the fixture: a point inside the full-frame
+   * look and clear of the two-box look is inside BOTH of the two multi-box looks, so it is
+   * sound for `1↔2` and blind for `2↔3`.
+   *
+   * Keyed `from->to`, resolved in either order (a pair is unordered for placement). Absent for a
+   * pair ⇒ {@link probeB}, which is every two-look fixture's only case.
+   */
+  readonly probeBByPair?: Readonly<Record<string, Rect>>;
+}
+
+/** THE probe-B rect for one measured pair — the per-pair override, else the fixture's own. */
+export function probeBFor(fixture: SkewFixture, pair?: readonly [string, string]): Rect {
+  if (pair === undefined) return fixture.probeB;
+  const [a, b] = pair;
+  return (
+    fixture.probeBByPair?.[`${a}->${b}`] ?? fixture.probeBByPair?.[`${b}->${a}`] ?? fixture.probeB
+  );
 }
 
 export const BANNER_COLUMN_FIXTURE: SkewFixture = {
@@ -266,10 +320,62 @@ export const GHAB_SEATED_FIXTURE: SkewFixture = {
   probeC: GHAB_PROBE_C,
 };
 
+/**
+ * 🔴 **`ghab3` — the owner's THREE looks in one scene, and the fixture the acceptance runs on.**
+ *
+ * `look-1` is the full-frame plate; `look-2` is his two-box layout; `look-3` is the three-box
+ * one. Every measured pair is chosen at run time (`--from` / `--to`), so `1↔2`, `1↔3` and the
+ * two three-step sequences are all switches inside ONE scene — which is what makes a sequence
+ * mean anything: the row really has been through the intermediate look.
+ *
+ * ⚠ **`guest-2` and `guest-3` are seated in EVERY look**, at a 2×2 px rect off in the corner
+ * where they are not shown. That is the `ghab-seated` device and it is here for the same
+ * reason: a plate that is absent from a look gets PARKED, and re-entering the look that shows
+ * it starts the producer again — a `PLAY` inside the window, which is term (b) (`B-192`) and
+ * not the term this change is about. Seating them everywhere keeps every switch pure
+ * `MIXER FILL` / `CLIP`, which is exactly the claim under test.
+ */
+const OFFSCREEN = (x: number): Rect => ({ x, y: 1078, width: 2, height: 2 });
+
+export const GHAB3_ONE_RECTS: Readonly<Record<string, Rect>> = {
+  [PLATE_A]: { x: 0, y: 0, width: 1920, height: 1080 },
+  [PLATE_B]: OFFSCREEN(1400),
+  [PLATE_C]: OFFSCREEN(1500),
+};
+export const GHAB3_TWO_RECTS: Readonly<Record<string, Rect>> = {
+  ...GHAB_BOXES_RECTS,
+  [PLATE_C]: OFFSCREEN(1500),
+};
+export const GHAB3_THREE_RECTS: Readonly<Record<string, Rect>> = GHAB_THREE_RECTS;
+
+export const GHAB3_FIXTURE: SkewFixture = {
+  id: 'ghab3',
+  rects: {
+    [LOOK_GHAB_FULL]: GHAB3_ONE_RECTS,
+    [LOOK_GHAB_BOXES]: GHAB3_TWO_RECTS,
+    [LOOK_GHAB_THREE]: GHAB3_THREE_RECTS,
+  },
+  looks: [LOOK_GHAB_FULL, LOOK_GHAB_BOXES, LOOK_GHAB_THREE],
+  probeA: GHAB_PROBE_A,
+  probeB: GHAB_PROBE_B,
+  probeC: GHAB_PROBE_C,
+  /*
+    `look-2 -> look-3` is the pair the fixture's own probe B cannot read: it sits at the top of
+    the frame, which is inside the FULL look's plate and outside both multi-box looks' — sound
+    for either pair that involves `look-1`, blind for the pair that does not. This rect is inside
+    `look-2`'s left box and clear of every plate of `look-3`, which is the same condition one
+    pair along.
+  */
+  probeBByPair: {
+    [`${LOOK_GHAB_BOXES}->${LOOK_GHAB_THREE}`]: { x: 700, y: 400, width: 100, height: 100 },
+  },
+};
+
 export const SKEW_FIXTURES: Readonly<Record<string, SkewFixture>> = {
   [BANNER_COLUMN_FIXTURE.id]: BANNER_COLUMN_FIXTURE,
   [GHAB_FIXTURE.id]: GHAB_FIXTURE,
   [GHAB_SEATED_FIXTURE.id]: GHAB_SEATED_FIXTURE,
+  [GHAB3_FIXTURE.id]: GHAB3_FIXTURE,
 };
 
 /** The clearance every probe must keep from any hole edge it is not meant to straddle. */
@@ -347,11 +453,38 @@ function clearOf(rect: Rect, probe: Rect, margin: number): boolean {
  * which is why this is asserted in the tests AND re-run by the harness before it records,
  * rather than being a note beside two hand-picked rectangles.
  */
+/**
+ * The two look ids ONE run switches between, resolved and CHECKED.
+ *
+ * A fixture may carry more than two (the owner's carries three), so the pair is a per-run
+ * choice. It is resolved here rather than at each call site so an id that the fixture does not
+ * declare is a loud refusal instead of an empty rect map and a measurement of nothing.
+ */
+export function measuredPair(
+  fixture: SkewFixture,
+  from?: string,
+  to?: string,
+): readonly [string, string] {
+  const pick = (id: string | undefined, fallbackIndex: number, label: string): string => {
+    const chosen = id ?? fixture.looks[fallbackIndex];
+    if (chosen === undefined || !fixture.looks.includes(chosen)) {
+      throw new Error(
+        `the ${fixture.id} fixture does not declare a look "${String(chosen)}" for --${label}; ` +
+          `it has: ${fixture.looks.join(', ')}`,
+      );
+    }
+    return chosen;
+  };
+  return [pick(from, 0, 'from'), pick(to, 1, 'to')];
+}
+
 export function probePlacementIssues(
   fixture: SkewFixture = BANNER_COLUMN_FIXTURE,
+  pair?: readonly [string, string],
 ): readonly string[] {
   const issues: string[] = [];
-  const [first, second] = fixture.looks;
+  const [first, second] = pair ?? measuredPair(fixture);
+  const probeB = probeBFor(fixture, [first, second]);
   const looks = [first, second].map((id) => ({ id, rects: fixture.rects[id] ?? {} }));
   for (const look of looks) {
     if (Object.keys(look.rects).length === 0) {
@@ -408,7 +541,7 @@ export function probePlacementIssues(
     closing (picture → background), depending on the direction of the switch. A probe inside
     both would read the mixer move as well and the two transitions would collapse.
   */
-  const bIn = looks.filter((look) => holdingPlate(look.rects, fixture.probeB) !== undefined);
+  const bIn = looks.filter((look) => holdingPlate(look.rects, probeB) !== undefined);
   if (bIn.length !== 1) {
     issues.push(
       `probe B is inside a hole in ${String(bIn.length)} of the two looks — it must be inside exactly one`,
@@ -417,20 +550,20 @@ export function probePlacementIssues(
   for (const look of looks) {
     if (bIn.some((l) => l.id === look.id)) continue;
     for (const [plate, rect] of Object.entries(look.rects)) {
-      if (!clearOf(rect, fixture.probeB, PROBE_EDGE_CLEARANCE)) {
+      if (!clearOf(rect, probeB, PROBE_EDGE_CLEARANCE)) {
         issues.push(`probe B is not clear of the ${plate} hole in ${look.id}`);
       }
     }
   }
 
   // The probes must not overlap, or one transition would be read twice.
-  if (intersects(fixture.probeA, fixture.probeB)) {
+  if (intersects(fixture.probeA, probeB)) {
     issues.push('probe A and probe B overlap');
   }
   if (fixture.probeC !== undefined) {
     for (const [name, other] of [
       ['A', fixture.probeA],
-      ['B', fixture.probeB],
+      ['B', probeB],
     ] as const) {
       if (intersects(fixture.probeC, other)) issues.push(`probe C overlaps probe ${name}`);
     }
@@ -454,7 +587,7 @@ export function probePlacementIssues(
   // look punches (where it would sit under a picture and change the classifier's regions).
   for (const [name, probe] of [
     ['A', fixture.probeA],
-    ['B', fixture.probeB],
+    ['B', probeB],
   ] as const) {
     if (intersects(BACKGROUND_MOTION_PATCH, probe)) {
       issues.push(`the background motion patch overlaps probe ${name}`);
@@ -490,7 +623,7 @@ export function probePlacementIssues(
   const raster = `${String(SKEW_SCENE.width)}x${String(SKEW_SCENE.height)}`;
   for (const [name, probe] of [
     ['A', fixture.probeA],
-    ['B', fixture.probeB],
+    ['B', probeB],
   ] as const) {
     if (
       probe.x < 0 ||

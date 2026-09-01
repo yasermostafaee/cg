@@ -4,6 +4,7 @@ import {
   fillerLookRects,
   PLATE_A,
   PLATE_B,
+  PLATE_C,
   SKEW_SCENE,
   type Rect,
   type SkewFixture,
@@ -257,6 +258,7 @@ export function buildSkewScene(options: SkewSceneOptions = {}): Scene {
   const EMPTY_RECTS: Readonly<Record<string, Rect>> = {
     [PLATE_A]: { x: 1918, y: 1078, width: 2, height: 2 },
     [PLATE_B]: { x: 1916, y: 1078, width: 2, height: 2 },
+    [PLATE_C]: { x: 1914, y: 1078, width: 2, height: 2 },
   };
   const assetId = options.videoAssetId ?? 'skew-bg-asset';
   const raw = {
@@ -339,4 +341,11 @@ export function buildSkewScene(options: SkewSceneOptions = {}): Scene {
 }
 
 /** The plate ids this scene declares, in the order the carrier derives them. */
-export const SKEW_PLATES = [PLATE_A, PLATE_B] as const;
+/**
+ * The plate ids this scene declares, in the order the carrier derives them.
+ *
+ * ⚠ THREE since `single-clock-look-switch`: the owner's template declares three, and a fixture
+ * that used two could not express his `look-3`. A fixture that names only two simply leaves the
+ * third at its off-screen rect in every look, which seats it and shows it nowhere.
+ */
+export const SKEW_PLATES = [PLATE_A, PLATE_B, PLATE_C] as const;

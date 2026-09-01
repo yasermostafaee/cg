@@ -8694,3 +8694,108 @@ cheap answer and is the one shape that puts the two clocks back.
   headings anywhere, and the duplicate audit printed exactly the two accepted duplicates (`B-056`,
   `B-080`). Cross-checked against the registry's dated pointer — _"Next free after this session is
   `B-197`"_ — headings and pointer AGREE.
+
+## [ ] B-198 — ONE `MIXER` batch is not atomic: a departing box lingered a whole channel frame over the arriving plate, in 1 recording of 100 ⟨priority: high — it is the ONLY thing standing between `single-clock-look-switch` and its all-or-nothing acceptance, and it is on air⟩ — OPEN, measured 2026-09-01 by `SINGLE-CLOCK-SWITCH-02` §3
+
+**What:** with the plate-bearing page moved BELOW its plates and the mask retired, a look switch is
+`MIXER FILL` / `CLIP` and nothing else — and the page/mixer skew `B-174` chased for three sessions
+is **gone: `k = 0` in 100 recordings of 100**, every direction, every pair. What the measurement
+exposed underneath it is a different disagreement, between the FILLS THEMSELVES: in one recording,
+`MIXER 1-30 FILL 0 0 1 1` (the arriving full-frame plate) took effect ONE CHANNEL FRAME before
+`MIXER 1-31 FILL …` (the departing box moving off screen), so for 40 ms the outgoing box was drawn
+on top of the incoming full-frame picture.
+
+**The measurement, at `1080i5000`, `a7976e14`, on the file consumer:**
+
+| campaign                                          | recordings | `k` (channel frames) | BLACK frames | MISPLACED frames    | discarded |
+| ------------------------------------------------- | ---------- | -------------------- | ------------ | ------------------- | --------- |
+| `1 → 2` (full → two-box)                          | 10         | 0 in all 10          | 0            | 0                   | 0         |
+| `2 → 1`                                           | 10         | 0 in all 10          | 0            | 0                   | 0         |
+| `1 → 3` (full → three-box)                        | 10         | 0 in all 10          | 0            | 0                   | 0         |
+| `3 → 1`                                           | 10         | 0 in all 10          | 0            | 0                   | 0         |
+| `1 → 2 → 3` (the `2 → 3` leg, having come from 1) | 10         | 0 in all 10          | 0            | 0                   | 0         |
+| `3 → 2 → 1` (the `2 → 1` leg, having come from 3) | 10         | 0 in all 10          | 0            | **1 run: 2**        | 0         |
+| `2 → 1` again, plain, 20 more                     | 20         | 0 in all 20          | 0            | 0                   | 0         |
+| `2 → 1` again, via 3, 20 more                     | 20         | 0 in all 20          | 0            | 0                   | 0         |
+| **total**                                         | **100**    | **0 in 100 of 100**  | **0**        | **2 frames, 1 run** | **0**     |
+
+**The one run, in full** (`evidence/2026-09-01-singleclock/seq-3-2-1`, run 06):
+
+```
+probe A (the fills)  @ 40      probe B (the page)   @ 40      k = 0
+probe C (the box's own content) @ 42      <- TWO FIELDS LATE, and it is the tell
+peak MISPLACED 22.68 % of the frame, for 2 recorded frames = 1 channel frame = 40 ms
+peak BLACK 0 %   peak OTHER 0.14 %   settled-frame CONTROL 0 %
+wire: CG 1-9 UPDATE 0 "{\"__cg\":{\"look\":\"look-ghab-full\"}}"
+      MIXER 1-30 FILL 0 0 1 1
+      MIXER 1-30 CLIP 0 0 1 1
+      MIXER 1-31 FILL 0.729167 0.998148 0.001042 0.001852
+      MIXER 1-31 CLIP 0.729167 0.998148 0.001042 0.001852
+```
+
+🔴 **22.68 % IS NOT AN APPROXIMATE NUMBER — IT IS THE BOX.** `guest-2`'s rect in `look-2` is
+916 × 515 = 471 740 px of a 1920 × 1080 frame = **22.75 %**, and the classifier reads areas to
+about one 4 × 4 block. The misplaced region is the departing box, exactly, and nothing else.
+
+**Why it is NOT the defect `single-clock-look-switch` removes.** That defect was the PAGE against
+the MIXER — two independent clocks, no shared tick, `k` = 20 / 30 / 60 ms and then ±1 field. Here
+probe A and probe B read the SAME frame index in all 100 recordings including this one: the page and
+the fills are together, always. What split is `MIXER 1-30` against `MIXER 1-31` — two commands in
+ONE batch, on ONE socket, to ONE channel.
+
+⚠ **It was invisible before, and that is the honest reason it is only being filed now.** A 40 ms
+one-frame residue sat inside a 60–100 ms artefact the mask produced on every switch; there was
+nothing to see it against. Removing the larger term is what made the smaller one measurable — which
+is the ordinary shape of this kind of work and not a regression.
+
+### What it is probably NOT, checked rather than assumed
+
+- **Not a `PLAY`.** `containedPlay` is `false` and the wire above carries none. The `ghab3` fixture
+  seats every plate in every look for exactly this reason, so nothing is ever parked and nothing has
+  to be re-started.
+- **Not a dropped channel tick.** 76 frames recorded against 76 expected; the whole campaign of 102
+  recordings discarded **none** and the worst deficit anywhere was 2 frames of ~76 (2.6 %, inside
+  the harness's 4 % refusal threshold).
+- **Not the classifier's tolerance.** `settledResidualPct` is **0** for this run — the settled
+  frames either side classify as nothing at all, which is the per-run positive control the
+  classification rests on.
+- **Not the sequence.** The SAME leg (`look-2 → look-1`) ran 10 + 20 + 20 = 50 times, with and
+  without the `via` leg, and 49 were clean. The one non-zero is in the `via` set, but so are 19
+  clean ones and the plain set is 20 for 20 — this reads as a rare timing split, not as a state
+  carried across the previous switch.
+
+### The candidates, none measured
+
+1. **CasparCG applies a multi-command `MIXER` batch across two ticks when the batch straddles a
+   frame boundary.** The bridge sends the commands back to back on one socket; nothing in AMCP
+   2.5.0 makes a group of `MIXER` commands atomic with respect to the channel tick, and
+   `MIXER … DEFER` + `MIXER COMMIT` is the verb pair that exists to say otherwise. **This is the
+   first thing to measure**, and it has a cheap probe: send the same batch with `DEFER`/`COMMIT` and
+   re-run this campaign.
+2. **The bridge's own send ordering.** The batch is issued as separate `#send` calls; if any await
+   between them can yield across a tick, the split is ours rather than the server's.
+3. **The recording.** The file consumer writes one frame per FIELD at `1080i5000`, so a 40 ms
+   artefact is 2 recorded frames — which is what was seen. A capture that blended fields would show
+   this differently, but nothing here de-interlaces.
+
+### Why this blocks the change
+
+`SINGLE-CLOCK-SWITCH-02`'s acceptance is **all-or-nothing by instruction**: _"zero black and zero
+hole-misalignment in EVERY recording. Any non-zero recording is a failure — stop, report it, land
+nothing."_ 99 of 100 is an improvement of a kind the owner has rejected three times, so it is
+reported as a failure and **nothing was pushed**. The implementation exists as one local commit
+(`a7976e14`) and is not on the remote.
+
+⚠ **What a reader must NOT conclude from this item.** The reorder is not being reported as
+ineffective — the term it targets measured **zero in 100 of 100**, which is the first time any
+`B-174` campaign has produced a zero at all. What is reported is that the acceptance names a
+condition this residual also fails, and that the residual has a different cause.
+
+- **Cross-refs:** `single-clock-look-switch` (the change this gates), [[B-174]] (the page/mixer
+  skew, measured gone), [[B-192]] (term (b), producer start latency — a different residual, also
+  untouched), [[B-155]] (the `PLAY`-carrying window, excluded here by construction), [[C-021]]
+  (where a `DEFER`/`COMMIT` recon would belong).
+- **Number:** highest `B-` HEADING across every ref was `B-197`; `B-198` … `B-201` returned no
+  headings anywhere — every occurrence is a provenance sentence or this file's own pointer.
+  Cross-checked against the registry's dated pointer — _"Next free after this session is `B-198`"_ —
+  headings and pointer AGREE.
