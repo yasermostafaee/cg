@@ -98,7 +98,7 @@ function row(item: StackItemState): ReturnType<typeof createElement> {
     // see `RowBinding`.
     binding: { kind: 'bound' as const, item },
     template: { templateId: 'tpl-1', templateType: 'clock', fields: [] },
-    bankPosition: 1,
+    defaultAlias: 'Layer 1',
     selected: false,
     dirty: false,
     onSelect: () => undefined,

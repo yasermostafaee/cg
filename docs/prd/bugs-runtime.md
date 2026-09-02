@@ -9142,3 +9142,53 @@ Three assertions were added, and all three redden when the fix is removed:
   measurement `DEFAULT_LOW_BANK_VISIBLE_ROWS` is derived from).
 - **Number:** derived in the same sweep as `B-201` above — highest heading `B-200`, `B-201` …
   `B-205` absent, registry pointer `B-201`; `B-202` is the next after the one this session took.
+
+## [x] B-203 — the Layers panel calls a BED row `Layer 1`, which is already the name of an operator row: two rows, one name, on the surface air is driven from ⟨priority: high — a duplicate row name on a playout surface, and the row it collides with is the top operator row⟩ — FIXED 2026-09-02 by the `MIXER-DEFER-SAFETY-01` delta
+
+**What:** `defaultLayerAlias` is the canonical row name and it knows about both halves — it
+picks the WORD from `isLowBankLayer` (`Bed` vs `Layer`) and the NUMBER from `bankPosition`,
+which counts down from each half's OWN top. `FixedBankConfigModal` calls it. The rehearsal
+overlay's `rowNameFor` calls it. **`LayerRow` did not:**
+
+```ts
+const rowName = slot.alias ?? `Layer ${String(bankPosition)}`; // LayerRow.tsx
+```
+
+It was handed a bare `bankPosition: number` and formatted the label itself — correct for
+exactly one half of the bank. So on the operator's main list, with the default bank:
+
+| row                         | what `defaultLayerAlias` says | what the Layers panel said |
+| --------------------------- | ----------------------------- | -------------------------- |
+| layer 89 (top operator row) | `Layer 1`                     | `Layer 1`                  |
+| layer 9 (top bed row)       | `Bed 1`                       | **`Layer 1`**              |
+
+🔴 **Two rows with the same name, on the surface an operator takes to air from** — and the
+accessible name and tooltip carried it too (`Row 21 · Layer 1 · CasparCG layer 1-9`), so it
+was not a display-only truncation but the row's identity everywhere the panel states it. The
+same row simultaneously answered to `Bed 1` in the bank config dialog and in the rehearsal
+overlay, so the three surfaces disagreed about what to call one layer.
+
+**Why nobody saw it:** `B-201`. The offline mock never published bed slots at all, so no bed
+row has ever rendered in the E2E suite or in test mode — there was no bed row anywhere to
+carry a wrong label. The two defects are one investigation and the second was only reachable
+once the first was fixed.
+
+**The fix.** `LayerRow` takes `defaultAlias: string` — the whole answer, resolved by the PANEL
+through `defaultLayerAlias` — instead of `bankPosition: number` it formats itself. That is the
+same shape `acceptsBank` already used one prop below: the row is handed the answer, and the
+one derivation lives in the panel for every row.
+
+**Pinned by** `fixed-layers.spec.ts`, which now asserts the top bed row reads `Bed 1` — an
+assertion that could not have existed before, because the row did not render.
+
+⚠ **This is the FIFTH hand-restated derivation from the same change**, and the first in
+SHIPPED renderer code rather than in the mock or a test. The other four are catalogued under
+`B-201`. The pattern is worth naming once more because it is what a `git grep` for the
+predicate's NAME cannot find: `` `Layer ${n}` `` never mentions `defaultLayerAlias`, so the
+only way to it is to ask which code CONSTRUCTS a value the canonical function already owns.
+
+- **Cross-refs:** [[B-201]] (why no bed row ever rendered, and the other four restatements),
+  [[B-202]] (the same shape in the schema default).
+- **Number:** highest `B-` HEADING across every ref was `B-202` (taken earlier this session);
+  `B-203` … `B-207` returned no headings anywhere. The registry entry for this session names
+  `B-203` as next free; headings and pointer AGREE.

@@ -167,7 +167,7 @@ export async function renderLayerRow(options: {
   template?: TemplateInfo | null;
   link?: Link;
   dirty?: boolean;
-  bankPosition?: number;
+  defaultAlias?: string;
   /** Render the row as already SELECTED (drives the toggle-select assertions). */
   selected?: boolean;
   /** Observe what a row click reports back to the panel. */
@@ -253,7 +253,7 @@ export async function renderLayerRow(options: {
           // that care about the difference drive the panel, not one row.
           displayPosition: options.displayPosition ?? 1,
           rehearsing: options.rehearsing ?? false,
-          bankPosition: options.bankPosition ?? 1,
+          defaultAlias: options.defaultAlias ?? 'Layer 1',
           selected: options.selected ?? false,
           dirty: options.dirty ?? false,
           seatedPlates: options.seatedPlates ?? [],

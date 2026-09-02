@@ -67,18 +67,27 @@ interface Props {
    */
   displayPosition: number;
   /**
-   * The layer's 1-based place within its BANK, counting DOWN from the highest layer —
-   * what the default alias (`Layer 1`, `Layer 2`, …) is built from.
+   * The row's default NAME when it has no configured alias — `Layer 3`, `Bed 1`.
    *
-   * Comes from the canonical `bankPosition`, so it is fixed to the layer and survives
-   * ticking, unticking and filtering. See `bankPosition`'s own comment for why a
-   * handle that renumbers is worse than none.
+   * 🔴 `B-201` — THE WHOLE STRING, resolved by the PANEL through the canonical
+   * `defaultLayerAlias`, not a bare position this row formats itself.
+   *
+   * It used to be `bankPosition: number` and this file built `Layer ${bankPosition}` from
+   * it. That is right for exactly one half of the bank. `defaultLayerAlias` picks the WORD
+   * from `isLowBankLayer` — beds are `Bed N`, and each half counts down from its OWN top —
+   * so the restated version called bed row 9 `Layer 1`, which is ALSO what it calls operator
+   * row 89: two rows, the same name, on the surface an operator drives air from. The config
+   * modal and the rehearsal overlay both called `defaultLayerAlias` all along, so the same
+   * row answered to two different names depending on which panel was asking.
+   *
+   * Like `acceptsBank` below, the row is handed the ANSWER rather than a bank to derive it
+   * from: one derivation, in the panel, for every row.
    */
-  bankPosition: number;
+  defaultAlias: string;
   /**
    * `single-clock-look-switch` — which half of the bank this row belongs to, resolved by
    * the PANEL through the canonical `isLowBankLayer` (the row is handed no bank of its own,
-   * exactly like `bankPosition`). The template picker refuses the other half's packages with
+   * exactly like `defaultAlias`). The template picker refuses the other half's packages with
    * a reason, so the operator meets `wrong-bank` on the surface rather than at the bridge.
    */
   acceptsBank: 'low' | 'high';
@@ -219,7 +228,8 @@ const styles = {
  * separately by the owner and normally reading the same.
  *
  *   - `#` is PLAIN DISPLAY ORDER: 1 at the top of the rendered list, counting down.
- *   - the default ALIAS is `Layer <bankPosition>`, the layer's FIXED place in the bank
+ *   - the default ALIAS comes from `defaultLayerAlias` — `Layer N` for an operator row,
+ *     `Bed N` for a bed row — the layer's FIXED place in ITS HALF of the bank
  *     counting down from its highest layer — so `Layer 1` is the top layer, the one
  *     that draws over the others and therefore the one an operator means by it.
  *
@@ -271,7 +281,7 @@ export function LayerRow({
   binding,
   template,
   displayPosition,
-  bankPosition,
+  defaultAlias,
   acceptsBank,
   selected,
   dirty,
@@ -318,7 +328,7 @@ export function LayerRow({
    * It used to default to the CasparCG layer number (`Layer 70`), which read as a
    * name while actually being wire vocabulary, and now contradicts the `#` column.
    */
-  const rowName = slot.alias ?? `Layer ${String(bankPosition)}`;
+  const rowName = slot.alias ?? defaultAlias;
 
   /*
     §14.5 / `tasks.md` 7.1 — THE LOOK PICKER’S THREE FACTS.

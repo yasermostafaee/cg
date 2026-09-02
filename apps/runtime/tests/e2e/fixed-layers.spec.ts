@@ -79,6 +79,11 @@ test('a seeded bank renders permanent rows with aliases and honest occupancy', a
   for (const bed of [9, 5, 1]) {
     await expect(app.layerRow(bed)).toBeVisible();
   }
+  // The beds are the LOWEST layers and the list is descending, so they sit at the
+  // bottom — which is also where they are on air. The group head is drawn once, at the
+  // FIRST of them, so the row immediately below it must be the highest bed row.
+  await expect(app.layerRow(9)).toContainText('Bed 1');
+
   // The ALIAS is the row's primary label.
   await expect(app.layerRow(70)).toContainText('CLOCK');
   await expect(app.layerRow(71)).toContainText('LOWER THIRD');

@@ -32,7 +32,7 @@ import { useStationLayers } from '../../hooks/useStationLayers.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { useStackDeliveryPending } from '../../hooks/useStackDeliveryPending.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
-import { bankPosition, isLayerVisible, isLowBankLayer, isRehearsing } from '@cg/shared-ipc';
+import { defaultLayerAlias, isLayerVisible, isLowBankLayer, isRehearsing } from '@cg/shared-ipc';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import { isOnAir } from '../stack/onAir.js';
 import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftStore.js';
@@ -941,7 +941,7 @@ export function LayersPanel({
                       // The default alias's number — the layer's FIXED place in the
                       // bank, which ticking and unticking must never renumber. See
                       // `bankPosition` for why the two are deliberately separate.
-                      bankPosition={bankPosition(bank, slot.layer)}
+                      defaultAlias={defaultLayerAlias(bank, slot.layer)}
                       // The SAME predicate the group break above is drawn from, and the
                       // same one the bridge refuses on — one derivation, three readers.
                       acceptsBank={isLowBankLayer(bank, slot.layer) ? 'low' : 'high'}

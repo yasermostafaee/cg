@@ -2079,5 +2079,11 @@ neither was touched by it. Recorded rather than fixed, because renumbering a shi
 than a duplicate heading and the right repair is the owner's call — but the audit is no longer a
 clean signal for `B-`, so the next session should expect those two hits and not read them as new.
 
-⇒ **Next free after this session is `B-203`** (`B-` stays contiguous `B-001` … `B-202`, no gaps)
+⚠ **`B-203` was taken later in the SAME session.** Fixing `B-201` made bed rows render for the
+first time, and the first thing a rendered bed row showed was a wrong name — `LayerRow` restated
+`Layer ${bankPosition}` instead of calling `defaultLayerAlias`, so bed 9 read `Layer 1`, which is
+also operator row 89. A FIFTH restatement of the same derivation, and the first in shipped renderer
+code. Derivation: highest heading was `B-202`, `B-203` … `B-207` absent.
+
+⇒ **Next free after this session is `B-204`** (`B-` stays contiguous `B-001` … `B-203`, no gaps)
 **and `P-039`** (`P-001` … `P-038`, no gaps).
