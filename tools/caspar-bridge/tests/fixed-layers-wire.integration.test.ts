@@ -346,3 +346,48 @@ it('S10 — R-028 fail-closed untick over the REAL occupancy: unknown refuses, e
   // The refusal applied NOTHING: 74 keeps its earlier tick state only.
   expect(b.runtime.fixedLayersConfig()?.visibility).toEqual({ '74': false });
 });
+
+/*
+  🔴 `B-205` — S10 ON THE BED HALF, over the REAL occupancy verdict.
+
+  The live-CHANGE path (`validateFixedBankChange`) walked the operator half only, so a
+  bed row could be hidden with the tap blind, and hidden while a foreign producer was on
+  it. This is S10's three-step shape run against bed rows, with the beds at 2–6 rather
+  than the default 1–9 so a hard-coded bed range cannot pass it. The refusal must name
+  the BED layer; the tick record it leaves behind must be the bed half's.
+*/
+it('🔴 B-205 — fail-closed untick on a BED row: unknown refuses, empty applies, producer refuses', async () => {
+  const low = { start: 2, count: 5 };
+  const b = await boot({ bank: { channel: 1, low, start: 70, count: 10 } });
+  if (mock === null) throw new Error('mock not booted');
+  const untickBed = (
+    visibility: Record<string, boolean>,
+  ): { ok: boolean; reason?: string; message?: string } =>
+    b.runtime.setFixedLayers({ channel: 1, low: { ...low, visibility }, start: 70, count: 10 });
+
+  // Tap has never heard: UNKNOWN refuses, naming the bed layer, applying nothing.
+  const blind = untickBed({ '4': false });
+  expect(blind.ok).toBe(false);
+  expect(blind.reason).toBe('untick-unknown');
+  expect(blind.message).toContain('layer 4');
+  expect(b.runtime.fixedLayersConfig()?.low.visibility).toBeUndefined();
+
+  // Healthy + hearing, bed provably empty → the untick applies, on the BED record.
+  await b.runtime.whenServerHealthy(HEALTH_MS);
+  await waitFor(() => b.runtime.fixedLayersState().every((s) => s.observed.kind === 'empty'));
+  expect(untickBed({ '4': false })).toEqual({ ok: true });
+  expect(b.runtime.fixedLayersConfig()?.low.visibility).toEqual({ '4': false });
+  expect(b.runtime.fixedLayersConfig()?.visibility).toBeUndefined();
+
+  // A FOREIGN producer on a bed row: occupied → refused, naming that layer.
+  await foreignPlay(mock, 'PLAY 1-6 "bed-feed.mov"');
+  await waitFor(() =>
+    b.runtime.fixedLayersState().some((s) => s.layer === 6 && s.observed.kind === 'producer'),
+  );
+  const occupied = untickBed({ '4': false, '6': false });
+  expect(occupied.ok).toBe(false);
+  expect(occupied.reason).toBe('untick-occupied');
+  expect(occupied.message).toContain('layer 6');
+  // The refusal applied NOTHING: 4 keeps its earlier tick state only.
+  expect(b.runtime.fixedLayersConfig()?.low.visibility).toEqual({ '4': false });
+});

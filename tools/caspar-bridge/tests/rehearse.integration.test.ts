@@ -1,7 +1,7 @@
 import * as dgram from 'node:dgram';
 import { afterEach, expect, it } from 'vitest';
-import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { isRehearsing } from '@cg/shared-ipc';
+import type { ConnectionConfig, FixedLayerBank, TemplateInfo } from '@cg/shared-ipc';
+import { fixedBankSlots, isRehearsing } from '@cg/shared-ipc';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS } from './support/harness.js';
@@ -347,16 +347,20 @@ it('mutes and restores EACH of several rehearsing rows independently', async () 
  * muted layers, and a re-assert that walked a "last rehearsing" pointer would
  * restore exactly one of them.
  *
- * `#reassertDeclaredVolumes` walks `start … start+count` of the declared bank
- * and holds no rehearse state at all, which is why it cannot have that bug. The
- * existing two-row case above proves the walk; this proves it does not degrade
- * as the bank grows, and that it needs no surviving bookkeeping to work.
+ * `#reassertDeclaredVolumes` walks `fixedBankSlots(bank)` — every row of BOTH
+ * halves — and holds no rehearse state at all, which is why it cannot have that
+ * bug. The existing two-row case above proves the walk; this proves it does not
+ * degrade as the bank grows, and that it needs no surviving bookkeeping to work.
+ *
+ * The rows are enumerated through `fixedBankSlots`, never `start … start+count`
+ * by hand: a test that rebuilt the range itself would be asserting the operator
+ * half only, which is exactly the shape `B-204` found in the code under test.
  */
 it('the startup re-assert covers EVERY declared row, with no rehearse bookkeeping at all', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  const bank = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 6 };
-  const layers = Array.from({ length: bank.count }, (_, i) => bank.start + i);
+  const bank: FixedLayerBank = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 6 };
+  const layers = fixedBankSlots(bank).map((slot) => slot.layer);
   // Every row muted, and nothing anywhere recording that — the state a crash
   // mid-multi-row-rehearse leaves behind. Mixer state is CHANNEL state and
   // outlives the process.
@@ -375,6 +379,58 @@ it('the startup re-assert covers EVERY declared row, with no rehearse bookkeepin
   expect(runtime.rehearseState()).toEqual([]);
   for (const layer of layers) {
     expect(mock.layerState({ channel: 1, layer })?.volume).toBe(1);
+  }
+}, 30000);
+
+/**
+ * 🔴 `B-204` — THE BED HALF IS RE-ASSERTED TOO.
+ *
+ * The mute that strands a row is not half-aware: `enterRehearse` sends
+ * `MIXER … VOLUME 0` for whatever slot the item is on, and a bed row can
+ * rehearse like any other. The startup re-assert that exists to undo a dead
+ * process's mute walked `start … start+count` — the OPERATOR half — so a bed
+ * left muted by a crash stayed muted until somebody took that row again, and a
+ * bed is taken once per programme rather than once per segment.
+ *
+ * Only BED rows are muted here, on purpose: a fix that merely walked the
+ * operator half twice, or that widened the range by hand to `1 … 9`, cannot
+ * pass this test — the rows are the bank's own `low` half, at a start that is
+ * not 1, so nothing but the canonical enumeration lands on all of them.
+ * Neutering the fix (walking the operator range again) reddens this.
+ */
+it('🔴 B-204 — a BED row muted by a dead rehearse is re-asserted at startup, like an operator row', async () => {
+  const oscPort = await freeUdpPort();
+  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
+  // Beds at 2–6, NOT the default 1–9, so a hard-coded bed range fails as loudly
+  // as a missing one.
+  const bank: FixedLayerBank = { channel: 1, low: { start: 2, count: 5 }, start: 70, count: 2 };
+  const bedLayers = fixedBankSlots(bank)
+    .map((slot) => slot.layer)
+    .filter((layer) => layer < bank.start);
+  expect(bedLayers).toEqual([2, 3, 4, 5, 6]);
+  // The state a crashed bridge leaves behind: bed rows muted, nothing recording it.
+  for (const layer of bedLayers) mock.setLayerVolume({ channel: 1, layer }, 0);
+  expect(mock.layerState({ channel: 1, layer: 6 })?.volume).toBe(0);
+
+  runtime = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { sweepMs: 60, fixedBank: bank },
+  );
+  runtime.start();
+  await runtime.startServing();
+  await runtime.whenServerHealthy(HEALTH_MS);
+  await new Promise((resolve) => setTimeout(resolve, 800));
+
+  for (const layer of bedLayers) {
+    expect(mock.layerState({ channel: 1, layer })?.volume, `bed layer ${String(layer)}`).toBe(1);
+  }
+  // And the operator half still gets its walk — the fix widened the set, it did
+  // not move it.
+  for (const layer of [70, 71]) {
+    expect(mock.layerState({ channel: 1, layer })?.volume, `operator layer ${String(layer)}`).toBe(
+      1,
+    );
   }
 }, 30000);
 

@@ -34,6 +34,7 @@ import type {
 } from '@cg/shared-schema';
 import { isRetainedOnAir, withCgControl } from '@cg/shared-schema';
 import {
+  fixedBankSlots,
   isLayerVisible,
   isLowBankLayer,
   layerAlias,
@@ -3338,18 +3339,29 @@ export class CasparRuntime {
    * survives the process, so without this the next operator would take that
    * graphic to air silent, with nothing anywhere explaining why. Runs once the
    * primary is first reachable, best-effort, and is idempotent.
+   *
+   * 🔴 `B-204` — EVERY DECLARED ROW MEANS BOTH HALVES. This walked
+   * `start … start+count` by hand, which is the operator half and silently
+   * nothing else, so a bed row muted by a dead rehearse was never re-asserted:
+   * the mute (`enterRehearse`) is not half-aware, but the recovery was. The rows
+   * are enumerated through `fixedBankSlots` — the ONE function that returns the
+   * bank's range — never rebuilt here; a second derivation of the range is how
+   * this asymmetry existed for a full change cycle (`B-201`, `B-205`).
+   *
+   * ⚠ WHAT THIS CONSULTS ABOUT THE LAYER: nothing. It blankets every declared
+   * row with `INTENDED_VOLUME` and asks nothing about what is on it (recorded in
+   * `live-source-multibox/design.md` as a constraint on the Live Source range,
+   * which sits outside both halves for exactly this reason). Widening to the bed
+   * half keeps that property: beds lie BELOW the Live Source band by the
+   * `low-bank-not-below-band` rule, so no live box can be un-muted here.
    */
   async #reassertDeclaredVolumes(): Promise<void> {
     const bank = this.#fixedBank;
     if (bank === null) return;
-    for (let layer = bank.start; layer < bank.start + bank.count; layer++) {
+    for (const slot of fixedBankSlots(bank)) {
       // `normal`, not `urgent`: this is startup housekeeping across the whole
       // bank, and it must never sit ahead of an operator's take in the queue.
-      await this.#send(
-        this.#builder.mixerVolume({ channel: bank.channel, layer }, INTENDED_VOLUME),
-        this.#nextSeq(),
-        'normal',
-      );
+      await this.#send(this.#builder.mixerVolume(slot, INTENDED_VOLUME), this.#nextSeq(), 'normal');
     }
   }
 
@@ -3665,7 +3677,13 @@ export class CasparRuntime {
         // always unknown — the persisted ticks were adjudicated when applied).
         // A LIVE install that arrives with layers already hidden must not
         // slip an occupied or unverifiable layer out of sight in one step.
-        for (let layer = next.start; layer <= next.start + next.count - 1; layer++) {
+        //
+        // 🔴 `B-205` — BOTH halves. This walked `next.start … next.start+count`,
+        // the operator half, so a bank arriving with a bed row pre-hidden was
+        // installed with nothing adjudicating that row. `fixedBankSlots` is the
+        // ONE enumeration of the bank's range; the change path in
+        // `validateFixedBankChange` walks the same set for the same reason.
+        for (const { layer } of fixedBankSlots(next)) {
           if (isLayerVisible(next, layer)) continue;
           const occupancy = this.#fixedSlotOccupancy({ channel: next.channel, layer });
           if (occupancy === 'occupied') {

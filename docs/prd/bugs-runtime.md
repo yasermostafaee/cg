@@ -9193,7 +9193,7 @@ only way to it is to ask which code CONSTRUCTS a value the canonical function al
   `B-203` … `B-207` returned no headings anywhere. The registry entry for this session names
   `B-203` as next free; headings and pointer AGREE.
 
-## [ ] B-204 — the bridge's startup VOLUME recovery walks the operator half only, so a bed row muted by a dead rehearse is never re-asserted ⟨priority: medium — the ordinary take path self-heals it, so this is the belt of a belt-and-braces that is missing for half the bank⟩ — OPEN, filed 2026-09-02 from the `MIXER-DEFER-SAFETY-01` delta
+## [x] B-204 — the bridge's startup VOLUME recovery walks the operator half only, so a bed row muted by a dead rehearse is never re-asserted ⟨priority: medium — the ordinary take path self-heals it, so this is the belt of a belt-and-braces that is missing for half the bank⟩ — FIXED 2026-09-02 by `BANK-HALF-SWEEP-01`
 
 **What:** `#reassertDeclaredVolumes` exists because **mixer state is CHANNEL state and survives the
 bridge process**. Its own comment states the case: _"A bridge that died mid-rehearse left a muted
@@ -9224,13 +9224,55 @@ same one-line shape used to fix the four `MockRuntime` copies in `B-201`. It is 
 session that found it: `MIXER-DEFER-SAFETY-01` authorised exactly one wire-path change and this is
 not it. Filed, not hidden.
 
+**The fix (`BANK-HALF-SWEEP-01`, 2026-09-02).** `#reassertDeclaredVolumes` iterates
+`fixedBankSlots(bank)` — the union, from the one function that returns it — instead of the
+operator range. Nine more `MIXER VOLUME 1` lines at startup on a default bank, all `normal`
+priority, all idempotent. Red-first: a new `rehearse.integration.test.ts` case boots a bank whose
+beds sit at **2–6** (not the default 1–9, so a hand-widened `1 … 9` fails as loudly as a missing
+walk), mutes ONLY the bed rows, and asserts every one reads `1` after first reachability; the
+existing "covers EVERY declared row" case now derives its rows from `fixedBankSlots` too. Both
+were run against the unfixed bridge first: `bed layer 2: expected +0 to be 1`. Walking the operator
+range again reddens both.
+
+**The "medium" reasoning, VERIFIED rather than inherited.** `take()` does send
+`mixerVolume(slot, INTENDED_VOLUME)` unconditionally and un-gated on `#rehearsing`
+(`caspar-runtime.ts`, the `volumeOk` send), so an ordinary take of the row does heal it — that
+part holds. The residual is every route to air that is NOT a take of that row, enumerated:
+
+| route                                                                                                                 | does it un-mute the row?                                                                    | left after this fix?                                                      |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| a take whose own `MIXER VOLUME` line FAILED (`volumeOk.ok === false`)                                                 | no — the take proceeds and only logs; the startup re-assert is the backstop                 | equal on both halves now                                                  |
+| the row goes live by ANOTHER route while rehearsing, and the bridge dies before `#abortRehearsalsThatWentLive` sweeps | no — `#rehearsing` is empty after a restart, so nothing exits the rehearse                  | equal on both halves now                                                  |
+| `restore` / reconnect re-`ADD` (`#decidePendingRestores` → `#sendAdd`)                                                | no — every producer the bridge creates is created MUTED (C-015 §6.5); only a take raises it | by design, both halves                                                    |
+| a look switch (`reconcileLivePlates`)                                                                                 | touches PLATE layers' volume (held/un-held), never the row's own CG layer                   | n/a                                                                       |
+| `update` (UPDATE)                                                                                                     | no `PLAY`, no un-mute — golden rule 10                                                      | by design                                                                 |
+| the operator reading a meter and finding a bed silent for a reason nothing explains                                   | no                                                                                          | the window is now startup → first reachability, same as the operator half |
+
+**Medium stands**, with one thing the entry did not say: the bed WORKFLOW makes any residual last a
+programme rather than a segment. `DEFAULT_LOW_BANK_VISIBLE_ROWS` is two precisely so the next
+programme's bed can be rehearsed while the current one is on air, so the bed that is rehearsing is
+the one a crash mutes, and the one whose next take is at the programme boundary. Before this fix
+that was a programme-length exposure to every row in the table; after it, the same rows are re-asserted at
+the moment they were for the operator half.
+
+⚠ **What the re-assert itself does NOT consult, recorded rather than left implicit.** It blankets
+every declared row with `VOLUME 1` and asks nothing about what is on the layer
+(`live-source-multibox/design.md` records this as a constraint on the Live Source range). A
+producer that survived the dead process on a declared row — ours, loaded-but-not-taken and
+therefore created muted, or a foreign one — is un-muted at first reachability until the restore
+sweep adopts it. That is a pre-existing property of the operator half and it now applies to nine
+more layers, all template layers: beds lie BELOW the Live Source band by `low-bank-not-below-band`,
+so no live box can be un-muted here. Filed as [[B-207]], not fixed — it is a wire-path change beyond
+the two this session authorised.
+
 - **Cross-refs:** [[B-201]] (the same restatement, four times, in the mock), [[B-205]] (the other
-  bridge-side instance, found in the same sweep).
+  bridge-side instance, found in the same sweep), [[P-039]] (the guard that now flags the shape),
+  [[B-207]] (what the re-assert consults about the layer: nothing).
 - **Number:** highest `B-` HEADING across every ref was `B-203` (taken earlier this session);
   `B-204` … `B-208` returned no headings anywhere. The registry entry for this session names
   `B-204` as next free; headings and pointer AGREE.
 
-## [ ] B-205 — the fail-closed UNTICK gate walks the operator half only, so a live config install can hide a bed row whose occupancy cannot be verified ⟨priority: medium — a safety gate that silently does not apply to half the bank⟩ — OPEN, filed 2026-09-02 from the `MIXER-DEFER-SAFETY-01` delta
+## [x] B-205 — the fail-closed UNTICK gate walks the operator half only, so a live config install can hide a bed row whose occupancy cannot be verified ⟨priority: medium — a safety gate that silently does not apply to half the bank⟩ — FIXED 2026-09-02 by `BANK-HALF-SWEEP-01`
 
 **What:** installing a bank LIVE is validated like a load, **plus** a fail-closed untick rule that
 `validateFixedBank` cannot carry on its own. The rule's purpose is in its own comment: _"A LIVE
@@ -9261,6 +9303,120 @@ config install is REFUSED), so it was not made by the session that found it, for
 `B-204`. The existing `untick-occupied` / `untick-unknown` tests would carry over; what is missing
 is a bed-row case for each.
 
-- **Cross-refs:** [[B-204]] (the other bridge-side instance), [[B-201]] (the pattern, catalogued).
+**The entry under-counted, and the correction is the first thing the fix records.** It said a
+`git grep` of the method found "exactly ONE such loop". That was true of `setFixedLayers` — the
+LIVE-INSTALL path, taken when no bank is in force — but the LIVE-CHANGE path it delegates to,
+`validateFixedBankChange` in `fixed-layers-store.ts`, walked `next.start … bankEnd(next)` too. So
+the hole was not "a live config install can hide a bed row": **every live tick change could**, on
+every station that already had a bank, which is all of them. Both loops are closed here.
+
+**The fix (`BANK-HALF-SWEEP-01`, 2026-09-02).** Both walks iterate `fixedBankSlots(next)`; the
+bodies are unchanged. Red-first, four tests, each run against the unfixed gate before the fix and
+each with the beds at **2–6** rather than the default 1–9 so a hand-widened `1 … 9` cannot pass:
+
+| path                        | test                                                                                                                                               | red before the fix                           |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| change, occupied bed        | `fixed-layers-store.test.ts` — `untick-occupied` naming `layer 4`                                                                                  | `expected FixedLayersConfigError` (no throw) |
+| change, unknown bed         | `fixed-layers-store.test.ts` — `untick-unknown` naming `layer 6`, distinguishable                                                                  | `expected FixedLayersConfigError` (no throw) |
+| change, over REAL occupancy | `fixed-layers-wire.integration.test.ts` — S10's three steps on a bed: blind refuses, empty applies on the BED record, a foreign `PLAY 1-6` refuses | blind untick accepted (`ok: true`)           |
+| install, unknown bed        | `template-persistence.integration.test.ts` — pre-hidden bed `3` refuses blind, applies once hearing                                                | install accepted (`ok: true`)                |
+
+A fifth pins the symmetry that an ALREADY-hidden bed row is not re-adjudicated. Removing the bed
+half from either walk reddens the tests on that path.
+
+**What the gate now refuses that it did not before — stated so nobody meets it as a surprise.**
+On a bank whose beds are declared (every bank since `a7976e14`, including upgraded ones through
+the schema default):
+
+1. Unticking a bed row while the CasparCG link is down, or while no fresh OSC has been heard,
+   is REFUSED with `untick-unknown` naming the layer. Yesterday it applied silently, and the row
+   left the operator's list while the bridge could not say whether anything was on it.
+2. Unticking a bed row that carries a producer — ours or foreign — is REFUSED with
+   `untick-occupied`. Yesterday it applied; the panel's honesty override kept the row on screen
+   anyway, so the operator saw no change but the config carried a tick the gate would have refused.
+3. Installing a bank live with a bed row pre-hidden is subject to both refusals.
+
+The operator-visible surface is the bank-config dialog, which already renders both codes for
+operator rows ("an occupied (or unverifiable) row cannot be unticked until its template is
+removed") — the sentence was true of half the rows and is now true of all of them. No new code,
+no new message: the refusal the operator meets on a bed row is the one they already meet on an
+operator row, and the offline mock refuses neither (it has no untick gate), so no E2E spec changes.
+
+⚠ **Adjacent, found while reading the same function, and NOT fixed here:** `validateFixedBankChange`
+refuses `start`, `channel` and `count` changes mid-session but says nothing about `low.start` or
+`low.count`, while two comments (`sources.ts`'s bed-band check, the config modal) state that the bed
+range "is fixed at install and the validator refuses a change". It does not. That is a NEW refusal,
+which this fix must not smuggle in — filed as [[B-206]].
+
+- **Cross-refs:** [[B-204]] (the other bridge-side instance), [[B-201]] (the pattern, catalogued),
+  [[P-039]] (the guard that now flags the shape), [[B-206]] (the bed range is not fixed at install).
 - **Number:** derived in the same sweep as `B-204` above — highest heading `B-203`, `B-204` …
   `B-208` absent; `B-205` is the next after the one filed immediately above.
+
+## [ ] B-206 — the bed range is NOT fixed at install: `validateFixedBankChange` refuses a moved or resized operator half and says nothing about `low.start` / `low.count` ⟨priority: medium — two comments promise a refusal that does not exist, and the tick record it would protect is keyed by the range that can move⟩ — OPEN, filed 2026-09-02 from `BANK-HALF-SWEEP-01` §3
+
+**What:** the live-change validator (`tools/caspar-bridge/src/fixed-layers-store.ts`) refuses
+`renumber-refused` when `next.start !== current.start`, `channel-change-refused` on the channel,
+and `resize-refused` when `next.count !== current.count`. It compares nothing on `next.low`. A
+`fixedLayers.set-config` carrying `low: { start: 2, count: 5 }` against a bank whose beds are 1–9
+applies, mid-session, with the bridge's `LayerManager` re-fenced to the new union and every
+consumer that keyed on the old range — ticks, aliases, the panel's grouping, `bankPosition` — now
+reading a record written for a different set of layers.
+
+**Two places already say it cannot happen**, which is what makes this worth a number rather than
+a note:
+
+- `packages/shared-ipc/src/channels/sources.ts`, the bed-band check: _"the bed range is fixed at
+  install (`renumber-refused` / `resize-refused`), the band is edited from the Sources surface, so
+  the band's own validator is the door every change to this relationship passes through."_ The
+  door is only a door if the OTHER side cannot move. It can.
+- `FixedBankConfigModal.tsx`: _"Its `start`/`count` are carried through untouched: like the
+  operator half's, they are fixed at install and the validator refuses a change."_ The modal
+  carries them through untouched, so the product's own UI cannot produce the change — but the
+  wire can, and `NoBankModal` still tells operators to hand-edit the file.
+
+**Why it was NOT fixed by the session that found it.** It is a NEW refusal — the gate would refuse
+a request it accepts today — and the prompt that found it (`BANK-HALF-SWEEP-01` §3) said in so
+many words not to smuggle a new refusal into a bug fix. It sits in the same function as `B-205`
+and is the same operator-only assumption one clause over, which is exactly why it was read.
+
+**What closing it looks like:** two more clauses in `validateFixedBankChange`, mirroring the
+operator half's — `next.low.start !== current.low.start` → `renumber-refused`,
+`next.low.count !== current.low.count` → `resize-refused` — with messages naming the BED range,
+plus a store unit test per clause and a wire test that the refusal applies nothing. The
+`low-bank-not-below-band` comment then becomes true.
+
+- **Cross-refs:** [[B-205]] (the same function, one clause over), [[B-201]] (the pattern).
+- **Number:** highest `B-` HEADING across every ref was `B-205`; `B-206` … `B-210` returned no
+  headings anywhere. Cross-checked against the registry's dated pointer — _"Next free after this
+  session is `B-206`"_ — headings and pointer AGREE.
+
+## [ ] B-207 — the startup VOLUME re-assert consults nothing about what is on the layer, so a producer that survived the dead process is audible from first reachability until the restore sweep adopts it ⟨priority: low — a window of seconds at startup, on a layer that will be re-muted by the adopt; a tension between two rules rather than a defect in either⟩ — OPEN, filed 2026-09-02 from `BANK-HALF-SWEEP-01` §2
+
+**What:** `#reassertDeclaredVolumes` (R-022) blankets every declared row — both halves, since
+`B-204` — with `MIXER VOLUME 1` once the primary is first live. It exists to undo a dead process's
+rehearse mute. It asks nothing about the layer first. C-015 §6.5 later made _"every producer the
+bridge creates is created MUTED; audio is raised only by an explicit recorded intent"_ THE rule,
+and `#sendAdd` mutes before every `CG ADD`. The two are consistent on an EMPTY layer. They are not
+on a layer carrying a producer the dead process created and never took: that producer was created
+muted, survives the process (mixer state is channel state), and is un-muted by the re-assert —
+before `#decidePendingRestores` runs from the occupancy sweep, adopt-clears it, and re-adds it
+muted. A template with autoplaying audio is audible in that window. `live-source-multibox/design.md`
+already records the same property as the reason the Live Source range sits OUTSIDE the bank
+(_"that walk would have unmuted every live box at first reachability"_); this entry is that record
+applied to the bank's own rows.
+
+**Scope after `B-204`:** nine more layers, all template layers. Beds lie below the Live Source
+band by `low-bank-not-below-band`, so no live box is reachable by the walk.
+
+**Why it was left:** any change is a wire-path change to a startup path measured on hardware, and
+`BANK-HALF-SWEEP-01` authorised exactly two, neither of which this is. Filed, not hidden.
+
+**What closing it looks like:** either order the re-assert AFTER the restore sweep's first
+adoption pass (so the walk lands on layers the bridge has already re-created muted or cleared),
+or restrict it to rows whose ledger says they were ON AIR — the row a rehearse mute strands is by
+construction not on air, so the second option needs the persisted ledger to carry that fact.
+
+- **Cross-refs:** [[B-204]] (the walk this is about), [[B-121]] (the reconnect re-add path).
+- **Number:** derived in the same sweep as `B-206` above — highest heading `B-205`, `B-206` …
+  `B-210` absent; `B-207` is the next after the one filed immediately above.

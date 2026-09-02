@@ -279,6 +279,43 @@ it('R-028 (2.3) — installing a bank LIVE with pre-hidden layers fails closed o
   expect(r.fixedLayersConfig()?.visibility).toEqual({ '71': false });
 });
 
+/*
+  🔴 `B-205` — the LIVE-INSTALL path meets the bed half too.
+
+  Installing a bank live walks every row of the NEW bank and refuses any pre-hidden row
+  whose occupancy is not provably empty. That walk was `next.start … next.start+count`,
+  so a bank arriving with a bed row already hidden was installed with nothing adjudicating
+  that row — the "we do not know" state the rule exists to stop anyone hiding. Beds at 2–6
+  so a hand-widened `1 … 9` cannot pass; the refusal names the bed layer.
+*/
+it('🔴 B-205 — installing a bank LIVE with a pre-hidden BED row fails closed on unknown occupancy', async () => {
+  const r = await bootRuntime(templatesDir(), { noBank: true });
+  const low = { start: 2, count: 5 };
+  const blind = r.setFixedLayers({
+    channel: 1,
+    low: { ...low, visibility: { '3': false } },
+    start: 70,
+    count: 4,
+  });
+  expect(blind.ok).toBe(false);
+  expect(blind.reason).toBe('untick-unknown');
+  expect(blind.message).toContain('layer 3');
+  expect(r.fixedLayersConfig()).toBeNull(); // nothing applied
+
+  // With a hearing tap and a provably-empty bed, the same install applies.
+  await r.whenServerHealthy(HEALTH_MS);
+  await waitFor(() => {
+    const probe = r.setFixedLayers({
+      channel: 1,
+      low: { ...low, visibility: { '3': false } },
+      start: 70,
+      count: 4,
+    });
+    return probe.ok;
+  });
+  expect(r.fixedLayersConfig()?.low.visibility).toEqual({ '3': false });
+});
+
 it('R-028 (2.5) — a candidate ceiling intersecting the reserved playout range refuses to BOOT, naming both ranges', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });

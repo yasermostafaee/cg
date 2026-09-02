@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import {
   type FIXED_LAYERS_SET_CONFIG_REASONS,
   FixedLayerBankSchema,
+  fixedBankEnd,
   fixedBankSlots,
   isLayerVisible,
   lowBankEnd,
@@ -114,20 +115,20 @@ export interface ValidateChangeOptions extends ValidateOptions {
   slotOccupancy: (slot: LayerSlot) => SlotOccupancy;
 }
 
-function bankEnd(bank: FixedLayerBank): number {
-  return bank.start + bank.count - 1;
-}
-
 /**
  * Validate a bank against the ceiling, the dynamic policy ranges, the reserved
  * (C-015) layers, and its own aliases. Returns the bank's slots; throws
  * {@link FixedLayersConfigError} naming the conflict.
+ *
+ * The operator half's end is `fixedBankEnd` from `@cg/shared-ipc` — this module
+ * used to carry a local `bankEnd` that restated it (`P-039`'s guard flagged it),
+ * and a local copy of the derivation is exactly how `B-205` came to exist.
  */
 export function validateFixedBank(
   bank: FixedLayerBank,
   options: ValidateOptions,
 ): readonly LayerSlot[] {
-  const end = bankEnd(bank);
+  const end = fixedBankEnd(bank);
   const range = `${String(bank.start)}–${String(end)}`;
   if (end > MAX_FIXED_LAYER) {
     throw new FixedLayersConfigError(
@@ -198,7 +199,7 @@ export function validateFixedBank(
 function validateLowBank(bank: FixedLayerBank, options: ValidateOptions, highRange: string): void {
   const lowEnd = lowBankEnd(bank);
   const lowRange = `${String(bank.low.start)}–${String(lowEnd)}`;
-  if (bank.low.start <= bankEnd(bank) && lowEnd >= bank.start) {
+  if (bank.low.start <= fixedBankEnd(bank) && lowEnd >= bank.start) {
     throw new FixedLayersConfigError(
       'banks-overlap',
       `the graphics-bed rows ${lowRange} overlap the operator's candidate layer bank ` +
@@ -308,7 +309,14 @@ export function validateFixedBankChange(
   // R-028 (2.3) — every layer flipping VISIBLE → HIDDEN must be provably
   // empty. Occupied refuses; UNKNOWN refuses too (fail closed): hiding a row
   // that may be on air would leave the operator no surface for a live graphic.
-  for (let layer = next.start; layer <= bankEnd(next); layer++) {
+  //
+  // 🔴 `B-205` — EVERY layer means BOTH halves. This walked `next.start …
+  // bankEnd(next)`, the operator half, so a bed row could be hidden with the tap
+  // blind — "we do not know" is precisely the state this rule refuses to let
+  // anyone hide, and it was hideable on every bed row. The rows come from
+  // `fixedBankSlots`, the ONE function that returns the bank's range; a second
+  // derivation here is how the gate came to cover half of what its name claims.
+  for (const { layer } of fixedBankSlots(next)) {
     if (!isLayerVisible(current, layer) || isLayerVisible(next, layer)) continue;
     const occupancy = options.slotOccupancy({ channel: next.channel, layer });
     if (occupancy === 'occupied') {

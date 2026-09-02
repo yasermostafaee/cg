@@ -244,6 +244,65 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
     expect(message).not.toContain('OCCUPIED (');
   });
 
+  /*
+    🔴 `B-205` — THE GATE MEETS BOTH HALVES.
+
+    The untick loop walked `next.start … next.start+count`, the operator half, so a
+    change that hid a BED row was never adjudicated at all: an occupied bed could be
+    slipped out of sight, and — the half that fails closed for a reason — a bed whose
+    occupancy could not be verified could be hidden while nothing could say whether
+    anything was on it. The panel's honesty override retains a bound or observably
+    occupied row whatever its tick, which covers `untick-occupied`; it does NOT retain
+    an unverifiable row, so `untick-unknown` on a bed was a hole with no backstop.
+
+    The beds here are 2–6, not the default 1–9, and the layer named in each refusal is
+    asserted, so a gate that widened its range by hand to `1 … 9` — the tenth
+    restatement — fails as loudly as the one that never looked. Removing the bed half
+    from the walk reddens all three.
+  */
+  it('🔴 B-205 — unticking an OCCUPIED bed row is refused like an operator row, naming the layer', () => {
+    const current = bank({ low: { start: 2, count: 5 } });
+    const next = bank({ low: { start: 2, count: 5, visibility: { '4': false } } });
+    const { code, message } = codeOf(() =>
+      validateFixedBankChange(current, next, {
+        policy: POLICY,
+        reservedLayers: [],
+        slotOccupancy: (slot: LayerSlot) => (slot.layer === 4 ? 'occupied' : 'empty'),
+      }),
+    );
+    expect(code).toBe('untick-occupied');
+    expect(message).toContain('layer 4');
+    expect(message).toContain('OCCUPIED');
+  });
+
+  it('🔴 B-205 — unticking a bed row with UNKNOWN occupancy fails closed, like an operator row', () => {
+    const current = bank({ low: { start: 2, count: 5 } });
+    const next = bank({ low: { start: 2, count: 5, visibility: { '6': false } } });
+    const { code, message } = codeOf(() =>
+      validateFixedBankChange(current, next, {
+        policy: POLICY,
+        reservedLayers: [],
+        slotOccupancy: () => 'unknown',
+      }),
+    );
+    expect(code).toBe('untick-unknown');
+    expect(message).toContain('layer 6');
+    expect(message).toContain('UNKNOWN');
+    expect(message).not.toContain('OCCUPIED (');
+  });
+
+  it('B-205 — a bed row that is ALREADY hidden is not re-adjudicated either', () => {
+    // Symmetric with the operator-half case below: the tick is not CHANGING, so
+    // an occupancy callback that refuses everything must not be consulted.
+    const hidden = bank({ low: { start: 2, count: 5, visibility: { '4': false } } });
+    const slots = validateFixedBankChange(hidden, hidden, {
+      policy: POLICY,
+      reservedLayers: [],
+      slotOccupancy: () => 'unknown',
+    });
+    expect(slots.length).toBe(hidden.count + hidden.low.count);
+  });
+
   it('a layer that is ALREADY hidden stays hidden without re-adjudication', () => {
     // Occupancy callback would refuse everything — but the tick is not
     // CHANGING, so it must not be consulted for already-hidden layers.
