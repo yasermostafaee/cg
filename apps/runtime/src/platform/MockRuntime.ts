@@ -40,6 +40,7 @@ import {
   DelimiterOptionSchema,
   fixedBankSlots,
   isFixedBankLayer,
+  isLowBankLayer,
   layerAlias,
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
@@ -1926,10 +1927,14 @@ function seedFixedBank(): FixedLayerBank | null {
     The difference between the two is that this one now SAYS `visibility`, so the next reader
     meets a decision instead of a default they have to know the semantics of.
   */
-  const low = defaultFixedLayerBank().low;
+  const defaults = defaultFixedLayerBank();
+  const low = defaults.low;
   const lowVisibility: Record<string, boolean> = {};
-  for (let layer = low.start; layer <= low.start + low.count - 1; layer++) {
-    lowVisibility[String(layer)] = true;
+  // The bed rows come from the ONE enumeration, filtered by the ONE predicate —
+  // never `low.start … low.start + low.count` by hand (`P-039`'s guard flagged
+  // exactly that here, the same shape `B-201` found four times in this file).
+  for (const { layer } of fixedBankSlots(defaults)) {
+    if (isLowBankLayer(defaults, layer)) lowVisibility[String(layer)] = true;
   }
   return {
     channel: 1,
@@ -2011,8 +2016,8 @@ function seedFixedObservations(): Map<number, FixedSlotObservation> {
           const bank = seedFixedBank();
           if (bank === null) return [];
           const beds: [number, FixedSlotObservation][] = [];
-          for (let layer = bank.low.start; layer <= bank.low.start + bank.low.count - 1; layer++) {
-            beds.push([layer, { kind: 'empty' }]);
+          for (const { layer } of fixedBankSlots(bank)) {
+            if (isLowBankLayer(bank, layer)) beds.push([layer, { kind: 'empty' }]);
           }
           return beds;
         })(),

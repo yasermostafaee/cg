@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { IdSchema, LiveFitModeSchema, LiveSourceIdSchema } from '@cg/shared-schema';
-import { lowBankEnd, type FixedLayerBank } from './fixedLayers.js';
+import { fixedBankEnd, lowBankEnd, type FixedLayerBank } from './fixedLayers.js';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 
@@ -655,7 +655,7 @@ export function validateSourceCatalog(
 
   const bank = options.fixedBank;
   if (bank !== null) {
-    const bankEnd = bank.start + bank.count - 1;
+    const bankEnd = fixedBankEnd(bank);
     if (range.start <= bankEnd && range.end >= bank.start) {
       // Name BOTH ranges, the `overlaps-reserved` stance: the operator has to
       // be able to see which side to move.

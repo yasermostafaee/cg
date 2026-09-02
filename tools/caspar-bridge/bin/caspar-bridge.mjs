@@ -71,6 +71,13 @@
 
 import * as os from 'node:os';
 import * as path from 'node:path';
+import {
+  fixedBankEnd,
+  fixedBankSlots,
+  isLayerVisible,
+  isLowBankLayer,
+  lowBankEnd,
+} from '@cg/shared-ipc';
 import { createBridge, parseReservedLayersFlag, resolveLiveLayersPath } from '../dist/index.js';
 
 const args = parseArgs(process.argv.slice(2));
@@ -408,11 +415,20 @@ function describeServeHostSource(source) {
  */
 function describeFixedBank({ bank, source }) {
   if (bank === null) return 'none declared (no --fixed-layers-path configured)';
-  const end = bank.start + bank.count - 1;
-  let shown = 0;
-  for (let layer = bank.start; layer <= end; layer++) {
-    if (bank.visibility?.[String(layer)] !== false) shown++;
+  // BOTH halves, from the ONE enumeration and the ONE predicates — this used to
+  // rebuild the operator range by hand and read the operator half's tick record
+  // directly, so it printed twenty rows as the whole bank and never mentioned
+  // the beds at all (P-039's guard flagged the arithmetic; the tick read it
+  // cannot see was fixed alongside). A boot line that describes half the bank
+  // is the same defect as a mock that fences half of it (B-201).
+  const halves = { operator: { count: 0, shown: 0 }, bed: { count: 0, shown: 0 } };
+  for (const { layer } of fixedBankSlots(bank)) {
+    const half = isLowBankLayer(bank, layer) ? halves.bed : halves.operator;
+    half.count++;
+    if (isLayerVisible(bank, layer)) half.shown++;
   }
+  const operatorEnd = fixedBankEnd(bank);
+  const bedEnd = lowBankEnd(bank);
   // ASCII only, deliberately: the Windows console this prints to renders an
   // en-dash as mojibake, and a line whose whole job is to be READ must not
   // arrive with garbage in the middle of the layer range.
@@ -423,8 +439,10 @@ function describeFixedBank({ bank, source }) {
         ? `built-in default (no file at ${fixedLayersPath})`
         : source;
   return (
-    `channel ${bank.channel}, layers ${bank.start}-${end} ` +
-    `(${bank.count} declared, ${shown} shown) - from ${where}`
+    `channel ${bank.channel}, layers ${bank.start}-${operatorEnd} ` +
+    `(${halves.operator.count} declared, ${halves.operator.shown} shown), ` +
+    `beds ${bank.low.start}-${bedEnd} ` +
+    `(${halves.bed.count} declared, ${halves.bed.shown} shown) - from ${where}`
   );
 }
 

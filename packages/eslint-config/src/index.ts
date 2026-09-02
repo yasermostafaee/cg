@@ -23,5 +23,15 @@ export {
 } from './rules/cef-compat.js';
 export { cefCompat } from './configs/cef-compat.js';
 
+// P-039 — the bank-shape guard. Registered by `base` under the `cg` namespace; exported
+// so the smoke check can assert on the one rule id and so a consumer can widen the
+// owner-file exemption deliberately rather than by copying the pattern.
+export {
+  BANK_SHAPE_OWNER_FILES,
+  BANK_SHAPE_RULE_ID,
+  bankShapePlugin,
+  bankShapeRule,
+} from './rules/bank-shape.js';
+
 export type { TierOptions } from './configs/node.js';
 export type { JsxA11yOptions } from './configs/jsx-a11y.js';

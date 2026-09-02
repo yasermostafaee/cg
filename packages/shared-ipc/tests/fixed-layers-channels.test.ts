@@ -8,6 +8,7 @@ import {
   FixedSlotStateSchema,
   ReservedLayersSchema,
   defaultFixedLayerBank,
+  fixedBankEnd,
   isLayerVisible,
   reservedLayerNumbers,
 } from '../src/index.js';
@@ -124,11 +125,11 @@ describe('the built-in default bank — what a station with no config comes up w
     expect(bank.channel).toBe(1);
     expect(bank.start).toBe(70);
     expect(bank.count).toBe(30);
-    expect(bank.start + bank.count - 1).toBe(99);
+    expect(fixedBankEnd(bank)).toBe(99);
 
     // The five DISPLAYED rows are the bank's highest layers, counting down.
     const visible = [];
-    for (let layer = bank.start; layer <= bank.start + bank.count - 1; layer++) {
+    for (let layer = bank.start; layer <= fixedBankEnd(bank); layer++) {
       if (isLayerVisible(bank, layer)) visible.push(layer);
     }
     expect(visible).toEqual([95, 96, 97, 98, 99]);

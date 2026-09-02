@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react';
 import {
   bankPosition,
   defaultLayerAlias,
+  fixedBankEnd,
   isLayerVisible,
   isLowBankLayer,
   lowBankEnd,
@@ -236,7 +237,7 @@ function BankEditor({
   // Checkbox model: layer → VISIBLE. Absent key in the bank means visible.
   const [visible, setVisible] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
-    for (let layer = bank.start; layer <= bank.start + bank.count - 1; layer++) {
+    for (let layer = bank.start; layer <= fixedBankEnd(bank); layer++) {
       initial[String(layer)] = isLayerVisible(bank, layer);
     }
     for (let layer = bank.low.start; layer <= lowBankEnd(bank); layer++) {
@@ -258,7 +259,7 @@ function BankEditor({
    * ends. Ordering is a correctness property here, not a preference.
    */
   const layers: number[] = [];
-  for (let layer = bank.start + bank.count - 1; layer >= bank.start; layer--) layers.push(layer);
+  for (let layer = fixedBankEnd(bank); layer >= bank.start; layer--) layers.push(layer);
   // Then the BED rows, still highest-first, as their own group below — which is also where
   // they sit on air. The list's order is the z-order, and the beds are underneath.
   const bedLayers: number[] = [];
@@ -269,7 +270,7 @@ function BankEditor({
     const cleaned: Record<string, string> = {};
     for (const [key, value] of Object.entries(aliases)) {
       const layer = Number(key);
-      if (value.trim() !== '' && layer >= bank.start && layer <= bank.start + bank.count - 1) {
+      if (value.trim() !== '' && layer >= bank.start && layer <= fixedBankEnd(bank)) {
         cleaned[key] = value.trim();
       }
     }
@@ -281,7 +282,7 @@ function BankEditor({
     const hidden: Record<string, boolean> = {};
     for (const [key, isVisible] of Object.entries(visible)) {
       const layer = Number(key);
-      if (!isVisible && layer >= bank.start && layer <= bank.start + bank.count - 1) {
+      if (!isVisible && layer >= bank.start && layer <= fixedBankEnd(bank)) {
         hidden[key] = false;
       }
     }
@@ -438,12 +439,11 @@ function BankEditor({
     >
       {/* Read-only facts first: the validator refuses changing any of them mid-session. */}
       <div style={styles.fixedFacts}>
-        Channel {String(bank.channel)} · layers {String(bank.start)}–
-        {String(bank.start + bank.count - 1)} ({String(bank.count)} candidate layers) — channel,
-        start and count are fixed at install; edit the bridge&rsquo;s fixed-layers config and
-        restart it to change them. Unticking hides a row from the panel only — the layer stays
-        fenced from automatic allocation, and an occupied (or unverifiable) row cannot be unticked
-        until its template is removed.
+        Channel {String(bank.channel)} · layers {String(bank.start)}–{String(fixedBankEnd(bank))} (
+        {String(bank.count)} candidate layers) — channel, start and count are fixed at install; edit
+        the bridge&rsquo;s fixed-layers config and restart it to change them. Unticking hides a row
+        from the panel only — the layer stays fenced from automatic allocation, and an occupied (or
+        unverifiable) row cannot be unticked until its template is removed.
       </div>
       <div style={styles.field}>
         Candidate layers, highest first — same order as the Layers list. Tick = row shown; the name

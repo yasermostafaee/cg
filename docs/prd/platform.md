@@ -2489,3 +2489,81 @@ that spec **named in the log**, not `cancelled`.
 - **Number:** highest `P-` HEADING across every ref was `P-037`; `P-038` … `P-040` returned no
   headings anywhere, and the duplicate audit for `P-` printed nothing. Cross-checked against the
   registry's dated pointer — _"no gaps. Next free: `P-038`."_ — headings and pointer AGREE.
+
+## [x] P-039 — a lint guard for the two-bank SHAPE: a bank range or a row name rebuilt by hand fails `cg/bank-shape`, in every workspace ⟨priority: high — nine restatements were found by sweeping, and nothing stopped a tenth⟩ — implemented 2026-09-02 by `BANK-HALF-SWEEP-01`
+
+**What:** `a7976e14` put the bank's union in ONE function (`fixedBankSlots`) and nine sites then
+rebuilt its range by hand — four in the mock (`B-201`), the schema default (`B-202`), the panel's
+row name (`B-203`), the bridge's volume recovery (`B-204`) and its untick gate (`B-205`). Every one
+was the OPERATOR half only, and none could be found by grepping for the predicate's name, because a
+restatement never uses the name. The sweep that caught the last two used three patterns:
+hand-built row-name strings, `start`/`count` arithmetic outside `shared-ipc`, and a literal
+`layer <= 9`.
+
+**How a tenth hides from that sweep — the shapes the three patterns miss, and two were already in
+the tree:**
+
+| shape                                                                                      | where it was                                                                                 | seen by the sweep?             |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- | ------------------------------ |
+| `Array.from({ length: bank.count }, (_, i) => bank.start + i)` — no `count - 1`, no `<= 9` | `rehearse.integration.test.ts`, `skew-harness/run.ts` (both halves, by hand)                 | **no**                         |
+| `for (let i = 0; i < bank.count; i++)` with `bank.start + i` inside                        | —                                                                                            | no                             |
+| `const { start, count } = bank` then `start + n`                                           | —                                                                                            | only if `n` is spelled `count` |
+| a direct tick read, `bank.visibility?.[k]`, instead of `isLayerVisible`                    | `bin/caspar-bridge.mjs` — the boot line counted operator ticks only and never mentioned beds | **no**                         |
+| a positional read of the union, `fixedBankSlots(bank).slice(0, bank.count)`                | —                                                                                            | no                             |
+| `layer < 10`, `slot.layer > 9`, `9 >= layer`, `layer <= MAX_LOW_FIXED_LAYER`               | —                                                                                            | only `layer <= 9`              |
+| the name built elsewhere — `'Layer ' + n`, an i18n table                                   | —                                                                                            | no                             |
+
+**The options, costed:**
+
+- **A lint rule on the SHAPE** — a custom ESLint rule, `cg/bank-shape`, in `@cg/eslint-config`,
+  registered by the BASE tier so every workspace has it, the owner module exempted by PATH. ~90
+  lines of rule, ~100 of smoke cases, 16 mechanical site fixes. Small. **Built.**
+- **Narrow the surface so `fixedBankSlots()` is the only enumerator** — `start`/`count` are the
+  persisted wire shape of a Zod-parsed record; hiding them means a class wrapper across an IPC
+  boundary and a persisted file, touching every consumer, and it does nothing for `Layer ${n}`.
+  Large, and incomplete. Not built.
+- **Type-aware lint** (`parserOptions.project`) checking member access on `FixedLayerBank`-typed
+  objects — precise, no name heuristics, but the base config is deliberately non-type-aware and
+  turning that on across thirty workspaces is a minutes-per-lint cost and a config migration.
+  Medium-large. Deferred; it is the shape that would close the direct-tick-read hole below.
+- **The grep sweep as a gate step** — cheapest of all, and it IS the sweep that cannot see the
+  tenth (rule 9 already records that a grep can go blind).
+
+**What was built.** `packages/eslint-config/src/rules/bank-shape.ts`: esquery selectors for
+`x.start + x.count` (either order, any receiver, either half), `start + count` on bare identifiers,
+`{ length: x.count }` / `new Array(x.count)`, a `for` bounded by `.count`, and a template literal
+that is exactly `` `Layer ${…}` `` / `` `Bed ${…}` `` or a `'Layer ' + …` concatenation. A custom
+rule with its OWN id rather than more `no-restricted-syntax` entries, because flat config REPLACES
+a rule's options when a later block re-declares it and three configs in this repo do — one of them
+for the directory that contains `LayerRow.tsx`. The owner module
+(`packages/shared-ipc/src/channels/fixedLayers.ts`) is exempt by a `files` pattern, and the smoke
+check proves the exemption does not extend to a neighbouring file.
+
+**Demonstrated, twice.** First fire on the real tree: **16 sites** in exactly the four bank-holding
+workspaces (`shared-ipc` ×3, `runtime` ×8, `caspar-bridge` ×3, `skew-harness` ×2) and none
+elsewhere — every one either the `fixedBankEnd` restatement or the `{ length }` shape above; all
+fixed in place, tree-wide lint then `25 successful, 25 total`. Then the three shipped restatements
+reintroduced VERBATIM from their original commits (`B-204`'s loop, `B-205`'s loop, `B-203`'s
+`` `Layer ${bankPosition}` ``) in a scratch file inside the bridge workspace: `3 problems (3
+errors)`, exit 1.
+
+**Which of the nine it would have caught:** eight — all four mock sites, both bridge sites, the
+panel's row name, and `defaultFixedLayerBank`'s inline bed loop. **Not the ninth:** `B-202`'s
+schema default was an OMISSION (a `{ start, count }` with no `visibility`), and no syntax rule sees
+what is absent; that one is pinned by `B-202`'s own picture-level tests.
+
+**What it covers that the nine did not need, stated so the guard is not read as a closed class:**
+any receiver name (`next`, `current`, `b`, `HARNESS_BANK`), the bed half's arithmetic, the
+destructured form, the array-fill and index-walk forms, and the name built by concatenation.
+**What it does not see:** literal bounds (three test suites use the default bed range as their own
+oracle, and an oracle derived from the code under test proves nothing, so the grep sweep keeps
+those); direct tick/alias record reads (`visibility` and `aliases` are ordinary property names in
+the designer's arrangements and the runtime's looks, and without types the rule cannot tell a
+bank's record from theirs — the bin's was fixed by hand alongside); and a positional slice of the
+union. The type-aware option above is what would close the second.
+
+- **Cross-refs:** [[B-201]], [[B-203]], [[B-204]], [[B-205]] (the restatements), [[B-066]] (the
+  same one-curated-list-two-enforcers shape, for CEF built-ins).
+- **Number:** highest `P-` HEADING across every ref was `P-038`; `P-039` … `P-041` returned no
+  headings anywhere. Cross-checked against the registry's dated pointer — _"and `P-039`"_ —
+  headings and pointer AGREE.

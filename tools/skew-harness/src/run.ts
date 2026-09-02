@@ -2,6 +2,7 @@ import * as dgram from 'node:dgram';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CasparRuntime } from '@cg/caspar-bridge';
+import { fixedBankSlots } from '@cg/shared-ipc';
 import { buildTemplateLiveSources } from '@cg/vcg-format';
 import {
   changeEvents,
@@ -524,17 +525,10 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
       {},
       {
         sweepMs: 250,
-        // Both halves of the bank, fenced — the union the product's boot validator returns.
-        fixedSlots: [
-          ...Array.from({ length: HARNESS_BANK.count }, (_, i) => ({
-            channel: HARNESS_BANK.channel,
-            layer: HARNESS_BANK.start + i,
-          })),
-          ...Array.from({ length: HARNESS_BANK.low.count }, (_, i) => ({
-            channel: HARNESS_BANK.channel,
-            layer: HARNESS_BANK.low.start + i,
-          })),
-        ],
+        // Both halves of the bank, fenced — the union the product's boot validator returns,
+        // from the ONE function that returns it (the two hand-built halves this replaced
+        // were `P-039`'s guard's first catch outside the product).
+        fixedSlots: fixedBankSlots(HARNESS_BANK),
         fixedBank: HARNESS_BANK,
         ...(options.mixerLineDelayMs === undefined
           ? {}

@@ -178,6 +178,10 @@ export function rowNameFor(
   alias: string | undefined,
 ): string {
   if (alias !== undefined) return alias;
+  // With NO bank declared there is no position to ask for, so this is the raw CasparCG
+  // layer number and not a row name — the one place the `Layer ${n}` shape is not a
+  // restatement of `defaultLayerAlias` (P-039). Pinned by rehearsalFrames.test.ts.
+  // eslint-disable-next-line cg/bank-shape -- no bank: the number IS the layer, not a bank position
   if (bank === null) return `Layer ${String(layer)}`;
   return defaultLayerAlias(bank, layer);
 }

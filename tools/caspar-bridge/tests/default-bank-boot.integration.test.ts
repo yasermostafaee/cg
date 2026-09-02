@@ -2,7 +2,12 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
-import { isLayerVisible, type ConnectionConfig, type FixedLayerBank } from '@cg/shared-ipc';
+import {
+  fixedBankEnd,
+  isLayerVisible,
+  type ConnectionConfig,
+  type FixedLayerBank,
+} from '@cg/shared-ipc';
 import { createBridge, type BridgeHandle } from '../src/index.js';
 
 /**
@@ -46,7 +51,7 @@ function freshConfigDir(): string {
 
 function visibleLayers(bank: FixedLayerBank): number[] {
   const out: number[] = [];
-  for (let layer = bank.start; layer <= bank.start + bank.count - 1; layer++) {
+  for (let layer = bank.start; layer <= fixedBankEnd(bank); layer++) {
     if (isLayerVisible(bank, layer)) out.push(layer);
   }
   return out;
