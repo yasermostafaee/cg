@@ -2419,3 +2419,73 @@ skipped when unset) and is the precedent this item follows.
   <https://github.com/yasermostafaee/cg/actions/runs/32585878051> — head `4124885d`, a later
   `dev` HEAD carrying the fix commit `3e4f7832`; `completed` + `success`, with the
   **`E2E (Playwright)` job RUN, not skipped**. The local Windows pass is not what discharges it.
+
+## [~] P-038 — CI cannot tell a RED E2E suite from a SLOW one: turbo buffers a task's output and the job cap kills it before the flush ⟨priority: high — it made eleven real failures read as flake for three runs and two pushes⟩ — implemented: the two budgets and the streaming flag ship with this item
+
+**What:** the `E2E (Playwright)` job runs `pnpm test:e2e`, which routes through
+`bounded-turbo-cli.mjs` to turbo. Turbo **buffers a task's output until that task COMPLETES** — on
+a GitHub runner it emits `::group::`/`::endgroup::` around the whole of it, which requires holding
+it. The job's `timeout-minutes: 20` then kills the run **before the second suite ever completes**,
+so not one line of that suite's output is ever written.
+
+🔴 **The consequence is not "we lose some logs". It is that two different outcomes become the same
+evidence.** A suite that is FAILING and a suite that is merely SLOW both produce: job conclusion
+`cancelled`, `required` → `failure`, zero bytes from the suite, and orphaned `chrome-headless-shell`
+processes at cleanup. Nothing in that picture distinguishes a product regression from infrastructure
+noise, and the natural reading of `cancelled` is the second one.
+
+**Measured, three times, same shape:**
+
+| run                                                                                 | commit     | `E2E (Playwright)` | duration | designer            | runtime              |
+| ----------------------------------------------------------------------------------- | ---------- | ------------------ | -------- | ------------------- | -------------------- |
+| [33632277519 att. 1](https://github.com/yasermostafaee/cg/actions/runs/33632277519) | `eb228a64` | **cancelled**      | 20m17s   | `275 passed (6.4m)` | **no output at all** |
+| [33632277519 att. 2](https://github.com/yasermostafaee/cg/actions/runs/33632277519) | `eb228a64` | **cancelled**      | 20m20s   | —                   | **no output at all** |
+| [33637419829](https://github.com/yasermostafaee/cg/actions/runs/33637419829)        | `68da3bfe` | **cancelled**      | 20m19s   | `275 passed (6.3m)` | **no output at all** |
+
+In the third, `##[endgroup]` for the designer suite lands at `13:51:13` and
+`##[error]The operation was canceled` at `14:03:22` — **12 m 09 s of silence**. The designer suite's
+entire 298-line output shares ONE timestamp, which is the buffering measured directly.
+
+⚠ **A second, unrelated instance already existed and was read the same way**: run 32278566981
+attempt 1 was `cancelled` at the same cap from an apt-mirror stall. `cancelled` could not tell
+those two apart either.
+
+**What the silence actually was:** eleven Runtime specs failing on `a7976e14`'s `wrong-bank`
+refusal (`B-201`). CI runs `workers: 1, retries: 1, timeout: 30_000`, so **11 × 2 × 30 s = 11 min**
+of pure timeout plus the ~1.8 min the suite takes green ≈ **12.8 min** — the observed silence, to
+within a minute. The arithmetic was only derivable AFTER running the suite locally; from CI alone it
+was unobtainable.
+
+**Fix — two parts, and the first is the one that matters.**
+
+1. **`globalTimeout`, CI-only, in BOTH Playwright configs**, set so the two suites' budgets SUM
+   under the job cap: designer **11 min**, runtime **5 min**, against ~17.4 min of usable room
+   (20 min cap − ~1.6 min setup − ~1 min build). Playwright then ends its own run, exits 1 with a
+   summary, and the job concludes **`failure`** with the failing specs named — inside the cap, so
+   the cap stops being the thing that decides. ⚠ The two numbers are ONE sum: raising either
+   obliges lowering the other, and each config's comment says so.
+2. **`--log-order=stream`** on `test:e2e` and `gate:e2e:run`. Output appears as it is produced
+   instead of at a completion that may never come, so a hung suite is legible WHILE it hangs.
+   `bounded-turbo-cli.mjs` forwards argv verbatim (it rewrites only `--concurrency`), so this needs
+   no change there; turbo 2.9.14 documents `stream` as a supported value.
+
+**Why not the alternatives**, costed rather than dismissed:
+
+- **Raise `timeout-minutes`** — a longer rope. The outcome is still `cancelled`, just later and
+  dearer; a fully red Runtime suite at `workers: 1, retries: 1` is ~93 min and no cap bounds that.
+  `CLAUDE.md` already argues this shape down at `B-073` → `B-098`.
+- **Split into two jobs** — ~80 lines across 6 files, and it does NOT satisfy the acceptance: a job
+  killed by `timeout-minutes` still concludes `cancelled`. 🔴 As a **matrix** it is actively
+  dangerous: the API job names become `E2E (Playwright) (designer)`, which no longer match
+  `REQUIRED_JOB_NAMES` in `tools/gate-hook/src/reuse-decision.mjs`, so `P-030`'s merge-run guard
+  would silently degrade to "always run everything" — and its test still passes, because it asserts
+  against the literal name string.
+- **`timeout 14m pnpm test:e2e`** — gives the `failure` conclusion but names nothing on its own,
+  and kills rather than reports.
+
+**Acceptance:** a deliberately-failing Runtime spec produces a CI conclusion of **`failure`** with
+that spec **named in the log**, not `cancelled`.
+
+- **Number:** highest `P-` HEADING across every ref was `P-037`; `P-038` … `P-040` returned no
+  headings anywhere, and the duplicate audit for `P-` printed nothing. Cross-checked against the
+  registry's dated pointer — _"no gaps. Next free: `P-038`."_ — headings and pointer AGREE.

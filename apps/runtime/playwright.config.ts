@@ -52,7 +52,34 @@ function resolveWorkers(): number | undefined {
   return Number.isInteger(bounded) && bounded >= 1 ? bounded : undefined;
 }
 
+/**
+ * 🔴 `P-038` — THE SUITE MUST OUTLIVE ITS OWN OVERRUN LONG ENOUGH TO REPORT IT.
+ *
+ * Without this, a Runtime suite that overruns is killed by the CI job's
+ * `timeout-minutes: 20` (`.github/workflows/pr.yml`), and turbo — which buffers a task's
+ * output until the task COMPLETES — never flushes a line of it. A RED suite and a SLOW
+ * suite then produce byte-identical evidence: job conclusion `cancelled`, zero runtime
+ * output, and nothing to tell them apart. Measured three times (runs 33632277519
+ * attempts 1 and 2, and 33637419829): 12 minutes of silence, then `The operation was
+ * canceled`. Eleven genuinely failing specs rode two pushes looking exactly like flake.
+ *
+ * A `globalTimeout` BELOW the job cap makes Playwright itself end the run: it exits 1
+ * with a summary, so the job concludes `failure` and names what failed. The cap stops
+ * being the thing that decides.
+ *
+ * ⚠ **THE TWO SUITES SHARE ONE JOB, so their budgets must SUM under the cap.** CI runs
+ * them SERIALLY (`bounded-turbo-cli` computes 1 concurrent task on the 4-vCPU runner), so
+ * the arithmetic is 20 min cap − ~1.6 min setup − ~1 min build = ~17.4 min for both.
+ * Designer takes 11 of it, this suite 5, leaving ~1.4 min of margin. Measured green
+ * times are 6.3 min (designer) and 1.8 min (runtime), and each budget must also cover
+ * this config's own 120 s `webServer` boot — so 5 min here is ~30 % headroom over a
+ * realistic worst case of 2 min boot + 1.8 min tests. **Raise one and you must lower the
+ * other**, or the cap fires first and the evidence goes back to being unreadable.
+ */
+const CI_GLOBAL_TIMEOUT_MS = 5 * 60_000;
+
 export default defineConfig({
+  globalTimeout: process.env.CI ? CI_GLOBAL_TIMEOUT_MS : undefined,
   // P-036 — refuse to run against a stale build. See tools/gate-hook/src/e2e-staleness.mjs.
   globalSetup: './tests/e2e-global-setup.mjs',
   testDir: './tests/e2e',

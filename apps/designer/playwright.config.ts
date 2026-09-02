@@ -58,7 +58,20 @@ function resolveWorkers(): number | undefined {
   return Number.isInteger(bounded) && bounded >= 1 ? bounded : undefined;
 }
 
+/**
+ * 🔴 `P-038` — the CI budget for THIS suite. The reasoning, the measurements and the
+ * shared-cap arithmetic live once, in `apps/runtime/playwright.config.ts`; this is the
+ * other half of the SAME sum and is meaningless read alone.
+ *
+ * 11 min here + 5 min there = 16 min, against ~17.4 min of usable room inside the job's
+ * `timeout-minutes: 20`. This suite measures 6.3 min green and must also cover its own
+ * 120 s `webServer` boot, so 11 min is ~30 % headroom over a realistic worst case.
+ * **Raise this and you must lower the runtime budget by the same amount.**
+ */
+const CI_GLOBAL_TIMEOUT_MS = 11 * 60_000;
+
 export default defineConfig({
+  globalTimeout: process.env.CI ? CI_GLOBAL_TIMEOUT_MS : undefined,
   // P-036 — refuse to run against a stale build. See tools/gate-hook/src/e2e-staleness.mjs.
   globalSetup: './tests/e2e-global-setup.mjs',
   testDir: './tests/e2e',
