@@ -2567,3 +2567,38 @@ union. The type-aware option above is what would close the second.
 - **Number:** highest `P-` HEADING across every ref was `P-038`; `P-039` … `P-041` returned no
   headings anywhere. Cross-checked against the registry's dated pointer — _"and `P-039`"_ —
   headings and pointer AGREE.
+
+## [x] P-040 — the gate persists its FULL output to a file, not its tail: `.gate-logs/gate-<stamp>-<pid>.log` from the one chokepoint every gate runs through ⟨priority: medium — a tool that failed and could not say why, one level below the CI blindness `P-038` had just closed⟩ — implemented 2026-09-02 by `BANK-HALF-SWEEP-01`
+
+**What:** the first push of `96090c49` failed its pre-push gate naming no failing task. Only the
+tail was captured; a standalone `pnpm gate` immediately after passed, the retry passed, and it was
+recorded as transient-but-undiagnosed. That record was right, and it is also `P-038` restated one
+level down: `P-038` was CI unable to say whether a suite was red or slow; this is the local gate
+unable to say WHICH task failed. The Stop hook already keeps a full per-session log
+(`.gate-logs/<session>.log`); a hand-run `pnpm gate` and the `.husky/pre-push` path kept nothing
+beyond the terminal, and a terminal is exactly what a tool captures the tail of.
+
+**The fix.** `tools/gate-hook/src/gate-log.mjs` — pure parts (names, header/footer, the prune
+decision) unit-tested with an injected filesystem plus one real round-trip on disk — wired into
+`gate-lock-cli.mjs`, the same chokepoint P-013 chose for the lock and for the same reason: every
+entry point (direct, pre-push, Stop hook) funnels through `gate` / `gate:e2e`, so one tee covers
+all of them. The child's stdout and stderr are PIPED and every chunk goes to both the terminal and
+the file; the header records command, cwd and start; the footer records exit code (or the signal),
+end, and wall time — a log with no footer is a gate that died before it could say so, which is
+itself a diagnosis. The path is printed before the gate starts and again on failure. Newest twenty
+kept, pruned by name (= by time) on gate END so a running gate's own file is never pruned, and only
+`gate-*.log` files are ever touched. Logging is FAIL-OPEN, unlike the gate: a read-only checkout
+warns once and still gates.
+
+**Verified:** 6 unit tests (`gate-log.test.ts`), and an end-to-end smoke through the real CLI with
+a child that wrote to both streams and exited 3 — both lines in the file in order, `(exit 3,
+0.1s)` in the footer, `gate FAILED (exit 3) - full output: .gate-logs\gate-…log` on stderr, exit
+3 forwarded.
+
+**One cost, named:** the child no longer sees a TTY, so turbo and vitest print without colour.
+That is the face the Stop hook and CI already saw, and the face a log file wants.
+
+- **Cross-refs:** [[P-013]] (the chokepoint), [[P-038]] (the same blindness one level up),
+  [[P-009]] (the Stop hook's own log, which this does not replace).
+- **Number:** derived in the same sweep as `P-039` above — highest heading `P-038`, `P-039` …
+  `P-041` absent; `P-040` is the next after the one filed immediately above.

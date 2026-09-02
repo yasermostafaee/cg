@@ -2096,3 +2096,35 @@ absent.
 
 ⇒ **Next free after this session is `B-206`** (`B-` stays contiguous `B-001` … `B-205`, no gaps)
 **and `P-039`** (`P-001` … `P-038`, no gaps).
+
+### 2026-09-02 — `B-206`, `B-207`, `P-039` and `P-040` (`BANK-HALF-SWEEP-01`: the two bridge halves closed, and a guard against the tenth)
+
+| kind | id      | one line                                                                                                                                                 | home                               |
+| ---- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `B-` | `B-206` | the bed range is NOT fixed at install — `validateFixedBankChange` refuses a moved/resized operator half and says nothing about `low.start` / `low.count` | [bugs-runtime.md](bugs-runtime.md) |
+| `B-` | `B-207` | the startup VOLUME re-assert consults nothing about what is on the layer, so a surviving producer is audible from first reachability until adopted       | [bugs-runtime.md](bugs-runtime.md) |
+| `P-` | `P-039` | `cg/bank-shape` — a lint guard for the two-bank SHAPE in every workspace; 16 sites on first fire, 3 verbatim reintroductions caught                      | [platform.md](platform.md)         |
+| `P-` | `P-040` | the gate persists its FULL output to `.gate-logs/gate-<stamp>-<pid>.log` from the one chokepoint                                                         | [platform.md](platform.md)         |
+
+`B-204` and `B-205` — filed by the previous session, not fixed there — were closed in code this
+session (both walks now iterate `fixedBankSlots`), red-first, and their headings flipped to `[x]`.
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across every ref
+was **`B-205`** (taken the previous session by the completeness sweep); `B-206` … `B-210` returned
+**no headings anywhere**. **Cross-check against the dated pointer:** the entry above ends _"Next
+free after this session is `B-206`"_ — headings and pointer AGREE. Two numbers taken.
+
+**Derivation for `P-`:** highest `P-` HEADING was **`P-038`**; `P-039` … `P-041` returned no
+headings. The dated pointer reads _"and `P-039`"_ — headings and pointer AGREE. Two numbers taken.
+
+⚠ The `B-` duplicate audit still reports `B-056` and `B-080` (predating, recorded by the previous
+entry, untouched here).
+
+⚠ `B-206` was found by READING `B-205`'s function one clause further than the fix needed, not by
+a failure: the same operator-only assumption, on the renumber/resize refusals instead of the untick
+one. It is a NEW refusal and was deliberately not made inside a bug fix. `B-207` was found by
+verifying `B-204`'s "medium" reasoning instead of inheriting it: the re-assert asks nothing about
+the layer, which `live-source-multibox/design.md` had already recorded for the Live Source range.
+
+⇒ **Next free after this session is `B-208`** (`B-` stays contiguous `B-001` … `B-207`, no gaps)
+**and `P-041`** (`P-001` … `P-040`, no gaps).

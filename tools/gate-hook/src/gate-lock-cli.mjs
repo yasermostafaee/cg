@@ -16,13 +16,29 @@
  * rather than refusing to gate) — the asymmetry is deliberate; see `runUnderLock`.
  */
 import { spawn } from 'node:child_process';
+import { appendFileSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 import os from 'node:os';
+import { relative } from 'node:path';
 
-import { GateLockTimeoutError, hostLockPath, resolveLockConfig, runUnderLock } from './gate-lock.mjs';
+import {
+  GateLockTimeoutError,
+  hostLockPath,
+  resolveLockConfig,
+  runUnderLock,
+} from './gate-lock.mjs';
+import { openGateLog } from './gate-log.mjs';
 
 /**
  * Spawn the gate command and resolve its normalized exit code. A signal death or a spawn
  * error both resolve to a non-zero code so they can never be mistaken for a green gate.
+ *
+ * P-040 — stdout and stderr are PIPED, not inherited, and every chunk goes to two places:
+ * the terminal it always went to, and `.gate-logs/gate-<stamp>-<pid>.log` under the repo
+ * root (the scripts run with cwd = root). The path is announced before the gate starts
+ * and again if it fails, so the next failure that names no task can be read in full
+ * rather than from whatever tail the terminal kept. The cost is that the child no longer
+ * sees a TTY — no colour, no cursor tricks — which is the same face the Stop hook and CI
+ * already see, and the face a log file wants.
  *
  * @param {string} command
  * @param {readonly string[]} commandArgs
@@ -30,7 +46,33 @@ import { GateLockTimeoutError, hostLockPath, resolveLockConfig, runUnderLock } f
  */
 function runChild(command, commandArgs) {
   return new Promise((resolve) => {
-    const child = spawn(command, commandArgs, { stdio: 'inherit', shell: true, env: process.env });
+    const startedAt = new Date();
+    const cwd = process.cwd();
+    const gateLog = openGateLog({
+      root: cwd,
+      command: [command, ...commandArgs].join(' '),
+      cwd,
+      startedAt,
+      pid: process.pid,
+      fs: { mkdirSync, appendFileSync, readdirSync, unlinkSync },
+      warn: (message) => process.stderr.write(message),
+    });
+    const shownPath = relative(cwd, gateLog.path) || gateLog.path;
+    process.stderr.write(`gate-lock: full output -> ${shownPath}\n`);
+
+    const child = spawn(command, commandArgs, {
+      stdio: ['inherit', 'pipe', 'pipe'],
+      shell: true,
+      env: process.env,
+    });
+    child.stdout?.on('data', (chunk) => {
+      process.stdout.write(chunk);
+      gateLog.write(chunk);
+    });
+    child.stderr?.on('data', (chunk) => {
+      process.stderr.write(chunk);
+      gateLog.write(chunk);
+    });
 
     // Forward interrupts to the child so a Ctrl-C tears the gate down cleanly; the child
     // exiting then unwinds runUnderLock's `finally` and releases the slot.
@@ -54,9 +96,21 @@ function runChild(command, commandArgs) {
 
     child.on('error', (err) => {
       process.stderr.write(`gate-lock: failed to start the gate: ${err.message}\n`);
+      gateLog.write(`gate-lock: failed to start the gate: ${err.message}\n`);
+      gateLog.close({ code: 1, signal: null, endedAt: new Date() });
       done({ code: 1 });
     });
-    child.on('close', (code, signal) => done({ code: signal ? 1 : (code ?? 1) }));
+    child.on('close', (code, signal) => {
+      const normalized = signal ? 1 : (code ?? 1);
+      gateLog.close({ code, signal, endedAt: new Date() });
+      if (normalized !== 0) {
+        process.stderr.write(
+          `gate-lock: gate FAILED (${signal ? `killed by ${signal}` : `exit ${String(code)}`}) - ` +
+            `full output: ${shownPath}\n`,
+        );
+      }
+      done({ code: normalized });
+    });
   });
 }
 

@@ -214,6 +214,12 @@ inline chain: `gate` = lock → `gate:run` (the real chain, still `0 cached, 82 
 `gate:e2e` = lock → `gate:e2e:run`. A broken lock DEGRADES to an unserialized run rather
 than blocking the gate (it is the sole landing gate); only a 15-min-stuck slot errors out.
 
+**The gate's FULL output is persisted, not its tail (P-040).** The same chokepoint tees
+every byte the gate prints into `.gate-logs/gate-<stamp>-<pid>.log` (gitignored, newest
+twenty kept) and names the file before the gate starts and again on failure. When a
+pre-push gate fails naming no task — the first push of `96090c49` did — read that file, not
+the terminal's tail. Logging is fail-open: a checkout that cannot write it still gates.
+
 **Docs-only carve-out (archive).** An OpenSpec **archive** operation — folding a
 merged change into `openspec/specs/` + the PRD status flip to `[x]` — touches only
 `openspec/**` and `docs/**`, never source / tests / build. Its gate is therefore
