@@ -364,7 +364,16 @@ export class CommandBuilder {
    * is no per-layer commit — a commit is CHANNEL-WIDE. And the staging area is shared BETWEEN
    * CONNECTIONS: a change deferred on one socket was applied by a `COMMIT` issued on another.
    * A deferred change nobody commits hangs indefinitely (1500 ms with no commit left it
-   * unapplied). See `B-198` for what that costs and what bounds it here.
+   * unapplied), and a DROPPED CONNECTION does not clear it either — `B-199` measured a change
+   * staged on a destroyed socket being applied by a commit from a new one. That is what
+   * {@link CasparRuntime}'s abort guard exists for.
+   *
+   * ⚠ **THE CROSS-CLIENT HALF CANNOT BE FIXED FROM HERE, so it is an OPERATING CONSTRAINT and
+   * it is written where an installer will meet it** — `docs/operator-guide/README.md`, under
+   * "Air-critical contracts". `B-198` carries the measurements; the log audit behind it found no
+   * other client has ever deferred on channel 1 in this machine's retained window, and that every
+   * peer in 49 436 logged commands was loopback — which answers the question for the development
+   * box and leaves it open for a plant that also runs a playout system.
    */
   deferMixer(line: string): string {
     // Only a `MIXER` line can be deferred. Everything else — `PLAY`, `CG …` — is returned

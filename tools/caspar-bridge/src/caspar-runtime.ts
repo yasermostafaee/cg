@@ -179,6 +179,22 @@ type RestorePlacement =
  * contradicted aspect, no room in the band) must be reachable while the wire is
  * still untouched, so a refused take mutates nothing at all.
  */
+/**
+ * `B-199` — the seating plan `#applyLivePlates` applies, NAMED so the guard wrapper and the
+ * method it guards can share one signature. It was an inline literal on the method; a wrapper
+ * cannot restate an inline literal without becoming a second place the shape is written down.
+ */
+interface LivePlateApplyPlan {
+  readonly placements: readonly LivePlatePlacement[];
+  readonly parked: readonly LivePlatePlacement[];
+  /** Keyed by the PRODUCER ARGUMENT — the seat's identity (session BM). */
+  readonly resolved: ReadonlyMap<string, SourceProducer>;
+  readonly offFrame: ReadonlySet<string>;
+  /** The producer arguments some look still binds. Keyed by identity, like `resolved`. */
+  readonly declared: ReadonlySet<string>;
+  readonly unresolved: ReadonlySet<string>;
+}
+
 interface LivePlatePlacement {
   /** The layer this seat's producer goes on — inside the declared band. */
   readonly slot: CommandSlot;
@@ -1178,8 +1194,18 @@ export class CasparRuntime {
    */
   /** `B-198` — TEST-ONLY, see the constructor option. `0` (the default) is a no-op. */
   readonly #mixerLineDelayMs: number;
+  /** `B-199` — TEST-ONLY, see the constructor option. `0` (the default) never throws. */
+  readonly #throwAfterMixerLines: number;
+  /** `B-199` — TEST-ONLY: STAGED lines sent so far, counted only when the injector is armed. */
+  #mixerLinesSent = 0;
   /** `B-198` — the layer the last `MIXER` line addressed, so the injector can find the boundary. */
   #lastMixerTarget: string | null = null;
+  /**
+   * 🔴 `B-199` — **the channel this process has `MIXER … DEFER`red something on and not yet
+   * committed**, or `null`. An INSTANCE field rather than a local, so the guard that drains it
+   * can sit OUTSIDE the batch that fills it and still run when that batch throws.
+   */
+  #stagedMixerChannel: number | null = null;
   readonly #sessionTuning: {
     oscDegradedAfterMs?: number;
     oscDownAfterMs?: number;
@@ -1234,7 +1260,23 @@ export class CasparRuntime {
        * Never set in production. `bridge.ts` does not expose it and no CLI flag reaches it;
        * only the skew harness passes it, and only when asked to.
        */
-      faultInjection?: { mixerLineDelayMs?: number };
+      faultInjection?: {
+        mixerLineDelayMs?: number;
+        /**
+         * 🔴 **TEST-ONLY (`B-199`) — THROW after this many STAGED `MIXER` lines have been sent.**
+         *
+         * The guard it exercises catches a batch that dies BETWEEN its first `DEFER` and its
+         * `COMMIT`, and nothing on an ordinary path throws there — `#send` catches its own
+         * errors and answers `{ ok: false }`. Without a way to make it happen, the guard would
+         * be reasoning; with one, a test can assert the wire.
+         *
+         * ⚠ **It counts DEFERRED lines, not `MIXER` lines**, and that is what makes the test
+         * independent of how many un-staged mixer commands a caller happens to send first — a
+         * take's own un-mute, for one. Dying anywhere else leaves nothing staged and so has
+         * nothing for this guard to do.
+         */
+        throwAfterMixerLines?: number;
+      };
       /** TEST-ONLY seam (B-100): override each session's OSC health timers. */
       sessionTuning?: {
         oscDegradedAfterMs?: number;
@@ -1330,6 +1372,7 @@ export class CasparRuntime {
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
     this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
     this.#mixerLineDelayMs = options.faultInjection?.mixerLineDelayMs ?? 0;
+    this.#throwAfterMixerLines = options.faultInjection?.throwAfterMixerLines ?? 0;
     this.#sessionTuning = options.sessionTuning ?? {};
     this.#templateServer =
       options.templateServer ?? new TemplateHttpServer((id) => this.#templates.html(id));
@@ -5768,18 +5811,95 @@ export class CasparRuntime {
    * ours — which is what the R-009 sweep, the quarantine and the clear refusal all
    * read.
    */
+  /**
+   * 🔴 **`B-199` — NO STAGED CHANGE OUTLIVES ITS BATCH.**
+   *
+   * ── WHAT IS BEING GUARDED, MEASURED ON THE PLANT ────────────────────────────
+   *
+   * `B-198` made a seating batch atomic by staging every `MIXER` line and committing once.
+   * That opens a window between the first `DEFER` and the `COMMIT`, and a batch that THROWS
+   * inside it reaches neither of the normal commit points. Three measurements say what that
+   * costs, and the first is the one that decides:
+   *
+   * - **A dropped connection does NOT clear the staging area.** Staged on one socket,
+   *   destroyed it, reconnected, and a `COMMIT` from the NEW connection applied the dead
+   *   one's change. A crashed bridge leaves a landmine.
+   * - **The hang branch:** on air stays the OUTGOING geometry, indefinitely (5 s measured,
+   *   nothing half-applied) — until an unrelated later batch commits and flushes the stale
+   *   half WITH it. The wrong geometry then arrives attached to an action that had nothing to
+   *   do with it, which is the least diagnosable failure of the three.
+   * - **The commit-anyway branch:** plate 1 on the new geometry and plate 2 on the old — a
+   *   shape no look authored, persisting until something else moves it.
+   *
+   * ── WHY THE THIRD IS THE ONE TO CHOOSE ──────────────────────────────────────
+   *
+   * It is bounded, immediate, and attached to the action that caused it, so it is the only
+   * one an operator can attribute — and it is REPAIRABLE, which the other two are not: the
+   * ledger was never rewritten (`registerLiveLayers` is past the throw), so it still describes
+   * the geometry the row was on, and re-emitting that puts the picture back where the console
+   * says it is. `B-166`'s rollback is the same move on the failure-code path.
+   *
+   * So this wrapper commits whatever is staged and then re-asserts the ledger's geometry,
+   * un-deferred, one line at a time — a repair path does not need to be atomic, and going
+   * through `DEFER` here would need a commit of its own inside a path that is already
+   * unwinding.
+   *
+   * ⚠ **IT IS A WRAPPER AND NOT A `try` INSIDE THE METHOD** because the method has two
+   * callers (`#takeImpl` and `reconcileLivePlates`) and both must be covered; a guard either
+   * of them could be added without would be one somebody eventually is.
+   */
   async #applyLivePlates(
     itemId: string,
-    plan: {
-      readonly placements: readonly LivePlatePlacement[];
-      readonly parked: readonly LivePlatePlacement[];
-      /** Keyed by the PRODUCER ARGUMENT — the seat's identity (session BM). */
-      readonly resolved: ReadonlyMap<string, SourceProducer>;
-      readonly offFrame: ReadonlySet<string>;
-      /** The producer arguments some look still binds. Keyed by identity, like `resolved`. */
-      readonly declared: ReadonlySet<string>;
-      readonly unresolved: ReadonlySet<string>;
-    },
+    plan: LivePlateApplyPlan,
+    mode: 'take' | 'live' | 'switch',
+  ): Promise<{ ok: boolean; errorCode?: string }> {
+    try {
+      return await this.#applyLivePlatesUnguarded(itemId, plan, mode);
+    } finally {
+      // Staged at this point ⇒ the batch did NOT reach either of its own commit points, i.e.
+      // it threw. `#commitStagedMixer` is idempotent, so the ordinary paths cost nothing here.
+      const abandoned = this.#stagedMixerChannel !== null;
+      await this.#commitStagedMixer();
+      if (abandoned) await this.#reassertLedgerGeometry(itemId);
+    }
+  }
+
+  /**
+   * `B-198` — apply everything this process staged on the channel, ONCE.
+   *
+   * Idempotent by draining the field, so every exit path can call it without a second commit
+   * splitting the batch the first one just closed. A commit is channel-wide and applies
+   * whatever ANY connection has staged, so it is issued only when we have staged something.
+   */
+  async #commitStagedMixer(): Promise<void> {
+    if (this.#stagedMixerChannel === null) return;
+    const channel = this.#stagedMixerChannel;
+    this.#stagedMixerChannel = null;
+    await this.#send(this.#builder.mixerCommit(channel), this.#nextSeq(), 'urgent');
+  }
+
+  /**
+   * `B-199` — put every layer the LEDGER still names back on the geometry it names.
+   *
+   * Reached only from the guard above, after a batch threw. The ledger is the record of what
+   * the console believes is on air; re-emitting it is what makes the picture agree with the
+   * sentence again. Failures are ignored on purpose — this is already the unwind path, and
+   * the next reconcile re-plans from the same ledger.
+   */
+  async #reassertLedgerGeometry(itemId: string): Promise<void> {
+    for (const record of this.#liveLayers.get(itemId) ?? []) {
+      for (const line of this.#builder.mixerFit(record.slot, {
+        fill: record.fill,
+        clip: record.clip,
+      })) {
+        await this.#send(line, this.#nextSeq(), 'urgent');
+      }
+    }
+  }
+
+  async #applyLivePlatesUnguarded(
+    itemId: string,
+    plan: LivePlateApplyPlan,
     mode: 'take' | 'live' | 'switch',
   ): Promise<{ ok: boolean; errorCode?: string; message?: string }> {
     const { placements, parked, resolved, offFrame, declared, unresolved } = plan;
@@ -5882,22 +6002,6 @@ export class CasparRuntime {
      * re-deriving it from the item's slot afterwards would be a second answer to a question
      * this loop already had in hand.
      */
-    let deferredChannel: number | null = null;
-    /**
-     * 🔴 `B-198` — **APPLY EVERYTHING THIS BATCH STAGED, ONCE.**
-     *
-     * Idempotent by draining the accumulator, so it can be called on more than one exit path
-     * without a second commit ever splitting the batch it just closed. A commit is
-     * channel-wide and applies whatever ANY connection has staged, so it is issued only when
-     * we have staged something ourselves.
-     */
-    const commitStaged = async (): Promise<void> => {
-      if (deferredChannel === null) return;
-      const channel = deferredChannel;
-      deferredChannel = null;
-      await this.#send(this.#builder.mixerCommit(channel), this.#nextSeq(), 'urgent');
-    };
-
     for (const placement of [...placements, ...freshParked]) {
       const prior = priorByProducer.get(placement.producerArg);
       const priorSlotRecord = priorBySlot.get(adoptionKey(placement.slot));
@@ -6035,7 +6139,7 @@ export class CasparRuntime {
 
           Urgent lane: seating runs inside a take, and a take does not queue behind a load.
         */
-        if (line.startsWith('MIXER ')) deferredChannel = placement.slot.channel;
+        if (line.startsWith('MIXER ')) this.#stagedMixerChannel = placement.slot.channel;
         const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
         if (sent.ok) {
           if (reseat && i === 0) playLanded = true;
@@ -6105,7 +6209,7 @@ export class CasparRuntime {
       would split the batch at the one seam the defect lives in. Its commit is at the end,
       after everything this switch moves has been staged.
     */
-    if (failure !== undefined) await commitStaged();
+    if (failure !== undefined) await this.#commitStagedMixer();
 
     if (failure !== undefined) {
       if (mode === 'take') {
@@ -6465,7 +6569,7 @@ export class CasparRuntime {
       // repair reason above.
       if (record.held !== true || mode === 'take') {
         // `B-198` — staged, like every other `MIXER` this switch sends. See `commitStaged`.
-        deferredChannel = record.slot.channel;
+        this.#stagedMixerChannel = record.slot.channel;
         const sent = await this.#send(
           this.#builder.deferMixer(this.#builder.mixerVolume(record.slot, CREATED_MUTED_VOLUME)),
           this.#nextSeq(),
@@ -6499,7 +6603,7 @@ export class CasparRuntime {
         for (const line of this.#builder.mixerFit(record.slot, parked)) {
           // `B-198` — the PARK is the departing half of the switch, so it stages with the
           // arriving half and lands on the same frame. This is the seam the defect lived in.
-          deferredChannel = record.slot.channel;
+          this.#stagedMixerChannel = record.slot.channel;
           const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
           if (sent.ok) continue;
           // Under-claims on failure, the same safe direction the mute takes: the next
@@ -6524,7 +6628,7 @@ export class CasparRuntime {
       below, because that sweep's `MIXER … CLEAR` is sent un-deferred and applies at once: a
       commit after it would re-apply a staged `FILL` onto a layer it had just reset.
     */
-    await commitStaged();
+    await this.#commitStagedMixer();
 
     this.registerLiveLayers(itemId, next);
 
@@ -9427,6 +9531,20 @@ export class CasparRuntime {
       The boundary is a CHANGE OF TARGET: `MIXER 1-30 …` followed by `MIXER 1-31 …`. A plate's
       own `FILL`/`CLIP` pair is left alone, because the reported event did not separate those.
     */
+    /*
+      `B-199` TEST-ONLY — die mid-batch. Thrown BEFORE the write and before `#send`'s own
+      `try`, so it escapes the way a real defect would rather than being converted into the
+      `{ ok: false }` every wire failure becomes. Only a STAGED line counts, so the throw is
+      guaranteed to land inside the defer→commit window the guard exists for.
+    */
+    if (this.#throwAfterMixerLines > 0 && line.endsWith(' DEFER')) {
+      this.#mixerLinesSent += 1;
+      if (this.#mixerLinesSent > this.#throwAfterMixerLines) {
+        throw new Error(
+          `TEST-ONLY fault injector: died after ${String(this.#throwAfterMixerLines)} MIXER lines`,
+        );
+      }
+    }
     if (this.#mixerLineDelayMs > 0 && line.startsWith('MIXER ')) {
       const target = line.split(' ')[1] ?? '';
       if (this.#lastMixerTarget !== null && this.#lastMixerTarget !== target) {

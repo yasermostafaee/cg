@@ -8878,3 +8878,149 @@ What the fix does about it is bound the exposure, not remove it:
 this is not hypothetical — but whether that system uses `DEFER` is a fact about their software that
 cannot be read from here. **If it does, this needs a different answer; if it does not, the ban's
 premise no longer applies and the comment should be replaced by this record.**
+
+### 2026-09-02 — the two questions `MIXER-DEFER-SAFETY-01` was sent to answer
+
+**§2 — has anything else on this server ever used `DEFER`? The log CAN answer it, and the answer is
+no — for this machine.**
+
+AMCP command logging is ON at `[info]` and records the peer:
+`Received message from 127.0.0.1: MIXER 1-30 FILL 0 0 1 1`. Retention as found:
+`D:\programs\casparcg-server-v2.5.0-stable-windows\log`, **14 files, `caspar_2026-07-28.log` …
+`caspar_2026-09-02.log`** — one per day the server ran, so 14 days of coverage across a 37-day span.
+
+|                        | count  | peers                                  | channels           |
+| ---------------------- | ------ | -------------------------------------- | ------------------ |
+| every command received | 49 436 | `127.0.0.1` (49 216) + `Console` (220) | —                  |
+| `MIXER … DEFER`        | 1 440  | **`127.0.0.1` only**                   | **channel 1 only** |
+| `MIXER … COMMIT`       | 286    | `127.0.0.1` only                       | channel 1 only     |
+
+Of the 1 440 deferrals, **1 436 are from 2026-09-02** — this project's own campaigns. The other
+**four are from 2026-08-15**, on layers 20/21, paired with two commits at 12:49:43 and 14:25:21: a
+hand probe, and almost certainly the recon that produced the ban's wording in `command-builder.ts`.
+`DEFER` appears nowhere outside a received command (0 hits).
+
+⇒ **No other client has ever deferred on channel 1 in the retained window.** ⚠ **AND THAT DOES NOT
+TRANSFER TO THE PLANT.** Every peer in 49 436 commands is loopback: **no remote client has ever
+connected to this server at all.** This is the development machine; `reservedLayers` describes a
+plant where a separate playout system drives the same CasparCG, and this log is silent about it. The
+question is answered for the box the measurement was taken on and is open for the one that matters.
+
+**§5 — the pipelining fallback, costed. It is NOT a substitute.**
+
+The root cause is that the bridge awaits each line's ACK while `CommandQueue` is already pipelined at
+`pipelineDepth: 4`. Removing the awaits has zero cross-connection exposure — so it is the obvious
+fallback if the `DEFER` ban has to be reinstated. Measured as the wall-clock span from the FIRST to
+the LAST `MIXER` line of one batch, taken from the **server's own log timestamps** (the only clock
+that shares a frame with the channel tick), 16 batches of 5–22 lines each way, same fixture, back to
+back:
+
+|                                            | min    | p50        | p90    | max     |
+| ------------------------------------------ | ------ | ---------- | ------ | ------- |
+| **serialised** (awaits, as at `eb228a64`)  | 1.0 ms | **2.0 ms** | 5.0 ms | 80.0 ms |
+| **pipelined** (awaits removed, no `DEFER`) | 0.0 ms | **2.0 ms** | 3.0 ms | 65.0 ms |
+
+As a fraction of the 40 ms frame — **and that fraction IS the split probability**: p50 **5.0 % → 5.0 %**,
+p90 12.5 % → 7.5 %.
+
+🔴 **Pipelining moves the median not at all.** On loopback the ACK round trip is already
+sub-millisecond, so the awaits were never what dominated the window; the residual is ~5 % of a frame
+either way, which is the same order as the 1-in-50 (2 %) the defect was measured at. **It would not
+have closed `B-198`.** `DEFER`/`COMMIT` is atomic by construction and has no residual at all — the
+picture does not move until the commit, whatever happens in between.
+
+⚠ **What this does NOT say.** It was measured with CasparCG on the same host. On a plant where the
+server is across a LAN the round trip is milliseconds, the serialised window grows with it, and
+pipelining would then buy a great deal more — but so would the residual, and it would still not be
+zero. If the fallback is ever taken, re-measure it there rather than carrying these numbers over.
+
+⚠ **A first attempt at this measurement was wrong and is recorded so the numbers are not read as
+better than they are:** the pipelining patch initially re-sent every line on each iteration, which
+inflated the batches to 9–49 lines and made the two columns incomparable. The table above is the
+corrected run, at 5–22 lines both ways — the same shape as the serialised one.
+
+## [x] B-199 — a seating batch that DIES between its first `DEFER` and its `COMMIT` leaves a staged change the next commit — anyone's — puts on air ⟨priority: high — it survives the process that made it, and it lands attached to an action that had nothing to do with it⟩ — FIXED 2026-09-02 by `MIXER-DEFER-SAFETY-01`
+
+**What:** `B-198` made a look switch atomic by staging every `MIXER` line and committing once. That
+opens a window between the first `DEFER` and the `COMMIT`, and a batch that THROWS inside it reaches
+neither of the commit points on the ordinary paths. Nothing on a normal path throws there — `#send`
+converts every wire failure into `{ ok: false }` — but a `TypeError`, a bad plan, or a process death
+does, and the staged line then outlives the batch that made it.
+
+**The three outcomes, measured on the plant (CasparCG 2.5.0, channel 1), and the first is the one
+that decides:**
+
+| branch                            | what was done                                                                             | what happened                                                                                             |
+| --------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **dropped connection**            | staged a `FILL`, **destroyed the socket**, reconnected, committed from the NEW connection | the dead connection's change **was applied**. `0 0 1 1` → `0.42 0.42 0.3 0.3`                             |
+| **hang**                          | staged one plate, never committed                                                         | on air stayed the OUTGOING geometry, unchanged, at +0.5 s, +2 s and +5 s — nothing half-applied …         |
+| **hang, then an unrelated batch** | staged a change on a DIFFERENT layer and committed that                                   | …and the stale half was flushed **with it**: layer 30 moved to `0.11` on a commit that was about layer 31 |
+| **commit anyway**                 | staged one plate, committed                                                               | plate 1 on the new geometry, plate 2 on the old — a shape no look authored, **persisting**                |
+
+🔴 **A DROPPED CONNECTION DOES NOT CLEAR THE STAGING AREA.** That is the fact that makes this worth
+a high priority rather than a note: a bridge that crashes mid-batch leaves a landmine in the server,
+and the next commit from ANY client — the next bridge start, another station, the playout system —
+detonates it at a moment nothing chose.
+
+**Why the commit-anyway branch is the one to choose, rather than the least bad of three.** It is
+bounded, immediate, and attached to the action that caused it, so an operator can attribute it — and
+it is REPAIRABLE, which the other two are not. The ledger (`#liveLayers`) is written by
+`registerLiveLayers`, which is past the throw, so it still describes the geometry the row was on and
+the console is still showing. Re-emitting it puts the picture back where the sentence says it is.
+`B-166`'s rollback is the same move on the failure-CODE path; this is it on the failure-THROW path.
+
+**The fix.** `#applyLivePlates` is now a thin guard around `#applyLivePlatesUnguarded`:
+
+```ts
+try {
+  return await this.#applyLivePlatesUnguarded(itemId, plan, mode);
+} finally {
+  const abandoned = this.#stagedMixerChannel !== null;
+  await this.#commitStagedMixer(); // idempotent — ordinary paths cost nothing
+  if (abandoned) await this.#reassertLedgerGeometry(itemId);
+}
+```
+
+⚠ **A WRAPPER, not a `try` inside the method**, because the method has TWO callers — `#takeImpl` and
+`reconcileLivePlates` — and a guard either of them could be added without is one somebody eventually
+is. The staging accumulator moved from a local to `#stagedMixerChannel` for the same reason: the
+thing that drains it has to sit outside the thing that fills it.
+
+**Red-first, and the seam that makes it possible.** Nothing on an ordinary path throws inside the
+window, so a test needs a fault injector: `faultInjection.throwAfterMixerLines` throws after N
+**STAGED** lines — counted on ` DEFER`, not on `MIXER`, so the throw is guaranteed to land inside
+the window rather than on a caller's own un-staged mixer command (a take's un-mute is the one that
+caught this). Two tests: a TAKE that dies still commits what it staged (its ledger is empty, so there
+is correctly nothing to re-assert), and a SWITCH that dies commits AND re-asserts every layer the
+ledger names, un-deferred. **Removing the `finally` reddens both.**
+
+- **Cross-refs:** [[B-198]] (the staging this guards), [[B-166]] (the same repair on the failure-code
+  path), [[B-200]] (the rollback that is still un-deferred).
+- **Number:** highest `B-` HEADING across every ref was `B-198`; `B-199` … `B-205` returned no
+  headings anywhere. Cross-checked against the registry's dated pointer — _"Next free after this
+  session is `B-199`"_ — headings and pointer AGREE.
+
+## [ ] B-200 — `B-166`'s rollback re-fit is not staged, so an all-or-nothing undo can itself land across two frames ⟨priority: low — a failure path, and the frames it can split are already a refused switch⟩ — OPEN, filed 2026-09-02 from `MIXER-DEFER-SAFETY-01` §6
+
+**What:** `B-198` stages every `MIXER` line of a SEATING batch so a switch's geometry lands on one
+channel frame. `B-166`'s rollback — the re-emission of the prior geometry when a switch is refused
+part-way — is still sent un-deferred, line by line. It is therefore exposed to exactly the split
+`B-198` closed: measured at 1 recording in 50 on the forward path, and there is no reason the undo
+would be luckier.
+
+**Why it was left, stated rather than hidden.** It is a FAILURE path; the frames it can split belong
+to a switch the operator is being told did not happen, so the artefact rides on top of a state that
+is already wrong and already being reported. Deferring it needs a commit of its own inside a path
+that is already unwinding, and `B-199`'s guard now commits on the way out — so a rollback that
+deferred without its own commit would be flushed by that guard at a moment neither of them chose.
+It is a small change that has to be made carefully, not a small change.
+
+**What closing it looks like:** stage the rollback's `mixerFit` lines and commit them before the
+method returns, with the `B-199` guard left as the backstop rather than the mechanism. The existing
+`B-166` all-or-nothing tests pin the CONTENT of the rollback and would carry over unchanged; what is
+missing is a wire-order test that the rollback's lines are staged and committed exactly once.
+
+- **Cross-refs:** [[B-166]] (the rollback itself), [[B-198]] (the staging), [[B-199]] (the guard that
+  constrains how this can be done).
+- **Number:** derived in the same sweep as `B-199` above — highest heading `B-198`, `B-199` … `B-205`
+  absent, registry pointer `B-199`; `B-200` is the next after the one this session took.

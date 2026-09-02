@@ -2026,3 +2026,26 @@ accepted duplicates (`B-056`, `B-080`). **Cross-check against the dated pointer:
 ends _"Next free after this session is `B-198`"_ — headings and pointer AGREE.
 
 ⇒ **Next free after this session is `B-199`**, and `B-` stays contiguous `B-001` … `B-198`, no gaps.
+
+### 2026-09-02 — `B-199` and `B-200` (`MIXER-DEFER-SAFETY-01`: closing the window `B-198`'s fix opened)
+
+`B-199` — **a seating batch that dies between its first `DEFER` and its `COMMIT` leaves a staged
+change behind**, and a dropped connection does NOT clear it: staged on one socket, destroyed it,
+reconnected, and a commit from the NEW connection applied the dead one's change. Fixed the same day
+by a guard that commits on the way out and re-asserts the ledger's geometry. FIXED.
+
+`B-200` — **`B-166`'s rollback re-fit is still un-staged**, so an all-or-nothing undo can itself land
+across two frames. Named because the previous session's report said it was "filed, not hidden" and it
+had in fact never been given a number — this entry is that correction. OPEN, low.
+
+**Derivation, from headings as the rule requires:** highest `B-` HEADING across every ref was
+**`B-198`** (taken the previous day by the MIXER-batch item); `B-199` … `B-205` returned **no headings
+anywhere**. **Cross-check against the dated pointer:** the entry above ends _"Next free after this
+session is `B-199`"_ — headings and pointer AGREE.
+
+⚠ `B-199` was written into the source comments before it was written into `bugs-runtime.md`, which is
+the wrong order and is recorded rather than tidied: the number was derived from the headings first,
+so it was never at risk of collision, but a reader who grepped between the two commits would have
+found a code reference with no item.
+
+⇒ **Next free after this session is `B-201`**, and `B-` stays contiguous `B-001` … `B-200`, no gaps.

@@ -121,6 +121,16 @@ Default is `off` — the Runtime makes zero outbound network requests. Air-gappe
 - **Never** install an OS or app update while a row is on-air. The auto-update gate enforces this — a queued install fires only when the stack drains to idle.
 - **Never** edit `.vcg` files directly. The watched folder is the only sanctioned ingress; the verify step is what guarantees the bytes that play on air match what your designer signed off on.
 - **Always** acknowledge the failover banner before continuing. If you dismiss it without checking, a fresh failover later won't grab your attention the same way.
+- **The Runtime STAGES its mixer changes and commits them channel-wide.** When it moves a graphic's
+  live boxes it sends each `MIXER … FILL`/`CLIP` with `DEFER` and then one `MIXER <channel> COMMIT`,
+  so the whole layout lands on a single video frame instead of drifting across two. On this build of
+  CasparCG that staging area is **shared by every connection to the server** and a commit applies
+  **everything staged on the channel, whoever staged it**. So: if any OTHER system drives the same
+  CasparCG channel — a playout automation, a second control application, a hand-typed AMCP session —
+  and it uses `MIXER … DEFER`, the two will interact: its commit can apply the Runtime's half-built
+  layout, and the Runtime's commit can apply its. **Before pointing another AMCP client at a channel
+  this Runtime controls, confirm that client does not use `DEFER`.** Clients that send ordinary,
+  undeferred `MIXER` commands are unaffected — those apply as they arrive and are never swept up.
 
 ## Keyboard
 

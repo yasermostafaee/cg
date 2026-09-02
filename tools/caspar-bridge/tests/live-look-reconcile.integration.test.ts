@@ -256,7 +256,14 @@ function assign(pairs: readonly (readonly [string, string])[]): SourceAssignment
 
 const DEFAULT_ASSIGNMENTS = assign(ROUTE_KEYS.map((k, i) => [k, `src-${String(i + 1)}`] as const));
 
-async function boot(options: { template?: TemplateInfo; assignments?: SourceAssignments } = {}) {
+async function boot(
+  options: {
+    template?: TemplateInfo;
+    assignments?: SourceAssignments;
+    /** `B-199` — TEST-ONLY: make the seating batch DIE after this many `MIXER` lines. */
+    throwAfterMixerLines?: number;
+  } = {},
+) {
   const oscPort = await freeUdpPort();
   tracePath = path.join(
     os.tmpdir(),
@@ -274,6 +281,9 @@ async function boot(options: { template?: TemplateInfo; assignments?: SourceAssi
       lookMixerHoldMs: 0,
       sourceCatalog: catalog(),
       sourceAssignments: options.assignments ?? DEFAULT_ASSIGNMENTS,
+      ...(options.throwAfterMixerLines === undefined
+        ? {}
+        : { faultInjection: { throwAfterMixerLines: options.throwAfterMixerLines } }),
     },
   );
   runtime = r;
@@ -2590,6 +2600,112 @@ it("🔴 B-155 §B — the common path's exact wire sequence: a plain switch, by
   expect(flipControl?.look).toBe('solo');
   expect(Object.keys(flipControl ?? {}), 'the id alone rides the payload').toEqual(['look']);
   expect(lines.slice(1)).toEqual(expected);
+});
+
+/**
+ * 🔴 **`B-199` — A BATCH THAT DIES MID-STAGE MUST NOT LEAVE A STAGED CHANGE BEHIND.**
+ *
+ * `B-198` made a seating batch atomic by staging every `MIXER` line and committing once, which
+ * opens a window between the first `DEFER` and the `COMMIT`. Measured on the plant, a batch
+ * abandoned inside that window is the worst of the three available outcomes:
+ *
+ * - a DROPPED CONNECTION does not clear the staging area — staged on one socket, destroyed it,
+ *   reconnected, and a `COMMIT` from the NEW connection applied the dead one's change;
+ * - left uncommitted the change HANGS (5 s measured, nothing half-applied) and is then flushed
+ *   by the next unrelated batch's commit, arriving with an action that had nothing to do with it.
+ *
+ * So the guard commits whatever is staged on a path that runs even when the batch throws, and
+ * then re-asserts the geometry the LEDGER still names — the record the console is showing, which
+ * is what makes the picture agree with the sentence again.
+ */
+it('🔴 B-199 — a TAKE that throws mid-stage still commits what it staged', async () => {
+  /*
+    Die after the FIRST `MIXER` line: one plate staged, the rest never sent. Without the guard
+    that line sits in the server's staging area with nothing scheduled to apply it.
+
+    ⚠ The dying batch is the TAKE's rather than a switch's, and that is the honest choice
+    rather than a convenience: the injector counts every `MIXER` the process sends, so the take
+    is simply the first seating batch to reach it — and a take that dies mid-stage leaves exactly
+    the same landmine a switch does. The guard is on the path they share.
+  */
+  const r = await boot({ throwAfterMixerLines: 1 });
+  await r.load('item-1', 'debate', {});
+  const before = (await recvLines()).length;
+  await expect(r.take('item-1')).rejects.toThrow(/fault injector/);
+  const lines = await since(before);
+  expect(
+    lines.filter((l) => l.endsWith(' DEFER')),
+    'exactly one line was staged',
+  ).toHaveLength(1);
+
+  /*
+    🔴 THE GUARD, ON THE WIRE. Nothing is left staged: the batch's own commit points were never
+    reached (the throw is before them), so this `COMMIT` can only have come from the wrapper.
+  */
+  expect(
+    lines.filter((l) => l === 'MIXER 1 COMMIT'),
+    'the abandoned batch was committed',
+  ).toEqual(['MIXER 1 COMMIT']);
+
+  /*
+    …AND THE REPAIR. The ledger was never rewritten — `registerLiveLayers` is past the throw — so
+    it still names the geometry the row was on, and every layer it names is re-asserted
+    UN-deferred, after the commit. That is what turns a half-applied batch into the state the
+    console is already claiming.
+  */
+  // Nothing to re-assert here and that is correct: a TAKE that dies has no prior geometry —
+  // the ledger is empty until `registerLiveLayers`, which is past the throw. The repair half is
+  // asserted on a SWITCH below, which is where the ledger actually holds something.
+  const commitAt = lines.indexOf('MIXER 1 COMMIT');
+  expect(lines.slice(commitAt + 1).filter((l) => l.endsWith(' DEFER'))).toEqual([]);
+});
+
+it('🔴 B-199 — a SWITCH that throws mid-stage commits AND puts the ledger geometry back', async () => {
+  /*
+    The repair half. The take is allowed to complete — the injector is armed past its eighteen
+    staged lines — so the ledger holds the outgoing look when the switch dies inside its own
+    staged window. The count is asserted rather than assumed: if the take's batch ever changes
+    size this test fails at that assertion instead of silently measuring nothing.
+  */
+  const STAGED_IN_TAKE = 18;
+  const r = await boot({ throwAfterMixerLines: STAGED_IN_TAKE + 1 });
+  const beforeTake = (await recvLines()).length;
+  await onAir(r);
+  expect(
+    (await since(beforeTake)).filter((l) => l.endsWith(' DEFER')),
+    'the take still stages exactly this many lines',
+  ).toHaveLength(STAGED_IN_TAKE);
+  const ledger = r.liveLayers().get('item-1') ?? [];
+  expect(ledger.length, 'the ledger holds the outgoing look').toBeGreaterThan(0);
+
+  const before = (await recvLines()).length;
+  await expect(r.setActiveLook('item-1', 'solo')).rejects.toThrow(/fault injector/);
+  const lines = await since(before);
+
+  // Nothing is left staged: the batch's own commit points are past the throw.
+  expect(lines.filter((l) => l === 'MIXER 1 COMMIT')).toEqual(['MIXER 1 COMMIT']);
+
+  /*
+    …AND THE REPAIR, after it. Every layer the LEDGER still names is re-asserted UN-deferred —
+    the ledger was never rewritten, so it is the geometry the console is claiming, and putting
+    the picture back on it is what makes the two agree again.
+  */
+  const afterCommit = lines.slice(lines.indexOf('MIXER 1 COMMIT') + 1);
+  for (const record of ledger) {
+    expect(afterCommit, `layer ${String(record.slot.layer)} is put back`).toContain(
+      `MIXER 1-${String(record.slot.layer)} FILL ${[
+        record.fill.x,
+        record.fill.y,
+        record.fill.width,
+        record.fill.height,
+      ]
+        .map((n) => String(Number(n.toFixed(6))))
+        .join(' ')}`,
+    );
+  }
+  // Un-deferred: a repair path does not need to be atomic, and deferring it would need a commit
+  // of its own inside a path that is already unwinding.
+  expect(afterCommit.filter((l) => l.endsWith(' DEFER'))).toEqual([]);
 });
 
 it('🔴 B-155 §B — a swap arriving MID-SWITCH is serialized after it and resolves the ENTERED look', async () => {
