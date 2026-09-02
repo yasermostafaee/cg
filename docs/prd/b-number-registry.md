@@ -2049,3 +2049,35 @@ so it was never at risk of collision, but a reader who grepped between the two c
 found a code reference with no item.
 
 ⇒ **Next free after this session is `B-201`**, and `B-` stays contiguous `B-001` … `B-200`, no gaps.
+
+### 2026-09-02 — `B-201`, `B-202` and `P-038` (the `MIXER-DEFER-SAFETY-01` DELTA: what the cancelled CI runs were hiding)
+
+Three numbers from one investigation, and the order matters: `P-038` is why the other two survived
+three CI runs.
+
+| kind | id      | one line                                                                                                                                                                                     | home                               |
+| ---- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `B-` | `B-201` | the offline mock rebuilt the bank range by hand in FOUR places, so it published no bed slots and refused every bed row `not-fixed` — eleven E2E specs could not load a plate-bearing package | [bugs-runtime.md](bugs-runtime.md) |
+| `B-` | `B-202` | the schema's `low` default omitted `visibility`, so an UPGRADED station showed nine bed rows where a fresh one shows two                                                                     | [bugs-runtime.md](bugs-runtime.md) |
+| `P-` | `P-038` | turbo buffers a task's output and the job cap kills it first, so a RED suite and a SLOW suite are byte-identical evidence                                                                    | [platform.md](platform.md)         |
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across every ref
+was **`B-200`** (taken the same day by the DEFER-safety item); `B-201` … `B-205` returned **no
+headings anywhere** — every hit in that range is a prior session's own derivation note, which is
+exactly the false positive the heading-only rule exists to ignore. **Cross-check against the dated
+pointer:** the previous entry ends _"Next free after this session is `B-201`"_ — headings and
+pointer AGREE. Two numbers taken, so the next is `B-203`.
+
+**Derivation for `P-`:** highest `P-` HEADING was **`P-037`**; `P-038` … `P-040` returned no
+headings, and the only `P-038` hit anywhere was the registry's own forward pointer. The dated
+pointer reads _"no gaps. Next free: `P-038`."_ — headings and pointer AGREE.
+
+⚠ **The duplicate audit for `B-` did NOT print nothing this time, and it is not this session's
+doing.** `git grep -hoE "^#+ \[[ x~]\] B-[0-9]{3}"` piped through `sort | uniq -d` reports **two**
+numbers carrying more than one heading: **`B-056`** and **`B-080`**. Both predate this session and
+neither was touched by it. Recorded rather than fixed, because renumbering a shipped item is worse
+than a duplicate heading and the right repair is the owner's call — but the audit is no longer a
+clean signal for `B-`, so the next session should expect those two hits and not read them as new.
+
+⇒ **Next free after this session is `B-203`** (`B-` stays contiguous `B-001` … `B-202`, no gaps)
+**and `P-039`** (`P-001` … `P-038`, no gaps).

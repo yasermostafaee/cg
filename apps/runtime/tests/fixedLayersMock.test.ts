@@ -3,6 +3,7 @@ import {
   FixedLayerBankSchema,
   FixedLayersSetConfigChannel,
   FixedSlotStateSchema,
+  fixedBankSlots,
 } from '@cg/shared-ipc';
 import { z } from 'zod';
 import { createMockBridge } from '../src/platform/createRuntimeBridge.js';
@@ -42,7 +43,22 @@ describe('MockRuntime fixed-bank parity (S12)', () => {
 
     await bridge.fixedLayers.setConfig(BANK);
     const state = z.array(FixedSlotStateSchema).parse(await bridge.fixedLayers.state());
-    expect(state).toHaveLength(10);
+    /*
+      🔴 `B-201` — THE UNION, and asserted by DERIVING it rather than by a number.
+
+      This read `toHaveLength(10)`: the operator half of a bank that also declares nine bed
+      rows. It was written before the beds existed and stayed true afterwards only because
+      the mock had the same blind spot — a PARITY test agreeing with the thing it was meant
+      to hold to account. `fixedBankSlots` is what the bridge fences its LayerManager with,
+      so comparing against it is the parity claim itself; a literal is a restatement, and a
+      restatement is what put both sides in this state.
+    */
+    expect(state).toHaveLength(fixedBankSlots(FixedLayerBankSchema.parse(BANK)).length);
+    expect(state.map((s) => s.layer).sort((a, b) => a - b)).toEqual(
+      fixedBankSlots(FixedLayerBankSchema.parse(BANK))
+        .map((s) => s.layer)
+        .sort((a, b) => a - b),
+    );
     expect(state.every((s) => s.observed.kind === 'unknown')).toBe(true); // offline honesty
     expect(state.every((s) => s.binding === null)).toBe(true);
     expect(state.find((s) => s.layer === 72)?.alias).toBe('ساعت');
@@ -128,6 +144,9 @@ describe('MockRuntime fixed-bank parity (S12)', () => {
     await bridge.fixedLayers.setConfig(BANK);
     expect(configs).toHaveLength(1);
     expect(states).toHaveLength(1);
-    expect(z.array(FixedSlotStateSchema).parse(states[0])).toHaveLength(10);
+    // `B-201` — the union again, derived (see the state test above for why not a literal).
+    expect(z.array(FixedSlotStateSchema).parse(states[0])).toHaveLength(
+      fixedBankSlots(FixedLayerBankSchema.parse(BANK)).length,
+    );
   });
 });

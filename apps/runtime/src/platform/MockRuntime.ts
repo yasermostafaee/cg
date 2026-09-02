@@ -36,7 +36,11 @@ import {
   ChannelRasterSchema,
   checkSourceAssignments,
   checkSourceCatalog,
+  defaultFixedLayerBank,
   DelimiterOptionSchema,
+  fixedBankSlots,
+  isFixedBankLayer,
+  layerAlias,
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
   pruneAssignmentsForCatalog,
@@ -953,11 +957,10 @@ export class MockRuntime {
     const template = this.#templates.get(templateId);
     if (template === undefined) return { accepted: false, errorCode: 'unknown-template' };
     const bank = this.#fixedBank;
-    const inBank =
-      bank !== null &&
-      channel === bank.channel &&
-      layer >= bank.start &&
-      layer < bank.start + bank.count;
+    // `B-201` — BOTH halves. This read `layer < bank.start + bank.count`, the operator half
+    // alone, so every bed row answered `not-fixed` — and a bed row is exactly where a
+    // plate-declaring package is the ONLY thing the picker will let an operator put.
+    const inBank = bank !== null && isFixedBankLayer(bank, channel, layer);
     if (!inBank) return { accepted: false, errorCode: 'not-fixed' };
     const bound = this.#fixedBindings.get(layer);
     // R-022 parity — the LOAD interlock, and the mock must hold it for the same
@@ -1010,11 +1013,9 @@ export class MockRuntime {
       };
     }
     const bank = this.#fixedBank;
-    const inBank =
-      bank !== null &&
-      channel === bank.channel &&
-      layer >= bank.start &&
-      layer < bank.start + bank.count;
+    // `B-201` — BOTH halves (see `loadFixed`). A bed row is a declared row of the bank, so
+    // the bank-scoped clear must reach it or a bed becomes the one row nothing can clear.
+    const inBank = bank !== null && isFixedBankLayer(bank, channel, layer);
     if (!inBank) {
       return {
         ok: false,
@@ -1043,10 +1044,30 @@ export class MockRuntime {
    */
   fixedLayersState(): FixedSlotState[] {
     if (this.#fixedBank === null) return [];
-    const { channel, start, count, aliases } = this.#fixedBank;
+    const bank = this.#fixedBank;
     const out: FixedSlotState[] = [];
-    for (let layer = start; layer <= start + count - 1; layer++) {
-      const alias = aliases?.[String(layer)];
+    /*
+      🔴 `B-201` — THE UNION, because that is what the bridge publishes.
+
+      This loop used to run `start … start + count - 1`: the OPERATOR half, and only it. So
+      when `single-clock-look-switch` added the bed half, the offline mock kept publishing
+      exactly the rows it always had — no bed slots, no "Graphics beds" group head, and no
+      row a plate-bearing package could legally be loaded onto. The bank OBJECT had a `low`
+      half all along; nothing ever turned it into slots.
+
+      That is the shape to watch for: the two-bank change was careful to make `fixedBankSlots`
+      the ONE place the union is computed, and every bridge-side consumer went through it —
+      but this parallel loop reconstructed the range from `start`/`count` instead of calling
+      it, so it silently opted out of the new half. A range rebuilt by hand is a second
+      derivation, and a second derivation is how the mock came to disagree with the bridge
+      about which rows exist.
+    */
+    for (const slot of fixedBankSlots(bank)) {
+      const { channel, layer } = slot;
+      // Read through `layerAlias`, which answers from the half that OWNS the layer — the
+      // two halves keep their own alias records and a merged lookup would make bed 9's key
+      // collide with an operator row's on a bank whose numbering happened to overlap.
+      const alias = layerAlias(bank, layer);
       const bound = this.#fixedBindings.get(layer);
       // R-028 (3.1) parity — the binding carries WHICH template is on the row
       // as RAW naming facts (id + name + file name), the same join the bridge
@@ -1267,12 +1288,9 @@ export class MockRuntime {
     layer: number,
   ): { ok: boolean; reason?: 'owned' | 'foreign' | 'amcp-error' } {
     const bank = this.#fixedBank;
-    if (
-      bank !== null &&
-      channel === bank.channel &&
-      layer >= bank.start &&
-      layer < bank.start + bank.count
-    ) {
+    // `B-201` — BOTH halves (see `loadFixed`). Ours-vs-foreign is decided the same way on a
+    // bed row as on an operator row; the half a layer sits in is not part of that question.
+    if (bank !== null && isFixedBankLayer(bank, channel, layer)) {
       const observed = this.#fixedObservations.get(layer);
       if (observed?.kind !== 'producer' || observed.producer !== 'html') {
         return { ok: false, reason: 'foreign' };
@@ -1888,41 +1906,62 @@ function fixedBankSeedArmed(): boolean {
  * like today.
  */
 function seedFixedBank(): FixedLayerBank | null {
-  return fixedBankSeedArmed()
-    ? {
-        channel: 1,
-        // `single-clock-look-switch` — the BED half, seeded at its default so the offline
-        // Playwright flow shows both groups exactly as a real station does.
-        low: { start: 1, count: 9 },
-        start: 70,
-        // R-028 — EIGHTEEN rows, not four. 70–73 keep the four documented
-        // display cases (html / non-html / empty / unknown); 74–85 are seeded
-        // EMPTY so the E2E suite has rows it can actually LOAD onto; 86–87
-        // carry the seed's two remaining stack items. Since part B's occupancy
-        // gate refuses a load onto anything not observably empty — an unbound
-        // row can still carry a live graphic — one empty row would let exactly
-        // one spec load, once.
-        // R-021 stage 4 — NINETEEN. Layer 88 is the `restore-blocked` row: bound,
-        // observed carrying a producer that is not ours, and the item waiting. It
-        // needs its own row because every other case is already spoken for, and
-        // because the property under test is a BOUND row over a FOREIGN producer —
-        // which none of 70–87 models (71 is foreign but unbound).
-        // §14.5 Stage E — TWENTY. Layer 89 carries the LOOK-BEARING row, and it needs
-        // its own for the same reason 88 did: the property under test is a row whose
-        // template AUTHORS LOOKS, and no other seeded row has one, so the picker would
-        // have nowhere to render. It is also why 70 must stay look-less — the spec that
-        // proves a picker is ABSENT where there are no looks reads that row.
-        count: 20,
-        aliases: {
-          '70': 'CLOCK',
-          '71': 'LOWER THIRD',
-          '86': 'TICKER',
-          '87': 'LOGO BUG',
-          '88': 'STUDIO FEED',
-          '89': 'DEBATE',
-        },
-      }
-    : null;
+  if (!fixedBankSeedArmed()) return null;
+  /*
+    🔴 `B-202` — THE BED HALF IS TAKEN FROM THE CANONICAL DEFAULT, then deviated from
+    DELIBERATELY and in the open.
+
+    It used to be the literal `{ start: 1, count: 9 }` with a comment claiming it showed
+    "both groups exactly as a real station does". That was false in the only way that
+    matters: `visibility` was ABSENT, and `isLayerVisible` reads absent as VISIBLE, so the
+    mock showed NINE bed rows where `defaultFixedLayerBank()` shows two. A restated literal
+    cannot notice when the thing it restates changes — which is the whole reason the schema
+    grew this half in the first place — so `start`/`count` now come from the one function
+    that owns them, and the E2E's deviation is a named override rather than an omission.
+
+    ⚠ THE DEVIATION, and why it is not the drift above: every bed row is TICKED, because
+    Playwright reaches a row by CLICKING its `LOAD`, and a hidden row is not rendered to
+    click. This is the same trade the operator half already makes deliberately — twenty rows
+    instead of the default five, for exactly the same reason and documented directly below.
+    The difference between the two is that this one now SAYS `visibility`, so the next reader
+    meets a decision instead of a default they have to know the semantics of.
+  */
+  const low = defaultFixedLayerBank().low;
+  const lowVisibility: Record<string, boolean> = {};
+  for (let layer = low.start; layer <= low.start + low.count - 1; layer++) {
+    lowVisibility[String(layer)] = true;
+  }
+  return {
+    channel: 1,
+    low: { start: low.start, count: low.count, visibility: lowVisibility },
+    start: 70,
+    // R-028 — EIGHTEEN rows, not four. 70–73 keep the four documented
+    // display cases (html / non-html / empty / unknown); 74–85 are seeded
+    // EMPTY so the E2E suite has rows it can actually LOAD onto; 86–87
+    // carry the seed's two remaining stack items. Since part B's occupancy
+    // gate refuses a load onto anything not observably empty — an unbound
+    // row can still carry a live graphic — one empty row would let exactly
+    // one spec load, once.
+    // R-021 stage 4 — NINETEEN. Layer 88 is the `restore-blocked` row: bound,
+    // observed carrying a producer that is not ours, and the item waiting. It
+    // needs its own row because every other case is already spoken for, and
+    // because the property under test is a BOUND row over a FOREIGN producer —
+    // which none of 70–87 models (71 is foreign but unbound).
+    // §14.5 Stage E — TWENTY. Layer 89 carries the LOOK-BEARING row, and it needs
+    // its own for the same reason 88 did: the property under test is a row whose
+    // template AUTHORS LOOKS, and no other seeded row has one, so the picker would
+    // have nowhere to render. It is also why 70 must stay look-less — the spec that
+    // proves a picker is ABSENT where there are no looks reads that row.
+    count: 20,
+    aliases: {
+      '70': 'CLOCK',
+      '71': 'LOWER THIRD',
+      '86': 'TICKER',
+      '87': 'LOGO BUG',
+      '88': 'STUDIO FEED',
+      '89': 'DEBATE',
+    },
+  };
 }
 
 /**
@@ -1955,6 +1994,28 @@ function seedFixedObservations(): Map<number, FixedSlotObservation> {
         // A kind our system never places, so "not html" is decidable from the wire
         // alone (video kinds are never enumerated).
         [88, { kind: 'producer', producer: 'decklink' }],
+        /*
+          🔴 `B-201` — THE BED ROWS ARE LOADABLE TOO, and they have to be seeded to be.
+
+          `single-clock-look-switch` made a plate-declaring package refusable on an operator
+          row (`wrong-bank`), so every spec that loads one now has to reach a BED row — and a
+          bed row with no observation reads `unknown`, which the occupancy gate refuses for a
+          completely different reason. Two refusals in a row, the second only visible after
+          fixing the first, is how one broken spec turns into two rounds of work.
+
+          Seeded from the bank rather than a literal range, so widening the bed half in
+          `seedFixedBank` cannot leave rows behind that the picker offers and the gate then
+          refuses.
+        */
+        ...(() => {
+          const bank = seedFixedBank();
+          if (bank === null) return [];
+          const beds: [number, FixedSlotObservation][] = [];
+          for (let layer = bank.low.start; layer <= bank.low.start + bank.low.count - 1; layer++) {
+            beds.push([layer, { kind: 'empty' }]);
+          }
+          return beds;
+        })(),
       ])
     : new Map();
 }

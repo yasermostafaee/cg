@@ -162,6 +162,19 @@ describe('the built-in default bank — what a station with no config comes up w
     const partial = FixedLayerBankSchema.parse({ channel: 1 });
     expect(partial.start).toBe(DEFAULT_FIXED_BANK_START);
     expect(partial.count).toBe(DEFAULT_FIXED_BANK_COUNT);
+    /*
+      🔴 `B-202` — AND THE BED HALF, WHICH THIS TEST'S OWN NAME ALREADY PROMISED.
+      It checked `start`/`count` on the operator half only, so when `low` arrived with a
+      `.default()` that omitted `visibility`, the two answers to "the default bank" diverged
+      underneath the one test named for keeping them equal: nine visible bed rows from the
+      schema, two from `defaultFixedLayerBank()`. Agreement is asserted on what an operator
+      SEES, not on the record's shape — an absent tick and an explicit `true` are the same
+      picture, and it is the picture the divergence was in.
+    */
+    const built = defaultFixedLayerBank();
+    for (let layer = 1; layer <= 9; layer++) {
+      expect(isLayerVisible(partial, layer)).toBe(isLayerVisible(built, layer));
+    }
   });
 });
 

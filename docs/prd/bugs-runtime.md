@@ -9024,3 +9024,121 @@ missing is a wire-order test that the rollback's lines are staged and committed 
   constrains how this can be done).
 - **Number:** derived in the same sweep as `B-199` above — highest heading `B-198`, `B-199` … `B-205`
   absent, registry pointer `B-199`; `B-200` is the next after the one this session took.
+
+## [x] B-201 — the offline mock never learned the bed half: it published no bed slots and refused every bed row as `not-fixed`, so ELEVEN Runtime E2E specs could not load a plate-bearing package anywhere ⟨priority: high — it is the whole offline surface for the feature `a7976e14` shipped, and it made CI unreadable for three runs⟩ — FIXED 2026-09-02 by the `MIXER-DEFER-SAFETY-01` delta
+
+**What:** `single-clock-look-switch` (`a7976e14`) split the bank in two and made the halves refuse
+each other: a package that declares live plates is a graphics BED, so the picker disables `Load`
+for it on an operator row (`requiredBankFor`) and the bridge refuses the same thing as
+`wrong-bank`. The bridge learned the new half for free, because its `LayerManager` is fenced at
+boot with `fixedBankSlots(bank)` — the UNION — and answers every membership question from that
+set.
+
+🔴 **`MockRuntime` holds no fenced set. It rebuilt the range by hand, in FOUR places, and every
+one of them was the operator half:**
+
+| site                 | what it did                                          | what it should ask     |
+| -------------------- | ---------------------------------------------------- | ---------------------- |
+| `fixedLayersState()` | looped `start … start + count - 1`                   | `fixedBankSlots(bank)` |
+| `loadFixed()`        | `layer < bank.start + bank.count`, else `not-fixed`  | `isFixedBankLayer`     |
+| `clearBankLayer()`   | the same range, else `not-in-bank`                   | `isFixedBankLayer`     |
+| `clearLayer()`       | the same range, so ours-vs-foreign was never reached | `isFixedBankLayer`     |
+
+So the offline Layers panel had **no bed rows at all** — no `Graphics beds` group head, and no row
+a bed package could go on — and even when aimed at one directly, the load answered `not-fixed`.
+The seed's own comment claimed it showed "both groups exactly as a real station does". It showed
+one.
+
+**What it cost, measured.** Eleven specs across five files (`assignment-freeze`,
+`live-source-sources`, `look-inputs`, `pvw-live-plate-placeholder`, `pvw-look-source-name`) each
+failed as `locator.click: Test timeout of 30000ms exceeded` waiting on a **disabled** `Load`
+button. On CI (`workers: 1`, `retries: 1`, `timeout: 30_000`) that is `11 × 2 × 30 s = 11 min` of
+pure timeout plus the ~1.8 min the suite takes green — against a 20-minute job cap, so the run was
+killed mid-suite with turbo still buffering and **nothing was ever printed**. Three runs running:
+`33632277519` attempts 1 and 2, and `33637419829`. See `P-038` — the reason this rode two pushes
+is not that the failure was subtle, it is that CI could not say it.
+
+🔴 **THE SHAPE, and it is golden rule 6 with the serial numbers filed off.** `a7976e14` was
+careful: it put the union in ONE function and routed every bridge-side consumer through it. What
+it did not do is look for consumers that were not asking a FUNCTION at all — four inline
+`start`/`count` arithmetic expressions, each a predicate in everything but name, each answering a
+narrower question than the code around it believed it asked. **A range rebuilt by hand is a second
+derivation**, and it cannot be found by grepping for the predicate's name, because it never uses
+the name.
+
+**The fix.**
+
+- `isFixedBankLayer(bank, channel, layer)` added beside `fixedBankSlots` in
+  `packages/shared-ipc/src/channels/fixedLayers.ts` — the membership question the bridge never had
+  to ask out loud, now askable by anything that holds a bank instead of a fenced set. Channel is
+  part of the question, not the caller's job.
+- All four mock sites go through it (`fixedLayersState` through `fixedBankSlots`, the other three
+  through the predicate), and aliases through `layerAlias`, which answers from the half that OWNS
+  the layer.
+- `seedFixedObservations` seeds the bed rows `empty`, derived from the seeded bank rather than a
+  literal range: an unseeded bed row reads `unknown`, which the occupancy gate refuses for a
+  DIFFERENT reason, and two refusals in a row is two rounds of work.
+- `loadTemplate` in the E2E fixture takes the next free row **of the half the package belongs
+  on**, via `requiredBankFor` — the same predicate the picker and the bridge use, never a local
+  guess. A caller that names a layer still gets it unchanged, so a spec can still aim at the wrong
+  half deliberately.
+- The mock's bed half now derives `start`/`count` from `defaultFixedLayerBank()` and states its
+  E2E deviation (all rows ticked, because Playwright reaches a row by clicking it) as an explicit
+  `visibility` record rather than an omission.
+
+**Proof:** the five spec files go 11 failed → **12 passed**, and their wall time drops 55.4 s →
+17.7 s, which is the eleven 30-second timeouts leaving.
+
+- **Cross-refs:** [[B-202]] (the same restated-instead-of-derived shape one layer down, on the
+  SHIPPED path), [[P-038]] (why CI could not tell anyone), [[B-100]] and [[P-012]] (a second copy
+  is how a rule drifts).
+- **Number:** highest `B-` HEADING across every ref was `B-200`; `B-201` … `B-205` returned no
+  headings anywhere (every hit is a prior session's derivation note). Cross-checked against the
+  registry's dated pointer — "Next free after this session is `B-201`" — headings and pointer
+  AGREE.
+
+## [x] B-202 — two answers to "the default bed bank": a station whose config file predates the beds comes up with NINE visible bed rows where a fresh install gets TWO ⟨priority: medium — display noise rather than air, but it lands on the installs that have been running longest⟩ — FIXED 2026-09-02 by the `MIXER-DEFER-SAFETY-01` delta
+
+**What:** there are exactly two ways a bank reaches a reader with no bed half of its own, and they
+were computed by different code.
+
+| path                            | who takes it                                                                                       | what it produced                                                     |
+| ------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| the schema's `low` `.default()` | a persisted `bridge-fixed-layers.json` written before `a7976e14` — i.e. **every upgraded station** | `{ start, count }` with **no `visibility`** ⇒ **9** visible bed rows |
+| `defaultFixedLayerBank()`       | a station with no file at all                                                                      | ticks written out in full ⇒ **2** visible bed rows                   |
+
+`isLayerVisible` reads an ABSENT tick as VISIBLE, so the omission is not "unspecified", it is the
+maximum. And it contradicts the file's own stated intent one screen above:
+`DEFAULT_LOW_BANK_VISIBLE_ROWS` is documented as "TWO, not nine and not one … nine visible bed rows
+would be eight rows of noise".
+
+The chain to an operator's screen is short and every hop is ordinary: `bin/caspar-bridge.mjs`
+always configures a `fixedLayersPath`, a PRESENT file is `FixedLayerBankSchema.safeParse`d in
+`fixed-layers-store.ts`, that feeds `fixedBankSlots`, which feeds the per-slot publish, and
+`LayersPanel` filters on `isLayerVisible`. Nine rows pass. `saveFixedLayerBank` writes on every
+applied `setConfig`, so any station that ever touched bank config has such a file — and
+`NoBankModal` still tells operators to hand-write one with no `low` key.
+
+**Effect is DISPLAY ONLY, and that is measured rather than assumed:** fencing derives from
+`start`/`count` and never from the tick record, so a widened tick set changes which rows are SHOWN
+and nothing about what is allocated or what reaches air.
+
+⚠ **Neither answer was asserted.** The test literally named "the schema's own defaults agree with
+it — one answer to 'the default bank'" checked `start` and `count` on the **operator** half and
+never looked at `low`; the low-bank test asserted `parsed.low` equals `{ start, count }` — the
+shape, not the picture. **The divergence sat underneath the one test named for preventing it.**
+
+**The fix.** `defaultLowBankVisibility()` is now the single computation, called by BOTH the
+schema's `.default()` (as a thunk, so each parse gets its own record) and `defaultFixedLayerBank`.
+Three assertions were added, and all three redden when the fix is removed:
+
+1. the upgrade parse yields the ticks, not just the shape;
+2. the UPGRADE path and the FRESH path show the SAME bed rows — asserted on what is VISIBLE rather
+   than on record shape, because an absent tick and an explicit `true` are the same picture and it
+   was the picture that diverged;
+3. each parse gets its own tick record.
+
+- **Cross-refs:** [[B-201]] (the same shape in the offline mock), [[B-195]] (the one-in-twelve
+  measurement `DEFAULT_LOW_BANK_VISIBLE_ROWS` is derived from).
+- **Number:** derived in the same sweep as `B-201` above — highest heading `B-200`, `B-201` …
+  `B-205` absent, registry pointer `B-201`; `B-202` is the next after the one this session took.

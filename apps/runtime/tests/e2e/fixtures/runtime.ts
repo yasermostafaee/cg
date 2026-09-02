@@ -8,6 +8,7 @@ import {
   type Manifest,
   type Scene,
 } from '@cg/shared-schema';
+import { requiredBankFor, type TemplateInfo } from '@cg/shared-ipc';
 import { STARTER_TEMPLATES } from '@cg/starter-templates';
 import { pack } from '@cg/vcg-format';
 
@@ -38,6 +39,20 @@ const FIRST_LOADABLE_LAYER = 74;
  */
 const TEMPLATE_PROBE_LAYER = 85;
 
+/**
+ * 🔴 `B-201` — THE FIRST LOADABLE **BED** ROW, and why the suite needs one at all.
+ *
+ * `single-clock-look-switch` split the bank: a package that DECLARES live plates is a
+ * graphics bed and may only be loaded onto a bed row (1–9); the picker disables `Load` on an
+ * operator row and the bridge refuses it as `wrong-bank`. Eleven specs were written before
+ * that rule existed and load plate-bearing packages, so they need the other half of the bank.
+ *
+ * The bed rows are seeded empty and all ticked by `MockRuntime.seedFixedBank`, so the whole
+ * band is loadable — see that function for why the mock deviates from the two-row default.
+ */
+const FIRST_LOADABLE_BED_LAYER = 1;
+const LAST_LOADABLE_BED_LAYER = 9;
+
 export class RuntimeApp {
   constructor(readonly page: Page) {}
 
@@ -54,7 +69,7 @@ export class RuntimeApp {
    */
   #nextLayer = FIRST_LOADABLE_LAYER;
 
-  /** Take the next free row, refusing to encroach on the picker probe row. */
+  /** Take the next free OPERATOR row, refusing to encroach on the picker probe row. */
   #takeLayer(): number {
     const layer = this.#nextLayer++;
     if (layer >= TEMPLATE_PROBE_LAYER) {
@@ -63,6 +78,48 @@ export class RuntimeApp {
       );
     }
     return layer;
+  }
+
+  /** `B-201` — the bed half's counterpart to `#nextLayer`. */
+  #nextBedLayer = FIRST_LOADABLE_BED_LAYER;
+
+  /** Take the next free BED row. */
+  #takeBedLayer(): number {
+    const layer = this.#nextBedLayer++;
+    if (layer > LAST_LOADABLE_BED_LAYER) {
+      throw new Error(
+        `E2E fixture ran out of loadable BED rows (reached ${String(layer)}). Widen the bed half in MockRuntime.seedFixedBank.`,
+      );
+    }
+    return layer;
+  }
+
+  /**
+   * 🔴 `B-201` — WHICH HALF OF THE BANK THIS PACKAGE MAY BE LOADED ONTO.
+   *
+   * Read through `requiredBankFor`, **the same predicate the picker disables its `Load`
+   * button on and the bridge refuses `wrong-bank` on** — never a local "does the name look
+   * like a plate template?" rule. A second derivation here would be a fixture that can
+   * disagree with the product about where a package belongs, and it would disagree SILENTLY:
+   * the failure is a 30-second click timeout on a disabled button, which reads as a hang.
+   *
+   * The carrier is fetched from the registry rather than assumed, because that is what the
+   * picker itself reads.
+   */
+  async #bankFor(templateId: string): Promise<'low' | 'high'> {
+    const liveSources = await this.page.evaluate(async (id) => {
+      const w = window as unknown as {
+        cg: {
+          templates: {
+            get: (req: { templateId: string }) => Promise<{ liveSources?: unknown } | null>;
+          };
+        };
+      };
+      return (await w.cg.templates.get({ templateId: id }))?.liveSources ?? null;
+    }, templateId);
+    return requiredBankFor({
+      liveSources: (liveSources ?? undefined) as TemplateInfo['liveSources'],
+    });
   }
 
   /**
@@ -267,9 +324,17 @@ export class RuntimeApp {
   /**
    * Load an ALREADY-IMPORTED template onto a row, via the row's `LOAD` and the
    * picker it opens.
+   *
+   * ⚠ `B-201` — with no explicit `layer` this takes the next free row **of the half this
+   * package belongs on** (`#bankFor`), not simply the next operator row. That is what an
+   * operator does: a graphics bed goes on a bed row because the picker offers it nowhere
+   * else. A caller that names a `layer` is trusted and gets it unchanged — a spec asserting
+   * the REFUSAL needs to be able to aim at the wrong half deliberately.
    */
   async loadTemplate(templateId: string, layer?: number): Promise<number> {
-    const target = layer ?? this.#takeLayer();
+    const target =
+      layer ??
+      ((await this.#bankFor(templateId)) === 'low' ? this.#takeBedLayer() : this.#takeLayer());
     await this.openTemplatePicker(target);
     await this.templateRow(templateId)
       .getByRole('button', { name: /^Load / })

@@ -2,7 +2,8 @@ import { test, expect, buildValidVcg } from './fixtures/runtime.js';
 
 /**
  * R-021 → R-028 part B — the declared-layer rows, driven against the offline
- * MockRuntime's CG_E2E_FIXED_BANK seed (channel 1, layers 70–89; 70–73 are the
+ * MockRuntime's CG_E2E_FIXED_BANK seed (channel 1, operator layers 70–89 plus the nine
+ * BED rows 1–9 added by `single-clock-look-switch`; 70–73 are the
  * four display cases html / ffmpeg / empty / unknown, and 88 is R-021 stage 4's
  * `restore-blocked` row — bound, over a producer that is not ours). The bridge-side truth —
  * real OSC tap + sweep + the exact-slot load — is integration-tested in
@@ -51,8 +52,33 @@ test('a seeded bank renders permanent rows with aliases and honest occupancy', a
   // render. This assertion is the reason that seed cannot be added quietly — it
   // pins that the bank renders EXACTLY its declared rows, which is the property
   // R-021 exists to guarantee.
-  await expect(app.layers.locator('[data-layer]')).toHaveCount(20);
+  //
+  // 🔴 `B-201` — TWENTY-NINE: the twenty operator rows PLUS the nine bed rows.
+  //
+  // Deliberately still a LITERAL, and not derived from the bank. The comment above
+  // states why and it survives the two-bank change intact: the number is a CANARY, and
+  // a derived count would have agreed with whatever the mock happened to publish —
+  // including, for a whole change cycle, publishing no bed rows at all. That is exactly
+  // what happened: `single-clock-look-switch` declared the bed half and `MockRuntime`
+  // rebuilt its slot range by hand from `start`/`count`, so this assertion kept reading
+  // 20 and kept passing while the offline surface had no bed rows, no group head, and
+  // nowhere a plate-bearing package could legally be loaded. Deriving the expectation
+  // here is the one change that would make the canary stop singing.
+  await expect(app.layers.locator('[data-layer]')).toHaveCount(29);
 
+  /*
+    🔴 `B-201` — AND THE BED GROUP IS ACTUALLY THERE, which nothing asserted before.
+
+    The count above is necessary and was not sufficient: it can be satisfied by
+    twenty-nine rows of one kind. What the two-bank shape promises the operator is that
+    the bottom of the list is a DIFFERENT KIND of row, said out loud — `wrong-bank`
+    refuses a load across that line, and a refusal about a boundary nobody can see is not
+    actionable. So the group head and the bed rows are pinned separately.
+  */
+  await expect(app.layers.locator('[data-bed-group-head]')).toHaveCount(1);
+  for (const bed of [9, 5, 1]) {
+    await expect(app.layerRow(bed)).toBeVisible();
+  }
   // The ALIAS is the row's primary label.
   await expect(app.layerRow(70)).toContainText('CLOCK');
   await expect(app.layerRow(71)).toContainText('LOWER THIRD');

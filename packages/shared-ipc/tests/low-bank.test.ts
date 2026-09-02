@@ -39,7 +39,50 @@ describe('the bed half is always declared', () => {
     // persisted file from an older build must come up with beds, or the very station the
     // migration exists for would boot with nowhere to migrate to.
     const parsed = FixedLayerBankSchema.parse(HIGH);
-    expect(parsed.low).toEqual({ start: DEFAULT_LOW_BANK_START, count: DEFAULT_LOW_BANK_COUNT });
+    expect(parsed.low).toEqual({
+      start: DEFAULT_LOW_BANK_START,
+      count: DEFAULT_LOW_BANK_COUNT,
+      // 🔴 `B-202` — AND ITS TICKS. This assertion used to stop at `{ start, count }`, which
+      // is why the omission survived: `isLayerVisible` reads an absent tick as VISIBLE, so
+      // the upgraded station — the ONLY station that takes this path — came up with nine
+      // visible bed rows against a fresh install's two. The shape was right and the picture
+      // was wrong, and nothing here looked at the picture.
+      visibility: {
+        1: false,
+        2: false,
+        3: false,
+        4: false,
+        5: false,
+        6: false,
+        7: false,
+        8: true,
+        9: true,
+      },
+    });
+  });
+
+  it('🔴 B-202 — the UPGRADE path and the FRESH path show the same bed rows', () => {
+    // The two ways a bank reaches a reader with no bed half of its own. They are computed by
+    // different code paths (the schema's `.default()` vs `defaultFixedLayerBank()`), so the
+    // only thing that keeps them equal is that both call `defaultLowBankVisibility` — and
+    // the only thing that keeps THAT true is this test.
+    const upgraded = FixedLayerBankSchema.parse(HIGH);
+    const fresh = defaultFixedLayerBank();
+    const shownOn = (b: FixedLayerBank): number[] => {
+      const shown: number[] = [];
+      for (let layer = 1; layer <= 9; layer++) if (isLayerVisible(b, layer)) shown.push(layer);
+      return shown;
+    };
+    expect(shownOn(upgraded)).toEqual(shownOn(fresh));
+    expect(shownOn(upgraded)).toEqual([8, 9]);
+  });
+
+  it('B-202 — each parse gets its OWN tick record, not a shared one', () => {
+    // `.default()` takes a thunk for this reason: a shared literal handed to two readers is
+    // one mutation away from a default that differs between them in the same process.
+    const first = FixedLayerBankSchema.parse(HIGH);
+    (first.low.visibility ?? {})['9'] = false;
+    expect(isLayerVisible(FixedLayerBankSchema.parse(HIGH), 9)).toBe(true);
   });
 
   it('the built-in default bank states its beds explicitly, with the top two ticked', () => {

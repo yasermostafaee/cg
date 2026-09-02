@@ -85,6 +85,30 @@ export const DEFAULT_LOW_BANK_COUNT = 9;
 export const DEFAULT_LOW_BANK_VISIBLE_ROWS = 2;
 
 /**
+ * 🔴 `B-202` — THE DEFAULT BED TICKS, COMPUTED IN ONE PLACE.
+ *
+ * There are TWO ways a bank reaches a reader with no bed half of its own: the schema's
+ * `.default()` (a persisted file written before `low` existed) and {@link
+ * defaultFixedLayerBank} (no file at all). Both call this, so they cannot give different
+ * answers — which they did, for exactly as long as the schema default restated the shape
+ * `{ start, count }` and left `visibility` out. `isLayerVisible` reads an absent tick as
+ * VISIBLE, so an upgraded station got **nine** visible bed rows where a fresh one got two:
+ * the "eight rows of noise" {@link DEFAULT_LOW_BANK_VISIBLE_ROWS} exists to prevent,
+ * delivered to precisely the installs that had been running longest.
+ *
+ * ⚠ A FRESH RECORD every call, for the reason {@link defaultFixedLayerBank} gives about
+ * itself: a shared literal handed to two readers is one mutation away from disagreeing.
+ */
+export function defaultLowBankVisibility(): Record<string, boolean> {
+  const end = DEFAULT_LOW_BANK_START + DEFAULT_LOW_BANK_COUNT - 1;
+  const ticks: Record<string, boolean> = {};
+  for (let layer = DEFAULT_LOW_BANK_START; layer <= end; layer++) {
+    ticks[String(layer)] = layer > end - DEFAULT_LOW_BANK_VISIBLE_ROWS;
+  }
+  return ticks;
+}
+
+/**
  * The LOW (bed) half of the bank. It carries no `channel` of its own: a bed and the plates
  * composited over it are on ONE channel by construction, so a second channel field would be
  * a value that can only ever be wrong.
@@ -131,11 +155,18 @@ export const FixedLayerBankSchema = z.object({
    * which costs nothing (they were outside every allocation range already) and means no
    * reader anywhere has to branch on "is a bed bank declared?". A persisted file written
    * before this field existed parses into the default, so the upgrade needs no migration.
+   *
+   * ⚠ **`visibility` IS PART OF THAT DEFAULT AND MUST STAY PART OF IT (`B-202`).** This is
+   * the path an UPGRADED station takes — every `bridge-fixed-layers.json` written before
+   * `a7976e14` lacks `low` — so a default that omits the ticks is not "unspecified", it is
+   * nine visible bed rows on the installs that have been running longest. A THUNK, so each
+   * parse gets its own record rather than a shared one every caller could mutate.
    */
-  low: LowFixedLayerBankSchema.default({
+  low: LowFixedLayerBankSchema.default(() => ({
     start: DEFAULT_LOW_BANK_START,
     count: DEFAULT_LOW_BANK_COUNT,
-  }),
+    visibility: defaultLowBankVisibility(),
+  })),
 });
 export type FixedLayerBank = z.infer<typeof FixedLayerBankSchema>;
 
@@ -159,6 +190,29 @@ export function lowBankEnd(bank: Pick<FixedLayerBank, 'low'>): number {
  */
 export function isLowBankLayer(bank: FixedLayerBank, layer: number): boolean {
   return layer >= bank.low.start && layer <= lowBankEnd(bank);
+}
+
+/**
+ * 🔴 `B-201` — IS THIS COORDINATE A ROW OF THE BANK? Both halves, one answer.
+ *
+ * The bridge never needed this: its `LayerManager` is fenced with {@link fixedBankSlots} at
+ * boot and answers membership from that set, so it learned about the beds for free. Anything
+ * that does NOT hold a fenced set — the offline `MockRuntime` is the one that matters —
+ * was left rebuilding the range by hand as `layer >= start && layer < start + count`, which
+ * is the OPERATOR half and silently nothing else.
+ *
+ * That is what this exists to stop, and the cost of not having it is measured: three such
+ * copies in `MockRuntime` (the exact-slot load, the bank-scoped clear, the owned-layer
+ * clear) all kept refusing bed rows as `not-fixed` for a full change cycle after the beds
+ * shipped — each one a predicate whose NAME said "is it in the bank" while its body asked a
+ * narrower question (golden rule 6).
+ *
+ * Channel is PART of the question, not a caller's job: a bank is one channel by
+ * construction, and a membership test that ignored it would call `2-70` a bank row.
+ */
+export function isFixedBankLayer(bank: FixedLayerBank, channel: number, layer: number): boolean {
+  if (channel !== bank.channel) return false;
+  return (layer >= bank.start && layer <= fixedBankEnd(bank)) || isLowBankLayer(bank, layer);
 }
 
 /**
@@ -211,11 +265,6 @@ export function defaultFixedLayerBank(): FixedLayerBank {
   for (let layer = start; layer <= end; layer++) {
     visibility[String(layer)] = layer > end - DEFAULT_FIXED_BANK_VISIBLE_ROWS;
   }
-  const lowEnd = DEFAULT_LOW_BANK_START + DEFAULT_LOW_BANK_COUNT - 1;
-  const lowVisibility: Record<string, boolean> = {};
-  for (let layer = DEFAULT_LOW_BANK_START; layer <= lowEnd; layer++) {
-    lowVisibility[String(layer)] = layer > lowEnd - DEFAULT_LOW_BANK_VISIBLE_ROWS;
-  }
   return {
     channel: DEFAULT_FIXED_BANK_CHANNEL,
     start,
@@ -224,7 +273,9 @@ export function defaultFixedLayerBank(): FixedLayerBank {
     low: {
       start: DEFAULT_LOW_BANK_START,
       count: DEFAULT_LOW_BANK_COUNT,
-      visibility: lowVisibility,
+      // `B-202` — the SAME function the schema's own `.default()` calls, so "no file at all"
+      // and "a file written before beds existed" cannot answer this differently.
+      visibility: defaultLowBankVisibility(),
     },
   };
 }
