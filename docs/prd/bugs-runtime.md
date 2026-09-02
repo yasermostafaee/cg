@@ -8695,7 +8695,7 @@ cheap answer and is the one shape that puts the two clocks back.
   `B-080`). Cross-checked against the registry's dated pointer — _"Next free after this session is
   `B-197`"_ — headings and pointer AGREE.
 
-## [ ] B-198 — ONE `MIXER` batch is not atomic: a departing box lingered a whole channel frame over the arriving plate, in 1 recording of 100 ⟨priority: high — it is the ONLY thing standing between `single-clock-look-switch` and its all-or-nothing acceptance, and it is on air⟩ — OPEN, measured 2026-09-01 by `SINGLE-CLOCK-SWITCH-02` §3
+## [x] B-198 — ONE `MIXER` batch is not atomic: a departing box lingered a whole channel frame over the arriving plate, in 1 recording of 100 ⟨priority: high — it is the ONLY thing standing between `single-clock-look-switch` and its all-or-nothing acceptance, and it is on air⟩ — FIXED 2026-09-02 by `MIXER-BATCH-ATOMICITY-01`; measured 2026-09-01 by `SINGLE-CLOCK-SWITCH-02` §3
 
 **What:** with the plate-bearing page moved BELOW its plates and the mask retired, a look switch is
 `MIXER FILL` / `CLIP` and nothing else — and the page/mixer skew `B-174` chased for three sessions
@@ -8799,3 +8799,82 @@ condition this residual also fails, and that the residual has a different cause.
   headings anywhere — every occurrence is a provenance sentence or this file's own pointer.
   Cross-checked against the registry's dated pointer — _"Next free after this session is `B-198`"_ —
   headings and pointer AGREE.
+
+### FIXED 2026-09-02 — `MIXER-BATCH-ATOMICITY-01`: the batch is STAGED, and one `COMMIT` lands it
+
+**The mechanism, from the code rather than from the symptom.** `#applyLivePlates` sends a
+seating batch line by line and **awaits each line's AMCP response before writing the next**
+(`caspar-runtime.ts`, the `for (const [i, line] of lines.entries())` loop; `#send` resolves on
+`result.response`, i.e. the ACK). So plate 2's `FILL` is not merely a separate socket write from
+plate 1's — it is a full command/ACK round trip behind it. `CommandQueue` is pipelined
+(`pipelineDepth: 4`) and this caller never fills it: **the pipeline exists and the bridge
+serialises itself.** A local round trip is O(0.2–2 ms) against a 40 ms channel frame at
+`1080i5000`, so a tick falls inside a gap a few percent of the time — which is the 1-in-50 that
+was observed.
+
+**The forced reproduction, and the false start that is worth recording.** A test-only injector
+(`faultInjection.mixerLineDelayMs`) delays `MIXER` lines at the SEND SEAM — deliberately at the
+seam and not inside the loop, because the fix changes the loop and forcing that vanished with the
+defect would prove nothing. The FIRST version delayed _every_ line and produced a **different**
+signature: `k` = 1–2 channel frames and **77.04 %** of the frame misplaced, against the reported
+`k` = 0 and 22.68 %. That is the same mechanism at the wrong amplitude — a per-line delay also
+separates a plate's own `FILL` from its own `CLIP` and drags the probe that reads the second
+plate. Narrowing the injector to the **plate boundary** (a `MIXER` line whose target differs from
+the previous one) reproduced the reported event exactly:
+
+|                 | reported, 1 run in 50     | forced, 6 runs of 6         |
+| --------------- | ------------------------- | --------------------------- |
+| `k`             | 0                         | 0                           |
+| peak MISPLACED  | 22.68132716049383 %       | **22.68132716049383 %**     |
+| peak BLACK      | 0                         | 0                           |
+| duration        | 40 ms (2 recorded frames) | 40 ms in 5 of 6, 80 ms in 1 |
+| settled control | 0                         | 0 / 0.0023 %                |
+
+Identical to fifteen significant figures, because it is the same box.
+
+**What this build offers, measured on the wire, with a control.** `MIXER … FILL … DEFER` answers
+`202 MIXER OK` and the getter still reports the OLD value; `MIXER 1 COMMIT` answers `202` and the
+getter then reports the new one. The control that makes those readings mean anything: a bogus
+trailing token (`… FILL 0 0 1 1 BANANAS`) answers **`501 MIXER FILL FAILED`** and `MIXER 1 BANANAS`
+answers **`400 ERROR`** — this parser does not silently swallow words it does not know.
+
+🔴 **AND TWO SCOPE FACTS THAT ARE WIDER THAN THE VERB LOOKS, BOTH MEASURED:**
+
+1. **A commit is CHANNEL-WIDE.** `MIXER 1-30 COMMIT` applied a change staged on **1-31** as well —
+   the layer token is accepted and IGNORED. There is no per-layer commit.
+2. **The staging area is SHARED BETWEEN CONNECTIONS.** A change deferred on socket B was applied
+   by a `COMMIT` issued on socket A. And a deferred change nobody commits **hangs** (1500 ms with
+   no commit left it unapplied).
+
+**The fix.** Every `MIXER` line of a seating batch goes out with ` DEFER` — appended at the ONE
+send site through `CommandBuilder.deferMixer`, which returns a `PLAY` untouched, so a `MIXER` added
+to that batch later is staged by construction rather than by somebody remembering. A single
+`MIXER <ch> COMMIT` is sent **after every plate has staged, arriving and departing alike** (the
+off-frame park is the departing half and stages with the rest), and **before** the clearing sweep,
+whose `MIXER … CLEAR` is applied at once and must not be undone by a later commit. A failed batch
+commits early rather than being left staged, because a staged change nobody commits hangs and would
+then be applied by whatever commits next, at a moment nothing chose; committing it reaches exactly
+the state a failed batch reached before `DEFER`, which is what `B-166`'s rollback is written for.
+
+⚠ **The rollback itself is NOT deferred, and that is a scope decision rather than an oversight.**
+`B-166`'s re-fit re-emits the prior geometry on a failure path; it is non-atomic today, it was not
+what this defect measured, and deferring it would need its own commit inside a path that is already
+unwinding. Filed as a known residual rather than fixed silently.
+
+🔴 **WHAT THE OWNER MUST DECIDE, BECAUSE IT IS NOT A CODE QUESTION.** `command-builder.ts` carried a
+standing ban on this verb pair — _"which this project forbids until it is known whether `COMMIT`
+applies only the deferring connection's queue; on a plant running several stations against one
+CasparCG, a `COMMIT` that applies everyone's is the same harm the channel-scope ban exists to
+prevent."_ **That question is now answered, and the answer is unfavourable: it applies everyone's.**
+What the fix does about it is bound the exposure, not remove it:
+
+- our `COMMIT` is issued only when **we** have staged something, so an empty batch of ours never
+  sweeps somebody else's;
+- the window between our first `DEFER` and our `COMMIT` is one seating batch — milliseconds;
+- the only party that can be harmed is one that itself uses `DEFER` on the same channel, and the
+  only party that can harm us is one that issues `COMMIT` on it.
+
+`reservedLayers` exists precisely because the company's PLAYOUT system drives the same CasparCG, so
+this is not hypothetical — but whether that system uses `DEFER` is a fact about their software that
+cannot be read from here. **If it does, this needs a different answer; if it does not, the ban's
+premise no longer applies and the comment should be replaced by this record.**

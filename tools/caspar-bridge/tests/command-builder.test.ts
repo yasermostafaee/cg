@@ -209,4 +209,44 @@ describe('CommandBuilder — Live Source verbs (C-015 phase 6, task 6.1)', () =>
       expect(builder.mixerClear({ channel: 3, layer: 0 })).toBe('MIXER 3-0 CLEAR');
     });
   });
+
+  /**
+   * 🔴 **`B-198` — the batch that lands on ONE frame.**
+   *
+   * A look switch sends one `FILL`+`CLIP` pair per plate and the runtime awaits each line's
+   * ACK, so plate 2's pair is a full round trip behind plate 1's. A channel tick falling in
+   * that gap landed the fills a frame apart — measured at 1 recording in 50 on the plant, and
+   * forced on demand at 22.68 % of the frame, which is the departing box's own area.
+   */
+  describe('B-198 — DEFER / COMMIT, the staging that makes a switch atomic', () => {
+    it('🔴 appends DEFER to a MIXER line and leaves everything else ALONE', () => {
+      /*
+        The whole point of taking a LINE rather than building one: the runtime hands this every
+        line of a seating batch without sorting them, so a `MIXER` added to that batch later is
+        staged by construction instead of by somebody remembering. A `PLAY` must survive
+        untouched — there is no deferred form of it, and appending the token would make it a
+        syntax error on the wire.
+      */
+      expect(builder.deferMixer('MIXER 1-30 FILL 0 0 1 1')).toBe('MIXER 1-30 FILL 0 0 1 1 DEFER');
+      expect(builder.deferMixer('MIXER 1-30 VOLUME 0')).toBe('MIXER 1-30 VOLUME 0 DEFER');
+      expect(builder.deferMixer('PLAY 1-30 "route://1-1"')).toBe('PLAY 1-30 "route://1-1"');
+      expect(builder.deferMixer('CG 1-9 UPDATE 0 "{}"')).toBe('CG 1-9 UPDATE 0 "{}"');
+    });
+
+    it('🔴 does not defer a line that merely CONTAINS the word', () => {
+      // Prefix, not substring: a field value carrying the word is a payload, not a command.
+      const payload = 'CG 1-9 UPDATE 0 "{headline: MIXER 1-30 FILL}"';
+      expect(builder.deferMixer(payload)).toBe(payload);
+    });
+
+    it('🔴 COMMIT is CHANNEL-scoped, because that is the only scope the server has', () => {
+      /*
+        Measured on CasparCG 2.5.0: `MIXER 1-30 COMMIT` applied a change staged on 1-31 as
+        well — the layer token is accepted and IGNORED. Spelling a layer here would be a
+        promise the server does not keep, so the builder does not offer one.
+      */
+      expect(builder.mixerCommit(1)).toBe('MIXER 1 COMMIT');
+      expect(builder.mixerCommit(3)).toBe('MIXER 3 COMMIT');
+    });
+  });
 });

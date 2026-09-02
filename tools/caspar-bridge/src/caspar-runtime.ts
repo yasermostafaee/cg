@@ -1176,6 +1176,10 @@ export class CasparRuntime {
    * HOLD a session in `degraded` (OSC-silent, AMCP up) deterministically — the
    * state the reachability predicate must count as reachable.
    */
+  /** `B-198` — TEST-ONLY, see the constructor option. `0` (the default) is a no-op. */
+  readonly #mixerLineDelayMs: number;
+  /** `B-198` — the layer the last `MIXER` line addressed, so the injector can find the boundary. */
+  #lastMixerTarget: string | null = null;
   readonly #sessionTuning: {
     oscDegradedAfterMs?: number;
     oscDownAfterMs?: number;
@@ -1205,6 +1209,32 @@ export class CasparRuntime {
       lookMixerHoldMs?: number;
       /** TEST-ONLY seam: inject a template server (e.g. one whose start() fails). */
       templateServer?: TemplateHttpServer;
+      /**
+       * 🔴 **TEST-ONLY FAULT INJECTOR (`B-198`) — delay a `MIXER` line by this many ms at the
+       * SEND SEAM when it addresses a DIFFERENT LAYER from the one before it, so a split that
+       * is otherwise 1-in-50 fires on demand.**
+       *
+       * ⚠ **AT THE PLATE BOUNDARY, NOT AT EVERY LINE, AND THAT DISTINCTION IS THE EXPERIMENT.**
+       * A per-LINE delay was tried first and it forced a different artefact: it also separates
+       * a plate's own `FILL` from its own `CLIP`, and it drags the probe that reads the second
+       * plate — so the recording came back with `k` = 1–2 channel frames and 77 % of the frame
+       * misplaced, against the reported event's `k` = 0 and 22.68 %. Same mechanism, wrong
+       * amplitude and wrong shape. Delaying only where the batch crosses from one plate to the
+       * next reproduces what was actually seen: one plate's geometry in force a channel frame
+       * before the next plate's, and nothing else disturbed.
+       *
+       * ⚠ **IT SITS AT THE SEAM ON PURPOSE, AND THAT IS THE WHOLE DESIGN.** The obvious place
+       * to force a split is between the lines in `#applyLivePlates` — and it is the wrong
+       * place, because the fix REPLACES that loop, so the forcing would vanish with the
+       * defect and "it passes with the forcing still in place" would be a claim about nothing.
+       * Delaying each `MIXER` line as it is SENT survives the fix intact: after it the lines
+       * are still separate writes, still this far apart, and still staged — so the same
+       * injector that produced the artefact is what proves it cannot happen any more.
+       *
+       * Never set in production. `bridge.ts` does not expose it and no CLI flag reaches it;
+       * only the skew harness passes it, and only when asked to.
+       */
+      faultInjection?: { mixerLineDelayMs?: number };
       /** TEST-ONLY seam (B-100): override each session's OSC health timers. */
       sessionTuning?: {
         oscDegradedAfterMs?: number;
@@ -1299,6 +1329,7 @@ export class CasparRuntime {
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
     this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
+    this.#mixerLineDelayMs = options.faultInjection?.mixerLineDelayMs ?? 0;
     this.#sessionTuning = options.sessionTuning ?? {};
     this.#templateServer =
       options.templateServer ?? new TemplateHttpServer((id) => this.#templates.html(id));
@@ -5840,6 +5871,33 @@ export class CasparRuntime {
     */
     const freshParked = parked.filter((p) => !priorByProducer.has(p.producerArg));
 
+    /**
+     * `B-198` — has this batch staged anything? The `COMMIT` after the loop is sent ONLY if it
+     * has, and that condition is not tidiness: a commit is channel-wide and applies whatever is
+     * staged by ANY connection, so one issued over an empty batch of ours could apply a half
+     * built batch of somebody else's. We commit our own work or we say nothing.
+     *
+     * It carries the CHANNEL rather than a boolean, and takes it from the plate whose line was
+     * actually staged: the commit has to name the channel those `FILL`s were sent on, and
+     * re-deriving it from the item's slot afterwards would be a second answer to a question
+     * this loop already had in hand.
+     */
+    let deferredChannel: number | null = null;
+    /**
+     * 🔴 `B-198` — **APPLY EVERYTHING THIS BATCH STAGED, ONCE.**
+     *
+     * Idempotent by draining the accumulator, so it can be called on more than one exit path
+     * without a second commit ever splitting the batch it just closed. A commit is
+     * channel-wide and applies whatever ANY connection has staged, so it is issued only when
+     * we have staged something ourselves.
+     */
+    const commitStaged = async (): Promise<void> => {
+      if (deferredChannel === null) return;
+      const channel = deferredChannel;
+      deferredChannel = null;
+      await this.#send(this.#builder.mixerCommit(channel), this.#nextSeq(), 'urgent');
+    };
+
     for (const placement of [...placements, ...freshParked]) {
       const prior = priorByProducer.get(placement.producerArg);
       const priorSlotRecord = priorBySlot.get(adoptionKey(placement.slot));
@@ -5962,9 +6020,23 @@ export class CasparRuntime {
       let playLanded = false;
       let landed = 0;
       for (const [i, line] of lines.entries()) {
-        // Urgent lane: seating runs inside a take, and a take does not queue
-        // behind a load.
-        const sent = await this.#send(line, this.#nextSeq(), 'urgent');
+        /*
+          🔴 `B-198` — **EVERY `MIXER` LINE OF THIS BATCH IS STAGED, NOT APPLIED.**
+
+          `deferMixer` returns a `PLAY` untouched and appends ` DEFER` to a `MIXER`, so the
+          whole batch goes through one call and a `MIXER` added to `lines` later is deferred by
+          construction. Nothing here reaches the picture until the `COMMIT` below, which is
+          what makes a switch's fills land on ONE channel frame however far apart their ACKs
+          are — and they are far apart, because this loop awaits each one.
+
+          ⚠ The await stays. It is what carries the per-line failure handling below (`landed`,
+          `playLanded`, and the rollback that reads them), and with the batch staged the gap it
+          leaves no longer costs anything on air.
+
+          Urgent lane: seating runs inside a take, and a take does not queue behind a load.
+        */
+        if (line.startsWith('MIXER ')) deferredChannel = placement.slot.channel;
+        const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
         if (sent.ok) {
           if (reseat && i === 0) playLanded = true;
           landed += 1;
@@ -6012,6 +6084,28 @@ export class CasparRuntime {
       }
       if (failure !== undefined) break;
     }
+
+    /*
+      🔴 `B-198` — **THE COMMIT, AFTER EVERY PLATE HAS STAGED AND BEFORE ANY ROLLBACK.**
+
+      ── 🔴 WHY THE FAILURE PATH COMMITS HERE AND THE GOOD PATH DOES NOT ─────────
+
+      A staged change nobody commits HANGS — measured: 1500 ms with no commit left it
+      unapplied, and it would then be applied by whatever commits next, ours or anyone's, at a
+      moment nothing chose. So a failed batch must not be left staged, and every branch below
+      this line either returns or rolls back with un-deferred commands.
+
+      Committing it applies the part that landed, which is exactly the state a failed batch
+      reaches today without `DEFER` — and `B-166`'s rollback below is written for precisely
+      that state and runs unchanged. Failing to commit would be a NEW failure mode.
+
+      ⚠ **THE GOOD PATH DELIBERATELY DOES NOT COMMIT HERE.** The off-frame PARK below is part
+      of the same switch — those are the plates LEAVING, and on the owner's own fixture the
+      departing box is exactly what drew over the arriving plate. Committing before they stage
+      would split the batch at the one seam the defect lives in. Its commit is at the end,
+      after everything this switch moves has been staged.
+    */
+    if (failure !== undefined) await commitStaged();
 
     if (failure !== undefined) {
       if (mode === 'take') {
@@ -6370,8 +6464,10 @@ export class CasparRuntime {
       // and unconditionally under a take, which re-asserts every layer it owns for the
       // repair reason above.
       if (record.held !== true || mode === 'take') {
+        // `B-198` — staged, like every other `MIXER` this switch sends. See `commitStaged`.
+        deferredChannel = record.slot.channel;
         const sent = await this.#send(
-          this.#builder.mixerVolume(record.slot, CREATED_MUTED_VOLUME),
+          this.#builder.deferMixer(this.#builder.mixerVolume(record.slot, CREATED_MUTED_VOLUME)),
           this.#nextSeq(),
           'urgent',
         );
@@ -6401,7 +6497,10 @@ export class CasparRuntime {
       if (!fitParked || mode === 'take') {
         fitParked = true;
         for (const line of this.#builder.mixerFit(record.slot, parked)) {
-          const sent = await this.#send(line, this.#nextSeq(), 'urgent');
+          // `B-198` — the PARK is the departing half of the switch, so it stages with the
+          // arriving half and lands on the same frame. This is the seam the defect lived in.
+          deferredChannel = record.slot.channel;
+          const sent = await this.#send(this.#builder.deferMixer(line), this.#nextSeq(), 'urgent');
           if (sent.ok) continue;
           // Under-claims on failure, the same safe direction the mute takes: the next
           // reconcile re-sends both. A refused `CLIP` after an acked `FILL` still renders
@@ -6416,6 +6515,16 @@ export class CasparRuntime {
         ...(fitParked && { fill: parked.fill, clip: parked.clip }),
       });
     }
+
+    /*
+      🔴 `B-198` — **THE COMMIT FOR THE WHOLE SWITCH, and this is the only place it can be.**
+
+      AFTER the arriving plates and the departing (parked) ones have both staged, so the two
+      halves land on ONE channel frame — which is the entire fix. BEFORE the clearing sweep
+      below, because that sweep's `MIXER … CLEAR` is sent un-deferred and applies at once: a
+      commit after it would re-apply a staged `FILL` onto a layer it had just reset.
+    */
+    await commitStaged();
 
     this.registerLiveLayers(itemId, next);
 
@@ -9312,6 +9421,19 @@ export class CasparRuntime {
     seq: number,
     priority: 'urgent' | 'normal',
   ): Promise<{ ok: boolean; onPrimary: boolean; errorCode?: string }> {
+    /*
+      `B-198` TEST-ONLY — the fault injector. Ahead of the write, so the delay lands BETWEEN
+      one plate's `MIXER` lines and the next plate's, exactly as a scheduling hiccup would.
+      The boundary is a CHANGE OF TARGET: `MIXER 1-30 …` followed by `MIXER 1-31 …`. A plate's
+      own `FILL`/`CLIP` pair is left alone, because the reported event did not separate those.
+    */
+    if (this.#mixerLineDelayMs > 0 && line.startsWith('MIXER ')) {
+      const target = line.split(' ')[1] ?? '';
+      if (this.#lastMixerTarget !== null && this.#lastMixerTarget !== target) {
+        await sleepMs(this.#mixerLineDelayMs);
+      }
+      this.#lastMixerTarget = target;
+    }
     try {
       const result = await this.#adapter.send(line, { priority });
       // A response ARRIVED, so the B-044 bounded timeout no longer applies —

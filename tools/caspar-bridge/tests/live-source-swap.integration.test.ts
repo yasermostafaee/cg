@@ -282,7 +282,10 @@ it('a null sourceId REVERTS the plate to its template assignment', async () => {
   expect(await r.swapLiveSource('item-1', 'guest-1', null)).toEqual({ ok: true });
 
   const lines = await recvLines();
-  expect(lines[lines.length - 4]).toContain('route://2');
+  // The plate is re-seated on its TEMPLATE assignment. Asked by CONTENT rather than by
+  // counting back from the end: `B-198` appended a `MIXER … COMMIT` to every seating batch,
+  // and a positional index measures the batch's length rather than what it carried.
+  expect(lines.filter((l) => l.startsWith('PLAY 1-30')).at(-1)).toContain('route://2');
   // An EMPTY override map is no override at all — a row back on its assignment
   // must not read as substituted.
   expect(r.stackSnapshot().find((i) => i.itemId === 'item-1')?.sourceOverride).toBeUndefined();

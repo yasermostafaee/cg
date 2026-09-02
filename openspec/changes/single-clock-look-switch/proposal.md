@@ -52,30 +52,32 @@ already used once, in `design.md §9b.5`.
 
 ## Status
 
-🔴 **THE SHAPE IS BUILT. THE ACCEPTANCE IS NOT MET, AND NOTHING WAS PUSHED.**
+⭐ **THE ACCEPTANCE IS MET. Measured on the plant, twice: 2026-09-01 found one residual, and
+2026-09-02 closed it and re-ran the campaign clean.**
 
-The reorder and the mask retirement are implemented and green (one local commit, `a7976e14`, not on
-the remote). The campaign that gates them ran on the plant on 2026-09-01 — **100 recordings**, the
-same file-consumer harness and the same artefact classifier that produced the 20 / 30 / 60 ms
-numbers, at `1080i5000`:
+| term                                             | 2026-09-01                     | 2026-09-02 (after `B-198`)   |
+| ------------------------------------------------ | ------------------------------ | ---------------------------- |
+| `k` — the PAGE against the MIXER, `B-174`'s term | 0 channel frames in 100 of 100 | **0 in 100 of 100**          |
+| BLACK frames                                     | 0 in 100 of 100                | **0 in 100 of 100**          |
+| DROPPED frames                                   | none                           | **none; worst deficit 2/76** |
+| MISPLACED frames                                 | 2 frames (40 ms) in ONE run    | **0 in 100 of 100**          |
 
-| term                                             | result                                               |
-| ------------------------------------------------ | ---------------------------------------------------- |
-| `k` — the PAGE against the MIXER, `B-174`'s term | **0 channel frames in 100 of 100**                   |
-| BLACK frames                                     | **0 in 100 of 100**                                  |
-| DROPPED frames                                   | **none; no recording discarded, worst deficit 2/76** |
-| MISPLACED frames                                 | 0 in 99 — **2 frames (40 ms) in ONE**                |
+**What the one residual was, and why a clean campaign is not what proves it gone.** `B-198`: a
+seating batch's `MIXER` lines are sent one at a time and each one's ACK is awaited, so a channel
+tick falling between two of them landed the fills a frame apart. At 1 recording in 50, a clean
+campaign after a change looks exactly like a clean campaign before it. The proof is a FORCED
+reproduction — the split made to fire on demand at the send seam — which produced the reported
+artefact on 6 runs of 6 (`k` = 0, misplaced 22.68132716049383 %, the departing box's own area to
+the last digit) and, **with the forcing still in place**, produces 0 % on 10 of 10 after the fix.
 
-**The one non-zero is a different disagreement and it is filed as `B-198`:** in that recording the
-arriving plate's `MIXER … FILL` took effect a whole channel frame before the departing box's, so the
-outgoing box was drawn over the incoming picture for 40 ms. The page and the fills were exactly
-together in that run as in every other (`k = 0`); what split was two `MIXER` commands of ONE batch.
+Every `MIXER` line of a batch now carries ` DEFER` and one `MIXER <ch> COMMIT` lands the lot on a
+single channel frame.
 
-The acceptance is all-or-nothing by instruction — _"Any non-zero recording is a failure — stop,
-report it, land nothing"_ — so it is reported as a failure. ⚠ **That is not a report that the reorder
-failed:** the term it targets read zero in every recording, which no `B-174` campaign had achieved
-before. `B-198` has to be closed, or the acceptance re-scoped by the owner with these numbers in
-front of him, before this ships.
+⚠ **One thing that is NOT covered by this and must not be read into it:** term (b), producer start
+latency (`B-192`), at **+2 … +4 fields (40–80 ms)**. It is absent from the campaign only because
+the `ghab3` fixture seats every plate in every look on purpose, so no producer is ever started
+inside a window. On the owner's real template a look revealing a parked box still shows it dark for
+that long, and no compositing order changes it.
 
 ## What this does NOT fix
 

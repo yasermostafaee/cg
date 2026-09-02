@@ -389,7 +389,10 @@ it('🔴 5.2 — a preset is STAGED ON AIR: the producer is seated, muted and re
   ).toHaveLength(1);
   expect(producerOf(r, 'live-3')).toContain('9');
   const layer = layerOf(r, 'live-3');
-  expect(lines).toContain(`MIXER 1-${String(layer)} VOLUME 0`);
+  // `B-198` — a seating batch's `MIXER` lines are STAGED, so the line on the wire carries a
+  // trailing ` DEFER` and a `MIXER <ch> COMMIT` follows the batch. What is being asserted is
+  // that the preset was seated MUTED, which the staged line says as plainly as the applied one.
+  expect(lines).toContain(`MIXER 1-${String(layer)} VOLUME 0 DEFER`);
   expect(mock?.layerRenderedRect({ channel: 1, layer }), 'and it renders nothing').toBeNull();
 });
 
@@ -498,8 +501,11 @@ it('5.4 — THE CUT IS THE ONLY MODE, so the switch itself is the immediate acti
   for (const f of fills) {
     // `MIXER … FILL x y sx sy` and nothing after: a duration or a tween name would be an
     // animated move, which v1 does not ship.
+    // ⚠ `B-198` — ` DEFER` is allowed after the four numbers and NOTHING ELSE is. The claim is
+    // unchanged: a duration or a tween name would still fail, which is the whole point of the
+    // `$` — a staged cut is still a cut.
     expect(f, 'no duration, no tween — the move is a cut').toMatch(
-      /FILL\s+-?[\d.]+\s+-?[\d.]+\s+-?[\d.]+\s+-?[\d.]+\s*$/,
+      /FILL\s+-?[\d.]+\s+-?[\d.]+\s+-?[\d.]+\s+-?[\d.]+(\s+DEFER)?\s*$/,
     );
   }
 });

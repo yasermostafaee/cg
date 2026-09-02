@@ -107,7 +107,17 @@ and the LayerManager itself.** `fixedBankSlots` hands them one union; that is th
       PAIR of a multi-look fixture rather than only the first two.
 - [x] 4.2 `1↔2`, `1↔3`, `1→2→3`, `3→2→1`, ten recordings each, plus forty more of the leg that
       failed. **100 recordings.** Per recording: BLACK frames, MISPLACED frames, DROPPED frames.
-- [ ] 4.3 **ACCEPTANCE: NOT MET.** BLACK: **0 in 100 of 100.** DROPPED: **none — no recording was
+- [x] 4.3 **ACCEPTANCE: MET, on the second campaign.** The first (2026-09-01) found ONE residual
+      and it was filed and closed as `B-198`; the campaign was then re-run UNCHANGED on
+      2026-09-02 and every term reads zero. **BLACK: 0 in 100 of 100. DROPPED: none — nothing
+      discarded, worst cadence deficit 2 frames of ~76. MISPLACED: 0 in 100 of 100. `k`, the
+      page-against-mixer skew this change targets: 0 channel frames in 100 of 100.**
+      🔴 **The campaign is the REGRESSION check and not the proof.** A 1-in-50 event cannot be
+      shown gone by 100 clean recordings, so the proof is the FORCED reproduction: the split made
+      to fire on demand at the send seam produced the reported artefact on 6 of 6 before the fix
+      (`k` = 0, misplaced 22.68132716049383 % — the departing box's own area to the last digit)
+      and 0 % on 10 of 10 after it, **with the forcing still in place**.
+- [x] 4.3a The first campaign's finding, for the record: **NOT MET on 2026-09-01.** BLACK: **0 in 100 of 100.** DROPPED: **none — no recording was
       discarded and the worst cadence deficit anywhere was 2 frames of ~76.** `k`, the page-against-
       mixer skew this whole change targets: **0 channel frames in 100 of 100**, which is the first
       zero any `B-174` campaign has produced. MISPLACED: **0 in 99 recordings and 2 frames (40 ms,

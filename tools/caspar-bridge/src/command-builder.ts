@@ -305,13 +305,10 @@ export class CommandBuilder {
    * governing two commands is evaluated once, and here one geometry emitting two
    * commands is emitted once.
    *
-   * ORDER: `FILL` then `CLIP`. They go out in one batch on one connection, which is
-   * as atomic as this bridge can be today — whether they land on the SAME FRAME is
-   * a separate, open question (§3b: `MIXER … DEFER` + a CHANNEL-scoped `COMMIT`,
-   * which this project forbids until it is known whether `COMMIT` applies only the
-   * deferring connection's queue; on a plant running several stations against one
-   * CasparCG, a `COMMIT` that applies everyone's is the same harm the channel-scope
-   * ban exists to prevent).
+   * ORDER: `FILL` then `CLIP`. ⭐ **`B-198` — and they now land on the SAME FRAME**, because
+   * every `MIXER` line of a seating batch is sent with `DEFER` and one {@link mixerCommit}
+   * applies the lot. See {@link deferMixer} for the measurement that settled the open question
+   * this comment used to record.
    */
   mixerFit(slot: CommandSlot, fit: { fill: NormalizedRect; clip: NormalizedRect }): string[] {
     return [
@@ -339,6 +336,54 @@ export class CommandBuilder {
    */
   mixerClear(slot: CommandSlot): string {
     return `MIXER ${target(slot)} CLEAR`;
+  }
+
+  /**
+   * 🔴 **`B-198` — STAGE a `MIXER` line instead of applying it.**
+   *
+   * ── WHAT THE DEFECT WAS ─────────────────────────────────────────────────────
+   *
+   * A look switch sends one `MIXER … FILL` + `CLIP` pair per plate, and `#applyLivePlates`
+   * awaits each line's ACK before writing the next — so the pair for plate 2 is separated from
+   * plate 1's by a full command/ACK round trip. When a channel tick fell inside that gap the
+   * fills landed a frame apart and the departing box drew over the arriving plate for 40 ms.
+   * Measured at 1 recording in 50; forced on demand it reproduces at 22.68 % of the frame,
+   * which is that box's own area to the last digit.
+   *
+   * ── WHAT THIS BUILD ACTUALLY OFFERS, MEASURED ON THE WIRE ───────────────────
+   *
+   * `MIXER 1-30 FILL … DEFER` answers `202 MIXER OK` and the getter still reports the OLD
+   * value; `MIXER 1 COMMIT` answers `202` and the getter then reports the new one. **The
+   * control that makes those readings mean something:** a bogus trailing token
+   * (`… FILL 0 0 1 1 BANANAS`) answers **`501 MIXER FILL FAILED`** and `MIXER 1 BANANAS`
+   * answers **`400 ERROR`** — this parser does NOT silently swallow words it does not know, so
+   * a `202` on `DEFER` is a `202` on a verb it understood.
+   *
+   * ⚠ **THE SCOPE, ALSO MEASURED, AND IT IS WIDER THAN THE VERB LOOKS.** `MIXER 1-30 COMMIT`
+   * applied a change staged on 1-31 as well: the layer token is accepted and IGNORED, so there
+   * is no per-layer commit — a commit is CHANNEL-WIDE. And the staging area is shared BETWEEN
+   * CONNECTIONS: a change deferred on one socket was applied by a `COMMIT` issued on another.
+   * A deferred change nobody commits hangs indefinitely (1500 ms with no commit left it
+   * unapplied). See `B-198` for what that costs and what bounds it here.
+   */
+  deferMixer(line: string): string {
+    // Only a `MIXER` line can be deferred. Everything else — `PLAY`, `CG …` — is returned
+    // untouched, so the ONE call site can hand it every line of a batch without sorting them
+    // and a `MIXER` added to that batch later is deferred by construction rather than by
+    // somebody remembering. That is the same "make it unrepresentable" move `mixerFit` makes
+    // for the FILL/CLIP pair, one level up.
+    return line.startsWith('MIXER ') ? `${line} DEFER` : line;
+  }
+
+  /**
+   * `B-198` — apply everything staged on the channel, on ONE frame.
+   *
+   * ⚠ **CHANNEL-SCOPED because that is the only scope this build has** (see
+   * {@link deferMixer}): `MIXER <ch>-<layer> COMMIT` was measured to commit the whole channel
+   * anyway, so spelling a layer here would be a promise the server does not keep.
+   */
+  mixerCommit(channel: number): string {
+    return `MIXER ${String(channel)} COMMIT`;
   }
 }
 

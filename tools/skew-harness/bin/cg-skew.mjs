@@ -9,6 +9,7 @@
 //   cg-skew --media-dir <dir> --fixture ghab --classify          # the owner's full-frame-vs-boxes pair
 //   cg-skew --media-dir <dir> --fixture ghab3 --from look-ghab-full --to look-ghab-three
 //   cg-skew --media-dir <dir> --fixture ghab3 --via look-ghab-full --from look-ghab-boxes --to look-ghab-three
+//   cg-skew --media-dir <dir> --fixture ghab3 --force-mixer-split 40   # B-198: make the split fire on demand
 //   cg-skew --media-dir <dir> --fixture ghab --reverse           # ...the other way round
 //   cg-skew --media-dir <dir> --fixture ghab --no-transition-mask # the CONTROL: the pre-fix switch
 //   cg-skew --media-dir <dir> --transition-lead-ms 0   # what the window's LEADING half buys
@@ -88,6 +89,10 @@ const options = {
   ...(typeof args.from === 'string' ? { fromLook: args.from } : {}),
   ...(typeof args.to === 'string' ? { toLook: args.to } : {}),
   ...(typeof args.via === 'string' ? { viaLook: args.via } : {}),
+  // `B-198` — FORCE the MIXER split. Test-only; it reaches a seam `bridge.ts` does not expose.
+  ...(args['force-mixer-split'] === undefined
+    ? {}
+    : { mixerLineDelayMs: Number(args['force-mixer-split']) }),
   // Undefined leaves the bridge's own derived default (one channel frame each).
 };
 

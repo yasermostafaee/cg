@@ -381,7 +381,7 @@ it('🔴 switching to a SOLO look RE-SEATS NOTHING — five plates HELD, one re-
     const layer = layerOf(r, key);
     expect(layer, `${key} must still own its layer`).toBeGreaterThanOrEqual(BAND.start);
     expect(recordOf(r, key)?.held, `${key} must be HELD`).toBe(true);
-    expect(lines).toContain(`MIXER 1-${String(layer)} VOLUME 0`);
+    expect(lines).toContain(`MIXER 1-${String(layer)} VOLUME 0 DEFER`);
     expect(mock?.layerState({ channel: 1, layer })?.volume).toBe(0);
   }
 });
@@ -750,7 +750,7 @@ it('🔴 a swap of a HELD plate re-seats it OFF SCREEN, so the look that shows i
   // 🔴 …and it is INVISIBLE while it waits: parked, so the layer renders nothing at all.
   expect(recordOf(r, 'live-2')?.held, 'seated, muted and off screen').toBe(true);
   expect(mock?.layerRenderedRect({ channel: 1, layer })).toBeNull();
-  expect(lines).toContain(`MIXER 1-${String(layer)} VOLUME 0`);
+  expect(lines).toContain(`MIXER 1-${String(layer)} VOLUME 0 DEFER`);
 
   const back = (await recvLines()).length;
   await r.setActiveLook('item-1', 'six');
@@ -996,7 +996,7 @@ it('🔴 a plate a look shows for the FIRST TIME never lands on a HELD layer', a
     re-emitting the fill would leave the box permanently empty.
   */
   expect(playsIn(lines)).toEqual([]);
-  expect(lines).toContain(`MIXER 1-${String(heldLayer)} VOLUME 0`);
+  expect(lines).toContain(`MIXER 1-${String(heldLayer)} VOLUME 0 DEFER`);
   expect(lines.some((l) => l.startsWith(`MIXER 1-${String(heldLayer)} FILL `))).toBe(true);
   // …and it is back on screen, at the rect look 'a' gives it — not merely un-parked.
   expect(mock?.layerRenderedRect({ channel: 1, layer: heldLayer })).not.toBeNull();
@@ -1138,7 +1138,7 @@ it('🔴 setLivePlateVolume does NOT put a HELD plate on air — the intent wait
 
   const back = (await recvLines()).length;
   await r.setActiveLook('item-1', 'six');
-  expect(await since(back)).toContain(`MIXER 1-${String(layer)} VOLUME 1`);
+  expect(await since(back)).toContain(`MIXER 1-${String(layer)} VOLUME 1 DEFER`);
   expect(mock?.layerState({ channel: 1, layer })?.volume).toBe(1);
 });
 
@@ -1771,7 +1771,7 @@ it('🔴 7.9 — DISJOINT membership survives a refusal: {A,B} → {C,D} with no
   // The outgoing pair is HELD — seated, muted, idle (§12.4) — not torn down.
   for (const plate of ['live-1', 'live-2']) {
     expect(recordOf(r, plate)?.held, `${plate} is held`).toBe(true);
-    expect(lines).toContain(`MIXER 1-${String(layerOf(r, plate))} VOLUME 0`);
+    expect(lines).toContain(`MIXER 1-${String(layerOf(r, plate))} VOLUME 0 DEFER`);
   }
   // The incoming pair is showing, and neither is held.
   for (const plate of ['live-3', 'live-4']) {
@@ -2550,14 +2550,26 @@ it("🔴 B-155 §B — the common path's exact wire sequence: a plain switch, by
   expect(await r.setActiveLook('item-1', 'solo')).toEqual({ ok: true });
 
   const lines = await since(before);
+  /*
+    🔴 **`B-198` — EVERY `MIXER` LINE CARRIES ` DEFER`, AND ONE `COMMIT` CLOSES THE BATCH.**
+
+    This is the fix on the wire, pinned as a whole-list equality so it cannot be half-applied.
+    Without the staging these lines are applied as they arrive, and a channel tick falling
+    between two of them lands the fills a frame apart — measured at 1 recording in 50, and
+    forced on demand at 22.68 % of the frame. Staged, nothing moves until the last line, so the
+    whole geometry lands on ONE frame however far apart the ACKs are.
+  */
   const expected = [
-    'MIXER 1-30 FILL 0 0 1 1',
-    'MIXER 1-30 CLIP 0 0 1 1',
+    'MIXER 1-30 FILL 0 0 1 1 DEFER',
+    'MIXER 1-30 CLIP 0 0 1 1 DEFER',
     ...[31, 32, 33, 34, 35].flatMap((layer) => [
-      `MIXER 1-${String(layer)} VOLUME 0`,
-      `MIXER 1-${String(layer)} FILL 2 2 0.25 0.25`,
-      `MIXER 1-${String(layer)} CLIP 0 0 1 1`,
+      `MIXER 1-${String(layer)} VOLUME 0 DEFER`,
+      `MIXER 1-${String(layer)} FILL 2 2 0.25 0.25 DEFER`,
+      `MIXER 1-${String(layer)} CLIP 0 0 1 1 DEFER`,
     ]),
+    // ⚠ LAST, and after EVERY plate has staged. Inside the loop it would commit plate 1
+    // before plate 2 had staged and split the batch exactly where it split before.
+    'MIXER 1 COMMIT',
   ];
   /*
     🔴 **`single-clock-look-switch` — the sequence is `flip → geometry`, and NOTHING follows it.**

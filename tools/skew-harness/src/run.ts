@@ -102,6 +102,16 @@ export interface SkewOptions {
   readonly fromLook?: string;
   readonly toLook?: string;
   readonly viaLook?: string;
+  /**
+   * 🔴 `B-198` — **FORCE THE SPLIT.** Delays every `MIXER` line at the bridge's send seam by
+   * this many ms, turning a 1-in-50 event into one that fires on demand.
+   *
+   * ⚠ **A 1-in-50 event is not proved fixed by a campaign that passes.** 100 clean recordings
+   * after a change look exactly like 100 clean recordings before it. This is the arm that can
+   * tell them apart: with the delay set, the defect must appear BEFORE the fix and must be
+   * gone AFTER it, with the delay still set.
+   */
+  readonly mixerLineDelayMs?: number;
   /*
     `single-clock-look-switch` — `transitionMask`, `transitionLeadMs` and `transitionTailMs`
     are GONE with the product options they set. The mask they steered no longer exists: a
@@ -226,6 +236,8 @@ export interface SkewReport {
     readonly liveBand: string;
     /** The look the row passes through on its way to `from` — a SEQUENCE's first leg. */
     readonly via?: string;
+    /** `B-198` — the forced per-`MIXER`-line delay, when this campaign is the forced arm. */
+    readonly mixerLineDelayMs?: number;
   };
   readonly runs: readonly RunResult[];
   readonly kChannelFrames: Distribution;
@@ -524,6 +536,9 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
           })),
         ],
         fixedBank: HARNESS_BANK,
+        ...(options.mixerLineDelayMs === undefined
+          ? {}
+          : { faultInjection: { mixerLineDelayMs: options.mixerLineDelayMs } }),
         sourceCatalog: catalog() as never,
         sourceAssignments: assignments(templateId) as never,
         // `single-clock-look-switch` — the transition window's options are GONE with the mask
@@ -596,6 +611,9 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
         bedLayer: BED_LAYER,
         liveBand: '30-39',
         ...(options.viaLook === undefined ? {} : { via: options.viaLook }),
+        ...(options.mixerLineDelayMs === undefined
+          ? {}
+          : { mixerLineDelayMs: options.mixerLineDelayMs }),
       },
       runs,
       kChannelFrames: distribution(runs.filter(usable).map((r) => r.kChannel as number)),
