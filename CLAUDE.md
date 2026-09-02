@@ -153,7 +153,7 @@ before.
 
 **Run it as plain `pnpm gate`; NEVER `pnpm gate --force`.** The `--force` is already
 inside the script (`turbo … --force`), so `pnpm gate` IS the uncached run — it reports
-`0 cached, 82 total`. `gate` is an `&&` chain and pnpm appends extra args to the LAST
+`0 cached, 93 total`. `gate` is an `&&` chain and pnpm appends extra args to the LAST
 command, so the flag lands on `openspec validate --all --strict --force` →
 `error: unknown option '--force'`: a bogus red on an otherwise green gate. Same trap
 for any `pnpm <script> <flag>` where the script chains commands.
@@ -210,7 +210,7 @@ layer over B-098's `bounded-turbo-cli` (host serialization vs. intra-gate fan-ou
 both). It lives at the SINGLE `gate`/`gate:e2e` script chokepoint every entry point
 (direct, pre-push, Stop hook) funnels through — do NOT re-implement it per caller (a
 second copy is how the rule drifts, B-100/P-012), and do NOT "simplify" `gate` back to the
-inline chain: `gate` = lock → `gate:run` (the real chain, still `0 cached, 82 total`),
+inline chain: `gate` = lock → `gate:run` (the real chain, still `0 cached, 93 total`),
 `gate:e2e` = lock → `gate:e2e:run`. A broken lock DEGRADES to an unserialized run rather
 than blocking the gate (it is the sole landing gate); only a 15-min-stuck slot errors out.
 

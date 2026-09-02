@@ -183,3 +183,12 @@ cited by run URL. It never got one, and nothing here recorded that it was outsta
       flaky (`live-source.spec.ts:492`, green on retry #1), runtime **`93 passed (1.6m)`** — the
       eleven that had been failing among them. The local Windows `gate:e2e` is not what discharges
       this and is not cited as such.
+- [x] 7.5 ✅ **`BANK-HALF-SWEEP-01` (B-204 / B-205 / P-039 / P-040) — DISCHARGED** —
+      <https://github.com/yasermostafaee/cg/actions/runs/33666146082> — head `723a149e`, the
+      `dev` HEAD carrying `eac8f3ed` (both bridge walks iterate `fixedBankSlots`), `f8f6b10c`
+      (the `cg/bank-shape` guard and its 16 site fixes, five of them in the runtime's bank-config
+      modal and mock) and `723a149e` (the gate log); `completed` + **`success`**, with the
+      **`E2E (Playwright)` job RUN, not skipped** — started `18:16:24Z`, completed `18:26:50Z`
+      (**10m26s**) — alongside a green `Lint • Typecheck • Test • Build` (9m11s). The
+      pre-push gate for the same push ran `93 successful, 93 total`, `0 cached`, exit 0 in
+      214.7 s, and its full output is the first `.gate-logs/gate-*.log` written by P-040.
