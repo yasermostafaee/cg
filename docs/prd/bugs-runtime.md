@@ -9192,3 +9192,75 @@ only way to it is to ask which code CONSTRUCTS a value the canonical function al
 - **Number:** highest `B-` HEADING across every ref was `B-202` (taken earlier this session);
   `B-203` … `B-207` returned no headings anywhere. The registry entry for this session names
   `B-203` as next free; headings and pointer AGREE.
+
+## [ ] B-204 — the bridge's startup VOLUME recovery walks the operator half only, so a bed row muted by a dead rehearse is never re-asserted ⟨priority: medium — the ordinary take path self-heals it, so this is the belt of a belt-and-braces that is missing for half the bank⟩ — OPEN, filed 2026-09-02 from the `MIXER-DEFER-SAFETY-01` delta
+
+**What:** `#reassertDeclaredVolumes` exists because **mixer state is CHANNEL state and survives the
+bridge process**. Its own comment states the case: _"A bridge that died mid-rehearse left a muted
+layer behind … without this the next operator would take that graphic to air silent, with nothing
+anywhere explaining why."_ It runs once when the primary first becomes reachable, best-effort and
+idempotent.
+
+It iterates `bank.start … bank.start + bank.count - 1` — **the operator half, and nothing else**
+(`tools/caspar-bridge/src/caspar-runtime.ts`). Bed rows 1–9 get no `MIXER VOLUME` re-assert at
+startup.
+
+The mute that strands them is not half-aware, which is what makes the asymmetry reachable: rehearse
+entry sends `mixerVolume(slot, 0)` for whatever slot the item is on, with no bank-half test. A bed
+row can rehearse — it is a row like any other — so it can be left muted by a process that dies.
+
+⚠ **WHAT KEEPS THIS AT MEDIUM, stated rather than left for the reader to hope:** `take()` sends
+`mixerVolume(slot, INTENDED_VOLUME)` **unconditionally**, deliberately not gated on
+`#rehearsing.has(itemId)` — the comment there says gating it _"would reintroduce exactly the
+dependence on our own bookkeeping being correct that this exists to remove"_. So an ordinary take
+of that bed row un-mutes it. The residual is every route to air that is NOT a take of that row: a
+reconcile, a look switch that re-seats without a take, or an operator reading a level meter and
+finding a bed silent for a reason nothing explains. That residual is precisely what
+`#reassertDeclaredVolumes` was written to close, and it is closed for twenty rows and open for nine.
+
+**What closing it looks like:** iterate `fixedBankSlots(bank)` instead of the operator range — the
+same one-line shape used to fix the four `MockRuntime` copies in `B-201`. It is a WIRE-PATH change
+(it emits `MIXER VOLUME` on nine more layers at startup), so it was deliberately NOT made by the
+session that found it: `MIXER-DEFER-SAFETY-01` authorised exactly one wire-path change and this is
+not it. Filed, not hidden.
+
+- **Cross-refs:** [[B-201]] (the same restatement, four times, in the mock), [[B-205]] (the other
+  bridge-side instance, found in the same sweep).
+- **Number:** highest `B-` HEADING across every ref was `B-203` (taken earlier this session);
+  `B-204` … `B-208` returned no headings anywhere. The registry entry for this session names
+  `B-204` as next free; headings and pointer AGREE.
+
+## [ ] B-205 — the fail-closed UNTICK gate walks the operator half only, so a live config install can hide a bed row whose occupancy cannot be verified ⟨priority: medium — a safety gate that silently does not apply to half the bank⟩ — OPEN, filed 2026-09-02 from the `MIXER-DEFER-SAFETY-01` delta
+
+**What:** installing a bank LIVE is validated like a load, **plus** a fail-closed untick rule that
+`validateFixedBank` cannot carry on its own. The rule's purpose is in its own comment: _"A LIVE
+install that arrives with layers already hidden must not slip an occupied or unverifiable layer out
+of sight in one step."_ It raises `untick-occupied` or `untick-unknown`.
+
+The loop that enforces it runs `next.start … next.start + next.count - 1` — **the operator half**.
+A `git grep` of the whole method finds exactly ONE such loop; there is no bed-half equivalent
+anywhere. So a live install may hide any bed row it likes, and the refusal never fires.
+
+⚠ **WHAT KEEPS THIS AT MEDIUM, and it is a genuine partial mitigation rather than a reason not to
+fix it.** `LayersPanel` filters rows on
+`isLayerVisible(bank, layer) || slot.binding !== null || slot.observed.kind === 'producer'` —
+part A's honesty override, which keeps a BOUND or observably-OCCUPIED row visible whatever its
+tick. That covers the `untick-occupied` half: a bed row carrying a producer stays on screen even
+if hidden.
+
+🔴 **It does NOT cover `untick-unknown`, which is the half that fails closed for a reason.** A bed
+row whose occupancy is UNVERIFIABLE is neither bound nor observed as a producer, so the honesty
+override does not retain it — and the gate that should have refused the untick never ran. The row
+disappears from the operator's list while the bridge cannot say whether anything is on it. "We do
+not know" is exactly the state the rule refuses to let anyone hide, and it is hideable on nine
+rows.
+
+**What closing it looks like:** run the same body over `fixedBankSlots(next)` rather than the
+operator range, so both halves meet one gate. WIRE-ADJACENT and safety-critical (it changes when a
+config install is REFUSED), so it was not made by the session that found it, for the same reason as
+`B-204`. The existing `untick-occupied` / `untick-unknown` tests would carry over; what is missing
+is a bed-row case for each.
+
+- **Cross-refs:** [[B-204]] (the other bridge-side instance), [[B-201]] (the pattern, catalogued).
+- **Number:** derived in the same sweep as `B-204` above — highest heading `B-203`, `B-204` …
+  `B-208` absent; `B-205` is the next after the one filed immediately above.

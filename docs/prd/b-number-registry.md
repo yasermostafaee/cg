@@ -2085,5 +2085,14 @@ first time, and the first thing a rendered bed row showed was a wrong name — `
 also operator row 89. A FIFTH restatement of the same derivation, and the first in shipped renderer
 code. Derivation: highest heading was `B-202`, `B-203` … `B-207` absent.
 
-⇒ **Next free after this session is `B-204`** (`B-` stays contiguous `B-001` … `B-203`, no gaps)
+⚠ **`B-204` and `B-205` were taken later in the SAME session, by a COMPLETENESS SWEEP rather than
+by a failure.** Having found seven hand-restated derivations of the two-bank shape, the session
+swept for more instead of assuming it had them all — three patterns: row-name strings built by hand,
+bank-range arithmetic outside `shared-ipc`, and hard-coded `layer <= 9` predicates. Two survivors
+were real and both are in SHIPPED BRIDGE code: `#reassertDeclaredVolumes` and the fail-closed untick
+gate each walk the operator half only. Neither was fixed — both are wire-path or refusal-path
+changes and the prompt authorised neither. Derivation: highest heading `B-203`, `B-204` … `B-208`
+absent.
+
+⇒ **Next free after this session is `B-206`** (`B-` stays contiguous `B-001` … `B-205`, no gaps)
 **and `P-039`** (`P-001` … `P-038`, no gaps).
