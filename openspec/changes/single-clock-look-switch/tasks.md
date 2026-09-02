@@ -152,3 +152,34 @@ and the LayerManager itself.** `fixedBankSlots` hands them one union; that is th
       corners, so the home §9a.1 recorded ("the CSS hole rounds") disappears with the punch. The only
       home that does not re-impose frame alignment is producer-side, via a keyer layer — unmeasured.
       The overlay-row alternative is CLASS 1 by construction and must not be used.
+
+## 7. 🔴 THE LINUX `e2e` DEBT THIS CHANGE OWED — undischarged for three runs, discharged 2026-09-02
+
+`a7976e14` altered UI, so CLAUDE.md's "E2E coverage" rule owed it a COMPLETED, GREEN `e2e` job
+cited by run URL. It never got one, and nothing here recorded that it was outstanding.
+
+- [x] 7.1 **Why no run existed, measured rather than assumed.** The classifier was NOT at fault: it
+      scores `a7976e14` `{ kind: 'code', needsE2e: true }`, and 90 of the 91 changed files force
+      that verdict independently. `a7976e14` was the MIDDLE COMMIT of a batched three-commit push,
+      and GitHub creates one run per push keyed to the push's head — so
+      `gh api ".../runs?head_sha=a7976e14…"` returns **`total_count: 0`**, as it does for
+      `3bbe1727`. The rule's first clause fires from the diff and works; its CITATION clause is
+      enforced by nothing, which is why the gap was invisible.
+- [x] 7.2 **What the missing runs were hiding.** Eleven Runtime specs, failing on this change's own
+      `wrong-bank` refusal against specs it invalidated and never updated (`B-201`). The three runs
+      that did exist could not say so: turbo buffers a task's output until the task completes and
+      the job's 20-minute cap killed it first, so a RED suite and a SLOW one produced byte-identical
+      evidence — conclusion `cancelled`, zero bytes from the suite (`P-038`).
+- [x] 7.3 **The runs that do NOT discharge it, named so the record cannot be misread.**
+      `eb228a64` — [33632277519](https://github.com/yasermostafaee/cg/actions/runs/33632277519),
+      `E2E (Playwright)` **cancelled** on attempt 1 (20m17s) AND on attempt 2 (20m20s).
+      `68da3bfe` — [33637419829](https://github.com/yasermostafaee/cg/actions/runs/33637419829),
+      **cancelled** (20m19s). A cancelled run is neither a pass nor a fail and proves nothing.
+- [x] 7.4 ✅ **DISCHARGED** —
+      <https://github.com/yasermostafaee/cg/actions/runs/33656454945> — head `96090c49`, a later
+      `dev` HEAD carrying this change; `completed` + **`success`**, with the **`E2E (Playwright)`
+      job RUN, not skipped** (9m19s), alongside a green `Lint • Typecheck • Test • Build`. Both
+      suites executed on `ubuntu-latest`: designer `287` collected → 274 passed + 12 skipped + 1
+      flaky (`live-source.spec.ts:492`, green on retry #1), runtime **`93 passed (1.6m)`** — the
+      eleven that had been failing among them. The local Windows `gate:e2e` is not what discharges
+      this and is not cited as such.
