@@ -1,7 +1,9 @@
 import globals from 'globals';
 import type { Linter } from 'eslint';
 import { base } from './base.js';
+import { cgPlugin } from '../rules/cg-plugin.js';
 import { ELECTRON_PACKAGE, MAIN_ONLY_PACKAGES, NODE_BUILTINS } from '../rules/forbidden.js';
+import { NO_HARDCODED_ORIGIN_RULE_ID } from '../rules/no-hardcoded-origin.js';
 import type { TierOptions } from './node.js';
 
 /**
@@ -9,13 +11,20 @@ import type { TierOptions } from './node.js';
  *
  * Forbids Node built-ins, electron (must go through preload's contextBridge),
  * and Main-tier @cg/* packages. Use together with `base`.
+ *
+ * `P-041` — the origin guard (`cg/no-hardcoded-origin`) is enabled HERE and only here:
+ * browser clients are the code that must follow the page's origin. The plugin object is
+ * the same one `base` registers (flat config refuses a second object under `cg`), so this
+ * block works composed after `base` and standalone alike.
  */
 export function renderer(options: TierOptions = {}): Linter.Config {
   const config: Linter.Config = {
     languageOptions: {
       globals: { ...globals.browser },
     },
+    plugins: { cg: cgPlugin },
     rules: {
+      [NO_HARDCODED_ORIGIN_RULE_ID]: 'error',
       'no-restricted-imports': [
         'error',
         {

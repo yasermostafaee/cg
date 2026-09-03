@@ -1,4 +1,4 @@
-import type { ESLint, Rule } from 'eslint';
+import type { Rule } from 'eslint';
 
 /**
  * `P-039` — THE BANK-SHAPE GUARD: a range that is rebuilt by hand is a second derivation,
@@ -147,11 +147,8 @@ export const bankShapeRule: Rule.RuleModule = {
   },
 };
 
-/** The plugin the tier configs register under the `cg` namespace (`cg/bank-shape`). */
-export const bankShapePlugin: ESLint.Plugin = {
-  meta: { name: '@cg/eslint-plugin-bank-shape', version: '0.0.0' },
-  rules: { 'bank-shape': bankShapeRule },
-};
+// The plugin object lives in `./cg-plugin.ts` (ONE object for every `cg/*` rule — flat
+// config refuses two different objects under the same plugin name), since `P-041`.
 
 /** The rule id as consumers see it — one string, so a smoke case cannot misspell it. */
 export const BANK_SHAPE_RULE_ID = 'cg/bank-shape';

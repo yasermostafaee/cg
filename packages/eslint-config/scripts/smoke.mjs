@@ -16,6 +16,7 @@ import {
   broadcast,
   jsxA11y,
   BANK_SHAPE_RULE_ID,
+  NO_HARDCODED_ORIGIN_RULE_ID,
 } from '../dist/index.js';
 
 /**
@@ -338,6 +339,113 @@ for (const c of cases) {
     passed += 1;
   } else {
     console.error('  FAIL  bank-shape exempted a file that is not the owner module');
+    failed += 1;
+  }
+}
+
+// P-041 — the origin guard (`cg/no-hardcoded-origin`). Enabled by the RENDERER tier only.
+// One case per shape the rule names — the first is the verbatim constant the Runtime used
+// to probe — then the allowed forms (a namespace URL, a bare CasparCG-style host, a fully
+// derived origin, the port-only import, operator text), the owner-file exemption by path,
+// and the node tier NOT enabling it (the bridge legitimately logs its own bind).
+{
+  const clientCfg = [...base, renderer()];
+  const client = new ESLint({ baseConfig: clientCfg, overrideConfigFile: true });
+  const PRELUDE =
+    'declare const host: string; declare const scheme: string; declare const port: number; declare function use(x: unknown): void;\n';
+  const lint = async (eslint, code, filePath) => {
+    const results = await eslint.lintText(PRELUDE + code + '\n', { filePath });
+    return results[0]?.messages ?? [];
+  };
+  const hit = (messages) => messages.find((m) => m.ruleId === NO_HARDCODED_ORIGIN_RULE_ID);
+
+  const fires = [
+    // The verbatim constant (`DEFAULT_BRIDGE_WS_URL`'s value) the Runtime probed until P-041.
+    "const u = 'ws://127.0.0.1:5280'; use(u);",
+    // Derived host, literal bridge port — still an origin spelled by hand.
+    'const u = `ws://${host}:5280`; use(u);',
+    // A dev-server origin.
+    "const u = 'http://localhost:5174/'; use(u);",
+    // Concatenation, with the port in its own literal.
+    "const u = 'http://' + host + ':4000'; use(u);",
+    // A literal IPv4 — the plant pin's shape.
+    "const u = 'http://192.168.21.93:7911/template/x'; use(u);",
+    // host:port with no scheme.
+    "const u = '127.0.0.1:5280'; use(u);",
+    // The bracketed IPv6 loopback.
+    "const u = 'ws://[::1]:5280'; use(u);",
+    // Reading the bridge's BIND default as a client target — the import forms.
+    "import { DEFAULT_BRIDGE_WS_URL } from '@cg/shared-ipc'; use(DEFAULT_BRIDGE_WS_URL);",
+    "import { DEFAULT_BRIDGE_HOST } from '@cg/shared-ipc'; use(DEFAULT_BRIDGE_HOST);",
+  ];
+  for (const code of fires) {
+    const messages = await lint(client, code, 'src/platform/some-client.ts');
+    if (hit(messages)) {
+      console.log(`  PASS  no-hardcoded-origin fires: ${code}`);
+      passed += 1;
+    } else {
+      console.error(`  FAIL  no-hardcoded-origin did NOT fire: ${code}`);
+      console.error(
+        `        got: ${messages.map((m) => `${m.ruleId}: ${m.message}`).join(' | ') || '(no messages)'}`,
+      );
+      failed += 1;
+    }
+  }
+
+  const allowed = [
+    // A namespace URL is not an origin.
+    "const ns = 'http://www.w3.org/2000/svg'; use(ns);",
+    // A BARE host: the CasparCG server default's spelling — documented as unseen, on purpose.
+    "const h = '127.0.0.1'; use(h);",
+    // Operator text that mentions the address.
+    "const msg = 'The control connection stays on 127.0.0.1.'; use(msg);",
+    // A fully derived origin — the shape the owner module builds.
+    'const u = `${scheme}://${host}:${String(port)}`; use(u);',
+    // The port alone is the bridge's and may be imported anywhere.
+    "import { DEFAULT_BRIDGE_PORT } from '@cg/shared-ipc'; use(DEFAULT_BRIDGE_PORT);",
+    // A public example URL in a validation preset.
+    "const example = 'https://irib.ir'; use(example);",
+  ];
+  for (const code of allowed) {
+    const messages = await lint(client, code, 'src/platform/some-client.ts');
+    const violation = hit(messages);
+    if (!violation) {
+      console.log(`  PASS  no-hardcoded-origin allows: ${code}`);
+      passed += 1;
+    } else {
+      console.error(`  FAIL  no-hardcoded-origin fired on an allowed form: ${code}`);
+      console.error(`        ${violation.message}`);
+      failed += 1;
+    }
+  }
+
+  // The owner module is exempt BY PATH — and only that path.
+  const ownerCode = "const u = 'ws://127.0.0.1:5280'; use(u);";
+  const owner = await lint(client, ownerCode, 'src/platform/bridgeUrl.ts');
+  if (!hit(owner)) {
+    console.log('  PASS  no-hardcoded-origin exempts the owner module (src/platform/bridgeUrl.ts)');
+    passed += 1;
+  } else {
+    console.error('  FAIL  no-hardcoded-origin fired inside the owner module');
+    failed += 1;
+  }
+  const copy = await lint(client, ownerCode, 'src/platform/bridgeUrlCopy.ts');
+  if (hit(copy)) {
+    console.log('  PASS  no-hardcoded-origin does not extend the exemption to a neighbouring file');
+    passed += 1;
+  } else {
+    console.error('  FAIL  no-hardcoded-origin exempted a file that is not the owner module');
+    failed += 1;
+  }
+
+  // The node tier does NOT enable it: the bridge logs the address it BINDS.
+  const nodeCfg = new ESLint({ baseConfig: [...base, node()], overrideConfigFile: true });
+  const nodeSide = await lint(nodeCfg, ownerCode, 'src/bridge.ts');
+  if (!hit(nodeSide)) {
+    console.log('  PASS  no-hardcoded-origin is not enabled by the node tier');
+    passed += 1;
+  } else {
+    console.error('  FAIL  no-hardcoded-origin fired under the node tier');
     failed += 1;
   }
 }

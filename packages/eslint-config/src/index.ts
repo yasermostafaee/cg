@@ -26,12 +26,23 @@ export { cefCompat } from './configs/cef-compat.js';
 // P-039 — the bank-shape guard. Registered by `base` under the `cg` namespace; exported
 // so the smoke check can assert on the one rule id and so a consumer can widen the
 // owner-file exemption deliberately rather than by copying the pattern.
+export { BANK_SHAPE_OWNER_FILES, BANK_SHAPE_RULE_ID, bankShapeRule } from './rules/bank-shape.js';
+
+// P-041 — the origin guard. Registered by `base` (same plugin object), ENABLED by the
+// renderer tier only; the pure folding + matching are exported so the smoke check can
+// probe them directly, and the owner-file list so a consumer can widen it deliberately.
 export {
-  BANK_SHAPE_OWNER_FILES,
-  BANK_SHAPE_RULE_ID,
-  bankShapePlugin,
-  bankShapeRule,
-} from './rules/bank-shape.js';
+  BIND_DEFAULT_IMPORTS,
+  KNOWN_DEV_PORTS,
+  NO_HARDCODED_ORIGIN_RULE_ID,
+  ORIGIN_OWNER_FILES,
+  foldStringExpression,
+  hardcodedOriginIn,
+  noHardcodedOriginRule,
+} from './rules/no-hardcoded-origin.js';
+
+// THE ONE `cg` plugin object — both rules above. Register this and nothing else under `cg`.
+export { cgPlugin } from './rules/cg-plugin.js';
 
 export type { TierOptions } from './configs/node.js';
 export type { JsxA11yOptions } from './configs/jsx-a11y.js';

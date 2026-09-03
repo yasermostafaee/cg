@@ -2610,3 +2610,107 @@ That is the face the Stop hook and CI already saw, and the face a log file wants
   [[P-009]] (the Stop hook's own log, which this does not replace).
 - **Number:** derived in the same sweep as `P-039` above — highest heading `P-038`, `P-039` …
   `P-041` absent; `P-040` is the next after the one filed immediately above.
+
+## [~] P-041 — the dev servers answer only on `localhost` and the client assumes it: LAN-visible dev by default, the bridge origin derived from the page, and a lint guard so a literal origin cannot come back ⟨priority: high — nothing could be tested from a second machine, and the client half is invisible from the dev box⟩ — implemented 2026-09-04 by `LAN-DEV-ACCESS-01` (`openspec/changes/lan-dev-access/`)
+
+**What:** both Vite dev servers listen on every interface by default in development
+(`HOST=127.0.0.1` restricts; `vite preview` and the built app unchanged); the Runtime derives its
+bridge WebSocket host from the page's own origin in ONE module (`apps/runtime/src/platform/
+bridgeUrl.ts`), keeping the bridge's port; the `C-024` pin is gone (see [[C-024]], commit
+`f41da425`); and `cg/no-hardcoded-origin` refuses a hand-spelled client origin in the renderer
+tier.
+
+**Why:** the servers bound `127.0.0.1` unless `HOST` was remembered, and the client probed the
+constant `ws://127.0.0.1:5280`. From a second machine the page did not load, and had it loaded it
+would have probed THAT machine's loopback and sat in DISCONNECTED with nothing wrong anywhere it
+could see. The defect cannot be seen from the dev box, where `localhost` and the LAN address are
+one machine — which is why every local check passed. It is the `C-024` gap one layer up: the
+client could not be told, or ask, where its server is.
+
+**Acceptance:**
+
+- WHEN either app is started with `dev` and `HOST` is unset THEN it listens on every interface
+  and prints a `Network:` URL per interface; WHEN `HOST=127.0.0.1` THEN loopback only
+- WHEN `vite preview` or a build runs THEN nothing about them changes (loopback; static files)
+- WHEN a browser opens the dev server at the LAN address THEN HMR connects at that address
+- WHEN the Runtime page is opened at `http://192.168.21.93:5174` from a second machine THEN it
+  probes `ws://192.168.21.93:5280`, never `ws://127.0.0.1:5280`
+- WHEN client code spells a loopback/IPv4 origin, a host:port, a scheme beside one of this
+  repo's default ports, or imports the bridge's bind-default constants THEN lint fails; WHEN it
+  is the owner module THEN it does not
+
+**Notes:**
+
+- **§1 discovery, and a prediction that FAILED.** The brief predicted 3–6 origin-producing
+  sites, one a WebSocket, one a template/asset URL bypassing the helper. The sweep (every hit
+  listed in `openspec/changes/lan-dev-access/tasks.md` 1.3) found ONE: `createRuntimeBridge.ts`'s
+  `resolveBridgeUrl()` → `DEFAULT_BRIDGE_WS_URL`. The WebSocket half was right; the template half
+  was wrong for a structural reason — the PVW is a same-origin `srcdoc` iframe, template HTML
+  rides the socket, and the CasparCG-facing URL is built by the BRIDGE (`bridge.ts:678`), never
+  by the client. One mechanism, not three. ⚠ The first `git grep` over `packages/*/src` was
+  BLIND — git treats a wildcard pathspec as a full-path match, so it matched nothing and said
+  nothing — caught because the `packages/shared-ipc` constant was known to exist; rerun as a
+  prefix. Golden rule 9's tool can go blind by pathspec, not only by NUL byte.
+- **§4 identification.** `git diff` showed ONE added line, `// return '192.168.21.93';` — the pin
+  already commented out by the owner, not a live return and not a second artifact; `git log -S`
+  showed the live pin entered at `9453b989` and left at `56c0799f`. Deleted with its never-stage
+  entry and the flag-only warning sentence in one commit, per C-024's rule.
+- **Default LAN-visible, deliberately.** `HOST` existed and defaulted to loopback; that is a flag
+  someone has to remember, the failure mode the hack came from. The dev-only boundary is Vite's
+  contract (`server.*` is read by the dev server alone), pinned by `tests/vite-config.test.ts` in
+  each app. `host: true` rather than `'0.0.0.0'` so Vite prints every `Network:` URL — on this
+  box, `172.18.0.1` (a tunnel adapter) AND `192.168.21.93`, the two-interface situation that made
+  `guessLanHost()` guess wrong.
+- **Verified here (same machine, LAN address — which proves the BINDING and HMR, not the client):**
+  Chromium at `http://192.168.21.93:5174/` and `:4000/` — both 200; both HMR sockets
+  `ws://192.168.21.93:<port>/?token=…` received `{"type":"connected"}`; the served
+  `/@vite/client` carries `__HMR_HOSTNAME__ = null`. **Verified for the client without loopback:**
+  `tests/e2e/lan-origin.spec.ts` serves the page from an unresolvable name routed to the preview
+  server at the network layer; red on the old constant (`Received: "ws://127.0.0.1:5280/"`),
+  green on the fix. The live dev page at the LAN address probed `ws://192.168.21.93:5280/` (refused
+  — the bridge was not started with `--host 0.0.0.0`).
+- 🔴 **UNVERIFIED — the owner's half, on a second machine.** (1) On this box: `pnpm build`, then
+  `node tools/caspar-bridge/bin/caspar-bridge.mjs --host 0.0.0.0` (plus the usual flags) and
+  `pnpm --filter @cg/runtime dev`. (2) On the second machine, Chrome or Edge: open
+  `http://192.168.21.93:5174/`. (3) Expect the page to load and the link pill to read LIVE, not
+  "NOT CONNECTED"; DevTools → Network → WS shows `ws://192.168.21.93:5280/` and
+  `ws://192.168.21.93:5174/?token=…`. (4) `http://192.168.21.93:4000/` loads the Designer; a
+  "Session-only storage" notice is expected (next bullet). (5) If (3) reads NOT CONNECTED: the
+  bridge must have printed `WS listening on ws://0.0.0.0:5280`, and TCP 5280 must pass the
+  firewall.
+- **§6 firewall — REPORT, nothing changed.** Active profile `DomainAuthenticated` on both
+  adapters. Inbound Allow rules already exist for `C:\program files\nodejs\node.exe` (TCP and UDP,
+  Domain and Public profiles), and that is the node in use (v26.4.0), so no new rule is expected.
+  If the second machine cannot connect: allow inbound TCP 4000, 5174 and 5280 on the Domain
+  profile (or re-check the program rule). The PRIVATE profile has no node rule.
+- **The bridge's loopback bind is NOT changed and is not a bug:** `runtime-caspar-bridge`
+  requires it. A remote console needs `--host 0.0.0.0` (README updated).
+- ⚠ **Plain HTTP on a LAN IP is an INSECURE context.** The Designer there shows "Session-only
+  storage — no persistent storage" (OPFS and the File System Access pickers exist only under
+  `https:` or `localhost`); the Runtime falls back to an in-memory library the same way
+  (`workspace.ts`). A second-machine session works but does not persist a library across
+  reloads. Not fixed here — the fix is TLS or a per-browser flag; recorded so the plant is not
+  surprised.
+- **§7 the guard.** Shape: fold a string-building expression (literal / template / `+` chain,
+  non-literal pieces as `«expr»`) and match scheme+loopback/IPv4 host, host:port, scheme+known
+  dev port (4000, 5000, 5174, 7000, 5280), plus the `DEFAULT_BRIDGE_HOST` / `DEFAULT_BRIDGE_WS_URL`
+  imports. Registered by `base` via the ONE `cg` plugin object (`rules/cg-plugin.ts`), enabled by
+  the renderer tier only. **First fire: 0** on the current tree across the five renderer-tier
+  workspaces; **1** on the verbatim pre-fix `createRuntimeBridge.ts` (the import). Smoke `58
+passed, 0 failed`. ⚠ The owner exemption is inside the RULE, not a base `files` block: the
+  first smoke run fired inside the owner module because `renderer()` composes after `base` and
+  re-enabled it. **Cannot see:** bare hosts (`'127.0.0.1'` is also a CasparCG default), numeric
+  ports, pieces assembled across statements, config/env values, `new URL()` parts, hostnames,
+  anything outside `src/**`, and Node-tier code by design.
+- **Filed, NOT fixed (outside the boundary):** `tools/caspar-amcp-probe/bin/beacon-probe-lib.mjs:49`
+  `DEFAULT_LAN_HOST = '192.168.21.93'`, a throwaway harness default — the last machine-specific
+  address in the tree, in a tool that is not client code and not lint-guarded.
+- **Prefix class:** `P-`, because the subject is cross-cutting dev tooling — two apps' dev
+  servers, the Runtime's platform layer and the lint tier — not a Runtime feature, not a CasparCG
+  behaviour, not an on-air bug.
+- **Number:** highest `P-` HEADING across every ref was `P-040`; `P-041` … `P-043` returned no
+  headings (the only `P-041` hits were the registry's own forward pointer and this session's
+  cross-references). The dated pointer reads _"and `P-041`"_ — headings and pointer AGREE.
+- **Cross-refs:** [[C-024]] (the same gap one layer down, closed here), [[P-035]] (the net, now
+  empty), [[P-039]] (the sibling guard this one is shaped after), [[B-162]] (the flag that
+  `templateServeUnreachableWarning` names).

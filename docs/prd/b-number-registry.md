@@ -2128,3 +2128,28 @@ the layer, which `live-source-multibox/design.md` had already recorded for the L
 
 ⇒ **Next free after this session is `B-208`** (`B-` stays contiguous `B-001` … `B-207`, no gaps)
 **and `P-041`** (`P-001` … `P-040`, no gaps).
+
+### 2026-09-04 — `P-041` (`LAN-DEV-ACCESS-01`: LAN-visible dev servers, the bridge origin derived from the page, and a guard)
+
+| kind | id      | one line                                                                                                                                                                          | home                       |
+| ---- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `P-` | `P-041` | the dev servers answer only on `localhost` and the client assumes it — LAN-visible dev by default, the bridge origin derived from the page's own origin, `cg/no-hardcoded-origin` | [platform.md](platform.md) |
+
+**Derivation for `P-`, from headings as the rule requires:** highest `P-` HEADING across every ref
+was **`P-040`**; `P-041` … `P-043` returned **no headings anywhere** — the only `P-041` hits were
+this file's own forward pointer and the filing session's cross-references, the documented false
+positive. **Cross-check against the dated pointer:** the entry above ends _"and `P-041`"_ —
+headings and pointer AGREE. One number taken. **Prefix class `P-`, chosen because** the subject is
+cross-cutting dev tooling — two apps' dev servers, the Runtime's platform layer and the lint tier —
+not a Runtime feature (`R-`), not a CasparCG behaviour (`C-`), not an on-air bug (`B-`).
+
+`C-024` was CLOSED in code this session (its remaining half: the commented-out pin deleted, the
+never-stage entry dropped, the warning sentence completed — `f41da425`); no new `C-` number.
+Nothing filed under `B-`: the beacon-probe harness default (`beacon-probe-lib.mjs:49`,
+`DEFAULT_LAN_HOST = '192.168.21.93'`) is recorded INSIDE `P-041` as filed-not-fixed rather than
+given a number of its own — a throwaway harness default outside the prompt's boundary, not a
+product bug. The `B-` duplicate audit was not rerun (no `B-` taken); `B-056` and `B-080` remain as
+recorded above.
+
+⇒ **Next free after this session is `B-208`** (unchanged) **and `P-042`** (`P-001` … `P-041`, no
+gaps).
