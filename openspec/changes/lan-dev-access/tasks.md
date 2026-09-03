@@ -97,5 +97,12 @@
 - [x] 7.1 `P-041` filed in `docs/prd/platform.md`; registry entry with the heading derivation
       (highest `P-` heading `P-040`; pointer says `P-041`; they agree).
 - [x] 7.2 Filed, not fixed: `beacon-probe-lib.mjs:49` `DEFAULT_LAN_HOST` (outside the boundary).
-- [ ] 7.3 Linux `e2e` discharge — the run URL, `E2E (Playwright)` job conclusion and duration go
-      here once CI completes for the pushed head.
+- [x] 7.3 ✅ **Linux `e2e` DISCHARGED** —
+      <https://github.com/yasermostafaee/cg/actions/runs/33808859821> — head `b30bd5da`, the `dev`
+      HEAD carrying all three commits of this change (`f41da425`, `b074f719`, `b30bd5da`);
+      `completed` + **`success`**, with the **`E2E (Playwright)` job RUN, not skipped** — started
+      `21:36:49Z`, completed `21:46:17Z` (**9m28s**), job-level conclusion `success`
+      (<https://github.com/yasermostafaee/cg/actions/runs/33808859821/job/100825778425>) —
+      alongside a green `Lint • Typecheck • Test • Build` (9m5s). The push's own pre-push gate ran
+      `93 successful, 93 total`, `0 cached`, in 3m5s. The local Windows `gate:e2e` is not what
+      discharges this and is not cited as such.

@@ -2611,7 +2611,7 @@ That is the face the Stop hook and CI already saw, and the face a log file wants
 - **Number:** derived in the same sweep as `P-039` above — highest heading `P-038`, `P-039` …
   `P-041` absent; `P-040` is the next after the one filed immediately above.
 
-## [~] P-041 — the dev servers answer only on `localhost` and the client assumes it: LAN-visible dev by default, the bridge origin derived from the page, and a lint guard so a literal origin cannot come back ⟨priority: high — nothing could be tested from a second machine, and the client half is invisible from the dev box⟩ — implemented 2026-09-04 by `LAN-DEV-ACCESS-01` (`openspec/changes/lan-dev-access/`)
+## [~] P-041 — the dev servers answer only on `localhost` and the client assumes it: LAN-visible dev by default, the bridge origin derived from the page, and a lint guard so a literal origin cannot come back ⟨priority: high — nothing could be tested from a second machine, and the client half is invisible from the dev box⟩ — implemented 2026-09-04 by `LAN-DEV-ACCESS-01` (`openspec/changes/lan-dev-access/`); e2e discharged by https://github.com/yasermostafaee/cg/actions/runs/33808859821 (the `E2E (Playwright)` job RAN and passed on `b30bd5da`, 9m28s); the second-machine acceptance is still the OWNER's
 
 **What:** both Vite dev servers listen on every interface by default in development
 (`HOST=127.0.0.1` restricts; `vite preview` and the built app unchanged); the Runtime derives its
