@@ -1,6 +1,6 @@
-import { DEFAULT_BRIDGE_WS_URL } from '@cg/shared-ipc';
 import type { AppInfo, BridgeLinkStatus, RuntimeBridge } from '../shared/runtime-bridge.js';
 import { MockRuntime } from './MockRuntime.js';
+import { resolveBridgeUrl } from './bridgeUrl.js';
 import { WebSocketRuntime } from './WebSocketRuntime.js';
 import { LibraryStore } from './library/LibraryStore.js';
 import { initRuntimeWorkspace } from './library/workspace.js';
@@ -75,10 +75,10 @@ export async function createRuntimeBridge(
   return ws;
 }
 
-function resolveBridgeUrl(): string {
-  const override = (globalThis as { __CG_BRIDGE_URL__?: string }).__CG_BRIDGE_URL__;
-  return typeof override === 'string' && override.length > 0 ? override : DEFAULT_BRIDGE_WS_URL;
-}
+// `P-041` — the bridge URL is decided in ONE module, `./bridgeUrl.ts`: the harness override,
+// else the page's own host with the bridge's default port, else loopback. It used to be a
+// constant `ws://127.0.0.1:5280` here, which is correct on the dev machine and wrong on every
+// other machine that opens the page — and only ever tested on the former.
 
 function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
   return new Promise<void>((resolve, reject) => {

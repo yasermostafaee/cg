@@ -117,9 +117,17 @@ export function serializeWsFrame(frame: WsFrame): string {
 // deliberately browser-**safe** — the Runtime SPA dev server's own default of
 // 6000 is on Chrome's ERR_UNSAFE_PORT blocklist; 5280 is not.
 
-/** Default host the bridge binds and the browser probes. */
+/**
+ * Default host the bridge BINDS. ⚠ Not the host the browser probes: since `P-041` the
+ * Runtime derives its bridge host from the page's own origin (`apps/runtime/src/platform/
+ * bridgeUrl.ts`) and uses this only as the loopback fallback when there is no page origin
+ * to follow. Client code importing it is refused by `cg/no-hardcoded-origin`.
+ */
 export const DEFAULT_BRIDGE_HOST = '127.0.0.1';
-/** Default bridge WebSocket port (browser-safe). */
+/** Default bridge WebSocket port (browser-safe). The browser keeps this and swaps the host. */
 export const DEFAULT_BRIDGE_PORT = 5280;
-/** Default bridge WebSocket URL the browser probes at boot. */
+/**
+ * The bridge's default bind URL — what a SAME-HOST client reaches it at. A browser on
+ * another machine must not probe this (its own loopback); see `bridgeUrlFor`.
+ */
 export const DEFAULT_BRIDGE_WS_URL = `ws://${DEFAULT_BRIDGE_HOST}:${DEFAULT_BRIDGE_PORT}`;

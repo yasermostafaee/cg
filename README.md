@@ -55,9 +55,15 @@ pnpm build     # build all @cg/* workspace packages so the apps can import them
 Run an app — each is a Vite dev server in the browser:
 
 ```bash
-pnpm --filter @cg/designer dev   # visual editor  → http://127.0.0.1:4000
-pnpm --filter @cg/runtime  dev   # playout controller → http://127.0.0.1:5174
+pnpm --filter @cg/designer dev   # visual editor  → http://<this machine>:4000
+pnpm --filter @cg/runtime  dev   # playout controller → http://<this machine>:5174
 ```
+
+Both dev servers listen on **every interface by default** (P-041), so a second machine on
+the plant network can open them at this machine's LAN address — Vite prints each
+`Network:` URL at start. Set `HOST=127.0.0.1` to restrict a dev server back to loopback.
+`vite preview` and the built app are unaffected and stay loopback unless `HOST` says
+otherwise.
 
 > The Designer's persistent "open a real folder" mode uses the File System
 > Access API (Chromium: Chrome/Edge/Brave). Other browsers fall back to OPFS
@@ -73,8 +79,11 @@ pnpm build                                    # REQUIRED after any source change
 node tools/caspar-bridge/bin/caspar-bridge.mjs
 ```
 
-Then start the Runtime SPA (`pnpm --filter @cg/runtime dev`); it connects to
-`ws://127.0.0.1:5280` on its own.
+Then start the Runtime SPA (`pnpm --filter @cg/runtime dev`); it connects to the bridge
+on its own at **the host the page was served from**, port `5280` — `ws://127.0.0.1:5280`
+when you open it locally, `ws://<this machine>:5280` when a second machine opens it
+(P-041). For that second case the bridge must also be told to listen on the LAN
+(`--host 0.0.0.0`; it binds loopback by default and that default is deliberate).
 
 **It runs from `dist/`, not from `src/`.** The launcher imports the compiled
 `tools/caspar-bridge/dist/index.js`, so editing a `.ts` file and restarting runs

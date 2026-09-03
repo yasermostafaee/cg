@@ -97,8 +97,8 @@ Persian / RTL is a core requirement.
 ```bash
 pnpm install
 pnpm build                              # turbo: build all @cg/* packages
-pnpm --filter @cg/designer dev          # Designer SPA → http://127.0.0.1:4000
-pnpm --filter @cg/runtime  dev          # Runtime  SPA → http://127.0.0.1:5174
+pnpm --filter @cg/designer dev          # Designer SPA → port 4000, LAN-visible by default (P-041); HOST=127.0.0.1 restricts
+pnpm --filter @cg/runtime  dev          # Runtime  SPA → port 5174, same; the page derives its bridge host from its own origin
 pnpm gate                               # full green gate — turbo --force + format:check + openspec validate. NEVER append flags (see below)
 pnpm test:e2e                           # Playwright E2E via turbo (builds first — never run against a stale dist)
 pnpm --filter @cg/<pkg> typecheck|lint|test|build   # one workspace

@@ -36,13 +36,26 @@ export default defineConfig({
     target: 'es2022',
   },
   server: {
-    // Defaults to loopback. Set HOST=0.0.0.0 (or `true`) to expose the dev
-    // server on the LAN — e.g. to open the Designer from another device.
+    // P-041 — the DEV server is LAN-visible BY DEFAULT (`true` = every interface, and Vite
+    // prints each Network URL). This is a private plant network, and the alternative is a
+    // flag someone has to remember (`HOST=0.0.0.0` was that flag) — the failure mode this
+    // repo has already paid for. `HOST=127.0.0.1` restricts it back to loopback.
+    //
+    // The dev-only boundary is Vite's own contract, not a convention: `server.*` is read by
+    // the `vite` dev server ONLY. `vite build` binds nothing, and `vite preview` reads
+    // `preview.*` below, which stays loopback — so a packaged build cannot inherit this.
+    // `tests/vite-config.test.ts` pins both halves.
+    //
+    // HMR: `server.hmr.host` is deliberately UNSET, so Vite's client falls back to
+    // `location.hostname` and a remote browser's HMR socket targets the address it loaded
+    // the page from (verified over the LAN address, not assumed — see P-041).
     // Override the port with PORT (e.g. PORT=80 for a bare http://<ip>/ URL).
-    host: process.env.HOST ?? '127.0.0.1',
+    host: process.env.HOST ?? true,
     port: process.env.PORT !== undefined ? Number(process.env.PORT) : 5174,
   },
   preview: {
+    // Loopback by default, unchanged by P-041: `preview` serves the BUILT app, which is the
+    // packaged-build path and out of that item's scope. HOST=0.0.0.0 exposes it explicitly.
     host: process.env.HOST ?? '127.0.0.1',
     port: process.env.PORT !== undefined ? Number(process.env.PORT) : 7000,
   },
