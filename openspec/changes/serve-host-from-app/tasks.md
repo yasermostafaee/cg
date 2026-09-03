@@ -67,3 +67,9 @@
       skipped** (checked in the run's job list, not inferred from the run's own conclusion). The
       local Windows `gate:e2e` was green too (93 passed) and is noted only as a local signal: it is
       non-authoritative by the very rule that owes this debt, and never discharges it.
+- [x] 5.3 ✅ **The `.claude/never-stage` entry WAS dropped — 2026-09-04, `LAN-DEV-ACCESS-01`.**
+      The uncommitted edit turned out to be ONE line, the pin already commented out by the owner
+      (`// return '192.168.21.93';`); it was deleted, the never-stage entry dropped, and
+      `templateServeUnreachableWarning`'s flag-only sentence completed to name the panel — all in
+      ONE commit, per `C-024`'s "never before" rule. Task 2.1's "must not be edited from this
+      checkout" no longer applies; the module split it produced stays because it is the right seam.

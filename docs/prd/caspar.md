@@ -1260,7 +1260,22 @@ it reads the assignment the Runtime already holds — while this item needs all 
 does not say which plate it belongs to, and a plate label that does not say whether the feed arrived,
 are each half an answer.
 
-## [~] C-024 — the bridge advertises a HARDCODED LAN address, and only an uncommitted hack makes testing possible ⟨priority: high⟩ — the CURE that [[P-035]] merely NETS — **CLI half LANDED 2026-08-23 by [[B-162]]; PERSISTED + PANEL half LANDED 2026-08-24 (`serve-host-from-app`)**
+## [~] C-024 — the bridge advertises a HARDCODED LAN address, and only an uncommitted hack makes testing possible ⟨priority: high⟩ — the CURE that [[P-035]] merely NETS — **CLI half LANDED 2026-08-23 by [[B-162]]; PERSISTED + PANEL half LANDED 2026-08-24 (`serve-host-from-app`); HACK DELETED + never-stage entry DROPPED + warning sentence completed 2026-09-04 (`LAN-DEV-ACCESS-01`) — every Acceptance bullet now met; awaiting archive of `serve-host-from-app`**
+
+⭐ **STATUS UPDATE 2026-09-04 — THE HACK IS GONE, AND THE NET WITH IT (`LAN-DEV-ACCESS-01`).**
+The prompt that authorised acting on the uncommitted edit first IDENTIFIED it: `git diff` showed
+ONE added line in `guessLanHost()`, `// return '192.168.21.93';` — the pin already commented out
+by the owner, not a live return. The committed tree had carried no live pin since `56c0799f`.
+So it was one artifact, not two, and the three named pieces went in ONE commit as the standing
+instruction required: the comment line deleted (the file now matches `d6b6a952`'s version byte
+for byte except for the sentence below), the `tools/caspar-bridge/src/template-http-server.ts`
+entry dropped from `.claude/never-stage` (the list is now EMPTY and says why; the guard stays
+wired, and `never-stage-decision.test.ts` now asserts the entry is ABSENT rather than present),
+and `templateServeUnreachableWarning` now ends by naming BOTH fixes — the flag and the Runtime's
+Server settings panel. `serve-host-config.ts`'s header no longer claims the file is off-limits.
+⚠ `tools/caspar-amcp-probe/bin/beacon-probe-lib.mjs:49` still carries `DEFAULT_LAN_HOST =
+'192.168.21.93'` as a throwaway harness default — recorded under [[P-041]], not edited (outside
+that prompt's boundary).
 
 ⭐ **STATUS UPDATE 2026-08-23 — `--template-serve-host` EXISTS.** [[B-162]] needed the same seam
 (its §1c) and wired it: `bin/caspar-bridge.mjs` now passes `templateServe` to `createBridge`, so
@@ -1270,11 +1285,12 @@ boot line names the advertised host **and where it came from**. Four of the five
 below are therefore met. **What is NOT met, and why this stays `[~]`:**
 
 - ~~**No persisted-file layer.**~~ ✅ **CLOSED 2026-08-24** — see the status update below.
-- **The hack is still in the owner's working tree** and `.claude/never-stage` still lists
-  `template-http-server.ts`. It CAN now be dropped in favour of
-  `--template-serve-host 192.168.21.93`, but that is the owner's action on their own machine, not
-  something a commit can perform — so the entry stays until they confirm, because removing the net
-  while the hack is still present is strictly worse than leaving it.
+- ~~**The hack is still in the owner's working tree** and `.claude/never-stage` still lists
+  `template-http-server.ts`.~~ ✅ **CLOSED 2026-09-04** — see the status update above. It could be
+  dropped in favour of `--template-serve-host 192.168.21.93`, but that was the owner's action on
+  their own machine, not something a commit could perform — so the entry stayed until a prompt
+  authorised it, because removing the net while the hack is still present is strictly worse than
+  leaving it.
 
 ⭐ **STATUS UPDATE 2026-08-24 — THE MIDDLE LAYER AND THE PANEL EXIST (`serve-host-from-app`).** The
 precedence is now the full three every other bridge store has — **explicit flag > persisted
@@ -1299,7 +1315,9 @@ rather than at each derivation point.
   That wording is load-bearing: picking the wrong interface is precisely `guessLanHost()`'s
   failure, and a list presented as an answer would reproduce it with more confidence.
 
-⚠ **THE `never-stage` ENTRY CANNOT BE DROPPED YET, and the reason is not the panel.** The entry
+~~⚠ **THE `never-stage` ENTRY CANNOT BE DROPPED YET, and the reason is not the panel.**~~ ✅
+**DROPPED 2026-09-04, in the same commit that deleted the hack — exactly as the paragraph below
+required.** Kept as written for the record. The entry
 exists because the HACK exists in the owner's working tree, where `git add <directory>` can sweep it
 up (that is how `dev` briefly carried the hardcoded IP on 2026-08-17). This change removes the
 REASON for the hack — the address is now configurable and persisted, so the early
@@ -1308,11 +1326,12 @@ which is uncommitted and the owner's to delete by hand. **Drop the `never-stage`
 commit that removes the hack, never before**: removing the net while the hack is still present is
 strictly worse than leaving it, and that is the whole distinction [[P-035]] records.
 
-⚠ **One sentence is still flag-only, and it is in the file this change may not touch.**
-`templateServeUnreachableWarning` (`template-http-server.ts:147`) still ends _"Set
---template-serve-host …"_, with no mention of the panel. It is correct but now incomplete advice.
-That file is the `never-stage` one, so it is left for the commit that removes the hack — the boot
-line and the panel's own message, which are not in that file, both name the panel already.
+~~⚠ **One sentence is still flag-only, and it is in the file this change may not touch.**~~ ✅
+**COMPLETED 2026-09-04.** `templateServeUnreachableWarning` (`template-http-server.ts:147`) used to
+end _"Set --template-serve-host …"_, with no mention of the panel — correct but incomplete advice,
+left for the commit that removed the hack because the file was the `never-stage` one. That commit
+landed, and the sentence now names the flag AND the Runtime's Server settings panel; the boot
+line and the panel's own message already did.
 
 Read the original item below unchanged; it is still the specification of the remaining half.
 

@@ -2227,8 +2227,16 @@ pre-push decision, the message-region lint).
   the hack reaching `dev`; C-024 removes the need for the hack to exist, and until it lands every
   day is another day of an uncommitted edit in a permanently-dirty checkout — a hazard this guard can
   only ever catch, never remove.
+- ✅ **THE LIST IS EMPTY as of 2026-09-04 (`LAN-DEV-ACCESS-01`).** The hack was deleted from the
+  working tree — it had already been reduced to a commented-out line by the owner — and its
+  `template-http-server.ts` entry was dropped from `.claude/never-stage` in the SAME commit, per
+  [[C-024]]'s "never before" rule. The guard stays wired in `.husky/pre-commit` with its escape and
+  its tests; the "shipped list" test now asserts the entry is ABSENT rather than present, and the
+  list file itself says why it is empty and when to add a path again. An empty list forbids
+  nothing, which is this item's own fourth Acceptance bullet. The item stays `[~]` only because its
+  guard has no change dir to archive; nothing about it is outstanding.
 - **Cross-refs:** `P-009` (the Stop-hook gate, the same "enforce rather than remember" shape),
-  `P-013` (the host gate lock).
+  `P-013` (the host gate lock), [[P-041]] (the session that emptied the list).
 
 ## [~] P-036 — an E2E run against a STALE build makes red-then-green vacuous while looking rigorous ⟨priority: high⟩ — implemented: the guard, wired into both apps, with its proof
 

@@ -14,9 +14,9 @@
 # advertised one machine's LAN address. It was caught in post-push verification
 # and cost a second push to correct.
 #
-# ⚠ THIS IS A NET, NOT A CURE. The cure is the bridge advertise-host refactor,
-# which removes the reason the hack exists at all. Until that lands, this file
-# stops the same accident recurring.
+# ⚠ THIS IS A NET, NOT A CURE. The cure was the bridge advertise-host refactor
+# (C-024: `--template-serve-host`, then the persisted config + the Runtime's
+# Server settings panel), which removed the reason the hack existed at all.
 #
 # THE ESCAPE, when a listed file genuinely must be committed:
 #
@@ -24,8 +24,9 @@
 #
 # It is deliberately loud — the guard prints what it let through, so an
 # intentional override is visible in the terminal rather than silent.
-
-# The owner's plant-testing advertise-host hack. See tools/caspar-bridge/src/
-# template-http-server.ts `guessLanHost()`. Remove this line when the
-# advertise-host refactor lands and the hack is gone.
-tools/caspar-bridge/src/template-http-server.ts
+#
+# THE LIST IS EMPTY as of 2026-09-04 (LAN-DEV-ACCESS-01): the hack was deleted
+# from the working tree in the same commit that dropped its entry here, per
+# C-024's standing instruction ("never before"). The guard stays wired and
+# armed; an empty list forbids nothing (P-035 acceptance). Add a path below the
+# moment this checkout carries uncommitted local work again.

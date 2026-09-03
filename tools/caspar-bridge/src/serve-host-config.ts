@@ -14,10 +14,12 @@ import type { TemplateServeOverride } from './template-http-server.js';
  *
  *     explicit command-line flag  >  persisted connection config  >  built-in derivation
  *
- * ⚠ **It lives here rather than in `template-http-server.ts` because that file is in
- * `.claude/never-stage`** while the owner's plant-testing `guessLanHost()` pin sits in it
- * uncommitted (`P-035`). `deriveServeOptions` already takes an override, so the whole three-layer
- * rule composes ABOVE that seam and the never-stage file is never edited.
+ * ⚠ **It lives here rather than in `template-http-server.ts` because, when it was written, that
+ * file was in `.claude/never-stage`** while the owner's plant-testing `guessLanHost()` pin sat in
+ * it uncommitted (`P-035`). `deriveServeOptions` already takes an override, so the whole
+ * three-layer rule composes ABOVE that seam. The pin and the never-stage entry were both removed
+ * on 2026-09-04 (`LAN-DEV-ACCESS-01`); the split stays because it is the right seam, not because
+ * the file is still off-limits.
  */
 
 /**

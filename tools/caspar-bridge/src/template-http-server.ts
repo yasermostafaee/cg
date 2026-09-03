@@ -130,7 +130,8 @@ export function hostsUnableToFetchTemplates(
  * It names the servers, the two halves of the address they cannot reach, and —
  * the part that matters at 03:00 — what the failure LOOKS like, because the
  * failure looks like nothing: live plates render, `CG ADD` succeeds, and only
- * the graphic is missing. It also names the flag that fixes it, since the
+ * the graphic is missing. It also names BOTH ways to fix it — the flag and the
+ * Runtime's Server settings panel (`C-024`, `serve-host-from-app`) — since the
  * derivation is a guess and the operator is the one who knows the answer.
  */
 export function templateServeUnreachableWarning(
@@ -143,7 +144,8 @@ export function templateServeUnreachableWarning(
     `but these CasparCG servers are REMOTE and cannot fetch it: ${unreachable.join(', ')}. ` +
     `Those servers will show live sources but NO TEMPLATE — no background, no text — ` +
     `and CG ADD will still report success. ` +
-    `Set --template-serve-host <this machine's address as those servers see it>.\n`
+    `Set --template-serve-host <this machine's address as those servers see it>, ` +
+    `or set the template serve host in the Runtime's Server settings panel (persists across restarts).\n`
   );
 }
 

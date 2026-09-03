@@ -93,12 +93,18 @@ describe("offendingPaths — the guard's actual decision", () => {
 });
 
 describe('the shipped list is wired to the real file', () => {
-  it("lists the owner's hack", () => {
-    // Reading the REAL list, so a rename or a stray edit that empties it fails
-    // here rather than silently disarming the guard.
+  it('exists, parses, and no longer names the deleted hack (C-024 closed 2026-09-04)', () => {
+    // Reading the REAL list, so a rename fails here rather than silently disarming
+    // the guard. Until 2026-09-04 this asserted the list CONTAINED
+    // `template-http-server.ts`; that entry was dropped in the same commit that
+    // deleted the owner's `guessLanHost()` pin (C-024's "never before" rule), so
+    // the list is legitimately EMPTY now — an empty list forbids nothing, by
+    // P-035's own acceptance. What must not happen is the entry drifting back
+    // without the hack: a listed file with nothing to protect is a file nobody
+    // may edit, for no reason.
     const url = new URL('../../../.claude/never-stage', import.meta.url);
-    expect(readPatterns(readFileSync(url, 'utf8'))).toContain(
-      'tools/caspar-bridge/src/template-http-server.ts',
-    );
+    const patterns = readPatterns(readFileSync(url, 'utf8'));
+    expect(Array.isArray(patterns)).toBe(true);
+    expect(patterns).not.toContain('tools/caspar-bridge/src/template-http-server.ts');
   });
 });
