@@ -1,4 +1,7 @@
 import {
+  DEVICE_ADDRESSING_RULE,
+  DEVICE_NUMBER_RECIPE,
+  describeDeviceAddressing,
   isAirOutputKind,
   outputVerdictOf,
   type ChannelOutputCheck,
@@ -119,6 +122,34 @@ function creationWords(creation: ConsumerCreation): string {
   }
 }
 
+/**
+ * `C-030` — one line per missing declared device: which addressing form the declaration
+ * uses, in plain words, followed by the rule that tells the operator how CasparCG reads it.
+ * "Declared as hardware persistent ID 23487013 (a slot index would be a small number such as
+ * 1)." — the counter-example is what lets someone who has never opened the config recognise
+ * which kind of number they are holding.
+ */
+function addressingWords(checks: readonly ChannelOutputCheck[]): string[] {
+  const lines: string[] = [];
+  for (const check of checks) {
+    for (const m of check.missing) {
+      for (const device of m.devices) {
+        const addressing = describeDeviceAddressing(device);
+        const counter =
+          addressing.form === 'persistent-id'
+            ? ' (a slot index would be a small number such as 1)'
+            : addressing.form === 'slot-index'
+              ? ' (a hardware persistent ID would be a long number such as 23487013)'
+              : '';
+        lines.push(
+          `Channel ${String(check.channel)}: the ${m.kind} is declared as ${addressing.words}${counter}. ${DEVICE_ADDRESSING_RULE}`,
+        );
+      }
+    }
+  }
+  return lines;
+}
+
 /** True when any missing kind is a PROGRAM output (leaves the machine), not a local monitor. */
 function losesAir(checks: readonly ChannelOutputCheck[]): boolean {
   return checks.some((c) => c.missing.some((m) => isAirOutputKind(m.kind)));
@@ -184,13 +215,22 @@ export function OutputMissingStrip({ server }: { server: ServerHealth }): JSX.El
             {check.creation !== undefined ? ` ${creationWords(check.creation)}` : ''}
           </span>
         ))}
+        {/* C-030 — WHICH addressing form the declaration uses, and how CasparCG reads it. The
+          form is a reading for the operator; the rule sentence travels with it so the reading
+          is never mistaken for something the server enforces. */}
+        {addressingWords(verdict.channels).map((line) => (
+          <span key={line} style={styles.detail}>
+            {line}
+          </span>
+        ))}
         <span style={styles.detail}>
           A consumer that fails at start never appears — usually a device CasparCG could not open:
-          the card was replaced and its persistent ID changed, the index moved, or the driver is
-          missing. Read the CasparCG log on the playout machine for the exact reason, correct the
+          the card was replaced and its persistent ID changed, the slot index moved, or the driver
+          is missing. Read the CasparCG log on the playout machine for the exact reason, correct the
           consumer in casparcg.config there, restart CasparCG, and this clears on its own. The
           server is UP and answering — do not power-cycle it over this.
         </span>
+        <span style={styles.detail}>{DEVICE_NUMBER_RECIPE}</span>
       </span>
     </div>
   );
