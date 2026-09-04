@@ -561,8 +561,9 @@ export function LayersPanel({
    *
    * This used to be `items.filter(isOnAir)` joined against `liveRows` — an emergency control
    * scoped from believed status, which is `B-122`'s shape one verb along. It cost two real
-   * cases: a row in the `exitRehearse` window (plates seated and potentially AUDIBLE, status
-   * not on air) was never reached, and a browser whose `useLiveLayers` snapshot had not yet
+   * cases: a row in the boot-adoption window (`B-145` — plates seated and potentially AUDIBLE,
+   * status not on air; once misnamed the `exitRehearse` window, `B-216`) was never reached, and
+   * a browser whose `useLiveLayers` snapshot had not yet
    * arrived would have addressed nothing and reported success for it.
    *
    * The BRIDGE scopes it from its own ledger now. ⚠ Do not reintroduce a status filter here,

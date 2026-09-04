@@ -2858,7 +2858,7 @@ it('B-161 neighbour 1 — an ON-AIR row still re-points immediately, and KEEPS T
   );
 });
 
-it('B-161 neighbour 2 — a REHEARSING row still seats: the gate must not be "on air" alone', async () => {
+it('B-161 neighbour 2 — a REHEARSING row with nothing seated: UPDATE reaches NO live layer (B-216 reversed this test)', async () => {
   const r = await boot({ template: ownersTemplateWithField(), assignments: OWNERS_ASSIGNMENTS });
   await r.load('item-1', 'debate', { title: 'before' });
   expect((await r.enterRehearse('item-1')).ok, 'a loaded row can enter rehearse').toBe(true);
@@ -2867,8 +2867,25 @@ it('B-161 neighbour 2 — a REHEARSING row still seats: the gate must not be "on
   expect((await r.update('item-1', {}, 'merge', NEW_BINDING)).accepted).toBe(true);
   const lines = await since(before);
 
-  // 🔴 Rehearsing is NOT on air, but it is not stopped either: it OWNS its layers, on PVW. A gate
-  // that asked `isOnAirStatus` ALONE would silently break rehearse, which is exactly why this
-  // test sits beside the off-air one rather than in a file of its own.
-  expect(playsIn(lines).length, 'a rehearsing row still seats its plates').toBeGreaterThan(0);
+  /*
+    🔴 `B-216` — THIS TEST USED TO ASSERT THE OPPOSITE, AND IT WAS ASSERTING THE DEFECT. It
+    read "a rehearsing row still seats: the gate must not be on air alone", on the argument
+    that a rehearsing row owns its plates on PVW. PVW is a browser-side render of the retained
+    page (`R-022`: nothing is ever sent to CasparCG) and `enterRehearse` seats nothing — so
+    this UPDATE put four `PLAY`s, four `VOLUME 0` and eight `FILL`/`CLIP` on the wire for a
+    row nobody had taken: `B-161`'s own signature, reached through the flag `B-161` added.
+    Ownership is the LEDGER (or air), never the rehearse flag; the full matrix, including the
+    boot-adoption route that DOES put seats on a row that is not on air, is
+    `ownership-is-the-ledger.integration.test.ts`.
+  */
+  expect({
+    plays: playsIn(lines),
+    volumes: volumesIn(lines),
+    fits: fitsIn(lines),
+    seats: layerSet(r),
+  }).toEqual({ plays: [], volumes: [], fits: [], seats: [] });
+  // …and the edit is NOT lost: it is in force for the next take, exactly like the off-air case.
+  expect(r.stackSnapshot().find((i) => i.itemId === 'item-1')?.lookSourceOverride).toEqual(
+    NEW_BINDING,
+  );
 });

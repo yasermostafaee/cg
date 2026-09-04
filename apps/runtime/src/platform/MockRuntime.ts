@@ -697,7 +697,8 @@ export class MockRuntime {
    *
    * 🔴 **SCOPED FROM `liveLayersState()`, not from the stack, and that IS the parity that
    * matters here.** The bridge answers this from its ledger precisely so that a row whose
-   * STATUS does not say "on air" — the `exitRehearse` window — is still silenced. A mock that
+   * STATUS does not say "on air" — the boot-adoption window, `B-145` (once misnamed the
+   * `exitRehearse` window; rehearse seats nothing, `B-216`) — is still silenced. A mock that
    * scoped it from `isOnAir` would teach the UI a model the bridge does not have, which is the
    * `B-070` / `B-072` class this parity guard exists for.
    *

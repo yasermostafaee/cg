@@ -241,7 +241,8 @@ export interface RuntimeBridge {
      *
      * NO ARGUMENTS, deliberately: the scope is not the caller's to choose. It was, in the
      * first cut — the browser resolved it from `isOnAir(item)` — and that left a row in the
-     * `exitRehearse` window (plates seated, potentially audible, status not on air) outside
+     * boot-adoption window (`B-145`: plates seated, potentially audible, status not on air —
+     * once misnamed the `exitRehearse` window; rehearse seats nothing, `B-216`) outside
      * the panic button's reach, and would have addressed nothing at all in the window before
      * `useLiveLayers` had answered. `B-122`'s rule is that an emergency control must not
      * depend on the bookkeeping whose failure is the emergency; the bridge's ledger is the

@@ -307,12 +307,17 @@ describe('SOLO — one raise, N−1 mutes, in ONE call', () => {
 
 // ── GOLDEN RULE 10 ────────────────────────────────────────────────────────────
 
-describe('🔴 GOLDEN RULE 10 — on a row that owns no live seats, every verb sends NOTHING', () => {
+describe('🔴 GOLDEN RULE 10 — a RAISE reaches only a seat the bridge OWNS, and ownership is the LEDGER', () => {
   /**
-   * A `loaded` row that OWNS SEATED RECORDS — the state the gate exists for.
+   * A `loaded` row that OWNS SEATED RECORDS — `B-145`'s boot-adoption shape: the persisted
+   * ledger came back at boot, the row's status did not. Those producers are on their layers,
+   * composited on the channel, whatever the status says.
    *
-   * The record check alone is not the gate, and this is the fixture that proves it: there
-   * really are records here, so a gate written as "is anything seated?" would send.
+   * 🔴 `B-216` — this fixture used to be "the state the gate exists for", on the reading that
+   * records and ownership were two different facts and a rehearse flag was the second. They
+   * are one fact: the LEDGER is what the bridge owns (the owner's call, `UPDATE-INFORCE-02`
+   * §2 — PANIC already scoped itself by it). So a RAISE here now reaches the wire, and the row
+   * that owns nothing is `loadedWithoutSeats` below.
    */
   async function loadedWithSeats(): Promise<CasparRuntime> {
     const r = await boot();
@@ -326,18 +331,21 @@ describe('🔴 GOLDEN RULE 10 — on a row that owns no live seats, every verb s
     return r;
   }
 
+  /** A `loaded` row with NOTHING seated — the row that owns no live layer at all. */
+  async function loadedWithoutSeats(): Promise<CasparRuntime> {
+    const r = await boot();
+    await r.load('item-1', 'four-box', {});
+    return r;
+  }
+
   /*
-    ⚠ **THE RULE IS DIRECTIONAL, and this block used to state it wrongly (`PATCH-BX-01` B).**
+    ⚠ **THE RULE IS DIRECTIONAL (`PATCH-BX-01` B), AND OWNERSHIP IS THE LEDGER (`B-216`).**
 
-    It asserted that ALL FIVE maps send zero commands on a row that owns no live seats. That
-    over-stated rule 10 and was a defect in its own right: rule 10's words are *"no `PLAY`, no
-    un-mute and no fill"*, and a `MIXER … VOLUME 0` is none of the three. Gating the silence
-    meant OFF, a fader dragged to zero and the panic button were all refused the wire on
-    precisely the rows where a guest could still be AUDIBLE — each recording an intent, sending
-    nothing, and answering `ok`.
-
-    So the maps are split by DIRECTION rather than by verb name. What is unchanged, and is the
-    half `B-161` is about, is that a RAISE still sends nothing.
+    Rule 10's words are *"no `PLAY`, no un-mute and no fill"* on a row that does not own live
+    layers. A `MIXER … VOLUME 0` is none of the three, so a SILENCE is never gated. A RAISE is
+    gated on OWNERSHIP — and ownership is answered by the one predicate every door shares:
+    on air, or the ledger holds seats. Not the rehearse flag: rehearse is a browser-side
+    preview plus a mute interlock, and it seats nothing (`R-022`).
   */
   const RAISING: [string, Record<string, number>][] = [
     ['FADER', FADER],
@@ -349,20 +357,38 @@ describe('🔴 GOLDEN RULE 10 — on a row that owns no live seats, every verb s
   ];
 
   for (const [name, map] of RAISING) {
-    it(`${name} (a RAISE) sends ZERO commands and still records the intent`, async () => {
-      const r = await loadedWithSeats();
+    it(`${name} (a RAISE) on a row with NO seats sends ZERO commands and still records the intent`, async () => {
+      const r = await loadedWithoutSeats();
       const before = (await recvLines()).length;
 
       const verdict = await r.setLivePlateVolumes('item-1', map);
 
       expect(verdict.ok, 'the verb SUCCEEDS — it is configuration, and it landed').toBe(true);
-      // 🔴 THE WHOLE ASSERTION: nothing reached the plant. Not a `PLAY`, not a `MIXER`, not
-      // a fill, not an un-hold. `B-161` measured four `PLAY`s and eight `MIXER`s arriving on
-      // a `loaded` row from a verb that only meant to change configuration.
+      // 🔴 Nothing reached the plant: there is no layer to reach, and the take is what will
+      // seat this plate — at the armed volume.
       expect(await recvLines()).toHaveLength(before);
       // …and the intent is recorded, so the next take carries it. Removing this would take
       // away arming-before-the-take, which is the affordance the mute rule exists to
       // preserve.
+      expect(r.livePlateVolumes('item-1')).toEqual(map);
+    });
+
+    it(`${name} (a RAISE) on a row whose seats the bridge OWNS reaches the wire, whatever the status says`, async () => {
+      /*
+        🔴 `B-216` — RED before this session: `#ownsLiveSeats` read `on air OR rehearsing`,
+        so the raise was withheld from a producer that was genuinely on the channel, and the
+        operator pressing ON for a guest they could see recorded an intent and heard nothing.
+      */
+      const r = await loadedWithSeats();
+      const before = (await recvLines()).length;
+
+      const verdict = await r.setLivePlateVolumes('item-1', map);
+
+      expect(verdict.ok).toBe(true);
+      const lines = await volumeLines(before);
+      expect(lines, 'the raise reaches the seat the ledger names').toEqual(
+        Object.values(map).map((v) => `MIXER 1-30 VOLUME ${String(v)}`),
+      );
       expect(r.livePlateVolumes('item-1')).toEqual(map);
     });
   }
@@ -382,13 +408,7 @@ describe('🔴 GOLDEN RULE 10 — on a row that owns no live seats, every verb s
     });
   }
 
-  it('🔴 SOLO on such a row sends its ZEROS and withholds its ONE — the split, in one call', async () => {
-    /*
-      The sharpest statement of the directional rule, because SOLO carries both directions in a
-      single map. The three siblings are silenced (a mute reaches a seated layer whatever the
-      row's state); the raised plate is NOT (that is the half that could put a voice on air).
-      Both intents are recorded either way.
-    */
+  it('SOLO on a row whose seats the bridge OWNS sends its ZEROS and its ONE — both directions reach owned seats', async () => {
     const r = await loadedWithSeats();
     const before = (await recvLines()).length;
 
@@ -396,37 +416,48 @@ describe('🔴 GOLDEN RULE 10 — on a row that owns no live seats, every verb s
 
     const lines = await volumeLines(before);
     expect(lines.filter((l) => l.endsWith(' VOLUME 0'))).toHaveLength(3);
-    expect(
-      lines.filter((l) => l.endsWith(' VOLUME 1')),
-      'the RAISE is withheld',
-    ).toEqual([]);
+    expect(lines.filter((l) => l.endsWith(' VOLUME 1'))).toEqual(['MIXER 1-30 VOLUME 1']);
     expect(r.livePlateVolumes('item-1')).toEqual(SOLO);
   });
 
-  it('🔴 the LEDGER’s as-sent volume is untouched too — a claim about a command never sent', async () => {
-    // Skipping only the send would leave `intendedVolume` claiming a volume the layer never
-    // received. That field is exactly what a later re-seat re-asserts, so it is the field
-    // through which `B-161` would have reached air.
+  it('the LEDGER’s as-sent volume follows the send, and only the send', async () => {
+    // `intendedVolume` is the layer's as-sent copy: written when a command LANDED, never for
+    // one that was withheld. That field is what a later re-seat re-asserts, so a claim about
+    // a command never sent would be re-asserted onto every future swap.
     const r = await loadedWithSeats();
-
-    await r.setLivePlateVolumes('item-1', ON);
-
-    expect(
+    const seated = () =>
       r
         .liveLayers()
         .get('item-1')
-        ?.find((x) => x.sourceId === 'guest-1')?.intendedVolume,
-    ).toBe(0);
+        ?.find((x) => x.sourceId === 'guest-1')?.intendedVolume;
+    expect(seated()).toBe(0);
+
+    await r.setLivePlateVolumes('item-1', ON);
+
+    expect(seated(), 'sent, so recorded').toBe(1);
   });
 
-  it('🔴 the gate is `#ownsLiveSeats`, NOT the air status — a REHEARSING row still reaches its plates', async () => {
+  it('🔴 a REHEARSING row with NOTHING seated reaches nothing — PVW owns no layer (B-216)', async () => {
     /*
-      The trap `B-161` names, on the audio axis. A rehearsing row is deliberately NOT on air
-      (`enterRehearse` refuses an on-air row) and yet OWNS its plates on PVW — and rehearse is
-      precisely when an operator checks a guest's level before air. A gate built on
-      `isOnAirStatus` alone would have taken that away without failing any test that existed
-      before.
+      `B-161`'s second clause put the rehearse flag inside `#ownsLiveSeats`, on the argument
+      that a rehearsing row "owns its plates on PVW". PVW is a browser-side render; nothing is
+      ever sent to CasparCG for it (`R-022`), and `enterRehearse` seats nothing. So a raise on
+      a rehearsing, never-taken row has no layer to reach and must record the intent for the
+      take, exactly like any other row with no seats.
     */
+    const r = await loadedWithoutSeats();
+    expect((await r.enterRehearse('item-1')).ok).toBe(true);
+    const before = (await recvLines()).length;
+
+    await r.setLivePlateVolumes('item-1', ON);
+
+    expect(await recvLines()).toHaveLength(before);
+    expect(r.livePlateVolumes('item-1')).toEqual(ON);
+  });
+
+  it('a REHEARSING row WITH adopted seats still reaches its plates — for the seats’ sake, not the rehearsal’s', async () => {
+    // Rehearse is precisely when an operator checks a guest's level before air; what makes
+    // the raise reach the wire is that the producer is on the channel, which the ledger says.
     const r = await loadedWithSeats();
     expect((await r.enterRehearse('item-1')).ok).toBe(true);
     const before = (await recvLines()).length;
@@ -436,10 +467,11 @@ describe('🔴 GOLDEN RULE 10 — on a row that owns no live seats, every verb s
     expect(await volumeLines(before)).toContain('MIXER 1-30 VOLUME 1');
   });
 
-  it('…and LEAVING rehearse closes the RAISE again, with the plates still seated', async () => {
-    // `exitRehearse` does NOT tear plates down — it drops the row from `#rehearsing` and
-    // restores the TEMPLATE layer's volume. The row then owns no seats, so its RAISE half is
-    // gated once more; its SILENCE half never was.
+  it('…and LEAVING rehearse changes NOTHING about the raise: the seats are still the bridge’s', async () => {
+    // `exitRehearse` drops the row from `#rehearsing` and restores the TEMPLATE layer's
+    // volume; it neither seats nor releases plates. Under the ledger axis the row owns its
+    // seats before, during and after the rehearsal alike — RED before `B-216`, when the
+    // raise was gated once more the moment the flag went.
     const r = await loadedWithSeats();
     await r.enterRehearse('item-1');
     await r.exitRehearse('item-1');
@@ -448,23 +480,31 @@ describe('🔴 GOLDEN RULE 10 — on a row that owns no live seats, every verb s
 
     await r.setLivePlateVolumes('item-1', ON);
 
-    expect(await volumeLines(before)).toEqual([]);
+    expect(await volumeLines(before)).toEqual(['MIXER 1-30 VOLUME 1']);
     expect(r.livePlateVolumes('item-1')).toEqual(ON);
   });
 
   it('the single-plate verb is gated by the SAME code — one gate, two doors', async () => {
     // The gate lives inside `setLivePlateVolume`, the one writer both channels share, so a
     // caller cannot get round it by choosing the other door — in EITHER direction.
+    const noSeats = await loadedWithoutSeats();
+    const before = (await recvLines()).length;
+    expect(await noSeats.setLivePlateVolume('item-1', 'guest-1', 1)).toEqual({
+      ok: true,
+      sent: false,
+    });
+    expect(await recvLines()).toHaveLength(before);
+    expect(noSeats.livePlateVolumes('item-1')).toEqual({ 'guest-1': 1 });
+  });
+
+  it('…and the same one writer lets BOTH directions through on a row that owns its seats', async () => {
     const r = await loadedWithSeats();
     const before = (await recvLines()).length;
 
-    expect(await r.setLivePlateVolume('item-1', 'guest-1', 1)).toEqual({ ok: true, sent: false });
-    expect(await recvLines()).toHaveLength(before);
-
-    // …and the same one writer lets the SILENCE through, on the same row, in the same call
-    // shape. Two doors, one gate, one direction rule.
+    expect(await r.setLivePlateVolume('item-1', 'guest-1', 1)).toEqual({ ok: true, sent: true });
     expect(await r.setLivePlateVolume('item-1', 'guest-1', 0)).toEqual({ ok: true, sent: true });
-    expect(await volumeLines(before)).toEqual(['MIXER 1-30 VOLUME 0']);
+
+    expect(await volumeLines(before)).toEqual(['MIXER 1-30 VOLUME 1', 'MIXER 1-30 VOLUME 0']);
     expect(r.livePlateVolumes('item-1')).toEqual({ 'guest-1': 0 });
   });
 });

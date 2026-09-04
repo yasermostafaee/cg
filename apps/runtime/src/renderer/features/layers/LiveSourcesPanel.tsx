@@ -66,8 +66,9 @@ interface Props {
    *
    * It used to take one: the caller resolved the ON-AIR rows' seated plates from the stack and
    * handed them down. That was `B-122`'s shape one verb along — an emergency control gated on
-   * believed status — and it cost two real cases: a row in the `exitRehearse` window (plates
-   * seated and potentially AUDIBLE, status not on air) was never reached, and a browser whose
+   * believed status — and it cost two real cases: a row in the boot-adoption window (`B-145`:
+   * plates seated and potentially AUDIBLE, status not on air; once misnamed the `exitRehearse`
+   * window, `B-216`) was never reached, and a browser whose
    * live-layer snapshot had not yet arrived would have addressed nothing while reporting
    * success for it.
    *

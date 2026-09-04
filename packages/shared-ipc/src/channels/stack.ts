@@ -335,8 +335,9 @@ export const StackSetPlateVolumeChannel = defineChannel(
  * **the scope is not the caller's to choose.**
  *
  * ⭐ **`B-122`, one verb along.** PANIC's first cut resolved its scope in the BROWSER, from the
- * console's on-air predicate — so a row in the `exitRehearse` window (plates seated and
- * potentially audible, status not on air) was never reached by the panic button, and a browser
+ * console's on-air predicate — so a row in the boot-adoption window (`B-145`: plates seated and
+ * potentially audible, status not on air; the record first misnamed it the `exitRehearse`
+ * window — rehearse seats nothing, `B-216`) was never reached by the panic button, and a browser
  * whose ledger snapshot had not yet ARRIVED would have addressed nothing and reported success
  * for it. That is precisely the shape `B-122` describes: an emergency control gated on the
  * bookkeeping whose failure is the emergency.

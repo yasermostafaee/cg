@@ -1015,8 +1015,9 @@ describe('add-multibox-audio — audio is visible without opening anything', () 
  *
  * The panel used to resolve the scope from the ON-AIR rows and hand it down. That was `B-122`'s
  * shape one verb along — an emergency control gated on believed status — and it cost two real
- * cases: a row in the `exitRehearse` window (plates seated and potentially AUDIBLE, status not
- * on air) was never reached, and a browser whose ledger snapshot had not yet arrived would have
+ * cases: a row in the boot-adoption window (`B-145`: plates seated and potentially AUDIBLE,
+ * status not on air; once misnamed the `exitRehearse` window — rehearse seats nothing, `B-216`)
+ * was never reached, and a browser whose ledger snapshot had not yet arrived would have
  * addressed nothing while reporting success.
  *
  * These tests therefore assert about the DOOR and the WORDING. That the scope is right is a
@@ -1080,8 +1081,9 @@ describe('PATCH-BX-01 — PANIC asks the bridge, and reads its answer out loud',
 
   it('🔴 it is offered even when NO row reads as on air — that is the whole fix', async () => {
     /*
-      The `exitRehearse` window: plates seated, the item present, and nothing about it saying
-      "on air". Under the old scope this press addressed nothing. The panel must not gate it.
+      The boot-adoption window (`B-145`; once misnamed the `exitRehearse` window, `B-216`):
+      plates seated, the item present, and nothing about it saying "on air". Under the old
+      scope this press addressed nothing. The panel must not gate it.
     */
     const offAir = ownerLabelFor(
       [{ ...item('item-a'), status: 'loaded' } as StackItemState],

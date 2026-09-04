@@ -30,7 +30,9 @@ import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
  * ⚠ The residual was first written up as the `exitRehearse` window. That is the wrong cause and
  * is corrected at {@link seatsOnAnOffAirRow}: leaving rehearse cannot produce this state,
  * because a rehearsing row's plates are never seated in the first place. Boot adoption is what
- * produces it; rehearse is only a way of passing through it.
+ * produces it; rehearse is only a way of passing through it. (`B-216` made that true by
+ * construction — from `B-161` until then, an `update` with bindings DID seat a rehearsing row,
+ * because `#ownsLiveSeats` carried the rehearse flag. Ownership is now the ledger at every door.)
  *
  * That is `B-122`'s shape one verb along — *"it gated the emergency control on exactly the
  * values that may be wrong in the emergency"* — and the fix is `clearAll`'s: ask the LEDGER,
@@ -167,11 +169,13 @@ async function onAir(r: CasparRuntime, itemId = 'item-1'): Promise<void> {
  * ── WHERE THIS STATE COMES FROM IN PRODUCTION, corrected ───────────────────
  *
  * ⚠ **NOT from `exitRehearse`, and it is worth saying so because that is the plausible answer
- * and it is wrong.** It was measured: a rehearsing row's plates are never seated in the first
- * place. `enterRehearse` seats nothing; `setActiveLook` returns early for a row that is neither
- * on air nor already seated (*"an OFF-AIR row with no seats has nothing to reconcile"*); and a
- * `swapLiveSource`/`update` on such a row was probed directly and left the ledger empty. So
- * leaving rehearse cannot, by itself, produce a seated off-air row.
+ * and it is wrong.** A rehearsing row's plates are never seated in the first place.
+ * `enterRehearse` seats nothing; `setActiveLook` returns early for a row that owns no live
+ * layer; and `swapLiveSource`/`update` on such a row reach no layer either. So leaving rehearse
+ * cannot, by itself, produce a seated off-air row. (⚠ `B-216`: the `update` half of that was
+ * FALSE from `B-161` until 2026-09-04 — `#ownsLiveSeats` carried the rehearse flag and an
+ * UPDATE with bindings seated a rehearsing row's plates. Ownership is now the ledger at every
+ * door, and `ownership-is-the-ledger.integration.test.ts` pins all three verbs on the wire.)
  *
  * The real origin is **BOOT ADOPTION (`B-145`)**: `adoptLiveLayers` restores the persisted
  * ledger at startup while the browser re-delivers its stack intent SEPARATELY, so the bridge
@@ -235,11 +239,15 @@ describe('🔴 seats held by an OFF-AIR row — the case PANIC could not reach',
     expect(volumeOf(r, 'item-2', 'guest-1')).toBe(0);
   });
 
-  it('🔴 a RAISE on the same row is still refused the wire — rule 10 is intact', async () => {
+  it('a RAISE on the same row REACHES the wire — the seats are the bridge’s (B-216), and rule 10 is intact', async () => {
     /*
-      The half that must NOT change. A raise CAN put a voice on air from a row that owns no
-      seats, so it stays gated: intent recorded, nothing sent. If this ever goes green with a
-      `MIXER … VOLUME 1` on the wire, `B-161` is back on the audio axis.
+      🔴 `B-216` — THIS TEST USED TO ASSERT THE OPPOSITE ("a raise on the same row is still
+      refused the wire"), on the reading that a row could hold seats it did not own. Under the
+      ledger axis the ledger IS ownership: these producers are on their layers, composited on
+      the channel, and an operator pressing ON for a guest they can see must be obeyed. Rule
+      10 is intact because its subject is a row that owns NO live layer — the seatless row in
+      `ownership-is-the-ledger.integration.test.ts` and `live-plate-audio-verbs`' GOLDEN RULE
+      10 block — where a raise still records the intent and sends nothing.
     */
     const r = await boot();
     await seatsOnAnOffAirRow(r);
@@ -248,9 +256,12 @@ describe('🔴 seats held by an OFF-AIR row — the case PANIC could not reach',
 
     const verdict = await r.setLivePlateVolume('item-2', 'guest-2', 1);
 
-    expect(verdict).toEqual({ ok: true, sent: false });
-    expect(await since(before), 'nothing at all reached the plant').toEqual([]);
-    // …and the INTENT still stands, so the next take carries it.
+    expect(verdict).toEqual({ ok: true, sent: true });
+    expect(
+      (await since(before)).filter((l) => /VOLUME 1$/.test(l)),
+      'the raise reached the seat the ledger names',
+    ).toHaveLength(1);
+    expect(volumeOf(r, 'item-2', 'guest-2'), 'the guest is genuinely audible now').toBe(1);
     expect(r.livePlateVolumes('item-2')?.['guest-2']).toBe(1);
   });
 });

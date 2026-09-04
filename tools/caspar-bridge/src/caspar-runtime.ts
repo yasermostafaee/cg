@@ -4979,29 +4979,49 @@ export class CasparRuntime {
    * `beforeApply` seam — do not invent a second spelling of the hold.
    */
   /**
-   * 🔴 **`B-161` — DOES THIS ROW OWN LIVE LAYERS RIGHT NOW?** The question a
-   * configuration verb must ask before it is allowed to touch one.
+   * 🔴 **`B-161` / `B-216` — DOES THIS ROW OWN LIVE LAYERS RIGHT NOW?** The question a
+   * configuration verb must ask before it is allowed to touch one — and the ONE predicate every
+   * door asks it through: `update`'s binding transaction, `swapLiveSource`, `setActiveLook`, and
+   * a volume RAISE. Golden rule 6: a second spelling of this question at any door is how two
+   * doors came to answer one row two ways (`B-216`).
    *
-   * TWO ways to own them, and they are not the same state:
+   * TWO ways to own them, and they are the two axes the owner named (`UPDATE-INFORCE-02` §2):
    *
    * - **on air** — {@link isOnAirStatus}, the ONE canonical status predicate, REUSED here
-   *   rather than re-derived. Golden rule 6: a second local spelling of this status list is
-   *   how one of them comes to disagree, and that predicate's own header already says so.
-   * - **rehearsing** — the row holds its plates on PVW. Deliberately NOT covered by the
-   *   predicate above: `enterRehearse` REFUSES an on-air row, so the two states are disjoint
-   *   by construction and "on air" can never imply "rehearsing". A gate built on
-   *   `isOnAirStatus` alone would take rehearse's re-point away without failing any test that
-   *   existed before `B-161`.
+   *   rather than re-derived. Status is the truth about what the operator SEES. An on-air row
+   *   with an EMPTY ledger (taken on the empty look, or every plate a `media` clip that §12.4's
+   *   named fallback tore down) is still unambiguously on air, which is why the ledger alone
+   *   was never enough — `setActiveLook`'s old note, kept here where the predicate lives.
+   * - **the LEDGER holds seats for it** — `#liveLayers`, the truth about what the bridge OWNS: a
+   *   structural fact it wrote when it sent the `PLAY`, and the one thing `B-145`'s boot
+   *   adoption restores while the row's status is not. Those producers are on their layers,
+   *   composited on the channel, whatever any status claims — so a configuration change on
+   *   that row re-points something genuinely on air, and PANIC already scopes itself by this
+   *   same fact.
    *
-   * Everything else — `idle`, `loaded`, a row that has been taken out — owns nothing, so a
-   * binding change for it is pure state and the next take is what puts it on air.
+   * 🔴 **REHEARSE IS NOT IN IT, AND THIS REVERSES `B-161`'s SECOND CLAUSE.** `B-161` wrote
+   * `on air OR rehearsing`, on the argument that a rehearsing row "owns its plates on PVW". It
+   * does not. PVW is a BROWSER-side render of the retained page (`R-022`: *"nothing is ever sent
+   * to CasparCG"*); `enterRehearse` sends at most one `MIXER VOLUME 0` to the TEMPLATE layer and
+   * seats nothing. So a rehearsing, never-taken row owns no live layer — and with rehearse in the
+   * predicate an UPDATE on it reconciled and SEATED its plates: four `PLAY`s, four `VOLUME 0`,
+   * eight `FILL`/`CLIP`, measured at the wire (`ownership-is-the-ledger.integration.test.ts`) —
+   * `B-161`'s own defect, reached through the flag `B-161` added. A rehearsing row that DOES hold
+   * seats (adopted at boot, then put on PVW) is reached by the ledger half, for the seats' sake.
+   *
+   * ⚠ Both halves, read once, here. Not the status alone (the adopted-seats row would be
+   * refused a re-point its pictures visibly need); not the ledger alone (see the first bullet).
+   *
+   * Everything else — `idle`, `loaded`, a row that has been taken out, a row on PVW with nothing
+   * seated — owns nothing, so a binding change for it is pure state and the next take is what
+   * puts it on air.
    */
   #ownsLiveSeats(itemId: string): boolean {
     const item = this.#reconciler.get(itemId);
     if (item !== null && item !== undefined && isOnAirStatus(item.status, item.pending)) {
       return true;
     }
-    return this.#rehearsing.has(itemId);
+    return (this.#liveLayers.get(itemId) ?? []).length > 0;
   }
 
   async #applyBindingTransaction(
@@ -5042,12 +5062,14 @@ export class CasparRuntime {
       gate, and `live-look-reconcile.integration.test.ts`'s `neighbour 1` asserts the whole set
       rather than the one box a reader would think to look at.
 
-      ⚠ **AND IT IS NOT `isOnAirStatus` ALONE**, which is the trap this shape invites. A
-      REHEARSING row is deliberately NOT on air — `enterRehearse` refuses when
-      `isOnAirStatus` is true — yet it OWNS its layers, on PVW, and must keep re-pointing.
-      Asking only the air question would have silently broken rehearse; `neighbour 2` is the
-      test that says so. Hence {@link #ownsLiveSeats}, which asks the question this decision
-      actually turns on.
+      ⚠ **AND IT IS NOT `isOnAirStatus` ALONE — the other half is the LEDGER, not the rehearse
+      flag (`B-216`).** `B-161` first wrote `on air OR rehearsing` here, and `neighbour 2`
+      pinned it: an UPDATE on a rehearsing, never-taken row went on SEATING its plates — four
+      `PLAY`s on a row nobody had taken, this file's own defect reached through the flag added
+      to fix it. A rehearsing row owns nothing on the channel (PVW is a browser render); a row
+      whose seats survived a restart owns them whatever its status says. Hence
+      {@link #ownsLiveSeats}, which asks the question this decision actually turns on, and
+      which `setActiveLook` and `swapLiveSource` now ask too — one predicate, three doors.
     */
     if (!this.#ownsLiveSeats(itemId)) {
       this.#applySourceOverride(itemId, next.overrides ?? {}, next.bindings);
@@ -5474,28 +5496,31 @@ export class CasparRuntime {
     */
     return this.#withLiveSeatLock(itemId, async () => {
       /*
-      🔴 "IS THIS ROW ON AIR" IS ASKED OF THE STATUS, NOT OF THE LEDGER.
+      🔴 "DOES THIS ROW OWN LIVE LAYERS" IS ASKED OF THE ONE PREDICATE — `B-216`.
 
-      This tested `the ledger is empty` and called it "nothing is seated, so recording the
-      look IS the whole action". An empty ledger is NOT the same fact: `registerLiveLayers`
-      DELETES an item's entry when its record list is empty, and two ordinary on-air paths
-      reach that state — a row taken on the EMPTY look (valid, background alone), and a row
-      whose plates were all `media` clips that §12.4's named fallback tore down on the way
-      out of a look. Both are unambiguously on air.
+      This door used to carry its own spelling — `on air, or the ledger is non-empty` — while
+      `update`'s binding transaction and `swapLiveSource` asked `on air, or rehearsing`. The
+      spellings agreed everywhere but one cell: a row whose seats survived a bridge restart
+      while its status did not (`B-145` boot adoption). There this door moved the plates and
+      the other two refused, and the record could not say which was right. Now all three ask
+      {@link #ownsLiveSeats}, whose header says why BOTH halves (status and ledger) are needed
+      and why rehearse is neither.
 
-      Under the old spelling such a row was told `ok` while NOTHING was sent: every hole in
-      a populated look stayed empty, the reachability refusal below was skipped too, and only
-      a re-take — a cut — repaired it. That is 6.7's "designed layout with a hole in it"
-      reached with no refusal and no message.
+      What survives from this door's old note, and is now argued at the predicate: an EMPTY
+      ledger is NOT "off air". `registerLiveLayers` DELETES an item's entry when its record
+      list is empty, and two ordinary on-air paths reach that state — a row taken on the EMPTY
+      look (valid, background alone), and a row whose plates were all `media` clips that
+      §12.4's named fallback tore down on the way out of a look. Both are unambiguously on air
+      by STATUS, which is what keeps them reconciling; under a ledger-only spelling such a row
+      was told `ok` while NOTHING was sent — every hole in a populated look stayed empty, the
+      reachability refusal below was skipped too, and only a re-take repaired it: 6.7's
+      "designed layout with a hole in it" reached with no refusal and no message.
 
       Golden rule 6, in the file that lectures about it 300 lines up: reuse the ONE canonical
-      predicate rather than deriving a second local spelling of "on air". The ledger check
-      stays, but only for what it genuinely answers — an OFF-AIR row with no seats has nothing
-      to reconcile, so recording the look really is the whole action there.
+      predicate rather than deriving a second local spelling. An off-air row with no seats has
+      nothing to reconcile, so recording the look really is the whole action there.
     */
-      const item = this.#reconciler.get(itemId);
-      const onAir = item != null && isOnAirStatus(item.status, item.pending);
-      if (!onAir && (this.#liveLayers.get(itemId) ?? []).length === 0) {
+      if (!this.#ownsLiveSeats(itemId)) {
         /*
           Case 2 of `#recordActiveLook`: nothing is seated and nothing reaches the plant —
           `B-151`'s pin, which the rehearse control's safety rests on. Recording it IS the
@@ -6973,12 +6998,17 @@ export class CasparRuntime {
       never reaches the transaction at all and must still be refused.
     */
 
-      const seatedAnything = (this.#liveLayers.get(itemId) ?? []).length > 0;
-      if (!seatedAnything) {
-        // Nothing seated for this plate — the item is not on air, or its hole is
-        // off-frame. Recording the override IS the whole action; the next take
-        // resolves through it. Deliberately not gated on reachability: this is a
-        // list edit, exactly like setting a position on an idle row.
+      /*
+        `B-216` — THE ONE PREDICATE, HERE TOO. This door used to ask "is anything seated?" of
+        the ledger alone, then hand the transaction a row it would gate a SECOND way (on air
+        or rehearsing) — the third spelling of one question, and the reason `PATCH-BX-01`'s
+        probe found a swap on a rehearsing row silent while an UPDATE on the same row seated
+        four producers. On a row the bridge owns nothing of — not on air, nothing seated, on
+        PVW or not — recording the override IS the whole action; the next take resolves
+        through it. Deliberately not gated on reachability: this is a list edit, exactly like
+        setting a position on an idle row.
+      */
+      if (!this.#ownsLiveSeats(itemId)) {
         this.#applySourceOverride(itemId, next, nextBindings);
         return { ok: true };
       }
@@ -7202,15 +7232,18 @@ export class CasparRuntime {
       with playout. That is `B-161`'s shape exactly, arriving on the audio axis instead of
       the picture one.
 
-      ⚠ **`#ownsLiveSeats`, NOT `isOnAirStatus`** — the same trap `B-161` names. A REHEARSING
-      row is deliberately NOT on air and yet OWNS its plates on PVW, and it must keep hearing
-      them: rehearse is precisely when an operator checks a guest's level before air. Asking
-      only the air question would take that away without failing any test that existed before.
+      ⚠ **`#ownsLiveSeats`, NOT `isOnAirStatus` — and NOT the rehearse flag either (`B-216`).**
+      A row whose seats survived a restart while its status did not (`B-145` boot adoption)
+      holds producers that are genuinely on the channel: a raise there reaches a real layer,
+      and an operator pressing ON for a guest they can see is exactly that case. A rehearsing
+      row with nothing seated has no layer to reach and records the intent for the take; a
+      rehearsing row WITH adopted seats is reached for the seats' sake — which is when an
+      operator checks a guest's level before air.
 
-      ⚠ **A record can legitimately exist while this is false**, which is why the record check
-      alone is not the gate. `out` and `stopItem` both tear plates down, but `exitRehearse`
-      does NOT — it drops the row from `#rehearsing` and restores the TEMPLATE layer's volume,
-      leaving the plate records seated. That row owns seats by neither test.
+      ⚠ **A record can no longer exist while this is false.** `out` and `stopItem` tear plates
+      down and release the ledger, and `exitRehearse` never seated any. The state this text
+      used to name — "plates seated, owned by neither test" — was the boot-adoption window
+      wearing `exitRehearse`'s name, and under the ledger axis a seated plate IS owned.
 
       ⚠ **BOTH HALVES of the send path are skipped — the wire AND the ledger's as-sent copy.**
       Writing `intendedVolume` for a command that was never sent is the standing lie the
@@ -7230,8 +7263,9 @@ export class CasparRuntime {
       thing it can do is take a sound OFF air.
 
       🔴 **AND GATING IT WAS A DEFECT IN ITS OWN RIGHT, not a conservative choice.** The window
-      the gate exists for — `exitRehearse` leaves plates SEATED while the row owns no seats —
-      is a window in which a guest can be genuinely AUDIBLE. Refusing to lower the volume there
+      the gate exists for — a row whose seats survived a restart while its status did not
+      (`B-145`; the record once blamed `exitRehearse` for it, wrongly) — is a window in which
+      a guest can be genuinely AUDIBLE. Refusing to lower the volume there
       meant OFF, a fader dragged to zero, and the panic button all recorded an intent and left
       the microphone open, while the console reported `ok`. That is the same class of lie
       `B-122` names: an operator told the escape hatch worked while the thing is still on air.
@@ -7297,8 +7331,10 @@ export class CasparRuntime {
    * therefore *"gated the emergency control on exactly the values that may be wrong in the
    * emergency"* — with every item reading `idle` it sent nothing and reported success. This
    * verb's first cut had the same shape one layer up: PANIC's scope was resolved in the
-   * BROWSER from `isOnAir(item)`, so **a row in the `exitRehearse` window — plates seated,
-   * potentially audible, status not on air — was never silenced by the panic button.**
+   * BROWSER from `isOnAir(item)`, so **a row in the boot-adoption window (`B-145`) — plates
+   * seated, potentially audible, status not on air — was never silenced by the panic button.**
+   * (The record first called that window `exitRehearse`'s; it is not — rehearse seats
+   * nothing, `B-216`.)
    *
    * The scope is now the LEDGER: every plate the bridge itself seated, whatever any status
    * claims. That is a structural fact — the bridge wrote each record when it sent the `PLAY`
