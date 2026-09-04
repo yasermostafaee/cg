@@ -1,4 +1,11 @@
-import type { ChannelOutputCheck, DeclaredConsumer, MissingConsumer } from '@cg/shared-ipc';
+import {
+  DEVICE_ADDRESSING_RULE,
+  DEVICE_NUMBER_RECIPE,
+  describeDeviceAddressing,
+  type ChannelOutputCheck,
+  type DeclaredConsumer,
+  type MissingConsumer,
+} from '@cg/shared-ipc';
 
 /**
  * `C-029` — the program-output check's policy knobs and its one command builder.
@@ -84,11 +91,21 @@ export function describeMissingOutput(label: string, check: ChannelOutputCheck):
     .join(', ');
   const running =
     check.running.length === 0 ? 'nothing' : check.running.map((r) => r.kind).join(', ');
+  // C-030 — which addressing form each missing declaration uses, and how CasparCG reads it.
+  const addressing = check.missing
+    .flatMap((m) =>
+      m.devices.map((d) => `the ${m.kind} is declared as ${describeDeviceAddressing(d).words}`),
+    )
+    .join('; ');
   return (
     `[caspar-bridge] 🔴 CHANNEL ${String(check.channel)} OUTPUT MISSING on server ${label} — ` +
     `casparcg.config declares ${what} and CasparCG is not running it (running: ${running}). ` +
     `A consumer that fails at start never appears in INFO; check the CasparCG log for the ` +
     `reason ("Decklink device … not found" / "Decklink drivers not found"), fix the config on ` +
-    `the playout machine and restart CasparCG.\n`
+    `the playout machine and restart CasparCG.` +
+    (addressing.length > 0
+      ? ` ${addressing}. ${DEVICE_ADDRESSING_RULE} ${DEVICE_NUMBER_RECIPE}`
+      : '') +
+    `\n`
   );
 }
