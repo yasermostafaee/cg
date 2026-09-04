@@ -2034,3 +2034,70 @@ about a consumer's health (asserted).
 - **Number:** the highest `C-` heading was `C-029`; `git grep -n "C-030"` returned only the registry's
   forward pointer, never a heading; the registry's dated sentence reads "Next free … `C-030`" —
   headings and pointer AGREE. Recorded in [b-number-registry.md](b-number-registry.md).
+
+---
+
+## [~] C-031 — the bridge's boot line says how many templates it loaded, and how many persisted files it skipped ⟨priority: medium — the one number every take depends on was the one the boot line did not print⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`
+
+**What:** beside `candidate layers`, `live sources`, `plate assignments`, `live layer ledger`, the
+mixer hold and the missing-consumer setting, the boot line prints
+`templates: 3 loaded from <dir> - 1 skipped as unusable (see the warnings above)` — or, at zero,
+that nothing can go to air until a `.vcg` is imported. `TemplateRegistry.loadPersisted()` already
+returned the counts; the constructor discarded them. They are kept as
+`CasparRuntime.templateProvenance` and exposed on the `BridgeHandle` as `templates`.
+
+**Why:** on 2026-09-04 every take was refused and the first question — does the bridge hold the
+templates at all? — had no line on screen to answer it. On this station that line reads
+`3 loaded … 1 skipped` today; the skipped file is `delimiters.json`, which [[B-116]] already
+records as living in the templates directory by construction. The count says at a glance that
+there is a warning above to scroll to.
+
+**Acceptance:**
+
+- WHEN the templates directory holds two records and one unusable file THEN the handle reports
+  `{ loaded: 2, skipped: 1, dir }` and the boot line says so
+- WHEN the directory does not exist yet THEN `{ loaded: 0, skipped: 0 }` and the line says nothing
+  can go to air until a `.vcg` is imported
+- WHEN no directory is configured (an embedder) THEN `dir: null`
+
+**Regression-test note:** `tools/caspar-bridge/tests/templates-boot.integration.test.ts` 3/3.
+
+- **Cross-refs:** [[B-116]] (the skipped file), [[B-214]] (the incident), [[R-028]] (the registry).
+- **Number:** the highest `C-` heading was `C-030`; `git grep -n "C-031"` returned only the registry's
+  forward pointer, never a heading; the registry's dated sentence reads "Next free … `C-031`" —
+  headings and pointer AGREE. Recorded in [b-number-registry.md](b-number-registry.md).
+
+---
+
+## [ ] C-032 — the template serve port is EPHEMERAL by default, so every bridge restart invalidates every URL CasparCG was given and no stable firewall rule can exist ⟨priority: medium — a recommendation, not a change: the default should become a pinned port⟩ — FILED 2026-09-04 from `RUNTIME-FIX-0904` §6b
+
+**What is true today:** `--template-serve-port` defaults to `0` (`template-http-server.ts:58`,
+`bin/caspar-bridge.mjs:20`); the bridge on `192.168.21.93` was serving on `55277` in July and on
+`64373` this afternoon. Every `CG ADD` carries the port of the moment. The server-connection
+dialog already says _"Empty = ephemeral (today's default). Pin it to make a firewall rule
+possible."_
+
+**What it costs:** (1) a producer created by an earlier bridge run holds a URL nothing serves any
+more — the plant's orphan html layer at 96 on a stale URL is the likely instance; (2) no
+inbound firewall rule can name the port, so the only rule that works is per-executable
+(node.exe, which is what this host has); (3) the audit's recorded command ([[B-209]]) now shows
+the port, which is how a reader will learn it changed.
+
+**Recommendation (the brief asked whether the default should change — yes):** make the default a
+fixed port (the CLI's own example is `7911`), with `0` still accepted explicitly for a
+never-collide dev boot, and keep the bind failure loud (`apply-failed` already names it). A fixed
+default is what a station operator expects of a server and what a firewall needs; the cost is one
+possible collision at boot, which is already a loud failure rather than a silent one. Not changed
+this session: the default is the owner's to move, and a changed port on the plant is a firewall
+change on the plant.
+
+**Acceptance (for the session that takes it):**
+
+- WHEN the flag and the config are both absent THEN the bridge binds the fixed default and says
+  `default` as the port's source on the boot line
+- WHEN `0` is given explicitly THEN it is ephemeral, and the boot line says so
+- WHEN the default port is taken THEN the boot fails loudly naming the port and the flag
+
+- **Cross-refs:** [[B-162]] / [[C-024]] (the serve host half of the same address), [[B-209]] (the
+  port is now on the record), [[B-214]].
+- **Number:** taken with [[C-031]]; see the registry entry.

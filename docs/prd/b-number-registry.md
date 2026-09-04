@@ -2207,3 +2207,41 @@ holds the consumer-verb replies this session re-used. The `B-` duplicate audit w
 
 ⇒ **Next free after this session is `B-209`** (unchanged), **`C-031`** (`C-001` … `C-030`, no gaps)
 **and `P-042`** (unchanged).
+
+### 2026-09-04 — `B-209` … `B-215`, `C-031` and `C-032` (`RUNTIME-FIX-0904`: why every take is refused, and the surfaces that would not say)
+
+| kind | id      | one line                                                                                                                                                  | home                               | status         |
+| ---- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------------- |
+| `B-` | `B-209` | the audit record keeps the refusal CODE and not the COMMAND it answered — `AuditEntry.command`, from the one `#send` chokepoint                           | [bugs-runtime.md](bugs-runtime.md) | closed in code |
+| `B-` | `B-210` | the Audit log shows raw UTC stamps to a control room at UTC+3:30 — local time to the second, the date as a band, UTC on hover                             | [bugs-runtime.md](bugs-runtime.md) | closed in code |
+| `B-` | `B-211` | the Audit log shows two raw UUIDs per row — names first (the table's and the picker's own rules), ids beneath, shortened, complete in the title, copyable | [bugs-runtime.md](bugs-runtime.md) | closed in code |
+| `B-` | `B-212` | the in-use refusal names a COUNT not a LOCATION, and nudged toward Remove All — `references` on the wire, one wording, "Show <row>" / "Remove item"       | [bugs-runtime.md](bugs-runtime.md) | closed in code |
+| `B-` | `B-213` | `State (n)` counts ERROR rows as on air — `(N on air)` and `(N in error)`, two predicates, one file                                                       | [bugs-runtime.md](bugs-runtime.md) | closed in code |
+| `B-` | `B-214` | every take refused `amcp-404` by `.114` since 11:37:32Z, 118 s after the same `CG ADD` was accepted — the server process changed and has no html producer | [bugs-runtime.md](bugs-runtime.md) | filed only     |
+| `B-` | `B-215` | a refused fixed-row load leaves a slotless item that restore seats on a DYNAMIC layer (60–69) no row shows                                                | [bugs-runtime.md](bugs-runtime.md) | filed only     |
+| `C-` | `C-031` | the boot line says how many templates loaded and how many files were skipped                                                                              | [caspar.md](caspar.md)             | closed in code |
+| `C-` | `C-032` | the ephemeral serve-port default — recommendation: a pinned default                                                                                       | [caspar.md](caspar.md)             | filed only     |
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three
+bug files was **`B-208`** (`git grep -n -E "^## \[.\] B-2[0-9][0-9]"`); `B-209` … `B-215` returned **no
+headings anywhere** — the only `B-209` hits were this file's own forward pointers, the documented
+false positive. **Cross-check against the dated pointer:** the entry above ends _"Next free after
+this session is `B-209`"_ — headings and pointer AGREE. Seven numbers taken, all filed in
+`bugs-runtime.md` per the routing rule (Runtime surfaces and a CasparCG-side incident).
+
+**Derivation for `C-`:** highest `C-` HEADING was **`C-030`**; `git grep -n "C-031"` returned only this
+file's forward pointer. The dated pointer reads _"`C-031` (`C-001` … `C-030`, no gaps)"_ — headings
+and pointer AGREE. Two numbers taken. **Prefix class `C-`, chosen because** both are bridge/CasparCG
+plumbing (the boot line, the serve port), not Runtime surfaces.
+
+⚠ `B-214` is the INCIDENT, filed not fixed: the defect is on the plant (the server process answering
+at `.114` has no html producer), and the measurement is handed to the owner as one line in a named
+window. `B-215` was found by tracing the two invisible items in the record (first entry
+`load failed wrong-bank`, next entry `out ok L60`) to `#slotForRestore`'s `#allocate()` fall-through
+— a restore defect outside the brief's boundary, filed with two candidate fixes.
+
+⚠ The `B-` duplicate audit was not rerun (numbers derived from headings); `B-056` and `B-080` remain
+as recorded above.
+
+⇒ **Next free after this session is `B-216`** (`B-001` … `B-215`, no gaps), **`C-033`** (`C-001` …
+`C-032`, no gaps) **and `P-042`** (unchanged).

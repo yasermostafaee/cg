@@ -9516,3 +9516,271 @@ recorded here so the next reader does not learn them on air.
 - **Number:** the highest `B-` heading across the three bug files was `B-207`; `git grep -n "B-208"`
   returned only the registry's forward pointers and the `B-207` provenance notes, never a heading.
   Recorded in [b-number-registry.md](b-number-registry.md).
+
+---
+
+## [~] B-209 — the audit record keeps the refusal CODE and not the COMMAND it answered, so fourteen `amcp-404` takes could not be traced to a verb ⟨priority: high — the forensic surface could not answer the first question a refused take raises⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`
+
+**Observed 2026-09-04** in the station's own record (`~/.cg-runtime/bridge-audit.ndjson` on the
+bridge host `192.168.21.93`): from `11:37:32Z` every take answered `outcome: failed,
+errorCode: amcp-404` — fourteen in a row — and no row said which of a take's up-to-five
+commands (`MIXER … VOLUME 0`, `CG … ADD`, `MIXER … VOLUME 1`, the plate seating, `CG … PLAY`) the
+server had refused. The bridge prints no AMCP exchange anywhere; the only wire trace in the
+product is the mock's. `RUNTIME-FIX-0904` §1 had to reconstruct the verb by reading `#takeImpl`
+top to bottom (`MIXER` never answers 404; a refused `PLAY` needs the `ADD` to have landed; so the
+`ADD`).
+
+**Repro:** boot a bridge without `startServing()` (the bare-id branch), `loadFixed`, `take`.
+**Expected:** the `take` row carries the refused line beside `amcp-404`.
+**Actual (before):** `command` did not exist; the row carried the code alone.
+
+**Fix:** `AuditEntrySchema.command` (optional, ≤256). `#send` — the one chokepoint every AMCP line
+passes — returns `command: summarizeWireLine(line)` beside a non-ok code (and on a throw);
+`#sendAdd`, `#takeImpl` (ADD and PLAY), `#updateImpl`, `#stopItemImpl`, `#nextItemImpl` and
+`#outImpl` carry it out; `auditVerdict` copies it. The summariser keeps the verb, the target and
+the FIRST quoted argument (for `CG ADD` the URL — host and the ephemeral port), elides later
+quoted arguments, caps at 200, never throws. A refusal before the wire records no command. The
+Audit panel shows it under the ids.
+
+**Regression-test note:** `tools/caspar-bridge/tests/audit-command.integration.test.ts` — red first
+on the current tree (`expected undefined to be defined`), 3/3 after; `wire-line-summary.test.ts`.
+
+- **Cross-refs:** [[B-141]] (the record this extends), [[B-214]] (the incident), [[C-032]] (why
+  the port in the URL matters).
+- **Number:** the highest `B-` heading across the three bug files was `B-208`; `git grep -n "B-209"`
+  returned only the registry's forward pointers, never a heading. Recorded in
+  [b-number-registry.md](b-number-registry.md).
+
+---
+
+## [~] B-210 — the Audit log shows raw ISO-8601 UTC stamps to the millisecond to a control room at UTC+3:30 ⟨priority: high — an operator correlating a row with the wall clock is three and a half hours off, and the `Z` is the easiest thing on the screen to miss⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`
+
+**Observed 2026-09-04:** the panel's first column read `2026-09-04T12:18:47.561Z` for an action the
+operator performed at 15:48:47 by the clock on the wall. Nothing on the surface said the stamp was
+UTC except the trailing `Z`.
+
+**Repro:** open the Audit log on a console whose zone is not UTC.
+**Expected:** the console's local time, to the second; the date only where it changes; the record's
+UTC stamp still reachable.
+**Actual (before):** the raw stamp, on every row.
+
+**Fix:** `auditFormat.ts` `auditTimeParts` (Intl, the browser's zone; `12:18:47.561Z` →
+`15:48:47` in `Asia/Tehran`, pinned); the time cell carries the UTC stamp as its title; the local
+date is a band where it changes down the newest-first list. The record on disk is untouched.
+
+**Regression-test note:** `apps/runtime/tests/auditFormat.test.ts`,
+`auditPanel.legibility.dom.test.ts` (B-210 block), `tests/e2e/audit-legibility.spec.ts`.
+
+- **Cross-refs:** [[B-211]] (the same surface, the other column), [[B-141]].
+- **Number:** taken with [[B-209]]; see the registry entry.
+
+---
+
+## [~] B-211 — the Audit log's ITEM / DETAIL column shows two raw UUIDs per row where the operator's names are `Bed 1` and `3ghab` ⟨priority: high — a forensic surface an operator cannot read is a forensic surface nobody reads⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`
+
+**Observed 2026-09-04:** every row read `item-e602d912-… · f00a5363-…`. The row the operator
+had pressed PLAY on was `Bed 1`; the template was `3ghab`. The constraint, stated because it
+decides the fix: **the ids may not be deleted.** A name can be renamed or repeated; an id cannot;
+shortening a UUID to its first eight characters for display is fine, deleting it would turn a
+record into a story.
+
+**Repro:** take a row, open the Audit log.
+**Expected:** the row's name as the Layers table gives it and the template's name as the picker
+gives it, first; the ids beneath, complete and copyable.
+**Actual (before):** the ids alone.
+
+**Fix:** `placeName` (through `layerAlias` / `defaultLayerAlias` — the table's own two functions;
+a layer outside the bank reads `layer 60 (not a row)`), `templateName` (through
+`templateDisplayName`, so the file name outranks the manifest name exactly as on the row),
+`shortId` (`item-e602d912…`, full id in the title, copy button with a local confirm — a toast
+renders under a modal). `MockRuntime`'s audit entries now carry the slot (parity), so the offline
+log names rows too. ⚠ The sentence qualifying the console name — _"It is a LABEL you typed, not a
+verified sign-in — it says which console, not which person"_ — is byte-identical, and a test pins
+it: naming the row better must not read as naming the person better.
+
+**Regression-test note:** `auditPanel.legibility.dom.test.ts` (B-211 block), `auditFormat.test.ts`,
+`tests/e2e/audit-legibility.spec.ts`.
+
+- **Cross-refs:** [[B-210]], [[B-143]] (the actor caveat this deliberately leaves alone), [[B-215]]
+  (why a layer can be "not a row").
+- **Number:** taken with [[B-209]]; see the registry entry.
+
+---
+
+## [~] B-212 — the in-use refusal names a COUNT and not a LOCATION, and its only concrete remedy was Remove All ⟨priority: high — on a live station a refusal that withholds the precise remedy while naming the sweeping one is steering toward the sweeping one⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`
+
+**Observed 2026-09-04:** _"2 stack item(s) still use this template — remove them (or Remove All)
+first."_ The owner was looking at rows that all read EMPTY, could not find the two, and pressed
+Remove All. The record shows why nothing on screen matched: the two items were on CasparCG layers
+60 and 61 — dynamic layers no row shows (see [[B-215]]) — so "them" pointed at nothing visible.
+
+**Repro:** with a template still held by an item, press Delete from station.
+**Expected:** each item's place named — a row by the name the table gives it, a layer outside the
+bank as CasparCG names it with "not one of this station's rows" said — and the way there offered.
+**Actual (before):** a count, and a nudge toward Remove All.
+
+**Fix:** `templates.remove` carries `references: { itemId, slot? }[]`; `describeTemplateReferences`
+in `@cg/shared-ipc` is the ONE wording for the bridge, the mock and the disconnected library path
+(`LibraryStore.remove(id, references, bank)`); Remove All is not mentioned. The picker renders each
+reference under the list with its remedy: **Show <row>** closes the picker and asks the Layers
+table (`rowFocus.ts`) to scroll to the row, focus it and select it; an item NO row shows gets
+**Remove item** — confirm-gated, naming its layer and that removal takes it off air if it is on
+air — issuing `stack.remove` for that one id. The fragment _"item(s) still use this template"_ is
+kept verbatim for every count, because the E2E and the DOM tests match on it (a singular "still
+uses" broke both on the first local run — recorded so the next wording change sweeps first).
+
+**Regression-test note:** `packages/shared-ipc/tests/template-references.test.ts`,
+`tools/caspar-bridge/tests/template-remove-references.test.ts`,
+`apps/runtime/tests/templateRemoval.dom.test.ts` (B-212 block), `LibraryStore.test.ts`,
+`tests/e2e/live-source-sources.spec.ts` (the Show-row step).
+
+- **Cross-refs:** [[B-215]] (why the items were invisible), [[R-005]], [[B-122]] (the same
+  "sweeping remedy" shape on CLEAR ALL).
+- **Number:** taken with [[B-209]]; see the registry entry.
+
+---
+
+## [~] B-213 — the layer table's `State (n)` counts rows in ERROR as on air ⟨priority: high — a refused take rendered as a graphic on air, in the sacred air colour⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`
+
+**Observed 2026-09-04:** `State (2)` in green with exactly two occupied rows, both in `ERROR`
+(two refused takes); earlier `(3)` = two refused rows plus one genuinely on air from another
+console.
+
+**What it was derived from — established before the label was touched:** `items.filter(isOnAir)`
+— STOP ALL's predicate, which counts `error` because an errored row MAY be showing something and
+must still be offered STOP. The status itself is the reconciled one: the bridge's ack, refined by
+OSC when there is any; a refused take settles to `error`, never to `playing`. So the count was
+ack-derived, not intent-derived, and its defect is specifically that `error` wore the air colour.
+Not a deeper intent-vs-confirmed defect; not filed as one.
+
+**Repro:** two rows whose takes were refused.
+**Expected:** no air count; `(2 in error)`.
+**Actual (before):** `(2)` in the air colour.
+
+**Fix:** `stack/onAir.ts` gains `isOnAirOrUnsettled` (the renderer's ONE spelling of the R-010
+predicate — the Server settings gate now delegates to it instead of carrying a copy) and
+`airTally` → `{ onAir, inError }`. `LayerTableHeader` renders `(N on air)` in the air colour and
+`(N in error)` in the error colour, never one number, neither when zero, the §4 grey kept. STOP
+ALL keeps `isOnAir`.
+
+⚠ **Noted, not fixed:** the same `error` ambiguity cuts the other way for the R-010 gate — a row
+that WAS on air and whose `update` was refused reads `error`, which `isOnAirStatus` does not
+count, so `setConfig` would be allowed over a possibly-live graphic. Outside this session's
+boundary (the refusal path); recorded here for the next reader.
+
+**Regression-test note:** `apps/runtime/tests/onAir.test.ts`, `layerTableHeader.dom.test.ts`
+(tally block), `layersPanel.unreachableLabels.dom.test.ts` (`(1 on air)`),
+`tests/e2e/audit-legibility.spec.ts` (the tally step).
+
+- **Cross-refs:** [[B-122]] (`isOnAir` is not CLEAR ALL's predicate either), [[R-010]], [[B-081]]
+  (the grey).
+- **Number:** taken with [[B-209]]; see the registry entry.
+
+---
+
+## [ ] B-214 — every take is refused `amcp-404` by `192.168.21.114` since 11:37:32Z on 2026-09-04, 118 s after the same `CG ADD` was accepted — the server process answering there changed and has no html producer ⟨priority: high — the station cannot put any graphic to air⟩ — FILED 2026-09-04, the measurement handed to the owner
+
+**Measured 2026-09-04** from the bridge's own record on `192.168.21.93` (the bridge host; nothing
+was sent to the plant):
+
+```
+11:35:29.818Z  load  ok      L99  f00a5363   (list-only: nothing on the wire)
+11:35:34.588Z  take  ok      L99  f00a5363   <- CG ADD + CG PLAY both accepted by .114
+11:36:01.635Z  take  ok      L99             (bare CG PLAY, producer resident)
+11:36:44.641Z  take  ok      L99             (the last accepted take)
+11:37:07…28Z   out   ok      x7              (CLEAR ALL pressed three times; CLEARs accepted)
+11:37:32.856Z  take  failed  L99  amcp-404   <- the first refusal; thirteen more follow
+```
+
+Same template, same layer, same bridge process (the running bridge dates from `12:18:58Z`; the
+previous one wrote every row above), no `set-config` applied today (the connection file is dated
+2026-08-24). After a `CLEAR` the take's `CG ADD` is the first CG verb and `MIXER` never 404s, so
+the `ADD` was refused.
+
+**What CasparCG `69e8ad5` says a URL `CG ADD` can 404 for** (`cg_proxy.cpp`,
+`html_producer.cpp`, `AMCPCommandQueue.cpp`, read from source): `find_record` returns the `.html`
+record for ANY name ("a hack to allow query params"); `html::create_cg_producer` returns empty
+only for a name that is neither a template-folder file nor `http:`/`https:`-prefixed;
+`get_or_create_proxy` returns empty only when `find_record` misses or the factory returns empty;
+`cg_add_command` maps that to `file_not_found` → `404`. **With an html cg producer registered, a
+URL `CG ADD` cannot answer 404 on that build.** Therefore:
+
+- **(a) reachability of the serve host is NOT the cause.** An unfetchable URL yields `202` and a
+  blank page, exactly as the server-connection dialog says; the dialog's sentence stands. This
+  side was verified: all three templates answer `200` on the live ephemeral port `64373`, and
+  node.exe is allowed inbound on the domain profile.
+- **(b), in a specific form, is the finding:** the process answering at `192.168.21.114:5250`
+  changed between `11:36:44Z` and `11:37:32Z` (a restart, or a different build/install started)
+  and the one answering since has NO html producer registered — CEF did not initialise in it. The
+  same code path applies to both rows: `ارم روی انتن` on an operator row and `3ghab` on `Bed 1`
+  both left at the `ADD`, so classification and bank fencing are cleared.
+
+⚠ Both `BRIDGE LIVE` and `PRIMARY A HEALTHY` stay green throughout — the AMCP socket is up and
+answering. A missing html producer is invisible to every health surface the product has.
+
+**The measurement, for the owner — one line, on the PLAYOUT machine (`192.168.21.114`), in a
+PowerShell window there (not the CasparCG console, not the AMCP console), typed as ONE line:**
+
+`Select-String -Path 'D:\casparcg-server-v2.5.0-stable-windows\log\caspar_*.log' -Pattern 'Starting CasparCG|Initialized .* module|CEF|html|Could not find template' | Select-Object -Last 40`
+
+Read for: a `Starting CasparCG …` line between 15:06 and 15:08 local (a restart), whether the html
+module is listed as initialised in that start, and the `Could not find template http://192.168.21.93:…`
+errors from 15:07:32 on. (The log path is the plant's per [[C-030]]; if the install lives
+elsewhere, the `log\caspar_*.log` half is what matters.) A second, read-only check from the AMCP
+console window connected to `.114`: `VERSION` — anything other than `2.5.0 69e8ad5` means a
+different install answered.
+
+**Expected:** a take after a CLEAR re-ADDs and plays. **Actual:** every take since `11:37:32Z`
+answers `amcp-404`.
+
+**Regression-test note:** none possible here — the defect is on the plant. What the product now
+does about it is [[B-209]] (the record names the refused line) and [[C-031]] (the boot line says
+how many templates the bridge holds, so the first question has an answer).
+
+- **Cross-refs:** [[B-177]] (a `404` is not proof the subject is a file — the fall-through class),
+  [[B-162]] (the dialog sentence, and why reachability is `202`-with-nothing), [[C-032]] (the
+  ephemeral port), [[B-101]] (a green socket says nothing about a producer).
+- **Number:** taken with [[B-209]]; see the registry entry.
+
+---
+
+## [ ] B-215 — a REFUSED fixed-row load leaves a slotless item that the next restore seats on a DYNAMIC layer outside every declared bank, where no row shows it ⟨priority: high — the bridge then CLEARs and blocks on a layer the operator cannot see⟩ — FILED 2026-09-04 from `RUNTIME-FIX-0904` §4
+
+**Measured 2026-09-04** from the record:
+
+```
+11:34:20.949Z  load  failed  L99  e506e319  item-493243df  wrong-bank
+11:35:20.162Z  out   ok      L60  e506e319  item-493243df           <- the same item, now on 60
+11:35:25.595Z  load  failed  L99  e506e319  item-281ae6e2  wrong-bank
+11:52:57.632Z  out   ok      L61  e506e319  item-281ae6e2           <- and this one on 61
+12:01:24.552Z  remove ok     L60 / L61                              <- Remove All
+```
+
+**Mechanism, from the code:** `#loadFixedImpl` records the intent (`applyIntent load`) BEFORE the
+`wrong-bank` refusal, so the refused item stays in the reconciler as a slotless `error` item. The
+browser retains it (`RetainedAirStateSchema` includes `error`). On the next resync `restore()`
+finds no retained slot and **`#slotForRestore` falls through to `#allocate()`** — the
+`DEFAULT_LAYER_POLICY` `custom` range, layers 60–69 — so the item comes back holding a dynamic
+layer outside both halves of the bank. From then on it is a real slot holder: `CLEAR ALL` sends
+`CLEAR 1-60` to the plant (seven times that afternoon), the in-use refusal counts it, the old
+`State (n)` counted it, and no row shows it. The only surfaces that reveal it are the audit log
+and, now, the in-use refusal's "CasparCG layer 60, which is not one of this station's rows".
+
+**Expected:** a refused load leaves nothing behind, or leaves something every surface can show.
+**Actual:** an invisible item on a layer the station never declared, cleared on the plant by a
+bulk verb.
+
+**Not fixed here:** the load refusal path and restore are outside `RUNTIME-FIX-0904`'s boundary.
+Two candidate fixes, for the session that takes it: (1) a `wrong-bank` / `not-fixed` /
+`slot-bound` refusal removes the item it just recorded (the refusal touched nothing else, so
+there is nothing to keep); (2) `#slotForRestore` refuses to allocate for a retained item whose
+state is `error` and whose slot is absent (`skip: 'no-layer'` with a reason the panel can show).
+(1) is the narrower and the one that makes (2) unreachable.
+
+**Regression-test note:** none yet — the test is the fix's. The shape to pin: `loadFixed` refused
+`wrong-bank` → `stackSnapshot()` holds no such item; and a retained `{ state: 'error' }` with no
+slot is skipped by `restore()`, never allocated.
+
+- **Cross-refs:** [[B-212]] (the refusal that could not name it), [[B-092]] / [[B-108]] (restore
+  and its skips), [[B-201]] (the wrong-bank refusal itself), [[B-114]] (release by the same door).
+- **Number:** taken with [[B-209]]; see the registry entry.
