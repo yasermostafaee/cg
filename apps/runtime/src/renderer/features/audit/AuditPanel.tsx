@@ -1,10 +1,19 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
+import { Check, Copy } from 'lucide-react';
 import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
-import { MAX_ACTOR_LENGTH, UNATTRIBUTED_ACTOR } from '@cg/shared-ipc';
+import {
+  MAX_ACTOR_LENGTH,
+  UNATTRIBUTED_ACTOR,
+  type FixedLayerBank,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
+import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { Notice } from '../../ui/Notice.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
+import { auditTimeParts, placeName, shortId, templateName } from './auditFormat.js';
 
 interface Props {
   open: boolean;
@@ -30,6 +39,12 @@ type ActionFilter = (typeof ACTION_OPTIONS)[number];
 
 /** B-141 — the bridge's own answer to "is this instrument live?" (`audit.health`). */
 type AuditHealth = Awaited<ReturnType<typeof window.cg.audit.health>>;
+
+/*
+  `B-210` / `B-211` — the time column narrowed from an ISO stamp's width to a clock's,
+  and the detail column widened to carry a name line over an id line.
+*/
+const COLUMNS = '84px 110px 110px 1fr 80px';
 
 const styles = {
   filters: {
@@ -69,14 +84,15 @@ const styles = {
   },
   row: {
     display: 'grid',
-    gridTemplateColumns: '180px 110px 110px 1fr 80px',
+    gridTemplateColumns: COLUMNS,
     gap: '0.6rem',
     padding: '0.25rem 0.5rem',
     borderBottom: `1px solid ${colors.border}`,
+    alignItems: 'start',
   },
   headerRow: {
     display: 'grid',
-    gridTemplateColumns: '180px 110px 110px 1fr 80px',
+    gridTemplateColumns: COLUMNS,
     gap: '0.6rem',
     padding: '0.4rem 0.5rem',
     background: colors.panelMuted,
@@ -87,6 +103,40 @@ const styles = {
     color: colors.textMuted,
     position: 'sticky' as const,
     top: 0,
+  },
+  /*
+    `B-210` — the DATE, once per day down the list, as a band rather than a column.
+    The list is newest-first, so a band sits above the first row of each day. It is
+    not a row: it names nothing that happened.
+  */
+  dateBand: {
+    padding: '0.2rem 0.5rem',
+    background: colors.panelMuted,
+    color: colors.textMuted,
+    fontSize: '0.72rem',
+    letterSpacing: '0.05em',
+    borderBottom: `1px solid ${colors.border}`,
+  },
+  /** `B-211` — the NAME line: what the operator calls the row and the template. */
+  names: { display: 'block' },
+  /** …and the ID line beneath it: muted, full id in the title, copy beside each. */
+  ids: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    gap: '0.35rem',
+    alignItems: 'center',
+    color: colors.textMuted,
+    fontSize: '0.72rem',
+  },
+  idCode: { fontFamily: 'monospace' },
+  /** `B-209` — the refused line, on its own line so a long URL does not push the ids off. */
+  command: {
+    display: 'block',
+    color: colors.textMuted,
+    fontSize: '0.72rem',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
   },
   empty: {
     padding: '1rem',
@@ -114,6 +164,13 @@ const styles = {
  * No live-tail in v1: the operator clicks "Refresh" to re-fetch.
  * A push channel would add minimal value — audit volume is low and
  * the panel is opened for forensic review, not continuous monitoring.
+ *
+ * `B-210` / `B-211` — it reads the record in the operator's terms (see
+ * `auditFormat.ts`): local time to the second, the date only where it changes,
+ * the row's and the template's NAMES first, the ids beneath them — shortened for
+ * display, full in the title, and copyable. The names are joined here, against the
+ * same registry list and the same declared bank the Layers table reads, so the log
+ * cannot call a row something the table does not.
  */
 export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [entries, setEntries] = useState<readonly AuditEntry[]>([]);
@@ -134,6 +191,14 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     the record wrong — only the box.
   */
   const [operatorName, setOperatorNameState] = useState<string>('');
+  /*
+    `B-211` — the two joins a name needs, fetched with every refresh. A template
+    deleted since the entry was written simply has no name any more, and the row
+    falls back to its id — which is the honest reading, and why the id is never
+    dropped.
+  */
+  const [templates, setTemplates] = useState<ReadonlyMap<string, TemplateInfo>>(new Map());
+  const [bank, setBank] = useState<FixedLayerBank | null>(null);
 
   async function refresh(): Promise<void> {
     const req: { limit: number; action?: AuditEntry['action']; actor?: string } = { limit: 200 };
@@ -143,12 +208,16 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     // Both, together, every time: a health reading from before the entries were
     // fetched could report a writer that has failed since, and the operator would
     // read a failing instrument's silence as quiet.
-    const [next, nextHealth] = await Promise.all([
+    const [next, nextHealth, list, nextBank] = await Promise.all([
       window.cg.audit.recent(req),
       window.cg.audit.health(),
+      window.cg.templates.list(),
+      window.cg.fixedLayers.config(),
     ]);
     setEntries(next);
     setHealth(nextHealth);
+    setTemplates(new Map(list.map((t) => [t.templateId, t])));
+    setBank(nextBank);
   }
 
   useEffect(() => {
@@ -200,6 +269,9 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         (B-143): the system knows the limits of what it knows, and the operator — the
         one who acts on it — is the one not told. So it is written where the log is
         read, in the operator's words, beside the column it qualifies.
+
+        `B-211` did not touch this sentence, deliberately: naming the ROW and the
+        TEMPLATE better must not read as naming the PERSON better.
       */}
       <div style={styles.console}>
         <label htmlFor="audit-operator">This console</label>
@@ -250,7 +322,10 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       </div>
       <div style={styles.table}>
         <div style={styles.headerRow}>
-          <span>timestamp</span>
+          {/* `B-210` — local wall-clock time; the record's UTC stamp is the cell's title. */}
+          <span title="This console's local time, to the second. Hover a time for the record's own UTC stamp.">
+            time
+          </span>
           <span>actor</span>
           <span>action</span>
           <span>item / detail</span>
@@ -262,7 +337,25 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
             filtered={actionFilter !== 'all' || actorFilter.trim() !== ''}
           />
         ) : (
-          entries.map((e, idx) => <Row key={idx} entry={e} />)
+          entries.map((e, idx) => {
+            /*
+              `B-210` — the date band, where the LOCAL date changes down the list.
+              Computed from the same parts the row renders, so the band and the row can
+              never disagree about which day a 01:00 entry belongs to.
+            */
+            const parts = auditTimeParts(e.ts);
+            const previous = idx > 0 ? auditTimeParts(entries[idx - 1]?.ts ?? '').date : null;
+            return (
+              <Fragment key={idx}>
+                {parts.date !== '' && parts.date !== previous ? (
+                  <div style={styles.dateBand} data-audit-date={parts.date} role="presentation">
+                    {parts.date}
+                  </div>
+                ) : null}
+                <Row entry={e} time={parts} templates={templates} bank={bank} />
+              </Fragment>
+            );
+          })
         )}
       </div>
     </Modal>
@@ -343,24 +436,93 @@ function EmptyState({
   );
 }
 
-function Row({ entry }: { entry: AuditEntry }): JSX.Element {
+function Row({
+  entry,
+  time,
+  templates,
+  bank,
+}: {
+  entry: AuditEntry;
+  time: ReturnType<typeof auditTimeParts>;
+  templates: ReadonlyMap<string, TemplateInfo>;
+  bank: FixedLayerBank | null;
+}): JSX.Element {
   const outcomeStyle =
     entry.outcome === 'ok'
       ? styles.outcomeOk
       : entry.outcome === 'timeout'
         ? styles.outcomeTimeout
         : styles.outcomeFailed;
+  /*
+    `B-211` — NAME PRIMARY, ID SECONDARY. The place (the row, or the layer with the
+    fact that it is not a row) and the template, in the operator's words; then the
+    ids beneath, shortened for the eye and complete in the title and on the copy.
+    An entry with nothing to name (an import, a lock) shows only what it has.
+  */
+  const place = placeName(entry.slot, bank);
+  const template = templateName(entry.templateId, templates);
+  const names = [place, template].filter((n): n is string => n !== null);
   return (
-    <div style={styles.row}>
-      <span>{entry.ts}</span>
+    <div style={styles.row} data-audit-row="">
+      {/* `B-210` — the clock the operator is looking at; the UTC stamp on hover. */}
+      <span title={`Recorded as ${time.utc} (UTC)`} data-audit-time={time.utc}>
+        {time.time}
+      </span>
       <span>{entry.actor}</span>
       <span>{entry.action}</span>
       <span>
-        {entry.itemId ?? ''}
-        {entry.templateId !== undefined ? ` · ${entry.templateId}` : ''}
-        {entry.errorCode !== undefined ? ` · ${entry.errorCode}` : ''}
+        {names.length > 0 ? (
+          <span style={styles.names} data-audit-names="">
+            {names.join(' · ')}
+          </span>
+        ) : null}
+        <span style={styles.ids}>
+          {entry.itemId !== undefined ? <IdChip kind="item" id={entry.itemId} /> : null}
+          {entry.templateId !== undefined ? <IdChip kind="template" id={entry.templateId} /> : null}
+          {entry.errorCode !== undefined ? (
+            <span data-audit-error-code="">{entry.errorCode}</span>
+          ) : null}
+        </span>
+        {/* `B-209` — the line CasparCG refused, beside the code it refused it with. */}
+        {entry.command !== undefined ? (
+          <span style={styles.command} data-audit-command="" title={entry.command}>
+            {entry.command}
+          </span>
+        ) : null}
       </span>
       <span style={outcomeStyle}>{entry.outcome}</span>
     </div>
+  );
+}
+
+/**
+ * `B-211` — one id: shortened in the text, complete in the title, and a copy button
+ * beside it. The copy confirms LOCALLY (the icon flips to a check for a moment)
+ * rather than through the command toast, which renders UNDER a modal's backdrop and
+ * would never be seen (the A9 lesson).
+ */
+function IdChip({ kind, id }: { kind: 'item' | 'template'; id: string }): JSX.Element {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span data-audit-id={kind} data-audit-full-id={id}>
+      <code style={styles.idCode} title={id}>
+        {shortId(id)}
+      </code>{' '}
+      <Button
+        variant="neutral"
+        aria-label={`Copy ${kind} id`}
+        title={`Copy ${id}`}
+        onClick={() => {
+          const clipboard = navigator.clipboard;
+          if (clipboard === undefined) return;
+          void clipboard.writeText(id).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+          });
+        }}
+      >
+        <Icon icon={copied ? Check : Copy} size={12} />
+      </Button>
+    </span>
   );
 }

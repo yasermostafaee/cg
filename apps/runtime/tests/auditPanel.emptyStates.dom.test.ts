@@ -79,6 +79,10 @@ function stubBridge(health: Health, entries: AuditEntry[] = []): void {
         operatorName = name;
       },
     },
+    // `B-211` — the panel joins names against the registry and the bank; empty here,
+    // because these tests are about the empty states, not the naming.
+    templates: { list: () => Promise.resolve([]) },
+    fixedLayers: { config: () => Promise.resolve(null) },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
 }

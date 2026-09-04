@@ -268,7 +268,7 @@ export class MockRuntime {
     // B-070 parity — CG ADD creates the producer.
     this.#loaded.add(itemId);
     this.#settleSlotObservation(itemId, 'producer');
-    this.#audit.unshift(auditEntry('load', { itemId, templateId }));
+    this.#audit.unshift(auditEntry('load', this.#auditItem(itemId, templateId)));
     this.#emitStack();
     return { accepted: true };
   }
@@ -286,7 +286,7 @@ export class MockRuntime {
     this.#loaded.add(itemId);
     this.#settleSlotObservation(itemId, 'producer');
     this.#transition(itemId, 'playing', true);
-    this.#audit.unshift(auditEntry('take', { itemId, templateId: item.templateId }));
+    this.#audit.unshift(auditEntry('take', this.#auditItem(itemId, item.templateId)));
     // 🔴 SESSION BP parity — THE TAKE PINS LEVEL 2. A row that is on air does not change its
     // picture because somebody edited configuration, and the take is the only writer.
     // Deliberately a SET rather than set-if-absent: a re-take re-freezes, which is the
@@ -341,7 +341,7 @@ export class MockRuntime {
     // `pending` that used to block setPosition for the item's whole life).
     if (!this.#loaded.has(itemId)) {
       this.#patch(itemId, { fields: merged, pending: false });
-      this.#audit.unshift(auditEntry('update', { itemId, templateId: item.templateId }));
+      this.#audit.unshift(auditEntry('update', this.#auditItem(itemId, item.templateId)));
       this.#emitStack();
       return { accepted: true };
     }
@@ -352,7 +352,7 @@ export class MockRuntime {
       status: wasOnAir ? 'updating' : item.status,
       pending: wasOnAir,
     });
-    this.#audit.unshift(auditEntry('update', { itemId, templateId: item.templateId }));
+    this.#audit.unshift(auditEntry('update', this.#auditItem(itemId, item.templateId)));
     // B-044 contract: `updating` is transient — it settles to the item's
     // underlying on-air state on the (simulated) ack, never resting.
     if (wasOnAir) this.#settle(itemId, 'on-air');
@@ -370,7 +370,7 @@ export class MockRuntime {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false };
     this.#transition(itemId, 'exiting', true);
-    this.#audit.unshift(auditEntry('stop', { itemId, templateId: item.templateId }));
+    this.#audit.unshift(auditEntry('stop', this.#auditItem(itemId, item.templateId)));
     // C-015 parity — `#stopItemImpl` awaits `teardownLiveLayers`, so the plates come
     // down WITH the graphic even though the template producer survives below.
     this.#releaseLivePlates(itemId);
@@ -391,7 +391,7 @@ export class MockRuntime {
   next(itemId: string): { accepted: boolean; errorCode?: string } {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
-    this.#audit.unshift(auditEntry('next', { itemId, templateId: item.templateId }));
+    this.#audit.unshift(auditEntry('next', this.#auditItem(itemId, item.templateId)));
     return { accepted: true };
   }
 
@@ -410,7 +410,7 @@ export class MockRuntime {
     // commits without a wire send and a later take re-ADDs.
     this.#loaded.delete(itemId);
     this.#settleSlotObservation(itemId, 'empty');
-    this.#audit.unshift(auditEntry('out', { itemId, templateId: item.templateId }));
+    this.#audit.unshift(auditEntry('out', this.#auditItem(itemId, item.templateId)));
     // C-015 parity — `#outImpl` takes the live layers down FIRST, then the graphic.
     this.#releaseLivePlates(itemId);
     // SESSION BP parity — and level 2 thaws: an assignment edit now lands at the next take,
@@ -427,7 +427,7 @@ export class MockRuntime {
     const item = this.#find(itemId);
     this.#stack = this.#stack.filter((i) => i.itemId !== itemId);
     if (item !== null)
-      this.#audit.unshift(auditEntry('remove', { itemId, templateId: item.templateId }));
+      this.#audit.unshift(auditEntry('remove', this.#auditItem(itemId, item.templateId)));
     // SESSION BP parity — the frozen level 2 dies with the item, so a re-used itemId never
     // inherits a retired show's assignment.
     this.#frozenAssignments.delete(itemId);
@@ -740,9 +740,7 @@ export class MockRuntime {
   removeAll(): { ok: boolean; removed: number } {
     const removed = this.#stack.length;
     for (const item of this.#stack) {
-      this.#audit.unshift(
-        auditEntry('remove', { itemId: item.itemId, templateId: item.templateId }),
-      );
+      this.#audit.unshift(auditEntry('remove', this.#auditItem(item.itemId, item.templateId)));
       // B-056 parity — every item's removal resolves its warning.
       this.#resolveOwnedOccupancy(item.itemId);
     }
@@ -1727,6 +1725,21 @@ export class MockRuntime {
     this.#rehearsing.set(itemId, { itemId, channel: slot.channel, layer: slot.layer });
     this.rehearseChanged.emit(this.rehearseState());
     return { ok: true };
+  }
+
+  /**
+   * `B-211` parity — an audit entry names the LAYER the item was on, exactly as the
+   * bridge's `#itemDetail` does (the pre-state, read before the verb runs). The Audit
+   * panel turns that into the row's name; a mock that recorded no slot would be the
+   * one build where the log could not name a row.
+   */
+  #auditItem(itemId: string, templateId: string): Partial<AuditEntry> {
+    const slot = this.#slotFor(itemId);
+    return {
+      itemId,
+      templateId,
+      ...(slot !== null && { slot: { ...slot, server: 'primary' as const } }),
+    };
   }
 
   /** The fixed layer this item is bound to, or null when the mock knows of none. */
