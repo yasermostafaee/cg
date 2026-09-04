@@ -28,6 +28,8 @@ export function defaultHandlers(): Map<string, AmcpHandler> {
   m.set('CLEAR', handleClear);
   m.set('CG', handleCg);
   m.set('MIXER', handleMixer);
+  m.set('ADD', handleAdd);
+  m.set('REMOVE', handleRemove);
   return m;
 }
 
@@ -142,10 +144,62 @@ function handleInfo(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
     handler now mirrors the captured reply's shape exactly (status class, one-chunk body,
     bare-`\n` interior, tag names, 3-space indent), with the mock's own mode value.
   */
+  /*
+    `C-029` — `INFO CONFIG` answers in the real dialect too: `201 INFO CONFIG OK` and ONE
+    chunk carrying the server's parsed `casparcg.config` written back (captured verbatim on
+    the plant 2026-09-04; `outputs.test.ts` pins the shape). The mock's config DECLARES
+    exactly what its `INFO <channel>` REPORTS running — `<screen/>` and `<system-audio/>`
+    per channel — so the bridge's declared-versus-running check reads `ok` by default and a
+    test that wants the alarm scripts a declaration the running set lacks via `setHandler`.
+  */
+  if (req.args[0]?.toUpperCase() === 'CONFIG') {
+    const channels: string[] = [];
+    for (let ch = 1; ch <= ctx.channelCount; ch++) {
+      channels.push(
+        '      <channel>',
+        '         <video-mode>1080i5000</video-mode>',
+        '         <consumers>',
+        '            <screen/>',
+        '            <system-audio/>',
+        '         </consumers>',
+        '      </channel>',
+      );
+    }
+    const config = [
+      '<?xml version="1.0" encoding="utf-8"?>',
+      '<configuration>',
+      '   <paths>',
+      '      <media-path>media/</media-path>',
+      '      <log-path disable="false">log/</log-path>',
+      '      <data-path>data/</data-path>',
+      '      <template-path>template/</template-path>',
+      '   </paths>',
+      '   <channels>',
+      ...channels,
+      '   </channels>',
+      '   <controllers>',
+      '      <tcp>',
+      '         <port>5250</port>',
+      '         <protocol>AMCP</protocol>',
+      '      </tcp>',
+      '   </controllers>',
+      '</configuration>',
+      '',
+    ].join('\n');
+    return { kind: 'ok-line', code: 201, verb: 'INFO', data: config };
+  }
   const ch = Number(req.args[0]);
   if (!Number.isInteger(ch) || ch < 1 || ch > ctx.channelCount) {
     return { kind: 'err', code: 404, verb: 'INFO' };
   }
+  /*
+    `C-029` — the `<output>` block mirrors the plant's capture (2026-09-04): each running
+    consumer under `<port><port_N>` with its own `name()` in `<consumer>` — `system-audio`
+    at 500 and `screen` at 600, which is what a channel with `<screen/>` + `<system-audio/>`
+    reports. The old `<port/>` said "no consumers at all", which no real channel with a
+    picture ever reports and which a declared-versus-running check would read as EVERY
+    declared consumer missing.
+  */
   const xml = [
     '<?xml version="1.0" encoding="utf-8"?>',
     '<channel>',
@@ -156,12 +210,81 @@ function handleInfo(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
     '      <audio/>',
     '   </mixer>',
     '   <output>',
-    '      <port/>',
+    '      <port>',
+    '         <port_500>',
+    '            <consumer>system-audio</consumer>',
+    '         </port_500>',
+    '         <port_600>',
+    '            <consumer>screen</consumer>',
+    '            <screen>',
+    '               <always_on_top>false</always_on_top>',
+    '               <index>0</index>',
+    '               <key_only>false</key_only>',
+    '               <name>Screen consumer</name>',
+    '            </screen>',
+    '         </port_600>',
+    '      </port>',
     '   </output>',
     '</channel>',
     '',
   ].join('\n');
   return { kind: 'ok-line', code: 201, verb: 'INFO', data: xml };
+}
+
+/**
+ * `C-029` — `ADD <channel> <KIND …>` / `REMOVE <channel> <KIND …>` / `REMOVE <channel>-<port>`.
+ *
+ * Modelled as REFUSALS by default, and the refusal codes are the measured ones (2026-09-04,
+ * 2.5.0 `69e8ad5`, plant and dev host alike):
+ *
+ * - `ADD 1 DECKLINK 99` for a device the server cannot open → `403 ADD FAILED` (a
+ *   `user_error` from `get_device`, logged as " Check syntax." — the consumer-side twin of
+ *   `B-177`'s disguise, `B-208`);
+ * - `ADD 1 DECKLINK DEVICE 99` — the `DEVICE` word is not in the grammar — and `ADD 1 FOOBAR`
+ *   → `404 ADD FAILED` (the factory threw, so the registry answered "no match … check
+ *   syntax" as `file_not_found`);
+ * - `REMOVE` of a consumer that is not running → `404 REMOVE FAILED`.
+ *
+ * A mock with no cards refuses every DeckLink `ADD` the way the plant refuses one for a card
+ * it does not have; a test that wants a `202` scripts it with `setHandler('ADD', …)` and
+ * asserts the exact line the bridge sent. The doctrine is the file's own: an unimplemented
+ * verb that silently `202`s would let a wrong command look correct.
+ */
+function handleAdd(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
+  const ch = Number(req.args[0]);
+  if (!Number.isInteger(ch) || ch < 1 || ch > ctx.channelCount) {
+    return { kind: 'err', code: 401, verb: 'ADD' };
+  }
+  const kind = req.args[1]?.toUpperCase();
+  if (kind === 'DECKLINK') {
+    const device = req.args[2];
+    // `DEVICE` (or any non-number) where the grammar wants the device token → the factory's
+    // stoll throws → 404 on the wire, exactly as measured.
+    if (device === undefined || !/^\d+$/.test(device)) {
+      return {
+        kind: 'err',
+        code: 404,
+        verb: 'ADD',
+        detail: 'No match found for supplied commands. Check syntax.',
+      };
+    }
+    return { kind: 'err', code: 403, verb: 'ADD', detail: `Decklink device ${device} not found.` };
+  }
+  return {
+    kind: 'err',
+    code: 404,
+    verb: 'ADD',
+    detail: 'No match found for supplied commands. Check syntax.',
+  };
+}
+
+function handleRemove(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
+  const target = req.args[0] ?? '';
+  const ch = Number(target.split('-')[0]);
+  if (!Number.isInteger(ch) || ch < 1 || ch > ctx.channelCount) {
+    return { kind: 'err', code: 401, verb: 'REMOVE' };
+  }
+  return { kind: 'err', code: 404, verb: 'REMOVE' };
 }
 
 /** A classified producer argument, or the reason the mock refuses to build one. */
