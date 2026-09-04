@@ -98,10 +98,16 @@
 - [x] 6.1 Focused suites green: shared-ipc 230/230, amcp-mock 97/97, runtime DOM 24/24, bridge
       (output-policy + output-check + channel-raster + live-seating) 41/41; typecheck + lint green
       for bridge, runtime, shared-ipc, mock; prettier written.
-- [ ] 6.2 `pnpm gate` green uncached (`0 cached, … total`).
-- [ ] 6.3 Linux `gate:e2e` — owed (UI + a new E2E spec). Discharged ONLY by a COMPLETED, GREEN
-      `E2E (Playwright)` job on GitHub Actions for the commit carrying this change, run URL recorded
-      here beside this line, with the job-level conclusion and duration and confirmation the job RAN.
+- [x] 6.2 `pnpm gate` green uncached — `Tasks: 93 successful, 93 total · Cached: 0 cached, 93 total ·
+Time: 3m11.472s`, openspec `72 passed, 0 failed` (`.gate-logs/gate-20260904T001733Z-4640.log`);
+      run again by the pre-push hook on the push, green.
+- [x] 6.3 Linux `gate:e2e` — **DISCHARGED** for the commit carrying this change, `d4ffe68f` (the
+      docs commit on top of the four code commits `5cd7b43a` / `480a6872` / `65a473a0` / `353edb35`):
+      <https://github.com/yasermostafaee/cg/actions/runs/33822182671> — run conclusion `success`;
+      job `E2E (Playwright)` **RAN** (not skipped), started `2026-09-04T00:32:20Z`, completed
+      `2026-09-04T00:42:22Z`, **10m02s**, conclusion **`success`**
+      (<https://github.com/yasermostafaee/cg/actions/runs/33822182671/job/100867069340>); the
+      `Lint • Typecheck • Test • Build` job also ran, 5m32s, `success`.
 - [x] 6.4 The plant left as found: config still broken (the fixture), no consumer added or removed
       on it (one `ADD 1 DECKLINK 99` refused with 403, `INFO 1` byte-identical before and after).
       The dev host's 2.5.0 was STARTED for the reversibility measurements, its own screen consumer

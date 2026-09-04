@@ -1873,7 +1873,7 @@ harm it guarded returns without anyone noticing.
 
 ---
 
-## [~] C-029 — program output is GONE and nothing says so: the declared-versus-running output check, its banner, and a bounded off-by-default re-creation ⟨priority: high — the station had no SDI output for days and every pill read HEALTHY⟩ — IMPLEMENTED 2026-09-04, `openspec/changes/pgm-output-alarm/`; Linux `gate:e2e` OWED
+## [~] C-029 — program output is GONE and nothing says so: the declared-versus-running output check, its banner, and a bounded off-by-default re-creation ⟨priority: high — the station had no SDI output for days and every pill read HEALTHY⟩ — IMPLEMENTED 2026-09-04, `openspec/changes/pgm-output-alarm/`; Linux `gate:e2e` DISCHARGED for `d4ffe68f` — <https://github.com/yasermostafaee/cg/actions/runs/33822182671> (`E2E (Playwright)` RAN, 10m02s, `success`)
 
 **What the plant did, 2026-09-01.** The DeckLink card was replaced. `casparcg.config` kept the old
 card's persistent ID (`<decklink><device>23487013</device>`), the consumer failed at boot and never
