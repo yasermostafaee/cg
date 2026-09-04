@@ -339,13 +339,16 @@ describe('R-058 — the channel-not-producing alarm', () => {
     expect(title).toMatch(/server is UP/i);
     expect(title).toMatch(/not a connection failure/i);
     /*
-      🔴 It must NOT claim the config is wrong. The console cannot read casparcg.config —
-      it is on the playout machine, may be remote, and AMCP does not expose it. A consumer
-      that cannot start is the LIKELY cause, not an observed one, and a wrong diagnosis
-      gets acted on (the `amcp-error` lesson: naming the wrong mechanism is worse than
-      naming none).
+      🔴 It must NOT claim the config is wrong. This chip reads the OSC axis only — it saw
+      the channel tick and stop, nothing more — so a consumer that cannot start is the
+      LIKELY cause, not an observed one, and a wrong diagnosis gets acted on (the
+      `amcp-error` lesson: naming the wrong mechanism is worse than naming none). Since
+      `C-029` the bridge does read what the config DECLARES (`INFO CONFIG`), and the chip
+      points at the surface that carries that observation instead of claiming it here.
     */
-    expect(title).toMatch(/cannot read casparcg\.config/i);
+    expect(title).toMatch(/OUTPUT MISSING banner/);
+    expect(title).toMatch(/only the log can see/i);
     expect(title).not.toMatch(/the config is wrong|misconfigured/i);
+    expect(title).not.toMatch(/cannot read casparcg\.config/i);
   });
 });

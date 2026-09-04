@@ -210,12 +210,12 @@ function noOscTitle(label: string): string {
  * the `<screen />` consumer. Every signal the console had was about REACHABILITY, and every
  * one of them was true.
  *
- * ⚠ **It sends the operator somewhere, and it stops short of what it cannot see.** The
- * console cannot read `casparcg.config` — it is on the playout machine, may be remote, and
- * AMCP does not expose it — so "the config is wrong" is a claim this surface has no standing
- * to make. "The channel is not producing frames, check CasparCG's own log and its consumers"
- * is both true and actionable, and a consumer that cannot start is only the most likely cause
- * rather than the stated one.
+ * ⚠ **It sends the operator somewhere, and it stops short of what it cannot see.** This
+ * chip reads the OSC axis only: it knows the channel ticked and stopped, not why. Since
+ * `C-029` the bridge DOES read what `casparcg.config` declares (`INFO CONFIG` exposes it) and
+ * the OUTPUT MISSING banner names a declared consumer that never started — so the sentence
+ * points there for that case, and for the other (every consumer started, one stopped later)
+ * it still says only what is true: the log has the reason, this surface does not.
  *
  * ⚠ **It says the server is UP**, for the same reason `noOscTitle` does: the fault is inside
  * CasparCG, and an operator who restarts a playout box over this takes working channels off
@@ -234,7 +234,9 @@ function deadChannelTitle(label: string, channels: readonly number[]): string {
     "Check CasparCG's own log and the channel's consumers — a consumer that cannot start " +
     '(a device that is not present, a format it will not take) stops the channel without ' +
     'failing any command. ' +
-    'The console cannot read casparcg.config, so it cannot tell you which consumer.'
+    'If the OUTPUT MISSING banner is showing, it names the declared consumer that is not ' +
+    'running; if it is not, every declared consumer started and one has stopped since, which ' +
+    'only the log can see.'
   );
 }
 
