@@ -2186,3 +2186,24 @@ the destroy) measured on the dev host's 2.5.0 where the log could be read.
 
 ⇒ **Next free after this session is `B-209`** (`B-001` … `B-208`, no gaps), **`C-030`**
 (`C-001` … `C-029`, no gaps) **and `P-042`** (unchanged).
+
+### 2026-09-04 — `C-030` (`CARD-ADDRESSING-01`: how the output card is addressed, and where the operator gets the number)
+
+| kind | id      | one line                                                                                                                                                                           | home                   |
+| ---- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| `C-` | `C-030` | `<device>` takes a slot index or a persistent ID through ONE field, matched slot-first then ID; the alarm names the form; the log recipe; a recommendation for this one-card plant | [caspar.md](caspar.md) |
+
+**Derivation for `C-`, from headings as the rule requires:** highest `C-` HEADING was **`C-029`**
+(taken by `PGM-OUTPUT-ALARM-01` the same day); `git grep -n "C-030"` returned only this file's own
+"next free" pointer — the documented false positive — and no heading. **Cross-check against the
+dated pointer:** the entry above ends _"**`C-030`** (`C-001` … `C-029`, no gaps)"_ — headings and
+pointer AGREE. One number taken. **Prefix class `C-`, chosen because** the subject is how CasparCG
+addresses a DeckLink and what the bridge's alarm says about it, not a Runtime-only surface.
+
+Nothing filed under `B-`: the slot-first / ID-second matching with no marker (`util.h` `get_device`)
+is an UPSTREAM CasparCG property recorded inside `C-030`, not a product defect; and `B-208` already
+holds the consumer-verb replies this session re-used. The `B-` duplicate audit was not rerun (no
+`B-` taken); `B-056` and `B-080` remain as recorded above.
+
+⇒ **Next free after this session is `B-209`** (unchanged), **`C-031`** (`C-001` … `C-030`, no gaps)
+**and `P-042`** (unchanged).

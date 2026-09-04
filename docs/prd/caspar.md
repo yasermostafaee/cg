@@ -1956,3 +1956,81 @@ lives in the server log. A channel that ticked and STOPPED remains [[R-058]]'s c
 - **Number:** the highest `C-` heading was `C-028`; `git grep -n "C-029"` returned only the
   registry's forward pointer and [[C-028]]'s provenance note, never a heading. Recorded in
   [b-number-registry.md](b-number-registry.md).
+
+---
+
+## [~] C-030 — how the output card is ADDRESSED: `<device>` takes a slot index or a persistent ID through one field, the alarm says which, and the operator is told where the number comes from ⟨priority: high — the owner's "auto-detect" is achievable by addressing, not discovery, and the choice has a failure mode either way⟩ — IMPLEMENTED 2026-09-04 (the alarm half), `openspec/changes/output-card-addressing/`; the config edit is the OWNER's and is HELD; Linux `gate:e2e` OWED
+
+**What:** [[C-029]] tells the operator to _"read the CasparCG log on the playout machine"_. This item
+makes that concrete and answers the question under the owner's wish for auto-detection: **why type a
+number at all?** Discovery over AMCP is impossible and settled (Q2 of the 2026-08-25 walk, [[C-021]];
+probing is not a substitute, [[B-208]]). Addressing is the other route.
+
+**Where the number comes from — the recipe (Section 1, the deliverable that stands alone).**
+CasparCG prints its DeckLink cards once per start, in its own log, nowhere else (`decklink.cpp`
+`init`: `Decklink devices found:` then ` - <model> [n] (id)` per card — printed **only when a card
+was found**, so an absence means no card or no driver). The plant's line, observed 2026-08-25:
+` - DeckLink SDI 4K [1] (23487013)` — `[1]` is the **slot index**, `(23487013)` the **persistent
+hardware ID**. Three lines, in the operator guide: the file
+(`D:\casparcg-server-v2.5.0-stable-windows\log\caspar_<date>.log` on the playout machine); the search,
+typed as ONE line in a **PowerShell window on the playout machine** (not the CasparCG console, not the
+AMCP console): `Select-String -Path 'D:\casparcg-server-v2.5.0-stable-windows\log\caspar_*.log' -Pattern 'Decklink devices found' -Context 0,4 | Select-Object -Last 1`;
+and what to copy into `<device>` in a text editor, followed by a CasparCG restart. ⚠ Read from
+SOURCE, not observed on the dev host, which has had no DeckLink driver since 2026-08-24 (0 enumeration
+lines in 15 logs); the shape matches the plant's observed line exactly.
+
+**Does `<device>` accept an index? Yes — both forms, ONE field, and CasparCG does not tell them
+apart (Section 2).** `decklink/consumer/config.h:34`: `int64_t device_index = 1; // Either an index,
+or a persistent id`. `config.cpp:39` reads the element as one integer, `:134-135` defaults an absent
+element to index 1. `util.h:222-245` `get_device`: for each card in enumeration order, **match the
+slot ordinal FIRST, the persistent ID SECOND** — no threshold, no separate element, no marker on the
+number. A value equal to some card's ordinal IS that slot whatever else it might be. 🔴 That is the
+"distinguishes by guessing" case; it is harmless only because persistent IDs are long and slots are
+single digits, a property of the numbers and not of the parser. (`key-device` defaults to
+`device_index + 1` — arithmetic that only makes sense on an index.) The prediction held in substance
+and failed in one word: CasparCG never DECIDES which form it was handed; it tries both. The bridge
+passes the value through untouched at both emit sites (`command-builder.ts:460`, `output-check.ts`).
+On the wire, on the dev host with nothing on air, `ADD 1 DECKLINK 1` and `ADD 1 DECKLINK 23487013`
+both answer `403` in 2–3 ms with `INFO 1` byte-identical before and after — the driver fails before
+any comparison, so this host cannot separate the forms; on the plant the index form would SUCCEED
+(its card is slot 1) and put the channel on the SDI output, an intervention and not a probe, and was
+NOT run. The exact console lines for the owner are in the change's `design.md` §2.
+
+**Recommendation for THIS plant (Section 3) — a recommendation, not a decision:**
+`<device>1</device>`. Failure under each scheme: with a persistent ID a swapped card gives **no output
+and the red [[C-029]] banner** (the last five days); with a slot index a same-slot swap gives **output
+with no edit**, and on a multi-card box a card that moves slots gives **the wrong card's output with
+no alarm** — the worst class this product knows. In general the ID's failure is the safer one:
+fail-closed and loud beats silently wrong. For THIS plant the index's is, because the general risk
+needs a second card and this box has one (`DeckLink SDI 4K [1]`, 2026-08-25, not re-verified from
+here): `1` cannot address a card other than the one installed, a substitution would need someone to
+physically fit a different card, and an empty slot still fails closed with the banner. Condition: the
+day a second DeckLink is fitted, the declaration goes back to the persistent ID. Prepared, not
+applied — the owner edits the config in a text editor and restarts CasparCG: index →
+`<device>1</device>`; ID → `<device>NNNNNNNN</device>` with the number in `( )` on the new card's log
+line.
+
+**The alarm names the form (Section 4) — closed in code, red-first.** `describeDeviceAddressing`
+(`@cg/shared-ipc`): digits `1…64` ⇒ slot index, `≥ 1000` ⇒ hardware persistent ID, else unknown — a
+READING for the operator, so `DEVICE_ADDRESSING_RULE` (slot first, ID second, no marker) travels with
+it; `DEVICE_NUMBER_RECIPE` is the recipe in one sentence. The banner adds "the decklink is declared as
+hardware persistent ID 23487013 (a slot index would be a small number such as 1)" plus the rule and
+the recipe; the bridge's stderr line carries the same. Nothing widened: the banner still says nothing
+about a consumer's health (asserted).
+
+**Acceptance:**
+
+- WHEN the alarm names a missing DeckLink declared as `23487013` THEN it calls that a hardware
+  persistent ID and says a slot index would be a small number such as 1
+- WHEN the declaration is `1` THEN it calls that a slot index
+- WHEN the alarm shows THEN it states the slot-first / ID-second rule, names the startup log, the
+  search string `Decklink devices found` and the brackets `[slot] (persistent ID)`, and says that no
+  such line means no card or no driver
+- WHEN the alarm shows THEN it does not mention a reference signal, dropped frames or an unhappy
+  consumer
+
+- **Cross-refs:** [[C-029]] (the alarm this extends), [[C-021]] (Q2: nothing enumerates), [[B-208]]
+  (why probing is not a picker), [[B-177]] (the producer-side twin), [[R-058]].
+- **Number:** the highest `C-` heading was `C-029`; `git grep -n "C-030"` returned only the registry's
+  forward pointer, never a heading; the registry's dated sentence reads "Next free … `C-030`" —
+  headings and pointer AGREE. Recorded in [b-number-registry.md](b-number-registry.md).

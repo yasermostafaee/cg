@@ -144,11 +144,32 @@ the server what the config DECLARES (`INFO CONFIG`) and what the channel RUNS (`
 and the banner is the difference between the two.
 
 The banner names the channel, the declared consumer and its device (`decklink (device 23487013)`),
-what IS running, and when it last checked. **The next action is on the playout machine, not in this
-console:** read CasparCG's own log for the reason (`Decklink device … not found.` — the card was
-replaced or its persistent ID changed; `Decklink drivers not found.` — the driver is missing), fix
-the `<device>` in `casparcg.config`, restart CasparCG. The banner clears on its own within one check
-after the consumer is seen running. Do not power-cycle the playout box over it — the server is UP.
+**which kind of number that is** — a hardware persistent ID (a long number) or a slot index (a small
+number such as `1`) — what IS running, and when it last checked. **The next action is on the playout
+machine, not in this console:** read CasparCG's own log for the reason (`Decklink device … not
+found.` — the card was replaced or its persistent ID changed; `Decklink drivers not found.` — the
+driver is missing), fix the `<device>` in `casparcg.config`, restart CasparCG. The banner clears on
+its own within one check after the consumer is seen running. Do not power-cycle the playout box over
+it — the server is UP.
+
+**Where the number comes from — three lines.** CasparCG prints its DeckLink cards exactly once per
+start, in its own log, and nowhere else.
+
+1. **The file:** on the playout machine, `D:\casparcg-server-v2.5.0-stable-windows\log\caspar_<date>.log`
+   — one file per day; the list is printed at every start, so the newest file after a restart has it.
+2. **The search:** in a **PowerShell window on the playout machine** (not the CasparCG console window,
+   not the AMCP console), type this ONE line and press Enter:
+   `Select-String -Path 'D:\casparcg-server-v2.5.0-stable-windows\log\caspar_*.log' -Pattern 'Decklink devices found' -Context 0,4 | Select-Object -Last 1`
+3. **What to copy:** the lines beneath the match read ` - <model> [slot] (persistent ID)`, e.g.
+   ` - DeckLink SDI 4K [1] (23487013)`. The number in `[ ]` is the **slot index**; the number in
+   `( )` is the **hardware persistent ID**. Put the one you choose inside `<device>…</device>` in
+   `casparcg.config`, in a text editor (never in a console), and restart CasparCG. **If the search
+   finds nothing, the server saw no card at all — or no driver** — and no number will help until it does.
+
+**How CasparCG reads the number.** Both kinds go in the same `<device>` element. The server walks
+its cards in order and, for each one, matches the number against the card's slot position FIRST and
+its persistent ID SECOND; the number carries no marker saying which it is. In practice a small
+number is a slot and a long one is a card, and that is how the banner labels it.
 
 If the bridge loses CasparCG while the banner is up, it does not disappear: it re-labels itself
 `PROGRAM OUTPUT UNVERIFIED` and says when the output was last seen missing. An alarm that goes quiet
@@ -158,10 +179,18 @@ because its own source died would read as "fixed", and this one refuses to.
 lists the DeckLink cards a machine has (`INFO SYSTEM` is ignored; `INFO CONFIG` only echoes what you
 wrote; the real list is printed once in the startup log, which the bridge does not read). So the
 console cannot discover your card, cannot offer a picker, and will never choose a device for you.
-What it does: **you name the device in `casparcg.config` — the index from the startup log or,
-better, the persistent ID, which does not move when cards or slots change — and the bridge checks
-that the consumer you declared is running and tells you when it is not.** Trying devices with `ADD`
-is not a way to find them: a failure says nothing useful and a success puts that card on air.
+What it does: **you name the device in `casparcg.config` — the slot index or the persistent ID from
+the startup log (the three lines above) — and the bridge checks that the consumer you declared is
+running and tells you when it is not.** Trying devices with `ADD` is not a way to find them: a
+failure says nothing useful and a success puts that card on air.
+
+**Slot index or persistent ID — the trade-off.** `<device>1</device>` means "whatever card sits in
+slot 1": a card swapped in the same slot needs **no edit at all**, which is the nearest thing to
+auto-detection this server offers — and, on a box with more than one card, a card that moves slots
+puts a **different card's** output on air with no alarm. `<device>23487013</device>` means "this
+exact card": a swap gives **no output and the red banner**, never the wrong picture, at the cost of
+one edit and a restart after every swap. The recommendation for THIS plant, with its reasons, is
+recorded under `C-030` in `docs/prd/caspar.md`; the choice is the owner's.
 
 **What the check cannot see:** a consumer that is present but unhappy — a DeckLink that lost its
 reference signal, or is dropping frames. The server reports a consumer's existence and settings,
