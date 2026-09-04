@@ -11,10 +11,19 @@ import { reportCommandSuccess } from '../status/commandFeedback.js';
  * The chain is, in order: pick a `.vcg` → import it into the SHARED library
  * (where it STAYS, for reuse — this is the library's own import flow, reused
  * verbatim via `importVcgFile`, never a fixed-layers-only fork) → create an
- * item bound to the row's EXACT slot → pre-roll it. The binding happens on the
- * bridge through `LayerManager.bindFixed`; nothing here can reach dynamic
- * allocation, because `fixedLayers.load` is the only channel it calls and that
- * channel refuses any coordinate outside the declared bank (`not-fixed`).
+ * item bound to the row's EXACT slot. The binding happens on the bridge through
+ * `LayerManager.bindFixed`; nothing here can reach dynamic allocation, because
+ * `fixedLayers.load` is the only channel it calls and that channel refuses any
+ * coordinate outside the declared bank (`not-fixed`).
+ *
+ * ⚠ IT DOES NOT PRE-ROLL. A fixed-row LOAD is LIST-ONLY on the bridge (`loadFixed`
+ * → `#loadOnto(listOnly)`): no adopt-`CLEAR`, no `CG ADD`, no AMCP of any kind. The
+ * first wire contact for a row is its PLAY, which re-ADDs on the way to air
+ * (B-039). This comment said "pre-roll it" for a while after that stopped being
+ * true, and `RUNTIME-FIX-0904` spent its first section establishing the fact
+ * from the code — a stale sentence here is one more place the next reader would
+ * have believed a `load … ok` audit row proved the template had reached
+ * CasparCG. It proves nothing about the wire.
  *
  * A cancelled file picker returns `{ accepted: false, cancelled: true }` — the
  * `withConfirm` contract: nothing ran, so no success flash and no error toast.

@@ -113,7 +113,7 @@ import {
   type FixedLayersErrorCode,
   type SlotOccupancy,
 } from './fixed-layers-store.js';
-import { CommandBuilder, type CommandSlot } from './command-builder.js';
+import { CommandBuilder, summarizeWireLine, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
 import {
   projectLiveLayers,
@@ -484,6 +484,13 @@ interface AuditDetail {
   templateId?: string;
   slot?: CommandSlot;
   /**
+   * `B-209` — the AMCP line a refusal came back on (payload elided), when the impl
+   * had one. Written by the impl from `#send`'s answer, read by `auditVerdict`; an
+   * impl that refuses before the wire leaves it unset, and the record then says
+   * only the code — which is honest, because no command was refused.
+   */
+  command?: string;
+  /**
    * `remove()` ONLY — the wire failure its `{ accepted: true }` response cannot
    * express. See the note at the assignment. Nothing else may use this to
    * contradict a result, or "the outcome is DERIVED from the result" stops being
@@ -503,16 +510,21 @@ interface AuditDetail {
  */
 function auditVerdict(
   detail: AuditDetail,
-  result: { accepted: boolean; errorCode?: string },
-): { outcome: AuditEntry['outcome']; errorCode?: string } {
+  result: { accepted: boolean; errorCode?: string; command?: string },
+): { outcome: AuditEntry['outcome']; errorCode?: string; command?: string } {
   const errorCode = detail.wireFailure ?? result.errorCode;
   if (result.accepted && detail.wireFailure === undefined) return { outcome: 'ok' };
+  // `B-209` — the refused LINE rides beside the code. The result's own is preferred
+  // (it is the line the answer above came back on); `detail.command` is the path for
+  // a verb whose response shape cannot carry it, the `wireFailure` precedent.
+  const command = result.command ?? detail.command;
   return {
     // The schema's third outcome, reachable exactly because `#send` now tells a
     // timeout apart from a send failure. "Nothing came back" and "it was refused"
     // are the two readings a dispute has to choose between.
     outcome: errorCode === AMCP_TIMEOUT_CODE ? 'timeout' : 'failed',
     ...(errorCode !== undefined ? { errorCode } : {}),
+    ...(command !== undefined ? { command } : {}),
   };
 }
 
@@ -3050,7 +3062,13 @@ export class CasparRuntime {
         */
         const code = added.errorCode ?? 'amcp-error';
         this.#reconciler.applyAck(seq, false, code);
-        return { accepted: false, errorCode: code };
+        // `B-209` — WHICH line was refused. On 2026-09-04 this was the exit every
+        // take left by, and the record could not say so.
+        return {
+          accepted: false,
+          errorCode: code,
+          ...(added.command !== undefined && { command: added.command }),
+        };
       }
     } else {
       /*
@@ -3166,8 +3184,14 @@ export class CasparRuntime {
     // left this process) and `amcp-404` (CasparCG refused it) are different facts
     // pointing at different machines, and flattening both to `amcp-error` told the
     // operator neither.
-    const { ok, errorCode } = await this.#send(this.#builder.take(slot), seq, 'normal');
-    if (!ok) return { accepted: false, errorCode: errorCode ?? 'amcp-error' };
+    const { ok, errorCode, command } = await this.#send(this.#builder.take(slot), seq, 'normal');
+    if (!ok) {
+      return {
+        accepted: false,
+        errorCode: errorCode ?? 'amcp-error',
+        ...(command !== undefined && { command }),
+      };
+    }
     // `B-191` — the take LANDED, and the one thing that may still be wrong about it is said
     // rather than swallowed: the pictures are on the recorded look, the holes are not.
     return lookTellFailed === undefined
@@ -3543,8 +3567,18 @@ export class CasparRuntime {
     // Send the merged field set the Reconciler now holds.
     const merged = this.#reconciler.get(itemId)?.fields ?? fields;
     this.#armExpiry(seq);
-    const { ok, errorCode } = await this.#send(this.#builder.update(slot, merged), seq, 'normal');
-    return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
+    const { ok, errorCode, command } = await this.#send(
+      this.#builder.update(slot, merged),
+      seq,
+      'normal',
+    );
+    return ok
+      ? { accepted: true }
+      : {
+          accepted: false,
+          errorCode: errorCode ?? 'amcp-error',
+          ...(command !== undefined && { command }),
+        };
   }
 
   /**
@@ -3605,12 +3639,16 @@ export class CasparRuntime {
     // `{ accepted: false }`, which the toast could only render as "Not accepted."
     // — the operator told that a graphic did not come off air, and nothing about
     // whether the command reached CasparCG at all.
-    const { ok, errorCode } = await this.#send(this.#builder.stop(slot), seq, 'urgent');
+    const { ok, errorCode, command } = await this.#send(this.#builder.stop(slot), seq, 'urgent');
     // SESSION BP — a landed STOP is off air too, so level 2 thaws here for the same reason
     // and through the same method as `out`'s. The producer staying resident is beside the
     // point: what the freeze protects is the PICTURE, and there is no longer one.
     this.#thawAssignment(itemId, ok);
-    return { accepted: ok, ...(!ok && errorCode !== undefined && { errorCode }) };
+    return {
+      accepted: ok,
+      ...(!ok && errorCode !== undefined && { errorCode }),
+      ...(!ok && command !== undefined && { command }),
+    };
   }
 
   /**
@@ -3643,8 +3681,18 @@ export class CasparRuntime {
     const slot = this.#slots.get(itemId);
     if (slot === undefined) return { accepted: false, errorCode: 'unknown-item' };
     if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
-    const { ok, errorCode } = await this.#send(this.#builder.next(slot), this.#nextSeq(), 'urgent');
-    return ok ? { accepted: true } : { accepted: false, errorCode: errorCode ?? 'amcp-error' };
+    const { ok, errorCode, command } = await this.#send(
+      this.#builder.next(slot),
+      this.#nextSeq(),
+      'urgent',
+    );
+    return ok
+      ? { accepted: true }
+      : {
+          accepted: false,
+          errorCode: errorCode ?? 'amcp-error',
+          ...(command !== undefined && { command }),
+        };
   }
 
   async out(itemId: string): Promise<{ accepted: boolean; errorCode?: string }> {
@@ -3683,7 +3731,11 @@ export class CasparRuntime {
       behind it.
     */
     await this.teardownLiveLayers(itemId);
-    const { ok, onPrimary, errorCode } = await this.#send(this.#builder.out(slot), seq, 'urgent');
+    const { ok, onPrimary, errorCode, command } = await this.#send(
+      this.#builder.out(slot),
+      seq,
+      'urgent',
+    );
     // B-039 — `CLEAR` DESTROYS the producer: record that no producer exists on the
     // slot so a subsequent take re-ADDs (instead of `CG PLAY`-ing an empty layer).
     // The slot stays RESERVED (the item is still on the stack, idle) until remove —
@@ -3702,7 +3754,11 @@ export class CasparRuntime {
     // left" versus "CasparCG refused it" matters MOST: the first is fixed by
     // waiting for the link, the second means the graphic is still on air and
     // needs another route off. It answered a bare `{ accepted: false }`.
-    return { accepted: ok, ...(!ok && errorCode !== undefined && { errorCode }) };
+    return {
+      accepted: ok,
+      ...(!ok && errorCode !== undefined && { errorCode }),
+      ...(!ok && command !== undefined && { command }),
+    };
   }
 
   // ── R-009: orphan-layer sweep + explicit per-layer Clear ────────────
@@ -8990,7 +9046,7 @@ export class CasparRuntime {
    *      boot failure. An audit entry is a RECORD OF what happened, and nothing
    *      downstream reads it to decide what to send.
    */
-  async #audited<T extends { accepted: boolean; errorCode?: string }>(
+  async #audited<T extends { accepted: boolean; errorCode?: string; command?: string }>(
     action: AuditEntry['action'],
     detail: AuditDetail,
     run: (detail: AuditDetail) => Promise<T>,
@@ -9019,7 +9075,7 @@ export class CasparRuntime {
   #recordOutcome(
     action: AuditEntry['action'],
     detail: AuditDetail,
-    verdict: { outcome: AuditEntry['outcome']; errorCode?: string },
+    verdict: { outcome: AuditEntry['outcome']; errorCode?: string; command?: string },
   ): void {
     this.#recordAudit({
       actor: operatorActor(),
@@ -9040,6 +9096,8 @@ export class CasparRuntime {
         : {}),
       outcome: verdict.outcome,
       ...(verdict.errorCode !== undefined ? { errorCode: verdict.errorCode } : {}),
+      // `B-209` — the refused line, beside the code it was refused with.
+      ...(verdict.command !== undefined ? { command: verdict.command } : {}),
     });
   }
 
@@ -9865,7 +9923,7 @@ export class CasparRuntime {
     line: string,
     seq: number,
     priority: 'urgent' | 'normal',
-  ): Promise<{ ok: boolean; onPrimary: boolean; errorCode?: string }> {
+  ): Promise<{ ok: boolean; onPrimary: boolean; errorCode?: string; command?: string }> {
     /*
       `B-198` TEST-ONLY — the fault injector. Ahead of the write, so the delay lands BETWEEN
       one plate's `MIXER` lines and the next plate's, exactly as a scheduling hiccup would.
@@ -9909,6 +9967,16 @@ export class CasparRuntime {
         ok,
         onPrimary: result.winner === this.#adapter.currentPrimary,
         ...(errorCode !== undefined && { errorCode }),
+        /*
+          `B-209` — THE LINE THE CODE CAME BACK ON, carried out with the code. This is
+          the one place every AMCP command passes through, so it is the one place the
+          answer can be paired with what was asked: a caller that returns
+          `{ accepted: false, errorCode }` from here has the line in hand and only has
+          to keep it. Fourteen `amcp-404`s on 2026-09-04 recorded no verb because
+          nothing had ever kept it — the bridge prints no exchange and the audit
+          kept only the code.
+        */
+        ...(errorCode !== undefined && { command: summarizeWireLine(line) }),
       };
     } catch (err) {
       this.#clearExpiry(seq);
@@ -9918,7 +9986,7 @@ export class CasparRuntime {
       // goes to look.
       const errorCode = err instanceof AmcpTimeoutError ? AMCP_TIMEOUT_CODE : 'amcp-send-failed';
       this.#reconciler.applyAck(seq, false, errorCode);
-      return { ok: false, onPrimary: false, errorCode };
+      return { ok: false, onPrimary: false, errorCode, command: summarizeWireLine(line) };
     }
   }
 
@@ -9949,7 +10017,7 @@ export class CasparRuntime {
     templateId: string,
     fields: FieldValues,
     seq: number,
-  ): Promise<{ ok: boolean; errorCode?: string }> {
+  ): Promise<{ ok: boolean; errorCode?: string; command?: string }> {
     // fix-setconfig-serve-restart — the loud-failure contract: when serving
     // is INTENDED for this process but the server is down, a load must fail
     // with a clear reason (mirroring the unknown-template guard) — NEVER
@@ -10042,7 +10110,12 @@ export class CasparRuntime {
     );
     if (!muted.ok) {
       this.#reconciler.applyAck(seq, false, ADD_MUTE_FAILED);
-      return { ok: false, errorCode: ADD_MUTE_FAILED };
+      // `B-209` — the MIXER line that was refused, not the ADD that never went.
+      return {
+        ok: false,
+        errorCode: ADD_MUTE_FAILED,
+        ...(muted.command !== undefined && { command: muted.command }),
+      };
     }
     /*
       `tasks.md` 6.7 — THE ACTIVE LOOK RIDES THE `CG ADD` PAYLOAD TOO, and this is the
@@ -10080,13 +10153,17 @@ export class CasparRuntime {
     const activeLook = this.#activeLookOf(itemId);
     const control: CgControl = { ...(activeLook !== undefined && { look: activeLook.id }) };
     const addFields = withCgControl(fields, control);
-    const { ok, errorCode } = await this.#send(
+    const { ok, errorCode, command } = await this.#send(
       this.#builder.load(slot, templateArg, addFields),
       seq,
       'normal',
     );
     if (ok) this.#loaded.add(itemId);
-    return { ok, ...(errorCode !== undefined && { errorCode }) };
+    return {
+      ok,
+      ...(errorCode !== undefined && { errorCode }),
+      ...(command !== undefined && { command }),
+    };
   }
 
   /**

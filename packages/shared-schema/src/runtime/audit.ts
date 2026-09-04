@@ -37,5 +37,16 @@ export const AuditEntrySchema = z.object({
   oscConfirmMs: z.number().nonnegative().optional(),
   outcome: z.enum(['ok', 'failed', 'timeout']),
   errorCode: z.string().optional(),
+  /**
+   * `B-209` — the AMCP line CasparCG answered with the code above, payload elided.
+   *
+   * `amcp-404` alone says the server refused SOMETHING; a take sends up to five
+   * commands and the code is the same whichever one failed. Recorded beside the
+   * code so the record can say WHICH verb on WHICH layer was refused — the one
+   * fact the station could not produce for itself on 2026-09-04, when fourteen
+   * takes in a row answered `amcp-404` and nothing anywhere had kept the line.
+   * Absent on an accepted action and on a refusal that never reached the wire.
+   */
+  command: z.string().max(256).optional(),
 });
 export type AuditEntry = z.infer<typeof AuditEntrySchema>;

@@ -53,6 +53,54 @@ const FLASH_LAYER = 0;
  * `JSON.parse`. See `packages/caspar-client/src/amcp/escape.ts` for the rule and
  * its provenance. A raw value never reaches the wire unquoted.
  */
+/** The longest `command` an audit entry carries (`AuditEntrySchema.command` caps at 256). */
+export const WIRE_LINE_SUMMARY_MAX = 200;
+
+/**
+ * `B-209` — an AMCP line as the audit record keeps it: the verb, the target and the
+ * first quoted argument intact, every LATER quoted argument elided, the whole thing
+ * capped.
+ *
+ * The first quoted argument is kept because for `CG ADD` it is the template URL —
+ * the host and the PORT CasparCG was told to fetch from, which is exactly what a
+ * reader of a refused take needs (an ephemeral port changes on every bridge
+ * restart, `C-032`). The data payload after it is the operator's field values, which
+ * the stack snapshot already holds; eliding it keeps a Persian ticker's worth of text
+ * out of a column whose job is to name a command. `CG UPDATE`'s single argument IS
+ * the payload and is kept up to the cap, because there the payload is the command.
+ *
+ * ⚠ Pure and total: any line, any length, never throws. A summariser that could throw
+ * would turn a refused command into a lost audit row, which is the outcome this
+ * exists to prevent.
+ */
+export function summarizeWireLine(line: string, max = WIRE_LINE_SUMMARY_MAX): string {
+  const open = line.indexOf('"');
+  let summary = line;
+  if (open !== -1) {
+    const close = closingQuote(line, open);
+    if (close !== -1) {
+      const head = line.slice(0, close + 1);
+      // Every further quoted argument (escaped quotes included) becomes an ellipsis.
+      const rest = line.slice(close + 1).replace(/"(?:[^"\\]|\\.)*"/g, '"…"');
+      summary = head + rest;
+    }
+  }
+  return summary.length > max ? `${summary.slice(0, max - 1)}…` : summary;
+}
+
+/** The index of the quote that closes the one at `open`, honouring `\"`, or -1. */
+function closingQuote(line: string, open: number): number {
+  for (let i = open + 1; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '\\') {
+      i += 1;
+      continue;
+    }
+    if (ch === '"') return i;
+  }
+  return -1;
+}
+
 export class CommandBuilder {
   /** Load a template onto a slot — `CG ADD` with play-on-load OFF (loaded, NOT playing). */
   load(slot: CommandSlot, template: string, fields: FieldValues): string {
