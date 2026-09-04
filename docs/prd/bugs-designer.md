@@ -3721,3 +3721,203 @@ green after, with the whole package suite run three times.
 - **Number:** highest `B-` HEADING across every ref was `B-189`; the registry's dated pointer said
   _"Next free after this session is `B-190`"_ — headings and pointer agreed, so `B-190` is taken here
   and the next free becomes `B-191`.
+
+---
+
+## [~] B-217 — a canvas video went BLANK after look switches and undo, and a brand-new video rendered nothing; the reported blank is NOT reproduced, and three defects in the seam it went through are closed in code ⟨priority: high — the canvas misrepresents the composition and the owner's only cure is a reload⟩ — FILED 2026-09-04 from `DESIGNER-FIX-0902` §1; the three mechanisms CLOSED IN CODE the same day; the owner's specific blank still OPEN
+
+**Repro (owner, 2026-08-30):** a LOOKS template with a video used as the background. Several look
+switches through the `Active look` picker, then some `Ctrl+Z`.
+
+**Expected:** the canvas keeps painting the video at the playhead's frame, through every switch and
+every undo; a video added afterwards paints too.
+
+**Actual:** the background video stopped rendering on the canvas. `Ctrl+Z` did not bring it back.
+Adding a brand-new video rendered nothing either. The Inspector's own thumbnail rendered the same
+asset correctly the whole time. Saving and reopening the project cured it. The element read healthy
+(`X 0 Y 0 W 1918 H 1080`, opacity 100 %, visible, full range, `duration 8.00 s`, `on hold: Loop`,
+`3721366285-preview.mp4` 898×506 conformed 29.97→50 fps).
+
+### What was already narrowed, and is not re-derived here
+
+Reopen cures ⇒ the document is intact: runtime VIEW state. The Inspector thumbnail is fine ⇒ file,
+decode and element data are fine: only the canvas layer is dead. A NEW video is blank too ⇒ the
+broken thing is SHARED, not per element. Undo does not restore it ⇒ it is not in undoable state.
+So the search is for something released across a composition unmount and never re-acquired.
+
+### 1. The WebGL hypothesis — dead by inspection, nothing to listen for
+
+The Designer canvas has **no WebGL context anywhere**: the only `getContext` calls in
+`apps/designer/src/renderer` and `packages/template-runtime/src` are `2d` (the snap-grid probe, the
+canvas ruler, the video converter's frame reader). The canvas is a DOM iframe rendering `<video>`
+elements through `@cg/template-runtime`. There is no `webglcontextlost` to fire, so the hypothesis
+is dropped on that evidence rather than on a listener that stayed quiet.
+
+### 2. MEASURED — a video inside a look PLAYS in the static canvas after one hide/show
+
+The instrument, `apps/designer/tests/e2e/video-looks-blank.spec.ts`, walks the report against the
+real canvas: a root background video, a multi-frame group, two looks with a plate each and a second
+video INSIDE look-1, four look switches, a scrub, a nudge + two undos, a second round trip, a new
+video — sampling the visible `<video>` at every stage (blob src, decoded, at the playhead's mapped
+time, paused, rate 1, and visible pixels when drawn). Pre-fix, three stages failed and all three
+were the same fact:
+
+| stage                                        | measured                                                  |
+| -------------------------------------------- | --------------------------------------------------------- |
+| in-look video after ONE hide → show          | `paused: false`, `currentTime` 3.38 s — **PLAYING**       |
+| after four more switches                     | still playing, looped (`currentTime` 0.455 s)             |
+| after a scrub to frame 150 (should be 3.0 s) | `currentTime` 1.086 s, playing — **the playhead lost it** |
+| after an undo (a rebuild)                    | paused at 2.0 s, renders — the rebuild "cures" it         |
+| root background video, every stage           | fine                                                      |
+| a brand-new video                            | fine                                                      |
+
+**Mechanism.** `B-150`'s `LookMediaPark` (`look-media.ts`, `e04760e0`, 2026-08-21) parks the
+content of a hidden look and, on the way back, calls `driver.resume()` on every member it recorded.
+It recorded every parked member **unconditionally**, and `VideoDriver.resume()` /
+`LottieDriver.resume()` are continue-OR-START: `if (destroyed || running || settledHold) return;
+running = true; handle.play()`. The ticker and sequence drivers refuse a resume when they were not
+running; the two media drivers do not. The Designer canvas never plays, so every driver there is
+idle — one look switch away and back was enough to set the clip playing, and `positionAt()` (the
+playhead's positioning, `D-135` §5) is a no-op for a running driver, so scrubbing no longer moved
+it until the next rebuild made a fresh, idle driver.
+
+**Fix.** `ParkableDriver` gains `isRunning()` (implemented on the video, Lottie, ticker and
+sequence drivers), and `#park` records a member as owing a resume **only when the pause actually
+stopped a running driver**. On air nothing changes: a running driver is still recorded and still
+resumed in place. RED-first: with the unconditional add restored, the new park test fails at
+_"still a paused frame after hide → show: expected false to be true"_.
+
+### 3. READ — the park's membership was asked of a node the preview's pool had detached
+
+The video registered its build-time `media` node with the park, and the park asks `contains()` of
+that node. The Designer preview pools every live `<video>` across a rebuild and transplants it over
+the freshly built one (`preview.ts` `reconcileVideos`, `D-128` Phase 3) — so from the first rebuild
+on, the registered node is detached, `contains()` is false for every root, and the member is never
+parked or silenced again. `B-137` gave the driver a `live()` resolver for exactly this swap; the
+park now registers `node: () => live()` and `audio: () => live()`, and `LookMediaMember` accepts a
+getter. Pinned by a transplant-in-miniature test: an UNMUTED replacement node inside the hidden look
+is silenced by the next reassert. Editor-only in consequence (the playout page never transplants),
+and it is what MASKED §2 after the first rebuild in the instrument's stage 6.
+
+### 4. READ — the pool re-adopted a node with a TERMINAL media error, forever
+
+`harvestVideos` pooled every `<video>` node and `reconcileVideos` transplanted it back whenever the
+element id and asset matched — **with no look at `media.error`**. A node whose media hit a terminal
+error (the seek-fragile decode class `video-poster.ts` documents, a revoked blob URL) is a corpse,
+and pooling it puts the corpse back on screen after EVERY rebuild: the transplanted node carries
+`data-cg-poster-armed="1"` so the asset walk never re-arms it, and nothing in the static canvas
+ever rebuilds it — the driver's `recover()` runs only while a driver is running, which the canvas
+never is. **That is the one shape in this seam that survives `Ctrl+Z` and is cured only by a
+reload** — the owner's signature for the EXISTING video. The pool now drops a dead node at harvest
+and refuses one at reconcile, so the fresh node takes over and gets a normal src + poster. Pinned
+on the generated preview source (`preview-video-pool-dead-node.test.ts`), the contract style
+`preview-video-poster-guard.test.ts` established; a real terminal error is not reproducible with
+the committed fixtures, and that limit is stated rather than papered over.
+
+### 5. Ruled out, with the reason
+
+- **A stuck rebuild** (`busy` never released, every later `scene-replace` coalesced away — which
+  would leave src-less fresh `<video>` nodes on screen and never draw a new element): the only
+  awaits between the harvest and the asset walk are `runtime.ready` (`document.fonts.ready`) and
+  `runtime.update()`, and `update()` contains no `await` at all.
+- **Revoked blob URLs held by the renderer's cache**: the bridge revokes every asset URL on
+  `projects.activeChanged`, and the renderer's `assetUrlCache` is cleared only while the Assets
+  panel is mounted — a real hole, but the handle-tier Save the owner uses never re-emits
+  `activeChanged`, and nothing in a look switch or an undo does either. Recorded here as a latent
+  gap (a project switch with the panel closed, same-content asset ids); not this defect's path.
+- **Duplicate element ids across look instances** (the pool is keyed by element id): each look is
+  its own fresh composition (`looks.ts` `addLook`), and paste re-ids, so ids do not repeat.
+
+### When it started
+
+§2 began with `e04760e0` (2026-08-21, `B-150`'s park). §4 dates from `D-128` Phase 3 (the pool,
+July). The single-clock reorder (`a7976e14`, 2026-09-01) landed AFTER the 2026-08-30 report and is
+not on this path; `C-028` (2026-08-25) touched the plate fit payload only; `B-188` (2026-08-29)
+touched look SOURCES only. The report cannot be blamed on either recent seam change.
+
+### What is NOT closed — and what would close it
+
+The instrument does not reproduce the owner's blank with the committed fixtures in headless
+Chromium: the root background rendered at every stage, and so did a brand-new video. §4 explains a
+persistent blank for the EXISTING video once a node dies; it does not, on its own, explain a NEW
+video rendering nothing — unless the new video's own poster load failed on the same asset, which a
+console line would have shown. **The owner's project (`livegroup`) is not in the repo and not on
+this host's disk**, so the walk was against fixtures. To close: open that project with the console
+visible, repeat the switches and undos, and report (a) whether the background video is INSIDE a
+look's composition or at the root, and (b) any `[cg-preview]` / `[cg]` console line. Until then
+this stays `[~]`: three defects closed in code, the reported blank filed and open.
+
+- **Regression tests:** `packages/template-runtime/tests/looks-media-park.test.ts` (three `B-217`
+  pins: never-started stays paused across a round trip; a running driver is still resumed; a
+  transplanted node is still silenced), `apps/designer/tests/preview-video-pool-dead-node.test.ts`,
+  and the instrument `apps/designer/tests/e2e/video-looks-blank.spec.ts` (fourteen stages, all
+  green post-fix; three RED pre-fix).
+- **Cross-refs:** [[B-150]] (the park), [[B-137]] (the `live()` resolver this reuses), `D-128`
+  Phase 3 (the pool), `D-135` §5 (the playhead owns the canvas frame), [[B-218]] (the sibling
+  Designer report of the same day).
+- **Number:** highest `B-` HEADING across the three bug files was `B-216`; the registry's dated
+  pointer said _"Next free after this session is `B-217`"_ — headings and pointer AGREE, so `B-217`
+  is taken here.
+
+---
+
+## [~] B-218 — "keep aspect / free" was ONE flag for every plate in every look: setting one box to FREE freed all of them ⟨priority: medium — a per-plate control that silently reaches every other plate⟩ — FILED AND CLOSED IN CODE 2026-09-04 (`DESIGNER-FIX-0902` §2; `openspec/changes/aspect-lock-live-source/` 3.5–3.7); Linux `gate:e2e` owed
+
+**Repro (owner, 2026-08-30):** a two-box look. Select one box, press its `keep aspect` toggle to
+`FREE`.
+
+**Expected:** that box resizes freely; the other box keeps its aspect; boxes in other looks are
+untouched.
+
+**Actual:** every box in the look reads `FREE`, and so do the boxes in the other looks.
+
+**Evidence already measured:** in `livegroup.vcg`'s exported `template.json`, `aspectLock` has
+ZERO occurrences while `expectedAspect` sits on every plate — the lock state was not per element.
+
+### Which kind of defect it was — established before anything was fixed
+
+🔴 **Genuinely ONE app-level flag, by design, not a per-element value with a shared write path.**
+`store-core.ts:183` declared `aspectLockEnabled: boolean` with a docstring arguing for exactly
+this: _"Per author, not per plate. A per-plate session flag would be invisible state whose extent
+the author cannot see."_ — `D-155`'s third reason, spelled the same way in the in-flight change's
+`designer-live-source` delta, in `StyleSection.tsx`'s `AspectRow` (which read the one flag), in
+`Gizmo.tsx:457-460` (the lock condition `video-placeholder` + `expectedAspect` + the flag — the
+anchor the brief gave as `~:455` had drifted by two lines) and in `ArrangementsSection.tsx`, whose
+`CELLS` fields read the SAME flag as "one value, two surfaces". So the fix is the other design, not
+a plumbing repair: the report is the design's own argument measured the other way round — the
+shared flag was the invisible state, because an author freeing one box could not see that every
+other box changed with it, and the toggle beside the SELECTED plate showing that plate's own state
+is the visible extent.
+
+### The fix
+
+- `aspectLockOff: ReadonlySet<string>` replaces the boolean — the set of lock KEYS whose lock is
+  OFF; absent ⇒ locked, so the default and every plate after a reopen need no entry.
+- `isAspectLocked(state, key)` (`slices/view.ts`) is the ONE predicate the gizmo, the aspect row
+  and the `CELLS` fields ask; `setAspectLock(key, enabled)` takes the key.
+- A plate's key is its element id. The arrangement `CELLS` fields, which constrain a different
+  quantity (the box composition's resolution aspect, `lockedCellEdit`) and can no longer ride a
+  plate's toggle, get a toggle of their own beside the cells, keyed by the arrangement's id.
+- Still session-only. `D-155`'s two reasons for keeping it out of the scene stand.
+
+### ⚠ Should it PERSIST? — answered separately, and NOT done
+
+It does not survive an export today, and after this fix it still does not. Persisting the per-plate
+choice would be a **format change**: a schema field on `video-placeholder` in `@cg/shared-schema`,
+an export path in `@cg/vcg-format`, and a value the runtime never reads — `D-155`'s reason 2. It is
+therefore not made silently here. Recorded as the owner's open decision (tasks 3.7); the
+recommendation is to leave it session-only unless authors report re-freeing plates after every
+reopen.
+
+- **Regression tests:** `apps/designer/tests/aspect-lock-per-plate.test.ts` (five store pins:
+  default locked with no entry, freeing one leaves the rest locked, re-locking removes only its
+  own entry, no-op writes do not churn, scene/dirty/undo untouched);
+  `resize-edge-snap.dom.test.ts` now calls `setAspectLock('plate', …)`; scenario-level
+  `apps/designer/tests/e2e/aspect-lock-per-plate.spec.ts` (green on Windows, 2026-09-04).
+- **Not touched, deliberately:** [[D-155]] (the lock's justification — corrected in place, not
+  reopened), [[B-175]] (the fixed-corner pin), [[B-185]] (the handle drift — ACCEPTED and PARKED
+  by the owner; nothing here changes the resize solve).
+- **Cross-refs:** [[D-155]], [[D-147]] (the aspect declaration), [[B-217]] (the same day's other
+  Designer report).
+- **Number:** taken immediately after `B-217` in the same sweep; `git grep -n "B-218"` returned
+  nothing anywhere before this heading was written.

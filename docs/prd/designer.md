@@ -4906,6 +4906,15 @@ and exported for a value the runtime can never read. The aspect itself is alread
 selections, like `snappingEnabled`. A per-plate session flag would be invisible state the author
 cannot see the extent of.
 
+🔴 **CORRECTED by [[B-218]], 2026-09-04 — the paragraph above shipped and was WRONG in practice.**
+The owner's report: in a two-box look, setting one box to FREE changed it for every box, and in
+the other looks too. The shared flag was the invisible state — an author freeing one box could not
+see that every other box changed with it — and the toggle beside the SELECTED plate, showing that
+plate's own state, is the visible extent. The lock is now held **per plate** (and the `CELLS`
+fields per arrangement, with a toggle of their own), still session-only; the two reasons for not
+persisting it stand, and whether to persist it anyway is an open decision recorded under
+[[B-218]].
+
 ### The FIT button survives with a CHANGED JOB
 
 **Fit plate to aspect** stops being the normal path and becomes a **REPAIR**: for a plate authored
@@ -5203,3 +5212,81 @@ in the same docs-only commit.
 ⚠ Recorded rather than silently left, because a `[~]` with every task ticked and its e2e discharged
 looks indistinguishable from a `[~]` that is genuinely unfinished — and the next reader would spend
 the same audit working out which one it is.
+
+---
+
+## [x] D-158 — parts of the background (the neon frame's corners, the `LIVE STREAM` title bar) should appear OVER the live box instead of being covered by it ⟨priority: medium⟩ — ANSWERED WITHOUT A FLAG, 2026-09-04 (`DESIGNER-FIX-0902` §3): over-the-picture artwork is its own template on a bank row, not an element inside a look. No change dir — documentation only, no code
+
+**What:** the request as made — some artwork of a plate-bearing template should draw ON TOP of
+the live picture rather than sit beneath it.
+
+**Why:** a neon frame whose corners overlap the picture, a title bar across the top of a live box —
+ordinary broadcast furniture.
+
+### The August design is obsolete, and the reason is recorded so it is not rebuilt
+
+The design agreed in August was a per-element _"draws over the picture"_ flag whose whole
+mechanism was subtracting those elements from a **punched hole** in the page above the plates.
+**That hole no longer exists.** The single-clock reorder (`a7976e14`, 2026-09-01,
+`openspec/changes/single-clock-look-switch/`) retired the mask and moved the plate-bearing page
+BELOW its plates. Verified against the tree on 2026-09-04: no exported `liveSourceMask`,
+`MaskHole`, `LiveSourceMask`, `sceneMaskHoles`, `intersectPunches` or `PlateFits` symbol remains
+anywhere under `packages/`, `tools/` or `apps/`; `live-source-punch.ts` and its test, plus
+`live-source-mask.test.ts`, `transition-mask.test.ts`, `overlap-residue.test.ts`,
+`arrangement-hole-size.test.ts` and `unit-b-prime-mutators.test.ts`, were deleted in that commit.
+What survives are tombstone comments naming the removal (`scene.ts:769`, `scene-flatten.ts:346`,
+`:458`, `runtime.ts:536`, `arrangement-view.ts:27`, `vcg-format/live-sources.ts:155`) and the skew
+harness's own scene notes (`tools/skew-harness/src/scene.ts:27`, `:48`, `:68`, `:169`, `:203`),
+which still describe `sceneMaskHoles` in the present tense — stale prose in a measuring instrument,
+not a mechanism. There is no hole to subtract an element from.
+
+### The runtime's answer, verified against the client's packages
+
+[[B-195]] (`bugs-runtime.md`, 2026-09-01) audited the client's twelve packages with the product's
+own flattening: **exactly one** (`3ghab.vcg`) has live plates, and **the other eleven ARE the
+over-the-picture furniture, already authored as separate templates** — `ارم-روی-انتن`,
+`زیرنویس-روی-انتن`, `نوار-خبر-روی-انتن`, `توالی-خبر-روی-انتن`, `میانبرنامه-روی-انتن`,
+`zirnevis-white` (`.vcg` and `.cgproj`), `logo1`, `parcham`, `pen`, `text`. The count of elements
+whose geometry is tied to a plate's rect was **zero**. Re-checked 2026-09-04 against the folder
+the audit read (`…\Desktop\temp\cg templates exports`): the same twelve files are there, dated as
+the audit recorded. Under the reorder the bank rows (`70–99`) already sit ABOVE the live band, so a
+furniture package on its own row draws over the pictures with no flag and no mask — that is the
+`runtime-live-source-routing` delta's _"A furniture package still draws over the pictures"_
+scenario in `single-clock-look-switch`.
+
+**So no flag is built.** The answer is recorded where a template author and an operator will find
+it: `docs/designer-guide/README.md` §"Live boxes, and artwork that must appear over the picture"
+and `docs/operator-guide/README.md` §"Artwork over the live picture is its own row".
+
+### ⚠ The one shape that would bring the old design back — a KNOWN FUTURE REQUEST, not work
+
+A super positioned **under a particular guest box** — geometry tied to a plate's rect, which must
+move on the same frame the fills move (`B-195`'s CLASS 1). Nothing like that is built, and its
+severity would not be the old one: on an overlay row a late element is a graphic arriving one
+frame late, **not a black hole**. The owner confirmed on 2026-09-01 that supers over a guest are
+coming; when a per-box super is asked for, it is a new item, and this note is where it starts.
+
+### Designer surfaces that still describe the retired mechanism — REPORTED, not redesigned
+
+None suggests a "draws over" flag exists or is coming; all still describe the hole the page no
+longer punches, and one implies the template cannot draw over the picture at all:
+
+| where                                                  | the string                                                                                                                                        |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ArrangementsSection.tsx:104` (mode label)             | `Fade — the mask dissolves (cheapest)`                                                                                                            |
+| `ArrangementsSection.tsx:242` (move hint)              | _"anything else drifts the picture off its hole while it travels"_                                                                                |
+| `ArrangementsSection.tsx:380` (callout)                | _"a plate in one declares no hole and punches none"_                                                                                              |
+| `ArrangementsSection.tsx:423`, `:431` (how boxes work) | _"the hole is that fraction of whatever cell the box lands in"_, _"the plate is a hole filled edge-to-edge"_                                      |
+| `StyleSection.tsx:715-721` (Live Source hint)          | _"the hole paints nothing on air, and the picture is composited on a layer behind it … the frame … sits entirely outside the hole"_               |
+| `StyleSection.tsx:794-795` (Frame row hint)            | _"The frame is painted by the TEMPLATE, outside the hole — it never covers the live picture"_ — true in effect under the reorder, wrong mechanism |
+
+A follow-up item may re-word them against the reorder; this one does not (the brief: report, do
+not redesign).
+
+- **Cross-refs:** [[B-195]] (the audit), `single-clock-look-switch` (the reorder), [[B-194]] (the
+  affordability number the audit corrected), `C-015` (the layer bands).
+- **Number:** highest `D-` HEADING was `D-157`; `git grep -n "D-158"` returned only `D-157`'s own
+  sweep note (_"`D-158` returned nothing at all"_), never a heading. ⚠ The registry's last dated `D-`
+  sentence (2026-08-24) still reads _"Next free: `D-157`"_ — it was written before `D-157` was
+  filed and never advanced, so HEADINGS and the pointer DISAGREE by one; the headings win and
+  `D-158` is taken here. Recorded in the registry's 2026-09-04 entry.

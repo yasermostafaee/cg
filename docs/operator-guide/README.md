@@ -73,6 +73,21 @@ re-establish — on air. The Runtime cannot detect a divergent bank on another s
 **installation requirement**, the same class of contract as pointing the server's OSC at
 the bridge: check it when you set up or change any station's config.
 
+### Artwork over the live picture is its own row
+
+A template that carries live boxes is composited **below** the live pictures: nothing drawn
+inside it — its background, a frame, a title bar — can appear over a picture, and there is no
+setting that makes it. **Anything that must draw over the picture is a separate template on its
+own bank row**, above the live band: the logo bug, the lower-third name super, the news bar, the
+title bar. Load it on its row and take it; it draws over every plate-bearing template beneath,
+and it switches, holds and clears on its own trigger, independent of the look switch. This is
+how the station's set is already authored — one package carries the boxes, and the logo, lower
+third, news bar and interstitial are their own rows.
+
+The one thing a row cannot do today is follow a particular guest box when the layout switches (a
+super pinned under one box). On its own row such a graphic may arrive a frame late on a switch —
+never a black hole. Ask for it as a feature rather than expecting a plate template to draw it.
+
 ### Upgrading from the old dynamic stack
 
 Older versions placed each graphic on whatever layer was free in its template type's range,

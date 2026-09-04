@@ -2271,3 +2271,33 @@ rerun (numbers derived from headings); `B-056` and `B-080` remain as recorded ab
 
 ⇒ **Next free after this session is `B-217`** (`B-001` … `B-216`, no gaps), **`C-034`** (`C-001` …
 `C-033`, no gaps) **and `P-042`** (unchanged).
+
+### 2026-09-04 (later) — `B-217`, `B-218` and `D-158` (`DESIGNER-FIX-0902`: the dead canvas video, the shared aspect toggle, the feature that answered itself)
+
+| kind | id      | one line                                                                                                                                                                                                                 | home                                 | status                                                                                        |
+| ---- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `B-` | `B-217` | a canvas video went BLANK after look switches and undo; the blank is NOT reproduced, and three defects in the seam it went through (the park's blind revive, detached membership, a pooled dead node) are closed in code | [bugs-designer.md](bugs-designer.md) | three mechanisms closed in code; the owner's blank filed, open                                |
+| `B-` | `B-218` | "keep aspect / free" was ONE flag for every plate in every look — now per plate (and per arrangement), still session-only; persistence is the owner's open decision                                                      | [bugs-designer.md](bugs-designer.md) | closed in code                                                                                |
+| `D-` | `D-158` | artwork over the live box — ANSWERED without a flag: it is its own template on a bank row; the August per-element flag design is obsolete with the mask; recorded in both guides                                         | [designer.md](designer.md)           | answered by documentation, `[x]`, no change dir; a per-box super is noted as a future request |
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three
+bug files was **`B-216`** (`git grep -n -E "^## \[.\] B-2[0-9][0-9]"`); `git grep -n "B-217"`
+returned exactly ONE hit — this file's own "Next free" pointer, the documented false positive — and
+`git grep -n "B-218"` returned nothing. **Cross-check against the dated pointer:** the entry above
+ends _"Next free after this session is `B-217`"_ — headings and pointer AGREE. Two numbers taken,
+both filed in `bugs-designer.md` (Designer canvas and Inspector surfaces).
+
+**Derivation for `D-`:** highest `D-` HEADING was **`D-157`** (`designer.md:5049`); `git grep -n
+"D-158"` returned only `D-157`'s own sweep note (_"`D-158` returned nothing at all"_), never a
+heading. ⚠ **Cross-check against the dated pointer — they DISAGREE.** The last dated `D-` sentence in
+this file is the 2026-08-24 entry's _"Next free: `D-157` and `B-176`"_ (and the 2026-08-24 `R-`
+entry's _"`R-059`, `D-157` and `B-176`"_): both were written BEFORE `D-157` was filed and no later
+entry advanced the `D-` pointer when it was taken. Headings win, as the rule says; `D-158` is taken
+here and the pointer is corrected below. One number taken, filed in `designer.md` — a feature
+request, answered rather than implemented.
+
+⚠ The `B-` duplicate audit was not rerun (numbers derived from headings); `B-056` and `B-080` remain
+as recorded above.
+
+⇒ **Next free after this session is `B-219`** (`B-001` … `B-218`, no gaps), **`D-159`** (`D-001` …
+`D-158`, no gaps — corrected from the stale `D-157`), **`C-034`** and **`P-042`** (both unchanged).
