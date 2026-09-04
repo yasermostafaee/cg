@@ -46,6 +46,15 @@ import {
   parseVideoModeFromInfo,
   videoModeFramePeriodMs,
   videoModeRaster,
+  // C-029 — the program-output check's two parsers and its diff, beside the wire types
+  // they read into, for the same reason as `parseVideoModeFromInfo` above.
+  missingConsumers,
+  parseDeclaredConsumersFromConfig,
+  parseRunningConsumersFromInfo,
+  type ChannelOutputCheck,
+  type ConsumerCreation,
+  type DeclaredChannelConsumers,
+  type RunningConsumer,
   type LayerClearReason,
   type PLAYOUT_CLEAR_REASONS,
   type RestoreMigration,
@@ -91,6 +100,12 @@ import {
 } from '@cg/shared-ipc';
 import { operatorActor } from './actor-context.js';
 import { ChannelSettingsStore } from './channel-settings-store.js';
+import {
+  OUTPUT_RECHECK_MS,
+  creatableMissingConsumer,
+  describeMissingOutput,
+  missingConsumerAddCommand,
+} from './output-check.js';
 import {
   validateFixedBank,
   validateFixedBankChange,
@@ -1086,6 +1101,38 @@ export class CasparRuntime {
    * golden rules state for liveness, applied to geometry.
    */
   readonly #modeReadFrom = new Map<number, ServerLabel>();
+  /*
+    🔴 `C-029` — THE PROGRAM-OUTPUT CHECK: what `casparcg.config` DECLARES against what
+    `INFO <channel>` reports RUNNING, per server, per channel.
+
+    Two reads, two latches, one verdict:
+
+    - `#declaredConsumers` — `INFO CONFIG`, read ONCE PER CONNECTION on the sweep tick
+      (`undefined` = not read yet, asked again next tick; `null` = answered but not a
+      configuration, latched — asking again would not make it one).
+    - `#runningConsumers` — the `<output>` block of the SAME `INFO <channel>` reply the
+      `R-030` mode read already sends, so the running half costs no extra AMCP traffic; a
+      slow wall-clock re-read (`#outputRecheckMs`, 60 s) keeps it honest afterwards.
+    - `#outputChecks` — the verdict, KEPT across a disconnect on purpose so the renderer can
+      say "last seen missing, cannot re-check" (`outputVerdictOf`'s `unverifiable` arm)
+      instead of falling silent. Reset only by a fresh reading.
+
+    All three are keyed by the server that ANSWERED, never by whoever was primary when the
+    send started — a failover mid-flight would otherwise file A's declaration under B.
+  */
+  readonly #declaredConsumers = new Map<ServerLabel, DeclaredChannelConsumers[] | null>();
+  readonly #configReadInFlight = new Set<ServerLabel>();
+  readonly #runningConsumers = new Map<
+    ServerLabel,
+    Map<number, { running: RunningConsumer[]; at: string }>
+  >();
+  readonly #outputChecks = new Map<ServerLabel, Map<number, ChannelOutputCheck>>();
+  /** When this server's running set was last read (ms epoch), for the slow re-check. */
+  readonly #outputReadAt = new Map<ServerLabel, number>();
+  /** `label:channel` pairs the bridge has already tried to create a consumer on, this connection. */
+  readonly #outputCreateAttempted = new Set<string>();
+  readonly #createMissingConsumers: boolean;
+  readonly #outputRecheckMs: number;
   /**
    * R-030 — channels whose raster mismatch has already been shouted, so a
    * settled fault is announced on its TRANSITION and not on every publish.
@@ -1221,6 +1268,13 @@ export class CasparRuntime {
       sweepMs?: number;
       occupancyStaleMs?: number;
       channelTickStaleMs?: number;
+      /**
+       * `C-029` — may the bridge `ADD` a declared consumer the output check finds missing?
+       * Resolved by `resolveCreateMissingConsumers` in `bridge.ts`; absent here is OFF.
+       */
+      createMissingConsumers?: boolean;
+      /** `C-029` — TEST-ONLY: how often a reachable server's running consumers are re-read. */
+      outputRecheckMs?: number;
       /**
        * `B-174` — how long a look switch HOLDS its `MIXER FILL`/`CLIP` batch after the
        * page has been told, in ms, so the fills land with the holes instead of 1–3 fields
@@ -1372,6 +1426,9 @@ export class CasparRuntime {
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
     this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
+    // C-029 — `=== true`, never `?? false` with a truthy fallback: absent is OFF.
+    this.#createMissingConsumers = options.createMissingConsumers === true;
+    this.#outputRecheckMs = options.outputRecheckMs ?? OUTPUT_RECHECK_MS;
     this.#mixerLineDelayMs = options.faultInjection?.mixerLineDelayMs ?? 0;
     this.#throwAfterMixerLines = options.faultInjection?.throwAfterMixerLines ?? 0;
     this.#sessionTuning = options.sessionTuning ?? {};
@@ -1477,6 +1534,26 @@ export class CasparRuntime {
       //                     emptied item never flashes red.
       session.on('state-change', ({ from, to }) => {
         if (this.#sessions[label] !== session) return; // torn-down era
+        /*
+          C-029 — a NEW CONNECTION invalidates the per-connection facts: the declaration,
+          the mode latch and the one-shot creation attempt. A CasparCG restarted after a
+          config fix comes back through resyncing → healthy, and this is what makes the
+          alarm CLEAR on the next tick's re-read instead of latching for the life of the
+          bridge. `degraded → healthy` is the SAME connection with OSC back, so it is
+          deliberately excluded — it must not re-send INFO on every OSC flap. The kept
+          verdict (`#outputChecks`) is NOT cleared here: until the re-read lands it is
+          still the last thing anyone saw.
+        */
+        if (to === 'healthy' && from !== 'degraded') {
+          this.#declaredConsumers.delete(label);
+          this.#outputReadAt.delete(label);
+          for (const [channel, readFrom] of [...this.#modeReadFrom]) {
+            if (readFrom === label) this.#modeReadFrom.delete(channel);
+          }
+          for (const key of [...this.#outputCreateAttempted]) {
+            if (key.startsWith(`${label}:`)) this.#outputCreateAttempted.delete(key);
+          }
+        }
         if (this.#adapter.currentPrimary !== label) return; // only the primary feeds the reconciler
         if (to === 'healthy') {
           this.#reconciler.setLinkDown(false);
@@ -7616,9 +7693,28 @@ export class CasparRuntime {
     // mode at all, reported `unreadable` forever, and so silently lost the
     // mismatch check — on exactly the installs the C-018 recon was about.
     if (isLiveState(session.state)) {
+      const primaryLabel = this.#adapter.currentPrimary;
+      // C-029 — the DECLARED half of the output check: one `INFO CONFIG` per connection,
+      // asked again next tick only while it has not answered at all. Same axis, same gate,
+      // same reasons as the mode read below.
+      if (
+        !this.#declaredConsumers.has(primaryLabel) &&
+        !this.#configReadInFlight.has(primaryLabel)
+      ) {
+        void this.#readServerConfig(primaryLabel);
+      }
       for (const channel of this.#declaredChannels()) {
         if (this.#modeReadFrom.get(channel) === this.#adapter.currentPrimary) continue;
         void this.#readChannelMode(channel);
+      }
+      // C-029 — the RUNNING half rides the mode read's reply; this is only the slow
+      // re-read that lets the alarm CLEAR without a reconnect (a hand-typed `ADD` in the
+      // console, a consumer that came up late). Stamped at SEND time so a slow reply
+      // cannot double-send, and first armed by the first ingest, never before it.
+      const lastRead = this.#outputReadAt.get(primaryLabel);
+      if (lastRead !== undefined && Date.now() - lastRead >= this.#outputRecheckMs) {
+        this.#outputReadAt.set(primaryLabel, Date.now());
+        for (const channel of this.#declaredChannels()) void this.#readChannelOutputs(channel);
       }
       // R-022 — re-assert every declared row's intended volume, once, as soon as a
       // server is first reachable. A bridge that died mid-rehearse left a MUTED
@@ -8614,12 +8710,17 @@ export class CasparRuntime {
         structural rather than a check someone has to remember.
       */
       const channels = session.osc.channelTicks.channels(this.#channelTickStaleMs);
+      // C-029 — the kept verdicts, whatever the state: `outputVerdictOf` decides the arm.
+      const outputs = [...(this.#outputChecks.get(label)?.values() ?? [])].sort(
+        (a, b) => a.channel - b.channel,
+      );
       return {
         label,
         state,
         amcpAxisOk: state === 'healthy',
         ...(heardAt !== null ? { oscFreshAt: new Date(heardAt).toISOString() } : {}),
         ...(channels.length > 0 ? { channels } : {}),
+        ...(outputs.length > 0 ? { outputs } : {}),
       };
     };
     const primarySession = this.#sessions[cur];
@@ -9238,6 +9339,9 @@ export class CasparRuntime {
             ? response.lines.join('\n')
             : null;
       if (xml === null) return;
+      // C-029 — the RUNNING consumers ride this same reply, BEFORE the mode parse: an
+      // unreadable mode must not cost the output check its reading.
+      this.#ingestChannelInfo(result.winner, channel, xml);
       const mode = parseVideoModeFromInfo(xml);
       if (mode === null) return;
       // Attributed to the server that actually ANSWERED, never to whoever was
@@ -9255,6 +9359,225 @@ export class CasparRuntime {
     } catch {
       // See above: an unreadable mode stays absent, never guessed.
     }
+  }
+
+  /**
+   * `C-029` — the DECLARED half: `INFO CONFIG`, once per connection.
+   *
+   * Sent the way the mode read is sent — through the adapter, `low` priority, `primary`
+   * target — and for the same reasons. Latches on ANY `201` reply: a reply that is not a
+   * configuration (an older build, a different dialect) is recorded as `null` and NOT
+   * re-asked, because asking again would not make it one; only a refusal or a timeout
+   * leaves the latch unset so the next tick tries again. Keyed by the server that ANSWERED.
+   */
+  async #readServerConfig(label: ServerLabel): Promise<void> {
+    this.#configReadInFlight.add(label);
+    try {
+      const result = await this.#adapter.send('INFO CONFIG', {
+        priority: 'low',
+        target: 'primary',
+      });
+      const response = result.response;
+      const xml =
+        response.kind === 'ok-line'
+          ? response.data
+          : response.kind === 'ok-multi'
+            ? response.lines.join('\n')
+            : null;
+      if (xml === null) return;
+      this.#declaredConsumers.set(result.winner, parseDeclaredConsumersFromConfig(xml));
+      for (const channel of this.#declaredChannels()) {
+        this.#recomputeOutputCheck(result.winner, channel);
+      }
+    } catch {
+      // Unreadable stays absent and is asked again next tick — never guessed.
+    } finally {
+      this.#configReadInFlight.delete(label);
+    }
+  }
+
+  /**
+   * `C-029` — the slow re-read of one channel's RUNNING consumers. The first reading rides
+   * the mode read's own reply (`#readChannelMode` → `#ingestChannelInfo`); this exists only
+   * so the alarm can clear or fire without a reconnect, and after the bridge's own `ADD`.
+   */
+  async #readChannelOutputs(channel: number): Promise<void> {
+    try {
+      const result = await this.#adapter.send(`INFO ${String(channel)}`, {
+        priority: 'low',
+        target: 'primary',
+      });
+      const response = result.response;
+      const xml =
+        response.kind === 'ok-line'
+          ? response.data
+          : response.kind === 'ok-multi'
+            ? response.lines.join('\n')
+            : null;
+      if (xml === null) return;
+      this.#ingestChannelInfo(result.winner, channel, xml);
+    } catch {
+      // A missed re-read keeps the previous verdict; the next interval tries again.
+    }
+  }
+
+  /** `C-029` — record what an `INFO <channel>` reply says is RUNNING, then re-judge. */
+  #ingestChannelInfo(label: ServerLabel, channel: number, xml: string): void {
+    const running = parseRunningConsumersFromInfo(xml);
+    // No `<output>` at all is "could not check", never an empty channel.
+    if (running === null) return;
+    let byChannel = this.#runningConsumers.get(label);
+    if (byChannel === undefined) {
+      byChannel = new Map();
+      this.#runningConsumers.set(label, byChannel);
+    }
+    byChannel.set(channel, { running, at: new Date().toISOString() });
+    if (!this.#outputReadAt.has(label)) this.#outputReadAt.set(label, Date.now());
+    this.#recomputeOutputCheck(label, channel);
+  }
+
+  /**
+   * `C-029` — the verdict for one server's one channel, from the two halves, published
+   * only when its CONTENT changes (a re-read that agrees refreshes `observedAt` in place
+   * and is carried by the next health emit rather than forcing one).
+   *
+   * The stderr line fires on the TRANSITION into `missing` and once when it clears —
+   * `#announceChannelSettings`'s shape, so a settled fault cannot bury the next one.
+   */
+  #recomputeOutputCheck(label: ServerLabel, channel: number): void {
+    const declaredAll = this.#declaredConsumers.get(label);
+    if (declaredAll === undefined) return; // the declaration has not been read yet
+    const observed = this.#runningConsumers.get(label)?.get(channel);
+    if (observed === undefined) return; // the channel has not been read yet
+    const declared =
+      declaredAll === null
+        ? null
+        : (declaredAll.find((d) => d.channel === channel)?.consumers ?? []);
+    const missing = declared === null ? [] : missingConsumers(declared, observed.running);
+    let byChannel = this.#outputChecks.get(label);
+    if (byChannel === undefined) {
+      byChannel = new Map();
+      this.#outputChecks.set(label, byChannel);
+    }
+    const previous = byChannel.get(channel);
+    const next: ChannelOutputCheck = {
+      channel,
+      declared,
+      running: observed.running,
+      missing,
+      observedAt: observed.at,
+      ...(previous?.creation !== undefined ? { creation: previous.creation } : {}),
+    };
+    byChannel.set(channel, next);
+    const changed =
+      previous === undefined ||
+      JSON.stringify({ ...previous, observedAt: '' }) !==
+        JSON.stringify({ ...next, observedAt: '' });
+    if (changed) {
+      const wasMissing = (previous?.missing.length ?? 0) > 0;
+      if (missing.length > 0 && !wasMissing) {
+        process.stderr.write(describeMissingOutput(label, next));
+      } else if (missing.length === 0 && wasMissing) {
+        process.stderr.write(
+          `[caspar-bridge] channel ${String(channel)} output on server ${label} is running again ` +
+            `(${observed.running.map((r) => r.kind).join(', ')}).\n`,
+        );
+      }
+      this.healthChanged.emit(this.health());
+    }
+    if (this.#createMissingConsumers && missing.length > 0) {
+      const key = `${label}:${String(channel)}`;
+      if (!this.#outputCreateAttempted.has(key)) {
+        this.#outputCreateAttempted.add(key);
+        void this.#createMissingConsumer(label, channel, next);
+      }
+    }
+  }
+
+  /**
+   * 🔴 `C-029` — CREATE a declared consumer the check found missing. Behind
+   * `--create-missing-consumers`, OFF by default, and bounded three ways:
+   *
+   * 1. **Once per connection per channel** (`#outputCreateAttempted`, reset on reconnect):
+   *    a device CasparCG could not open at boot it usually cannot open now either, and a
+   *    refused `ADD` every minute would be noise on the plant's log for no output.
+   * 2. **The declaration's OWN parameters, verbatim** (`missingConsumerAddCommand`): the
+   *    same device token the config names, so a multi-card box can never be handed a
+   *    different card by this path. Kinds the bridge does not create are recorded as
+   *    `not-attempted`, with the reason.
+   * 3. **Only a kind the check found MISSING**: measured 2026-09-04, `output::add` REMOVES
+   *    whatever sits at the index before initialising the new consumer, so an `ADD` for a
+   *    consumer that is already running would replace it on air. Absent is the only safe
+   *    precondition, and it is the only one this is ever called under.
+   *
+   * The wire's answer is recorded in the check (`creation`) and the running set is re-read
+   * right after, so a `202` is verified against `INFO` rather than believed.
+   */
+  async #createMissingConsumer(
+    label: ServerLabel,
+    channel: number,
+    check: ChannelOutputCheck,
+  ): Promise<void> {
+    const at = new Date().toISOString();
+    const target = creatableMissingConsumer(check);
+    const command = target === null ? null : missingConsumerAddCommand(channel, target);
+    const record = (creation: ConsumerCreation): void => {
+      const byChannel = this.#outputChecks.get(label);
+      const current = byChannel?.get(channel);
+      if (byChannel === undefined || current === undefined) return;
+      byChannel.set(channel, { ...current, creation });
+      this.healthChanged.emit(this.health());
+    };
+    if (command === null) {
+      const kinds = check.missing.map((m) => m.kind).join(', ');
+      record({
+        at,
+        outcome: 'not-attempted',
+        note: `${kinds} is not a consumer kind the bridge creates (only a DeckLink with a declared device)`,
+      });
+      process.stderr.write(
+        `[caspar-bridge] --create-missing-consumers is on, but ${kinds} on channel ` +
+          `${String(channel)} is not a kind the bridge creates — reported only.\n`,
+      );
+      return;
+    }
+    process.stderr.write(
+      `[caspar-bridge] --create-missing-consumers: sending "${command}" to server ${label} ` +
+        `(the declaration's own device; never a substitute).\n`,
+    );
+    try {
+      const result = await this.#adapter.send(command, { target: 'primary' });
+      const response = result.response;
+      if (response.kind === 'err') {
+        record({ at, outcome: 'refused', command, code: response.code });
+        process.stderr.write(
+          `[caspar-bridge] 🔴 CasparCG refused "${command}" (${String(response.code)}) — it ` +
+            `cannot open that device either; the config on the playout machine still names a ` +
+            `device the server does not have.\n`,
+        );
+      } else {
+        record({ at, outcome: 'created', command });
+        process.stderr.write(
+          `[caspar-bridge] "${command}" accepted (${String(response.code)}) — re-reading INFO ` +
+            `${String(channel)} to confirm the consumer is running.\n`,
+        );
+      }
+    } catch (err) {
+      record({
+        at,
+        outcome: 'failed',
+        command,
+        note: err instanceof Error ? err.message : String(err),
+      });
+    }
+    void this.#readChannelOutputs(channel);
+  }
+
+  /** `C-029` — the checks as the health snapshot carries them, for tests and diagnostics. */
+  outputChecksState(label: ServerLabel = this.#adapter.currentPrimary): ChannelOutputCheck[] {
+    return [...(this.#outputChecks.get(label)?.values() ?? [])].sort(
+      (a, b) => a.channel - b.channel,
+    );
   }
 
   settingsGet(): Settings {

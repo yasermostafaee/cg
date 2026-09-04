@@ -20,6 +20,8 @@
 //   caspar-bridge --template-serve-port 7911          # B-162: pin the template HTTP port (default: ephemeral)
 //   caspar-bridge --look-mixer-hold-ms 40             # B-174: the look switch's mixer hold (default: one
 //                                                     #   channel frame of the observed mode; 0 disables)
+//   caspar-bridge --create-missing-consumers          # C-029: ADD a consumer casparcg.config declares that
+//                                                     #   is not running (default OFF: reported, never created)
 //
 // R-010 boot precedence: explicit --caspar-*/--backup-* flags > the persisted
 // config file (~/.cg-runtime/bridge-connection.json by default) > built-in
@@ -78,7 +80,12 @@ import {
   isLowBankLayer,
   lowBankEnd,
 } from '@cg/shared-ipc';
-import { createBridge, parseReservedLayersFlag, resolveLiveLayersPath } from '../dist/index.js';
+import {
+  createBridge,
+  parseReservedLayersFlag,
+  resolveCreateMissingConsumers,
+  resolveLiveLayersPath,
+} from '../dist/index.js';
 
 const args = parseArgs(process.argv.slice(2));
 
@@ -262,6 +269,24 @@ const lookMixerHoldMs = readMsFlag('look-mixer-hold-ms', 'disables the hold');
   page still flips its per-look decoration, and the hold is what aims the fills at that.
 */
 
+/*
+  🔴 C-029 — `--create-missing-consumers`: may the bridge ADD a consumer that casparcg.config
+  declares and CasparCG is not running? OFF unless typed. The absence of the flag is the
+  station's normal state: a missing output is REPORTED (the banner, the stderr line) and
+  never created behind the operator's back. The flag takes no value — a value is a typo,
+  and a typo that switches a card ON AIR must not boot silently.
+*/
+if (typeof args['create-missing-consumers'] === 'string') {
+  console.error(
+    '[caspar-bridge] --create-missing-consumers takes no value. Type it bare to turn creation ' +
+      'on, or omit it (the default) to have missing outputs reported and never created.',
+  );
+  process.exit(1);
+}
+const createMissingConsumers = resolveCreateMissingConsumers(
+  args['create-missing-consumers'] === true ? true : undefined,
+);
+
 // Build the CasparCG connection from flags, falling back to defaults.
 // B-046 — server B exists ONLY when a --backup-* flag declares it; the
 // default is single-server (a phantom backup diverges every send, replays
@@ -318,6 +343,7 @@ const handle = await createBridge({
   auditLogPath,
   templateServe,
   ...(lookMixerHoldMs !== undefined ? { lookMixerHoldMs } : {}),
+  createMissingConsumers,
 });
 
 console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);
@@ -351,6 +377,17 @@ if (lookMixerHoldMs !== undefined && lookMixerHoldMs > LOOK_MIXER_HOLD_IMPLAUSIB
       'long, on air, with swaps and updates on that row waiting behind it.',
   );
 }
+// C-029 — READ BACK on the boot line, both ways, so a station can see which state it is in
+// without knowing the flag exists. The OFF line is the one a test holds the default to.
+console.error(
+  createMissingConsumers
+    ? '[caspar-bridge] missing-consumer creation: ON (--create-missing-consumers) - a consumer ' +
+        'casparcg.config declares that is not running will be ADDed once per connection with ' +
+        "the declaration's own device, never a substitute; the outcome is reported either way"
+    : '[caspar-bridge] missing-consumer creation: OFF (default) - a consumer casparcg.config ' +
+        'declares that is not running is REPORTED (banner + this log), never created; ' +
+        '--create-missing-consumers turns creation on',
+);
 console.error(
   `[caspar-bridge] template HTTP server on ${handle.templateServe.url}/template/<id>` +
     (handle.templateServe.exposed ? ' (LAN-exposed)' : ' (loopback)') +

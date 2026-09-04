@@ -108,6 +108,7 @@ import {
 } from './fixed-layers-store.js';
 import { loadReservedLayers } from './reserved-layers-store.js';
 import { loadPersistedLiveLayers, savePersistedLiveLayers } from './live-layers-store.js';
+import { resolveCreateMissingConsumers } from './output-check.js';
 import {
   resolveSourceCatalog,
   saveSourceCatalog,
@@ -263,10 +264,19 @@ export interface BridgeOptions {
    */
   lookMixerHoldMs?: number;
   /**
+   * `C-029` — whether the bridge may `ADD` a consumer that `casparcg.config` declares and
+   * CasparCG is not running (`--create-missing-consumers`). **OFF unless explicitly true**:
+   * the default is reported-never-created, resolved through ONE exported function
+   * (`resolveCreateMissingConsumers`) so a test holds the default to its answer. On, the
+   * bridge sends the declaration's OWN parameters once per connection and re-reads; it
+   * never names a device the config did not.
+   */
+  createMissingConsumers?: boolean;
+  /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
    */
-  runtimeTuning?: { sweepMs?: number; occupancyStaleMs?: number };
+  runtimeTuning?: { sweepMs?: number; occupancyStaleMs?: number; outputRecheckMs?: number };
 }
 
 export interface BridgeHandle {
@@ -545,6 +555,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     sourceAssignments: prunedAssignments.value,
     ...(options.auditLogPath !== undefined ? { auditLogPath: options.auditLogPath } : {}),
     ...(options.lookMixerHoldMs !== undefined ? { lookMixerHoldMs: options.lookMixerHoldMs } : {}),
+    // C-029 — resolved through the ONE default-owning function, never `?? false` here.
+    createMissingConsumers: resolveCreateMissingConsumers(options.createMissingConsumers),
     ...(options.runtimeTuning ?? {}),
   });
   // B-145 — adopt the persisted ledger, then keep it written.

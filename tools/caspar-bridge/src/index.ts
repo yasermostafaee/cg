@@ -17,6 +17,14 @@ export {
   resolveLiveLayersPath,
   type LiveLayersPathOption,
 } from './live-layers-store.js';
+// C-029 — the CLI resolves `--create-missing-consumers` through this, so the OFF default is
+// ONE exported function a test can hold to its answer (`output-policy.test.ts`).
+export {
+  OUTPUT_RECHECK_MS,
+  creatableMissingConsumer,
+  missingConsumerAddCommand,
+  resolveCreateMissingConsumers,
+} from './output-check.js';
 export { TemplateRegistry } from './template-registry.js';
 export {
   TemplateHttpServer,

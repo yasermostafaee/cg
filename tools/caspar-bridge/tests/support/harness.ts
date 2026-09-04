@@ -68,6 +68,7 @@ export const BOUNDED_STOP_MS = 5_000;
  */
 export async function awaitChannelModeRead(runtime: {
   channelSettingsState(): { observed: readonly unknown[] };
+  health(): { primary: { outputs?: readonly unknown[] | undefined } };
 }): Promise<void> {
   const deadline = Date.now() + HEALTH_MS;
   while (runtime.channelSettingsState().observed.length === 0) {
@@ -75,6 +76,22 @@ export async function awaitChannelModeRead(runtime: {
       throw new Error(
         "R-030's one-shot channel-mode read never completed — the quiescent-wire " +
           'baseline cannot be established (did the sweep or the INFO reply break?)',
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  /*
+    `C-029` — the SAME first tick also sends one `INFO CONFIG` (the declared-consumer half of
+    the program-output check; the running half rides the mode read's own reply). Its latch
+    is the `outputs` entry in health, set when both halves have landed — so this waits for
+    it too, and a baseline taken afterwards excludes every ambient INFO this connection
+    sends until the 60 s re-check, which no test body reaches.
+  */
+  while (runtime.health().primary.outputs === undefined) {
+    if (Date.now() >= deadline) {
+      throw new Error(
+        "C-029's one-shot output check never completed — the quiescent-wire baseline " +
+          'cannot be established (did INFO CONFIG stop answering, or the check stop latching?)',
       );
     }
     await new Promise((resolve) => setTimeout(resolve, 25));
