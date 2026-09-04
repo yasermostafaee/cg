@@ -58,7 +58,7 @@ const styles = {
     letterSpacing: '0.5em',
     textAlign: 'center' as const,
   },
-  error: { color: colors.error, fontSize: '0.85rem', minHeight: '1rem' },
+  error: { color: colors.errorText, fontSize: '0.85rem', minHeight: '1rem' },
 } as const;
 
 /**

@@ -136,7 +136,9 @@ const styles = {
    * count: it is a fact about this console's reach, not about air.
    */
   errorCount: {
-    color: colors.error,
+    // Error TEXT on the dark header — the owner's `rgb(255 28 28)`, never the
+    // background red (2.13:1 here).
+    color: colors.errorText,
     fontWeight: 700,
     fontSize: '12px',
     lineHeight: 1,

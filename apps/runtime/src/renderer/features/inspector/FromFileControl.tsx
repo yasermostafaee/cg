@@ -52,7 +52,7 @@ const styles = {
   // its detach control. It was a bare muted span that wrapped and pushed the
   // buttons around as the path grew.
   hint: { fontSize: '0.72rem', color: colors.textMuted, margin: 0 },
-  error: { fontSize: '0.75rem', color: colors.error, margin: 0 },
+  error: { fontSize: '0.75rem', color: colors.errorText, margin: 0 },
   splitLabel: {
     display: 'flex',
     gap: '0.3rem',

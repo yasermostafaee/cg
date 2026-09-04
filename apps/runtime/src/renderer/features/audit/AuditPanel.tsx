@@ -153,7 +153,8 @@ const styles = {
     padding: '0.75rem',
   },
   outcomeOk: { color: '#86efac' },
-  outcomeFailed: { color: '#fda4af' },
+  // Error TEXT on a dark background — the owner's colour, through the theme.
+  outcomeFailed: { color: colors.errorText },
   outcomeTimeout: { color: '#fcd34d' },
 } as const;
 

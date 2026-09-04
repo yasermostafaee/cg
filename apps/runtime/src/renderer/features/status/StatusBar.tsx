@@ -80,7 +80,7 @@ const styles = {
   healthDot: { color: cssVars['--r-success'] },
   backup: { color: colors.textMuted },
   failed: { color: colors.offline },
-  failedHard: { color: colors.error },
+  failedHard: { color: colors.errorText },
   ok: { color: colors.text, fontWeight: 700 },
   // B-081 — the look of health we CANNOT currently verify: muted, never a confident color.
   stale: { color: colors.textMuted },

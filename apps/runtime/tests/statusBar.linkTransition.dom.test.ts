@@ -373,8 +373,12 @@ describe('the BACKUP LED agrees with its own label too', () => {
     backup: { label: 'B', state: 'disconnected', amcpAxisOk: false, oscFreshAt: HEARD_AT },
   };
 
-  /** `colors.error` — `styles.failedHard`, the tone a down server wears. */
-  const FAULT_RED = 'rgb(153, 27, 27)';
+  /**
+   * `colors.errorText` — `styles.failedHard`, the tone a down server wears. Error TEXT on the
+   * dark status bar is the owner's `rgb(255 28 28)` (2026-09-04); the background red
+   * (`colors.error`, 2.13:1 as text) is for the banners.
+   */
+  const FAULT_RED = 'rgb(255, 28, 28)';
 
   function hollowDot(scope: HTMLElement | undefined): HTMLElement | undefined {
     return [...(scope?.querySelectorAll<HTMLElement>('span') ?? [])].find(

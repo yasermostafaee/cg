@@ -55,8 +55,26 @@ export const colors = {
    */
   onAir: 'rgb(44 255 122)',
   exit: '#F59E0B',
-  /** ERROR. Red, which now means only this and destructive intent. */
+  /**
+   * ERROR. Red, which now means only this and destructive intent.
+   *
+   * ⚠ A BACKGROUND colour: the alarm banners, the command toast and the refusal
+   * `Notice` paint it behind white text. As TEXT on this palette's dark surfaces it
+   * measures 2.13:1 — illegible — which `Modal`, `Notice` and the Server settings
+   * panel each discovered separately. Error TEXT on a dark background takes
+   * `errorText` below.
+   */
   error: '#991B1B',
+  /**
+   * ERROR, as TEXT on a dark background. The exact value the owner specified
+   * (2026-09-04, `RUNTIME-FIX-0904`): _"use rgb(255 28 28) for errors on dark
+   * backgrounds"_. The row's ERROR mark, the header's `(N in error)` tally, the
+   * status bar's hard failure, the link indicator, the lock overlay's refusal, the
+   * Inspector's file error and the audit log's `failed` outcome all read through
+   * this. Saturated on purpose, like `onAir`: it is the mark an operator has to find,
+   * and it is the other colour that means one thing.
+   */
+  errorText: 'rgb(255 28 28)',
   offline: '#94A3B8',
   /**
    * An EMPTY layer row — its mark and all of its text. Exact value from the owner.
@@ -441,7 +459,7 @@ export interface AirStateVisual {
  */
 export function airStateVisual(status: StackItemStatus, pending: boolean): AirStateVisual {
   if (status === 'disconnected') return { color: colors.offline, icon: '⚠', label: 'OFFLINE' };
-  if (status === 'error') return { color: colors.error, icon: '✕', label: 'ERROR' };
+  if (status === 'error') return { color: colors.errorText, icon: '✕', label: 'ERROR' };
   if (status === 'on-air') return { color: colors.onAir, icon: '●', label: 'ON AIR' };
   if (status === 'playing')
     return pending

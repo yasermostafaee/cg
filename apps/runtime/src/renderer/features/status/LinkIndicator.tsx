@@ -107,7 +107,8 @@ function visual(status: BridgeLinkStatus, reach: CasparReach): Visual {
       };
     case 'disconnected':
       return {
-        color: colors.error,
+        // Error TEXT on the dark status bar — the owner's `rgb(255 28 28)`.
+        color: colors.errorText,
         text: 'DISCONNECTED — reconnecting…',
         title: 'Lost the bridge connection; commands are rejected until it reconnects',
       };
