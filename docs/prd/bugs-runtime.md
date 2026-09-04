@@ -5376,10 +5376,17 @@ row owns no live seats, **publishes the state and returns** before `reconcileLiv
 The new predicate is `#ownsLiveSeats(itemId)`, placed immediately above it:
 
 - **on air** — `isOnAirStatus`, **reused, never re-derived** (golden rule 6);
-- **or rehearsing** — `#rehearsing.has(itemId)`, because a rehearsing row is deliberately NOT on air
-  (`enterRehearse` refuses an on-air row, so the two states are disjoint by construction) yet owns
-  its plates on **PVW**. 🔴 **A gate built on `isOnAirStatus` alone would have silently broken
-  rehearse without failing any test that existed before this item.**
+- ~~**or rehearsing** — `#rehearsing.has(itemId)`, because a rehearsing row is deliberately NOT on
+  air (`enterRehearse` refuses an on-air row, so the two states are disjoint by construction) yet
+  owns its plates on **PVW**. 🔴 **A gate built on `isOnAirStatus` alone would have silently broken
+  rehearse without failing any test that existed before this item.**~~
+  🔴 **REVERSED 2026-09-04 by [[B-216]].** The second half is **the LEDGER** — `#liveLayers` holds
+  seats for the row — and never the rehearse flag. A rehearsing row owns nothing on the channel
+  (PVW is a browser render, `enterRehearse` seats nothing), and with `rehearsing` in the predicate
+  an UPDATE on a rehearsing, never-taken row went on seating four producers — this item's own
+  defect, reached through the flag this item added; `neighbour 2` asserted it as a feature and was
+  green for twelve days. The row the ledger half exists for is the one whose seats survived a
+  restart while its status did not ([[B-145]]).
 
 ⚠ **The gate is at the ROW, never at the look or the visible hole.** On a live row it returns early
 for nothing and the reconcile runs exactly as before — **UNION pre-seat intact**, every look's
@@ -5427,6 +5434,14 @@ faithful for it. What the owner should do to SEE it fixed is in the item's Repro
 swap the inputs, press UPDATE, and nothing must appear on air.** Then take the row and confirm the
 new inputs are the ones that come up — that second half is the one that proves the edit was not
 merely discarded.
+
+✅ **RUN 2026-09-04 (`UPDATE-INFORCE-02` §4), both halves, twice.** Through the running bridge's own
+WebSocket on the plant, on the owner's 3-plate row: STOP → layers 10–59 read empty on `INFO 1`;
+UPDATE with `l2`/`l3` swapped → accepted in 2 ms, **nothing appeared across 39 `INFO 1` polls over
+8 s**, ledger empty, bindings recorded; TAKE → accepted in 34 ms, **plate `l2` came up on `m2.mkv`
+and `l3` on `m1.mkv`**; then the reverse, back to the template default, with the same readings. The
+full table, and the note that the running bridge carried this item's gate rather than [[B-216]]'s
+later alignment, are in [[B-216]].
 
 - ✅ **Linux `e2e` DISCHARGED** — <https://github.com/yasermostafaee/cg/actions/runs/32633887346>
   — head `6f6eb690` (the tip carrying the gate, its four tests and this record), `completed` +
@@ -9784,3 +9799,153 @@ slot is skipped by `restore()`, never allocated.
 - **Cross-refs:** [[B-212]] (the refusal that could not name it), [[B-092]] / [[B-108]] (restore
   and its skips), [[B-201]] (the wrong-bank refusal itself), [[B-114]] (release by the same door).
 - **Number:** taken with [[B-209]]; see the registry entry.
+
+## [~] B-216 — 🔴 the three doors that may touch a live layer answered ONE row THREE ways, and one of them let an UPDATE seat a REHEARSING row's plates — `B-161`'s own defect, reached through the flag `B-161` added ⟨priority: HIGHEST — bare video on air from a configuration verb, on a row whose whole contract is "nothing is sent to CasparCG"⟩ — CLOSED IN CODE 2026-09-04 by `UPDATE-INFORCE-02` (`openspec/changes/multibox-layout-switch/` 7.14f, `openspec/changes/add-multibox-audio/` 8.8); the plant check `B-161` owed was RUN the same day (below); Linux `gate:e2e` owed for the tip
+
+**Measured 2026-09-04 at the mock's AMCP wire** — `tools/caspar-bridge/tests/ownership-is-the-ledger.integration.test.ts`,
+run RED on `f23c065b` before any code changed. An UPDATE carrying one new binding, on a row that
+was `load`ed, put on PVW (`enterRehearse`) and never taken:
+
+```
+PLAY 1-30 "route://2"   MIXER 1-30 VOLUME 0 DEFER   MIXER 1-30 FILL 0 0 0.25 0.25 DEFER      MIXER 1-30 CLIP …
+PLAY 1-33 "route://5"   MIXER 1-33 VOLUME 0 DEFER   MIXER 1-33 FILL 0.25 0 0.25 0.25 DEFER   MIXER 1-33 CLIP …
+PLAY 1-31 "route://3"   MIXER 1-31 VOLUME 0 DEFER   MIXER 1-31 FILL 2 2 0.25 0.25 DEFER      MIXER 1-31 CLIP …
+PLAY 1-32 "route://4"   MIXER 1-32 VOLUME 0 DEFER   MIXER 1-32 FILL 2 2 0.25 0.25 DEFER      MIXER 1-32 CLIP …
+```
+
+Four producers created and sized on a row nobody had taken — [[B-161]]'s wire signature, byte for
+byte — on a row on PVW, whose contract ([[R-022]]) is _"nothing is ever sent to CasparCG"_. The same
+run then measured the rest of the record's dispute: the ledger persisted with those four seats and a
+restarted bridge **adopted them and reported no rehearsal** (`liveLayers().size === 1`,
+`rehearseState() === []`); and in the cell the record could not decide — not on air, not
+rehearsing, ledger NON-EMPTY (an on-air row's seats adopted at boot, the row re-delivered as
+`loaded`) — **`update` recorded and sent nothing while `setActiveLook` moved the plates**
+(`{ updateMoved: false, switchMoved: true }`), and a raise on those seats answered `sent: false`.
+
+### The three spellings, and the one cell where they disagreed
+
+| door                                  | asked, on `f23c065b`                                              | anchor                                 |
+| ------------------------------------- | ----------------------------------------------------------------- | -------------------------------------- |
+| `update` → `#applyBindingTransaction` | `#ownsLiveSeats` = on air **OR rehearsing**                       | `caspar-runtime.ts:4999`, gate `:5052` |
+| `swapLiveSource`                      | **ledger non-empty** (its own outer gate), then the transaction's | `:6976`, then `:7046`                  |
+| `setActiveLook`                       | on air **OR ledger non-empty**                                    | `:5498`                                |
+| a volume RAISE (`setLivePlateVolume`) | `#ownsLiveSeats`                                                  | `:7248`                                |
+
+They agree everywhere except **not on air, not rehearsing, ledger NON-EMPTY**, where
+`setActiveLook` moved plates and `update`/`swapLiveSource` refused — and, the worse half,
+**rehearsing, nothing seated**, where `update` seated plates and the other two did not.
+
+**The route that reaches the disputed cell is boot adoption ([[B-145]]):** the persisted ledger
+comes back at boot while the row's status comes back only when the browser re-delivers its stack
+and OSC re-derives it, and its rehearsal never comes back. Until this fix a second route existed —
+rehearse, then UPDATE — and it is the one the record was arguing about.
+
+### The record's contradiction, settled by the measurement above
+
+- `PATCH-BX-01` (`09eb9760`, 2026-08-23 17:57): _"a rehearsing row's plates are never seated …
+  a `swapLiveSource`/`update` on one was probed and left the ledger empty."_ **TRUE for the swap**
+  — that door carried its own ledger-only gate, so it never reached the transaction. **FALSE for
+  `update`** from `008ac12b` (2026-08-23 13:53, four hours EARLIER, and green ever since): [[B-161]]
+  put `rehearsing` inside `#ownsLiveSeats` and its `neighbour 2` test asserted _"a rehearsing row
+  still seats"_ as the feature. The two statements were written the same afternoon about the same
+  tree and both cited a measurement.
+- The `NOTAKE-02` audit: _"a row rehearsing when the bridge restarts comes back with seats and no
+  rehearsal flag."_ **TRUE** — for exactly a rehearsing row that had received an UPDATE with
+  bindings. ⚠ Its text is not in the tree under that name; the claim was re-measured here rather
+  than cited.
+
+### 🔴 THE RULE, decided (the owner, `UPDATE-INFORCE-02` §2) — ownership is the LEDGER
+
+**The ledger is the truth about what the bridge OWNS; status is the truth about what the operator
+SEES; the rehearse flag is a claim about a browser-side preview and a mute interlock, and it has no
+seats of its own.** `enterRehearse` sends at most one `MIXER VOLUME 0` to the TEMPLATE layer
+(`caspar-runtime.ts:3303`) and seats nothing; PVW is rendered in the browser
+(`rehearse-live-plate-placeholders`). So every door that may touch a live layer asks ONE predicate:
+
+`#ownsLiveSeats(itemId)` = `isOnAirStatus(item)` **OR** `#liveLayers` holds seats for the item.
+
+Both halves, read once: not the status alone (a row whose seats survived a restart would be refused
+a re-point its pictures visibly need), and not the ledger alone (an on-air row can hold an EMPTY
+ledger — taken on the empty look, or every plate a `media` clip that §12.4's fallback tore down —
+and under a ledger-only spelling it was told `ok` while nothing was sent, `setActiveLook`'s old
+note). PANIC already scoped itself by the ledger for the same reason ([[B-122]] one verb along).
+
+⚠ **NOT by persisting the rehearse flag.** Considered and rejected at `caspar-runtime.ts:1166`:
+the mute does not survive a restart either — startup re-asserts every declared row's volume
+(`#reassertDeclaredVolumes`, both halves since [[B-204]]) — so a persisted flag would outlive the
+condition it describes and interlock `PLAY` on a layer that is no longer muted. Re-verified
+2026-09-04; the reasoning holds.
+
+### The fix
+
+- `#ownsLiveSeats` reads `on air OR ledger non-empty`; the `#rehearsing` half is gone.
+- `setActiveLook` and `swapLiveSource`'s outer gate call `#ownsLiveSeats` instead of their own
+  spellings — one predicate, four doors (`update`, `swapLiveSource`, `setActiveLook`, the raise).
+- The raise gate is unchanged in code and changed in meaning: a raise on adopted seats now reaches
+  the producer that is genuinely on the channel; a raise on a row with no seats reaches nothing and
+  records the intent, as before.
+- Seven comments that named the seated-off-air state _"the `exitRehearse` window"_ now name it
+  the boot-adoption window; `CLAUDE.md` golden rule 10's rehearse clause is corrected; the
+  `add-multibox-audio` design/spec and `multibox-layout-switch` 7.14d/7.14f carry the reversal.
+
+### Regression tests — MEASURED RED, then GREEN, then RED AGAIN under mutation
+
+| where                                                        | asserts                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ownership-is-the-ledger.integration.test.ts` (new, 5 tests) | rehearsing + nothing seated: UPDATE, SWAP, SWITCH reach NO layer and the edits are in force; a restart finds no seats and no flag; the boot-adoption route makes BOTH doors move; rehearsing WITH seats re-points; a raise reaches owned seats and nothing on a seatless row |
+| `live-look-reconcile` `neighbour 2`                          | **REVERSED** — a rehearsing row with nothing seated: no `PLAY`/`VOLUME`/`FILL`, no seat, edit kept                                                                                                                                                                           |
+| `live-plate-audio-verbs` GOLDEN RULE 10 block                | rewritten to the ledger axis: `loadedWithSeats` sends a raise; `loadedWithoutSeats` sends nothing; rehearsal changes neither                                                                                                                                                 |
+| `live-plate-panic` "a RAISE on the same row"                 | **REVERSED** — a raise on the adopted-seats row reaches the wire and the guest is audible; rule 10's subject is the seatless row                                                                                                                                             |
+
+**RED on `f23c065b`:** 4 of the 5 new tests (the wire above; seats after restart; `updateMoved:
+false`; `sent: false`). **GREEN after the fix:** 102/102 across the three suites. **Mutation:**
+restoring `return this.#rehearsing.has(itemId)` reddens **12** tests — 4 new, 6 audio, 2 reconcile
+(including the pre-existing _"switching the look of a REHEARSING row sends NOTHING"_, which the
+shared predicate now protects too).
+
+### Repro / Expected / Actual
+
+**Repro:** load a multi-box row, press ON PVW, change one per-look input in the Inspector, press
+UPDATE. **Expected:** nothing reaches CasparCG; the binding is in force for the take. **Actual (on
+`f23c065b`, at the mock wire):** four `PLAY`s, four `VOLUME 0`, eight `FILL`/`CLIP`, four seats in
+the ledger — pictures on the channel under a template that is not on air. **Regression test:** the
+new file's first test, plus the reversed `neighbour 2`.
+
+### ✅ THE PLANT CHECK `B-161` OWED — RUN 2026-09-04, through the running bridge's own WebSocket
+
+Driven exactly as the Runtime SPA drives it (`stack.stop` → `stack.update` with `lookBindings` →
+`stack.take`, actor `UPDATE-INFORCE-02 (Claude)` in the audit), against the plant
+(`192.168.21.114:5250`, `2.5.0 69e8ad5`) and read back with read-only `INFO 1` polls. The row: the
+owner's `comp1` (`3ghab.vcg`, template `e506e319…`) on layer 9, active look `look-3`, plates
+`l1`=DeckLink 1, `l2`=`m1.mkv`, `l3`=`m2.mkv` on layers 10–12. ⚠ The running bridge (PID 19648,
+started 18:25, `dist` of 16:57) carries [[B-161]]'s gate and NOT this fix — for a STOPPED row the
+two gates agree (not on air, not rehearsing, ledger empty), so the check exercises the rule as it
+stood; deploying this fix to the plant is the owner's bridge restart.
+
+| step                                              | reading                                                                                                                                                             |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| STOP                                              | `{accepted:true}`; 2.5 s later `INFO 1` shows layers 10–59 EMPTY, the ledger holds no seat, status `loaded`                                                         |
+| UPDATE, inputs swapped (`l2`→media2, `l3`→media1) | `{accepted:true}` in **2 ms**; **nothing appeared on layers 10–59 across 39 `INFO 1` polls over 8 s**; ledger still empty; `lookSourceOverride` recorded = the swap |
+| TAKE                                              | `{accepted:true}` in **34 ms**; seats `L10:l1 L11:l3 L12:l2`; `INFO 1`: L10 decklink, L11 `m1.mkv`, L12 `m2.mkv` — **plate `l2` on media2, plate `l3` on media1**   |
+| the same, in reverse (bindings cleared)           | identical readings; the row came back `l2`→`m1.mkv`, `l3`→`m2.mkv`, on air, as found                                                                                |
+
+The second half is what proves the edit was **GATED rather than DISCARDED**: the take came up with
+the swapped inputs already in force (the planner kept both clips on their layers and re-labelled
+the plates — a pure geometry move, no re-`PLAY`). What the `<screen/>` consumer showed during the
+8 s is the owner's to read; `INFO 1` is the record here. ⚠ **The DeckLink fixture has changed:**
+`INFO CONFIG` now declares `<decklink><device>1</device>` and `INFO 1` lists a running
+`decklink@301` — the config that named the dead card `23487013` ([[C-029]]) has been repaired since
+2026-09-04 morning, so the check ran with the program output ATTACHED, and nothing appeared on it
+either by the same reading.
+
+### Not covered here
+
+[[B-204]] / [[B-205]] (closed), the mixer `DEFER` exposure, term (b) / [[B-192]], the orphan html
+layers on dead template-server ports: untouched, and this item makes no claim about them.
+
+- **Cross-refs:** [[B-161]] (the rule, and the first spelling this reverses), [[B-145]] (boot
+  adoption — the route that reaches the disputed cell), [[B-122]] (PANIC's ledger scope, the
+  precedent), [[R-022]] (rehearse sends nothing to CasparCG), [[B-204]] (the startup volume
+  re-assert the no-persisted-flag reasoning rests on), `CLAUDE.md` golden rule 10.
+- **Number:** taken from the headings (highest `B-215`) and cross-checked against the registry's
+  dated pointer (_"Next free after this session is `B-216`"_) — they agree; see the registry entry.

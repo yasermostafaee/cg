@@ -157,6 +157,21 @@ nothing and reported success.
 - [x] 8.6 `design.md` §5 rewritten — and it corrects its own earlier claim that `exitRehearse`
       CAUSES the seated-off-air window. Measured: a rehearsing row's plates are never seated.
       **Boot adoption (`B-145`) is the origin**; rehearse only passes through it.
+      ⚠ **Half wrong when written — corrected 2026-09-04 by 8.8:** the `update` verb DID seat a
+      rehearsing row's plates from `B-161` until `B-216`, because `#ownsLiveSeats` carried the
+      rehearse flag. The swap half of the probe was right for the wrong reason (its own gate).
+- [x] 8.8 🔴 **`B-216` (`UPDATE-INFORCE-02`, 2026-09-04) — OWNERSHIP IS THE LEDGER, at the audio
+      door too.** `#ownsLiveSeats` = `on air OR the ledger holds seats`; the rehearse flag is out
+      of it. Consequences here: a RAISE on a row whose seats survived a restart (adopted, status
+      not on air) now REACHES the wire — the producer is genuinely on the channel and the
+      operator pressing ON for a guest they can see is the case; a raise on a row with NO seats
+      (loaded, or rehearsing and never taken) reaches nothing and records the intent, as before;
+      rehearsal changes nothing about ownership. 8.3's directional rule is untouched.
+      **Tests:** the GOLDEN RULE 10 block of `live-plate-audio-verbs.integration.test.ts` was
+      rewritten to the ledger axis (`loadedWithSeats` now sends a raise; `loadedWithoutSeats` is
+      the row that owns nothing) — six of its tests go RED with the old predicate restored. The
+      requirement and scenarios in `specs/runtime-caspar-bridge/spec.md` were replaced. Full
+      item: `docs/prd/bugs-runtime.md` **`B-216`**.
 - [x] 8.7 **Linux `gate:e2e` DISCHARGED** — a COMPLETED, GREEN `e2e` job on `ubuntu-latest` for
       commit `104a5cd4`, which is `dev`'s tip and carries this patch:
       <https://github.com/yasermostafaee/cg/actions/runs/32649701579> — run `conclusion: success`,

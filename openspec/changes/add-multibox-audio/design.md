@@ -36,9 +36,16 @@ chose (`gate the one path the verbs share rather than making two paths agree`), 
 - a fifth verb added later inherits the gate by construction rather than by remembering;
 - there is exactly one place to read to know what the rule is.
 
-**The predicate is `#ownsLiveSeats`, not `isOnAirStatus`.** A REHEARSING row is deliberately not
-on air and yet owns its plates on PVW, so the air question alone would silently break rehearse —
-`B-161`'s own warning, and it applies here unchanged.
+**The predicate is `#ownsLiveSeats`, not `isOnAirStatus`.** ~~A REHEARSING row is deliberately
+not on air and yet owns its plates on PVW, so the air question alone would silently break
+rehearse — `B-161`'s own warning, and it applies here unchanged.~~ 🔴 **CORRECTED 2026-09-04
+(`B-216`, `UPDATE-INFORCE-02`):** the other half of the predicate is the **LEDGER**, never the
+rehearse flag. A rehearsing row owns nothing on the channel — PVW is a browser render (`R-022`)
+and `enterRehearse` seats nothing — while a row whose seats survived a restart (`B-145` boot
+adoption) holds producers that are genuinely on the channel. So a RAISE on adopted seats now
+reaches the wire whatever the status says, and a raise on a rehearsing row with nothing seated
+has no layer to reach and records the intent for the take. `#ownsLiveSeats` = on air OR the ledger
+holds seats, and it is the one predicate every door asks (§8.3's directional rule is unchanged).
 
 **What the gate skips is BOTH halves of the send path**: the `MIXER … VOLUME` and the ledger's
 `intendedVolume` write. Skipping only the send would leave the ledger claiming a volume the
@@ -51,11 +58,15 @@ rule exists to preserve, and this must not take it away.
 
 ### The state where the gate actually bites, named
 
-After `exitRehearse`. `out` and `stopItem` both call `teardownLiveLayers`, which releases the
-ledger — so records and a not-on-air row do not coexist through those doors. `exitRehearse`
-does **not** tear plates down: it drops the row from `#rehearsing` and restores the template
-layer's own volume, leaving the plate records seated. That row owns seats by neither test, and a
-raise there would put a guest's microphone on air with no graphic above it.
+~~After `exitRehearse`.~~ 🔴 **CORRECTED 2026-09-04 (`B-216`):** the state is **boot adoption**
+(`B-145`) — the persisted ledger comes back while the row's status does not — and under the ledger
+axis that row **owns** its seats, so the gate does not bite there at all: a raise reaches a
+producer that is genuinely on the channel. `out` and `stopItem` both call `teardownLiveLayers`,
+which releases the ledger, and `exitRehearse` never seated anything (it drops the row from
+`#rehearsing` and restores the template layer's own volume). "Records held by a row that owns
+nothing" is therefore not a reachable state; the gate bites on a row with **no seats** — a
+rehearsing or merely loaded row — where a raise has no layer to reach and records the intent for
+the take, which is the arming affordance the mute rule preserves.
 
 ## 3. Does the map verb need `#withLiveSeatLock`? — YES, once per item
 
@@ -145,6 +156,17 @@ is corrected here:** a rehearsing row's plates are never seated in the first pla
 nor already seated; a `swapLiveSource`/`update` on one was probed and left the ledger empty).
 **Boot adoption** is what produces a seated off-air row; rehearse is only a way of passing
 through it. The window is real — the mechanism named for it was not.
+
+🔴 **And that sentence was itself HALF WRONG when written, measured 2026-09-04 (`B-216`,
+`UPDATE-INFORCE-02` §1).** The `swapLiveSource` half of the probe was true — that door carried its
+own ledger-only gate. The `update` half was NOT: from `B-161` (2026-08-23 13:53, four hours
+before this paragraph) `#ownsLiveSeats` read `on air OR rehearsing`, so an `update` with bindings
+on a rehearsing, never-taken row reconciled and **seated four producers** — `B-161`'s `neighbour
+2` asserted exactly that, as a feature, and it was green the whole time. So a rehearsing row's
+plates COULD be seated, by one verb of three, and a bridge restart then found them with no
+rehearsal flag. Ownership is now the ledger at every door and rehearse seats nothing by
+construction; the sentence above is true again, and pinned by
+`ownership-is-the-ledger.integration.test.ts` rather than by a probe.
 
 `CLEAR ALL` is the precedent and the shape is copied from it deliberately: the one filter that
 remains is about OWNERSHIP, not belief — a plate with no seat has nothing to silence — and that

@@ -992,14 +992,61 @@ candidate shapes.
       not punched) is what makes a switch pure `MIXER FILL`. Narrowing it would put a `PLAY` back
       inside a switch and reintroduce **`B-155` case 3, which session BT closed on `4777b724`** —
       so `neighbour 1` asserts the whole seat SET as a superset, not the one visible box.
-      ⚠ **And the gate is NOT `isOnAirStatus` alone.** A REHEARSING row is deliberately not on air
-      yet owns its plates on PVW; the air question alone would have broken rehearse without
-      failing any pre-existing test. `#ownsLiveSeats` asks both, REUSING `isOnAirStatus` rather
-      than re-deriving the status list (golden rule 6).
+      ⚠ **And the gate is NOT `isOnAirStatus` alone.** ~~A REHEARSING row is deliberately not on
+      air yet owns its plates on PVW; the air question alone would have broken rehearse without
+      failing any pre-existing test.~~ 🔴 **CORRECTED 2026-09-04 by `B-216` (see 7.14f):** the
+      other half is the **LEDGER**, never the rehearse flag. A rehearsing row owns nothing on the
+      channel (PVW is a browser render; `enterRehearse` seats nothing), and with `rehearsing` in
+      the predicate an UPDATE on a rehearsing, never-taken row went on seating four producers —
+      this item's own defect, reached through the flag this item added. `#ownsLiveSeats` now
+      reads `on air OR the ledger holds seats`, REUSING `isOnAirStatus` rather than re-deriving
+      the status list (golden rule 6), and every door asks it.
       **Shipped:** the gate + `#ownsLiveSeats` in `caspar-runtime.ts`, four wire tests in
       `live-look-reconcile.integration.test.ts` (the defect, the state half, and both
       neighbours), RED-then-GREEN with the chain rebuilt between readings; 612 tests / 78 files
-      green. Full item: `docs/prd/bugs-runtime.md` **`B-161`**.
+      green. Full item: `docs/prd/bugs-runtime.md` **`B-161`**. ⚠ `neighbour 2` was REVERSED by
+      `B-216`: it used to assert that a rehearsing row seats, and that assertion was the defect.
+      ✅ **THE PLANT CHECK THIS ITEM OWED WAS RUN 2026-09-04** (`UPDATE-INFORCE-02` §4), through
+      the running bridge's own WebSocket on the plant (`192.168.21.114`, the owner's 3-plate
+      `3ghab` row on layer 9): STOP → the band read empty on `INFO 1`; UPDATE with the inputs
+      swapped (`l2`→media2, `l3`→media1) → accepted in 2 ms and **nothing appeared on layers
+      10–59 across 39 `INFO 1` polls over 8 s**, the ledger stayed empty, the bindings were
+      recorded in force; TAKE → accepted in 34 ms and the row came up with **plate `l2` on
+      `m2.mkv` and plate `l3` on `m1.mkv`** — the edit was GATED, not discarded. Run again in
+      reverse (bindings cleared) with the same readings, leaving the plant as found. What the
+      `<screen/>` consumer showed is the owner's to read; every wire and ledger fact is recorded
+      in `B-161`'s item.
+
+- [x] 7.14f 🔴 **`B-216` — THE TWO DOORS DISAGREED, AND OWNERSHIP IS THE LEDGER
+      (`UPDATE-INFORCE-02`, 2026-09-04).** `setActiveLook` gated on `on air OR ledger non-empty`;
+      `update`/`swapLiveSource` (through `#ownsLiveSeats`) gated on `on air OR rehearsing`; and
+      `swapLiveSource` carried a third, ledger-only gate in front of the shared transaction. They
+      disagreed in exactly one cell — not on air, not rehearsing, ledger NON-EMPTY — which
+      **boot adoption (`B-145`) reaches**: the persisted ledger comes back at boot while the
+      row's status and its rehearsal do not. There `setActiveLook` moved the plates and the
+      other two refused.
+      **Measured first, at the mock wire** (`ownership-is-the-ledger.integration.test.ts`, run
+      RED on the unchanged tree): an UPDATE on a rehearsing, never-taken row emitted four
+      `PLAY`s, four `VOLUME 0` and eight `FILL`/`CLIP`; after a restart that row came back with
+      its seats and no rehearsal flag; in the adopted-seats cell `update` refused while the
+      look switch moved; a raise on adopted seats was withheld. That settled the record's
+      contradiction: `PATCH-BX-01`'s _"a rehearsing row's plates are never seated"_ was FALSE
+      for `update` from `B-161` (2026-08-23 13:53) until this fix, TRUE for `swapLiveSource` and
+      `setActiveLook` only because each carried its own gate; the `NOTAKE-02` audit's _"comes
+      back with seats and no rehearsal flag"_ was TRUE for exactly that row.
+      **The axis, decided by the owner:** the LEDGER is what the bridge OWNS; status is what the
+      operator SEES; rehearse is a browser preview plus a mute interlock and seats nothing.
+      `#ownsLiveSeats` = `isOnAirStatus OR ledger non-empty`, asked by all four doors
+      (`update`, `swapLiveSource`, `setActiveLook`, the volume raise). ⚠ NOT by persisting the
+      rehearse flag: the mute does not survive a restart either (startup re-asserts every
+      declared row's volume, both halves since `B-204`), so a persisted flag would outlive the
+      condition it describes — re-verified, the reasoning holds.
+      **Red-first:** reverting the predicate to `on air OR rehearsing` reddens 12 tests across
+      three suites (4 in the new file, 6 in `live-plate-audio-verbs`, 2 in
+      `live-look-reconcile`). Spec: this change's `runtime-multibox-layout/spec.md`, requirement
+      _"A configuration verb is never a playout verb, and ownership is the LEDGER"_; the audio
+      half in `add-multibox-audio`'s `runtime-caspar-bridge/spec.md`. Full item:
+      `docs/prd/bugs-runtime.md` **`B-216`**.
 
 - [~] 7.14e 🔴 **`SKEW-INTERSECT-01` — THE TRANSITION MASK: for as long as the two halves can
   disagree, the page punches `outgoing ∩ entering` (2026-08-31).**

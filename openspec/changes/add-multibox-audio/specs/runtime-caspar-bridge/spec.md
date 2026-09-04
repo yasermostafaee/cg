@@ -46,9 +46,12 @@ row does not own live seats. This holds for the single-plate verb, for the map v
 every operator gesture built on either of them.
 
 "Owns live seats" SHALL be answered by the **one predicate that asks what the decision turns
-on** — a row that is on air, **or** a row that is rehearsing and therefore holds its plates on
-preview. It SHALL NOT be answered by the on-air status alone: a rehearsing row is deliberately
-not on air and yet owns its layers.
+on**, shared with every other door that may touch a live layer: a row that is **on air**, **or**
+a row for which the bridge's live-layer **LEDGER holds seats**. It SHALL NOT be answered by the
+on-air status alone — a row whose seats survived a bridge restart while its status did not holds
+producers that are genuinely on the channel — and it SHALL NOT consult the rehearse flag: a
+rehearsing row seats nothing on the channel (rehearse is a browser-side preview and a mute
+interlock), so rehearsal is neither ownership nor a bar to it.
 
 When the row does not own live seats, the verb SHALL emit no `PLAY`, no `MIXER VOLUME`, no
 `MIXER FILL` or `CLIP`, and SHALL NOT un-hold a held plate. It SHALL NOT write the layer
@@ -57,18 +60,24 @@ ledger's as-sent volume either, since nothing was sent.
 The intent SHALL still be recorded, so a plate's audio can be armed **before** the take and the
 take carries it.
 
-#### Scenario: A raise on a row that owns no live seats sends nothing
+#### Scenario: A raise on a row with no seats sends nothing
 
-- **WHEN** a plate's volume is set to `1` on a row that is neither on air nor rehearsing, even
-  though the bridge still holds seated layer records for it
-- **THEN** no AMCP command is sent, the layer ledger's recorded volume is unchanged, and the
-  item's `plateVolumes` carries the new intent
+- **WHEN** a plate's volume is set to `1` on a row for which the bridge holds no seated layer
+  record — a loaded row, or a rehearsing row that was never taken
+- **THEN** no AMCP command is sent and the item's `plateVolumes` carries the new intent
 
-#### Scenario: A rehearsing row still reaches its plates
+#### Scenario: A raise reaches a seat the bridge owns, whatever the status says
 
-- **WHEN** a plate's volume is set on a REHEARSING row
-- **THEN** the volume is asserted on that plate's seated layer, because a rehearsing row owns
-  its plates on preview
+- **WHEN** a plate's volume is set to `1` on a row that is not on air but whose seats the ledger
+  holds — the shape a bridge restart leaves behind
+- **THEN** `MIXER … VOLUME 1` is sent to that plate's seated layer and the ledger's as-sent
+  volume follows the send
+
+#### Scenario: Rehearsal changes nothing about ownership
+
+- **WHEN** a row with adopted seats enters rehearse, or leaves it
+- **THEN** a raise on it reaches its seated layer before, during and after the rehearsal alike,
+  because the seats are the bridge's and the rehearsal never seated or released one
 
 #### Scenario: The armed intent is carried by the next take
 

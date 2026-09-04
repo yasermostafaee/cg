@@ -261,6 +261,58 @@ allocation — the corresponding INVERSE SHALL exist and be exercised by a test.
 - **THEN** a corresponding release, un-punch, fit-clear and de-allocation exists and is covered by a
   test, so no half of a pair can ship without the other
 
+### Requirement: A configuration verb is never a playout verb, and ownership is the LEDGER
+
+A configuration verb SHALL touch a live layer only on a row that **owns live layers** — an UPDATE
+carrying bindings, a per-plate source swap, a look switch and a plate-volume raise are all such
+verbs — and SHALL otherwise land the change in state for the next take to seat. `UPDATE` puts
+values IN FORCE; only a take puts content ON AIR. On a row that owns nothing the verb SHALL emit no
+`PLAY`, no un-mute and no fill, and SHALL NOT discard the edit.
+
+"Owns live layers" SHALL be answered by **one predicate**, asked by every such door, and it SHALL
+have exactly two halves: the row is **on air** by the one canonical status predicate, **or** the
+bridge's live-layer **LEDGER holds seats** for it. The ledger is the truth about what the bridge
+OWNS — a structural fact it wrote when it sent the `PLAY`, and the one thing boot adoption
+restores while a row's status is not; status is the truth about what the operator SEES; both are
+needed, because an on-air row can hold an empty ledger and an adopted row can hold seats with no
+status. The predicate SHALL NOT consult the rehearse flag: rehearse is a browser-side preview and
+a mute interlock on the template layer, it seats nothing on the channel, and a row on preview with
+nothing seated owns no live layer.
+
+No door SHALL carry a second spelling of the question. Two doors that answer one row two ways is
+the defect this requirement exists to close.
+
+#### Scenario: A rehearsing row with nothing seated is not reached by any configuration verb
+
+- **GIVEN** a row that was loaded, never taken, and put on preview
+- **WHEN** the operator changes its bindings by UPDATE, swaps one plate's source, or switches its
+  look
+- **THEN** no `PLAY`, `MIXER VOLUME`, `MIXER FILL` or `MIXER CLIP` reaches CasparCG, the ledger
+  holds no seat for the row, and each edit is in force for the next take
+
+#### Scenario: A row whose seats survived a restart is re-pointed by every door alike
+
+- **GIVEN** a row that was on air, whose bridge restarted and adopted its persisted seats, and
+  whose status came back as not on air
+- **WHEN** the operator changes its bindings by UPDATE, and separately switches its look
+- **THEN** both doors move the seated plates on the wire — neither refuses while the other acts —
+  and a binding naming a new input seats it
+
+#### Scenario: Rehearsal neither grants nor removes ownership
+
+- **GIVEN** a row holding adopted seats that is then put on preview, and a row on preview holding
+  none
+- **WHEN** a configuration verb reaches each
+- **THEN** the first is re-pointed because of its seats and the second reaches nothing, and
+  leaving preview changes neither answer
+
+#### Scenario: A restart finds nothing for a row that only rehearsed
+
+- **GIVEN** a row that was loaded, put on preview and given new bindings by UPDATE, and whose
+  bridge then restarts
+- **THEN** the restarted bridge adopts no seat for it and reports no rehearsal, because the
+  rehearsal never seated one and the flag is process state
+
 ### Requirement: The transition between layouts has SELECTABLE MODES, and its curve rule binds the PLATES only
 
 A layout switch SHALL offer several transition modes, including an **immediate cut with no

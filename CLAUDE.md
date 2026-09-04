@@ -72,11 +72,17 @@ Persian / RTL is a core requirement.
     — every look's inputs, including the looks not punched — is what makes a switch pure
     `MIXER FILL`; narrowing it puts a `PLAY` back inside a switch (`B-155` case 3). If a gate
     changes the pre-seat SET, it is the wrong gate.
-    ⚠ **And "owns live layers" is NOT `isOnAirStatus` alone** — a REHEARSING row is
-    deliberately not on air yet owns its plates on PVW, so the air question alone silently
-    breaks rehearse. Use the ONE predicate that asks what the decision turns on
-    (`#ownsLiveSeats`), and gate the one path the verbs share rather than making two paths
-    agree.
+    ⚠ **And "owns live layers" is NOT `isOnAirStatus` alone — the other half is the LEDGER,
+    and it is NEVER the rehearse flag (`B-216`).** A row whose seats survived a bridge restart
+    while its status did not (`B-145` boot adoption) holds producers that are on the channel,
+    and a configuration change on it re-points them whatever the status says. A REHEARSING row
+    owns nothing on the channel: PVW is a browser render (`R-022`, nothing is ever sent to
+    CasparCG) and `enterRehearse` seats nothing — `B-161`'s first spelling put `rehearsing`
+    inside the predicate and an UPDATE on a rehearsing, never-taken row went on seating four
+    producers, `B-161`'s own defect reached through the flag added to fix it. Use the ONE
+    predicate that asks what the decision turns on (`#ownsLiveSeats` = on air OR the ledger
+    holds seats) at EVERY door — `update`, `swapLiveSource`, `setActiveLook`, a volume raise —
+    and gate the one path the verbs share rather than making two paths agree.
 
 ## Where features go
 

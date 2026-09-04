@@ -2101,3 +2101,67 @@ change on the plant.
 - **Cross-refs:** [[B-162]] / [[C-024]] (the serve host half of the same address), [[B-209]] (the
   port is now on the record), [[B-214]].
 - **Number:** taken with [[C-031]]; see the registry entry.
+
+## [~] C-033 — the skew harness borrows a live channel: it now captures and restores the channel's CONSUMERS as well as its mode, and says loudly what it is about to change when a live output consumer is attached ⟨priority: medium — a measurement instrument that could leave a channel in its original mode with one fewer output than it found, and say nothing⟩ — CLOSED IN CODE 2026-09-04 by `UPDATE-INFORCE-02` §5
+
+**Hardening on its own merits, not an incident response.** `tools/skew-harness` measures on a real
+CasparCG channel: it sets the channel's video mode for the run and restores it, attaches and
+detaches a `FILE` consumer per run, and `CLEAR`s the channel at the end. The MODE was always put
+back; the channel's CONSUMERS were never read. A `SET <ch> MODE` re-initialises every consumer on
+that channel, and a consumer that cannot run the measurement mode does not come back — so the
+instrument could hand a channel back in its original mode with a consumer missing, and its report
+would not say so. A channel has two facts, and the harness restored one of them.
+
+**What:** `tools/skew-harness/src/consumers.ts`, wired into `measureSkew` (`run.ts`):
+
+- **Capture first.** Before the first command the harness reads the channel's RUNNING consumers
+  (`INFO <channel>`'s `<output>`) and DECLARED consumers (`INFO CONFIG`) through the SAME
+  extractions the bridge's [[C-029]] alarm uses (`parseRunningConsumersFromInfo`,
+  `parseDeclaredConsumersFromConfig` in `@cg/shared-ipc`) — no second parser.
+- **Say so, loudly, before anything changes.** If any running consumer carries the channel off the
+  machine (`isAirOutputKind`: DeckLink, NDI, …) it prints a notice naming every such consumer and
+  every change in the order it will make them — the `SET MODE` that re-initialises every consumer,
+  the `ADD`/`REMOVE FILE` cycles, the final `CLEAR`, the mode restore and re-`ADD` — and waits
+  five seconds. It speaks even when the mode is unchanged (the file consumer and the `CLEAR` are
+  changes too); it is silent when only `screen` / `system-audio` are running.
+- **Restore both facts.** After the mode restore it re-reads the running set, compares by port AND
+  kind, and re-`ADD`s what did not survive — from a MEASURED grammar only: a DeckLink from its own
+  declaration's tokens via the bridge's `missingConsumerAddCommand` (one `ADD` speller, not two),
+  and a `SCREEN`. Anything else (`system-audio`, `ndi`, an undeclared DeckLink, an unreadable
+  `INFO CONFIG`) is REPORTED as missing with the reason, never guessed at — an `ADD` at a running
+  index REPLACES the consumer and a guessed device token on a multi-card box could put a
+  different card on air ([[B-208]]). A consumer that survived is never touched. Each `ADD` is
+  verified by re-reading `INFO`, and the final reading — not the intent — is what the report says.
+- **The reading lands twice:** on stderr, one line per fact (found / now / re-created and
+  verified / not re-created and why / STILL MISSING, with "A LIVE OUTPUT IS DOWN" when it is one),
+  and in `report.json` under `consumers` (`before`, `after`, `restored`, `unrestorable`,
+  `stillMissing`). A restore that itself fails is printed and does not hide the measurement.
+
+**Acceptance:**
+
+- WHEN the harness connects to a channel whose running set includes an air-output consumer THEN a
+  notice naming it and every change about to be made is printed before the first command, and the
+  run waits five seconds
+- WHEN the running set has no air-output consumer THEN no notice is printed
+- WHEN, after the mode is restored, a captured consumer is no longer running THEN the harness
+  re-`ADD`s it from a measured grammar (a declared DeckLink's own tokens; `SCREEN`) and verifies
+  by re-reading `INFO`
+- WHEN a missing consumer's grammar is unmeasured, or its DeckLink is undeclared THEN it is
+  reported as missing with the reason and no `ADD` is sent
+- WHEN a captured consumer is still running THEN no `ADD` is sent for it
+- WHEN the run ends THEN `report.json` carries the before/after consumer readings and every restore
+  outcome
+
+**Tests:** `tools/skew-harness/tests/consumers.test.ts` (13) — the two readings against the plant's
+own `INFO 1` / `INFO CONFIG` shapes of 2026-09-04, the notice's content and silence, the plan's
+four refusals, and the report's verified/still-missing readings.
+
+**Not verified on the plant this session:** the harness was not run against `192.168.21.114`
+(its DeckLink is on air and a `SET MODE` is exactly the change this item exists to announce); the
+decisions are pure functions of two `INFO` readings and are pinned without a server. The first
+real run will print the notice for `decklink@301`.
+
+- **Cross-refs:** [[C-029]] (the parsers and the one `ADD` builder this reuses), [[B-208]] (why
+  re-creation is attempted only for what is missing), [[B-174]] (what the harness measures).
+- **Number:** taken from the headings (highest `C-032`) and cross-checked against the registry's
+  dated pointer — they agree; see the registry entry.

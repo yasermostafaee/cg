@@ -2245,3 +2245,29 @@ as recorded above.
 
 ⇒ **Next free after this session is `B-216`** (`B-001` … `B-215`, no gaps), **`C-033`** (`C-001` …
 `C-032`, no gaps) **and `P-042`** (unchanged).
+
+### 2026-09-04 — `B-216` and `C-033` (`UPDATE-INFORCE-02`: the two doors, and the harness's consumers)
+
+| kind | id      | one line                                                                                                                                                                            | home                               | status         |
+| ---- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------------- |
+| `B-` | `B-216` | the three live-layer doors answered one row three ways, and `update` seated a REHEARSING row's plates — ownership is now the LEDGER (or air) at every door, never the rehearse flag | [bugs-runtime.md](bugs-runtime.md) | closed in code |
+| `C-` | `C-033` | the skew harness captures and restores a borrowed channel's CONSUMERS as well as its mode, and says loudly what it is about to change when a live output is attached                | [caspar.md](caspar.md)             | closed in code |
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three
+bug files was **`B-215`** (`git grep -n -E "^## \[.\] B-2[0-9][0-9]"`); `git grep -n "B-216"`
+returned exactly ONE hit — this file's own "Next free" pointer, the documented false positive — and
+no heading. **Cross-check against the dated pointer:** the entry above ends _"Next free after this
+session is `B-216`"_ — headings and pointer AGREE. One number taken, filed in `bugs-runtime.md`
+(a bridge/runtime playout defect).
+
+**Derivation for `C-`:** highest `C-` HEADING was **`C-032`**; `git grep -n "C-033"` returned only
+this file's own pointer. The dated pointer reads _"`C-033` (`C-001` … `C-032`, no gaps)"_ —
+headings and pointer AGREE. One number taken. **Prefix class `C-`, chosen because** the subject is
+a CasparCG-side instrument's handling of a channel's consumers over AMCP, not a Runtime surface.
+
+⚠ `B-216` was found by MEASURING the record's two contradictory statements at the mock wire before
+any code changed; the measurement is the item's first section. The `B-` duplicate audit was not
+rerun (numbers derived from headings); `B-056` and `B-080` remain as recorded above.
+
+⇒ **Next free after this session is `B-217`** (`B-001` … `B-216`, no gaps), **`C-034`** (`C-001` …
+`C-033`, no gaps) **and `P-042`** (unchanged).
