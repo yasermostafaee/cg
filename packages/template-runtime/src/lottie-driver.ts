@@ -250,6 +250,16 @@ export class LottieDriver {
     this.cancelFrame();
   }
 
+  /**
+   * `B-217` — whether this driver is ticking right now. The look park asks BEFORE it pauses:
+   * `resume()` below starts a never-running driver (continue-or-start, like the video's), so
+   * a park that promised a resume to an idle editor Lottie would set it animating on the
+   * way back.
+   */
+  isRunning(): boolean {
+    return this.running;
+  }
+
   /** Continue from the frame captured by `pause()`; a freeze hold stays frozen. */
   resume(): void {
     if (this.destroyed || this.running || this.settledHold) return;

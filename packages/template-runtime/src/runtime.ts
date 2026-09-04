@@ -1483,12 +1483,15 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           element nothing, while one hidden INSIDE a hidden look is parked correctly.
         */
         lookMediaPark.register({
-          node: media,
+          // `B-217` — through `live()`, not the build-time node: the Designer preview
+          // transplants a pooled `<video>` over this one on every rebuild, and a member
+          // registered by the detached node is never inside any look root again.
+          node: () => live(),
           driver,
           // OPT-IN, matching the hold arrays below. A video that gates the hold is silenced
           // but never paused — a paused driver never completes (see `look-media.ts`).
           parkable: el.drivesHold !== true,
-          audio: media,
+          audio: () => live(),
         });
         // media-phases-follow-composition — the at-rest poster shows the derived H (the held
         // look). The scene-builder wrote `holdAt ?? midpoint` (it has no comp anchors); the

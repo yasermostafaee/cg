@@ -321,6 +321,16 @@ export class VideoDriver implements ElementOutroDriver {
   }
 
   /**
+   * `B-217` — whether this driver is advancing the clip right now. The look park asks BEFORE
+   * it pauses, because `resume()` below STARTS a driver that was never running (it is a
+   * continue-or-start, deliberately — see its header) and a park must not turn a hidden,
+   * never-started editor `<video>` into a playing one on the way back.
+   */
+  isRunning(): boolean {
+    return this.running;
+  }
+
+  /**
    * Continue from where `pause()` froze — SEEK-FREE (2026-07-25). `pause()` froze
    * the element where it froze, so the MEDIA is authoritative (the same principle
    * as the large-gap re-base): re-anchor the driver clock to the media's actual

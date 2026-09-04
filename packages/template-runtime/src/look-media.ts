@@ -57,10 +57,16 @@
  * the cost of a rule with an exception in it.
  */
 
-/** The pause/resume pair every content driver in this package already implements. */
+/**
+ * The pause/resume pair every content driver in this package already implements — plus
+ * `isRunning()`, which `B-217` added because the park needs to know whether a pause DID
+ * anything before it promises a resume (see `#park`).
+ */
 export interface ParkableDriver {
   pause(): void;
   resume(): void;
+  /** True while the driver is actively advancing its content (not stopped, not paused). */
+  isRunning(): boolean;
 }
 
 /** Just enough of a media element to silence it — kept structural so tests need no DOM. */
@@ -69,17 +75,33 @@ export interface Silenceable {
 }
 
 export interface LookMediaMember {
-  /** The node whose place in the tree decides whether this member is on screen. */
-  readonly node: Element;
+  /**
+   * The node whose place in the tree decides whether this member is on screen.
+   *
+   * `B-217` — a GETTER is accepted as well as a node, for the one kind whose node a host may
+   * legitimately REPLACE: the Designer preview pools a `<video>` across a rebuild and
+   * transplants it over the freshly built one (`preview.ts` `reconcileVideos`), so the node
+   * captured at registration is detached from then on, `contains()` answers false for it,
+   * and the member would never be parked or silenced again. The video registers `live()`
+   * (the same resolver `B-137` gave its driver) so the question is asked of the node that is
+   * actually in the document.
+   */
+  readonly node: Element | (() => Element);
   readonly driver: ParkableDriver;
   /**
    * `false` when this member gates a hold: it is silenced while hidden but never paused,
    * because a paused driver never completes and the graphic would never come off air.
    */
   readonly parkable: boolean;
-  /** The element to silence, when this kind has sound at all. */
-  readonly audio?: Silenceable | undefined;
+  /** The element to silence, when this kind has sound at all — a getter for the same reason as `node`. */
+  readonly audio?: Silenceable | (() => Silenceable) | undefined;
 }
+
+const nodeOf = (member: LookMediaMember): Element =>
+  typeof member.node === 'function' ? member.node() : member.node;
+
+const audioOf = (member: LookMediaMember): Silenceable | undefined =>
+  typeof member.audio === 'function' ? member.audio() : member.audio;
 
 /**
  * The ONE seam LOOKS uses to park hidden content — and the seam `tasks.md` 7.10's operator
@@ -127,16 +149,15 @@ export class LookMediaPark {
    */
   reassert(): void {
     for (const member of this.#members) {
-      const hidden = this.#hiddenRoots.some(
-        (root) => root === member.node || root.contains(member.node),
-      );
+      const node = nodeOf(member);
+      const hidden = this.#hiddenRoots.some((root) => root === node || root.contains(node));
       if (hidden) this.#park(member);
       else this.#revive(member);
     }
   }
 
   #park(member: LookMediaMember): void {
-    const { audio } = member;
+    const audio = audioOf(member);
     if (audio !== undefined) {
       // CAPTURE once, ASSERT every time. A member already silenced keeps its ORIGINAL
       // captured value — re-capturing would record our own mute as the thing to restore —
@@ -156,13 +177,24 @@ export class LookMediaPark {
 
       Costs nothing to re-issue: every driver's `pause()` in this package returns immediately
       when it is not running or already paused.
+
+      🔴 **`B-217` — A REVIVE IS OWED ONLY TO A DRIVER THE PAUSE ACTUALLY STOPPED.** This used
+      to add the member to the set unconditionally, and `resume()` on a VideoDriver or a
+      LottieDriver does not "continue" — it STARTS a driver that was never running (the ticker
+      and sequence drivers refuse; the media drivers do not). The Designer canvas never plays,
+      so every driver there is idle: one look switch away and back was enough to set a clip
+      playing in the static editor, and the playhead then could not position it (`positionAt`
+      is a no-op for a running driver) until the next rebuild. Measured 2026-09-04 in
+      `video-looks-blank.spec.ts`. On air nothing changes: a running driver is still recorded
+      and still resumed. The set is never REMOVED from here — a member paused by an earlier
+      reassert is not running now, and still owes its resume.
     */
-    this.#paused.add(member);
+    if (member.driver.isRunning()) this.#paused.add(member);
     member.driver.pause();
   }
 
   #revive(member: LookMediaMember): void {
-    const { audio } = member;
+    const audio = audioOf(member);
     if (audio !== undefined && this.#silenced.has(member)) {
       // Whatever was true before the park — NOT `false`. See the header.
       audio.muted = this.#silenced.get(member) ?? true;

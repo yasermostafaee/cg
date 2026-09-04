@@ -464,3 +464,68 @@ describe('what else runs inside a hidden look', () => {
     r.remove();
   });
 });
+
+// ──────────── B-217 — a revive is owed only to a driver the pause actually stopped ────────────
+
+describe('B-217 — the park never STARTS what it did not stop', () => {
+  it('🔴 a never-started <video> (the Designer canvas, which never plays) stays PAUSED across a look round trip', () => {
+    /*
+      The editor canvas never calls play(): every driver is idle and every <video> is a paused
+      poster frame positioned by the playhead. Pre-fix the park added a hidden member to its
+      "owes a resume" set unconditionally, and VideoDriver.resume() is continue-OR-START — so
+      one switch away and back set the clip playing in the static canvas, and the playhead
+      could not position it again until the next rebuild (positionAt() is a no-op while a
+      driver runs). Measured 2026-09-04 in apps/designer/tests/e2e/video-looks-blank.spec.ts.
+    */
+    const { r } = boot([video('vid-a')], [video('vid-b')]);
+    trackHeads();
+    expect(vid('vid-a').paused, 'idle before anything').toBe(true);
+
+    expect(r.setActiveLook('look-b')).toBe(true);
+    expect(r.setActiveLook('look-a')).toBe(true);
+
+    expect(vid('vid-a').paused, 'still a paused frame after hide → show').toBe(true);
+    expect(vid('vid-b').paused, 'the other look’s clip too').toBe(true);
+    r.remove();
+  });
+
+  it('a driver that WAS running when parked is still resumed — on air nothing changes', async () => {
+    const { r, clock } = boot([video('vid-a')], [video('vid-b')]);
+    trackHeads();
+    await r.play({});
+    await run(clock, 100);
+    expect(vid('vid-a').paused).toBe(false);
+
+    r.setActiveLook('look-b');
+    expect(vid('vid-a').paused, 'parked while hidden').toBe(true);
+    r.setActiveLook('look-a');
+    expect(vid('vid-a').paused, 'revived in place when shown again').toBe(false);
+    r.remove();
+  });
+
+  it('🔴 membership follows the LIVE node: a transplanted <video> inside a hidden look is still silenced', () => {
+    /*
+      The Designer preview pools a <video> across a rebuild and transplants it over the freshly
+      built one (preview.ts reconcileVideos). The member used to be registered by the node
+      captured at build time, which is detached from then on — contains() answered false for
+      it, so the member was never parked or silenced again. The video now registers live(),
+      the same resolver B-137 gave its driver. The observable half is the SILENCE guarantee:
+      nothing whose picture is off screen may put sound on air, whichever node is on screen.
+    */
+    const { r } = boot([video('vid-a')], [video('vid-b')]);
+    trackHeads();
+    // The host's transplant, in miniature: an UNMUTED equivalent node with the same element id
+    // replaces the built one inside the hidden look.
+    const old = vid('vid-b');
+    const swapped = document.createElement('video');
+    for (const name of old.getAttributeNames()) swapped.setAttribute(name, old.getAttribute(name)!);
+    swapped.muted = false;
+    old.replaceWith(swapped);
+    expect(vid('vid-b')).toBe(swapped);
+
+    // A reassert with look-b hidden must reach the node that is actually in the document.
+    expect(r.setActiveLook('look-a')).toBe(true);
+    expect(swapped.muted, 'the live node inside the hidden look is silenced').toBe(true);
+    r.remove();
+  });
+});

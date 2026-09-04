@@ -116,8 +116,13 @@ the editor UI and the runtime renderer (the "Where features go" map in
   nothing inside it. `LookMediaPark` (`look-media.ts`) SILENCES hidden content
   unconditionally and PAUSES it as the policy half, reviving it IN PLACE — `VideoDriver`
   re-anchors to the media position rather than seeking, so a switch back is seamless.
-  Membership is asked of the DOM (`Element.contains`) because `display: none` is a DOM fact
-  and a parallel table could disagree with what is on screen. 🔴 Two things are deliberately
+  `B-217`: a revive is owed ONLY to a driver that was running when parked (`isRunning()` is
+  asked before the pause) — `VideoDriver.resume()` / `LottieDriver.resume()` START a
+  never-started driver, and a blind revive set clips playing in the Designer canvas, which
+  never plays. Membership is asked of the DOM (`Element.contains`) because `display: none` is
+  a DOM fact and a parallel table could disagree with what is on screen; the video registers
+  its node as a getter (`live()`), so a node the preview's pool transplanted is still the one
+  asked. 🔴 Two things are deliberately
   never parked: content that GATES A HOLD (a paused driver never completes, so the graphic
   would never come off air) and CLOCKS (a parked countdown returns claiming time it does not
   have). ⚠ The pause is the half a future operator toggle governs; the silence is not a

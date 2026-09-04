@@ -390,7 +390,17 @@ export class Preview {
           const nodes = document.querySelectorAll('video[data-cg-element-id]');
           for (let i = 0; i < nodes.length; i++) {
             const id = nodes[i].dataset && nodes[i].dataset.cgElementId;
-            if (id) videoPool[id] = nodes[i];
+            if (!id) continue;
+            // B-217 — a node with a TERMINAL media error is a corpse, not a warm cache. Pooling
+            // it would put it back on screen after every rebuild, and nothing in the static
+            // canvas ever rebuilds a dead node: the driver's recover() runs only while a
+            // driver is running, which the canvas never is. Drop it so the fresh node takes
+            // over and gets a normal src + poster from applyAssetUrls.
+            if (nodes[i].error) {
+              delete videoPool[id];
+              continue;
+            }
+            videoPool[id] = nodes[i];
           }
         }
 
@@ -410,7 +420,8 @@ export class Preview {
             if (!id) continue;
             seen[id] = true;
             const pooled = videoPool[id];
-            if (pooled && pooled !== fresh && pooled.dataset.cgAssetId === assetId) {
+            // B-217 — never transplant a dead node (see harvestVideos); the fresh one wins.
+            if (pooled && pooled !== fresh && !pooled.error && pooled.dataset.cgAssetId === assetId) {
               pooled.style.cssText = fresh.style.cssText; // the new transform/geometry
               pooled.className = fresh.className;
               pooled.dataset.cgPosterMs = fresh.dataset.cgPosterMs || '';

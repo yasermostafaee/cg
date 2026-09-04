@@ -942,6 +942,12 @@ payloads are dropped silently (a broadcast frame can't write logs).
    read from the SAME `drivesHold` the hold arrays use — a driver that gates a hold must
    never be paused, or the graphic never comes off air. **A kind that must keep tracking real
    time (the clock) is deliberately not enrolled**; if yours is like that, say so at the site.
+   The driver contract is `pause()` / `resume()` / **`isRunning()`** (`B-217`): the park
+   asks `isRunning()` BEFORE it pauses and owes a `resume()` only to a driver that was
+   running, because `VideoDriver.resume()` and `LottieDriver.resume()` START a never-started
+   driver — in the Designer canvas, which never plays, a blind revive set clips playing. If a
+   host may REPLACE your node across a rebuild (the preview's video pool does), register a
+   getter (`node: () => live()`) so membership is asked of the node actually in the document.
 4. **Designer UI** — the canvas/inspector to author it (`apps/designer`).
 5. If it can be **animated/bound**, make sure `applyBaseStyles` / `animation-applier`
    / `bindings` handle its target properties (see below).
