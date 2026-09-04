@@ -116,6 +116,16 @@ references, bank)`, `WebSocketRuntime.#references`.
 
 ## 10. Gate and evidence
 
-- [ ] 10.1 `pnpm gate` green uncached.
-- [ ] 10.2 Linux `gate:e2e` — owed (UI changed). Record the run URL, the `E2E (Playwright)`
-      job's conclusion and duration, and that it RAN, here.
+- [x] 10.1 `pnpm gate` green uncached — `Tasks: 93 successful, 93 total · Cached: 0 cached, 93
+total · Time: 2m58.0s`, openspec `74 passed, 0 failed`; green again inside both pre-push
+      hooks (3m09s, 3m13s).
+- [x] 10.2 Linux `gate:e2e` — **DISCHARGED** for `79b66c33` (the head carrying every commit of
+      this change, `b3620834` … `79b66c33`):
+      <https://github.com/yasermostafaee/cg/actions/runs/33880494176> — run conclusion `success`;
+      job `E2E (Playwright)` **RAN** (not skipped), started `2026-09-04T13:54:11Z`, completed
+      `2026-09-04T14:04:37Z`, **10m26s**, conclusion **`success`**
+      (<https://github.com/yasermostafaee/cg/actions/runs/33880494176/job/101048161212>); the
+      `Lint • Typecheck • Test • Build` job also ran, 2m57s, `success`. The Windows E2E run
+      (5 passed, 10.6s) was the pre-push signal only and discharges nothing.
+- [x] 10.3 The plant left untouched: no bridge was started against it, no AMCP was sent to it.
+      The running bridge (PID 15544, since 12:18:58Z) was read, not driven.

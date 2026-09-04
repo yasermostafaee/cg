@@ -9519,7 +9519,7 @@ recorded here so the next reader does not learn them on air.
 
 ---
 
-## [~] B-209 — the audit record keeps the refusal CODE and not the COMMAND it answered, so fourteen `amcp-404` takes could not be traced to a verb ⟨priority: high — the forensic surface could not answer the first question a refused take raises⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`
+## [~] B-209 — the audit record keeps the refusal CODE and not the COMMAND it answered, so fourteen `amcp-404` takes could not be traced to a verb ⟨priority: high — the forensic surface could not answer the first question a refused take raises⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` — <https://github.com/yasermostafaee/cg/actions/runs/33880494176> (`E2E (Playwright)` RAN, 10m26s, `success`)
 
 **Observed 2026-09-04** in the station's own record (`~/.cg-runtime/bridge-audit.ndjson` on the
 bridge host `192.168.21.93`): from `11:37:32Z` every take answered `outcome: failed,
@@ -9553,7 +9553,7 @@ on the current tree (`expected undefined to be defined`), 3/3 after; `wire-line-
 
 ---
 
-## [~] B-210 — the Audit log shows raw ISO-8601 UTC stamps to the millisecond to a control room at UTC+3:30 ⟨priority: high — an operator correlating a row with the wall clock is three and a half hours off, and the `Z` is the easiest thing on the screen to miss⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`
+## [~] B-210 — the Audit log shows raw ISO-8601 UTC stamps to the millisecond to a control room at UTC+3:30 ⟨priority: high — an operator correlating a row with the wall clock is three and a half hours off, and the `Z` is the easiest thing on the screen to miss⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` (run `33880494176`, see [[B-209]])
 
 **Observed 2026-09-04:** the panel's first column read `2026-09-04T12:18:47.561Z` for an action the
 operator performed at 15:48:47 by the clock on the wall. Nothing on the surface said the stamp was
@@ -9576,7 +9576,7 @@ date is a band where it changes down the newest-first list. The record on disk i
 
 ---
 
-## [~] B-211 — the Audit log's ITEM / DETAIL column shows two raw UUIDs per row where the operator's names are `Bed 1` and `3ghab` ⟨priority: high — a forensic surface an operator cannot read is a forensic surface nobody reads⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`
+## [~] B-211 — the Audit log's ITEM / DETAIL column shows two raw UUIDs per row where the operator's names are `Bed 1` and `3ghab` ⟨priority: high — a forensic surface an operator cannot read is a forensic surface nobody reads⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` (run `33880494176`, see [[B-209]])
 
 **Observed 2026-09-04:** every row read `item-e602d912-… · f00a5363-…`. The row the operator
 had pressed PLAY on was `Bed 1`; the template was `3ghab`. The constraint, stated because it
@@ -9607,7 +9607,7 @@ it: naming the row better must not read as naming the person better.
 
 ---
 
-## [~] B-212 — the in-use refusal names a COUNT and not a LOCATION, and its only concrete remedy was Remove All ⟨priority: high — on a live station a refusal that withholds the precise remedy while naming the sweeping one is steering toward the sweeping one⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`
+## [~] B-212 — the in-use refusal names a COUNT and not a LOCATION, and its only concrete remedy was Remove All ⟨priority: high — on a live station a refusal that withholds the precise remedy while naming the sweeping one is steering toward the sweeping one⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` (run `33880494176`, see [[B-209]])
 
 **Observed 2026-09-04:** _"2 stack item(s) still use this template — remove them (or Remove All)
 first."_ The owner was looking at rows that all read EMPTY, could not find the two, and pressed
@@ -9640,7 +9640,7 @@ uses" broke both on the first local run — recorded so the next wording change 
 
 ---
 
-## [~] B-213 — the layer table's `State (n)` counts rows in ERROR as on air ⟨priority: high — a refused take rendered as a graphic on air, in the sacred air colour⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`
+## [~] B-213 — the layer table's `State (n)` counts rows in ERROR as on air ⟨priority: high — a refused take rendered as a graphic on air, in the sacred air colour⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` (run `33880494176`, see [[B-209]]); the `(N in error)` text reads the owner's `rgb(255 28 28)` (`colors.errorText`, `79b66c33`)
 
 **Observed 2026-09-04:** `State (2)` in green with exactly two occupied rows, both in `ERROR`
 (two refused takes); earlier `(3)` = two refused rows plus one genuinely on air from another

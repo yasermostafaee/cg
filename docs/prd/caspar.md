@@ -2037,7 +2037,7 @@ about a consumer's health (asserted).
 
 ---
 
-## [~] C-031 — the bridge's boot line says how many templates it loaded, and how many persisted files it skipped ⟨priority: medium — the one number every take depends on was the one the boot line did not print⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`
+## [~] C-031 — the bridge's boot line says how many templates it loaded, and how many persisted files it skipped ⟨priority: medium — the one number every take depends on was the one the boot line did not print⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` — <https://github.com/yasermostafaee/cg/actions/runs/33880494176> (`E2E (Playwright)` RAN, 10m26s, `success`)
 
 **What:** beside `candidate layers`, `live sources`, `plate assignments`, `live layer ledger`, the
 mixer hold and the missing-consumer setting, the boot line prints
