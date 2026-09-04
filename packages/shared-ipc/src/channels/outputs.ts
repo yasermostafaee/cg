@@ -186,3 +186,68 @@ export const AIR_OUTPUT_KINDS: readonly string[] = [
 export function isAirOutputKind(kind: string): boolean {
   return AIR_OUTPUT_KINDS.includes(kind.toLowerCase());
 }
+
+/**
+ * `C-030` — the plain-words reading of a `<device>` value, for an operator who has never seen
+ * `casparcg.config`.
+ *
+ * ── THE RULE THIS READS, AND WHY IT IS A READING ────────────────────────────
+ *
+ * 2.5.0 `69e8ad5` addresses a DeckLink through ONE `int64_t` field that its own header
+ * annotates _"Either an index, or a persistent id"_ (`decklink/consumer/config.h:34`). The
+ * lookup (`decklink/util/util.h` `get_device`) walks the cards in enumeration order and, for
+ * each, matches the slot ordinal FIRST (`n == device_index`) and the persistent ID SECOND
+ * (`id == device_index`). There is no threshold, no separate element, no marker on the
+ * number: a value that equals some card's ordinal IS that slot, whatever else it might also
+ * be; anything else is tried as an ID. So the words below are how an operator should READ the
+ * number, and {@link DEVICE_ADDRESSING_RULE} must travel with them so the reading is never
+ * mistaken for something CasparCG enforces.
+ *
+ * Slot indices are 1-based and small (a box has a handful of cards, never hundreds);
+ * persistent IDs are the driver's `BMDDeckLinkPersistentID`, a long number (the plant's is
+ * `23487013`). The band between is called `unknown` rather than guessed.
+ */
+export type DeviceAddressingForm = 'slot-index' | 'persistent-id' | 'unknown';
+
+export interface DeviceAddressing {
+  form: DeviceAddressingForm;
+  /** "slot index 1" / "hardware persistent ID 23487013" / the value, said to be neither. */
+  words: string;
+}
+
+const SLOT_INDEX_MAX = 64;
+const PERSISTENT_ID_MIN = 1000;
+
+export function describeDeviceAddressing(device: string): DeviceAddressing {
+  const trimmed = device.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const n = Number(trimmed);
+    if (n >= 1 && n <= SLOT_INDEX_MAX) {
+      return { form: 'slot-index', words: `slot index ${String(n)}` };
+    }
+    if (n >= PERSISTENT_ID_MIN) {
+      return { form: 'persistent-id', words: `hardware persistent ID ${trimmed}` };
+    }
+  }
+  return {
+    form: 'unknown',
+    words: `device "${trimmed}" (neither a slot index nor a persistent ID)`,
+  };
+}
+
+/** `C-030` — how CasparCG reads the number; carried wherever a form is named. */
+export const DEVICE_ADDRESSING_RULE =
+  'CasparCG matches the number against each card’s slot position first and its persistent ID ' +
+  'second — the number itself carries no marker, so a small number is a slot and a long one is ' +
+  'a card.';
+
+/**
+ * `C-030` — where the number comes from. The only place CasparCG prints its DeckLink cards is
+ * the startup log (`decklink.cpp` `init`: `Decklink devices found:` then one ` - <model> [n]
+ * (id)` line per card, printed only when at least one card was found).
+ */
+export const DEVICE_NUMBER_RECIPE =
+  'The number comes from CasparCG’s startup log on the playout machine: search the newest ' +
+  'caspar_<date>.log in the server’s log folder for "Decklink devices found:" — each line ' +
+  'beneath reads <model> [slot] (persistent ID). Copy the number in [ ] for a slot index or the ' +
+  'one in ( ) for a hardware ID. No such line means the server saw no card at all, or no driver.';
