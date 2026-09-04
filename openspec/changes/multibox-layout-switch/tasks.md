@@ -1047,6 +1047,11 @@ candidate shapes.
       _"A configuration verb is never a playout verb, and ownership is the LEDGER"_; the audio
       half in `add-multibox-audio`'s `runtime-caspar-bridge/spec.md`. Full item:
       `docs/prd/bugs-runtime.md` **`B-216`**.
+      ✅ **Linux `gate:e2e` DISCHARGED for `f09b5b28`** (the `dev` tip carrying `a00680e8`, the
+      fix): <https://github.com/yasermostafaee/cg/actions/runs/33894720866> — run
+      `completed` + `success`, with the **`E2E (Playwright)` job RUN, not skipped** (563 s,
+      `success`), beside `Lint • Typecheck • Test • Build` (457 s, `success`). Read from the
+      run's job list.
 
 - [~] 7.14e 🔴 **`SKEW-INTERSECT-01` — THE TRANSITION MASK: for as long as the two halves can
   disagree, the page punches `outgoing ∩ entering` (2026-08-31).**

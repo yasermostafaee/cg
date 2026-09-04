@@ -9800,7 +9800,7 @@ slot is skipped by `restore()`, never allocated.
   and its skips), [[B-201]] (the wrong-bank refusal itself), [[B-114]] (release by the same door).
 - **Number:** taken with [[B-209]]; see the registry entry.
 
-## [~] B-216 — 🔴 the three doors that may touch a live layer answered ONE row THREE ways, and one of them let an UPDATE seat a REHEARSING row's plates — `B-161`'s own defect, reached through the flag `B-161` added ⟨priority: HIGHEST — bare video on air from a configuration verb, on a row whose whole contract is "nothing is sent to CasparCG"⟩ — CLOSED IN CODE 2026-09-04 by `UPDATE-INFORCE-02` (`openspec/changes/multibox-layout-switch/` 7.14f, `openspec/changes/add-multibox-audio/` 8.8); the plant check `B-161` owed was RUN the same day (below); Linux `gate:e2e` owed for the tip
+## [~] B-216 — 🔴 the three doors that may touch a live layer answered ONE row THREE ways, and one of them let an UPDATE seat a REHEARSING row's plates — `B-161`'s own defect, reached through the flag `B-161` added ⟨priority: HIGHEST — bare video on air from a configuration verb, on a row whose whole contract is "nothing is sent to CasparCG"⟩ — CLOSED IN CODE 2026-09-04 by `UPDATE-INFORCE-02` (`openspec/changes/multibox-layout-switch/` 7.14f, `openspec/changes/add-multibox-audio/` 8.8); the plant check `B-161` owed was RUN the same day (below); Linux `gate:e2e` DISCHARGED for `f09b5b28` — <https://github.com/yasermostafaee/cg/actions/runs/33894720866> (`E2E (Playwright)` RAN, 563 s, `success`)
 
 **Measured 2026-09-04 at the mock's AMCP wire** — `tools/caspar-bridge/tests/ownership-is-the-ledger.integration.test.ts`,
 run RED on `f23c065b` before any code changed. An UPDATE carrying one new binding, on a row that
