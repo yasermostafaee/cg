@@ -39,6 +39,90 @@ const ChannelTickSchema = z.object({
 
 export type ChannelTick = z.infer<typeof ChannelTickSchema>;
 
+/**
+ * `C-029` — ONE consumer actually RUNNING on a channel, as `INFO <channel>` reports it under
+ * `<output><port><port_N>`. `kind` is the consumer's own name on the wire (`decklink`,
+ * `screen`, `system-audio`, …) and `port` is CasparCG's index for it — `300 + device` for a
+ * DeckLink (so the plant's `<device>23487013</device>` reads as `port_23487313`), `500` for
+ * system audio, `600 + screen` for a screen. Captured verbatim from the plant's 2.5.0
+ * `69e8ad5` on 2026-09-04; the parser lives in `outputs.ts`.
+ */
+const RunningConsumerSchema = z.object({
+  port: z.number().int().nonnegative(),
+  kind: z.string().min(1),
+});
+
+export type RunningConsumer = z.infer<typeof RunningConsumerSchema>;
+
+/**
+ * `C-029` — one consumer `casparcg.config` DECLARES for a channel, read back through
+ * `INFO CONFIG`. This is what the OPERATOR WROTE, not what the card reports (the 2026-08-25
+ * walk's Q2): it is the boot-time baseline the alarm compares the running set against, and
+ * it carries the declaration's own parameters so a re-creation can repeat them exactly and
+ * never substitute.
+ */
+const DeclaredConsumerSchema = z.object({
+  kind: z.string().min(1),
+  /** The `<device>` the declaration names, verbatim, when it names one. */
+  device: z.string().optional(),
+  embeddedAudio: z.boolean().optional(),
+  keyOnly: z.boolean().optional(),
+  keyer: z.string().optional(),
+});
+
+export type DeclaredConsumer = z.infer<typeof DeclaredConsumerSchema>;
+
+/**
+ * `C-029` — a declared consumer KIND with fewer instances running than declared. Counted per
+ * kind rather than matched per device, because `INFO <channel>` reports the running
+ * DeckLink's device only through its port number while the declaration may spell the same
+ * card as an index or a persistent ID.
+ */
+const MissingConsumerSchema = z.object({
+  kind: z.string().min(1),
+  declared: z.number().int().positive(),
+  running: z.number().int().nonnegative(),
+  /** The devices the missing declarations name, for the operator's sentence. */
+  devices: z.array(z.string()),
+});
+
+export type MissingConsumer = z.infer<typeof MissingConsumerSchema>;
+
+/**
+ * `C-029` — what the bridge did about a missing consumer, when `--create-missing-consumers`
+ * is on. `not-attempted` names a kind the bridge does not create (a screen, system audio,
+ * or a kind whose `ADD` grammar it does not know); the others are the wire's answer to the
+ * one `ADD` it sent, verbatim in `command`.
+ */
+const ConsumerCreationSchema = z.object({
+  at: z.string().datetime(),
+  outcome: z.enum(['created', 'refused', 'failed', 'not-attempted']),
+  command: z.string().optional(),
+  code: z.number().int().optional(),
+  note: z.string().optional(),
+});
+
+export type ConsumerCreation = z.infer<typeof ConsumerCreationSchema>;
+
+/**
+ * `C-029` — ONE channel's declared-versus-running output check.
+ *
+ * `declared` is `null` when `INFO CONFIG` answered but could not be read as a configuration
+ * — a gap in the check, never an alarm (the `R-030` `unreadable` stance). `missing` is the
+ * alarm: a declared kind with fewer running instances than declared, which is exactly the
+ * shape of a consumer that failed at boot and therefore never appeared in `<output>`.
+ */
+const ChannelOutputCheckSchema = z.object({
+  channel: z.number().int().positive(),
+  declared: z.array(DeclaredConsumerSchema).nullable(),
+  running: z.array(RunningConsumerSchema),
+  missing: z.array(MissingConsumerSchema),
+  observedAt: z.string().datetime(),
+  creation: ConsumerCreationSchema.optional(),
+});
+
+export type ChannelOutputCheck = z.infer<typeof ChannelOutputCheckSchema>;
+
 const ServerHealthSchema = z.object({
   label: ServerLabelSchema,
   state: z.enum(['disconnected', 'connecting', 'handshaking', 'resyncing', 'healthy', 'degraded']),
@@ -49,6 +133,17 @@ const ServerHealthSchema = z.object({
    * Absent or empty means we have heard none, which is UNKNOWN and never an alarm.
    */
   channels: z.array(ChannelTickSchema).optional(),
+  /**
+   * `C-029` — the declared-versus-running output check for every declared channel of THIS
+   * server, once both halves have been read. Absent until then.
+   *
+   * ⚠ **KEPT ACROSS A DISCONNECT, on purpose.** The last verdict stays in the snapshot while
+   * the server is unreachable, so the renderer can say "last seen missing, cannot re-check"
+   * instead of falling silent — an alarm that goes quiet because its own source died is
+   * worse than no alarm. {@link outputVerdictOf} is what turns the kept verdict into the
+   * `unverifiable` arm; readers must go through it rather than reading `missing` directly.
+   */
+  outputs: z.array(ChannelOutputCheckSchema).optional(),
 });
 
 export type ServerHealth = z.infer<typeof ServerHealthSchema>;
@@ -77,6 +172,54 @@ export type ServerHealth = z.infer<typeof ServerHealthSchema>;
 export function stoppedChannelsOf(server: ServerHealth): readonly number[] {
   if (!isServerReachable(server.state)) return [];
   return (server.channels ?? []).filter((c) => !c.ticking).map((c) => c.channel);
+}
+
+/**
+ * `C-029` — the operator-facing verdict on a server's declared outputs.
+ *
+ * - `unknown` — nothing to say: no check has completed, or every completed check could not
+ *   read the declaration. Never an alarm (an unreadable declaration is a gap, not a fault).
+ * - `ok` — every declared consumer on every checked channel is running.
+ * - `missing` — the alarm: the server is REACHABLE and at least one declared consumer is not
+ *   running. `channels` carries only the offending checks.
+ * - `unverifiable` — the server is NOT reachable and the LAST completed check found a
+ *   consumer missing. The alarm does not clear because its source died; it says so.
+ */
+export type OutputVerdict =
+  | { kind: 'unknown' }
+  | { kind: 'ok'; observedAt: string }
+  | { kind: 'missing'; channels: readonly ChannelOutputCheck[]; observedAt: string }
+  | { kind: 'unverifiable'; channels: readonly ChannelOutputCheck[]; lastObservedAt: string };
+
+/**
+ * 🔴 **`C-029` — THE ONE AUTHORITY for "is this server missing a declared output?"**
+ *
+ * Beside {@link stoppedChannelsOf} for the same reason that one lives here: it is a
+ * question over the wire types, and a second copy in a banner is how the name comes to
+ * lie (golden rule 6). Two things it decides that a reader must not re-derive:
+ *
+ * 1. **Reachability changes the ARM, never silences the fact.** `R-058` returns `[]` for
+ *    an unreachable server because a stopped tick on a dead link is unknowable; a missing
+ *    consumer is different — the last reading is a fact about the last time anyone could
+ *    look, and hiding it would let a dead bridge→CasparCG hop read as "fixed".
+ * 2. **`degraded` is reachable** (AMCP up, OSC silent), exactly as {@link isServerReachable}
+ *    says, and a check read over AMCP is as valid in that state as in `healthy`.
+ */
+export function outputVerdictOf(server: ServerHealth): OutputVerdict {
+  const checks = server.outputs ?? [];
+  const missing = checks.filter((c) => c.missing.length > 0);
+  const observedAt = checks.reduce<string | null>(
+    (newest, c) => (newest === null || c.observedAt > newest ? c.observedAt : newest),
+    null,
+  );
+  if (observedAt === null) return { kind: 'unknown' };
+  if (!isServerReachable(server.state)) {
+    return missing.length > 0
+      ? { kind: 'unverifiable', channels: missing, lastObservedAt: observedAt }
+      : { kind: 'unknown' };
+  }
+  if (missing.length > 0) return { kind: 'missing', channels: missing, observedAt };
+  return checks.some((c) => c.declared !== null) ? { kind: 'ok', observedAt } : { kind: 'unknown' };
 }
 
 /**

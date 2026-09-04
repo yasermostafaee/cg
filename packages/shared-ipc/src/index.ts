@@ -38,6 +38,7 @@ export * from './channels/capabilities.js';
 export * from './channels/common.js';
 export * from './channels/stack.js';
 export * from './channels/connections.js';
+export * from './channels/outputs.js';
 export * from './channels/layers.js';
 export * from './channels/lock.js';
 export * from './channels/projects.js';
