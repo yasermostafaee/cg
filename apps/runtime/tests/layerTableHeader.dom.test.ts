@@ -34,7 +34,10 @@ afterEach(async () => {
   container = null;
 });
 
-async function renderHeader(onAirCount = 0, unverifiable = false): Promise<HTMLDivElement> {
+async function renderHeader(
+  tally: { onAir: number; inError: number } = { onAir: 0, inError: 0 },
+  unverifiable = false,
+): Promise<HTMLDivElement> {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -44,7 +47,7 @@ async function renderHeader(onAirCount = 0, unverifiable = false): Promise<HTMLD
       createElement(
         StrictMode,
         null,
-        createElement(LayerTableHeader, { density: 'full', onAirCount, unverifiable }),
+        createElement(LayerTableHeader, { density: 'full', tally, unverifiable }),
       ),
     );
   });
@@ -74,5 +77,53 @@ describe('LayerTableHeader — the toggle column head', () => {
   it('leaves every other head naming its verb — only the toggle column changed', async () => {
     const el = await renderHeader();
     expect(heads(el).slice(1)).toEqual(['PLAY', 'ON PVW', 'NEXT', 'STOP', 'CLEAR']);
+  });
+});
+
+/**
+ * `B-213` — THE TALLY SAYS WHAT IT COUNTS, AND KEEPS "ON AIR" AND "IN ERROR" APART.
+ *
+ * On 2026-09-04 the header read `State (2)` in the air colour over two rows whose
+ * takes had just been refused. The number was right for STOP ALL's question and wrong
+ * for the one a control room asks of a green number, and nothing on the surface said
+ * which question it was answering.
+ */
+describe('LayerTableHeader — the State tally', () => {
+  it('THE INCIDENT: two refused rows and nothing on air shows "2 in error" and NO air count', async () => {
+    const el = await renderHeader({ onAir: 0, inError: 2 });
+    expect(el.querySelector('[data-air-tally]')).toBeNull();
+    const error = el.querySelector<HTMLElement>('[data-error-tally]');
+    expect(error?.textContent).toContain('2 in error');
+    expect(error?.getAttribute('aria-label')).toBe('2 items in error');
+    // Not the air colour.
+    expect(el.textContent).not.toContain('on air');
+  });
+
+  it('says "on air" in words — a bare parenthesised number is gone', async () => {
+    const el = await renderHeader({ onAir: 3, inError: 0 });
+    const air = el.querySelector<HTMLElement>('[data-air-tally]');
+    expect(air?.textContent).toContain('3 on air');
+    expect(air?.getAttribute('aria-label')).toBe('3 items on air');
+    expect(el.querySelector('[data-error-tally]')).toBeNull();
+    expect(el.textContent).not.toMatch(/\(3\)/);
+  });
+
+  it('shows both when both are true — one on air from another console, two refused here', async () => {
+    const el = await renderHeader({ onAir: 1, inError: 2 });
+    expect(el.querySelector('[data-air-tally]')?.textContent).toContain('1 on air');
+    expect(el.querySelector('[data-error-tally]')?.textContent).toContain('2 in error');
+  });
+
+  it('says NOTHING at rest — no zero in either colour', async () => {
+    const el = await renderHeader();
+    expect(el.querySelector('[data-air-tally]')).toBeNull();
+    expect(el.querySelector('[data-error-tally]')).toBeNull();
+  });
+
+  it('keeps the §4 grey when nothing can confirm the air count', async () => {
+    const el = await renderHeader({ onAir: 2, inError: 0 }, true);
+    const air = el.querySelector<HTMLElement>('[data-air-tally]');
+    expect(air?.hasAttribute('data-unverifiable')).toBe(true);
+    expect(air?.textContent).toContain('2 on air');
   });
 });

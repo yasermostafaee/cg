@@ -3,6 +3,7 @@ import type { ConnectionConfig, TemplateServeInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { isLoopbackHost } from '../../../shared/loopback.js';
 import { useStack } from '../../hooks/useStack.js';
+import { isOnAirOrUnsettled } from '../stack/onAir.js';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
@@ -96,17 +97,14 @@ interface EndpointDraft {
   oscPort: string;
 }
 
-/** R-010 — the on-air predicate the panel mirrors (the bridge is the authority). */
+/**
+ * R-010 — the on-air predicate the panel mirrors (the bridge is the authority).
+ *
+ * `B-213` — it DELEGATES to the one renderer-side spelling in `stack/onAir.ts`, which
+ * the header's tally reads too. The status list used to live here as a second copy.
+ */
 export function anyOnAirOrUnsettled(items: readonly StackItemState[]): number {
-  return items.filter(
-    (i) =>
-      i.pending ||
-      i.status === 'playing' ||
-      i.status === 'on-air' ||
-      i.status === 'updating' ||
-      i.status === 'exiting' ||
-      i.status === 'unconfirmed',
-  ).length;
+  return items.filter(isOnAirOrUnsettled).length;
 }
 
 function toDraft(ep: { host: string; amcpPort: number; oscPort: number }): EndpointDraft {

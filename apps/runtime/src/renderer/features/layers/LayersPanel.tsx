@@ -34,7 +34,7 @@ import { useStackDeliveryPending } from '../../hooks/useStackDeliveryPending.js'
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { defaultLayerAlias, isLayerVisible, isLowBankLayer, isRehearsing } from '@cg/shared-ipc';
 import { useRehearse } from '../../hooks/useRehearse.js';
-import { isOnAir } from '../stack/onAir.js';
+import { airTally, isOnAir } from '../stack/onAir.js';
 import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftStore.js';
 import { appliedPlateSources } from '../inspector/livePlates.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
@@ -371,6 +371,13 @@ export function LayersPanel({
   // STOP ALL's count: the status IS the right question there — a row that never
   // played has no authored outro to run. See `isOnAir`.
   const onAirCount = items.filter(isOnAir).length;
+  /*
+    `B-213` — the HEADER's numbers, and deliberately not `onAirCount`. STOP ALL must be
+    offered to an errored row (it MAY be showing something); a tally in the air colour
+    may not count a refused take as a graphic on air. Two questions, two predicates,
+    both spelled once in `stack/onAir.ts`.
+  */
+  const tally = airTally(items);
   // B-122 — CLEAR ALL's count, and deliberately a different one. It counts rows
   // that HOLD A LAYER, an ownership fact, because the believed status is exactly
   // what may be wrong when the operator reaches for this button.
@@ -909,7 +916,7 @@ export function LayersPanel({
                 {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
                 <LayerTableHeader
                   density={density}
-                  onAirCount={onAirCount}
+                  tally={tally}
                   // §4 — `unreachable` only, never the boot window: a count that
                   // greyed itself for the first second of every reload would teach
                   // the operator to stop reading the grey.

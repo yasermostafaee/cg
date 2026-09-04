@@ -130,6 +130,17 @@ const styles = {
    * server is confirming it. B-081's tone, reused rather than a new grey.
    */
   onAirCountStale: { color: colors.textMuted },
+  /**
+   * `B-213` — the rows whose last command was REFUSED, as their own number in the
+   * error colour, beside the air count and never added to it. Smaller than the air
+   * count: it is a fact about this console's reach, not about air.
+   */
+  errorCount: {
+    color: colors.error,
+    fontWeight: 700,
+    fontSize: '12px',
+    lineHeight: 1,
+  },
   verbHead: {
     textAlign: 'center' as const,
     overflow: 'hidden',
@@ -141,12 +152,21 @@ const styles = {
 
 export function LayerTableHeader({
   density,
-  onAirCount,
+  tally,
   unverifiable = false,
 }: {
   density: Density;
-  /** How many rows are ON AIR right now — shown beside `State`, in the air colour. */
-  onAirCount: number;
+  /**
+   * `B-213` — what the list adds up to, as TWO numbers that mean two things: rows this
+   * console believes are on air (or unsettled), shown in the air colour; and rows whose
+   * last command was refused, shown in the error colour. They are never one number.
+   *
+   * It was `onAirCount`, and it was `items.filter(isOnAir).length` — STOP ALL's
+   * predicate, which counts `error` because an errored row must still be offered
+   * STOP. So `State (2)` sat in green over two rows whose takes had just been REFUSED.
+   * The count read as "2 on air"; the truth was "0 on air, 2 refused".
+   */
+  tally: { onAir: number; inError: number };
   /**
    * §4 — neither hop can back that count right now, so it stops wearing the air
    * colour.
@@ -181,28 +201,47 @@ export function LayerTableHeader({
         the resting state, and — worse — it would put the air colour on screen at all
         times, which is exactly how a colour reserved for one meaning stops being
         noticed.
+
+        `B-213` — and it SAYS what it counts. `(2)` beside "State" read as two on air
+        whatever it was actually counting; `(2 on air)` cannot be read any other way,
+        and `(2 in error)` is its own number in its own colour, never folded in.
       */}
       <span
         style={styles.cell}
         title="What is on this layer right now: on air, ready, empty, occupied by another system, or unknown."
       >
         State
-        {onAirCount > 0 && (
+        {tally.onAir > 0 && (
           <span
             style={
               unverifiable ? { ...styles.onAirCount, ...styles.onAirCountStale } : styles.onAirCount
             }
-            aria-label={`${String(onAirCount)} items on air`}
+            aria-label={`${String(tally.onAir)} items on air`}
+            data-air-tally={String(tally.onAir)}
             {...(unverifiable ? { 'data-unverifiable': '' } : {})}
             {...(unverifiable
               ? {
                   title:
                     'What this console believes is on air. CasparCG cannot be reached, so nothing is confirming it right now.',
                 }
-              : {})}
+              : {
+                  title:
+                    'Rows this console believes are on air or unsettled — a play CasparCG accepted, or one still waiting for its answer. A refused row is counted separately.',
+                })}
           >
             {' '}
-            ({onAirCount})
+            ({tally.onAir} on air)
+          </span>
+        )}
+        {tally.inError > 0 && (
+          <span
+            style={styles.errorCount}
+            aria-label={`${String(tally.inError)} items in error`}
+            data-error-tally={String(tally.inError)}
+            title="Rows whose last command CasparCG refused. Nothing is claimed about what those layers show — open the row or the audit log for the code."
+          >
+            {' '}
+            ({tally.inError} in error)
           </span>
         )}
       </span>
