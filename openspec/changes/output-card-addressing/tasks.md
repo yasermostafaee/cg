@@ -63,9 +63,14 @@ frames|unhappy/)`) stays green; the operator guide's "What the check cannot see"
 
 ## 6. Gate and evidence
 
-- [ ] 6.1 `pnpm gate` green uncached.
-- [ ] 6.2 Linux `gate:e2e` — OWED (the banner's text changed). Discharged only by a COMPLETED, GREEN
-      `E2E (Playwright)` job for the commit carrying this change, run URL recorded here with the
-      job-level conclusion and duration and confirmation the job RAN.
+- [x] 6.1 `pnpm gate` green uncached — `Tasks: 93 successful, 93 total · Cached: 0 cached, 93 total ·
+Time: 2m59.8s`, openspec `73 passed, 0 failed`; green again in the pre-push hook.
+- [x] 6.2 Linux `gate:e2e` — **DISCHARGED** for `ca3cc1e6` (the docs commit on top of `a9f507eb` /
+      `f04f4f59` / `eb264cbf`, the commits carrying this change):
+      <https://github.com/yasermostafaee/cg/actions/runs/33826394983> — run conclusion `success`;
+      job `E2E (Playwright)` **RAN** (not skipped), started `2026-09-04T01:36:24Z`, completed
+      `2026-09-04T01:47:44Z`, **11m20s**, conclusion **`success`**
+      (<https://github.com/yasermostafaee/cg/actions/runs/33826394983/job/100879891581>); the
+      `Lint • Typecheck • Test • Build` job also ran, 6m43s, `success`.
 - [x] 6.3 The plant left as found (read only). The dev host's 2.5.0 was STARTED for §2c and STOPPED;
       its config untouched (`casparcg.config` 2877 bytes, 2026-08-24 15:48).

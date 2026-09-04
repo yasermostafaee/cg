@@ -1959,7 +1959,7 @@ lives in the server log. A channel that ticked and STOPPED remains [[R-058]]'s c
 
 ---
 
-## [~] C-030 — how the output card is ADDRESSED: `<device>` takes a slot index or a persistent ID through one field, the alarm says which, and the operator is told where the number comes from ⟨priority: high — the owner's "auto-detect" is achievable by addressing, not discovery, and the choice has a failure mode either way⟩ — IMPLEMENTED 2026-09-04 (the alarm half), `openspec/changes/output-card-addressing/`; the config edit is the OWNER's and is HELD; Linux `gate:e2e` OWED
+## [~] C-030 — how the output card is ADDRESSED: `<device>` takes a slot index or a persistent ID through one field, the alarm says which, and the operator is told where the number comes from ⟨priority: high — the owner's "auto-detect" is achievable by addressing, not discovery, and the choice has a failure mode either way⟩ — IMPLEMENTED 2026-09-04 (the alarm half), `openspec/changes/output-card-addressing/`; the config edit is the OWNER's and is HELD; Linux `gate:e2e` DISCHARGED for `ca3cc1e6` — <https://github.com/yasermostafaee/cg/actions/runs/33826394983> (`E2E (Playwright)` RAN, 11m20s, `success`)
 
 **What:** [[C-029]] tells the operator to _"read the CasparCG log on the playout machine"_. This item
 makes that concrete and answers the question under the owner's wish for auto-detection: **why type a
