@@ -105,6 +105,7 @@
       surviving a selection change. Do not read 6.2's tick as covering this. ⚠ PARTLY answered by
       `B-218`'s `aspect-lock-per-plate.spec.ts` (the toggle surviving a selection change, per
       plate); the locked DRAG at browser level is still not pinned.
-- [ ] 6.4 `B-218` — Linux `gate:e2e` OWED for the per-plate change (UI: a new toggle on the
-      arrangement row, the aspect row rewired). Discharged only by a COMPLETED green `e2e` job on
-      the commit that carries it, cited by run URL here.
+- [x] 6.4 `B-218` — Linux `gate:e2e` DISCHARGED for `48ef55ce` (the `dev` tip that carries
+      `645c171a`): **https://github.com/yasermostafaee/cg/actions/runs/33910015631** —
+      `E2E (Playwright)` job conclusion `success`, its `E2E` step RAN (`success`, not skipped),
+      601 s; `Lint • Typecheck • Test • Build` `success`, 316 s. Recorded 2026-09-04.

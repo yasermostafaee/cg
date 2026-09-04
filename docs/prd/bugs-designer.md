@@ -3724,7 +3724,7 @@ green after, with the whole package suite run three times.
 
 ---
 
-## [~] B-217 — a canvas video went BLANK after look switches and undo, and a brand-new video rendered nothing; the reported blank is NOT reproduced, and three defects in the seam it went through are closed in code ⟨priority: high — the canvas misrepresents the composition and the owner's only cure is a reload⟩ — FILED 2026-09-04 from `DESIGNER-FIX-0902` §1; the three mechanisms CLOSED IN CODE the same day; the owner's specific blank still OPEN
+## [~] B-217 — a canvas video went BLANK after look switches and undo, and a brand-new video rendered nothing; the reported blank is NOT reproduced, and three defects in the seam it went through are closed in code ⟨priority: high — the canvas misrepresents the composition and the owner's only cure is a reload⟩ — FILED 2026-09-04 from `DESIGNER-FIX-0902` §1; the three mechanisms CLOSED IN CODE the same day; the owner's specific blank still OPEN; Linux `gate:e2e` DISCHARGED for `48ef55ce` — <https://github.com/yasermostafaee/cg/actions/runs/33910015631> (`E2E (Playwright)` RAN, 601 s, `success`)
 
 **Repro (owner, 2026-08-30):** a LOOKS template with a video used as the background. Several look
 switches through the `Active look` picker, then some `Ctrl+Z`.
@@ -3861,7 +3861,7 @@ this stays `[~]`: three defects closed in code, the reported blank filed and ope
 
 ---
 
-## [~] B-218 — "keep aspect / free" was ONE flag for every plate in every look: setting one box to FREE freed all of them ⟨priority: medium — a per-plate control that silently reaches every other plate⟩ — FILED AND CLOSED IN CODE 2026-09-04 (`DESIGNER-FIX-0902` §2; `openspec/changes/aspect-lock-live-source/` 3.5–3.7); Linux `gate:e2e` owed
+## [~] B-218 — "keep aspect / free" was ONE flag for every plate in every look: setting one box to FREE freed all of them ⟨priority: medium — a per-plate control that silently reaches every other plate⟩ — FILED AND CLOSED IN CODE 2026-09-04 (`DESIGNER-FIX-0902` §2; `openspec/changes/aspect-lock-live-source/` 3.5–3.7); Linux `gate:e2e` DISCHARGED for `48ef55ce` — <https://github.com/yasermostafaee/cg/actions/runs/33910015631> (`E2E (Playwright)` RAN, 601 s, `success`)
 
 **Repro (owner, 2026-08-30):** a two-box look. Select one box, press its `keep aspect` toggle to
 `FREE`.
