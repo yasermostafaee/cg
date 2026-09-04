@@ -50,6 +50,20 @@ export {
   type Rect,
   type SkewFixture,
 } from './geometry.js';
+export {
+  airOutputsOf,
+  borrowNotice,
+  consumerReport,
+  consumerRestorePlan,
+  declaredConsumersOf,
+  describeConsumerReport,
+  runningConsumersOf,
+  type ConsumerAdd,
+  type ConsumerReport,
+  type ConsumerRestoreAttempt,
+  type ConsumerRestorePlan,
+  type UnrestorableConsumer,
+} from './consumers.js';
 export { buildSkewScene, SKEW_PLATES } from './scene.js';
 export { buildTemplateHtml, bundleTemplateRuntime } from './template.js';
 export {

@@ -2,7 +2,7 @@ import * as dgram from 'node:dgram';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CasparRuntime } from '@cg/caspar-bridge';
-import { fixedBankSlots } from '@cg/shared-ipc';
+import { fixedBankSlots, type DeclaredConsumer, type RunningConsumer } from '@cg/shared-ipc';
 import { buildTemplateLiveSources } from '@cg/vcg-format';
 import {
   changeEvents,
@@ -17,6 +17,15 @@ import {
 } from './analyse.js';
 import { connectAmcp, framePeriodMs, readChannelMode, type AmcpClient } from './amcp.js';
 import { classifyWindow, directionOf, excludeMask, type ArtefactSummary } from './artefact.js';
+import {
+  borrowNotice,
+  consumerReport,
+  consumerRestorePlan,
+  declaredConsumersOf,
+  describeConsumerReport,
+  runningConsumersOf,
+  type ConsumerReport,
+} from './consumers.js';
 import {
   describeRecording,
   dumpFramePng,
@@ -244,6 +253,12 @@ export interface SkewReport {
   readonly kChannelFrames: Distribution;
   readonly kMilliseconds: Distribution;
   /**
+   * `C-033` — what the borrowed channel was running before the run, what it runs after the
+   * restore, and what the harness re-created or could not. Absent only when the running set
+   * could not be read at the start.
+   */
+  readonly consumers?: ConsumerReport;
+  /**
    * 🔴 `SKEW-INTERSECT-01` §2 — **the two terms that are NOT the mask/fill disagreement, kept
    * apart from it and from each other so no future report can collapse the three again.**
    *
@@ -470,8 +485,30 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
 
   const control = await connectAmcp(options.casparHost, options.amcpPort);
   const originalMode = (await readChannelMode(control, options.channel)).format;
+  /*
+    `C-033` — CAPTURE THE CHANNEL'S CONSUMERS BEFORE TOUCHING ANYTHING, and say so, loudly,
+    when any of them goes to air. `SET MODE` re-initialises every consumer on the channel and a
+    consumer that cannot run the measurement mode does not come back; the MODE was always
+    restored, the CONSUMERS were not, and nothing in the report said so. Both are now captured
+    here and compared and restored in `restoreChannel` (the `finally` below).
+  */
+  const consumersBefore = runningConsumersOf(await infoXml(control, options.channel));
+  const declared = declaredConsumersOf(await configXml(control), options.channel);
+  const notice = borrowNotice({
+    channel: options.channel,
+    running: consumersBefore ?? [],
+    modeFrom: originalMode,
+    modeTo: options.mode,
+    runs: options.runs,
+  });
+  if (notice !== null) {
+    process.stderr.write(notice);
+    await sleep(BORROW_NOTICE_GRACE_MS);
+  }
   let tap: WireTap | null = null;
   let runtime: CasparRuntime | null = null;
+  let result: SkewReport | null = null;
+  let consumers: ConsumerReport | null = null;
 
   try {
     if (options.mode !== originalMode) {
@@ -621,9 +658,9 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
       ...(options.classify ? { artefactsByDirection: groupArtefacts(runs.filter(usable)) } : {}),
     };
 
-    if (!options.withPlaySwitch) return report;
-
-    /*
+    result = report;
+    if (options.withPlaySwitch) {
+      /*
       🔴 `B-155` — THE SWITCH THAT CARRIES A PLAY, reached through the product's own
       configuration surface rather than by hand-typed AMCP.
 
@@ -636,57 +673,64 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
       other clip while the row is live, then presses the look; the switch resolves the new
       producer, `seatUnchanged` fails, and the replace lands INSIDE the switch window.
     */
-    const playRuns: RunResult[] = [];
-    const catalogPointing = (file: string): unknown => ({
-      layerRange: { start: 30, end: 39 },
-      sources: [
-        { id: 'src-1', name: file, producer: { kind: 'media', file } },
-        { id: 'src-2', name: SOURCE_CLIPS[1], producer: { kind: 'media', file: SOURCE_CLIPS[1] } },
-      ],
-    });
-    try {
-      for (let i = 0; i < Math.min(options.runs, 4); i += 1) {
-        const target = i % 2 === 0 ? SWAP_CLIP : SOURCE_CLIPS[0];
-        const raw = await recordOneSwitch({
-          ...shared,
-          index: i,
-          label: 'b155',
-          from: measuredFrom,
-          to: measuredTo,
-          beforeRecording: () => {
-            const verdict = runtime?.setSourceCatalog(catalogPointing(target ?? '') as never);
-            if (verdict?.ok !== true) {
-              throw new Error(`the B-155 catalog re-point was refused: ${JSON.stringify(verdict)}`);
-            }
-            return Promise.resolve();
+      const playRuns: RunResult[] = [];
+      const catalogPointing = (file: string): unknown => ({
+        layerRange: { start: 30, end: 39 },
+        sources: [
+          { id: 'src-1', name: file, producer: { kind: 'media', file } },
+          {
+            id: 'src-2',
+            name: SOURCE_CLIPS[1],
+            producer: { kind: 'media', file: SOURCE_CLIPS[1] },
           },
-        });
-        // A b155 run is only a b155 run if the replace actually rode the switch.
-        playRuns.push(
-          raw.kChannel !== null && !raw.containedPlay
-            ? {
-                ...raw,
-                kRecorded: null,
-                kChannel: null,
-                kMs: null,
-                reason: 'the catalog re-point produced no PLAY inside the switch',
+        ],
+      });
+      try {
+        for (let i = 0; i < Math.min(options.runs, 4); i += 1) {
+          const target = i % 2 === 0 ? SWAP_CLIP : SOURCE_CLIPS[0];
+          const raw = await recordOneSwitch({
+            ...shared,
+            index: i,
+            label: 'b155',
+            from: measuredFrom,
+            to: measuredTo,
+            beforeRecording: () => {
+              const verdict = runtime?.setSourceCatalog(catalogPointing(target ?? '') as never);
+              if (verdict?.ok !== true) {
+                throw new Error(
+                  `the B-155 catalog re-point was refused: ${JSON.stringify(verdict)}`,
+                );
               }
-            : raw,
-        );
+              return Promise.resolve();
+            },
+          });
+          // A b155 run is only a b155 run if the replace actually rode the switch.
+          playRuns.push(
+            raw.kChannel !== null && !raw.containedPlay
+              ? {
+                  ...raw,
+                  kRecorded: null,
+                  kChannel: null,
+                  kMs: null,
+                  reason: 'the catalog re-point produced no PLAY inside the switch',
+                }
+              : raw,
+          );
+        }
+      } finally {
+        // Put the catalog back the way the harness found its own configuration.
+        runtime.setSourceCatalog(catalog() as never);
       }
-    } finally {
-      // Put the catalog back the way the harness found its own configuration.
-      runtime.setSourceCatalog(catalog() as never);
+      const playUsable = playRuns.filter((r) => r.kChannel !== null && r.containedPlay);
+      result = {
+        ...report,
+        playSwitch: {
+          runs: playRuns,
+          kChannelFrames: distribution(playUsable.map((r) => r.kChannel as number)),
+          kMilliseconds: distribution(playUsable.map((r) => r.kMs as number)),
+        },
+      };
     }
-    const playUsable = playRuns.filter((r) => r.kChannel !== null && r.containedPlay);
-    return {
-      ...report,
-      playSwitch: {
-        runs: playRuns,
-        kChannelFrames: distribution(playUsable.map((r) => r.kChannel as number)),
-        kMilliseconds: distribution(playUsable.map((r) => r.kMs as number)),
-      },
-    };
   } finally {
     await runtime?.stop();
     await tap?.close();
@@ -695,9 +739,77 @@ export async function measureSkew(options: SkewOptions): Promise<SkewReport> {
       if (originalMode.length > 0 && originalMode !== 'unknown') {
         await control.send(`SET ${String(options.channel)} MODE ${originalMode}`);
       }
+      // `C-033` — the consumers are the channel's other fact; put back what the run took down.
+      consumers = await restoreChannel(control, options.channel, consumersBefore, declared);
     } finally {
       control.close();
     }
+  }
+  if (result === null) throw new Error('measureSkew produced no report');
+  return consumers === null ? result : { ...result, consumers };
+}
+
+/** How long the loud notice stays on screen before the first command, when a live output is attached. */
+const BORROW_NOTICE_GRACE_MS = 5000;
+
+/** Consumers re-initialise asynchronously after `SET MODE` and after an `ADD`; read only once they have. */
+const CONSUMER_SETTLE_MS = 1500;
+
+async function infoXml(control: AmcpClient, channel: number): Promise<string> {
+  return (await control.send(`INFO ${String(channel)}`)).body.join('\n');
+}
+
+async function configXml(control: AmcpClient): Promise<string> {
+  return (await control.send('INFO CONFIG')).body.join('\n');
+}
+
+/**
+ * `C-033` — after the mode is back: re-read the running set, re-ADD what the run took down
+ * (from a MEASURED grammar only — see `consumers.ts`), re-read again, and report the READING.
+ *
+ * Returns null only when the running set could not be read at the START, since there is then
+ * nothing to compare against; that case is itself printed. Never throws: a restore that fails
+ * must not hide the measurement that succeeded, and the report carries the failure.
+ */
+async function restoreChannel(
+  control: AmcpClient,
+  channel: number,
+  before: readonly RunningConsumer[] | null,
+  declared: readonly DeclaredConsumer[] | null,
+): Promise<ConsumerReport | null> {
+  if (before === null) {
+    process.stderr.write(
+      `cg-skew: channel ${String(channel)} consumers could not be read before the run (no <output> in INFO), so nothing is compared or restored\n`,
+    );
+    return null;
+  }
+  try {
+    await sleep(CONSUMER_SETTLE_MS);
+    const after = runningConsumersOf(await infoXml(control, channel)) ?? [];
+    const plan = consumerRestorePlan({ channel, before, after, declared });
+    const attempted: { consumer: RunningConsumer; command: string; reply: string }[] = [];
+    for (const add of plan.adds) {
+      const reply = await control.send(add.command);
+      attempted.push({ ...add, reply: reply.status });
+    }
+    let final = after;
+    if (attempted.length > 0) {
+      await sleep(CONSUMER_SETTLE_MS);
+      final = runningConsumersOf(await infoXml(control, channel)) ?? after;
+    }
+    const report = consumerReport({
+      before,
+      after: final,
+      attempted,
+      unrestorable: plan.unrestorable,
+    });
+    process.stderr.write(describeConsumerReport(channel, report));
+    return report;
+  } catch (err) {
+    process.stderr.write(
+      `cg-skew: 🔴 the consumer restore itself failed: ${err instanceof Error ? err.message : String(err)} — read INFO ${String(channel)} by hand before trusting the channel\n`,
+    );
+    return null;
   }
 }
 

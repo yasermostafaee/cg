@@ -17,6 +17,18 @@ Requires a reachable CasparCG (default `127.0.0.1:5250`) and ffmpeg/ffprobe on `
 `--runs` (default 10), `--out` (default `evidence/<stamp>/`), `--host`, `--port`,
 `--channel`, `--settle-ms`, `--tail-ms`, `--with-play-switch`.
 
+**The channel is BORROWED, and both of its facts are put back (`C-033`).** Before the first
+command the harness reads what the channel is RUNNING (`INFO <channel>`'s `<output>`) and what it
+DECLARES (`INFO CONFIG`). If any running consumer carries the channel off the machine (a DeckLink,
+NDI, …) it prints a loud notice naming it and every change the run is about to make — the
+`SET MODE` that re-initialises every consumer on the channel, the `ADD`/`REMOVE FILE` cycles, the
+final `CLEAR` — and waits five seconds before touching anything. After the mode is restored it
+re-reads the running set and re-`ADD`s what did not survive, from a **measured** grammar only (a
+DeckLink from its own declaration's tokens via the bridge's `missingConsumerAddCommand`, a
+`SCREEN`); anything else is reported as missing with the reason, never guessed at, and a consumer
+that survived is never touched (an `ADD` at a running index replaces it — `B-208`). The reading
+lands in `report.json` under `consumers` and on stderr, one line per fact.
+
 ## What it does
 
 1. Generates two **static** high-contrast pattern clips into the media folder (a moving
