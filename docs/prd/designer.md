@@ -5281,7 +5281,9 @@ longer punches, and one implies the template cannot draw over the picture at all
 | `StyleSection.tsx:794-795` (Frame row hint)            | _"The frame is painted by the TEMPLATE, outside the hole — it never covers the live picture"_ — true in effect under the reorder, wrong mechanism |
 
 A follow-up item may re-word them against the reorder; this one does not (the brief: report, do
-not redesign).
+not redesign). ⭐ **Re-worded 2026-09-05 under [[B-220]]** (`DESIGNER-FIX-0905` §1), which also
+found that five of the six sit in a section `InspectorPanel` never mounts, and five more Designer
+strings — the preflight refusals — that this table did not list.
 
 - **Cross-refs:** [[B-195]] (the audit), `single-clock-look-switch` (the reorder), [[B-194]] (the
   affordability number the audit corrected), `C-015` (the layer bands).
@@ -5290,3 +5292,121 @@ not redesign).
   sentence (2026-08-24) still reads _"Next free: `D-157`"_ — it was written before `D-157` was
   filed and never advanced, so HEADINGS and the pointer DISAGREE by one; the headings win and
   `D-158` is taken here. Recorded in the registry's 2026-09-04 entry.
+
+## [~] D-159 — the Inspector explains in prose what it could express in state ⟨priority: high — the owner's words: "long and small and unreadable"⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905`; `openspec/changes/inspector-state-over-prose/`)
+
+**What:** the Inspector's explanatory paragraphs become STATE where they can — a control the mode
+ignores is withheld (present, disabled, its reason as its own tooltip), a degenerate value reads as
+degenerate, a fact is a field, and no paragraph restates a placeholder. What is genuinely worth
+reading once moves behind an `i` into the shared modal at reading size; a state and its remedy stay
+inline, short, beside their control, at one legible default; a refusal stays inline and louder.
+
+**Why:** the owner photographed seven blocks — Playout, Video, Live Source / fit, Frame, Sequence,
+Looks and the home cards — and named the symptom _"long and small and unreadable"_. The root cause
+is not length: the UI explains in prose what it could express in state. _"Hold loop (frames 38 → 38) has no playback effect here: a manual hold waits for the operator…"_ is a control that should
+read `inert`; _"Opacity and filters are withheld…"_ is a paragraph standing in for two controls
+that were simply absent; the sequence paragraph repeated, word for word, the placeholder of the
+field directly above it.
+
+**Acceptance:** the `#### Scenario`s of the change's six spec deltas (`designer-inspector`,
+`designer-live-source`, `designer-playout-lifecycle`, `designer-video-element`, `designer-shell`,
+`designer-multibox-arrangements`).
+
+### §3 — the sweep, and how the prediction came out
+
+The prompt predicted **35–60** explanatory prose blocks. Counting rule: a rendered paragraph,
+caption or callout of one or more sentences that EXPLAINS (teaches, states a mechanism, a
+constraint, or a state and its remedy). Not counted: bare labels ("Which content closes the
+graphic?"), bare empty states with no explanation ("No fields."), pure numeric readouts, modal
+bodies (already reading-size) and tooltips (already on a control).
+
+| where                                         | blocks | of which changed here                                                                       |
+| --------------------------------------------- | -----: | ------------------------------------------------------------------------------------------- |
+| Inspector — Live Source, Frame, Transform     |      2 | 2 (state line + `i`; controls withheld; frame colour withheld at 0)                         |
+| Inspector — Video, Lottie, follow, clamps     |     19 | 4 (provenance → fields; follow state; phase-marks state + `i`; `drives hold` withheld)      |
+| Inspector — Ticker, Clock, Sequence, Repeater |      6 | 5 (three time-driven → state + one `i`; sequence duplicate deleted + `i`; repeater → field) |
+| Inspector — Dynamic / Data, Keyframe          |      6 | 0 (state + remedy, left inline)                                                             |
+| Playout                                       |      7 | 3 (hold loop row + `i`; static caption + `i`; content-start caption shortened)              |
+| Looks                                         |      6 | 5 (summary + two hints → `i`; two empties → one line; refusal block louder)                 |
+| Home cards                                    |      5 | 5 (badge derived from the scene + one line)                                                 |
+| Preview modal / fields panels                 |      5 | 0                                                                                           |
+| Left-rail panels, timeline, landing empties   |      5 | 0                                                                                           |
+| **Reachable total**                           | **61** | **24**                                                                                      |
+| Arrangements section — **never rendered**     |     22 | 5 (the `D-158` strings, §1)                                                                 |
+| **Grand total**                               | **83** |                                                                                             |
+
+⚠ The reachable count lands at the prediction's upper edge; what carries the grand total past 60 is
+a section `InspectorPanel` does not mount (22 blocks, including an eight-paragraph "How boxes and
+backgrounds work" collapsed by default). The Video / Lottie count is high because the follow
+window's seven clamp warnings are seven separate conditional blocks, each a state and its remedy —
+they stay inline by the rule. Reported as measured, not fitted.
+
+### Sentence by sentence — the seven sampled contexts
+
+| sentence                                                                             | kind             | went to                                           |
+| ------------------------------------------------------------------------------------ | ---------------- | ------------------------------------------------- |
+| Hold loop (frames 38 → 38) has no playback effect here                               | state            | the row's tag `inert` / `empty`                   |
+| a manual hold waits for the operator to stop it, so the hold source is ignored       | state + remedy   | inline, one line                                  |
+| Pick auto-out or loop-cycle to activate the loop                                     | remedy           | inline                                            |
+| (Not the transport's preview loop, and not Loop cycle, which repeats the whole …)    | teaching         | the `i` ("The three loops")                       |
+| Following nothing yet — this composition has no out-point                            | state            | inline, tagged `inert`                            |
+| so there are no lifecycle anchors to derive the window from, and the clip behaves…   | mechanism        | the `i` ("Following the composition")             |
+| Set an out-point in the Playout section to activate follow                           | remedy           | inline                                            |
+| A plate is static and axis-aligned                                                   | state            | inline                                            |
+| its rect is sent to CasparCG once, as a fixed box                                    | mechanism        | the `i` ("Live plates on air")                    |
+| so rotating or animating it — or a parent — would slide the live picture out         | constraint       | ON the rotation control (tooltip); the `i`        |
+| Opacity and filters are withheld for the same reason                                 | constraint       | ON the opacity control and the Filter header      |
+| the hole paints nothing on air, and the picture is composited on a layer behind it   | mechanism, STALE | the `i`, corrected (page below; no hole)          |
+| The frame below is the one thing this element draws, and it sits entirely outside…   | teaching, STALE  | the `i`, corrected                                |
+| The frame is painted by the TEMPLATE, outside the hole — it never covers the picture | mechanism, STALE | the `i`, corrected                                |
+| it does not move the rect CasparCG is given                                          | mechanism        | the `i`                                           |
+| A width of 0 means no frame; the colour is kept                                      | state            | the colour field, withheld at 0 with this reason  |
+| A composition item rotates a one-element clock/logo or a composed layout…            | teaching         | the Items section's `i`                           |
+| its live content (a clock) keeps ticking                                             | teaching         | the `i`                                           |
+| Give a text item a data key to make it operator-editable; without one it's static    | DUPLICATE        | deleted — the field's placeholder already says it |
+| One multi-frame group                                                                | teaching         | the Looks `i`                                     |
+| Sources are not declared here — this list is what the plates use…                    | teaching         | the `i`                                           |
+| Two looks using the same source start on the same input…                             | teaching         | the `i`                                           |
+| No sources yet. Point a plate at one…                                                | state + remedy   | inline, one line                                  |
+| In the order the plates first use them. A source disappears when…                    | mechanism        | the `i`                                           |
+| No looks yet.                                                                        | state            | inline                                            |
+| A look is a full sub-scene — … exactly one look is on air at a time (the switch is…) | teaching         | the `i`                                           |
+| Open a look to author it — … Double-clicking a look on the canvas opens it too       | teaching         | the `i`                                           |
+| N issues — export will refuse + rows                                                 | refusal          | inline, LOUDER (0.8rem heading, 0.76rem rows)     |
+| From "…webm" (480×270, conformed 30→50 fps)                                          | facts            | four labelled rows                                |
+| the five home-card descriptions                                                      | differentiator   | a derived badge + one line each                   |
+
+### Hiding vs disabling — the choice per control
+
+Recorded in the change's `design.md` §1. In one line: rotation, opacity, the Filter section, the
+frame colour at 0 and `drives hold` without an out point are **disabled with their reason**;
+keyframe diamonds stay **absent** (no place to carry a sentence — the withheld rows and the `i` say
+why the plate is static); the hold loop and the follow are **state rows** (readouts, not controls);
+`Pin content start` stays **enabled** under manual / static because the marker is a promise about
+time the entrance leg honours whatever the mode.
+
+### What is visually checkable, and what is not
+
+Checkable in the running app: every withheld control (dimmed row, `not-allowed` cursor, the
+tooltip), every `i` (the modal at 0.9rem), the hold loop's tag, the video's four provenance rows,
+the badge on each home card, the Looks panel's **Make it a look** rows. NOT checked visually by
+this session: the legibility judgement itself — the sizes are pinned in `prose.css.ts` and the
+DOM/E2E tests assert content and state, not rendered pixels; whether 0.76rem at a 46ch measure
+reads well in the owner's window is the owner's read.
+
+### Not in scope, and seen
+
+- ⚠ **Localisation:** the five starter labels are Persian with an English gloss, and every
+  description, badge and Inspector string is English — the mixed-language surface is wider than
+  the cards (every panel). Reported, nothing changed.
+- The clock's format-token legend stays inline (consulted every time a format is typed).
+- [[B-197]] (rounded corners on a plate) is named in the Live Source `i` as having no home yet;
+  nothing about it changes.
+- Nothing in `@cg/template-runtime`, the bridge or the wire.
+
+- **Cross-refs:** [[B-219]], [[B-220]], [[D-158]], [[D-137]] (the plate's withheld controls),
+  [[D-133]] (the hold loop), [[D-119]] (the starter cards).
+- **Number:** highest `D-` HEADING was `D-158`; `git grep -n "D-159"` returned only the registry's
+  own "Next free" pointer; `D-160` appears twice in `docs/handoff/` as a DOCUMENTED PHANTOM (session
+  AX's widening sweep), never a heading. The dated pointer reads `D-159` — headings and pointer
+  AGREE.

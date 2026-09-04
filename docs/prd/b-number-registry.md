@@ -2301,3 +2301,31 @@ as recorded above.
 
 ⇒ **Next free after this session is `B-219`** (`B-001` … `B-218`, no gaps), **`D-159`** (`D-001` …
 `D-158`, no gaps — corrected from the stale `D-157`), **`C-034`** and **`P-042`** (both unchanged).
+
+### 2026-09-05 — `B-219`, `B-220` and `D-159` (`DESIGNER-FIX-0905`: the orphan composition, the retired hole's strings, state over prose)
+
+| kind | id      | one line                                                                                                                                                                  | home                                 | status                                                       |
+| ---- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ |
+| `B-` | `B-219` | deleting a look left an orphan composition the Looks panel did not mention, and `+ Look` collided on `look-1`; measured as case 1 (a second entry), reuse door added      | [bugs-designer.md](bugs-designer.md) | closed in code                                               |
+| `B-` | `B-220` | eight Designer strings still described the retired mask "hole" — `D-158`'s six (five unreachable) plus five preflight refusals; all rewritten against the reorder         | [bugs-designer.md](bugs-designer.md) | closed in code                                               |
+| `D-` | `D-159` | the Inspector explains in prose what it could express in state — withheld controls, state rows, fields, the `i`, one legible default; 61 reachable blocks swept, 24 moved | [designer.md](designer.md)           | closed in code; Linux `gate:e2e` owed until the run is cited |
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three
+bug files was **`B-218`** (`git grep -n -E "^## \[.\] B-2[0-9][0-9]"`); `git grep -n "B-219"`
+returned exactly ONE hit — this file's own "Next free" pointer, the documented false positive —
+and `git grep -n "B-220"` returned nothing. **Cross-check against the dated pointer:** the entry
+above ends _"Next free after this session is `B-219`"_ — headings and pointer **AGREE**. Two
+numbers taken, both filed in `bugs-designer.md`.
+
+**Derivation for `D-`:** highest `D-` HEADING was **`D-158`** (`designer.md:5218`); `git grep -n
+"D-159"` returned only this file's pointer; `D-160` returned two hits in `docs/handoff/` (sessions
+AX and AY), both describing a DOCUMENTED PHANTOM from a widening sweep, never a heading. The dated
+pointer above reads `D-159` (corrected last session) — headings and pointer **AGREE**. One number
+taken, filed in `designer.md`.
+
+⚠ The `B-` duplicate audit was not rerun (numbers derived from headings); `B-056` and `B-080` remain
+as recorded above.
+
+⇒ **Next free after this session is `B-221`** (`B-001` … `B-220`, no gaps), **`D-160`** (`D-001` …
+`D-159`, no gaps — ⚠ the two handoff mentions of `D-160` are a recorded phantom, not a claim),
+**`C-034`** and **`P-042`** (both unchanged).

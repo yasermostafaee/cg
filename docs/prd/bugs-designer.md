@@ -3921,3 +3921,101 @@ reopen.
   Designer report).
 - **Number:** taken immediately after `B-217` in the same sweep; `git grep -n "B-218"` returned
   nothing anywhere before this heading was written.
+
+## [~] B-219 — deleting a look leaves an ORPHAN composition the Looks panel does not mention, and the next `+ Look` is named `look-1` again ⟨priority: medium — two panels contradicting each other in one frame⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905` §5; `openspec/changes/inspector-state-over-prose/` 5.1–5.4)
+
+**Repro (owner, screenshot):** a multi-frame group with three looks. Remove all three from the Looks
+section.
+
+**Expected:** the two panels agree about what exists, and the author can get the authored looks
+back or knows how to be rid of their leftovers.
+
+**Actual:** the Compositions panel lists `comp1`, `look-1`, `look-2`, `look-3`; the Looks section
+reads **"No looks yet."** — in the same frame. Pressing `+ Look` creates a look named `look-1`,
+unrelated to the leftover `look-1`, so the orphans must be deleted by hand.
+
+### 🔴 Established BEFORE fixing — what a colliding default name actually did
+
+Three readings were possible, in rising order of harm: (1) a second entry appears — clutter; (2)
+the new look reuses the orphan's entry; (3) 🔴 the new look silently ADOPTS the orphan's content,
+arriving pre-populated with an old look's plates. The third had not been reported, which is why it
+was measured rather than assumed. **Measured on `e02215c5` by the first version of
+`apps/designer/tests/looks-orphan.test.ts`: case (1).** `addLook` built a fresh composition with a
+fresh id (`comp-N`, skipping existing ids) and no layers, named it `look-1` because `freshLookId`
+counted only `group.looks`, and left the orphans untouched. No reuse, no adoption — but in the
+Compositions panel a second `look-1` beside the first is indistinguishable from either.
+
+### Which model — private storage, or a reusable object?
+
+**A reusable object a look points at, by design.** `looks.ts` `removeLook`'s docstring and the trash
+button's title: _"its COMPOSITION stays in the project (the authored sub-scene is recoverable work,
+listed in the Compositions panel — deleting it is the author's separate, explicit act)"_. So the
+orphan is not the bug. **The bug is that nothing said so at the moment it mattered, and nothing let
+the author reuse it.**
+
+### The fix — in that model, with no cascade
+
+- `freshLookId` avoids every existing composition NAME and id as well as every look id: after
+  removing `look-1`…`look-3` the next look is `look-4`.
+- `addLookFromComposition(compId)` — the reuse door: instances an existing composition full-frame
+  in the group's home document and registers it, through the SAME `registerLook` path `addLook`
+  takes for a fresh one. A composition named `look-N` whose id is free comes back as `look-N` (the
+  id reaches the export). `detachedLookCompositions(scene)` is the list it is offered from: every
+  composition the size of the home document that is not the home, not already a look, and nestable
+  without a cycle (`compositionClosure`, the same reachability "Add to composition" uses; a
+  box-sized composition is not offered for a full-frame job).
+- The Looks section lists them under **Compositions that can become a look**, each with **Make it
+  a look**; `removeLook` raises a notice naming the composition that stays and both doors.
+- **No cascade.** Deleting a composition may take hours of authoring with it; it stays the author's
+  own act in the Compositions panel, one undo step like every other scene write. Removing a look is
+  undoable and never deletes a composition (pinned).
+
+- **Regression tests:** `apps/designer/tests/looks-orphan.test.ts` (eight store pins: the orphans
+  survive with their plates; the notice; `look-4`, empty, orphans untouched; the offered list
+  excludes the home and a box; restore = same id, same composition, plate back, no new
+  composition; a non-id-shaped name keeps its name; the refusals; undo), `looks-orphan.dom.test.ts`
+  (the panel says both things in one frame; the button registers through the store),
+  `e2e/look-orphan.spec.ts` (the walk).
+- **Cross-refs:** [[D-152]] (looks), [[D-159]] (the same prompt's prose-to-state work, which the
+  Looks section's wording rode in on), [[B-217]] (the look park — the other same-week Looks
+  defect).
+- **Number:** highest `B-` HEADING across the three bug files was `B-218`; `git grep -n "B-219"`
+  returned only the registry's own "Next free" pointer (the documented false positive). The dated
+  pointer reads `B-219` — headings and pointer AGREE.
+
+## [~] B-220 — eight Designer strings still describe the retired mask "hole" ⟨priority: low — five of them are in a section the Inspector never mounts⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905` §1; `openspec/changes/inspector-state-over-prose/` 1.1–1.4)
+
+`D-158` recorded six Designer strings that still described the hole the page no longer punches
+(`a7976e14`, `single-clock-look-switch`) and left them alone. The owner then photographed two of
+them in the Live Source / fit and Frame panels — _"the hole paints nothing on air, and the picture
+is composited on a layer behind it… the frame sits entirely outside the hole"_.
+
+### Verdict on every string, checked against the tree on 2026-09-05
+
+| where                                                            | verdict                                                                                                                                                                                                                                               |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ArrangementsSection.tsx` mode label `Fade — the mask dissolves` | STALE and never true in code: the arrangement transition modes are implemented nowhere in the runtime or the bridge, and the whole section is compiled but **not rendered** (`InspectorPanel.tsx:92` — disabled 2026-08-19). Rewritten.               |
+| `…` move hint _"drifts the picture off its hole"_                | ACCURATE IN SUBSTANCE (the CSS box and the CasparCG tween must share one curve) with the wrong noun — "away from its frame and title". Unreachable.                                                                                                   |
+| `…` callout _"declares no hole and punches none"_                | STALE: a plate in a stamped scope declares no box, so no picture is seated. Unreachable.                                                                                                                                                              |
+| `…` _"the hole is that fraction of whatever cell"_               | STALE: the picture is composited into that fraction. Unreachable.                                                                                                                                                                                     |
+| `…` _"the plate is a hole filled edge-to-edge"_                  | STALE, and only under `cover`: under `contain` the margin shows the page. Unreachable.                                                                                                                                                                |
+| `StyleSection.tsx` Live Source hint (the owner's #1)             | STALE: no hole, the page is composited BELOW the pictures, nothing on the page can reach one. Relocated to the panel's `i`, corrected; the constraints moved onto the withheld controls.                                                              |
+| `StyleSection.tsx` Frame hint (the owner's #2)                   | TRUE IN EFFECT, wrong mechanism: the frame IS painted by the template and never covers the picture — because it is painted on the page just outside the rect, below the picture. Relocated to the `i`; the width-0 state moved onto the colour field. |
+| ADDITIONAL — `live-source-preflight.ts` ×5                       | not in `D-158`'s list: the stamped-scope refusal ("declares no hole … punches none"), the animated refusal ("a moving hole would slide off the source behind it"), three overlap refusals ("overlapping holes"). All rewritten.                       |
+
+The owner's two are `D-158`'s #6 and #7 — among the six, not additional. Nothing described a hole
+the Designer still composes with: the Designer never composed with one; the mask was the
+runtime's, and the runtime is untouched by this fix (the authorisation boundary).
+
+- **Also:** the unset refusal read _'Live Source "Live Source" has no source'_ for a plate still
+  wearing the factory name — the kind repeated as a name. It reads _"The unnamed Live Source at
+  (x, y) has no source"_ now (`plateRef`, keyed on `DEFAULT_LIVE_SOURCE_NAME`). Not a collision with
+  `PLATE-SOURCE-01` / [[B-183]]: that was a VALUE the author had not accepted; this is a NAME the
+  factory gave.
+- **Regression tests:** `apps/designer/tests/live-source-inspector.dom.test.ts` asserts the panel
+  and the `i` carry no "hole" and describe the page below the pictures; `e2e/live-source.spec.ts`
+  the same at browser level.
+- **Cross-refs:** [[D-158]] (the list), [[B-195]] (the audit that established the reorder's answer),
+  [[B-197]] (rounded corners on a plate — adjacent, untouched), [[D-159]].
+- **Number:** taken immediately after `B-219` in the same sweep; `git grep -n "B-220"` returned
+  nothing anywhere before this heading was written.
