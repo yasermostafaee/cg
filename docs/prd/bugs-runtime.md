@@ -9420,3 +9420,99 @@ construction not on air, so the second option needs the persisted ledger to carr
 - **Cross-refs:** [[B-204]] (the walk this is about), [[B-121]] (the reconnect re-add path).
 - **Number:** derived in the same sweep as `B-206` above — highest heading `B-205`, `B-206` …
   `B-210` absent; `B-207` is the next after the one filed immediately above.
+
+## [ ] B-208 — the consumer side lies the way the producer side does: a DeckLink `ADD` for a device the server cannot open answers `403` with " Check syntax." in the log, the `DEVICE` spelling answers `404 File not found.`, an `ADD` at a running index REPLACES the consumer, and `REMOVE`'s `202` precedes the destroy ⟨priority: medium — nothing in the product sends these verbs yet except `C-029`'s off-by-default flag, but any code that will must know the replies do not mean what they say⟩ — OPEN, filed 2026-09-04 from `PGM-OUTPUT-ALARM-01`'s §3 measurement
+
+**Measured 2026-09-04** on the plant (`192.168.21.114`, `2.5.0 69e8ad5`, DeckLink drivers present,
+the card the config names gone) and on the dev host's 2.5.0 (no DeckLink drivers at all), read with
+a raw socket, the dev host's log read alongside. The brief asked, before any code trusted an `ADD`
+reply, whether the consumer side has an equivalent of [[B-177]]'s `#404 PLAY FAILED / File not
+found.` disguise. **It has two.**
+
+**Instance 1 — a device CasparCG cannot open is a "syntax" error:**
+
+```
+ADD 1 DECKLINK 99                          -> 403 ADD FAILED       (plant 6 ms, dev host 2 ms)
+[error]    Check syntax.                                            <- the only log line
+[info]    [decklink_consumer] Uninitialized.
+```
+
+`get_device` throws `user_error("Decklink device 99 not found.")` (`util.h:244`); the AMCP queue
+maps every `user_error` to `403` and logs the fixed string " Check syntax." (`AMCPCommandQueue.cpp:66`).
+The message the exception carries never reaches the wire OR the log. So `403 ADD FAILED` is the
+same reply as an illegal parameter, and the log actively points at the grammar.
+
+**Instance 2 — the spelling `ADD 1 DECKLINK DEVICE <n>` is itself a grammar error, and it is
+disguised as a missing FILE:**
+
+```
+ADD 1 DECKLINK DEVICE 99                   -> 404 ADD FAILED       (50 ms)
+[error]   Exception: Dynamic exception type: class std::invalid_argument
+[error]   std::exception::what: invalid stoll argument
+[error]    File not found.
+```
+
+`parse_amcp_config` takes the device token positionally (`config.cpp:190`, `std::stoll(params.at(1))`),
+so `DEVICE` throws inside the factory; the registry swallows any factory exception and throws
+`file_not_found("No match found for supplied commands. Check syntax.")` (`frame_consumer_registry.cpp:171`),
+which the queue answers as `404` — **byte-identical to `ADD 1 FOOBAR`**. This is [[B-177]]'s
+mechanism exactly (the fall-through disguise), one registry over. Any document that writes the `ADD`
+this way — the session brief did — is writing a command that can never succeed.
+
+**Instance 3 — `ADD` at an index that is already running REPLACES it, with a gap:**
+
+```
+03:12:55.754  ADD 1 SCREEN                      (port 600 already held the config's screen)
+03:12:55.755  Screen consumer [1|1080p5000] Initialized.        <- the NEW one
+03:12:55.755  202 ADD OK
+03:12:55.783  Screen consumer [1|1080p5000] Uninitialized.      <- the OLD one, 28 ms after the OK
+```
+
+`output::add` calls `remove(index)` BEFORE `initialize` and emplaces after (`output.cpp:64-72`).
+The old consumer leaves the map first; if the new one's `initialize` throws, the channel has LOST
+the old one and gained nothing. `INFO` cannot show any of this — `port_600` reads the same before
+and after.
+
+**Instance 4 — `REMOVE`'s receipt precedes the destroy, exactly like `CLEAR`'s:**
+
+```
+03:12:57.173  REMOVE 1 SCREEN  -> 202 REMOVE OK
+03:12:57.189  Screen consumer [1|1080p5000] Uninitialized.      <- 16 ms after
+03:13:22.717  REMOVE 1-601     -> 202 REMOVE OK
+03:13:22.730  Screen consumer [1|1080p5000] Uninitialized.      <- 13 ms after
+```
+
+`output::remove` erases the map entry under the lock and answers; the object dies on the
+`destroy_consumer_proxy`'s detached thread. `INFO` reflects the erase immediately, so on the AMCP
+axis the consumer is "gone" before the device is released — the same 13–16 ms window [[B-177]]
+measured for a producer, and the same consequence: an `ADD` of the SAME device issued on the `202`
+can collide with the release. (Also measured: the numeric form is `REMOVE 1-601`, not `REMOVE 1 601`
+— the latter is parsed as a consumer spec and answers `404`.)
+
+**Expected:** a `403`/`404` on a consumer verb means what the code says; a receipt means the thing
+is gone; an `ADD` does not silently remove something first.
+**Actual:** above.
+**Env:** as stated. Not reproducible against `@cg/amcp-mock` beyond the codes, which it now answers
+(`handleAdd`/`handleRemove` refuse with these measured codes by default).
+
+### What this means for code, today and later
+
+- [[C-029]]'s creation path (`--create-missing-consumers`, OFF by default) is built INSIDE these
+  facts: it sends the declaration's own grammar (never the `DEVICE` word), only for a kind the
+  check found ABSENT (so instance 3 cannot fire), reads `403` as "CasparCG cannot open that device
+  either" rather than as its own syntax, and verifies a `202` by re-reading `INFO`.
+- ⚠ Any future path that REMOVEs and re-ADDs the same DeckLink device must not issue the `ADD` on
+  the `REMOVE`'s `202` — wait for the destroy or a settle (instance 4), exactly [[B-177]]'s rule.
+- ⚠ Nothing may classify a consumer verb's failure by response code alone: `403` is "parameter OR
+  device", `404` is "grammar OR kind OR — through the fall-through — anything the factory threw".
+
+**Regression-test note:** `tools/amcp-mock` answers the measured codes; `output-check.integration.test.ts`
+drives the `403` path. Instances 3 and 4 are properties of the real server and have no mock model —
+recorded here so the next reader does not learn them on air.
+
+- **Cross-refs:** [[B-177]] (the producer-side original), [[C-029]] (the only sender of these verbs
+  today, and the reason the measurement was taken), [[C-021]] (Q2: nothing enumerates — a probe is
+  not a picker).
+- **Number:** the highest `B-` heading across the three bug files was `B-207`; `git grep -n "B-208"`
+  returned only the registry's forward pointers and the `B-207` provenance notes, never a heading.
+  Recorded in [b-number-registry.md](b-number-registry.md).

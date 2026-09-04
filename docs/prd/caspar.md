@@ -1870,3 +1870,89 @@ harm it guarded returns without anyone noticing.
   and the `expectedAspect` decision), [[B-149]] (the on-air precedent for hole ≠ picture),
   [[B-143]] (`resolvePlateAspect`'s `assumed` flag has no readers — the honesty half that a
   `contain` default makes more visible).
+
+---
+
+## [~] C-029 — program output is GONE and nothing says so: the declared-versus-running output check, its banner, and a bounded off-by-default re-creation ⟨priority: high — the station had no SDI output for days and every pill read HEALTHY⟩ — IMPLEMENTED 2026-09-04, `openspec/changes/pgm-output-alarm/`; Linux `gate:e2e` OWED
+
+**What the plant did, 2026-09-01.** The DeckLink card was replaced. `casparcg.config` kept the old
+card's persistent ID (`<decklink><device>23487013</device>`), the consumer failed at boot and never
+appeared in `INFO`. AMCP answered, OSC ticked, `BRIDGE LIVE` and `PRIMARY A HEALTHY` sat in the bar,
+and the station had **no program output**. The absence was discoverable only by reading `INFO 1`'s
+XML and noticing that `<output>` listed `port_500` (system-audio) and `port_600` (screen) and nothing
+else. Verified at the wire from this dev host on 2026-09-04 (`192.168.21.114:5250`,
+`2.5.0 69e8ad5 Stable`), and the config is deliberately still broken — it is the fixture.
+
+**What:** the bridge reads, over AMCP, what each channel DECLARES (`INFO CONFIG`, once per
+connection) and what it RUNS (the `<output>` block of the `INFO <channel>` reply the [[R-030]] mode
+read already sends; re-read every 60 s and after a reconnect), publishes per channel the declared
+set, the running set and every declared kind with fewer running instances than declared, and keeps
+that verdict across a disconnect. The Runtime renders a full-width `role="alert"` strip — the
+`ConnectionBanner` / `RasterMismatchBanner` language, not `FailoverBanner`'s slab ([[B-172]]) — that
+names the channel, `decklink (device 23487013)`, what is running, and the next action; when the bridge
+loses CasparCG after a `missing` verdict the strip stays and reads UNVERIFIED instead of vanishing.
+`outputVerdictOf` in `@cg/shared-ipc` is the one authority for every arm.
+
+**"Auto-detect" — the honest limit, stated for the operator.** Nothing enumerates DeckLink devices
+over AMCP (Q2 of the 2026-08-25 walk, re-confirmed: `INFO SYSTEM` degrades to `INFO`; `INFO CONFIG`
+echoes what the operator wrote; the device list lives only in the startup log the bridge does not
+read). So it cannot mean discovery or a picker. It means: **the operator names the device in
+`casparcg.config`; the bridge verifies the declared consumer is running and complains when it is
+not, naming the device the config named.** Probing with `ADD` is not a substitute (below).
+
+**Measured 2026-09-04 — `ADD` with an unknown device, on the plant (card gone, drivers present) and
+the dev host's 2.5.0 (no drivers), the plant in a state where a glitch cost nothing (no program
+output; an orphan html producer on 1-96; screen + system audio the only outputs):**
+
+| command                                           | reply                                   | log                                                                           |
+| ------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------- |
+| `ADD 1 DECKLINK 99` (plant)                       | `403 ADD FAILED`, 6 ms                  | " Check syntax." — a `user_error` from `get_device`                           |
+| `ADD 1 DECKLINK 99` (dev host)                    | `403 ADD FAILED`, 2 ms                  | " Check syntax."                                                              |
+| `ADD 1 DECKLINK DEVICE 99` (the brief's spelling) | `404 ADD FAILED`, 50 ms                 | `invalid stoll argument` — `DEVICE` is not in the grammar; " File not found." |
+| `ADD 1 FOOBAR`                                    | `404 ADD FAILED`                        | " File not found."                                                            |
+| `INFO 1` before/after every failed `ADD`          | byte-identical (1620 / 1095 chars)      | no consumer re-initialised                                                    |
+| `ADD 1 SCREEN 1` → `REMOVE 1-601`                 | `202` / `202`; gone from `INFO` at once | "Uninitialized." **13–16 ms AFTER** the `202`                                 |
+| `ADD 1 SCREEN` (600 already running)              | `202 ADD OK`                            | new "Initialized." +1 ms, OLD "Uninitialized." **+28 ms** — REPLACED          |
+
+⇒ (a) the reply for a missing device is `403` with no text and a lying log line; (b) a failed
+`ADD` at a free index does not disturb the channel, an `ADD` at a running index replaces the
+consumer; (c) `REMOVE` is reversible and `INFO` reflects it immediately, but the receipt precedes
+the destroy exactly like `CLEAR`'s ([[B-177]]); (d) **probing is NOT a substitute for enumeration**
+— a failure cannot tell a missing device from missing drivers or an unsupported format, and a
+success puts a card ON AIR. Both lying errors filed as [[B-208]].
+
+**The flag — `--create-missing-consumers`, OFF by default.** On, the bridge sends ONE `ADD` per
+connection per channel for a declared DeckLink the check found missing, built from the declaration's
+OWN tokens (`ADD 1 DECKLINK 23487013 EMBEDDED_AUDIO` for this plant's config), records CasparCG's
+answer in the health snapshot and the banner, and verifies a `202` by re-reading `INFO`. It never
+names a device the config did not (the owner's boundary: the config stays the boot-time baseline;
+no silent substitution on a multi-card box). `output-policy.test.ts` reddens if the default flips —
+in the resolver and on the shipped CLI's boot line.
+
+**Acceptance:**
+
+- WHEN `casparcg.config` declares a consumer for a channel and `INFO <channel>` does not list a
+  running consumer of that kind THEN the Runtime shows a full-width alarm naming the channel, the
+  kind and its device, what is running, and the next action — with every reachability pill still
+  green
+- WHEN a later read (60 s, a reconnect after a config fix, or the bridge's own `ADD`) finds the
+  consumer running THEN the alarm clears on its own
+- WHEN the bridge cannot reach CasparCG after a `missing` verdict THEN the alarm stays, re-labelled
+  UNVERIFIED, saying when the output was last seen missing
+- WHEN the declaration cannot be read, or nothing has been checked yet, or the browser→bridge link
+  is down THEN nothing lights from this alarm
+- WHEN the bridge runs without `--create-missing-consumers` THEN no `ADD` is ever sent for a missing
+  consumer; WHEN it runs with it THEN at most one `ADD` per connection per channel, with the
+  declaration's own device, its outcome recorded
+
+**What this does NOT see, stated in the operator guide:** a consumer that is present but unhappy
+(lost reference, dropped frames) — `INFO` reports existence and configuration, never health; that
+lives in the server log. A channel that ticked and STOPPED remains [[R-058]]'s chip.
+
+- **Cross-refs:** [[R-058]] (the OSC-axis sibling; its "cannot read casparcg.config" sentence is
+  superseded — addendum there), [[R-030]] (the `INFO <channel>` read this rides), [[B-177]] (the
+  producer-side disguise), [[B-208]] (the consumer-side one), [[B-172]] (why a strip, not the slab),
+  [[C-021]] (Q2: nothing enumerates), [[B-141]]/[[B-143]]/[[B-144]] (the family).
+- **Number:** the highest `C-` heading was `C-028`; `git grep -n "C-029"` returned only the
+  registry's forward pointer and [[C-028]]'s provenance note, never a heading. Recorded in
+  [b-number-registry.md](b-number-registry.md).

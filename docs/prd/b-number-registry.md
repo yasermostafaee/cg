@@ -2153,3 +2153,36 @@ recorded above.
 
 ⇒ **Next free after this session is `B-208`** (unchanged) **and `P-042`** (`P-001` … `P-041`, no
 gaps).
+
+### 2026-09-04 — `C-029` and `B-208` (`PGM-OUTPUT-ALARM-01`: program output missing is said, and the consumer verbs' lying replies are on record)
+
+| kind | id      | one line                                                                                                                                                                                       | home                               |
+| ---- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `C-` | `C-029` | the declared-versus-running output check (`INFO CONFIG` vs `INFO <channel>`), its full-width banner with an UNVERIFIED arm, and `--create-missing-consumers` OFF by default                    | [caspar.md](caspar.md)             |
+| `B-` | `B-208` | a DeckLink `ADD` for a device the server cannot open is `403` + " Check syntax."; `ADD … DECKLINK DEVICE <n>` is `404 File not found.`; `ADD` at a running index replaces; `REMOVE` acks early | [bugs-runtime.md](bugs-runtime.md) |
+
+**Derivation for `C-`, from headings as the rule requires:** highest `C-` HEADING was **`C-028`**;
+`git grep -n "C-029"` returned the registry's own "next free" pointer and `C-028`'s provenance note
+— the documented false positives — and no heading. **Cross-check against the dated pointer:** the
+2026-08-25 entry ends _"Next free: `C-029`"_ — headings and pointer AGREE. One number taken.
+**Prefix class `C-`, chosen because** the subject is CasparCG behaviour read over AMCP and the
+bridge's judgement of it, not a Runtime-only surface (the banner is the saying, the check is the
+subject).
+
+**Derivation for `B-`:** highest `B-` HEADING across the three bug files was **`B-207`**;
+`git grep -n "B-208"` returned only this file's forward pointers and `B-207`'s provenance note,
+never a heading. **Cross-check against the dated pointer:** the entry above ends _"Next free after
+this session is `B-208`"_ — headings and pointer AGREE. One number taken. Filed in
+`bugs-runtime.md` per the routing rule: a CasparCG/bridge behaviour, not tooling.
+
+⚠ `B-208` was found by MEASURING what the brief's §0f asked to be found before any reply was
+trusted — the consumer-side twin of `B-177`'s disguise — and it came back with two disguises rather
+than one (the `403` for a missing device, and the `404` for the brief's own spelling of the
+command), plus two lifecycle facts (`ADD` replaces at a running index; `REMOVE` acks 13–16 ms before
+the destroy) measured on the dev host's 2.5.0 where the log could be read.
+
+⚠ The `B-` duplicate audit was not rerun (one `B-` taken, derived from headings); `B-056` and
+`B-080` remain as recorded above.
+
+⇒ **Next free after this session is `B-209`** (`B-001` … `B-208`, no gaps), **`C-030`**
+(`C-001` … `C-029`, no gaps) **and `P-042`** (unchanged).

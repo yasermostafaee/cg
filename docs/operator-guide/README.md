@@ -132,6 +132,49 @@ Default is `off` — the Runtime makes zero outbound network requests. Air-gappe
   this Runtime controls, confirm that client does not use `DEFER`.** Clients that send ordinary,
   undeferred `MIXER` commands are unaffected — those apply as they arrive and are never swept up.
 
+## Program output
+
+**The red `PROGRAM OUTPUT MISSING` banner means CasparCG is up, answering, and NOT sending your
+channel anywhere.** It appears when `casparcg.config` on the playout machine declares an output
+consumer (the `<decklink>` block, usually) and CasparCG is not running it. That is what a consumer
+that failed at start looks like: the server boots, the channel runs on whatever consumers did
+start (the `<screen />` preview, `<system-audio />`), every health pill reads green, and the SDI
+output is simply absent. Nothing else in this console can see that — the bridge reads it by asking
+the server what the config DECLARES (`INFO CONFIG`) and what the channel RUNS (`INFO <channel>`),
+and the banner is the difference between the two.
+
+The banner names the channel, the declared consumer and its device (`decklink (device 23487013)`),
+what IS running, and when it last checked. **The next action is on the playout machine, not in this
+console:** read CasparCG's own log for the reason (`Decklink device … not found.` — the card was
+replaced or its persistent ID changed; `Decklink drivers not found.` — the driver is missing), fix
+the `<device>` in `casparcg.config`, restart CasparCG. The banner clears on its own within one check
+after the consumer is seen running. Do not power-cycle the playout box over it — the server is UP.
+
+If the bridge loses CasparCG while the banner is up, it does not disappear: it re-labels itself
+`PROGRAM OUTPUT UNVERIFIED` and says when the output was last seen missing. An alarm that goes quiet
+because its own source died would read as "fixed", and this one refuses to.
+
+**What "auto-detect" means here, and what it cannot mean.** Nothing in CasparCG's control protocol
+lists the DeckLink cards a machine has (`INFO SYSTEM` is ignored; `INFO CONFIG` only echoes what you
+wrote; the real list is printed once in the startup log, which the bridge does not read). So the
+console cannot discover your card, cannot offer a picker, and will never choose a device for you.
+What it does: **you name the device in `casparcg.config` — the index from the startup log or,
+better, the persistent ID, which does not move when cards or slots change — and the bridge checks
+that the consumer you declared is running and tells you when it is not.** Trying devices with `ADD`
+is not a way to find them: a failure says nothing useful and a success puts that card on air.
+
+**What the check cannot see:** a consumer that is present but unhappy — a DeckLink that lost its
+reference signal, or is dropping frames. The server reports a consumer's existence and settings,
+never its health; that lives in the CasparCG log. A channel that WAS producing frames and stopped is
+the StatusBar's `NOT PRODUCING` chip, a different signal on a different axis.
+
+**`--create-missing-consumers` (bridge flag, OFF unless you type it).** With it on, the bridge sends
+ONE `ADD` per connection for a declared DeckLink it found missing — with exactly the device and
+flags the config names, never a substitute — and shows you CasparCG's answer on the banner. Useful
+when a card was busy or its driver late at boot; useless when the config names a card the machine
+does not have, which CasparCG refuses the same way (`403`), and that refusal is shown. The bridge's
+boot log says which state it is in: `missing-consumer creation: OFF (default)` or `ON`.
+
 ## Keyboard
 
 Lockscreen `Enter` submits the PIN. The rest of the surface is mouse-driven in v1; configurable keybindings land in v1.1.

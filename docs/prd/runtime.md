@@ -3278,6 +3278,18 @@ case regardless, because the row's ERROR now carries its reason.
 Out of scope by decision: the console does **not** read, fetch or validate `casparcg.config`. It is
 on the playout machine, may be remote, and AMCP does not expose it.
 
+> ⭐ **ADDENDUM 2026-09-04 ([[C-029]]) — the sentence above was wrong on the fact, and is superseded
+> in part.** `INFO CONFIG` DOES expose the parsed configuration (measured on the plant 2026-08-25,
+> Q2 of the DeckLink walk; re-read 2026-09-04). What it exposes is what the operator WROTE — not
+> what the card reports — and that is exactly the baseline a "declared but not running" check needs.
+> [[C-029]] reads it, compares it with `INFO <channel>`'s `<output>`, and raises a full-width banner
+> naming the declared consumer that never started. This chip's last sentence now points there for
+> that case and keeps "only the log can see" for the other (every consumer started, one stopped
+> later). The owner's 2026-08-23 incident lands in [[C-029]]'s case, not in "stopped": a consumer
+> that fails at boot never appears in `<output>`, and the channel ticks normally on the consumers it
+> does have — which is why this chip could never have caught it. The prose above is left as written
+> so the dated reasoning is not falsified.
+
 **Acceptance:**
 
 - WHEN a channel's framerate ticks were arriving and STOP, with AMCP healthy THEN the alarm shows,
