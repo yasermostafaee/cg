@@ -353,6 +353,8 @@ console.error(
   `[caspar-bridge] plate assignments: ${describeAssignments(handle.sourceAssignments)}`,
 );
 console.error(`[caspar-bridge] live layer ledger: ${describeLiveLayers(handle.liveLayers)}`);
+// C-031 — the one number every take depends on, said at boot like the rest.
+console.error(`[caspar-bridge] templates: ${describeTemplates(handle.templates)}`);
 // Longer than any real channel frame (the slowest, 1080p2398, is ~41.7 ms; an interlaced
 // 24p-family mode ~83). Not a limit — a threshold for saying so out loud on the boot line.
 const LOOK_MIXER_HOLD_IMPLAUSIBLE_MS = 200;
@@ -481,6 +483,30 @@ function describeFixedBank({ bank, source }) {
     `beds ${bank.low.start}-${bedEnd} ` +
     `(${halves.bed.count} declared, ${halves.bed.shown} shown) - from ${where}`
   );
+}
+
+/**
+ * C-031 — the TEMPLATE REGISTRY at boot, in one line: how many loaded, how many
+ * persisted files were refused, and from where.
+ *
+ * The boot line named the bank, the sources, the assignments, the ledger, the mixer
+ * hold and the consumer setting, and not the one number every take depends on. On
+ * 2026-09-04 every take answered `amcp-404` and the first thing anyone had to
+ * establish was whether the bridge held the templates at all; nothing printed said.
+ * A skipped file is named individually by the registry's own warning as it is
+ * skipped; this line carries only the count, so a reader sees at a glance that there
+ * IS something above to scroll up to.
+ *
+ * ASCII only, deliberately, for the same reason as every sibling above.
+ */
+function describeTemplates({ loaded, skipped, dir }) {
+  const where = dir === null ? 'no --templates-dir (nothing persists)' : dir;
+  const refused =
+    skipped === 0 ? 'none skipped' : `${skipped} skipped as unusable (see the warnings above)`;
+  if (loaded === 0) {
+    return `0 loaded from ${where} - ${refused}; nothing can go to air until a .vcg is imported`;
+  }
+  return `${loaded} loaded from ${where} - ${refused}`;
 }
 
 /**

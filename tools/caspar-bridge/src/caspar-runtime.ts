@@ -1085,6 +1085,14 @@ export class CasparRuntime {
   // hydrated in the constructor so the registry is complete before the
   // WebSocket ever answers a `templates.list`.
   readonly #templates: TemplateRegistry;
+  /**
+   * `C-031` — what the registry's boot hydration found: how many persisted templates
+   * it loaded, how many files it refused, and from where. Kept so the CLI can SAY it
+   * on the boot line. On 2026-09-04 every take was refused and the first question —
+   * "does the bridge even hold the templates?" — had no line to answer it; this number
+   * would have answered it in a second.
+   */
+  readonly #templateProvenance: { loaded: number; skipped: number; dir: string | null };
   /** R-034 — the station's delimiter list, persisted beside the templates. */
   readonly #delimiters: DelimiterStore;
   /** R-030 — the per-channel output raster + what `INFO` reports, persisted. */
@@ -1407,7 +1415,11 @@ export class CasparRuntime {
     // R-028 (o1) — hydrate the persisted catalogue BEFORE anything can ask
     // for it; a bridge restart must not empty the library.
     this.#templates = new TemplateRegistry(options.templatesDir);
-    this.#templates.loadPersisted();
+    // `C-031` — the counts are KEPT, not discarded: the boot line reads them back.
+    this.#templateProvenance = {
+      ...this.#templates.loadPersisted(),
+      dir: options.templatesDir ?? null,
+    };
     // R-034 — same shape, same reason: the delimiter list is read from disk
     // before the WebSocket can answer a `delimiters.list`, so a bridge restart
     // never hands a browser the defaults over the operator's own list.
@@ -8949,6 +8961,16 @@ export class CasparRuntime {
   /** The retained HTML for a template id, or `null` (the Phase 3 serve seam). */
   templateHtml(templateId: string): string | null {
     return this.#templates.html(templateId);
+  }
+
+  /**
+   * `C-031` — the registry's boot hydration, for the CLI's boot line: how many
+   * templates were loaded from the persist directory, how many persisted files were
+   * skipped as unusable, and the directory. A later import changes the registry,
+   * not this: it records what BOOT found, which is the question a restart raises.
+   */
+  get templateProvenance(): { loaded: number; skipped: number; dir: string | null } {
+    return { ...this.#templateProvenance };
   }
 
   /**

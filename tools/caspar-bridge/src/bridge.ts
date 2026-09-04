@@ -319,6 +319,14 @@ export interface BridgeHandle {
    */
   readonly fixedBankSource: { bank: FixedLayerBank | null; source: FixedBankSource };
   /**
+   * `C-031` — how many templates the registry loaded at boot, how many persisted
+   * files it skipped, and from where, so the CLI can SAY it. The boot line already
+   * names the bank, the sources, the assignments, the ledger, the mixer hold and the
+   * consumer setting; the one number it did not name is the one every take depends
+   * on, and on 2026-09-04 it was the first question with no line to answer it.
+   */
+  readonly templates: { loaded: number; skipped: number; dir: string | null };
+  /**
    * D-137 / C-015 — the source catalog in force AND where it came from, so the
    * CLI can SAY it at boot.
    *
@@ -716,6 +724,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     templateServe,
     runtime,
     fixedBankSource: { bank: fixedBank, source: fixedBankSource },
+    templates: runtime.templateProvenance,
     sourceCatalog,
     sourceAssignments: {
       value: prunedAssignments.value,
