@@ -14,6 +14,12 @@ import {
 import type { LiveFitMode, LiveSourceRect } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
+import {
+  defaultLayerAlias,
+  isFixedBankLayer,
+  layerAlias,
+  type FixedLayerBank,
+} from './fixedLayers.js';
 
 /**
  * Templates channels (Phase 7 §3 / Phase 8 M7.2). The Runtime's
@@ -420,6 +426,86 @@ export const TemplatesImportChannel = defineChannel(
  * the next reconnect re-imports what the operator just deleted. A REFUSED removal must
  * leave it intact.
  */
+/**
+ * `B-212` — WHERE one stack item that still uses a template is.
+ *
+ * `slot` is the layer the item holds; absent means the item is on the stack and on no
+ * layer at all (a load that was refused before a layer was bound leaves exactly that).
+ * The channel carries the coordinate, never a display name: the NAME is resolved by
+ * {@link describeTemplateReferences} on whichever side has the bank, through the same
+ * two functions the Layers table names its rows with.
+ */
+export const TemplateReferenceSchema = z.object({
+  itemId: IdSchema,
+  slot: z
+    .object({ channel: z.number().int().positive(), layer: z.number().int().nonnegative() })
+    .optional(),
+});
+export type TemplateReference = z.infer<typeof TemplateReferenceSchema>;
+
+/**
+ * `B-212` — the `in-use` refusal, worded so it names WHERE, not merely HOW MANY.
+ *
+ * _"2 stack item(s) still use this template — remove them (or Remove All) first."_ is
+ * what the owner read on 2026-09-04 while looking at rows that all said EMPTY. The two
+ * items were on CasparCG layers 60 and 61 — dynamic layers no row shows — so nothing on
+ * screen could be the "them" the sentence meant, and the sentence's only concrete remedy
+ * was the destructive one. He reached for it. A refusal that withholds the precise remedy
+ * and names the sweeping one is steering toward the sweeping one, and on a live station
+ * that is a safety property.
+ *
+ * So the sentence now names each place: a row by the name the Layers table gives it
+ * (alias, else `Layer N` / `Bed N`, through the SAME two functions — one naming rule,
+ * two readers), and a layer outside the bank as CasparCG names it, with the fact that it
+ * is not a row said out loud. It does NOT mention Remove All. The old opening fragment
+ * is kept so every surface and test that matched on _"still use this template"_ still
+ * does.
+ *
+ * ⚠ ONE implementation, in the wire package, for the bridge, the offline mock and the
+ * browser's disconnected library path — a refusal spelled three times is a refusal that
+ * eventually disagrees with itself (golden rule 6).
+ */
+export function describeTemplateReferences(
+  references: readonly TemplateReference[],
+  bank: FixedLayerBank | null,
+): string {
+  const count = references.length;
+  const places = references.map((ref) => describeReferencePlace(ref, bank));
+  // `item(s) still use this template` is kept VERBATIM for every count: it is the fragment
+  // the E2E and the DOM tests match on, and a singular "still uses" broke both on the
+  // first local run. The count says the number; the places say where.
+  return `${String(count)} stack item(s) still use this template — ${places.join(', ')}. Remove ${count === 1 ? 'that item' : 'those items'} first.`;
+}
+
+/** One reference's place, in the operator's words. Exported for the surface's per-row line. */
+export function describeReferencePlace(
+  reference: TemplateReference,
+  bank: FixedLayerBank | null,
+): string {
+  const slot = reference.slot;
+  if (slot === undefined) return 'on the stack with no layer bound';
+  if (bank !== null && isFixedBankLayer(bank, slot.channel, slot.layer)) {
+    const name = layerAlias(bank, slot.layer) ?? defaultLayerAlias(bank, slot.layer);
+    return `on the row “${name}” (layer ${String(slot.layer)})`;
+  }
+  const channel = bank === null || bank.channel !== slot.channel ? `${String(slot.channel)}-` : '';
+  return `on CasparCG layer ${channel}${String(slot.layer)}, which is not one of this station's rows`;
+}
+
+/**
+ * `B-212` — is this reference one of the station's ROWS (something the surface can
+ * scroll to), or somewhere no row shows? The same predicate the wording above uses.
+ */
+export function referenceRowName(
+  reference: TemplateReference,
+  bank: FixedLayerBank | null,
+): string | null {
+  const slot = reference.slot;
+  if (slot === undefined || bank === null) return null;
+  if (!isFixedBankLayer(bank, slot.channel, slot.layer)) return null;
+  return layerAlias(bank, slot.layer) ?? defaultLayerAlias(bank, slot.layer);
+}
+
 export const TemplatesRemoveChannel = defineChannel(
   'templates.remove',
   z.object({ templateId: IdSchema }),
@@ -427,6 +513,12 @@ export const TemplatesRemoveChannel = defineChannel(
     ok: z.boolean(),
     reason: z.enum(['in-use', 'unknown-template']).optional(),
     message: z.string().optional(),
+    /**
+     * `B-212` — with `in-use`: WHERE each referencing item is, so the surface can offer
+     * the way there (scroll to the row) or the precise removal, instead of leaving the
+     * operator to hunt — or to reach for Remove All.
+     */
+    references: z.array(TemplateReferenceSchema).optional(),
   }),
 );
 

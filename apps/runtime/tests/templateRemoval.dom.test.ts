@@ -3,8 +3,14 @@ import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SourceAssignments, TemplateInfo } from '@cg/shared-ipc';
+import type {
+  FixedLayerBank,
+  SourceAssignments,
+  TemplateInfo,
+  TemplateReference,
+} from '@cg/shared-ipc';
 import { useTemplatePicker } from '../src/renderer/features/fixedLayers/useTemplatePicker.js';
+import { onRowFocus } from '../src/renderer/features/layers/rowFocus.js';
 import {
   __resetSourcesForTest,
   currentSourceAssignments,
@@ -53,12 +59,45 @@ const WITH_PLATES: TemplateInfo = {
 let container: HTMLDivElement | null = null;
 let registry: TemplateInfo[] = [];
 let assignments: SourceAssignments = { assignments: [] };
-let removeResult: { ok: boolean; reason?: string; message?: string } = { ok: true };
+let removeResult: {
+  ok: boolean;
+  reason?: string;
+  message?: string;
+  references?: TemplateReference[];
+} = { ok: true };
 const removeCalls: string[] = [];
 const setAssignmentCalls: SourceAssignments[] = [];
+/** `B-212` — the item removals the picker's per-reference remedy issues. */
+const stackRemoveCalls: string[] = [];
+/** `B-212` — the bank the picker names rows against; the incident's own shape. */
+const BANK: FixedLayerBank = {
+  channel: 1,
+  start: 70,
+  count: 30,
+  aliases: { '99': 'لوگوی اصلی' },
+  low: { start: 1, count: 9 },
+};
 
 function installBridge(): void {
   const stub = {
+    // `B-212` — the picker reads the bank (through `useBridgeSnapshot`, which asks the
+    // link first), and the remedy for an item no row shows is `stack.remove`.
+    link: {
+      status: () => 'live' as const,
+      onStatusChanged: () => () => undefined,
+      resyncing: () => false,
+      onResyncingChanged: () => () => undefined,
+    },
+    fixedLayers: {
+      config: () => Promise.resolve(BANK),
+      onConfigChanged: () => () => undefined,
+    },
+    stack: {
+      remove: (req: { itemId: string }) => {
+        stackRemoveCalls.push(req.itemId);
+        return Promise.resolve({ accepted: true });
+      },
+    },
     templates: {
       list: () => Promise.resolve(registry),
       remove: (req: { templateId: string }) => {
@@ -130,6 +169,7 @@ beforeEach(async () => {
   removeResult = { ok: true };
   removeCalls.length = 0;
   setAssignmentCalls.length = 0;
+  stackRemoveCalls.length = 0;
   __resetSourcesForTest();
   installBridge();
   initSources(window.cg);
@@ -194,7 +234,8 @@ describe('a refusal the operator cannot see is its own defect', () => {
     removeResult = {
       ok: false,
       reason: 'in-use',
-      message: '1 stack item(s) still use this template — remove them (or Remove All) first.',
+      message:
+        '1 stack item(s) still use this template — on the row “Layer 1” (layer 99). Remove that item first.',
     };
     const dialog = await openPicker();
     await press(/Delete two-box from this station/);
@@ -234,6 +275,118 @@ describe('a refusal the operator cannot see is its own defect', () => {
     // silently un-bind a template the operator still has.
     expect(setAssignmentCalls).toEqual([]);
     expect(currentSourceAssignments().assignments).toHaveLength(1);
+  });
+});
+
+/**
+ * ⭐ **`B-212` — A REFUSAL THAT NAMES A COUNT BUT NOT A LOCATION IS HALF A REFUSAL.**
+ *
+ * _"2 stack item(s) still use this template — remove them (or Remove All) first."_ was
+ * read on 2026-09-04 by an operator looking at rows that all said EMPTY: the two items
+ * were on layers 60 and 61, dynamic layers no row shows. The sentence's one concrete
+ * remedy was the sweeping one, and he reached for it. These pin the two remedies the
+ * dialog now offers instead — the way to a row, and the removal of one hidden item —
+ * and that the sweeping one is not mentioned.
+ */
+describe('B-212 — the in-use refusal names where, and offers the way there', () => {
+  it('a row-bound item gets "Show <row>", which closes the picker and asks the table to go there', async () => {
+    removeResult = {
+      ok: false,
+      reason: 'in-use',
+      message:
+        '1 stack item(s) still use this template — on the row “لوگوی اصلی” (layer 99). Remove that item first.',
+      references: [{ itemId: 'i-row', slot: { channel: 1, layer: 99 } }],
+    };
+    const focused: number[] = [];
+    const off = onRowFocus((layer) => focused.push(layer));
+    try {
+      const dialog = await openPicker();
+      // Let the bank snapshot land (it is a round trip through the stub).
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      await press(/Delete two-box from this station/);
+      await press(/^Delete from station$/);
+
+      const line = dialog.querySelector('[data-in-use-reference="i-row"]');
+      expect(line?.textContent).toContain('on the row “لوگوی اصلی” (layer 99)');
+      const show = line?.querySelector('button');
+      expect(show?.textContent).toBe('Show لوگوی اصلی');
+      expect(dialog.textContent).not.toMatch(/remove all/i);
+
+      await act(async () => {
+        show?.click();
+        await Promise.resolve();
+      });
+      // The picker is gone and the table was asked for layer 99 — by its stable identity.
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(focused).toEqual([99]);
+      // Nothing was removed by "show me".
+      expect(stackRemoveCalls).toEqual([]);
+    } finally {
+      off();
+    }
+  });
+
+  it('an item NO row shows gets a confirm-gated removal of THAT item — the precise remedy, not Remove All', async () => {
+    removeResult = {
+      ok: false,
+      reason: 'in-use',
+      message:
+        "1 stack item(s) still use this template — on CasparCG layer 60, which is not one of this station's rows. Remove that item first.",
+      references: [{ itemId: 'i-hidden', slot: { channel: 1, layer: 60 } }],
+    };
+    const dialog = await openPicker();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await press(/Delete two-box from this station/);
+    await press(/^Delete from station$/);
+
+    const line = dialog.querySelector('[data-in-use-reference="i-hidden"]');
+    expect(line?.textContent).toContain(
+      "CasparCG layer 60, which is not one of this station's rows",
+    );
+    expect(line?.querySelector('button')?.textContent).toBe('Remove item');
+    expect(dialog.textContent).not.toMatch(/remove all/i);
+
+    // The remedy is gated: a confirm that names the layer and what removal does.
+    await press(/^Remove the item on CasparCG layer 60/);
+    const confirmText = document.body.textContent ?? '';
+    expect(confirmText).toContain('Remove that item?');
+    expect(confirmText).toContain('layer 60');
+    expect(confirmText).toContain('if it is on air, it comes off');
+    expect(stackRemoveCalls).toEqual([]);
+
+    await press(/^Remove item$/);
+    // ONE item, by id — never the stack.
+    expect(stackRemoveCalls).toEqual(['i-hidden']);
+    // The line is gone and the operator is told the next step.
+    expect(dialog.querySelector('[data-in-use-reference="i-hidden"]')).toBeNull();
+    expect(dialog.querySelector('[data-modal-message]')?.textContent).toContain(
+      'Press Delete from station again',
+    );
+  });
+
+  it('cancelling the confirm removes nothing', async () => {
+    removeResult = {
+      ok: false,
+      reason: 'in-use',
+      message: 'x still use this template',
+      references: [{ itemId: 'i-hidden', slot: { channel: 1, layer: 60 } }],
+    };
+    await openPicker();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await press(/Delete two-box from this station/);
+    await press(/^Delete from station$/);
+    await press(/^Remove the item on CasparCG layer 60/);
+    await press('Cancel');
+    expect(stackRemoveCalls).toEqual([]);
   });
 });
 

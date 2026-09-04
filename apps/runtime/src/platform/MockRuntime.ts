@@ -40,6 +40,8 @@ import {
   DelimiterOptionSchema,
   fixedBankSlots,
   isFixedBankLayer,
+  describeTemplateReferences,
+  type TemplateReference,
   isLowBankLayer,
   layerAlias,
   EMPTY_SOURCE_ASSIGNMENTS,
@@ -1394,6 +1396,7 @@ export class MockRuntime {
     ok: boolean;
     reason?: 'in-use' | 'unknown-template';
     message?: string;
+    references?: TemplateReference[];
   } {
     if (!this.#templates.has(templateId)) {
       return {
@@ -1403,12 +1406,21 @@ export class MockRuntime {
       };
     }
 
-    const referencing = this.#stack.filter((i) => i.templateId === templateId).length;
-    if (referencing > 0) {
+    // `B-212` parity — WHERE each item is, through the ONE shared wording, against
+    // the mock's own bank; a mock that only counted would teach test mode the
+    // sentence the real station no longer says.
+    const references: TemplateReference[] = this.#stack
+      .filter((i) => i.templateId === templateId)
+      .map((i) => {
+        const slot = this.#slotFor(i.itemId);
+        return { itemId: i.itemId, ...(slot !== null && { slot }) };
+      });
+    if (references.length > 0) {
       return {
         ok: false,
         reason: 'in-use',
-        message: `${String(referencing)} stack item(s) still use this template — remove them (or Remove All) first.`,
+        message: describeTemplateReferences(references, this.#fixedBank),
+        references,
       };
     }
 

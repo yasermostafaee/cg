@@ -101,6 +101,7 @@ import {
   type RestoreSkip,
   type Settings,
   type TemplateInfo,
+  type TemplateReference,
 } from '@cg/shared-ipc';
 import { MemoryWorkspace } from '@cg/storage';
 import type {
@@ -993,8 +994,18 @@ export class WebSocketRuntime implements RuntimeBridge {
   }
 
   /** B-085 — how many current stack items reference `templateId` (offline R-005 check). */
-  #referencedCount(templateId: string): number {
-    return this.#lastStack.filter((i) => i.templateId === templateId).length;
+  /**
+   * `B-212` — WHERE each item still using a template is, from the last-known stack:
+   * the item id and the layer it held (absent when it held none). The offline refusal
+   * names these; the bridge's own answer names them the same way while live.
+   */
+  #references(templateId: string): TemplateReference[] {
+    return this.#lastStack
+      .filter((i) => i.templateId === templateId)
+      .map((i) => ({
+        itemId: i.itemId,
+        ...(i.slot !== undefined && { slot: { channel: i.slot.channel, layer: i.slot.layer } }),
+      }));
   }
 
   readonly connections = {
@@ -1126,7 +1137,7 @@ export class WebSocketRuntime implements RuntimeBridge {
       }
       // Disconnected: the removal is local. Enforce R-005 against the last-known
       // stack (exact while disconnected — the bridge cannot mutate it).
-      return this.#library.remove(req.templateId, this.#referencedCount(req.templateId));
+      return this.#library.remove(req.templateId, this.#references(req.templateId));
     },
     // R-028 (o1) — the bridge pushes the full catalogue on every change, so
     // operator B's Library re-lists the moment operator A imports.

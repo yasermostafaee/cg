@@ -78,17 +78,24 @@ describe('LibraryStore', () => {
     const store = new LibraryStore(new MemoryWorkspace());
     await store.import(TEMPLATE, '<html/>');
 
-    // Referenced by 2 stack items → refused, still present.
-    const refused = await store.remove('lower-third', 2);
+    // Referenced by 2 stack items → refused, still present — and `B-212`: the refusal
+    // says WHERE, with the references riding beside the sentence.
+    const refused = await store.remove('lower-third', [
+      { itemId: 'a', slot: { channel: 1, layer: 60 } },
+      { itemId: 'b' },
+    ]);
     expect(refused).toMatchObject({ ok: false, reason: 'in-use' });
-    expect(refused.message).toContain('2 stack item(s)');
+    expect(refused.message).toContain('2 stack item(s) still use this template');
+    expect(refused.message).toContain('CasparCG layer 1-60');
+    expect(refused.message).toContain('no layer bound');
+    expect(refused.references).toHaveLength(2);
     expect(store.has('lower-third')).toBe(true);
 
     // Unknown id → distinct reason, never a silent success.
-    expect(await store.remove('nope', 0)).toMatchObject({ ok: false, reason: 'unknown-template' });
+    expect(await store.remove('nope', [])).toMatchObject({ ok: false, reason: 'unknown-template' });
 
     // Unreferenced → removed, and it does not survive a reload.
-    expect(await store.remove('lower-third', 0)).toEqual({ ok: true });
+    expect(await store.remove('lower-third', [])).toEqual({ ok: true });
     expect(store.has('lower-third')).toBe(false);
     expect(store.list()).toEqual([]);
   });

@@ -82,6 +82,8 @@ import {
   EMPTY_SOURCE_CATALOG,
   checkSourceAssignments,
   checkSourceCatalog,
+  describeTemplateReferences,
+  type TemplateReference,
   activeLookOf,
   liveSourceCarrierState,
   lookPlateFits,
@@ -8965,6 +8967,7 @@ export class CasparRuntime {
     ok: boolean;
     reason?: 'in-use' | 'unknown-template';
     message?: string;
+    references?: TemplateReference[];
   } {
     if (!this.#templates.has(templateId)) {
       return {
@@ -8974,14 +8977,30 @@ export class CasparRuntime {
       };
     }
 
-    const referencing = this.#reconciler
+    /*
+      `B-212` — WHERE each referencing item is, not merely how many there are. The layer
+      is read from `#slots` (the bridge's own binding, the same map `#itemDetail` reads
+      for the audit record); an item with no slot is reported as such rather than
+      dropped, because it blocks the removal exactly as much as one on a layer does.
+      The wording is the ONE shared spelling in `@cg/shared-ipc`, resolved against this
+      bridge's bank so a row is named as the operator's table names it.
+    */
+    const references: TemplateReference[] = this.#reconciler
       .snapshot()
-      .filter((i) => i.templateId === templateId).length;
-    if (referencing > 0) {
+      .filter((i) => i.templateId === templateId)
+      .map((i) => {
+        const slot = this.#slots.get(i.itemId);
+        return {
+          itemId: i.itemId,
+          ...(slot !== undefined && { slot: { channel: slot.channel, layer: slot.layer } }),
+        };
+      });
+    if (references.length > 0) {
       return {
         ok: false,
         reason: 'in-use',
-        message: `${String(referencing)} stack item(s) still use this template — remove them (or Remove All) first.`,
+        message: describeTemplateReferences(references, this.#fixedBank),
+        references,
       };
     }
 

@@ -263,7 +263,17 @@ test('library: DELETE FROM STATION is a different verb from the row REMOVE, and 
   // said nothing.
   await expect(picker.locator('[data-modal-message]')).toContainText(/still use this template/);
   await expect(app.templateRow(TWO_BOX)).toBeVisible();
-  await app.closeTemplatePicker();
+  /*
+    `B-212` — and WHERE: the row by the name the Layers table gives it, with the way
+    there beside it, and no nudge toward Remove All. Pressing "Show" closes the picker
+    and the table goes to the row — it ends SELECTED, so the Inspector shows it too.
+  */
+  const references = picker.locator('[data-in-use-references]');
+  await expect(references).toContainText(/on the row “Bed \d+” \(layer \d+\)/);
+  await expect(picker).not.toContainText(/Remove All/i);
+  await references.getByRole('button', { name: /^Show Bed \d+$/ }).click();
+  await expect(picker).toHaveCount(0);
+  await expect(app.layerRow(layer)).toHaveAttribute('aria-pressed', 'true');
 
   // Clearing the ROW leaves the LIBRARY untouched — R-021 imports once and reuses.
   await app.layerRow(layer).getByRole('button', { name: 'REMOVE' }).click();

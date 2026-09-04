@@ -351,7 +351,8 @@ describe('templates.remove channel schema (R-005)', () => {
       TemplatesRemoveChannel.response.parse({
         ok: false,
         reason: 'in-use',
-        message: '2 stack item(s) still use this template — remove them (or Remove All) first.',
+        message:
+          "2 stack item(s) still use this template — on the row “Bed 1” (layer 9), on CasparCG layer 60, which is not one of this station's rows. Remove those items first.",
       }),
     ).toMatchObject({ ok: false, reason: 'in-use' });
     expect(

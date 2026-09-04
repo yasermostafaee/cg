@@ -1,4 +1,9 @@
-import type { TemplateInfo } from '@cg/shared-ipc';
+import {
+  describeTemplateReferences,
+  type FixedLayerBank,
+  type TemplateInfo,
+  type TemplateReference,
+} from '@cg/shared-ipc';
 import type { Workspace } from '@cg/storage';
 
 /**
@@ -16,6 +21,8 @@ export interface RemoveResult {
   ok: boolean;
   reason?: 'in-use' | 'unknown-template';
   message?: string;
+  /** `B-212` — with `in-use`: where each referencing item is. */
+  references?: TemplateReference[];
 }
 
 const DIR = 'library';
@@ -137,11 +144,20 @@ export class LibraryStore {
 
   /**
    * Guarded removal (the offline path). Enforces R-005 refuse-while-referenced
-   * against a caller-supplied reference count (the WebSocketRuntime counts the
-   * last-known stack, which is exact while disconnected because the bridge is the
-   * sole mutator of the stack and cannot change it while unreachable).
+   * against the caller-supplied REFERENCES (the WebSocketRuntime reads the last-known
+   * stack, which is exact while disconnected because the bridge is the sole mutator
+   * of the stack and cannot change it while unreachable).
+   *
+   * `B-212` — it used to take a COUNT, and the sentence it produced could only say
+   * how many. The places come in, and the wording is the ONE shared spelling; `bank`
+   * is whatever the caller knows (offline, usually nothing — the layers are then
+   * named as CasparCG names them, which is still a place the operator can find).
    */
-  async remove(templateId: string, referencedCount: number): Promise<RemoveResult> {
+  async remove(
+    templateId: string,
+    references: readonly TemplateReference[],
+    bank: FixedLayerBank | null = null,
+  ): Promise<RemoveResult> {
     if (!this.#index.has(templateId)) {
       return {
         ok: false,
@@ -149,11 +165,12 @@ export class LibraryStore {
         message: `Template “${templateId}” is not registered.`,
       };
     }
-    if (referencedCount > 0) {
+    if (references.length > 0) {
       return {
         ok: false,
         reason: 'in-use',
-        message: `${String(referencedCount)} stack item(s) still use this template — remove them (or Remove All) first.`,
+        message: describeTemplateReferences(references, bank),
+        references: [...references],
       };
     }
     await this.delete(templateId);

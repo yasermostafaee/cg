@@ -1,14 +1,19 @@
 import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
 import {
+  describeReferencePlace,
   liveSourceCarrierState,
+  referenceRowName,
   requiredBankFor,
   unassignedPlateIds,
+  type FixedLayerBank,
   type TemplateInfo,
+  type TemplateReference,
 } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { useConfirm } from '../../ui/useDialog.js';
+import { requestRowFocus } from '../layers/rowFocus.js';
 import { reportCommandSuccess } from '../status/commandFeedback.js';
 import {
   currentSourceAssignments,
@@ -120,6 +125,26 @@ const styles = {
    */
   unassigned: { fontSize: '0.75rem', color: colors.pending },
   empty: { fontSize: '0.85rem', color: colors.textMuted, margin: 0 },
+  /*
+    `B-212` — the places a refused deletion named, one line each with its remedy
+    beside it. Rendered in the BODY, under the list, because the pinned message region
+    is strings by contract (see `ModalMessage`) and a remedy is a control.
+  */
+  references: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.35rem',
+    marginTop: '0.75rem',
+    paddingTop: '0.5rem',
+    borderTop: `1px solid ${colors.border}`,
+    fontSize: '0.8rem',
+  },
+  reference: {
+    display: 'flex',
+    gap: '0.5rem',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
 } as const;
 
 /**
@@ -199,6 +224,32 @@ export function useTemplatePicker(): {
    * a reason the operator must act on has to land.
    */
   const [message, setMessage] = useState<ModalMessage | null>(null);
+  /*
+    `B-212` — WHERE the items that refused a deletion are, so the dialog can offer the
+    way there. _"2 stack item(s) still use this template — remove them (or Remove All)
+    first."_ was read on 2026-09-04 by an operator whose rows all said EMPTY (the two
+    items sat on layers 60 and 61, which no row shows); the sentence's only concrete
+    remedy was the sweeping one, and it was taken. A refusal that withholds the precise
+    remedy while naming the destructive one is steering toward it.
+
+    Now each place gets its own line under the list: a ROW gets "Show <row>" (close
+    this, scroll there, select it); a layer no row shows gets a confirm-gated removal
+    of THAT item alone. Neither mentions Remove All.
+  */
+  const [references, setReferences] = useState<readonly TemplateReference[]>([]);
+  /*
+    The bank, so a reference is named as the Layers table names its row — the same
+    `referenceRowName` / `describeReferencePlace` the bridge's sentence was built with.
+
+    PULLED AT THE MOMENT OF THE REFUSAL, not subscribed. This hook is mounted by every
+    `LayerRow`, and a bank subscription here would be thirty subscriptions for a dialog
+    that needs the value only while it is naming places — the first cut did exactly that,
+    and seven unrelated row suites went red on a bridge stub with no `fixedLayers`. The
+    template list beside it is pulled at open time for the same reason. Offline the pull
+    is refused (R-006) and resolves to `null`: the places are then named as CasparCG
+    names them, which is still somewhere the operator can find.
+  */
+  const [bank, setBank] = useState<FixedLayerBank | null>(null);
   // D-137 / C-015 — SUBSCRIBED, unlike the template list beside it, because the
   // assignments are bridge-owned and a second console can bind a plate while
   // this dialog is open. The list is browser-local, so a snapshot is right for
@@ -257,6 +308,7 @@ export function useTemplatePicker(): {
       });
       if (!ok) return;
       setMessage(null);
+      setReferences([]);
       try {
         const res = await window.cg.templates.remove({ templateId: template.templateId });
         if (!res.ok) {
@@ -266,6 +318,10 @@ export function useTemplatePicker(): {
             role: 'refusal',
             text: res.message ?? 'The template could not be deleted.',
           });
+          // `B-212` — and the places, each with its remedy, under the list. The bank is
+          // read now, for these names; see the note at `bank`.
+          setBank(await window.cg.fixedLayers.config().catch(() => null));
+          setReferences(res.references ?? []);
           return;
         }
         // The bindings go ONLY after the owner confirmed the removal. A refused
@@ -294,10 +350,50 @@ export function useTemplatePicker(): {
   const settle = useCallback((choice: TemplateChoice): void => {
     setRequest(null);
     setMessage(null);
+    setReferences([]);
     const resolve = resolver.current;
     resolver.current = null;
     resolve?.(choice);
   }, []);
+
+  /**
+   * `B-212` — the precise remedy for an item NO ROW SHOWS: remove that one item, after
+   * a confirm that names its layer and says what removing it does. This is the
+   * alternative to Remove All, which is what the old sentence left the operator with.
+   */
+  const removeReference = useCallback(
+    async (reference: TemplateReference): Promise<void> => {
+      const place = describeReferencePlace(reference, bank);
+      const ok = await confirm({
+        title: 'Remove that item?',
+        body:
+          `The item ${place} is not on any row this station shows. Removing it clears its ` +
+          `layer — if it is on air, it comes off — and frees the template. No row is touched.`,
+        confirmLabel: 'Remove item',
+        tone: 'remove',
+      });
+      if (!ok) return;
+      try {
+        const res = await window.cg.stack.remove({ itemId: reference.itemId });
+        if (!res.accepted) {
+          // `stack.remove` answers a bare `accepted`; there is no code to quote.
+          setMessage({ role: 'refusal', text: `The item ${place} could not be removed.` });
+          return;
+        }
+        setReferences((current) => current.filter((r) => r.itemId !== reference.itemId));
+        setMessage({
+          role: 'notice',
+          text: `Removed the item ${place}. Press Delete from station again to delete the template.`,
+        });
+      } catch (err) {
+        setMessage({
+          role: 'refusal',
+          text: err instanceof Error ? err.message : 'The item could not be removed.',
+        });
+      }
+    },
+    [bank, confirm],
+  );
 
   const pickerDialog =
     request === null ? null : (
@@ -412,6 +508,50 @@ export function useTemplatePicker(): {
                     >
                       Needs a source: {needsSource.join(', ')}
                     </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {/*
+          `B-212` — WHERE the items are, each with the way there. A row the operator can
+          see gets "Show <row>"; a layer no row shows gets the one-item removal. The
+          sentence above names them; these are the remedies it used to withhold.
+        */}
+        {references.length > 0 && (
+          <div style={styles.references} data-in-use-references="">
+            {references.map((reference) => {
+              const rowName = referenceRowName(reference, bank);
+              const slot = reference.slot;
+              const place = describeReferencePlace(reference, bank);
+              return (
+                <div
+                  key={reference.itemId}
+                  style={styles.reference}
+                  data-in-use-reference={reference.itemId}
+                >
+                  <span>{place}</span>
+                  {rowName !== null && slot !== undefined ? (
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        // Close first, then ask the table to go there: the picker sits
+                        // over the list, and a scroll under a backdrop is not a remedy.
+                        settle(null);
+                        requestRowFocus(slot.layer);
+                      }}
+                    >
+                      Show {rowName}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="danger"
+                      aria-label={`Remove the item ${place}`}
+                      onClick={() => void removeReference(reference)}
+                    >
+                      Remove item
+                    </Button>
                   )}
                 </div>
               );

@@ -330,7 +330,8 @@ it('a REFUSED removal keeps the retention — the template is still re-delivered
   const { result, reimported } = await reimportedIdsAfterReconnect({
     ok: false,
     reason: 'in-use',
-    message: '1 stack item(s) still use this template — remove them (or Remove All) first.',
+    message:
+      '1 stack item(s) still use this template — on the row “Layer 1” (layer 99). Remove that item first.',
   });
 
   expect(result).toMatchObject({ ok: false, reason: 'in-use' });

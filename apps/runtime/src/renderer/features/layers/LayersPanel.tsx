@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useMemo, useState, useSyncExternalStore } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import {
   CircleArrowOutDownRight,
@@ -39,6 +39,7 @@ import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftS
 import { appliedPlateSources } from '../inspector/livePlates.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import { LayerRow } from './LayerRow.js';
+import { onRowFocus } from './rowFocus.js';
 import { resolveRowBinding } from './rowState.js';
 import { LayerTableHeader } from './LayerTableHeader.js';
 import { resolveDensity } from './layerTable.js';
@@ -279,6 +280,29 @@ export function LayersPanel({
    */
   const { ref: listRef, width: listWidth } = useElementWidth<HTMLDivElement>();
   const density = listWidth === null ? 'full' : resolveDensity(listWidth);
+
+  /*
+    `B-212` — "take me to that row". A refusal elsewhere (the template picker's
+    `in-use`) names a row; this is the other half of the remedy: scroll the row into
+    view, put focus on it, and select what it carries so the Inspector shows it too.
+
+    Looked up by the row's `data-layer` — its stable identity — on the document rather
+    than through the list's ref, because `useElementWidth` hands out a CALLBACK ref (see
+    that hook for why) and there is exactly one Layers table on the page. `scrollIntoView`
+    is guarded for jsdom, where the rest of the gesture still runs.
+  */
+  useEffect(
+    () =>
+      onRowFocus((layer) => {
+        const row = document.querySelector<HTMLElement>(`[data-layer="${String(layer)}"]`);
+        if (row === null) return;
+        if (typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center' });
+        row.focus();
+        const bound = slots.find((s) => s.layer === layer)?.binding;
+        if (bound !== null && bound !== undefined) onSelectionChange(bound.itemId);
+      }),
+    [slots, onSelectionChange],
+  );
 
   // Template identity for every bound row, joined once for the whole list.
   const templates = useTemplateIndex(items.map((i) => i.templateId));
