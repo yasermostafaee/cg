@@ -102,6 +102,14 @@ export const cellsHead = style({
   margin: '0.5rem 0 0.2rem',
 });
 
+/** `B-218` — the per-arrangement CELLS lock row: label + the shared `Button`, nothing restyled. */
+export const cellLockRow = style({
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.4rem',
+  margin: '0.1rem 0 0.35rem',
+});
+
 export const cell = style({
   marginBottom: '0.3rem',
   paddingInlineStart: '0.3rem',

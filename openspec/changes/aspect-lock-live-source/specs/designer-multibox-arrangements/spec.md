@@ -51,6 +51,16 @@ implemented that way.
 - WHEN the box's composition has no usable resolution
 - THEN the cell fields behave exactly as they did before this change
 
+#### Scenario: the CELLS lock is the arrangement's own (`B-218`)
+
+- WHEN the author turns one arrangement's `keep aspect` toggle off
+- THEN only that arrangement's cell fields type width and height independently
+- AND every other arrangement, and every plate's own lock, is unchanged
+
+`B-218` (2026-09-04): the cells used to ride the plate's toggle as ONE shared flag. With the
+plate lock held per plate, the `CELLS` fields carry a toggle of their own beside the cells they
+govern, keyed by the arrangement's id in the same session set, and default ON.
+
 ### Requirement: A plate never has a cell, so its authored transform is its rendered transform
 
 A `video-placeholder` SHALL always resolve to NO active cell, in every arrangement and at every

@@ -156,31 +156,41 @@ export interface DesignerStoreState {
    */
   issuesOpen: boolean;
   /**
-   * 🔴 `D-155` — **keep a declared aspect while resizing. A SESSION PREFERENCE, deliberately
-   * NOT authored state, and ONE value for both geometry editors.**
+   * 🔴 `D-155` / `B-218` — **keep a declared aspect while resizing. A SESSION PREFERENCE,
+   * deliberately NOT authored state — and PER SUBJECT: the set of lock keys whose lock is
+   * OFF.** A key is the id of the thing the toggle sits beside: a Live Source plate's element
+   * id (the aspect row), or an arrangement's id (its `CELLS` fields). Absent ⇒ locked.
    *
-   * ── WHY IT IS NOT IN THE SCENE ──────────────────────────────────────────
-   *
-   * Three reasons, and the first is the one that settles it:
+   * ── WHY IT IS NOT IN THE SCENE (unchanged since `D-155`) ─────────────────
    *
    * 1. **A `.vcg` that resizes differently for two people is the failure mode.** The lock is
    *    a fact about how the AUTHOR works, not about the template. The aspect itself
    *    (`expectedAspect`) IS authored and stays so; only the editor's treatment of it is here.
    * 2. **The runtime can never read it.** Storing it would mean a schema field, a migration
-   *    and an export path for a value nothing downstream consumes.
-   * 3. **Per author, not per plate.** A per-plate session flag would be invisible state whose
-   *    extent the author cannot see.
+   *    and an export path for a value nothing downstream consumes. Whether to persist the
+   *    per-plate choice anyway is an open decision recorded under `B-218`; it is a FORMAT
+   *    change and is not made here.
    *
-   * ⚠ **ONE value, two surfaces** — the Live Source aspect row and the arrangement `CELLS`
-   * fields both read and write THIS. They constrain different quantities (a plate's declared
-   * aspect; a cell's composition resolution — see `ArrangementsSection`), but "am I holding
-   * shape while I drag?" is one question and two toggles for it would be the two-spellings
-   * defect this repo keeps paying for.
+   * ── 🔴 WHY IT IS PER PLATE, reversing `D-155`'s third reason (`B-218`) ──
    *
-   * Defaults ON: the complaint that produced `D-155` is that the deformation happens by
-   * accident, and a lock that must be found before it helps does not answer that.
+   * `D-155` argued _"per author, not per plate: a per-plate flag would be invisible state whose
+   * extent the author cannot see."_ Measured the other way round: this was ONE boolean, so
+   * setting one box FREE in a two-box look freed every box in every look, and nothing told the
+   * author that the extent of the toggle they pressed was the whole template. The toggle beside
+   * the SELECTED plate showing that plate's own state IS the visible extent; a flag shared by
+   * plates the author is not looking at was the invisible one.
+   *
+   * ⚠ **ONE predicate, three readers** — `isAspectLocked(state, key)` in `slices/view.ts` is what
+   * the gizmo, the aspect row and the `CELLS` fields all ask. The arrangement `CELLS` fields keep
+   * their own toggle, keyed by the arrangement, because they constrain a different quantity (a
+   * cell's composition resolution, see `lockedCellEdit`) and can no longer ride a plate's toggle.
+   *
+   * Stored as the OFF set rather than the ON set so the default needs no entry: a plate the
+   * author never touched, and every plate after a reopen, is locked. Defaults ON because the
+   * complaint that produced `D-155` is that the deformation happens by accident, and a lock
+   * that must be found before it helps does not answer that.
    */
-  aspectLockEnabled: boolean;
+  aspectLockOff: ReadonlySet<string>;
   /**
    * D-122 — the canvas's live zoom (scene-px → screen-px scale), MIRRORED from the
    * CanvasArea-local zoom state so the store-side move paths (the arrow-key nudge) can
@@ -234,7 +244,7 @@ export const initialState: DesignerStoreState = {
   rulerVisible: false,
   snappingEnabled: true,
   issuesOpen: false,
-  aspectLockEnabled: true,
+  aspectLockOff: new Set<string>(),
   canvasZoom: 1,
   snapGuides: { x: [], y: [] },
   guides: { x: [], y: [] },

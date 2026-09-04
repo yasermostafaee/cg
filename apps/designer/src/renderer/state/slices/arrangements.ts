@@ -515,10 +515,10 @@ export function cellResolutionAspect(scene: Scene | null, index: number): number
  * left alone, because moving a box does not reshape it and constraining a position would be a
  * lock on the wrong quantity.
  *
- * ⚠ **It reads the SAME session preference the plate's lock does** (`aspectLockEnabled`).
- * "Am I holding shape while I drag?" is ONE question, and two toggles for it would be the
- * two-spellings defect this repo keeps paying for — even though the two surfaces constrain
- * different quantities (a plate's declared aspect; a cell's composition resolution).
+ * ⚠ `locked` is THIS ARRANGEMENT's lock (`B-218`: `isAspectLocked(state, arrangement.id)`),
+ * read by the caller through the same predicate the plates use. It used to be a flag shared
+ * with every plate's toggle; the two surfaces constrain different quantities (a plate's
+ * declared aspect; a cell's composition resolution), and since `B-218` they are keyed apart.
  *
  * Rounded to 2 dp so the field shows a number an author can read: the residual aspect error
  * is ~1e-4 on a 100 px cell, three orders inside `ASPECT_TOLERANCE`, and an unrounded derive

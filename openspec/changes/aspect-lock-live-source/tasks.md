@@ -32,8 +32,20 @@
 
 - [x] 3.1 Lock toggle beside the aspect select in `StyleSection`'s `AspectRow`, ON by default when
       `expectedAspect` is set.
-- [x] 3.2 Session preference, per author, alongside `snappingEnabled`. No schema field, no
-      migration, no export path.
+- [x] 3.2 Session preference alongside `snappingEnabled`. No schema field, no migration, no
+      export path. ⚠ **"per author" SUPERSEDED by `B-218` (2026-09-04)** — see 3.5.
+- [x] 3.5 🔴 `B-218` — the lock is PER PLATE: `aspectLockOff` (the OFF set, keyed by the plate's
+      element id) replaces the one `aspectLockEnabled` boolean; `isAspectLocked(state, key)` is
+      the ONE predicate the gizmo, the aspect row and the `CELLS` fields ask;
+      `setAspectLock(key, enabled)` takes the key. Absent ⇒ locked, so the default and every
+      plate after a reopen need no entry. The owner's report: freeing one box in a two-box look
+      freed every box, and the other looks' boxes too.
+- [x] 3.6 `B-218` — the `CELLS` fields get a toggle of their OWN, per arrangement, keyed by the
+      arrangement's id in the same set (they can no longer ride a plate's toggle, and they
+      constrain a different quantity — see 4.1).
+- [ ] 3.7 ⚠ OPEN DECISION (owner's) — whether the per-plate lock should PERSIST in the scene /
+      `.vcg`. It is a format change (a schema field on `video-placeholder` + an export path for a
+      value the runtime never reads) and is deliberately NOT made here; recorded under `B-218`.
 - [x] 3.3 NO keyboard override. Record which bindings took both candidates: `Shift` is the
       snap override in resize/rotate (`Gizmo.tsx`), `Alt` is the snap override in the move
       gestures (`CanvasOverlay.tsx`, `D-122`).
@@ -68,6 +80,13 @@
 - [x] 5.8 ⚠ 5.5 and 5.6 are the ones that will be written as "it probably still works".
       `computeRectResize` is shared by every element kind and by `D-110`'s keyframed-path morph
       rect — assert the byte-identity, do not intend it.
+- [x] 5.9 `B-218` — the store contract, pinned in `apps/designer/tests/aspect-lock-per-plate.test.ts`:
+      every key locked by default with no entry; freeing ONE plate leaves every other plate and
+      every arrangement locked; re-locking removes only its own entry; a no-op write does not
+      churn the set; the scene, `dirty` and the undo stack are untouched. The gizmo's read of the
+      plate's own lock rides `resize-edge-snap.dom.test.ts` (its `setAspectLock('plate', …)` calls).
+      Scenario-level: `apps/designer/tests/e2e/aspect-lock-per-plate.spec.ts` (two plates, one
+      freed, the other read back ON, the first read back OFF on reselection).
 
 ## 6. Gate
 
@@ -83,4 +102,9 @@
       discharges the LINUX-RUN debt for the code that shipped; it does not mean scenario-level
       E2E coverage exists. The 26 new unit tests cover the arithmetic and the cell rule; what has
       no browser-level test is the author actually dragging a locked handle and the toggle
-      surviving a selection change. Do not read 6.2's tick as covering this.
+      surviving a selection change. Do not read 6.2's tick as covering this. ⚠ PARTLY answered by
+      `B-218`'s `aspect-lock-per-plate.spec.ts` (the toggle surviving a selection change, per
+      plate); the locked DRAG at browser level is still not pinned.
+- [ ] 6.4 `B-218` — Linux `gate:e2e` OWED for the per-plate change (UI: a new toggle on the
+      arrangement row, the aspect row rewired). Discharged only by a COMPLETED green `e2e` job on
+      the commit that carries it, cited by run URL here.

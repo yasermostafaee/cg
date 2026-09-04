@@ -16,6 +16,7 @@ import {
   lockedCellEdit,
 } from '../../state/slices/arrangements.js';
 import { activeLayersOf } from '../../state/scene-doc.js';
+import { isAspectLocked } from '../../state/slices/view.js';
 import { CollapseSection } from './CollapseSection.js';
 import { NumberField, SelectField, TextField } from './controls.js';
 import * as s from './InspectorPanel.css.js';
@@ -125,13 +126,15 @@ function ArrangementRow({
   const count = arrangementCount(arrangement);
   const t = arrangement.transition;
   /**
-   * `D-155` §4 — the SAME session preference the Live Source aspect row toggles. ONE value,
-   * two surfaces: "am I holding shape while I drag?" is one question, and a second toggle for
-   * it would be this repo's two-spellings defect. What differs is the quantity each surface
-   * holds — a plate's declared aspect there, a cell's composition RESOLUTION here, for the
-   * reason `lockedCellEdit` sets out.
+   * `D-155` §4 / `B-218` — THIS ARRANGEMENT's lock, through the ONE predicate the plate's
+   * aspect row and the gizmo also ask (`isAspectLocked`), keyed by the arrangement's id.
+   *
+   * It used to ride the plate's toggle as a single shared flag ("one value, two surfaces").
+   * `B-218` made the lock per plate, so the `CELLS` fields — which constrain a different
+   * quantity, a cell's composition RESOLUTION (see `lockedCellEdit`) — need a key of their own
+   * and a toggle of their own, beside the cells it governs.
    */
-  const aspectLocked = useDesignerSelector((st) => st.aspectLockEnabled);
+  const aspectLocked = useDesignerSelector((st) => isAspectLocked(st, arrangement.id));
 
   /**
    * Changing the MODE has to produce a WHOLE valid transition, because the schema is a
@@ -249,6 +252,35 @@ function ArrangementRow({
           <BoxBinding scene={scene} arrangement={arrangement} />
 
           <h4 className={cls.cellsHead}>cells</h4>
+          {/*
+            `B-218` — the CELLS lock, beside the cells it governs. Per ARRANGEMENT, keyed by its
+            id in the same session set the plates' locks live in. A width typed here derives the
+            height (and vice versa) so the cell keeps its box composition's RESOLUTION aspect —
+            see `lockedCellEdit` for why that, and never a plate's `expectedAspect`.
+          */}
+          {arrangement.cells.length > 0 && (
+            <div className={cls.cellLockRow}>
+              <span className={s.label}>keep aspect</span>
+              <Button
+                variant="secondary"
+                selected={aspectLocked}
+                aria-pressed={aspectLocked}
+                data-aspect-lock={aspectLocked ? 'on' : 'off'}
+                onClick={() => designerStore.setAspectLock(arrangement.id, !aspectLocked)}
+                title={
+                  aspectLocked
+                    ? 'ON — typing a cell width derives its height (and the reverse), keeping ' +
+                      'each cell at its box composition’s resolution aspect. Turn it off to ' +
+                      'type both freely.'
+                    : 'OFF — a cell’s width and height are typed independently. Turn it on to ' +
+                      'keep each cell at its box composition’s resolution aspect.'
+                }
+                aria-label="Keep cell aspect while editing"
+              >
+                {aspectLocked ? 'LOCKED' : 'FREE'}
+              </Button>
+            </div>
+          )}
           {arrangement.cells.length === 0 ? (
             <p className={cls.hint}>
               No cells — this is the 0-box arrangement: the background alone, which is a real on-air

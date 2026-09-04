@@ -25,12 +25,14 @@ comment, spec text or task written for this change may claim the lock prevents c
   other axis; corner handles project the pointer onto the constrained diagonal.
 - **A lock toggle beside the aspect select** in the Inspector's Live Source section, on by default
   whenever `expectedAspect` is set. It is a **session preference**, not authored state, and there
-  is **no keyboard override**.
+  is **no keyboard override**. **`B-218` (2026-09-04): it is held PER PLATE** — the toggle beside a
+  plate reads and writes that plate's own lock, keyed by its element id; the first spelling was one
+  shared boolean and freeing one box freed every box in every look.
 - **The FIT button survives with a changed job** — a repair for a plate authored before the lock,
   or one deformed with the lock off, rather than the normal path.
 - **The `CELLS` number fields honour a lock too**, on a DIFFERENT quantity — the composition's
   resolution aspect. See the §"a cell has no aspect" requirement, which is the load-bearing
-  correction in this change.
+  correction in this change. Since `B-218` they carry a toggle of their own, per arrangement.
 
 ## Capabilities
 

@@ -219,7 +219,7 @@ function committed(id: string): { x: number; y: number; w: number; h: number } {
 
 beforeEach(() => {
   seed();
-  designerStore.setAspectLock(true);
+  designerStore.setAspectLock('plate', true);
 });
 
 afterEach(() => {
@@ -257,7 +257,7 @@ describe('B-181 — an aspect-LOCKED corner snaps the BOX EDGE, not the pointer'
       test below would pass for the wrong reason and nothing would be testing the fix — which is
       exactly how an aspect-locked EDGE handle (which does NOT diverge) would have fooled us.
     */
-    designerStore.setAspectLock(true);
+    designerStore.setAspectLock('plate', true);
     const host = mountGizmo('plate');
     // Shift bypasses the snap, so this is the raw locked solve at the same pointer.
     dragHandleTo(host, 'br', GRAB_BR, AIM, { shift: true });
@@ -374,7 +374,7 @@ describe('B-181 — the UNLOCKED path is the positive control and must not move'
       identically — the element's own `scale` cancels out of the algebra. Snapping either one
       gives the same answer, and `pointerForMovingEdge` provably returns the target itself.
     */
-    designerStore.setAspectLock(false);
+    designerStore.setAspectLock('plate', false);
     const host = mountGizmo('plate');
     const { guides } = dragHandleTo(host, 'br', GRAB_BR, { x: 1003, y: 700 });
     const c = committed('plate');
@@ -385,7 +385,7 @@ describe('B-181 — the UNLOCKED path is the positive control and must not move'
   });
 
   it('an unlocked EDGE handle is unchanged too — one axis driven, the other untouched', () => {
-    designerStore.setAspectLock(false);
+    designerStore.setAspectLock('plate', false);
     const host = mountGizmo('plate');
     // The `r` strip's midpoint is (740, 280).
     const { guides } = dragHandleTo(host, 'r', { x: 740, y: 280 }, { x: 1004, y: 280 });

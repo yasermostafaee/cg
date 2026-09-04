@@ -1,4 +1,16 @@
-import { current, set, type DesignerTool } from '../store-core.js';
+import { current, set, type DesignerStoreState, type DesignerTool } from '../store-core.js';
+
+/**
+ * `B-218` — is the aspect lock ON for `key` (a plate's element id, or an arrangement's id)?
+ * THE one predicate every reader uses — the gizmo, the Live Source aspect row, the `CELLS`
+ * fields — so "locked" cannot grow a second spelling. Absent from the OFF set ⇒ locked.
+ */
+export function isAspectLocked(
+  state: Pick<DesignerStoreState, 'aspectLockOff'>,
+  key: string,
+): boolean {
+  return !state.aspectLockOff.has(key);
+}
 
 /**
  * View / canvas-aids slice — the active tool, the ruler/snapping toggles, the
@@ -21,16 +33,23 @@ export const viewSlice = {
   },
 
   /**
-   * `D-155` — keep a declared aspect while resizing. A SESSION preference (never the scene);
-   * see `aspectLockEnabled` in `store-core.ts` for why, and why it is ONE value shared by the
-   * Live Source aspect row and the arrangement `CELLS` fields.
+   * `D-155` / `B-218` — keep a declared aspect while resizing, for ONE subject. A SESSION
+   * preference (never the scene); see `aspectLockOff` in `store-core.ts` for why it is session
+   * state, and why it is keyed per plate (and per arrangement) rather than one flag.
    *
-   * ⚠ Takes an explicit value rather than flipping, because two surfaces render this one
-   * toggle: a blind flip from a stale render would let the two disagree about which way they
-   * were moving it.
+   * `key` is the id of the thing the toggle sits beside — a Live Source plate's element id, or
+   * an arrangement's id for its `CELLS` fields. Absent from the set ⇒ locked (the default).
+   *
+   * ⚠ Takes an explicit value rather than flipping: a blind flip from a stale render could
+   * move the lock the wrong way.
    */
-  setAspectLock(enabled: boolean): void {
-    if (current.aspectLockEnabled !== enabled) set({ aspectLockEnabled: enabled });
+  setAspectLock(key: string, enabled: boolean): void {
+    const off = current.aspectLockOff;
+    if (off.has(key) === !enabled) return;
+    const next = new Set(off);
+    if (enabled) next.delete(key);
+    else next.add(key);
+    set({ aspectLockOff: next });
   },
 
   /**

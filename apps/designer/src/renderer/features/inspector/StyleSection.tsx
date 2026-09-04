@@ -52,6 +52,7 @@ import { SharedImagePicker } from '../sharedLibrary/SharedImagePicker.js';
 import { TickerSeparatorControl } from './TickerSeparatorControl.js';
 import * as dds from './DynamicDataSection.css.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
+import { isAspectLocked } from '../../state/slices/view.js';
 import { activeDocOf, activeFieldData, activeLayersOf } from '../../state/scene-doc.js';
 import { lottieFollowAttachPhases, videoFollowAttachPhases } from '../../state/follow-attach.js';
 import { deriveLookSources, videoFollowClipFacts } from '@cg/shared-schema';
@@ -908,14 +909,13 @@ function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Eleme
     s.scene === null ? 0 : activeDocOf(s.scene).resolution.height,
   );
   /**
-   * `D-155` — the SESSION preference, read from the store rather than from the element.
-   *
-   * It is per AUTHOR and never per plate: a `.vcg` that resizes differently for two people is
-   * the failure this decision avoids, and the runtime could never read it anyway. See
-   * `aspectLockEnabled` in `store-core.ts` for the full argument — including why the
-   * arrangement `CELLS` fields read this SAME value rather than growing a second toggle.
+   * `D-155` / `B-218` — THIS PLATE's lock, read from the session store rather than from the
+   * element. Session state, never the scene: a `.vcg` that resizes differently for two people
+   * is the failure that decision avoids, and the runtime could never read it anyway. But it is
+   * keyed by the plate — `B-218` was ONE flag for every plate in every look, so setting one
+   * box FREE freed all of them. See `aspectLockOff` in `store-core.ts`.
    */
-  const locked = useDesignerSelector((s) => s.aspectLockEnabled);
+  const locked = useDesignerSelector((s) => isAspectLocked(s, id));
 
   const options = [...ASPECT_PRESETS.map((p) => p.key), ASPECT_CUSTOM, ASPECT_UNSPECIFIED] as const;
 
@@ -1038,7 +1038,7 @@ function AspectRow({ element }: { element: VideoPlaceholderElement }): JSX.Eleme
             selected={locked}
             aria-pressed={locked}
             data-aspect-lock={locked ? 'on' : 'off'}
-            onClick={() => designerStore.setAspectLock(!locked)}
+            onClick={() => designerStore.setAspectLock(id, !locked)}
             title={
               locked
                 ? 'ON — dragging a handle keeps this plate at its aspect. Turn it off to resize ' +

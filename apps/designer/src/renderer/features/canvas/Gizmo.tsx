@@ -30,6 +30,7 @@ import {
 import { colors } from '../../theme.js';
 import * as s from './Gizmo.css.js';
 import { hasNoActiveCell, renderedTransformAt } from '../../state/slices/arrangements.js';
+import { isAspectLocked } from '../../state/slices/view.js';
 import { sizeRatioForAspect } from '../inspector/aspect-presets.js';
 
 interface Props {
@@ -452,11 +453,14 @@ function beginResize(
     ⚠ NARROW BY CONSTRUCTION: a `video-placeholder` with `expectedAspect` SET, and nothing
     else. Every other element kind, an unspecified aspect, and the lock switched off all
     resolve to `undefined` and take the untouched free-resize path.
+
+    `B-218` — the lock is THIS plate's (`isAspectLocked(state, element.id)`), never a flag
+    shared by every plate in every look.
   */
   const lockRatio =
     element.type === 'video-placeholder' &&
     element.expectedAspect !== undefined &&
-    designerStore.get().aspectLockEnabled
+    isAspectLocked(designerStore.get(), element.id)
       ? (sizeRatioForAspect(element.expectedAspect, t0.scale) ?? undefined)
       : undefined;
   const targets = snapping ? buildSnapTargets(element.id, currentFrame) : { xs: [], ys: [] };

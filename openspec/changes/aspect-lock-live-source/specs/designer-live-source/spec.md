@@ -2,22 +2,31 @@
 
 ## ADDED Requirements
 
-### Requirement: The aspect lock is a session preference, with a visible toggle
+### Requirement: The aspect lock is a per-plate session preference, with a visible toggle
 
 A lock toggle SHALL sit beside the aspect select in the Live Source Inspector section, and SHALL
 be ON by default whenever `expectedAspect` is set.
 
-It SHALL be a **SESSION PREFERENCE** — per author, persisting across selections like
-`snappingEnabled` — and SHALL NOT be authored state.
+It SHALL be a **SESSION PREFERENCE** — persisting across selections like `snappingEnabled` — and
+SHALL NOT be authored state. It SHALL be held **PER PLATE**: the toggle beside a plate reads and
+writes that plate's own lock, keyed by the plate's element id, and no plate's toggle SHALL change
+another plate's lock — in the same look or in any other.
 
-Three reasons, recorded so the decision is not re-litigated:
+Two reasons it stays out of the scene, recorded so the decision is not re-litigated:
 
 1. **A `.vcg` that resizes differently for two people is the failure mode.** The lock is a fact
    about how the AUTHOR works, not about the template.
 2. **The runtime can never read it.** Storing it would mean a schema field, a migration and an
-   export path for a value nothing downstream consumes.
-3. **Per author, not per plate.** A per-plate session flag would be invisible state whose extent
-   the author cannot see.
+   export path for a value nothing downstream consumes. Whether the per-plate choice should be
+   persisted anyway is an OPEN decision recorded under `B-218`; it is a format change and is not
+   made by this change.
+
+⚠ **SUPERSEDED (`B-218`, 2026-09-04):** this requirement first read _"per author, not per plate:
+a per-plate session flag would be invisible state whose extent the author cannot see"_, and the
+lock shipped as ONE boolean. Measured the other way round: in a two-box look, setting one box to
+FREE changed it for every box, and in the other looks too, and nothing told the author that the
+extent of the toggle they pressed was the whole template. The toggle beside the SELECTED plate,
+showing that plate's own state, IS the visible extent; the shared flag was the invisible one.
 
 The aspect itself (`expectedAspect`) remains authored; only how the EDITOR treats it is the
 preference.
@@ -37,6 +46,17 @@ preference.
 - WHEN the author turns the lock off, selects another plate, and returns
 - THEN the lock is still off
 - AND the scene document is unchanged by any of it
+
+#### Scenario: the lock is per plate
+
+- WHEN the author turns plate A's lock off and then selects plate B, in the same look or in another
+- THEN plate B's toggle reads ON and plate B still resizes locked
+- AND plate A's toggle still reads OFF when it is selected again
+
+#### Scenario: the gizmo asks the plate's own lock
+
+- WHEN plate A's lock is off and plate B's is on
+- THEN dragging a handle on B keeps B's aspect and dragging a handle on A does not
 
 ### Requirement: The FIT button is a repair, and says so
 
