@@ -6,6 +6,7 @@ import { designerStore, useDesignerSelector } from '../../state/store.js';
 import { activeLookGroup } from '../../state/slices/looks.js';
 import { liveSourceIssues } from '../../state/live-source-preflight.js';
 import { CollapseSection } from './CollapseSection.js';
+import { InfoTip, StateLine } from './InfoTip.js';
 import { TextField } from './controls.js';
 import * as cls from './LooksSection.css.js';
 
@@ -35,6 +36,16 @@ import * as cls from './LooksSection.css.js';
  * ⚠ The wording _"the same source in two looks is ONE seat held across the switch"_ was
  * corrected by session BM before `B-188` and stays corrected: a shared key promises the same
  * default, not the same seat.
+ *
+ * ── `DESIGNER-FIX-0905` — WHAT MOVED, AND WHERE ───────────────────────────
+ *
+ * The section opened with a three-sentence summary (what the group is, how sources come
+ * into existence, what a shared key promises) and closed each half with a hint (the order of
+ * the list; how a look is authored). All four are TEACHING — read once, ever — and they sat at
+ * 0.63–0.66rem across a 320 px column. They live behind the section's `i` now, at reading
+ * size; what stays inline is each half's STATE (empty or not) and, first, the refusal block,
+ * which is the one thing here that names a blocking condition and is louder for the quiet
+ * around it.
  */
 export function LooksSection({ scene }: { scene: Scene }): JSX.Element | null {
   const group = activeLookGroup(scene);
@@ -43,16 +54,42 @@ export function LooksSection({ scene }: { scene: Scene }): JSX.Element | null {
   // rather than a second place to create a second group.
   if (group === undefined) return null;
   return (
-    <CollapseSection title="Looks" defaultExpanded>
-      <p className={cls.summary}>
-        One multi-frame group. Sources are not declared here — this list is what the plates use, and
-        a source appears the moment a plate is pointed at it. Two looks using the same source start
-        on the same input, and the operator can point either one elsewhere.
-      </p>
+    <CollapseSection title="Looks" defaultExpanded trailing={<LooksTip />}>
       <IssuesPart scene={scene} />
       <SourcesPart />
       <LooksPart scene={scene} />
     </CollapseSection>
+  );
+}
+
+/** The group's teaching, said once: what a look is, where sources come from, what a shared key means. */
+function LooksTip(): JSX.Element {
+  return (
+    <InfoTip title="Looks and sources">
+      <p>
+        A template has <strong>one multi-frame group</strong>. Each <strong>look</strong> in it is a
+        full sub-scene — a composition of its own, instanced full-frame in this composition — whose
+        plates, titles and decor are authored freely inside it. Exactly one look is on air at a
+        time, and the switch between looks is a cut.
+      </p>
+      <p>
+        <strong>Sources are not declared here.</strong> The list is what the plates use: a source
+        comes into existence the moment a plate is pointed at a key — typing a name such as “live-1”
+        in a plate’s <em>source id</em> box is what creates it — and it disappears when the last
+        plate using it stops. The list is in the order the plates first use them; the operator’s
+        mappings are keyed by source id, not by position, so they survive the list changing shape.
+      </p>
+      <p>
+        Two looks using the same source start on the same input, and the operator can point either
+        one elsewhere.
+      </p>
+      <p>
+        Open a look to author it — its plates and titles are ordinary elements, and the Transform
+        panel reads their real geometry. Double-clicking a look on the canvas opens it too. Removing
+        a look keeps its composition in the project; it can be made a look again from the list
+        below, or deleted in the Compositions panel.
+      </p>
+    </InfoTip>
   );
 }
 
@@ -72,10 +109,9 @@ function SourcesPart(): JSX.Element {
     <>
       <p className={cls.groupLabel}>Sources — used by the plates</p>
       {sources.length === 0 && (
-        <p className={cls.empty}>
-          No sources yet. Point a plate at one in the Inspector’s “Live Source” panel — typing a
-          name such as “live-1” is what creates it, and it appears here.
-        </p>
+        <StateLine tone="text">
+          No sources yet — point a plate at one in its “Live Source” panel.
+        </StateLine>
       )}
       {sources.map((routeKey) => (
         <div key={routeKey} className={cls.row}>
@@ -84,13 +120,6 @@ function SourcesPart(): JSX.Element {
           </div>
         </div>
       ))}
-      {sources.length > 0 && (
-        <p className={cls.hint}>
-          In the order the plates first use them. A source disappears when the last plate using it
-          stops — the operator’s mappings are keyed by source id, not by position, so they survive
-          the list changing shape.
-        </p>
-      )}
     </>
   );
 }
@@ -109,12 +138,7 @@ function LooksPart({ scene }: { scene: Scene }): JSX.Element {
   return (
     <>
       <p className={cls.groupLabel}>Looks — entered with a cut</p>
-      {looks.length === 0 && (
-        <p className={cls.empty}>
-          No looks yet. A look is a full sub-scene — its plates, titles and decor are authored
-          freely inside it, and exactly one look is on air at a time (the switch is a cut).
-        </p>
-      )}
+      {looks.length === 0 && <StateLine tone="text">No looks yet.</StateLine>}
       {looks.map((look) => (
         <LookRow
           key={look.id}
@@ -132,12 +156,6 @@ function LooksPart({ scene }: { scene: Scene }): JSX.Element {
           + Look
         </Button>
       </div>
-      {looks.length > 0 && (
-        <p className={cls.hint}>
-          Open a look to author it — its plates and titles are ordinary elements, and the Transform
-          panel reads their real geometry. Double-clicking a look on the canvas opens it too.
-        </p>
-      )}
     </>
   );
 }

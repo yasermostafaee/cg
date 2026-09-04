@@ -6,7 +6,7 @@ import {
   type TemplateType,
 } from '@cg/shared-schema';
 import type { RecentProject, StarterEntry } from '@cg/shared-ipc';
-import { getStarter, STARTER_TEMPLATES } from '@cg/starter-templates';
+import { describePlayout, getStarter, STARTER_TEMPLATES } from '@cg/starter-templates';
 import { forgetFileHandle, type KeyValueStore, type Workspace } from '@cg/storage';
 import { PROJECT_PACKAGE_EXT } from '@cg/shared-schema';
 import { Emitter } from './emitter.js';
@@ -57,6 +57,8 @@ export class ProjectStore {
       templateType: s.scene.templateType,
       ...(s.preview !== undefined ? { previewUrl: s.preview } : {}),
       ...(s.isNew === true ? { isNew: true } : {}),
+      // `DESIGNER-FIX-0905` — the landing badge, derived from the scene at catalog time.
+      playout: describePlayout(s.scene),
     }));
   }
 

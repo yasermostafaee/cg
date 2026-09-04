@@ -53,10 +53,14 @@ export const secondaryNum = style({
   fontVariantNumeric: 'tabular-nums',
 });
 
-/** Everything else: muted body text. */
+/**
+ * Everything else: muted body text. `DESIGNER-FIX-0905` §4 — one step up from 0.68rem so the
+ * derived-window readouts survive a narrow inspector; still a step under the settle line, so
+ * the hierarchy this file exists for is kept.
+ */
 export const muted = style({
-  fontSize: '0.68rem',
-  lineHeight: 1.4,
+  fontSize: '0.72rem',
+  lineHeight: 1.45,
   color: colors.textMuted,
   margin: 0,
 });

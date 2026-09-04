@@ -19,9 +19,11 @@ import { Select } from '../../ui/Select.js';
 import { designerStore } from '../../state/store.js';
 import { contentStartDefaultFrom } from './content-start-default.js';
 import { CollapseSection } from './CollapseSection.js';
+import { InfoTip, StateLine } from './InfoTip.js';
 import { RealtimeNumberInput } from './controls.js';
 import * as s from './InspectorPanel.css.js';
 import * as cls from './PlayoutSection.css.js';
+import * as prose from './prose.css.js';
 
 const MODE_LABELS: Record<PlayoutMode, string> = {
   // D-114 — the no-out-point mode: play in → hold → hard cut on stop, no animated exit.
@@ -712,7 +714,7 @@ export function holdLoopInertReason(
 }
 
 /**
- * D-133 §3.4 — the loop range's own caption, and the surface that names it.
+ * D-133 §3.4 — the loop range's own STATE ROW, and the surface that names it.
  *
  * THE THREE LOOPS, named apart (a spec requirement, not a preference):
  *
@@ -726,10 +728,18 @@ export function holdLoopInertReason(
  * "Hold loop" names WHERE it applies, which is also the whole of why it can be inert.
  *
  * §9.1 — an inert control that does not explain itself is a defect. When the range has no
- * playback effect this states so and NAMES THE MISSING CONDITION exactly; it reuses this
- * panel's existing caption surface rather than introducing a second hint style.
+ * playback effect this states so and NAMES THE MISSING CONDITION exactly.
+ *
+ * ⭐ `DESIGNER-FIX-0905` — **the state is a TAG, the remedy is one line, the teaching is
+ * behind the `i`.** This was a paragraph — _"Hold loop (frames 38 → 38) has no playback effect
+ * here: a manual hold waits for the operator to stop it, so the hold source is ignored. Pick
+ * auto-out or loop-cycle to activate the loop."_ — and the three-loops distinction rode on the
+ * end of the ACTIVE paragraph in parentheses. Now: `inert` / `empty` / `active` is read at a
+ * glance, the missing condition and its remedy stay inline (a remedy never goes behind the
+ * `i`), and `38 → 38` reads as what it is — an EMPTY range with nothing to replay, whatever the
+ * mode, which is exactly the runtime's own rule (`startHoldLoop`: `to <= from` parks).
  */
-function HoldLoopCaption({
+function HoldLoopRow({
   reason,
   from,
   to,
@@ -739,27 +749,62 @@ function HoldLoopCaption({
   to: number;
 }): JSX.Element {
   const range = `frames ${String(from)} → ${String(to)}`;
+  const empty = to <= from;
+  const tip = <ThreeLoopsTip />;
+  if (empty) {
+    return (
+      <StateLine testId="hold-loop-state" tip={tip} tone="text">
+        <span className={prose.tagCaution}>empty</span>
+        Hold loop {range} — nothing to replay. Drag the cyan marker earlier than the out point to
+        give the hold a range.
+      </StateLine>
+    );
+  }
   if (reason === null) {
     return (
-      <p className={cls.caption} data-testid="hold-loop-state">
-        Hold loop: during the hold the composition replays {range} until the content finishes — the
-        content itself keeps running across every repeat, it never restarts. (Not the
-        transport&rsquo;s preview loop, and not Loop cycle, which repeats the whole in → hold →
-        out.)
-      </p>
+      <StateLine testId="hold-loop-state" tip={tip} tone="text">
+        <span className={prose.tagActive}>active</span>
+        Hold loop {range} — replays during the hold; the content keeps running and never restarts.
+      </StateLine>
     );
   }
   return (
-    <p className={cls.caption} data-testid="hold-loop-state">
-      Hold loop ({range}) has no playback effect here:{' '}
+    <StateLine testId="hold-loop-state" tip={tip} tone="text">
+      <span className={prose.tagCaution}>inert</span>
+      Hold loop {range} — no playback effect:{' '}
       {reason === 'static'
-        ? 'a static composition holds the out point and cuts on stop, so it never runs a hold source. Pick auto-out or loop-cycle to give it one.'
+        ? 'a static composition never runs a hold source. Pick auto-out or loop-cycle.'
         : reason === 'manual'
-          ? 'a manual hold waits for the operator to stop it, so the hold source is ignored. Pick auto-out or loop-cycle to activate the loop.'
+          ? 'a manual hold ignores the hold source. Pick auto-out or loop-cycle.'
           : reason === 'no-drivers'
-            ? 'this composition has no effective hold driver — no ticker, sequence or countdown clock, and no Lottie or video opted in to drive the hold — so its hold is timed however the hold source reads. Add one to activate the loop.'
-            : 'the hold is timed, so it parks on the out point for the hold duration. Set hold to Content-driven to activate the loop.'}
-    </p>
+            ? 'no effective hold driver — no ticker, sequence or countdown clock, and no video or Lottie driving the hold. Add one.'
+            : 'the hold is timed. Set hold to Content-driven.'}
+    </StateLine>
+  );
+}
+
+/**
+ * The three loops, said once. This is TEACHING — read once, ever — so it lives behind the
+ * `i` at reading size rather than in parentheses at the end of every active caption.
+ */
+function ThreeLoopsTip(): JSX.Element {
+  return (
+    <InfoTip title="The three loops">
+      <p>
+        <strong>Hold loop</strong> — during a <em>content-driven</em> hold the composition replays
+        the range from the content start to the out point until the content finishes. The content
+        itself keeps running across every repeat; it never restarts. It has no effect under a manual
+        or static hold, under a timed hold, or when nothing drives the hold.
+      </p>
+      <p>
+        <strong>Loop cycle</strong> — the playout mode that repeats the whole in → hold → out cycle
+        on air.
+      </p>
+      <p>
+        <strong>Preview loop</strong> — the transport bar’s toggle, which loops the editor’s
+        playhead over the ruler. It never reaches air.
+      </p>
+    </InfoTip>
   );
 }
 
@@ -916,10 +961,27 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
               Add out point
             </Button>
           </div>
-          <p className={cls.caption}>
-            Static plays in, holds, and cuts on stop. Adding an out point enables manual / auto-out
-            / loop-cycle (in → hold → out); drag it on the timeline.
-          </p>
+          {/* `DESIGNER-FIX-0905` — the STATE stays inline; what the other modes are is read
+              once, behind the `i`. The remedy is the button beside it. */}
+          <StateLine
+            tip={
+              <InfoTip title="The out point and the modes">
+                <p>
+                  With no out point a composition is <strong>static</strong>: it plays in, holds its
+                  last frame, and cuts on stop — no animated exit.
+                </p>
+                <p>
+                  Adding an out point splits the timeline into an entrance, a hold and an exit, and
+                  enables the other modes: <strong>manual</strong> (hold until the operator stops
+                  it, then play the exit), <strong>auto-out</strong> (exit by itself after the hold)
+                  and <strong>loop cycle</strong> (repeat in → hold → out). Drag the marker on the
+                  timeline to move it.
+                </p>
+              </InfoTip>
+            }
+          >
+            Static: plays in, holds, cuts on stop.
+          </StateLine>
         </>
       )}
 
@@ -968,12 +1030,12 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
                 </Button>
               </div>
               <p className={cls.caption}>
-                Content starts automatically at the entrance completion. Pin it to set an exact
-                frame, then drag it on the timeline.
+                Auto is the entrance’s completion. Pin it for an exact frame, then drag it on the
+                timeline.
               </p>
             </>
           )}
-          <HoldLoopCaption
+          <HoldLoopRow
             reason={holdLoopInertReason(mode, playout.holdSource, hasDrivers)}
             from={lifecycle.contentStart ?? contentStartDefault()}
             to={lifecycle.outPoint}

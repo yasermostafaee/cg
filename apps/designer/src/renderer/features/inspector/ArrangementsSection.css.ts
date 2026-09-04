@@ -1,5 +1,6 @@
 import { style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
+import { inlineMuted } from './prose.css.js';
 
 /**
  * `multibox-layout-switch` C2 — the Arrangements section's own surfaces.
@@ -10,26 +11,13 @@ import { colors } from '../../theme.js';
  * rows sit on.
  */
 
-export const empty = style({
-  fontSize: '0.68rem',
-  color: colors.textMuted,
-  margin: '0.25rem 0 0.5rem',
-  lineHeight: 1.45,
-});
+// `DESIGNER-FIX-0905` §4 — the shared legible default (`prose.css.ts`), not three copies of
+// a smaller one. (This section is compiled but unreachable; kept consistent all the same.)
+export const empty = inlineMuted;
 
-export const summary = style({
-  fontSize: '0.66rem',
-  color: colors.textMuted,
-  margin: '0.15rem 0 0.5rem',
-  lineHeight: 1.45,
-});
+export const summary = inlineMuted;
 
-export const hint = style({
-  fontSize: '0.63rem',
-  color: colors.textMuted,
-  margin: '0.3rem 0 0.1rem',
-  lineHeight: 1.4,
-});
+export const hint = inlineMuted;
 
 const rowBase = {
   borderRadius: '0.25rem',
@@ -178,14 +166,14 @@ export const calloutHead = style({
 
 export const calloutBody = style({
   margin: '0 0 0.35rem',
-  fontSize: '0.66rem',
+  fontSize: '0.76rem',
   lineHeight: 1.5,
   color: colors.textMuted,
 });
 
 export const calloutWarn = style({
   margin: '0 0 0.15rem',
-  fontSize: '0.64rem',
+  fontSize: '0.76rem',
   lineHeight: 1.5,
   color: colors.caution,
 });

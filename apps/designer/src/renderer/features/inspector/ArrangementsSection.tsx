@@ -100,9 +100,16 @@ export function ArrangementsSection({ scene }: { scene: Scene }): JSX.Element {
 }
 
 const MODES = ['cut', 'fade', 'move'] as const;
+// `DESIGNER-FIX-0905` §1 — these three read "the mask dissolves" until 2026-09-05. There
+// is no mask (`single-clock-look-switch`, `a7976e14`): the page carrying the plates is
+// composited BELOW them, so a fade is the page's boxes cross-fading while the pictures cut.
+// ⚠ The transition modes are not implemented anywhere in the runtime or the bridge yet,
+// and this whole section is compiled but unreachable (`InspectorPanel` does not render it)
+// — the strings are corrected so the day it is reached it does not describe a mechanism
+// that never shipped.
 const MODE_LABELS = [
   'Cut — no transition (free)',
-  'Fade — the mask dissolves (cheapest)',
+  'Fade — the boxes cross-fade; the pictures cut (cheapest)',
   'Move — the boxes travel (linear only)',
 ] as const;
 
@@ -242,8 +249,8 @@ function ArrangementRow({
               ) : (
                 <p className={cls.hint}>
                   A move is always <code>linear</code>. It is the only easing whose CSS and CasparCG
-                  spellings mean the same curve — anything else drifts the picture off its hole
-                  while it travels.
+                  spellings mean the same curve — anything else drifts the picture away from its
+                  frame and title while it travels.
                 </p>
               )}
             </>
@@ -409,8 +416,8 @@ function NoBoxesYet(): JSX.Element {
       </p>
       <p className={cls.calloutWarn}>
         ⚠ Don’t put a plate inside a <code>repeater</code> or a <code>sequence</code> item — those
-        stamp their content at play time, so a plate in one declares no hole and punches none.
-        Export refuses it.
+        stamp their content at play time, so a plate in one declares no box to the runtime and no
+        picture is ever seated there. Export refuses it.
       </p>
     </div>
   );
@@ -452,15 +459,16 @@ function HowBoxesWork(): JSX.Element {
       <p className={cls.calloutBody}>
         <strong>Size a box like a typical cell.</strong> Only the plate’s{' '}
         <em>proportion inside its box</em> is exported — the box is measured, the plate’s rect is
-        divided by it, and at play time the hole is that fraction of whatever cell the box lands in.
-        Absolute pixels inside the box are not stored, so a box drawn at the size of a cell shows
-        you what will air.
+        divided by it, and at play time the picture is composited into that fraction of whatever
+        cell the box lands in. Absolute pixels inside the box are not stored, so a box drawn at the
+        size of a cell shows you what will air.
       </p>
       <p className={cls.calloutWarn}>
         ⚠ <strong>One box across counts of different shape changes its CROP.</strong> The fractions
         are fixed, so a box designed for a half-frame cell that later lands in a full-frame one
-        keeps its proportions and re-crops the picture. It is not an obvious break — the plate is a
-        hole filled edge-to-edge — so check a wide arrangement and a narrow one before air.
+        keeps its proportions and re-crops the picture. It is not an obvious break — under “Fill
+        box” the picture fills the plate’s rect edge-to-edge — so check a wide arrangement and a
+        narrow one before air.
       </p>
       <p className={cls.calloutBody}>
         <strong>The background is an ordinary element</strong> of this composition — a shape or an

@@ -141,6 +141,9 @@ export function fieldScrub(opts: ScrubOpts): {
       if (e.button !== 0) return;
       if ((e.target as Element).closest('button') !== null) return; // diamond
       const input = e.currentTarget.querySelector('input');
+      // A WITHHELD field (`disabled`) scrubs nothing: the gesture would commit a value the
+      // control has just said it cannot honour, through a path the disabled input never sees.
+      if (input?.disabled === true) return;
       if (input !== null && document.activeElement === input) return; // editing
       e.preventDefault();
       runScrubGesture({
@@ -180,9 +183,17 @@ interface NumberFieldProps {
    * burst is ONE undo entry; single selection omits it (relies on coalescing).
    */
   onCommitBoundary?: (() => void) | undefined;
+  /**
+   * `DESIGNER-FIX-0905` — the control is WITHHELD: shown, disabled, and carrying the
+   * reason on itself (as its tooltip) rather than in a paragraph elsewhere. A control
+   * that vanishes teaches nothing about why it is unavailable; one that stays and says
+   * why is the state the prose used to stand in for.
+   */
+  withheld?: string | undefined;
 }
 
 export function NumberField(props: NumberFieldProps): JSX.Element {
+  const withheld = props.withheld !== undefined;
   const opts = {
     value: props.value,
     onCommit: props.onCommit,
@@ -195,12 +206,12 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
   const field = fieldScrub(opts);
   const hasUnit = props.suffix !== undefined;
   return (
-    <div className={s.row}>
+    <div className={cx(s.row, withheld && s.rowWithheld)} title={props.withheld}>
       <span
         className={s.label}
-        style={labelScrub.style}
-        onPointerDown={labelScrub.onPointerDown}
-        title="Drag to adjust"
+        style={withheld ? undefined : labelScrub.style}
+        onPointerDown={withheld ? undefined : labelScrub.onPointerDown}
+        title={withheld ? props.withheld : 'Drag to adjust'}
       >
         {props.label}
       </span>
@@ -209,7 +220,10 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
           on the left, and the diamond is pushed to the right edge. The multi
           editor uses the SAME primitive (D-053) — drag-scrub + live onChange —
           and just sets a history boundary on commit via `onCommitBoundary`. */}
-      <div className={cx('cg-field', s.scrubSurface)} onPointerDown={field.onPointerDown}>
+      <div
+        className={cx('cg-field', !withheld && s.scrubSurface)}
+        onPointerDown={field.onPointerDown}
+      >
         <RealtimeNumberInput
           value={props.value}
           onCommit={props.onCommit}
@@ -222,6 +236,8 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
           onCommitBoundary={props.onCommitBoundary}
           className={cx(hasUnit ? s.inputInnerAuto : s.inputInner, hasUnit && 'cg-num-unit')}
           ariaLabel={props.label}
+          disabled={withheld}
+          title={props.withheld}
         />
         {hasUnit && <span className="cg-unit">{props.suffix}</span>}
         {props.trailing !== undefined && <span className={s.point}>{props.trailing}</span>}
@@ -330,6 +346,9 @@ interface RealtimeNumberInputProps {
    * ONE undo entry; single selection omits it (relies on time-coalescing).
    */
   onCommitBoundary?: (() => void) | undefined;
+  /** `DESIGNER-FIX-0905` — a withheld input: disabled, with the reason as its tooltip. */
+  disabled?: boolean | undefined;
+  title?: string | undefined;
 }
 
 /**
@@ -362,7 +381,11 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
     <input
       ref={inputRef}
       className={props.className}
-      style={{ ...props.style, cursor: editing ? 'text' : 'ew-resize', touchAction: 'none' }}
+      style={{
+        ...props.style,
+        cursor: props.disabled === true ? 'not-allowed' : editing ? 'text' : 'ew-resize',
+        touchAction: 'none',
+      }}
       type="number"
       value={buf}
       step={props.step}
@@ -370,9 +393,11 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
       max={props.max}
       placeholder={props.placeholder}
       aria-label={props.ariaLabel}
+      disabled={props.disabled}
+      title={props.title}
       onPointerDown={(e) => {
         // When an ancestor owns the gesture, do nothing here.
-        if (props.scrub === false) return;
+        if (props.scrub === false || props.disabled === true) return;
         // While editing, let the pointer place the caret / select text
         // as usual. Otherwise this press is either a click (focus to
         // type) or the start of a scrub — decided by whether it moves.
@@ -531,17 +556,22 @@ interface SelectFieldProps<T extends string> {
   onCommit: (v: T) => void;
   /** Optional element rendered in a trailing column (e.g. KeyframeIndicator). */
   trailing?: JSX.Element | undefined;
+  /** `DESIGNER-FIX-0905` — withheld: disabled, the reason as the control's tooltip. */
+  withheld?: string | undefined;
 }
 
 export function SelectField<T extends string>(props: SelectFieldProps<T>): JSX.Element {
+  const withheld = props.withheld !== undefined;
   return (
-    <div className={s.row}>
+    <div className={cx(s.row, withheld && s.rowWithheld)} title={props.withheld}>
       <span className={s.label}>{props.label}</span>
       <div className="cg-field">
         <Select
           className={s.inputInner}
           value={props.value}
           aria-label={props.label}
+          disabled={withheld}
+          title={props.withheld}
           onChange={(e) => props.onCommit(e.target.value as T)}
         >
           {props.options.map((o, i) => (
@@ -566,24 +596,35 @@ interface ColorFieldProps {
   resetKey?: string;
   /** D-049 — multi-selection "mixed" state: the selected elements differ on this colour. */
   mixed?: boolean;
+  /**
+   * `DESIGNER-FIX-0905` — the colour is WITHHELD for now (e.g. a frame at width 0): the
+   * swatch and hex stay visible but disabled, and the reason rides the control as its
+   * tooltip. The value is KEPT — that is the whole point of showing it dimmed rather than
+   * hiding it.
+   */
+  withheld?: string | undefined;
 }
 
 export function ColorField(props: ColorFieldProps): JSX.Element {
   const mixed = props.mixed === true;
+  const withheld = props.withheld !== undefined;
   const hex = mixed ? '' : props.value.replace(/^#/, '').toUpperCase();
   return (
-    <div className={s.row}>
+    <div className={cx(s.row, withheld && s.rowWithheld)} title={props.withheld}>
       <span className={s.label}>{props.label}</span>
       <div className="cg-field">
         <ColorPicker
           value={props.value}
           onChange={props.onCommit}
           ariaLabel={`${props.label} colour`}
+          disabled={withheld}
         />
         <input
           className={s.hexInput}
           type="text"
           defaultValue={hex}
+          disabled={withheld}
+          title={props.withheld}
           placeholder={mixed ? 'mixed' : undefined}
           onFocus={(e) => e.currentTarget.select()}
           onBlur={(e) => {

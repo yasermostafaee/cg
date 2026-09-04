@@ -30,6 +30,22 @@ test.describe('D-119 — starter landing catalog', () => {
     await expect(app.page.getByText('New', { exact: true })).toHaveCount(0);
   });
 
+  /**
+   * `DESIGNER-FIX-0905` — the one thing the five starters differ in, playout behaviour, is a
+   * comparable BADGE on each card, derived from the scene, above one line of description.
+   */
+  test('every card carries a playout badge, and the badges differ where the templates do', async ({
+    app,
+  }) => {
+    await app.goto();
+    const badges = app.page.getByTestId('starter-playout');
+    await expect(badges).toHaveCount(EXPECTED_LABELS.length);
+    await expect(badges.nth(0)).toHaveText('holds until stopped, then exits');
+    await expect(badges.nth(2)).toContainText(/loops every ~10 s/);
+    await expect(badges.nth(3)).toHaveText('auto-out after 6 s');
+    await expect(badges.nth(4)).toHaveText('content-driven hold');
+  });
+
   test('picking the composite starter loads it into the Studio', async ({ app }) => {
     await app.goto();
     await app.page.getByTestId('starter-card').first().click();

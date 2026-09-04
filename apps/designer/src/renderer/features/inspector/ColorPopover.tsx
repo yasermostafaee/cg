@@ -23,6 +23,8 @@ interface ColorPickerProps {
   /** Show the swatch as fully transparent (checker only), e.g. an unset
    *  background. Picking a colour clears it. */
   transparent?: boolean;
+  /** `DESIGNER-FIX-0905` — a withheld swatch: still shows its colour, opens nothing. */
+  disabled?: boolean;
 }
 
 export function ColorPicker(props: ColorPickerProps): JSX.Element {
@@ -34,8 +36,9 @@ export function ColorPicker(props: ColorPickerProps): JSX.Element {
       <Control
         ref={btnRef}
         variant="bare"
-        title="Pick a colour"
+        title={props.disabled === true ? undefined : 'Pick a colour'}
         aria-label={props.ariaLabel}
+        disabled={props.disabled === true}
         onClick={() => setOpen((o) => !o)}
         className={cx(s.swatchButton, s.checker)}
         style={{ width: size, height: size }}

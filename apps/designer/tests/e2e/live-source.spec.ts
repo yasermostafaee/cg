@@ -242,14 +242,24 @@ test.describe('Live Source (D-137 phase 1)', () => {
     // the picture behind it.
     await expect(app.page.getByRole('button', { name: /^Toggle keyframe for / })).toHaveCount(0);
 
-    // No rotation (MIXER FILL is axis-aligned) and no opacity (the plate paints zero
-    // pixels on air and cannot reach the layer composited behind it).
-    await expect(app.inspector.getByRole('spinbutton', { name: 'Rotation' })).toHaveCount(0);
-    await expect(app.inspector.getByRole('spinbutton', { name: 'Opacity' })).toHaveCount(0);
+    // `DESIGNER-FIX-0905` — rotation (MIXER FILL is axis-aligned) and opacity (the plate
+    // paints nothing on air; the picture is drawn above the page) are WITHHELD, not hidden:
+    // present, disabled, and carrying their reason as the tooltip.
+    const rotation = app.inspector.getByRole('spinbutton', { name: 'Rotation' });
+    const opacity = app.inspector.getByRole('spinbutton', { name: 'Opacity' });
+    await expect(rotation).toHaveCount(1);
+    await expect(rotation).toBeDisabled();
+    await expect(rotation).toHaveAttribute('title', /withheld on a live plate/i);
+    await expect(opacity).toHaveCount(1);
+    await expect(opacity).toBeDisabled();
+    await expect(opacity).toHaveAttribute('title', /withheld on a live plate/i);
 
-    // No Filter section: filters paint pixels, and in 'author' mode one would tint
-    // only the SMPTE bars — an effect that reaches nothing on air.
-    await expect(app.inspector.getByRole('button', { name: 'Filter' })).toHaveCount(0);
+    // The Filter section is a WITHHELD header, not an expandable section: filters paint
+    // pixels, and in 'author' mode one would tint only the SMPTE bars.
+    await expect(app.inspector.getByRole('button', { name: 'Toggle Filter' })).toHaveCount(0);
+    const filterStub = app.inspector.getByTestId('section-withheld').filter({ hasText: 'Filter' });
+    await expect(filterStub).toHaveCount(1);
+    await expect(filterStub).toContainText(/withheld/i);
 
     // What DOES stay: the box itself. A static scale is composed into the declared
     // rect, so these six describe the hole, and the hole is the contract.
@@ -267,8 +277,17 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await expect(app.inspector.getByRole('spinbutton', { name: 'stroke width' })).toHaveCount(1);
     await expect(app.inspector.getByRole('textbox', { name: 'stroke hex value' })).toHaveCount(1);
 
-    // And the author is told WHY, here, rather than at export.
-    await expect(app.inspector.getByText(/static and axis-aligned/i)).toBeVisible();
+    // And the author is told WHY, here, rather than at export: the STATE inline, the
+    // mechanism behind the `i` at reading size — written against the reorder (no hole).
+    const state = app.inspector.getByTestId('live-source-state');
+    await expect(state).toContainText(/static and axis-aligned/i);
+    await expect(app.inspector).not.toContainText(/\bhole\b/i);
+    await state.getByRole('button', { name: /About Live plates on air/ }).click();
+    const tip = app.page.getByRole('dialog', { name: 'Live plates on air' });
+    await expect(tip).toContainText(/composited below the live pictures/i);
+    await expect(tip).not.toContainText(/\bhole\b/i);
+    await app.page.keyboard.press('Escape');
+    await expect(tip).toHaveCount(0);
 
     // A freshly drawn plate is still exportable.
     await expect(errorPill(app)).toHaveCount(0);

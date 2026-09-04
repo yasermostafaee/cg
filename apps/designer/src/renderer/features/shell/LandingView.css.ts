@@ -127,7 +127,24 @@ export const cardBody = style({
 
 export const cardLabel = style({ fontWeight: 700 });
 
-export const cardDesc = style({ color: colors.textMuted, fontSize: '0.76rem', lineHeight: 1.35 });
+/**
+ * `DESIGNER-FIX-0905` — the playout badge: what this starter does on air, as a chip in the
+ * accent so five cards can be compared on the one thing they differ in.
+ */
+export const cardBadge = style({
+  alignSelf: 'flex-start',
+  fontSize: '0.68rem',
+  fontWeight: 600,
+  letterSpacing: '0.02em',
+  padding: '0.12rem 0.45rem',
+  borderRadius: '999px',
+  background: colors.panelMuted,
+  border: `1px solid ${colors.border}`,
+  color: colors.accent,
+  whiteSpace: 'nowrap',
+});
+
+export const cardDesc = style({ color: colors.textMuted, fontSize: '0.78rem', lineHeight: 1.4 });
 
 // D-093 — a Recent row is the open button (the card) plus a sibling remove (×) control.
 export const recentRowWrap = style({

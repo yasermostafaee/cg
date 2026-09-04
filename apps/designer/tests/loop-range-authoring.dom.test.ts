@@ -214,11 +214,39 @@ describe('the three loops are named apart, and an inert range says why', () => {
     const text = loopState();
     expect(text).toMatch(/hold loop/i);
     expect(text).toMatch(/frames 40 → 75/);
+    // `DESIGNER-FIX-0905` — the state is a TAG, read at a glance.
+    expect(text).toMatch(/^active/i);
     // The CLAIM: the content survives the repeat. This is the item, so the surface says it.
     expect(text).toMatch(/never restarts|keeps running/i);
-    // And it is not either of the other two loops.
-    expect(text).toMatch(/preview loop/i);
-    expect(text).toMatch(/loop cycle/i);
+    // And it is not either of the other two loops — that distinction is TEACHING, read once,
+    // behind the row's `i` at reading size (the shared modal, portaled to `document.body`).
+    expect(text).not.toMatch(/preview loop/i);
+    const tip = host.querySelector<HTMLButtonElement>(
+      '[data-testid="hold-loop-state"] [data-testid="info-tip"]',
+    );
+    expect(tip).not.toBeNull();
+    click(tip!);
+    const modal = document.body.querySelector('[role="dialog"]')?.textContent ?? '';
+    expect(modal).toMatch(/preview loop/i);
+    expect(modal).toMatch(/loop cycle/i);
+    expect(modal).toMatch(/hold loop/i);
+  });
+
+  it('DEGENERATE: a range whose start is at the out point reads EMPTY, whatever the mode', () => {
+    // `DESIGNER-FIX-0905` §2 — "38 → 38 shown as the degenerate loop it is": the runtime's own
+    // rule (`startHoldLoop`: `to <= from` parks), stated as the row's tag rather than left for
+    // the author to notice in the numbers.
+    mount(
+      scene([tickerEl('tick'), shape('rect-1')], {
+        lifecycle: { outPoint: 38, contentStart: 38 },
+        playout: { mode: 'auto-out', holdSource: 'content-driven' },
+      }),
+    );
+    const text = loopState();
+    expect(text).toMatch(/^empty/i);
+    expect(text).toMatch(/frames 38 → 38/);
+    expect(text).toMatch(/nothing to replay/i);
+    expect(text).not.toMatch(/no playback effect/i);
   });
 
   it('INERT (no drivers): it names the MISSING DRIVER, not the hold select', () => {
@@ -231,6 +259,7 @@ describe('the three loops are named apart, and an inert range says why', () => {
       }),
     );
     const text = loopState();
+    expect(text).toMatch(/^inert/i);
     expect(text).toMatch(/no playback effect/i);
     expect(text).toMatch(/no effective hold driver/i);
     expect(text).toMatch(/ticker|sequence|countdown/i);

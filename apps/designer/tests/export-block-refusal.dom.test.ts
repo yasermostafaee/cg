@@ -40,7 +40,7 @@ const OVERLAP: ExportIssue = {
   code: 'live-source-overlap',
   message:
     'Live Source "guest-1" overlaps "guest-2". Each is composited on its own CasparCG layer, ' +
-    'so overlapping holes put two live sources over the same pixels and which one shows is a ' +
+    'so overlapping plates put two live sources over the same pixels and which one shows is a ' +
     'z-order accident.',
   elementId: 'guest-1',
 };

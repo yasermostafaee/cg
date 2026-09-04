@@ -16,6 +16,7 @@ import {
   resolveVisibilityOf,
 } from '@cg/shared-schema';
 import { arrangementViewOf, boxInstanceIds } from './slices/arrangements.js';
+import { DEFAULT_LIVE_SOURCE_NAME } from './element-defaults.js';
 import type { ExportIssue } from '@cg/shared-ipc';
 import { frameAabb, GEOMETRY_TRACK_KEYS, type Aabb } from './off-frame.js';
 
@@ -190,6 +191,23 @@ function label(el: Element): string {
   return el.name.trim() === '' ? el.id : el.name;
 }
 
+/**
+ * `DESIGNER-FIX-0905` — the SUBJECT of a refusal about a plate. A plate the author named
+ * is `Live Source "guest-2"`; one still wearing the factory default read
+ * _'Live Source "Live Source"'_ — the kind repeated as if it were a name — and now names
+ * itself by where it sits, which is what actually tells two unnamed plates apart.
+ * ⚠ Not `PLATE-SOURCE-01`'s placeholder (`B-183`, the `+ Source` text reading as a real
+ * source): that was a VALUE the author had not accepted; this is a NAME the factory gave.
+ */
+function plateRef(el: Element, box?: Aabb): string {
+  const name = el.name.trim();
+  if (name !== '' && name !== DEFAULT_LIVE_SOURCE_NAME) return `Live Source "${name}"`;
+  if (box !== undefined && Number.isFinite(box.minX) && Number.isFinite(box.minY)) {
+    return `The unnamed Live Source at (${String(Math.round(box.minX))}, ${String(Math.round(box.minY))})`;
+  }
+  return 'The unnamed Live Source';
+}
+
 /** The four Live Source preflight checks, over the whole project. */
 export function liveSourceIssues(scene: Scene): ExportIssue[] {
   const issues: ExportIssue[] = [];
@@ -205,11 +223,11 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
       severity: 'error',
       code: 'live-source-in-stamped-scope',
       message:
-        `Live Source "${label(stamped.element)}" sits inside a ${stamped.scope}, which stamps ` +
-        `its content at run time. A plate there declares no hole to the runtime and punches ` +
-        `none in the backdrop, so nothing is composited behind it and nothing says so — and ` +
-        `every stamp would carry the same source id, so the copies would fight over one live ` +
-        `layer. Move the plate out of the ${stamped.scope}.`,
+        `${plateRef(stamped.element)} sits inside a ${stamped.scope}, which stamps ` +
+        `its content at run time. A plate there declares no box to the runtime, so no ` +
+        `picture is ever seated for it and nothing says so — and every stamp would carry ` +
+        `the same source id, so the copies would fight over one live layer. Move the plate ` +
+        `out of the ${stamped.scope}.`,
       elementId: stamped.element.id,
     });
   }
@@ -279,8 +297,8 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
           severity: 'error',
           code: 'live-source-unset',
           message:
-            `Live Source "${label(element)}" has no source: it is not pointed at anything, so ` +
-            `nothing would ever be composited behind it. ${chooseASource}`,
+            `${plateRef(element, box)} has no source: it is not pointed at anything, so ` +
+            `no picture would ever be seated in it. ${chooseASource}`,
           elementId: element.id,
         });
       } else if (!LiveSourceIdSchema.safeParse(element.routeKey).success) {
@@ -333,10 +351,10 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
           severity: 'error',
           code: 'live-source-animated',
           message:
-            `Live Source "${label(element)}" carries a position/size/scale/rotation keyframe. ` +
-            `The composited source is placed ONCE from the static rect, so a moving hole would ` +
-            `slide off the source behind it. Remove the keyframes from this plate — animating a ` +
-            `Live Source is out of scope in v1.`,
+            `${plateRef(element, box)} carries a position/size/scale/rotation keyframe. ` +
+            `The picture is placed ONCE from the static rect, so a moving plate would slide ` +
+            `its frame and title away from the picture. Remove the keyframes from this plate — ` +
+            `animating a Live Source is out of scope in v1.`,
           elementId: element.id,
         });
       } else {
@@ -411,7 +429,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
             code: 'live-source-overlap',
             message:
               `Live Source "${label(self.element)}" overlaps "${label(other.element)}". Each is ` +
-              `composited on its own CasparCG layer, so overlapping holes put two live sources ` +
+              `composited on its own CasparCG layer, so overlapping plates put two live sources ` +
               `over the same pixels and which one shows is a z-order accident.`,
             elementId: self.element.id,
           });
@@ -463,7 +481,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
             message:
               `Live Source "${label(self.element)}" overlaps "${label(other.element)}" in ` +
               `arrangement "${arrangement.name}". Each is composited on its own CasparCG ` +
-              `layer, so overlapping holes put two live sources over the same pixels and ` +
+              `layer, so overlapping plates put two live sources over the same pixels and ` +
               `which one shows is a z-order accident. The same two plates in DIFFERENT ` +
               `arrangements are fine — they are never on air together.`,
             elementId: self.element.id,
@@ -596,7 +614,7 @@ export function liveSourceIssues(scene: Scene): ExportIssue[] {
               message:
                 `Live Source "${label(self.element)}" overlaps "${label(other.element)}" ` +
                 `when look "${look.name}" is active. Each is composited on its own CasparCG ` +
-                `layer, so overlapping holes put two live sources over the same pixels and ` +
+                `layer, so overlapping plates put two live sources over the same pixels and ` +
                 `which one shows is a z-order accident. The same two plates in DIFFERENT ` +
                 `looks are fine — they are never on air together.`,
               elementId: self.element.id,

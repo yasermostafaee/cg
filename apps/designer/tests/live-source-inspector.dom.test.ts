@@ -146,24 +146,53 @@ describe('D-137 — the Live Source Inspector offers no affordance it cannot hon
     expect(diamondProps(render(shape())).length).toBeGreaterThan(0);
   });
 
-  it('offers NO rotation field — while a shape does', () => {
-    expect(labels(render(live()))).not.toContain('Rotation');
+  /**
+   * ⭐ `DESIGNER-FIX-0905` — WITHHELD, not hidden. The three controls a plate cannot
+   * honour are still rendered, DISABLED, and carry their reason on themselves (the
+   * tooltip); the shape is the contrast that proves the disabling is per kind.
+   */
+  const field = (c: HTMLDivElement, label: string): HTMLInputElement | null =>
+    c.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
+
+  it('offers the rotation field DISABLED, with its reason on the control — while a shape offers it live', () => {
+    const rot = field(render(live()), 'Rotation');
+    expect(rot).not.toBeNull();
+    expect(rot?.disabled).toBe(true);
+    expect(rot?.title).toMatch(/withheld on a live plate/i);
+    expect(rot?.title).toMatch(/axis-aligned/i);
     afterRender();
-    expect(labels(render(shape()))).toContain('Rotation');
+    const shapeRot = field(render(shape()), 'Rotation');
+    expect(shapeRot?.disabled).toBe(false);
+    expect(shapeRot?.title).toBe('');
   });
 
-  it('offers NO opacity field — while a shape does', () => {
-    expect(labels(render(live()))).not.toContain('Opacity');
+  it('offers the opacity field DISABLED, with its reason on the control — while a shape offers it live', () => {
+    const op = field(render(live()), 'Opacity');
+    expect(op).not.toBeNull();
+    expect(op?.disabled).toBe(true);
+    expect(op?.title).toMatch(/withheld on a live plate/i);
+    // 🔴 §1 — the reason is written against the reorder: no "hole", the page is BELOW.
+    expect(op?.title).not.toMatch(/\bhole\b/i);
+    expect(op?.title).toMatch(/above the page/i);
     afterRender();
-    expect(labels(render(shape()))).toContain('Opacity');
+    expect(field(render(shape()), 'Opacity')?.disabled).toBe(false);
   });
 
-  it('renders NO Filter SECTION — while a shape does', () => {
-    // Asserted on the section HEADER, not on the word: the Live Source hint
-    // legitimately contains "Filters", explaining why there is no section.
-    expect(sectionTitles(render(live()))).not.toContain('Filter');
+  it('renders the Filter section as a WITHHELD header, not an expandable section — a shape gets the real one', () => {
+    const c = render(live());
+    // Not among the expandable sections…
+    expect(sectionTitles(c)).not.toContain('Filter');
+    // …but present as a withheld stub carrying the reason.
+    const stub = c.querySelector<HTMLElement>(
+      '[data-testid="section-withheld"][data-section="Filter"]',
+    );
+    expect(stub).not.toBeNull();
+    expect(stub?.textContent).toMatch(/Filter/);
+    expect(stub?.textContent).toMatch(/withheld/i);
+    expect(stub?.querySelector('[title]')?.getAttribute('title')).toMatch(/paints none on air/i);
     afterRender();
     expect(sectionTitles(render(shape()))).toContain('Filter');
+    expect(container?.querySelector('[data-testid="section-withheld"]')).toBeNull();
   });
 
   it('offers NO key id control — fill+key is the MAPPING’s, not the scene’s', () => {
@@ -187,14 +216,31 @@ describe('D-137 — the Live Source Inspector offers no affordance it cannot hon
     expect(render(live()).textContent ?? '').toMatch(/aspect/i);
   });
 
-  it('SAYS WHY, once — the author should not learn this from a preflight error', () => {
-    const text = render(live()).textContent ?? '';
-    expect(text).toMatch(/static and axis-aligned/i);
-    // The hint was amended when the plate gained a frame (§9a.1): it used to say the
-    // element paints nothing on air, which stopped being true. It now says the HOLE
-    // paints nothing and the frame is the exception — and names where the frame sits.
-    expect(text).toMatch(/composited on a layer behind it/i);
-    expect(text).toMatch(/entirely/i);
+  /**
+   * ⭐ `DESIGNER-FIX-0905` — the one line that stays inline is the STATE; the mechanism
+   * is read once, behind the `i`, at reading size, and it is written against the code as
+   * it is NOW: no hole is punched, the page is composited BELOW the pictures, and the
+   * frame is painted on the page just outside the rect. The old paragraph's claims — "the
+   * hole paints nothing", "composited on a layer behind it", "entirely outside the hole" —
+   * described `a7976e14`'s retired mask and must not come back.
+   */
+  it('states the plate is static inline, and puts the corrected mechanism behind the `i`', () => {
+    const c = render(live());
+    const line = c.querySelector('[data-testid="live-source-state"]');
+    expect(line?.textContent).toMatch(/static and axis-aligned/i);
+    expect(line?.textContent).toMatch(/withheld/i);
+    // The stale mechanism is gone from the panel…
+    expect(c.textContent ?? '').not.toMatch(/\bhole\b/i);
+    expect(c.textContent ?? '').not.toMatch(/composited on a layer behind/i);
+    // …and the `i` opens the corrected one, in the shared modal (portaled to body).
+    const tip = line?.querySelector<HTMLButtonElement>('[data-testid="info-tip"]');
+    expect(tip).not.toBeNull();
+    act(() => tip?.click());
+    const modal = document.body.querySelector('[role="dialog"]');
+    expect(modal?.textContent).toMatch(/composited below the live pictures/i);
+    expect(modal?.textContent).toMatch(/paints nothing/i);
+    expect(modal?.textContent).toMatch(/just outside the plate’s rect/i);
+    expect(modal?.textContent).not.toMatch(/\bhole\b/i);
   });
 
   /**
@@ -262,6 +308,29 @@ describe('D-137 — the Live Source Inspector offers no affordance it cannot hon
       // The falsy-zero trap: nothing may read the 0 as absent and drop the key, or
       // the colour is lost the moment the author dials the frame off.
       expect(storedStroke()).toEqual({ width: 0, color: '#00ff00' });
+    });
+
+    /**
+     * `DESIGNER-FIX-0905` — "a width of 0 means no frame; the colour is kept" is the
+     * colour field's own STATE now, not a sentence under it: at 0 the swatch and the hex
+     * stay visible (the colour IS kept) but disabled, and the reason rides them.
+     */
+    it('at width 0 the colour field is WITHHELD — visible, disabled, reason on the control', () => {
+      const c = render(live({ width: 0, color: '#00ff00' }));
+      const hex = c.querySelector<HTMLInputElement>('[aria-label="stroke hex value"]');
+      const swatch = c.querySelector<HTMLButtonElement>('[aria-label="stroke colour"]');
+      expect(hex?.value).toBe('00FF00');
+      expect(hex?.disabled).toBe(true);
+      expect(hex?.title).toMatch(/no frame at width 0/i);
+      expect(hex?.title).toMatch(/colour is kept/i);
+      expect(swatch?.disabled).toBe(true);
+      // And no paragraph restates it.
+      expect(c.textContent ?? '').not.toMatch(/means no frame/i);
+      afterRender();
+      const on = render(live({ width: 4, color: '#00ff00' }));
+      expect(on.querySelector<HTMLInputElement>('[aria-label="stroke hex value"]')?.disabled).toBe(
+        false,
+      );
     });
 
     it('WRITES the colour, and keeps the width it was already carrying', () => {

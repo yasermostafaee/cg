@@ -5,6 +5,7 @@ import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { NewProjectModal } from './NewProjectModal.js';
 import { SaveBeforeSwitchModal } from './SaveBeforeSwitchModal.js';
+import { playoutBadge } from './playout-badge.js';
 import * as s from './LandingView.css.js';
 
 /**
@@ -145,6 +146,13 @@ export function LandingView(): JSX.Element {
               )}
               <span className={s.cardBody}>
                 <span className={s.cardLabel}>{st.label}</span>
+                {/* `DESIGNER-FIX-0905` — the DIFFERENTIATOR as a comparable badge, derived
+                    from the starter's scene, above one line of description. */}
+                {st.playout !== undefined && (
+                  <span className={s.cardBadge} data-testid="starter-playout">
+                    {playoutBadge(st.playout)}
+                  </span>
+                )}
                 <span className={s.cardDesc}>{st.description}</span>
               </span>
             </Button>

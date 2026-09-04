@@ -1,5 +1,6 @@
 import { style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
+import { inlineMuted } from './prose.css.js';
 
 /**
  * LOOKS phase 2 (`design.md` §14) — the Looks section's resting surfaces.
@@ -7,28 +8,12 @@ import { colors } from '../../theme.js';
  * Tokens + local literals only, the `ArrangementsSection.css.ts` precedent: the shared
  * `Button` / `Select` primitives supply every interactive state; nothing here restyles a
  * control.
+ *
+ * `DESIGNER-FIX-0905` §4 — the section's own `empty` / `summary` / `hint` (0.63–0.68rem) are
+ * gone; what inline text remains uses the shared legible default (`prose.css.ts`).
  */
 
-export const empty = style({
-  fontSize: '0.68rem',
-  color: colors.textMuted,
-  margin: '0.25rem 0 0.5rem',
-  lineHeight: 1.45,
-});
-
-export const summary = style({
-  fontSize: '0.66rem',
-  color: colors.textMuted,
-  margin: '0.15rem 0 0.5rem',
-  lineHeight: 1.45,
-});
-
-export const hint = style({
-  fontSize: '0.63rem',
-  color: colors.textMuted,
-  margin: '0.3rem 0 0.1rem',
-  lineHeight: 1.4,
-});
+export const hint = inlineMuted;
 
 export const groupLabel = style({
   fontSize: '0.62rem',
@@ -47,8 +32,11 @@ export const groupLabel = style({
  * metrics on purpose, so only the colour distinguishes it.
  */
 export const issueSummary = style({
-  fontSize: '0.62rem',
-  fontWeight: 600,
+  // `DESIGNER-FIX-0905` §4 — the refusal heading is set a step ABOVE the inline default
+  // (0.76rem), not below it as it was (0.62rem): it names a blocking condition, and it is
+  // louder now precisely because everything around it got shorter.
+  fontSize: '0.8rem',
+  fontWeight: 700,
   letterSpacing: '0.04em',
   textTransform: 'uppercase',
   color: colors.danger,
@@ -110,8 +98,11 @@ export const rowBody = style({ padding: '0.1rem 0.25rem 0.25rem' });
  * state is invented.
  */
 export const issue = style({
-  fontSize: '0.64rem',
+  // §4 — the refusal ROWS name the field and give an example value; they are read, not
+  // scanned, so they get the inline default's size in the danger colour.
+  fontSize: '0.76rem',
   color: colors.danger,
   margin: '0.2rem 0',
-  lineHeight: 1.4,
+  lineHeight: 1.45,
+  maxWidth: '46ch',
 });

@@ -68,8 +68,10 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
   {
     id: 'irib-news',
     label: 'میان‌برنامهٔ خبر — News Composite',
+    // `DESIGNER-FIX-0905` — ONE line per card. What each starter does on air is the badge
+    // (`describePlayout`), not a sentence at the end of the description.
     description:
-      'The marquee: a two-deck IRIB-style strap with live Tehran + Greenwich wall clocks (Persian digits, blinking colons), @IRIBNEWS brand tag, bound program title, and a content-driven RTL headline crawl. Stays on air until stopped.',
+      'Two-deck IRIB-style strap: live Tehran and Greenwich clocks, brand tag, bound title, RTL headline crawl.',
     preview: '/starters/irib-news.png',
     assets: [
       {
@@ -85,7 +87,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     id: 'ticker',
     label: 'نوار اخبار — News Ticker',
     description:
-      'Persian news strap with a content-driven RTL crawl: measured (never timed), holds on air until the operator stops it, then plays its authored exit. Headlines are an editable list data key.',
+      'Persian news strap with a measured RTL crawl; the headlines are an editable list.',
     preview: '/starters/ticker.png',
     assets: [
       {
@@ -101,7 +103,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     id: 'logo-bug',
     label: 'آرم شبکه — Logo Sting',
     description:
-      'Corner channel bug: a pen-path mark morphing square → circle → compass star beside a Persian wordmark, re-playing its sting every ~10 seconds via loop-cycle playout.',
+      'Corner channel bug: a pen-path mark morphing square → circle → star beside a Persian wordmark.',
     preview: '/starters/logo-bug.png',
     assets: [
       {
@@ -117,7 +119,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     id: 'title',
     label: 'زیرنویس معرفی — Guest Title',
     description:
-      'Self-closing guest / expert title: two-tier plate flush right with the compass-star brand square, bound name/role data keys, auto-out playout — enters, holds 6 s, exits by itself.',
+      'Two-tier guest / expert title flush right, with the brand square and bound name and role.',
     preview: '/starters/title.png',
     assets: [
       {
@@ -133,7 +135,7 @@ export const STARTER_TEMPLATES: readonly StarterTemplate[] = [
     id: 'sequence',
     label: 'توالی خبر — Headline Rotator',
     description:
-      'Sequence-style strap: headlines rotate one at a time (first transitions in, the last transitions out), then the strap closes itself via a content-driven hold. Items are an editable list data key.',
+      'Headlines rotate one at a time, then the strap closes itself; the items are an editable list.',
     preview: '/starters/sequence.png',
     assets: [
       {
@@ -153,3 +155,4 @@ export function getStarter(id: string): StarterTemplate | null {
 }
 
 export { iribNewsScene, logoBugScene, sequenceScene, tickerScene, titleScene };
+export { describePlayout, type StarterPlayoutSummary } from './describe-playout.js';

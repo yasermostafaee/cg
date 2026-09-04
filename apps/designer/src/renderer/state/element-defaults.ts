@@ -296,10 +296,17 @@ export function defaultEllipse(id: string, x: number, y: number): ShapeElement {
  * canvas tool, handing over a generated `live-N`; keeping the parameter would leave that door
  * open for the next caller.
  */
+/**
+ * `DESIGNER-FIX-0905` — the factory's default name, exported so the preflight can tell a
+ * plate the author NAMED from one still wearing this default. A refusal that read
+ * _'Live Source "Live Source" has no source'_ was repeating the kind as if it were a name.
+ */
+export const DEFAULT_LIVE_SOURCE_NAME = 'Live Source';
+
 export function defaultLiveSource(id: string, x: number, y: number): VideoPlaceholderElement {
   return {
     id,
-    name: 'Live Source',
+    name: DEFAULT_LIVE_SOURCE_NAME,
     type: 'video-placeholder',
     visible: true,
     locked: false,

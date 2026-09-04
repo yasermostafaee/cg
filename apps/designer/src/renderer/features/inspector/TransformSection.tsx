@@ -9,7 +9,7 @@ import {
   hasKeyframeAt,
   keyframeVariantFor,
 } from '../timeline/keyframe-helpers.js';
-import { descriptorFor, isKeyframeable } from './field-registry.js';
+import { descriptorFor, isKeyframeable, withheldReason } from './field-registry.js';
 import { Seg, SingleField, transformFieldProps } from './transform-fields.js';
 import * as s from './TransformSection.css.js';
 import { renderedTransformAt } from '../../state/slices/arrangements.js';
@@ -67,14 +67,25 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
     );
   }
 
-  // D-137 — a kind may declare a transform property UNMANAGED, and then it has no
-  // field at all. A Live Source drops `rotation` (`MIXER FILL` is axis-aligned, so a
-  // rotated plate declares its bounding box and the picture shows outside the frame
-  // the author drew) and `opacity` (the element paints zero pixels on air, and the
-  // hole's opacity cannot reach the live layer behind it). A control that cannot
-  // change what airs is a control that lies.
-  const showRotation = descriptorFor(element, 'rotation') !== undefined;
-  const showOpacity = descriptorFor(element, 'opacity') !== undefined;
+  // D-137 — a kind may declare a transform property UNMANAGED. A Live Source drops
+  // `rotation` (`MIXER FILL` is axis-aligned, so a rotated plate declares its bounding box
+  // and the picture shows outside the frame the author drew) and `opacity` (the plate
+  // paints nothing on air; the picture is drawn by CasparCG above the page, out of reach of
+  // anything the page could fade). A control that cannot change what airs is a control
+  // that lies.
+  //
+  // ⭐ `DESIGNER-FIX-0905` — an unmanaged property is WITHHELD, not hidden: the field
+  // stays, disabled, with the registry's reason as its tooltip. It used to vanish, and a
+  // paragraph elsewhere explained the absence; the absence taught nothing on its own. The
+  // decision (`descriptorFor`) and the reason (`withheldReason`) come from the ONE registry.
+  const rotationWithheld =
+    descriptorFor(element, 'rotation') === undefined
+      ? (withheldReason(element, 'rotation') ?? 'Not available for this element')
+      : undefined;
+  const opacityWithheld =
+    descriptorFor(element, 'opacity') === undefined
+      ? (withheldReason(element, 'opacity') ?? 'Not available for this element')
+      : undefined;
 
   // Commit a property's STORED value (the shared field props convert the
   // displayed value — e.g. opacity %, scale % — back to stored units).
@@ -127,20 +138,19 @@ export function TransformSection({ element, selectedKeyframe }: Props): JSX.Elem
           point={indicatorFor('scale.y')}
         />
       </div>
-      {/* Rotation (degrees) — single field, diamond outside the border. */}
-      {showRotation && (
-        <SingleField
-          {...transformFieldProps('rotation', t.rotation, commit('rotation'))}
-          point={indicatorFor('rotation')}
-        />
-      )}
+      {/* Rotation (degrees) — single field, diamond outside the border. Withheld (disabled,
+          reason as tooltip) for a kind whose registry drops it. */}
+      <SingleField
+        {...transformFieldProps('rotation', t.rotation, commit('rotation'))}
+        point={indicatorFor('rotation')}
+        withheld={rotationWithheld}
+      />
       {/* Opacity (percent) — single field, diamond outside the border. */}
-      {showOpacity && (
-        <SingleField
-          {...transformFieldProps('opacity', opacity, commit('opacity'))}
-          point={indicatorFor('opacity')}
-        />
-      )}
+      <SingleField
+        {...transformFieldProps('opacity', opacity, commit('opacity'))}
+        point={indicatorFor('opacity')}
+        withheld={opacityWithheld}
+      />
     </div>
   );
 }

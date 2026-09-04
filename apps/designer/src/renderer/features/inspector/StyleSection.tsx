@@ -69,6 +69,9 @@ import {
 import { KeyframeDot } from './keyframe-diamond.js';
 import { applyFillModeChange } from './fill-commit.js';
 import { CollapseSection } from './CollapseSection.js';
+import { InfoTip, StateLine } from './InfoTip.js';
+import { withheldReason } from './field-registry.js';
+import * as prose from './prose.css.js';
 import {
   ColorField,
   NumberField,
@@ -92,6 +95,32 @@ import * as fieldCss from './controls.css.js';
 interface Props {
   element: Element;
   selectedKeyframe: { elementId: string; property: AnimatableProperty; frame: number } | null;
+}
+
+/**
+ * `DESIGNER-FIX-0905` — the three content-driven kinds each carried a "Time-driven: … scrubbing
+ * the timeline doesn't move it" caption. One TEACHING, said once, behind one shared `i`; the
+ * inline line reduces to the state.
+ */
+function TimeDrivenTip({ kind }: { kind: 'ticker' | 'clock' | 'sequence' }): JSX.Element {
+  const what =
+    kind === 'ticker'
+      ? 'the crawl runs during playback, and its pass length comes from the measured content width divided by the speed'
+      : kind === 'clock'
+        ? 'the clock repaints once per second during playback'
+        : 'items advance on their dwell, or on Next, during playback';
+  return (
+    <InfoTip title="Time-driven content">
+      <p>
+        This element runs on its own clock, not on the composition’s frames: {what}. Scrubbing the
+        timeline does not move it, and it keeps running across every repeat of a hold loop.
+      </p>
+      <p>
+        Only its box <em>style</em> — colour, background, shadow, padding — animates on the
+        timeline. Press play, or open the Preview, to see it run.
+      </p>
+    </InfoTip>
+  );
 }
 
 /**
@@ -705,25 +734,71 @@ function LiveSourceSections({ element }: { element: VideoPlaceholderElement }): 
         <AspectRow element={element} />
         <FitModeRow element={element} />
         {/*
-          D-137 — ONE line, said once, instead of a row of disabled controls saying
-          it repeatedly and forever.
-
-          It is here because the author would otherwise learn it at EXPORT, from a
-          preflight error — the wrong end of the process. Every removal above it
-          (keyframes, rotation, opacity, filters) has the same single cause, so it
-          gets a single sentence rather than four tooltips.
+          ⭐ `DESIGNER-FIX-0905` — the paragraph that stood here is gone, and its sentences
+          went three ways. Its CONSTRAINTS ("rotating would slide the picture out", "opacity
+          and filters are withheld") now sit ON the controls they explain: the Transform
+          section renders rotation and opacity disabled with the registry's reason as their
+          tooltip, and the Filter section below is a withheld header with the same. Its
+          MECHANISM — why a plate is static, what it paints, where the frame sits — is
+          behind the `i`, at reading size, corrected for the reorder: no hole is punched any
+          more (`single-clock-look-switch`), the page sits BELOW the pictures. What stays
+          inline is the one-line STATE: a plate is static, and its withheld controls say why.
         */}
-        <p className={dds.hint}>
-          A plate is <strong>static and axis-aligned</strong>: its rect is sent to CasparCG once, as
-          a fixed box, so rotating or animating it — or a parent — would slide the live picture out
-          from behind the frame on air. Opacity and filters are withheld for the same reason: the
-          hole paints nothing on air, and the picture is composited on a layer behind it. The{' '}
-          <strong>frame</strong> below is the one thing this element draws, and it sits entirely{' '}
-          <strong>outside</strong> the hole.
-        </p>
+        <StateLine testId="live-source-state" tip={<LivePlateTip />}>
+          A plate is <strong>static and axis-aligned</strong> — rotation, opacity, filters and
+          keyframes are withheld, and each says why on itself.
+        </StateLine>
       </CollapseSection>
       <LiveSourceFrameRow element={element} />
+      {/*
+        The Filter section, WITHHELD rather than absent (`DESIGNER-FIX-0905`): the header
+        stays, dimmed, carrying the registry's reason. It used to be simply missing, and a
+        section that vanishes teaches nothing about why it is unavailable.
+      */}
+      <CollapseSection title="Filter" withheld={withheldReason(element, 'filter')} />
     </>
+  );
+}
+
+/**
+ * `DESIGNER-FIX-0905` §1 — **what a live plate does on air, said once, and said against the
+ * code as it is NOW.** Six Designer strings still described the retired mask (`D-158`'s
+ * table); the two the owner photographed were the ones this panel carried. The mechanism
+ * under the reorder (`single-clock-look-switch`, `a7976e14`): the page that carries the
+ * plates is composited BELOW them, CasparCG draws each picture into exactly the plate's
+ * declared rect, and the plate paints nothing — there is no hole, because nothing on the
+ * page is ever in front of a picture. The knowledge is load-bearing (it is why rotation,
+ * opacity and filters are withheld, and it sits beside `B-197`'s open question about a
+ * rounded frame), so it is relocated and corrected here, not deleted.
+ */
+function LivePlateTip(): JSX.Element {
+  return (
+    <InfoTip title="Live plates on air">
+      <p>
+        A plate is <strong>static and axis-aligned</strong>. Its rect is sent to CasparCG once, as a
+        fixed box, and the live picture is composited into exactly that box. Rotating or animating
+        the plate — or a parent — would move the frame and title you drew while the picture stayed
+        put, so rotation and every keyframe are withheld.
+      </p>
+      <p>
+        On air the plate <strong>paints nothing</strong>. The page that carries the plates is
+        composited <strong>below</strong> the live pictures, so nothing you draw in this template
+        can appear over a picture, and nothing on the page can fade or filter one. That is why
+        opacity and the Filter section are withheld: they would act on pixels the plate does not
+        have. On the canvas the bars and the source label stand in for the picture.
+      </p>
+      <p>
+        The <strong>frame</strong> is the one thing a plate draws. It is painted on the page, just
+        outside the plate’s rect, so the picture never covers it and it never covers the picture —
+        and it does not change the rect CasparCG is given. Rounded corners have no home on a plate
+        yet.
+      </p>
+      <p>
+        Under <strong>Fit whole picture</strong> a source of a different shape shows the page’s own
+        background in the margin, never black. Artwork that must appear <em>over</em> a picture is
+        its own template, on its own bank row above the live band.
+      </p>
+    </InfoTip>
   );
 }
 
@@ -772,11 +847,23 @@ function LiveSourceFrameRow({ element }: { element: VideoPlaceholderElement }): 
   const commit = (next: Stroke): void => {
     designerStore.updateElement(id, { stroke: next } as Partial<Element>);
   };
+  /*
+    ⭐ `DESIGNER-FIX-0905` — "a width of 0 means no frame; the colour is kept" was a sentence
+    under the fields. It is now the COLOUR FIELD'S OWN STATE: at width 0 the swatch and hex
+    stay visible (the colour IS kept — that is the point of showing it) but disabled, with
+    the reason as their tooltip. The mechanism the rest of that sentence carried ("painted
+    by the template, outside the hole") went to the Live Source `i`, corrected: there is no
+    hole; the frame is painted on the page just outside the rect, below the picture.
+  */
+  const off = width <= 0;
   return (
     <CollapseSection title="Frame" defaultExpanded>
       <ColorField
         label="stroke"
         value={color}
+        withheld={
+          off ? 'No frame at width 0. The colour is kept — set a width to paint it.' : undefined
+        }
         onCommit={(next) => {
           commit({ ...(element.stroke ?? { width }), color: next });
         }}
@@ -791,11 +878,6 @@ function LiveSourceFrameRow({ element }: { element: VideoPlaceholderElement }): 
           commit({ ...(element.stroke ?? { color }), width: Math.max(0, next) });
         }}
       />
-      <p className={dds.hint}>
-        The frame is painted by the TEMPLATE, <strong>outside</strong> the hole — it never covers
-        the live picture, and it does not move the rect CasparCG is given. A width of{' '}
-        <strong>0</strong> means no frame; the colour is kept.
-      </p>
     </CollapseSection>
   );
 }
@@ -1244,14 +1326,37 @@ function useFollowAnchors(): FollowAnchors | null {
  * defect. A follow-source element in a composition with NO lifecycle derives nothing —
  * this says WHY, instead of silently doing nothing (the option is never silently
  * disabled). Shared by both media kinds.
+ *
+ * `DESIGNER-FIX-0905` — the paragraph held three kinds of sentence. The STATE ("following
+ * nothing — no out point") and its REMEDY ("set one in Playout") stay inline; the MECHANISM
+ * ("no lifecycle anchors to derive the window from, so the clip behaves as if it had no
+ * phase markers") is read once, behind the `i`.
  */
 function FollowNoAnchors(): JSX.Element {
   return (
-    <p className={dds.hint} data-testid="follow-no-anchors">
-      Following nothing yet — this composition has no out-point, so there are no lifecycle anchors
-      to derive the window from, and the clip behaves as if it had no phase markers. Set an
-      out-point in the Playout section to activate follow.
-    </p>
+    <StateLine testId="follow-no-anchors" tone="text" tip={<FollowTip />}>
+      <span className={prose.tagCaution}>inert</span>
+      Following nothing — this composition has no out point. Set one in Playout to activate follow.
+    </StateLine>
+  );
+}
+
+/** What "follow the composition" derives from, said once. */
+function FollowTip(): JSX.Element {
+  return (
+    <InfoTip title="Following the composition">
+      <p>
+        A clip that follows the composition takes its intro, hold and outro from the composition’s
+        own anchors: the entrance (from the active in to the content start), the hold (until the out
+        point) and the exit (from the out point to the active out). Its window is derived from those
+        three, never authored on the clip.
+      </p>
+      <p>
+        With no out point there are no anchors to derive from, so the clip behaves as if it had no
+        phase markers: the whole clip plays as the intro and it holds its last frame. Adding an out
+        point in the Playout section is what activates follow.
+      </p>
+    </InfoTip>
   );
 }
 
@@ -1798,6 +1903,14 @@ function VideoSections({
   const duration = element.durationMs;
   const anchors = useFollowAnchors();
   const follows = followsComposition(phases);
+  // `DESIGNER-FIX-0905` — `drives hold` is WITHHELD while the composition has no out point:
+  // with none it is `static`, every hold source is ignored, and the flag can change nothing
+  // until an out point exists. Disabled with the reason on the control, never hidden — the
+  // author must still see that the flag exists and what unlocks it.
+  const hasOutPoint = useDesignerSelector((s) => {
+    const scene = s.scene;
+    return scene !== null && activeDocOf(scene).lifecycle !== undefined;
+  });
   // A follower's stored `introEnd` is IGNORED data — the poster anchor is `holdAt` (the
   // held look), mirroring the scene-builder's `videoPosterMs` rule; the runtime refines
   // the canvas dataset to the exact derived H.
@@ -1857,6 +1970,12 @@ function VideoSections({
           value={element.drivesHold === true ? 'on' : 'off'}
           options={['off', 'on'] as const}
           labels={['No', 'Yes']}
+          withheld={
+            hasOutPoint
+              ? undefined
+              : 'Inert: this composition has no out point, so it has no hold for a clip to ' +
+                'drive. Add an out point in the Playout section first.'
+          }
           // Q — the flag has exactly ONE writer, and it is the deep-reaching one.
           // `updateElement` is shallow (it goes through `locate`, which searches a layer's
           // DIRECT children only), so this control could not write a grouped element's flag;
@@ -1867,10 +1986,26 @@ function VideoSections({
         />
         {phases === undefined ? (
           <>
-            <p className={dds.hint}>
-              No phase marks — the whole clip is the intro, the hold loops the whole clip, and there
-              is no outro. The poster uses the clip midpoint.
-            </p>
+            {/* `DESIGNER-FIX-0905` — the STATE inline (no marks: the whole clip is the intro);
+                what that means for the hold, the outro and the poster is behind the `i`. */}
+            <StateLine
+              tip={
+                <InfoTip title="Phase marks">
+                  <p>
+                    Without phase marks the whole clip is the intro: the hold loops the whole clip
+                    and there is no outro. The poster frame is the clip midpoint.
+                  </p>
+                  <p>
+                    <strong>Add phase marks</strong> splits the clip into intro, hold and outro at
+                    times you set in the clip’s own milliseconds.{' '}
+                    <strong>Follow composition</strong> derives them from the composition’s out
+                    point instead.
+                  </p>
+                </InfoTip>
+              }
+            >
+              No phase marks — the whole clip plays as the intro.
+            </StateLine>
             <Button
               variant="secondary"
               onClick={() =>
@@ -1941,18 +2076,42 @@ function VideoSections({
             </Button>
           </>
         )}
+        {/*
+          `DESIGNER-FIX-0905` — the provenance is FACTS, so it is FIELDS, like `duration`
+          above: one labelled row per fact instead of one sentence carrying four. Read-only
+          (decision (e)); the `data-testid` wraps the group so the facts stay assertable.
+        */}
         {provenance !== undefined && (
-          <p className={dds.hint} data-testid="video-provenance">
-            From “{provenance.sourceFilename}” ({String(provenance.sourceWidth)}×
-            {String(provenance.sourceHeight)}
-            {provenance.sourceFps !== provenance.targetFps
-              ? `, conformed ${String(provenance.sourceFps)}→${String(provenance.targetFps)} fps`
-              : ''}
-            {provenance.crop !== undefined
-              ? `, cropped to ${String(provenance.crop.width)}×${String(provenance.crop.height)}`
-              : ''}
-            ).
-          </p>
+          <div data-testid="video-provenance">
+            <div className={fieldCss.row}>
+              <span className={fieldCss.label}>source</span>
+              <span className={fieldCss.readout} title={provenance.sourceFilename}>
+                {provenance.sourceFilename}
+              </span>
+            </div>
+            <div className={fieldCss.row}>
+              <span className={fieldCss.label}>source size</span>
+              <span className={fieldCss.readout}>
+                {String(provenance.sourceWidth)}×{String(provenance.sourceHeight)}
+              </span>
+            </div>
+            {provenance.sourceFps !== provenance.targetFps && (
+              <div className={fieldCss.row}>
+                <span className={fieldCss.label}>conformed</span>
+                <span className={fieldCss.readout}>
+                  {String(provenance.sourceFps)}→{String(provenance.targetFps)} fps
+                </span>
+              </div>
+            )}
+            {provenance.crop !== undefined && (
+              <div className={fieldCss.row}>
+                <span className={fieldCss.label}>cropped to</span>
+                <span className={fieldCss.readout}>
+                  {String(provenance.crop.width)}×{String(provenance.crop.height)}
+                </span>
+              </div>
+            )}
+          </div>
         )}
       </CollapseSection>
       <FilterSection
@@ -2048,10 +2207,9 @@ function TickerSections({
             designerStore.updateElement(id, { cycleBoundary } as Partial<Element>)
           }
         />
-        <p className={dds.hint}>
-          Time-driven: the crawl runs during playback (its pass length comes from the measured
-          content width ÷ speed) — scrubbing the timeline doesn’t move it.
-        </p>
+        <StateLine tip={<TimeDrivenTip kind="ticker" />}>
+          Time-driven — scrubbing does not move it.
+        </StateLine>
       </CollapseSection>
 
       <CollapseSection title="Items" defaultExpanded>
@@ -2305,10 +2463,9 @@ function ClockSections({
             )}
           </>
         )}
-        <p className={dds.hint}>
-          Time-driven: the clock repaints once per second during playback — scrubbing the timeline
-          doesn’t move it.
-        </p>
+        <StateLine tip={<TimeDrivenTip kind="clock" />}>
+          Time-driven — scrubbing does not move it.
+        </StateLine>
       </CollapseSection>
 
       {/* Style parity with the ticker text section: family/weight/size, colour
@@ -2553,13 +2710,32 @@ function SequenceSections({
             designerStore.updateElement(id, { direction } as Partial<Element>)
           }
         />
-        <p className={dds.hint}>
-          Time-driven: items advance on their dwell / on Next during playback — scrubbing the
-          timeline doesn’t move the sequence.
-        </p>
+        <StateLine tip={<TimeDrivenTip kind="sequence" />}>
+          Time-driven — scrubbing does not move it.
+        </StateLine>
       </CollapseSection>
 
-      <CollapseSection title="Items" defaultExpanded>
+      <CollapseSection
+        title="Items"
+        defaultExpanded
+        trailing={
+          // `DESIGNER-FIX-0905` — the paragraph under the list held one TEACHING sentence (what
+          // a composition item is) and one that DUPLICATED the per-item data-key field's own
+          // placeholder ("data key — bind for operator editing (optional)"). The duplicate is
+          // deleted; the teaching is read once, here.
+          <InfoTip title="Sequence items">
+            <p>
+              A <strong>text</strong> item is one line of the rotation. Give it a data key to make
+              it operator-editable; without one it is static design-time text.
+            </p>
+            <p>
+              A <strong>composition</strong> item rotates a one-element clock or logo, or a composed
+              layout, through the sequence’s transitions; its live content — a clock — keeps ticking
+              while it is shown.
+            </p>
+          </InfoTip>
+        }
+      >
         <ListItemsEditor
           items={element.items}
           label={element.name || 'Sequence'}
@@ -2570,11 +2746,6 @@ function SequenceSections({
           itemDataKey={itemDataKey}
           onItemDataKey={(itemId, key) => designerStore.setSequenceItemDataKey(id, itemId, key)}
         />
-        <p className={dds.hint}>
-          A composition item rotates a one-element clock/logo or a composed layout through the
-          sequence’s transitions; its live content (a clock) keeps ticking. Give a text item a data
-          key to make it operator-editable; without one it’s static design-time text.
-        </p>
       </CollapseSection>
 
       {/* Style parity with the ticker/clock text sections. D-052 — colour /
@@ -2733,21 +2904,37 @@ function RepeaterSections({
             designerStore.updateElement(id, { gap: Math.max(0, gap) } as Partial<Element>)
           }
         />
+        {/* `DESIGNER-FIX-0905` — "0 max items = unlimited" is the FIELD's own state now: the
+            unit slot reads `unlimited` at 0. The stamping mechanism is behind the `i`. */}
         <NumberField
           label="max items"
           value={element.maxItems ?? 0}
           step={1}
           min={0}
+          suffix={element.maxItems === undefined ? 'unlimited' : undefined}
           onCommit={(n) =>
             designerStore.updateElement(id, {
               maxItems: n >= 1 ? Math.round(n) : undefined,
             } as Partial<Element>)
           }
         />
-        <p className={dds.hint}>
-          Rows stamp one “{child?.name ?? element.compositionId}” per item. Values update live on
-          air; the row count is stamped at each play (0 max items = unlimited).
-        </p>
+        <StateLine
+          tip={
+            <InfoTip title="How a repeater stamps rows">
+              <p>
+                A repeater stamps one instance of “{child?.name ?? element.compositionId}” per item
+                in its list, laid out by the direction and gap above.
+              </p>
+              <p>
+                Values inside the rows update live on air. The <em>number</em> of rows is stamped
+                once at each play — adding or removing items takes effect on the next take. A max
+                items of 0 means no limit.
+              </p>
+            </InfoTip>
+          }
+        >
+          One “{child?.name ?? element.compositionId}” per item.
+        </StateLine>
       </CollapseSection>
 
       <CollapseSection title="Rows" defaultExpanded>
