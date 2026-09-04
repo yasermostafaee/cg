@@ -587,12 +587,17 @@ test.describe('Live Source — the frame (§9a.1)', () => {
   const strokeHex = (app: DesignerApp) =>
     app.inspector.getByRole('textbox', { name: 'stroke hex value' });
 
-  /** Set the frame through the Inspector exactly as an author would. */
+  /**
+   * Set the frame through the Inspector exactly as an author would — WIDTH FIRST.
+   * `DESIGNER-FIX-0905`: at width 0 the colour field is WITHHELD (disabled, its colour kept,
+   * "set a width to paint it" as its tooltip), so the hex box only accepts a value once a
+   * width exists. Filling the hex first used to work and now waits on a disabled input.
+   */
   async function setFrame(app: DesignerApp, width: number, hex: string): Promise<void> {
-    await strokeHex(app).fill(hex);
-    await strokeHex(app).press('Enter');
     await strokeWidth(app).fill(String(width));
     await strokeWidth(app).press('Enter');
+    await strokeHex(app).fill(hex);
+    await strokeHex(app).press('Enter');
   }
 
   test('the frame paints around the plate, and the declared rect does not move', async ({

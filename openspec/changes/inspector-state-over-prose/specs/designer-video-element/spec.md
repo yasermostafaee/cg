@@ -5,9 +5,9 @@
 ### Requirement: A follower with no out point is a state with a remedy
 
 The Inspector SHALL show, for a video or Lottie element that follows the composition while the
-composition has no out point, a one-line state — "Following nothing — no out point" — with the
-remedy ("set one in Playout") inline and the mechanism (why there are no anchors to derive from)
-behind an `i`.
+composition has no out point, a one-line state — "Following nothing yet — no out point" — with
+the remedy ("set one in Playout") inline and the mechanism (why there are no anchors to derive
+from) behind an `i`.
 
 #### Scenario: a video following a composition without an out point
 

@@ -1336,7 +1336,8 @@ function FollowNoAnchors(): JSX.Element {
   return (
     <StateLine testId="follow-no-anchors" tone="text" tip={<FollowTip />}>
       <span className={prose.tagCaution}>inert</span>
-      Following nothing — this composition has no out point. Set one in Playout to activate follow.
+      Following nothing yet — this composition has no out point. Set one in Playout to activate
+      follow.
     </StateLine>
   );
 }
