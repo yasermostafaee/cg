@@ -78,6 +78,10 @@
 - [x] 6.1 `B-219` (the orphan), `B-220` (the retired-hole strings, additional to `D-158`),
       `D-159` (state over prose) filed; registry entry; numbers derived from headings and
       cross-checked against the dated pointer — they AGREE this time (`B-219`, `D-159`).
-- [ ] 6.2 Full green gate; one push, verified against the remote.
+- [x] 6.2 Full green gate — `pnpm gate`, `93 successful, 93 total`, `0 cached` (2026-09-05). ⚠ The
+      FIRST run was red on `@cg/single-file-export#typecheck` with an `EPERM: rename` of the
+      generated `cg-runtime-bundles.ts` — `prebuild`, `pretypecheck` and `pretest` each run the
+      same generator and two of them renamed onto one file at once; filed as `P-042`, not fixed
+      here (platform tooling, outside the Designer boundary). The rerun was green.
 - [ ] 6.3 Linux `gate:e2e` — run URL, `E2E (Playwright)` job conclusion and duration, RAN not
       skipped — recorded here beside the tick.

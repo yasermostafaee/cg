@@ -2304,11 +2304,12 @@ as recorded above.
 
 ### 2026-09-05 — `B-219`, `B-220` and `D-159` (`DESIGNER-FIX-0905`: the orphan composition, the retired hole's strings, state over prose)
 
-| kind | id      | one line                                                                                                                                                                  | home                                 | status                                                       |
-| ---- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------ |
-| `B-` | `B-219` | deleting a look left an orphan composition the Looks panel did not mention, and `+ Look` collided on `look-1`; measured as case 1 (a second entry), reuse door added      | [bugs-designer.md](bugs-designer.md) | closed in code                                               |
-| `B-` | `B-220` | eight Designer strings still described the retired mask "hole" — `D-158`'s six (five unreachable) plus five preflight refusals; all rewritten against the reorder         | [bugs-designer.md](bugs-designer.md) | closed in code                                               |
-| `D-` | `D-159` | the Inspector explains in prose what it could express in state — withheld controls, state rows, fields, the `i`, one legible default; 61 reachable blocks swept, 24 moved | [designer.md](designer.md)           | closed in code; Linux `gate:e2e` owed until the run is cited |
+| kind | id      | one line                                                                                                                                                                       | home                                 | status                                                       |
+| ---- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------ | ------------------------------------------------------------ |
+| `B-` | `B-219` | deleting a look left an orphan composition the Looks panel did not mention, and `+ Look` collided on `look-1`; measured as case 1 (a second entry), reuse door added           | [bugs-designer.md](bugs-designer.md) | closed in code                                               |
+| `B-` | `B-220` | eight Designer strings still described the retired mask "hole" — `D-158`'s six (five unreachable) plus five preflight refusals; all rewritten against the reorder              | [bugs-designer.md](bugs-designer.md) | closed in code                                               |
+| `D-` | `D-159` | the Inspector explains in prose what it could express in state — withheld controls, state rows, fields, the `i`, one legible default; 61 reachable blocks swept, 24 moved      | [designer.md](designer.md)           | closed in code; Linux `gate:e2e` owed until the run is cited |
+| `P-` | `P-042` | `@cg/single-file-export`'s three `pre*` hooks race over ONE generated file — an `EPERM: rename` on Windows reddened one gate in two; filed only, outside the Designer boundary | [platform.md](platform.md)           | filed only                                                   |
 
 **Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three
 bug files was **`B-218`** (`git grep -n -E "^## \[.\] B-2[0-9][0-9]"`); `git grep -n "B-219"`
@@ -2323,9 +2324,14 @@ AX and AY), both describing a DOCUMENTED PHANTOM from a widening sweep, never a 
 pointer above reads `D-159` (corrected last session) — headings and pointer **AGREE**. One number
 taken, filed in `designer.md`.
 
+**Derivation for `P-`** (taken later the same session, when the gate went red): highest `P-`
+HEADING was **`P-041`** (`platform.md:2614`); `git grep -n "P-042"` returned only this file's own
+"Next free" pointers, seven of them, every one reading `P-042 (unchanged)` — headings and pointer
+**AGREE**. One number taken, filed in `platform.md` as FILED ONLY.
+
 ⚠ The `B-` duplicate audit was not rerun (numbers derived from headings); `B-056` and `B-080` remain
 as recorded above.
 
 ⇒ **Next free after this session is `B-221`** (`B-001` … `B-220`, no gaps), **`D-160`** (`D-001` …
 `D-159`, no gaps — ⚠ the two handoff mentions of `D-160` are a recorded phantom, not a claim),
-**`C-034`** and **`P-042`** (both unchanged).
+**`C-034`** (unchanged) and **`P-043`** (`P-001` … `P-042`, no gaps).

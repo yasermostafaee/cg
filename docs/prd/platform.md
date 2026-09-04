@@ -2714,3 +2714,47 @@ passed, 0 failed`. ⚠ The owner exemption is inside the RULE, not a base `files
 - **Cross-refs:** [[C-024]] (the same gap one layer down, closed here), [[P-035]] (the net, now
   empty), [[P-039]] (the sibling guard this one is shaped after), [[B-162]] (the flag that
   `templateServeUnreachableWarning` names).
+
+## [ ] P-042 — `@cg/single-file-export`'s three `pre*` hooks race over ONE generated file: an `EPERM: rename` on Windows reddened one gate in two ⟨priority: low — a host flake, but it reads exactly like a product regression and it is not bounded⟩ — FILED ONLY 2026-09-05 (`DESIGNER-FIX-0905`; outside the Designer boundary that prompt authorises)
+
+**What:** `packages/single-file-export/package.json` runs `scripts/bundle-runtime.mjs` from THREE
+hooks — `prebuild`, `pretypecheck`, `pretest`. Under `pnpm gate` turbo runs `typecheck` and `test`
+(neither depends on `build`) concurrently, so two generators run at once. Each writes its own
+pid-named temp file and then renames it onto the SAME `src/generated/cg-runtime-bundles.ts`
+(`bundle-runtime.mjs:136-138` — _"atomic write: temp + rename so a concurrent reader never sees a
+partial file"_). On Windows the second rename lands while the first's target, or a `tsc` /
+`vitest` reading it, still has the file open, and `fs.rename` refuses it with `EPERM`. The hook
+exits 1, the task goes red, and the loser's `.tmp-<pid>` file is left behind (gitignored, so
+`git status` stays clean and nothing announces it).
+
+**Measured:** 2026-09-05, first `pnpm gate` of the session —
+`@cg/single-file-export#typecheck` red with
+`EPERM: operation not permitted, rename '…cg-runtime-bundles.ts.tmp-14568' -> '…cg-runtime-bundles.ts'`
+(`.gate-logs/gate-20260904T204552Z-7908.log`); the rerun was green, `93 successful, 93 total, 0
+cached`. Nothing in the diff touched that package.
+
+**Why it matters:** the red names a real task and a real file, so it reads as a product failure
+and costs a full uncached rerun (~5 min) to disprove; and the "atomic" write is atomic only for
+one writer — the comment promises what three concurrent writers cannot keep. It is the `B-098` /
+`P-034` shape one layer down: a contention red whose victim moves between runs.
+
+**Acceptance:**
+
+- WHEN two of the three hooks run the generator concurrently THEN neither fails — either the
+  generator skips its write when the existing file is byte-identical to what it just built (the
+  common case: all three build the same bytes from the same runtime), or the rename is retried on
+  `EPERM`, or the hooks are collapsed to one turbo task the others depend on
+- WHEN a generator loses such a race THEN it leaves no `.tmp-<pid>` file behind
+- WHEN the gate is red for this reason THEN it says so in one line rather than a Node stack
+
+**Notes:** deliberately NOT fixed by the session that found it — the fix is in build tooling, and
+that prompt authorised Designer UI and copy only. The stray `cg-runtime-bundles.ts.tmp-14568` was
+deleted by hand before the rerun.
+
+- **Prefix class:** `P-`, dev tooling; the package is shared by both apps.
+- **Number:** highest `P-` HEADING was `P-041`; `git grep -n "P-042"` returned only the registry's
+  own "Next free" pointers (seven, all `P-042 (unchanged)`). The dated pointer reads `P-042` —
+  headings and pointer AGREE.
+- **Cross-refs:** [[P-034]] / [[B-098]] (the bounded fan-out — this race is the same class inside
+  one package), [[P-040]] (the persisted gate log that made the diagnosis a read rather than a
+  rerun).
