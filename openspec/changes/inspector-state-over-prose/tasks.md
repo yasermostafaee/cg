@@ -83,5 +83,25 @@
       generated `cg-runtime-bundles.ts` — `prebuild`, `pretypecheck` and `pretest` each run the
       same generator and two of them renamed onto one file at once; filed as `P-042`, not fixed
       here (platform tooling, outside the Designer boundary). The rerun was green.
-- [ ] 6.3 Linux `gate:e2e` — run URL, `E2E (Playwright)` job conclusion and duration, RAN not
-      skipped — recorded here beside the tick.
+- [x] 6.3 Linux `gate:e2e` DISCHARGED for `c305f9ad` (the `dev` tip that carries `cc13abca`,
+      `c0c9eab6`, `158022fd`, `ff66b210` and itself):
+      **https://github.com/yasermostafaee/cg/actions/runs/33921378832** — run conclusion
+      `success`; `E2E (Playwright)` job conclusion `success`, its `E2E` step RAN (`success`, not
+      skipped), 621 s; `Lint • Typecheck • Test • Build` `success`, its `Test` step RAN, 369 s.
+      Recorded 2026-09-05.
+      ⚠ The FIRST run (`ff66b210`, https://github.com/yasermostafaee/cg/actions/runs/33919147452)
+      was RED and discharged nothing: `E2E (Playwright)` ran (883 s) and failed five specs, all
+      this change's own — `duration-guard.spec.ts` asserting `/following nothing yet/i` (the
+      state line had dropped the "yet"; the pre-push sweep was case-SENSITIVE and missed the
+      lowercase regex), and the four Live Source frame specs whose `setFrame` helper filled the
+      hex colour before the width (withheld at 0 now). Fixed in `c305f9ad`. Its `ci` job was
+      red on `@cg/caspar-bridge`'s `owned-slot-occupancy` integration test — a `waitFor`
+      timeout, the B-073 flake family, untouched here. 274 other specs passed on Linux.
+      ⚠ Windows-LOCAL observation, not filed: `live-source.spec.ts` "MULTIPLE independent Live
+      Sources" (and once the `1.5g` frame-overlap spec) lose a `fill` on this host — the typed
+      value never reaches the store when the fill follows a selection or edit closely — 2 of 3
+      runs alone at one worker, NOT reproduced under instrumentation (event log, focus log,
+      added pacing: 4/4 green), unchanged by reverting this change's Transform rendering (3/3
+      red) or the coordinate-bearing refusal (1/3 red), and GREEN on Linux in run 33919147452.
+      Non-authoritative host; recorded so the next local red is read as this and not as a
+      product regression.

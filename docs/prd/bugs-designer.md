@@ -3922,7 +3922,7 @@ reopen.
 - **Number:** taken immediately after `B-217` in the same sweep; `git grep -n "B-218"` returned
   nothing anywhere before this heading was written.
 
-## [~] B-219 — deleting a look leaves an ORPHAN composition the Looks panel does not mention, and the next `+ Look` is named `look-1` again ⟨priority: medium — two panels contradicting each other in one frame⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905` §5; `openspec/changes/inspector-state-over-prose/` 5.1–5.4)
+## [~] B-219 — deleting a look leaves an ORPHAN composition the Looks panel does not mention, and the next `+ Look` is named `look-1` again ⟨priority: medium — two panels contradicting each other in one frame⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905` §5; `openspec/changes/inspector-state-over-prose/` 5.1–5.4); Linux `gate:e2e` DISCHARGED for `c305f9ad` — <https://github.com/yasermostafaee/cg/actions/runs/33921378832> (`E2E (Playwright)` RAN, 621 s, `success`)
 
 **Repro (owner, screenshot):** a multi-frame group with three looks. Remove all three from the Looks
 section.
@@ -3983,7 +3983,7 @@ the author reuse it.**
   returned only the registry's own "Next free" pointer (the documented false positive). The dated
   pointer reads `B-219` — headings and pointer AGREE.
 
-## [~] B-220 — eight Designer strings still describe the retired mask "hole" ⟨priority: low — five of them are in a section the Inspector never mounts⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905` §1; `openspec/changes/inspector-state-over-prose/` 1.1–1.4)
+## [~] B-220 — eight Designer strings still describe the retired mask "hole" ⟨priority: low — five of them are in a section the Inspector never mounts⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905` §1; `openspec/changes/inspector-state-over-prose/` 1.1–1.4); Linux `gate:e2e` DISCHARGED for `c305f9ad` — <https://github.com/yasermostafaee/cg/actions/runs/33921378832> (`E2E (Playwright)` RAN, 621 s, `success`)
 
 `D-158` recorded six Designer strings that still described the hole the page no longer punches
 (`a7976e14`, `single-clock-look-switch`) and left them alone. The owner then photographed two of

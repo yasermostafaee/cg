@@ -5293,7 +5293,7 @@ strings — the preflight refusals — that this table did not list.
   filed and never advanced, so HEADINGS and the pointer DISAGREE by one; the headings win and
   `D-158` is taken here. Recorded in the registry's 2026-09-04 entry.
 
-## [~] D-159 — the Inspector explains in prose what it could express in state ⟨priority: high — the owner's words: "long and small and unreadable"⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905`; `openspec/changes/inspector-state-over-prose/`)
+## [~] D-159 — the Inspector explains in prose what it could express in state ⟨priority: high — the owner's words: "long and small and unreadable"⟩ — FILED AND CLOSED IN CODE 2026-09-05 (`DESIGNER-FIX-0905`; `openspec/changes/inspector-state-over-prose/`); Linux `gate:e2e` DISCHARGED for `c305f9ad` — <https://github.com/yasermostafaee/cg/actions/runs/33921378832> (`E2E (Playwright)` RAN, 621 s, `success`)
 
 **What:** the Inspector's explanatory paragraphs become STATE where they can — a control the mode
 ignores is withheld (present, disabled, its reason as its own tooltip), a degenerate value reads as
