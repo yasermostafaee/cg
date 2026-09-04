@@ -3,7 +3,7 @@ import { PencilLine, Star, Trash2 } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { designerStore, useDesignerSelector } from '../../state/store.js';
-import { activeLookGroup } from '../../state/slices/looks.js';
+import { activeLookGroup, detachedLookCompositions } from '../../state/slices/looks.js';
 import { liveSourceIssues } from '../../state/live-source-preflight.js';
 import { CollapseSection } from './CollapseSection.js';
 import { InfoTip, StateLine } from './InfoTip.js';
@@ -156,6 +156,44 @@ function LooksPart({ scene }: { scene: Scene }): JSX.Element {
           + Look
         </Button>
       </div>
+      <DetachedPart />
+    </>
+  );
+}
+
+/**
+ * ⭐ `DESIGNER-FIX-0905` §5 / `B-219` — **the compositions that can become a look.**
+ *
+ * The owner's screenshot: the Compositions panel listing `comp1`, `look-1`, `look-2`,
+ * `look-3` while this section read "No looks yet" — two panels contradicting each other in
+ * one frame. A removed look's composition is kept ON PURPOSE (recoverable work); what was
+ * missing is this: the panel saying so, and a door back. Derived from the PROJECT scene, like
+ * the sources above, through `detachedLookCompositions` (the same reachability the
+ * Compositions panel's "Add to composition" uses).
+ */
+function DetachedPart(): JSX.Element | null {
+  const projectScene = useDesignerSelector((st) => st.scene);
+  const detached = detachedLookCompositions(projectScene);
+  if (detached.length === 0) return null;
+  return (
+    <>
+      <p className={cls.groupLabel}>Compositions that can become a look</p>
+      {detached.map((c) => (
+        <div key={c.id} className={cls.row} data-testid="detached-look-composition">
+          <div className={cls.rowHead}>
+            <span className={cls.rowName}>{c.name}</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => designerStore.addLookFromComposition(c.id)}
+              title="Instance this composition full-frame and register it as a look — its plates and decor come back as authored"
+              aria-label={`Make ${c.name} a look`}
+            >
+              Make it a look
+            </Button>
+          </div>
+        </div>
+      ))}
     </>
   );
 }
