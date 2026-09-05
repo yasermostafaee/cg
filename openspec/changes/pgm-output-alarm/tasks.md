@@ -140,8 +140,13 @@ Time: 3m11.472s`, openspec `72 passed, 0 failed` (`.gate-logs/gate-20260904T0017
       old line).
 - [x] 7.5 `tests/e2e/pgm-output-missing.spec.ts`: the first scenario asserts the one-line banner
       and reads the detail from the dialog's Outputs region; a new scenario stops the screen
-      consumer and asserts no alert plus the preview row. ⚠ Linux `gate:e2e` OWED for the commit
-      carrying this — discharge by run URL here.
+      consumer and asserts no alert plus the preview row. Linux `gate:e2e` **DISCHARGED** for
+      `3b431f67` (the docs commit on top of the code commit `dfe3adf1`):
+      <https://github.com/yasermostafaee/cg/actions/runs/33969010294> — run `conclusion: success`;
+      job `E2E (Playwright)` **RAN** (621 s, not skipped), `success`
+      (<https://github.com/yasermostafaee/cg/actions/runs/33969010294/job/101314110461>); the
+      `Lint • Typecheck • Test • Build` job also ran, 422 s, `success`. Read 2026-09-05 by
+      `LAYERS-HEADER-COUNT-01`'s CI follow-up.
 - [x] 7.6 Spec, proposal §"Correction 2026-09-05", design §6, this section; operator guide
       "Program output" rewritten for the two surfaces; `C-029` heading addendum; `B-223` filed in
       `bugs-runtime.md`; the registry entry.

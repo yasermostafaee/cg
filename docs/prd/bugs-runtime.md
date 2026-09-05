@@ -10359,7 +10359,7 @@ re-run against any stored template.
   `B-222`"_ — headings and pointer AGREE. Two numbers taken this session: `B-222` (this) and
   `B-223` (below).
 
-## [~] B-223 — the program-output alarm shouted at the operator over a stopped SCREEN consumer: five lines about persistent IDs, slot indexes, drivers and the server log, full-width, over a preview window that has nothing to do with air ⟨priority: high — an alarm spent on a non-event is an alarm nobody reads when it is real⟩ — FILED AND CLOSED IN CODE 2026-09-05 by `TICKER-JUDDER-01` §B; the Linux `gate:e2e` for the commit is OWED
+## [~] B-223 — the program-output alarm shouted at the operator over a stopped SCREEN consumer: five lines about persistent IDs, slot indexes, drivers and the server log, full-width, over a preview window that has nothing to do with air ⟨priority: high — an alarm spent on a non-event is an alarm nobody reads when it is real⟩ — FILED AND CLOSED IN CODE 2026-09-05 by `TICKER-JUDDER-01` §B; Linux `gate:e2e` DISCHARGED for `3b431f67` (carries `dfe3adf1`) — <https://github.com/yasermostafaee/cg/actions/runs/33969010294> (`E2E (Playwright)` RAN 621 s, `success`; `Lint • Typecheck • Test • Build` RAN 422 s, `success`; read 2026-09-05)
 
 **What:** `C-029`'s banner compared what `casparcg.config` declares against what runs and alarmed
 on ANY difference, softening only its tone for a monitor. With the plant's screen consumer stopped
@@ -10495,7 +10495,19 @@ the fix is a ceiling rather than a smaller share, so the width is deterministic.
 
 - **Cross-refs:** [[B-213]] (the derivation this leaves alone), `R-022` (why REHEARSING is not
   counted), `B-081` §4 (the grey), the `layerTable.ts` header (why widths are fixed px).
-- **Owed:** the owner's visual check at the two widths; the Linux `e2e` for the commit.
+- **CI, read 2026-09-05:** run #1263 for `829f5fb7` —
+  <https://github.com/yasermostafaee/cg/actions/runs/33971260484> — **FAILED** in
+  `E2E (Playwright)` on ONE assertion, twice (retry included): `audit-legibility.spec.ts:72`
+  expected `/\(3 on air\)/` and received `"3"` — the old parenthesised wording, pinned by a
+  spec this fix's rule-9 sweep MISSED because the spec spells it as a regex SOURCE string
+  (`on air\\)`, a backslash between the words and the parenthesis), so a sweep for `on air)`
+  matched nothing and read clean. Every other runtime spec passed on Linux, including the new
+  `layers-header-tally.spec.ts` (#36 ✓) and `pgm-output-missing.spec.ts` (#57–59 ✓); the unit
+  gate (`Lint • Typecheck • Test • Build`) was green. The lesson is recorded in memory: sweep the
+  bare words, case-insensitively, then read every assertion hit. Fixed in the follow-up commit
+  (the spec now asserts the number as the visible text, the words in `aria-label` and `title`).
+- **Owed:** the owner's visual check at the two widths; the Linux `e2e` for the FIX commit —
+  discharge by run URL here.
 - **Number:** highest `B-` HEADING across the three bug files was `B-223` (this file);
   `git grep -n "B-224" HEAD` returned only the registry's own "Next free" pointer, `B-225` nothing.
   Cross-checked against the registry's dated pointer — _"Next free after this session is

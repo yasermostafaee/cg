@@ -53,7 +53,7 @@ test('the audit log names the row and the template, shows local time to the seco
   await expect(log).toHaveCount(0);
 });
 
-test('the layer table’s tally says "on air" in words, and only for rows that are', async ({
+test('the layer table’s tally is the number in the air colour, says "on air" in its accessible name, and moves only for rows that are', async ({
   app,
 }) => {
   const layer = await app.importVcg('tally.vcg', await buildValidVcg('tpl-e2e-tally'));
@@ -67,8 +67,11 @@ test('the layer table’s tally says "on air" in words, and only for rows that a
   await expect(app.layers.locator('[data-error-tally]')).toHaveCount(0);
 
   await app.layerRow(layer).getByRole('button', { name: 'PLAY' }).click();
-  // `B-213` — the count says what it counts, in words, and moved by exactly the take.
+  // `B-213` — the count says what it counts and moved by exactly the take. `B-224` took
+  // the words off the VISIBLE head (the number is the whole text, in the air colour, with
+  // the row's own mark beside it); the words live on in the accessible name and the tooltip.
   await expect(tally).toHaveAttribute('data-air-tally', String(before + 1));
-  await expect(tally).toHaveText(new RegExp(`\\(${String(before + 1)} on air\\)`));
+  await expect(tally).toHaveText(String(before + 1));
   await expect(tally).toHaveAttribute('aria-label', `${String(before + 1)} items on air`);
+  await expect(tally).toHaveAttribute('title', new RegExp(`^${String(before + 1)} on air`));
 });
