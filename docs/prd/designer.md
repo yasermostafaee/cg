@@ -5320,24 +5320,25 @@ constraint, or a state and its remedy). Not counted: bare labels ("Which content
 graphic?"), bare empty states with no explanation ("No fields."), pure numeric readouts, modal
 bodies (already reading-size) and tooltips (already on a control).
 
-| where                                         | blocks | of which changed here                                                                       |
-| --------------------------------------------- | -----: | ------------------------------------------------------------------------------------------- |
-| Inspector — Live Source, Frame, Transform     |      2 | 2 (state line + `i`; controls withheld; frame colour withheld at 0)                         |
-| Inspector — Video, Lottie, follow, clamps     |     19 | 4 (provenance → fields; follow state; phase-marks state + `i`; `drives hold` withheld)      |
-| Inspector — Ticker, Clock, Sequence, Repeater |      6 | 5 (three time-driven → state + one `i`; sequence duplicate deleted + `i`; repeater → field) |
-| Inspector — Dynamic / Data, Keyframe          |      6 | 0 (state + remedy, left inline)                                                             |
-| Playout                                       |      7 | 3 (hold loop row + `i`; static caption + `i`; content-start caption shortened)              |
-| Looks                                         |      6 | 5 (summary + two hints → `i`; two empties → one line; refusal block louder)                 |
-| Home cards                                    |      5 | 5 (badge derived from the scene + one line)                                                 |
-| Preview modal / fields panels                 |      5 | 0                                                                                           |
-| Left-rail panels, timeline, landing empties   |      5 | 0                                                                                           |
-| **Reachable total**                           | **61** | **24**                                                                                      |
-| Arrangements section — **never rendered**     |     22 | 5 (the `D-158` strings, §1)                                                                 |
-| **Grand total**                               | **83** |                                                                                             |
+| where                                         | blocks | of which changed here                                                                                                                                                    |
+| --------------------------------------------- | -----: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Inspector — Live Source, Frame, Transform     |      2 | 2 (state line + `i`; controls withheld; frame colour withheld at 0)                                                                                                      |
+| Inspector — Video, Lottie, follow, clamps     |     19 | 4 (provenance → fields; follow state; phase-marks state + `i`; `drives hold` withheld)                                                                                   |
+| Inspector — Ticker, Clock, Sequence, Repeater |      6 | 5 (three time-driven → state + one `i`; sequence duplicate deleted + `i`; repeater → field)                                                                              |
+| Inspector — Dynamic / Data, Keyframe          |      6 | 0 (state + remedy, left inline)                                                                                                                                          |
+| Playout                                       |      7 | 3 (hold loop row + `i`; static caption + `i`; content-start caption shortened)                                                                                           |
+| Looks                                         |      6 | 5 (summary + two hints → `i`; two empties → one line; refusal block louder)                                                                                              |
+| Home cards                                    |      5 | 5 (badge derived from the scene + one line)                                                                                                                              |
+| Preview modal / fields panels                 |      5 | 0                                                                                                                                                                        |
+| Left-rail panels, timeline, landing empties   |      5 | 0                                                                                                                                                                        |
+| **Reachable total**                           | **61** | **24**                                                                                                                                                                   |
+| Arrangements section — **never rendered**     |     22 | 5 (the `D-158` strings, §1) — ⚠ recounted under [[D-160]] (2026-09-05): **20** paragraphs, **18** explaining; of the five, four are blocks and one is a `<select>` label |
+| **Grand total**                               | **83** |                                                                                                                                                                          |
 
 ⚠ The reachable count lands at the prediction's upper edge; what carries the grand total past 60 is
-a section `InspectorPanel` does not mount (22 blocks, including an eight-paragraph "How boxes and
-backgrounds work" collapsed by default). The Video / Lottie count is high because the follow
+a section `InspectorPanel` does not mount (22 blocks — recounted under [[D-160]] as 20 paragraphs,
+18 of them explaining — including an eight-paragraph "How boxes and backgrounds work" collapsed by
+default). The Video / Lottie count is high because the follow
 window's seven clamp warnings are seven separate conditional blocks, each a state and its remedy —
 they stay inline by the rule. Reported as measured, not fitted.
 
@@ -5410,3 +5411,191 @@ reads well in the owner's window is the owner's read.
   own "Next free" pointer; `D-160` appears twice in `docs/handoff/` as a DOCUMENTED PHANTOM (session
   AX's widening sweep), never a heading. The dated pointer reads `D-159` — headings and pointer
   AGREE.
+
+## [ ] D-160 — `ArrangementsSection` is neither dead code nor pending work: it is one line of `P2.DEL`, the owner-gated A′ deletion whose gate the tree now shows as MET — and the owner's 2026-09-05 "no transitions" decision turns that task's two PARKED rows into DELETE rows ⟨priority: medium — nothing an operator can reach is wrong; what is wrong is an open `[ ]` whose scope is stale and whose gate nobody has read against the plant record⟩ — FILED 2026-09-05 (`ARRANGEMENT-DEADWOOD-01`); nothing deleted in this session, by the brief's own gate
+
+**What:** execute `openspec/changes/multibox-layout-switch/tasks.md` §1b **P2.DEL** as ONE change —
+the arrangements schema, the `.vcg` carrier, the runtime view, the four disabled Designer
+components (`ArrangementsSection`, `ArrangementElementSection`, `ArrangementPicker`,
+`ArrangementCellOverlay`), the arrangements slice, the skipped `arrangements.spec.ts` and the
+pinned tests, per `design.md` §14.4's DIES table — **with the two PARKED rows of that table
+deleted rather than re-homed**: the `fade` / `move` arms of `ArrangementTransitionSchema`
+(`packages/shared-schema/src/arrangements.ts:69-83`) and `hideDuringTransition`
+(`packages/shared-schema/src/elements.ts:149`). Until that session, `ArrangementsSection.tsx`
+stays byte-for-byte as at `cc13abca`: no partial deletion, no string edits.
+
+**Why:** `ARRANGEMENT-DEADWOOD-01` asked one question — _can `ArrangementsSection` be deleted
+whole, or does something reachable depend on it?_ — and the tree's answer is the third thing:
+nothing reachable depends on it, and it still cannot go alone. It was retired on 2026-08-19 by
+**disabling its entry points** (owner: _"DISABLED, not deleted … so a bug in the new surface cannot
+strand the owner"_, `InspectorPanel.tsx:92-94`) with an explicit `[ ]` deletion task gated on
+_"once the owner has authored a real template on the new path"_ (`tasks.md:178-186`). That gate is
+now met by the plant record: [[B-216]]'s check reads the owner's `3ghab.vcg` on layer 9 with active
+look `look-3` and three plates seated (`bugs-runtime.md:9928`). So `P2.DEL` is **due**, not
+deferred. And the owner decided on 2026-09-05 that _"switching between boxes needs no transition —
+the way it works now is correct and sufficient"_, which retires the "animated phase" the two PARKED
+rows were waiting for. Deleting the section by itself would half-execute `P2.DEL`, leave its
+stylesheet (shared with `ArrangementElementSection.tsx:73`), its store mutators, its schema arms and
+the carrier field (`packages/vcg-format/src/live-sources.ts:140`, `transition: a.transition`) in
+place, and put the checklist one item out of true. The brief's own rule applies: _do not
+half-delete_.
+
+**Acceptance:**
+
+- `P2.DEL` lands as one change and one commit family, ticked in `tasks.md` with its Linux
+  `gate:e2e` run URL; `design.md` §14.4's PARKED rows are struck with a pointer here; Stage G
+  8.2–8.9 are struck as WITHDRAWN (owner decision 1, 2026-09-05), 8.1 and 8.10 untouched.
+- `git grep -n -E "ArrangementTransition|hideDuringTransition|ArrangementView|arrangementViewOf"`
+  returns nothing under `apps/`, `packages/`, `tools/` except archived docs; the `.vcg` manifest
+  no longer carries `transition` (a format change — flag class 1, export path).
+- The session that does it names its hard stops out loud: `packages/template-runtime` (air path),
+  `packages/vcg-format` (export), `packages/shared-ipc` (the bridge contract) — flag classes 1
+  and 3 of `CLAUDE.md`'s commit-and-merge policy — and owes an authoritative Linux `e2e`.
+- Nothing visual changes for the operator: every surface `P2.DEL` deletes is already unmounted.
+
+### §1 — state, established before anything else (anchors)
+
+1. **File / export / imports / the mount proof.** `apps/designer/src/renderer/features/inspector/ArrangementsSection.tsx:48`
+   exports `ArrangementsSection`. A tree-wide `git grep -n "ArrangementsSection"` finds **no import
+   of the export anywhere**; the only import naming the file is
+   `ArrangementElementSection.tsx:6`, which pulls the STYLESHEET (`ArrangementsSection.css.js`) for
+   one class (`cls.hint`, `:73`). `InspectorPanel.tsx` imports `LooksSection`, `PlayoutSection` and
+   the rest (`:1-24`) and never this module; `SceneInspector` renders `<LooksSection>` where the
+   comment at `:92-94` records the disable. A component with zero import edges cannot mount under
+   any condition — there is no lazy import, no string-keyed component map and no route naming it.
+   **The `DESIGNER-FIX-0905` claim is PROVED, not repeated.** The three siblings are in the same
+   state: `ArrangementPicker` (`CanvasArea.tsx:933`, comment only), `ArrangementCellOverlay`
+   (`CanvasOverlay.tsx:783`, comment only), `ArrangementElementSection` (no importer at all).
+2. **The "tombstone" in `arrangement-view.ts`.** `packages/template-runtime/src/arrangement-view.ts:8-18`
+   is a block comment — _"`single-clock-look-switch` — `liveArrangementView` IS GONE, with its one
+   consumer … there is one computation left, on the bridge's side, so the read-back has nothing to
+   reconcile"_ — and `:20-36` is the doc comment of `applyArrangementToNodes`, which still names
+   `sceneMaskHoles`. Both are **comments**: not a type, not a switch arm, not a dead branch, not a
+   persisted field; nothing reads them at runtime. ⚠ **They are epitaphs for the MASK
+   (`a7976e14`), not for a transition** — `D-158` lists this file at `designer.md:5237`
+   (`arrangement-view.ts:27`) among the mask tombstones. What the file holds that RUNS is
+   `applyArrangementToNodes` (`:52`), called from `runtime.ts:480` and driven by the Designer
+   preview (`preview.ts:662`, `:1002`) — an air-path function `P2.DEL` deletes whole. Untouched
+   here on both counts.
+3. **Pending work — cited, not "nothing".** (a) `multibox-layout-switch/tasks.md:178` `- [ ] P2.DEL`,
+   the code deletion of this section and its family. (b) `tasks.md:1433` Stage G — _"the
+   transition modes (§13.5)"_ — `[ ] 8.2` … `[ ] 8.9`: the `linear` contract, the mode set, a
+   mask-luminance fade, a `clip-path` move, the background crossfade. (c) `design.md:2323-2324`,
+   two PARKED rows: the `fade` / `move` arms _"carry to looks unchanged when the animated phase
+   arrives"_; `hideDuringTransition` _"not deleted (the animated phase re-reaches it)"_ — and the
+   schema says the same at `elements.ts:140-148`, _"What un-parks it: an ANIMATED look-switch
+   mode"_. (d) Spec scenarios in the change delta
+   `multibox-layout-switch/specs/designer-multibox-arrangements/spec.md:127`, `:139` — _"entered
+   with a fade"_, _"entered with a move"_. No living spec exists under
+   `openspec/specs/designer-multibox-arrangements/` (`git ls-files openspec/specs` has no
+   `arrang*`). (e) Tests pinning the transition arms: `packages/shared-schema/tests/arrangements.test.ts`,
+   `packages/shared-schema/tests/looks.test.ts`,
+   `packages/vcg-format/tests/live-source-arrangements.test.ts`. (f) `docs/prd/runtime.md:3135` —
+   _"Transition modes: cut in v1, full stop … PARKED for the animated phase"_. (g) Work done ON
+   the unreachable panel after it was unmounted: `4c4880c0` (D-155, 2026-08-25), `645c171a`
+   (B-218, 2026-09-04 — the CELLS keep-aspect toggle, `aspect-lock-live-source/tasks.md:56` `[x]
+4.1`) and `cc13abca` (B-220, 2026-09-05). Last meaningful touch: **2026-09-04**. (h) The E2E
+   `apps/designer/tests/e2e/arrangements.spec.ts:9` skips wholesale, _"deleted with P2.DEL"_.
+4. **The count, measured.** `ArrangementsSection.tsx` at `cc13abca` (HEAD's content, and the
+   commit that made the count) holds **20** `<p>` elements: `empty` 1, `summary` 1, `hint` 4,
+   `calloutHead` 1, `calloutBody` 8, `calloutWarn` 4, the box row 1. Under `D-159`'s own rule
+   (paragraphs that EXPLAIN; bare state lines excluded) **18** count — `:376` _"N cells have no box
+   yet"_ and `:401` _"This arrangement has no boxes to place."_ are state lines. **22 is not
+   reproducible** from the file; `D-159` §3 carried it (`designer.md:5335`, `:5339`) and now points
+   here. Of `D-158`'s five strings, **four** are prose blocks (`:251-253`, `:417-421`, `:459-465`,
+   `:466-472`) and **one is a `<select>` option label** (`:112`) — so "five of the blocks" is four
+   blocks and one label. ⚠ The label no longer reads _"Fade — the mask dissolves"_: [[B-220]]
+   rewrote it to _"Fade — the boxes cross-fade; the pictures cut (cheapest)"_ in `cc13abca`.
+
+### §2 — the verdict, flat
+
+**Neither.** Nothing reachable depends on it, and it is not deletable alone. The compile graph
+makes the first half safe: `InspectorPanel` switched to LOOKS by removing the import, so the module
+has **no in-edges**, and its one out-edge that matters (the stylesheet) lands in a sibling that is
+equally unmounted. The second half is what `P2.DEL` is for: this section is one of **four**
+components retired as a set; it alone calls seven store mutators
+(`apps/designer/src/renderer/state/slices/arrangements.ts` — `addArrangement`, `removeArrangement`,
+`renameArrangement`, `setArrangementDefault`, `setArrangementCell`, `setActiveArrangement`,
+`setArrangementTransition`); it alone WRITES the `fade` / `move` arms, which are pinned by three
+test files and exported into the `.vcg` carrier. Looks deletable, must stay this session: the
+stylesheet (the sibling's `cls.hint`); `arrangements.spec.ts` (skipped, and it also covers the
+picker and the overlay); the slice; `ArrangementTransitionSchema` + `CUT_TRANSITION`;
+`hideDuringTransition` (`resolveVisibility`'s third input, `visibility.ts:76`, reachable); the
+runtime view (`runtime.ts:480` is live); the two comments in `arrangement-view.ts` (air path).
+
+### Two owner decisions, recorded 2026-09-05, and what each reaches
+
+1. **No transitions between boxes** — _"the way it works now is correct and sufficient."_ The
+   "animated phase" is not deferred; it will not be built. What that retires, beyond this section's
+   unreachable mode labels and hints: the PARKED rows above, Stage G 8.2–8.9, the two spec-delta
+   scenarios, the `runtime.md:3135` row, `design.md` §13.4 / §13.5, and the `linear` contract
+   (§12.2). `P2.DEL` is the change that acts on it; a note beside `P2.DEL` and Stage G points here.
+2. **Multi-language is deferred and will cover BOTH apps.** No string was translated, normalised
+   or wrapped in this session; the read-only inventory below is the only localisation work done.
+
+### Read-only string inventory for the deferred multi-language pass (owner decision 2)
+
+Counting rule: a heuristic tally of user-visible string SITES per module — JSX text runs, labelled
+attributes (`title`, `aria-label`, `placeholder`, `label`, `alt`), and sentence-shaped literals
+(three or more words) in `.ts` files, comments stripped, tests and `.css.ts` excluded. Rough by
+design; the KIND column is the finding. Nothing was changed.
+
+| where user-visible strings live                                       | file / module                                                                                                                            | rough count                                        | kind                                                                                                                                                                                                    |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Designer** — Inspector panels (Style, Playout, Looks, Dynamic Data) | `apps/designer/src/renderer/features/inspector/` (33 files; `StyleSection.tsx` ≈ 220 alone)                                              | ≈ 470 reachable + 61 in the unmounted Arrangements | prose blocks · labels · tooltips · badges · the `i` modal bodies                                                                                                                                        |
+| Designer — live-source preflight refusals                             | `apps/designer/src/renderer/state/live-source-preflight.ts`                                                                              | ≈ 34 sentences                                     | refusal / error messages (multi-line template literals with interpolated names)                                                                                                                         |
+| Designer — shell, toolbar, transport, status bar, shortcuts           | `features/shell/`, `features/status/`, `features/tools/`                                                                                 | ≈ 120                                              | labels · tooltips · one prose modal (`ShortcutsModal.tsx`, ≈ 24)                                                                                                                                        |
+| Designer — canvas, overlay, background control                        | `features/canvas/`                                                                                                                       | ≈ 85                                               | tooltips · labels · a few hints                                                                                                                                                                         |
+| Designer — fields, list editor, preview forms                         | `features/fields/`                                                                                                                       | ≈ 97                                               | labels · placeholders · tooltips                                                                                                                                                                        |
+| Designer — assets, video import, shared library                       | `features/assets/`, `features/sharedLibrary/`                                                                                            | ≈ 83                                               | labels · progress and error messages                                                                                                                                                                    |
+| Designer — compositions, timeline, add guard, issues, library         | `features/compositions/`, `features/timeline/`, `features/addGuard/`, `features/issues/`, `features/library/`                            | ≈ 84                                               | labels · tooltips · one dialog of prose                                                                                                                                                                 |
+| Designer — app shell: home cards, window-too-small overlay            | `apps/designer/src/renderer/App.tsx`                                                                                                     | ≈ 17                                               | prose · badges — the overlay (`:521-523`) is the ONLY Persian UI string in either app                                                                                                                   |
+| Designer — element defaults and preset EXAMPLES                       | `state/element-defaults.ts`, `inspector/pattern-presets.ts` (`'۱۴۰۳'`, `'مجری'`), `aspect-presets.ts`, `sequence-presets.ts`             | ≈ 15                                               | 🔴 default CONTENT and examples — data an author edits, not chrome                                                                                                                                      |
+| Designer — preview iframe, exporter                                   | `apps/designer/src/platform/preview.ts`, `Exporter.ts`                                                                                   | ≈ 25 (most literals are CSS / selectors)           | error messages surfaced to the author                                                                                                                                                                   |
+| **Runtime** — layers panel, rows, live plates, audio, look switch     | `apps/runtime/src/renderer/features/layers/` (18 files)                                                                                  | ≈ 240                                              | labels · badges · tooltips · refusal fallbacks (`lookSwitch.ts:27`)                                                                                                                                     |
+| Runtime — inspector (fields, position picker, delimiters, plates)     | `features/inspector/` (20 files)                                                                                                         | ≈ 110                                              | labels · tooltips · placeholders                                                                                                                                                                        |
+| Runtime — status bar, link indicator, banners                         | `features/status/` (8 files)                                                                                                             | ≈ 80                                               | badges · status lines · banners                                                                                                                                                                         |
+| Runtime — fixed layers, connections, sources, monitors, lock          | `features/fixedLayers/`, `features/connections/`, `features/sources/`, `features/monitors/`, `features/lock/`                            | ≈ 180                                              | labels · refusal rules · badges                                                                                                                                                                         |
+| Runtime — audit panel                                                 | `features/audit/`                                                                                                                        | ≈ 16                                               | column labels; DETAIL text is FORMATTED from ids and codes (`auditFormat.ts`), not authored                                                                                                             |
+| Runtime — the code→message seam                                       | `apps/runtime/src/renderer/ui/errorCodeMessage.ts`, `fixedLayersReasonMessage.ts`, `sourcesReasonMessage.ts`, `asyncButtonController.ts` | ≈ 41 sentences over ≈ 40 wire codes                | refusal and error messages — ONE table per code family                                                                                                                                                  |
+| Runtime — other UI primitives                                         | `apps/runtime/src/renderer/ui/` (the other 23 files)                                                                                     | ≈ 20                                               | labels · tooltips                                                                                                                                                                                       |
+| Runtime — mock runtime, seed, delimiters                              | `apps/runtime/src/platform/MockRuntime.ts`, `seed.ts`, `features/inspector/delimiterStore.ts`                                            | ≈ 10 + the delimiter list                          | mock-only refusals; delimiter LABELS (`Persian comma`) are UI, their VALUES (`،`) are data                                                                                                              |
+| **Upstream of the Runtime** — bridge-authored refusal sentences       | `tools/caspar-bridge/src/caspar-runtime.ts` (≈ 10), `delimiter-store.ts` (1)                                                             | ≈ 11 sentences                                     | refusal messages as FREE TEXT on the wire — `message: z.string()` beside `reason: z.enum` — and the Runtime prints `message` FIRST (`applyDraft.ts:165`)                                                |
+| Wire reason codes                                                     | `packages/shared-ipc/src/channels/*.ts`                                                                                                  | ≈ 40 enum codes; ≈ 14 sentences (Zod validation)   | codes, not text; the validation sentences reach nobody in normal use                                                                                                                                    |
+| Schema validation messages                                            | `packages/shared-schema/src/elements.ts` and siblings                                                                                    | ≈ 17                                               | Zod messages; reach an author only through an import / validation failure                                                                                                                               |
+| **Starter templates**                                                 | `packages/starter-templates/src/index.ts`, `irib-news.ts`, `title.ts`, `ticker.ts`, `sequence.ts`, `logo-bug.ts`                         | ≈ 37 sentences, Persian with English gloss         | 🔴 **OPERATOR-AUTHORED CONTENT** (headlines, names, roles, a wordmark) plus starter LABELS that are bilingual by construction (`میان‌برنامهٔ خبر — News Composite`). Translating these is a DATA change |
+| Template runtime                                                      | `packages/template-runtime/src/`                                                                                                         | ≈ 18 literals, ≈ 0 user-facing                     | CSS values and thrown errors — not UI                                                                                                                                                                   |
+
+**Cheap:** every wire refusal already crosses as a CODE and the Runtime owns one table per code
+family, so the operator-facing half of the Runtime's error vocabulary is already keyed and could be
+swapped in one place; the only leak is the ≈ 11 bridge-authored `message` sentences, which win over
+the table whenever present. **Expensive:** the Designer's Inspector alone is close to half of the Designer's
+UI text and about a quarter of both apps' together — inline JSX prose, `title=` tooltips and template literals with interpolated numbers and
+hand-rolled plurals (`${n}-box`, `arrangement${n === 1 ? '' : 's'}`) — and the starter pack mixes
+Persian operator content with English UI glosses inside the same literal, so a pass has to split
+content from chrome before a single key can be assigned.
+
+### §6 — the predictions, as they came out
+
+- **P1 — MISS.** §1.3 found a task, a spec, tests and a decision record. The structural reason:
+  this repo retires by DISABLING with a `[ ]` deletion task and parks what it defers with an
+  explicit un-park condition — it files what it does not build, so "no evidence at all" was never
+  the likely shape of an unmounted section.
+- **P2 — MISS, by the half that matters.** "Can be deleted" is true of the module (no in-edges) and
+  false of the act: the section is one of four in a gated set with shared styles, a shared slice, a
+  shared schema and a shared E2E. What made the compile half safe is that the panel switched to
+  LOOKS by removing the import rather than by a flag — a flag would have left an edge.
+- **P3 — HIT.** Well over a dozen string-bearing directories in each app, past three by a wide
+  margin. Structural reason:
+  strings live beside their components in feature folders; there is no resource file to pull them
+  into, in either app.
+
+- **Cross-refs:** [[B-216]] (the plant record that meets `P2.DEL`'s gate), [[B-220]] (the five
+  strings, rewritten in place), [[D-158]] (the mask tombstones, including `arrangement-view.ts`),
+  [[D-159]] (the count this corrects), `multibox-layout-switch` §1b `P2.DEL`, §14.4 (SURVIVES /
+  DIES / PARKED), Stage G 8.2–8.9, [[B-147]] (the written-but-unreachable class the parked flag
+  was filed against).
+- **Number:** highest `D-` HEADING was `D-159` (`designer.md:5296`); `git grep -n "D-160"` returned
+  the registry's pointer, `D-159`'s own sweep note, and the two `docs/handoff/` mentions already
+  recorded as a DOCUMENTED PHANTOM (session AX) — never a heading. The registry's dated pointer
+  reads `D-160` — headings and pointer AGREE.

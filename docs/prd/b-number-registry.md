@@ -2354,3 +2354,20 @@ as recorded above.
 
 ⇒ **Next free after this session is `B-222`** (`B-001` … `B-221`, no gaps), **`D-160`**, **`C-034`**
 and **`P-043`** (all unchanged).
+
+### 2026-09-05 — `D-160` (`ARRANGEMENT-DEADWOOD-01`: `ArrangementsSection` is one line of `P2.DEL`, and `P2.DEL` is due)
+
+| kind | id      | one line                                                                                                                                                                                                                                                                                                                                     |
+| ---- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `D-` | `D-160` | `ArrangementsSection` is neither dead code nor pending work: nothing reachable depends on it and it still cannot go alone — it is one of four components in `multibox-layout-switch`'s owner-gated `P2.DEL`, whose gate the plant record now meets; the owner's "no transitions" decision turns that task's two PARKED rows into DELETE rows |
+
+**Derivation for `D-`, from headings as the rule requires:** highest `D-` HEADING was **`D-159`**
+(`designer.md:5296`, `git grep -n -E "^## \[.\] D-1[5-9][0-9]"`); `git grep -n "D-160" HEAD`
+returned this file's pointer, `D-159`'s own sweep note and the two `docs/handoff/` mentions already
+recorded above as a DOCUMENTED PHANTOM (session AX) — never a heading — and `git grep -n "D-161"
+HEAD` returned nothing. **Cross-check against the dated pointer:** the entry above reads
+_"**`D-160`**"_ — headings and pointer **AGREE**. One number taken, filed in `designer.md`. No `B-`,
+`C-` or `P-` number was taken; nothing was deleted or translated in that session.
+
+⇒ **Next free after this session is `B-222`**, **`D-161`** (`D-001` … `D-160`, no gaps), **`C-034`**
+and **`P-043`** (unchanged).

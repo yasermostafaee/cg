@@ -9959,7 +9959,7 @@ layers on dead template-server ports: untouched, and this item makes no claim ab
 - **Number:** taken from the headings (highest `B-215`) and cross-checked against the registry's
   dated pointer (_"Next free after this session is `B-216`"_) — they agree; see the registry entry.
 
-## [~] B-221 — a link that dies between a batch's first `DEFER` and its `COMMIT` strands the staged half on the server: the commit is SENT on every exit path and cannot ARRIVE on a dead socket, and nothing on the reconnect path ever committed it ⟨priority: high — the orphan lands with the next `COMMIT` on the channel, ours or anyone's, on layers that action never touched⟩ — FILED AND CLOSED IN CODE 2026-09-05 by `MIXER-DEFER-ABORT-01` for the in-process case; the process-death case is OPEN pending an owner decision (below); the plant run of the reconnect path is OWED
+## [~] B-221 — a link that dies between a batch's first `DEFER` and its `COMMIT` strands the staged half on the server: the commit is SENT on every exit path and cannot ARRIVE on a dead socket, and nothing on the reconnect path ever committed it ⟨priority: high — the orphan lands with the next `COMMIT` on the channel, ours or anyone's, on layers that action never touched⟩ — FILED AND CLOSED IN CODE 2026-09-05 by `MIXER-DEFER-ABORT-01` for the in-process case; the process-death case is OPEN pending an owner decision (below); the plant run of the reconnect path is OWED; CI for `7f85b3bb` COMPLETED GREEN — <https://github.com/yasermostafaee/cg/actions/runs/33936819497> (`Lint • Typecheck • Test • Build` RAN 435 s, `E2E (Playwright)` RAN 578 s, both `success`; read 2026-09-05 by `ARRANGEMENT-DEADWOOD-01`)
 
 **What:** `B-198` stages every `MIXER` line of a seating batch and commits once; `B-199` put that
 commit in a `finally` so a batch that THROWS still commits. This is the abort a `finally` cannot
@@ -10176,6 +10176,15 @@ because both are decisions rather than fixes:
 - **Owed:** the plant run of the reconnect path — no AMCP was sent to `192.168.21.114` this
   session by instruction; the mock models the server's queue from its source, and the source is
   not the plant.
+- **CI (read 2026-09-05 by `ARRANGEMENT-DEADWOOD-01` §5 — the run `MIXER-DEFER-ABORT-01` left
+  unclaimed):** <https://github.com/yasermostafaee/cg/actions/runs/33936819497> for `7f85b3bb`
+  (`dev`, push) — run `status: completed`, `conclusion: success`. Jobs: `Detect changed paths` 9 s
+  · `Docs check` 54 s · `Lint • Typecheck • Test • Build` **435 s, `success`** ·
+  `E2E (Playwright)` **578 s, `success`** · `required` 2 s. Both heavy jobs RAN — non-zero
+  durations, not the path-filtered 0 s that renders green and discharges nothing — so the tree at
+  this commit, `live-look-reconcile.integration.test.ts` and the `INVARIANT (B-221)` included, is
+  verified on Linux. It puts none of this item's claims in doubt. The plant run above stays owed:
+  CI never touches `192.168.21.114`.
 - **Number:** highest `B-` HEADING across every ref was `B-220` (`bugs-designer.md:3986`);
   `git grep -n "B-221" HEAD` returned exactly ONE hit — the registry's own "Next free" pointer —
   and `B-222` returned nothing. Cross-checked against the registry's dated pointer — _"Next free

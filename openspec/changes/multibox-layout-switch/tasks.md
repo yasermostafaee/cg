@@ -184,6 +184,15 @@ the `commitAnimatable` intercept, the `arrangedTransform` read sites, `scene-doc
       the arrangements schema, carrier, runtime view, Designer machinery and tests per §14.4's
       DIES table, plus the disabled-but-present components above and the skipped
       `arrangements.spec.ts`.
+      ⭐ **2026-09-05 (`ARRANGEMENT-DEADWOOD-01`, filed as `D-160`): the gate is MET, and the scope
+      grows by two rows.** `bugs-runtime.md` `B-216` reads the owner's `3ghab.vcg` on air with
+      active look `look-3` and three plates seated — a real template on the new path — so this
+      task is DUE, not deferred. By owner decision (2026-09-05: _"switching between boxes needs no
+      transition — the way it works now is correct and sufficient"_) §14.4's two PARKED rows —
+      the `fade` / `move` arms of `ArrangementTransitionSchema` and `hideDuringTransition` — are
+      DELETED here, not re-homed onto looks; Stage G 8.2–8.9 below are withdrawn with them.
+      Nothing was deleted in that session: `ArrangementsSection` is one of four in this set and
+      goes with the set (the reasoning, the anchors and the hard stops are in `D-160`).
 
 🔴 **The one correction to make out loud:** a reading that puts exclusivity after the reconcile is
 following section numbering, not the design. §12.1 explicitly says the phasing does **not** close
@@ -1431,6 +1440,12 @@ candidate shapes.
       new way to make a hand-typed caption wrong, and nothing yet makes that observable.
 
 ## 7. STAGE F — the CUT ships. STAGE G — the transition modes (§13.5)
+
+⚠ **STAGE G IS WITHDRAWN by owner decision (2026-09-05, recorded in `D-160`):** _"switching between
+boxes needs no transition — the way it works now is correct and sufficient."_ 8.2–8.9 describe work
+that will never be built; they stay listed as the record of what was parked and are struck by
+`P2.DEL` (§1b), which deletes the parked schema arms with them. 8.1 and 8.10 are not transition
+items and are unaffected.
 
 - [ ] 8.1 **KEEP the v1 `live-source-animated` refusal** and pin it with a test that a runtime
       arrangement change does **NOT** trip it while an authored keyframe still does (§2b).
