@@ -2371,3 +2371,21 @@ _"**`D-160`**"_ — headings and pointer **AGREE**. One number taken, filed in `
 
 ⇒ **Next free after this session is `B-222`**, **`D-161`** (`D-001` … `D-160`, no gaps), **`C-034`**
 and **`P-043`** (unchanged).
+
+### 2026-09-05 — `B-222`, `B-223` (`TICKER-JUDDER-01`: why the ticker judders, and who the output alarm shouts at)
+
+| kind | id      | one line                                                                                                                                                                                                                                                                                                               | home                               | status                                                            |
+| ---- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------- |
+| `B-` | `B-222` | the headline crawl breaks up on PGM while the videos stay smooth; measured, the strap is cheap and compositor-driven, and the 1920×1080 × 50 Hz cost is the html producer's own frame path (a full-raster copy per paint on CEF's UI thread, a free-running CEF timer with no genlock); §C knobs reported, not applied | [bugs-runtime.md](bugs-runtime.md) | OPEN — not a template defect; the plant-side trial is the owner's |
+| `B-` | `B-223` | the output alarm shouted at the operator over a stopped screen consumer; severity is now by air-criticality in one predicate, the banner is one line, the engineering detail moved to Server connection ▸ Outputs, the bridge's log line follows                                                                       | [bugs-runtime.md](bugs-runtime.md) | closed in code; the Linux `gate:e2e` for the commit OWED          |
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three
+bug files was **`B-221`** (`bugs-runtime.md:9962`, `git grep -n -E "^## \[.\] B-2[0-9][0-9]"`);
+`git grep -n "B-222" HEAD` returned exactly ONE hit — this file's own "Next free" pointer — and
+`git grep -n "B-223" HEAD` returned nothing. **Cross-check against the dated pointer:** the entry
+above ends _"Next free after this session is `B-222`"_ — headings and pointer **AGREE**. Two numbers
+taken, both filed in `bugs-runtime.md`. No `D-`, `C-` or `P-` number was taken (the §C plant knobs
+are recorded inside `B-222` as an owner action rather than allocated a `C-`).
+
+⇒ **Next free after this session is `B-224`** (`B-001` … `B-223`, no gaps), **`D-161`**, **`C-034`**
+and **`P-043`** (unchanged).

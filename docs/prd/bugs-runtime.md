@@ -10189,3 +10189,231 @@ because both are decisions rather than fixes:
   `git grep -n "B-221" HEAD` returned exactly ONE hit — the registry's own "Next free" pointer —
   and `B-222` returned nothing. Cross-checked against the registry's dated pointer — _"Next free
   after this session is `B-221`"_ — headings and pointer AGREE.
+
+## [ ] B-222 — the headline crawl breaks up on the plant's PGM while three videos on the same channel stay smooth: measured, the strap template is cheap and compositor-driven, and the cost that scales with 1920×1080 at 50 Hz sits in the html producer's own frame path — a full-raster copy per paint on CEF's UI thread, and a free-running CEF timer with no genlock to the channel tick ⟨priority: high — visible on air on every crawl⟩ — FILED 2026-09-05 by `TICKER-JUDDER-01`; NOT a template defect (the §A4 fix was withheld by measurement, not by choice); the plant-side trial is the OWNER's (§C below, report only)
+
+**Observed** by the owner on the real PGM output (not Remote Desktop), plant `192.168.21.114`,
+channel `1080p5000`, 2026-09-05: four rows on air including html layers 97, 98, 99, each created at
+`cw=1920&ch=1080`; three videos in boxes perfectly smooth; **only the ticker stutters**, somewhat
+better with a single box; CasparCG logs not one dropped frame (a `late` grep matched `Latency` in
+`ffmpeg[…] Latency: N` lines — decode latency, not drops); i7-7700K 4C/8T, GeForce GT 730 (2022
+driver), 24 GB; with the screen consumer running CPU 64 %, GPU Copy 73 % / 3D 29 %; with it stopped
+CPU 54–63 %, Copy 55 % / 3D 32 % — **the ticker still stutters**.
+
+### §A1 — the state, with anchors (nothing changed)
+
+Layer 97 is the stored template `9e1115d9…` (`میان‌برنامه (روی آنتن)`, the IRIB-style strap comp
+exported alone: scene 1920×190, 50 fps, `playout.mode: manual`, `lifecycle {outPoint 60,
+contentStart 55}`), the record read from the bridge host's own `~/.cg-runtime/bridge-templates/`.
+
+| what animates                                              | how, and by which property                                                                                                                                                                                                                                                 | anchor                                                 |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `ir-crawl` (ticker, 1560×76, speed 120 px/s, 4 headlines)  | a JS `requestAnimationFrame` loop writes `transform: translateX(d px)` on `.cg-ticker-track` every frame; items are absolutely positioned spans fed 256 px ahead of the entering edge and recycled 64 px past the leaving edge; the track carries `will-change: transform` | `ticker-driver.ts:419-446`, `scene-builder.ts:700-706` |
+| `ir-rotator` (sequence, 360×134, dwell 4000 ms)            | a 400 ms `translate()` + `visibility` on the item node at each advance; during the dwell a rAF loop runs every frame and writes NOTHING (it only compares elapsed time)                                                                                                    | `sequence-driver.ts:530-560`                           |
+| the clock inside `st-tehran` / `st-gmt`                    | a rAF loop every frame; DOM write only when the formatted text changes (`HH:mm`, once a minute) or the colon phase flips (once a second: `opacity` on the colon spans)                                                                                                     | `clock-driver.ts:509-530`, `578-590`                   |
+| the strap's keyframed shapes/text (bar, slab, star, panel) | the `FrameDriver` in `once` mode during the intro 0→60 and the outro only; at the hold it has ENDED — measured: 74 frame-driver ticks per play, none afterwards                                                                                                            | `frame-driver.ts:113-146`                              |
+| layer 98 (`zirnevis-white`, 1920×282)                      | a `<video>` element the size of the strap, base64-inlined and **decoded inside the page** (CEF's software decoder on the plant), plus a second ticker (1710×72, four HARD-CODED items, no field binding)                                                                   | the stored record `16a31af6…`                          |
+| layer 99 (logo bug, 448×144)                               | nothing continuous after the intro: zero paints, zero raster in 6 s                                                                                                                                                                                                        | the stored record `6624cc34…`                          |
+
+**Compositor-only or main-thread?** The track is its own compositor layer (measured: layer id 8,
+3096×76, `drawsContent`); its tiles were rasterised **twice in six seconds** (5 raster tasks, 2
+source frames — when items are fed), never per frame; **Layout ran 9 times in 6 s** (feed-time
+width measurement), never per frame. So the motion is compositor-driven, but each step is
+main-thread-triggered: JS + style recalc + prepaint + commit ≈ 0.7–0.8 ms per frame. **Painted
+surface:** the page is 1920×1080 (`applyOutputPosition` resizes `html`/`body` to the `cw`/`ch`
+raster, `position.ts:238-241`) with the 1920×190 stage translated into it; Blink's per-frame damage
+is the band (1560×76); **but CEF's off-screen path hands CasparCG the whole 1920×1080 BGRA buffer
+on every paint and CasparCG copies all 8,294,400 bytes of it regardless of `dirtyRects`**
+(`html_producer.cpp:326-361`; single-threaded `memcpy` when `enable-gpu` is off, line 356). At the
+CasparCG level the per-frame surface is the whole page. **Expensive-to-paint features:** the crawl's
+`text-shadow` blur 6 (raster once per fed item), `box-shadow` blur 26 on the bar and the panel and
+three linear gradients (static at the hold), the clock's `text-shadow` blur 8 (repainted once a
+second on a 399×183 layer). Nothing is repainted per frame on the CPU rasteriser.
+
+### §A2 — the measurement (before; nothing was changed, so there is no after)
+
+Method: the stored HTML served over local HTTP at `/template/t?cw=1920&ch=1080`, opened in headless
+system Chrome through Playwright at a 1920×1080 viewport with CEF 2.5.0's default switches
+(`--disable-gpu --disable-gpu-compositing --disable-gpu-vsync --enable-begin-frame-scheduling`),
+driven exactly as CasparCG does — `update(<the logged payload>)` then `play()` — and profiled at the
+hold for 6 s: an in-page rAF sampler, a DevTools trace (`devtools.timeline`, `cc`, `viz`), the CDP
+layer tree. 🔴 **Machine: Intel i5-10400 (6C/12T, 2.9–4.3 GHz), Intel UHD 630, 16 GB, Windows 11;
+Chrome's rAF runs at 60 Hz here, not the plant's 50.** The script and traces are in the session's
+scratch record; the numbers:
+
+| layer 97 at the hold, software mode       | value                                                                                                             |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| rAF frames / 6 s                          | 361 → 60.2 fps; gap p50/p90/p99/max = 16.70 / 16.70 / 16.80 / 16.80 ms; **0 long frames > 25 ms**                 |
+| renderer main thread per frame            | `ProxyMain::BeginMainFrame` **0.73–0.84 ms** (JS 0.30, style 0.05, prepaint 0.06, paint-walk 0.17, commit 0.07)   |
+| compositor thread per frame               | ≈ 0.3 ms (`MainFrame.Draw` 0.12 + `ReadyToCommit` 0.10)                                                           |
+| viz software draw per frame               | `Display::DrawAndSwap` **0.37 ms**, ≈ 9 quads                                                                     |
+| raster                                    | 52 tasks in 6 s, 11.3 ms total — track layer 5 tasks / 2 source frames; rotator layer 19 / 19; root 14 / 1        |
+| Layout / Paint events in 6 s              | 9 (1.35 ms) / 750 (60.8 ms — the per-frame paint WALK of the root and the band's cull rect; no raster follows)    |
+| rAF loops alive at the hold               | exactly three of ours: ticker `step`, sequence dwell `step`, clock `paint`                                        |
+| layer 98 (video + ticker)                 | 60.3 fps, 0 long frames; main thread ≈ 1.2 ms/frame; 2 raster tasks (the video is a compositor video layer)       |
+| layer 99 (logo bug)                       | 60.3 fps; 0 Paint, 0 raster; ≈ 0.25 ms/frame of JS+commit                                                         |
+| same, GPU compositing allowed (UHD 630)   | rAF 75 fps (no vsync); `DrawAndSwap` 0.14 ms; +≈ 0.6 ms/frame on the GPU process                                  |
+| CPU contention, 10 spinners on 12 threads | layer 97 **0 long frames**, main thread 0.95 ms/frame; a CSS-animation control and a JS-rAF control page: 0 and 0 |
+| CPU contention, 16 spinners on 12 threads | layer 97 **0 long frames** (1.03 ms/frame); the CSS control 1 draw gap of 26 ms                                   |
+
+**What this proves:** the template's own per-frame work is small (≈ 1.5 ms of CPU across three
+threads at 60 Hz on this box), the moving element is a promoted layer, nothing is re-rasterised or
+re-laid-out per frame, and the page keeps every frame under a CPU load Chromium on Windows can be
+given. **What it cannot prove:** anything about CEF's off-screen path (the per-paint copy, the
+`frames_` queue, the CEF timer against the channel tick), the 7700K sharing four cores with three
+decoders, the GT 730's upload path, or a 50 Hz cadence. Chromium is not CEF and this box is not the
+plant.
+
+### §A3 — the predictions
+
+- **P1 (not on its own layer; wide repaint) — MISS.** The track is composited (`will-change:
+transform`, `scene-builder.ts:706`; layer 8, 3096×76); the region rasterised per frame is zero.
+- **P2 (a rotator animates continuously) — HALF.** The page never reaches an idle frame — three rAF
+  loops stay alive — but the rotator PAINTS only at the colon blink (1/s) and the 400 ms slide every
+  4 s (19 raster tasks in 6 s on its own layer). The continuous painter is the crawl alone.
+- **P3 (no JS writing layout; CSS animation) — MISS in the letter, hit in the substance.** The crawl
+  is JS-driven, not CSS (`ticker-driver.ts:424`), but the property it writes is compositor-only and
+  no layout is written per frame.
+- **The third thing — where the cost that scales with 1920×1080 × 50 Hz actually is:** in the
+  html producer, not in the page. Per paint per html layer, CasparCG copies 8.3 MB on the CEF UI
+  thread that all html producers share (`html_producer.cpp:346-361`) and uploads it to the GPU —
+  two full-HD html layers repainting at 50 Hz are ≈ 0.83 GB/s before a single video, which is
+  what a GT 730's **Copy engine at 73 %** looks like. And frame delivery is a free-running CEF timer
+  (`windowless_frame_rate = ceil(channel fps)`, `html_producer.cpp:583-584`) with **no genlock to
+  the channel tick**: a 4-deep queue (`frames_max_size_ = 4`, line 135) that returns the previous
+  frame as a still whenever it is empty at the tick (`receive` → `try_pop`, lines 196-266, the
+  SILENT `late-frame` tag) and drops the oldest when it overflows (line 372). Two 50 Hz clocks that
+  are not the same clock beat; a late paint under load empties the queue. Either way the channel
+  outputs 50 frames — **repeats without drops, on continuously moving content only, worse with more
+  load** — which is exactly what the owner saw. The videos do not show it because the ffmpeg
+  producer decodes AHEAD into a buffer; the html producer cannot render ahead.
+
+### §A4 — why no template change shipped
+
+Gate 1 (identical render) and gate 3 (no restructure) were never the obstacle; gate 2 was: **there
+is no after-number to beat.** The only change our code could make is to move the crawl off the
+main thread (a Web Animations API `transform` on the track with the feeder reading the animation's
+`currentTime`), which would spare ≈ 0.7 ms of main-thread work per frame and make the motion
+survive a starved renderer main thread — and the contention runs above show the JS-driven page
+keeping every frame under 133 % oversubscription, so the measurement gives that change nothing to
+fix. It is listed here as the one option on our side, NOT shipped: a restructure of `TickerDriver`'s
+pause/resume/`setItems` model, with no evidence it reaches the mechanism above.
+
+**What the owner should look at on PGM to judge this record:** the crawl at a steady point in its
+lap — a repeated frame shows as a momentary hold followed by a double-length step, with the clock's
+colon blink and the panel's slide unaffected. Nothing in the template changed, so there is nothing
+to "see fixed" from §A; the judgement points are for the §C trial.
+
+### §C — the plant-side knobs, from 2.5.0's own source (report only; nothing was sent to the plant)
+
+1. **`<html>` settings** (`src/shell/casparcg.config:55-60`, read in `src/modules/html/html.cpp`):
+   `remote-debugging-port` (0 = off; CEF's DevTools port), `enable-gpu` (**default `false`** — CEF
+   renders and composites in SOFTWARE: `--disable-gpu`, `--disable-gpu-compositing`,
+   `--disable-gpu-vsync=gpu` appended, `html.cpp:200-206`; `true` appends `--enable-webgl` and
+   `--use-angle=<angle-backend>`, lines 170-183), `angle-backend` (`gl` default; `d3d11`/`d3d9`;
+   only read when gpu is on), `cache-path`. Always on regardless: `windowless_rendering_enabled`,
+   `no_sandbox`, `--enable-begin-frame-scheduling`, `--disable-web-security`,
+   `--autoplay-policy=no-user-gesture-required` (lines 193-198, 236-240). Even with `enable-gpu`
+   on, 2.5.0's producer still receives a CPU buffer through `OnPaint` (no `OnAcceleratedPaint`, no
+   shared texture in the file) — the GPU path adds a per-frame GPU→CPU readback per html layer.
+2. **Frame rate:** `browser_settings.windowless_frame_rate = int(ceil(format_desc.fps))`
+   (`html_producer.cpp:583-584`) — the channel's rate, 50 here; a CEF timer, not the channel tick.
+3. **Painted surface size:** the browser is created at `format_desc.square_width × square_height`
+   (`html_producer.cpp:577-578`, `GetViewRect` line 323) — the CHANNEL raster. The ONLY override is
+   in the producer's URL: `width=<n>` / `height=<n>` matched by regex over the whole URL
+   (`html_producer.cpp:677-692`) set that producer's `format_desc` — a smaller page, a smaller
+   buffer, a smaller copy. ⚠ The bridge's `cw=`/`ch=` do NOT match that regex (no `width=` in
+   them), and a smaller frame must be placed with `MIXER FILL`, or the mixer stretches it over the
+   channel — to be verified on the dev host before the plant. Nothing else in the config affects
+   it.
+4. **Recommendation, in order.** ⚠ Owner's call. (a) **First: `<remote-debugging-port>9222`** —
+   zero risk to air; lets the owner record a DevTools Performance trace of the plant's own CEF
+   renderer, which is the one measurement this session could not take and which decides between
+   "the page is late" and "the copy/queue is late". (b) **The lever that changes the arithmetic is
+   fewer full-HD html paints per second:** move layer 98's video out of HTML into a CasparCG media
+   layer (the ffmpeg producer, the same path as the three smooth boxes) and keep only the ticker in
+   HTML; later, a bridge change to size each html producer to its template's footprint
+   (`width=1920&height=190` + `MIXER FILL`) cuts the strap's copy 5.7×. (c) **Do not touch
+   `enable-gpu`** on this card: it moves CEF's raster and composite onto the GT 730 whose Copy
+   engine is already the busiest unit, adds a readback per html frame, and 2.5.0's own producer
+   comments record a stutter class specific to gpu mode (`html_producer.cpp:214-222`).
+   `angle-backend` is moot while gpu is off; `cache-path` is irrelevant. Stopping the screen
+   consumer is load relief (−5 % CPU, −18 % Copy measured by the owner), not the cause.
+
+**Repro:** the plant as observed above; not reproducible on this dev box (no CEF, no 50 Hz OSR path).
+**Expected:** a crawl that advances 2.4 px every 20 ms, every frame.
+**Actual:** repeated frames on the crawl only; the channel reports no drops.
+**Regression test:** none in this repo — the mechanism named is in CasparCG's html producer, not in
+our code path; the measurement harness (serve-and-profile) lives in the session record and can be
+re-run against any stored template.
+
+- **Cross-refs:** [[B-098]] (the other place "a longer rope is not the fix" was learned), `R-030`
+  (the `cw`/`ch` raster the bridge appends, and why it is not CasparCG's `width=`), [[B-223]] (the
+  same session's §B), the `caspar.md` html-producer notes.
+- **Owed:** the plant-side trial and its visual judgement (owner); a DevTools trace of the plant's
+  CEF if `remote-debugging-port` is set; the dev-host verification of `width=`/`height=` +
+  `MIXER FILL` before any bridge change.
+- **Number:** highest `B-` HEADING across the three bug files was `B-221` (this file); `git grep
+-n "B-222" HEAD` returned only the registry's own "Next free" pointer; `B-223` returned nothing.
+  Cross-checked against the registry's dated pointer — _"Next free after this session is
+  `B-222`"_ — headings and pointer AGREE. Two numbers taken this session: `B-222` (this) and
+  `B-223` (below).
+
+## [~] B-223 — the program-output alarm shouted at the operator over a stopped SCREEN consumer: five lines about persistent IDs, slot indexes, drivers and the server log, full-width, over a preview window that has nothing to do with air ⟨priority: high — an alarm spent on a non-event is an alarm nobody reads when it is real⟩ — FILED AND CLOSED IN CODE 2026-09-05 by `TICKER-JUDDER-01` §B; the Linux `gate:e2e` for the commit is OWED
+
+**What:** `C-029`'s banner compared what `casparcg.config` declares against what runs and alarmed
+on ANY difference, softening only its tone for a monitor. With the plant's screen consumer stopped
+by hand (2026-09-05, to measure the ticker) the operator got: _DECLARED OUTPUT NOT RUNNING — CHANNEL
+1 IS MISSING A CONFIGURED CONSUMER … casparcg.config declares screen and CasparCG is not running it.
+Running: decklink, system-audio. Checked 14:08:44 …_ followed by the addressing reading, the rule
+CasparCG reads the number by, the failed-at-start paragraph and the startup-log recipe. **The
+owner: "this should not matter to the operator at all."** He is right: the alarm exists for a dead
+DeckLink — air off — and a preview window on the playout machine is not the operator's business.
+
+**The rule now, in one place (`outputSeverityOf` / `isAirOutputKind` / `checksLosingAir`,
+`@cg/shared-ipc` `outputs.ts`):** severity by air-criticality — _does anything outside the playout
+machine depend on this consumer?_ Over every kind 2.5.0 can declare (`src/shell/casparcg.config`,
+`src/modules/` at `v2.5.0-stable`):
+
+| kind           | severity | why                                                                                    |
+| -------------- | -------- | -------------------------------------------------------------------------------------- |
+| `decklink`     | air      | SDI/HDMI out of the card — this plant's air path; the alarm stays exactly as loud      |
+| `bluefish`     | air      | SDI out of a Bluefish card                                                             |
+| `ndi`          | air      | video over the network to whatever subscribes                                          |
+| `ffmpeg`       | air      | a stream or a recording — the console cannot tell which, and both leave the machine    |
+| `artnet`       | air      | DMX to a lighting rig; nobody declares Art-Net for a preview                           |
+| _unknown_      | air      | only the LOCAL list is enumerated, so a stale list can only make the console louder    |
+| `screen`       | local    | a preview window on the playout machine's own display                                  |
+| `system-audio` | local    | the machine's own sound device — the audio twin of `screen`; air audio is embedded SDI |
+
+**Two surfaces.** The operator's banner renders ONLY for a check losing air, and carries the
+headline plus ONE line per channel (`decklink (device 23487013)`, "CasparCG is not running it",
+"the fix is on the playout machine", "Details: Server connection ▸ Outputs"). The engineering
+detail moved to a read-only `OutputsSection` inside the Server connection dialog: declared / running
+/ checked-at per channel, an AIR row with `C-030`'s words, the restart paragraph and the creation
+outcome, a preview / local-monitor row for a local kind, the kept verdict dated for an unreachable
+server. The bridge's stderr line follows the same rule (🔴 for air, a plain "noted, not alarmed"
+line for local). **Nothing gates on it** (§B.4, by `git grep` over `outputs` / `missing` /
+`outputVerdictOf` / `isAirOutputKind`): the readers are the two surfaces, `health()`, and the
+off-by-default `#createMissingConsumer` — no refusal, no disabled control, no failover.
+
+**Red-first, per severity class, with the sources stashed:** `outputMissingBanner.dom.test.ts` —
+10 of 18 red against the old banner, among them `🔴 a missing screen consumer renders NO banner`
+and `🔴 the banner carries the headline and one line per channel`; `output-addressing.test.ts` —
+2 of 5 red against the old stderr line (`🔴 a channel missing only a screen consumer is a plain
+note`); `outputs.test.ts` — the unknown-kind case cannot pass on the old enumerated air list. Then
+sources restored, `@cg/shared-ipc` rebuilt, all green. `outputMissingBanner.addressing.dom.test.ts`
+was folded into `outputsSection.dom.test.ts` (17 cases) — every `C-030` assertion moved to the
+surface that now carries the words; none was dropped. The E2E gains a scenario that stops the
+screen consumer and asserts no alert plus the preview row.
+
+**Repro:** stop the screen consumer on a plant whose config declares `<screen/>`.
+**Expected:** nothing for the operator; a preview row in Server connection ▸ Outputs.
+**Actual (before):** a full-width amber banner with five lines of engineering instructions.
+**Regression tests:** the three suites above; `pgm-output-missing.spec.ts` (Linux `gate:e2e` OWED).
+
+- **Cross-refs:** `C-029` (the alarm, corrected in place — `openspec/changes/pgm-output-alarm/`
+  proposal §"Correction 2026-09-05", design §6, tasks §7), `C-030` (the addressing words, now on
+  the technical surface), [[B-172]] (why it is a strip), [[B-222]] (the same session's §A).
+- **Number:** derived with `B-222` above — `B-223` returned nothing in `git grep -n "B-223" HEAD`;
+  the registry's pointer agrees.
