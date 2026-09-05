@@ -7,6 +7,7 @@ import {
   type AmcpRequest,
   type HandlerContext,
   type AmcpResponse,
+  type LayerState,
   type MixerRect,
   type ProducerKind,
 } from './types.js';
@@ -60,6 +61,19 @@ export function defaultHandlers(): Map<string, AmcpHandler> {
  * behaviour — mixer state belongs to the channel, not to the producer — and is
  * precisely why both the volume restore and the geometry reset have to be
  * explicit.
+ *
+ * `B-198` / `B-221` — **`DEFER` and `COMMIT` are modelled, and modelled as the real
+ * server keeps them.** A trailing `DEFER` on `VOLUME`/`FILL`/`CLIP` STAGES the change
+ * into the channel's queue (`HandlerContext.stageMixer`) instead of applying it, exactly
+ * as `transforms_applier::apply()` does in 2.5.0's `AMCPCommandsImpl.cpp`; `MIXER <ch>
+ * COMMIT` applies the whole queue in order and empties it. The layer token on a `COMMIT`
+ * is accepted and IGNORED — measured on the plant (`B-198`): `MIXER 1-30 COMMIT` applied
+ * a change staged on 1-31 — and the queue belongs to the server, not to the connection,
+ * so a change staged on one socket is applied by a commit from another (`B-199`).
+ *
+ * Until this the mock applied a deferred line at once and answered `400` to `COMMIT`,
+ * which is the one thing a mock must never do twice over: a bridge that staged a batch
+ * and lost its commit looked, offline, exactly like one that committed it.
  */
 function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   const slot = parseChannelLayer(req.args[0]);
@@ -67,25 +81,39 @@ function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   if (slot.channel > ctx.channelCount) return { kind: 'err', code: 404, verb: 'MIXER' };
   const sub = (req.args[1] ?? '').toUpperCase();
 
+  if (sub === 'COMMIT') {
+    ctx.commitMixer(slot.channel);
+    return { kind: 'ok', code: 202, verb: 'MIXER' };
+  }
+
+  // The real applier pops a trailing `DEFER` before the sub-verb parses its arguments,
+  // so `FILL 0 0 1 1 DEFER` is four numbers plus a flag, not five arguments.
+  const deferred =
+    req.args.length > 2 && (req.args[req.args.length - 1] ?? '').toUpperCase() === 'DEFER';
+  const args = deferred ? req.args.slice(0, -1) : req.args;
+  const apply = (patch: Partial<Omit<LayerState, 'slot'>>): AmcpResponse => {
+    if (deferred) ctx.stageMixer(slot.channel, () => ctx.setLayer(slot, patch));
+    else ctx.setLayer(slot, patch);
+    return { kind: 'ok', code: 202, verb: 'MIXER' };
+  };
+
   if (sub === 'VOLUME') {
-    const raw = req.args[2];
+    const raw = args[2];
     if (raw === undefined) return { kind: 'err', code: 402, verb: 'MIXER' };
     const volume = Number(raw);
     // A non-numeric or negative volume is a REFUSAL, not a clamp: silently
     // coercing it would let a malformed mute read as a successful one.
     if (!Number.isFinite(volume) || volume < 0) return { kind: 'err', code: 401, verb: 'MIXER' };
-    ctx.setLayer(slot, { volume });
-    return { kind: 'ok', code: 202, verb: 'MIXER' };
+    return apply({ volume });
   }
 
   if (sub === 'FILL' || sub === 'CLIP') {
-    const rect = parseMixerRect(req.args.slice(2));
+    const rect = parseMixerRect(args.slice(2));
     // Same doctrine as VOLUME's refusal: four numbers or nothing. A rect with a
     // silently-coerced component is a geometry nobody declared, and half a
     // placement is worse than none — it looks applied.
     if (rect === null) return { kind: 'err', code: 401, verb: 'MIXER' };
-    ctx.setLayer(slot, sub === 'FILL' ? { fill: rect } : { clip: rect });
-    return { kind: 'ok', code: 202, verb: 'MIXER' };
+    return apply(sub === 'FILL' ? { fill: rect } : { clip: rect });
   }
 
   if (sub === 'CLEAR') {

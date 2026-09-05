@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createMock, type MockHandle } from '@cg/amcp-mock';
+import { createMock, defaultHandlers, type MockHandle } from '@cg/amcp-mock';
 import type {
   ConnectionConfig,
   SourceAssignments,
@@ -2707,6 +2707,152 @@ it('🔴 B-199 — a SWITCH that throws mid-stage commits AND puts the ledger ge
   // of its own inside a path that is already unwinding.
   expect(afterCommit.filter((l) => l.endsWith(' DEFER'))).toEqual([]);
 });
+
+/**
+ * 🔴 **`B-221` — A LINK THAT DIES MID-STAGE: THE COMMIT IS SENT, AND CANNOT ARRIVE.**
+ *
+ * `B-199` put the commit in a `finally`, which guarantees it is SENT on every exit path. This
+ * is the path a `finally` cannot close: the socket dies between the first `DEFER` and the
+ * `COMMIT`. Every send after the death fails at once — the batch's own commit, the guard's
+ * commit, the rollback — while the line acked BEFORE it is already in the server's queue,
+ * which belongs to the server and not to the socket (measured, `B-199`: a change staged on a
+ * destroyed socket was applied by a commit from a new one). Nothing on the old reconnect path
+ * committed, so the orphan waited for the next `COMMIT` on the channel — a later take of ANY
+ * row — and landed with it, on layers that action never touched.
+ *
+ * ⭐ **THE INJECTOR IS SERVER-SIDE, so no bridge change can reach it.** The mock's own `MIXER`
+ * handler is wrapped: it stages the first deferred line exactly as the real server would, then
+ * destroys every AMCP socket before the ack is written. From the bridge's side that is a link
+ * that died with a staged line in flight — which is the fault, not a model of it.
+ *
+ * RED before the fix on exactly the two assertions that matter: no `COMMIT` reached the server
+ * after the reconnect, and the mock still held the orphan. The positive control that makes
+ * that red a measurement rather than a silence: the reconnect's own `VERSION` handshake is on
+ * the same trace, so the instrument was live when nothing followed it.
+ */
+it('🔴 B-221 — a link that dies mid-stage strands the staged half; the next healthy link commits it and puts the ledger back', async () => {
+  const r = await boot();
+  await onAir(r);
+  const m = mock;
+  if (m === null) throw new Error('no mock');
+  const ledger = r.liveLayers().get('item-1') ?? [];
+  expect(ledger, 'six seats on the outgoing look').toHaveLength(6);
+  const soloLayer = layerOf(r, 'live-1');
+  const gridCell = { x: 0, y: 0, width: 0.25, height: 0.25 };
+  expect(m.layerState({ channel: 1, layer: soloLayer })?.fill).toEqual(gridCell);
+
+  const honest = defaultHandlers().get('MIXER');
+  if (honest === undefined) throw new Error('the mock has no MIXER handler');
+  let stagedSeen = 0;
+  m.setHandler('MIXER', (req, ctx) => {
+    const response = honest(req, ctx);
+    // The line IS staged — the server got it — and then the link dies under the ack.
+    if (req.raw.endsWith(' DEFER') && ++stagedSeen === 1) m.closeAllAmcpConnections();
+    return response;
+  });
+
+  const before = (await recvLines()).length;
+  const refused = await r.setActiveLook('item-1', 'solo');
+  expect(refused.ok, 'the switch is refused — every send after the death failed').toBe(false);
+  m.setHandler('MIXER', honest);
+
+  /*
+    THE ABANDONMENT, MEASURED. One line reached the server and is staged there; the bridge
+    SENT a commit — the failure path's and the `finally`'s — and neither arrived, because
+    nothing arrives on a dead socket. `stagedMixerCount` is the server's side of the seam,
+    which is the only side that can say so.
+  */
+  const dropped = await since(before);
+  expect(dropped.filter((l) => l.endsWith(' DEFER'))).toEqual([
+    `MIXER 1-${String(soloLayer)} FILL 0 0 1 1 DEFER`,
+  ]);
+  expect(
+    dropped.filter((l) => l === 'MIXER 1 COMMIT'),
+    'no commit could arrive',
+  ).toEqual([]);
+  expect(m.stagedMixerCount(1), 'the staged half outlives the socket').toBe(1);
+  expect(m.layerState({ channel: 1, layer: soloLayer })?.fill, 'staged is not applied').toEqual(
+    gridCell,
+  );
+  // The ledger was put back by `B-166`'s rollback (its lines died too, but the RECORD is
+  // what the repair reads), so it names the outgoing look — the geometry the console shows.
+  expect(recordOf(r, 'live-1')?.fill).toEqual(gridCell);
+
+  /*
+    THE RECONNECT. The session cycles on its own; the new connection's `VERSION` handshake is
+    the positive control that the trace was recording when the old code sent nothing after it.
+  */
+  await waitFor(() => r.health().primary.state !== 'healthy', 4000, 'the drop is observed');
+  await waitFor(() => r.health().primary.state === 'healthy', 10_000, 'the session reconnects');
+  // Bounded, and NOT an assertion: the old code sends nothing here, and the red belongs on
+  // the two named assertions below rather than on a wait that timed out.
+  const lastCell = `MIXER 1-${String(ledger[ledger.length - 1]?.slot.layer ?? -1)} CLIP `;
+  await settleFor(async () => {
+    const post = (await recvLines()).slice(before);
+    const reconnectAt = post.lastIndexOf('VERSION');
+    return reconnectAt >= 0 && post.slice(reconnectAt).some((l) => l.startsWith(lastCell));
+  }, 4000);
+
+  const after = (await recvLines()).slice(before);
+  const reconnectAt = after.lastIndexOf('VERSION');
+  expect(reconnectAt, 'a new connection handshook (the instrument is live)').toBeGreaterThan(0);
+  const post = after.slice(reconnectAt);
+
+  // 🔴 THE FIX, ON THE WIRE: the orphan is committed on the NEXT link, before any other
+  // band-layer traffic, and then every seat the ledger names is put back, un-deferred.
+  expect(
+    post.filter((l) => l === 'MIXER 1 COMMIT'),
+    'the orphan is committed',
+  ).toEqual(['MIXER 1 COMMIT']);
+  const commitAt = post.indexOf('MIXER 1 COMMIT');
+  expect(
+    post.slice(0, commitAt).filter((l) => /^MIXER 1-3\d /.test(l)),
+    'nothing touches the band before the orphan is committed',
+  ).toEqual([]);
+  const repair = post.slice(commitAt + 1);
+  const rect = (n: { x: number; y: number; width: number; height: number }): string =>
+    [n.x, n.y, n.width, n.height].map((v) => String(Number(v.toFixed(6)))).join(' ');
+  for (const record of ledger) {
+    const layer = String(record.slot.layer);
+    expect(repair, `layer ${layer} is put back`).toContain(
+      `MIXER 1-${layer} FILL ${rect(record.fill)}`,
+    );
+    expect(repair, `layer ${layer} is re-masked`).toContain(
+      `MIXER 1-${layer} CLIP ${rect(record.clip)}`,
+    );
+  }
+  expect(
+    repair.filter((l) => l.endsWith(' DEFER')),
+    'the repair is not itself staged',
+  ).toEqual([]);
+
+  // …and the server agrees: nothing is left staged, and the plate the orphan moved to full
+  // frame for one round trip is back on the cell the ledger names.
+  expect(m.stagedMixerCount(1), 'nothing is left staged').toBe(0);
+  expect(m.layerState({ channel: 1, layer: soloLayer })?.fill).toEqual(gridCell);
+}, 30_000);
+
+/** Poll a predicate (sync or async) until it holds, or fail with `what`. */
+async function waitFor(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs: number,
+  what: string,
+): Promise<void> {
+  if (!(await settleFor(predicate, timeoutMs))) throw new Error(`timed out waiting for: ${what}`);
+}
+
+/** Poll a predicate until it holds or the time is up; report which, never throw. */
+async function settleFor(
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (!(await predicate())) {
+    if (Date.now() >= deadline) return false;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  return true;
+}
 
 it('🔴 B-155 §B — a swap arriving MID-SWITCH is serialized after it and resolves the ENTERED look', async () => {
   /*

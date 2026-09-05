@@ -287,6 +287,13 @@ export interface MockHandle {
   traceFlush(): Promise<void>;
   /** B-038/B-041 — the last `CG UPDATE` data payload seen on a slot (see `lastCgAdd`). */
   lastCgUpdate(slot: LayerSlot): CgDataResult | undefined;
+  /**
+   * `B-221` — how many `MIXER … DEFER` changes are staged on the channel and not yet
+   * committed. The observation a bridge test needs and cannot make from the wire: a
+   * `COMMIT` the bridge SENT over a dead socket never arrives, so "nothing is left
+   * staged" has to be read from the server's side of the seam.
+   */
+  stagedMixerCount(channel: number): number;
   /** Number of currently-connected AMCP clients. */
   readonly amcpClientCount: number;
   /** Shut down both servers and resolve when fully closed. */
@@ -327,6 +334,25 @@ export interface HandlerContext {
    * — the queued `play()` never flushed). Anything staler is ignored.
    */
   completeCgAdd(slot: LayerSlot, token: number, resolved: boolean): void;
+  /**
+   * `B-198` / `B-221` — STAGE a mixer change instead of applying it: `MIXER … DEFER`.
+   *
+   * Modelled the way CasparCG 2.5.0 actually keeps it (`AMCPCommandsImpl.cpp`,
+   * `transforms_applier::deferred_transforms_`): ONE queue per CHANNEL, owned by the
+   * server process rather than by the connection that staged into it, appended in
+   * arrival order and applied in that order by a `COMMIT`. The consequences that shape
+   * the bridge's guards fall out of that one structure and are what this hook exists to
+   * make checkable offline: a staged change is invisible to `layerState` until committed,
+   * a commit is channel-wide whatever layer token it names, the queue outlives the socket
+   * that filled it, and nothing but a commit ever empties it.
+   */
+  stageMixer(channel: number, apply: () => void): void;
+  /**
+   * `MIXER <ch> COMMIT` — apply every change staged on the channel, in order, and empty the
+   * queue. Returns how many changes were applied (0 for a commit over an empty queue, which
+   * the real server also answers `202`).
+   */
+  commitMixer(channel: number): number;
   /** Channel count the mock was started with. */
   readonly channelCount: number;
 }

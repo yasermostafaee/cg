@@ -192,3 +192,50 @@ cited by run URL. It never got one, and nothing here recorded that it was outsta
       (**10m26s**) — alongside a green `Lint • Typecheck • Test • Build` (9m11s). The
       pre-push gate for the same push ran `93 successful, 93 total`, `0 cached`, exit 0 in
       214.7 s, and its full output is the first `.gate-logs/gate-*.log` written by P-040.
+
+## 8. `B-221` — the abort the `DEFER` batch had left open (2026-09-05, `MIXER-DEFER-ABORT-01`)
+
+`B-198` staged the batch; `B-199` put its commit in a `finally`. This section is the path a
+`finally` cannot close — a link that dies between the first `DEFER` and the `COMMIT` — and the record
+of what was established before it was touched. The full account is `B-221` in `docs/prd/bugs-runtime.md`.
+
+- [x] 8.1 **State first, nothing fixed.** `B-198` closed AND verified (`eb228a64`; 4.3 above);
+      `B-199` closed in code with two red-first tests (`68da3bfe`); `B-200` filed only, un-deferred
+      by decision and untouched; `command-builder.ts` carries no ban text; `CommandQueue`
+      `pipelineDepth: 4` at `command-queue.ts:109` with the awaited send inside `#send` — ⚠ the
+      remembered anchor `caspar-runtime.ts:6022` was the `B-199` guard's doc comment, not the seam.
+      The staging map has ELEVEN emitters, not eight: the remembered eight plus
+      `#applyLivePlatesUnguarded` (all three `DEFER` sites, both in-line commits),
+      `#commitStagedMixer` (the one sender) and `#reassertLedgerGeometry` (the repair).
+- [x] 8.2 **The one question, answered flatly: YES.** One reachable class — the socket dying
+      mid-batch (and its sub-case, a commit that times out against a hung server) — where the
+      commit is SENT twice (the failure path, the `finally`) and cannot ARRIVE, the lines acked before
+      the death are staged-and-abandoned, and `#commitStagedMixer` had drained its field before
+      sending so nothing remembered them. Every other candidate is NOT reached, each cited in the
+      item. Plus process death, which no in-process guard can see.
+- [x] 8.3 **From 2.5.0's source** (`v2.5.0-stable`, `AMCPCommandsImpl.cpp`, `transforms_applier`):
+      the staging area is a process-wide `static` vector per channel index, appended by `DEFER`,
+      applied-then-cleared only by `COMMIT`; `mixer_clear_command` and `clear_command` never touch
+      it; there is NO discard verb. "Persists indefinitely" is correct, and structural.
+- [x] 8.4 **The fix, red-first with a SERVER-SIDE injector** (the mock's `MIXER` handler stages the
+      first deferred line, then destroys the socket before the ack): `#sendMixerCommit` judges a
+      commit's landing by `ok && onPrimary` and records `#orphanedMixerChannel` otherwise;
+      `#flushOrphanedStaging` commits the orphan on the primary's next `healthy` and re-asserts the
+      ledger's geometry through `#reassertLedgerGeometry`. RED: `the orphan is committed: expected []
+to deeply equal [ 'MIXER 1 COMMIT' ]` after a live reconnect handshake. GREEN with the injector
+      in place; the byte-for-byte golden sequence unchanged; 66 of 66.
+- [x] 8.5 **The mock learned the verb pair** — it had applied `DEFER` lines at once and answered
+      `400` to `COMMIT`. Now one queue per channel, owned by the mock, in-order apply on commit, the
+      commit's layer token ignored, untouched by `CLEAR`/`MIXER CLEAR`/undeferred lines;
+      `stagedMixerCount(channel)`; six tests in `live-producers.test.ts`.
+- [x] 8.6 **The guard at the send seam**, proved by reintroduction: the arm removed from the seating
+      loop's staging site → 62 of 66 red, 186 `INVARIANT (B-221)` hits; restored → 66 green. What it
+      cannot see is enumerated in the item (seven shapes).
+- [x] 8.7 **The dormancy recorded where the mixer path is changed** — `deferMixer`'s doc in
+      `command-builder.ts`: channel-wide + shared (measured), two senders ever on the plant's
+      retained logs as of 2026-09-05 (`192.168.21.93`, `Console`), the enumeration command, and the
+      wake condition (any second client — the owner's playout system first, hence `reservedLayers`).
+- [ ] 8.8 **OWED / OPEN.** The plant run of the reconnect path (no AMCP was sent to
+      `192.168.21.114` this session, by instruction). The owner's decision on the process-death half:
+      an unconditional connect-time `COMMIT` (complete, and the cross-connection exposure itself) or a
+      persisted open-batch flag beside the ledger (bounded to our own work, a hot-path disk write).

@@ -58,6 +58,12 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
   let nextAddToken = 0;
   const addTokens = new Map<string, number>();
   const pageTokens = new Map<string, number>();
+  // `B-198` / `B-221` — the deferred mixer queue, ONE per channel and owned by the mock
+  // (the server), not by a connection: CasparCG's `deferred_transforms_` is a process-wide
+  // static keyed by channel index, so a change staged on one socket is applied by a commit
+  // from any socket and survives the socket that staged it. Per mock instance rather than
+  // per module, so one test's orphan cannot land in the next test's channel.
+  const deferredMixer = new Map<number, (() => void)[]>();
 
   const ctx: HandlerContext = {
     channelCount,
@@ -129,6 +135,20 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
         });
       }
     },
+    stageMixer(channel: number, apply: () => void): void {
+      const queue = deferredMixer.get(channel);
+      if (queue === undefined) deferredMixer.set(channel, [apply]);
+      else queue.push(apply);
+    },
+    commitMixer(channel: number): number {
+      const queue = deferredMixer.get(channel) ?? [];
+      deferredMixer.delete(channel);
+      // In arrival order — the last change staged for a layer is the one that stands,
+      // which is what lets a fresh batch override a stale orphan on the layers it touches
+      // and NOT on the layers it does not.
+      for (const apply of queue) apply();
+      return queue.length;
+    },
   };
 
   const onTrace = traceStream
@@ -166,6 +186,9 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     },
     setLayerVolume(slot: LayerSlot, volume: number): void {
       registry.patch(slot, { volume });
+    },
+    stagedMixerCount(channel: number): number {
+      return deferredMixer.get(channel)?.length ?? 0;
     },
     lastCgAdd(
       slot: LayerSlot,

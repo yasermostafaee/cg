@@ -245,6 +245,94 @@ describe('MIXER FILL and CLIP', () => {
   });
 });
 
+/**
+ * `B-198` / `B-221` — the deferred mixer queue, modelled as CasparCG 2.5.0 keeps it
+ * (`AMCPCommandsImpl.cpp`, `transforms_applier::deferred_transforms_`: one static vector per
+ * channel index, appended by `DEFER`, applied-then-cleared by `COMMIT`, touched by nothing
+ * else). Every property below is one the bridge's abort guards rest on, and every one was
+ * first measured on the plant before it was written here.
+ *
+ * ⚠ `send()` opens a FRESH socket per line, so "stage on one connection, commit on another"
+ * is not a separate test — it is the shape of every test in this block, and it is the
+ * measured `B-199` fact: the queue belongs to the server, not to the socket that filled it.
+ */
+describe('MIXER DEFER and COMMIT — the deferred queue, as 2.5.0 keeps it', () => {
+  it('a deferred FILL is STAGED, not applied — and stays staged until a COMMIT', async () => {
+    const m = await boot();
+    await send(m.amcpPort, 'PLAY 1-50 "route://1-10"');
+    expect(await send(m.amcpPort, 'MIXER 1-50 FILL 0.1 0.2 0.3 0.4 DEFER')).toBe('202 MIXER\r\n');
+    // Acked, and NOT on the layer: the getter still reads the old value (measured `B-198`).
+    expect(m.layerState(L(50))?.fill).toEqual(FULL_FRAME);
+    expect(m.stagedMixerCount(1)).toBe(1);
+    // The commit — from a different socket — is what puts it there.
+    expect(await send(m.amcpPort, 'MIXER 1 COMMIT')).toBe('202 MIXER\r\n');
+    expect(m.layerState(L(50))?.fill).toEqual({ x: 0.1, y: 0.2, width: 0.3, height: 0.4 });
+    expect(m.stagedMixerCount(1)).toBe(0);
+  });
+
+  it('a COMMIT is CHANNEL-WIDE: the layer token is accepted and ignored', async () => {
+    const m = await boot();
+    await send(m.amcpPort, 'MIXER 1-51 FILL 0.5 0.5 0.5 0.5 DEFER');
+    await send(m.amcpPort, 'MIXER 1-52 VOLUME 0 DEFER');
+    expect(m.stagedMixerCount(1)).toBe(2);
+    // `MIXER 1-30 COMMIT` applied a change staged on 1-31 on the plant; same here.
+    expect(await send(m.amcpPort, 'MIXER 1-30 COMMIT')).toBe('202 MIXER\r\n');
+    expect(m.layerState(L(51))?.fill).toEqual({ x: 0.5, y: 0.5, width: 0.5, height: 0.5 });
+    expect(m.layerState(L(52))?.volume).toBe(0);
+    expect(m.stagedMixerCount(1)).toBe(0);
+  });
+
+  it('applies a committed queue IN ORDER — the last change staged for a layer stands', async () => {
+    const m = await boot();
+    await send(m.amcpPort, 'MIXER 1-53 FILL 0 0 1 1 DEFER');
+    await send(m.amcpPort, 'MIXER 1-53 FILL 0.25 0.25 0.5 0.5 DEFER');
+    await send(m.amcpPort, 'MIXER 1 COMMIT');
+    // This is what lets a fresh batch override a stale orphan on the layers it touches —
+    // and what leaves the orphan standing on the layers it does not.
+    expect(m.layerState(L(53))?.fill).toEqual({ x: 0.25, y: 0.25, width: 0.5, height: 0.5 });
+  });
+
+  it('nothing but a COMMIT empties the queue — not MIXER CLEAR, not CLEAR, not an undeferred line', async () => {
+    const m = await boot();
+    await send(m.amcpPort, 'PLAY 1-54 "route://1-10"');
+    await send(m.amcpPort, 'MIXER 1-54 FILL 0.1 0.1 0.2 0.2 DEFER');
+    expect(m.stagedMixerCount(1)).toBe(1);
+    // `mixer_clear_command` → `stage->clear_transforms()`: the APPLIED transforms, never the
+    // deferred vector. `clear_command` → `stage->clear()`: the layers. An undeferred line goes
+    // straight to `apply_transforms` and does not look at the queue. None of the three is a
+    // discard verb, because 2.5.0 has none.
+    expect(await send(m.amcpPort, 'MIXER 1-54 CLEAR')).toBe('202 MIXER\r\n');
+    expect(m.stagedMixerCount(1)).toBe(1);
+    expect(await send(m.amcpPort, 'CLEAR 1-54')).toBe('202 CLEAR\r\n');
+    expect(m.stagedMixerCount(1)).toBe(1);
+    expect(await send(m.amcpPort, 'MIXER 1-54 FILL 0.5 0.5 0.5 0.5')).toBe('202 MIXER\r\n');
+    expect(m.layerState(L(54))?.fill).toEqual({ x: 0.5, y: 0.5, width: 0.5, height: 0.5 });
+    expect(m.stagedMixerCount(1)).toBe(1);
+    // …and the orphan then lands on whatever commits next, over the geometry applied since.
+    await send(m.amcpPort, 'MIXER 1 COMMIT');
+    expect(m.layerState(L(54))?.fill).toEqual({ x: 0.1, y: 0.1, width: 0.2, height: 0.2 });
+    expect(m.stagedMixerCount(1)).toBe(0);
+  });
+
+  it('a REFUSED deferred line stages nothing, and a commit over an empty queue is 202', async () => {
+    const m = await boot();
+    // The applier pops `DEFER` and the sub-verb then fails to parse — nothing reaches the queue.
+    expect(await send(m.amcpPort, 'MIXER 1-55 FILL 0.1 0.2 0.3 DEFER')).toBe('401 ERROR\r\n');
+    expect(m.stagedMixerCount(1)).toBe(0);
+    expect(await send(m.amcpPort, 'MIXER 1 COMMIT')).toBe('202 MIXER\r\n');
+  });
+
+  it('the queue is PER CHANNEL: a commit on channel 2 leaves channel 1 staged', async () => {
+    mock = await createMock({ amcpPort: 0, oscPort: 0, disableOsc: true, channels: 2 });
+    const m = mock;
+    await send(m.amcpPort, 'MIXER 1-56 VOLUME 0 DEFER');
+    await send(m.amcpPort, 'MIXER 2-56 VOLUME 0 DEFER');
+    expect(await send(m.amcpPort, 'MIXER 2 COMMIT')).toBe('202 MIXER\r\n');
+    expect(m.stagedMixerCount(2)).toBe(0);
+    expect(m.stagedMixerCount(1)).toBe(1);
+  });
+});
+
 describe('renderedRect', () => {
   it('is null for edge-touching rects — zero area is nothing rendered', () => {
     expect(

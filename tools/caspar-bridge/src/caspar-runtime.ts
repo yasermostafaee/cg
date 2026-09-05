@@ -1276,6 +1276,21 @@ export class CasparRuntime {
    * can sit OUTSIDE the batch that fills it and still run when that batch throws.
    */
   #stagedMixerChannel: number | null = null;
+  /**
+   * 🔴 `B-221` — **the channel on which this process staged something and then could not
+   * DELIVER the commit**, or `null`.
+   *
+   * `B-199`'s guard puts the commit in a `finally`, which guarantees it is SENT on every
+   * exit path; nothing can guarantee it ARRIVES. A link that dies between the first
+   * `DEFER` and the `COMMIT` — measured on the plant: the staged half survives the socket
+   * that staged it — leaves the server holding a change that the next `COMMIT`, ours or
+   * anyone's, applies at a moment nothing chose. This field is the memory of that: written
+   * by {@link #sendMixerCommit} when a commit does not land on the primary, drained by
+   * {@link #flushOrphanedStaging} on the next healthy connection, which commits the orphan
+   * and puts the ledger's geometry back — the same repair `B-199` makes on the throw path,
+   * moved to the one moment a dead link can be repaired at.
+   */
+  #orphanedMixerChannel: number | null = null;
   readonly #sessionTuning: {
     oscDegradedAfterMs?: number;
     oscDownAfterMs?: number;
@@ -1583,6 +1598,11 @@ export class CasparRuntime {
         if (this.#adapter.currentPrimary !== label) return; // only the primary feeds the reconciler
         if (to === 'healthy') {
           this.#reconciler.setLinkDown(false);
+          // `B-221` — FIRST, before anything else this connection is asked to carry: a batch
+          // whose commit died with the previous link is committed here and the ledger's
+          // geometry put back, so the orphan cannot ride on the next take instead. A no-op
+          // unless a commit is on record as undelivered (`#sendMixerCommit`).
+          void this.#flushOrphanedStaging();
           // R-021 stage 4 — sampled ONCE, with the producer KIND, and the key set
           // derived from it. `reconcileOnReconnect` only asks "occupied?"; the
           // restore decision additionally asks "ours?" on a declared row.
@@ -6013,7 +6033,10 @@ export class CasparRuntime {
    *
    * - **A dropped connection does NOT clear the staging area.** Staged on one socket,
    *   destroyed it, reconnected, and a `COMMIT` from the NEW connection applied the dead
-   *   one's change. A crashed bridge leaves a landmine.
+   *   one's change. A crashed bridge leaves a landmine. ⚠ This wrapper cannot reach that
+   *   case — its commit is SENT on every exit but a dead socket does not carry it — so a
+   *   link that dies mid-batch is `B-221`'s subject: {@link #flushOrphanedStaging} commits
+   *   the orphan on the next healthy connection and makes the same repair as below.
    * - **The hang branch:** on air stays the OUTGOING geometry, indefinitely (5 s measured,
    *   nothing half-applied) — until an unrelated later batch commits and flushes the stale
    *   half WITH it. The wrong geometry then arrives attached to an action that had nothing to
@@ -6065,7 +6088,77 @@ export class CasparRuntime {
     if (this.#stagedMixerChannel === null) return;
     const channel = this.#stagedMixerChannel;
     this.#stagedMixerChannel = null;
-    await this.#send(this.#builder.mixerCommit(channel), this.#nextSeq(), 'urgent');
+    await this.#sendMixerCommit(channel);
+  }
+
+  /**
+   * 🔴 `B-221` — send ONE `MIXER <ch> COMMIT` and remember whether it LANDED.
+   *
+   * The one place the answer to "is the server's staging area clear?" is written. `ok` alone
+   * is not it: in mirror-sync a backup-only success acks `ok` while the primary — the server
+   * whose staging area the batch filled — never saw the commit, which is the same `ok &&
+   * onPrimary` gate the adoption bookkeeping uses for the same reason. Anything short of a
+   * primary ack — a dead socket, a timeout on a hung server, a refusal — leaves the channel
+   * ORPHANED, and {@link #flushOrphanedStaging} finishes the job when a connection exists to
+   * finish it on. Conservative on purpose, like arming the accumulator BEFORE the send: a
+   * commit we cannot prove arrived is a commit we assume did not.
+   */
+  async #sendMixerCommit(channel: number): Promise<boolean> {
+    const sent = await this.#send(this.#builder.mixerCommit(channel), this.#nextSeq(), 'urgent');
+    const landed = sent.ok && sent.onPrimary;
+    if (!landed) this.#orphanedMixerChannel = channel;
+    return landed;
+  }
+
+  /**
+   * 🔴 `B-221` — **a batch whose commit died with the link is committed on the next link,
+   * and the picture put back where the ledger says it is.**
+   *
+   * ── THE PATH `B-199`'S `finally` CANNOT CLOSE ────────────────────────────────
+   *
+   * `B-199` guards the defer→commit window against a THROW: the commit sits in a `finally`
+   * and is sent on every exit path. What a `finally` cannot do is deliver. When the socket
+   * dies between the first `DEFER` and the `COMMIT`, every send after the death fails at
+   * once — the batch's own commit, the guard's commit, the rollback — and the lines that
+   * were acked BEFORE it are already in the server's queue. Measured on the plant (`B-199`):
+   * a change staged on a destroyed socket was applied by a commit from a new one. So the
+   * orphan waits, indefinitely, for the next `COMMIT` on the channel — a later take of ANY
+   * row on it — and lands with that action, on layers that action did not touch.
+   *
+   * ── WHAT THIS DOES, AND WHY THIS ORDER ──────────────────────────────────────
+   *
+   * On the primary's next `healthy`, if a commit is on record as undelivered: commit it —
+   * applying the partial batch, which is `B-199`'s commit-anyway decision for `B-199`'s
+   * reasons (bounded, immediate, attributable, REPAIRABLE) — and then re-assert the ledger's
+   * geometry for every row seated on that channel, un-deferred, so the partial geometry
+   * stands for one round trip rather than until the next unrelated take. The commit comes
+   * first because the repair is un-deferred: sent before the commit it would be applied at
+   * once and then overwritten by the orphan the commit flushes. Nothing here is sent unless
+   * this process staged something and failed to commit it — an empty staging area of ours
+   * is never swept, for the cross-connection reason `#commitStagedMixer` gives.
+   *
+   * A commit that fails AGAIN (the link flapped) re-orphans the channel through the same
+   * helper, so the next `healthy` tries again; the repair is skipped then, because it
+   * would not land either.
+   *
+   * ⚠ **WHAT THIS CANNOT REACH — process death.** The flag lives in this process. A bridge
+   * that is killed mid-batch takes the flag with it, and the next start has no way to know
+   * the server is holding an orphan short of committing unconditionally on connect — which
+   * sweeps whatever any other client has staged, the cross-connection exposure `B-198`
+   * bounded. That is an owner decision and is filed under `B-221`, not made here.
+   */
+  async #flushOrphanedStaging(): Promise<void> {
+    const channel = this.#orphanedMixerChannel;
+    if (channel === null) return;
+    this.#orphanedMixerChannel = null;
+    if (!(await this.#sendMixerCommit(channel))) return;
+    for (const [itemId, records] of this.#liveLayers) {
+      if (!records.some((record) => record.slot.channel === channel)) continue;
+      // Under the row's seat lock so the repair cannot interleave with a switch or swap
+      // that arrived with the link; a take is unlocked by design and re-asserts every seat
+      // it owns anyway.
+      await this.#withLiveSeatLock(itemId, () => this.#reassertLedgerGeometry(itemId));
+    }
   }
 
   /**
@@ -10007,6 +10100,42 @@ export class CasparRuntime {
       The boundary is a CHANGE OF TARGET: `MIXER 1-30 …` followed by `MIXER 1-31 …`. A plate's
       own `FILL`/`CLIP` pair is left alone, because the reported event did not separate those.
     */
+    /*
+      🔴 `B-221` — **THE INVARIANT AT THE SEAM: a staged line cannot leave this process
+      unless the accumulator that will commit it is armed for its channel.**
+
+      Every `MIXER … DEFER` on the wire is a promise that a `MIXER <ch> COMMIT` follows, and
+      the only thing that keeps that promise is `#stagedMixerChannel`: the batch's own
+      commit, the failure-path commit and `B-199`'s `finally` all read it and send nothing
+      when it is `null`. So the one way to write an unbalanced batch is to stage a line
+      without arming it — a new staging site that forgets the assignment, or a hand-built
+      `${line} DEFER` that bypasses `deferMixer` — and that mistake is silent by
+      construction: the server acks the line, the commit is skipped because nothing was
+      recorded, and the change waits in the server for whatever commits next.
+
+      Checked HERE and not in a helper, because a helper can be bypassed and this seam
+      cannot: every AMCP line passes through it (`B-209`'s argument for the same spot).
+      Thrown BEFORE the write, so the unbalanced line never reaches the server; thrown
+      BEFORE `#send`'s `try`, so it escapes loudly instead of becoming `{ ok: false }`;
+      and inside the batch it is `B-199`'s guard that catches it — commits what WAS armed
+      and puts the ledger back — so the failure is refused to the operator rather than
+      landing on air.
+
+      ⚠ Blind by design to a batch that arms correctly on a path with no commit at all, to a
+      commit that is sent but not delivered (that is `#flushOrphanedStaging`'s subject, and
+      a shape, not a delivery, is what a seam can check), and to anything another client
+      stages. Named in `B-221`.
+    */
+    if (line.endsWith(' DEFER')) {
+      const channel = Number(line.split(' ')[1]?.split('-')[0]);
+      if (!Number.isInteger(channel) || this.#stagedMixerChannel !== channel) {
+        throw new Error(
+          `INVARIANT (B-221): a MIXER line was staged with no armed commit for its channel ` +
+            `(armed: ${String(this.#stagedMixerChannel)}) — it would never be committed. ` +
+            `Line: ${summarizeWireLine(line)}`,
+        );
+      }
+    }
     /*
       `B-199` TEST-ONLY — die mid-batch. Thrown BEFORE the write and before `#send`'s own
       `try`, so it escapes the way a real defect would rather than being converted into the

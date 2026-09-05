@@ -8921,6 +8921,15 @@ connected to this server at all.** This is the development machine; `reservedLay
 plant where a separate playout system drives the same CasparCG, and this log is silent about it. The
 question is answered for the box the measurement was taken on and is open for the one that matters.
 
+**2026-09-05 — and now answered for the plant, by the owner's own enumeration** (`MIXER-DEFER-ABORT-01`):
+over every retained CasparCG log on the playout machine (`192.168.21.114`), exactly **two** senders
+have ever issued an AMCP command — `192.168.21.93` (this bridge) and `Console`. No second client has
+ever connected, so no foreign `DEFER` or `COMMIT` has ever existed there: the cross-connection half
+is **dormant — real in design, absent in practice** (retained logs, not the machine's whole history).
+The record, the re-runnable command and the condition that wakes it live where the mixer path is
+changed — `command-builder.ts`, `deferMixer`'s doc — and the half that needs no second client, our
+own commit failing to ARRIVE, is [[B-221]].
+
 **§5 — the pipelining fallback, costed. It is NOT a substitute.**
 
 The root cause is that the bridge awaits each line's ACK while `CommandQueue` is already pipelined at
@@ -9949,3 +9958,225 @@ layers on dead template-server ports: untouched, and this item makes no claim ab
   re-assert the no-persisted-flag reasoning rests on), `CLAUDE.md` golden rule 10.
 - **Number:** taken from the headings (highest `B-215`) and cross-checked against the registry's
   dated pointer (_"Next free after this session is `B-216`"_) — they agree; see the registry entry.
+
+## [~] B-221 — a link that dies between a batch's first `DEFER` and its `COMMIT` strands the staged half on the server: the commit is SENT on every exit path and cannot ARRIVE on a dead socket, and nothing on the reconnect path ever committed it ⟨priority: high — the orphan lands with the next `COMMIT` on the channel, ours or anyone's, on layers that action never touched⟩ — FILED AND CLOSED IN CODE 2026-09-05 by `MIXER-DEFER-ABORT-01` for the in-process case; the process-death case is OPEN pending an owner decision (below); the plant run of the reconnect path is OWED
+
+**What:** `B-198` stages every `MIXER` line of a seating batch and commits once; `B-199` put that
+commit in a `finally` so a batch that THROWS still commits. This is the abort a `finally` cannot
+close. When the socket dies between the first `DEFER` and the `COMMIT`, every send after the death
+fails at once — the batch's own failure-path commit, the guard's `finally` commit, `B-166`'s
+rollback — while the lines acked BEFORE it are already in the server's deferred vector, which
+belongs to the server process and not to the socket ([[B-199]] measured exactly that). And
+`#commitStagedMixer` DRAINED its field before sending, so once the commit failed nothing in the
+process remembered that anything was staged. Reconnect ran `#loaded.clear()`, the pending-restore
+decision and `reconcileOnReconnect` — status work, never a `COMMIT` — so the orphan waited for the
+next commit on the channel: the next take or switch of ANY row on it. Per layer the LAST staged line
+stands, so that batch overrides the orphan on the layers it also stages and applies it unchanged on
+the layers it does not — one row's box jumping to a shape no look authored, attached to another
+row's take, which is `B-199`'s "hang, then an unrelated batch" row and the least diagnosable of its
+three outcomes.
+
+**Measured 2026-09-05 at the mock's AMCP wire, RED on the tree before any fix** —
+`tools/caspar-bridge/tests/live-look-reconcile.integration.test.ts`, `🔴 B-221 — a link that dies
+mid-stage …`. ⭐ **The injector is SERVER-SIDE:** the mock's own `MIXER` handler is wrapped so it
+STAGES the first deferred line exactly as the real server does and then destroys every AMCP socket
+before the ack is written. Nothing in the bridge can reach it, so the same injector that produced
+the red is what proves the fix.
+
+| step                                                             | reading                                                                                                                                                                                    |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| six-box row on air; `setActiveLook('solo')`                      | refused (`ok: false`); exactly ONE line reached the server — `MIXER 1-30 FILL 0 0 1 1 DEFER`                                                                                               |
+| the bridge's commits (the failure path's, then the `finally`'s)  | **neither arrived**: zero `MIXER 1 COMMIT` on the server's trace; the mock reports `stagedMixerCount(1) === 1`; layer 30 still on its grid cell — staged is not applied                    |
+| the session reconnects (`VERSION`/`INFO` handshake on the trace) | **nothing follows the handshake** — `the orphan is committed: expected [] to deeply equal [ 'MIXER 1 COMMIT' ]`. The handshake is the positive control: the instrument was live and silent |
+
+### §1 — the state, established before anything was touched
+
+| item                                                | status                        | anchor                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [[B-198]] — the deferred batch                      | closed **and verified**       | `eb228a64`; the campaign re-run at zero in 100 of 100 and the forced reproduction at 0 % on 10 of 10 (`single-clock-look-switch/tasks.md` 4.3); the byte-for-byte golden sequence pins it                                                                                                                                                        |
+| [[B-200]] — `B-166`'s rollback, un-deferred         | **filed only**                | `bugs-runtime.md` `[ ] B-200`; `#applyLivePlatesUnguarded`'s `moved`/`unmuted` loops send `mixerFit`/`mixerVolume` with no `deferMixer` — by decision, and untouched here                                                                                                                                                                        |
+| `command-builder.ts` ban text                       | **gone**                      | `git grep -i -E "forbid\|banned\|\bban\b\|until it is known\|prohibit" -- tools/caspar-bridge/src/command-builder.ts` → no hits; `deferMixer`'s doc carries the measurements instead                                                                                                                                                             |
+| `CommandQueue` `pipelineDepth: 4`, the awaited send | as remembered, one correction | `packages/caspar-client/src/queue/command-queue.ts:109` (`options.pipelineDepth ?? 4`); the awaited send is `await this.#adapter.send(line, { priority })` inside `#send` — ⚠ the cited `caspar-runtime.ts:6022` was NOT the seam: on `d6a12d58` it sits inside `#applyLivePlates`'s doc comment (the `B-199` guard), ~4 000 lines above `#send` |
+
+**The staging map — eleven emitters, not eight.** The remembered eight are all real, but one of
+them is a wrapper since `B-199` and three helpers do the actual staging, committing and repairing:
+
+| method                             | `DEFER`s                                                              | issues `COMMIT`                                                                                   | `MIXER` outside any batch                                                                                                                                                |
+| ---------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `#takeImpl`                        | —                                                                     | —                                                                                                 | the page layer's un-mute (`INTENDED_VOLUME`, own seq) — sent AFTER `#applyLivePlates` returns                                                                            |
+| `enterRehearse` / `exitRehearse`   | —                                                                     | —                                                                                                 | `VOLUME 0` / `VOLUME INTENDED_VOLUME`, un-deferred                                                                                                                       |
+| `#reassertDeclaredVolumes`         | —                                                                     | —                                                                                                 | one `VOLUME` per bank slot, `normal` lane                                                                                                                                |
+| `#applyLivePlates`                 | —                                                                     | **yes** — the `finally` (`B-199`)                                                                 | via `#reassertLedgerGeometry` on the throw path                                                                                                                          |
+| `#applyLivePlatesUnguarded`        | **yes** — three sites: the seating loop, the departing mute, the park | **yes** — twice: the failure-path commit before the rollback, the good-path commit after the park | `MIXER CLEAR` at four sites (the dropped preset — INSIDE the staged window; the take rollback; the live teardown; the clearing sweep) and `B-200`'s un-deferred rollback |
+| `#commitStagedMixer` (helper)      | —                                                                     | **the one sender**, via `#sendMixerCommit`                                                        | —                                                                                                                                                                        |
+| `#reassertLedgerGeometry` (helper) | —                                                                     | —                                                                                                 | `FILL`/`CLIP` per ledger record, un-deferred, by design                                                                                                                  |
+| `setLivePlateVolume`               | —                                                                     | —                                                                                                 | one `VOLUME`, un-deferred                                                                                                                                                |
+| `teardownLiveLayers`               | —                                                                     | —                                                                                                 | `MIXER CLEAR` per record                                                                                                                                                 |
+| `#sendAdd`                         | —                                                                     | —                                                                                                 | the born-muted `VOLUME 0` after `CG ADD`                                                                                                                                 |
+
+Every `DEFER` in the tree goes through `deferMixer` from inside `#applyLivePlatesUnguarded`; every
+`COMMIT` goes through `#commitStagedMixer`, called from three places (the `finally`, the failure
+path, the good path). One helper sends, three sites call — the prediction "exactly one site issuing
+`COMMIT`" is true of the sender and false of the call sites, and the difference is the whole design:
+the helper is idempotent precisely so three sites can call it.
+
+### §2 — the one question: is there a reachable path that writes `DEFER` and never writes `COMMIT`?
+
+**Yes — one class, plus the one no process can close.** Each candidate, with what decides it:
+
+| candidate                                                        | verdict                              | why                                                                                                                                                                                                                                                                                                                                          |
+| ---------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a throw between the first stage and the commit                   | **not reached**                      | `B-199`'s `finally` in `#applyLivePlates` (`68da3bfe`) commits and repairs; two red-first tests pin it                                                                                                                                                                                                                                       |
+| a rejected send (non-`202`)                                      | **not reached**                      | `#send` never rejects — every wire failure becomes `{ ok: false }` — and the failure branch commits BEFORE `B-166`'s rollback; the server is alive to receive it                                                                                                                                                                             |
+| an early `return`/`continue` inside the staged region            | **not reached**                      | the only `continue` (the dropped preset) stays inside the loop above the commit; the one `return` before any staging is `placements.length === 0 && parked.length === 0 && previous.length === 0`; every other `return` is after the failure-path commit; the `finally` backs all of them                                                    |
+| an exception from seating/geometry code between stage and commit | **not reached**                      | `parkedFit`, `releaseLivePlate`, `mixerFit`, `same()` all sit inside the `try` — that IS `B-199`'s case                                                                                                                                                                                                                                      |
+| an `await` that never settles                                    | **not reached**                      | every `await` in the window is a `#send` → `CommandQueue.enqueue`, which arms a per-entry timer in `pump()` (default 2 000 ms) and rejects every entry on `close`/`dispose` (`failAll`); the hold is `sleepMs`; nothing can hang                                                                                                             |
+| a `CommandQueue` timeout or drain                                | **reached, as a sub-case**           | a line that times out on a LIVE server commits fine (the server is answering); a line that times out on a HUNG server with the socket still open is followed by a `COMMIT` that times out too — the same class as the row below, arriving through `AmcpTimeoutError` instead of `AmcpDisconnectedError`                                      |
+| **socket disconnect / reconnect mid-batch**                      | **REACHED**                          | `CommandQueue.onClose` → `failAll(AmcpDisconnectedError)` → `{ ok: false, 'amcp-send-failed' }` → the failure-path commit and the `finally` commit are both SENT and both fail (`AmcpTransport.send`: `socket not writable`); the lines acked before the death are **staged-and-abandoned** on the server, and the drained field forgot them |
+| process death (SIGKILL, crash) mid-batch                         | **reached, unreachable from inside** | no `finally` runs; the next start has no memory; only a connect-time `COMMIT` covers it — see OPEN below                                                                                                                                                                                                                                     |
+
+⭐ **The third thing:** the commit IS in a `finally` and the `finally` is not enough, because what
+fails on this path is DELIVERY, not control flow. A `finally` guarantees the send; nothing but a live
+socket guarantees the arrival, and by construction this path has none.
+
+### §3 — from CasparCG 2.5.0's source (`v2.5.0-stable`, `src/protocol/amcp/AMCPCommandsImpl.cpp`), not from reasoning
+
+```cpp
+class transforms_applier
+{
+    static tbb::concurrent_unordered_map<int, std::vector<stage::transform_tuple_t>> deferred_transforms_;
+    …
+    std::future<void> commit_deferred()
+    {
+        const int  channel_index = ctx_.channel_index;
+        const auto f = ctx_.channel.stage->apply_transforms(deferred_transforms_[channel_index]).share();
+        return std::async(std::launch::deferred, [=]() { f.get(); deferred_transforms_[channel_index].clear(); });
+    }
+    void apply()
+    {
+        if (defer_) {
+            auto& defer_tranforms = deferred_transforms_[ctx_.channel_index];
+            defer_tranforms.insert(defer_tranforms.end(), transforms_.begin(), transforms_.end());
+        } else
+            ctx_.channel.stage->apply_transforms(transforms_);
+    }
+};
+tbb::concurrent_unordered_map<int, std::vector<stage::transform_tuple_t>> transforms_applier::deferred_transforms_;
+```
+
+1. **Does an uncommitted staged change persist indefinitely? YES — the memory is right, and the
+   reason is structural.** `deferred_transforms_` is a **`static`** member: one map for the whole
+   process, keyed by channel index, not by connection. The only code that empties a channel's
+   vector is `commit_deferred()`, after it has applied it. So a staged change lives until a `COMMIT`
+   names its channel or the server process exits — which is why a dropped connection does not clear
+   it (there is no per-connection state to clear) and why a commit from any socket applies it.
+   `mixer_clear_command` calls `stage->clear_transforms(…)` (the APPLIED transforms) and
+   `clear_command` calls `stage->clear(…)` (the layers); neither touches the vector.
+2. **Is there a verb that DISCARDS a staged batch? NO.** The identifier `deferred_transforms_` is
+   referenced in exactly two places — `apply()` appends, `commit_deferred()` applies-then-clears —
+   and the word `DEFER` in exactly one (the constructor pops it as a flag). `COMMIT` is the only
+   exit from the staged state.
+3. **The least-bad terminal action on an aborted batch: commit the partial, then repair.** Leaving
+   it staged is not "leaving it": with no discard verb, "staged" means "applied later, by the next
+   commit on the channel, whoever sends it, on layers that commit never meant to touch" — a wrong
+   geometry that arrives attached to an unrelated action, which nobody can attribute. Committing it
+   applies a wrong geometry NOW, bounded to the batch's own layers, attached to the action that
+   caused it — and, because the ledger was written from the same failure path, REPAIRABLE by
+   re-asserting what the ledger names. That is `B-199`'s decision for `B-199`'s reasons; this item
+   only moves it to the one moment a dead link can be repaired at.
+
+### The fix — committed on the next link, guarded at the seam (`tools/caspar-bridge/src/caspar-runtime.ts`)
+
+- **`#sendMixerCommit(channel)`** — the ONE place a `COMMIT` is sent and its landing judged:
+  `ok && onPrimary` (the adoption bookkeeping's gate, for the adoption bookkeeping's reason — in
+  mirror-sync a backup-only ack is `ok` while the primary never saw it). Anything short of that
+  writes **`#orphanedMixerChannel`**. `#commitStagedMixer` still drains its field first and sends
+  exactly once, so the normal path is **byte-identical** — the golden sequence test stayed green
+  untouched.
+- **`#flushOrphanedStaging()`** — on the primary's next `healthy` (`#wireAdapter`'s `state-change`
+  handler, FIRST after `setLinkDown(false)`): commit the orphan, and if that lands, re-assert the
+  ledger's geometry for every row seated on that channel through `#reassertLedgerGeometry` under the
+  row's seat lock — `B-199`'s repair, unchanged, reused. A commit that fails again re-orphans through
+  the same helper; the repair is then skipped because it would not land either. Nothing is sent
+  unless this process staged something and failed to commit it.
+- **GREEN with the injector still in place:** after the reconnect handshake the server receives
+  `MIXER 1 COMMIT` before any other band-layer traffic, then all six records' `FILL`/`CLIP`
+  un-deferred; `stagedMixerCount(1) === 0`; layer 30 is back on the grid cell the ledger names.
+  The whole suite: 66 of 66.
+- **The mock had to learn the verb pair first** (`tools/amcp-mock`): it used to APPLY a `DEFER`
+  line at once and answer `400` to `COMMIT`, so a bridge that staged and lost its commit looked,
+  offline, exactly like one that committed. It now models the queue as the source keeps it — one
+  per channel, owned by the mock, appended by `DEFER`, applied-in-order-then-emptied by `COMMIT`,
+  the layer token on a commit ignored, untouched by `CLEAR`/`MIXER CLEAR`/undeferred lines — with
+  `stagedMixerCount(channel)` as the server-side observation and six tests of its own
+  (`live-producers.test.ts`).
+
+### The guard — an invariant at the send seam, and its red-first proof
+
+Chosen over a batch helper and over a lint rule because the seam is the one place a line cannot
+bypass: a helper can be skipped by a hand-built `${line} DEFER`, and a lint rule sees shapes in
+this repo's source, not a string built at runtime. In `#send`, before the write and before its own
+`try`: a line ending in ` DEFER` whose channel is not the armed `#stagedMixerChannel` **throws**
+(`INVARIANT (B-221): a MIXER line was staged with no armed commit for its channel …`). Thrown
+before the write, the unbalanced line never reaches the server; thrown inside a batch, `B-199`'s
+guard commits what WAS armed and repairs, so the mistake is refused to the operator instead of
+landing on air. It cannot fire on any current path — every staging site arms before it sends.
+
+**Reintroduced verbatim, and it fired:** the arm at the seating loop's staging site
+(`if (line.startsWith('MIXER ')) this.#stagedMixerChannel = placement.slot.channel;`) removed →
+`live-look-reconcile.integration.test.ts`: **62 of 66 red, 186 `INVARIANT (B-221)` hits**, the first
+reading `… (armed: null) — it would never be committed. Line: MIXER 1-30 VOLUME 0 DEFER`. Restored →
+**66 of 66 green**. That is how "the guard finds nothing on the current tree" was told apart from a
+failing guard: it found 186 things on a tree with the shape in it and nothing on the tree without.
+
+🔴 **What it cannot see — how a second unbalanced batch would hide from it:**
+
+1. **A batch that arms and stages correctly on a path with no commit at all** — a new `deferMixer`
+   caller outside `#applyLivePlates`'s wrapper (a deferred `setLivePlateVolume`, say): the field is
+   armed, the seam is satisfied, and the line waits for the next unrelated batch's commit. Only a
+   call-site restriction (a lint rule beside `cg/bank-shape`, or `#applyLivePlates` being the sole
+   home) would see that shape; it is not built here.
+2. **A commit that is sent but not delivered** — this item's own subject. A seam checks a SHAPE; it
+   cannot check an arrival. `#flushOrphanedStaging` covers it, not the guard.
+3. **Anything another client stages** — invisible from here by construction (dormant; see
+   [[B-198]]'s 2026-09-05 note).
+4. **A staged line that is later `CLEAR`ed un-deferred inside the same batch.** The dropped-preset
+   path sends `out` + `MIXER CLEAR` while the preset's own earlier lines (`VOLUME 0`, possibly a
+   `FILL`) are still staged, and the batch's commit then re-applies them onto the emptied layer.
+   Benign as measured by reading: a stale fill on an EMPTY band layer that every seat overwrites
+   with its own — but it is a balanced batch to the guard and a wrong order to the server.
+5. **The audio half of the repair.** `#reassertLedgerGeometry` re-asserts geometry only (`B-199`'s
+   decision). A staged `VOLUME` flushed by the orphan commit — a plate coming back from HELD, say —
+   is not re-muted by the repair; the next reconcile is. Pre-existing on the throw path too.
+6. **A take arriving in the same event-loop turn as `healthy`.** The take is unlocked by design; a
+   staged line of its own landing BEFORE the flush's commit would be split by it, once, by one frame
+   — `B-198`'s residual, at reconnect, under a race the seat lock cannot cover.
+7. **Process death** — below.
+
+### OPEN — the process-death half, an owner decision rather than a code change
+
+`#orphanedMixerChannel` lives in the process. A bridge killed mid-batch takes it with it, and the
+next start cannot know the server is holding an orphan. Two ways to close it, neither taken here
+because both are decisions rather than fixes:
+
+- **A `MIXER <ch> COMMIT` on every connect, unconditionally.** Closes it completely and is exactly
+  the cross-connection exposure `B-198` bounded — it sweeps whatever any other client has staged.
+  DORMANT as of 2026-09-05 (two senders, ever), so today it would sweep nothing; the day a second
+  client appears it becomes the harm the ban existed for.
+- **Persist the open-batch flag** beside the ledger (`B-145`'s persistence) — written before the
+  first `DEFER`, cleared at the commit — so the next start commits only when THIS bridge left
+  something staged. Bounded to our own work, at the cost of a disk write on the hot path of every
+  switch.
+
+- **Cross-refs:** [[B-198]] (the staging, and the 2026-09-05 dormancy note), [[B-199]] (the throw
+  guard this extends, and the plant measurements it rests on), [[B-166]] (the rollback that runs
+  on the same failure path), [[B-200]] (the un-deferred rollback, untouched), [[B-145]] (the
+  persistence the OPEN option would ride), [[B-209]] (the seam argument, reused), `CLAUDE.md`
+  golden rule 8 (probe the axis you judge — a `finally` proves the send, not the arrival).
+- **Owed:** the plant run of the reconnect path — no AMCP was sent to `192.168.21.114` this
+  session by instruction; the mock models the server's queue from its source, and the source is
+  not the plant.
+- **Number:** highest `B-` HEADING across every ref was `B-220` (`bugs-designer.md:3986`);
+  `git grep -n "B-221" HEAD` returned exactly ONE hit — the registry's own "Next free" pointer —
+  and `B-222` returned nothing. Cross-checked against the registry's dated pointer — _"Next free
+  after this session is `B-221`"_ — headings and pointer AGREE.

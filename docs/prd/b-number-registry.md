@@ -2335,3 +2335,22 @@ as recorded above.
 ⇒ **Next free after this session is `B-221`** (`B-001` … `B-220`, no gaps), **`D-160`** (`D-001` …
 `D-159`, no gaps — ⚠ the two handoff mentions of `D-160` are a recorded phantom, not a claim),
 **`C-034`** (unchanged) and **`P-043`** (`P-001` … `P-042`, no gaps).
+
+### 2026-09-05 — `B-221` (`MIXER-DEFER-ABORT-01`: the abort a `finally` cannot close)
+
+| kind | id      | one line                                                                                                                                                                                                                                                                                                                                        | home                               | status                                                                                           |
+| ---- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `B-` | `B-221` | a link that dies between a batch's first `DEFER` and its `COMMIT` strands the staged half on the server — the commit is sent on every exit path and cannot arrive, and reconnect never committed it; closed by a reconnect-time flush + `B-199`'s repair, guarded by an invariant at the send seam; the process-death half is an owner decision | [bugs-runtime.md](bugs-runtime.md) | closed in code (in-process case); OPEN (process death); the plant run of the reconnect path OWED |
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three
+bug files was **`B-220`** (`bugs-designer.md:3986`, `git grep -n -E "^## \[.\] B-2[0-9][0-9]"`);
+`git grep -n "B-221" HEAD` returned exactly ONE hit — this file's own "Next free" pointer, the
+documented false positive — and `git grep -n "B-222" HEAD` returned nothing. **Cross-check against
+the dated pointer:** the entry above ends _"Next free after this session is `B-221`"_ — headings and
+pointer **AGREE**. One number taken, filed in `bugs-runtime.md`.
+
+⚠ The `B-` duplicate audit was not rerun (numbers derived from headings); `B-056` and `B-080` remain
+as recorded above.
+
+⇒ **Next free after this session is `B-222`** (`B-001` … `B-221`, no gaps), **`D-160`**, **`C-034`**
+and **`P-043`** (all unchanged).

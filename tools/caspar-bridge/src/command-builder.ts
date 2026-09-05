@@ -414,14 +414,35 @@ export class CommandBuilder {
    * A deferred change nobody commits hangs indefinitely (1500 ms with no commit left it
    * unapplied), and a DROPPED CONNECTION does not clear it either — `B-199` measured a change
    * staged on a destroyed socket being applied by a commit from a new one. That is what
-   * {@link CasparRuntime}'s abort guard exists for.
+   * {@link CasparRuntime}'s abort guard (`B-199`, a throw) and its reconnect flush (`B-221`, a
+   * dead link) exist for. From the server's own source (2.5.0 `AMCPCommandsImpl.cpp`,
+   * `transforms_applier`): the staging area is ONE process-wide `static` vector per channel
+   * index, appended by `DEFER`, applied-then-cleared by `COMMIT`, and touched by nothing else —
+   * no `CLEAR`, no `MIXER CLEAR`, no disconnect, no discard verb of any kind.
    *
-   * ⚠ **THE CROSS-CLIENT HALF CANNOT BE FIXED FROM HERE, so it is an OPERATING CONSTRAINT and
-   * it is written where an installer will meet it** — `docs/operator-guide/README.md`, under
-   * "Air-critical contracts". `B-198` carries the measurements; the log audit behind it found no
-   * other client has ever deferred on channel 1 in this machine's retained window, and that every
-   * peer in 49 436 logged commands was loopback — which answers the question for the development
-   * box and leaves it open for a plant that also runs a playout system.
+   * ── 🔴 THE CROSS-CONNECTION EXPOSURE: REAL IN DESIGN, DORMANT IN PRACTICE ──────────────
+   *
+   * Because that vector is shared by every connection, a `COMMIT` of ours applies whatever
+   * anyone staged and a `COMMIT` of anyone's applies ours — measured, not assumed (`B-198`, on
+   * the plant's 2.5.0). That half cannot be fixed from here; it is an OPERATING CONSTRAINT and
+   * is written where an installer meets it (`docs/operator-guide/README.md`, "Air-critical
+   * contracts").
+   *
+   * **As of 2026-09-05 it is DORMANT.** Over every retained CasparCG log on the playout machine
+   * (`192.168.21.114`), exactly TWO senders have ever issued an AMCP command: this bridge at
+   * `192.168.21.93`, and the server's own `Console`. No second client has ever connected, so no
+   * foreign `DEFER` or `COMMIT` has ever existed on that server. ⚠ Retained logs, not the
+   * machine's whole history — strong evidence of current practice, not proof about the past.
+   * The enumeration, run by the owner and to be re-run in a PowerShell window ON the playout
+   * machine (one line):
+   *
+   *   Select-String -Path 'D:\casparcg-server-v2.5.0-stable-windows\log\caspar_*.log' -Pattern 'Received message from ([^:]+):' | ForEach-Object { $_.Matches[0].Groups[1].Value } | Sort-Object -Unique
+   *
+   * **What wakes it:** ANY second AMCP client on that CasparCG — first among them the owner's
+   * playout system, which is why `reservedLayers` exists. A third line in that output is the
+   * signal; when it appears, the question becomes whether that client uses `DEFER`, and if it
+   * does this pair needs a different answer (`B-198` records the pipelining fallback, costed).
+   * The half that needs no second client — our own commit failing to ARRIVE — is `B-221`.
    */
   deferMixer(line: string): string {
     // Only a `MIXER` line can be deferred. Everything else — `PLAY`, `CG …` — is returned
