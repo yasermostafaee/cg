@@ -11068,3 +11068,94 @@ the row to read stopped; press UPDATE with any input change.
   own "Next free" pointers and one back-reference inside the `B-226` entry, and `B-228` nothing.
   Cross-checked against the registry's dated pointer — _"Next free after this session is `B-227`"_ —
   headings and pointer AGREE. One number taken.
+
+---
+
+## [ ] B-228 — 🔴 REMOVE ALL's gate omits BOTH exemptions the per-row REMOVE and the bridge apply, so the bulk button is disabled for a press the bridge would accept — the exact UI↔wire disagreement `#removeRefusal`'s own doc says must not exist ⟨priority: high — it is the same withheld-graceful-remedy shape as [[B-226]], and it has had a RED Linux `e2e` standing on `dev` since it landed⟩ — FILED 2026-09-06 by `RESTART-NOTICE-01`; report only, nothing built
+
+**Found** while diagnosing why the Linux `e2e` job went red on `b07d2fad` and stayed red on
+`0e4aae58`. ⭐ **The failing E2E was RIGHT — it is the messenger, not the defect**, which is worth
+recording because the obvious "fix" is to change the test and it would have buried this.
+
+### §1 — the disagreement, measured
+
+`R-017` gave REMOVE a real refusal, and the bridge decides it in ONE place, `#removeRefusal`
+(`caspar-runtime.ts:8926`), with **two exemptions**:
+
+| exemption                                                                                        | why                                                                                                        |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| a **restore-blocked** row (`#restoreBlocked.has(itemId)`, `:8946`)                               | its layer is held by a producer provably NOT ours, so REMOVE destroys nothing of ours (`R-021` stage 4 d1) |
+| an item on **no declared operator row** (`#declaredLayerClass(...) !== 'operator-row'`, `:8949`) | no row ⇒ no STOP and no CLEAR to press, so refusing leaves [[B-212]]'s incident with no remedy at all      |
+
+That method's own header says, in as many words:
+
+> ⚠ The RENDERER carries the identical exemption (`layerRowActions`, `blocked`), and it has to: this
+> is the one place where the shared predicate alone would make the two sides disagree, because the UI
+> knows the row is blocked and would otherwise disable a verb the bridge accepts.
+
+The ROW's REMOVE does carry it (`layerRowActions.ts:387`, `const blocked = deps.restoreBlocked`).
+🔴 **REMOVE ALL does not:**
+
+```ts
+// LayersPanel.tsx:402
+const removeBlockedCount = items.filter(isOnAirStatus).length;
+```
+
+Neither exemption. So a stack whose only on-air row is restore-blocked disables REMOVE ALL while
+`stack.remove-all` would accept it.
+
+⭐ **The comment above that line (`:386-401`) is the tell, and it is worth reading before fixing.** It
+reasons carefully — and correctly — about which PREDICATE to use, rejecting `isOnAir` on `B-122`
+grounds and choosing `isOnAirStatus` precisely so "the UI and the wire" cannot "disagree about the
+same press". It then disagrees about the same press, because the predicate was the only half swept:
+the EXEMPTIONS are part of the bridge's answer and were not carried across. Getting the shared
+function right is not the same as getting the shared ANSWER right.
+
+### §2 — how it shows, and why nothing local caught it
+
+`apps/runtime/tests/e2e/server-settings.spec.ts:102` clicks `Remove all items` to clear the stack so
+Apply is reachable. The E2E fixture's seed includes `seedBlockedStackItem()` — a restore-blocked row
+published `status: 'on-air'` — so under `R-017` the button is disabled from the first frame and
+Playwright waits the full 30 s (`element is not enabled`, twice with the retry). Reproduced locally on
+2026-09-06: part 1 of that file passes, part 2 fails on that line.
+
+⚠ **Part 1 of the SAME FILE was updated by `R-017` and asserts the new truth**
+(`await expect(page.getByRole('button', { name: 'Remove all items' })).toBeDisabled()`, `:64`) while
+part 2, nine lines below, still clicks it. That is golden rule 9's shape — the sweep for consumers
+stopped inside the file it had already opened — and `pnpm gate` does not run Playwright (`P-028`), so
+the only signal was CI.
+
+### §3 — the two candidate fixes, for the owner
+
+- **(A) Carry the exemptions into the count.** `removeBlockedCount` becomes the number of rows that
+  are on air AND not exempt, which needs per-row `restoreBlocked` and the declared-layer-class —
+  neither is on `StackItemState`, so the count has to be computed from the SLOTS the panel already
+  renders rather than from `items`. Correct, and it makes the two sides agree by construction.
+- **(B) Ask the bridge.** A `stack.remove-all-refusal` read, so the count is not re-derived in the
+  renderer at all. Heavier, but it removes the possibility of a third divergence.
+
+⚠ **Whichever wins, the E2E at `:102` should be left ASSERTING what it asserts.** If (A) or (B) lands,
+Remove-All becomes enabled there and the test passes unchanged. Rewriting it to use Clear-All would
+make the suite green while leaving the disagreement in place — the fix that hides the bug.
+
+**Repro:** open the Runtime against the offline mock with the fixed-bank seed armed (the E2E fixture's
+default); the only on-air row is the restore-blocked seed.
+**Expected:** REMOVE ALL is enabled — the bridge exempts that row and would accept the press.
+**Actual:** REMOVE ALL is disabled, tooltip "1 row(s) are on air".
+
+- **Cross-refs:** `R-017` (the item that introduced both halves), [[B-226]] (the graceful remedy
+  withheld while the irreversible one stays enabled — the same shape, filed by the same item),
+  [[B-212]] (the orphan the second exemption exists for), `R-021` stage 4 d1 (the first exemption's
+  rule), [[B-122]] (the prohibition the `:386` comment correctly honours), `P-028` (why the gate could
+  not catch it).
+- **Owed:** nothing built. `dev`'s Linux `e2e` is RED until this is fixed — runs
+  <https://github.com/yasermostafaee/cg/actions/runs/33992738274> (`b07d2fad`) and
+  <https://github.com/yasermostafaee/cg/actions/runs/33997761591> (`0e4aae58`), both `E2E (Playwright)`
+  `failure`, same single test, `Lint • Typecheck • Test • Build` `success` in both. **Every
+  `gate:e2e` debt on `dev` is therefore undischargeable until this lands**, including [[B-225]]'s and
+  [[B-227]]'s.
+- **Number:** highest `B-` HEADING across the three bug files was **`B-227`**
+  (`git grep -n -E "^## \[.\] B-2[0-9][0-9]"`); `git grep -n "B-228" HEAD` returned only the registry's
+  own "Next free" pointers and one back-reference inside the `B-227` entry, and `git grep -n "B-229"
+HEAD` returned nothing. Cross-checked against the registry's dated pointer — _"Next free after this
+  session is `B-228`"_ — headings and pointer AGREE. One number taken.

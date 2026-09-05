@@ -2513,3 +2513,31 @@ after this session is `B-227`"_ — headings and pointer **AGREE**. One number t
 
 ⇒ **Next free after this session is `B-228`** (`B-001` … `B-227`, no gaps), **`D-161`**, **`C-034`**
 and **`P-044`** (unchanged).
+
+### 2026-09-06 — `B-228` (`RESTART-NOTICE-01`, second pass: why `dev`'s Linux `e2e` is red)
+
+| kind | id      | one line                                                                                                                                                                                      | home                               | status                                                 |
+| ---- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------ |
+| `B-` | `B-228` | REMOVE ALL's gate omits both exemptions the per-row REMOVE and the bridge apply, so the bulk button is disabled for a press the bridge would accept — and it has held `dev`'s Linux `e2e` red | [bugs-runtime.md](bugs-runtime.md) | FILED, report only — two candidate fixes, owner's call |
+
+Filed after the session's own commit (`0e4aae58`) came back with `ci` green and `e2e` red, and the
+parent commit `b07d2fad` had failed identically. Diagnosed rather than assumed: reproduced locally,
+traced to `LayersPanel.tsx:402`, and the bridge's `#removeRefusal` header was read to establish which
+side is wrong.
+
+🔴 **The correction that matters most here: the failing E2E is the MESSENGER, not the defect.** The
+obvious move — rewrite `server-settings.spec.ts:102` to use Clear-All, as `R-017` did for part 1 of the
+same file — would have gone green while leaving a UI that disables a verb the bridge accepts. It was
+half-done before the bridge's own doc was read; that doc says in as many words that the renderer must
+carry the exemption, which is what identified the UI as the wrong half. **No test was changed.**
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three bug
+files was **`B-227`** (`bugs-runtime.md`, `git grep -n -E "^## \[.\] B-2[0-9][0-9]"`);
+`git grep -n "B-228" HEAD` returned only this file's own "Next free" pointers and one back-reference
+inside the `B-227` entry, and `git grep -n "B-229" HEAD` returned nothing. The duplicate audit printed
+exactly `B-056` and `B-080`. **Cross-check against the dated pointer:** the entry above ends _"Next free
+after this session is `B-228`"_ — headings and pointer **AGREE**. One number taken, filed in
+`bugs-runtime.md`. No `C-`, `D-` or `P-` number was taken; nothing was deleted or translated.
+
+⇒ **Next free after this session is `B-229`** (`B-001` … `B-228`, no gaps), **`D-161`**, **`C-034`**
+and **`P-044`** (unchanged).
