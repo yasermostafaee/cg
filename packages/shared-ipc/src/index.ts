@@ -56,6 +56,11 @@ export * from './channels/playoutLayers.js';
 // third declared layer class. Deliberately its own channel and not a wider
 // playoutLayers: see the header of channels/liveLayers.ts.
 export * from './channels/liveLayers.js';
+// B-225 — the standing notice that the playout server stopped carrying what this
+// console had put on air, and the ONE PRESS that puts those rows back. Its own
+// channel rather than a `connections` field: this is not link health, it is a
+// statement about AIR that outlives the reconnect that produced it.
+export * from './channels/emptiedAir.js';
 export * from './channels/delimiters.js';
 // R-030 — the per-channel output raster (bridge-owned) + the configured-vs-real
 // video-mode verdict.

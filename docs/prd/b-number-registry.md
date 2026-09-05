@@ -2479,3 +2479,37 @@ after this session is `B-226`"_ — headings and pointer **AGREE**. One number t
 
 ⇒ **Next free after this session is `B-227`** (`B-001` … `B-226`, no gaps), **`D-161`**, **`C-034`**
 and **`P-044`** (unchanged).
+
+### 2026-09-06 — `B-227` (`RESTART-NOTICE-01`: the ledger stops lying, and the operator is told)
+
+| kind | id      | one line                                                                                                                                                                                                              | home                               | status                                                       |
+| ---- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------ |
+| `B-` | `B-227` | after a CasparCG restart the live-seat ledger outlives its producers, so `#ownsLiveSeats` reads TRUE for a row the console shows stopped — and an UPDATE or a SWAP on it puts bare video on air, measured at the wire | [bugs-runtime.md](bugs-runtime.md) | FILED AND CLOSED IN CODE the same day; Linux `gate:e2e` OWED |
+
+The session's other deliverable took NO number: §B implemented the owner's 2026-09-05 decision on the
+already-filed [[B-225]] (DETECT AND SAY, with a one-press put-it-back), so it lands under that item and
+flips it to `[~]`. `B-227` is the one NEW defect the session measured, found while establishing §A.1's
+answer, and it is fixed rather than filed because the fix reused a function that already existed.
+
+⭐ **Correction worth carrying, and it cost this session a red test to learn:** `played` is **not** "on
+air". `out` leaves `played: true` — only `stop` retracts it (`reconciler.ts:661` vs `:675-687`, where
+`idle` is the out's unevidenced TARGET rather than an observation). So `reconcileOnReconnect`'s reset
+set contains rows the operator deliberately cleared, and the first spelling of `B-225`'s notice offered
+to put one of them back on air — [[B-109]] reached through an assumption nobody had measured. The
+discriminator is `isOnAirStatus` sampled BEFORE the reconcile, minus `exiting`.
+
+⭐ **Second correction, to `RESTART-RESTORE-01`'s anchors:** every load-bearing finding it recorded
+survives, but its line numbers had drifted ~14 lines by `b07d2fad` (`R-017` landed in between), and
+`#ownsLiveSeats` was cited at `:5039` when it is at `:5022`. The FACTS were re-verified individually
+rather than trusted; the numbers were not.
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three bug
+files was **`B-226`** (`bugs-runtime.md`, `git grep -n -E "^## \[.\] B-2[0-9][0-9]"`);
+`git grep -n "B-227" HEAD` returned only this file's own "Next free" pointers and one back-reference
+inside the `B-226` entry, and `git grep -n "B-228" HEAD` returned nothing. The duplicate audit printed
+exactly `B-056` and `B-080`. **Cross-check against the dated pointer:** the entry above ends _"Next free
+after this session is `B-227`"_ — headings and pointer **AGREE**. One number taken, filed in
+`bugs-runtime.md`. No `C-`, `D-` or `P-` number was taken; nothing was deleted or translated.
+
+⇒ **Next free after this session is `B-228`** (`B-001` … `B-227`, no gaps), **`D-161`**, **`C-034`**
+and **`P-044`** (unchanged).

@@ -100,6 +100,9 @@ import {
   type REHEARSE_ENTER_REASONS,
   type REHEARSE_EXIT_REASONS,
   REMOVE_ON_AIR_CODE,
+  EMPTIED_AIR_REFUSALS,
+  type EmptiedAirNotice,
+  type EmptiedAirRefusal,
 } from '@cg/shared-ipc';
 import { operatorActor } from './actor-context.js';
 import { ChannelSettingsStore } from './channel-settings-store.js';
@@ -121,6 +124,7 @@ import { OrphanTracker } from './orphan-tracker.js';
 import {
   projectLiveLayers,
   reconcileLiveLayers,
+  type DroppedLiveLayer,
   type LiveLayerAdoption,
   type LiveLayerLedger,
   type LiveLayerOccupancy,
@@ -734,6 +738,15 @@ export class CasparRuntime {
    */
   readonly liveLayersChanged = new Emitter<LiveLayerLedger>();
   /**
+   * `B-225` — emitted when the standing "air was emptied under us" notice is RAISED by a
+   * reconnect, NARROWED by a partial restore, or DISMISSED. `null` means there is nothing
+   * to report.
+   *
+   * A push as well as a pull because the raise happens on the bridge's own schedule — no
+   * browser asked for it, and the operator may be looking at the console when it lands.
+   */
+  readonly emptiedAirChanged = new Emitter<EmptiedAirNotice | null>();
+  /**
    * `multibox-layout-switch` `tasks.md` 6.5 / §12.4 — emitted for EVERY plate the
    * reconcile releases, held or torn down.
    *
@@ -831,6 +844,13 @@ export class CasparRuntime {
    * an operator being invited to clear a face off air (`design.md` §4).
    */
   readonly #liveLayers: LiveLayerLedger = new Map();
+  /**
+   * `B-225` — the standing notice, or `null`. Process state, deliberately NOT persisted: it
+   * describes a reconnect THIS process observed, and a bridge that restarts has no way to
+   * know whether the rows were put back in the meantime. A notice that outlived its evidence
+   * would be the same class of defect as the ledger that outlived its producers (`B-227`).
+   */
+  #emptiedAir: EmptiedAirNotice | null = null;
   /**
    * 🔴 **The ADOPTED coordinates nothing has confirmed since the restart.**
    *
@@ -1607,6 +1627,9 @@ export class CasparRuntime {
           // correctly left alone by it.
           const heard = session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
           void this.#decidePendingRestores(observedProducers, heard);
+          // `B-227` — and the LEDGER is reconciled against the SAME sample, inside the same
+          // `heard` gate, immediately below. See `#reconcileLedgerOnReconnect` for why the
+          // two halves belong together and why nobody had joined them.
           // The SAME blind-tap distinction applies here, and this path had the
           // bug too: `reconcileOnReconnect` resets a `played` item to IDLE when
           // its slot is not in `occupiedKeys`, treating silence as proof the
@@ -1617,7 +1640,45 @@ export class CasparRuntime {
           // from the drop still stands) rather than being falsely reset, and the
           // sweep reconciles for real once OSC arrives.
           if (heard) {
-            this.#reconciler.reconcileOnReconnect(occupiedKeys);
+            // `B-227` — BOTH halves of one event, from the one sample. The ledger first: it
+            // is the structural fact (what the bridge OWNS), and the status reset below is
+            // the derived one (what the operator SEES). Neither sends anything.
+            const dropped = this.#reconcileLedgerOnReconnect(occupiedKeys);
+            /*
+              🔴 `B-225` — THE BEFORE-STATE, SAMPLED HERE BECAUSE IT DOES NOT SURVIVE THE
+              NEXT LINE. Which rows were ON AIR when the server stopped carrying them is the
+              question the notice turns on, and `reconcileOnReconnect` answers a different
+              one — it resets every `played` record whose layer is silent, and `played` is
+              NOT "on air": `out` leaves it TRUE (only `stop` retracts it), so an operator's
+              own CLEAR is inside the reset set and must be excluded HERE.
+            */
+            const wasOnAir = new Set(
+              this.#reconciler
+                .snapshot()
+                .filter((item) => isOnAirStatus(item) && item.status !== 'exiting')
+                .map((item) => item.itemId),
+            );
+            const reset = this.#reconciler.reconcileOnReconnect(occupiedKeys);
+            /*
+              🔴 `B-225` — AND THIS IS WHERE THE ANSWER EXISTS, SO THIS IS WHERE IT IS KEPT.
+
+              `reset` is every row this reconnect took from a played state to `idle` — air
+              this console had put up, which the server is no longer carrying. One publish
+              later it is unrecoverable: the browser retains `idle` as `cleared`, which
+              `item-state.ts` defines as *"KNOWN EMPTY … NOT restorable"* — correct by
+              `B-109` (a deliberately-emptied row must never be resurrected) and fatal to any
+              consumer downstream of it. Everything the notice and the one press need is in
+              hand right here and nowhere afterwards.
+
+              ⚠ It was already being computed and thrown away. Nothing new is measured, no
+              probe is added and nothing extra reaches the wire — `RESTART-NOTICE-01` §B.1's
+              constraint — the return value is simply no longer discarded.
+            */
+            this.#raiseEmptiedAir(
+              reset.filter((item) => wasOnAir.has(item.itemId)),
+              dropped,
+              from !== 'degraded',
+            );
           } else {
             // …and while blind, NO on-air claim is verifiable — not just the
             // restored ones. Skipping the reconcile alone would leave a played
@@ -2888,7 +2949,18 @@ export class CasparRuntime {
   }
 
   async take(itemId: string): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
-    return this.#audited('take', this.#itemDetail(itemId), () => this.#takeImpl(itemId));
+    const verdict = await this.#audited('take', this.#itemDetail(itemId), () =>
+      this.#takeImpl(itemId),
+    );
+    /*
+      `B-225` — a row that is BACK ON AIR must leave the standing notice, and it leaves it
+      here rather than in the restore verb: the operator's own take of a listed row is the
+      same event as the one press taking it, and a notice that went on naming a row already
+      back on air would be a surface describing a plant that has moved on. One narrowing
+      point ({@link #retireFromEmptiedAir}), reached by every door.
+    */
+    if (verdict.accepted) this.#retireFromEmptiedAir(itemId);
+    return verdict;
   }
 
   async #takeImpl(
@@ -7783,6 +7855,280 @@ export class CasparRuntime {
   }
 
   /**
+   * 🔴 **`B-227` — THE LEDGER MUST NOT OUTLIVE WHAT IT DESCRIBES: correct it on RECONNECT,
+   * by the same evidence and the same function that correct it at BOOT.**
+   *
+   * ── THE DEFECT ──────────────────────────────────────────────────────────────
+   *
+   * CasparCG restarts under a running bridge. The reconnect samples occupancy once, finds
+   * every layer silent, and {@link Reconciler.reconcileOnReconnect} resets each played row to
+   * `idle` — correct, and untouched. But nothing corrected `#liveLayers`, which went on naming
+   * the Live Source layers this bridge had seated, with producers that no longer existed.
+   *
+   * {@link #ownsLiveSeats} is `on air OR the ledger holds seats`, so on a row the reconciler
+   * had just reset the ledger ALONE kept the answer TRUE. That is golden rule 10's gate, and
+   * with it stuck true an UPDATE on a stopped row re-enters the binding reconcile and SEATS:
+   * `PLAY`s onto the empty band, `MIXER VOLUME`s, `FILL`/`CLIP`s — video on air with no
+   * template above it, on a row the console shows stopped. `B-161`'s defect, reached through a
+   * stale belief instead of through the rehearse flag.
+   *
+   * ── WHY IT WAS NEVER JOINED — a missed join, not a deliberate intent record ──
+   *
+   * The dates settle it. `reconcileOnReconnect` is `B-086`'s (`f82e9e68`, 2026-07-15) and
+   * lives in the Reconciler, which knows an item's TEMPLATE slot and has never heard of a
+   * ledger. The ledger's types are 2026-08-10 (`7e595ac5`). `reconcileLiveLayers` — **the ONE
+   * spelling of "correct the ledger's claim by the server's evidence"** — is `B-145`'s
+   * (`229885cd`, 2026-08-18), and it was wired to the BOOT door only. So the identical
+   * physical event (CasparCG came back with empty layers) was reconciled against the ledger
+   * when met at boot and not when met at reconnect. Nobody chose that; the reconnect path
+   * simply predates the thing it needed to correct.
+   *
+   * Hence: the same function, from the same sample, at the second door. Golden rule 6 — a
+   * second local spelling of the three-valued rule here is how the two doors would drift.
+   *
+   * ── THE `heard` GATE IS THE POSITIVE CONTROL, AND IT IS LOAD-BEARING ────────
+   *
+   * 🔴 Called ONLY from inside the branch that has already proven the OSC tap is HEARING
+   * (`hasFreshOsc`). From a blind tap, silence is evidence of nothing whatsoever (`B-101`,
+   * `B-053`) — and dropping seats there is the INVERSE fault, and the worse one: the console
+   * would forget producers that are genuinely on the channel, and could then neither re-point
+   * nor tear them down. A blinked socket is the same distinction from the other side: the
+   * server kept its producers, so they come back `occupied` and every record is KEPT.
+   *
+   * ⚠ Because the caller has proven the tap is hearing, `observe` is two-valued here — real
+   * CasparCG never reports a layer `empty`, so silence IS the empty signal (`B-053`), the
+   * identical inference `reconcileOnReconnect` makes from this same set one line below. The
+   * three-valued rule's `unknown` arm belongs to boot, where occupancy may be unknowable; it
+   * cannot be reached from here, and that is a property of the call site rather than a
+   * narrowing of the rule.
+   *
+   * ⚠ Written through {@link registerLiveLayers} — the ONE write path — so the drop persists
+   * (`bridge.ts` writes `bridge-live-layers.json` on every `liveLayersChanged`) and reaches
+   * the operator's LIVE SOURCES list, instead of leaving the file to describe a plant that no
+   * longer matches it. It also clears each touched item's `unverified` marks, which is right
+   * for the same reason the drop is: a record we have just OBSERVED occupied is no longer an
+   * unconfirmed file claim.
+   *
+   * Returns what it dropped, for the caller to REPORT — the seats that were on air until the
+   * server took them away. That is the signal `RESTART-NOTICE-01` §B surfaces, and it exists
+   * only here, at the instant before the reconciler's publish turns it into `cleared`.
+   */
+  #reconcileLedgerOnReconnect(occupiedKeys: ReadonlySet<string>): readonly DroppedLiveLayer[] {
+    if (this.#liveLayers.size === 0) return [];
+    const adoption = reconcileLiveLayers({
+      persisted: this.#liveLayers,
+      observe: (slot) => (occupiedKeys.has(adoptionKey(slot)) ? 'occupied' : 'empty'),
+    });
+    if (adoption.dropped.length === 0) return [];
+    // Only the items that actually lost a record are rewritten: an untouched item must not
+    // emit a `liveLayersChanged` that says nothing, and must not have its marks cleared.
+    for (const itemId of new Set(adoption.dropped.map((d) => d.itemId))) {
+      this.registerLiveLayers(itemId, adoption.adopted.get(itemId) ?? []);
+    }
+    return adoption.dropped;
+  }
+
+  // ─────────── `B-225` — AIR WAS EMPTIED UNDER US: the notice and the one press ───────────
+
+  /**
+   * 🔴 **RAISE the standing notice from what the reconnect just measured.**
+   *
+   * `reset` is what the caller has already narrowed to TWO conditions, and both are needed:
+   * the row was ON AIR immediately before the reconnect, **and** `reconcileOnReconnect` reset
+   * it because its layer had gone silent.
+   *
+   * 🔴 **THE FIRST CONDITION IS NOT REDUNDANT, AND ASSUMING IT WAS IS THE BUG THIS PARAGRAPH
+   * EXISTS TO STOP SOMEBODY RE-INTRODUCING.** The obvious reading — "the reconcile only
+   * touches `played` records, so its output is already the on-air set" — is FALSE, and it was
+   * this session's first spelling until a test caught it. `played` means *a `PLAY` was sent
+   * and has not been retracted*, and **`out` does not retract it**: `stop` sets
+   * `played = false` (`reconciler.ts:661`), the `out` intent (`:675-687`) deliberately does
+   * not, because `idle` is the out's unevidenced TARGET rather than an observation. So a row
+   * the operator CLEARED an hour ago is still `played: true`, is inside the reset set, and
+   * without the status filter would be offered back — a graphic the operator deliberately
+   * took off air, put back by one press, which is `B-109` exactly.
+   *
+   * The filter is `isOnAirStatus` — the ONE canonical predicate, reused, never re-derived —
+   * **minus `exiting`**. That subtraction is a separate question rather than a second
+   * spelling of the predicate: `exiting` means a CLEAR the operator asked for is IN FLIGHT,
+   * so the row is on air only in the sense that it has not finished leaving. Restoring it
+   * would act against a command already given.
+   *
+   * ⚠ **A NEW RECONNECT REPLACES A STANDING NOTICE; IT DOES NOT MERGE INTO ONE.** Merging
+   * looks kinder — rows from an earlier notice that were never put back would stay listed —
+   * and it is wrong, because the carried-over rows are no longer BACKED by the measurement.
+   * Between two reconnects the operator may have cleared one of them deliberately; a merged
+   * list cannot tell that row from one the server took, so it would offer to put a
+   * deliberately-emptied row back on air. The offer must be provable, so the notice says
+   * exactly what THIS reconnect took away. Rows that drop off are not lost — they are on the
+   * stack, idle, and an ordinary take puts any of them back.
+   *
+   * ⚠ Emits nothing when nothing came off air, and in particular does NOT clear a standing
+   * notice: an ordinary healthy reconnect with an empty stack has no opinion about a notice
+   * raised by an earlier one.
+   */
+  #raiseEmptiedAir(
+    reset: readonly StackItemState[],
+    dropped: readonly DroppedLiveLayer[],
+    newConnection: boolean,
+  ): void {
+    if (reset.length === 0) return;
+    const notice: EmptiedAirNotice = {
+      at: new Date().toISOString(),
+      rows: reset.map((item) => ({
+        itemId: item.itemId,
+        templateId: item.templateId,
+        ...(item.slot !== undefined
+          ? { slot: { channel: item.slot.channel, layer: item.slot.layer } }
+          : {}),
+      })),
+      seatsDropped: dropped.length,
+      newConnection,
+    };
+    this.#emptiedAir = notice;
+    this.emptiedAirChanged.emit(notice);
+    /*
+      `RESTART-NOTICE-01` §C.2 — THE ONE LINE. The bridge's stderr is the only record any of
+      this leaves on the host, and until now a reconnect that emptied air left none at all.
+      Written here rather than in a logger because this is the moment the facts exist.
+    */
+    process.stderr.write(
+      `[caspar-bridge] air emptied under us: ${String(notice.rows.length)} row(s) were on air ` +
+        `and their layers are silent on ${newConnection ? 'a NEW AMCP connection' : 'the same AMCP connection'}; ` +
+        `${String(notice.seatsDropped)} live-source seat(s) dropped from the ledger. ` +
+        `Nothing was re-seated — the operator decides.\n`,
+    );
+  }
+
+  /**
+   * Drop one row from the standing notice — **the ONE narrowing point, and every route that
+   * makes a row un-offerable goes through it.**
+   *
+   * Called when the row goes back ON AIR by any door (the one press restores through the
+   * ordinary `take`, so an operator's own take is the same event) and when it is REMOVED. A
+   * notice that went on naming a row already back on air would be the same defect as the
+   * ledger that outlived its producers — a surface confidently describing a plant that has
+   * moved on.
+   */
+  #retireFromEmptiedAir(itemId: string): void {
+    const notice = this.#emptiedAir;
+    if (notice === null) return;
+    const rows = notice.rows.filter((r) => r.itemId !== itemId);
+    if (rows.length === notice.rows.length) return;
+    this.#emptiedAir = rows.length === 0 ? null : { ...notice, rows };
+    this.emptiedAirChanged.emit(this.#emptiedAir);
+  }
+
+  /** `B-225` — the standing notice, or `null`. */
+  emptiedAir(): EmptiedAirNotice | null {
+    return this.#emptiedAir;
+  }
+
+  /**
+   * Dismiss the notice without restoring anything. Bridge-side so two browsers cannot
+   * disagree about whether the console is still reporting empty air. Changes nothing on the
+   * wire: the rows stay on the stack, idle, and a take puts any of them back.
+   */
+  dismissEmptiedAir(): { ok: boolean } {
+    if (this.#emptiedAir === null) return { ok: false };
+    this.#emptiedAir = null;
+    this.emptiedAirChanged.emit(null);
+    return { ok: true };
+  }
+
+  /**
+   * 🔴 **THE ONE PRESS — put the named rows back, and only rows the notice can prove.**
+   *
+   * The owner's decision (2026-09-05) was *detect and say*, not restore automatically,
+   * because **an unattended machine must not put a graphic on air.** So nothing in this class
+   * calls this method: it is reachable only from `air.restore-emptied`, which is reachable
+   * only from a control the operator pressed. There is no timer, no reconnect hook and no
+   * page-load path into it, and there must never be one.
+   *
+   * ⭐ **Each row is re-taken through the ORDINARY {@link take}**, never a private re-seat.
+   * That is what makes the restore inherit every refusal a take already owns — reachability,
+   * the `R-022` rehearse interlock, §12.6 multi-box exclusivity, live-plate seating and the
+   * pre-roll `CG ADD` a restarted server needs (`B-054`) — instead of growing a second
+   * spelling of "put this row on air" that would drift from the first (golden rule 6). It is
+   * also why a successful row leaves the notice without this method saying so: `take` retires
+   * it through {@link #retireFromEmptiedAir}.
+   *
+   * REFUSALS, each named rather than folded into a bare count (`B-108`'s rule):
+   *
+   * - not in the standing notice, or no notice at all → `unknown-item`. The notice IS the
+   *   evidence; a row outside it has no proof it was ever taken away, and acting on that is
+   *   how a deliberately-cleared row would come back.
+   * - gone from the stack since the notice was raised → `unknown-item`.
+   * - its template is no longer registered → `unknown-template`. **DEFENCE IN DEPTH, and
+   *   named as such: it is unreachable through the public verbs today**, because
+   *   {@link templateRemove} refuses `in-use` while any stack row references the template —
+   *   that invariant, not this guard, is what actually answers the case. The guard stays
+   *   because the failure it prevents is the silent one: a take whose `CG ADD` fetches a
+   *   template the serve endpoint no longer has renders a BLACK layer that reports a healthy
+   *   producer. `emptied-air-notice.integration.test.ts` pins the invariant, so relaxing
+   *   `templateRemove` reddens there rather than quietly arming this path.
+   * - anything the take itself refuses → its own code, or `refused` when it is one this
+   *   surface does not enumerate.
+   *
+   * ⚠ **A SECOND RESTART LANDING MID-RESTORE is why the write-back is stamped.** The takes are
+   * awaited one at a time, so a reconnect during them raises a NEW notice. The refusal
+   * write-back therefore compares the standing notice's `at` against the one this call was
+   * answering, and writes nothing if they differ — the newer measurement is the one that
+   * describes the plant now, and must not be overwritten with verdicts about the old set.
+   * `at` is the identity and not the object reference on purpose: {@link #retireFromEmptiedAir}
+   * rewrites the object on every success while keeping the stamp, which is exactly the
+   * "same notice, narrowed" case the check must let through.
+   */
+  async restoreEmptiedAir(itemIds: readonly string[]): Promise<{
+    restored: number;
+    results: { itemId: string; ok: boolean; reason?: EmptiedAirRefusal }[];
+  }> {
+    const notice = this.#emptiedAir;
+    const offered = new Set((notice?.rows ?? []).map((r) => r.itemId));
+    const results: { itemId: string; ok: boolean; reason?: EmptiedAirRefusal }[] = [];
+    for (const itemId of itemIds) {
+      if (!offered.has(itemId)) {
+        results.push({ itemId, ok: false, reason: 'unknown-item' });
+        continue;
+      }
+      const item = this.#reconciler.get(itemId);
+      if (item === null) {
+        results.push({ itemId, ok: false, reason: 'unknown-item' });
+        continue;
+      }
+      if (!this.#templates.has(item.templateId)) {
+        results.push({ itemId, ok: false, reason: 'unknown-template' });
+        continue;
+      }
+      const verdict = await this.take(itemId);
+      results.push(
+        verdict.accepted
+          ? { itemId, ok: true }
+          : { itemId, ok: false, reason: emptiedAirRefusalFor(verdict.errorCode) },
+      );
+    }
+    // The successes have already left the notice through `take`. What is written back is why
+    // the rest did not — and only onto the notice this call was answering (see the header).
+    const failures = new Map(
+      results.filter((r) => !r.ok).map((r) => [r.itemId, r.reason ?? 'refused']),
+    );
+    if (notice !== null && this.#emptiedAir !== null && failures.size > 0) {
+      const current = this.#emptiedAir;
+      if (current.at === notice.at) {
+        this.#emptiedAir = {
+          ...current,
+          rows: current.rows.map((r) => {
+            const refusal = failures.get(r.itemId);
+            return refusal === undefined ? r : { ...r, refusal };
+          }),
+        };
+        this.emptiedAirChanged.emit(this.#emptiedAir);
+      }
+    }
+    return { restored: results.filter((r) => r.ok).length, results };
+  }
+
+  /**
    * The ledger itself, as a defensive copy.
    *
    * ⚠ **ITS DOC USED TO SAY "for tests and for phase 6's re-emission", AND THAT
@@ -8547,9 +8893,12 @@ export class CasparRuntime {
   async remove(
     itemId: string,
   ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
-    return this.#audited('remove', this.#itemDetail(itemId), (detail) =>
+    const verdict = await this.#audited('remove', this.#itemDetail(itemId), (detail) =>
       this.#removeImpl(itemId, detail),
     );
+    // `B-225` — a removed row can never be put back, so it must stop being offered.
+    if (verdict.accepted) this.#retireFromEmptiedAir(itemId);
+    return verdict;
   }
 
   /**
@@ -10488,4 +10837,22 @@ export class CasparRuntime {
 /** Key for the per-process layer-adoption set (reconnect-reconciliation). */
 function adoptionKey(slot: CommandSlot): string {
   return `${String(slot.channel)}:${String(slot.layer)}`;
+}
+
+/**
+ * `B-225` — a `take` refusal, expressed in the notice's own vocabulary.
+ *
+ * ⚠ **The fall-through is `refused`, never the raw code, and that is deliberate.** `take` can
+ * refuse for reasons this surface does not enumerate (multi-box exclusivity, a live band with
+ * no room, an AMCP error), and each is a real refusal the operator must see reported as one.
+ * Widening `EMPTIED_AIR_REFUSALS` every time a take grows a code would make this list a second
+ * copy of the take's — the drift golden rule 6 is about — so the narrow list carries the
+ * outcomes this surface can SAY something specific about, and everything else is honestly
+ * `refused` rather than silently dropped.
+ */
+function emptiedAirRefusalFor(errorCode: string | undefined): EmptiedAirRefusal {
+  const known: readonly string[] = EMPTIED_AIR_REFUSALS;
+  return errorCode !== undefined && known.includes(errorCode)
+    ? (errorCode as EmptiedAirRefusal)
+    : 'refused';
 }

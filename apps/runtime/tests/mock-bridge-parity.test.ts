@@ -45,6 +45,10 @@ const BACKING_METHODS = [
   'orphans',
   'clearLayer',
   'ownedOccupancy',
+  // B-225 — the notice and its two operator acts.
+  'emptiedAir',
+  'restoreEmptiedAir',
+  'dismissEmptiedAir',
   'engage',
   'release',
   'lockState',
@@ -67,6 +71,7 @@ const BACKING_EMITTERS = [
   'configChanged',
   'orphansChanged',
   'ownedOccupancyChanged',
+  'emptiedAirChanged',
   'lockChanged',
   'updateChanged',
   'settingsChanged',
@@ -173,6 +178,13 @@ const BRIDGE_SURFACE: {
       'onConfigChanged',
     ],
     layers: ['orphans', 'clear', 'onOrphansChanged', 'ownedOccupancy', 'onOwnedOccupancyChanged'],
+    /*
+      B-225 — the playout server stopped carrying what this console put on air. Listed here
+      for the reason this guard exists at all: the SPA's notice is developed and E2E'd against
+      the offline mock, where a notice can never be raised, so a `restore` that existed on one
+      backend and not the other would go unnoticed until the plant.
+    */
+    emptiedAir: ['notice', 'restore', 'dismiss', 'onNoticeChanged'],
     // R-028 part B — `fixedLayers` was MISSING from this guard (recorded as a
     // part-A seam): `tests/**` is not typechecked, so the mapped type above
     // never caught the omission and any mock↔bridge divergence in the fixed

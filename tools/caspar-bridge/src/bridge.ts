@@ -24,6 +24,10 @@ import {
   LayersOrphansChannel,
   LayersOwnedOccupancyChangedChannel,
   LayersOwnedOccupancyChannel,
+  EmptiedAirDismissChannel,
+  EmptiedAirNoticeChangedChannel,
+  EmptiedAirNoticeChannel,
+  EmptiedAirRestoreChannel,
   LockEngageChannel,
   LockReleaseChannel,
   LockStateChangedChannel,
@@ -811,6 +815,8 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     backing.configChanged.subscribe((c) => push(ConnectionsConfigChangedChannel, c)),
     backing.orphansChanged.subscribe((o) => push(LayersOrphansChangedChannel, o)),
     backing.ownedOccupancyChanged.subscribe((w) => push(LayersOwnedOccupancyChangedChannel, w)),
+    // B-225 — air was emptied under us (or the notice was acted on / dismissed).
+    backing.emptiedAirChanged.subscribe((n) => push(EmptiedAirNoticeChangedChannel, n)),
     backing.lockChanged.subscribe((l) => push(LockStateChangedChannel, l)),
     backing.updateChanged.subscribe((u) => push(UpdateStateChangedChannel, u)),
     backing.settingsChanged.subscribe((s) => push(SettingsChangedChannel, s)),
@@ -1005,6 +1011,16 @@ export function buildRoutes(
     ),
     // B-056 — owned-slot occupancy warnings (no Clear: the remedy is Out/Remove).
     route(LayersOwnedOccupancyChannel, () => b.ownedOccupancy()),
+
+    /*
+      B-225 — the playout server stopped carrying what this console had put on air. The
+      notice is a READ plus TWO deliberate operator acts, and there is no third door: nothing
+      on the bridge restores by itself (the owner's 2026-09-05 decision — an unattended
+      machine must not put a graphic on air), so `restore` is reachable only from a press.
+    */
+    route(EmptiedAirNoticeChannel, () => b.emptiedAir()),
+    route(EmptiedAirRestoreChannel, (r: { itemIds: string[] }) => b.restoreEmptiedAir(r.itemIds)),
+    route(EmptiedAirDismissChannel, () => b.dismissEmptiedAir()),
 
     // R-021 stage 2a — the fixed-bank wire contract: config read/update +
     // per-slot state. Order on an applied change: validate → apply → persist

@@ -10613,7 +10613,83 @@ the fix is a ceiling rather than a smaller share, so the width is deterministic.
   Cross-checked against the registry's dated pointer — _"Next free after this session is
   `B-224`"_ — headings and pointer AGREE. One number taken.
 
-## [ ] B-225 — CasparCG restarting under a running bridge empties air and the console says nothing: the reconnect resets every row to IDLE, the browser mirrors that back as `cleared`, and nothing distinguishes "the server restarted" from "the socket blinked" ⟨priority: high — with NSSM auto-restart the channel returns emitting a valid, correctly-timed BLACK picture, which is not a fault to anything downstream⟩ — FILED 2026-09-05 by `RESTART-RESTORE-01`; report only, nothing built
+## [~] B-225 — CasparCG restarting under a running bridge empties air and the console says nothing: the reconnect resets every row to IDLE, the browser mirrors that back as `cleared`, and nothing distinguishes "the server restarted" from "the socket blinked" ⟨priority: high — with NSSM auto-restart the channel returns emitting a valid, correctly-timed BLACK picture, which is not a fault to anything downstream⟩ — FILED 2026-09-05 by `RESTART-RESTORE-01`; **CLOSED IN CODE 2026-09-06 by `RESTART-NOTICE-01` §B** on the owner's choice of option (2), DETECT AND SAY; the plant check is the OWNER's (§D below) and a Linux `gate:e2e` is OWED
+
+### ✅ 2026-09-06 — SHIPPED: the console says so, and one press puts the rows back (`RESTART-NOTICE-01` §B)
+
+**The owner's decision, 2026-09-05**, choosing between (1) do nothing, (2) detect and say with a
+one-press put-it-back, and (3) restore automatically: **(2)**. The reason is on record and became the
+acceptance criterion — _an unattended machine must not put a graphic on air_ — so option (3) is
+REFUSED and nothing in the bridge re-seats a row without a press.
+
+**What the kept signal actually proves, and it is narrower than the title of this item.** The
+detection keeps what `:1609-1634` was already computing and discarding; it adds no probe and no wire
+traffic. It proves: _at the moment the primary session re-entered `healthy` with the OSC tap PROVEN
+HEARING, layers this bridge had put producers on reported no producer._ It does **not** prove the
+server restarted — CasparCG publishes no boot marker, uptime or channel generation on any wire this
+bridge reads (`osc.health`/`uptimeSec` is modelled and never emitted; `INFO` carries no such field).
+`newConnection` narrows it honestly, since a restart necessarily kills the AMCP socket while a
+recovered OSC flap does not, and the notice's wording branches on it rather than asserting a cause.
+
+**How the one press tells a server-took-it-away row from a deliberately-cleared one.** Two conditions,
+both required: the row was ON AIR immediately before the reconnect, **and** `reconcileOnReconnect`
+reset it because its layer went silent.
+
+🔴 **The first condition was assumed redundant and is not — this is the correction this session owes
+the record.** The natural reading is that the reconcile only touches `played` records, so its output
+IS the on-air set. It is false: `played` means _a `PLAY` was sent and not retracted_, and **`out` does
+not retract it** — `stop` sets `played = false` (`reconciler.ts:661`), the `out` intent (`:675-687`)
+deliberately does not, because `idle` is its unevidenced TARGET rather than an observation. So a row
+the operator CLEARED an hour ago is still `played: true` and lands inside the reset set. Without the
+status filter the notice offered to put a deliberately-cleared graphic back on air — [[B-109]]
+exactly. The filter is `isOnAirStatus` (the ONE canonical predicate, reused) **minus `exiting`**, that
+subtraction being a separate question: `exiting` means a CLEAR the operator asked for is in flight, so
+restoring would act against a command already given.
+
+**Surface.** `EmptiedAirNotice` renders in the chrome directly above the LAYER LIST, beside
+`OrphanLayersBanner` — **not** a sixth top-of-page banner. The five up there (`ConnectionBanner`,
+`BridgeSkewBanner`, `FailoverBanner`, `RasterMismatchBanner`, `OutputMissingBanner`) describe the link
+or the plant's configuration: standing conditions the operator cannot resolve from the banner. This
+one names ROWS in the list below it and offers to act on them, which is the region
+`OrphanLayersBanner` already owns. Amber attention treatment, never the on-air red. Not translated
+(multi-language is deferred for both apps).
+
+**Dismissal — three ways it ends, never a timer:** the press restores every row (rows leave the notice
+individually, so a partial press leaves the rest listed WITH their reasons); DISMISS clears it
+bridge-side, so two browsers cannot disagree, and changes nothing on air; or the rows retire
+themselves — an ordinary take or a remove drops a row through the one narrowing point.
+
+**The inverses (`RESTART-NOTICE-01` §B.4), each handled:**
+
+- **Dismissed** → the notice is gone, air is unchanged, the rows sit on the stack as `idle`, and an
+  ordinary take puts any of them back.
+- **A second restart mid-restore** → the new reconnect REPLACES the notice rather than merging into
+  it, and the restore's refusal write-back is stamped with the notice's `at` so it cannot overwrite
+  the newer measurement. Replacement is deliberate: a merged list would carry rows that are no longer
+  BACKED by a measurement, and between two reconnects the operator may have cleared one deliberately —
+  which is the one thing the offer must never contain. Rows that drop off are not lost; they are on
+  the stack and a take puts them back.
+- **The template is no longer in the registry** → it cannot happen while the row is on the stack:
+  `templateRemove` refuses `in-use` for exactly that reason, and a test pins the invariant.
+  `restoreEmptiedAir` keeps an `unknown-template` guard as **defence in depth, named as such**,
+  because the failure it prevents is the silent one — a take whose `CG ADD` fetches a template the
+  serve endpoint no longer has renders a BLACK layer that reports a healthy producer.
+
+**Shipped:** `EmptiedAirNoticeSchema` + four channels (`packages/shared-ipc/src/channels/emptiedAir.ts`);
+`#raiseEmptiedAir` / `#retireFromEmptiedAir` / `emptiedAir()` / `restoreEmptiedAir()` /
+`dismissEmptiedAir()` in `caspar-runtime.ts`; routes and the push in `bridge.ts`; the contract,
+`WebSocketRuntime`, the honestly-empty `MockRuntime` half and `useEmptiedAir`; the
+`EmptiedAirNotice` strip. Tests: `tools/caspar-bridge/tests/emptied-air-notice.integration.test.ts`
+(8) and `apps/runtime/tests/emptiedAirNotice.dom.test.ts` (8), plus the `mock-bridge-parity` guard
+extended with the new namespace.
+
+⚠ **KNOWN LIMITATIONS, stated rather than left to be discovered.** (1) There is **no E2E** for this
+surface and there cannot be one today: the Playwright suite runs against the offline mock, where a
+notice can never be raised by design (a seeded one would be a lie about air, and its press would offer
+to restore rows nothing took away). The DOM test is the coverage. (2) The strip lives in
+`styles.chrome`, which is not rendered while a MONITOR is fullscreen — the same existing gap
+`OrphanLayersBanner` has; in that mode empty air is visible on PGM itself. Neither is a blocker;
+both are the owner's to weigh.
 
 **Observed** by the owner, 2026-09-05 on `192.168.21.114`. CasparCG now runs as a Windows service
 installed with NSSM, WITH AUTO-RESTART, so it lives in Session 0 — no window, no console, no Remote
@@ -10905,3 +10981,90 @@ claim.
   returned only the registry's own "Next free" pointers and one back-reference inside the `B-225` entry,
   and `B-227` nothing. Cross-checked against the registry's dated pointer — _"Next free after this
   session is `B-226`"_ — headings and pointer AGREE. One number taken.
+
+---
+
+## [~] B-227 — 🔴 the live-seat LEDGER outlives what it describes: after a CasparCG restart the reconciler resets the row to IDLE and `#liveLayers` goes on naming layers whose producers are gone, so `#ownsLiveSeats` reads TRUE for a row the console shows stopped — and an UPDATE on it puts bare video on air ⟨priority: HIGHEST — a configuration verb seating producers over black, on a row nobody has taken, after an event the operator was never told about⟩ — FILED AND CLOSED IN CODE 2026-09-06 by `RESTART-NOTICE-01` §A; a Linux `gate:e2e` is OWED
+
+**Found** by `RESTART-NOTICE-01` §A while acting on [[B-225]]'s findings; **measured at the wire**, not
+inferred. It is [[B-161]]'s defect reached through a stale BELIEF instead of through the rehearse flag
+[[B-216]] removed, which makes it the third distinct route into the same hazard.
+
+### §1 — the mechanism
+
+`#ownsLiveSeats` (`caspar-runtime.ts:5022`) is `isOnAirStatus(item) OR the ledger holds seats`, and it
+is the ONE predicate behind all four doors that may touch a live layer ([[B-216]]). On a CasparCG
+restart the reconnect resets the row's status to `idle` — correct, and untouched — while nothing
+corrected the ledger, so its second half kept the answer TRUE. Golden rule 10's gate is exactly that
+predicate, so an UPDATE on the stopped row re-entered the binding reconcile and SEATED.
+
+Measured on the mock's AMCP trace with the fixture from `ownership-is-the-ledger`: a `swapLiveSource`
+on a row the console showed **stopped**, after a restart, put
+
+```
+PLAY 1-30 "route://6"
+MIXER 1-30 VOLUME 0 DEFER
+MIXER 1-30 FILL 0 0 0.25 0.25 DEFER
+MIXER 1-30 CLIP 0 0 0.25 0.25 DEFER
+```
+
+on the wire — a real producer, on a real channel layer, with no template above it.
+
+### §2 — why the two were never joined (the question `RESTART-NOTICE-01` §A.1 asked)
+
+🔴 **Not a deliberate record of INTENT outliving the truth — a MISSED JOIN, and the dates settle it:**
+
+| when       | what                                                                                                                                                        |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-07-15 | `f82e9e68` ([[B-086]]) — `reconcileOnReconnect`, in `@cg/caspar-client`'s Reconciler, which knows an item's TEMPLATE slot and has never heard of a ledger   |
+| 2026-08-10 | `7e595ac5` — the ledger's types, four weeks later                                                                                                           |
+| 2026-08-18 | `229885cd` ([[B-145]]) — `reconcileLiveLayers`, **the ONE spelling of "correct the ledger's claim by the server's evidence"** … wired to the BOOT door only |
+
+So the identical physical event — CasparCG came back with empty layers — was reconciled against the
+ledger when met at BOOT and not when met at RECONNECT. Nobody chose that: the reconnect path simply
+predates the thing it needed to correct, and the function that does the correcting arrived five weeks
+later on the other door.
+
+### §3 — the fix
+
+`#reconcileLedgerOnReconnect` calls **the same `reconcileLiveLayers`**, from the **same one occupancy
+sample** `reconcileOnReconnect` reads, one line above it. No second spelling of the three-valued rule.
+
+🔴 **The `heard` gate is the positive control and it is load-bearing.** It runs only inside the branch
+that has already proven the OSC tap is HEARING (`hasFreshOsc`). From a blind tap silence is evidence of
+nothing ([[B-101]], [[B-053]]), and dropping seats there is the INVERSE fault and the worse one — the
+console would forget producers genuinely on the channel and could then neither re-point nor tear them
+down. A blinked socket is the same distinction from the other side: the server kept its producers, they
+come back `occupied`, and every record is KEPT.
+
+**Other ledger consumers, each named and checked** (`RESTART-NOTICE-01` §A.3): `#liveLayerKeys` →
+`#isLiveLayer`, which fences `clearLayer` (`live-source` refusal) and `clearAll`. Dropping a record
+un-fences that coordinate — and it is safe, because the only records dropped are ones the server
+positively reports EMPTY: `clearLayer` then refuses the same layer as `foreign` (no fresh `html`
+observation), and there is no producer of ours left to protect. `#flushOrphanedStaging`,
+`#reassertLedgerGeometry`, `#applyLivePlatesUnguarded`, `setLivePlateVolume(s)`, PANIC and
+`teardownLiveLayers` all read by `itemId` and correctly find nothing for a row whose seats are gone.
+**HELD (parked) plates are NOT at risk**: a hold is a `MIXER FILL` moving the box off frame
+(`parkedFit`, [[B-154]]) — the producer stays and stays OSC-visible, which is the whole point of
+§12.4's no-re-`PLAY` cut.
+
+**Repro:** take a multi-box row to air; restart the CasparCG service under the running bridge; wait for
+the row to read stopped; press UPDATE with any input change.
+**Expected:** nothing reaches a layer — `UPDATE` is a configuration verb (golden rule 10).
+**Actual (before the fix):** `PLAY` + `MIXER VOLUME` + `FILL`/`CLIP` per plate, bare video on air.
+
+- **Shipped:** `#reconcileLedgerOnReconnect` in `caspar-runtime.ts`, called from the `heard` branch of
+  `session.on('state-change')`; `tools/caspar-bridge/tests/ledger-outlives-truth.integration.test.ts`
+  (3 tests — the drop, the four doors, and the blip inverse as the positive control).
+- **Cross-refs:** [[B-161]] (a configuration verb is never a playout verb — the rule broken),
+  [[B-216]] (one predicate, four doors — `#ownsLiveSeats`, whose second half went stale), [[B-145]]
+  (`reconcileLiveLayers`, reused rather than re-derived), [[B-086]]/[[B-053]] (the reconnect reset this
+  now travels with), [[B-101]] (why the `heard` gate is not optional), [[B-225]] (the same reconnect,
+  seen from the operator's side).
+- **Owed:** a Linux `gate:e2e` (the same push carries UI changes for [[B-225]]); the owner's plant
+  check is `RESTART-NOTICE-01` §D.
+- **Number:** highest `B-` HEADING across the three bug files was **`B-226`**
+  (`git grep -n -E "^## \[.\] B-2[0-9][0-9]"`); `git grep -n "B-227" HEAD` returned only the registry's
+  own "Next free" pointers and one back-reference inside the `B-226` entry, and `B-228` nothing.
+  Cross-checked against the registry's dated pointer — _"Next free after this session is `B-227`"_ —
+  headings and pointer AGREE. One number taken.

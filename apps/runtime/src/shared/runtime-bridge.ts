@@ -26,6 +26,10 @@ import type {
   LayersClearChannel,
   LayersOrphansChannel,
   LayersOwnedOccupancyChannel,
+  EmptiedAirDismissChannel,
+  EmptiedAirNotice,
+  EmptiedAirNoticeChannel,
+  EmptiedAirRestoreChannel,
   LockEngageChannel,
   OrphanLayer,
   OwnedOccupancyWarning,
@@ -389,6 +393,30 @@ export interface RuntimeBridge {
      */
     ownedOccupancy(): Promise<ChannelResponse<typeof LayersOwnedOccupancyChannel>>;
     onOwnedOccupancyChanged(handler: (warnings: OwnedOccupancyWarning[]) => void): Unsubscribe;
+  };
+
+  /**
+   * `B-225` — **the playout server stopped carrying what this console had put on air.**
+   *
+   * Its own namespace rather than a field on `connections`: link health answers "can we
+   * reach the server", and this answers "is what we put up still there" — a statement about
+   * AIR that outlives the reconnect that produced it and needs its own two operator acts.
+   *
+   * 🔴 **`restore` is the ONLY way anything goes back on air, and it exists solely to be
+   * reached by a press.** The owner's decision (2026-09-05) was detect-and-say over restoring
+   * automatically, because *an unattended machine must not put a graphic on air.* Nothing may
+   * call it from an effect, a timer, a reconnect handler or a mount.
+   */
+  emptiedAir: {
+    /** The standing notice, or `null` when there is nothing to report. */
+    notice(): Promise<ChannelResponse<typeof EmptiedAirNoticeChannel>>;
+    /** Put the named rows back — an explicit operator act, never automatic. */
+    restore(
+      req: ChannelRequest<typeof EmptiedAirRestoreChannel>,
+    ): Promise<ChannelResponse<typeof EmptiedAirRestoreChannel>>;
+    /** Clear the notice without restoring. Changes nothing on air. */
+    dismiss(): Promise<ChannelResponse<typeof EmptiedAirDismissChannel>>;
+    onNoticeChanged(handler: (notice: EmptiedAirNotice | null) => void): Unsubscribe;
   };
 
   lock: {

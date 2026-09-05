@@ -205,6 +205,19 @@ export function createMockBridge(): RuntimeBridge {
       onOwnedOccupancyChanged: (handler) => mock.ownedOccupancyChanged.subscribe(handler),
     },
 
+    /*
+      B-225 — offline parity. There is no CasparCG in test mode, so nothing can empty air
+      under us and the notice is permanently `null`. The verbs are still present and still
+      answer honestly (`restored: 0`, `dismiss` → `ok: false`): a contract half-implemented
+      offline is how a surface comes to be exercised in one mode and broken in the other.
+    */
+    emptiedAir: {
+      notice: () => Promise.resolve(mock.emptiedAir()),
+      restore: (req) => Promise.resolve(mock.restoreEmptiedAir(req.itemIds)),
+      dismiss: () => Promise.resolve(mock.dismissEmptiedAir()),
+      onNoticeChanged: (handler) => mock.emptiedAirChanged.subscribe(handler),
+    },
+
     // R-021 stage 2a — fixed-bank parity (offline: occupancy honestly unknown).
     fixedLayers: {
       config: () => Promise.resolve(mock.fixedLayersConfig()),

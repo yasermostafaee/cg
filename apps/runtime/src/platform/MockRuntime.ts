@@ -10,6 +10,8 @@ import type {
   LockState,
   OrphanLayer,
   OwnedOccupancyWarning,
+  EmptiedAirNotice,
+  EmptiedAirRefusal,
   PendingUpdate,
   PLAYOUT_CLEAR_REASONS,
   PlayoutLayerState,
@@ -1328,6 +1330,41 @@ export class MockRuntime {
     if (this.#ownedOccupancy.length !== before) {
       this.ownedOccupancyChanged.emit(this.ownedOccupancy());
     }
+  }
+
+  /*
+    ── B-225 — air emptied under us (offline: never) ──────────────────────
+
+    🔴 **HONESTLY EMPTY, NOT A SEEDED DEMO.** Every other offline surface seeds a plausible
+    row so the console has something to show; this one must not. The notice's whole meaning is
+    *the playout server stopped carrying what you put up* — there is no playout server in test
+    mode, so a seeded notice would be a lie about air, and its one press would offer to
+    "restore" rows nothing ever took away. The verbs exist and answer honestly instead.
+  */
+  readonly emptiedAirChanged = new Emitter<EmptiedAirNotice | null>();
+
+  emptiedAir(): EmptiedAirNotice | null {
+    return null;
+  }
+
+  restoreEmptiedAir(itemIds: readonly string[]): {
+    restored: number;
+    results: { itemId: string; ok: boolean; reason?: EmptiedAirRefusal }[];
+  } {
+    // No notice can stand offline, so every row is outside it — the same answer the real
+    // bridge gives for a row it cannot prove was taken away.
+    return {
+      restored: 0,
+      results: itemIds.map((itemId) => ({
+        itemId,
+        ok: false,
+        reason: 'unknown-item' as EmptiedAirRefusal,
+      })),
+    };
+  }
+
+  dismissEmptiedAir(): { ok: boolean } {
+    return { ok: false };
   }
 
   // ── lock ────────────────────────────────────────────────────────────

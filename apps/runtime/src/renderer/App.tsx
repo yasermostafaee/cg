@@ -8,6 +8,7 @@ import { RasterMismatchBanner } from './features/status/RasterMismatchBanner.js'
 import { OutputMissingBanner } from './features/status/OutputMissingBanner.js';
 import { ServerSettingsPanel } from './features/connections/ServerSettingsPanel.js';
 import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
+import { EmptiedAirNotice } from './features/layers/EmptiedAirNotice.js';
 import { LayersPanel } from './features/layers/LayersPanel.js';
 import { ChannelScope } from './features/channels/ChannelScope.js';
 import { MonitorStrip } from './features/monitors/MonitorStrip.js';
@@ -30,6 +31,7 @@ import { useLink } from './hooks/useLink.js';
 import { useLock } from './hooks/useLock.js';
 import { useOrphans } from './hooks/useOrphans.js';
 import { useOwnedOccupancy } from './hooks/useOwnedOccupancy.js';
+import { useEmptiedAir } from './hooks/useEmptiedAir.js';
 import { useStack } from './hooks/useStack.js';
 import { useRehearse } from './hooks/useRehearse.js';
 import { isRehearsing } from '@cg/shared-ipc';
@@ -86,6 +88,7 @@ export function App(): JSX.Element {
   const link = useLink();
   const orphans = useOrphans();
   const ownedOccupancy = useOwnedOccupancy();
+  const emptiedAir = useEmptiedAir();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // R-028 part B — the operator's own workspace geometry (persisted per browser).
   const layout = useShellLayout();
@@ -291,6 +294,12 @@ export function App(): JSX.Element {
                 {!monitorFocused && (
                   <>
                     <div style={styles.chrome}>
+                      {/* B-225 — the playout server stopped carrying what this console put
+                        on air. Here rather than with the five top-of-page banners because it
+                        names ROWS in the list below and offers to act on them; see the
+                        component's own header for the full argument. Renders nothing unless
+                        a reconnect actually took air away. */}
+                      <EmptiedAirNotice notice={emptiedAir} />
                       <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
                     </div>
                     {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed

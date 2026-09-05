@@ -14,6 +14,10 @@ import {
   LayersOrphansChannel,
   LayersOwnedOccupancyChangedChannel,
   LayersOwnedOccupancyChannel,
+  EmptiedAirDismissChannel,
+  EmptiedAirNoticeChangedChannel,
+  EmptiedAirNoticeChannel,
+  EmptiedAirRestoreChannel,
   LockEngageChannel,
   LockReleaseChannel,
   LockStateChangedChannel,
@@ -94,6 +98,7 @@ import {
   type LockState,
   type OrphanLayer,
   type OwnedOccupancyWarning,
+  type EmptiedAirNotice,
   type PendingUpdate,
   type PlayoutLayerState,
   type LiveLayerState,
@@ -294,6 +299,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #configSubs = new Subs<ConnectionConfig>();
   readonly #orphanSubs = new Subs<OrphanLayer[]>();
   readonly #ownedOccupancySubs = new Subs<OwnedOccupancyWarning[]>();
+  // B-225 — the standing "air was emptied under us" notice (null when there is none).
+  readonly #emptiedAirSubs = new Subs<EmptiedAirNotice | null>();
   // R-021 stage 2a — fixed-bank config + per-slot state pushes.
   readonly #fixedConfigSubs = new Subs<FixedLayerBank | null>();
   readonly #fixedStateSubs = new Subs<FixedSlotState[]>();
@@ -729,6 +736,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#ownedOccupancySubs.emit(p.data);
         break;
       }
+      case EmptiedAirNoticeChangedChannel.name: {
+        const p = EmptiedAirNoticeChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#emptiedAirSubs.emit(p.data);
+        break;
+      }
       case TemplatesChangedChannel.name: {
         const p = TemplatesChangedChannel.payload.safeParse(payload);
         if (p.success) this.#templatesSubs.emit(p.data);
@@ -1028,6 +1040,17 @@ export class WebSocketRuntime implements RuntimeBridge {
     ownedOccupancy: () => this.#invoke(LayersOwnedOccupancyChannel, undefined),
     onOwnedOccupancyChanged: (handler: (warnings: OwnedOccupancyWarning[]) => void) =>
       this.#ownedOccupancySubs.add(handler),
+  };
+
+  // B-225 — the notice, and the two acts an operator may take on it. `restore` is reachable
+  // only from a press; nothing here may call it on mount, on reconnect or on a timer.
+  readonly emptiedAir = {
+    notice: () => this.#invoke(EmptiedAirNoticeChannel, undefined),
+    restore: (req: ChannelRequest<typeof EmptiedAirRestoreChannel>) =>
+      this.#invoke(EmptiedAirRestoreChannel, req),
+    dismiss: () => this.#invoke(EmptiedAirDismissChannel, undefined),
+    onNoticeChanged: (handler: (notice: EmptiedAirNotice | null) => void) =>
+      this.#emptiedAirSubs.add(handler),
   };
 
   // R-021 stage 2a — the fixed-bank wire contract (facts only; verb
