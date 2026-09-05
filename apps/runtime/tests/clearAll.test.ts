@@ -129,7 +129,17 @@ describe('stack.clearAll', () => {
     mock.clearAll();
     expect(mock.stackSnapshot()).toHaveLength(1); // cleared from air, kept in the list
 
-    mock.removeAll();
+    /*
+      🔴 `R-017` — the `settle()` is REQUIRED now, and its absence was hiding something.
+
+      Remove-All is refused while anything is on air OR UNSETTLED, and the clear above lands
+      the row on a transient before it rests at `idle`. Without the settle the second half of
+      this test was removing a row mid-exit — which is exactly the press R-017 exists to
+      refuse. The test's own claim is unchanged and now reads honestly: clear KEEPS the row,
+      remove drops it, and remove waits for the clear to finish.
+    */
+    await settle();
+    expect(mock.removeAll()).toMatchObject({ ok: true });
     expect(mock.stackSnapshot()).toHaveLength(0); // dropped from the list
   });
 

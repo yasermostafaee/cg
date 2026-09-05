@@ -254,8 +254,12 @@ export interface RuntimeBridge {
      */
     silenceAllLivePlates(): Promise<ChannelResponse<typeof StackSilenceAllLivePlatesChannel>>;
     /**
-     * R-010 — OUT + REMOVE every stack item (clears air, empties the list).
-     * The sanctioned path to unblock a server reconfiguration.
+     * OUT + REMOVE every stack item (clears air, empties the list).
+     *
+     * 🔴 `R-017` — REFUSED, all-or-nothing, while anything is on air, and no longer R-010's
+     * unblock path: `clearAll` is. Apply gates on the on-air COUNT, so taking rows off air is
+     * the whole remedy and this one is refused in the very state a reconfiguration is blocked
+     * in (`operator-surface` §6).
      */
     removeAll(): Promise<ChannelResponse<typeof StackRemoveAllChannel>>;
     /**

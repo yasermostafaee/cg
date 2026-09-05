@@ -11,6 +11,7 @@ import {
   XSquare,
 } from 'lucide-react';
 import type { FixedSlotState } from '@cg/shared-ipc';
+import { isOnAirStatus } from '@cg/shared-schema';
 import type { StackItemState } from '@cg/shared-schema';
 import type { RowAction } from '../../ui/rowAction.js';
 import type { AsyncResult } from '../../ui/asyncButtonController.js';
@@ -110,6 +111,30 @@ export const RESTORE_BLOCKED_REASON =
 
 export const AWAITING_ROW_REASON =
   'Connecting… this row’s contents have not arrived from the bridge yet, so its actions are held. They return as soon as it answers.';
+
+/**
+ * 🔴 `R-017` — WHY REMOVE IS HELD WHILE THE ROW IS ON AIR.
+ *
+ * REMOVE clears the layer AND drops the item, and neither half can be undone: the row's
+ * fields, its position override and its per-look composition go with it. It was the only
+ * verb on the row with no state condition whatsoever — and the only irreversible one.
+ *
+ * ⚠ **A confirm was already there and was never the gap.** `LayerRow` has attached an
+ * on-air-aware dialog to this verb, on both surfaces, since before R-017 was re-verified.
+ * A confirmation asks; a refusal declines. R-017 is the refusal.
+ *
+ * It names the way OUT, like {@link RESTORE_BLOCKED_REASON}, because the remedy is two
+ * short presses and an operator told only "no" concludes the console is broken. STOP is
+ * named first: it is the graceful half and leaves the template loaded, so the row can be
+ * taken again without a re-pick.
+ *
+ * ⭐ **Exported so the row's tooltip and the toast that answers the bridge's refusal are
+ * ONE string from ONE place** — `tasks.md` 1.10's requirement, and the reason it is a
+ * requirement is that two sentences which match today drift apart on the day one of them
+ * is edited.
+ */
+export const REMOVE_ON_AIR_REASON =
+  'This row is on air, and REMOVE cannot be undone — it clears the layer and drops the item, with its fields and overrides. Take it off air first: STOP runs the template’s outro and keeps it loaded, CLEAR cuts it immediately.';
 
 export interface LayerRowActionDeps {
   /**
@@ -526,11 +551,30 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
           ...act(
             'load-remove',
             'REMOVE',
-            false,
+            /*
+              🔴 `R-017` — THE STATE CONDITION THIS VERB NEVER HAD, and it goes HERE, in the
+              ONE `RowAction` this toggle's REMOVE half is declared as. `buttonActions` and
+              `toMenuItems` are two projections of the same array, so the button and the
+              context-menu item inherit the gate structurally — there is no second place to
+              remember, which is the whole reason the shape rule exists.
+
+              `isOnAirStatus` is IMPORTED, never re-derived: the bridge's own refusal is the
+              same function object, so the two cannot answer one row two ways. That identity
+              is what `removeOnAir.agreement.test.ts` asserts, and it is why this reads the
+              item's own `status` rather than the row's DISPLAY badge — `LayerRow` masks an
+              unbacked air claim to `unverified` for the operator's benefit, and a gate
+              computed from the mask would diverge from the bridge on exactly the states the
+              mask exists for.
+            */
+            item !== null && isOnAirStatus(item) && !blocked,
             () => (item === null ? noop() : deps.remove(item.itemId)),
             Trash2,
             undefined,
-            templateMissing ? MISSING_TEMPLATE_REASON : undefined,
+            templateMissing
+              ? MISSING_TEMPLATE_REASON
+              : item !== null && isOnAirStatus(item) && !blocked
+                ? REMOVE_ON_AIR_REASON
+                : undefined,
           ),
           // The two halves of ONE slot, and the reason `tone` is its own field:
           // they share a key, so only an explicit declaration can give them

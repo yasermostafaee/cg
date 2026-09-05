@@ -5,7 +5,7 @@ import { isLoopbackHost } from '../../../shared/loopback.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useStack } from '../../hooks/useStack.js';
 import { OutputsSection } from './OutputsSection.js';
-import { isOnAirOrUnsettled } from '../stack/onAir.js';
+import { isOnAirStatus } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
@@ -100,13 +100,17 @@ interface EndpointDraft {
 }
 
 /**
- * R-010 — the on-air predicate the panel mirrors (the bridge is the authority).
+ * R-010 — how many rows block Apply. A COUNT, not a predicate: the panel says the
+ * number in its refusal, so this is the one thing it derives.
  *
- * `B-213` — it DELEGATES to the one renderer-side spelling in `stack/onAir.ts`, which
- * the header's tally reads too. The status list used to live here as a second copy.
+ * `B-213` made it delegate to a renderer-side spelling; `operator-surface` §5(B) removed
+ * that spelling and this now counts with `isOnAirStatus` from `@cg/shared-schema` — the
+ * same function object the bridge's own `#onAirCount` filters on, so the panel's
+ * pre-emptive message and the bridge's actual refusal can no longer disagree about which
+ * rows count.
  */
 export function anyOnAirOrUnsettled(items: readonly StackItemState[]): number {
-  return items.filter(isOnAirOrUnsettled).length;
+  return items.filter(isOnAirStatus).length;
 }
 
 function toDraft(ep: { host: string; amcpPort: number; oscPort: number }): EndpointDraft {
@@ -347,7 +351,7 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
       ? [
           {
             role: 'refusal' as const,
-            text: `Apply is blocked: ${String(onAirCount)} item(s) are on air or unsettled. Use Remove All (or Out each item) first.`,
+            text: `Apply is blocked: ${String(onAirCount)} item(s) are on air or unsettled. Use Clear All — it takes them off air and keeps the rows.`,
           },
         ]
       : []),

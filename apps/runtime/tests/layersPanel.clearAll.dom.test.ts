@@ -417,7 +417,19 @@ describe('StackPanel Clear-All', () => {
     (window as unknown as { cg: typeof stub }).cg = stub;
     const el = await renderPanel();
     expect(clearAllButton(el)?.disabled).toBe(false);
-    expect(removeAllButton(el)?.disabled).toBe(false);
+    /*
+      🔴 `R-017` — REVERSED, and the reversal is the point of the two buttons being different.
+
+      This stack is `[item('a', 'on-air')]`, so Remove-All is now WITHHELD before the link even
+      drops: it is irreversible and never a remedy, so it waits. Clear-All beside it stays
+      enabled on the identical stack, because it IS the remedy — `B-122`'s rule that an
+      emergency control is never gated on the believed status.
+
+      That the two now differ HERE, on one stack, in one assertion pair, is the clearest
+      statement of the asymmetry this file exists to protect. It is not incidental to the
+      link-down subject below; it is what makes the link-down behaviour legible.
+    */
+    expect(removeAllButton(el)?.disabled).toBe(true);
 
     await act(async () => {
       status = 'disconnected';

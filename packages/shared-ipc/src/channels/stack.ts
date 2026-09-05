@@ -148,10 +148,34 @@ export const StackOutChannel = defineChannel(
   z.object({ accepted: z.boolean() }),
 );
 
+/**
+ * 🔴 `R-017` — the ONE refusal code both REMOVE verbs answer with, declared beside the
+ * channels that carry it so the bridge, the mock and the renderer's message table all read
+ * the same literal instead of three matching strings.
+ *
+ * `stack.remove` and `stack.remove-all` have DIFFERENT response shapes and deliberately keep
+ * them; what they share is this vocabulary.
+ */
+export const REMOVE_ON_AIR_CODE = 'on-air';
+
+/**
+ * 🔴 `R-017` — REMOVE ONE, and it can now be REFUSED.
+ *
+ * It answered a bare `{ accepted }` with no implementation that ever declined, so the
+ * shape had nowhere to put a reason and the picker's own comment recorded the cost —
+ * _"there is no code to quote"_. It follows `B-070`'s `errorCode` precedent (the shape
+ * `stack.next` and `stack.take` already use) rather than inventing a third vocabulary.
+ *
+ * The one code it adds is `on-air`: the item is on air or unsettled, so clearing its layer
+ * and dropping the row is refused. ⚠ The refusal is scoped to items the console can act on
+ * ANOTHER way — see `caspar-runtime.ts`'s `#removeImpl`, where an item on no declared
+ * operator row is deliberately exempt, because for that one REMOVE is the only remedy
+ * (`B-212`).
+ */
 export const StackRemoveChannel = defineChannel(
   'stack.remove',
   z.object({ itemId: IdSchema }),
-  z.object({ accepted: z.boolean() }),
+  z.object({ accepted: z.boolean(), errorCode: z.string().optional() }),
 );
 
 /**
@@ -396,14 +420,32 @@ export const StackSetPlateVolumesChannel = defineChannel(
 );
 
 /**
- * R-010 — clear EVERYTHING in one operation: every stack item is OUTed and
- * REMOVEd (per-item CLEAR-destroys semantics, in sequence), clearing air and
- * emptying the list. The sanctioned path to unblock a server reconfiguration.
+ * Clear EVERYTHING in one operation: every stack item is OUTed and REMOVEd (per-item
+ * CLEAR-destroys semantics, in sequence), clearing air and emptying the list.
+ *
+ * 🔴 `R-017` — REFUSED WHILE ANYTHING IS ON AIR, and this is no longer R-010's unblock
+ * path. `stack.clear-all` is: Apply gates on the on-air COUNT rather than on an empty
+ * list, so taking everything off air is the whole remedy and emptying the stack was
+ * always more than R-010 asked for. Naming this one there would have named a control
+ * disabled by exactly the condition being reported.
+ *
+ * ⚠ **A DIFFERENT SHAPE FROM `stack.remove`, DELIBERATELY.** That one answers
+ * `{ accepted, errorCode? }`; this one answers `{ ok, removed, errorCode? }` because its
+ * caller needs the COUNT. Two shapes, ONE refusal vocabulary — do not unify them as a
+ * side effect of adding the refusal, and do not add `removed: 0` semantics to the other.
+ *
+ * ⚠ **All-or-nothing.** A refusal removes NOTHING (`removed: 0`). Removing the idle rows
+ * and skipping the live ones would break the action's own name and leave the operator
+ * believing the stack is empty while a graphic is live.
  */
 export const StackRemoveAllChannel = defineChannel(
   'stack.remove-all',
   z.void(),
-  z.object({ ok: z.boolean(), removed: z.number().int().nonnegative() }),
+  z.object({
+    ok: z.boolean(),
+    removed: z.number().int().nonnegative(),
+    errorCode: z.string().optional(),
+  }),
 );
 
 /**

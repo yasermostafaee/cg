@@ -10,6 +10,9 @@
  * Unknown codes are surfaced verbatim rather than swallowed: an unrecognised
  * reason the operator can quote to an engineer beats a generic dead end.
  */
+import { REMOVE_ON_AIR_CODE } from '@cg/shared-ipc';
+import { REMOVE_ON_AIR_REASON } from '../features/layers/layerRowActions.js';
+
 const MESSAGES: Readonly<Record<string, string>> = {
   'unknown-item': 'That item is no longer on the stack.',
   'unknown-template': 'That template is not registered with the bridge — re-import it.',
@@ -79,6 +82,17 @@ const MESSAGES: Readonly<Record<string, string>> = {
     'CasparCG refused to mute the layer, so the graphic was NOT loaded — loading it would have put its audio on air. Try again; if it keeps failing, check the channel on the playout server.',
   rehearsing:
     'That row is on PVW. Take it off PVW first — loading would put an unmuted graphic on the layer.',
+  /*
+    🔴 `R-017` — the REMOVE refusal, and the one sentence BOTH remove verbs answer with.
+
+    It is `REMOVE_ON_AIR_REASON` from `layerRowActions.ts` verbatim, and that is the point
+    rather than a coincidence: `tasks.md` 1.10 requires the tooltip that pre-empts the press
+    and the toast that answers the bridge to be ONE string, because two sentences that match
+    today drift on the day one of them is edited. The row's own control cannot be pressed
+    while this applies, so this wording is reached by the paths that do not go through it —
+    the context menu on a stale render, the template picker's orphan remedy, a race.
+  */
+  [REMOVE_ON_AIR_CODE]: REMOVE_ON_AIR_REASON,
   // The BANK-SCOPED clear's two structural refusals. Both are guard verdicts rather
   // than transient failures, so neither suggests retrying: the answer will not change
   // until the CONFIG does.

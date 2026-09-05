@@ -10,7 +10,7 @@ import { test, expect } from './fixtures/runtime.js';
  *      warning and Apply round-trips.
  */
 
-test('settings panel: blocked while on air, Remove-All clears + unblocks, remote-host apply round-trips', async ({
+test('settings panel: blocked while on air, Clear-All unblocks and the ROWS SURVIVE, remote-host apply round-trips', async ({
   app,
 }) => {
   const page = app.page;
@@ -47,18 +47,27 @@ test('settings panel: blocked while on air, Remove-All clears + unblocks, remote
   await panel.getByRole('button', { name: 'Cancel' }).click();
   await expect(panel).toBeHidden();
 
-  // 2. Remove-All: confirm the app's modal (a deliberate destructive path).
-  await page.getByRole('button', { name: 'Remove all items' }).click();
-  await page
-    .getByRole('dialog', { name: 'Remove all items?' })
-    .getByRole('button', { name: 'Remove all', exact: true })
-    .click();
-  // R-028 part B — there is no separate Stack panel to empty. Remove-All is
-  // proved by the LAYER rows: every one of them stops naming an item and offers
-  // LOAD again. The rows themselves survive — they are declared layers, not a
-  // list of what happens to be loaded.
-  await expect(app.layers.locator('[data-item-id]')).toHaveCount(0);
-  await expect(app.layerRow(70).getByRole('button', { name: 'LOAD' })).toBeVisible();
+  /*
+    2. 🔴 `R-017` / `operator-surface` §6 — THE REMEDY IS CLEAR-ALL, AND THE ASSERTION
+       CHANGES SHAPE RATHER THAN WORDING.
+
+    Remove-All is no longer the unblock path and is no longer even available here: it is
+    disabled by exactly the condition the panel is reporting. Clear-All is, because Apply
+    gates on the ON-AIR COUNT and not on an empty list.
+
+    That makes this step assert strictly MORE than it used to. Remove-All emptied the rows, so
+    "the item is gone" and "Apply is unblocked" were indistinguishable. Clear-All takes the
+    graphic off air and KEEPS the row, so the two facts separate: the item must still be
+    there, and Apply must still become enabled. The old shape could not have caught a
+    Clear-All that quietly removed things.
+  */
+  await expect(page.getByRole('button', { name: 'Remove all items' })).toBeDisabled();
+  await page.getByRole('button', { name: /^Clear all rows/ }).click();
+  const clearDialog = page.getByRole('dialog').filter({ hasText: /Clear/ });
+  await clearDialog.getByRole('button', { name: /^Clear/ }).click();
+  // The ROW and its ITEM both survive — that is the whole difference from Remove-All.
+  await expect(app.layers.locator('[data-item-id]')).not.toHaveCount(0);
+  await expect(app.layerRow(70).getByRole('button', { name: 'REMOVE' })).toBeVisible();
 
   // 3. Reopened: unblocked; remote host → warning; Apply → applied.
   await openSettings.click();

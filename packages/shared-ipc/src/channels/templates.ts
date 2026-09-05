@@ -420,7 +420,14 @@ export const TemplatesImportChannel = defineChannel(
  * missing template and the row can NEVER be brought back, and `setPosition`'s re-ADD stops
  * silently. An idle/loaded row is just as poisoned as an on-air one, so the predicate is
  * "any reference", not "any on-air reference". Remove the referencing items first
- * (`stack.remove` / Remove-All) — the same unblock path R-010 uses.
+ * (`stack.remove`, or the picker's per-item remedy).
+ *
+ * ⚠ **THE R-010 CROSS-REFERENCE THAT USED TO CLOSE THAT SENTENCE IS DELETED, not reworded.**
+ * `operator-surface` §6 moved R-010's unblock path to CLEAR-ALL, and the two paths are now
+ * genuinely different rather than differently spelled: Clear-All takes rows OFF AIR and
+ * leaves them on the stack, so every reference survives it and this refusal would repeat
+ * forever. Naming it here would be false, and naming Remove-All would point at a control
+ * `R-017` disables whenever an on-air row is what is holding the template.
  *
  * A confirmed removal must also prune the client's reconnect-reconciliation retention, or
  * the next reconnect re-imports what the operator just deleted. A REFUSED removal must

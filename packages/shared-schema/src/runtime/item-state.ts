@@ -270,6 +270,55 @@ export function isRestorable(state: RetainedAirState): boolean {
 }
 
 /**
+ * 🔴 **THE on-air-or-unsettled predicate for a stack item. THE ONE DEFINITION, both
+ * sides of the bridge seam.**
+ *
+ * `updating` / `exiting` ride an on-air producer; `unconfirmed` (B-044) and `pending`
+ * mean the on-air result is UNKNOWN. **Unknown must count as on air in every gate
+ * built on this, because each one's failure mode is acting on a live graphic.**
+ *
+ * ── WHY IT LIVES HERE, AND WHY THERE MUST NEVER BE A SECOND SPELLING ────────
+ *
+ * It was module-private in `caspar-runtime.ts` while the renderer kept a
+ * hand-written mirror (`isOnAirOrUnsettled`) whose own doc called itself "the mirror
+ * of the bridge's `isOnAirStatus`" — plus six further verbatim re-derivations in
+ * `setPosition`, `PositionPicker` and `MockRuntime`. **Eight copies of one rule, agreeing
+ * only by luck**, which is the exact drift CLAUDE.md golden rule 6 forbids and which
+ * `retainedStateFor` two functions above is sited here to avoid for its own question.
+ * `operator-surface` §5 answer (B) collapsed all eight into this.
+ *
+ * ⚠ **A DELEGATING WRAPPER IS STILL A SECOND NAME.** Do not add
+ * `isOnAirOrUnsettled(item)`, `anyOnAir(items)` or a scalar `(status, pending)` overload
+ * as a convenience — each becomes the name a later reader gates on, and then there are
+ * two again. Callers spell `isOnAirStatus(item)`; a list spells
+ * `items.some(isOnAirStatus)`.
+ *
+ * ── WHAT IT DELIBERATELY EXCLUDES, AND WHY THAT IS NOT AN OVERSIGHT ─────────
+ *
+ * `unverified`, `error` and `disconnected` are OUT. All three mean "we cannot confirm",
+ * and a gate built on them refuses on the value that is least trustworthy — which is
+ * `B-122`'s finding, not its exception. The measured cost of including `unverified` is
+ * recorded in `B-226`: the row's CLEAR is gated on CasparCG REACHABILITY while REMOVE is
+ * not, so with the bridge up and CasparCG unreachable a row reads `unverified`, CLEAR is
+ * disabled, and REMOVE is the only control left. Refusing there leaves no operator action
+ * at all.
+ *
+ * ⚠ **NOT `isOnAir`** (`apps/runtime/.../stack/onAir.ts`), which is status-only, never
+ * reads `pending`, and carries B-122's standing prohibition on gating a clear path. The
+ * two answer different questions and are not interchangeable.
+ */
+export function isOnAirStatus(item: Pick<StackItemState, 'status' | 'pending'>): boolean {
+  return (
+    item.pending ||
+    item.status === 'playing' ||
+    item.status === 'on-air' ||
+    item.status === 'updating' ||
+    item.status === 'exiting' ||
+    item.status === 'unconfirmed'
+  );
+}
+
+/**
  * B-092 — one stack item's INTENT as retained by the browser, so the stack
  * survives a restart of the bridge process (the stack otherwise lives only in
  * the bridge's in-memory Reconciler and dies with it).

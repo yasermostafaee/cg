@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isOnAirStatus } from '@cg/shared-schema';
 import type { PositionAnchor, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -61,16 +62,19 @@ const styles = {
   },
 } as const;
 
-/** The on-air lock mirrors the bridge's set-position refusal predicate. */
+/**
+ * The on-air lock, which is R-011's refusal asked from the UI side.
+ *
+ * ⚠ It KEEPS ITS NAME AND DELEGATES, where `isOnAirOrUnsettled` was deleted outright —
+ * and the difference is real rather than a lapse. That one was a SYNONYM for the shared
+ * predicate, so it was a second name for one rule; this one names a different question
+ * ("is the position control locked") that today happens to be answered by that rule. What
+ * it must not do is re-derive the answer: it used to spell the six terms out, mirroring
+ * `setPosition`'s own inline copy rather than the canonical predicate, so the lock and the
+ * refusal were two derivations that agreed by luck (`operator-surface` §5(B)).
+ */
 export function isPositionLocked(item: StackItemState): boolean {
-  return (
-    item.pending ||
-    item.status === 'playing' ||
-    item.status === 'on-air' ||
-    item.status === 'updating' ||
-    item.status === 'exiting' ||
-    item.status === 'unconfirmed'
-  );
+  return isOnAirStatus(item);
 }
 
 /**

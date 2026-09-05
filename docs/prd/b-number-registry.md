@@ -2452,3 +2452,30 @@ filed in `bugs-runtime.md`. No `C-`, `D-` or `P-` number was taken; nothing was 
 
 ⇒ **Next free after this session is `B-226`** (`B-001` … `B-225`, no gaps), **`D-161`**, **`C-034`**
 and **`P-044`** (unchanged).
+
+### 2026-09-06 — `B-226` (`R017-ONE-AUTHORITY-01`: one on-air predicate, then R-017's refusal)
+
+| kind | id      | one line                                                                                                                                                                                                                                                     | home                               | status                                            |
+| ---- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | ------------------------------------------------- |
+| `B-` | `B-226` | the row's CLEAR is gated on CasparCG reachability and REMOVE is not, so with the bridge up and CasparCG unreachable the graceful remedy is withheld while the irreversible one stays enabled — and that is what stopped `unverified` joining R-017's refusal | [bugs-runtime.md](bugs-runtime.md) | FILED, report only — the fix is an owner decision |
+
+The session's own deliverable took NO number: it implemented `operator-surface` wave 1 (`R-017`) on the
+owner's gate answers, so it lands under an existing item. `B-226` is the one NEW defect it measured, and
+it is filed rather than fixed because it forced §2's answer and its remedy is a choice between three
+candidates.
+
+⭐ **Correction worth carrying:** the on-air status list was spelled **EIGHT** times in the tree, not the
+two the design named — `isOnAirStatus`, `setPosition`'s inline copy, `isOnAirOrUnsettled`,
+`isPositionLocked` and four in `MockRuntime`, every one the same six terms in the same order. All eight
+now import one definition from `@cg/shared-schema`.
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three bug
+files was **`B-225`** (`bugs-runtime.md`, `git grep -n -E "^## \[.\] B-2[0-9][0-9]"`);
+`git grep -n "B-226" HEAD` returned only this file's own "Next free" pointers and one back-reference
+inside the `B-225` entry, and `git grep -n "B-227" HEAD` returned nothing. The duplicate audit printed
+exactly `B-056` and `B-080`. **Cross-check against the dated pointer:** the entry above ends _"Next free
+after this session is `B-226`"_ — headings and pointer **AGREE**. One number taken, filed in
+`bugs-runtime.md`. No `C-`, `D-` or `P-` number was taken; nothing was deleted or translated.
+
+⇒ **Next free after this session is `B-227`** (`B-001` … `B-226`, no gaps), **`D-161`**, **`C-034`**
+and **`P-044`** (unchanged).

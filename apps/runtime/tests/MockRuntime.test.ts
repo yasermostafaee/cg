@@ -56,7 +56,7 @@ describe('MockRuntime owned-slot occupancy (B-056 parity)', () => {
     expect(calls).toBe(0);
   });
 
-  it('boots with the seeded warning under CG_E2E_OWNED_OCCUPANCY and resolves it on remove', () => {
+  it('boots with the seeded warning under CG_E2E_OWNED_OCCUPANCY and resolves it on remove', async () => {
     (globalThis as { CG_E2E_OWNED_OCCUPANCY?: boolean }).CG_E2E_OWNED_OCCUPANCY = true;
     try {
       const rt = new MockRuntime();
@@ -71,8 +71,29 @@ describe('MockRuntime owned-slot occupancy (B-056 parity)', () => {
       // A take does NOT resolve (bridge parity).
       rt.take('item-irib-news');
       expect(rt.ownedOccupancy()).toHaveLength(1);
-      // The remedy resolves it and publishes the change.
-      rt.remove('item-irib-news');
+      /*
+        🔴 `R-017` — THE REMEDY IS NOW TWO PRESSES, and this asserts both halves rather than
+        being relaxed to skip the take above.
+
+        The row was taken on air on the line before, so REMOVE is refused — by the mock, in
+        parity with the bridge, which is the whole reason the mock carries the refusal. The
+        refusal must change NOTHING: the warning is still there and the row is still on the
+        stack. Then the remedy the refusal names — take it off air first — and the remove
+        lands.
+      */
+      expect(rt.remove('item-irib-news')).toMatchObject({ accepted: false });
+      expect(rt.ownedOccupancy(), 'a refused remove resolves nothing').toHaveLength(1);
+      expect(rt.stackSnapshot().map((i) => i.itemId)).toContain('item-irib-news');
+      // ⚠ Let the TAKE settle before the out: the mock's `#settle` bails when the item is
+      // no longer `pending`, so an out issued inside the take's own settle window has its
+      // timer eaten by it. Not a product behaviour — a mock timing detail, and waiting is
+      // what the other suites do (`clearAll.test.ts`'s `settle()`).
+      await new Promise((r) => setTimeout(r, 220));
+      rt.out('item-irib-news');
+      // …and the out has to settle too: `exiting` is inside the refusal's set, because the
+      // on-air result is still unknown while it runs. That is the gate working, not a race.
+      await new Promise((r) => setTimeout(r, 220));
+      expect(rt.remove('item-irib-news')).toMatchObject({ accepted: true });
       expect(rt.ownedOccupancy()).toEqual([]);
       expect(emissions[emissions.length - 1]).toEqual([]);
     } finally {

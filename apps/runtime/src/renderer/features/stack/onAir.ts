@@ -1,3 +1,4 @@
+import { isOnAirStatus } from '@cg/shared-schema';
 import type { StackItemState } from '@cg/shared-schema';
 
 /**
@@ -37,30 +38,18 @@ export function isOnAir(item: StackItemState): boolean {
   return item.status !== 'idle' && item.status !== 'loaded';
 }
 
-/**
- * THE on-air-or-unsettled predicate for a stack item, renderer side — the mirror of the
- * bridge's `isOnAirStatus` (R-010's `setConfig` gate, R-030's raster gate, the rehearse
- * guards). `updating` / `exiting` ride an on-air producer; `unconfirmed` and `pending` mean
- * the on-air result is UNKNOWN, and unknown counts as on air in every gate whose failure
- * mode is acting on a live graphic.
+/*
+ * `isOnAirOrUnsettled` USED TO LIVE HERE, and its own doc called it "the mirror of the
+ * bridge's `isOnAirStatus`". It was byte-for-byte the same six terms — two names for one
+ * rule, agreeing only by luck, which is what CLAUDE.md golden rule 6 forbids and what
+ * `tasks.md` 1.1 means by "ONE import, never two mirrored definitions".
  *
- * `error` is deliberately NOT here: it says a command was refused, and says nothing about
- * whether the layer is showing anything. `unverified` is not here either — the link is
- * down, and the header greys itself for that case as a whole.
- *
- * ONE spelling, in this file, read by the Server settings panel's apply gate and by the
- * header's tally (golden rule 6). The panel used to carry its own copy.
+ * `operator-surface` §5 answer (B) DELETED it rather than leaving it delegating: a
+ * delegating wrapper is still the second name a later reader gates on. Everything that
+ * asked it now imports `isOnAirStatus` from `@cg/shared-schema` — the same function object
+ * the bridge's own gates call, which is what makes the agreement test an IDENTITY check
+ * rather than a table of equal answers.
  */
-export function isOnAirOrUnsettled(item: StackItemState): boolean {
-  return (
-    item.pending ||
-    item.status === 'playing' ||
-    item.status === 'on-air' ||
-    item.status === 'updating' ||
-    item.status === 'exiting' ||
-    item.status === 'unconfirmed'
-  );
-}
 
 /**
  * `B-213` — what the layer table's header SAYS about the list, as two numbers that mean
@@ -85,7 +74,7 @@ export function airTally(items: readonly StackItemState[]): AirTally {
   let onAir = 0;
   let inError = 0;
   for (const item of items) {
-    if (isOnAirOrUnsettled(item)) onAir += 1;
+    if (isOnAirStatus(item)) onAir += 1;
     else if (item.status === 'error') inError += 1;
   }
   return { onAir, inError };

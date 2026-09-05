@@ -98,7 +98,7 @@ branch `ai-stale`, never landed): **CONFIRMED** / **CHANGED** / **CANNOT VERIFY*
 
 Wave 1 of the landing order. Independent of every other section here.
 
-- [ ] 1.1 ⟨GATE: §5⟩ Write the chosen on-air predicate into `design.md` as the answer, then use
+- [x] 1.1 ⟨GATE: §5⟩ Write the chosen on-air predicate into `design.md` as the answer, then use
       it on BOTH sides. **ONE import, never two mirrored definitions** — the bridge's
       `isOnAirStatus` is module-private in `caspar-runtime.ts` today, so "share it" means MOVING
       it into a package both sides can import. A second local derivation of the state list is the
@@ -107,37 +107,61 @@ Wave 1 of the landing order. Independent of every other section here.
       predicate's contract — _"it must never gate a clear path again, on either side of the bridge
       seam"_ — and REMOVE clears the layer before dropping the row. `§5` sets out why the item's
       written answer is no longer the recommended one.
-- [ ] 1.2 ⟨GATE: §5⟩ Add the gate to the row's SINGLE `RowAction` declaration
+- [x] 1.2 ⟨GATE: §5⟩ Add the gate to the row's SINGLE `RowAction` declaration
       (`layerRowActions.ts`, the REMOVE half of `load-remove`), so the button and the
       context-menu item inherit it structurally. Title names the remedy: STOP or CLEAR.
       **INVERSE:** assert REMOVE returns to enabled after a STOP settles the item to `loaded`
       and after a CLEAR settles it to `idle` — a gate with no measured way back is a trap.
-- [ ] 1.3 ⟨GATE: §5⟩ Extend `stack.remove`'s response shape to carry a refusal
+- [x] 1.3 ⟨GATE: §5⟩ Extend `stack.remove`'s response shape to carry a refusal
       (`packages/shared-ipc/src/channels/stack.ts`), following `B-070`'s `errorCode` precedent
       rather than inventing a third vocabulary. Refuse bridge-side. **Assert on the WIRE that
       nothing was sent**, not that the call returned `accepted: false`.
-- [ ] 1.4 ⟨GATE: §5⟩ Same for `stack.remove-all`, which has a DIFFERENT response shape
+- [x] 1.4 ⟨GATE: §5⟩ Same for `stack.remove-all`, which has a DIFFERENT response shape
       (`{ ok, removed }`). Two shapes, one refusal vocabulary. **INVERSE:** with nothing on air,
       `remove-all` behaves exactly as today — confirm and all — and that is a test, not an
       assumption.
-- [ ] 1.5 ⟨GATE: §5⟩ `LayersPanel.tsx` — add the `onAirCount` term to REMOVE ALL's `disabled`,
+- [x] 1.5 ⟨GATE: §5⟩ `LayersPanel.tsx` — add the `onAirCount` term to REMOVE ALL's `disabled`,
       keeping it RENDERED and titled. Do NOT harmonise it with Clear-All's genuine absence; the
       two are deliberately different and `design.md` `§0.9` C6 says why.
-- [ ] 1.6 ⟨GATE: §5⟩ **The agreement test.** Enumerate every `StackItemStatus` and assert the UI
+- [x] 1.6 ⟨GATE: §5⟩ **The agreement test.** Enumerate every `StackItemStatus` and assert the UI
       gate and the bridge refusal resolve IDENTICALLY for each. This is the test that would have
       caught the failure R-017's notes were written to prevent, and it asserts the CLAIM (they
       agree) rather than the presence of either gate.
-- [ ] 1.7 ⟨GATE: §5⟩ Only four idle rows of five are individually removable while the fifth is
+- [x] 1.7 ⟨GATE: §5⟩ Only four idle rows of five are individually removable while the fifth is
       on air — the bulk action is withheld, the per-row ones are not. Assert both halves.
-- [ ] 1.8 ⟨GATE: §6⟩ The remedy copy ripple, all four sites plus the assertion:
+- [x] 1.8 ⟨GATE: §6⟩ The remedy copy ripple, all four sites plus the assertion:
       `ServerSettingsPanel.tsx`, `MockRuntime.ts`, `caspar-runtime.ts`'s own message, and the
       literal-string assertion in `serverSettingsPanel.dom.test.ts`.
-- [ ] 1.9 ⟨GATE: §6⟩ Rewrite `apps/runtime/tests/e2e/server-settings.spec.ts` step 2: it clicks
+- [x] 1.9 ⟨GATE: §6⟩ Rewrite `apps/runtime/tests/e2e/server-settings.spec.ts` step 2: it clicks
       Remove-All to unblock Apply and then asserts "No items loaded". After Clear-All the rows
       correctly REMAIN, idle — so the assertion changes SHAPE. Assert the CLAIM (Apply became
       available AND the rows survived), which is strictly more than the old test checked.
-- [ ] 1.10 ⟨GATE: §5⟩ Refusals reach the operator through the command toast, worded identically
+- [x] 1.10 ⟨GATE: §5⟩ Refusals reach the operator through the command toast, worded identically
       however issued. Assert the WORDING is one string from one place, not two that match today.
+
+### 1b. Wave 1's ripple, found while landing it — OWED, not done
+
+`R017-ONE-AUTHORITY-01` swept for §6's real site list and found `1.8`'s four short. These are the
+sites the sweep found that wave 1 could NOT close from inside section 1, recorded here so they
+travel with the work rather than being rediscovered.
+
+- [x] 1b.1 `packages/shared-ipc/src/channels/templates.ts` and `caspar-runtime.ts`'s
+      `templateRemove` docstring both closed their remedy sentence with _"the same unblock path
+      R-010 uses"_. **DELETED rather than reworded** — after §6(A) the two paths genuinely
+      differ: Clear-All leaves every row on the stack, so every reference survives it and R-005's
+      refusal would repeat forever. Both now name the per-item remedy only.
+- [ ] 1b.2 **`openspec/specs/runtime-caspar-bridge/spec.md`'s `stack.remove-all` scenario is now
+      FALSE and no delta covers it** — _"Refused while on air, accepted after Remove-All"_
+      describes a press wave 1 refuses bridge-side. `pnpm openspec validate --all --strict` will
+      NOT catch it: it is a semantic contradiction, not a structural one. Needs a
+      `## MODIFIED Requirements` delta in this change's `specs/`.
+- [ ] 1b.3 **`openspec/specs/runtime-template-library/spec.md` still names Remove-All as R-005's
+      unblock path**, which `B-212` already falsified on 2026-09-04 and wave 1 makes doubly wrong
+      (that control is now disabled in the on-air case). Same treatment as 1b.2.
+- [ ] 1b.4 The PRD's own copies of the same vocabulary — `docs/prd/runtime.md`'s `R-005` body,
+      `R-010` entry, and `R-017`'s RIPPLE bullet (which is where `1.8`'s four-site list and the
+      false _"No items loaded"_ claim originate). Rides the PRD status flip in `6.3`, not this
+      wave.
 
 ## 2. The PLAYOUT tab's column model, and the table's semantics ⟨GATE: §3⟩
 
@@ -233,6 +257,11 @@ Wave 5. **A no-op if the owner answers (A).**
       in `tools/gate-hook/src/gate-decision.mjs` is touched: the diff is `openspec/**` and
       `docs/**` only. **Every section 1–5 task above owes its own**, and none may be ticked on a
       Windows run.
-- [ ] 7.4 Real-hardware pass: **nothing owed by this change.** Section 1 owes one — R-017's
-      refusal touches an on-air path — and it is recorded there rather than here so the debt
-      travels with the work.
+- [ ] 7.4 Real-hardware pass: **OWED BY SECTION 1, which has now landed.** R-017's refusal is on an
+      on-air path: with a row on air the operator must see REMOVE held with its reason, REMOVE ALL
+      withheld, and a blocked Apply naming Clear-All. Not dischargeable on the mock.
+- [ ] 7.5 **Linux `gate:e2e` OWED for section 1's commit.** It alters UI and rendering (the row's
+      verb state, the header button, the settings copy) and rewrites
+      `apps/runtime/tests/e2e/server-settings.spec.ts`. Only a COMPLETED, GREEN `e2e` job on
+      GitHub Actions for the carrying commit discharges it; a Windows pass does not. Write the run
+      URL here beside the tick.

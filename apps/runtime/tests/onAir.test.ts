@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
-import { airTally, isOnAir, isOnAirOrUnsettled } from '../src/renderer/features/stack/onAir.js';
+import { isOnAirStatus } from '@cg/shared-schema';
+import { airTally, isOnAir } from '../src/renderer/features/stack/onAir.js';
 
 /**
  * `B-213` — the header's tally keeps "believed on air" and "refused" APART.
@@ -54,8 +55,8 @@ describe('airTally', () => {
 });
 
 describe('the two predicates are different questions', () => {
-  it('isOnAir still offers STOP to an errored row; isOnAirOrUnsettled does not call it on air', () => {
+  it('isOnAir still offers STOP to an errored row; isOnAirStatus does not call it on air', () => {
     expect(isOnAir(item('error'))).toBe(true);
-    expect(isOnAirOrUnsettled(item('error'))).toBe(false);
+    expect(isOnAirStatus(item('error'))).toBe(false);
   });
 });

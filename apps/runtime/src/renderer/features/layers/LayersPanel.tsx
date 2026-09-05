@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { isOnAirStatus } from '@cg/shared-schema';
 import type { StackItemState } from '@cg/shared-schema';
 import {
   CircleArrowOutDownRight,
@@ -382,6 +383,23 @@ export function LayersPanel({
   // that HOLD A LAYER, an ownership fact, because the believed status is exactly
   // what may be wrong when the operator reaches for this button.
   const boundCount = items.filter((i) => i.slot !== undefined).length;
+  /*
+    🔴 `R-017` — REMOVE ALL's count, and it is a FOURTH one. Read this before "simplifying"
+    it into `onAirCount` four lines above.
+
+    `onAirCount` is `isOnAir` — status-only, everything but idle/loaded, so `unverified` and
+    `error` are IN. Two reasons it cannot gate this button. First, `isOnAir` carries `B-122`'s
+    standing prohibition — _"it must never gate a clear path again, on either side of the
+    bridge seam"_ — and Remove-All IS a clear path: `removeAll` is built from `remove`, which
+    sends `out(slot)`. Second, the bridge refuses `stack.remove-all` on `isOnAirStatus`, so
+    gating the button on a WIDER set would disable it on rows the bridge would have accepted —
+    the UI and the wire disagreeing about the same press, which is the one thing R-017's
+    ONE-AUTHORITY direction exists to prevent.
+
+    So the same imported function the row's REMOVE and the bridge's refusal read. Four counts
+    on this panel now, one per question, each spelled once.
+  */
+  const removeBlockedCount = items.filter(isOnAirStatus).length;
 
   // "Get it off the screen" is not "throw it away". This clears air and KEEPS
   // the rows, so recovering is a re-take — not a re-import and re-typing every
@@ -687,12 +705,28 @@ export function LayersPanel({
             <Icon icon={XSquare} />
             CLEAR ALL
           </Button>
+          {/*
+            🔴 `R-017` — WITHHELD WHILE ANYTHING IS ON AIR, and RENDERED while it is withheld.
+            The bulk action alone is withheld: individual idle rows stay removable, because
+            "some rows are removable and one is not" is a true statement about the stack and
+            silently removing the idle ones while skipping the live one would break the
+            action's own name.
+
+            ⚠ Do NOT harmonise this with CLEAR ALL's treatment above. That one is ALWAYS
+            enabled and gated only on reachability, because it is the emergency remedy and
+            refusing a remedy strands graphics on air. This one is the opposite kind of act —
+            irreversible, and never a remedy for anything — so it is the one that waits.
+          */}
           <Button
             variant="neutral"
-            disabled={linkDown || items.length === 0}
+            disabled={linkDown || items.length === 0 || removeBlockedCount > 0}
             aria-label="Remove all items"
             data-verb-tone="remove"
-            title="Clears anything on air and empties every row"
+            title={
+              removeBlockedCount > 0
+                ? `${String(removeBlockedCount)} row(s) are on air, and REMOVE ALL cannot be undone. Take them off air first — STOP ALL runs their outros, CLEAR ALL cuts immediately.`
+                : 'Clears anything on air and empties every row'
+            }
             onClick={() => void removeAll()}
           >
             <Icon icon={Trash2} />

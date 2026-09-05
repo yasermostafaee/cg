@@ -328,7 +328,8 @@ describe('ServerSettingsPanel — R-010', () => {
     const { setConfig } = stubBridge([], {
       ok: false,
       reason: 'on-air-block',
-      message: '1 item(s) are on air or unsettled — Remove All (or Out each item) first.',
+      message:
+        '1 item(s) are on air or unsettled — Clear All takes them off air and keeps the rows.',
     });
     const el = await renderPanel();
     const addBackup = el.querySelector<HTMLButtonElement>('button[aria-label="Add backup"]');
@@ -348,7 +349,7 @@ describe('ServerSettingsPanel — R-010', () => {
       }),
     );
     // The race case: the bridge (authoritative) refused — its reason shows.
-    expect(el.textContent).toContain('Remove All (or Out each item) first');
+    expect(el.textContent).toContain('Clear All takes them off air and keeps the rows');
   });
 
   /*

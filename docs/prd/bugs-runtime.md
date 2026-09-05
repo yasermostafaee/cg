@@ -10833,3 +10833,75 @@ the owner. **The owner decides; this session built nothing.**
   `git grep -n "B-225" HEAD` returned only the registry's own "Next free" pointers and one back-
   reference in the `B-224` entry, `B-226` nothing. Cross-checked against the registry's dated pointer
   — _"Next free after this session is `B-225`"_ — headings and pointer AGREE. One number taken.
+
+## [ ] B-226 — the row's CLEAR is gated on CasparCG REACHABILITY and REMOVE is not, so in the window «bridge up, CasparCG unreachable» the only enabled control on a row is the IRREVERSIBLE one and the graceful remedy is withheld ⟨priority: high — it inverts the safe default exactly when the console's model is least trustworthy, and it is what stops `unverified` being added to R-017's refusal⟩ — FILED 2026-09-06 by `R017-ONE-AUTHORITY-01` §2; report only, nothing built
+
+**Measured at HEAD `40b95341`**, reading the two gates side by side:
+
+| control        | `disabled`                                                    | anchor                                                            |
+| -------------- | ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| row **CLEAR**  | `needsCaspar \|\| awaiting`                                   | `layerRowActions.ts`, the `clear` literal                         |
+| row **REMOVE** | `linkDown \|\| awaiting` (plus R-017's on-air term)           | `layerRowActions.ts`, the REMOVE half of `load-remove`, via `act` |
+| **CLEAR ALL**  | `needsCaspar`                                                 | `LayersPanel.tsx`                                                 |
+| **REMOVE ALL** | `linkDown \|\| items.length === 0` (plus R-017's on-air term) | `LayersPanel.tsx`                                                 |
+
+with `const needsCaspar = linkDown || deps.casparReach !== 'reachable'`.
+
+**What:** the two differ by one term — `casparReach` — and the difference runs the wrong way. With the
+BRIDGE up and CasparCG unreachable, `linkDown` is false and `needsCaspar` is true, so **CLEAR and CLEAR
+ALL go disabled while REMOVE and REMOVE ALL stay enabled.** The row in that window reads `unverified`
+("WAS ON AIR"), which is precisely the state in which nobody can say what is on the layer — and the only
+verb the console still offers for it destroys the row, its fields, its position override, its per-look
+composition and its frozen level 2, none of which come back.
+
+Each gate is defensible ALONE. CLEAR is reachability-gated because an enabled button that cannot send is
+"not a capability, it is the appearance of one" (its own comment). REMOVE is not, because it is a LIST
+operation the bridge can perform whether or not CasparCG answers. **The defect is the pair**: the
+graceful remedy is withheld and the irreversible one is offered, in the one window where the console's
+own model is least trustworthy.
+
+### Why it is filed now, and what it blocked
+
+`R017-ONE-AUTHORITY-01` §2 asked whether R-017's REMOVE should refuse on `unverified` as well as on the
+shared on-air set. `unverified` is the strongest fail-open in that set — it is DERIVED only from an
+`on-air`/`playing` base (`reconciler.ts`'s `reconcileStatus`), so an idle row can never wear it and it
+always means "this row WAS on air and the wire cannot back it".
+
+🔴 **It could not be added, and this asymmetry is the whole reason.** Adding it closes the last enabled
+control on such a row: CLEAR already disabled by `needsCaspar`, REMOVE then refused by status, and no
+back door — the browser's retention re-publishes the row after a reload and `retainedStateFor` maps
+`unverified` back to `'on-air'`, so a reload returns it to the same state. R-017's own note that _"on a
+genuinely dead link nothing is newly stranded"_ was written against a tree in which CLEAR was UNGATED;
+the gating landed later, and the note did not follow it.
+
+**So the fix direction is this item, not a wider REMOVE gate.** Once the row always has a reachable
+graceful remedy, `unverified` can be added to the refusal without trapping anybody — and that is the
+better end state, because it is the one status in the fail-open set that positively asserts a prior air
+claim.
+
+**Candidates, not a decision:**
+
+- **(A) Ungate CLEAR from reachability**, back to always-enabled like CLEAR ALL's B-122 treatment. Cheap,
+  and consistent with "an emergency control is never gated on the believed state" — but it re-opens the
+  thing the gating fixed: a button that sends nothing and reports afterwards.
+- **(B) Gate REMOVE on reachability too**, so the two move together. Symmetrical and small; the cost is
+  that a row could then be neither cleared nor removed while CasparCG is down, which is this item's own
+  complaint arriving from the other side.
+- **(C) Keep both gates and make the REMOVE path clear the layer BEST-EFFORT**, which it already does —
+  and say so in the tooltip, so the operator knows the destructive verb is the one that still works.
+  Honest but weakest: it documents the inversion rather than removing it.
+
+**Repro:** bridge up, CasparCG stopped; take a row to air, wait for it to read WAS ON AIR.
+**Expected:** the graceful remedy is at least as available as the irreversible one.
+**Actual:** CLEAR and CLEAR ALL are disabled; REMOVE and REMOVE ALL are enabled.
+
+- **Cross-refs:** [[B-122]] (an emergency control is not gated on the believed status — the rule this
+  pair breaks in the other direction), [[B-086]]/[[B-093]] (`unverified`'s two writers), `R-017` (the
+  refusal that had to stop short of `unverified` because of this), [[B-225]] (`#ownsLiveSeats` reading a
+  stale ledger — a different lie about the same window), `R-021` stage 4 d1 (a blocked row keeps CLEAR
+  and REMOVE, the principle this generalises).
+- **Owed:** nothing built. Whichever candidate wins is a UI change and owes a Linux `gate:e2e`.
+- **Number:** highest `B-` HEADING across the three bug files was `B-225`; `git grep -n "B-226" HEAD`
+  returned only the registry's own "Next free" pointers and one back-reference inside the `B-225` entry,
+  and `B-227` nothing. Cross-checked against the registry's dated pointer — _"Next free after this
+  session is `B-226`"_ — headings and pointer AGREE. One number taken.

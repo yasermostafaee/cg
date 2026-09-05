@@ -1,3 +1,4 @@
+import { isOnAirStatus } from '@cg/shared-schema';
 import type { AuditEntry, Position, StackItemState, StackItemStatus } from '@cg/shared-schema';
 import type {
   ConnectionConfig,
@@ -48,6 +49,7 @@ import {
   EMPTY_SOURCE_CATALOG,
   pruneAssignmentsForCatalog,
   REFERENCE_RASTER,
+  REMOVE_ON_AIR_CODE,
   SourceAssignmentsSchema,
   SourceCatalogSchema,
   videoModeRaster,
@@ -425,8 +427,17 @@ export class MockRuntime {
     return { accepted: true };
   }
 
-  remove(itemId: string): { accepted: boolean } {
+  remove(itemId: string): { accepted: boolean; errorCode?: string } {
     const item = this.#find(itemId);
+    // `R-017` parity — the mock must REFUSE where the bridge refuses, or a surface built
+    // against it ships against a fiction (`B-070`/`B-072`, the reason `mock-bridge-parity`
+    // exists). Same imported predicate, so the two cannot drift.
+    // ⚠ The bridge additionally exempts an item on no declared operator row (`B-212`); the
+    // mock has no layer-class model, and every item it holds IS on a row, so the exemption
+    // is unreachable here rather than omitted.
+    if (item !== null && isOnAirStatus(item)) {
+      return { accepted: false, errorCode: REMOVE_ON_AIR_CODE };
+    }
     this.#stack = this.#stack.filter((i) => i.itemId !== itemId);
     if (item !== null)
       this.#audit.unshift(auditEntry('remove', this.#auditItem(itemId, item.templateId)));
@@ -505,14 +516,7 @@ export class MockRuntime {
   ): { ok: boolean; reason?: 'on-air' | 'unknown-item' } {
     const item = this.#find(itemId);
     if (item === null) return { ok: false, reason: 'unknown-item' };
-    if (
-      item.pending ||
-      item.status === 'playing' ||
-      item.status === 'on-air' ||
-      item.status === 'updating' ||
-      item.status === 'exiting' ||
-      item.status === 'unconfirmed'
-    ) {
+    if (isOnAirStatus(item)) {
       return { ok: false, reason: 'on-air' };
     }
     this.#positions.set(itemId, position);
@@ -740,7 +744,13 @@ export class MockRuntime {
   }
 
   /** R-010 — OUT + REMOVE everything: clears (simulated) air, empties the list. */
-  removeAll(): { ok: boolean; removed: number } {
+  removeAll(): { ok: boolean; removed: number; errorCode?: string } {
+    // `R-017` parity — all-or-nothing, decided before the first removal (see the bridge's
+    // `removeAll` for why a per-item refusal inside the loop would half-empty the stack and
+    // then report that nothing happened).
+    if (this.#stack.some(isOnAirStatus)) {
+      return { ok: false, removed: 0, errorCode: REMOVE_ON_AIR_CODE };
+    }
     const removed = this.#stack.length;
     for (const item of this.#stack) {
       this.#audit.unshift(auditEntry('remove', this.#auditItem(item.itemId, item.templateId)));
@@ -1133,20 +1143,12 @@ export class MockRuntime {
       unreachable?: string[];
     };
   } {
-    const unsettled = this.#stack.filter(
-      (i) =>
-        i.pending ||
-        i.status === 'playing' ||
-        i.status === 'on-air' ||
-        i.status === 'updating' ||
-        i.status === 'exiting' ||
-        i.status === 'unconfirmed',
-    ).length;
+    const unsettled = this.#stack.filter(isOnAirStatus).length;
     if (unsettled > 0) {
       return {
         ok: false,
         reason: 'on-air-block',
-        message: `${String(unsettled)} item(s) are on air or unsettled — Remove All (or Out each item) first.`,
+        message: `${String(unsettled)} item(s) are on air or unsettled — Clear All takes them off air and keeps the rows.`,
       };
     }
     this.#config = config;
@@ -1640,15 +1642,7 @@ export class MockRuntime {
   } {
     // Same gate, same wording, same predicate shape as the bridge: changing the
     // raster re-scales every graphic on the channel.
-    const unsettled = this.#stack.filter(
-      (i) =>
-        i.pending ||
-        i.status === 'playing' ||
-        i.status === 'on-air' ||
-        i.status === 'updating' ||
-        i.status === 'exiting' ||
-        i.status === 'unconfirmed',
-    ).length;
+    const unsettled = this.#stack.filter(isOnAirStatus).length;
     if (unsettled > 0) {
       return {
         ok: false,
@@ -1700,16 +1694,9 @@ export class MockRuntime {
     }
     if (this.#rehearsing.has(itemId)) return { ok: true };
     // Fail closed: `unconfirmed`/`pending` mean the on-air result is UNKNOWN, and
-    // an unknown must never be muted on a guess. Same status list as the bridge's
-    // `isOnAirStatus`.
-    const onAir =
-      item.pending ||
-      item.status === 'playing' ||
-      item.status === 'on-air' ||
-      item.status === 'updating' ||
-      item.status === 'exiting' ||
-      item.status === 'unconfirmed';
-    if (onAir) {
+    // an unknown must never be muted on a guess. Not "the same status list as the
+    // bridge's" any more — literally the same function (`operator-surface` §5(B)).
+    if (isOnAirStatus(item)) {
       return {
         ok: false,
         reason: 'on-air',

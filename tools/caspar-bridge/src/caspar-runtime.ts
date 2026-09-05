@@ -32,7 +32,7 @@ import type {
   RetainedStackItem,
   StackItemState,
 } from '@cg/shared-schema';
-import { isRetainedOnAir, withCgControl } from '@cg/shared-schema';
+import { isOnAirStatus, isRetainedOnAir, withCgControl } from '@cg/shared-schema';
 import {
   fixedBankSlots,
   isLayerVisible,
@@ -99,6 +99,7 @@ import {
   type Rehearsal,
   type REHEARSE_ENTER_REASONS,
   type REHEARSE_EXIT_REASONS,
+  REMOVE_ON_AIR_CODE,
 } from '@cg/shared-ipc';
 import { operatorActor } from './actor-context.js';
 import { ChannelSettingsStore } from './channel-settings-store.js';
@@ -530,29 +531,14 @@ function auditVerdict(
   };
 }
 
-/**
- * THE on-air predicate for a stack item — the ONE definition of "on air or
- * unsettled", read by R-010's `setConfig` gate, R-030's raster gate, the
- * rehearse-entry guard and the rehearse abort.
- *
- * Extracted because rehearse made it the fourth consumer, and a fourth inline
- * copy of this status list is exactly how one of them comes to disagree — the
- * repo's one-canonical-predicate rule (CLAUDE.md golden rule 6). The stakes
- * differ per caller but the question does not: `updating`/`exiting` ride an
- * on-air producer, and B-044's `unconfirmed` means the on-air result is UNKNOWN.
- * Unknown must count as on air in every one of these gates, because each one's
- * failure mode is acting on a live graphic.
+/*
+ * `isOnAirStatus` USED TO BE DEFINED HERE, module-private, while the renderer kept a
+ * hand-written mirror of the same six terms and six further copies existed besides.
+ * `operator-surface` §5 answer (B) moved the ONE definition to `@cg/shared-schema`
+ * (`runtime/item-state.ts`, beside the status enum it reads), so both sides of the
+ * bridge seam now import the same function object. It is imported at the top of this
+ * file; do not re-declare it here, and do not add a local wrapper.
  */
-function isOnAirStatus(status: StackItemState['status'], pending: boolean): boolean {
-  return (
-    pending ||
-    status === 'playing' ||
-    status === 'on-air' ||
-    status === 'updating' ||
-    status === 'exiting' ||
-    status === 'unconfirmed'
-  );
-}
 
 /**
  * R-010 — where the OSC UDP ingest binds, derived from the declared server's
@@ -2808,14 +2794,11 @@ export class CasparRuntime {
   ): Promise<{ ok: boolean; reason?: 'on-air' | 'unknown-item' }> {
     const item = this.#reconciler.get(itemId);
     if (item === null) return { ok: false, reason: 'unknown-item' };
-    if (
-      item.pending ||
-      item.status === 'playing' ||
-      item.status === 'on-air' ||
-      item.status === 'updating' ||
-      item.status === 'exiting' ||
-      item.status === 'unconfirmed'
-    ) {
+    // `operator-surface` §5(B) — this re-derived the six terms inline, and the
+    // renderer's `isPositionLocked` was written as a mirror OF THIS COPY rather than
+    // of the canonical predicate. Two mirrors of a copy is how the R-011 lock and the
+    // R-011 refusal come to disagree about one row; both now ask the one function.
+    if (isOnAirStatus(item)) {
       return { ok: false, reason: 'on-air' };
     }
     this.#positions.set(itemId, position);
@@ -3288,7 +3271,7 @@ export class CasparRuntime {
     // result is UNKNOWN, and an unknown must never be muted on a guess. Reuses
     // the SAME predicate `#onAirCount` and R-010's `setConfig` gate read, never a
     // second local list of what counts as on air.
-    if (isOnAirStatus(item.status, item.pending)) {
+    if (isOnAirStatus(item)) {
       return {
         ok: false,
         reason: 'on-air',
@@ -3456,7 +3439,7 @@ export class CasparRuntime {
       // An item that has VANISHED (removed from the stack) is also no longer
       // ours to interlock. Its volume still has to be restored — the producer may
       // be gone but the mixer setting is not.
-      const live = item == null || isOnAirStatus(item.status, item.pending);
+      const live = item == null || isOnAirStatus(item);
       if (!live) continue;
       process.stderr.write(
         `[caspar-bridge] rehearse on ${String(itemId)} ended: the layer went live by another ` +
@@ -4235,7 +4218,7 @@ export class CasparRuntime {
   ): { itemId: string; templateId: string; boxes: number } | null {
     for (const item of this.#reconciler.snapshot()) {
       if (item.itemId === exceptItemId) continue;
-      if (!isOnAirStatus(item.status, item.pending)) continue;
+      if (!isOnAirStatus(item)) continue;
       if (this.#slots.get(item.itemId)?.channel !== channel) continue;
       const boxes = this.#multiBoxCount(item.templateId);
       if (boxes > 1) return { itemId: item.itemId, templateId: item.templateId, boxes };
@@ -5038,7 +5021,7 @@ export class CasparRuntime {
    */
   #ownsLiveSeats(itemId: string): boolean {
     const item = this.#reconciler.get(itemId);
-    if (item !== null && item !== undefined && isOnAirStatus(item.status, item.pending)) {
+    if (item !== null && item !== undefined && isOnAirStatus(item)) {
       return true;
     }
     return (this.#liveLayers.get(itemId) ?? []).length > 0;
@@ -8414,8 +8397,25 @@ export class CasparRuntime {
    * doesn't abort the rest (`remove` drops the item regardless). The
    * sanctioned path to unblock a server reconfiguration.
    */
-  async removeAll(): Promise<{ ok: boolean; removed: number }> {
+  async removeAll(): Promise<{ ok: boolean; removed: number; errorCode?: string }> {
     const items = this.#reconciler.snapshot();
+    /*
+      🔴 `R-017` — REFUSED ALL-OR-NOTHING, decided BEFORE the first removal.
+
+      The check runs over the whole snapshot first rather than per item inside the loop,
+      and that ordering is the requirement rather than a style choice: a loop that refused
+      as it went would remove every idle row it reached before meeting the live one, and
+      answer `{ ok: false }` on a stack it had already half-emptied. The operator would be
+      told the action did not happen, and it would have.
+
+      ONE predicate with the single verb — `#removeRefusal`, not a second reading — so the
+      bulk and the row can never disagree, including about `B-212`'s exemption: a stack whose
+      only on-air item is an orphan outside the bank is still removable in bulk, because that
+      item has no row to take it off air from.
+    */
+    if (items.some((item) => this.#removeRefusal(item.itemId) !== null)) {
+      return { ok: false, removed: 0, errorCode: REMOVE_ON_AIR_CODE };
+    }
     for (const item of items) {
       await this.remove(item.itemId);
     }
@@ -8544,13 +8544,82 @@ export class CasparRuntime {
     return { ok: true, stopped: stoppable.length };
   }
 
-  async remove(itemId: string): Promise<{ accepted: boolean }> {
+  async remove(
+    itemId: string,
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
     return this.#audited('remove', this.#itemDetail(itemId), (detail) =>
       this.#removeImpl(itemId, detail),
     );
   }
 
-  async #removeImpl(itemId: string, detail: AuditDetail): Promise<{ accepted: boolean }> {
+  /**
+   * 🔴 `R-017` — MAY THIS ITEM BE REMOVED RIGHT NOW? The ONE place the answer is decided,
+   * asked by `remove` and by `removeAll`, so the single and the bulk verb can never
+   * disagree about one row.
+   *
+   * TWO conditions, and the second is what keeps the refusal from stranding anybody:
+   *
+   * - **on air or unsettled** — {@link isOnAirStatus}, the shared predicate the ROW's own
+   *   REMOVE button reads. Not a second list, not a widened one: the UI gate and this
+   *   refusal are the same function object, which is what makes them provably agree.
+   * - **AND the item sits on a DECLARED OPERATOR ROW** — so the console is showing it and
+   *   STOP and CLEAR are reachable on that row. That is the remedy the refusal names, and a
+   *   refusal whose remedy is unreachable is a trap.
+   *
+   * ⚠ **THE EXEMPTION IS `B-212`, MEASURED ON THE PLANT, AND IT IS NOT TIDINESS.** An item
+   * on a layer outside the declared bank has NO ROW: nothing shows it, so there is no STOP
+   * and no CLEAR to press. The template picker's own remedy for exactly that case promises
+   * in words that it works on air — _"if it is on air, it comes off"_ — and it issues this
+   * verb. Refusing there would leave the incident's own shape with Remove-All disabled, the
+   * per-item remove refused, and no row-level verb reachable: no remedy at all. So the gate
+   * asks a STRUCTURAL question about the slot, never a second status question.
+   */
+  #removeRefusal(itemId: string): { errorCode: string; message: string } | null {
+    const item = this.#reconciler.get(itemId);
+    if (item === null || item === undefined) return null;
+    if (!isOnAirStatus(item)) return null;
+    /*
+      🔴 EXEMPTION 2 — a RESTORE-BLOCKED row, and it is `R-021` stage 4 decision d1's rule
+      rather than a new one.
+
+      Such a row's layer is held by a producer that is provably NOT OURS, so the item's air
+      claim — seeded from the browser's retention across the reconnect — is one this bridge
+      already knows to be false: nothing of ours is on that layer, and REMOVE would destroy
+      nothing. d1 says in as many words that CLEAR and REMOVE are the two verbs a blocked row
+      keeps, "the block is what they exist to resolve", and holding the item on the stack
+      while its layer belongs to somebody else is precisely the stranding it forbids.
+
+      ⚠ The RENDERER carries the identical exemption (`layerRowActions`, `blocked`), and it
+      has to: this is the one place where the shared predicate alone would make the two sides
+      disagree, because the UI knows the row is blocked and would otherwise disable a verb the
+      bridge accepts.
+    */
+    if (this.#restoreBlocked.has(itemId)) return null;
+    const slot = this.#slots.get(itemId);
+    if (slot === undefined) return null;
+    if (this.#declaredLayerClass(slot.channel, slot.layer) !== 'operator-row') return null;
+    return {
+      errorCode: REMOVE_ON_AIR_CODE,
+      message:
+        `That row is on air, so removing it would clear layer ${String(slot.layer)} and drop the ` +
+        `item — and neither can be undone. Take it off air first: STOP runs the template's outro ` +
+        `and keeps it loaded, CLEAR cuts it immediately.`,
+    };
+  }
+
+  async #removeImpl(
+    itemId: string,
+    detail: AuditDetail,
+  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+    // `R-017` — BEFORE the reconciler is touched, so a refusal mutates nothing at all.
+    // Every other refusal door in this file keeps that discipline for the same reason: a
+    // decline that has already dropped the row from the stack is not a decline.
+    // `auditVerdict` reads the RESULT's own code on a non-accepted answer, which is right
+    // here: this is a PLAN-time refusal, not a `wireFailure` — nothing was sent to fail.
+    const refusal = this.#removeRefusal(itemId);
+    if (refusal !== null) {
+      return { accepted: false, errorCode: refusal.errorCode, message: refusal.message };
+    }
     const slot = this.#slots.get(itemId);
     // Drop it from the stack immediately (UI responsiveness), then best-effort
     // clear the slot on the server.
@@ -8674,6 +8743,17 @@ export class CasparRuntime {
 
   async #applyConfig(next: ConnectionConfig): Promise<SetConfigResult> {
     // 1. On-air gate — bridge-authoritative (the UI mirrors it; races lose here).
+    /*
+      🔴 `R-017` / `operator-surface` §6 — IT NAMES CLEAR-ALL, and Remove-All is now the
+      wrong answer twice over. This gate counts what is ON AIR, so taking everything off air
+      is the whole remedy — emptying the stack was always more than it asked for, and it costs
+      the operator every row's fields and overrides. And since R-017, Remove-All is DISABLED by
+      exactly the condition this sentence reports, so naming it would point at a greyed button.
+
+      `B-212` reached the same rule one layer down on 2026-09-04, from a plant incident, and
+      `packages/shared-ipc/tests/template-references.test.ts` pins it there as a test whose name
+      is the policy: "the sweeping remedy is not the one to steer toward".
+    */
     const unsettled = this.#onAirCount();
     if (unsettled > 0) {
       return {
@@ -8681,7 +8761,7 @@ export class CasparRuntime {
         reason: 'on-air-block',
         message:
           `${String(unsettled)} item(s) are on air or unsettled — ` +
-          `Remove All (or Out each item) first.`,
+          `Clear All takes them off air and keeps the rows.`,
       };
     }
 
@@ -8873,7 +8953,7 @@ export class CasparRuntime {
    * `error`/`disconnected` rest states don't.
    */
   #onAirCount(): number {
-    return this.#reconciler.snapshot().filter((i) => isOnAirStatus(i.status, i.pending)).length;
+    return this.#reconciler.snapshot().filter(isOnAirStatus).length;
   }
 
   health(): ConnectionHealth {
@@ -9111,8 +9191,13 @@ export class CasparRuntime {
    * `load()` and `take()`'s B-039 re-ADD both guard on `#templates.has(...)` and would
    * refuse with `unknown-template` forever, and `setPosition`'s re-ADD would silently stop
    * re-ADDing. An `idle`/`loaded` row is poisoned exactly as badly as an on-air one, so
-   * both block. Removing the referencing items (stack.remove / Remove-All) is the unblock
-   * path — the same one R-010 points at.
+   * both block. Removing the referencing items (`stack.remove`, or the picker's per-item
+   * remedy) is the unblock path.
+   *
+   * ⚠ `operator-surface` §6 DELETED the "same one R-010 points at" clause rather than
+   * rewording it: R-010's remedy is now CLEAR-ALL, which leaves every row on the stack, so
+   * every reference survives it and this refusal would repeat forever. The two paths are
+   * genuinely different now. See the same note on `TemplateReferenceSchema`.
    */
   templateRemove(templateId: string): {
     ok: boolean;

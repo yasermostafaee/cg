@@ -172,6 +172,15 @@ describe('layerRowActions — a blocked row commands nothing, but is never stran
     // way would be fail-STUCK, not fail-safe. CLEAR is also d1's own first exit:
     // the operator's explicit, confirm-gated hard Clear, and then a take.
     expect(byKey.get('clear')?.disabled).toBe(false);
+    /*
+      🔴 `R-017` DOES NOT REACH THIS ROW, and the exemption is deliberate on BOTH sides.
+
+      The fixture is `itemWith('on-air')`, so the shared on-air predicate says yes — and
+      R-017's refusal still does not apply, because a blocked row's layer is held by a
+      producer that is provably NOT OURS. The air claim is one the bridge already knows to be
+      false, REMOVE would destroy nothing of ours, and holding it is exactly the stranding d1
+      forbids. `#removeRefusal` carries the same exemption, so the two sides agree.
+    */
     expect(byKey.get('load-remove')?.disabled).toBe(false);
     expect(byKey.get('load-remove')?.label).toBe('REMOVE');
   });
