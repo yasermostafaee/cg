@@ -10418,7 +10418,7 @@ screen consumer and asserts no alert plus the preview row.
 - **Number:** derived with `B-222` above — `B-223` returned nothing in `git grep -n "B-223" HEAD`;
   the registry's pointer agrees.
 
-## [~] B-224 — the Layers header's STATE tally reads `STATE (1 ON AIR) (…` when rows are both on air and in error: the second count is cut off for lack of room, so the operator cannot see how many rows are in error ⟨priority: high — the one number a refused take leaves behind is the one that was clipped⟩ — FILED AND CLOSED IN CODE 2026-09-05 by `LAYERS-HEADER-COUNT-01`; the Linux `gate:e2e` for the commit is OWED
+## [~] B-224 — the Layers header's STATE tally reads `STATE (1 ON AIR) (…` when rows are both on air and in error: the second count is cut off for lack of room, so the operator cannot see how many rows are in error ⟨priority: high — the one number a refused take leaves behind is the one that was clipped⟩ — FILED AND CLOSED IN CODE 2026-09-05 by `LAYERS-HEADER-COUNT-01`; Linux `gate:e2e` DISCHARGED for `c1b68132` (carries `829f5fb7`) — <https://github.com/yasermostafaee/cg/actions/runs/33972591471> (`E2E (Playwright)` RAN 535 s, `success`; `Lint • Typecheck • Test • Build` RAN 173 s, `success`; read 2026-09-05)
 
 **Observed** by the owner, 2026-09-05, Runtime → Layers with one row ON AIR and rows in ERROR: the
 head read `STATE (1 ON AIR) (…` — the error count clipped. Two owner decisions the fix rests on:
@@ -10506,8 +10506,14 @@ the fix is a ceiling rather than a smaller share, so the width is deterministic.
   gate (`Lint • Typecheck • Test • Build`) was green. The lesson is recorded in memory: sweep the
   bare words, case-insensitively, then read every assertion hit. Fixed in the follow-up commit
   (the spec now asserts the number as the visible text, the words in `aria-label` and `title`).
-- **Owed:** the owner's visual check at the two widths; the Linux `e2e` for the FIX commit —
-  discharge by run URL here.
+- **CI for the fix, read 2026-09-05:** run #1264 for `c1b68132` —
+  <https://github.com/yasermostafaee/cg/actions/runs/33972591471> — `status: completed`,
+  `conclusion: success`; `E2E (Playwright)` **RAN** 535 s, `success`
+  (<https://github.com/yasermostafaee/cg/actions/runs/33972591471/job/101323643537>);
+  `Lint • Typecheck • Test • Build` RAN 173 s, `success`. Both heavy jobs ran, so the tree at
+  `c1b68132` — the header, the column model, `layers-header-tally.spec.ts` and the corrected
+  `audit-legibility.spec.ts` included — is verified on Linux. **DISCHARGED.**
+- **Owed:** the owner's visual check at the two widths.
 - **Number:** highest `B-` HEADING across the three bug files was `B-223` (this file);
   `git grep -n "B-224" HEAD` returned only the registry's own "Next free" pointer, `B-225` nothing.
   Cross-checked against the registry's dated pointer — _"Next free after this session is
