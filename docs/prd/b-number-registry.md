@@ -2427,3 +2427,28 @@ above ends _"and `P-043` (unchanged)"_ — headings and pointer **AGREE**. One n
 
 ⇒ **Next free after this session is `P-044`** (`P-001` … `P-043`, no gaps), **`B-225`**, **`D-161`**
 and **`C-034`** (unchanged).
+
+### 2026-09-05 — `B-225` (`RESTART-RESTORE-01`: what happens to air when the playout server restarts itself)
+
+| kind | id      | one line                                                                                                                                                                                                                                                                       | home                               | status                                            |
+| ---- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | ------------------------------------------------- |
+| `B-` | `B-225` | a CasparCG restart under a running bridge empties air and no surface says so: the reconnect resets every row to IDLE, the browser mirrors that back as `cleared` (destroying the only evidence a restore could use), and nothing distinguishes a restart from a blinked socket | [bugs-runtime.md](bugs-runtime.md) | FILED, report only — nothing built, owner decides |
+
+The session established state and reported; it changed no product code and sent nothing to the plant.
+Its three findings, for the reader who needs them without the entry: putting air back after a CasparCG
+restart has never been designed — the reconcile-to-IDLE is the SPECIFIED behaviour and it worked; the
+record is silent on this direction, since every restore decision on file ([[B-092]], [[B-145]],
+[[B-107]]/[[B-109]]) is about a dead BRIDGE with CasparCG still rendering; and the restart's first
+real-hardware exercise of [[B-221]]'s reconnect path discharges nothing of `B-221`, because a clean
+service stop is not a socket death mid-batch.
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three bug
+files was **`B-224`** (`bugs-runtime.md`, `git grep -n -E "^## \[.\] B-2[0-9][0-9]"`);
+`git grep -n "B-225" HEAD` returned only this file's own "Next free" pointers and one back-reference
+inside the `B-224` entry, and `git grep -n "B-226" HEAD` returned nothing. The duplicate audit printed
+exactly `B-056` and `B-080`. **Cross-check against the dated pointer:** the entry above ends _"Next
+free after this session is `P-044` … `B-225`"_ — headings and pointer **AGREE**. One number taken,
+filed in `bugs-runtime.md`. No `C-`, `D-` or `P-` number was taken; nothing was deleted or translated.
+
+⇒ **Next free after this session is `B-226`** (`B-001` … `B-225`, no gaps), **`D-161`**, **`C-034`**
+and **`P-044`** (unchanged).

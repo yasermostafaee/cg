@@ -10612,3 +10612,224 @@ the fix is a ceiling rather than a smaller share, so the width is deterministic.
   `git grep -n "B-224" HEAD` returned only the registry's own "Next free" pointer, `B-225` nothing.
   Cross-checked against the registry's dated pointer — _"Next free after this session is
   `B-224`"_ — headings and pointer AGREE. One number taken.
+
+## [ ] B-225 — CasparCG restarting under a running bridge empties air and the console says nothing: the reconnect resets every row to IDLE, the browser mirrors that back as `cleared`, and nothing distinguishes "the server restarted" from "the socket blinked" ⟨priority: high — with NSSM auto-restart the channel returns emitting a valid, correctly-timed BLACK picture, which is not a fault to anything downstream⟩ — FILED 2026-09-05 by `RESTART-RESTORE-01`; report only, nothing built
+
+**Observed** by the owner, 2026-09-05 on `192.168.21.114`. CasparCG now runs as a Windows service
+installed with NSSM, WITH AUTO-RESTART, so it lives in Session 0 — no window, no console, no Remote
+Desktop capture, and the declared `screen` consumer can never run there (harmless: [[B-223]] already
+classifies a missing `screen` as local, and the operator is shown nothing). The owner restarted the
+service. Program output went EMPTY and every layer stopped. The bridge never died — `caspar-bridge.mjs
+--host 0.0.0.0`, PID 2736, up since 15:06:02 local and still up at 20:51 — and the browser never lost
+its socket. The Runtime showed every row **stopped**: no banner, no alarm, no tally. The rows were put
+back BY HAND: four `take`s in 4.97 s, 17:12:17.807 → 17:12:22.777, the last four lines of
+`~/.cg-runtime/bridge-audit.ndjson`.
+
+⭐ **What auto-restart changes, and why this is filed now.** Before, a dead CasparCG stayed dead: the
+SDI output disappeared, and loss of signal is a condition downstream equipment can detect and act on.
+Now NSSM brings it back within seconds, the DeckLink consumer starts from `casparcg.config`, and the
+channel emits a valid, correctly-timed, entirely black picture. ⚠ **A valid black signal is not a
+fault to anything downstream.** Whether that matters depends on this station's downstream chain, which
+this session does not know — it is stated as the consequence, for the owner to judge.
+
+### §1 — the state, established before anything was touched
+
+**(a) What the bridge does when its AMCP link drops and comes back.** All of it is
+`session.on('state-change')`, `caspar-runtime.ts:1576-1655`, in this order:
+
+| step                                                              | what it does                                                                                                                                                                 | puts content back?    |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| link LEAVES `healthy` → `#reconciler.setLinkDown(true)` (`:1652`) | every on-air row publishes as `unverified` — "WAS ON AIR", muted ([[B-086]])                                                                                                 | no                    |
+| the session's own cycle (`server-session.ts:227-273`)             | fresh transport + queue, `VERSION` → `INFO` handshake, then a 150 ms RESYNC drain                                                                                            | no                    |
+| `to === 'healthy' && from !== 'degraded'` (`:1588-1597`)          | forgets the per-connection facts: `#declaredConsumers`, `#outputReadAt`, the mode latch, `#outputCreateAttempted` — so `INFO CONFIG` and `INFO <ch>` are re-read ([[C-029]]) | no                    |
+| `session.on('healthy')` (`:1555-1558`)                            | `#loaded.clear()` — producer-existence bookkeeping dropped, so the next take re-`ADD`s ([[B-054]]/[[B-039]])                                                                 | no                    |
+| `#reconciler.setLinkDown(false)` (`:1600`)                        | lifts the demotion                                                                                                                                                           | no                    |
+| `#flushOrphanedStaging()` (`:1605`, body `:6150-6162`)            | **returns immediately unless `#orphanedMixerChannel !== null`** — i.e. unless a `MIXER … COMMIT` of ours is on record as undelivered ([[B-221]])                             | only in that one case |
+| `#decidePendingRestores(...)` (`:1623`)                           | decides parked restores — `#pendingRestore` is **empty** here, see (b)                                                                                                       | no                    |
+| `reconcileOnReconnect(occupiedKeys)` (`:1634`)                    | 🔴 **resets every `played` item whose layer is silent to `idle`** (`reconciler.ts:549-565`)                                                                                  | no — the opposite     |
+| the health snapshot / output check (`:7885-7929`)                 | re-reads the declared and running consumers on the next tick                                                                                                                 | no                    |
+
+**Nothing on this path puts content back.** `#reassertDeclaredVolumes` (`:3493-3501`) is not on it at
+all: it is latched one-shot per PROCESS by `#volumesReasserted` (`:7925-7928`), so on a CasparCG
+restart under a running bridge it does not run a second time. Benign here — a restarted CasparCG boots
+with default mixer state — but it is a startup repair for a dead BRIDGE, not for a dead server.
+
+**(b) Is there a `restore` at all? Yes — and it is keyed to the wrong socket.**
+`CasparRuntime.restore(items)` exists (`:2234`) and is [[B-092]]'s: it rebuilds the stack from the
+BROWSER's retained intent. Its only trigger is the SPA↔bridge WebSocket `open` handler —
+`WebSocketRuntime.#connect` → `#resync(reconnected)`, `WebSocketRuntime.ts:358-384`. **A CasparCG
+restart does not touch that socket**, so `restore()` is never called and `#pendingRestore` is empty at
+the healthy transition. It restores rows, slots, position/source/look overrides and the frozen level-2
+pin; it can distinguish nothing about the server, because it never runs in response to the server.
+([[B-215]]'s slotless-item defect is on this same path, and is unrelated to this item.)
+
+**(c) What survives on our side — and the two halves point OPPOSITE WAYS. This is the crux.**
+
+- 🔴 **The browser's INTENT is overwritten with the empty truth.** `reconcileOnReconnect` sets the row
+  to `idle`; the snapshot publishes; `WebSocketRuntime.ts:661-663` mirrors it (unsuppressed —
+  `#resyncing` is false, nothing is resyncing); `StackRetentionStore.mirror` is replace-all
+  (`:78-81`); and `retainedStateFor('idle')` is **`cleared`**
+  (`shared-schema/src/runtime/item-state.ts:233-234`) — which that same file defines as "the layer is
+  KNOWN EMPTY … **NOT restorable**" (`:172-181`). Within one publish, the record that those rows were
+  ever on air is gone from the only place that outlives the bridge. **A restore after the fact is
+  therefore not merely absent — the evidence it would need has been destroyed**, and destroyed
+  correctly by [[B-109]]'s rule, which exists to stop a restart re-`ADD`ing a graphic the operator
+  deliberately cleared. The two cases retain identically and nothing downstream can tell them apart.
+- ⚠ **The LEDGER survives intact and becomes a lie.** `#liveLayers` is persisted on every change to
+  `~/.cg-runtime/bridge-live-layers.json` (`bridge.ts:599-629`) and nothing on the reconnect path
+  prunes it. Read 2026-09-05: it still names three seats for `item-ba823a50…` — channel 1 layers 10,
+  11, 13, producers `DECKLINK DEVICE 1`, `"m1"`, `"m2"` — layers a restarted CasparCG has emptied.
+  Consequence, because one predicate reads it: `#ownsLiveSeats` (`:5039-5044`) is `on air OR the
+ledger holds seats`, so it answers **true** for a row the console shows as stopped. Every
+  configuration door gates on it — `update`, `swapLiveSource`, `setActiveLook`, a volume raise — so an
+  UPDATE that changes an input on such a row seats that one producer (a seat with no prior producer is
+  `PLAY`ed; `:6218`, `:6275`): one video box on air, alone, over black, with no template above it.
+  That is [[B-161]]'s shape reached through a stale ledger rather than through the rehearse flag.
+- The row model, the declared item and the frozen level-2 pin survive as records — they travel on
+  `RetainedStackItem` (`StackRetentionStore.ts:100-144`) and are re-delivered on the SPA's next
+  connect. It is the AIR STATE, and only the air state, that is lost.
+
+**(d) Can we tell a RESTART from a dropped socket? No — nothing today distinguishes them.**
+
+- The handshake sends `VERSION` then `INFO` and **discards both replies** beyond `isOk`
+  (`server-session.ts:275-290`). CasparCG's `INFO` carries no boot time or generation counter, and
+  nothing keeps the previous reply to compare against.
+- `INFO CONFIG` is re-read (`:1588-1597`), but it reports the DECLARATION — identical across a
+  restart by construction.
+- An `osc.health` event carrying `uptimeSec` is MODELLED (`shared-schema/src/runtime/osc.ts:64`,
+  `osc/change-tracker.ts:58`) and **never emitted**: `osc/event-mapper.ts` maps only `osc.framerate`
+  and the four layer kinds. Whether CasparCG 2.5.0 publishes any uptime address at all is unmeasured
+  — a recon question, not a claim.
+- The one signal that DOES exist is the one already computed and thrown away: at `:1609-1634` the
+  bridge samples real occupancy and derives exactly the set of rows that were on air and whose layers
+  are now empty. It then spends that fact on a status change and says nothing. "Restart" versus
+  "somebody cleared our layers by hand" is not separable from it — but for this purpose the two are
+  the same event: **what we believed was ours is gone.**
+
+### §2 — the one question
+
+> **Neither, and here is the third thing:** putting air back after a CasparCG restart has never been
+> designed, attempted or refused — what our system DOES do is a designed behaviour that worked exactly
+> as specified, and the specification is to go honestly empty.
+
+`openspec/specs/runtime-caspar-bridge/spec.md` (and its archived sources, `2026-07-18-runtime-onair-honest-linkloss`,
+`2026-07-22-runtime-amcp-probed-liveness`) says it in the server's own words: a played item whose slot
+is not occupied within the staleness bound — _"the producer is gone, e.g. CasparCG restarted"_ — SHALL
+be reset to **IDLE**. The restart was not an unhandled case; it is the named example in the scenario.
+
+⚠ **The record is SILENT on the opposite direction.** Every restore decision on file is about a dead
+BRIDGE with CasparCG still rendering — [[B-092]] (the browser owns the intent across the bridge's
+death), [[B-145]] (the ledger outlives the process), [[B-107]]/[[B-109]] (which retained states may be
+re-seated). Nothing asks what should happen when CasparCG dies and the bridge lives. Correction to the
+premise this item was raised under: the phrase _"the config stays the boot-time baseline"_ on file
+(`caspar.md:1928`, [[C-029]]) is about which DeckLink device the bridge may name in a
+`--create-missing-consumers` `ADD` on a multi-card box. It is not a decision about air surviving a
+dead bridge, and it does not speak to this at all.
+
+### §3 — what the operator sees, and what nothing tells him
+
+| surface                                                  | during the outage                                                                                     | after the restart                                                                        |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `ConnectionBanner`                                       | nothing — it watches the browser→bridge link, which never dropped                                     | nothing                                                                                  |
+| server pill (`StatusBar.tsx:146`)                        | red `OFFLINE` while the AMCP socket is down and retrying                                              | back to `HEALTHY`                                                                        |
+| rows                                                     | `unverified` — "WAS ON AIR", muted ([[B-086]])                                                        | **stopped** (`idle`)                                                                     |
+| on-air tally ([[B-224]], `LayerTableHeader.tsx:145-152`) | the number, greyed (`onAirCountStale`)                                                                | **absent — a zero count is not rendered**                                                |
+| `OutputMissingBanner` ([[B-223]])                        | `unverifiable` only if the LAST check had found a program output missing; here it had not, so nothing | nothing — the DeckLink consumer restarted from `casparcg.config`, so the verdict is `ok` |
+| the [[R-058]] dead-channel chip                          | —                                                                                                     | nothing — it fires on a channel that ticked and STOPPED; this one ticks                  |
+
+🔴 **The uncomfortable answer: there is no such moment.** No surface in the product says "the channel
+is alive and carrying nothing". Every alarm we have watches a different axis: `ConnectionBanner`
+watches the browser's link, the pill watches AMCP reachability, [[B-223]]'s check watches CONSUMERS
+(existence and configuration — never content), [[R-058]] watches whether the channel produces frames
+at all. A restarted CasparCG passes every one of them: reachable, consumers running, frames flowing.
+**Air being blank is not the same as a row being stopped, and a tally of zero is not an alarm** — it
+is the absence of a number, rendered identically to a console nobody has taken anything on yet. The
+app looks calm and empty because, on every axis it measures, everything is fine.
+
+⭐ One thing the display DOES tell us, and it is evidence rather than inference from a log: the rows
+came back **stopped** and not `unverified`, so the `heard` branch at `:1633` was taken — OSC was
+arriving from the restarted server when it went healthy, and `reconcileOnReconnect` ran with real
+occupancy. Had the tap been blind, `:1645-1650` would have left them on a muted "WAS ON AIR" instead.
+
+### §4 — the reconnect [[B-221]] owed: what the record actually holds
+
+🔴 **The bridge's record does not reach the reconnect, and this must be reported rather than
+reconstructed.** Three writers were checked:
+
+- **The audit NDJSON records operator VERBS only.** Its whole vocabulary over 1524 lines is `take`
+  491, `stop` 318, `update` 309, `out` 112, `load` 64, `remove` 63, `import` 52, `next` 41, `failover`
+  40, `reconnect` 34. The `reconnect` action is emitted from exactly one place — `setConfig`'s step 6
+  (`:8777-8782`), an OPERATOR applying a new connection config — **never from an automatic socket
+  reconnect**. The only September `reconnect` line is dated 2026-09-04. There is no entry for the
+  2026-09-05 restart, and by construction there could not be one.
+- **The `state-change` handler writes no log line at all.** `caspar-runtime.ts:1576-1655` contains no
+  `process.stderr.write`; neither does `#flushOrphanedStaging` (`:6150-6162`).
+- **stderr is not captured.** `~/.cg-runtime/bridge-stderr.log` is 175 bytes, last written 2026-07-27;
+  the running bridge writes to its terminal.
+
+So: whether `#flushOrphanedStaging` ran (it did — it is called unconditionally at `:1605`), whether it
+found anything (it returns at `:6152` unless a commit is on record as undelivered), whether
+`#reassertDeclaredVolumes` ran (it did not — one-shot per process, already spent at 15:06) — the first
+and third are answered from the CODE, and the second is **not answered by any record**. The audit
+shows no operator verb between 16:44:57 and 17:12:17, and the owner's restart was deliberate rather
+than mid-take, so an orphan is very unlikely; but `setActiveLook`, `swapLiveSource` and volume changes
+are not audited verbs, so a look switch in that window would have left no timestamped trace, and this
+is stated as unproven rather than as a clean run.
+
+⚠ **What this discharges of [[B-221]]: nothing.** The owed plant run needs a socket death BETWEEN a
+batch's first `DEFER` and its `COMMIT` — the mock reproduces it by destroying every AMCP socket
+mid-stage, server-side. A clean NSSM service stop with no batch in flight cannot produce an orphan, so
+`#orphanedMixerChannel` was null and the flush was an early return. **What this exercise DOES show —
+and it is worth having — is that the reconnect path around the flush survives a real CasparCG restart
+on real hardware**: the session re-handshook, `#loaded` cleared, and the operator's very next take at
+17:12:17 was accepted and rendered, which is [[B-054]]/[[B-039]]'s re-`ADD` working on the plant.
+`B-221`'s mixer-orphan case and its process-death case both remain OWED, unchanged.
+
+### §5 — the options, with costs
+
+| option                    | what it costs                                                                                                                                                                                                                                                          | air risk                                                                                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Do nothing**            | Zero to build. The re-seat itself is CHEAP — measured at 4.97 s for four rows. **The cost is entirely DISCOVERY**, and nothing tells him: §3 shows every surface reads normal. The bound on air-loss is "until a human looks at the picture"                           | Unbounded blackout, silent. Worst on the quiet rows — a logo or a strap that should sit there all day and that nobody is watching the way they watch a live box |
+| **Detect and SAY**        | Small, and smaller than it looks: §1(d) shows the bridge ALREADY computes the set at `:1609-1634` and discards it. The smallest honest version is to keep that set on the health snapshot and have the Runtime say it. No new probe, no new AMCP verb, no wire traffic | None — it sends nothing. A "put it back" affordance re-issues the takes the operator would have pressed, on his press                                           |
+| **Restore automatically** | Largest, and it needs a new persistence layer FIRST: §1(c) shows the intent is destroyed within one publish, so there is nothing left to restore FROM. That means retaining pre-reconnect air state ahead of the reconcile and deciding when it expires                | The whole list below                                                                                                                                            |
+
+🔴 **Every way an automatic restore can be wrong**, all of them live here today:
+
+1. **A stale ledger.** The ledger already survives the restart naming producers that no longer exist
+   (§1(c)); a restore built on it re-`PLAY`s from a record nothing has verified.
+2. **The retention says `cleared`.** `idle` → `cleared` → not restorable, and a row the operator
+   deliberately emptied retains IDENTICALLY. Restoring from it re-`ADD`s a graphic he took off —
+   [[B-109]] exactly, re-opened.
+3. **A half-restart.** One channel back, another still initialising; or the DeckLink consumer failing
+   this time while AMCP answers — [[C-029]]'s own incident. The restore then seats onto a channel with
+   no output and reports success.
+4. **A restart during a take.** The row's status is `unconfirmed`; nobody knows whether the `PLAY`
+   landed. Restoring adds a second `ADD`/`PLAY` on top of an unresolved one.
+5. **A restore racing the operator.** He is already re-taking by hand when it fires; two seatings of
+   the same layer, and [[B-155]]'s re-seat-inside-a-switch class is exactly this shape.
+6. **An automatic action putting a graphic on air with nobody watching.** The worst of the six and the
+   least reversible: the console decides, unattended, that something should be on the station's output.
+   Every other rule in this codebase says a take is the operator's press.
+
+⭐ **Recommendation — Detect and SAY.** It is the only one of the three that changes the failure mode
+rather than trading it for another. Today's behaviour is not wrong, it is MUTE: the reconcile-to-idle
+is correct and specified, and the defect is that a correct decision is taken silently about the
+station's output. Detection is already computed and thrown away, so the honest minimum is small and
+sends nothing to the wire; and an operator told "the server restarted, these four rows were on air"
+recovers in the 5 s the audit already measures. Automatic restore buys those same five seconds at the
+price of six failure modes and of an unattended machine putting graphics on air — and it cannot even
+be built until the retention stops being overwritten, which is a change to [[B-109]]'s rule and needs
+the owner. **The owner decides; this session built nothing.**
+
+- **Cross-refs:** [[B-092]] (restore, and the socket it is keyed to), [[B-107]]/[[B-109]] (why the
+  retained state is `cleared`), [[B-145]] (the ledger that survives), [[B-054]]/[[B-039]] (the re-`ADD`
+  that made the manual recovery work), [[B-086]] (the `unverified` demotion), [[B-161]]/[[B-216]]
+  (`#ownsLiveSeats`, the predicate a stale ledger misleads), [[B-221]] (the reconnect path this run
+  exercised without discharging), [[B-223]] (the output check that watches consumers), [[B-224]] (the
+  tally that renders no zero), [[R-058]] (the chip that watches frames), [[C-029]].
+- **Owed:** nothing was built, so nothing is owed in code. If the owner takes "Detect and SAY", it is
+  a UI change and owes a Linux `gate:e2e`.
+- **Number:** highest `B-` HEADING across the three bug files was `B-224` (this file);
+  `git grep -n "B-225" HEAD` returned only the registry's own "Next free" pointers and one back-
+  reference in the `B-224` entry, `B-226` nothing. Cross-checked against the registry's dated pointer
+  — _"Next free after this session is `B-225`"_ — headings and pointer AGREE. One number taken.
