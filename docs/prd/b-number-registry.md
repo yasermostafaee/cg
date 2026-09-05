@@ -2405,3 +2405,25 @@ taken, filed in `bugs-runtime.md`. No `D-`, `C-` or `P-` number was taken.
 
 ⇒ **Next free after this session is `B-225`** (`B-001` … `B-224`, no gaps), **`D-161`**, **`C-034`**
 and **`P-043`** (unchanged).
+
+### 2026-09-05 — `P-043` (`STRAP98-PAINT-01`: what paints layer 98 at the hold, and can 2.5.0 play its alpha)
+
+| kind | id      | one line                                                                                                                                                                                                                                             | home                       | status                                                           |
+| ---- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------- |
+| `P-` | `P-043` | CasparCG 2.5.0 DOES play a VP8 WebM's alpha (the producer selects `libvpx` off `alpha_mode`, where the bundled `ffmpeg` CLI would not) and composites it PREMULTIPLIED, so an asset whose transparent pixels are not black lifts everything under it | [platform.md](platform.md) | MEASURED on the dev host's own 2.5.0; report only, nothing built |
+
+**No `B-` number was taken.** The session's other output is a measured §D/§E inside the OPEN `B-222`,
+not a new defect: it withdraws `B-222` §C(b)'s first clause (moving layer 98's video to a media layer
+removes no paints — at the hold the crawl is the only painter, the frozen video decodes nothing) and
+adds the on-air arithmetic (≈ 114 full-HD html paints/s, 88 % of them the two crawls). Nothing in our
+code was found defective, so nothing was filed as a bug.
+
+**Derivation for `P-`, from headings as the rule requires:** highest `P-` HEADING across the PRD was
+**`P-042`** (`platform.md`, `git grep -n -E "^## \[.\] P-0[0-9][0-9]"`); `git grep -n "P-043" HEAD`
+returned only this file's own "Next free" pointers (five, all `P-043 (unchanged)`) and
+`git grep -n "P-044" HEAD` returned nothing. **Cross-check against the dated pointer:** the entry
+above ends _"and `P-043` (unchanged)"_ — headings and pointer **AGREE**. One number taken, filed in
+`platform.md`. No `B-`, `D-` or `C-` number was taken; nothing was deleted or translated.
+
+⇒ **Next free after this session is `P-044`** (`P-001` … `P-043`, no gaps), **`B-225`**, **`D-161`**
+and **`C-034`** (unchanged).

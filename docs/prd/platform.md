@@ -2758,3 +2758,67 @@ deleted by hand before the rerun.
 - **Cross-refs:** [[P-034]] / [[B-098]] (the bounded fan-out — this race is the same class inside
   one package), [[P-040]] (the persisted gate log that made the diagnosis a read rather than a
   rerun).
+
+## [ ] P-043 — CasparCG 2.5.0 DOES play a VP8 WebM with its alpha (the producer picks `libvpx` off the `alpha_mode` tag, where the bundled `ffmpeg` CLI would not), and its mixer composites PREMULTIPLIED — so an asset whose transparent pixels are not black lifts everything under it ⟨priority: medium — two facts that decide whether a graphic may leave HTML, and both are the opposite of what the CLI and the usual "straight alpha" assumption say⟩ — MEASURED 2026-09-05 by `STRAP98-PAINT-01`
+
+**Where measured:** the DEV HOST's own install
+(`D:\programs\casparcg-server-v2.5.0-stable-windows`, `VERSION` → `2.5.0 69e8ad5 Stable`), started as
+an ISOLATED instance — its own config file, its own media path, AMCP on port **5260**, one
+`1080p5000` channel with NO consumers. The owner's `casparcg.config` was not touched and nothing was
+sent to the plant.
+
+**Method:** `PLAY 1-1 #AARRGGBB` (a flat colour producer), `PLAY 1-2 <clip>`, then `PRINT 1` and read
+the PNG it drops in the media folder. The subject is layer 98's strap asset — VP8 in WebM, 1920×282,
+50 fps, 14.3 s, `alpha_mode=1` — whose held frame is **79 % fully transparent** with RGB **18,18,18**
+under alpha 0, and carries an opaque white bar at rows 198–260.
+
+⚠ **`PRINT` LAGS BY ONE.** The PNG that appears while case N is running is case N−**1**'s frame. Give
+every case a DIFFERENT background colour so each grab identifies itself — otherwise a whole set reads
+one case out of step and every conclusion is shifted onto the wrong clip. The first pass here did
+exactly that, and only the colours caught it.
+
+| case                                            | transparent area reads | verdict                                           |
+| ----------------------------------------------- | ---------------------- | ------------------------------------------------- |
+| flat colour alone (red, black, grey)            | exactly the colour     | baseline: the mixer does not tint                 |
+| the strap WebM over magenta `#FFFF00FF`         | `255,19,255`           | the background shows through — **ALPHA HONOURED** |
+| opaque control (solid green h.264) over blue    | `0,147,0` everywhere   | nothing shows through — negative control HOLDS    |
+| ProRes 4444 of the same held frame, over cyan   | `0,255,255` +18 red    | alpha honoured — positive control HOLDS           |
+| the WebM re-encoded to ProRes 4444, over yellow | `255,255,19`           | same; **no conversion is needed**                 |
+
+**The decoder — and why a CLI check would have lied.** CasparCG's log names no decoder even at
+`debug`. The bundled `ffmpeg.exe` (7.0.2) decodes this same file with `vp8 (native)` → `yuv420p`,
+**no alpha**; forced with `-c:v libvpx` it yields `yuva420p`. The server passes the alpha anyway, and
+`casparcg.exe` carries the literals `libvpx` and `libvpx-vp9` in the same block as `alpha_mode` inside
+`caspar::ffmpeg::Decoder::Decoder(struct AVStream *)` (source path
+`src/modules/ffmpeg/producer/av_producer.cpp`) and imports `avcodec_find_decoder_by_name`: the
+producer looks the alpha-capable decoder up BY NAME off the stream's `alpha_mode` tag. **Never infer
+CasparCG's alpha support from a bare `ffmpeg` run — the CLI default and the producer disagree, and the
+CLI is the pessimistic one.**
+
+🔴 **PREMULTIPLIED, and this is the half that bites.** Over pure black the same strap's transparent
+area reads **19,19,19**, not `0,0,0`: the mixer ADDS the source's RGB instead of scaling it by alpha.
+The SAME asset rendered by the browser reads exactly `255,0,255` over magenta — straight alpha, no
+lift. So this strap on a CasparCG media layer would lay a constant **~7.5 % grey wash over the whole
+1920×282 band**, visibly unlike what is on air today. An asset is safe to move out of HTML only if its
+transparent pixels are BLACK; `alpha_mode=1` alone does not make it so.
+
+**Acceptance:**
+
+- WHEN a session must know whether CasparCG can play an asset's alpha THEN it reads this entry rather
+  than running the `ffmpeg` CLI, whose default decoder answers the wrong question
+- WHEN a graphic is proposed for a move from HTML onto a media layer THEN its transparent pixels are
+  checked for black BEFORE the move is costed, and a non-black finding is reported as a picture
+  change rather than discovered on air
+- WHEN a `PRINT`-based frame grab is used for a series of cases THEN each case gets a distinct
+  background colour and every grab is identified by it
+
+**Notes:** the converted candidate (`-c:v libvpx` decode → ProRes 4444) was produced and does
+composite identically, at **16.5 MB against the WebM's 2.24 MB** — it is not needed and it did not
+leave the dev host. Nothing was sent to `192.168.21.114`.
+
+- **Prefix class:** `P-`, platform — a property of the CasparCG build both apps target, not of our code.
+- **Number:** highest `P-` HEADING was `P-042` (this file); `git grep -n "P-043" HEAD` returned only
+  the registry's own "Next free" pointers and `P-044` nothing. The dated pointer reads
+  _"`P-043` (unchanged)"_ — headings and pointer AGREE.
+- **Cross-refs:** [[B-222]] §D (which measured that the move this entry costs buys no paints anyway),
+  [[R-030]] (the `cw`/`ch` raster the bridge appends, and why it is not CasparCG's `width=`).

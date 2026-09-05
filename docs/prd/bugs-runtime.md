@@ -10190,7 +10190,7 @@ because both are decisions rather than fixes:
   and `B-222` returned nothing. Cross-checked against the registry's dated pointer — _"Next free
   after this session is `B-221`"_ — headings and pointer AGREE.
 
-## [ ] B-222 — the headline crawl breaks up on the plant's PGM while three videos on the same channel stay smooth: measured, the strap template is cheap and compositor-driven, and the cost that scales with 1920×1080 at 50 Hz sits in the html producer's own frame path — a full-raster copy per paint on CEF's UI thread, and a free-running CEF timer with no genlock to the channel tick ⟨priority: high — visible on air on every crawl⟩ — FILED 2026-09-05 by `TICKER-JUDDER-01`; NOT a template defect (the §A4 fix was withheld by measurement, not by choice); the plant-side trial is the OWNER's (§C below, report only)
+## [ ] B-222 — the headline crawl breaks up on the plant's PGM while three videos on the same channel stay smooth: measured, the strap template is cheap and compositor-driven, and the cost that scales with 1920×1080 at 50 Hz sits in the html producer's own frame path — a full-raster copy per paint on CEF's UI thread, and a free-running CEF timer with no genlock to the channel tick ⟨priority: high — visible on air on every crawl⟩ — FILED 2026-09-05 by `TICKER-JUDDER-01`; NOT a template defect (the §A4 fix was withheld by measurement, not by choice); the plant-side trial is the OWNER's (§C below, report only); §D/§E added 2026-09-05 by `STRAP98-PAINT-01` — at the hold the CRAWL is the only painter (the frozen video decodes nothing and draws no frame of its own), so §C(b)'s "move the video to a media layer" clause is WITHDRAWN; the surviving lever is sizing each producer to its footprint
 
 **Observed** by the owner on the real PGM output (not Remote Desktop), plant `192.168.21.114`,
 channel `1080p5000`, 2026-09-05: four rows on air including html layers 97, 98, 99, each created at
@@ -10340,6 +10340,98 @@ to "see fixed" from §A; the judgement points are for the §C trial.
    `angle-backend` is moot while gpu is off; `cache-path` is irrelevant. Stopping the screen
    consumer is load relief (−5 % CPU, −18 % Copy measured by the owner), not the cause.
 
+### §D — the hold, measured (2026-09-05, `STRAP98-PAINT-01`): the CRAWL is the painter; the video is not, and §C(b)'s first clause is WITHDRAWN
+
+§A profiled layer 97 and reported layer 98's cost as "its in-page video". That claim was never
+measured AT THE HOLD, and at the hold it is false.
+
+**What the runtime does with this template once it is up** (anchors, nothing changed):
+
+- `holdBehavior: "freeze"` PAUSES the element and CANCELS the driver's rAF — `seekMs(introEndMs)`,
+  `handle.pause()`, `settledHold = true`, `running = false`, `cancelFrame()`
+  (`video-driver.ts:538-545`). No decode, no timer, nothing scheduled.
+- The freeze lands at **5.02 s, not 14.32 s.** The element carries `phases.source: "composition"`,
+  so it FOLLOWS the composition window and `introEndMs` is the derived hold `H`
+  (`runtime.ts:1288-1331`); measured, `H` = 5.02 s = frame 251 = the scene's own
+  `lifecycle.contentStart`. The clip's remaining 9.3 s are never played on air.
+- `auto-out` + `holdSource: "content-driven"` waits on `waitForContent()`
+  (`playout-controller.ts:355-375`); the ticker's `repeat: "infinite"` never completes, so the hold
+  never ends, no outro is ever taken, and the graphic stays up until `stop()`. That is why the hold
+  is the steady state worth measuring.
+- D-133's hold loop (`playout-controller.ts:409-424`) would re-render `[contentStart -> outPoint]`
+  every frame, but this scene has ZERO keyframe blocks, so `frameDependent(251, 520)` is false and
+  no FrameDriver opens. Confirmed at the wire below: with the crawl stopped the page draws nothing.
+
+**Method** — as §A2, at the hold: the stored record's own HTML (bridge-templates
+`16a31af6…`) served over local HTTP at `/template/t?cw=1920&ch=1080`, headless system Chrome
+152.0.7977.76 at a 1920×1080 viewport with CEF 2.5.0's software switches
+(`--disable-gpu --disable-gpu-compositing --disable-gpu-vsync --enable-begin-frame-scheduling`),
+driven `update("{}")` then `play("{}")`, 20 s to reach the hold, then a 6 s CDP trace.
+🔴 **Machine: i5-10400 6C/12T, UHD 630, 15.8 GB, Windows 11 26100; Chrome's rAF is 60 Hz here, not
+the plant's 50.** Variants are compared against EACH OTHER on this box, never against a target.
+
+| layer 98 at the hold            | draws / 6 s | quads per draw | RunTask ms / 6 s (renderer + compositor + viz) | ms per drawn frame | video frames decoded in the window |
+| ------------------------------- | ----------- | -------------- | ---------------------------------------------- | ------------------ | ---------------------------------- |
+| (a) as shipped                  | 362         | 6.36           | 647.8                                          | 1.79               | **0** (138 → 138)                  |
+| (b) the video element removed   | 362         | 5.36           | 577.1                                          | 1.59               | n/a                                |
+| (c) the ticker element removed  | **0**       | —              | 94.9                                           | —                  | **0** (250 → 250)                  |
+| (d) the ticker kept, `speed: 0` | **0**       | —              | 124.0                                          | —                  | **0** (138 → 138)                  |
+
+**Reading: (b) ≈ (a); (c) and (d) draw NOTHING.** The crawl is the painter. The video's entire
+marginal cost at the hold is ONE composited quad per already-drawn frame — 70.7 ms across 6 s, 0.20 ms
+per drawn frame — with zero decode and zero raster, and it exists only because the crawl has already
+caused a frame to be produced. **§C recommendation (b)'s first clause — "move layer 98's video out of
+HTML into a CasparCG media layer" — is WITHDRAWN: it removes no paints.** (Its second clause, sizing
+each producer to its footprint, stands and is quantified below.) A media-layer move would not even
+have rendered the same picture: see `P-043`.
+
+**Why (d) exists, and why (c) alone would have been the wrong control.** Removing the ticker removes
+the scope's only hold driver, so B-032's guard resolves `content-driven` back to `timed`
+(`runtime.ts:677-678`) and the graphic takes its outro and ends — (c) is not "(a) minus the crawl".
+(d) holds the lifecycle identical to (a) (same content-driven hold, video frozen at the same 5.02 s)
+and changes only whether the crawl MOVES. It draws nothing either.
+
+**Controls.** The in-page rAF sampler was removed and (a) and (d) re-run: (a) still drew 361 frames
+(677.2 ms), (d) still drew 0 (134.3 ms) — the sampler is not what produces the frames. And the
+zero-draw readings are not a dead instrument: the SAME 6 s windows recorded 362 `BeginFrame` and 362
+`FireAnimationFrame` events, so the trace was live while it recorded no draws.
+
+**Two §A statements this corrects.**
+
+1. §A1's layer-98 row — "decoded inside the page" — is true for the first 5.02 s and false for every
+   second after it. The element is paused and its decoded-frame counter does not move again.
+2. §A1 and §A2 record layer 99 as "zero paints, zero raster in 6 s". That does not generalise: over
+   **24 s it drew 408 frames (28 % duty)**. It is `loop-cycle` with `holdMs 8000`, so it re-plays its
+   70-frame intro about every 9.4 s and a 6 s window can land wholly inside one hold. §A's own
+   sampling window was the reason it looked free.
+
+### §E — the steady-state arithmetic for the REAL on-air set (report only)
+
+The concurrent set, reconstructed from the bridge's own audit (`~/.cg-runtime/bridge-audit.ndjson`,
+2026-09-05, take/stop/out folded in order) is channel 1 layers **9, 97, 98, 99 — FOUR html producers,
+not three** — over the three media producers at layers 10/11/12 in `bridge-live-layers.json`.
+
+| layer | template   | scene     | measured          | duty  | paints/s at the plant's 50 Hz |
+| ----- | ---------- | --------- | ----------------- | ----- | ----------------------------- |
+| 9     | `e506e319` | 1920×1080 | **0** draws / 6 s | 0 %   | **0**                         |
+| 97    | `9e1115d9` | 1920×190  | 360 draws / 6 s   | 100 % | **50**                        |
+| 98    | `16a31af6` | 1920×282  | 361 draws / 6 s   | 100 % | **50**                        |
+| 99    | `6624cc34` | 448×144   | 408 draws / 24 s  | 28 %  | **14**                        |
+
+**≈ 114 full-HD html paints per second at the hold**, each an 8,294,400-byte copy on the ONE CEF UI
+thread every html producer shares (§A3) — **≈ 945 MB/s** before a frame of video is decoded. **The two
+crawls are 100 of those 114 — 88 %.** Layer 9 is free; the frozen video is free; the logo costs 12 %.
+
+**What would change that number** — named only, each an OWNER decision, none built:
+
+1. **Size each producer to its own footprint** (`width=`/`height=` in the producer URL +
+   `MIXER FILL`, §C3): 1.46 MB for layer 97, 2.17 MB for 98, 0.26 MB for 99 per paint — **≈ 185 MB/s,
+   an 80 % cut**, and the largest lever by a wide margin. Still owed its dev-host verification.
+2. **One page carrying both crawls**: 114 → 64 paints/s, and one fewer producer contending for the
+   shared CEF UI thread.
+3. **A Web Animations crawl**: already declined in §A4 on measurement — it moves ~0.7 ms of
+   main-thread work per frame and changes no copy at all.
+
 **Repro:** the plant as observed above; not reproducible on this dev box (no CEF, no 50 Hz OSR path).
 **Expected:** a crawl that advances 2.4 px every 20 ms, every frame.
 **Actual:** repeated frames on the crawl only; the channel reports no drops.
@@ -10349,10 +10441,12 @@ re-run against any stored template.
 
 - **Cross-refs:** [[B-098]] (the other place "a longer rope is not the fix" was learned), `R-030`
   (the `cw`/`ch` raster the bridge appends, and why it is not CasparCG's `width=`), [[B-223]] (the
-  same session's §B), the `caspar.md` html-producer notes.
+  same session's §B), `P-043` (2.5.0 DOES play this WebM's alpha, and composites it premultiplied —
+  measured for §D's withdrawn move), the `caspar.md` html-producer notes.
 - **Owed:** the plant-side trial and its visual judgement (owner); a DevTools trace of the plant's
   CEF if `remote-debugging-port` is set; the dev-host verification of `width=`/`height=` +
-  `MIXER FILL` before any bridge change.
+  `MIXER FILL` before any bridge change — now the LARGEST remaining lever (§E), since §D removed the
+  other one.
 - **Number:** highest `B-` HEADING across the three bug files was `B-221` (this file); `git grep
 -n "B-222" HEAD` returned only the registry's own "Next free" pointer; `B-223` returned nothing.
   Cross-checked against the registry's dated pointer — _"Next free after this session is
