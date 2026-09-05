@@ -10417,3 +10417,86 @@ screen consumer and asserts no alert plus the preview row.
   the technical surface), [[B-172]] (why it is a strip), [[B-222]] (the same session's §A).
 - **Number:** derived with `B-222` above — `B-223` returned nothing in `git grep -n "B-223" HEAD`;
   the registry's pointer agrees.
+
+## [~] B-224 — the Layers header's STATE tally reads `STATE (1 ON AIR) (…` when rows are both on air and in error: the second count is cut off for lack of room, so the operator cannot see how many rows are in error ⟨priority: high — the one number a refused take leaves behind is the one that was clipped⟩ — FILED AND CLOSED IN CODE 2026-09-05 by `LAYERS-HEADER-COUNT-01`; the Linux `gate:e2e` for the commit is OWED
+
+**Observed** by the owner, 2026-09-05, Runtime → Layers with one row ON AIR and rows in ERROR: the
+head read `STATE (1 ON AIR) (…` — the error count clipped. Two owner decisions the fix rests on:
+_"Showing only the numbers is enough; the colour says whether it is an error or on air"_, and
+_"The STATE column can also be wider — the NAME column is far too wide."_
+
+### §1 — the state, established before anything was touched
+
+- **Derivation, unchanged and confirmed:** `airTally(items)` in
+  `apps/runtime/src/renderer/features/stack/onAir.ts:84-92` — `onAir` = `isOnAirOrUnsettled` over
+  each item's RECONCILED `status` (plus `pending`), `inError` = `status === 'error'`, never one number;
+  passed as `tally` from `LayersPanel.tsx:380` and rendered by `LayerTableHeader.tsx`. Exactly what
+  `RUNTIME-FIX-0904` / [[B-213]] established (status-derived, never intent; `error` no longer wears the
+  air colour). **Not touched by this fix.**
+- **States the tally carries — exactly two.** `onAir` counts `playing`, `on-air`, `updating`,
+  `exiting`, `unconfirmed` and any `pending`; `inError` counts `error`. Not counted, by design:
+  `idle`/`loaded` (READY, nothing on air), `unverified` (the link is down and the whole head greys
+  itself, §4 of `B-081`), `disconnected`, and REHEARSING — which is a row FLAG, not a status, and by
+  `R-022` is precisely the state in which a graphic cannot reach air. Zero counts are not rendered.
+- **Column sizing, and why STATE truncated:** `layerTable.ts` — every column is a FIXED px width
+  except the flexible ones; STATE was `132 px` (`W.stateFull`) at the full and compact densities
+  and `34 px` icon-only at tight; NAME was `minmax(132px, 1fr)`; TEMPLATE `minmax(160px, 2fr)`. The
+  header cell wore `overflow: hidden; text-overflow: ellipsis` on a `white-space: nowrap` row
+  (`LayerTableHeader.tsx` `styles.cell` / `styles.header`). Measured in Chrome at the head's font:
+  `STATE (1 on air) (2 in error)` needs **160 px** (175 at two digits each) — a CSS clip of a
+  fixed-width cell, not a string cut in JS.
+- **The longest row NAME that actually exists:** the NAME column shows the row's alias (`slot.alias
+?? 'Layer N'`, `LayerRow.tsx:331`). Every real alias, measured at the alias font (`600 1.05rem`,
+  the app stack — Persian resolves to Segoe UI on Windows, Vazirmatn elsewhere; both measured):
+  `میانبرنامه روی انتن` (the owner's screenshot) **127 px** · `Debate — 4 box` 123 · `LOWER THIRD`
+  (mock) 109 · `زیرنویس اصلی` (plant, layer 98) 106 · `STUDIO FEED` 102 · `لوگوی اصلی` (plant, 99)
+  89 · `Layer 30` 64. The longest TEMPLATE name in the plant's records, `میان‌برنامه (روی آنتن)`,
+  would be 144 px if an operator ever aliased a row with it. ⚠ The old alias floor of 132 fit the
+  longest real name by 5 px; the old STATE width of 132 clipped its own row label `NOT CONNECTED`
+  (136 px needed) by 4.
+
+### §2 — the fix
+
+| what                   | before                                                               | after                                                                                                                                                                                       |
+| ---------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| head, 1 on air + 2 err | `STATE (1 ON AIR) (2 IN ERROR)` → clipped to `STATE (1 ON AIR) (…`   | `STATE ● 1 ▲ 2` — each number in its state's colour, the row's own lucide mark beside it (`CircleDot` / `TriangleAlert`); text reads `State 1 2`; tooltip `1 on air — …` / `2 in error — …` |
+| head, single state     | `STATE (4 ON AIR)`                                                   | `STATE ● 4`, no separator                                                                                                                                                                   |
+| head at tight (34 px)  | `STATE` clipped, counts impossible                                   | the marks are dropped, the numbers wrap under the word (the head is a wrapping flex row; no `overflow: hidden` on it)                                                                       |
+| STATE column           | 132 px                                                               | **150 px** — holds `NOT CONNECTED` (136) and the compact tally at two digits (≈ 90)                                                                                                         |
+| NAME column (full)     | `minmax(132px, 1fr)` — absorbed slack beside an ellipsizing template | `minmax(150px, 220px)` — the floor fits every real name (127) and the template-name case (144); the CEILING is the owner's "far too wide": the template now takes all the slack             |
+| NAME column (compact)  | `minmax(132px, 1fr)`                                                 | `minmax(150px, 1fr)` — no template column to give the slack to                                                                                                                              |
+| accessible name        | `1 items on air` / `2 items in error`                                | unchanged                                                                                                                                                                                   |
+
+TEMPLATE, the verb columns, the rows' own content and every other string are untouched. Nothing
+was translated.
+
+**Red-first, sources stashed:** `layerTableHeader.dom.test.ts` 5 of 9 red on the old head
+(among them `🔴 1 on air and 2 in error: BOTH numbers are in the DOM, in the compact form` and
+`🔴 a single state renders as one mark and one number, with no stray separator`);
+`layerTable.test.ts` 9 of 9 red on the old widths (`🔴 the floor fits the longest real row name
+with room for the dirty chip`, `🔴 is at least as wide as the widest row state label`). Restored,
+all green. `lookPicker.dom.test.ts`'s density-arithmetic literal follows the new widths; the
+`§4` unreachable-labels test reads the number. New E2E `layers-header-tally.spec.ts`: the head
+and the seeded longest name (`MockRuntime` layer 73) hold `scrollWidth ≤ clientWidth` at the
+default width and with the Inspector open — Linux `gate:e2e` OWED.
+
+**Predictions:** P1 HIT (a CSS clip of a fixed 132 px head cell; the JS string was whole). P2 HIT
+(two states; the others are excluded by construction, above). P3 MISS in the letter — NAME was
+not a bare `1fr` absorbing everything: `layerTable.ts` had already narrowed it to a `1fr` SHARE
+against the template's `2fr` by decision; it was still the only other flexible column, so at any
+width above ~900 px it grew with the panel. The structural cause of "too wide" was the share, and
+the fix is a ceiling rather than a smaller share, so the width is deterministic.
+
+**Repro:** one row ON AIR and two rows in ERROR; look at the Layers header.
+**Expected:** both counts visible, whole, at every width.
+**Actual (before):** the second count clipped at 132 px.
+**Regression tests:** `layerTableHeader.dom.test.ts`, `layerTable.test.ts`,
+`layers-header-tally.spec.ts`.
+
+- **Cross-refs:** [[B-213]] (the derivation this leaves alone), `R-022` (why REHEARSING is not
+  counted), `B-081` §4 (the grey), the `layerTable.ts` header (why widths are fixed px).
+- **Owed:** the owner's visual check at the two widths; the Linux `e2e` for the commit.
+- **Number:** highest `B-` HEADING across the three bug files was `B-223` (this file);
+  `git grep -n "B-224" HEAD` returned only the registry's own "Next free" pointer, `B-225` nothing.
+  Cross-checked against the registry's dated pointer — _"Next free after this session is
+  `B-224`"_ — headings and pointer AGREE. One number taken.

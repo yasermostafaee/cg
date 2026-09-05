@@ -1987,6 +1987,9 @@ function seedFixedBank(): FixedLayerBank | null {
     aliases: {
       '70': 'CLOCK',
       '71': 'LOWER THIRD',
+      // `B-224` — the LONGEST real row name (a plant alias, from the owner's screenshot),
+      // seeded so the E2E can hold the NAME column to it at the narrower panel width.
+      '73': 'میانبرنامه روی انتن',
       '86': 'TICKER',
       '87': 'LOGO BUG',
       '88': 'STUDIO FEED',

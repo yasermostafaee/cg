@@ -1,5 +1,7 @@
 import type { CSSProperties } from 'react';
+import { CircleDot, TriangleAlert } from 'lucide-react';
 import { colors } from '../../theme.js';
+import { Icon } from '../../ui/Icon.js';
 import {
   ROW_GEOMETRY,
   VERBS_GRID,
@@ -110,24 +112,48 @@ const styles = {
   },
   cell: { overflow: 'hidden', textOverflow: 'ellipsis' },
   /**
+   * `B-224` — the STATE head is a WRAPPING flex row: the word, then one count per
+   * non-zero state. At the full and compact densities everything sits on one line
+   * inside the widened column; at the tightest density (an icon-only, 34 px column)
+   * the counts wrap UNDER the word instead of being clipped — the header grows a line
+   * there, and every number stays whole. `overflow: hidden` is deliberately NOT on
+   * this cell: a hidden overflow is exactly how the second count went missing.
+   */
+  stateHead: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    alignItems: 'baseline',
+    columnGap: '0.35rem',
+    rowGap: '0.1rem',
+    minWidth: 0,
+  },
+  /** One count: the state's own mark beside its number, both in the state's colour. */
+  count: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '0.2rem',
+    fontWeight: 700,
+    lineHeight: 1,
+    // Numbers never move when they change from 9 to 10.
+    fontVariantNumeric: 'tabular-nums' as const,
+  },
+  /**
    * The on-air tally beside `State`. The sacred air colour, and one of only two
    * places allowed to use it (the row's state mark is the other) — it is a genuine
    * air claim about the channel, not decoration.
    */
   onAirCount: {
     color: colors.onAir,
-    fontWeight: 700,
     // 14px, per the owner — larger than the ~10px header type around it without
     // dominating the row. This is the one number a control room wants from the whole
     // list ("how much of my output is live?"), so it is sized to be read at a glance
     // rather than hunted for.
     fontSize: '14px',
-    lineHeight: 1,
   },
   /**
    * …and the same number with its confidence withdrawn (§4). Muted, keeping its
-   * size and its parentheses — the count is unchanged, only the claim that a
-   * server is confirming it. B-081's tone, reused rather than a new grey.
+   * size — the count is unchanged, only the claim that a server is confirming it.
+   * B-081's tone, reused rather than a new grey.
    */
   onAirCountStale: { color: colors.textMuted },
   /**
@@ -139,9 +165,7 @@ const styles = {
     // Error TEXT on the dark header — the owner's `rgb(255 28 28)`, never the
     // background red (2.13:1 here).
     color: colors.errorText,
-    fontWeight: 700,
     fontSize: '12px',
-    lineHeight: 1,
   },
   verbHead: {
     textAlign: 'center' as const,
@@ -199,51 +223,66 @@ export function LayerTableHeader({
         one row: "how much of my graphics output is live right now?" Previously that
         needed counting green marks down a thirty-row list.
 
-        Rendered ONLY when the count is non-zero. A permanent `(0)` would be noise on
+        Rendered ONLY when the count is non-zero. A permanent `0` would be noise on
         the resting state, and — worse — it would put the air colour on screen at all
         times, which is exactly how a colour reserved for one meaning stops being
         noticed.
 
-        `B-213` — and it SAYS what it counts. `(2)` beside "State" read as two on air
-        whatever it was actually counting; `(2 on air)` cannot be read any other way,
-        and `(2 in error)` is its own number in its own colour, never folded in.
+        `B-213` — and it counts TWO things apart: on air in the air colour, in error in
+        the error colour, never folded into one number.
+
+        `B-224` — THE WORDS LEFT THE HEAD; THE COLOUR AND THE MARK CARRY THE STATE.
+        `(1 on air) (2 in error)` needed 160 px of a 132 px cell, so the second count was
+        cut off for lack of room and the operator could not see how many rows were in
+        error. The owner's decision: "showing only the numbers is enough; the colour says
+        whether it is an error or on air." So each state is now ITS NUMBER in ITS COLOUR,
+        with the row's own state mark beside it (the same lucide `CircleDot` an ON AIR row
+        draws, the same `TriangleAlert` an ERROR row draws) so colour is not the only
+        carrier — and where the mark does not fit (the icon-only density) the mark is
+        dropped and the number is kept. The words survive in two places that cost no
+        width: the `title` tooltip and the accessible name.
       */}
       <span
-        style={styles.cell}
+        style={styles.stateHead}
         title="What is on this layer right now: on air, ready, empty, occupied by another system, or unknown."
       >
         State
+        {/* Explicit separator TEXT between the word and each count. A flex row lays them
+            out with `columnGap`, which leaves the DOM text reading `State12` for one on
+            air and two in error — the exact ambiguity this head exists to remove. A
+            whitespace-only text node is dropped by flex layout, so the rendering is
+            unchanged; the text, the clipboard and any test read `State 1 2`. */}
+        {tally.onAir > 0 && ' '}
         {tally.onAir > 0 && (
           <span
-            style={
-              unverifiable ? { ...styles.onAirCount, ...styles.onAirCountStale } : styles.onAirCount
-            }
+            style={{
+              ...styles.count,
+              ...styles.onAirCount,
+              ...(unverifiable ? styles.onAirCountStale : {}),
+            }}
             aria-label={`${String(tally.onAir)} items on air`}
             data-air-tally={String(tally.onAir)}
             {...(unverifiable ? { 'data-unverifiable': '' } : {})}
-            {...(unverifiable
-              ? {
-                  title:
-                    'What this console believes is on air. CasparCG cannot be reached, so nothing is confirming it right now.',
-                }
-              : {
-                  title:
-                    'Rows this console believes are on air or unsettled — a play CasparCG accepted, or one still waiting for its answer. A refused row is counted separately.',
-                })}
+            title={
+              unverifiable
+                ? `${String(tally.onAir)} on air — what this console believes is on air. CasparCG cannot be reached, so nothing is confirming it right now.`
+                : `${String(tally.onAir)} on air — rows this console believes are on air or unsettled: a play CasparCG accepted, or one still waiting for its answer. A refused row is counted separately.`
+            }
           >
-            {' '}
-            ({tally.onAir} on air)
+            {spec.showStateLabel && <Icon icon={CircleDot} size={12} />}
+            {tally.onAir}
           </span>
         )}
+        {tally.inError > 0 && ' '}
         {tally.inError > 0 && (
           <span
-            style={styles.errorCount}
+            style={{ ...styles.count, ...styles.errorCount }}
             aria-label={`${String(tally.inError)} items in error`}
             data-error-tally={String(tally.inError)}
-            title="Rows whose last command CasparCG refused. Nothing is claimed about what those layers show — open the row or the audit log for the code."
+            title={`${String(tally.inError)} in error — rows whose last command CasparCG refused. Nothing is claimed about what those layers show; open the row or the audit log for the code.`}
           >
-            {' '}
-            ({tally.inError} in error)
+            {spec.showStateLabel && <Icon icon={TriangleAlert} size={11} />}
+            {tally.inError}
           </span>
         )}
       </span>

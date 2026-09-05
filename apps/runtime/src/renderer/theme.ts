@@ -68,7 +68,7 @@ export const colors = {
   /**
    * ERROR, as TEXT on a dark background. The exact value the owner specified
    * (2026-09-04, `RUNTIME-FIX-0904`): _"use rgb(255 28 28) for errors on dark
-   * backgrounds"_. The row's ERROR mark, the header's `(N in error)` tally, the
+   * backgrounds"_. The row's ERROR mark, the header's in-error count, the
    * status bar's hard failure, the link indicator, the lock overlay's refusal, the
    * Inspector's file error and the audit log's `failed` outcome all read through
    * this. Saturated on purpose, like `onAir`: it is the mark an operator has to find,

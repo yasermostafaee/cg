@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
 import { LayerTableHeader } from '../src/renderer/features/layers/LayerTableHeader.js';
+import type { Density } from '../src/renderer/features/layers/layerTable.js';
 
 /**
  * §5 — THE TOGGLE COLUMN'S HEAD NAMES THE COLUMN, NOT A VERB.
@@ -37,6 +38,7 @@ afterEach(async () => {
 async function renderHeader(
   tally: { onAir: number; inError: number } = { onAir: 0, inError: 0 },
   unverifiable = false,
+  density: Density = 'full',
 ): Promise<HTMLDivElement> {
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -47,7 +49,7 @@ async function renderHeader(
       createElement(
         StrictMode,
         null,
-        createElement(LayerTableHeader, { density: 'full', tally, unverifiable }),
+        createElement(LayerTableHeader, { density, tally, unverifiable }),
       ),
     );
   });
@@ -88,42 +90,90 @@ describe('LayerTableHeader — the toggle column head', () => {
  * for the one a control room asks of a green number, and nothing on the surface said
  * which question it was answering.
  */
+/** The STATE head's VISIBLE text, whitespace collapsed — SVG marks contribute nothing. */
+function stateHeadText(el: HTMLElement): string {
+  const head =
+    el.querySelector<HTMLElement>('[data-air-tally], [data-error-tally]')?.parentElement ??
+    [...el.querySelectorAll<HTMLElement>('[role="row"] > span')].find((s) =>
+      (s.textContent ?? '').startsWith('State'),
+    ) ??
+    null;
+  return (head?.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
 describe('LayerTableHeader — the State tally', () => {
-  it('THE INCIDENT: two refused rows and nothing on air shows "2 in error" and NO air count', async () => {
+  it('THE INCIDENT: two refused rows and nothing on air shows the error count and NO air count', async () => {
     const el = await renderHeader({ onAir: 0, inError: 2 });
     expect(el.querySelector('[data-air-tally]')).toBeNull();
     const error = el.querySelector<HTMLElement>('[data-error-tally]');
-    expect(error?.textContent).toContain('2 in error');
+    expect(error?.textContent?.trim()).toBe('2');
     expect(error?.getAttribute('aria-label')).toBe('2 items in error');
-    // Not the air colour.
+    // Not the air colour, and no air words anywhere visible.
     expect(el.textContent).not.toContain('on air');
   });
 
-  it('says "on air" in words — a bare parenthesised number is gone', async () => {
-    const el = await renderHeader({ onAir: 3, inError: 0 });
+  /*
+    `B-224` — THE WORDS LEFT THE HEAD. `(1 on air) (2 in error)` needed 160 px of a 132 px
+    cell, so the second count was cut off and the operator could not see how many rows
+    were in error. Each state is now ITS NUMBER in ITS COLOUR with the row's own mark
+    beside it; the words live in the tooltip and the accessible name, which cost no width.
+  */
+  it('🔴 B-224 — 1 on air and 2 in error: BOTH numbers are in the DOM, in the compact form, with the rows’ own marks', async () => {
+    const el = await renderHeader({ onAir: 1, inError: 2 });
     const air = el.querySelector<HTMLElement>('[data-air-tally]');
-    expect(air?.textContent).toContain('3 on air');
-    expect(air?.getAttribute('aria-label')).toBe('3 items on air');
-    expect(el.querySelector('[data-error-tally]')).toBeNull();
-    expect(el.textContent).not.toMatch(/\(3\)/);
+    const error = el.querySelector<HTMLElement>('[data-error-tally]');
+    // Both numbers, whole.
+    expect(air?.textContent?.trim()).toBe('1');
+    expect(error?.textContent?.trim()).toBe('2');
+    // The compact form: the word, then the two numbers — no parentheses, no words.
+    expect(stateHeadText(el)).toBe('State 1 2');
+    expect(el.textContent).not.toMatch(/on air|in error|\(|\)/);
+    // The rows' own marks beside the numbers: CircleDot for on air, TriangleAlert for error.
+    expect(air?.querySelector('svg.lucide-circle-dot')).not.toBeNull();
+    expect(error?.querySelector('svg.lucide-triangle-alert')).not.toBeNull();
+    // The full words travel where they cost no width: the tooltip and the accessible name.
+    expect(air?.getAttribute('title')).toMatch(/^1 on air/);
+    expect(error?.getAttribute('title')).toMatch(/^2 in error/);
+    expect(air?.getAttribute('aria-label')).toBe('1 items on air');
+    expect(error?.getAttribute('aria-label')).toBe('2 items in error');
+    // Nothing on the head hides an overflow — a hidden overflow is how the count went missing.
+    expect(air?.parentElement?.style.overflow).not.toBe('hidden');
   });
 
-  it('shows both when both are true — one on air from another console, two refused here', async () => {
-    const el = await renderHeader({ onAir: 1, inError: 2 });
-    expect(el.querySelector('[data-air-tally]')?.textContent).toContain('1 on air');
-    expect(el.querySelector('[data-error-tally]')?.textContent).toContain('2 in error');
+  it('🔴 B-224 — a single state renders as one mark and one number, with no stray separator', async () => {
+    const el = await renderHeader({ onAir: 4, inError: 0 });
+    const air = el.querySelector<HTMLElement>('[data-air-tally]');
+    expect(air?.textContent?.trim()).toBe('4');
+    expect(air?.getAttribute('aria-label')).toBe('4 items on air');
+    expect(el.querySelector('[data-error-tally]')).toBeNull();
+    expect(stateHeadText(el)).toBe('State 4');
+    expect(el.textContent).not.toMatch(/[()/·|,]/);
+  });
+
+  it('🔴 B-224 — at the icon-only density the marks are dropped and the numbers are kept', async () => {
+    const el = await renderHeader({ onAir: 12, inError: 12 }, false, 'tight');
+    const air = el.querySelector<HTMLElement>('[data-air-tally]');
+    const error = el.querySelector<HTMLElement>('[data-error-tally]');
+    expect(air?.textContent?.trim()).toBe('12');
+    expect(error?.textContent?.trim()).toBe('12');
+    expect(air?.querySelector('svg')).toBeNull();
+    expect(error?.querySelector('svg')).toBeNull();
+    // …and the head can WRAP the counts under the word rather than clip them.
+    expect(air?.parentElement?.style.flexWrap).toBe('wrap');
   });
 
   it('says NOTHING at rest — no zero in either colour', async () => {
     const el = await renderHeader();
     expect(el.querySelector('[data-air-tally]')).toBeNull();
     expect(el.querySelector('[data-error-tally]')).toBeNull();
+    expect(stateHeadText(el)).toBe('State');
   });
 
   it('keeps the §4 grey when nothing can confirm the air count', async () => {
     const el = await renderHeader({ onAir: 2, inError: 0 }, true);
     const air = el.querySelector<HTMLElement>('[data-air-tally]');
     expect(air?.hasAttribute('data-unverifiable')).toBe(true);
-    expect(air?.textContent).toContain('2 on air');
+    expect(air?.textContent?.trim()).toBe('2');
+    expect(air?.getAttribute('title')).toMatch(/cannot be reached/);
   });
 });

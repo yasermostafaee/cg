@@ -297,7 +297,9 @@ describe('🔴 5.5 / 7.2 — the second line costs the column model NOTHING', ()
     // `minWidthFor` sums rigid columns + flexible floors + gaps + padding. A `1 / -1`
     // child contributes none of those, which is exactly why `resolveDensity` stays correct
     // on a row that has a picker.
-    expect(minWidthFor('full')).toBe(34 + 132 + VERBS_WIDTH_PX + 132 + 160 + 4 * 12 + 24);
+    // `B-224` widened the state column to 150 and lifted the alias floor to 150 (both
+    // measured, see `layerTable.test.ts`); the SUM is what this case pins, not the widths.
+    expect(minWidthFor('full')).toBe(34 + 150 + VERBS_WIDTH_PX + 150 + 160 + 4 * 12 + 24);
     // FOUR columns at tight (rowNum, state icon, alias floor 0, verbs) ⇒ THREE gaps.
     expect(minWidthFor('tight')).toBe(34 + 34 + VERBS_WIDTH_PX + 0 + 3 * 12 + 24);
   });

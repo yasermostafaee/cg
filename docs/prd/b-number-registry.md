@@ -2389,3 +2389,19 @@ are recorded inside `B-222` as an owner action rather than allocated a `C-`).
 
 ⇒ **Next free after this session is `B-224`** (`B-001` … `B-223`, no gaps), **`D-161`**, **`C-034`**
 and **`P-043`** (unchanged).
+
+### 2026-09-05 — `B-224` (`LAYERS-HEADER-COUNT-01`: the Layers header tally must show every count, at every width)
+
+| kind | id      | one line                                                                                                                                                                                                                                             | home                               | status                                                   |
+| ---- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------- |
+| `B-` | `B-224` | the STATE head read `STATE (1 ON AIR) (…` — the error count clipped by a fixed 132 px cell; now each state is its number in its colour with the row's own mark, STATE is 150 px, NAME is floored at the longest real name and capped at full density | [bugs-runtime.md](bugs-runtime.md) | closed in code; the Linux `gate:e2e` for the commit OWED |
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three
+bug files was **`B-223`** (`bugs-runtime.md`, `git grep -n -E "^## \[.\] B-2[0-9][0-9]"`);
+`git grep -n "B-224" HEAD` returned exactly ONE hit — this file's own "Next free" pointer — and
+`git grep -n "B-225" HEAD` returned nothing. **Cross-check against the dated pointer:** the entry
+above ends _"Next free after this session is `B-224`"_ — headings and pointer **AGREE**. One number
+taken, filed in `bugs-runtime.md`. No `D-`, `C-` or `P-` number was taken.
+
+⇒ **Next free after this session is `B-225`** (`B-001` … `B-224`, no gaps), **`D-161`**, **`C-034`**
+and **`P-043`** (unchanged).

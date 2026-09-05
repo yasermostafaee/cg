@@ -203,8 +203,10 @@ describe('§4 — the four treatments, together, with CasparCG unreachable', () 
     expect(air?.getAttribute('data-row-state'), 'never the air tone').not.toBe('onair');
 
     // 3. The header count — still a count, greyed, not renamed and not hidden.
-    // (`B-213` made it say what it counts — "on air" — the grey is unchanged.)
-    expect(airCount(el)?.textContent).toContain('(1 on air)');
+    // (`B-213` made it say what it counts in its accessible name; `B-224` took the words
+    // off the visible head — the number is the whole text — and the grey is unchanged.)
+    expect(airCount(el)?.textContent?.trim()).toBe('1');
+    expect(airCount(el)?.getAttribute('aria-label')).toBe('1 items on air');
     expect(airCount(el)?.hasAttribute('data-unverifiable')).toBe(true);
     expect(airCount(el)?.style.color).toBe(asRendered(colors.textMuted));
 
