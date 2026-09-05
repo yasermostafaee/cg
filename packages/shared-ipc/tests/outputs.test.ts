@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  checksLosingAir,
   isAirOutputKind,
   missingConsumers,
+  outputSeverityOf,
   outputVerdictOf,
   parseDeclaredConsumersFromConfig,
   parseRunningConsumersFromInfo,
@@ -234,12 +236,57 @@ describe('C-029 — outputVerdictOf, the one authority', () => {
   });
 });
 
-describe('C-029 — isAirOutputKind', () => {
-  it('names the kinds that leave the machine, and not the monitors', () => {
-    expect(isAirOutputKind('decklink')).toBe(true);
+describe('B-223 — severity by air-criticality: outputSeverityOf / isAirOutputKind', () => {
+  it('every 2.5.0 consumer kind that leaves the machine is air', () => {
+    for (const kind of ['decklink', 'bluefish', 'ndi', 'ffmpeg', 'artnet']) {
+      expect(outputSeverityOf(kind)).toBe('air');
+      expect(isAirOutputKind(kind)).toBe(true);
+    }
     expect(isAirOutputKind('DECKLINK')).toBe(true);
-    expect(isAirOutputKind('ndi')).toBe(true);
+  });
+
+  it('the two local monitors on the playout machine are local, whatever the case', () => {
+    expect(outputSeverityOf('screen')).toBe('local');
+    expect(outputSeverityOf('system-audio')).toBe('local');
+    expect(outputSeverityOf('SCREEN')).toBe('local');
     expect(isAirOutputKind('screen')).toBe(false);
     expect(isAirOutputKind('system-audio')).toBe(false);
+  });
+
+  it('🔴 a kind this code has never seen is AIR — the stale list can only make the console louder', () => {
+    expect(outputSeverityOf('newtek-ivga')).toBe('air');
+    expect(outputSeverityOf('some-future-consumer')).toBe('air');
+  });
+});
+
+describe('B-223 — checksLosingAir is the operator alarm’s whole content', () => {
+  const screenOnly: ChannelOutputCheck = {
+    channel: 1,
+    declared: [{ kind: 'decklink', device: '23487013' }, { kind: 'screen' }],
+    running: [{ port: 23487313, kind: 'decklink' }],
+    missing: [{ kind: 'screen', declared: 1, running: 0, devices: [] }],
+    observedAt: '2026-09-05T14:08:44.000Z',
+  };
+  const decklinkMissing: ChannelOutputCheck = {
+    ...screenOnly,
+    channel: 2,
+    running: [{ port: 600, kind: 'screen' }],
+    missing: [{ kind: 'decklink', declared: 1, running: 0, devices: ['23487013'] }],
+  };
+
+  it('a channel missing only a local monitor contributes nothing', () => {
+    expect(checksLosingAir([screenOnly])).toEqual([]);
+  });
+
+  it('a channel missing a program output is kept, whatever else it is missing', () => {
+    expect(checksLosingAir([screenOnly, decklinkMissing])).toEqual([decklinkMissing]);
+    expect(
+      checksLosingAir([
+        {
+          ...decklinkMissing,
+          missing: [...decklinkMissing.missing, ...screenOnly.missing],
+        },
+      ]),
+    ).toHaveLength(1);
   });
 });

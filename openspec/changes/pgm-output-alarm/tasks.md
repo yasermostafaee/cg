@@ -77,7 +77,8 @@
       addendum rather than a rewrite.
 - [x] 4.4 `tests/outputMissingBanner.dom.test.ts` — 13 cases: the fixture's words, strip not slab,
       degraded alarms, four must-not-light cases, the unverified arm, monitor-only voice, the refused
-      creation sentence, and both hook paths.
+      creation sentence, and both hook paths. (The monitor-only voice and the on-banner creation
+      sentence were SUPERSEDED by §7 / `B-223` on 2026-09-05 — see 7.2 and 7.3.)
 - [x] 4.5 `tests/e2e/pgm-output-missing.spec.ts` — a real bridge on a scripted mock: the fixture
       raises the alert with the words, coexists with a HEALTHY pill, clears when the running set
       gains the decklink; the mock's defaults raise nothing.
@@ -112,3 +113,38 @@ Time: 3m11.472s`, openspec `72 passed, 0 failed` (`.gate-logs/gate-20260904T0017
       on it (one `ADD 1 DECKLINK 99` refused with 403, `INFO 1` byte-identical before and after).
       The dev host's 2.5.0 was STARTED for the reversibility measurements, its own screen consumer
       restored to `port_500` + `port_600`, and STOPPED at the end of the session.
+
+## 7. `B-223` — severity by air-criticality (session `TICKER-JUDDER-01` §B, 2026-09-05)
+
+- [x] 7.1 `@cg/shared-ipc` `outputs.ts`: `LOCAL_MONITOR_KINDS` (`screen`, `system-audio`),
+      `outputSeverityOf`, `isAirOutputKind` re-implemented as "not a local monitor" so an unknown
+      kind is AIR, `checksLosingAir`. `AIR_OUTPUT_KINDS` removed (the second list was the drift).
+      `outputs.test.ts`: every 2.5.0 kind classified, the unknown-kind case, `checksLosingAir`.
+- [x] 7.2 `OutputMissingBanner`: renders only for a check losing air; the headline plus ONE line
+      per channel; the engineering detail, the creation outcome and the amber "monitor" tone are
+      gone from it. `outputMissingBanner.dom.test.ts` rewritten; red-first per severity class:
+      the "missing screen consumer renders NO banner" and "the banner carries the headline and one
+      line per channel" cases failed against the old banner (10 of 18 red, sources stashed), then
+      green.
+- [x] 7.3 `OutputsSection` (`features/connections/`), mounted read-only in `ServerSettingsPanel`,
+      fed by `useConnections()`: declared / running / checked-at per channel, AIR rows with the
+      `C-030` words + the restart paragraph + the creation outcome, preview / local-monitor rows,
+      the kept verdict for an unreachable server. `outputWords.ts` is the one spelling both
+      surfaces share. `outputsSection.dom.test.ts` (17 cases) — the former banner addressing test
+      (`outputMissingBanner.addressing.dom.test.ts`) folded in, no assertion dropped;
+      `serverSettingsPanel.dom.test.ts` stub gains `health`/`onHealthChanged` and one case (the
+      section renders; Apply is as enabled as before).
+- [x] 7.4 Bridge `describeMissingOutput`: the 🔴 line for an air kind, a plain "noted, not alarmed"
+      line for a local-only loss, "Also not running, local only" when both. The bridge test
+      `output-addressing.test.ts` gains the two cases (red-first: the screen-only case failed on the
+      old line).
+- [x] 7.5 `tests/e2e/pgm-output-missing.spec.ts`: the first scenario asserts the one-line banner
+      and reads the detail from the dialog's Outputs region; a new scenario stops the screen
+      consumer and asserts no alert plus the preview row. ⚠ Linux `gate:e2e` OWED for the commit
+      carrying this — discharge by run URL here.
+- [x] 7.6 Spec, proposal §"Correction 2026-09-05", design §6, this section; operator guide
+      "Program output" rewritten for the two surfaces; `C-029` heading addendum; `B-223` filed in
+      `bugs-runtime.md`; the registry entry.
+- [x] 7.7 Confirmed by grep (§B.4): the check gates nothing — its readers are the two surfaces,
+      `health()` and the off-by-default `#createMissingConsumer`; no refusal, no disabled control,
+      no failover reads `outputs` or `missing`.

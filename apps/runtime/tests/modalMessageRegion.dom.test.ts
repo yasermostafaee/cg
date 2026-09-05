@@ -239,6 +239,9 @@ describe('the census — every Runtime dialog that can speak, speaks through the
           }),
         onConfigChanged: () => () => undefined,
         setConfig: () => Promise.resolve({ ok: true }),
+        // `B-223` — the panel carries the output check's technical section, which reads health.
+        health: () => Promise.resolve(null),
+        onHealthChanged: () => () => undefined,
         // `C-024` — the panel reads what is IN FORCE on open; nothing is masked here.
         templateServe: () =>
           Promise.resolve({

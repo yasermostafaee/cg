@@ -40,3 +40,33 @@ describe('C-030 — describeMissingOutput names the addressing form and the log 
     expect(line).toMatch(/\[slot\] \(persistent ID\)/);
   });
 });
+
+describe('B-223 — severity by air-criticality on the bridge’s own log line', () => {
+  it('🔴 a channel missing only a screen consumer is a plain note, not the 🔴 OUTPUT MISSING line', () => {
+    const line = describeMissingOutput('A', {
+      ...check,
+      running: [
+        { port: 23487313, kind: 'decklink' },
+        { port: 500, kind: 'system-audio' },
+      ],
+      missing: [{ kind: 'screen', declared: 1, running: 0, devices: [] }],
+    });
+    expect(line).not.toMatch(/OUTPUT MISSING/);
+    expect(line).not.toMatch(/🔴/);
+    expect(line).toMatch(/screen/);
+    expect(line).toMatch(/no effect on air/);
+    expect(line).toMatch(/noted, not alarmed/);
+    expect(line).not.toMatch(/restart CasparCG/);
+  });
+
+  it('a missing DeckLink beside a missing screen keeps the 🔴 line and lists the screen as local only', () => {
+    const line = describeMissingOutput('A', {
+      ...check,
+      running: [{ port: 500, kind: 'system-audio' }],
+      missing: [...check.missing, { kind: 'screen', declared: 1, running: 0, devices: [] }],
+    });
+    expect(line).toMatch(/🔴 CHANNEL 1 OUTPUT MISSING/);
+    expect(line).toMatch(/declares decklink \(device 23487013\) and CasparCG is not running it/);
+    expect(line).toMatch(/Also not running, local only: screen/);
+  });
+});

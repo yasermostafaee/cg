@@ -270,6 +270,9 @@ describe('ServerSettingsPanel ports — R-020 (B-077 interaction)', () => {
           }),
         onConfigChanged: () => () => undefined,
         setConfig,
+        // `B-223` — the panel carries the output check's technical section, which reads health.
+        health: () => Promise.resolve(null),
+        onHealthChanged: () => () => undefined,
         // `C-024` — the panel reads what is IN FORCE on open; nothing is masked here.
         templateServe: () =>
           Promise.resolve({

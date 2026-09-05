@@ -170,21 +170,78 @@ export function missingConsumers(
 }
 
 /**
- * Consumer kinds that carry the channel OFF the machine — a program output. `screen` and
- * `system-audio` are confidence monitors on the playout box itself: losing one is worth
- * saying, but it is not "nothing reaches air".
+ * `B-223` — SEVERITY BY AIR-CRITICALITY, not by "declared".
+ *
+ * The owner's judgement (2026-09-05, the screen consumer stopped on the plant and the Runtime
+ * shouting DECLARED OUTPUT NOT RUNNING at the operator): _"this should not matter to the
+ * operator at all."_ The alarm was built for a dead DeckLink — air off — and it must stay exactly
+ * that loud for that; a preview window on the playout machine is not the operator's business.
+ *
+ * ── THE PRINCIPLE, AND THE ONE LIST IT PRODUCES ──────────────────────────────
+ *
+ * The question is **does anything OUTSIDE the playout machine depend on this consumer?** A
+ * consumer whose output leaves the box is a program output: if it is declared and not running,
+ * something downstream is missing what it was promised, and the operator must know NOW. A
+ * consumer that renders on the box itself is a local monitor: its loss is a fact for the
+ * engineer, never an alarm for the operator.
+ *
+ * Only the LOCAL kinds are enumerated, so that an UNKNOWN kind — a consumer added in a later
+ * CasparCG, or a name this code has never seen — is treated as a program output and stays
+ * LOUD. Fail-safe by construction: the one list that could go stale is the list that makes
+ * things quieter, and a kind missing from it can only make the console shout about a preview,
+ * never fall silent about air.
+ *
+ * ── EVERY CONSUMER KIND 2.5.0 CAN DECLARE, AND WHERE EACH FALLS ─────────────
+ *
+ * From `src/shell/casparcg.config` and the `src/modules/` tree at `v2.5.0-stable` (`decklink`,
+ * `bluefish`, `ffmpeg`, `artnet`, `screen`, `oal` = system-audio, `newtek` = the NDI consumer):
+ *
+ * | kind           | leaves the machine?                                          | severity |
+ * | -------------- | ------------------------------------------------------------ | -------- |
+ * | `decklink`     | SDI/HDMI out of a DeckLink card — the plant's air path       | air      |
+ * | `bluefish`     | SDI out of a Bluefish card                                   | air      |
+ * | `ndi`          | video over the network to whatever subscribes to it          | air      |
+ * | `ffmpeg`       | a stream or a recording; the console cannot tell which, and  | air      |
+ * |                | a missing recording is still something to say now            |          |
+ * | `artnet`       | DMX to a lighting rig; nobody declares Art-Net for a preview | air      |
+ * | `screen`       | a window on the playout machine's own display                | local    |
+ * | `system-audio` | the playout machine's own sound device — the audio twin of   | local    |
+ * |                | `screen`; this plant's air audio is embedded in the SDI      |          |
+ *
+ * The names compare by the same token `casparcg.config` and `INFO` use (see the header above).
  */
-export const AIR_OUTPUT_KINDS: readonly string[] = [
-  'decklink',
-  'bluefish',
-  'ndi',
-  'newtek-ivga',
-  'ffmpeg',
-  'artnet',
-];
+export const LOCAL_MONITOR_KINDS: readonly string[] = ['screen', 'system-audio'];
 
+/** The severity a missing consumer of this kind carries for the OPERATOR. */
+export type OutputSeverity = 'air' | 'local';
+
+export function outputSeverityOf(kind: string): OutputSeverity {
+  return LOCAL_MONITOR_KINDS.includes(kind.toLowerCase()) ? 'local' : 'air';
+}
+
+/**
+ * Whether a missing consumer of this kind takes the channel OFF AIR. Everything that is not a
+ * known local monitor — including a kind this code has never heard of — answers yes.
+ */
 export function isAirOutputKind(kind: string): boolean {
-  return AIR_OUTPUT_KINDS.includes(kind.toLowerCase());
+  return outputSeverityOf(kind) === 'air';
+}
+
+/**
+ * `B-223` — the checks whose missing set contains at least one PROGRAM output. This is the
+ * operator alarm's whole content: a channel missing only local monitors contributes nothing
+ * here, however many it is missing, and belongs on the technical surface instead.
+ */
+export function checksLosingAir(
+  checks: readonly ChannelOutputCheckLike[],
+): readonly ChannelOutputCheckLike[] {
+  return checks.filter((c) => c.missing.some((m) => isAirOutputKind(m.kind)));
+}
+
+/** The shape `checksLosingAir` needs — `ChannelOutputCheck` without the import cycle. */
+interface ChannelOutputCheckLike {
+  channel: number;
+  missing: readonly MissingConsumer[];
 }
 
 /**

@@ -3,7 +3,7 @@ import { StrictMode, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
-import type { ConnectionConfig } from '@cg/shared-ipc';
+import type { ConnectionConfig, ConnectionHealth } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { ServerSettingsPanel } from '../src/renderer/features/connections/ServerSettingsPanel.js';
 import { clearPortals, openDialog } from './support/dialog.js';
@@ -60,6 +60,7 @@ function stubBridge(
   } = { ok: true },
   serveInfo: typeof SERVE_INFO = SERVE_INFO,
   config: ConnectionConfig = CONFIG,
+  health: ConnectionHealth | null = null,
 ): { setConfig: Mock } {
   const setConfig = vi.fn(() => Promise.resolve(setConfigResult));
   const stub = {
@@ -68,6 +69,10 @@ function stubBridge(
       onConfigChanged: () => () => undefined,
       setConfig,
       templateServe: () => Promise.resolve(serveInfo),
+      // B-223 — the panel now carries the output check's technical section, which reads
+      // connection health. The default here is "no reading yet"; `health` overrides it.
+      health: () => Promise.resolve(health),
+      onHealthChanged: () => () => undefined,
     },
     stack: {
       snapshot: () => Promise.resolve(items),
@@ -132,6 +137,38 @@ describe('ServerSettingsPanel — R-010', () => {
     const host = el.querySelector<HTMLInputElement>('input[aria-label="Primary host"]');
     expect(host?.value).toBe('127.0.0.1');
     expect(el.textContent).toContain('No backup declared');
+  });
+
+  it('B-223 — carries the output check’s technical section, fed from connection health', async () => {
+    const health: ConnectionHealth = {
+      primary: {
+        label: 'A',
+        state: 'healthy',
+        amcpAxisOk: true,
+        outputs: [
+          {
+            channel: 1,
+            declared: [{ kind: 'decklink', device: '23487013' }, { kind: 'screen' }],
+            running: [{ port: 23487313, kind: 'decklink' }],
+            missing: [{ kind: 'screen', declared: 1, running: 0, devices: [] }],
+            observedAt: '2026-09-05T14:08:44.000Z',
+          },
+        ],
+      },
+      currentPrimary: 'A',
+      strategy: 'mirror-sync',
+    } as ConnectionHealth;
+    stubBridge([item('idle')], { ok: true }, SERVE_INFO, CONFIG, health);
+    const el = await renderPanel();
+    const section = el.querySelector('section[aria-label="Program outputs"]');
+    expect(section).not.toBeNull();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(section?.textContent).toContain('Channel 1 on server A');
+    expect(section?.querySelector('[data-severity="local"]')?.textContent).toContain('screen');
+    // Read-only: the section gates nothing — Apply is exactly as enabled as before.
+    expect(applyButton(el).disabled).toBe(false);
   });
 
   it('mirrors the on-air gate: Apply disabled with the reason while anything is on air/unsettled', async () => {

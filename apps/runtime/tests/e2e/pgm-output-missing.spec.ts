@@ -14,6 +14,8 @@ import { expect, test } from './fixtures/runtime.js';
  *   - "The fixture raises the alarm, in words an operator can act on"
  *   - "The alarm clears when the declared consumer is seen running"
  *   - "Nothing lights when every declared consumer is running"
+ *   - `B-223`: "A missing local monitor raises no operator alarm" and "The engineering detail
+ *     lives on the technical surface"
  *
  * Boots the real `WebSocketRuntime` (the shape `retention-honesty.spec.ts` established)
  * rather than the `app` fixture, because the `MockRuntime` has no bridge and no server to
@@ -126,14 +128,54 @@ test.describe('C-029 — program output missing', () => {
     await expect(alert).toContainText('PROGRAM OUTPUT MISSING');
     await expect(alert).toContainText('CHANNEL 1 HAS NO DECKLINK OUTPUT');
     await expect(alert).toContainText('decklink (device 23487013)');
-    await expect(alert).toContainText('Running: system-audio, screen');
-    await expect(alert).toContainText('restart CasparCG');
+    await expect(alert).toContainText('Server connection ▸ Outputs');
+    // B-223 — the operator's line stops there; the engineering detail is not on the banner.
+    await expect(alert).not.toContainText('restart CasparCG');
     // Every reachability signal is still true — the alarm coexists with a green pill.
     await expect(page.getByLabel('Status bar')).toContainText('HEALTHY');
+
+    // B-223 — the technical surface carries what the banner dropped.
+    await page.getByRole('button', { name: 'Open server settings' }).click();
+    const outputs = page
+      .getByRole('dialog', { name: 'Server connection settings' })
+      .getByRole('region', { name: 'Program outputs' });
+    await expect(outputs).toContainText('decklink (device 23487013)');
+    await expect(outputs).toContainText('Running: system-audio, screen');
+    await expect(outputs).toContainText('hardware persistent ID 23487013');
+    await expect(outputs).toContainText('restart CasparCG');
+    await page.keyboard.press('Escape');
 
     // The declared consumer comes up (a fixed config and a restart, or a hand-typed ADD).
     state.running = [...MONITORS, { port: 23487313, kind: 'decklink' }];
     await expect(alert).toHaveCount(0, { timeout: 15_000 });
+  });
+
+  test('B-223 — a stopped screen consumer raises nothing for the operator, and is noted on the technical surface', async ({
+    page,
+  }) => {
+    // The plant on 2026-09-05: the DeckLink running, the screen consumer stopped by hand.
+    const state = {
+      running: [
+        { port: 500, kind: 'system-audio' },
+        { port: 23487313, kind: 'decklink' },
+      ],
+      config: PLANT_CONFIG,
+    };
+    await boot(page, state);
+    await expect(page.getByLabel('Status bar')).toContainText('HEALTHY', { timeout: 15_000 });
+    // Give the first sweep tick time to land both reads and publish the verdict.
+    await page.waitForTimeout(6_000);
+    await expect(page.getByRole('alert', { name: 'Program output missing' })).toHaveCount(0);
+    await expect(page.getByRole('alert', { name: 'Program output unverified' })).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'Open server settings' }).click();
+    const outputs = page
+      .getByRole('dialog', { name: 'Server connection settings' })
+      .getByRole('region', { name: 'Program outputs' });
+    await expect(outputs).toContainText('Channel 1 on server A');
+    await expect(outputs).toContainText('Preview');
+    await expect(outputs).toContainText('no effect on air');
+    await expect(outputs).not.toContainText('restart CasparCG');
   });
 
   test('nothing lights when every declared consumer is running (the mock’s own defaults)', async ({

@@ -2,6 +2,7 @@ import {
   DEVICE_ADDRESSING_RULE,
   DEVICE_NUMBER_RECIPE,
   describeDeviceAddressing,
+  isAirOutputKind,
   type ChannelOutputCheck,
   type DeclaredConsumer,
   type MissingConsumer,
@@ -80,32 +81,51 @@ export function creatableMissingConsumer(check: {
   );
 }
 
-/** One line, for stderr, naming what is declared and not running. */
+/**
+ * One line, for stderr, naming what is declared and not running.
+ *
+ * `B-223` — severity by air-criticality (`isAirOutputKind`, the one predicate): a missing
+ * program output is the 🔴 line with the full remedy; a channel missing ONLY local monitors
+ * (`screen`, `system-audio`) is a plain note — a preview window on the playout machine is not
+ * an alarm, on this log any more than on the operator's screen.
+ */
 export function describeMissingOutput(label: string, check: ChannelOutputCheck): string {
-  const what = check.missing
-    .map((m) =>
-      m.devices.length > 0
-        ? `${m.kind} (device ${m.devices.join(', ')})`
-        : `${m.kind} ×${String(m.declared)} (${String(m.running)} running)`,
-    )
-    .join(', ');
+  const words = (missing: readonly MissingConsumer[]): string =>
+    missing
+      .map((m) =>
+        m.devices.length > 0
+          ? `${m.kind} (device ${m.devices.join(', ')})`
+          : `${m.kind} ×${String(m.declared)} (${String(m.running)} running)`,
+      )
+      .join(', ');
   const running =
     check.running.length === 0 ? 'nothing' : check.running.map((r) => r.kind).join(', ');
+  const air = check.missing.filter((m) => isAirOutputKind(m.kind));
+  const local = check.missing.filter((m) => !isAirOutputKind(m.kind));
+  if (air.length === 0) {
+    return (
+      `[caspar-bridge] channel ${String(check.channel)} on server ${label}: casparcg.config ` +
+      `declares ${words(local)} and CasparCG is not running it — a local monitor on the playout ` +
+      `machine (a preview window / the sound device), no effect on air; noted, not alarmed ` +
+      `(running: ${running}).\n`
+    );
+  }
   // C-030 — which addressing form each missing declaration uses, and how CasparCG reads it.
-  const addressing = check.missing
+  const addressing = air
     .flatMap((m) =>
       m.devices.map((d) => `the ${m.kind} is declared as ${describeDeviceAddressing(d).words}`),
     )
     .join('; ');
   return (
     `[caspar-bridge] 🔴 CHANNEL ${String(check.channel)} OUTPUT MISSING on server ${label} — ` +
-    `casparcg.config declares ${what} and CasparCG is not running it (running: ${running}). ` +
+    `casparcg.config declares ${words(air)} and CasparCG is not running it (running: ${running}). ` +
     `A consumer that fails at start never appears in INFO; check the CasparCG log for the ` +
     `reason ("Decklink device … not found" / "Decklink drivers not found"), fix the config on ` +
     `the playout machine and restart CasparCG.` +
     (addressing.length > 0
       ? ` ${addressing}. ${DEVICE_ADDRESSING_RULE} ${DEVICE_NUMBER_RECIPE}`
       : '') +
+    (local.length > 0 ? ` Also not running, local only: ${words(local)}.` : '') +
     `\n`
   );
 }

@@ -47,7 +47,9 @@
       `DEVICE_NUMBER_RECIPE` beside the `C-029` parsers.
 - [x] 4.2 `OutputMissingBanner`: one line per missing device (form + counter-example + rule) and the
       recipe line. `describeMissingOutput`: the same two facts on stderr.
-- [x] 4.3 🔴 Red first, measured: `device-addressing.test.ts` 5/5 red, `outputMissingBanner.addressing.dom.test.ts`
+- [x] 4.3 🔴 Red first, measured (⚠ the banner test named here was FOLDED into
+      `apps/runtime/tests/outputsSection.dom.test.ts` by `B-223` on 2026-09-05 — the words moved to
+      the technical surface, every assertion kept): `device-addressing.test.ts` 5/5 red, `outputMissingBanner.addressing.dom.test.ts`
       4/5 red (the health-boundary case green by construction), `output-addressing.test.ts` 3/3 red —
       then 25/25, 17/17, 12/12 green after the words were added.
 - [x] 4.4 Nothing widened: the health-boundary assertion (`not.toMatch(/reference signal|dropping

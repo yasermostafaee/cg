@@ -150,22 +150,35 @@ Default is `off` — the Runtime makes zero outbound network requests. Air-gappe
 ## Program output
 
 **The red `PROGRAM OUTPUT MISSING` banner means CasparCG is up, answering, and NOT sending your
-channel anywhere.** It appears when `casparcg.config` on the playout machine declares an output
-consumer (the `<decklink>` block, usually) and CasparCG is not running it. That is what a consumer
-that failed at start looks like: the server boots, the channel runs on whatever consumers did
-start (the `<screen />` preview, `<system-audio />`), every health pill reads green, and the SDI
-output is simply absent. Nothing else in this console can see that — the bridge reads it by asking
-the server what the config DECLARES (`INFO CONFIG`) and what the channel RUNS (`INFO <channel>`),
-and the banner is the difference between the two.
+channel anywhere.** It appears when `casparcg.config` on the playout machine declares a program
+output — a consumer whose picture leaves the machine: `decklink`, `bluefish`, `ndi`, `ffmpeg`,
+`artnet` — and CasparCG is not running it. That is what a consumer that failed at start looks like:
+the server boots, the channel runs on whatever consumers did start (the `<screen />` preview,
+`<system-audio />`), every health pill reads green, and the SDI output is simply absent. Nothing
+else in this console can see that — the bridge reads it by asking the server what the config
+DECLARES (`INFO CONFIG`) and what the channel RUNS (`INFO <channel>`), and the banner is the
+difference between the two.
 
-The banner names the channel, the declared consumer and its device (`decklink (device 23487013)`),
-**which kind of number that is** — a hardware persistent ID (a long number) or a slot index (a small
-number such as `1`) — what IS running, and when it last checked. **The next action is on the playout
-machine, not in this console:** read CasparCG's own log for the reason (`Decklink device … not
-found.` — the card was replaced or its persistent ID changed; `Decklink drivers not found.` — the
-driver is missing), fix the `<device>` in `casparcg.config`, restart CasparCG. The banner clears on
-its own within one check after the consumer is seen running. Do not power-cycle the playout box over
-it — the server is UP.
+**The banner is one line for the operator.** It names the channel, the declared consumer and its
+device (`decklink (device 23487013)`), says CasparCG is not running it, and says the fix is on the
+playout machine. Everything an engineer needs to make that fix is in **Server connection ▸ Outputs**
+(the server-settings dialog, opened from the status bar): what each channel declares and runs, when
+it was last checked, **which kind of number the declaration is** — a hardware persistent ID (a long
+number) or a slot index (a small number such as `1`) — how CasparCG reads it, where the number comes
+from, and what the bridge's own re-creation attempt answered, if the flag is on. **The next action
+is on the playout machine, not in this console:** read CasparCG's own log for the reason (`Decklink
+device … not found.` — the card was replaced or its persistent ID changed; `Decklink drivers not
+found.` — the driver is missing), fix the `<device>` in `casparcg.config`, restart CasparCG. The
+banner clears on its own within one check after the consumer is seen running. Do not power-cycle the
+playout box over it — the server is UP.
+
+**A stopped preview is not an alarm.** `<screen />` is a preview window on the playout machine's own
+display and `<system-audio />` is that machine's own sound device; neither reaches air. When one of
+them is declared and not running — the screen consumer closed by hand, say — **nothing lights for
+the operator**: no banner, no disabled control, no failover. The fact is noted in Server connection
+▸ Outputs as a preview row, and in the bridge's log as a plain line, and that is all. Any consumer
+kind this console does not recognise is treated as a program output, so a new kind can only make
+the console louder, never quieter.
 
 **Where the number comes from — three lines.** CasparCG prints its DeckLink cards exactly once per
 start, in its own log, and nowhere else.

@@ -170,6 +170,39 @@ answered._ "Repoint" (the operator naming a NEW device from the console) is not 
 an operator-facing setting that does not exist, and doing it from the config file is the
 existing, restart-based path.
 
+## 6. Severity by air-criticality (`B-223`, 2026-09-05)
+
+The alarm was built for a dead DeckLink; on 2026-09-05 it shouted at the operator over a
+stopped screen consumer. The rule, decided on one principle — **does anything outside the playout
+machine depend on this consumer?** — over every kind 2.5.0 can declare (`src/shell/casparcg.config`
+and `src/modules/` at `v2.5.0-stable`):
+
+| kind           | what it drives                                                             | severity | operator surface                      |
+| -------------- | -------------------------------------------------------------------------- | -------- | ------------------------------------- |
+| `decklink`     | SDI/HDMI out of a DeckLink — this plant's air path                         | air      | the banner, one line                  |
+| `bluefish`     | SDI out of a Bluefish card                                                 | air      | the banner                            |
+| `ndi`          | video over the network to whatever subscribes                              | air      | the banner                            |
+| `ffmpeg`       | a stream or a recording — the console cannot tell which, and both leave    | air      | the banner                            |
+| `artnet`       | DMX to a lighting rig; nobody declares Art-Net for a preview               | air      | the banner                            |
+| _unknown_      | a kind this code has never seen                                            | air      | the banner — a stale list only shouts |
+| `screen`       | a preview window on the playout machine's own display                      | local    | nothing; a preview row in the dialog  |
+| `system-audio` | the playout machine's own sound device; this plant's air audio is embedded | local    | nothing; a local-monitor row          |
+
+Only the LOCAL kinds are enumerated (`LOCAL_MONITOR_KINDS`), so the list that can go stale is the
+one that quietens, never the one that alarms. One predicate (`outputSeverityOf` / `isAirOutputKind`
+/ `checksLosingAir`) serves the banner, the dialog's Outputs section and the bridge's stderr line.
+
+**Two surfaces, one fact each way.** The operator's banner: the headline and ONE line per channel
+(what is declared, "CasparCG is not running it", "the fix is on the playout machine", "Details:
+Server connection ▸ Outputs"). The technical surface (`OutputsSection`, read-only, inside the
+Server connection dialog beside the hosts it is about): declared / running / checked-at per
+channel, an AIR row with `C-030`'s addressing reading and rule, the startup-log recipe, the
+failed-at-start paragraph and the creation outcome; a preview row for a local kind; the kept
+verdict, dated, for an unreachable server. Nothing on either surface is a control: a missing
+consumer of any severity disables no button, refuses no action and keys no failover — verified by
+`git grep` over every reader of `outputs` / `missing` / `outputVerdictOf` / `isAirOutputKind`
+(the two surfaces, `health()`, and the off-by-default `#createMissingConsumer`).
+
 ## 5. Not in scope
 
 `B-192` term (b); the mixer `DEFER` exposure; the five orphan html layers (one was visible on the

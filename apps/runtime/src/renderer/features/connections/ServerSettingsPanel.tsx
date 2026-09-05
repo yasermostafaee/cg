@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ConnectionConfig, TemplateServeInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { isLoopbackHost } from '../../../shared/loopback.js';
+import { useConnections } from '../../hooks/useConnections.js';
 import { useStack } from '../../hooks/useStack.js';
+import { OutputsSection } from './OutputsSection.js';
 import { isOnAirOrUnsettled } from '../stack/onAir.js';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -140,6 +142,8 @@ function parseEndpoint(
  */
 export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | null {
   const items = useStack();
+  // B-223 — the output check's technical surface reads the same health the banner does.
+  const health = useConnections();
   const [primary, setPrimary] = useState<EndpointDraft>({
     host: '127.0.0.1',
     amcpPort: '5250',
@@ -586,6 +590,16 @@ export function ServerSettingsPanel({ open, onClose }: Props): JSX.Element | nul
           </div>
         )}
       </section>
+
+      {/*
+        `B-223` — THE OUTPUT CHECK'S ENGINEERING DETAIL LIVES HERE, NOT ON THE OPERATOR BANNER.
+
+        A fact ABOUT the servers above — what each declares and what each runs — so it sits
+        with them, read-only, on the surface an engineer opens. The banner in the shell keeps
+        one actionable line and points here; a missing preview window is noted here and nowhere
+        else. Nothing in this section is a control, so it gates nothing and is gated by nothing.
+      */}
+      <OutputsSection health={health} />
 
       <section style={styles.section} aria-label="Redundancy options">
         <div style={styles.row}>

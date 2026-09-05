@@ -1,16 +1,13 @@
 import {
-  DEVICE_ADDRESSING_RULE,
-  DEVICE_NUMBER_RECIPE,
-  describeDeviceAddressing,
+  checksLosingAir,
   isAirOutputKind,
   outputVerdictOf,
-  type ChannelOutputCheck,
-  type ConsumerCreation,
   type ServerHealth,
 } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useLink } from '../../hooks/useLink.js';
+import { missingWords } from '../connections/outputWords.js';
 
 /**
  * `C-029` — the LOUD half of the declared-versus-running output check: **program output is
@@ -23,6 +20,25 @@ import { useLink } from '../../hooks/useLink.js';
  * is the `B-141` / `B-143` / `B-144` family — the system knows something and does not say
  * it — and this banner is the saying.
  *
+ * ── `B-223` — WHO THIS SHOUTS AT, AND WHAT IT SAYS ──────────────────────────
+ *
+ * The plant, 2026-09-05: the screen consumer was stopped to measure the ticker, and this
+ * banner went full-width orange at the operator — five lines about persistent IDs, slot
+ * indexes, drivers and the server log — over a preview window that has nothing to do with
+ * air. The owner: _"this should not matter to the operator at all."_
+ *
+ * Two rules follow, and both live in `@cg/shared-ipc` rather than here:
+ *
+ * 1. **Severity is by air-criticality** (`outputSeverityOf`). Only a check missing a PROGRAM
+ *    output (`checksLosingAir`) reaches this surface. A channel missing only local monitors
+ *    (`screen`, `system-audio`) renders NOTHING here, whatever the verdict says — the verdict is
+ *    still `missing`, and the technical surface still shows it.
+ * 2. **The operator gets ONE line it can act on.** The headline names the channel and the kind;
+ *    one line per channel names the declared thing, says CasparCG is not running it, and says
+ *    where the fix is. The engineering detail — which addressing form the number is, the rule
+ *    CasparCG reads it by, the startup-log recipe, the creation outcome, "do not power-cycle" —
+ *    lives on the technical surface: `OutputsSection` in the Server connection dialog.
+ *
  * ── THE SURFACE, AND WHY THIS ONE ───────────────────────────────────────────
  *
  * The same in-flow, full-width, `role="alert"` strip `ConnectionBanner` and
@@ -33,14 +49,12 @@ import { useLink } from '../../hooks/useLink.js';
  *
  * ── WHAT IT SAYS IN EACH STATE — decided by `outputVerdictOf`, never re-derived here ────
  *
- * - `missing`      — the alarm. Names the channel, the declared kind and its device, what IS
- *                    running, and what to do (fix the config on the playout machine and
- *                    restart CasparCG; read the CasparCG log for the exact reason).
- * - `unverifiable` — the bridge cannot reach CasparCG and the LAST check found the output
- *                    missing. The banner STAYS and says it cannot re-check: an alarm that
- *                    goes quiet because its own source died is worse than no alarm.
- * - `ok` / `unknown` — nothing. An unreadable declaration is a gap in the check, not a
- *                    fault, and a never-checked server has nothing to say yet.
+ * - `missing` + an air kind   — the alarm.
+ * - `unverifiable` + air kind — the bridge cannot reach CasparCG and the LAST check found a
+ *                               program output missing. The banner STAYS and says it cannot
+ *                               re-check: an alarm that goes quiet because its own source died
+ *                               is worse than no alarm.
+ * - anything else             — nothing: `ok`, `unknown`, or a loss that is local-only.
  *
  * ── WHAT IT DELIBERATELY DOES NOT DO ────────────────────────────────────────
  *
@@ -69,7 +83,6 @@ const styles = {
     background: colors.error,
     flexShrink: 0,
   },
-  monitorOnly: { background: colors.pending, color: '#0B0B0C' },
   text: { flex: 1, minWidth: 0, lineHeight: 1.35 },
   detail: {
     display: 'block',
@@ -80,80 +93,8 @@ const styles = {
   },
 } as const;
 
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const h = String(d.getHours()).padStart(2, '0');
-  const m = String(d.getMinutes()).padStart(2, '0');
-  const s = String(d.getSeconds()).padStart(2, '0');
-  return `${h}:${m}:${s}`;
-}
-
-/** "decklink (device 23487013)" / "screen" — the declared thing that is not running. */
-function missingWords(check: ChannelOutputCheck): string {
-  return check.missing
-    .map((m) => {
-      const count = m.declared > 1 ? ` ×${String(m.declared)} (${String(m.running)} running)` : '';
-      return m.devices.length > 0
-        ? `${m.kind} (device ${m.devices.join(', ')})${count}`
-        : `${m.kind}${count}`;
-    })
-    .join(', ');
-}
-
-function runningWords(check: ChannelOutputCheck): string {
-  return check.running.length === 0 ? 'nothing' : check.running.map((r) => r.kind).join(', ');
-}
-
-function creationWords(creation: ConsumerCreation): string {
-  const at = formatTime(creation.at);
-  switch (creation.outcome) {
-    case 'created':
-      return `The bridge re-created it at ${at} (${creation.command ?? 'ADD'}); the next check confirms whether it is running.`;
-    case 'refused':
-      return (
-        `The bridge tried to re-create it at ${at} (${creation.command ?? 'ADD'}) and CasparCG refused` +
-        `${creation.code !== undefined ? ` (${String(creation.code)})` : ''} — it cannot open that device either.`
-      );
-    case 'failed':
-      return `The bridge tried to re-create it at ${at} (${creation.command ?? 'ADD'}) and the command did not complete.`;
-    case 'not-attempted':
-      return `Creation is on, but ${creation.note ?? 'this kind is not one the bridge creates'}.`;
-  }
-}
-
-/**
- * `C-030` — one line per missing declared device: which addressing form the declaration
- * uses, in plain words, followed by the rule that tells the operator how CasparCG reads it.
- * "Declared as hardware persistent ID 23487013 (a slot index would be a small number such as
- * 1)." — the counter-example is what lets someone who has never opened the config recognise
- * which kind of number they are holding.
- */
-function addressingWords(checks: readonly ChannelOutputCheck[]): string[] {
-  const lines: string[] = [];
-  for (const check of checks) {
-    for (const m of check.missing) {
-      for (const device of m.devices) {
-        const addressing = describeDeviceAddressing(device);
-        const counter =
-          addressing.form === 'persistent-id'
-            ? ' (a slot index would be a small number such as 1)'
-            : addressing.form === 'slot-index'
-              ? ' (a hardware persistent ID would be a long number such as 23487013)'
-              : '';
-        lines.push(
-          `Channel ${String(check.channel)}: the ${m.kind} is declared as ${addressing.words}${counter}. ${DEVICE_ADDRESSING_RULE}`,
-        );
-      }
-    }
-  }
-  return lines;
-}
-
-/** True when any missing kind is a PROGRAM output (leaves the machine), not a local monitor. */
-function losesAir(checks: readonly ChannelOutputCheck[]): boolean {
-  return checks.some((c) => c.missing.some((m) => isAirOutputKind(m.kind)));
-}
+/** Where the engineering detail lives — named on the one line, so the operator can hand it on. */
+export const OUTPUT_DETAIL_POINTER = 'Details: Server connection ▸ Outputs.';
 
 export function OutputMissingBanner(): JSX.Element | null {
   const health = useConnections();
@@ -167,30 +108,27 @@ export function OutputMissingStrip({ server }: { server: ServerHealth }): JSX.El
   const verdict = outputVerdictOf(server);
   if (verdict.kind === 'ok' || verdict.kind === 'unknown') return null;
 
-  const air = losesAir(verdict.channels);
-  const channels = verdict.channels.map((c) => String(c.channel)).join(', ');
-  const tone = air ? {} : styles.monitorOnly;
+  // B-223 — only the checks that take a channel OFF AIR reach the operator. A local-only
+  // loss leaves the verdict `missing` and this surface empty.
+  const losing = checksLosingAir(verdict.channels);
+  if (losing.length === 0) return null;
+  const channels = losing.map((c) => String(c.channel)).join(', ');
+  const kinds = losing
+    .flatMap((c) =>
+      c.missing.filter((m) => isAirOutputKind(m.kind)).map((m) => m.kind.toUpperCase()),
+    )
+    .filter((k, i, all) => all.indexOf(k) === i)
+    .join('/');
 
   if (verdict.kind === 'unverifiable') {
     return (
-      <div
-        role="alert"
-        aria-label="Program output unverified"
-        style={{ ...styles.banner, ...tone }}
-      >
+      <div role="alert" aria-label="Program output unverified" style={styles.banner}>
         <span style={styles.text}>
-          {air ? 'PROGRAM OUTPUT UNVERIFIED' : 'DECLARED OUTPUT UNVERIFIED'} — CASPARCG ON SERVER{' '}
-          {server.label} IS UNREACHABLE, AND THE LAST CHECK FOUND CHANNEL {channels} WITHOUT ITS
-          OUTPUT.
-          {verdict.channels.map((check) => (
-            <span key={check.channel} style={styles.detail}>
-              Channel {String(check.channel)}: declared {missingWords(check)} was not running at{' '}
-              {formatTime(verdict.lastObservedAt)}; running then: {runningWords(check)}.
-            </span>
-          ))}
+          PROGRAM OUTPUT UNVERIFIED — CASPARCG ON SERVER {server.label} IS UNREACHABLE, AND THE LAST
+          CHECK FOUND CHANNEL {channels} WITHOUT ITS {kinds} OUTPUT.
           <span style={styles.detail}>
-            This stays until the bridge can reach CasparCG and check again — the fault has not been
-            seen fixed, only lost from view.
+            Last seen missing at {formatTime(verdict.lastObservedAt)}; this stays until the bridge
+            can reach CasparCG and check again. {OUTPUT_DETAIL_POINTER}
           </span>
         </span>
       </div>
@@ -198,40 +136,27 @@ export function OutputMissingStrip({ server }: { server: ServerHealth }): JSX.El
   }
 
   return (
-    <div role="alert" aria-label="Program output missing" style={{ ...styles.banner, ...tone }}>
+    <div role="alert" aria-label="Program output missing" style={styles.banner}>
       <span style={styles.text}>
-        {air
-          ? `PROGRAM OUTPUT MISSING — CHANNEL ${channels} HAS NO ${verdict.channels
-              .flatMap((c) =>
-                c.missing.filter((m) => isAirOutputKind(m.kind)).map((m) => m.kind.toUpperCase()),
-              )
-              .join('/')} OUTPUT. NOTHING ON THIS CHANNEL REACHES AIR.`
-          : `DECLARED OUTPUT NOT RUNNING — CHANNEL ${channels} IS MISSING A CONFIGURED CONSUMER.`}
-        {verdict.channels.map((check) => (
+        PROGRAM OUTPUT MISSING — CHANNEL {channels} HAS NO {kinds} OUTPUT. NOTHING ON THIS CHANNEL
+        REACHES AIR.
+        {losing.map((check) => (
           <span key={check.channel} style={styles.detail}>
             Channel {String(check.channel)} on server {server.label}: casparcg.config declares{' '}
-            {missingWords(check)} and CasparCG is not running it. Running: {runningWords(check)}.
-            Checked {formatTime(check.observedAt)}.
-            {check.creation !== undefined ? ` ${creationWords(check.creation)}` : ''}
+            {missingWords(check.missing.filter((m) => isAirOutputKind(m.kind)))} and CasparCG is not
+            running it. The fix is on the playout machine, not here. {OUTPUT_DETAIL_POINTER}
           </span>
         ))}
-        {/* C-030 — WHICH addressing form the declaration uses, and how CasparCG reads it. The
-          form is a reading for the operator; the rule sentence travels with it so the reading
-          is never mistaken for something the server enforces. */}
-        {addressingWords(verdict.channels).map((line) => (
-          <span key={line} style={styles.detail}>
-            {line}
-          </span>
-        ))}
-        <span style={styles.detail}>
-          A consumer that fails at start never appears — usually a device CasparCG could not open:
-          the card was replaced and its persistent ID changed, the slot index moved, or the driver
-          is missing. Read the CasparCG log on the playout machine for the exact reason, correct the
-          consumer in casparcg.config there, restart CasparCG, and this clears on its own. The
-          server is UP and answering — do not power-cycle it over this.
-        </span>
-        <span style={styles.detail}>{DEVICE_NUMBER_RECIPE}</span>
       </span>
     </div>
   );
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
+  return `${h}:${m}:${s}`;
 }

@@ -55,12 +55,34 @@ what runs; the difference is the alarm.
    `ADD` at an index that is already running REPLACES it (old destroyed ~28 ms after the new
    one's `202`).
 
+## Correction 2026-09-05 — severity by air-criticality (`B-223`, session `TICKER-JUDDER-01` §B)
+
+The plant's screen consumer was stopped by hand to measure the ticker, and this change's banner
+went full-width orange at the operator — DECLARED OUTPUT NOT RUNNING, then five lines about
+persistent IDs, slot indexes, drivers and the server log — over a preview window that has nothing
+to do with air. The owner: _"this should not matter to the operator at all."_ He is right, and
+the "softer voice" this change shipped for a monitor was the wrong answer: a quieter alarm is still
+an alarm.
+
+What changes: **severity is decided by air-criticality, in one place** (`outputSeverityOf` in
+`@cg/shared-ipc`): a consumer whose output leaves the playout machine (`decklink`, `bluefish`,
+`ndi`, `ffmpeg`, `artnet` — and any kind the console does not recognise, so a stale list can only
+make it louder) is a program output and keeps the alarm exactly as loud as it was; `screen` and
+`system-audio` render on the box itself and raise **nothing** for the operator. **The operator's
+banner keeps one actionable line** (the channel, the declared thing, "CasparCG is not running it",
+"the fix is on the playout machine", where the detail is); **the engineering detail moves to a
+read-only Outputs section in the Server connection dialog** — the technical surface — which also
+shows a missing preview as a note. The bridge's stderr line follows the same rule. Nothing gates on
+a missing consumer of either severity (verified by grep: the check's only consumers are the two
+surfaces, `health()` and the flag-gated, off-by-default re-creation).
+
 ## Capabilities
 
 - `runtime-caspar-bridge` — ADDED: the declared-versus-running output check; ADDED: bounded,
   off-by-default missing-consumer creation.
-- `runtime-ui` — ADDED: a declared output that is not running is a full-width alarm that does
-  not go quiet when its source dies.
+- `runtime-ui` — ADDED: a missing program output is a one-line full-width alarm that does not go
+  quiet when its source dies; ADDED (`B-223`): a missing local monitor raises no operator alarm,
+  and the technical surface carries every check in full.
 
 ## Impact
 
