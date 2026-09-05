@@ -12,6 +12,178 @@ hit that in practice (see `§0.7`). So they are designed once, here.
 
 ---
 
+## ⚠ PREMISE CORRECTED — 2026-09-05, re-verified at `69311d19` (`OPERATOR-SURFACE-RECHECK-01`)
+
+**`§0` below is left VERBATIM — nothing in it has been edited — and no gated task in `tasks.md` has
+been ticked, unticked or reworded.** This block records what a re-verification against the current
+tip found, so the 29 gated tasks are decided on today's tree rather than on 2026-08-15's. It is
+written as a correction ABOVE the dated recon rather than into it, per this repo's rule for a dated
+document.
+
+**The span.** `§0` was read at `ec65480`. The tip is `69311d19` — **337 commits later**, five times
+the 68 that invalidated the earlier pass `§0.2a` records. Method as `§0`'s own: every claim
+relocated BY SYMBOL, `git grep` throughout, and every CHANGED verdict independently attacked before
+it was written here — 35 first-pass "changed" calls were overturned as rename-only, or as facts
+that had not moved since `ec65480` at all.
+
+**The headline is a good one: every load-bearing FINDING survived, and two INSTRUMENTS did not.**
+`VERB_COUNT` is still 6, R-017 is still unbuilt in all three halves, the C6 boundary still lives in
+exactly one module comment, and every gate is still open. What failed is `§0.0`'s tree-hash method
+and `§0.4`/`§0.7`'s reliance on it — see (B), which is the part worth reading twice.
+
+### (A) R-055 renamed the surface. TWO categories, and conflating them would break the wire.
+
+`R-055` (`cg-control-chrome-corrections`, complete, `eae75f1c`) renamed the operator-facing surface.
+The RENDERER-LOCAL names moved; the WIRE names deliberately did not.
+
+| category                                          | old → new                                                                                                                                                                                                                                                                                | citations in this change                                                                                                                                                                                             |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **STALE** — renderer-local, renamed               | tab `PLAYOUT` → `STATION LAYERS` · `PlayoutPanel.tsx` → `StationLayersPanel.tsx` · `playoutOccupancy.ts` → `stationLayerOccupancy.ts` · `hasPlayoutOccupant` → `hasStationLayerOccupant` · `usePlayoutLayers` → `useStationLayers` · `clearablePlayoutLayers` → `clearableStationLayers` | `design.md` 38, 39, 187, 193, 194, 195, 196, 197, 198, 206, 220, 265, 330, 335, 336, 356, 373, 441, 444, 456, 499, 510, 618 · `tasks.md` 36, 41, 77, 142, 150, 153, 196 · `specs/runtime-ui/spec.md` 6, 21           |
+| **STILL CORRECT** — wire, deliberately un-renamed | `playoutLayers.*` channel · `PlayoutLayerState` · `window.cg.playoutLayers`                                                                                                                                                                                                              | `design.md` 47, 187, 196, 199, 206, 336 · `tasks.md` 36, 66 — **a blind rename of these would break the wire.** `packages/shared-ipc/src/channels/playoutLayers.ts` records the split in its own banner (`2478a9ac`) |
+
+`proposal.md` names nothing renamed — zero hits.
+
+🔴 **Every PROPOSITION resting on a renamed file survived the rename.** The rename commit is
+`similarity index 93–96 %` and identifier-only on both files. Checked individually and not assumed:
+`§0.4`'s seven bullets (all still true), `§0.5` G2's `auto 1fr auto` (still at
+`StationLayersPanel.tsx:33`), `§0.8`'s leak check, `§8`'s `confirmAndClearOne`, and — the one that
+mattered most — **the C6 boundary comment, which survived verbatim** at
+`StationLayersPanel.tsx:90-105`, so `§0.9`'s "this design points at it and does NOT restate it" is
+still exactly right and `tasks.md` 4.2's destination still exists.
+
+### (B) 🔴 THREE claims were FALSE AT `ec65480` ITSELF. Recon errors, not staleness — and one failure.
+
+Each was re-checked against `git show ec65480:<path>` and was already false the day `§0` was
+written. They are recorded here rather than silently fixed because the reason they survived is the
+same reason all three times, and it is a lesson about the instrument:
+
+| where                      | the claim                                                                                                     | the tree, then and now                                                                                                                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `§7`                       | PGM/Preview "labelled NOT CONNECTED"                                                                          | They are not. `MonitorPanel.tsx` argues the opposite in its own words — _"The first draft labelled both 'NOT CONNECTED', which is a category error"_ — because PREVIEW has no link to be down |
+| `§8`                       | "The fixed-row CLEAR is the reverse: not confirm-gated at all, because it is the escape hatch"                | It **is** confirm-gated, at `LayerRow.tsx` (`action.key === 'clear'` → `withConfirm`), with three occupancy-dependent sentences. Present identically at `ec65480`                             |
+| `specs/runtime-ui` 173-176 | Remove-All stays rendered "deliberately unlike Clear-All, **whose absence** when nothing is on air is honest" | **There is no absence.** `LayersPanel.tsx` renders CLEAR ALL unconditionally, `disabled={needsCaspar}`, and its own comment says "CLEAR ALL is ALWAYS ENABLED". Identical at `ec65480`        |
+
+⭐ **The pattern, which is the finding: all three are prose read instead of code, and `§0.0`'s
+tree-hash instrument is what let them through.** An IDENTICAL blob cleared the FILE, and the false
+claim was inside a COMMENT in that file — including, for `§7`, a stale comment in `App.tsx` that
+still says "explicitly labelled NOT CONNECTED" today. This is the repo's _"the contract moved; the
+bytes did not"_ hazard running in reverse. **A tree hash is evidence that bytes did not move. It is
+not evidence that a claim about them is true**, and `§0.0`'s table should not be re-run as-is on the
+next pass.
+
+Two consequences for the gates, and neither is cosmetic:
+
+- **`§8` asks the owner to confirm an asymmetry that does not exist.** Both CLEARs are confirm-gated.
+  The question that IS open is a different one — whether the row's CLEAR should keep its confirm —
+  and `tasks.md` 6.2 would otherwise record a false asymmetry "where a later reader would try to
+  harmonise it".
+- **`tasks.md` 1.5's instruction rests on the false premise.** It says _"Do NOT harmonise it with
+  Clear-All's genuine absence"_; there is no absence, and the `§0.9` C6 it cites as authority is
+  about the station-layers panel's absent control, not this one.
+
+### (C) 🔴 A FOURTH false claim, and this one is NORMATIVE: the spec delta forbids the shipped answer
+
+`specs/runtime-ui/spec.md` 43-44 — an ADDED requirement, i.e. text that archives into
+`openspec/specs/` — reads:
+
+> A control whose PRESENCE varies by row SHALL NOT be placed in the verb block. Such a control SHALL
+> instead be reached through the Inspector, with at most an indicator on the row.
+
+**The context menu is not named.** But SOURCE and AUDIO — the two conditionally-present controls
+`§0.2` celebrates as the correct precedent, reached twice independently — are CONTEXT-MENU items
+(`layerRowActions.ts`, `surface: 'menu'` spread on `hasLivePlates`), and the `LookPicker` is a
+conditional control rendered on the row as a full second line rather than "an indicator". `§4.1`'s
+own wording is _"the context menu (or the Inspector)"_; the SHALL text dropped the menu.
+
+As written, **this change's normative half makes the shipped answer non-conforming and would send
+the fourth control's author to the Inspector — the opposite of what `§4`/`§4.2` concluded.**
+`tasks.md` 4.1 and 4.2 both write down a rule the spec delta already states differently, so
+confirming `§4.1`'s wording without reconciling the spec ships two spellings of one rule inside one
+change dir — the exact defect this design exists to prevent.
+
+### (D) What genuinely CHANGED since `ec65480`
+
+| `§`              | the recon said                                                   | today                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------- | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `§0.0`           | twelve paths at 0 commits / IDENTICAL                            | correct for its declared span (`2a44247..ec65480`) and re-verified as such — but **ten of the twelve have since moved**, five of them rename- or comment-only. The table no longer describes the tree and must not be read as if it did                                                                                                                                 |
+| `§0.3`           | the template registry has SIX consumers                          | **SEVEN** — `AuditPanel` joined 2026-09-04. All eight R-031 points still true                                                                                                                                                                                                                                                                                           |
+| `§0.6`           | UPDATE gates on `empty \|\| !onAir \|\| !dirty \|\| needsCaspar` | it also gates on `blocked` — the quoted list omits it. Immaterial to the finding: **REMOVE still has no state gate**                                                                                                                                                                                                                                                    |
+| `§0.7`           | CONFIRMED BY TREE HASH, byte-identical across the span           | 🔴 **the EVIDENCE is void** — `B-224` (`829f5fb7`) rewrote both files. **Every CONSTANT re-read and unchanged**: `VERB_COUNT` 6, 48/12/348, one shared `repeat(6, 48px)`, six heads in emitted order. The conclusion stands; its proof does not                                                                                                                         |
+| `§0.8`           | "there is no `liveLayers()` accessor in the tree at HEAD"        | 🔴 **false today.** A third channel (`packages/shared-ipc/src/channels/liveLayers.ts`), a hook, and a whole **LIVE SOURCES tab** landed 2026-08-20. ⭐ The leak `§0.8` predicted did NOT happen: the channel's own header argues why widening `reservedLayers` would break three doors, and cites `#declaredLayerClass`. The tab still reads `playoutLayers.state` only |
+| `§0.5` G2 / `§3` | ONE of the TWO surfaces has the rigid grid                       | **one of THREE.** `LiveSourcesPanel.tsx:98` is a second `auto 1fr auto` surface with no header. `tasks.md` 2.2 names only `PlayoutPanel.tsx`, so as written it closes half of G2                                                                                                                                                                                        |
+| `§5`             | four candidates; recommend (B)                                   | 🔴 **the map is stale — see (E)**                                                                                                                                                                                                                                                                                                                                       |
+| `§6`             | the e2e "clicks Remove-All and then asserts 'No items loaded'"   | that assertion does not exist in `server-settings.spec.ts` and did not at `ec65480` either. The four remedy STRINGS are all still present and unchanged                                                                                                                                                                                                                 |
+| `§1`             | (B) "strands the second-browser case"                            | R-028 o1 made the bridge registry the catalogue of record, so the second-browser case is a WORKING capability (B) would destroy, not a gap it fails to fill. Present at `ec65480`; the recon under-priced it                                                                                                                                                            |
+| `§2`             | (B) costs "~36px + one gap off the alias/template slack"         | the arithmetic is unchanged (`minWidthFor` +48 at both densities, then and now), but `B-224` re-set the columns around it: `W.stateFull` 132 → 150, `W.aliasMin` 132 → 150, and a NEW `W.aliasMax: 220` cap. Re-read before pricing (B)                                                                                                                                 |
+
+### (E) `§5`'s four-candidate table is the one the owner would be deciding on a stale map
+
+Re-measured at `69311d19`. The table is not wrong; it is **incomplete**, and one omission is new:
+
+- 🔴 **The renderer grew its own copy of the bridge's list.** `isOnAirOrUnsettled`
+  (`features/stack/onAir.ts`, `B-213`) is `pending || playing | on-air | updating | exiting |
+unconfirmed` — **byte-for-byte the same set as the bridge's `isOnAirStatus`** — and its own doc
+  calls it _"the mirror of the bridge's `isOnAirStatus`"_. So the renderer side of `§5` candidate
+  (B) already exists as a HAND-WRITTEN MIRROR that agrees today. That is precisely the "two that
+  match today" hazard `tasks.md` 1.10 names, and it makes (B) a DELETION as well as a promotion —
+  strictly cheaper than the table prices it, and worth doing whether or not R-017 lands.
+- `isOnAirStatus` is **still module-private** (`caspar-runtime.ts`, `function`, no `export`), so
+  "share it" still means moving it. Its consumers grew from four to six gates across five call
+  sites, two of them WRITE paths (`#ownsLiveSeats`, the multi-box on-air check) — so candidate (D)'s
+  blast radius is wider than the table states.
+- The table does not name **`#ownsLiveSeats`** (`B-216`) — `on air OR the ledger holds seats`, the
+  predicate every configuration verb already asks. It is a fifth candidate and arguably the right
+  one for REMOVE, which clears a layer.
+- **B-122's constraint, re-read verbatim:** _"It must never gate a clear path again, on either side
+  of the bridge seam."_ REMOVE clears the layer before dropping the row, so **candidate (A) —
+  `isOnAir` on both sides, R-017's own written direction — would violate it directly.** `§5` already
+  says (A) is no longer recommended; this is the sharper reason. ⚠ Note that `isOnAir` is read TODAY
+  on the REMOVE path, at `LayerRow.tsx` (`const onAirNow = isOnAir(item)`), to choose the confirm
+  dialog's WORDING and its button label. That is not a gate and does not violate B-122 — but it is
+  the one place a wrong `isOnAir` misinforms an operator on a destructive step, and whichever
+  candidate wins should own that sentence too.
+
+### (F) 🔴 `§0.6`'s headline consequence is overstated, and `§2` of this re-check is why
+
+`§0.6` and the Landing-order note say _"today a live graphic can be destroyed and its row dropped in
+one unconfirmed click."_ **The first half is true; "unconfirmed" is false.** The row's REMOVE has
+carried an on-air-aware confirm on BOTH surfaces since before `ec65480`: `LayerRow.tsx` attaches it
+at declaration time so the button and the menu item share it, and the dialog reads _"This item is ON
+AIR. Removing it CLEARS layer N"_ with the confirm labelled `Remove and clear (ON AIR)`.
+
+**R-017's case is unchanged and remains correct** — a confirm is not a prohibition, the BRIDGE still
+refuses nothing (`stack.remove` answers `{ accepted }`, `stack.remove-all` answers `{ ok, removed }`,
+neither with anywhere to put a reason), and REMOVE ALL is still `linkDown || items.length === 0`
+with no `onAirCount` term. What changes is the URGENCY argument in the landing order: the gap is a
+missing refusal, not a missing confirmation.
+
+### (G) Which task lines this makes stale
+
+**Stale CITATIONS only — the tasks themselves are untouched and unticked:** 0.2, 0.3, 0.6, 0.8 and
+section-2's heading, 2.2, 2.3, 4.2 all name `PlayoutPanel.tsx` or the `PLAYOUT` tab (see (A)).
+
+**Tasks whose PREMISE moved, and which should not be started until the owner has read this block:**
+
+- **1.5** — cites "Clear-All's genuine absence", which does not exist (B).
+- **1.8** — its four-site list is complete for the exact remedy string, but the R-010 unblock
+  VOCABULARY has two further homes in `packages/shared-ipc/src/channels/templates.ts`, and
+  `packages/shared-ipc/tests/template-references.test.ts` carries a shipped test whose NAME is the
+  policy `§6` is asking about: _"never mentions Remove All — the sweeping remedy is not the one to
+  steer toward"_, added by `B-212` from an owner incident on 2026-09-04. **`§6`'s answer has already
+  been decided once, in-span, from the plant.**
+- **1.9** — the assertion it rewrites does not exist (D).
+- **2.2** — names one of the TWO surfaces that never adopted the grid (D).
+- **4.1 / 4.2** — write down a rule this change's own spec delta already states differently and more
+  strictly (C).
+- **6.2** — would record an asymmetry that does not exist (B).
+
+`§0.1`'s per-item table and `§0.10` rows 1-2 were re-checked and **hold**: R-021's change is fully
+ticked, R-028's only unticked boxes are its own docs/gate rows (the same seven as at `ec65480`), and
+`openspec/specs/runtime-ui/spec.md` has ZERO commits in the span, so this change's one MODIFIED
+requirement has not drifted under it.
+
+---
+
 ## §0 — WHAT IS TRUE AT HEAD
 
 **Read at `ec65480`** — verified `HEAD == origin/dev`, working tree clean, pulled 2026-08-15.
