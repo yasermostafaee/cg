@@ -558,6 +558,22 @@ baseline — no wall-clock cost; the 64 processes were thrashing, not doing more
 `gate:e2e` untouched (its `--concurrency=1` is explicitly preserved) — no Linux e2e run owed. Remaining to reach `[x]`: owner confirms the
 flake stays gone across subsequent real-use runs.
 
+**Seen again 2026-09-05 (`ARRANGEMENT-DEADWOOD-01`), under the BOUNDED gate — one red, a different
+assertion.** The pre-push gate for `a14353ef` (a docs-only commit: four markdown files, no source)
+reddened `@cg/caspar-bridge#test` once — `tools/caspar-bridge/tests/two-bank-refusal.integration.test.ts:212`,
+_"a retained BED held against an operator row MIGRATES to a bed row, reported, off air"_, which
+asserts NOTHING reaches layer `1-95` during the migration and saw one line, `MIXER 1-95 VOLUME 1`
+— the shape of `#reassertDeclaredVolumes`'s boot-time blanket over the declared bank
+(`live-layers.ts:92`) landing inside the test's `recvLines()` window. Every control was green: the
+same suite alone (`pnpm --filter @cg/caspar-bridge test`: 93 files, 782 tests), the same full
+`pnpm gate` fifteen minutes earlier (`93 successful, 93 total`, `0 cached`, 3 m 45 s;
+`.gate-logs/gate-20260905T112049Z-7396.log`), and CI for the parent commit
+(<https://github.com/yasermostafaee/cg/actions/runs/33936819497>, `success`). Isolation-asymmetry
+again, so it is filed here and not as a bridge defect — but it is a WIRE line on a layer a test
+says must see none, which is [[B-198]] / [[B-221]]'s subject by neighbourhood, so whoever next
+touches the reassert blanket or the staging batch should read this test's window first. Nothing was
+changed: no timeout raised, no test loosened, the bridge untouched (`.gate-logs/gate-20260905T113604Z-12268.log`).
+
 **Evidence gathered 2026-07-23 (the fix session).** Five afternoon occurrences under the
 unbounded gate, spanning THREE workspaces: `@cg/caspar-client` (amcp-probed-liveness),
 `@cg/caspar-bridge` (stop-verb, update-producer-state, reconnect-reconciliation), and
