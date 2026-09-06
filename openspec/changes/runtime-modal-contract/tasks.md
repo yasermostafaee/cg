@@ -41,8 +41,6 @@
 
 - [x] 4.1 `pnpm openspec validate runtime-modal-contract --strict`.
 - [x] 4.2 Full green gate, uncached (`0 cached`).
-- [ ] 4.3 ⚠ **Linux `gate:e2e` OWED.** This change's code half (`d9c47573`) alters a
-      button's treatment on three dialogs, which is a rendering change. A green Windows
-      run does not discharge it. Write the run URL beside this box when a COMPLETED,
-      GREEN `e2e` job that actually RAN exists for a head containing the change — a
-      SKIPPED job discharges nothing (`P-029`).
+- [x] 4.3 ✅ **Linux `gate:e2e` DISCHARGED** — https://github.com/yasermostafaee/cg/actions/runs/34039564468 (the `E2E (Playwright)` job RAN and passed on `2ed9de26`, 557 s — not skipped). That head contains this
+      change's code half (`d9c47573`), so the run covers it: the `e2e` job is not
+      diff-scoped, it runs the whole Playwright suite against the whole tree.

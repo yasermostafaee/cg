@@ -11307,7 +11307,7 @@ only enforcement there is. Found by `MODALS-AND-SETTINGS-01` §1 while inventory
   (the PIN's digit normalisation, unaffected).
 - **Owed:** nothing built — report only.
 
-### ✅ IMPLEMENTED 2026-09-06 by `MODAL-CONTRACT-02` (`fface751`)
+### ✅ IMPLEMENTED 2026-09-06 by `MODAL-CONTRACT-02` (`fface751`) — Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/34039564468 (the `E2E (Playwright)` job RAN and passed on `2ed9de26`, 557 s — not skipped)
 
 **Both halves, because either alone is the defect.** The renderer trap moved to
 `ui/focusTrap.ts` and BOTH full-window surfaces call it — `Modal` composes it with its
@@ -11390,7 +11390,7 @@ one that generalises; the second is smaller and keeps the rule in one file. Foun
   the right default for every dialog that is not a form).
 - **Owed:** nothing built — report only.
 
-### ✅ IMPLEMENTED 2026-09-06 by `MODAL-CONTRACT-02` (`fface751`, `a24bc948`)
+### ✅ IMPLEMENTED 2026-09-06 by `MODAL-CONTRACT-02` (`fface751`, `a24bc948`) — Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/34039564468 (the `E2E (Playwright)` job RAN and passed on `2ed9de26`, 557 s — not skipped)
 
 🔴 **The filed diagnosis was RIGHT about the symptom and WRONG about the mechanism, and the
 difference decides the fix.** It reads "the modal primitive silently takes the focus away" —
@@ -11598,7 +11598,7 @@ should not be bundled with it. Found by `MODALS-AND-SETTINGS-01`'s delta sweep.
   rule 11.
 - **Owed:** nothing built — report only.
 
-### ✅ IMPLEMENTED 2026-09-06 by `MODAL-CONTRACT-02` (`e7d896b1`)
+### ✅ IMPLEMENTED 2026-09-06 by `MODAL-CONTRACT-02` (`e7d896b1`, corrected in `5864e204`) — Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/34039564468 (the `E2E (Playwright)` job RAN and passed on `2ed9de26`, 557 s — not skipped)
 
 All three go THROUGH `ui/operatorNaming.ts`, per golden rule 11 — this is application, not
 invention.
@@ -11684,6 +11684,8 @@ correct and unchanged; a synthetic click the operator never made is not.
   `minLength` rule is still visible rather than silently eating the key
 - WHEN a dialog's key handler closes that dialog THEN it prevents the default action, because
   focus will have moved by the time the browser runs it
+
+**Linux e2e DISCHARGED:** https://github.com/yasermostafaee/cg/actions/runs/34039564468 (the `E2E (Playwright)` job RAN and passed on `2ed9de26`, 557 s — not skipped).
 
 **Verified:** `tests/usePrompt.enter.dom.test.ts` (the mechanism — `preventDefault`, plus a
 negative control on the too-short path, red without the fix) and
