@@ -2671,7 +2671,7 @@ character and the same argument.
   spelling). The refusal and the fit chain live in `tools/caspar-bridge/src/live-plate-fit.ts`; see
   the pointer beside [[C-015]] in `caspar.md`.
 
-## [~] R-054 — one SETTINGS shell for CG Control, and one layout for its panes ⟨priority: medium⟩ — PARTLY DELIVERED 2026-09-06 by `STATION-SETUP-02` (`openspec/changes/station-setup/`): ONE dialog, `Station setup`, with SECTIONS rather than tabs (a tab hides the section a refusal came from), every old entry point a deep link, each section's commit contract in a legend, the channel raster's first UI and a read-only Station layers section; NOT delivered — the sources table, the shared `Select`; Linux `gate:e2e` for the commit OWED
+## [~] R-054 — one SETTINGS shell for CG Control, and one layout for its panes ⟨priority: medium⟩ — PARTLY DELIVERED 2026-09-06 by `STATION-SETUP-02` (`openspec/changes/station-setup/`): ONE dialog, `Station setup`, with SECTIONS rather than tabs (a tab hides the section a refusal came from), every old entry point a deep link, each section's commit contract in a legend, the channel raster's first UI and a read-only Station layers section; NOT delivered — the sources table, the shared `Select`; Linux `gate:e2e` DISCHARGED for `30a0cf17` — <https://github.com/yasermostafaee/cg/actions/runs/34045753015> (`E2E (Playwright)` RAN 624 s, `success`)
 
 **What:** one gear/settings entry point in CG Control opening ONE modal with tabs — at least
 **Configure** (candidate layers), **Sources** (live sources) and **Servers** (connections) — so

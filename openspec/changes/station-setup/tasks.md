@@ -96,5 +96,14 @@
 
 - [x] 9.1 `pnpm gate`, uncached, foreground, `0 cached` — run THROUGH `gate-run.mjs` so the
       run itself is R1's real-gate proof (see the session report for the log size).
-- [ ] 9.2 Linux `gate:e2e` — OWED. Discharged only by a COMPLETED, GREEN `e2e` job on a
-      `dev` head containing this work, cited by run URL, duration, and that it RAN.
+- [x] 9.2 Linux `gate:e2e` — **DISCHARGED** on `30a0cf17` (the head carrying this work):
+      <https://github.com/yasermostafaee/cg/actions/runs/34045753015> — `E2E (Playwright)`
+      **RAN** and passed, 16:32:16 → 16:42:40 (**624 s**), run `conclusion: success`, with
+      `Lint • Typecheck • Test • Build` green beside it (358 s).
+      ⚠ The FIRST run of this work (`df693ce9`,
+      <https://github.com/yasermostafaee/cg/actions/runs/34044676672>) was RED on both heavy
+      jobs and is recorded rather than hidden: the `ENOBUFS` control asserted Windows's death
+      signature, the fallback fixture's `process.exit` dropped a pipe write on Linux, and the
+      new e2e matched region names by substring (`Outputs` also found `Program outputs`) and
+      set a raster while the seed's rows were on air. Fixed in `30a0cf17`; a failing run
+      discharges nothing.

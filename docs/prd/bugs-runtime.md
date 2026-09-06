@@ -2602,7 +2602,7 @@ runs it before writing code.
 **Env:** Runtime + bridge, owner's plant. Source: `DEBT.md:119`, `DEBT.md:248` (the full
 write-up), `DEBT.md:409`.
 
-## [~] B-116 — every bridge boot warns that a template is corrupt and tells the operator to re-import it, because `delimiters.json` is stored inside the templates directory ⟨priority: medium⟩ — FIXED 2026-09-06 by `STATION-SETUP-02` §5 (`openspec/changes/station-setup/`): the registry admits only its OWN records (`isRegistryRecordName`, a rule from the writer's shape), nothing moves on disk; Linux `gate:e2e` for the commit OWED
+## [~] B-116 — every bridge boot warns that a template is corrupt and tells the operator to re-import it, because `delimiters.json` is stored inside the templates directory ⟨priority: medium⟩ — FIXED 2026-09-06 by `STATION-SETUP-02` §5 (`openspec/changes/station-setup/`): the registry admits only its OWN records (`isRegistryRecordName`, a rule from the writer's shape), nothing moves on disk; Linux `gate:e2e` DISCHARGED for `30a0cf17` — <https://github.com/yasermostafaee/cg/actions/runs/34045753015> (`E2E (Playwright)` RAN 624 s, `success`)
 
 **What:** `DelimiterStore` persists to `delimiters.json` **inside** `--templates-dir`
 (`~/.cg-runtime/bridge-templates/`), and `TemplateRegistry`'s loader reads every `*.json` in that

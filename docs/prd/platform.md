@@ -2881,7 +2881,7 @@ strip-derived value it never had. That commit staged one path by name.
   dated pointer reads _"`P-044` (unchanged)"_ — headings and pointer AGREE. Two numbers taken here
   (`P-044`, `P-045`); the space stays contiguous.
 
-## [~] P-045 — the Stop hook's 1 MiB `spawnSync` buffer KILLS a gate that prints too much, and truncates the very log `P-040` says to read ⟨priority: high — it manufactures a red from a green gate, and it does it exactly when output grows⟩ — FILED 2026-09-06 by `MODAL-CONTRACT-02`; FIXED 2026-09-06 by `STATION-SETUP-02` §R1 (`tools/gate-hook/src/gate-run.mjs`, streamed rather than raised — see the closing note)
+## [~] P-045 — the Stop hook's 1 MiB `spawnSync` buffer KILLS a gate that prints too much, and truncates the very log `P-040` says to read ⟨priority: high — it manufactures a red from a green gate, and it does it exactly when output grows⟩ — FILED 2026-09-06 by `MODAL-CONTRACT-02`; FIXED 2026-09-06 by `STATION-SETUP-02` §R1 (`tools/gate-hook/src/gate-run.mjs`, streamed rather than raised — see the closing note); green on Linux at `30a0cf17` — <https://github.com/yasermostafaee/cg/actions/runs/34045753015>
 
 **What:** `.claude/hooks/gate-stop.mjs` runs the turn-end gate as
 `spawnSync(command, { cwd: root, shell: true, encoding: 'utf8', windowsHide: true })` with no
@@ -2966,6 +2966,18 @@ The margin on the latest green gate was ~35 KB, not ~40.
 
 `P-040`'s remedy text is corrected in `CLAUDE.md` in the same act: read the footer first, and
 a footer-less log is a capture that died, never a task that failed.
+
+⚠ **AND THE CONTROL ITSELF IS PLATFORM-SPECIFIC — measured, not assumed.** The first Linux CI
+run of the fix was RED on the positive control: on `ubuntu-latest` the 2 MiB child can FINISH
+before `spawnSync`'s kill lands, so `status` is its own exit code beside the same `ENOBUFS`,
+where win32 reports `status: null` / `SIGTERM`. Both are the capture dying; only the Windows
+shape is the one this hook misread as a failing task, and only there is it asserted. The
+platform-independent half — `ENOBUFS` plus a capture cut short of the child's last line — is
+asserted everywhere. Two more Linux-only facts fell out of the same run and are recorded
+because each would recur: a fixture ending in `process.exit()` drops a pipe write still in
+flight (the streamed path writes to a FILE and is unaffected), and Playwright's `getByRole`
+matches an accessible name as a SUBSTRING, so a `region` named `Outputs` also finds a nested
+`Program outputs`.
 
 - **Cross-refs:** [[P-040]] (the remedy this disarms), [[P-009]] (the Stop hook), [[P-013]] (the
   chokepoint the tee shares with the lock), [[P-038]] (the same blindness one level up, in CI).
