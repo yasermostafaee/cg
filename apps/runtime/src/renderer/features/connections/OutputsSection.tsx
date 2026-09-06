@@ -172,7 +172,7 @@ function ServerBlock({ server }: { server: ServerHealth }): JSX.Element {
 
 /**
  * The section, from a health snapshot — exported on the snapshot so a test can drive it
- * without the hooks; `ServerSettingsPanel` passes `useConnections()`.
+ * without the hooks; `StationSetupDialog` passes `useConnections()`.
  */
 export function OutputsSection({ health }: { health: ConnectionHealth | null }): JSX.Element {
   return (

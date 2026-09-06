@@ -5,8 +5,14 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FixedLayerBank, FixedSlotState } from '@cg/shared-ipc';
 import { Modal, ModalAction, modalActionVariant } from '../src/renderer/ui/Modal.js';
-import { FixedBankConfigModal } from '../src/renderer/features/fixedLayers/FixedBankConfigModal.js';
 import { clearPortals, openDialog } from './support/dialog.js';
+import {
+  clickSetupButton,
+  renderStationSetup,
+  sectionOf,
+  stationSetupStub,
+  unmountStationSetup,
+} from './support/stationSetup.js';
 
 /**
  * THE MODAL PRIMITIVE — one chrome, three button roles, and one pinned message.
@@ -37,6 +43,7 @@ afterEach(async () => {
   root = null;
   container?.remove();
   container = null;
+  await unmountStationSetup();
   clearPortals();
   vi.restoreAllMocks();
 });
@@ -54,12 +61,6 @@ async function render(element: ReturnType<typeof createElement>): Promise<HTMLEl
   const dialog = openDialog();
   if (dialog === null) throw new Error('the dialog did not open');
   return dialog;
-}
-
-async function settle(): Promise<void> {
-  await act(async () => {
-    for (let i = 0; i < 6; i++) await Promise.resolve();
-  });
 }
 
 describe('§1 — every dialog gets its chrome from the primitive', () => {
@@ -237,43 +238,25 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
     binding: null,
   }));
 
-  function stubBridge(): void {
-    const stub = {
-      link: {
-        status: () => 'live',
-        onStatusChanged: () => () => undefined,
-        resyncing: () => false,
-        onResyncingChanged: () => () => undefined,
-      },
-      stack: { snapshot: () => Promise.resolve([]), onStateChanged: () => () => undefined },
-      fixedLayers: {
-        // The refusal the owner hit: a row far down the list is occupied.
-        setConfig: () =>
-          Promise.resolve({
-            ok: false,
-            reason: 'occupied-layer',
-            message: 'Layer 95 has a template on it.',
-          }),
-      },
-    };
-    (window as unknown as { cg: typeof stub }).cg = stub;
-  }
-
+  /*
+    `STATION-SETUP-02` — the candidate-layer table is a SECTION of Station setup now, and
+    its Apply lives in the section body rather than the dialog footer. The defect and the
+    mechanism are unchanged: the refusal is pinned beside the action row, and the thirty
+    rows above it scroll.
+  */
   async function openAndRefuse(): Promise<HTMLElement> {
-    stubBridge();
-    const dialog = await render(
-      createElement(FixedBankConfigModal, { bank: BANK, slots: SLOTS, onClose: () => undefined }),
-    );
-    await settle();
-    const apply = [...dialog.querySelectorAll('.cg-modal-footer button')].find(
-      (b) => b.textContent === 'Apply',
-    );
-    if (apply === undefined) throw new Error('Apply not rendered');
-    await act(async () => {
-      (apply as HTMLElement).click();
-      await Promise.resolve();
+    stationSetupStub({
+      bank: BANK,
+      slots: SLOTS,
+      // The refusal the owner hit: a row far down the list is occupied.
+      fixedSetConfigResult: {
+        ok: false,
+        reason: 'occupied-layer',
+        message: 'Layer 95 has a template on it.',
+      },
     });
-    await settle();
+    const dialog = await renderStationSetup({ section: 'candidate-layers' });
+    await clickSetupButton(dialog, 'Apply candidate layers');
     return dialog;
   }
 
@@ -333,7 +316,10 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
     const dialog = await openAndRefuse();
     expect(openDialog()).not.toBeNull();
     // Thirty operator rows plus the nine declared bed rows (`single-clock-look-switch`) —
-    // the dialog lists every candidate layer of BOTH halves.
-    expect(dialog.querySelectorAll('input[type="checkbox"]').length).toBe(39);
+    // the section lists every candidate layer of BOTH halves. Scoped to the section: the
+    // Servers section above it carries a checkbox of its own (auto-failover).
+    expect(
+      sectionOf(dialog, 'candidate-layers').querySelectorAll('input[type="checkbox"]').length,
+    ).toBe(39);
   });
 });

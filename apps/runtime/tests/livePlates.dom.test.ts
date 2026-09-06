@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { StackItemState } from '@cg/shared-schema';
 import type { SourceAssignments, SourceCatalog, TemplateInfo } from '@cg/shared-ipc';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
-import { SourcesModal } from '../src/renderer/features/sources/SourcesModal.js';
+import { StationSetupDialog } from '../src/renderer/features/stationSetup/StationSetupDialog.js';
 import {
   __resetDraftsForTest,
   clearDraft,
@@ -22,8 +22,9 @@ import { connectionsStub, linkFor } from './support/reachability.js';
 /**
  * D-137 / C-015 — WHERE a plate is bound, after the 2026-08-10 correction.
  *
- * Defining the installation's sources stays in the Live sources modal; BINDING a
- * plate moved to the INSPECTOR, beside the template being bound. The three
+ * Defining the installation's sources stays in the Live sources section of Station
+ * setup (the `Live sources` modal until `STATION-SETUP-02`); BINDING a plate moved to
+ * the INSPECTOR, beside the template being bound. The three
  * properties worth a test are the three the move exists to produce:
  *
  *  1. the modal no longer carries any plate binding at all;
@@ -171,36 +172,116 @@ async function renderInspector(
   return container;
 }
 
-describe('the Live sources modal defines sources and binds nothing', () => {
-  it('renders no plate binding at all', async () => {
-    bridgeStub([TWO_BOX], TWO_BOX);
+describe('the Live sources section of Station setup defines sources and binds nothing (§6)', () => {
+  it('renders no plate binding at all, and never touches the assignments channel', async () => {
+    /*
+      `STATION-SETUP-02` §6 — THE TWO SHAPES THAT LOOK LIKE ONE. The CATALOG (installation-
+      wide, `sources.set-config`) and the plate→source ASSIGNMENTS (per template,
+      `sources.set-assignments`) share a name and are two things in two files. Merging their
+      SURFACES into one dialog is fine; merging their SHAPE would make an assignment
+      installation-wide — the exact bug `LiveSourceSwapDialog`'s own intro exists to prevent.
+      So this asserts, on the merged surface: no plate control, and NO write to the
+      assignments channel however the catalog is edited.
+    */
+    const stub = bridgeStub([TWO_BOX], TWO_BOX);
+    // The whole dialog renders, so the rest of its bridge surface is stubbed too.
+    Object.assign(stub, {
+      fixedLayers: {
+        config: () => Promise.resolve(null),
+        onConfigChanged: () => () => undefined,
+        state: () => Promise.resolve([]),
+        onStateChanged: () => () => undefined,
+        setConfig: () => Promise.resolve({ ok: true }),
+      },
+      channelSettings: {
+        get: () => Promise.resolve({ settings: [], observed: [] }),
+        onChanged: () => () => undefined,
+        set: () => Promise.resolve({ ok: true }),
+      },
+      playoutLayers: { state: () => Promise.resolve([]), onStateChanged: () => () => undefined },
+      liveLayers: { state: () => Promise.resolve([]), onStateChanged: () => () => undefined },
+      delimiters: {
+        list: () => Promise.resolve([]),
+        onChanged: () => () => undefined,
+        set: () => Promise.resolve({ ok: true }),
+      },
+    });
+    Object.assign(stub.connections, {
+      config: () =>
+        Promise.resolve({
+          servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+          strategy: 'mirror-sync',
+          autoFailoverEnabled: true,
+        }),
+      onConfigChanged: () => () => undefined,
+      setConfig: () => Promise.resolve({ ok: true }),
+      templateServe: () =>
+        Promise.resolve({
+          serveHost: '127.0.0.1',
+          port: 0,
+          exposed: false,
+          unreachable: [],
+          flagOverrides: {},
+          candidates: [],
+        }),
+    });
+    Object.assign(stub.stack, {
+      snapshot: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
     await act(async () => {
       initSources(window.cg);
-      root.render(createElement(SourcesModal, { onClose: () => undefined }));
+      root.render(
+        createElement(StationSetupDialog, {
+          open: true,
+          section: 'sources',
+          onClose: () => undefined,
+        }),
+      );
       await Promise.resolve();
     });
     await act(async () => {
-      await Promise.resolve();
+      for (let i = 0; i < 8; i++) await Promise.resolve();
     });
     const dialog = document.querySelector('[role="dialog"]');
     expect(dialog).not.toBeNull();
+    const section = dialog?.querySelector('[data-station-section="sources"]');
+    expect(section).not.toBeNull();
     // It still DEFINES sources…
-    expect(dialog?.textContent).toContain('SOURCES');
+    expect(section?.textContent).toContain('SOURCES');
     expect(
-      [...(dialog?.querySelectorAll<HTMLInputElement>('input[aria-label^="Name of"]') ?? [])].map(
+      [...(section?.querySelectorAll<HTMLInputElement>('input[aria-label^="Name of"]') ?? [])].map(
         (i) => i.value,
       ),
     ).toEqual(['Studio A', 'Baku']);
-    // …and carries no trace of the binding job it briefly held. Asserted on the
-    // section, the plate ids AND the control, because any one of them surviving
-    // would put the dialog back to doing two jobs.
+    // …and carries no trace of the binding job it briefly held. Asserted on the WHOLE
+    // dialog, the plate ids AND the control, because any one of them surviving anywhere in
+    // Station setup would put the settings home to doing the Inspector's job.
     expect(dialog?.textContent).not.toContain('TEMPLATE PLATES');
     expect(dialog?.textContent).not.toContain('guest-1');
     expect(dialog?.querySelector('[data-plate-unassigned]')).toBeNull();
     expect(dialog?.querySelector('select[aria-label^="Source for"]')).toBeNull();
+
+    // Edit the catalog through the section — rename a source — and the assignments
+    // channel is never written: the two shapes stay separately stored.
+    const name = section?.querySelector<HTMLInputElement>('input[aria-label="Name of Studio A"]');
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    await act(async () => {
+      if (name === null || name === undefined) throw new Error('no name field');
+      setter?.call(name, 'Studio One');
+      name.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      for (let i = 0; i < 8; i++) await Promise.resolve();
+    });
+    expect(setCalls, 'the catalog edit must not write the assignments').toEqual([]);
+    await act(async () => {
+      root.unmount();
+    });
   });
 });
 

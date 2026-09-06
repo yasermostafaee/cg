@@ -6,7 +6,12 @@ import { ConnectionBanner } from './features/status/ConnectionBanner.js';
 import { BridgeSkewBanner } from './features/status/BridgeSkewBanner.js';
 import { RasterMismatchBanner } from './features/status/RasterMismatchBanner.js';
 import { OutputMissingBanner } from './features/status/OutputMissingBanner.js';
-import { ServerSettingsPanel } from './features/connections/ServerSettingsPanel.js';
+import { StationSetupDialog } from './features/stationSetup/StationSetupDialog.js';
+import {
+  closeStationSetup,
+  openStationSetup,
+  useStationSetupRequest,
+} from './features/stationSetup/stationSetupStore.js';
 import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
 import { EmptiedAirNotice } from './features/layers/EmptiedAirNotice.js';
 import { LayersPanel } from './features/layers/LayersPanel.js';
@@ -25,7 +30,6 @@ import { Tooltip } from './ui/Tooltip.js';
 import { useConnections } from './hooks/useConnections.js';
 import { initDelimiters } from './features/inspector/delimiterStore.js';
 import { initSources } from './features/sources/sourceStore.js';
-import { SourcesModal } from './features/sources/SourcesModal.js';
 import { useStackHousekeeping } from './hooks/useStackHousekeeping.js';
 import { useLink } from './hooks/useLink.js';
 import { useLock } from './hooks/useLock.js';
@@ -93,8 +97,9 @@ export function App(): JSX.Element {
   // R-028 part B — the operator's own workspace geometry (persisted per browser).
   const layout = useShellLayout();
   const [auditOpen, setAuditOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [sourcesOpen, setSourcesOpen] = useState(false);
+  // `STATION-SETUP-02` — ONE settings dialog, opened at a section from five surfaces; the
+  // request lives in a module store so the Inspector and the Layers panel can raise it too.
+  const stationSetup = useStationSetupRequest();
   const selected = useMemo(
     () => items.find((i) => i.itemId === selectedId) ?? null,
     [items, selectedId],
@@ -412,8 +417,8 @@ export function App(): JSX.Element {
         )}
         <StatusBar
           onOpenAudit={() => setAuditOpen(true)}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onOpenSources={() => setSourcesOpen(true)}
+          onOpenSettings={() => openStationSetup('servers')}
+          onOpenSources={() => openStationSetup('sources')}
         />
         <CommandToast />
         {/* THE tooltip, mounted ONCE. Every control carrying a `title` inherits it
@@ -421,8 +426,12 @@ export function App(): JSX.Element {
           `ui/Tooltip.tsx`). */}
         <Tooltip />
         <AuditPanel open={auditOpen} onClose={() => setAuditOpen(false)} />
-        <ServerSettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
-        {sourcesOpen && <SourcesModal onClose={() => setSourcesOpen(false)} />}
+        <StationSetupDialog
+          open={stationSetup.open}
+          section={stationSetup.section}
+          requestId={stationSetup.requestId}
+          onClose={closeStationSetup}
+        />
         <LockOverlay
           engaged={lock.engaged}
           {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}

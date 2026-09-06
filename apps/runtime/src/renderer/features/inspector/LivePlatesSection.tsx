@@ -23,7 +23,7 @@ import { isOnAir } from '../stack/onAir.js';
  * D-137 / C-015 — bind each of THIS template's live plates to one of the
  * installation's sources.
  *
- * ── WHY IT IS HERE AND NOT IN THE LIVE SOURCES MODAL ────────────────────────
+ * ── WHY IT IS HERE AND NOT IN THE LIVE SOURCES SECTION OF STATION SETUP ─────
  *
  * It was there first, and the cost showed immediately: that dialog then did two
  * unrelated jobs — DEFINING the station's sources and BINDING every plate of
@@ -128,8 +128,9 @@ export function LivePlatesSection({
     rather than left standing.** BO built the owner's then-decision — that the Inspector must
     stop staging template-assignment edits for a looks template — and reverted it under its
     stop rule, because a sweep found this section is the ONLY surface in the product that binds
-    a plate to a source (`SourcesModal` DEFINES the station's sources and merely lists which
-    plates reference one; it has no picker). Removing the editor left the template-level default
+    a plate to a source (the Live sources section of Station setup — `SourcesSection`, once
+    `SourcesModal` — DEFINES the station's sources and merely lists which plates reference
+    one; it has no picker). Removing the editor left the template-level default
     with no door at all, and every FRESH row would start unbound with its take refused
     (`live-source-unassigned`). That finding stands. What changed is that it is no longer the
     thing holding `B-155` open.
@@ -143,7 +144,7 @@ export function LivePlatesSection({
 
     ⭐ So WHERE this control lives stopped being a correctness question and became a question of
     where an operator expects to find it. The direction is recorded in `tasks.md` 7.16b — the
-    template's own entry, NOT the Live sources modal, which is about defining the INPUTS and
+    template's own entry, NOT the Live sources section, which is about defining the INPUTS and
     has nothing to do with any particular template — and it is deliberately not this session's
     work.
 

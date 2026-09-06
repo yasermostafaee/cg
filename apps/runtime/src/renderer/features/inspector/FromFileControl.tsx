@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react';
+import { useSyncExternalStore } from 'react';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -11,7 +11,8 @@ import {
   listDelimiters,
   subscribeDelimiters,
 } from './delimiterStore.js';
-import { DelimitersModal, ManageDelimitersButton } from './DelimitersModal.js';
+import { ManageDelimitersButton } from './DelimitersSection.js';
+import { openStationSetup } from '../stationSetup/stationSetupStore.js';
 import { splitDefaultFor } from './fieldTargetStore.js';
 import { type FromFileFieldKind } from './fromFileContent.js';
 import { reloadFromFile, stageFromFile } from './fromFileOps.js';
@@ -101,7 +102,6 @@ export function FromFileControl({
   useSyncExternalStore(subscribeDelimiters, delimitersVersion);
   const state = fromFileState(item.itemId, path);
   const supported = fileSourceSupported();
-  const [managing, setManaging] = useState(false);
   const delimiters = listDelimiters();
 
   const choose = async (): Promise<void> => {
@@ -266,7 +266,9 @@ export function FromFileControl({
                   </option>
                 ))}
               </select>
-              <ManageDelimitersButton onOpen={() => setManaging(true)} />
+              {/* `STATION-SETUP-02` — a deep link into Station setup's Delimiters section,
+                  kept beside the picker because this is where the need is discovered. */}
+              <ManageDelimitersButton onOpen={() => openStationSetup('delimiters')} />
             </>
           )}
         </div>
@@ -280,7 +282,6 @@ export function FromFileControl({
           {state.error}
         </p>
       )}
-      {managing && <DelimitersModal onClose={() => setManaging(false)} />}
     </div>
   );
 }

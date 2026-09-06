@@ -2,10 +2,11 @@
 import { StrictMode, createElement, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectionHealth } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
-import { ServerSettingsPanel } from '../src/renderer/features/connections/ServerSettingsPanel.js';
+import { StationSetupDialog } from '../src/renderer/features/stationSetup/StationSetupDialog.js';
+import { stationSetupStub } from './support/stationSetup.js';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
 import { PositionPicker } from '../src/renderer/features/inspector/PositionPicker.js';
 import {
@@ -39,7 +40,7 @@ beforeEach(() => {
 afterEach(() => {
   container?.remove();
   container = null;
-  // `ServerSettingsPanel` is a portalled `Modal` now — clear the scrim so it cannot
+  // `StationSetupDialog` is a portalled `Modal` — clear the scrim so it cannot
   // leak into the next spec's queries.
   clearPortals();
   vi.restoreAllMocks();
@@ -257,55 +258,16 @@ describe('PositionPicker offsets — R-020', () => {
   });
 });
 
-describe('ServerSettingsPanel ports — R-020 (B-077 interaction)', () => {
-  function stubBridge(): { setConfig: Mock } {
-    const setConfig = vi.fn(() => Promise.resolve({ ok: true }));
-    const stub = {
-      connections: {
-        config: () =>
-          Promise.resolve({
-            servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
-            strategy: 'mirror-sync' as const,
-            autoFailoverEnabled: true,
-          }),
-        onConfigChanged: () => () => undefined,
-        setConfig,
-        // `B-223` — the panel carries the output check's technical section, which reads health.
-        health: () => Promise.resolve(null),
-        onHealthChanged: () => () => undefined,
-        // `C-024` — the panel reads what is IN FORCE on open; nothing is masked here.
-        templateServe: () =>
-          Promise.resolve({
-            serveHost: '127.0.0.1',
-            port: 0,
-            exposed: false,
-            unreachable: [],
-            flagOverrides: {},
-            candidates: [],
-          }),
-      },
-      stack: {
-        snapshot: () => Promise.resolve([]),
-        onStateChanged: () => () => undefined,
-      },
-      link: {
-        status: () => 'live' as const,
-        onStatusChanged: () => () => undefined,
-        resyncing: () => false,
-        onResyncingChanged: () => () => undefined,
-      },
-    };
-    (window as unknown as { cg: typeof stub }).cg = stub;
-    return { setConfig };
-  }
-
+describe('Station setup — Servers ports — R-020 (B-077 interaction)', () => {
   it('a Persian-typed port passes the numeric validation and submits canonical', async () => {
-    const { setConfig } = stubBridge();
-    await render(createElement(ServerSettingsPanel, { open: true, onClose: () => undefined }));
-    // The panel is built on the shared `Modal` now, which PORTALS to `document.body`,
-    // so the fields are not inside the mount container. Query the dialog itself.
+    // `STATION-SETUP-02` — the Servers form is a section of Station setup; the one shared
+    // stub supplies every section's bridge surface.
+    const { setConfig } = stationSetupStub();
+    await render(createElement(StationSetupDialog, { open: true, onClose: () => undefined }));
+    // The dialog PORTALS to `document.body`, so the fields are not inside the mount
+    // container. Query the dialog itself.
     const el = openDialog();
-    if (el === null) throw new Error('the server settings dialog did not open');
+    if (el === null) throw new Error('Station setup did not open');
     await setInput(inputByLabel(el, 'Primary AMCP port'), '۵۲۵۱');
     // The /^\d+$/ port rule sees Latin digits — no "must be an integer" refusal.
     expect(el.textContent).not.toContain('AMCP port must be an integer');

@@ -1182,7 +1182,7 @@ export class MockRuntime {
           simulate the cases where that derivation goes wrong (no LAN interface, a
           `--template-serve-host` typo) because it cannot see this machine's
           interfaces, so it declines to claim one. The panel's warning is exercised
-          in `serverSettingsPanel.dom.test.ts`, where the response can be arranged.
+          in `stationSetupServers.dom.test.ts`, where the response can be arranged.
         */
         unreachable: [],
       },

@@ -194,7 +194,7 @@ test('PVW marks every live plate, and the marker lands ON the hole', async ({ ap
 
 test('the two plate states are told apart WITHOUT reading the label', async ({ app }) => {
   const page = app.page;
-  const dialog = page.getByRole('dialog', { name: 'Live sources' });
+  const dialog = page.getByRole('dialog', { name: 'Station setup' });
   await page.setViewportSize({ width: 1600, height: 900 });
 
   await registerTwoBox(page);
@@ -210,10 +210,13 @@ test('the two plate states are told apart WITHOUT reading the label', async ({ a
   await expect(marker(page, 'guest-1')).toContainText('PLACEHOLDER');
 
   // Define a source, then BIND it to one plate through the Inspector.
-  await page.getByRole('button', { name: 'Open live sources' }).click();
+  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
   await dialog.getByLabel('New source name').fill('Studio A');
-  await dialog.getByRole('button', { name: 'Add' }).click();
-  await dialog.getByRole('button', { name: 'Done' }).click();
+  await dialog
+    .getByRole('region', { name: 'Live sources' })
+    .getByRole('button', { name: 'Add' })
+    .click();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
 
   await app.selectLayerRow(layer);
   const plates = app.inspector.locator('[aria-label="Live plates"]');

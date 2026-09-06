@@ -1521,7 +1521,7 @@ of `live-source-multibox`'s scope. **This item therefore stays `[~]` carrying ex
 more than usual: if [[C-019]] ships template audio before this is decided, every audio template
 authored in the meantime bakes in whichever behaviour the exporter allowed at the time.
 
-## [ ] R-030 — output placement must know the channel raster ⟨priority: medium⟩
+## [ ] R-030 — output placement must know the channel raster ⟨priority: medium⟩ — UI landed 2026-09-06: `Station setup ▸ Channel raster` (`STATION-SETUP-02`, `openspec/changes/station-setup/`) is the FIRST control `channelSettings.set` has had; before it the raster could be read (the mismatch banner) and written only by editing `channel-settings.json` by hand
 
 **What:** Give play-out placement the real channel geometry, and scale the stage to it. R-011's
 "author small, place anywhere" is already implemented — but against a **hardcoded 1920×1080
@@ -2671,7 +2671,7 @@ character and the same argument.
   spelling). The refusal and the fit chain live in `tools/caspar-bridge/src/live-plate-fit.ts`; see
   the pointer beside [[C-015]] in `caspar.md`.
 
-## [ ] R-054 — one SETTINGS shell for CG Control, and one layout for its panes ⟨priority: medium⟩
+## [~] R-054 — one SETTINGS shell for CG Control, and one layout for its panes ⟨priority: medium⟩ — PARTLY DELIVERED 2026-09-06 by `STATION-SETUP-02` (`openspec/changes/station-setup/`): ONE dialog, `Station setup`, with SECTIONS rather than tabs (a tab hides the section a refusal came from), every old entry point a deep link, each section's commit contract in a legend, the channel raster's first UI and a read-only Station layers section; NOT delivered — the sources table, the shared `Select`; Linux `gate:e2e` for the commit OWED
 
 **What:** one gear/settings entry point in CG Control opening ONE modal with tabs — at least
 **Configure** (candidate layers), **Sources** (live sources) and **Servers** (connections) — so

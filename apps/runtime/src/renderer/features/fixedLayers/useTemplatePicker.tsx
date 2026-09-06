@@ -175,16 +175,18 @@ const STALE_CARRIER_TITLE =
  *
  * A FRESHLY IMPORTED TEMPLATE HAS ALL OF THEM, and that is the ordinary state
  * rather than a fault: the author names plates for the layout, the installation
- * names its sources, and the two are joined by a deliberate action in Live
- * sources. This row is where the operator finds out that action is still owed —
- * before the take refuses, which is the other place they would find out.
+ * names its sources (Station setup ▸ Live sources), and the two are joined by a
+ * deliberate action in the Inspector's Live plates. This row is where the operator
+ * finds out that action is still owed — before the take refuses, which is the other
+ * place they would find out.
  *
  * It also covers the DELETION case with no extra state: retiring a source drops
  * the assignments it orphaned, so those plates simply read as needing one again.
  */
 const UNASSIGNED_TITLE =
-  'These live plates have no source yet. Open Live sources to assign one to each — until then ' +
-  'this template refuses its take, naming the plate.';
+  'These live plates have no source yet. Define the sources in Station setup ▸ Live sources, then ' +
+  'assign one to each plate in the Inspector — until then this template refuses its take, naming ' +
+  'the plate.';
 
 interface PickRequest {
   title: string;

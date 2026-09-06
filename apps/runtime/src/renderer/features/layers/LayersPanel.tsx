@@ -61,7 +61,7 @@ import {
   rowPlateAudioOf,
 } from './liveLayerRows.js';
 import { hasStationLayerOccupant } from './stationLayerOccupancy.js';
-import { FixedBankConfigModal } from '../fixedLayers/FixedBankConfigModal.js';
+import { openStationSetup } from '../stationSetup/stationSetupStore.js';
 
 interface Props {
   onSelectionChange: (itemId: string | null) => void;
@@ -291,7 +291,6 @@ export function LayersPanel({
   // from the row verbs refusing for the identical reason.
   const needsCasparReason = casparRefusalReason(linkDown, casparReach) ?? BRIDGE_DOWN_REASON;
   const [activeTab, setActiveTab] = useState('layers');
-  const [configOpen, setConfigOpen] = useState(false);
   const { confirm, confirmDialog } = useConfirm();
   /**
    * The table degrades on the width of the LIST, not the viewport: the operator
@@ -843,27 +842,23 @@ export function LayersPanel({
             REMOVE ALL
           </Button>
           {/*
-            CONFIGURE — offered whether or not a bank exists.
-
-            It used to be gated on `bank !== null`, which meant the ONE screen
-            that tells the operator to go and configure something was the one
-            screen with no way to do it. The modal is still honest about which
-            parts it cannot change (channel, start and count are fixed at
-            install), and says so in words rather than pointing at a control that
-            is not there.
+            CONFIGURE — offered whether or not a bank exists, and since `STATION-SETUP-02`
+            a DEEP LINK into Station setup's Candidate layers section rather than a dialog
+            of its own. It used to be gated on `bank !== null`, which meant the ONE screen
+            that tells the operator to go and configure something was the one screen with
+            no way to do it. The section is still honest about which parts it cannot change
+            (channel, start and count are fixed at install).
           */}
           {/* `neutral`, not `ghost`: a ghost has an icon button's tight padding, so
-              beside the bulk verbs it read as a label rather than a control. Neutral is
-              not invisible — a control still needs a boundary, a hover and a focus
-              ring, whatever colour it has been denied. */}
+              beside the bulk verbs it read as a label rather than a control. */}
           <Button
             variant="neutral"
             title={
               bank === null
-                ? 'No candidate layers are declared yet — see what the bridge needs'
-                : 'Show or hide rows, and name them'
+                ? 'No candidate layers are declared yet — see what the bridge needs (Station setup)'
+                : 'Show or hide rows, and name them (Station setup)'
             }
-            onClick={() => setConfigOpen(true)}
+            onClick={() => openStationSetup('candidate-layers')}
           >
             Configure
           </Button>
@@ -948,7 +943,7 @@ export function LayersPanel({
                 Once a range exists, <strong>Configure</strong> is where you show or hide individual
                 rows and give them names.
               </span>
-              <Button variant="secondary" onClick={() => setConfigOpen(true)}>
+              <Button variant="secondary" onClick={() => openStationSetup('candidate-layers')}>
                 What the bridge needs
               </Button>
             </div>
@@ -1241,9 +1236,6 @@ export function LayersPanel({
           <StationLayersPanel layers={playout} />
         )}
       </Tabs>
-      {configOpen && (
-        <FixedBankConfigModal bank={bank} slots={slots} onClose={() => setConfigOpen(false)} />
-      )}
       {confirmDialog}
     </Panel>
   );

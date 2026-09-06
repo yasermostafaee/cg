@@ -128,16 +128,16 @@ test.describe('C-029 — program output missing', () => {
     await expect(alert).toContainText('PROGRAM OUTPUT MISSING');
     await expect(alert).toContainText('CHANNEL 1 HAS NO DECKLINK OUTPUT');
     await expect(alert).toContainText('decklink (device 23487013)');
-    await expect(alert).toContainText('Server connection ▸ Outputs');
+    await expect(alert).toContainText('Station setup ▸ Outputs');
     // B-223 — the operator's line stops there; the engineering detail is not on the banner.
     await expect(alert).not.toContainText('restart CasparCG');
     // Every reachability signal is still true — the alarm coexists with a green pill.
     await expect(page.getByLabel('Status bar')).toContainText('HEALTHY');
 
     // B-223 — the technical surface carries what the banner dropped.
-    await page.getByRole('button', { name: 'Open server settings' }).click();
+    await page.getByRole('button', { name: 'Open Station setup at Servers' }).click();
     const outputs = page
-      .getByRole('dialog', { name: 'Server connection settings' })
+      .getByRole('dialog', { name: 'Station setup' })
       .getByRole('region', { name: 'Program outputs' });
     await expect(outputs).toContainText('decklink (device 23487013)');
     await expect(outputs).toContainText('Running: system-audio, screen');
@@ -168,9 +168,9 @@ test.describe('C-029 — program output missing', () => {
     await expect(page.getByRole('alert', { name: 'Program output missing' })).toHaveCount(0);
     await expect(page.getByRole('alert', { name: 'Program output unverified' })).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Open server settings' }).click();
+    await page.getByRole('button', { name: 'Open Station setup at Servers' }).click();
     const outputs = page
-      .getByRole('dialog', { name: 'Server connection settings' })
+      .getByRole('dialog', { name: 'Station setup' })
       .getByRole('region', { name: 'Program outputs' });
     await expect(outputs).toContainText('Channel 1 on server A');
     await expect(outputs).toContainText('Preview');

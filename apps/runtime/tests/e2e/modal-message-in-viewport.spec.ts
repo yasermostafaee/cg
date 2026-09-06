@@ -60,14 +60,17 @@ test('a refusal stays in the viewport when the modal body is scrolled away from 
   app,
 }) => {
   const page = app.page;
-  const dialog = page.getByRole('dialog', { name: 'Live sources' });
+  const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
-  await page.getByRole('button', { name: 'Open live sources' }).click();
+  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
   await expect(dialog).toBeVisible();
 
   for (const name of NAMES) {
     await dialog.getByLabel('New source name').fill(name);
-    await dialog.getByRole('button', { name: 'Add' }).click();
+    await dialog
+      .getByRole('region', { name: 'Live sources' })
+      .getByRole('button', { name: 'Add' })
+      .click();
   }
   await expect(dialog.locator('[data-source-id]')).toHaveCount(NAMES.length);
 
@@ -117,7 +120,7 @@ test('a refusal stays in the viewport when the modal body is scrolled away from 
   await expect(message).toBeInViewport({ ratio: 1 });
   // …and the action row it is pinned to is still reachable, which is the other
   // half of the same promise: a long message may not push Done off the bottom.
-  await expect(dialog.getByRole('button', { name: 'Done' })).toBeInViewport({ ratio: 1 });
+  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeInViewport({ ratio: 1 });
 
   // ── the negative control: this check can fail ──────────────────────────────
   // The last element INSIDE the scrolling body — where the refusal used to be

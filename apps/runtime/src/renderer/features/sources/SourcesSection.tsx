@@ -16,7 +16,7 @@ import {
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
-import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
+import type { ModalMessage } from '../../ui/Modal.js';
 import { Notice } from '../../ui/Notice.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { templateDisplayName } from '../library/templateName.js';
@@ -29,7 +29,8 @@ import {
 
 /**
  * D-137 / C-015 — the CG Control surface where an installation DEFINES its live
- * sources.
+ * sources. A SECTION of Station setup since `STATION-SETUP-02`; the status bar's
+ * SOURCES button opens the dialog at this section.
  *
  * ── ⭐ ONE JOB, AFTER THE 2026-08-10 CORRECTION ─────────────────────────
  *
@@ -41,10 +42,13 @@ import {
  * the template being bound. This surface briefly carried both, and two unrelated
  * jobs in one dialog is what that cost: six plates across two templates, none of
  * them the thing the operator opened this to do, and a scrollbar before the first
- * source existed. Selecting a template shows that template's plates; a global
- * list shows every plate in the station.
+ * source existed. `STATION-SETUP-02` §6 restates it for the move into one dialog:
+ * the CATALOG is installation-wide and the ASSIGNMENTS are per-template, and they
+ * are two shapes on two channels (`sources.set-config` / `sources.set-assignments`)
+ * in two files. This section touches the first and never the second —
+ * `stationSetupScope.dom.test.ts` asserts it.
  *
- * ── TWO BEHAVIOURS COPIED FROM `DelimitersModal`, DELIBERATELY ──────────────
+ * ── TWO BEHAVIOURS SHARED WITH THE DELIMITERS SECTION, DELIBERATELY ──────────
  *
  * - **No optimistic local update.** Every edit goes through the store, which
  *   adopts the value only once the bridge accepts it. The bridge can refuse (a
@@ -76,13 +80,11 @@ const styles = {
     padding: '0.6rem 0.7rem',
     fontSize: '0.82rem',
     color: colors.textMuted,
-    marginBottom: '0.6rem',
   },
   list: {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.5rem',
-    marginBottom: '0.7rem',
   },
   entry: {
     border: `1px solid ${colors.border}`,
@@ -96,12 +98,11 @@ const styles = {
   field: { display: 'flex', flexDirection: 'column' as const, gap: '0.15rem' },
   fieldLabel: { fontSize: '0.72rem', color: colors.textMuted },
   derived: { fontSize: '0.72rem', color: colors.textMuted, alignSelf: 'center' },
-  section: {
+  subsection: {
     borderTop: `1px solid ${colors.border}`,
     paddingTop: '0.6rem',
-    marginTop: '0.6rem',
   },
-  sectionTitle: {
+  subTitle: {
     fontSize: '0.74rem',
     fontWeight: 700,
     letterSpacing: '0.05em',
@@ -274,17 +275,20 @@ function RequiredText({
   );
 }
 
-export function SourcesModal({ onClose }: { onClose: () => void }): JSX.Element {
+export function SourcesSection({
+  report,
+}: {
+  report: (message: ModalMessage | null) => void;
+}): JSX.Element {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const catalog = currentSourceCatalog();
-  const [message, setMessage] = useState<ModalMessage | null>(null);
   const [newName, setNewName] = useState('');
   const [bandStart, setBandStart] = useState('');
   const [bandEnd, setBandEnd] = useState('');
   const [templates, setTemplates] = useState<readonly TemplateInfo[]>([]);
 
   // Pulled at OPEN, not subscribed: the catalogue is browser-local (B-085) and
-  // this dialog is short-lived. It is read for ONE purpose — turning the
+  // the dialog is short-lived. It is read for ONE purpose — turning the
   // cascade report's template IDS into the names the operator knows them by.
   useEffect(() => {
     let live = true;
@@ -303,16 +307,16 @@ export function SourcesModal({ onClose }: { onClose: () => void }): JSX.Element 
   }, []);
 
   const refuse = (text: string): void => {
-    setMessage({ role: 'refusal', text });
+    report({ role: 'refusal', text });
   };
 
   const commitCatalog = (next: SourceCatalog): void => {
     void commitSourceCatalog(next).then(({ refusal, droppedAssignments }) => {
       if (refusal !== null) {
-        setMessage({ role: 'refusal', ...refusal });
+        report({ role: 'refusal', ...refusal });
         return;
       }
-      setMessage(droppedAssignments.length === 0 ? null : describeDropped(droppedAssignments));
+      report(droppedAssignments.length === 0 ? null : describeDropped(droppedAssignments));
     });
   };
 
@@ -377,30 +381,12 @@ export function SourcesModal({ onClose }: { onClose: () => void }): JSX.Element 
   const band = catalog.layerRange;
 
   return (
-    <Modal
-      title="Live sources"
-      size="wide"
-      onClose={onClose}
-      {...(message !== null ? { message } : {})}
-      /*
-        `cancel`, not `primary` — the same reasoning as `Text file delimiters`: the catalog
-        and the band commit on their own controls (`commitCatalog`), so Done dismisses and
-        commits nothing. The label is unchanged; the role is what carries the treatment.
-      */
-      footer={
-        <ModalAction actionRole="cancel" onClick={onClose}>
-          Done
-        </ModalAction>
-      }
-    >
+    <>
       {/*
-        ONE line per section, attached to the thing it concerns — never a block of
-        prose above the form. The previous version's three paragraphs explained the
-        FEATURE, all of it true and none of it needed at the moment of acting;
-        sharing one muted grey, nothing on the surface stood out. What survives is
-        the fact that changes what the operator does.
+        ONE line per sub-heading, attached to the thing it concerns — never a block of
+        prose above the form. What survives is the fact that changes what the operator does.
       */}
-      <div style={styles.sectionTitle}>SOURCES</div>
+      <div style={styles.subTitle}>SOURCES</div>
       {catalog.sources.length === 0 ? (
         <div style={styles.empty} role="status">
           Nothing is defined yet — a template&rsquo;s live plate cannot be taken until it is
@@ -508,8 +494,8 @@ export function SourcesModal({ onClose }: { onClose: () => void }): JSX.Element 
         </Button>
       </div>
 
-      <div style={styles.section}>
-        <div style={styles.sectionTitle}>LAYER BAND</div>
+      <div style={styles.subsection}>
+        <div style={styles.subTitle}>LAYER BAND</div>
         <div style={styles.row}>
           <div style={styles.field}>
             <span style={styles.fieldLabel}>From</span>
@@ -538,10 +524,8 @@ export function SourcesModal({ onClose }: { onClose: () => void }): JSX.Element 
           </Button>
         </div>
         {/* The rule an operator needs BEFORE typing two numbers — that the band must
-            clear the candidate bank and the playout range — stays. What went is the
-            sentence promising that the bridge names both ranges on a clash: it does,
-            and that refusal is now legible in the pinned region, so saying it in
-            advance was one more grey paragraph competing with the thing it describes. */}
+            clear the candidate bank and the playout range — stays. The bridge names both
+            ranges on a clash, and that refusal is legible in the pinned region. */}
         <p style={styles.hint}>
           Placed below the template&rsquo;s own layer; must not overlap the candidate layer bank or
           the playout system&rsquo;s range.{' '}
@@ -550,7 +534,7 @@ export function SourcesModal({ onClose }: { onClose: () => void }): JSX.Element 
             : `Currently ${String(band.start)}–${String(band.end)}.`}
         </p>
       </div>
-    </Modal>
+    </>
   );
 }
 
@@ -594,8 +578,8 @@ function ProducerFields({
     optional = false,
   ): JSX.Element => (
     // A <div>, not a <label>: the caption sits beside the control and the
-    // accessible name comes from the input's own `aria-label` — the
-    // ServerSettingsPanel pattern, and the one the a11y rule can verify.
+    // accessible name comes from the input's own `aria-label` — the pattern the
+    // a11y rule can verify.
     <div style={styles.field}>
       <span style={styles.fieldLabel}>{label}</span>
       <NumericInput

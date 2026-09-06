@@ -55,10 +55,10 @@ async function registerTwoBox(app: { page: Page }): Promise<void> {
 
 test('sources: an installation defines its lives, and the modal binds nothing', async ({ app }) => {
   const page = app.page;
-  const dialog = page.getByRole('dialog', { name: 'Live sources' });
+  const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
   await registerTwoBox(app);
-  await page.getByRole('button', { name: 'Open live sources' }).click();
+  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
   await expect(dialog).toBeVisible();
 
   // NOTHING DEFINED is a real, common and important state, and it is said
@@ -73,7 +73,10 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   // Define a source. The bridge is authoritative; the modal adopts only what it
   // accepts, so seeing the row appear IS the round-trip.
   await dialog.getByLabel('New source name').fill('Studio A');
-  await dialog.getByRole('button', { name: 'Add' }).click();
+  await dialog
+    .getByRole('region', { name: 'Live sources' })
+    .getByRole('button', { name: 'Add' })
+    .click();
   await expect(dialog.getByText(/Nothing is defined yet/)).toHaveCount(0);
   // A fresh entry starts as a route, and the resolved form is shown in the
   // words the bridge will send.
@@ -118,7 +121,10 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   // A duplicate NAME is refused, and the refusal is a SENTENCE — never a wire
   // identifier and never a reason code.
   await dialog.getByLabel('New source name').fill('Studio A');
-  await dialog.getByRole('button', { name: 'Add' }).click();
+  await dialog
+    .getByRole('region', { name: 'Live sources' })
+    .getByRole('button', { name: 'Add' })
+    .click();
   await expect(dialog.getByText(/Another source already has that name/)).toBeVisible();
 
   // The band must be disjoint from the operator's candidate bank. The mock's
@@ -141,33 +147,36 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   // stored `keyDevice` survives with it — C-027 keeps the FIELD precisely so a
   // pair the operator already wrote is not deleted — and the not-sent sentence
   // comes back with it rather than being a one-shot toast at edit time.
-  await dialog.getByRole('button', { name: 'Done' }).click();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toBeHidden();
-  await page.getByRole('button', { name: 'Open live sources' }).click();
+  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
   await expect(dialog.getByText('DECKLINK DEVICE 1', { exact: true })).toBeVisible();
   await expect(dialog.getByLabel('Decklink key device for Studio A')).toHaveValue('2');
   await expect(
     dialog.getByText(/Key device 2 is stored, but it is not sent to CasparCG/),
   ).toBeVisible();
   await expect(dialog.getByText(/Currently 10–59/)).toBeVisible();
-  await dialog.getByRole('button', { name: 'Done' }).click();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
 });
 
 test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says which it freed', async ({
   app,
 }) => {
   const page = app.page;
-  const dialog = page.getByRole('dialog', { name: 'Live sources' });
+  const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
   await registerTwoBox(app);
 
   // Two sources to choose between, so the picker is a real choice.
-  await page.getByRole('button', { name: 'Open live sources' }).click();
+  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
   for (const name of ['Studio A', 'Baku']) {
     await dialog.getByLabel('New source name').fill(name);
-    await dialog.getByRole('button', { name: 'Add' }).click();
+    await dialog
+      .getByRole('region', { name: 'Live sources' })
+      .getByRole('button', { name: 'Add' })
+      .click();
   }
-  await dialog.getByRole('button', { name: 'Done' }).click();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
 
   // Load the template onto a row and select it — that is what shows its plates.
   const first = await app.loadTemplate(TWO_BOX);
@@ -216,13 +225,13 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   // Deleting a source that is in use is ALLOWED, CASCADES, and says at the
   // moment of deletion which plates it freed — an operator who learns at the
   // take is learning too late.
-  await page.getByRole('button', { name: 'Open live sources' }).click();
+  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
   await dialog.getByRole('button', { name: 'Remove Studio A' }).click();
   await expect(dialog.getByText(/need.* a new one/)).toBeVisible();
   // The template is named the way the operator knows it (the imported file
   // name, cleaned), never by its id.
   await expect(dialog.getByText(/two box \/ guest-1/)).toBeVisible();
-  await dialog.getByRole('button', { name: 'Done' }).click();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
 
   // …and the plate is back to needing a source, which is a state the whole
   // feature already handles, rather than a dangling binding nobody can see.
@@ -235,13 +244,16 @@ test('library: DELETE FROM STATION is a different verb from the row REMOVE, and 
   app,
 }) => {
   const page = app.page;
-  const dialog = page.getByRole('dialog', { name: 'Live sources' });
+  const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
   await registerTwoBox(app);
-  await page.getByRole('button', { name: 'Open live sources' }).click();
+  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
   await dialog.getByLabel('New source name').fill('Studio A');
-  await dialog.getByRole('button', { name: 'Add' }).click();
-  await dialog.getByRole('button', { name: 'Done' }).click();
+  await dialog
+    .getByRole('region', { name: 'Live sources' })
+    .getByRole('button', { name: 'Add' })
+    .click();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
 
   // Bind a plate, which is what makes this template the one the reported bug hit:
   // binding requires SELECTING the template, which requires LOADING it onto a row.

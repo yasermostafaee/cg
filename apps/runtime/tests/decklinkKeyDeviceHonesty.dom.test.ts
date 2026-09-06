@@ -5,7 +5,8 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CommandBuilder } from '@cg/caspar-bridge';
 import { checkSourceCatalog, type SourceCatalog, type SourceProducer } from '@cg/shared-ipc';
-import { SourcesModal } from '../src/renderer/features/sources/SourcesModal.js';
+import { StationSetupDialog } from '../src/renderer/features/stationSetup/StationSetupDialog.js';
+import { stationSetupStub } from './support/stationSetup.js';
 import { __resetSourcesForTest } from '../src/renderer/features/sources/sourceStore.js';
 import { clearPortals, openDialog } from './support/dialog.js';
 
@@ -59,26 +60,17 @@ afterEach(async () => {
 
 function stubBridge(): { sent: SourceCatalog[] } {
   const sent: SourceCatalog[] = [];
-  const stub = {
-    sources: {
-      config: () => Promise.resolve({ sources: [] }),
-      onConfigChanged: () => () => undefined,
-      setConfig: (next: SourceCatalog) => {
-        sent.push(next);
-        const verdict = checkSourceCatalog(next, { fixedBank: null, reservedLayers: [] });
-        return Promise.resolve(
-          verdict.ok
-            ? { ok: true }
-            : { ok: false, reason: verdict.reason, message: verdict.message },
-        );
-      },
-      assignments: () => Promise.resolve({ assignments: [] }),
-      onAssignmentsChanged: () => () => undefined,
-      setAssignments: () => Promise.resolve({ ok: true }),
+  // `STATION-SETUP-02` — the Live sources section lives in Station setup; the shared stub
+  // supplies every section, and this spec's real validator replaces the catalog writer.
+  stationSetupStub({
+    sourcesSetConfig: (next: SourceCatalog) => {
+      sent.push(next);
+      const verdict = checkSourceCatalog(next, { fixedBank: null, reservedLayers: [] });
+      return Promise.resolve(
+        verdict.ok ? { ok: true } : { ok: false, reason: verdict.reason, message: verdict.message },
+      );
     },
-    templates: { list: () => Promise.resolve([]) },
-  };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  });
   return { sent };
 }
 
@@ -95,13 +87,22 @@ async function renderModal(): Promise<HTMLElement> {
   const r = root;
   await act(async () => {
     r.render(
-      createElement(StrictMode, null, createElement(SourcesModal, { onClose: () => undefined })),
+      createElement(
+        StrictMode,
+        null,
+        createElement(StationSetupDialog, {
+          open: true,
+          section: 'sources',
+          onClose: () => undefined,
+        }),
+      ),
     );
     await Promise.resolve();
     await Promise.resolve();
   });
+  await settle();
   const dialog = openDialog();
-  if (dialog === null) throw new Error('the Live sources dialog did not open');
+  if (dialog === null) throw new Error('Station setup did not open');
   return dialog;
 }
 

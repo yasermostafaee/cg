@@ -1,21 +1,24 @@
 import { test, expect } from './fixtures/runtime.js';
 
 /**
- * R-010 — the server settings panel + Remove-All, driven against the offline
+ * R-010 — the Servers section of Station setup + Remove-All, driven against the offline
  * MockRuntime (which mirrors the bridge's on-air gate):
  *
- *   1. With an item ON AIR, the panel opens blocked (reason shown, Apply disabled).
+ *   1. With an item ON AIR, the dialog opens blocked (reason shown, APPLY SERVERS disabled).
  *   2. Remove-All (confirm accepted) clears the stack.
- *   3. Reopened, the panel is unblocked; a remote host shows the LAN-exposure
+ *   3. Reopened, the section is unblocked; a remote host shows the LAN-exposure
  *      warning and Apply round-trips.
+ *
+ * `STATION-SETUP-02` — the `Server connection` dialog became Station setup's Servers
+ * section; the panel locator is the one dialog and the button is its deep link.
  */
 
 test('settings panel: blocked while on air, Clear-All unblocks and the ROWS SURVIVE, remote-host apply round-trips', async ({
   app,
 }) => {
   const page = app.page;
-  const panel = page.getByRole('dialog', { name: 'Server connection settings' });
-  const openSettings = page.getByRole('button', { name: 'Open server settings' });
+  const panel = page.getByRole('dialog', { name: 'Station setup' });
+  const openSettings = page.getByRole('button', { name: 'Open Station setup at Servers' });
 
   // 1. Take an item to air, THEN open the panel → gate mirrored, Apply disabled.
   // R-028 part B — addressed by LAYER, not `.first()`: rows render newest-layer
@@ -96,7 +99,7 @@ test('settings panel: the serve address sits beside the server hosts, offers can
   app,
 }) => {
   const page = app.page;
-  const panel = page.getByRole('dialog', { name: 'Server connection settings' });
+  const panel = page.getByRole('dialog', { name: 'Station setup' });
 
   /*
     🔴 `R-017` / `B-228` — TAKE THE ROWS OFF AIR SO APPLY IS REACHABLE, AND THE REMEDY IS
@@ -133,7 +136,7 @@ test('settings panel: the serve address sits beside the server hosts, offers can
   const clearDialog = page.getByRole('dialog').filter({ hasText: /Clear/ });
   await clearDialog.getByRole('button', { name: /^Clear/ }).click();
 
-  await page.getByRole('button', { name: 'Open server settings' }).click();
+  await page.getByRole('button', { name: 'Open Station setup at Servers' }).click();
   await expect(panel).toBeVisible();
 
   /*
@@ -163,7 +166,7 @@ test('settings panel: the serve address sits beside the server hosts, offers can
 
   // The value survives a close/reopen — which is the whole point of giving it a stored layer.
   await panel.getByRole('button', { name: 'Cancel' }).click();
-  await page.getByRole('button', { name: 'Open server settings' }).click();
+  await page.getByRole('button', { name: 'Open Station setup at Servers' }).click();
   await expect(panel.getByLabel('Template serve host')).toHaveValue('192.168.21.93');
   await expect(panel.getByLabel('Template serve port')).toHaveValue('7911');
 });

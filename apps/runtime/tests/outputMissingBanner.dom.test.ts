@@ -134,7 +134,7 @@ describe('C-029 — the banner on the plant’s fixture', () => {
     expect(text).toContain('decklink (device 23487013)');
     expect(text).toContain('CasparCG is not running it');
     expect(text).toContain('The fix is on the playout machine');
-    expect(text).toContain('Server connection ▸ Outputs');
+    expect(text).toContain('Station setup ▸ Outputs');
   });
 
   it('is a strip like ConnectionBanner’s, not a fixed slab', async () => {
@@ -266,7 +266,7 @@ describe('C-029 — when the bridge cannot reach CasparCG', () => {
     expect(text).toContain('SERVER A IS UNREACHABLE');
     expect(text).toContain('WITHOUT ITS DECKLINK OUTPUT');
     expect(text).toMatch(/stays until the bridge can reach CasparCG/);
-    expect(text).toContain('Server connection ▸ Outputs');
+    expect(text).toContain('Station setup ▸ Outputs');
   });
 });
 

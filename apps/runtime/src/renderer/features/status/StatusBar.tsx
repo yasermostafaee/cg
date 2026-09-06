@@ -12,16 +12,16 @@ import { LinkIndicator } from './LinkIndicator.js';
 
 interface Props {
   onOpenAudit?: () => void;
-  /** R-010 — opens the server connection settings panel. */
+  /** R-010 / `STATION-SETUP-02` — opens Station setup at its Servers section. */
   onOpenSettings?: () => void;
   /**
-   * D-137 / C-015 — opens the Live Source mapping.
+   * D-137 / C-015 — opens Station setup at its Live sources section.
    *
-   * Beside SERVERS, and that placement is the point: both are INSTALLATION
-   * config that decides what a command does when it reaches CasparCG, and this
-   * one is the surface without which a template declaring a live source cannot
-   * be taken at all. It is not a per-row or per-field concern, so it does not
-   * belong beside a control the way the delimiter gear does.
+   * ⭐ The button STAYS, beside SERVERS, though both now open the same dialog: this is the
+   * section the operator opens most, and the surface without which a template declaring a
+   * live source cannot be taken at all. It is a DEEP LINK into one home, never a second
+   * surface. It is not a per-row or per-field concern, so it does not belong beside a
+   * control the way the delimiter gear does.
    */
   onOpenSources?: () => void;
 }
@@ -512,12 +512,20 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
         ⇄ FAILOVER
       </AsyncButton>
       {onOpenSettings !== undefined && (
-        <Button onClick={onOpenSettings} aria-label="Open server settings">
+        <Button
+          onClick={onOpenSettings}
+          aria-label="Open Station setup at Servers"
+          title="Station setup — Servers"
+        >
           SERVERS
         </Button>
       )}
       {onOpenSources !== undefined && (
-        <Button onClick={onOpenSources} aria-label="Open live sources">
+        <Button
+          onClick={onOpenSources}
+          aria-label="Open Station setup at Live sources"
+          title="Station setup — Live sources"
+        >
           SOURCES
         </Button>
       )}

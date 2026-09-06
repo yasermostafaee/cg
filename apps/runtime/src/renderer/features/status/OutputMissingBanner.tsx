@@ -37,7 +37,7 @@ import { missingWords } from '../connections/outputWords.js';
  *    one line per channel names the declared thing, says CasparCG is not running it, and says
  *    where the fix is. The engineering detail — which addressing form the number is, the rule
  *    CasparCG reads it by, the startup-log recipe, the creation outcome, "do not power-cycle" —
- *    lives on the technical surface: `OutputsSection` in the Server connection dialog.
+ *    lives on the technical surface: `OutputsSection` in the Station setup dialog.
  *
  * ── THE SURFACE, AND WHY THIS ONE ───────────────────────────────────────────
  *
@@ -94,7 +94,7 @@ const styles = {
 } as const;
 
 /** Where the engineering detail lives — named on the one line, so the operator can hand it on. */
-export const OUTPUT_DETAIL_POINTER = 'Details: Server connection ▸ Outputs.';
+export const OUTPUT_DETAIL_POINTER = 'Details: Station setup ▸ Outputs.';
 
 export function OutputMissingBanner(): JSX.Element | null {
   const health = useConnections();

@@ -53,8 +53,9 @@ There are exactly two ways out, and both are safe:
 A row that reads BLOCKED for longer than you expect is a question for whoever owns the
 other system, not a fault of the Runtime.
 
-The header's **Configure** opens the bank settings: **aliases** and each row's
-**visibility** tick can change live. The channel, the start layer and the COUNT are all
+The header's **Configure** opens **Station setup** at its Candidate layers section — the one
+settings dialog, also reached from the status bar's SERVERS and SOURCES: **aliases** and each
+row's **visibility** tick can change live, applied by the section's own button. The channel, the start layer and the COUNT are all
 fixed at install and cannot change mid-session — the set of candidate layers is an
 agreement with whoever else uses the machine, so it is not something to renegotiate during
 a show. A refused change tells you the rule it broke and the specific layers involved. A
@@ -161,8 +162,8 @@ difference between the two.
 
 **The banner is one line for the operator.** It names the channel, the declared consumer and its
 device (`decklink (device 23487013)`), says CasparCG is not running it, and says the fix is on the
-playout machine. Everything an engineer needs to make that fix is in **Server connection ▸ Outputs**
-(the server-settings dialog, opened from the status bar): what each channel declares and runs, when
+playout machine. Everything an engineer needs to make that fix is in **Station setup ▸ Outputs**
+(the settings dialog, opened from the status bar's SERVERS): what each channel declares and runs, when
 it was last checked, **which kind of number the declaration is** — a hardware persistent ID (a long
 number) or a slot index (a small number such as `1`) — how CasparCG reads it, where the number comes
 from, and what the bridge's own re-creation attempt answered, if the flag is on. **The next action
@@ -175,8 +176,8 @@ playout box over it — the server is UP.
 **A stopped preview is not an alarm.** `<screen />` is a preview window on the playout machine's own
 display and `<system-audio />` is that machine's own sound device; neither reaches air. When one of
 them is declared and not running — the screen consumer closed by hand, say — **nothing lights for
-the operator**: no banner, no disabled control, no failover. The fact is noted in Server connection
-▸ Outputs as a preview row, and in the bridge's log as a plain line, and that is all. Any consumer
+the operator**: no banner, no disabled control, no failover. The fact is noted in Station setup ▸
+Outputs as a preview row, and in the bridge's log as a plain line, and that is all. Any consumer
 kind this console does not recognise is treated as a program output, so a new kind can only make
 the console louder, never quieter.
 

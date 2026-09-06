@@ -22,7 +22,7 @@ import { templateDisplayName } from '../features/library/templateName.js';
  *     per row. The row's name was `Bed 1` and the template's was `3ghab`.
  *   - **`B-223`** — the program-output alarm put persistent ids, slot indexes and
  *     driver names in front of the operator; the engineering moved to
- *     `Server connection ▸ Outputs` and the alarm kept one line.
+ *     `Station setup ▸ Outputs` (then `Server connection ▸ Outputs`) and the alarm kept one line.
  *   - **`useTemplateIndex`'s own header** — "the stack row and the Inspector kept
  *     printing the raw `templateId`", fixed by joining against the registry.
  *   - **`B-232`** — the emptied-air notice listed
