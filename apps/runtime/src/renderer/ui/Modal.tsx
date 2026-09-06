@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import { colors } from '../theme.js';
+import { colors, cssVars } from '../theme.js';
 import { Button, type ButtonVariant } from './Button.js';
 import { useFocusTrap } from './focusTrap.js';
 import { Icon } from './Icon.js';
@@ -58,7 +58,7 @@ const styles = {
   scrim: {
     position: 'fixed' as const,
     inset: 0,
-    background: 'rgba(0, 0, 0, 0.6)',
+    background: cssVars['--r-modal-scrim'],
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -69,7 +69,7 @@ const styles = {
     background: colors.panel,
     border: `1px solid ${colors.border}`,
     borderRadius: '0.4rem',
-    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)',
+    boxShadow: cssVars['--r-shadow-2'],
     padding: '1rem 1.25rem',
     display: 'flex',
     flexDirection: 'column' as const,

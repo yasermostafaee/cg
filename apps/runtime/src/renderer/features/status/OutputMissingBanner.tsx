@@ -4,7 +4,7 @@ import {
   outputVerdictOf,
   type ServerHealth,
 } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useLink } from '../../hooks/useLink.js';
 import { missingWords } from '../connections/outputWords.js';
@@ -79,7 +79,7 @@ const styles = {
     fontSize: '0.8rem',
     fontWeight: 700,
     letterSpacing: '0.04em',
-    color: '#FFFFFF',
+    color: cssVars['--r-ink-on-fill'],
     background: colors.error,
     flexShrink: 0,
   },

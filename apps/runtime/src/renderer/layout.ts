@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { colors } from './theme.js';
+import { colors, cssVars } from './theme.js';
 
 /**
  * The app shell's layout contract: the PAGE never scrolls, each PANEL does.
@@ -119,7 +119,7 @@ export const appShell = {
   overlayScrim: {
     position: 'fixed' as const,
     inset: 0,
-    background: 'rgba(0, 0, 0, 0.45)',
+    background: cssVars['--r-scrim'],
     zIndex: 800,
   },
   overlayPanel: {
@@ -133,7 +133,7 @@ export const appShell = {
     zIndex: 801,
     display: 'flex',
     flexDirection: 'column' as const,
-    boxShadow: '-8px 0 24px rgba(0, 0, 0, 0.45)',
+    boxShadow: cssVars['--r-shadow-drawer'],
   },
   fixedPanel: {
     display: 'flex',

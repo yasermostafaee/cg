@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import { CircleDot, TriangleAlert } from 'lucide-react';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
 import {
   ROW_GEOMETRY,
@@ -101,7 +101,7 @@ const styles = {
     // because it is this header's own colour — it is deliberately lighter than
     // both row backgrounds so the sticky band reads as a lid on the list rather
     // than as one more row of it.
-    background: 'rgb(45 55 69)',
+    background: cssVars['--r-table-head-bg'],
     borderBottom: `1px solid ${colors.border}`,
     fontSize: '0.62rem',
     fontWeight: 700,

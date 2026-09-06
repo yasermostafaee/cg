@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { colors } from '../theme.js';
+import { colors, cssVars } from '../theme.js';
 
 /**
  * THE ONE SPELLING OF A MESSAGE TREATMENT IN THE RUNTIME.
@@ -48,9 +48,9 @@ export type NoticeRole = 'refusal' | 'notice';
 
 const ROLE_STYLE: Record<NoticeRole, CSSProperties> = {
   refusal: {
-    border: '1px solid #B45309',
-    background: 'rgba(180, 83, 9, 0.12)',
-    color: '#FCD34D',
+    border: `1px solid ${cssVars['--r-notice-line']}`,
+    background: cssVars['--r-notice-fill'],
+    color: cssVars['--r-caution-text'],
   },
   notice: {
     border: `1px solid ${colors.border}`,

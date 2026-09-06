@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { LucideIcon } from 'lucide-react';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
 import { Panel } from '../../ui/Panel.js';
 import type { PanelId } from '../../hooks/useShellLayout.js';
@@ -51,7 +51,7 @@ const styles = {
   screen: {
     flex: 1,
     minHeight: 0,
-    background: '#000',
+    background: cssVars['--r-video-ground'],
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'center',

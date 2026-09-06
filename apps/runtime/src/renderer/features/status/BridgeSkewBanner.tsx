@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 
 /**
  * 🔴 **`B-153` — THE BRIDGE IS OLDER THAN THIS PAGE, SAID AT CONNECT.**
@@ -37,7 +37,7 @@ const styles = {
     fontSize: '0.8rem',
     fontWeight: 700,
     letterSpacing: '0.04em',
-    color: '#0B0B0C',
+    color: cssVars['--r-ink-on-band'],
     background: colors.pending,
     flexShrink: 0,
   },

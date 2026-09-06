@@ -1,5 +1,5 @@
 import type { EmptiedAirNotice as Notice, EmptiedAirRefusal } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
@@ -15,15 +15,15 @@ interface Props {
 
 const styles = {
   strip: {
-    border: '1px solid #B45309',
-    background: 'rgba(180, 83, 9, 0.12)',
+    border: `1px solid ${cssVars['--r-notice-line']}`,
+    background: cssVars['--r-notice-fill'],
     borderRadius: '0.25rem',
     padding: '0.5rem 0.75rem',
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.4rem',
     fontSize: '0.85rem',
-    color: '#FCD34D',
+    color: cssVars['--r-caution-text'],
   },
   row: {
     display: 'flex',
@@ -34,7 +34,7 @@ const styles = {
   actions: { display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0 },
   detail: { color: colors.text, fontSize: '0.78rem' },
   rows: { color: colors.text, fontSize: '0.78rem', margin: 0, paddingInlineStart: '1.1rem' },
-  refusal: { color: '#FCD34D' },
+  refusal: { color: cssVars['--r-caution-text'] },
   /**
    * `B-232` — the layer coordinate, QUIET but present.
    *

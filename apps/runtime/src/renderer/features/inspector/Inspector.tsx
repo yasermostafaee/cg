@@ -56,6 +56,13 @@ function fieldClass(dirty: boolean): string {
 const ID_STUB_LENGTH = 6;
 
 /**
+ * What a `color` field shows when the template gave it no value. It is the
+ * OPERATOR'S DATA, not this console's chrome, which is why it is a plain constant
+ * here rather than a `--r-*` token — see the note at its use.
+ */
+const DEFAULT_COLOR_FIELD_VALUE = '#FFFFFF';
+
+/**
  * ⭐ R-040's CLASS, ARRIVING ON A SECOND SURFACE — a display label derived from a
  * non-unique human name, with the unique key present but hidden.
  *
@@ -818,7 +825,11 @@ function FieldControl({
     return <NumberField value={value} fieldId={fieldId} dirty={dirty} onStage={onStage} />;
   }
   if (kind === 'color') {
-    const v = typeof value === 'string' ? value : '#FFFFFF';
+    // NOT CHROME, AND DELIBERATELY NOT A TOKEN (STATION-CHROME-01 §1): this is the
+    // fallback VALUE of a template's own colour field — the operator's data, headed
+    // for the graphic on air. A theme token here would put the console's palette
+    // inside the broadcast, and would move the graphic the day the palette moved.
+    const v = typeof value === 'string' ? value : DEFAULT_COLOR_FIELD_VALUE;
     return (
       <input
         type="color"

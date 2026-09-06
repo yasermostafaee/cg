@@ -489,7 +489,7 @@ export function SourcesSection({
             onChange={(e) => setNewName(e.target.value)}
           />
         </label>
-        <Button variant="secondary" onClick={addSource}>
+        <Button variant="add" onClick={addSource}>
           Add
         </Button>
       </div>

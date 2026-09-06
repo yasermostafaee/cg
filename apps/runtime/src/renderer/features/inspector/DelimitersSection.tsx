@@ -116,7 +116,7 @@ export function DelimitersSection({
             placeholder="\t"
           />
         </label>
-        <Button variant="secondary" onClick={() => void add()}>
+        <Button variant="add" onClick={() => void add()}>
           Add
         </Button>
         {/*

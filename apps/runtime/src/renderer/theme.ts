@@ -140,6 +140,23 @@ export const colors = {
  * flash. Same family, different jobs — and they keep separate names so a tweak to
  * one cannot silently move the other.
  */
+/*
+ * ── SHARED BASE VALUES ──────────────────────────────────────────────────────
+ *
+ * Module-private, and never referenced by a component: a component reads a ROLE.
+ * These exist only so two roles that genuinely share a value today share one
+ * declaration — the indirection the naming rule explicitly allows. Adding a role
+ * here does not make it a palette: nothing outside this file can name them.
+ */
+/** White, as the ink on any saturated fill dark enough to take it. */
+const INK_LIGHT = '#FFFFFF';
+/** The near-black ink a BRIGHT fill takes — the verb hovers, the file chip. */
+const INK_DEEP = '#10151F';
+/** The interactive sky. `--r-accent`'s value, shared with the Add role. */
+const ACCENT_SKY = '#38BDF8';
+/** Amber as TEXT on a dark ground. */
+const CAUTION_TEXT = '#FCD34D';
+
 export const cssVars = {
   // Semantic colors
   '--r-surface': chrome.panel,
@@ -149,7 +166,7 @@ export const cssVars = {
   '--r-border-strong': '#4B5563',
   '--r-text': chrome.text,
   '--r-text-muted': chrome.textMuted,
-  '--r-accent': '#38BDF8', // sky — interactive / secondary
+  '--r-accent': ACCENT_SKY, // sky — interactive / secondary
   '--r-accent-strong': '#0EA5E9',
   /**
    * R-055 — the sky's HOVER weight, LIGHTER than `--r-accent`.
@@ -365,6 +382,126 @@ export const cssVars = {
    * a lighter panel darkens the corners until the thing stops reading as ONE rectangle.
    */
   '--r-splash-vignette': 'rgba(0, 0, 0, 0.22)',
+  /*
+   * ── STATION-CHROME-01 §1 — THE ROLES THAT USED TO BE LITERALS ────────────────
+   *
+   * Everything below was, until this change, a bare hex or `rgba()` spelled inside
+   * `controls.css` rules and inside component `style={{…}}` objects: 120 of them
+   * across 23 files. A value with no home has no reviewer, which is how `57ca77d3`
+   * shipped a wash nobody chose.
+   *
+   * They are named by ROLE — what the colour is FOR — never by value. `--r-btn-add-*`
+   * answers "what colour are the Add buttons?"; `--r-blue-500` never could.
+   *
+   * NOT ONE VALUE CHANGED when they moved here. Where two roles share a value today
+   * they each keep their own NAME and point at the same base constant below, so a
+   * future retune of one cannot drag the other along silently.
+   */
+
+  // The inks a FILLED control needs, each tinted to the fill it sits on.
+  '--r-ink-on-fill': INK_LIGHT,
+  '--r-ink-on-accent': '#04121F',
+  '--r-ink-on-caution': '#1C1207',
+  '--r-ink-on-verb': INK_DEEP,
+  /** The dark ink on the caution BAND (the connection / bridge-skew banners). */
+  '--r-ink-on-band': '#0B0B0C',
+  /** DANGER as TEXT on a dark ground — the outlined Remove, the error badge. */
+  '--r-danger-text': '#FCA5A5',
+  /** CAUTION as TEXT on a dark ground — a notice's ink, the audit log's timeout. */
+  '--r-caution-text': CAUTION_TEXT,
+  '--r-caution-hover': '#D97706',
+  /** OK as TEXT on a dark ground — the audit log's succeeded outcome. */
+  '--r-ok-text': '#86EFAC',
+
+  /*
+   * THE ADD BUTTONS — the owner's own acceptance test for this section:
+   * «if later we want to change the colour of the Add buttons, we change one
+   * colour, in one obvious place.» That place is `--r-btn-add`, and it is the ONE
+   * declaration that moves every Add button in the app.
+   *
+   * It is deliberately NOT `--r-accent`. Before this change an Add button was a
+   * plain `secondary`, so "the Add colour" and "every secondary control's colour"
+   * were the same declaration and the owner's edit was impossible to express. The
+   * value is `--r-accent`'s TODAY — no pixel moved — but the NAME is now separate,
+   * which is the entire point.
+   */
+  '--r-btn-add': ACCENT_SKY,
+  '--r-btn-add-bg': chrome.panelMuted,
+
+  // Control chrome — the hover weights a neutral control lifts to.
+  '--r-control-hover-bg': '#2C3A4E',
+  '--r-control-hover-line': '#64748B',
+  /** A ticked checkbox under the pointer — the sky's own lift, see `--r-accent-lift`. */
+  '--r-toggle-on-hover': '#6DD3FB',
+
+  // The layer table's grounds.
+  '--r-row-bg': 'rgb(30 38 51)',
+  '--r-row-empty-bg': '#10141E',
+  '--r-row-selected-fill': 'rgba(56, 189, 248, 0.1)',
+  /**
+   * 🔴 THE OWNER'S MARKED-ROW FILL. `rgb(145 93 5)`, tuned by hand, and it moved
+   * here BYTE FOR BYTE — `emptiedAirRowContrast.dom.test.ts` still measures
+   * `colors.markedRowInk` at 5.06:1 and the edge bars at 3.86:1 against this exact
+   * value, resolved through the token. A "tidier" nearby amber is a regression.
+   */
+  '--r-row-marked-fill': 'rgb(145 93 5)',
+  /** The marked row's two edge bars. Its own name, not `--r-caution-text`'s: R2
+   * measured 3.86:1 against the fill above and that ratio is a property of THIS pair. */
+  '--r-row-marked-edge': CAUTION_TEXT,
+  '--r-table-head-bg': 'rgb(45 55 69)',
+
+  // Washes, scrims and shadows — the sky at low alpha, and black at several.
+  '--r-focus-halo': 'rgba(56, 189, 248, 0.35)',
+  '--r-menu-hover-fill': 'rgba(56, 189, 248, 0.16)',
+  '--r-divider-drag-fill': 'rgba(56, 189, 248, 0.22)',
+  '--r-scrim': 'rgba(0, 0, 0, 0.45)',
+  '--r-modal-scrim': 'rgba(0, 0, 0, 0.6)',
+  '--r-lock-scrim': 'rgba(15, 23, 42, 0.94)',
+  '--r-shadow-menu': '0 4px 16px rgba(0, 0, 0, 0.45)',
+  '--r-shadow-drawer': '-8px 0 24px rgba(0, 0, 0, 0.45)',
+
+  // NOTICES — the amber-bordered advisory the app uses in five places.
+  '--r-notice-line': '#B45309',
+  '--r-notice-fill': 'rgba(180, 83, 9, 0.12)',
+
+  // THE FAILOVER ALARM — its own deep red family, louder than `--r-error`.
+  '--r-alarm-bg': '#7F1D1D',
+  '--r-alarm-ink': '#FEF2F2',
+  '--r-alarm-line': '#B91C1C',
+  '--r-alarm-ink-line': 'rgba(254, 242, 242, 0.4)',
+  '--r-alarm-ink-line-strong': 'rgba(254, 242, 242, 0.5)',
+
+  // THE COMMAND TOAST's acknowledged form.
+  '--r-toast-ok-bg': '#065F46',
+  '--r-toast-ok-ink': '#ECFDF5',
+
+  // THE CONNECTION BAND's hazard stripe.
+  '--r-band-stripe-a': '#F5C451',
+  '--r-band-stripe-b': '#E0A92E',
+
+  // THE FILE CHIP — a light pill on the dark chrome (the Inspector's from-file mark).
+  '--r-file-chip-bg': '#E6EBF0',
+  '--r-file-chip-ink': INK_DEEP,
+  '--r-file-chip-detach-bg': '#55606C',
+  '--r-file-chip-detach-ink': '#F2F5F8',
+
+  /*
+   * VIDEO SURFACES — what a picture sits on, and what stands in for one.
+   *
+   * `--r-video-ground` is BLACK and must stay black: it is the ground a real
+   * broadcast picture is composited on, so anything else would tint the operator's
+   * reference. The checkers are the "no picture here" stand-in behind a rehearsal
+   * plate, and the hatch is the "this plate is not in this look" fill.
+   */
+  '--r-video-ground': '#000',
+  '--r-checker-a': '#3D4253',
+  '--r-checker-b': '#5B6075',
+  '--r-plate-hatch': 'rgba(0, 0, 0, 0.34)',
+  '--r-plate-chip-bg': 'rgba(0, 0, 0, 0.78)',
+  '--r-plate-ink': '#FFFFFF',
+  '--r-plate-ink-dim': 'rgba(255, 255, 255, 0.72)',
+  '--r-plate-outline': 'rgba(255, 255, 255, 0.85)',
+
   // Spacing (4px base)
   '--r-space-1': '4px',
   '--r-space-2': '8px',
@@ -405,6 +542,40 @@ export const cssVars = {
   '--r-dur-med': '200ms',
   '--r-dur-spin': '700ms',
 } as const;
+
+/** The `<style>` element `applyThemeVars` owns. Named so a second call replaces it. */
+const THEME_STYLE_ID = 'cg-theme-vars';
+
+/**
+ * ── STATION-CHROME-01 §1 — HOW THE ONE HOME REACHES THE STYLESHEET ──────────
+ *
+ * `controls.css` used to REPEAT every value in its own `:root` block, with a parity
+ * test asserting the two copies matched. That is what actually defeated the owner's
+ * acceptance test: the values agreed, but changing one still meant editing TWO
+ * files, and a test that only proves two copies are equal is not a single home —
+ * it is a well-guarded duplicate.
+ *
+ * So `controls.css` no longer declares any of them. This writes the `:root` block
+ * from `cssVars` into a `<style>` in the document head, once, before the first
+ * render. The stylesheet reads `var(--r-*)`; TypeScript reads `cssVars`; the value
+ * itself is written exactly once, here.
+ *
+ * ⚠ MUST RUN BEFORE THE FIRST RENDER, and `main.tsx` calls it at module scope for
+ * that reason (`themeVarsApplied.dom.test.ts` pins the call). No app element exists
+ * before `createRoot().render()`, so no app pixel can paint without the tokens. The
+ * startup splash is unaffected either way: it lives in `index.html`, paints before
+ * the bundle, and mirrors its own values as documented literals (`splashCss.test.ts`).
+ */
+export function applyThemeVars(root: HTMLElement, doc: Document = root.ownerDocument): void {
+  const body = Object.entries(cssVars)
+    .map(([name, value]) => `  ${name}: ${value};`)
+    .join('\n');
+  const existing = doc.getElementById(THEME_STYLE_ID);
+  const style = existing instanceof HTMLStyleElement ? existing : doc.createElement('style');
+  style.id = THEME_STYLE_ID;
+  style.textContent = `:root {\n${body}\n}\n`;
+  if (existing === null) doc.head.append(style);
+}
 
 /**
  * Badge "tone" for a stack status — the `StatusBadge` maps this to a CSS class so

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { onCommandError, onCommandSuccess } from './commandFeedback.js';
 
 const styles = {
@@ -13,19 +13,19 @@ const styles = {
     fontSize: '0.85rem',
     fontWeight: 700,
     zIndex: 50,
-    boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+    boxShadow: cssVars['--r-shadow-2'],
   },
   error: {
     background: colors.error,
-    color: '#FEF2F2',
+    color: cssVars['--r-alarm-ink'],
     border: `1px solid ${colors.error}`,
   },
   // Green success, mirroring the error toast's dark-bg / light-text weight.
   // `#10B981` is the `--r-success` token (ack / healthy).
   success: {
-    background: '#065F46',
-    color: '#ECFDF5',
-    border: '1px solid #10B981',
+    background: cssVars['--r-toast-ok-bg'],
+    color: cssVars['--r-toast-ok-ink'],
+    border: `1px solid ${cssVars['--r-success']}`,
   },
 } as const;
 

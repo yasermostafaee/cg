@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ConnectionHealth, FailoverInfo } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
+import { cssVars } from '../../theme.js';
 
 interface Props {
   health: ConnectionHealth | null;
@@ -13,8 +14,8 @@ const styles = {
     left: 0,
     right: 0,
     padding: '0.4rem 1rem',
-    background: '#7F1D1D',
-    color: '#FEF2F2',
+    background: cssVars['--r-alarm-bg'],
+    color: cssVars['--r-alarm-ink'],
     fontSize: '0.82rem',
     fontWeight: 600,
     letterSpacing: '0.04em',
@@ -23,17 +24,17 @@ const styles = {
     justifyContent: 'space-between',
     gap: '0.75rem',
     zIndex: 800,
-    borderBottom: '1px solid #B91C1C',
+    borderBottom: `1px solid ${cssVars['--r-alarm-line']}`,
   },
   chip: {
     padding: '0.1rem 0.5rem',
     borderRadius: '0.7rem',
-    border: '1px solid rgba(254, 242, 242, 0.4)',
+    border: `1px solid ${cssVars['--r-alarm-ink-line']}`,
     fontSize: '0.7rem',
   },
   // Dismiss keeps the banner's light-on-red palette; the Button primitive adds
   // the hover / active / focus-visible states on top.
-  dismiss: { color: '#FEF2F2', borderColor: 'rgba(254, 242, 242, 0.5)' },
+  dismiss: { color: cssVars['--r-alarm-ink'], borderColor: cssVars['--r-alarm-ink-line-strong'] },
 } as const;
 
 /**

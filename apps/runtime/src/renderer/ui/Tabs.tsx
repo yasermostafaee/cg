@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { colors } from '../theme.js';
+import { colors, cssVars } from '../theme.js';
 
 /**
  * R-028 part B — a minimal tab strip, for the Layers / Playout split.
@@ -94,7 +94,7 @@ const styles = {
     width: '0.55rem',
     height: '0.55rem',
     borderRadius: '50%',
-    background: '#FCD34D',
+    background: cssVars['--r-caution-text'],
     flexShrink: 0,
   },
 } as const satisfies Record<string, CSSProperties>;

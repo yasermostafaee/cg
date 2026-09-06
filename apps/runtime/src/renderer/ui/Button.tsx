@@ -19,6 +19,11 @@ export type ButtonVariant =
   | 'play'
   | 'primary'
   | 'secondary'
+  /**
+   * ADD — every "add a thing to this list" control. Its own variant so its colour
+   * is its own declaration (`--r-btn-add`); see `.cg-btn--add` in `controls.css`.
+   */
+  | 'add'
   | 'accent'
   | 'commit'
   | 'caution'
@@ -34,6 +39,7 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   play: 'cg-btn--play',
   primary: 'cg-btn--primary',
   secondary: 'cg-btn--secondary',
+  add: 'cg-btn--add',
   accent: 'cg-btn--accent',
   commit: 'cg-btn--commit',
   caution: 'cg-btn--caution',
@@ -62,6 +68,9 @@ export const VARIANT_ACCENT: Record<ButtonVariant, string | undefined> = {
   play: cssVars['--r-onair'],
   primary: cssVars['--r-accent-strong'],
   secondary: cssVars['--r-accent'],
+  // ADD reads its OWN token, never `--r-accent` — that separation is the point of
+  // the variant, and a right-click item mirroring an Add must move with the button.
+  add: cssVars['--r-btn-add'],
   // THE ACCENTED ACTION — the sky the filled variant is built from, so a
   // right-click item mirroring one of these three reads as the same control.
   accent: cssVars['--r-accent'],

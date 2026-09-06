@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { useFocusTrap } from '../../ui/focusTrap.js';
 import { normalizeDigits } from '../../ui/NumericInput.js';
@@ -19,7 +19,7 @@ const styles = {
   scrim: {
     position: 'fixed' as const,
     inset: 0,
-    background: 'rgba(15, 23, 42, 0.94)',
+    background: cssVars['--r-lock-scrim'],
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',

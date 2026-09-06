@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { OperatorNames } from '../../ui/OperatorNames.js';
 import { operatorRowName } from '../../ui/operatorNaming.js';
@@ -21,15 +21,15 @@ interface Props {
 
 const styles = {
   strip: {
-    border: '1px solid #B45309',
-    background: 'rgba(180, 83, 9, 0.12)',
+    border: `1px solid ${cssVars['--r-notice-line']}`,
+    background: cssVars['--r-notice-fill'],
     borderRadius: '0.25rem',
     padding: '0.5rem 0.75rem',
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.4rem',
     fontSize: '0.85rem',
-    color: '#FCD34D',
+    color: cssVars['--r-caution-text'],
   },
   // R-015 — the neutral strip: an occupied-but-not-ours VIDEO layer is a
   // normal fact of the console, not a problem. Surface tones only (never

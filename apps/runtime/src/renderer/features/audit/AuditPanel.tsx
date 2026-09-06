@@ -7,7 +7,7 @@ import {
   type FixedLayerBank,
   type TemplateInfo,
 } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -153,10 +153,10 @@ const styles = {
   emptyFault: {
     padding: '0.75rem',
   },
-  outcomeOk: { color: '#86efac' },
+  outcomeOk: { color: cssVars['--r-ok-text'] },
   // Error TEXT on a dark background — the owner's colour, through the theme.
   outcomeFailed: { color: colors.errorText },
-  outcomeTimeout: { color: '#fcd34d' },
+  outcomeTimeout: { color: cssVars['--r-caution-text'] },
 } as const;
 
 /**

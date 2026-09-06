@@ -3,7 +3,7 @@ import { SquareDashed } from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
 import { Panel } from '../../ui/Panel.js';
 import { Icon } from '../../ui/Icon.js';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import { useStack } from '../../hooks/useStack.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
@@ -45,7 +45,7 @@ const styles = {
   screen: {
     flex: 1,
     minHeight: 0,
-    background: '#000',
+    background: cssVars['--r-video-ground'],
     display: 'flex',
     flexDirection: 'column' as const,
     alignItems: 'center',

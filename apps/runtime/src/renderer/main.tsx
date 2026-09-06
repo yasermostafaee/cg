@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { createRuntimeBridge } from '../platform/createRuntimeBridge.js';
 import { reportCommandError } from './features/status/commandFeedback.js';
+import { applyThemeVars } from './theme.js';
 
 /**
  * Browser entry point. The Electron preload used to inject `window.cg`
@@ -34,6 +35,14 @@ import { reportCommandError } from './features/status/commandFeedback.js';
  * while the hold keeps the door shut until 5 s, so a READY label would be on screen for
  * most of the splash at exactly the moment the operator still cannot use the app.
  */
+/*
+ * STATION-CHROME-01 §1 — the `--r-*` tokens, written from their ONE home
+ * (`theme.ts` `cssVars`) into the document before anything of the app renders.
+ * `controls.css` declares none of them itself, so this is not optional chrome:
+ * it is where the stylesheet's values come from. See `applyThemeVars`.
+ */
+applyThemeVars(document.documentElement);
+
 const rootEl = document.getElementById('root');
 if (!rootEl) {
   throw new Error('Missing #root element in index.html');

@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { colors } from '../src/renderer/theme.js';
+import { colors, cssVars } from '../src/renderer/theme.js';
 import { itemWith, renderLayerRow } from './support/layerRow.js';
 
 /**
@@ -33,6 +33,25 @@ import { itemWith, renderLayerRow } from './support/layerRow.js';
 // From the WORKSPACE ROOT, not `import.meta.url`: under vitest's jsdom transform that is not a
 // `file:` URL (the derived census in `modalMessageRegion.dom.test.ts` records the same trap).
 const css = readFileSync(join(process.cwd(), 'src', 'renderer', 'ui', 'controls.css'), 'utf8');
+
+/**
+ * STATION-CHROME-01 §1 — the rule now names TOKENS, so the stop has to be resolved
+ * before it can be measured. That is not a weakening of the principle stated above; it
+ * is the same principle one link further along. The colour is still read from the rule
+ * rather than typed here, and it is still the value a browser composites, because
+ * `applyThemeVars()` writes exactly these `cssVars` entries into the document.
+ *
+ * The owner's fill is unchanged and the test still proves it: `--r-row-marked-fill`
+ * resolves to `rgb(145 93 5)`, and the assertion below is on the resolved triple.
+ */
+function resolveToken(text: string): string {
+  const v = /^var\((--r-[a-z0-9-]+)\)$/.exec(text.trim());
+  if (v === null) return text;
+  const name = v[1] as keyof typeof cssVars;
+  const value = cssVars[name] as string | undefined;
+  if (value === undefined) throw new Error(`controls.css reads an undeclared token: ${v[1]}`);
+  return value;
+}
 
 type Rgb = readonly [number, number, number];
 
@@ -69,15 +88,15 @@ function markedRowColours(): { fill: Rgb; bar: Rgb } {
   const gradient = /linear-gradient\(([\s\S]*?)\);/.exec(rule[1] ?? '');
   if (gradient === null) throw new Error('the marked row no longer paints a gradient');
   // `90deg, <bar> 0 3px, <fill> 3px calc(100% - 3px), <bar> calc(100% - 3px)` — the colour
-  // is the first token of each stop; `rgb(145 93 5)` carries no comma of its own.
+  // is the first token of each stop, and is now a `var(--r-…)` reference.
   const stops = (gradient[1] ?? '')
     .split(',')
     .map((s) => s.trim())
     .slice(1)
     .map((stop) => {
-      const colour = /^(#[0-9a-f]{6}|rgba?\([^)]*\))/i.exec(stop);
+      const colour = /^(var\(--r-[a-z0-9-]+\)|#[0-9a-f]{6}|rgba?\([^)]*\))/i.exec(stop);
       if (colour === null) throw new Error(`a gradient stop without a colour: ${stop}`);
-      return parseColour(colour[1] ?? '');
+      return parseColour(resolveToken(colour[1] ?? ''));
     });
   const [bar, fill] = stops as [Rgb, Rgb, Rgb];
   return { fill, bar };

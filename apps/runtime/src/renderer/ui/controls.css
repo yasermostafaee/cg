@@ -11,118 +11,25 @@
  * are unchanged — only the styling mechanism moves here.
  */
 
-:root {
-  --r-surface: #111827;
-  --r-surface-raised: #1f2937;
-  --r-surface-sunken: #0f172a;
-  --r-border: #374151;
-  --r-border-strong: #4b5563;
-  --r-text: #e5e7eb;
-  --r-text-muted: #9ca3af;
-  --r-accent: #38bdf8;
-  --r-accent-strong: #0ea5e9;
-  /* R-055 — the sky's HOVER weight, lighter than `--r-accent` so an engaged
-     toggle LIFTS under the pointer instead of looking switched off. One more
-     weight of the same hue, exactly like the `--r-accent-fill` family below; it
-     is not a state colour and must not become one. */
-  --r-accent-lift: #7dd3fc;
-  /* The ACCENTED ACTION's weights — the same sky as `--r-accent`, in the dark
-     fill / line / light ink a FILLED control needs. Three controls wear it, all
-     in the Inspector. See `theme.ts` and `.cg-btn--accent` below. */
-  --r-accent-fill: #153b56;
-  --r-accent-fill-hover: #1a4a6b;
-  --r-accent-line: #2f7ba8;
-  --r-accent-line-hover: #4aa8e0;
-  --r-accent-ink: #cfe8f8;
-  /* THE INPUT SURFACE — one background and one line for every field in the app.
-     See `theme.ts` and `.cg-field`: an input is a well sunk into the panel, not a
-     raised chip, and ONE pair is what stops the dx/dy boxes from drifting away
-     from the text inputs. */
-  --r-field-bg: #0e1822;
-  --r-field-line: #2d4150;
-  /* ON AIR — GREEN, and this hue may mean nothing else. Red is now errors and
-     destructive intent only. See `theme.ts`'s header for the decision and for
-     the R-006 / B-087 re-anchoring it owes. Mirrored from `cssVars`; a parity
-     test asserts the two match. */
-  --r-onair: rgb(44 255 122);
-  --r-caution: #f59e0b;
-  --r-danger: #dc2626;
-  --r-danger-strong: #b91c1c;
-  --r-success: #10b981;
-  --r-dirty: #f59e0b;
-  --r-ready: #38bdf8;
-  --r-idle: #3f3f46;
-  --r-offline: #94a3b8;
-  --r-rehearsing: #a78bfa;
-  --r-rehearsing-strong: #7c3aed;
-  /* R-055 — the REHEARSING toggle's hover and press weights. They were three
-     literals inside the `.is-on` rules; naming them is what makes it visible that
-     a sky toggle reaching those rules is wearing the PVW hue. */
-  --r-rehearsing-mid: #8b5cf6;
-  --r-rehearsing-deep: #6d28d9;
-  --r-verb-load: #1aacd8;
-  --r-verb-remove: #ff0000;
-  --r-verb-play: #22dd7a;
-  --r-verb-next: #2ebea1;
-  --r-verb-stop: #b38d18;
-  --r-verb-clear: #de5105;
-
-  /* R-035 — the STARTUP SPLASH's own greys. Mirrored from `theme.ts` `cssVars` like
-     every token here, but with one extra hop nothing else has: the splash paints
-     BEFORE this stylesheet is loaded, so it cannot read these at all — the inline
-     `<style>` in `index.html` mirrors the VALUES as literals and
-     `tests/splashCss.test.ts` pins that second mirror. Their own family rather than
-     reuse of `--r-surface-*` (a deeper near-black, inks tuned for large tracked-out
-     type), and NO RED, ever — see `theme.ts` for both reasons. The chrome ACCENT is not
-     a token at all: the splash wears APASAI's exact brand blue as a splash-local
-     constant, and the app's own `--r-accent` sky is unchanged by that. */
-  --r-splash-bg: #1a212d;
-  --r-splash-line: #3d4959;
-  --r-splash-ink: #e8edf4;
-  --r-splash-ink-dim: #5a6675;
-  --r-splash-ink-faint: #55637a;
-  --r-splash-readout: #8b97a6;
-  --r-splash-rail: #2c3644;
-  --r-splash-scene-bar: #3a4557;
-  --r-splash-company-ink: #c9d3df;
-  --r-splash-logo-bars: #eef3f9;
-  --r-splash-logo-swoosh: #5c6a7c;
-  --r-splash-glow: rgba(0, 174, 239, 0.5);
-  --r-splash-vignette: rgba(0, 0, 0, 0.22);
-
-  --r-space-1: 4px;
-  --r-space-2: 8px;
-  --r-space-3: 12px;
-  --r-space-4: 16px;
-  --r-space-6: 24px;
-  --r-space-8: 32px;
-
-  --r-radius-sm: 4px;
-  --r-radius-md: 6px;
-  --r-radius-lg: 10px;
-  --r-radius-full: 9999px;
-
-  --r-text-xs: 0.72rem;
-  --r-text-sm: 0.8rem;
-  --r-text-md: 0.9rem;
-  --r-text-lg: 1rem;
-  --r-text-xl: 1.2rem;
-  --r-weight-medium: 500;
-  --r-weight-semibold: 600;
-  --r-weight-bold: 700;
-
-  --r-focus-ring: 2px;
-  --r-shadow-1: 0 1px 3px rgba(0, 0, 0, 0.35);
-  --r-shadow-2: 0 4px 16px rgba(0, 0, 0, 0.4);
-
-  /* THE PANEL BAR'S HEIGHT — one number, so four panels cannot disagree.
-     See `.cg-panel-header` for why it is a fixed floor and not intrinsic. */
-  --r-panel-bar-h: 52px;
-
-  --r-dur-fast: 120ms;
-  --r-dur-med: 200ms;
-  --r-dur-spin: 700ms;
-}
+/*
+ * ── WHERE THE `--r-*` VALUES ARE ────────────────────────────────────────────
+ *
+ * NOT HERE. `theme.ts` `cssVars` is the ONE home for every colour, radius, spacing
+ * step, type size and duration this stylesheet reads, and `applyThemeVars()` writes
+ * them into a `:root` block in the document head before the first render.
+ *
+ * This file used to REPEAT all 111 of them in a `:root` block of its own, kept equal
+ * to `theme.ts` by a parity test. That is what defeated the owner's acceptance test
+ * for STATION-CHROME-01 §1 — «if later we want to change the colour of the Add
+ * buttons, we change one colour, in one obvious place» — because the two copies
+ * agreed while an edit still had to touch two files. A well-guarded duplicate is not
+ * a single home.
+ *
+ * 🔴 SO: NO RULE IN THIS FILE MAY SPELL A COLOUR, A RADIUS OR A SPACING STEP. Every
+ * one reads `var(--r-…)`, and `tokenHome.test.ts` fails the build on a literal.
+ * If the value you want has no token, ADD THE TOKEN — named for what it is FOR, not
+ * for what colour it is.
+ */
 
 /* ── Panel chrome — THE bar, shared by every panel ──────────────────────────
  *
@@ -255,7 +162,7 @@
 .cg-btn--play {
   background: var(--r-onair);
   border-color: var(--r-onair);
-  color: #fff;
+  color: var(--r-ink-on-fill);
   font-weight: var(--r-weight-bold);
 }
 /* `.cg-btn--air` IS GONE — do not bring it back.
@@ -271,24 +178,42 @@
 .cg-btn--caution-strong {
   background: var(--r-caution);
   border-color: var(--r-caution);
-  color: #1c1207;
+  color: var(--r-ink-on-caution);
   font-weight: var(--r-weight-bold);
 }
 .cg-btn--caution-strong:hover:not(:disabled) {
-  background: #d97706;
-  border-color: #d97706;
-  color: #fff;
+  background: var(--r-caution-hover);
+  border-color: var(--r-caution-hover);
+  color: var(--r-ink-on-fill);
 }
 .cg-btn--primary {
   background: var(--r-accent-strong);
   border-color: var(--r-accent-strong);
-  color: #04121f;
+  color: var(--r-ink-on-accent);
   font-weight: var(--r-weight-bold);
 }
 .cg-btn--secondary {
   background: var(--r-surface-raised);
   border-color: var(--r-accent);
   color: var(--r-accent);
+}
+/*
+ * ── ADD — every "add a thing to this list" control, and nothing else ─────────
+ *
+ * IDENTICAL IN VALUE TO `--secondary` TODAY AND SEPARATE IN NAME, which is the
+ * whole point. The owner's ask for STATION-CHROME-01 was «if later we want to
+ * change the colour of the Add buttons, we change one colour, in one obvious
+ * place». While Add WAS a `secondary`, that edit could not be written down: moving
+ * it moved every secondary control in the app with it.
+ *
+ * Now it is one declaration — `--r-btn-add` in `theme.ts` — and it moves the Add
+ * buttons alone. Nothing about how they look changed when this class was created;
+ * `noPixelMoved.dom.test.ts` measures that against `--secondary`.
+ */
+.cg-btn--add {
+  background: var(--r-btn-add-bg);
+  border-color: var(--r-btn-add);
+  color: var(--r-btn-add);
 }
 
 /*
@@ -347,7 +272,7 @@
 .cg-btn--commit {
   background: var(--r-verb-play);
   border-color: var(--r-verb-play);
-  color: #10151f;
+  color: var(--r-ink-on-verb);
   font-weight: var(--r-weight-bold);
 }
 .cg-btn--commit:disabled {
@@ -380,11 +305,11 @@
 .cg-btn--danger {
   background: transparent;
   border-color: var(--r-danger);
-  color: #fca5a5;
+  color: var(--r-danger-text);
 }
 .cg-btn--danger:hover:not(:disabled) {
   background: var(--r-danger-strong);
-  color: #fff;
+  color: var(--r-ink-on-fill);
 }
 /*
  * GHOST — and the trap it is.
@@ -489,8 +414,8 @@
 .cg-btn--verb:hover:not(:disabled),
 .cg-btn--neutral:hover:not(:disabled),
 .cg-btn--icon:hover:not(:disabled) {
-  background: #2c3a4e;
-  border-color: #64748b;
+  background: var(--r-control-hover-bg);
+  border-color: var(--r-control-hover-line);
   box-shadow: var(--r-shadow-1);
   filter: none; /* the lifted fill IS the hover; brightness on top muddies it */
 }
@@ -572,7 +497,7 @@
    * glyphs need as non-text content. Near-black clears ~4.4:1 on the darkest of
    * the six and ~9:1 on the lightest, so ONE foreground serves all of them.
    */
-  color: #10151f;
+  color: var(--r-ink-on-verb);
 }
 .cg-btn[data-verb-tone='load']:hover:not(:disabled) {
   background: var(--r-verb-load);
@@ -635,7 +560,7 @@
 .cg-btn--icon.is-on {
   background: var(--r-rehearsing-strong);
   border-color: var(--r-rehearsing-strong);
-  color: #fff;
+  color: var(--r-ink-on-fill);
 }
 
 /*
@@ -654,7 +579,7 @@
 .cg-btn[data-verb-tone='play'].is-on {
   background: var(--r-verb-play);
   border-color: var(--r-verb-play);
-  color: #10151f;
+  color: var(--r-ink-on-verb);
 }
 
 /*
@@ -683,7 +608,7 @@
   border-color: var(--r-accent);
   /* Near-black, like the play tone above and for the same reason: sky is light
      enough that the white the violet uses would leave the glyph unreadable. */
-  color: #10151f;
+  color: var(--r-ink-on-verb);
 }
 .cg-btn--verb.is-on:hover:not(:disabled),
 .cg-btn--neutral.is-on:hover:not(:disabled),
@@ -858,7 +783,7 @@
 
 /* The inline, near-the-control error message (role="alert" only when shown). */
 .cg-btn-error {
-  color: #fca5a5;
+  color: var(--r-danger-text);
   font-size: var(--r-text-xs);
   font-weight: var(--r-weight-semibold);
 }
@@ -1054,8 +979,8 @@ textarea.cg-field--autogrow {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: #e6ebf0;
-  color: #10151f;
+  background: var(--r-file-chip-bg);
+  color: var(--r-file-chip-ink);
   font-size: var(--r-text-sm);
 }
 
@@ -1078,8 +1003,8 @@ textarea.cg-field--autogrow {
   width: 26px;
   padding: 0;
   border: 0;
-  background: #55606c;
-  color: #f2f5f8;
+  background: var(--r-file-chip-detach-bg);
+  color: var(--r-file-chip-detach-ink);
   cursor: pointer;
   font: inherit;
   line-height: 1;
@@ -1455,7 +1380,7 @@ textarea.cg-field--autogrow {
 }
 .cg-btn--icon.cg-list-remove:hover:not(:disabled) {
   border-color: var(--r-danger);
-  color: #fca5a5;
+  color: var(--r-danger-text);
 }
 
 /*
@@ -1572,7 +1497,7 @@ input[type='checkbox'] {
 
 input[type='checkbox']:hover:not(:disabled) {
   border-color: var(--r-accent);
-  background: #2c3a4e;
+  background: var(--r-control-hover-bg);
 }
 
 input[type='checkbox']:focus-visible {
@@ -1595,8 +1520,8 @@ input[type='checkbox']:checked {
  * pointer crossed it.
  */
 input[type='checkbox']:checked:hover:not(:disabled) {
-  background: #6dd3fb;
-  border-color: #6dd3fb;
+  background: var(--r-toggle-on-hover);
+  border-color: var(--r-toggle-on-hover);
 }
 
 /* The checkmark: two borders of a rotated box, so it scales with the control and
@@ -1605,7 +1530,7 @@ input[type='checkbox']:checked::after {
   content: '';
   width: 5px;
   height: 9px;
-  border: solid #04121f;
+  border: solid var(--r-ink-on-accent);
   border-width: 0 2px 2px 0;
   transform: translateY(-1px) rotate(45deg);
 }
@@ -1666,7 +1591,7 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-caution);
 }
 .cg-badge--error {
-  color: #fca5a5;
+  color: var(--r-danger-text);
 }
 
 /* ── Draft chip + dirty dot (R-003) ─────────────────────────────────────── */
@@ -1809,7 +1734,7 @@ input[type='checkbox']:disabled:checked {
 .cg-row.has-template {
   /* Exact value specified by the owner. Opaque rather than a white overlay so it
      does not compound with anything painted behind it. */
-  background: rgb(30 38 51);
+  background: var(--r-row-bg);
 }
 /* Hover outranks both, and must beat `has-template`'s specificity. */
 .cg-row:hover,
@@ -1847,7 +1772,7 @@ input[type='checkbox']:disabled:checked {
      difference `has-template` already carries — it is not striping — and it is what lets
      the eye find the occupied rows in a bank of thirty without reading any of them.
   */
-  background: #10141e;
+  background: var(--r-row-empty-bg);
 }
 .cg-row:not(.has-template):hover {
   /*
@@ -1857,7 +1782,7 @@ input[type='checkbox']:disabled:checked {
      the pointer than at rest, which is the false affordance this block exists to remove,
      inverted.
   */
-  background: #10141e;
+  background: var(--r-row-empty-bg);
 }
 
 /*
@@ -1886,7 +1811,7 @@ input[type='checkbox']:disabled:checked {
    carries no hue at all. Listed with `.has-template` so it wins on specificity. */
 .cg-row.is-selected,
 .cg-row.is-selected.has-template {
-  background: rgba(56, 189, 248, 0.1);
+  background: var(--r-row-selected-fill);
   box-shadow: inset 0 0 0 2px var(--r-accent);
 }
 
@@ -1960,9 +1885,9 @@ input[type='checkbox']:disabled:checked {
 .cg-row.has-template.is-emptied-air:hover {
   background-image: linear-gradient(
     90deg,
-    #fcd34d 0 3px,
-    rgb(145 93 5) 3px calc(100% - 3px),
-    #fcd34d calc(100% - 3px)
+    var(--r-row-marked-edge) 0 3px,
+    var(--r-row-marked-fill) 3px calc(100% - 3px),
+    var(--r-row-marked-edge) calc(100% - 3px)
   );
 }
 
@@ -1971,7 +1896,7 @@ input[type='checkbox']:disabled:checked {
   /* Focus and selection can coexist; the focus ring is inset further so both read. */
   box-shadow:
     inset 0 0 0 2px var(--r-accent),
-    inset 0 0 0 4px rgba(56, 189, 248, 0.35);
+    inset 0 0 0 4px var(--r-focus-halo);
 }
 
 /* ── Narrow-screen Inspector overlay ───────────────────────────────────── */
@@ -2086,7 +2011,7 @@ input[type='checkbox']:disabled:checked {
 /* DRAGGING — the whole track lights, not just the grip, so the captured divider is
    identifiable while the pointer is off somewhere else entirely. */
 .cg-divider.is-dragging {
-  background: rgba(56, 189, 248, 0.22);
+  background: var(--r-divider-drag-fill);
 }
 .cg-divider.is-dragging::after {
   background: var(--r-accent);
@@ -2201,7 +2126,7 @@ input[type='checkbox']:disabled:checked {
   width: auto;
   min-width: 2.4ch;
   padding: 0.15rem 0.5rem;
-  font-size: 0.72rem;
+  font-size: var(--r-text-xs);
   font-variant-numeric: tabular-nums;
   border: 1px solid var(--r-border-strong);
   border-radius: 3px;

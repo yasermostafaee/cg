@@ -14,7 +14,7 @@ import { Info } from 'lucide-react';
 // them stubbed out and back), because nothing else in the package is reachable
 // from them and both imports go through subpaths rather than the entry index.
 import type { ChannelRaster } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { LivePlateOverlay } from './LivePlateOverlay.js';
@@ -160,7 +160,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: '#000',
+    background: cssVars['--r-video-ground'],
     overflow: 'hidden',
     position: 'relative' as const,
   },
@@ -197,12 +197,12 @@ const styles = {
     top: '50%',
     transform: 'translate(-50%, -50%)',
     zIndex: 0,
-    background: '#3d4253',
+    background: cssVars['--r-checker-a'],
     backgroundImage:
-      `linear-gradient(45deg, #5b6075 25%, transparent 25%),` +
-      `linear-gradient(-45deg, #5b6075 25%, transparent 25%),` +
-      `linear-gradient(45deg, transparent 75%, #5b6075 75%),` +
-      `linear-gradient(-45deg, transparent 75%, #5b6075 75%)`,
+      `linear-gradient(45deg, ${cssVars['--r-checker-b']} 25%, transparent 25%),` +
+      `linear-gradient(-45deg, ${cssVars['--r-checker-b']} 25%, transparent 25%),` +
+      `linear-gradient(45deg, transparent 75%, ${cssVars['--r-checker-b']} 75%),` +
+      `linear-gradient(-45deg, transparent 75%, ${cssVars['--r-checker-b']} 75%)`,
     backgroundSize: '48px 48px',
     backgroundPosition: '0 0, 0 24px, 24px -24px, -24px 0',
   },
@@ -260,7 +260,7 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     gap: '0.3rem',
-    background: '#000',
+    background: cssVars['--r-video-ground'],
     color: colors.offline,
     fontSize: '0.7rem',
     textAlign: 'center' as const,

@@ -1,4 +1,4 @@
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { useLink } from '../../hooks/useLink.js';
 import { setTestMode } from '../../../platform/testMode.js';
@@ -48,7 +48,7 @@ const styles = {
     fontSize: '0.8rem',
     fontWeight: 700,
     letterSpacing: '0.04em',
-    color: '#0B0B0C',
+    color: cssVars['--r-ink-on-band'],
     flexShrink: 0,
   },
   text: { flex: 1, minWidth: 0, lineHeight: 1.35 },
@@ -62,8 +62,7 @@ const styles = {
 } as const;
 
 /** Repeating hazard stripes — deliberately unlike any live-air surface in the app. */
-const TEST_STRIPES =
-  'repeating-linear-gradient(135deg, #F5C451 0 14px, #E0A92E 14px 28px)' as const;
+const TEST_STRIPES = `repeating-linear-gradient(135deg, ${cssVars['--r-band-stripe-a']} 0 14px, ${cssVars['--r-band-stripe-b']} 14px 28px)`;
 
 export function ConnectionBanner(): JSX.Element | null {
   const link = useLink();
@@ -95,7 +94,7 @@ export function ConnectionBanner(): JSX.Element | null {
     <div
       role="alert"
       aria-label="Bridge disconnected"
-      style={{ ...styles.banner, background: colors.error, color: '#FFFFFF' }}
+      style={{ ...styles.banner, background: colors.error, color: cssVars['--r-ink-on-fill'] }}
     >
       <span style={styles.text}>
         NOT CONNECTED — NOTHING CAN REACH AIR.

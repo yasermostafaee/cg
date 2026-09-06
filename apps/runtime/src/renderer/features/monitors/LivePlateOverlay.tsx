@@ -5,7 +5,7 @@ import type { CSSProperties } from 'react';
 // this app's `window.cg` is the bridge. The two must not share a compilation.
 import { smpteBarsGradient } from '@cg/template-runtime/scene-builder';
 import type { ChannelRaster } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { frameBox } from './rehearsalFrames.js';
 import type { PlatePlacement } from './livePlateGeometry.js';
 
@@ -122,8 +122,12 @@ import type { PlatePlacement } from './livePlateGeometry.js';
 function hazardStripes(period: number): string {
   const half = period / 2;
   return (
-    `repeating-linear-gradient(135deg, rgba(0,0,0,0.34) 0px, rgba(0,0,0,0.34) ${String(half)}px,` +
-    ` rgba(0,0,0,0) ${String(half)}px, rgba(0,0,0,0) ${String(period)}px)`
+    `repeating-linear-gradient(135deg, ${
+      cssVars['--r-plate-hatch']
+    } 0px, ${cssVars['--r-plate-hatch']} ${String(half)}px,` +
+    // `transparent`, not `rgba(0,0,0,0)`: the gap between the stripes is the
+    // ABSENCE of ink, not a colour anyone chose, so it takes no token.
+    ` transparent ${String(half)}px, transparent ${String(period)}px)`
   );
 }
 
@@ -144,7 +148,7 @@ const styles = {
     alignItems: 'center',
     gap: '2px',
     padding: '6px 10px',
-    background: 'rgba(0, 0, 0, 0.78)',
+    background: cssVars['--r-plate-chip-bg'],
     borderRadius: '3px',
     // The ids and names here are installation strings, not authored copy: pin
     // them LTR so a Persian console cannot flip `guest-1` to `1-guest`.
@@ -158,11 +162,16 @@ const styles = {
     fontSize: '9px',
     fontWeight: 700,
     letterSpacing: '0.14em',
-    color: '#ffffff',
+    color: cssVars['--r-plate-ink'],
     opacity: 0.72,
   },
-  plate: { fontFamily: 'monospace', fontSize: '13px', fontWeight: 700, color: '#ffffff' },
-  source: { fontSize: '12px', color: '#ffffff' },
+  plate: {
+    fontFamily: 'monospace',
+    fontSize: '13px',
+    fontWeight: 700,
+    color: cssVars['--r-plate-ink'],
+  },
+  source: { fontSize: '12px', color: cssVars['--r-plate-ink'] },
   unassigned: { fontSize: '12px', fontWeight: 700, color: colors.pending },
   audio: {
     fontSize: '10px',
@@ -196,10 +205,10 @@ const styles = {
  */
 const AUDIO_GLYPH: Record<'audible' | 'silent' | 'held', { text: string; color: string }> = {
   audible: { text: '♪ AUDIO ON', color: colors.ready },
-  silent: { text: '✕ SILENT', color: 'rgba(255,255,255,0.72)' },
+  silent: { text: '✕ SILENT', color: cssVars['--r-plate-ink-dim'] },
   // "This box is not audible because the LOOK hides it" — a fact about the layout, not a
   // fault, so it says which and stays uncoloured.
-  held: { text: '✕ NOT IN THIS LOOK', color: 'rgba(255,255,255,0.72)' },
+  held: { text: '✕ NOT IN THIS LOOK', color: cssVars['--r-plate-ink-dim'] },
 };
 
 interface Props {
@@ -247,7 +256,7 @@ export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JS
               // states differ in colour across the entire rect rather than in one
               // corner of it. That is what makes them separable at a glance.
               filter: assigned ? 'none' : 'grayscale(1)',
-              border: `${String(2 * inv)}px dashed ${assigned ? 'rgba(255,255,255,0.85)' : colors.pending}`,
+              border: `${String(2 * inv)}px dashed ${assigned ? cssVars['--r-plate-outline'] : colors.pending}`,
               boxSizing: 'border-box',
               display: 'flex',
               alignItems: 'center',

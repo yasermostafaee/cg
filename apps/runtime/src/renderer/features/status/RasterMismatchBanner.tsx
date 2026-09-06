@@ -1,5 +1,5 @@
 import { mismatchedChannels, rasterVerdict } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
 
 /**
@@ -36,7 +36,7 @@ const styles = {
     fontSize: '0.8rem',
     fontWeight: 700,
     letterSpacing: '0.04em',
-    color: '#FFFFFF',
+    color: cssVars['--r-ink-on-fill'],
     background: colors.error,
     flexShrink: 0,
   },
