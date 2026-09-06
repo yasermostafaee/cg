@@ -2205,6 +2205,20 @@ export function seedBlockedStackItem(): StackItemState[] {
       status: 'on-air',
       pending: false,
       slot: { channel: 1, layer: BLOCKED_SEED.layer, server: 'primary' },
+      /*
+        🔴 `B-228` — THE SEED IS RESTORE-BLOCKED, SO IT IS REMOVE-EXEMPT, AND THE MOCK MUST
+        SAY SO OR THE OFFLINE CONSOLE DISAGREES WITH THE BRIDGE.
+
+        The real bridge answers this from `#removeExempt` (`#restoreBlocked.has(itemId)`), and
+        the whole point of publishing it is that no surface recomputes the rule. This row is
+        the offline mirror of exactly that case — the same row `isSeededBlockedLayer` already
+        marks `restoreBlocked` on the slot binding — so it carries the same published fact.
+
+        ⚠ Without this the E2E, which drives the OFFLINE mock, shows REMOVE ALL disabled for a
+        stack the bridge would accept: `B-228`'s own symptom, reproduced in the one place the
+        suite can see it. `server-settings.spec.ts` depends on this being right.
+      */
+      removeExempt: true,
     },
   ];
 }

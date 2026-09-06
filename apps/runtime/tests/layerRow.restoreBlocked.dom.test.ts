@@ -134,10 +134,24 @@ describe('rowState — BLOCKED outranks the item’s own status', () => {
 });
 
 describe('layerRowActions — a blocked row commands nothing, but is never stranded', () => {
+  /*
+    🔴 `B-228` — A BLOCKED ROW CARRIES **TWO** FACTS, AND THE FIXTURE NOW MODELS BOTH.
+
+    `restoreBlocked` is the SLOT BINDING's fact ("this layer is not ours to command"), which is
+    what holds the air verbs below. `removeExempt` is the BRIDGE's answer to a different
+    question ("may this row be removed"), published on the ITEM — and the bridge sets it for
+    exactly this row, because `#removeExempt` reads `#restoreBlocked`.
+
+    They travel on different channels and production always has both. Setting only the first
+    described a row the product never emits, and it is why the REMOVE assertion below could go
+    on passing while the BULK gate — which has no bindings to read — disagreed with it. See
+    `removeOnAir.agreement.dom.test.ts` for the decision-level guard.
+  */
+  const blockedItem = { ...itemWith('on-air'), removeExempt: true };
   const deps = (over = {}) =>
     layerRowActions(
       rowDeps({
-        binding: bindingFor(itemWith('on-air')),
+        binding: bindingFor(blockedItem),
         observed: { kind: 'producer', producer: 'decklink' },
         restoreBlocked: true,
         hasNext: true,

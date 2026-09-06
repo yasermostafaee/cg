@@ -11071,7 +11071,78 @@ the row to read stopped; press UPDATE with any input change.
 
 ---
 
-## [ ] B-228 — 🔴 REMOVE ALL's gate omits BOTH exemptions the per-row REMOVE and the bridge apply, so the bulk button is disabled for a press the bridge would accept — the exact UI↔wire disagreement `#removeRefusal`'s own doc says must not exist ⟨priority: high — it is the same withheld-graceful-remedy shape as [[B-226]], and it has had a RED Linux `e2e` standing on `dev` since it landed⟩ — FILED 2026-09-06 by `RESTART-NOTICE-01`; report only, nothing built
+## [~] B-228 — 🔴 REMOVE ALL's gate omits BOTH exemptions the per-row REMOVE and the bridge apply, so the bulk button is disabled for a press the bridge would accept — the exact UI↔wire disagreement `#removeRefusal`'s own doc says must not exist ⟨priority: high — it is the same withheld-graceful-remedy shape as [[B-226]], and it stood behind a RED Linux `e2e` on `dev`⟩ — FILED AND CLOSED IN CODE 2026-09-06 by `RESTART-NOTICE-01` (owner: "close it"); a Linux `gate:e2e` is OWED
+
+### ✅ 2026-09-06 — SHIPPED: the bridge publishes the exemption; both surfaces read it
+
+**The fix is neither candidate written up below.** Both of those had the renderer recompute the
+bridge's rule from inputs, which rebuilds one level up the mirrored-copies problem `R-017` had just
+spent a commit deleting — and it is not even possible for the second exemption, since
+`#declaredLayerClass` is bridge knowledge that never crosses the seam. **The bridge answers its own
+question once and SAYS so**: `#removeExempt` is extracted from `#removeRefusal` (one body, two
+readers), joined onto the item at the single publication seam `#published()`, and carried on the wire
+as `StackItemState.removeExempt`.
+
+⭐ **THE PRINCIPLE, worth more than the fix:** _a decision is the predicate PLUS everything else the
+decision consults. Publish the ANSWER from the side that can compute it; do not ship the inputs and
+hope both sides recompute the same rule._ `R-017` got the shared FUNCTION right and still shipped a
+disagreement, because only the predicate was swept across.
+
+Both renderer surfaces now resolve through one `removeIsRefused` (`removeGate.ts`), which reads the
+published fact. **ABSENT MEANS NOT EXEMPT** — a publisher that forgets the field leaves REMOVE
+refused on a live row rather than enabling it, and a test pins that asymmetry so it cannot be
+inverted. `removeExempt` is deliberately **not** in `RetainedStackItemSchema`: retention is a
+whitelist, and a retained copy would come back describing a plant the browser has not spoken to since.
+
+### 🔴 CORRECTION to this item's own §2 — the failing E2E was BOTH messenger and stale
+
+The filing above said the E2E at `server-settings.spec.ts:102` was the messenger and must not be
+changed. **That was half right, and the other half was wrong.** Measured after the fix landed:
+
+- REMOVE ALL's tooltip went from **2 row(s) are on air** to **1**, against a seed that puts exactly
+  two rows on air — so the restore-blocked row is now correctly exempt. That is the defect, real and
+  closed, and the E2E did surface it.
+- But the second on-air row (`seedLooksStackItem`) is **genuinely on air and genuinely not exempt**,
+  so REMOVE ALL stays correctly disabled and the spec's click still asked for something the product
+  now rightly refuses. **B-228's fix alone does not make that spec pass**, and no correct fix could.
+
+So the spec's unblock path was ALSO stale: `R-017` moved the remedy to Clear-All, updated part 1 of
+that file — which asserts Remove-All is disabled, nine lines above the click that contradicted it —
+and missed its sibling. Part 2 now uses Clear-All, **plus an ADDITION that pins the exemption**: the
+tooltip must read `1 row(s) are on air`, which fails on the defect and says in its comment what the
+number means, so a seed change makes the reason visible rather than silently re-arming it.
+
+### The extended agreement test — and what it still would NOT catch
+
+`removeOnAir.agreement.dom.test.ts` (renamed — it now renders the real panel, which is the lint
+tier's own discriminator) asserts over the **decision** (`is REMOVE refused for this row,
+right now?`) rather than the predicate, for the ROW (`layerRowActions`) and the BULK (the real
+`LayersPanel`, rendered), across status × pending × exemption, plus the bulk's OR-of-rows behaviour
+and the absent-means-not-exempt asymmetry. It goes red on the pre-fix code (4 of its assertions).
+
+⚠ **Stated plainly, because the whole item is made of this mistake:** it pins the two RENDERER
+surfaces against the published fact and **cannot** prove the bridge computes that fact correctly or
+that it reaches the wire. A bridge publishing `removeExempt: false` for a genuinely blocked row would
+leave both surfaces agreeing with each other and both wrong, with every renderer assertion green.
+That half is proved where it can be — against a real runtime and a real wire — by a new case in
+`tools/caspar-bridge/tests/remove-on-air-refusal.integration.test.ts` asserting that what the bridge
+PUBLISHES and what it REFUSES are the same answer, reached through `load` onto a dynamic layer
+outside the declared bank (the `B-212` arm, which only a real runtime can construct). **Neither file
+is sufficient alone.**
+
+⭐ **And what NEITHER catches:** a THIRD surface added later that gates REMOVE on `isOnAirStatus`
+directly. Nothing enumerates the set of surfaces that make this decision — the guard is that
+`removeIsRefused` is the only renderer-side spelling and its header forbids a second entry point,
+which is a convention, not a mechanism. That is the same gap `R-017` fell into one level down.
+
+**Shipped:** `removeExempt` on `StackItemStateSchema`; `#removeExempt` + the publish in
+`caspar-runtime.ts`; `removeGate.ts`'s `removeIsRefused`, read by `layerRowActions` and
+`LayersPanel`; `MockRuntime`'s blocked seed carries the same published fact (or the offline console
+disagrees with the bridge, which is where the E2E would have seen it).
+
+---
+
+**The original filing follows, unchanged, for the diagnosis it records.**
 
 **Found** while diagnosing why the Linux `e2e` job went red on `b07d2fad` and stayed red on
 `0e4aae58`. ⭐ **The failing E2E was RIGHT — it is the messenger, not the defect**, which is worth
@@ -11137,6 +11208,13 @@ the only signal was CI.
 ⚠ **Whichever wins, the E2E at `:102` should be left ASSERTING what it asserts.** If (A) or (B) lands,
 Remove-All becomes enabled there and the test passes unchanged. Rewriting it to use Clear-All would
 make the suite green while leaving the disagreement in place — the fix that hides the bug.
+
+> 🔴 **SUPERSEDED BY MEASUREMENT — see the CORRECTION above.** This paragraph was wrong on a fact it
+> asserted rather than checked: the seed puts a SECOND row on air (`seedLooksStackItem`) which is
+> genuinely not exempt, so Remove-All stays correctly disabled there and no correct fix makes that
+> click land. The spec's unblock really was stale as well. Left in place rather than edited, because
+> the reasoning it applies is right and only its premise was unmeasured — which is the same error one
+> level down that produced the item.
 
 **Repro:** open the Runtime against the offline mock with the fixed-bank seed armed (the E2E fixture's
 default); the only on-air row is the restore-blocked seed.

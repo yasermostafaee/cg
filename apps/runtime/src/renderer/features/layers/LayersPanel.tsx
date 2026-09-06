@@ -1,5 +1,8 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { isOnAirStatus } from '@cg/shared-schema';
+// B-228 — the ONE renderer-side REMOVE decision, shared with the row's own gate. It reads
+// `isOnAirStatus` for us, which is why this panel no longer imports that predicate directly:
+// the count must not be able to drift back to the bare predicate by an innocent edit.
+import { removeIsRefused } from './removeGate.js';
 import type { StackItemState } from '@cg/shared-schema';
 import {
   CircleArrowOutDownRight,
@@ -398,8 +401,21 @@ export function LayersPanel({
 
     So the same imported function the row's REMOVE and the bridge's refusal read. Four counts
     on this panel now, one per question, each spelled once.
+
+    🔴 **`B-228` — AND THAT WAS STILL WRONG, BECAUSE THE PREDICATE IS NOT THE ANSWER.** Every
+    sentence above is true and the line below it read `items.filter(isOnAirStatus)`, which is
+    the bridge's answer MINUS its two exemptions (`#removeRefusal`: a restore-blocked row, and
+    an item on no declared operator row). So this button sat disabled for a press
+    `stack.remove-all` would have accepted — the very "UI and the wire disagreeing about the
+    same press" this comment set out to prevent, reached by sweeping the predicate across and
+    leaving the rest of the decision behind. It held `dev`'s Linux `e2e` red until it was
+    traced.
+
+    `removeIsRefused` is now the one renderer-side decision, read here and by the ROW's REMOVE,
+    and it consults the bridge's PUBLISHED `removeExempt` instead of recomputing the rule —
+    which the renderer could not do anyway, since `#declaredLayerClass` is bridge knowledge.
   */
-  const removeBlockedCount = items.filter(isOnAirStatus).length;
+  const removeBlockedCount = items.filter(removeIsRefused).length;
 
   // "Get it off the screen" is not "throw it away". This clears air and KEEPS
   // the rows, so recovering is a re-take — not a re-import and re-typing every

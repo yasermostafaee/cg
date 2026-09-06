@@ -126,6 +126,39 @@ export const StackItemStateSchema = z.object({
    * looks rather than requiring the renderer to re-derive the same question.
    */
   activeLookId: z.string().min(1).optional(),
+  /**
+   * 🔴 **`B-228` — THIS ROW IS EXEMPT FROM THE REMOVE-ON-AIR REFUSAL, AS A PUBLISHED FACT.**
+   *
+   * `R-017` made {@link isOnAirStatus} the one predicate both sides of the seam read, and that
+   * was only half the answer. The bridge's `#removeRefusal` is the predicate **plus two
+   * exemptions**, and a surface that reads the predicate alone gets a DIFFERENT answer:
+   *
+   * - a **restore-blocked** row — its layer is held by a producer provably not ours, so the
+   *   air claim is one the bridge already knows to be false and REMOVE destroys nothing of
+   *   ours (`R-021` stage 4 d1);
+   * - an item on **no declared operator row** — no row means no STOP and no CLEAR to press, so
+   *   refusing leaves `B-212`'s incident with no remedy at all.
+   *
+   * The ROW's REMOVE carried the first (off `binding.restoreBlocked`) and REMOVE ALL carried
+   * neither, so the bulk button sat disabled for a press the bridge would have accepted —
+   * `B-228`, and the exact UI↔wire disagreement `#removeRefusal`'s own header forbids.
+   *
+   * ⭐ **PUBLISHED RATHER THAN RE-DERIVED, and that is the whole point of the fix.** Handing
+   * the renderer the two INPUTS and letting it recompute the rule would rebuild, one level up,
+   * the mirrored-copies problem `R-017` had just spent a commit deleting — and the second
+   * exemption is not even derivable there: `#declaredLayerClass` is bridge knowledge. So the
+   * bridge answers its own question once and says so, and every surface READS it.
+   *
+   * ⚠ **ABSENT MEANS NOT EXEMPT**, which is the fail-safe direction: a publisher that forgets
+   * this field leaves REMOVE refused on a live row rather than enabling it. Never invert that.
+   *
+   * ⚠ **DELIBERATELY NOT IN {@link RetainedStackItemSchema}.** Retention is an explicit
+   * whitelist, and this is a fact about what the BRIDGE can do right now — a retained copy
+   * would come back describing a plant the browser has not spoken to since. That is the
+   * `B-107`/`B-109` class arriving from the other side, and the schema boundary is what stops
+   * it: leave this field out of retention.
+   */
+  removeExempt: z.boolean().optional(),
 });
 export type StackItemState = z.infer<typeof StackItemStateSchema>;
 

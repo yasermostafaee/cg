@@ -2516,9 +2516,9 @@ and **`P-044`** (unchanged).
 
 ### 2026-09-06 — `B-228` (`RESTART-NOTICE-01`, second pass: why `dev`'s Linux `e2e` is red)
 
-| kind | id      | one line                                                                                                                                                                                      | home                               | status                                                 |
-| ---- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------ |
-| `B-` | `B-228` | REMOVE ALL's gate omits both exemptions the per-row REMOVE and the bridge apply, so the bulk button is disabled for a press the bridge would accept — and it has held `dev`'s Linux `e2e` red | [bugs-runtime.md](bugs-runtime.md) | FILED, report only — two candidate fixes, owner's call |
+| kind | id      | one line                                                                                                                                                                                             | home                               | status                                                            |
+| ---- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------------------- |
+| `B-` | `B-228` | REMOVE ALL's gate omits both exemptions the per-row REMOVE and the bridge apply, so the bulk button is disabled for a press the bridge would accept — and it stood behind a red Linux `e2e` on `dev` | [bugs-runtime.md](bugs-runtime.md) | FILED, then CLOSED IN CODE the same day on the owner's "close it" |
 
 Filed after the session's own commit (`0e4aae58`) came back with `ci` green and `e2e` red, and the
 parent commit `b07d2fad` had failed identically. Diagnosed rather than assumed: reproduced locally,
@@ -2529,7 +2529,20 @@ side is wrong.
 obvious move — rewrite `server-settings.spec.ts:102` to use Clear-All, as `R-017` did for part 1 of the
 same file — would have gone green while leaving a UI that disables a verb the bridge accepts. It was
 half-done before the bridge's own doc was read; that doc says in as many words that the renderer must
-carry the exemption, which is what identified the UI as the wrong half. **No test was changed.**
+carry the exemption, which is what identified the UI as the wrong half.
+
+⭐ **AND THE CORRECTION TO THAT CORRECTION, made by measurement a few hours later when the owner said
+to close it: the E2E was BOTH messenger and stale.** The fix moved REMOVE ALL's tooltip from
+`2 row(s) are on air` to `1` — the exemption crossing the seam, exactly as intended — but the seed
+puts a SECOND row on air that is genuinely not exempt, so the spec's click still asked for something
+the product rightly refuses, and no correct fix could make it land. The sentence above was true about
+the defect and wrong about the spec, because it asserted the seed's composition instead of reading it.
+The spec's unblock is now Clear-All **plus an added assertion that pins the exemption** (the tooltip
+must read `1`), so the change cannot double as a way to go green.
+
+**Both halves of that lesson are the same one:** an unmeasured premise inside otherwise correct
+reasoning. `R-017` swept a predicate and assumed it was the answer; this session read a failing test
+and assumed it named its only cause.
 
 **Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three bug
 files was **`B-227`** (`bugs-runtime.md`, `git grep -n -E "^## \[.\] B-2[0-9][0-9]"`);

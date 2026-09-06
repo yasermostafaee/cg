@@ -98,12 +98,40 @@ test('settings panel: the serve address sits beside the server hosts, offers can
   const page = app.page;
   const panel = page.getByRole('dialog', { name: 'Server connection settings' });
 
-  // The gate is the same one part 1 above proves; clear the stack so Apply is reachable.
-  await page.getByRole('button', { name: 'Remove all items' }).click();
-  await page
-    .getByRole('dialog', { name: 'Remove all items?' })
-    .getByRole('button', { name: 'Remove all', exact: true })
-    .click();
+  /*
+    🔴 `R-017` / `B-228` — TAKE THE ROWS OFF AIR SO APPLY IS REACHABLE, AND THE REMEDY IS
+    CLEAR-ALL.
+
+    This step used to click Remove-All, and `R-017` made that unperformable: Remove-All is now
+    withheld while any non-exempt row is on air — which part 1 above ASSERTS, nine lines from
+    here — so the click waited the full 30 s on a control that could never enable, and `dev`'s
+    Linux `e2e` went red. `pnpm gate` does not run Playwright (`P-028`), so CI was the only
+    signal. Part 1 was updated to Clear-All in the same commit and this sibling was missed:
+    golden rule 9's sweep, stopping inside the file it had already opened.
+
+    Clear-All is the right remedy rather than a way to go green — Apply gates on the ON-AIR
+    COUNT, not on an empty list, and Clear-All takes the graphics off air while KEEPING the
+    rows (part 1 asserts that difference explicitly).
+  */
+  /*
+    ⭐ `B-228`'s PIN, and it is an ADDITION rather than a relaxation — this assertion did not
+    exist before and it fails on the defect.
+
+    The e2e seed puts TWO rows on air: the look-bearing row, and the RESTORE-BLOCKED row whose
+    layer is held by a producer provably not ours. The bridge EXEMPTS the second from the
+    remove refusal (`#removeExempt`, `R-021` stage 4 d1), so exactly ONE row may block
+    Remove-All. Before `B-228` the bulk gate read the bare predicate and counted both — the UI
+    withholding a press the bridge would have accepted. If this number ever reads `2` again,
+    the exemption has stopped crossing the seam.
+  */
+  await expect(page.getByRole('button', { name: 'Remove all items' })).toHaveAttribute(
+    'title',
+    /^1 row\(s\) are on air/,
+  );
+
+  await page.getByRole('button', { name: /^Clear all rows/ }).click();
+  const clearDialog = page.getByRole('dialog').filter({ hasText: /Clear/ });
+  await clearDialog.getByRole('button', { name: /^Clear/ }).click();
 
   await page.getByRole('button', { name: 'Open server settings' }).click();
   await expect(panel).toBeVisible();

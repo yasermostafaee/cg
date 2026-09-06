@@ -167,3 +167,52 @@ it('…and the per-row verb is not withheld with it — only the BULK action wai
   expect((await rt.remove('item-a')).accepted, 'four idle rows of five stay removable').toBe(true);
   expect((await rt.remove('item-b')).accepted).toBe(false);
 });
+
+/**
+ * 🔴 **`B-228` — THE HALF THE RENDERER'S AGREEMENT TEST CANNOT PROVE.**
+ *
+ * `apps/runtime/tests/removeOnAir.agreement.dom.test.ts` pins that the ROW and the BULK resolve
+ * one decision from the published `removeExempt`. Both surfaces could agree with each other
+ * and both be wrong, because neither can see whether the BRIDGE computes and sends that fact
+ * correctly — and its own note says so rather than implying a coverage it does not have.
+ *
+ * This is that half: what the bridge PUBLISHES and what it REFUSES are the same answer, on a
+ * real runtime, against a real wire.
+ */
+it('🔴 `B-228` — the published `removeExempt` and the actual refusal cannot disagree', async () => {
+  const { rt } = await boot();
+  expect(await rt.loadFixed(SLOT, 'item-1', 'lower-third', {})).toEqual({ accepted: true });
+  expect((await rt.take('item-1')).accepted).toBe(true);
+
+  const published = (): boolean | undefined =>
+    rt.stackSnapshot().find((i) => i.itemId === 'item-1')?.removeExempt;
+
+  /*
+    AN ORDINARY ON-AIR ROW ON A DECLARED ROW: not exempt, and refused. `removeExempt` is
+    ABSENT rather than `false` — the fail-safe default the renderer reads as "not exempt", and
+    the spread that keeps an ordinary item byte-identical to what it was before the field
+    existed.
+  */
+  expect(published(), 'absent, not false').toBeUndefined();
+  expect((await rt.remove('item-1')).accepted, 'and the bridge refuses').toBe(false);
+
+  /*
+    THE EXEMPT CASE, reached the way the product reaches it. An item on NO declared operator
+    row is `#removeExempt`'s second arm (`B-212`): nothing shows it, so there is no STOP and no
+    CLEAR to press and a refusal would name a remedy that does not exist.
+
+    `load` (not `loadFixed`) allocates a DYNAMIC layer outside the declared bank, which is that
+    case exactly — and it is why this assertion is here rather than in the renderer suite: only
+    a real runtime can put an item somewhere `#declaredLayerClass` calls anything but
+    `operator-row`.
+  */
+  expect((await rt.load('item-off-bank', 'lower-third', {})).accepted).toBe(true);
+  expect((await rt.take('item-off-bank')).accepted).toBe(true);
+  const offBank = rt.stackSnapshot().find((i) => i.itemId === 'item-off-bank');
+  expect(offBank?.status, 'it really is on air — otherwise this proves nothing').toBe('on-air');
+  expect(offBank?.removeExempt, 'the bridge SAYS it is exempt').toBe(true);
+  expect(
+    (await rt.remove('item-off-bank')).accepted,
+    'and the refusal agrees with what it published',
+  ).toBe(true);
+});

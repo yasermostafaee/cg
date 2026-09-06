@@ -11,7 +11,6 @@ import {
   XSquare,
 } from 'lucide-react';
 import type { FixedSlotState } from '@cg/shared-ipc';
-import { isOnAirStatus } from '@cg/shared-schema';
 import type { StackItemState } from '@cg/shared-schema';
 import type { RowAction } from '../../ui/rowAction.js';
 import type { AsyncResult } from '../../ui/asyncButtonController.js';
@@ -21,6 +20,7 @@ import {
   type CasparReach,
 } from '../../ui/reachWording.js';
 import { isOnAir } from '../stack/onAir.js';
+import { removeIsRefused } from './removeGate.js';
 import type { RowBinding } from './rowState.js';
 
 /**
@@ -558,21 +558,32 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
               context-menu item inherit the gate structurally — there is no second place to
               remember, which is the whole reason the shape rule exists.
 
-              `isOnAirStatus` is IMPORTED, never re-derived: the bridge's own refusal is the
-              same function object, so the two cannot answer one row two ways. That identity
-              is what `removeOnAir.agreement.test.ts` asserts, and it is why this reads the
-              item's own `status` rather than the row's DISPLAY badge — `LayerRow` masks an
-              unbacked air claim to `unverified` for the operator's benefit, and a gate
-              computed from the mask would diverge from the bridge on exactly the states the
-              mask exists for.
+              🔴 `B-228` — `removeIsRefused`, THE ONE RENDERER-SIDE DECISION, and it replaced
+              `isOnAirStatus(item) && !blocked` here. That spelling was right about the
+              predicate and incomplete about the ANSWER: the bridge's `#removeRefusal` is the
+              predicate plus TWO exemptions, this carried one of them (`blocked`, off the
+              binding), and REMOVE ALL carried neither — so the bulk button withheld a press
+              the bridge would have accepted. Both surfaces now read the same function, which
+              reads the bridge's published `removeExempt` rather than recomputing the rule.
+
+              ⚠ It reads the item's own `status` and NOT the row's DISPLAY badge — `LayerRow`
+              masks an unbacked air claim to `unverified` for the operator's benefit, and a
+              gate computed from the mask would diverge from the bridge on exactly the states
+              the mask exists for.
+
+              ⚠ `blocked` is deliberately NOT consulted here any more. It is the binding's
+              restore-blocked fact, which is only ONE of the two exemptions; `removeExempt` is
+              the bridge's answer to both. The other verbs below still read `blocked`, and
+              correctly — they are gating on "this layer is not ours to command", which is a
+              different question from "may this row be removed".
             */
-            item !== null && isOnAirStatus(item) && !blocked,
+            item !== null && removeIsRefused(item),
             () => (item === null ? noop() : deps.remove(item.itemId)),
             Trash2,
             undefined,
             templateMissing
               ? MISSING_TEMPLATE_REASON
-              : item !== null && isOnAirStatus(item) && !blocked
+              : item !== null && removeIsRefused(item)
                 ? REMOVE_ON_AIR_REASON
                 : undefined,
           ),

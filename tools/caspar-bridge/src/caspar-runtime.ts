@@ -1877,6 +1877,26 @@ export class CasparRuntime {
       // two disagree, and it cannot do that unless it can read it.
       const frozenAssignment = this.#frozenAssignments.get(item.itemId);
       /*
+        🔴 `B-228` — THE BRIDGE'S OWN ANSWER TO "may this be removed", SAID OUT LOUD.
+
+        `#removeRefusal` is `isOnAirStatus` PLUS two exemptions, and until this line only the
+        predicate crossed the seam. The renderer could see one exemption (published as
+        `binding.restoreBlocked`) and could not see the other AT ALL — `#declaredLayerClass`
+        is bridge knowledge — so REMOVE ALL gated on the bare predicate and withheld a press
+        `removeAll` would have accepted.
+
+        Published rather than re-derived, deliberately: handing the renderer the inputs and
+        asking it to recompute the rule would rebuild the mirrored-copies problem `R-017` had
+        just deleted, one level up. `false` is spread away rather than sent, so an ordinary
+        row is the identical object it was before the field existed — and ABSENT reads as NOT
+        EXEMPT, which is the fail-safe direction.
+
+        ⚠ NOT retained: `RetainedStackItemSchema` is a whitelist and this is deliberately not
+        in it — a retained copy would come back describing a plant the browser has not spoken
+        to since.
+      */
+      const removeExempt = this.#removeExempt(item.itemId);
+      /*
         ⚠ **EVERY OPTIONAL FIELD BELOW MUST BE NAMED IN THIS GUARD.** It is the
         "nothing to join, return the identical object" fast path, and a field it does not
         list is a field this method silently DROPS for an item that has only that one.
@@ -1892,7 +1912,8 @@ export class CasparRuntime {
         lookSourceOverride === undefined &&
         frozenAssignment === undefined &&
         plateVolumes === undefined &&
-        activeLookId === undefined
+        activeLookId === undefined &&
+        !removeExempt
       )
         return item;
       return {
@@ -1903,6 +1924,7 @@ export class CasparRuntime {
         ...(frozenAssignment !== undefined && { frozenAssignment }),
         ...(plateVolumes !== undefined && { plateVolumes }),
         ...(activeLookId !== undefined && { activeLookId }),
+        ...(removeExempt && { removeExempt: true }),
       };
     });
   }
@@ -8927,26 +8949,13 @@ export class CasparRuntime {
     const item = this.#reconciler.get(itemId);
     if (item === null || item === undefined) return null;
     if (!isOnAirStatus(item)) return null;
-    /*
-      🔴 EXEMPTION 2 — a RESTORE-BLOCKED row, and it is `R-021` stage 4 decision d1's rule
-      rather than a new one.
-
-      Such a row's layer is held by a producer that is provably NOT OURS, so the item's air
-      claim — seeded from the browser's retention across the reconnect — is one this bridge
-      already knows to be false: nothing of ours is on that layer, and REMOVE would destroy
-      nothing. d1 says in as many words that CLEAR and REMOVE are the two verbs a blocked row
-      keeps, "the block is what they exist to resolve", and holding the item on the stack
-      while its layer belongs to somebody else is precisely the stranding it forbids.
-
-      ⚠ The RENDERER carries the identical exemption (`layerRowActions`, `blocked`), and it
-      has to: this is the one place where the shared predicate alone would make the two sides
-      disagree, because the UI knows the row is blocked and would otherwise disable a verb the
-      bridge accepts.
-    */
-    if (this.#restoreBlocked.has(itemId)) return null;
+    if (this.#removeExempt(itemId)) return null;
     const slot = this.#slots.get(itemId);
+    /*
+      Unreachable in practice — an item with no slot is exempt above — but the message names
+      the layer, so the narrowing is expressed rather than asserted with a `!`.
+    */
     if (slot === undefined) return null;
-    if (this.#declaredLayerClass(slot.channel, slot.layer) !== 'operator-row') return null;
     return {
       errorCode: REMOVE_ON_AIR_CODE,
       message:
@@ -8954,6 +8963,38 @@ export class CasparRuntime {
         `item — and neither can be undone. Take it off air first: STOP runs the template's outro ` +
         `and keeps it loaded, CLEAR cuts it immediately.`,
     };
+  }
+
+  /**
+   * 🔴 **`B-228` — THE TWO EXEMPTIONS, EXTRACTED SO THEY CAN BE PUBLISHED.**
+   *
+   * They were inline in {@link #removeRefusal} and therefore invisible to every surface: the
+   * renderer could see `isOnAirStatus` (shared) and `binding.restoreBlocked` (published), and
+   * could not see the declared-layer question at all. So REMOVE ALL gated on the bare
+   * predicate and withheld a press this method would have let through — the UI↔wire
+   * disagreement `#removeRefusal`'s own header forbids, arrived at by leaving half its answer
+   * unreachable.
+   *
+   * ⚠ **ONE BODY, TWO READERS, AND THAT IS THE POINT.** `#removeRefusal` asks it to decide, and
+   * `#published` asks it to SAY so on the wire (`StackItemState.removeExempt`). A second copy
+   * for the publish path — "just the restore-blocked half, the renderer knows the rest" — is
+   * exactly how this defect was built the first time.
+   *
+   * - **A RESTORE-BLOCKED row** (`R-021` stage 4 d1): its layer is held by a producer provably
+   *   NOT OURS, so the item's air claim — seeded from the browser's retention across the
+   *   reconnect — is one this bridge already knows to be false. Nothing of ours is on that
+   *   layer and REMOVE would destroy nothing. d1 says in as many words that CLEAR and REMOVE
+   *   are the two verbs a blocked row keeps, "the block is what they exist to resolve".
+   * - **An item on NO DECLARED OPERATOR ROW** (`B-212`, measured on the plant): nothing shows
+   *   it, so there is no STOP and no CLEAR to press. The refusal names a remedy that would not
+   *   exist, and a refusal whose remedy is unreachable is a trap. A STRUCTURAL question about
+   *   the slot, never a second status question.
+   */
+  #removeExempt(itemId: string): boolean {
+    if (this.#restoreBlocked.has(itemId)) return true;
+    const slot = this.#slots.get(itemId);
+    if (slot === undefined) return true;
+    return this.#declaredLayerClass(slot.channel, slot.layer) !== 'operator-row';
   }
 
   async #removeImpl(
