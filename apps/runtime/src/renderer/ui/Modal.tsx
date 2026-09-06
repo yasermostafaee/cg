@@ -282,9 +282,27 @@ interface ModalProps {
   children?: ReactNode;
   ariaLabel?: string;
   /**
-   * How wide the dialog is. `prose` (the default) is the ~460px column that reads
-   * well for a confirm question; `wide` is for dialogs carrying a TABLE of
-   * per-row controls, which at prose width wrap into an unreadable stack.
+   * How wide the dialog is. `prose` (the default) is the ~460px column that reads well
+   * for a confirm question; `wide` is the two-column-plus width.
+   *
+   * ── THE CRITERION IS THE COMPARISON, NOT THE MARKUP ─────────────────────
+   *
+   * This used to say `wide` is "for dialogs carrying a TABLE of per-row controls, which
+   * at prose width wrap into an unreadable stack" — and the TEMPLATE PICKER met that
+   * description while being `prose`, which made the sentence false about the tree it was
+   * describing. The picker was not the defect; the criterion was.
+   *
+   * It named an IMPLEMENTATION where the deciding property is whether the operator reads
+   * DOWN A COLUMN — comparing one row against another — which is what alignment across
+   * rows is for and what prose width destroys. The fixed-bank config dialog has that
+   * (thirty layers × checkbox + alias + observed state, scanned down the list); the
+   * picker does not (one name and one action per row, read one row at a time), so it
+   * stacks into a column at prose width and loses nothing.
+   *
+   * Stated that way the rule returns the width every dialog already has. The full
+   * requirement is in `openspec/specs/runtime-ui` — this comment points at it rather
+   * than being the only place it exists, which is the drift the whole
+   * `runtime-modal-contract` change was written to end.
    */
   size?: 'prose' | 'wide';
 }
