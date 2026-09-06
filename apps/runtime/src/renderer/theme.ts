@@ -86,6 +86,20 @@ export const colors = {
    */
   emptyRow: 'rgb(91 93 96)',
   /**
+   * `B-232` / `STATION-SETUP-02` §R2 — the ink the MUTED texts take on a row the
+   * emptied-air notice has MARKED.
+   *
+   * The mark's fill is the owner's opaque amber, `rgb(145 93 5)` (`controls.css`,
+   * `.cg-row.is-emptied-air`), and on it `textMuted` measures 2.19:1 — below even the
+   * 3:1 large-text floor — so the bank number and the "(not in this browser)" marker
+   * were unreadable on exactly the rows the notice is pointing at. `text` itself holds
+   * only 4.498:1 there, a hair under AA. This is one weight lighter, 5.06:1 on the fill,
+   * and it is spent ONLY on a marked row: everywhere else the muted role keeps its grey.
+   * Moving the FILL is not the remedy — the value is the owner's — so the ink moves.
+   * `emptiedAirRowContrast.dom.test.ts` asserts the ratio against the real fill.
+   */
+  markedRowInk: '#F3F4F6',
+  /**
    * R-022 — REHEARSING. Violet, and every other candidate in the palette was
    * ruled out for a specific reason rather than on taste:
    *

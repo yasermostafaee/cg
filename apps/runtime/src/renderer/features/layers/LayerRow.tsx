@@ -209,14 +209,6 @@ const styles = {
     whiteSpace: 'nowrap' as const,
     textAlign: 'center' as const,
   },
-  /** The description column reads quieter than the template name beside it. */
-  description: {
-    fontSize: '0.85rem',
-    color: colors.textMuted,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap' as const,
-  },
   empty: {
     fontSize: '0.85rem',
     color: colors.emptyRow,
@@ -231,6 +223,14 @@ const styles = {
   onEmptyRow: { color: colors.emptyRow },
   /** The 'template is not here' marker, quieter than the name it qualifies. */
   missingTemplate: { color: colors.textMuted, fontStyle: 'italic' as const },
+  /**
+   * `B-232` §R2 — the MUTED texts on a MARKED row take a legible ink. The mark's opaque
+   * amber puts `textMuted` at 2.19:1; this is 5.06:1 on it (`theme.ts`). Applied LAST in
+   * the spread so it wins over the empty-row grey too: on that fill, legibility is the
+   * only role that matters. (There is no description column any more — see the note by
+   * the template cell — so the two muted texts are the bank number and this marker.)
+   */
+  onMarkedRow: { color: colors.markedRowInk },
 } as const;
 
 /**
@@ -762,7 +762,11 @@ export function LayerRow({
       }}
     >
       <span
-        style={item === null ? { ...styles.rowNumber, ...styles.onEmptyRow } : styles.rowNumber}
+        style={{
+          ...styles.rowNumber,
+          ...(item === null ? styles.onEmptyRow : {}),
+          ...(emptiedAir ? styles.onMarkedRow : {}),
+        }}
       >
         {displayPosition}
       </span>
@@ -893,7 +897,18 @@ export function LayerRow({
             dir="auto"
           >
             {templateLabel}
-            {templateMissing && <span style={styles.missingTemplate}> (not in this browser)</span>}
+            {templateMissing && (
+              <span
+                style={
+                  emptiedAir
+                    ? { ...styles.missingTemplate, ...styles.onMarkedRow }
+                    : styles.missingTemplate
+                }
+              >
+                {' '}
+                (not in this browser)
+              </span>
+            )}
           </span>
         ) : (
           <span style={styles.empty}>Empty</span>
