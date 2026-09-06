@@ -323,7 +323,15 @@ it('FROZEN: the ORDINARY load path still adopt-CLEARs, and a live bridge is neve
     // B-108 — the skip now says WHICH row and WHY, and this is the BENIGN reason:
     // a page reload against a live bridge loses nothing, so the SPA filters it out
     // before any operator surface sees it.
-    skipped: [{ itemId: 'item1', reason: 'already-held' }],
+    skipped: [
+      {
+        itemId: 'item1',
+        reason: 'already-held',
+        // `B-233` — the naming travels with every skip, benign ones included.
+        templateId: 'lower-third',
+        slot: { channel: 1, layer: 10, server: 'primary' },
+      },
+    ],
     migrated: [],
   });
   expect(r2.stackSnapshot()).toHaveLength(2);
@@ -409,7 +417,15 @@ it('FROZEN: a restore never LIFTS B-086 — a mirror pair with the primary down 
     // A page reload now re-delivers retained intent. The demotion must SURVIVE it.
     expect(await r.restore(retain(r))).toEqual({
       restored: 0,
-      skipped: [{ itemId: 'item1', reason: 'already-held' }],
+      skipped: [
+        {
+          itemId: 'item1',
+          reason: 'already-held',
+          // `B-233` — the naming travels with every skip, benign ones included.
+          templateId: 'lower-third',
+          slot: { channel: 1, layer: 10, server: 'primary' },
+        },
+      ],
       migrated: [],
     });
     expect(status(r, 'item1')).toBe('unverified');

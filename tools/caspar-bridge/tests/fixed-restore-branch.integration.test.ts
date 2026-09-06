@@ -324,7 +324,18 @@ it('a declared row already bound by another restored item is SKIPPED, never re-h
   // could not help.
   expect(await r.restore(retainedOn(72, 'second'))).toEqual({
     restored: 0,
-    skipped: [{ itemId: 'second', reason: 'fixed-slot-taken' }],
+    // `B-233` — the skip CARRIES its naming now, and the assertion says so rather than
+    // being loosened to `toMatchObject`: the whole point of widening the wire is that the
+    // operator's strip can name this row, and a test that stopped looking at the extra
+    // fields would let them silently stop arriving.
+    skipped: [
+      {
+        itemId: 'second',
+        reason: 'fixed-slot-taken',
+        templateId: 'lower-third',
+        slot: { channel: 1, layer: 72, server: 'primary' },
+      },
+    ],
     migrated: [],
   });
   expect(r.stackSnapshot().some((i) => i.itemId === 'second')).toBe(false);

@@ -11,8 +11,8 @@
 ## 2. The dismissal rule
 
 - [x] 2.1 Move the rule out of `AuditPanel.tsx`'s footer comment and into the spec.
-- [x] 2.2 Apply it to the three dialogs that disagreed — `Candidate layers — not
-    configured`, `Live sources`, `Text file delimiters` — verifying first that each
+- [x] 2.2 Apply it to the three dialogs that disagreed — the unconfigured candidate-layers
+      explainer, `Live sources` and `Text file delimiters` — verifying first that each
       commits nothing rather than assuming it (`d9c47573`).
 - [x] 2.3 Red-first proof plus a NEGATIVE control: `Candidate layers` WITH a bank keeps
       its `primary` Apply, so the rule cannot decay into "no dialog has a primary"

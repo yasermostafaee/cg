@@ -243,7 +243,18 @@ it('R-028 / C-015 — a retained item whose slot is now RESERVED is skipped at r
     restored: 0,
     // B-108 — named, so the SPA can tell the operator this row is GONE (a reserved
     // playout coordinate yields no layer of ours) rather than letting it vanish.
-    skipped: [{ itemId: 'item-old', reason: 'no-layer' }],
+    // `B-233` — the skip CARRIES its naming now, and the assertion says so rather than
+    // being loosened to `toMatchObject`: the whole point of widening the wire is that the
+    // operator's strip can name this row, and a test that stopped looking at the extra
+    // fields would let them silently stop arriving.
+    skipped: [
+      {
+        itemId: 'item-old',
+        reason: 'no-layer',
+        templateId: 'tpl-clock',
+        slot: { channel: 1, layer: 61, server: 'primary' },
+      },
+    ],
     migrated: [],
   });
   expect(r.stackSnapshot().some((i) => i.itemId === 'item-old')).toBe(false);

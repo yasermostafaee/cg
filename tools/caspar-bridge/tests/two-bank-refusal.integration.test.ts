@@ -265,6 +265,17 @@ it('🔴 with every bed row taken, the migration SKIPS with its own reason', asy
     },
   ]);
   expect(third.restored).toBe(0);
-  expect(third.skipped).toEqual([{ itemId: 'bed-3', reason: 'no-bed-row' }]);
+  // `B-233` — the skip CARRIES its naming, asserted rather than loosened away: the strip that
+  // reports this row must be able to name it, and a `toMatchObject` here would let the fields
+  // silently stop arriving. The slot is the RETAINED coordinate — where the operator last saw
+  // it — which is exactly what `operatorRowName` needs to say which row did not come back.
+  expect(third.skipped).toEqual([
+    {
+      itemId: 'bed-3',
+      reason: 'no-bed-row',
+      templateId: 'debate',
+      slot: RETAINED_OPERATOR_ROW,
+    },
+  ]);
   expect(third.migrated).toEqual([]);
 }, 40_000);

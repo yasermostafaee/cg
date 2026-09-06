@@ -48,6 +48,25 @@ function stubBridge(
     },
     connections: connectionsStub(reach),
     layers: { clear },
+    /*
+      `B-233` — THE THREE CHANNELS THE OCCUPANCY STRIP'S NAMING NEEDS.
+
+      The strip used to print the owning item's raw id; it now names the ROW, which needs the
+      STACK (to reach a `templateId`), the BANK (to turn a coordinate into the operator's row
+      name) and the REGISTRY (to turn a template UUID into its name). `B-232`'s note in this
+      banner said it "holds neither"; these are what it holds now.
+
+      ⚠ Every method here is REQUIRED by the component, not defensive padding — the same
+      reason this stub already owes both reachability hops. A stub that omitted one would
+      fail as an unrelated-looking crash in every spec in the file, which is exactly what
+      happened when the hooks landed before this stub grew.
+    */
+    stack: { snapshot: () => Promise.resolve([]), onStateChanged: () => () => undefined },
+    fixedLayers: {
+      config: () => Promise.resolve(null),
+      onConfigChanged: () => () => undefined,
+    },
+    templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
   return { clear };
@@ -142,14 +161,28 @@ describe('OrphanLayersBanner — B-056 owned-slot occupancy variant', () => {
     expect(el.textContent).toBe('');
   });
 
-  it('names the channel-layer AND the item, with the Out/Remove remedy and NO Clear control', async () => {
+  it('names the channel-layer AND the owning ROW, with the Out/Remove remedy and NO Clear control', async () => {
     stubBridge();
     const el = await renderBanner([], [warning]);
     const alert = el.querySelector('[aria-label="Owned-layer occupancy warnings"]');
     expect(alert).not.toBeNull();
     expect(alert?.getAttribute('role')).toBe('alert');
     expect(el.textContent).toContain('Layer 1-10');
-    expect(el.textContent).toContain('item1');
+    /*
+      🔴 `B-233` — THIS ASSERTED THE RAW ITEM ID (`item1`), AND IT WAS RIGHT ABOUT THE OLD
+      COPY. Golden rule 11 replaced it: an operator-facing sentence names the row in the
+      operator's words, and the id is RELOCATED to the row's `title` rather than deleted.
+
+      This stub's stack is empty, so the item cannot be joined to a template and the row is
+      named by its LAST RESORT — a shortened id. That is the documented degradation and it is
+      what is asserted here; the fully-named case (a Persian row alias plus its template) has
+      its own spec in `operatorNaming.strips.dom.test.ts`, with a real bank and registry.
+    */
+    expect(el.textContent, 'the FULL raw id is still in the sentence').not.toContain('item1 ');
+    const row = alert?.querySelector('[title]');
+    expect(row?.getAttribute('title'), 'the id was deleted rather than relocated').toContain(
+      'item1',
+    );
     expect(el.textContent).toContain('Out or Remove the item');
     // No direct Clear on an owned layer — the strip has no buttons at all.
     expect(alert?.querySelector('button')).toBeNull();
