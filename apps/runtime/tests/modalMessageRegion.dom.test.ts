@@ -15,6 +15,8 @@ import {
   renderStationSetup,
   stationSetupStub,
   unmountStationSetup,
+  selectSetupTab,
+  tabOf,
 } from './support/stationSetup.js';
 
 /**
@@ -114,7 +116,20 @@ function expectMessageThroughTheRegion(dialog: HTMLElement, role: 'refusal' | 'n
 
 describe('the census — every section of Station setup that can speak, speaks through the region', () => {
   /** `Candidate layers`: the reference implementation, now a section. */
-  it('Candidate layers routes a bridge refusal through the region, and names itself', async () => {
+  /*
+    ⭐ `STATION-CHROME-01` §2 — **THE SECTION PREFIX IS GONE, AND THAT IS THE POINT.**
+
+    `STATION-SETUP-02` prefixed every message with its section's name ("Live sources: …")
+    because ONE region carried the messages of SEVEN sections at once, and without the name
+    you could not tell which one had spoken. Tabs remove the cause: only the ACTIVE section's
+    messages reach the region, so the sentence is already under that section's heading and
+    beside that section's own footer. Repeating the name there is the redundant labelling
+    golden rule 11 warns about.
+
+    So these cases now assert the STRONGER property the prefix was standing in for: the
+    message reaches the pinned region, AND it is not visible from any other tab.
+  */
+  it('Layers routes a bridge refusal through the region, and only its own tab shows it', async () => {
     const slots: FixedSlotState[] = Array.from({ length: 30 }, (_, i) => ({
       channel: 1,
       layer: 70 + i,
@@ -131,15 +146,23 @@ describe('the census — every section of Station setup that can speak, speaks t
       },
     });
     const dialog = await renderStationSetup({ section: 'candidate-layers' });
-    await clickSetupButton(dialog, 'Apply candidate layers');
+    await clickSetupButton(dialog, 'Apply layers');
 
     expectMessageThroughTheRegion(dialog, 'refusal');
-    // BOTH lines survive the move into the primitive: the RULE and the bridge's
-    // own sentence, which names the layer — and the SECTION that raised it.
+    // BOTH lines survive the move into the primitive: the RULE and the bridge's own
+    // sentence, which names the layer.
     const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
-    expect(text).toContain('Candidate layers:');
     expect(text).toContain('remove its template first');
     expect(text).toContain('Layer 95 has a template on it.');
+    // …and it does NOT follow the operator to another section's work.
+    await selectSetupTab(dialog, 'delimiters');
+    expect(dialog.querySelector('[data-modal-message]')?.textContent ?? '').not.toContain(
+      'Layer 95 has a template on it.',
+    );
+    // …but the RAIL still says Layers is blocked, from wherever he is standing.
+    expect(
+      tabOf(dialog, 'candidate-layers').querySelector('[data-tab-badge="warn"]'),
+    ).not.toBeNull();
   });
 
   /** `Live sources`: adopted the region, kept its own 2.13:1 red. */
@@ -151,7 +174,6 @@ describe('the census — every section of Station setup that can speak, speaks t
 
     expectMessageThroughTheRegion(dialog, 'refusal');
     const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
-    expect(text).toContain('Live sources:');
     expect(text).toContain('Give the source a name');
   });
 
@@ -176,7 +198,6 @@ describe('the census — every section of Station setup that can speak, speaks t
 
     expectMessageThroughTheRegion(dialog, 'refusal');
     const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
-    expect(text).toContain('Text file delimiters:');
     expect(text).toContain('Give the delimiter a name');
   });
 

@@ -4,7 +4,6 @@ import type { StackItemState } from '@cg/shared-schema';
 import { isLoopbackHost } from '../../../shared/loopback.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useStack } from '../../hooks/useStack.js';
-import { OutputsSection } from '../connections/OutputsSection.js';
 import { isOnAirStatus } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -12,91 +11,101 @@ import { Button } from '../../ui/Button.js';
 import { Modal, ModalAction, modalActionVariant, type ModalMessage } from '../../ui/Modal.js';
 import { Notice } from '../../ui/Notice.js';
 import { NumericInput } from '../../ui/NumericInput.js';
+import { Tabs, type TabSpec } from '../../ui/Tabs.js';
 import { CandidateLayersSection } from '../fixedLayers/CandidateLayersSection.js';
 import { DelimitersSection } from '../inspector/DelimitersSection.js';
 import { SourcesSection } from '../sources/SourcesSection.js';
-import { ChannelRasterSection } from './ChannelRasterSection.js';
-import { STATION_SETUP_SECTIONS, sectionSpec, type StationSetupSection } from './sections.js';
+import { ChannelSection } from './ChannelSection.js';
+import {
+  DEFAULT_STATION_SETUP_SECTION,
+  STATION_SETUP_SECTIONS,
+  sectionSpec,
+  type StationSetupSection,
+} from './sections.js';
 import { SetupSection } from './SetupSection.js';
-import { StationLayersSection } from './StationLayersSection.js';
 
 /**
- * `STATION-SETUP-02` — **ONE HOME FOR THE STATION'S SETTINGS.**
+ * `STATION-SETUP-02` / `STATION-CHROME-01` §2 — **ONE HOME FOR THE STATION'S SETTINGS, IN
+ * TABS.**
  *
- * This was `ServerSettingsPanel` — the Server connection dialog: hosts + ports with a real
- * Cancel / Apply, a working pinned refusal region, an on-air guard, and (since `B-223`)
- * the Outputs section. It was most of a settings home already, so it GREW rather than
- * being replaced: renamed, and given sections. What moved in:
+ * This was `ServerSettingsPanel` — the Server connection dialog — which GREW into the
+ * settings home: the live-source catalogue, the delimiter list, candidate-layer membership,
+ * and the channel. What it looks like is `STATION-CHROME-01`'s subject; what it stores is
+ * unchanged, key for key.
  *
- *   - the live-source CATALOG (was its own `Live sources` dialog) — the status bar's
- *     SOURCES button opens this dialog AT that section, not a second surface;
- *   - the delimiter list (was `Text file delimiters`) — the Inspector's gear deep-links;
- *   - candidate-layer membership, aliases, visibility and bound templates (was the
- *     `Configure` dialog, and its unconfigured explainer) — the Layers panel deep-links;
- *   - the CHANNEL RASTER (`R-030`) — the first UI this control has ever had;
- *   - the reserved and live layers, read-only — they had a CLI flag and a file and no UI.
+ * ── TABS, AND THE ARGUMENT AGAINST THEM, ANSWERED ───────────────────────────
  *
- * ── SECTIONS, NOT TABS, AND ONE MESSAGE REGION ──────────────────────────────
+ * The full argument is written once, at the head of `sections.ts`, and not repeated here.
+ * The short of it: the previous build's reason for a scroll — "a tab hides the section a
+ * refusal came from" — was sound, and the scroll did not deliver it. It put
+ * `Apply is blocked for Servers…` in front of an operator editing DELIMITERS. What replaces
+ * it keeps the protection and drops the assumption:
  *
- * A tab bar would hide the section a refusal came from. Every section stays rendered; a
- * jump row scrolls; each section reports into the ONE pinned region the primitive owns,
- * prefixed with the section's name, so a refusal is visible without hunting for the
- * section that raised it — which is the whole reason the region is pinned (`runtime-
- * modal-message-region`).
+ *   · **the active section's messages, and only those, reach the pinned region** — so a
+ *     refusal is rendered by the section that raised it, above that section's own footer,
+ *     and never in front of another section's work;
+ *   · **every blocked section marks itself in the RAIL** with an amber dot, and every
+ *     section with unapplied changes marks itself with a sky one — so nothing is hidden,
+ *     and one press lands on the sentence that says why.
  *
- * ── THE ON-AIR GUARD DID NOT WIDEN, AND THAT IS A DECISION ─────────────────
+ * ── EACH SECTION OWNS ITS FOOTER ────────────────────────────────────────────
  *
- * `connections.set-config` is refused while anything is on air, and this dialog
- * pre-disables its APPLY for that reason. That guard covers the SERVERS section alone,
- * and the footer's action now SAYS so (`APPLY SERVERS`). Per section: Outputs and Station
- * layers are read-only; the raster's on-air refusal is the BRIDGE's own and is surfaced,
- * never re-derived; sources, delimiters and candidate layers are not air-critical and
- * were never gated — they commit from the body, immediately, and their legends say so.
- * The old delimiters dialog's stated reason for being separate — "a gate that is right for
- * a host change and wrong for choosing what a comma means" — is honoured by scoping the
- * gate, not by keeping the dialog.
+ * Read-only sections carry no commit action at all and say there is nothing to apply.
+ * Sections that commit as they go say so and offer a quiet Close, which dismisses and
+ * commits nothing. Only the two draft sections carry an APPLY, and each one's APPLY names
+ * its own scope. `CandidateLayersSection` renders its Apply/Revert straight INTO this
+ * footer through `footerSlot` — that is what the tabs bought it: its own note recorded that
+ * the buttons sat in the body only because "the dialog's footer belongs to Servers", and
+ * that is no longer true.
  *
- * ── WIDE, under `runtime-modal-contract`'s criterion ────────────────────────
+ * ── THE ON-AIR GUARD DID NOT WIDEN ──────────────────────────────────────────
  *
- * The candidate-layer table (row · show · name · template) and the raster table (channel ·
- * width · height · what the server reports) both put several values per row that the
- * operator reads DOWN A COLUMN, comparing rows. That is the criterion, and this dialog
- * meets it twice over.
+ * `connections.set-config` is refused while anything is on air, and this dialog pre-disables
+ * APPLY SERVERS for that reason. That guard covers the SERVERS section alone, exactly as it
+ * did. Its refusal keeps the sentence saying every other section stays editable — and now it
+ * also lives where it belongs, in front of Servers and nowhere else.
  *
- * ── WHAT DELIBERATELY DID NOT MOVE IN — six things, each with its reason ────
+ * ── WHAT DELIBERATELY DID NOT MOVE IN ───────────────────────────────────────
  *
- * The operator name (the Audit panel puts it beside the actor column ON PURPOSE, because
- * its "self-declared and unverified" caveat must sit beside what it qualifies — `B-143`);
- * the lock PIN (one press from the status bar, engaged while walking away from a live
- * desk); panel widths and the Inspector overlay (per operator, per screen, not bridge
- * config); per-plate audio, the per-row source override and the on-air position (reached
- * during a live interview, from the row); the plate→source ASSIGNMENTS (per template,
- * beside the fields they bind — the catalog here is the OTHER of the two shapes, §6); and
- * the stack, which is the work, not a setting. `stationSetupScope.dom.test.ts` proves each
- * is still reachable where it was and acquired no second control here.
+ * The operator name (`B-143`); the lock PIN (one press from the status bar, engaged while
+ * walking away from a live desk — `STATION-CHROME-01` §7 re-confirmed this); panel widths
+ * and the Inspector overlay; per-plate audio, the per-row source override and the on-air
+ * position; the plate→source ASSIGNMENTS; and the stack, which is the work, not a setting.
+ * `stationSetupScope.dom.test.ts` proves each is still reachable where it was.
  *
- * Apply keeps its `AsyncButton` — it owns its busy/error rendering — and resolves its
- * variant from the shared role table (`modalActionVariant`): a documented exception to the
- * `ModalAction` rule, not drift.
+ * ⭐ **AND STATION LAYERS MOVED OUT** (§3). It is in front of the operator, in the panel it
+ * already has, not behind a door. The live-layer LEDGER — which was reachable only from the
+ * settings copy — moved to that panel rather than disappearing with the section.
  */
 
 interface Props {
   open: boolean;
-  /** The section the operator asked for — a deep link. Defaults to the first. */
+  /** The section the operator asked for — a deep link. Defaults to Channel. */
   section?: StationSetupSection;
-  /** Changes on every open request, so a repeat request while open still scrolls. */
+  /** Changes on every open request, so a repeat request while open still switches tab. */
   requestId?: number;
   onClose: () => void;
 }
 
 const styles = {
-  nav: {
+  shell: { display: 'flex', flex: 1, minHeight: 0, gap: 0, margin: '-0.25rem 0' },
+  pane: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    overflowY: 'auto' as const,
+    padding: '0.25rem 0 0.25rem 0.9rem',
     display: 'flex',
-    flexWrap: 'wrap' as const,
-    gap: '0.3rem',
-    alignItems: 'center',
+    flexDirection: 'column' as const,
+    gap: '0.75rem',
+  },
+  /** The footer's standing sentence — what this section's commit contract is. */
+  footNote: {
+    marginInlineEnd: 'auto',
     fontSize: '0.78rem',
     color: colors.textMuted,
+    textAlign: 'start' as const,
+    maxWidth: '58ch',
   },
   sub: {
     border: `1px solid ${colors.border}`,
@@ -164,6 +173,34 @@ export function anyOnAirOrUnsettled(items: readonly StackItemState[]): number {
   return items.filter(isOnAirStatus).length;
 }
 
+/**
+ * Do these two configs say the SAME thing? — the sky "unapplied changes" dot's whole basis.
+ *
+ * 🔴 NOT `JSON.stringify(a) !== JSON.stringify(b)`, and the first spelling of this was
+ * exactly that and was wrong in a way that looked right: the form always emits
+ * `templateServeHost` (`''` meaning "derive it"), while a stored config that has never had
+ * one simply OMITS the key. Absent and empty MEAN THE SAME THING here — the bridge's own
+ * normalizer says so — but they are different JSON, so every freshly-opened dialog claimed
+ * an unapplied draft the operator had not typed. A dot that is on before anything is done
+ * teaches the operator to ignore dots.
+ *
+ * So the comparison is on the NORMALISED fields, in one place, rather than on the shape.
+ */
+function sameServerConfig(a: ConnectionConfig, b: ConnectionConfig): boolean {
+  const endpoint = (e?: { host: string; amcpPort: number; oscPort: number }): string =>
+    e === undefined ? '' : `${e.host}|${String(e.amcpPort)}|${String(e.oscPort)}`;
+  const key = (c: ConnectionConfig): string =>
+    [
+      endpoint(c.servers.A),
+      endpoint(c.servers.B),
+      c.strategy,
+      String(c.autoFailoverEnabled),
+      c.templateServeHost ?? '',
+      c.templateServePort === undefined ? '' : String(c.templateServePort),
+    ].join('');
+  return key(a) === key(b);
+}
+
 function toDraft(ep: { host: string; amcpPort: number; oscPort: number }): EndpointDraft {
   return { host: ep.host, amcpPort: String(ep.amcpPort), oscPort: String(ep.oscPort) };
 }
@@ -187,20 +224,16 @@ function parseEndpoint(
   return { host, amcpPort, oscPort };
 }
 
-/** A section's message, prefixed with the section it came from — so the region never has to be hunted back to its source. */
-function fromSection(id: StationSetupSection, message: ModalMessage): ModalMessage {
-  return { ...message, text: `${sectionSpec(id).title}: ${message.text}` };
-}
-
 export function StationSetupDialog({
   open,
-  section = 'servers',
+  section = DEFAULT_STATION_SETUP_SECTION,
   requestId = 0,
   onClose,
 }: Props): JSX.Element | null {
   const items = useStack();
   // B-223 — the output check's technical surface reads the same health the banner does.
   const health = useConnections();
+  const [active, setActive] = useState<StationSetupSection>(section);
   const [primary, setPrimary] = useState<EndpointDraft>({
     host: '127.0.0.1',
     amcpPort: '5250',
@@ -225,10 +258,27 @@ export function StationSetupDialog({
   const [autoFailover, setAutoFailover] = useState(true);
   const [status, setStatus] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
+  /**
+   * What the bridge last told us is stored — the baseline the SKY "unapplied changes" dot
+   * measures against. Without it the dot would have to guess, and a dot that is on when
+   * nothing has been typed is worse than no dot.
+   */
+  const [loaded, setLoaded] = useState<ConnectionConfig | null>(null);
   /** One standing message per section — a refusal or an outcome, replaced by the next. */
   const [sectionMessages, setSectionMessages] = useState<
     Partial<Record<StationSetupSection, ModalMessage>>
   >({});
+  /** Sections that hold an unapplied draft, as they report it themselves. */
+  const [sectionDirty, setSectionDirty] = useState<Partial<Record<StationSetupSection, boolean>>>(
+    {},
+  );
+  /**
+   * The FOOTER SLOT. A section whose commit is its own — the bank — renders its Apply and
+   * Revert into this element, so the buttons are physically in the footer rather than
+   * duplicated there. Held in state rather than a ref because the portal target has to
+   * exist before the section renders into it, and a ref does not re-render.
+   */
+  const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
 
   /** Stable reporters, one per section, so a section's effect deps do not churn. */
   const reporters = useMemo(() => {
@@ -238,17 +288,25 @@ export function StationSetupDialog({
         setSectionMessages((prev) => {
           const next = { ...prev };
           if (message === null) delete next[id];
-          else next[id] = fromSection(id, message);
+          else next[id] = message;
           return next;
         });
       };
     return {
-      raster: make('raster'),
       sources: make('sources'),
       delimiters: make('delimiters'),
       candidateLayers: make('candidate-layers'),
     };
   }, []);
+
+  const markDirty = useMemo(
+    () =>
+      (id: StationSetupSection) =>
+      (dirty: boolean): void => {
+        setSectionDirty((prev) => (prev[id] === dirty ? prev : { ...prev, [id]: dirty }));
+      },
+    [],
+  );
 
   // Load the current config when opened; refresh when any client applies one.
   useEffect(() => {
@@ -263,6 +321,7 @@ export function StationSetupDialog({
       setAutoFailover(config.autoFailoverEnabled);
       setServeHost(config.templateServeHost ?? '');
       setServePort(config.templateServePort === undefined ? '' : String(config.templateServePort));
+      setLoaded(config);
     };
     void window.cg.connections.config().then(applyConfig);
     /*
@@ -289,6 +348,15 @@ export function StationSetupDialog({
   useEffect(() => {
     if (!open) setSectionMessages({});
   }, [open]);
+
+  /*
+    THE DEEP LINK LANDS ON THE TAB, not merely on the dialog. Keyed on `requestId` so a
+    SECOND request while the dialog is already open — SOURCES pressed with Servers showing —
+    still switches the tab; that repeat case is exactly what the id exists for.
+  */
+  useEffect(() => {
+    if (open) setActive(section);
+  }, [open, section, requestId]);
 
   const onAirCount = anyOnAirOrUnsettled(items);
 
@@ -341,6 +409,58 @@ export function StationSetupDialog({
 
   if (!open) return null;
 
+  /** Servers holds an unapplied draft when the typed config differs from what is stored. */
+  const serversDirty =
+    loaded !== null && typeof validated !== 'string' && !sameServerConfig(validated, loaded);
+
+  /**
+   * The Servers section's own refusals, worst-first. They live here rather than in a shared
+   * list because they belong to ONE tab: the whole point of §2 is that they are never in
+   * front of another section's work.
+   */
+  const serverMessages: readonly ModalMessage[] = [
+    // WHY APPLY SERVERS WILL NOT HAPPEN is a REFUSAL — the attention case, never red — and
+    // it names its SCOPE: the other sections are not gated and must not read as if they were.
+    ...(onAirCount > 0
+      ? [
+          {
+            role: 'refusal' as const,
+            text: `Apply is blocked for Servers: ${String(onAirCount)} item(s) are on air or unsettled. Use Clear All — it takes them off air and keeps the rows. Every other section stays editable.`,
+          },
+        ]
+      : []),
+    ...(validationError !== null ? [{ role: 'refusal' as const, text: validationError }] : []),
+    ...(refusal !== null ? [{ role: 'refusal' as const, text: refusal }] : []),
+    ...(status !== null ? [{ role: 'notice' as const, text: status }] : []),
+  ];
+
+  const messagesFor = (id: StationSetupSection): readonly ModalMessage[] => {
+    if (id === 'servers') return serverMessages;
+    const m = sectionMessages[id];
+    return m === undefined ? [] : [m];
+  };
+
+  const isBlocked = (id: StationSetupSection): boolean =>
+    messagesFor(id).some((m) => m.role === 'refusal');
+  const isDirty = (id: StationSetupSection): boolean =>
+    id === 'servers' ? serversDirty : (sectionDirty[id] ?? false);
+
+  const tabs: readonly TabSpec[] = STATION_SETUP_SECTIONS.map((s) => ({
+    id: s.id,
+    label: s.title,
+    group: s.group,
+    // BLOCKED beats EDITED: a section you cannot apply is the more urgent fact, and two
+    // dots on one row would be a puzzle rather than a signal.
+    ...(isBlocked(s.id)
+      ? { badge: { tone: 'warn' as const, label: `${s.title} is blocked` } }
+      : isDirty(s.id)
+        ? { badge: { tone: 'edited' as const, label: `${s.title} has unapplied changes` } }
+        : {}),
+  }));
+
+  const activeSpec = sectionSpec(active);
+  const activeMessages = messagesFor(active);
+
   const endpointRows = (
     draft: EndpointDraft,
     set: (next: EndpointDraft) => void,
@@ -380,316 +500,300 @@ export function StationSetupDialog({
     </>
   );
 
-  /*
-    THE DIALOG'S MESSAGES GO TO THE PRIMITIVE'S PINNED REGION. The Servers section's four
-    (why APPLY will not happen, a validation error, a bridge refusal, the outcome) first and
-    worst-first; then every other section's standing message, in section order.
-  */
-  const messages: readonly ModalMessage[] = [
-    // WHY APPLY SERVERS WILL NOT HAPPEN is a REFUSAL — the attention case, never red — and
-    // it names its SCOPE: the other sections are not gated and must not read as if they were.
-    ...(onAirCount > 0
-      ? [
-          {
-            role: 'refusal' as const,
-            text: `Apply is blocked for Servers: ${String(onAirCount)} item(s) are on air or unsettled. Use Clear All — it takes them off air and keeps the rows. Every other section stays editable.`,
-          },
-        ]
-      : []),
-    ...(validationError !== null
-      ? [{ role: 'refusal' as const, text: `Servers: ${validationError}` }]
-      : []),
-    ...(refusal !== null ? [{ role: 'refusal' as const, text: refusal }] : []),
-    ...(status !== null ? [{ role: 'notice' as const, text: status }] : []),
-    ...STATION_SETUP_SECTIONS.flatMap((s) => {
-      const m = sectionMessages[s.id];
-      return m === undefined ? [] : [m];
-    }),
-  ];
-
-  const jumpTo = (id: StationSetupSection): void => {
-    const el = document.querySelector<HTMLElement>(`[data-station-section="${id}"]`);
-    if (el === null) return;
-    if (typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'start' });
-    el.focus({ preventScroll: true });
-  };
-
   return (
     <Modal
       title="Station setup"
       ariaLabel="Station setup"
       size="wide"
       onClose={onClose}
-      {...(messages.length > 0 ? { message: messages } : {})}
+      {...(activeMessages.length > 0 ? { message: activeMessages } : {})}
       footer={
         <>
-          {/*
-            CANCEL: the Servers draft is dropped and nothing is sent; the sections that save
-            as they go are ALREADY saved, and the tooltip says so — the word "Cancel" must
-            not be read as undoing them. Routes to the same `onClose` as the ✕, Escape and the
-            backdrop. First in DOM order, so APPLY keeps the corner every dialog's primary has.
-          */}
-          <ModalAction
-            actionRole="cancel"
-            onClick={onClose}
-            title="Leaves without applying the Servers draft. The sections that save as you go are already saved."
-          >
-            Cancel
-          </ModalAction>
-          {/*
-            APPLY SERVERS — `primary`, and named for its SCOPE. It commits the Servers section
-            and nothing else; the raster, the bank, the catalog and the delimiters each commit
-            from their own section. An unscoped "APPLY" at the foot of a dialog with seven
-            sections would claim more than it does.
-          */}
-          <AsyncButton
-            variant={modalActionVariant('primary')}
-            data-modal-role="primary"
-            aria-label="Apply server settings"
-            title="Applies the Servers section. Refused while anything is on air."
-            disabled={onAirCount > 0 || validationError !== null}
-            run={async () => {
-              if (typeof validated === 'string') return { accepted: false };
-              setRefusal(null);
-              setStatus(null);
-              const result = await window.cg.connections.setConfig(validated);
-              if (!result.ok) {
-                setRefusal(
-                  `Servers: ${result.message ?? 'The bridge refused the new configuration.'}`,
-                );
-                return { accepted: false, errorCode: result.reason ?? 'refused' };
-              }
-              /*
-                🔴 B-162 — THE APPLY THAT SUCCEEDS AND STILL COSTS A SERVER ITS GRAPHICS. The
-                bridge's own verdict (`unreachable`) is read FIRST: a loopback template server
-                with a remote CasparCG configured means that server fetches ITSELF, gets nothing,
-                and shows live sources with no graphic over them while `CG ADD` reports success.
-                The bridge's verdict, never re-derived here (golden rule 6).
-              */
-              // `C-024` — RE-READ WHAT IS IN FORCE: the panel never computes it, it asks.
-              void window.cg.connections.templateServe().then(setServeInfo);
-              const unreachable = result.templateServe?.unreachable ?? [];
-              if (unreachable.length > 0) {
-                setRefusal(
-                  `Servers: applied, but the template server is loopback-only and ${unreachable.join(', ')} ` +
-                    `cannot reach it. Those servers will show live sources with NO TEMPLATE — no ` +
-                    `background, no text — and their CG ADD will still report success. Set Serve ` +
-                    `host above to this machine's address as those servers see it, then Apply ` +
-                    `again — the bridge does not need restarting.`,
-                );
-                return { accepted: true };
-              }
-              setStatus(
-                result.templateServe?.exposed === true
-                  ? `Applied. Template serve is LAN-exposed at ${result.templateServe.serveHost} (remote server); control stays on 127.0.0.1.`
-                  : 'Applied. All listeners remain loopback-only.',
-              );
-              return { accepted: true };
-            }}
-          >
-            APPLY SERVERS
-          </AsyncButton>
+          {/* This section's commit contract, in the footer, where the operator is looking
+              when he wants to know what pressing something will do. */}
+          <span style={styles.footNote} data-section-footer={active}>
+            {activeSpec.footerRest}
+          </span>
+          {/* The slot a section's own commit controls portal into (the bank's). */}
+          <span ref={setFooterSlot} data-station-footer-slot="" />
+          {active === 'servers' ? (
+            <>
+              {/*
+                CANCEL: the Servers draft is dropped and nothing is sent; the sections that
+                save as they go are ALREADY saved, and the tooltip says so. Routes to the same
+                `onClose` as the ✕, Escape and the backdrop. First in DOM order, so APPLY keeps
+                the corner every dialog's primary has.
+              */}
+              <ModalAction
+                actionRole="cancel"
+                onClick={onClose}
+                title="Leaves without applying the Servers draft. The sections that save as you go are already saved."
+              >
+                Cancel
+              </ModalAction>
+              {/*
+                APPLY SERVERS — `primary`, and named for its SCOPE. It commits the Servers
+                section and nothing else; the bank, the catalogue and the delimiters each
+                commit from their own tab.
+              */}
+              <AsyncButton
+                variant={modalActionVariant('primary')}
+                data-modal-role="primary"
+                aria-label="Apply server settings"
+                title="Applies the Servers section. Refused while anything is on air."
+                disabled={onAirCount > 0 || validationError !== null}
+                run={async () => {
+                  if (typeof validated === 'string') return { accepted: false };
+                  setRefusal(null);
+                  setStatus(null);
+                  const result = await window.cg.connections.setConfig(validated);
+                  if (!result.ok) {
+                    setRefusal(result.message ?? 'The bridge refused the new configuration.');
+                    return { accepted: false, errorCode: result.reason ?? 'refused' };
+                  }
+                  /*
+                    🔴 B-162 — THE APPLY THAT SUCCEEDS AND STILL COSTS A SERVER ITS GRAPHICS.
+                    The bridge's own verdict (`unreachable`) is read FIRST: a loopback template
+                    server with a remote CasparCG configured means that server fetches ITSELF,
+                    gets nothing, and shows live sources with no graphic over them while
+                    `CG ADD` reports success. The bridge's verdict, never re-derived here.
+                  */
+                  // `C-024` — RE-READ WHAT IS IN FORCE: the panel never computes it, it asks.
+                  void window.cg.connections.templateServe().then(setServeInfo);
+                  const unreachable = result.templateServe?.unreachable ?? [];
+                  if (unreachable.length > 0) {
+                    setRefusal(
+                      `Applied, but the template server is loopback-only and ${unreachable.join(', ')} ` +
+                        `cannot reach it. Those servers will show live sources with NO TEMPLATE — no ` +
+                        `background, no text — and their CG ADD will still report success. Set Serve ` +
+                        `host above to this machine's address as those servers see it, then Apply ` +
+                        `again — the bridge does not need restarting.`,
+                    );
+                    return { accepted: true };
+                  }
+                  setStatus(
+                    result.templateServe?.exposed === true
+                      ? `Applied. Template serve is LAN-exposed at ${result.templateServe.serveHost} (remote server); control stays on 127.0.0.1.`
+                      : 'Applied. All listeners remain loopback-only.',
+                  );
+                  return { accepted: true };
+                }}
+              >
+                APPLY SERVERS
+              </AsyncButton>
+            </>
+          ) : (
+            /*
+              EVERY OTHER TAB gets a quiet CLOSE and nothing else. A read-only tab has nothing
+              to commit; a save-as-you-go tab has already committed. "Cancel" would be a lie on
+              both — it would read as undoing what is already stored.
+            */
+            <ModalAction
+              actionRole="cancel"
+              onClick={onClose}
+              title="Dismisses the dialog. Nothing here is waiting to be applied."
+            >
+              Close
+            </ModalAction>
+          )}
         </>
       }
     >
-      {/* The jump row — every section stays rendered; this only scrolls. */}
-      <nav aria-label="Station setup sections" style={styles.nav}>
-        <span>Go to</span>
-        {STATION_SETUP_SECTIONS.map((s) => (
-          <Button
-            key={s.id}
-            variant="ghost"
-            aria-label={`Go to ${s.title}`}
-            onClick={() => jumpTo(s.id)}
-          >
-            {s.title}
-          </Button>
-        ))}
-      </nav>
-
-      <SetupSection id="servers" requested={section === 'servers'} requestId={requestId}>
-        <section style={styles.sub} aria-label="Primary server">
-          <span style={styles.subTitle}>PRIMARY (A)</span>
-          {endpointRows(primary, setPrimary, 'Primary')}
-        </section>
-
-        <section style={styles.sub} aria-label="Backup server">
-          <span style={styles.subTitle}>
-            BACKUP (B)
-            {backupEnabled ? (
-              <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>
-                Remove backup
-              </Button>
-            ) : (
-              <Button aria-label="Add backup" onClick={() => setBackupEnabled(true)}>
-                Add backup
-              </Button>
+      <div style={styles.shell}>
+        <Tabs
+          tabs={tabs}
+          activeId={active}
+          onSelect={(id) => setActive(id as StationSetupSection)}
+          ariaLabel="Station setup sections"
+          idPrefix="station"
+          orientation="vertical"
+        >
+          <div style={styles.pane}>
+            {active === 'channel' && (
+              <SetupSection id="channel">
+                <ChannelSection health={health} />
+              </SetupSection>
             )}
-          </span>
-          {backupEnabled ? (
-            endpointRows(backup, setBackup, 'Backup')
-          ) : (
-            <span style={styles.status}>
-              No backup declared — single-server operation (B-046: quiet by design).
-            </span>
-          )}
-        </section>
 
-        {/*
-          `C-024` — BESIDE THE SERVER HOSTS: a fact ABOUT the two servers above — the address
-          they fetch templates from. 🔴 The bridge is NOT restarted, and nothing here offers
-          to: `connections.set-config` rebuilds template serving on the running process.
-        */}
-        <section style={styles.sub} aria-label="Template serve address">
-          <span style={styles.subTitle}>HOW THOSE SERVERS REACH THIS MACHINE</span>
-          {/* ⚠ This copy deliberately does not say "NO TEMPLATE" — that phrase is the ALARM,
-              asserted ABSENT on a healthy apply, and ambient copy would drain it. */}
-          <span style={styles.status}>
-            The address CasparCG fetches templates from. Leave it empty to derive it. Get it wrong
-            and those servers show live sources with no graphic over them, while CG ADD still
-            reports success.
-          </span>
-          <div style={styles.row}>
-            <span style={styles.label}>Serve host</span>
-            <input
-              className="cg-field"
-              style={styles.host}
-              aria-label="Template serve host"
-              value={serveHost}
-              onChange={(e) => setServeHost(e.target.value)}
-            />
+            {active === 'servers' && (
+              <SetupSection id="servers">
+                <section style={styles.sub} aria-label="Primary server">
+                  <span style={styles.subTitle}>PRIMARY (A)</span>
+                  {endpointRows(primary, setPrimary, 'Primary')}
+                </section>
+
+                <section style={styles.sub} aria-label="Backup server">
+                  <span style={styles.subTitle}>
+                    BACKUP (B)
+                    {backupEnabled ? (
+                      <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>
+                        Remove backup
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="add"
+                        aria-label="Add backup"
+                        onClick={() => setBackupEnabled(true)}
+                      >
+                        Add backup
+                      </Button>
+                    )}
+                  </span>
+                  {backupEnabled ? (
+                    endpointRows(backup, setBackup, 'Backup')
+                  ) : (
+                    <span style={styles.status}>
+                      No backup declared — single-server operation (B-046: quiet by design).
+                    </span>
+                  )}
+                </section>
+
+                {/*
+                  `C-024` — BESIDE THE SERVER HOSTS: a fact ABOUT the two servers above — the
+                  address they fetch templates from. 🔴 The bridge is NOT restarted, and nothing
+                  here offers to: `connections.set-config` rebuilds template serving on the
+                  running process.
+                */}
+                <section style={styles.sub} aria-label="Template serve address">
+                  <span style={styles.subTitle}>HOW THOSE SERVERS REACH THIS MACHINE</span>
+                  {/* ⚠ This copy deliberately does not say "NO TEMPLATE" — that phrase is the
+                      ALARM, asserted ABSENT on a healthy apply, and ambient copy would drain it. */}
+                  <span style={styles.status}>
+                    The address CasparCG fetches templates from. Leave it empty to derive it. Get it
+                    wrong and those servers show live sources with no graphic over them, while CG
+                    ADD still reports success.
+                  </span>
+                  <div style={styles.row}>
+                    <span style={styles.label}>Serve host</span>
+                    <input
+                      className="cg-field"
+                      style={styles.host}
+                      aria-label="Template serve host"
+                      value={serveHost}
+                      onChange={(e) => setServeHost(e.target.value)}
+                    />
+                  </div>
+                  {flagServeHost === undefined ? null : (
+                    <div style={styles.maskedNote} data-testid="serve-host-masked">
+                      <span style={styles.inForce}>In force: {flagServeHost}</span>
+                      <span>(set by --template-serve-host)</span>
+                      <span style={styles.maskedStored}>
+                        {serveHost.trim().length === 0 ? 'empty (would derive)' : serveHost}
+                      </span>
+                      <span>
+                        not in force — overridden by --template-serve-host. It takes over at the
+                        next start without the flag, so it stays editable.
+                      </span>
+                    </div>
+                  )}
+                  {serveCandidates.length === 0 ? null : (
+                    <div style={styles.candidates}>
+                      {/* ⚠ CANDIDATES, NEVER A VERDICT: the bridge enumerates this machine's
+                          interfaces; it cannot know which one the plant routes to. */}
+                      <span style={styles.status}>
+                        Candidates — this machine&apos;s addresses, not a verdict about which one
+                        those servers can reach:
+                      </span>
+                      {serveCandidates.map((candidate) => (
+                        <Button
+                          key={candidate}
+                          aria-label={`Use serve host ${candidate}`}
+                          onClick={() => setServeHost(candidate)}
+                        >
+                          {candidate}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
+                  <div style={styles.row}>
+                    <span style={styles.label}>Serve port</span>
+                    <NumericInput
+                      className="cg-field"
+                      style={styles.port}
+                      aria-label="Template serve port"
+                      value={servePort}
+                      onValueChange={setServePort}
+                    />
+                    <span style={styles.status}>
+                      Empty = ephemeral (today&apos;s default). Pin it to make a firewall rule
+                      possible.
+                    </span>
+                  </div>
+                  {flagServePort === undefined ? null : (
+                    <div style={styles.maskedNote} data-testid="serve-port-masked">
+                      <span style={styles.inForce}>In force: {String(flagServePort)}</span>
+                      <span>(set by --template-serve-port)</span>
+                      <span style={styles.maskedStored}>
+                        {servePort.trim().length === 0 ? 'empty (ephemeral)' : servePort}
+                      </span>
+                      <span>not in force — overridden by --template-serve-port.</span>
+                    </div>
+                  )}
+                </section>
+
+                <section style={styles.sub} aria-label="Redundancy options">
+                  <div style={styles.row}>
+                    <span style={styles.label}>Strategy</span>
+                    <select
+                      className="cg-field"
+                      style={{ width: 'auto' }}
+                      aria-label="Redundancy strategy"
+                      value={strategy}
+                      onChange={(e) => setStrategy(e.target.value as ConnectionConfig['strategy'])}
+                    >
+                      <option value="mirror-sync">mirror-sync</option>
+                      <option value="mirror-async">mirror-async</option>
+                      <option value="journal-replay">journal-replay</option>
+                    </select>
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <input
+                        type="checkbox"
+                        aria-label="Auto-failover enabled"
+                        checked={autoFailover}
+                        onChange={(e) => setAutoFailover(e.target.checked)}
+                      />
+                      auto-failover
+                    </label>
+                  </div>
+                </section>
+
+                {/* The remote-host note stays in the BODY: it describes the configuration being
+                    edited, not the outcome of pressing Apply. `role="note"` keeps it out of the
+                    alert channel. */}
+                {remoteHosts.length > 0 && (
+                  <Notice
+                    noticeRole="refusal"
+                    aria="note"
+                    text={`Remote server (${remoteHosts.join(', ')}): the template server and OSC listener will use a LAN address so CasparCG can reach this machine. The control connection stays on 127.0.0.1.`}
+                  />
+                )}
+              </SetupSection>
+            )}
+
+            {active === 'sources' && (
+              <SetupSection id="sources">
+                <SourcesSection report={reporters.sources} />
+              </SetupSection>
+            )}
+
+            {active === 'delimiters' && (
+              <SetupSection id="delimiters">
+                <DelimitersSection report={reporters.delimiters} />
+              </SetupSection>
+            )}
+
+            {active === 'candidate-layers' && (
+              <SetupSection id="candidate-layers">
+                <CandidateLayersSection
+                  report={reporters.candidateLayers}
+                  onDirtyChange={markDirty('candidate-layers')}
+                  footerSlot={footerSlot}
+                />
+              </SetupSection>
+            )}
           </div>
-          {flagServeHost === undefined ? null : (
-            <div style={styles.maskedNote} data-testid="serve-host-masked">
-              <span style={styles.inForce}>In force: {flagServeHost}</span>
-              <span>(set by --template-serve-host)</span>
-              <span style={styles.maskedStored}>
-                {serveHost.trim().length === 0 ? 'empty (would derive)' : serveHost}
-              </span>
-              <span>
-                not in force — overridden by --template-serve-host. It takes over at the next start
-                without the flag, so it stays editable.
-              </span>
-            </div>
-          )}
-          {serveCandidates.length === 0 ? null : (
-            <div style={styles.candidates}>
-              {/* ⚠ CANDIDATES, NEVER A VERDICT: the bridge enumerates this machine's
-                  interfaces; it cannot know which one the plant routes to. */}
-              <span style={styles.status}>
-                Candidates — this machine&apos;s addresses, not a verdict about which one those
-                servers can reach:
-              </span>
-              {serveCandidates.map((candidate) => (
-                <Button
-                  key={candidate}
-                  aria-label={`Use serve host ${candidate}`}
-                  onClick={() => setServeHost(candidate)}
-                >
-                  {candidate}
-                </Button>
-              ))}
-            </div>
-          )}
-          <div style={styles.row}>
-            <span style={styles.label}>Serve port</span>
-            <NumericInput
-              className="cg-field"
-              style={styles.port}
-              aria-label="Template serve port"
-              value={servePort}
-              onValueChange={setServePort}
-            />
-            <span style={styles.status}>
-              Empty = ephemeral (today&apos;s default). Pin it to make a firewall rule possible.
-            </span>
-          </div>
-          {flagServePort === undefined ? null : (
-            <div style={styles.maskedNote} data-testid="serve-port-masked">
-              <span style={styles.inForce}>In force: {String(flagServePort)}</span>
-              <span>(set by --template-serve-port)</span>
-              <span style={styles.maskedStored}>
-                {servePort.trim().length === 0 ? 'empty (ephemeral)' : servePort}
-              </span>
-              <span>not in force — overridden by --template-serve-port.</span>
-            </div>
-          )}
-        </section>
-
-        <section style={styles.sub} aria-label="Redundancy options">
-          <div style={styles.row}>
-            <span style={styles.label}>Strategy</span>
-            <select
-              className="cg-field"
-              style={{ width: 'auto' }}
-              aria-label="Redundancy strategy"
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value as ConnectionConfig['strategy'])}
-            >
-              <option value="mirror-sync">mirror-sync</option>
-              <option value="mirror-async">mirror-async</option>
-              <option value="journal-replay">journal-replay</option>
-            </select>
-            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-              <input
-                type="checkbox"
-                aria-label="Auto-failover enabled"
-                checked={autoFailover}
-                onChange={(e) => setAutoFailover(e.target.checked)}
-              />
-              auto-failover
-            </label>
-          </div>
-        </section>
-
-        {/* The remote-host note stays in the BODY: it describes the configuration being
-            edited, not the outcome of pressing Apply. `role="note"` keeps it out of the
-            alert channel. */}
-        {remoteHosts.length > 0 && (
-          <Notice
-            noticeRole="refusal"
-            aria="note"
-            text={`Remote server (${remoteHosts.join(', ')}): the template server and OSC listener will use a LAN address so CasparCG can reach this machine. The control connection stays on 127.0.0.1.`}
-          />
-        )}
-      </SetupSection>
-
-      {/*
-        `B-223` — THE OUTPUT CHECK'S ENGINEERING DETAIL, read-only. Nothing in it is a
-        control, so it gates nothing and is gated by nothing. `OutputsSection` renders its own
-        labelled region (`Program outputs`), which the banner's pointer names.
-      */}
-      <SetupSection id="outputs" requested={section === 'outputs'} requestId={requestId}>
-        <OutputsSection health={health} />
-      </SetupSection>
-
-      <SetupSection id="raster" requested={section === 'raster'} requestId={requestId}>
-        <ChannelRasterSection report={reporters.raster} />
-      </SetupSection>
-
-      <SetupSection id="sources" requested={section === 'sources'} requestId={requestId}>
-        <SourcesSection report={reporters.sources} />
-      </SetupSection>
-
-      <SetupSection id="delimiters" requested={section === 'delimiters'} requestId={requestId}>
-        <DelimitersSection report={reporters.delimiters} />
-      </SetupSection>
-
-      <SetupSection
-        id="candidate-layers"
-        requested={section === 'candidate-layers'}
-        requestId={requestId}
-      >
-        <CandidateLayersSection report={reporters.candidateLayers} />
-      </SetupSection>
-
-      <SetupSection
-        id="station-layers"
-        requested={section === 'station-layers'}
-        requestId={requestId}
-      >
-        <StationLayersSection />
-      </SetupSection>
+        </Tabs>
+      </div>
     </Modal>
   );
 }

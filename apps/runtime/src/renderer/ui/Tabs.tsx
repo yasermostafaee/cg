@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { Fragment, type CSSProperties, type ReactNode } from 'react';
 import { colors, cssVars } from '../theme.js';
 
 /**
@@ -17,8 +17,24 @@ import { colors, cssVars } from '../theme.js';
 export interface TabSpec {
   id: string;
   label: string;
-  /** Optional attention marker, rendered after the label. */
-  badge?: { tone: 'warn'; label: string } | undefined;
+  /**
+   * Optional attention marker, rendered after the label.
+   *
+   * `warn` (amber) — this tab is BLOCKED: something in it was refused.
+   * `edited` (sky) — this tab has UNAPPLIED changes.
+   *
+   * `STATION-CHROME-01` §2 — these two are what let a tabbed dialog keep the promise the
+   * scroll was protecting. The old argument against tabs was that a tab HIDES the section a
+   * refusal came from; a dot in the rail means every blocked section announces itself from
+   * every tab, and one press lands on the sentence that says why. That is strictly more than
+   * the scroll gave, which only ever showed the refusal you happened to be standing beside.
+   */
+  badge?: { tone: 'warn' | 'edited'; label: string } | undefined;
+  /**
+   * Rail heading this tab sits under (vertical orientation only). Consecutive tabs sharing a
+   * group render one heading; a tab with no group renders none.
+   */
+  group?: string | undefined;
 }
 
 interface Props {
@@ -45,6 +61,15 @@ interface Props {
    * must never look like peers in one strip.
    */
   level?: 'inner' | 'outer';
+  /**
+   * `vertical` is the RAIL — a column of tabs beside the panel rather than a strip above
+   * it. Station setup's five sections do not fit a strip at a readable size, and a rail is
+   * also where a per-section status dot can live without competing with the section's own
+   * chrome. The caller lays the two out (rail | panel) in a row flex container.
+   */
+  orientation?: 'horizontal' | 'vertical';
+  /** Fixed rail width, vertical only. */
+  railWidth?: string;
 }
 
 const styles = {
@@ -97,6 +122,44 @@ const styles = {
     background: cssVars['--r-caution-text'],
     flexShrink: 0,
   },
+  /** UNAPPLIED CHANGES. The sky, never the amber — amber is "you are blocked". */
+  dotEdited: { background: cssVars['--r-accent'] },
+  // ── the RAIL (vertical) ──────────────────────────────────────────────────
+  rail: {
+    flexDirection: 'column' as const,
+    alignItems: 'stretch',
+    gap: '0.1rem',
+    borderBottom: 'none',
+    borderRight: `1px solid ${colors.border}`,
+    background: colors.background,
+    padding: '0.4rem 0.35rem',
+    overflowY: 'auto' as const,
+  },
+  railTab: {
+    justifyContent: 'flex-start',
+    textAlign: 'start' as const,
+    padding: '0.4rem 0.5rem',
+    borderRadius: '0.25rem',
+    border: '1px solid transparent',
+    borderBottom: '1px solid transparent',
+    fontWeight: 600,
+    letterSpacing: 0,
+    fontSize: '0.85rem',
+  },
+  railActiveTab: {
+    color: colors.text,
+    background: cssVars['--r-row-selected-fill'],
+    borderColor: colors.border,
+  },
+  railLabel: { flex: 1, minWidth: 0 },
+  railGroup: {
+    padding: '0.6rem 0.5rem 0.25rem',
+    fontSize: '0.62rem',
+    fontWeight: 700,
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase' as const,
+    color: colors.textMuted,
+  },
 } as const satisfies Record<string, CSSProperties>;
 
 export function Tabs({
@@ -107,40 +170,75 @@ export function Tabs({
   ariaLabel,
   idPrefix = 'tab',
   level = 'inner',
+  orientation = 'horizontal',
+  railWidth = '13rem',
 }: Props): JSX.Element {
   const outer = level === 'outer';
+  const vertical = orientation === 'vertical';
+  let lastGroup: string | undefined;
   return (
     <>
       <div
-        style={outer ? { ...styles.strip, ...styles.outerStrip } : styles.strip}
+        style={
+          vertical
+            ? { ...styles.strip, ...styles.rail, width: railWidth, flexShrink: 0 }
+            : outer
+              ? { ...styles.strip, ...styles.outerStrip }
+              : styles.strip
+        }
         role="tablist"
         aria-label={ariaLabel}
+        {...(vertical ? { 'aria-orientation': 'vertical' as const } : {})}
       >
         {tabs.map((tab) => {
           const active = tab.id === activeId;
-          const base = outer ? { ...styles.tab, ...styles.outerTab } : styles.tab;
-          const activeStyle = outer ? styles.outerActiveTab : styles.activeTab;
+          const base = vertical
+            ? { ...styles.tab, ...styles.railTab }
+            : outer
+              ? { ...styles.tab, ...styles.outerTab }
+              : styles.tab;
+          const activeStyle = vertical
+            ? styles.railActiveTab
+            : outer
+              ? styles.outerActiveTab
+              : styles.activeTab;
+          const heading = vertical && tab.group !== undefined && tab.group !== lastGroup;
+          if (vertical) lastGroup = tab.group;
           return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              id={`${idPrefix}-${tab.id}`}
-              aria-selected={active}
-              aria-controls={`${idPrefix}panel-${tab.id}`}
-              style={active ? { ...base, ...activeStyle } : base}
-              onClick={() => onSelect(tab.id)}
-            >
-              {tab.label}
-              {tab.badge !== undefined && (
-                // The dot is decorative; the LABEL beside it is what a screen
-                // reader announces, so the signal never depends on colour.
-                <>
-                  <span style={styles.dot} aria-hidden="true" />
-                  <span className="cg-visually-hidden">{tab.badge.label}</span>
-                </>
+            <Fragment key={tab.id}>
+              {heading && (
+                <span style={styles.railGroup} aria-hidden="true">
+                  {tab.group}
+                </span>
               )}
-            </button>
+              <button
+                type="button"
+                role="tab"
+                id={`${idPrefix}-${tab.id}`}
+                aria-selected={active}
+                aria-controls={`${idPrefix}panel-${tab.id}`}
+                style={active ? { ...base, ...activeStyle } : base}
+                onClick={() => onSelect(tab.id)}
+              >
+                {vertical ? <span style={styles.railLabel}>{tab.label}</span> : tab.label}
+                {tab.badge !== undefined && (
+                  // The dot is decorative; the LABEL beside it is what a screen
+                  // reader announces, so the signal never depends on colour.
+                  <>
+                    <span
+                      style={
+                        tab.badge.tone === 'edited'
+                          ? { ...styles.dot, ...styles.dotEdited }
+                          : styles.dot
+                      }
+                      aria-hidden="true"
+                      data-tab-badge={tab.badge.tone}
+                    />
+                    <span className="cg-visually-hidden">{tab.badge.label}</span>
+                  </>
+                )}
+              </button>
+            </Fragment>
           );
         })}
       </div>

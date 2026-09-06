@@ -512,12 +512,20 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
         ⇄ FAILOVER
       </AsyncButton>
       {onOpenSettings !== undefined && (
+        /*
+          `STATION-CHROME-01` §2 — RENAMED from SERVERS, and the rename is a correction
+          rather than a preference: this button opens the dialog at its DEFAULT tab, which
+          is now Channel, so a label reading "Servers" would name a section the press does
+          not land on. A control whose name and destination disagree is worse than an
+          unlabelled one. The SOURCES button beside it keeps its name because it still IS a
+          deep link, to a section it names.
+        */
         <Button
           onClick={onOpenSettings}
-          aria-label="Open Station setup at Servers"
-          title="Station setup — Servers"
+          aria-label="Open Station setup"
+          title="Station setup — the station's settings, in one place"
         >
-          SERVERS
+          SETTINGS
         </Button>
       )}
       {onOpenSources !== undefined && (

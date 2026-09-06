@@ -16,17 +16,26 @@ import type {
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { StationSetupDialog } from '../../src/renderer/features/stationSetup/StationSetupDialog.js';
-import type { StationSetupSection } from '../../src/renderer/features/stationSetup/sections.js';
+import {
+  DEFAULT_STATION_SETUP_SECTION,
+  type StationSetupSection,
+} from '../../src/renderer/features/stationSetup/sections.js';
 import { openDialog } from './dialog.js';
 
 /**
  * `STATION-SETUP-02` — ONE bridge stub for the ONE settings dialog.
  *
- * Every section of Station setup renders on open, so every dom spec that drives ANY section
- * needs the whole dialog's bridge surface: connections, the stack, the link, the fixed bank,
- * the raster, the station layers, the live-layer ledger, sources, delimiters and templates.
- * Ten specs each hand-rolling that surface is how two of them come to stub the same channel
- * differently; this is the one place it is written down, with every part overridable.
+ * Any section of Station setup may be the one on screen, so every dom spec that drives ANY
+ * section needs the whole dialog's bridge surface: connections, the stack, the link, the
+ * fixed bank, the raster, sources, delimiters and templates. Ten specs each hand-rolling that
+ * surface is how two of them come to stub the same channel differently; this is the one place
+ * it is written down, with every part overridable.
+ *
+ * ⭐ `STATION-CHROME-01` §2 — the dialog is TABBED now, so only ONE section is mounted at a
+ * time. A spec therefore says which tab it is about, either by opening at it
+ * (`renderStationSetup({ section })`) or by pressing its rail tab (`selectSetupTab`).
+ * `sectionOf` looks only at what is on screen, deliberately: a helper that could find a
+ * section the operator cannot see would let a spec assert something no operator can reach.
  *
  * The defaults are a QUIET station: nothing on air, one declared channel at the reference
  * raster whose server reading agrees, a two-row bank with nothing bound, no sources, the
@@ -216,7 +225,7 @@ export async function renderStationSetup(
         null,
         createElement(StationSetupDialog, {
           open: true,
-          section: options.section ?? 'servers',
+          section: options.section ?? DEFAULT_STATION_SETUP_SECTION,
           requestId: options.requestId ?? 1,
           onClose: options.onClose ?? ((): void => undefined),
         }),
@@ -244,11 +253,45 @@ export async function unmountStationSetup(): Promise<void> {
   container = null;
 }
 
-/** The section element for `id`, scoped to the dialog. */
+/**
+ * The section element for `id`, scoped to the dialog — and only if that tab is SHOWING.
+ *
+ * The error names the remedy because the failure is otherwise puzzling: the section exists in
+ * the rail, it is simply not the mounted one.
+ */
 export function sectionOf(dialog: HTMLElement, id: StationSetupSection): HTMLElement {
   const el = dialog.querySelector<HTMLElement>(`[data-station-section="${id}"]`);
-  if (el === null) throw new Error(`Station setup has no "${id}" section`);
+  if (el === null) {
+    const showing =
+      dialog.querySelector('[data-station-section]')?.getAttribute('data-station-section') ??
+      '(none)';
+    throw new Error(
+      `Station setup is showing "${showing}", not "${id}" — open at it or call selectSetupTab()`,
+    );
+  }
   return el;
+}
+
+/** Press a rail tab and let the pane settle. */
+export async function selectSetupTab(
+  dialog: HTMLElement,
+  id: StationSetupSection,
+): Promise<HTMLElement> {
+  const tab = dialog.querySelector<HTMLButtonElement>(`[role="tab"]#station-${id}`);
+  if (tab === null) throw new Error(`no "${id}" tab in the Station setup rail`);
+  await act(async () => {
+    tab.click();
+    await Promise.resolve();
+  });
+  await settleSetup();
+  return sectionOf(dialog, id);
+}
+
+/** The rail tab element for `id` — for asserting its selected state or its status dot. */
+export function tabOf(dialog: HTMLElement, id: StationSetupSection): HTMLButtonElement {
+  const tab = dialog.querySelector<HTMLButtonElement>(`[role="tab"]#station-${id}`);
+  if (tab === null) throw new Error(`no "${id}" tab in the Station setup rail`);
+  return tab;
 }
 
 /** Click a button anywhere in the dialog by its exact visible label. */

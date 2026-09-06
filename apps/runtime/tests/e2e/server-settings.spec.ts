@@ -1,4 +1,21 @@
+import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures/runtime.js';
+
+/**
+ * Open Station setup AND land on SERVERS.
+ *
+ * `STATION-CHROME-01` §2 — the status bar's button is SETTINGS now and opens the dialog at
+ * its default tab, CHANNEL, which is the tab that asks nothing of the operator. This whole
+ * file is about the Servers tab, so it says so once, here, rather than fifteen times.
+ */
+async function openServers(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Station setup' })
+    .getByRole('tablist', { name: 'Station setup sections' })
+    .getByRole('tab', { name: /^Servers/ })
+    .click();
+}
 
 /**
  * R-010 — the Servers section of Station setup + Remove-All, driven against the offline
@@ -18,14 +35,13 @@ test('settings panel: blocked while on air, Clear-All unblocks and the ROWS SURV
 }) => {
   const page = app.page;
   const panel = page.getByRole('dialog', { name: 'Station setup' });
-  const openSettings = page.getByRole('button', { name: 'Open Station setup at Servers' });
 
   // 1. Take an item to air, THEN open the panel → gate mirrored, Apply disabled.
   // R-028 part B — addressed by LAYER, not `.first()`: rows render newest-layer
   // first and most are empty, so the first PLAY on the page belongs to an empty
   // row and is correctly disabled. Layer 70 is the seed's loaded graphic.
   await app.layerRow(70).getByRole('button', { name: 'PLAY' }).click();
-  await openSettings.click();
+  await openServers(page);
   await expect(panel).toBeVisible();
   await expect(panel.getByLabel('Primary host')).toHaveValue('127.0.0.1');
   await expect(panel.getByText(/on air or unsettled/)).toBeVisible();
@@ -73,7 +89,7 @@ test('settings panel: blocked while on air, Clear-All unblocks and the ROWS SURV
   await expect(app.layerRow(70).getByRole('button', { name: 'REMOVE' })).toBeVisible();
 
   // 3. Reopened: unblocked; remote host → warning; Apply → applied.
-  await openSettings.click();
+  await openServers(page);
   await expect(panel.getByRole('button', { name: 'Apply server settings' })).toBeEnabled();
   await panel.getByLabel('Primary host').fill('192.168.1.50');
   await expect(panel.getByText(/Remote server \(192\.168\.1\.50\)/)).toBeVisible();
@@ -136,7 +152,7 @@ test('settings panel: the serve address sits beside the server hosts, offers can
   const clearDialog = page.getByRole('dialog').filter({ hasText: /Clear/ });
   await clearDialog.getByRole('button', { name: /^Clear/ }).click();
 
-  await page.getByRole('button', { name: 'Open Station setup at Servers' }).click();
+  await openServers(page);
   await expect(panel).toBeVisible();
 
   /*
@@ -166,7 +182,7 @@ test('settings panel: the serve address sits beside the server hosts, offers can
 
   // The value survives a close/reopen — which is the whole point of giving it a stored layer.
   await panel.getByRole('button', { name: 'Cancel' }).click();
-  await page.getByRole('button', { name: 'Open Station setup at Servers' }).click();
+  await openServers(page);
   await expect(panel.getByLabel('Template serve host')).toHaveValue('192.168.21.93');
   await expect(panel.getByLabel('Template serve port')).toHaveValue('7911');
 });

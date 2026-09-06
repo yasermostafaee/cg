@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { StationSetupSection } from './sections.js';
+import { DEFAULT_STATION_SETUP_SECTION, type StationSetupSection } from './sections.js';
 
 /**
  * `STATION-SETUP-02` — WHO OPENS STATION SETUP, AND AT WHICH SECTION.
@@ -11,7 +11,7 @@ import type { StationSetupSection } from './sections.js';
  * every layer between — the same reason `sourceStore` and `delimiterStore` are modules.
  *
  * A request carries a `requestId` so that pressing SOURCES while the dialog is already open
- * at Servers is a NEW request (the dialog scrolls to Sources), rather than a no-op on a
+ * at Servers is a NEW request (the dialog switches to that TAB), rather than a no-op on a
  * boolean that is already true.
  */
 
@@ -22,7 +22,11 @@ export interface StationSetupRequest {
   readonly requestId: number;
 }
 
-let state: StationSetupRequest = { open: false, section: 'servers', requestId: 0 };
+let state: StationSetupRequest = {
+  open: false,
+  section: DEFAULT_STATION_SETUP_SECTION,
+  requestId: 0,
+};
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -30,7 +34,9 @@ function emit(): void {
 }
 
 /** Open the dialog at `section` (a deep link), or bring it to that section if already open. */
-export function openStationSetup(section: StationSetupSection = 'servers'): void {
+export function openStationSetup(
+  section: StationSetupSection = DEFAULT_STATION_SETUP_SECTION,
+): void {
   state = { open: true, section, requestId: state.requestId + 1 };
   emit();
 }
@@ -56,6 +62,6 @@ export function useStationSetupRequest(): StationSetupRequest {
 
 /** Test seam — back to closed, with the counter reset. */
 export function __resetStationSetupForTest(): void {
-  state = { open: false, section: 'servers', requestId: 0 };
+  state = { open: false, section: DEFAULT_STATION_SETUP_SECTION, requestId: 0 };
   emit();
 }

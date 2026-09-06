@@ -45,7 +45,7 @@ function applyButton(el: HTMLElement): HTMLButtonElement {
 describe('Station setup — Servers (R-010)', () => {
   it('loads the current config into the fields', async () => {
     stub({ items: [item('idle')] });
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     const host = el.querySelector<HTMLInputElement>('input[aria-label="Primary host"]');
     expect(host?.value).toBe('127.0.0.1');
     expect(el.textContent).toContain('No backup declared');
@@ -71,18 +71,27 @@ describe('Station setup — Servers (R-010)', () => {
       strategy: 'mirror-sync',
     } as ConnectionHealth;
     stub({ items: [item('idle')], health });
-    const el = await renderStationSetup();
+    /*
+      ⭐ `STATION-CHROME-01` §4 MOVED THIS TAB. Outputs is on CHANNEL now, beside the raster,
+      because the two answer one question — what the channel is, and what it is coming out of
+      — and neither is set here. It is still fed from the same connection health.
+    */
+    const el = await renderStationSetup({ section: 'channel' });
     const section = el.querySelector('section[aria-label="Program outputs"]');
     expect(section).not.toBeNull();
     expect(section?.textContent).toContain('Channel 1 on server A');
     expect(section?.querySelector('[data-severity="local"]')?.textContent).toContain('screen');
-    // Read-only: the section gates nothing — APPLY SERVERS is exactly as enabled as before.
-    expect(applyButton(el).disabled).toBe(false);
+    // Read-only, and now provably so: the tab carries NO commit action at all — not a
+    // disabled one, none — and its footer says there is nothing to apply.
+    expect([...el.querySelectorAll('[data-modal-role="primary"]')]).toEqual([]);
+    expect(el.querySelector('[data-section-footer="channel"]')?.textContent).toContain(
+      'Nothing to apply',
+    );
   });
 
   it('mirrors the on-air gate: APPLY SERVERS disabled with the reason, and the reason names its scope', async () => {
     stub({ items: [item('on-air'), item('idle'), item('unconfirmed')] });
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     expect(applyButton(el).disabled).toBe(true);
     expect(el.textContent).toContain('2 item(s) are on air or unsettled');
     // `STATION-SETUP-02` §1 — the guard did NOT widen with the dialog, and the message says so.
@@ -92,13 +101,13 @@ describe('Station setup — Servers (R-010)', () => {
 
   it('idle/loaded items do not block APPLY SERVERS', async () => {
     stub({ items: [item('idle'), item('loaded')] });
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     expect(applyButton(el).disabled).toBe(false);
   });
 
   it('warns about LAN exposure for a non-loopback host, and confirms post-apply', async () => {
     const { setConfig } = stub();
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     expect(el.textContent).not.toContain('Remote server');
     await setSetupInput(el, 'Primary host', '192.168.1.50');
     expect(el.textContent).toContain('Remote server (192.168.1.50)');
@@ -132,7 +141,7 @@ describe('Station setup — Servers (R-010)', () => {
         },
       },
     });
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     await act(async () => {
       applyButton(el).click();
       await Promise.resolve();
@@ -154,7 +163,7 @@ describe('Station setup — Servers (R-010)', () => {
         templateServe: { serveHost: '127.0.0.1', port: 7911, exposed: false, unreachable: [] },
       },
     });
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     await act(async () => {
       applyButton(el).click();
       await Promise.resolve();
@@ -165,7 +174,7 @@ describe('Station setup — Servers (R-010)', () => {
 
   it('validates ports and disables APPLY SERVERS on garbage', async () => {
     stub();
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     await setSetupInput(el, 'Primary AMCP port', 'abc');
     expect(el.textContent).toContain('AMCP port must be an integer');
     expect(applyButton(el).disabled).toBe(true);
@@ -180,6 +189,7 @@ describe('Station setup — Servers (R-010)', () => {
     const { setConfig } = stub();
     let closed = false;
     const el = await renderStationSetup({
+      section: 'servers',
       onClose: () => {
         closed = true;
       },
@@ -210,7 +220,7 @@ describe('Station setup — Servers (R-010)', () => {
           '1 item(s) are on air or unsettled — Clear All takes them off air and keeps the rows.',
       },
     });
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     const addBackup = el.querySelector<HTMLButtonElement>('button[aria-label="Add backup"]');
     await act(async () => {
       addBackup?.click();
@@ -239,7 +249,7 @@ describe('Station setup — Servers (R-010)', () => {
 
   it('C-024: the serve host and a pinned port are submitted; an empty port is omitted', async () => {
     const { setConfig } = stub();
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     await setSetupInput(el, 'Template serve host', '192.168.21.93');
     await setSetupInput(el, 'Template serve port', '7911');
     await act(async () => {
@@ -261,7 +271,7 @@ describe('Station setup — Servers (R-010)', () => {
       problem and `0` already means something specific, so an empty port field is omitted.
     */
     const { setConfig } = stub();
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     await act(async () => {
       applyButton(el).click();
       await Promise.resolve();
@@ -280,7 +290,7 @@ describe('Station setup — Servers (R-010)', () => {
       },
       config: { ...SETUP_CONFIG, templateServeHost: '192.168.21.93' },
     });
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     const masked = el.querySelector('[data-testid="serve-host-masked"]');
     expect(masked).not.toBeNull();
     expect(masked?.textContent).toContain('10.0.0.7');
@@ -301,14 +311,14 @@ describe('Station setup — Servers (R-010)', () => {
 
   it('C-024: with NO flag set, nothing is masked — a derived host is not an override', async () => {
     stub({ serveInfo: { ...SETUP_SERVE_INFO, serveHost: '127.0.0.1' } });
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     expect(el.querySelector('[data-testid="serve-host-masked"]')).toBeNull();
     expect(el.querySelector('[data-testid="serve-port-masked"]')).toBeNull();
   });
 
   it('C-024: candidates are offered as CANDIDATES, and picking one fills the field', async () => {
     stub({ serveInfo: { ...SETUP_SERVE_INFO, candidates: ['192.168.21.93', '172.17.0.1'] } });
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     // ⚠ The wording is the point: this list must never read as a verdict about which
     // interface the plant can reach. That is exactly `guessLanHost()`'s failure.
     expect(el.textContent).toContain('not a verdict');
@@ -326,7 +336,7 @@ describe('Station setup — Servers (R-010)', () => {
 
   it('C-024: a non-integer serve port blocks APPLY SERVERS with a stated reason', async () => {
     stub();
-    const el = await renderStationSetup();
+    const el = await renderStationSetup({ section: 'servers' });
     await setSetupInput(el, 'Template serve port', '79x11');
     expect(applyButton(el).disabled).toBe(true);
     expect(el.textContent).toContain('Template serve port must be an integer');

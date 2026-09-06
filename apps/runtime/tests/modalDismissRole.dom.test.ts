@@ -10,6 +10,7 @@ import { clearPortals, openDialog } from './support/dialog.js';
 import {
   renderStationSetup,
   sectionOf,
+  selectSetupTab,
   stationSetupStub,
   unmountStationSetup,
 } from './support/stationSetup.js';
@@ -139,7 +140,9 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
   it('🔴 Station setup: Cancel DISMISSES — the Servers draft is dropped, nothing is sent, the saved sections stay saved', async () => {
     const stub = stationSetupStub();
     const onClose = vi.fn();
-    const dialog = await renderStationSetup({ onClose });
+    // The SERVERS tab: it is the only one with a draft, so it is the only one whose
+    // dismissing button can be called Cancel at all.
+    const dialog = await renderStationSetup({ section: 'servers', onClose });
     const cancel = footerActions(dialog).find((b) => b.textContent === 'Cancel');
     if (cancel === undefined) throw new Error('no Cancel in the footer');
     expectDismissOnly(cancel, 'Cancel', onClose);
@@ -156,41 +159,64 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
       primary action", which is a different and much worse rule.
 
       APPLY SERVERS sends `connections.setConfig`. It keeps the `primary` role — and it is
-      named for the ONE section it commits, because six other sections sit above it.
+      named for the ONE section it commits, because four other tabs sit beside it.
     */
     stationSetupStub();
-    const dialog = await renderStationSetup();
+    const dialog = await renderStationSetup({ section: 'servers' });
     const apply = lastFooterAction(dialog);
     expect(apply.textContent).toBe('APPLY SERVERS');
     expect(apply.getAttribute('data-modal-role')).toBe('primary');
     expect(apply.getAttribute('aria-label')).toBe('Apply server settings');
   });
 
-  it('🔴 the sections that commit from the BODY grow no footer action — exactly two buttons in the footer', async () => {
+  it('🔴 STATION-CHROME-01 §2 — each TAB carries its own footer, and no other tab’s action', async () => {
     /*
-      The raster's per-channel button and the bank's `Apply candidate layers` are IN THEIR
-      SECTIONS. A footer that also carried them would be a footer with three primaries, and
-      an operator reading "APPLY" at the foot of a seven-section dialog would not know what
-      it applies. The count is the claim: Cancel, and APPLY SERVERS.
+      The rule this file guards is unchanged; what changed is that the footer is now PER TAB,
+      so it can be checked exactly rather than by counting a shared row.
+
+      · SERVERS is the only tab with an APPLY, and it is named for its scope.
+      · The BANK's Apply/Revert are in ITS footer (portalled there from the section) — the
+        `STATION-SETUP-02` note said they lived in the body only because "the dialog's footer
+        belongs to Servers", and with tabs that is no longer true.
+      · Every other tab gets a quiet Close and nothing else: a read-only tab has nothing to
+        commit, and a save-as-you-go tab already committed. "Cancel" would be a lie on both.
     */
     stationSetupStub();
-    const dialog = await renderStationSetup({ section: 'candidate-layers' });
-    expect(footerActions(dialog).map((b) => b.textContent)).toEqual(['Cancel', 'APPLY SERVERS']);
 
-    const candidate = sectionOf(dialog, 'candidate-layers');
-    expect(
-      [...candidate.querySelectorAll('button')].some(
-        (b) => b.textContent === 'Apply candidate layers',
-      ),
-      'the bank applies from its own section',
-    ).toBe(true);
-    const raster = sectionOf(dialog, 'raster');
-    expect(
-      [...raster.querySelectorAll('button')].some((b) => b.textContent === 'Set raster'),
-      'the raster sets from its own section',
-    ).toBe(true);
-    // …and the two commit-as-you-go sections say so where the operator reads.
+    const dialog = await renderStationSetup({ section: 'servers' });
+    expect(footerActions(dialog).map((b) => b.textContent)).toEqual(['Cancel', 'APPLY SERVERS']);
+    /*
+      …then the OTHER tabs, from the SAME dialog, by pressing the rail. Reusing one dialog is
+      not convenience: a second `renderStationSetup` leaves the first mounted and
+      `openDialog()` hands back the OLDER one, so every assertion after it would silently be
+      about the wrong tab — green, and measuring nothing.
+    */
+    await selectSetupTab(dialog, 'candidate-layers');
+    expect(footerActions(dialog).map((b) => b.textContent)).toEqual([
+      'Revert',
+      'Apply layers',
+      'Close',
+    ]);
+    for (const section of ['channel', 'sources', 'delimiters'] as const) {
+      await selectSetupTab(dialog, section);
+      expect(
+        footerActions(dialog).map((b) => b.textContent),
+        `${section} carries a commit action it should not have`,
+      ).toEqual(['Close']);
+    }
+  });
+
+  it('a read-only tab SAYS there is nothing to apply, and the as-you-go tabs say they saved', async () => {
+    stationSetupStub();
+    const dialog = await renderStationSetup({ section: 'channel' });
+    expect(dialog.querySelector('[data-section-footer="channel"]')?.textContent).toContain(
+      'Nothing to apply',
+    );
+    await selectSetupTab(dialog, 'sources');
+    expect(dialog.querySelector('[data-section-footer="sources"]')?.textContent).toContain(
+      'Saved as you go',
+    );
+    // …and the section's own legend agrees with its footer.
     expect(sectionOf(dialog, 'sources').textContent).toContain('Saves as you go');
-    expect(sectionOf(dialog, 'delimiters').textContent).toContain('Saves as you go');
   });
 });

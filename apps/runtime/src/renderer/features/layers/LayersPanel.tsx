@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalSto
 // the count must not be able to drift back to the bare predicate by an innocent edit.
 import { removeIsRefused } from './removeGate.js';
 import type { StackItemState } from '@cg/shared-schema';
-import type { EmptiedAirRow, RestoreMigration, RestoreSkip } from '@cg/shared-ipc';
+import type { EmptiedAirRow, OrphanLayer, RestoreMigration, RestoreSkip } from '@cg/shared-ipc';
 import {
   CircleArrowOutDownRight,
   LoaderCircle,
@@ -82,10 +82,24 @@ interface Props {
    * existing caller and spec keeps its current meaning: nothing said, nothing marked.
    */
   emptiedAirRows?: readonly EmptiedAirRow[];
+  /**
+   * 🔴 `B-235` — layers carrying a producer this console did not put there and which nobody
+   * declared reserved. The STATION LAYERS tab lists them; the R-009 warning strip above the
+   * list names them too.
+   *
+   * Passed from `App` for the SAME reason `emptiedAirRows` is, and it is the reason that
+   * matters rather than the convenience: the strip and this tab must describe ONE set. Two
+   * independent subscriptions to the same channel can disagree for a frame, and a tab that
+   * says "nothing" while the strip above it says "layer 42" is precisely the confusion
+   * `B-235` is about. Optional and defaulted, so every existing spec keeps its meaning.
+   */
+  orphans?: readonly OrphanLayer[];
 }
 
 /** A stable empty default, so the memo below does not see a new array every render. */
 const NO_EMPTIED_AIR_ROWS: readonly EmptiedAirRow[] = [];
+/** Same, for the undeclared-layer group. */
+const NO_ORPHANS: readonly OrphanLayer[] = [];
 
 /**
  * §0 — what the panel says while the row states are not in yet.
@@ -207,6 +221,7 @@ export function LayersPanel({
   inspectorOpen,
   onToggleInspector,
   emptiedAirRows = NO_EMPTIED_AIR_ROWS,
+  orphans = NO_ORPHANS,
 }: Props): JSX.Element {
   /**
    * §3 — THE LIST AND WHETHER IT HAS ARRIVED, never the list alone.
@@ -1233,7 +1248,7 @@ export function LayersPanel({
             onPanic={panic}
           />
         ) : (
-          <StationLayersPanel layers={playout} />
+          <StationLayersPanel layers={playout} orphans={orphans} />
         )}
       </Tabs>
       {confirmDialog}

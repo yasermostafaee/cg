@@ -99,7 +99,11 @@ async function render(
   root = createRoot(container);
   const r = root;
   await act(async () => {
-    r.render(createElement(StrictMode, null, createElement(StationLayersPanel, { layers })));
+    // `B-235` — the panel's OTHER half. Empty here: these cases are about the declared
+    // rows and their clear gate, and the undeclared group has its own file.
+    r.render(
+      createElement(StrictMode, null, createElement(StationLayersPanel, { layers, orphans: [] })),
+    );
   });
   return { el: container, clear };
 }

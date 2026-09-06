@@ -135,7 +135,7 @@ test.describe('C-029 — program output missing', () => {
     await expect(page.getByLabel('Status bar')).toContainText('HEALTHY');
 
     // B-223 — the technical surface carries what the banner dropped.
-    await page.getByRole('button', { name: 'Open Station setup at Servers' }).click();
+    await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
     const outputs = page
       .getByRole('dialog', { name: 'Station setup' })
       .getByRole('region', { name: 'Program outputs' });
@@ -168,7 +168,7 @@ test.describe('C-029 — program output missing', () => {
     await expect(page.getByRole('alert', { name: 'Program output missing' })).toHaveCount(0);
     await expect(page.getByRole('alert', { name: 'Program output unverified' })).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Open Station setup at Servers' }).click();
+    await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
     const outputs = page
       .getByRole('dialog', { name: 'Station setup' })
       .getByRole('region', { name: 'Program outputs' });

@@ -1,4 +1,5 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   bankPosition,
   defaultLayerAlias,
@@ -36,13 +37,16 @@ import { useLink } from '../../hooks/useLink.js';
  * (`STATION-SETUP-02` predicted the explainer would be the awkward one. It was not; what
  * was awkward is below.)
  *
- * ── WHAT DID NOT SURVIVE THE MOVE UNCHANGED: THE APPLY ──────────────────────
+ * ── THE APPLY, AND WHERE IT ENDED UP ────────────────────────────────────────
  *
- * The old dialog's footer was Cancel / Apply, and an accepted Apply CLOSED it. Neither is
- * available to a section — the dialog's footer belongs to Servers — so the draft has its
- * own two controls in the body, `Apply candidate layers` and `Revert`, and an accepted
- * apply REPORTS a notice and stays open: the bridge republishes the bank, the editor
- * re-keys on it, and the ticks show what is in force.
+ * The old dialog's footer was Cancel / Apply, and an accepted Apply CLOSED it. When this
+ * became a section of a one-scroll dialog neither was available — "the dialog's footer
+ * belongs to Servers" — so `Apply layers` and `Revert` went into the body.
+ *
+ * ⭐ `STATION-CHROME-01` §2 GAVE THE FOOTER BACK. Each tab owns its own footer now, so the
+ * two controls render straight INTO it through `footerSlot` (a portal, not a second copy).
+ * An accepted apply still REPORTS a notice and stays open: the bridge republishes the bank,
+ * the editor re-keys on it, and the ticks show what is in force.
  *
  * Deliberately NOT gated on air (the old dialog said so and it still holds): a tick or an
  * alias is a live change, and the bridge refuses per row — unticking an OCCUPIED or
@@ -128,11 +132,19 @@ const styles = {
   waiting: { fontSize: '0.82rem', color: colors.textMuted },
 } as const;
 
+export interface CandidateLayersSectionProps {
+  report: (message: ModalMessage | null) => void;
+  /** `STATION-CHROME-01` §2 — does this section hold an unapplied draft? Feeds the rail dot. */
+  onDirtyChange?: ((dirty: boolean) => void) | undefined;
+  /** The dialog footer this section's Apply / Revert render into. `null` = render in the body. */
+  footerSlot?: HTMLElement | null | undefined;
+}
+
 export function CandidateLayersSection({
   report,
-}: {
-  report: (message: ModalMessage | null) => void;
-}): JSX.Element {
+  onDirtyChange,
+  footerSlot = null,
+}: CandidateLayersSectionProps): JSX.Element {
   const { bank, ready } = useFixedBankState();
   const { slots } = useFixedSlotsState();
   if (!ready) {
@@ -145,7 +157,16 @@ export function CandidateLayersSection({
   if (bank === null) return <NoBank />;
   // Re-keyed on the bank the bridge publishes, so an accepted apply — or another console's
   // change — replaces the draft with what is now in force rather than leaving stale edits.
-  return <BankEditor key={bankKey(bank)} bank={bank} slots={slots} report={report} />;
+  return (
+    <BankEditor
+      key={bankKey(bank)}
+      bank={bank}
+      slots={slots}
+      report={report}
+      onDirtyChange={onDirtyChange}
+      footerSlot={footerSlot}
+    />
+  );
 }
 
 function bankKey(bank: FixedLayerBank): string {
@@ -195,10 +216,14 @@ function BankEditor({
   bank,
   slots,
   report,
+  onDirtyChange,
+  footerSlot,
 }: {
   bank: FixedLayerBank;
   slots: FixedSlotState[];
   report: (message: ModalMessage | null) => void;
+  onDirtyChange: ((dirty: boolean) => void) | undefined;
+  footerSlot: HTMLElement | null;
 }): JSX.Element {
   // ONE edit model across BOTH halves, keyed by layer. The split back into the two
   // sub-banks happens once, in `apply`, through `isLowBankLayer` — the same predicate the
@@ -220,6 +245,19 @@ function BankEditor({
   const [aliases, setAliases] = useState<Record<string, string>>(initialAliases);
   const [visible, setVisible] = useState<Record<string, boolean>>(initialVisible);
   const [busy, setBusy] = useState(false);
+
+  /*
+    `STATION-CHROME-01` §2 — WHETHER THIS SECTION HOLDS AN UNAPPLIED DRAFT, reported up so the
+    rail can carry its sky dot. Computed from the SAME two maps `revert()` restores and
+    `apply()` sends, so the dot cannot claim a change the buttons do not have; a separate
+    `touched` flag would go stale the moment an edit was typed back to its original value.
+  */
+  const dirty =
+    JSON.stringify(aliases) !== JSON.stringify(initialAliases()) ||
+    JSON.stringify(visible) !== JSON.stringify(initialVisible());
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
   const { confirm, confirmDialog } = useConfirm();
   const stack = useStack();
   const linkDown = useLink() === 'disconnected';
@@ -306,6 +344,29 @@ function BankEditor({
    * the row's own confirm gate. Removal implies clear (the bridge's `stack.remove` sends
    * the CLEAR), so the dialog states ON AIR explicitly when the stack says the item is.
    */
+  /** This section's own commit controls — rendered into the dialog's footer, see below. */
+  const actions = (
+    <>
+      <Button
+        variant="neutral"
+        aria-label="Revert candidate layer edits"
+        title="Back to what the bridge holds; nothing is sent"
+        onClick={revert}
+      >
+        Revert
+      </Button>
+      <Button
+        variant="primary"
+        aria-label="Apply layers"
+        title="Sends the ticks and names to the bridge"
+        disabled={busy}
+        onClick={apply}
+      >
+        Apply layers
+      </Button>
+    </>
+  );
+
   async function removeTemplate(slot: FixedSlotState): Promise<void> {
     if (slot.binding === null) return;
     const { itemId } = slot.binding;
@@ -443,25 +504,21 @@ function BankEditor({
           })}
         </div>
       </div>
-      <div style={styles.actions}>
-        <Button
-          variant="neutral"
-          aria-label="Revert candidate layer edits"
-          title="Back to what the bridge holds; nothing is sent"
-          onClick={revert}
-        >
-          Revert
-        </Button>
-        <Button
-          variant="primary"
-          aria-label="Apply candidate layers"
-          title="Sends the ticks and names to the bridge"
-          disabled={busy}
-          onClick={apply}
-        >
-          Apply candidate layers
-        </Button>
-      </div>
+      {/*
+        `STATION-CHROME-01` §2 — THE ACTIONS GO IN THE DIALOG'S FOOTER when there is one to go
+        in. This section's own note recorded that they sat in the body only because "the
+        dialog's footer belongs to Servers"; with a tab per section that is no longer true, and
+        each tab's footer carries its own commit. The portal means they are physically IN the
+        footer rather than a second copy of themselves rendered there.
+
+        `footerSlot === null` — no host, e.g. a unit test rendering this section on its own —
+        falls back to the body, so the section is never left with no way to apply.
+      */}
+      {footerSlot === null ? (
+        <div style={styles.actions}>{actions}</div>
+      ) : (
+        createPortal(actions, footerSlot)
+      )}
       {confirmDialog}
     </>
   );

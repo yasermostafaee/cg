@@ -72,14 +72,23 @@ describe('Station setup — Candidate layers', () => {
     const onClose = vi.fn();
     const dialog = await renderStationSetup({ section: 'candidate-layers', onClose });
 
-    await clickSetupButton(dialog, 'Apply candidate layers');
+    await clickSetupButton(dialog, 'Apply layers');
 
     expect(stub.fixedSetConfig).toHaveBeenCalledTimes(1);
     const refusal = dialog.querySelector('[data-modal-message] [role="alert"]');
     expect(refusal).not.toBeNull();
-    // The SECTION, the RULE in operator wording (from the FIXED_LAYERS_SET_CONFIG_REASONS
-    // map)… and the SPECIFICS, verbatim from the bridge.
-    expect(refusal?.textContent).toContain('Candidate layers:');
+    /*
+      The RULE in operator wording (from the FIXED_LAYERS_SET_CONFIG_REASONS map)… and the
+      SPECIFICS, verbatim from the bridge.
+
+      ⭐ `STATION-CHROME-01` §2 dropped the "Candidate layers: " PREFIX this line used to
+      assert. It existed because one region carried seven sections' messages at once; with a
+      tab per section the sentence already sits under that section's heading and above that
+      section's own footer, and repeating the name is the redundant labelling golden rule 11
+      warns about. `modalMessageRegion.dom.test.ts` asserts the stronger property that
+      replaced it: the message does not follow the operator to another tab, and the RAIL says
+      which section is blocked from wherever he is standing.
+    */
     expect(refusal?.textContent).toContain('occupied');
     expect(refusal?.textContent).toContain('remove its template first');
     expect(refusal?.textContent).toContain('layer 71');
@@ -101,7 +110,7 @@ describe('Station setup — Candidate layers', () => {
       await Promise.resolve();
     });
 
-    await clickSetupButton(dialog, 'Apply candidate layers');
+    await clickSetupButton(dialog, 'Apply layers');
 
     expect(stub.fixedSetConfig).toHaveBeenCalledTimes(1);
     expect(stub.fixedSetConfig).toHaveBeenCalledWith({

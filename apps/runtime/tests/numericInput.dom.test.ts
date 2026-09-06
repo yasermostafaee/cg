@@ -263,7 +263,15 @@ describe('Station setup — Servers ports — R-020 (B-077 interaction)', () => 
     // `STATION-SETUP-02` — the Servers form is a section of Station setup; the one shared
     // stub supplies every section's bridge surface.
     const { setConfig } = stationSetupStub();
-    await render(createElement(StationSetupDialog, { open: true, onClose: () => undefined }));
+    // `STATION-CHROME-01` §2 — the dialog is tabbed, so it has to be opened AT Servers:
+    // the default tab is Channel, which carries no ports at all.
+    await render(
+      createElement(StationSetupDialog, {
+        open: true,
+        section: 'servers',
+        onClose: () => undefined,
+      }),
+    );
     // The dialog PORTALS to `document.body`, so the fields are not inside the mount
     // container. Query the dialog itself.
     const el = openDialog();

@@ -70,7 +70,7 @@ test('the --r-* tokens resolve in the browser, and the LAYERS table keeps its gr
 test('STATION SETUP paints from the tokens — its scrim is not transparent', async ({ app }) => {
   const page = app.page;
 
-  await page.getByRole('button', { name: 'Open Station setup at Servers' }).click();
+  await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
   await expect(dialog).toBeVisible();
 

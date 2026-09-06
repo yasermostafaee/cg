@@ -313,6 +313,9 @@ export function App(): JSX.Element {
                       /* `B-232` (owner) — the SAME notice the strip above renders, so the
                          marked rows and the strip's list are one reading, not two. */
                       emptiedAirRows={emptiedAir?.rows ?? []}
+                      /* `B-235` — the SAME orphan set the strip above renders, so the
+                         Station layers tab and the strip are one reading, not two. */
+                      orphans={orphans}
                       onSelectionChange={setSelectedId}
                       selectedId={selectedId}
                       layout={layout}
@@ -417,7 +420,7 @@ export function App(): JSX.Element {
         )}
         <StatusBar
           onOpenAudit={() => setAuditOpen(true)}
-          onOpenSettings={() => openStationSetup('servers')}
+          onOpenSettings={() => openStationSetup()}
           onOpenSources={() => openStationSetup('sources')}
         />
         <CommandToast />

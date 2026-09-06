@@ -256,7 +256,7 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
       },
     });
     const dialog = await renderStationSetup({ section: 'candidate-layers' });
-    await clickSetupButton(dialog, 'Apply candidate layers');
+    await clickSetupButton(dialog, 'Apply layers');
     return dialog;
   }
 
