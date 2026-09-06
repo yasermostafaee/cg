@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { StrictMode, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
@@ -297,6 +299,172 @@ describe('the census — every Runtime dialog that can speak, speaks through the
     );
     expect(dialog.querySelector('[data-modal-message]')).toBeNull();
     expect(dialog.querySelector('[data-notice]')).toBeNull();
+  });
+});
+
+/**
+ * 🔴 **THE CENSUS IS DERIVED — a fifth dialog enrols itself.**
+ *
+ * The rendered specs above name four dialogs BY IMPORT, and that is the weakness a census
+ * is supposed to close: the dialog that breaks the rule is, by definition, the one nobody
+ * added to the list. So the enumeration comes from the TREE — every module under
+ * `features/**` that imports the `Modal` primitive — and the invariants below are asserted
+ * against every one of them, including modules written after this file.
+ *
+ * ── WHY THESE THREE, AND WHY THEY ARE STATIC ────────────────────────────────
+ *
+ * A derived census cannot render each dialog: every one needs its own bridge stubs, and a
+ * harness that guessed them would assert against a component crashing on `undefined` rather
+ * than against the rule. What it CAN do is read the source for the three ways a dialog
+ * bypasses the primitive while still importing it — each of which actually happened before
+ * the primitive existed, and each of which is invisible to a rendered spec that does not
+ * exercise the offending state.
+ *
+ * The rendered specs above stay: they are the DEPTH (does the message actually route through
+ * the region under a real refusal), and this is the BREADTH. Neither replaces the other.
+ */
+describe('the census is DERIVED from the tree, not from a list somebody maintains', () => {
+  /*
+    ⚠ Resolved from the WORKSPACE ROOT, not from `import.meta.url`. Under vitest's jsdom
+    transform `import.meta.url` is not a `file:` URL, so `fileURLToPath` throws and the whole
+    SUITE fails to collect — which is the loud failure, and the reason the guard below exists
+    for the quiet one: a walk that silently returned nothing would make every invariant here
+    pass vacuously.
+  */
+  const featuresDir = join(process.cwd(), 'src', 'renderer', 'features');
+
+  function walk(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = join(dir, e.name);
+      if (e.isDirectory()) return walk(full);
+      return e.isFile() && (e.name.endsWith('.tsx') || e.name.endsWith('.ts')) ? [full] : [];
+    });
+  }
+
+  /** Every feature module that builds a dialog on the primitive, discovered not listed. */
+  const modalImporters = walk(featuresDir)
+    .map((path) => ({ path, source: readFileSync(path, 'utf8') }))
+    .filter(({ source }) => /from '.*ui\/Modal\.js'/.test(source));
+
+  const relative = (path: string): string => path.slice(featuresDir.length + 1).replace(/\\/g, '/');
+
+  it('finds MORE dialogs than the four the old census named — the derivation works', () => {
+    // A guard on the instrument itself. If the walk broke — a moved directory, a changed
+    // import path — it would return an empty set and every invariant below would pass
+    // vacuously, which is the failure mode a derived census is most exposed to.
+    const names = modalImporters.map((m) => relative(m.path)).sort();
+    expect(names.length, `only found: ${names.join(', ')}`).toBeGreaterThan(4);
+
+    // The four the hand-written census enumerates are still among them, so the derivation
+    // is a superset of what was being checked before rather than a different set.
+    for (const known of [
+      'fixedLayers/FixedBankConfigModal.tsx',
+      'sources/SourcesModal.tsx',
+      'inspector/DelimitersModal.tsx',
+      'connections/ServerSettingsPanel.tsx',
+    ]) {
+      expect(names, `${known} fell out of the derived set`).toContain(known);
+    }
+  });
+
+  /**
+   * The scrim SHAPE — `position: 'fixed'` AND a full-bleed `inset: 0` DECLARATION.
+   *
+   * ⚠ Both halves, and the `inset` matched as a declaration (leading whitespace, trailing
+   * comma) rather than anywhere in the text. The first spelling of this check tested only
+   * `/inset:\s*0/` against the whole file and flagged `monitors/RehearsalStage.tsx`, whose
+   * only match is inside a COMMENT reading _"Centred and sized to the SCALED FRAME by the
+   * caller — not `inset: 0`"_ — a module arguing for the opposite of what it was accused of.
+   * A census that cries wolf gets an exception list added to silence it, and the exception
+   * list is where a real offender then hides.
+   */
+  const hasScrim = (source: string): boolean =>
+    /position: 'fixed'/.test(source) && /^\s*inset: 0,/m.test(source);
+
+  it('no dialog hand-rolls a second SCRIM', () => {
+    // A full-window overlay. The primitive portals its own to `document.body`; a dialog that
+    // also declares one is painting a second layer with its own z-index and its own escape
+    // behaviour — the "five dialogs, five designs" state this primitive was built to end.
+    for (const { path, source } of modalImporters) {
+      expect(hasScrim(source), `${relative(path)} declares its own scrim`).toBe(false);
+    }
+  });
+
+  it('no dialog declares its own dialog ROLE — the chrome comes from the primitive', () => {
+    for (const { path, source } of modalImporters) {
+      expect(/role="dialog"/.test(source), `${relative(path)} sets role="dialog"`).toBe(false);
+      expect(/aria-modal/.test(source), `${relative(path)} sets aria-modal`).toBe(false);
+    }
+  });
+
+  it('every dialog with an action row resolves its treatments from the ROLE table', () => {
+    // The `runtime-modal-contract` rule: a dialog says what KIND of action a button is and
+    // the role decides the treatment. A footer built from bare `Button`s is a dialog picking
+    // colours again, which is how `SERVER CONNECTION`'s ordinary save came to wear the solid
+    // amber that means "this will interrupt something".
+    for (const { path, source } of modalImporters) {
+      if (!source.includes('footer={')) continue;
+      expect(
+        /\bModalAction\b|\bmodalActionVariant\b/.test(source),
+        `${relative(path)} builds an action row without the role table`,
+      ).toBe(true);
+    }
+  });
+
+  /**
+   * ⚠ **WHAT THIS CENSUS STILL CANNOT SEE.** Recorded here rather than in a handoff, because
+   * a blind spot nobody can point at is one the next session rediscovers.
+   *
+   *  1. **A dialog that hand-rolls its own scrim INSTEAD of importing `Modal`.** The
+   *     enrolment key is the import, so a surface that never imports the primitive is not in
+   *     the set at all — and the census would report "every dialog obeys" while the
+   *     offender sat outside it. This is not hypothetical: `LockOverlay` does exactly that,
+   *     legitimately and by a documented decision (a lock screen must not inherit the
+   *     primitive's three ways out). A cheap check EXISTS and is asserted below — the
+   *     scrim shape is distinctive — so this one is closed rather than merely named.
+   *  2. **Anything about SIZE.** `prose` vs `wide` turns on whether the operator compares
+   *     values down a column, which is a claim about CONTENT MEANING. No static rule and no
+   *     jsdom rendering can decide it; it is a judgement, and it lives in the spec and in
+   *     review. Do not add a heuristic here — a wrong automatic answer is worse than an
+   *     honest absence, because it would be believed.
+   *  3. **Whether a dialog's message routes through the region in a state no spec
+   *     exercises.** The rendered specs above cover the refusal each dialog is known to
+   *     produce; a NEW message added to an existing dialog and rendered into its body is
+   *     invisible to both halves of this file until someone writes the spec that triggers
+   *     it. The mitigation is structural rather than a test: `ModalProps.message` takes
+   *     DATA, not a `ReactNode`, so there is no seam through which a caller can style one.
+   */
+  it('CLOSES blind spot 1: no feature module outside the set hand-rolls a full-window scrim', () => {
+    /*
+      The cheap check that blind spot 1 asks for. Every module under `features/**` — Modal
+      importer or not — is scanned for the scrim shape, and the ONE legitimate exception is
+      named explicitly. So a new hand-rolled dialog fails here with its own path printed,
+      and the exception list is a decision with a diff rather than an omission.
+    */
+    const HAND_ROLLED_BY_DESIGN = new Set([
+      // `Modal.tsx`'s own note: a lock screen with a way out is not a lock, so it must not
+      // inherit the primitive's ✕ / Escape / backdrop. It DOES share the focus trap
+      // (`B-229`), which is the half that was wrongly withheld with them.
+      'lock/LockOverlay.tsx',
+    ]);
+
+    const offenders = walk(featuresDir)
+      .filter((path) => hasScrim(readFileSync(path, 'utf8')))
+      .map(relative)
+      .filter((name) => !HAND_ROLLED_BY_DESIGN.has(name));
+
+    // The instrument is live: the ONE module on the exception list really does match, so an
+    // empty `offenders` means "nothing else does" rather than "the pattern matches nothing".
+    expect(
+      walk(featuresDir)
+        .filter((p) => hasScrim(readFileSync(p, 'utf8')))
+        .map(relative),
+      'the scrim pattern matches nothing at all — the check is dead',
+    ).toContain('lock/LockOverlay.tsx');
+
+    expect(offenders, 'a feature hand-rolls a full-window overlay outside the primitive').toEqual(
+      [],
+    );
   });
 });
 
