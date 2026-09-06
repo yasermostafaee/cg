@@ -1367,7 +1367,32 @@ export class MockRuntime {
     return { ok: false };
   }
 
-  // ── lock ────────────────────────────────────────────────────────────
+  /*
+    ── lock ────────────────────────────────────────────────────────────
+
+    ⚠ `B-229` — **THE MOCK DELIBERATELY DOES NOT REFUSE INTENTS WHILE LOCKED, and this is a
+    recorded decision rather than the ripple that was missed.**
+
+    The bridge now refuses every operator intent while `#lock.engaged` (see `bridge.ts`'s
+    `LockPolicy`). The `R-017` parity rule normally requires the mock to refuse wherever the
+    bridge refuses — `remove()` above is exactly that — because a surface built against a
+    permissive mock ships against a fiction.
+
+    It does not apply here, and the difference is what the refusal is FOR. `R-017`'s refusal
+    is a rule the UI must render (a held verb, a tooltip, a confirm that must not appear), so
+    a mock that allowed it would let a surface be built wrong. The lock's refusal is
+    AIR SAFETY: it exists so a command cannot reach CasparCG. This mock's `link.status()` is
+    a constant `offline-mock` — there is no bridge, no socket and no playout server, so there
+    is no air for an intent to reach and nothing for the refusal to protect. What the
+    operator sees while locked is the same in both backends, because that half is the
+    RENDERER's (`ui/focusTrap.ts`) and it is backend-independent.
+
+    ⚠ The honest limit: this means a mock session cannot exercise the refusal SENTENCE. That
+    is covered where the sentence lives — `tools/caspar-bridge/tests/lock-refuses-intents.integration.test.ts`
+    walks the whole route table against a real socket. If the lock ever grows a rule the UI
+    must RENDER (a disabled verb, a lock-aware tooltip), this exemption expires and the mock
+    owes parity again.
+  */
   lockState(): LockState {
     return this.#lock;
   }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { useFocusTrap } from '../../ui/focusTrap.js';
 import { normalizeDigits } from '../../ui/NumericInput.js';
 
 interface Props {
@@ -68,22 +69,56 @@ const styles = {
  * retry indefinitely.
  *
  * Air-safety contract: while engaged, all input is captured by the
- * overlay; the stack rows underneath cannot receive clicks. The 🔒
- * chip in the status bar mirrors this state for situational awareness.
+ * overlay; the stack rows underneath can receive neither clicks NOR the
+ * KEYBOARD. The 🔒 chip in the status bar mirrors this state for
+ * situational awareness.
+ *
+ * 🔴 `B-229` — THE SECOND HALF OF THAT SENTENCE IS NEW, AND IT USED TO BE FALSE.
+ *
+ * "All input is captured" was written when only the pointer was considered. The scrim is
+ * `position: fixed; inset: 0`, so a click genuinely cannot reach through it — but this
+ * component handled no key at all, nothing in the app sets `inert`, and the stack rows
+ * stayed in the document's sequential focus order. Tab walked straight through a
+ * 94 %-opaque lock screen onto a TAKE, where Space presses it.
+ *
+ * The containment comes from {@link useFocusTrap}, the SAME implementation `Modal` uses.
+ * `Modal`'s own note explains why this component does not use the modal primitive — it
+ * would hand a lock screen three ways out, and a lock with a way out is not a lock. That
+ * reasoning is about the EXITS and was always right; it never applied to the trap, which
+ * is the opposite kind of mechanism, and reading the one as the other is why this
+ * overlay inherited neither.
+ *
+ * ⚠ The RENDERER half is only half. A lock the executing side ignores is not a lock
+ * either, so the bridge refuses every operator intent while `#lock.engaged` — see
+ * `LOCK_ENGAGED_REFUSAL` in `@cg/shared-ipc`. Neither half is sufficient alone: this one
+ * stops the press, and that one stops anything that got past it (another browser on the
+ * LAN, a dialog left open over the scrim, a stale render).
  */
 export function LockOverlay({ engaged, engagedAt, reason, onRelease }: Props): JSX.Element | null {
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [wrongAttempts, setWrongAttempts] = useState(0);
   const [elapsed, setElapsed] = useState<string>(formatElapsed(engagedAt));
+  const cardRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  /*
+    The trap arms with the lock and disarms with it — `enabled` IS `engaged`, so releasing
+    hands the keyboard back to the console immediately and with no reload, which is the
+    inverse half of `B-229` and exactly as important as the trap itself.
+
+    It nominates the PIN field, so focus lands where the operator must type rather than on
+    whatever happens to be first in the card. That replaces the bare `inputRef.focus()`
+    below rather than joining it: two things moving focus on the same commit is the race
+    `B-230` is about.
+  */
+  useFocusTrap(cardRef, engaged, { initialFocusSelector: 'input' });
 
   useEffect(() => {
     if (engaged) {
       setPin('');
       setError(null);
       setWrongAttempts(0);
-      inputRef.current?.focus();
     }
   }, [engaged]);
 
@@ -121,7 +156,7 @@ export function LockOverlay({ engaged, engagedAt, reason, onRelease }: Props): J
 
   return (
     <div style={styles.scrim} role="dialog" aria-label="Lock screen" aria-modal="true">
-      <div style={styles.card}>
+      <div ref={cardRef} style={styles.card}>
         <h2 style={styles.title}>RUNTIME LOCKED</h2>
         <p style={styles.sub}>Enter PIN to resume.</p>
         <div style={styles.metaRow}>

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { colors } from '../theme.js';
 import { Button, type ButtonVariant } from './Button.js';
+import { useFocusTrap } from './focusTrap.js';
 import { Icon } from './Icon.js';
 import { Notice, type NoticeRole } from './Notice.js';
 
@@ -43,9 +44,15 @@ import { Notice, type NoticeRole } from './Notice.js';
  * gives every dialog a visible ✕, Escape-to-close and backdrop-click-to-close —
  * three ways out — and a lock screen with a way out is not a lock. Its scrim is
  * hand-rolled for that reason and that reason only.
+ *
+ * ⚠ `B-229` — THAT PARAGRAPH IS ABOUT THE EXITS, AND IT WAS READ AS BEING ABOUT
+ * MORE. The lock does not take the ✕, Escape or the backdrop, and must not. It
+ * DOES take the focus trap, which is the opposite kind of mechanism — an exit lets
+ * the operator leave, and the trap stops focus leaving on its own. Reading the one
+ * rule as the other left the lock inheriting neither, and Tab walked through a
+ * 94 %-opaque lock screen onto a TAKE. The containment now lives in
+ * `ui/focusTrap.ts` and both surfaces call it.
  */
-
-const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 const styles = {
   scrim: {
@@ -301,39 +308,39 @@ export function Modal({
   const messages: readonly ModalMessage[] =
     message === undefined ? [] : Array.isArray(message) ? message : [message as ModalMessage];
 
+  /*
+    🔴 `B-230` — THE TRAP IS ARMED ONCE, AND THAT IS THE FIX AS MUCH AS THE SHARING IS.
+
+    This used to be one effect that did three things — move focus in, wrap Tab, handle
+    Escape — with `[onClose]` for its dependency list. Every caller passes `onClose` as an
+    inline arrow, so its identity changes on EVERY render, so the effect tore down and set
+    up again on every keystroke. Its setup moves focus. Typing one character into a
+    dialog's field therefore threw focus onto the ✕, which is why `usePrompt`'s `autoFocus`
+    looked "defeated by the primitive": it was not a race at mount, it was focus being
+    taken again on every commit.
+
+    Splitting them fixes it structurally rather than by tuning a dependency list: the trap
+    arms once (`useFocusTrap`, deps `[enabled]`), and the ESCAPE handler — which moves no
+    focus and is therefore free to re-register — keeps reading the latest `onClose`.
+
+    ⭐ `data-modal-autofocus` is how a dialog nominates where focus LANDS, resolved INSIDE
+    the trap rather than by a competing `autoFocus` attribute. One thing moves focus, so
+    there is no race to win: see `usePrompt`, the one caller that needs it.
+  */
+  useFocusTrap(ref, true, { initialFocusSelector: '[data-modal-autofocus]' });
+
   useEffect(() => {
-    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    ref.current?.querySelector<HTMLElement>(FOCUSABLE)?.focus();
-
     function onKeyDown(e: KeyboardEvent): void {
-      if (e.key === 'Escape') {
-        // Capture-phase + stop: Escape belongs to the top-most dialog, not to whatever is
-        // behind the scrim.
-        e.stopPropagation();
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-
-      const nodes = [...(ref.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [])];
-      const first = nodes[0];
-      const last = nodes[nodes.length - 1];
-      if (first === undefined || last === undefined) return;
-
-      // Wrap at the ends, so focus can never escape the dialog onto an on-air control.
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
+      if (e.key !== 'Escape') return;
+      // Capture-phase + stop: Escape belongs to the top-most dialog, not to whatever is
+      // behind the scrim.
+      e.stopPropagation();
+      onClose();
     }
 
     document.addEventListener('keydown', onKeyDown, true);
     return () => {
       document.removeEventListener('keydown', onKeyDown, true);
-      previous?.focus();
     };
   }, [onClose]);
 

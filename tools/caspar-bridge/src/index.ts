@@ -1,4 +1,7 @@
 export { createBridge } from './bridge.js';
+// `B-229` — the route table and its lock decision, for the lock-policy census. A test that
+// SAMPLED channels could never assert "the lock refuses everything"; it has to walk the table.
+export { buildRoutes, refusedWhileLocked } from './bridge.js';
 export type { BridgeHandle, BridgeOptions } from './bridge.js';
 export {
   loadReservedLayers,

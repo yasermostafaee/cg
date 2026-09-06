@@ -79,7 +79,21 @@ function connect(url: string): Promise<WebSocket> {
  * that says nothing" is one of the cases under test, and a helper that quietly filled it
  * in would test the helper.
  */
-async function engageLock(ws: WebSocket, id: string, actor: string | undefined): Promise<void> {
+/**
+ * Send one lock request as `actor` and wait for its response.
+ *
+ * ⚠ `B-229` — THE CHANNEL IS A PARAMETER NOW, and that is not a tidy-up. A locked bridge
+ * refuses `lock.engage` (it is a mutation, and letting a second console overwrite
+ * `#lockPin` would strand the operator who set it), so the two-console spec below can no
+ * longer engage twice. It engages once and RELEASES from the other console — which is the
+ * same claim about the audit record, made with a pair of acts the lock actually permits.
+ */
+async function lockRequest(
+  ws: WebSocket,
+  id: string,
+  actor: string | undefined,
+  channel: 'lock.engage' | 'lock.release' = 'lock.engage',
+): Promise<void> {
   const frames: WsFrame[] = [];
   ws.on('message', (data: Buffer) => {
     const frame = parseWsFrame(data.toString());
@@ -89,7 +103,7 @@ async function engageLock(ws: WebSocket, id: string, actor: string | undefined):
     serializeWsFrame({
       type: 'request',
       id,
-      channel: 'lock.engage',
+      channel,
       payload: { pin: '0000' },
       ...(actor !== undefined ? { actor } : {}),
     }),
@@ -99,6 +113,10 @@ async function engageLock(ws: WebSocket, id: string, actor: string | undefined):
     if (Date.now() > deadline) throw new Error(`no response for request ${id}`);
     await new Promise((r) => setTimeout(r, 10));
   }
+}
+
+async function engageLock(ws: WebSocket, id: string, actor: string | undefined): Promise<void> {
+  await lockRequest(ws, id, actor, 'lock.engage');
 }
 
 /**
@@ -196,13 +214,25 @@ describe('the audit actor is the acting console, as it labelled itself', () => {
       const gallery = await connect(handle.url);
       const studio = await connect(handle.url);
 
-      await engageLock(gallery, 'g1', 'Gallery 2');
-      await engageLock(studio, 's1', 'Studio A');
+      /*
+        ⚠ `B-229` — THE GALLERY LOCKS AND THE STUDIO UNLOCKS. This spec used to engage from
+        BOTH consoles, which a locked bridge now refuses: `lock.engage` is a mutation and
+        takes no exemption, or a second console could overwrite `#lockPin` and shut the
+        operator who set it out of his own desk.
+
+        The claim is untouched — two consoles on one bridge land on their OWN rows — and the
+        pair it is made with is now a real sequence rather than an impossible one. It also
+        happens to assert something worth having: the lock is the BRIDGE's, so any console
+        that knows the PIN can end it, and the record says which one did.
+      */
+      await lockRequest(gallery, 'g1', 'Gallery 2', 'lock.engage');
+      await lockRequest(studio, 's1', 'Studio A', 'lock.release');
 
       const rows = await rowsOnDisk(file, 2);
-      const actors = rows.filter((r) => r.action === 'lock-engage').map((r) => r.actor);
-      expect(actors).toContain('Gallery 2');
-      expect(actors).toContain('Studio A');
+      const byAction = (action: string): (string | undefined)[] =>
+        rows.filter((r) => r.action === action).map((r) => r.actor);
+      expect(byAction('lock-engage')).toContain('Gallery 2');
+      expect(byAction('lock-release')).toContain('Studio A');
     },
   );
 });

@@ -164,11 +164,25 @@ export function usePrompt(): {
         {request.body}
         <label style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
           {request.label}
+          {/*
+            🔴 `B-230` — `data-modal-autofocus`, NOT `autoFocus`, and the swap is the fix.
+
+            The attribute was here and it never worked. React applies `autoFocus` during
+            the commit; the primitive's focus-on-open runs in an effect AFTER it, so the
+            effect always won and focus landed on the ✕. Worse, that effect re-ran on every
+            keystroke (see `Modal`), so it was not a one-time race at mount — it took focus
+            back every time the operator typed a character.
+
+            Two things moving focus is the defect; a second `autoFocus` tuned to win would
+            have been a third. So the primitive is told WHERE to put focus and remains the
+            only thing that puts it there. Measured in a real browser, where the ordering
+            is decidable — jsdom cannot tell commit-time from effect-time here.
+          */}
           <input
             className="cg-field"
             type={request.type ?? 'text'}
             value={value}
-            autoFocus
+            data-modal-autofocus=""
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
               // Enter submits, but never past the length rule — the native prompt let a
