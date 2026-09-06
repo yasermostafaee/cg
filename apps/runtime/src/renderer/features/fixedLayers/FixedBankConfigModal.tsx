@@ -176,8 +176,15 @@ function NoBankModal({ onClose }: { onClose: () => void }): JSX.Element {
     <Modal
       title="Candidate layers — not configured"
       onClose={onClose}
+      /*
+        The rule the audit log states and every dialog owes: ONE action that DISMISSES and
+        commits nothing is `cancel`, never `primary` (owner). This dialog has nothing to
+        apply — the channel and range are fixed at install and it says so — so dressing its
+        Close as the action the dialog exists to perform put that weight on a button that
+        performs none. See `openspec/specs/runtime-ui`, where the rule now lives.
+      */
       footer={
-        <ModalAction actionRole="primary" onClick={onClose}>
+        <ModalAction actionRole="cancel" onClick={onClose}>
           Close
         </ModalAction>
       }

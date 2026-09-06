@@ -93,9 +93,16 @@ export function DelimitersModal({ onClose }: { onClose: () => void }): JSX.Eleme
           >
             Reset to defaults
           </ModalAction>
-          {/* The action this dialog exists to end on, in the same corner as every
-              other dialog's primary. */}
-          <ModalAction actionRole="primary" onClick={onClose}>
+          {/*
+            `cancel`, not `primary`: this dialog COMMITS AS YOU GO — every add, remove and
+            reset reaches the bridge on its own press — so by the time Done is reached there
+            is nothing left to commit, and `onClick` is `onClose` alone. The word stays,
+            because "Done" is honest for a dialog you commit through and then leave; it was
+            the TREATMENT that claimed an action this button does not perform. See
+            `openspec/specs/runtime-ui`, where the rule now lives rather than in one
+            component's comment — which is how three dialogs came to disagree with it.
+          */}
+          <ModalAction actionRole="cancel" onClick={onClose}>
             Done
           </ModalAction>
         </>

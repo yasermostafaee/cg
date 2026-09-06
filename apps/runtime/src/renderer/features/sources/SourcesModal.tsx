@@ -382,8 +382,13 @@ export function SourcesModal({ onClose }: { onClose: () => void }): JSX.Element 
       size="wide"
       onClose={onClose}
       {...(message !== null ? { message } : {})}
+      /*
+        `cancel`, not `primary` — the same reasoning as `Text file delimiters`: the catalog
+        and the band commit on their own controls (`commitCatalog`), so Done dismisses and
+        commits nothing. The label is unchanged; the role is what carries the treatment.
+      */
       footer={
-        <ModalAction actionRole="primary" onClick={onClose}>
+        <ModalAction actionRole="cancel" onClick={onClose}>
           Done
         </ModalAction>
       }
