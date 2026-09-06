@@ -25,9 +25,11 @@ test('one dialog: SERVERS and SOURCES open the same Station setup at different s
 
   await page.getByRole('button', { name: 'Open Station setup at Servers' }).click();
   await expect(dialog).toBeVisible();
-  // Every section, rendered — never a tab hiding the one a refusal came from.
+  // Every section, rendered — never a tab hiding the one a refusal came from. `exact`,
+  // because a role name matches as a SUBSTRING by default and `Outputs` would also find the
+  // nested `Program outputs` region (the first CI run counted two).
   for (const title of SECTIONS) {
-    await expect(dialog.getByRole('region', { name: title })).toHaveCount(1);
+    await expect(dialog.getByRole('region', { name: title, exact: true })).toHaveCount(1);
   }
   await expect(dialog.locator('[data-station-section-requested]')).toHaveAttribute(
     'data-station-section',
@@ -37,7 +39,7 @@ test('one dialog: SERVERS and SOURCES open the same Station setup at different s
   await expect(dialog.getByRole('button', { name: 'Apply server settings' })).toHaveText(
     'APPLY SERVERS',
   );
-  await expect(dialog.getByRole('region', { name: 'Live sources' })).toContainText(
+  await expect(dialog.getByRole('region', { name: 'Live sources', exact: true })).toContainText(
     'Saves as you go',
   );
   await dialog.getByRole('button', { name: 'Cancel' }).click();
@@ -65,11 +67,11 @@ test('Configure on the Layers panel deep-links to Candidate layers, whose Apply 
     'data-station-section',
     'candidate-layers',
   );
-  const candidate = dialog.getByRole('region', { name: 'Candidate layers' });
+  const candidate = dialog.getByRole('region', { name: 'Candidate layers', exact: true });
   await expect(candidate.getByLabel('Show layer 70')).toBeChecked();
   await expect(candidate.getByRole('button', { name: 'Apply candidate layers' })).toBeVisible();
   // …and the reserved/live layers are read-only beside it, declared at bridge start.
-  const station = dialog.getByRole('region', { name: 'Station layers' });
+  const station = dialog.getByRole('region', { name: 'Station layers', exact: true });
   await expect(station).toContainText('--reserved-layers');
   await expect(station.locator('input, button')).toHaveCount(0);
 });
@@ -85,9 +87,21 @@ test('the channel raster: set from its own button, durable, mismatch said from t
 }) => {
   const page = app.page;
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
-  const raster = dialog.getByRole('region', { name: 'Channel raster' });
+  const raster = dialog.getByRole('region', { name: 'Channel raster', exact: true });
+
+  /*
+    The e2e seed puts rows ON AIR, and the mock mirrors the bridge's raster guard exactly — so
+    the first CI run met the on-air REFUSAL where it expected the set to land. That refusal is
+    asserted at the end, deliberately; here the rows come off air first, the way
+    `server-settings.spec.ts` does it: Clear-All takes the graphics off air and KEEPS the rows.
+  */
+  await page.getByRole('button', { name: /^Clear all rows/ }).click();
+  const clearDialog = page.getByRole('dialog').filter({ hasText: /Clear/ });
+  await clearDialog.getByRole('button', { name: /^Clear/ }).click();
+  await expect(clearDialog).toBeHidden();
 
   await page.getByRole('button', { name: 'Open Station setup at Servers' }).click();
+  await expect(dialog.getByText(/Apply is blocked for Servers/)).toHaveCount(0);
   await expect(raster.getByLabel('Channel 1 raster width')).toHaveValue('1920');
   await expect(raster.getByLabel('Channel 1 raster height')).toHaveValue('1080');
   await expect(raster).toContainText('agrees');
