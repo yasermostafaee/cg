@@ -132,8 +132,14 @@ export function useFocusTrap(
       `Modal`'s version of this effect depended on `onClose`, which every caller passes as
       an inline arrow — a NEW identity on every render. So the effect tore down and set up
       again on every keystroke, and its setup moves focus: typing one character into a
-      dialog's field re-ran it and focus jumped to the ✕. Measured in a browser, not
-      reasoned about; see `tests/e2e/modal-initial-focus.spec.ts`.
+      dialog's field re-ran it and focus jumped to the ✕.
+
+      MEASURED in a real browser against `fface751~1`, not reasoned about — jsdom cannot tell
+      an open-time race from a per-commit steal, and the two want different fixes. Written up
+      in `tests/e2e/modal-initial-focus.spec.ts`, including the symptom nobody predicted:
+      focus leaving and returning resets a CONTROLLED input's caret to 0, so the characters
+      land in REVERSE and an operator typing `1234` at the lock screen got `4321` — his
+      correct PIN refused, with nothing on screen explaining why.
 
       `ref` is a stable ref object and the two options are read at arm time on purpose. If
       a future caller needs the nominated selector to CHANGE while the trap is armed, that
