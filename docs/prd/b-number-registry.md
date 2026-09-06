@@ -2554,3 +2554,44 @@ after this session is `B-228`"_ — headings and pointer **AGREE**. One number t
 
 ⇒ **Next free after this session is `B-229`** (`B-001` … `B-228`, no gaps), **`D-161`**, **`C-034`**
 and **`P-044`** (unchanged).
+
+### 2026-09-06 — `B-229` · `B-230` · `B-231` (`MODALS-AND-SETTINGS-01`, a survey session that built nothing)
+
+| kind | id      | one line                                                                                                                                                | home                               | status             |
+| ---- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------ |
+| `B-` | `B-229` | the lock screen holds the pointer and not the keyboard — Tab still reaches every on-air control behind the scrim, and nothing else reads `lock.engaged` | [bugs-runtime.md](bugs-runtime.md) | FILED, report only |
+| `B-` | `B-230` | `usePrompt`'s `autoFocus` is defeated by the primitive's focus-on-open, so the lock PIN dialog opens with the caret on the ✕                            | [bugs-runtime.md](bugs-runtime.md) | FILED, report only |
+| `B-` | `B-231` | a renamed bridge config file was left on the station's disk with no migration and no warning — `bridge-source-mappings.json`, read by nothing           | [bugs-runtime.md](bugs-runtime.md) | FILED, report only |
+
+All three were found while inventorying the Runtime's dialogs and its settings for the owner, and
+none of them is what the session was looking for — which is the ordinary yield of a survey and the
+reason surveys are worth the tokens.
+
+⭐ **`B-230` is the one worth remembering, because it was nearly filed as a reasoned claim.** React
+applies `autoFocus` at commit and the primitive focuses in a passive effect, so the effect wins —
+correct, and it is still a chain of reasoning about someone else's framework. It was turned into a
+measurement instead: a throwaway jsdom probe rendering the real `usePrompt` dialog, run, read
+(`ACTIVE: BUTTON … cg-modal-close`), and deleted. The probe cost about two minutes.
+
+⚠ **One number was NOT taken, deliberately, and it is recorded here so the decision is legible.**
+`packages/shared-ipc/src/channels/settings.ts` defines `settings.get` / `settings.set` /
+`settings.changed` for a "Settings panel" that does not exist — an Electron-era survivor (Phase 8
+§12 / M9.3) carrying one field, `telemetry`. It is routed by the bridge (`bridge.ts:1148`), held in
+memory by `caspar-runtime.ts:1255` **without being persisted**, and persisted to `localStorage` by
+the offline mock (`MockRuntime.ts:1800`) — so the mock survives a reload and the real bridge does
+not, which is backwards. No renderer code calls any of it. **Nothing misbehaves today because
+nothing calls it**, so it is not a defect; it is a trap for whoever builds the settings home next,
+and it is reported in that session's §5 rather than given a number it has not earned.
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the three
+bug files was **`B-228`** (`bugs-runtime.md`, `git grep -n -E "^## \[.\] B-2[0-9][0-9]"`);
+`git grep -c -E "B-(229|230|231)" -- docs` returned only this file's own "Next free" pointers (2) and
+one back-reference inside the `B-228` entry (1). The duplicate audit printed exactly `B-056` and
+`B-080`. **Cross-check against the dated pointer:** the entry above ends _"Next free after this
+session is `B-229`"_ — headings and pointer **AGREE**. Three numbers taken, all filed in
+`bugs-runtime.md`. No `C-`, `D-` or `P-` number was taken. Nothing was deleted or translated;
+[[B-116]] gained a scope note (a second file in the same trap) rather than a second number, because
+it is the same defect with a second filename and a new number would have split one fix in two.
+
+⇒ **Next free after this session is `B-232`** (`B-001` … `B-231`, no gaps), **`D-161`**, **`C-034`**
+and **`P-044`** (unchanged).

@@ -2628,6 +2628,18 @@ filename in the registry loader, or move the delimiter file up to `~/.cg-runtime
 other bridge config. **The second is a migration** (an existing `delimiters.json` has to be moved
 or it is silently abandoned), so it is not the one-liner it looks like. Source: `DEBT.md:230`.
 
+⚠ **SCOPE WIDENED 2026-09-06 by `MODALS-AND-SETTINGS-01` §3 — there is a SECOND file in the same
+trap, and it is latent rather than visible.** `ChannelSettingsStore` is constructed with
+`options.templatesDir` too (`caspar-runtime.ts:1455`) and writes `channel-settings.json`
+(`channel-settings-store.ts:34`) — so the R-030 channel raster lands beside the templates exactly as
+the delimiters do. It has not been SEEN yet only because the file is written on the first raster
+change and the bridge host has never had one: listing `~/.cg-runtime/bridge-templates/` on
+2026-09-06 shows four template records and `delimiters.json`, and no `channel-settings.json`. **The
+first operator to set a raster turns one false boot warning into two**, so a fix that skips one
+filename by name rather than fixing the placement rule would be wrong on the day it landed.
+`source-catalog-store.ts:42`–`51` already writes the rule down correctly and names this item while
+doing so; the two stores above predate it and never got it.
+
 ## [x] B-117 — a reachability gate disabled the ENTIRE console in TEST MODE, because it asked "is a real CasparCG healthy?" instead of "will this command be executed?" ⟨priority: medium⟩ — **CLOSED 2026-08-03 WITHOUT ANY WORK BEING DONE: the defect was already gone when this item was filed, and the item says so in its own text. See the closing note at the foot of this entry.**
 
 **What:** `useCasparReachable` answered from `useConnections()` alone. The offline mock reports a
@@ -11239,3 +11251,139 @@ default); the only on-air row is the restore-blocked seed.
   own "Next free" pointers and one back-reference inside the `B-227` entry, and `git grep -n "B-229"
 HEAD` returned nothing. Cross-checked against the registry's dated pointer — _"Next free after this
   session is `B-228`"_ — headings and pointer AGREE. One number taken.
+
+## [ ] B-229 — the lock screen holds the POINTER and not the KEYBOARD: with the console locked, Tab still reaches every on-air control behind the scrim, and nothing but the overlay itself ever reads `lock.engaged` ⟨priority: high — an engaged lock is the one state in which the console promises it cannot be operated, and it can be⟩
+
+**What:** `LockOverlay` puts up a `position: fixed; inset: 0` scrim at `z-index: 1000` carrying
+`role="dialog"` + `aria-modal="true"` (`LockOverlay.tsx:123`), and that scrim is the whole barrier.
+It is:
+
+- **not portalled** — it renders as the last child of `<main>` (`App.tsx:423`), so every console
+  control stays in the same sequential focus order, ahead of it;
+- **not focus-trapped** — there is no `keydown` handler anywhere in the file, so Tab past the PIN
+  input and the `UNLOCK` button walks into the document behind the scrim;
+- **not backed by `inert` or a `tabIndex` sweep** — `git grep -n -e "inert" -e "tabIndex" -e "pointerEvents"`
+  over `apps/runtime/src/renderer` finds nothing that suppresses anything while the lock is engaged.
+
+**And there is no second line of defence, on either side of the seam.** `lock.engaged` is read in
+exactly TWO places in the whole renderer: `App.tsx:424`, which hands it to the overlay, and
+`StatusBar.tsx:532`, which paints the 🔒 chip. No verb, no panel and no gate consults it. On the
+bridge, `#lock` is written by `engage` / `release` and read back by `state()`
+(`caspar-runtime.ts:1231`, `9428`–`9461`) and **no intent handler consults it before executing** — a
+take, a clear or a REMOVE arriving while the console is locked is executed exactly as if it were not.
+
+**Why:** the scrim is 94 % opaque (`rgba(15, 23, 42, 0.94)`), so the focus ring on whatever is
+focused behind it is invisible. The failure mode is not somebody deliberately defeating the lock —
+it is the ordinary one the lock exists for: a rack keyboard bumped, a sleeve on the Enter key, an
+operator resuming and pressing before looking. `Modal.tsx:20`–`23` states the invariant for ordinary
+dialogs in as many words — _"Tab cycling trapped inside so the operator cannot tab onto an on-air
+button behind the scrim"_ — and the one surface where it matters most is the one that does not have
+it.
+
+⭐ **The existing argument for the divergence is CORRECT and does not cover this.**
+`Modal.tsx:41`–`45` says `LockOverlay` is deliberately not built on the primitive, because the
+primitive gives every dialog a ✕, Escape and backdrop-click, and _"a lock screen with a way out is
+not a lock"_. That justifies not inheriting the three EXITS. **It does not justify not inheriting
+the TRAP**, which is the half that is about safety rather than convenience — and inheriting the trap
+alone is what the divergence should have meant.
+
+**Acceptance:**
+
+- With the lock engaged, sequential focus navigation (Tab and Shift-Tab, from any starting point,
+  including a focus that was already outside the card when the lock engaged) cannot land on any
+  element outside the lock card.
+- The lock still has NO way out but the PIN — the ✕, Escape and backdrop-click stay absent.
+- Focus lands in the PIN input when the lock engages, and returns there after a failed release.
+- An E2E asserts the trap with a real layout engine, with a negative control proving it can fail.
+
+**Notes:** the fix is a focus trap, not a re-parenting onto `Modal` — see the ⭐ above. Whether the
+BRIDGE should also refuse intents while locked is a separate and larger question (it would change
+what a lock means for a second browser on the same bridge) and is deliberately NOT part of this
+item's acceptance; it is named here only so the next reader knows the renderer is currently the
+only enforcement there is. Found by `MODALS-AND-SETTINGS-01` §1 while inventorying the dialogs.
+
+- **Cross-refs:** [[B-230]] (the other focus defect in the same wave, in the primitive rather than
+  around it), `Modal.tsx` module note (the deliberate divergence, and its exact scope), `R-020`
+  (the PIN's digit normalisation, unaffected).
+- **Owed:** nothing built — report only.
+
+## [ ] B-230 — `usePrompt` declares `autoFocus` on its input and the modal primitive silently takes the focus away: the lock PIN dialog opens with the caret on the ✕ ⟨priority: medium — it is the console's only PIN entry, and the operator's first keystrokes go nowhere⟩
+
+**What:** `useDialog.tsx:171` puts `autoFocus` on the prompt's `<input>`. `Modal.tsx:306` runs
+`ref.current?.querySelector(FOCUSABLE)?.focus()` in a `useEffect` on open, and the first focusable
+element in a `Modal` is the header's ✕ (`Modal.tsx:371`, `className="cg-modal-close"`). React
+applies `autoFocus` during commit; the passive effect runs after. **The effect wins.**
+
+**MEASURED, not reasoned** — a throwaway jsdom probe rendering `usePrompt`'s dialog reported:
+
+```
+ACTIVE: BUTTON {"ariaLabel":"Close","type":"button","cls":"cg-btn cg-btn--ghost cg-modal-close"}
+```
+
+**Why:** `usePrompt` has exactly one call site — `StatusBar.tsx:272`, the LOCK button's PIN prompt —
+so the whole blast radius is the one flow an operator runs at a shift change, under mild time
+pressure, usually without looking at where the caret is. The dialog is a single-field form; there is
+no other plausible place for focus to be.
+
+**And the second defect is that the code still reads as if it works.** `autoFocus` is sitting there
+in `useDialog.tsx` doing nothing, so the next reader will conclude the input is focused without
+testing it, exactly as this one nearly did. Two mechanisms claim the same job, one silently wins,
+and the loser was never removed.
+
+⚠ **The existing test cannot catch it.** `tests/modal.dom.test.ts:99` asserts focus-on-open lands on
+a `BUTTON` inside the dialog — true, and it is the correct assertion for the primitive, whose whole
+argument (`Modal.tsx:365`–`369`) is that focus should land on the harmless ✕. The gap is that
+nothing asserts what happens when a dialog has a FIELD the operator is meant to type into, which is
+a different question the primitive does not currently have an answer for.
+
+**Acceptance:**
+
+- Opening the PIN prompt puts focus in the PIN input.
+- Opening a `useConfirm` dialog still puts focus on the ✕ — the safe default is unchanged.
+- Whichever mechanism loses is DELETED rather than left in place.
+- A unit test pins both, so the two cases cannot silently converge again.
+
+**Notes:** the shape of the fix is a decision, not a one-liner — either `Modal` grows an explicit
+"initial focus" seam (a ref or a selector) that `usePrompt` uses and every other dialog leaves
+alone, or `usePrompt` focuses its input in its own effect after the primitive's. The first is the
+one that generalises; the second is smaller and keeps the rule in one file. Found by
+`MODALS-AND-SETTINGS-01` §1.
+
+- **Cross-refs:** [[B-229]] (focus and the lock, one layer out), `Modal.tsx:365`–`369` (why the ✕ is
+  the right default for every dialog that is not a form).
+- **Owed:** nothing built — report only.
+
+## [ ] B-231 — a renamed bridge config file was left on the station's disk with no migration and no warning: `bridge-source-mappings.json` is still there, read by nothing ⟨priority: low — the configuration it held was silently abandoned, and the class is the one any settings consolidation will meet again⟩
+
+**What:** `~/.cg-runtime/bridge-source-mappings.json` exists on the bridge host (129 bytes, last
+written 2026-08-10) and **nothing in the tree reads or writes it**: `git grep -n -e "source-mappings" -e "sourceMappings" -e "SourceMappings" -- tools apps packages`
+returns zero hits. `1608a804` ("Live Source 4a — the installation names its lives, and the Inspector
+binds each plate") renamed the concept to `SourceAssignments` and the store to
+`bridge-source-assignments.json`; the old file was not read, not migrated and not removed, and
+nothing said so.
+
+**Nothing is broken today** — the surviving file holds one dev-era mapping (`"id": "aaa"`, a route
+producer on channel 1) and the station's real assignments are in
+`bridge-source-assignments.json`. The item is filed for the CLASS, on a measured instance.
+
+**Why:** a persisted config file whose reader is renamed away resets the operator's configuration
+silently. There is no boot warning, no migration, and no inventory of what `~/.cg-runtime/` is
+supposed to contain — so the only way to notice is to list the directory and know which names are
+current, which is precisely the knowledge a station operator does not have. **This is the exact
+failure a settings consolidation is most likely to cause** (`MODALS-AND-SETTINGS-01` §5.3 names it
+in the abstract; this entry is the instance that already happened).
+
+**Acceptance:**
+
+- A superseded bridge config file is either migrated on first boot or named in a boot line that
+  says it is obsolete and being ignored.
+- The set of files the bridge owns under `~/.cg-runtime/` is written down in one place.
+- Renaming a persisted store's file obliges the same commit to say what happens to the old one.
+
+**Notes:** deliberately NOT scoped as "delete the stale file" — the useful output is the rule, since
+the next rename is the one that will cost something. Found by `MODALS-AND-SETTINGS-01` §3 while
+inventorying where each setting is stored, by listing the live bridge host's config directory.
+
+- **Cross-refs:** [[B-116]] (the other thing wrong with `~/.cg-runtime/` layout — a config file
+  inside `templatesDir`), `1608a804` (the rename).
+- **Owed:** nothing built — report only.
