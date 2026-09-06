@@ -184,6 +184,62 @@ requirement has not drifted under it.
 
 ---
 
+## ✅ OWNER ANSWERS — 2026-09-06, recorded by `MODAL-CONTRACT-02`
+
+**NOTHING IN THIS DOCUMENT BELOW THIS BLOCK HAS BEEN EDITED, and NO gated task in
+`tasks.md` has been ticked.** This records the owner's answers to the gates so they stop
+living only in a chat transcript. It is written as a dated block ABOVE the gates rather
+than into them, the same way `PREMISE CORRECTED` sits above `§0` — the gate text is what
+was ASKED, and rewriting a question to match its answer destroys the record of both.
+
+⭐ **Why this block exists at all, in one sentence:** a later session had to ask whether the
+template picker survives, because the answer existed only in a prompt. A decision that lives
+only in a prompt is one the next session cannot find.
+
+### The answers
+
+| gate   | answer                                                                                                                                                                                                                                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `§1`   | **(A) — the picker STAYS.** A list reached inside one action is a STEP, not a panel.                                                                                                                                                                   |
+| `§1.1` | **CONFIRMED: one entry point.** The picker stays reachable from LOAD and nowhere else — no second, similarly-named control to choose between under time pressure.                                                                                      |
+| `§2`   | **(A) — the supersession STANDS**, and amending `R-028`'s acceptance text is the DELIVERABLE, not a side effect of it.                                                                                                                                 |
+| `§2.1` | **STANDS.**                                                                                                                                                                                                                                            |
+| `§3`   | **(A) — the station-layers tab ADOPTS the column model.** ⚠ See the scope correction below: `tasks.md` 2.2 is half-scoped.                                                                                                                             |
+| `§3.1` | **YES — it gets the sticky header**, on the COLUMN-NAMING argument alone. The safety argument (a word above each icon-only glyph) genuinely does not transfer, and it is not being leaned on.                                                          |
+| `§5`   | **(B) — `isOnAirStatus` promoted out of `caspar-runtime.ts` into a shared package and imported by both sides.** Not (D): the union is a change to shipped on-air behaviour at four OTHER gates and is not to be inherited as a side effect of `R-017`. |
+| `§6`   | **(A) — the copy names CLEAR-ALL everywhere.** The `server-settings` E2E's assertion changes SHAPE, not just wording: after Clear-All the rows correctly REMAIN, idle.                                                                                 |
+
+### ⚠ A scope correction that travels with `§3`'s answer
+
+`tasks.md` 2.2 names ONE non-adopting surface. There are TWO: `LiveSourcesPanel.tsx:98`
+lays its rows out with its own `auto 1fr auto` grid and no header, exactly as the station
+tab does. It is the third tab in the SAME tab strip, so "the tab strip has one column model"
+is false while it is excluded. Whoever implements `§3` must scope both, or the answer lands
+half-applied and the rule is derived twice anyway — the hazard `§3` was written to name.
+
+### 🔴 The three "CONFIRM" items are NOT simple ticks
+
+They are worded as formalities and each has something wrong underneath it, per
+`OPERATOR-SURFACE-RECHECK-01`'s findings (B) and (C) above. Ticking them as written would
+carry a false statement into the archived spec.
+
+- **`§8` — the asymmetry it asks the owner to confirm DOES NOT EXIST.** Both clears are
+  confirm-gated: the fixed-row CLEAR goes through `LayerRow.tsx`'s `withConfirm`, with three
+  occupancy-dependent sentences, and did so at `ec65480` too. The question that IS open is a
+  different one — whether the row's CLEAR should KEEP its confirm — and `tasks.md` 6.2 would
+  otherwise record a false asymmetry that a later reader would try to "harmonise".
+- **`§7` — its label claim was never true.** PGM/Preview are not "labelled NOT CONNECTED";
+  `MonitorPanel.tsx` argues the opposite in its own words, because PREVIEW has no link to be
+  down. The RESERVATION half of `§7` is fine and can close; the sentence describing it cannot
+  be confirmed as written, and a stale comment in `App.tsx` still repeats it.
+- **`§4.1` and `§4.2` must be reconciled with `specs/runtime-ui/spec.md` 43-44 AS ONE ACT.**
+  That is an ADDED requirement — text that archives into `openspec/specs/` — and it says a
+  control whose PRESENCE varies by row SHALL be reached through the Inspector. The shipped
+  answer is the CONTEXT MENU. Confirming `§4.1`/`§4.2` while leaving 43-44 standing would
+  archive a normative requirement that forbids what the product does. One act, not two.
+
+---
+
 ## §0 — WHAT IS TRUE AT HEAD
 
 **Read at `ec65480`** — verified `HEAD == origin/dev`, working tree clean, pulled 2026-08-15.
