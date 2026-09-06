@@ -131,11 +131,27 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
   const { bank } = useFixedBankState();
   const templateIds = useMemo(() => items.map((i) => i.templateId), [items]);
   const templates = useTemplateIndex(templateIds);
+  /*
+    🔴 **NO `slot` IS PASSED, AND `B-232`'s NOTE IS WHY.** It warned that naming this owner by
+    its LAYER "would just repeat the coordinate the sentence has already printed two words
+    earlier". The first spelling of this fix passed the slot anyway and CI proved the note
+    right twice over: the strip rendered
+
+        "⚠ Layer 1-10 may still show … put there by layer 10 (not a row) · News Composite"
+
+    — the coordinate said twice, and `(not a row)` asserted about a layer that an item on the
+    stack demonstrably owns. `placeName` is correct in isolation (layer 10 is outside the
+    declared bank in that fixture) and wrong for THIS sentence, because the warning's
+    coordinate IS the owning item's own layer.
+
+    So the composition is asked for the one thing the sentence does not already say: WHICH
+    graphic. `operatorRowName` falls back to a shortened id when the template is unknown,
+    which is the documented last resort and still not a raw UUID.
+  */
   const ownerName = (w: OwnedOccupancyWarning): ReturnType<typeof operatorRowName> =>
     operatorRowName(
       {
         itemId: w.itemId,
-        slot: { channel: w.channel, layer: w.layer },
         ...(() => {
           const templateId = items.find((i) => i.itemId === w.itemId)?.templateId;
           return templateId !== undefined ? { templateId } : {};

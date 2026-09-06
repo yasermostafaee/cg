@@ -269,9 +269,19 @@ describe('B-233 §2 — the owned-occupancy strip names the row that put it ther
     return strip;
   }
 
-  it('🔴 THE BUG: it names the row, not `under item "item-e602d912-…"`', async () => {
+  it('🔴 THE BUG: it names the graphic, not `under item "item-e602d912-…"`', async () => {
     const strip = await renderBanner();
-    expect(strip.textContent).toContain(ROW_NAME);
+    /*
+      ⭐ THE TEMPLATE, NOT THE ROW ALIAS — and the distinction is `B-232`'s note, which CI
+      proved right. This spec first asserted the row name; passing the warning's coordinate to
+      `operatorRowName` to get it made the strip say "Layer 1-70 … put there by layer 70 …",
+      repeating the coordinate the sentence had already printed, and calling a layer an item
+      demonstrably owns "not a row" wherever the fixture's bank excluded it.
+
+      The warning's coordinate IS the owning item's own layer, so the only thing the sentence
+      does not already say is WHICH graphic — which is the template.
+    */
+    expect(strip.textContent).toContain(TEMPLATE_NAME);
     // ── the assertion that goes RED without the fix ────────────────────────
     expect(strip.textContent, 'the raw item id is in the sentence').not.toContain(ITEM_ID);
   });

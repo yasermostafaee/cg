@@ -61,12 +61,32 @@ function stubBridge(
       fail as an unrelated-looking crash in every spec in the file, which is exactly what
       happened when the hooks landed before this stub grew.
     */
-    stack: { snapshot: () => Promise.resolve([]), onStateChanged: () => () => undefined },
+    stack: {
+      // The item the occupancy warning names, ON THE STACK — which is the whole reason this
+      // strip needs no wire change (its owner's LOAD raised the warning, so the item is
+      // always there to join against). An empty stack would exercise only the last-resort id.
+      snapshot: () =>
+        Promise.resolve([
+          { itemId: 'item1', templateId: 'tpl-news', fields: {}, status: 'loaded' },
+        ]),
+      onStateChanged: () => () => undefined,
+    },
     fixedLayers: {
       config: () => Promise.resolve(null),
       onConfigChanged: () => () => undefined,
     },
-    templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
+    templates: {
+      list: () =>
+        Promise.resolve([
+          {
+            templateId: 'tpl-news',
+            templateType: 'lower-third',
+            name: 'News Composite',
+            fields: [],
+          },
+        ]),
+      onChanged: () => () => undefined,
+    },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
   return { clear };
@@ -170,15 +190,16 @@ describe('OrphanLayersBanner — B-056 owned-slot occupancy variant', () => {
     expect(el.textContent).toContain('Layer 1-10');
     /*
       🔴 `B-233` — THIS ASSERTED THE RAW ITEM ID (`item1`), AND IT WAS RIGHT ABOUT THE OLD
-      COPY. Golden rule 11 replaced it: an operator-facing sentence names the row in the
-      operator's words, and the id is RELOCATED to the row's `title` rather than deleted.
+      COPY. Golden rule 11 replaced it: the sentence names the GRAPHIC in the operator's
+      words, and the id is RELOCATED to the row's `title` rather than deleted.
 
-      This stub's stack is empty, so the item cannot be joined to a template and the row is
-      named by its LAST RESORT — a shortened id. That is the documented degradation and it is
-      what is asserted here; the fully-named case (a Persian row alias plus its template) has
-      its own spec in `operatorNaming.strips.dom.test.ts`, with a real bank and registry.
+      ⭐ It names the TEMPLATE and not the row, obeying `B-232`'s own note: naming the owner
+      by its layer "would just repeat the coordinate the sentence has already printed two
+      words earlier" — and CI proved that note right when the first attempt passed the slot
+      anyway and rendered "put there by layer 10 (not a row) · …".
     */
-    expect(el.textContent, 'the FULL raw id is still in the sentence').not.toContain('item1 ');
+    expect(el.textContent).toContain('News Composite');
+    expect(el.textContent, 'the raw item id is still in the sentence').not.toContain('item1');
     const row = alert?.querySelector('[title]');
     expect(row?.getAttribute('title'), 'the id was deleted rather than relocated').toContain(
       'item1',

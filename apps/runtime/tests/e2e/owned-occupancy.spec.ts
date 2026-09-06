@@ -26,7 +26,26 @@ test('a seeded owned-slot warning names the layer and item, offers no Clear, and
   const banner = page.getByRole('alert', { name: 'Owned-layer occupancy warnings' });
   await expect(banner).toBeVisible();
   await expect(banner).toContainText('Layer 1-10');
-  await expect(banner).toContainText('item-irib-news');
+  /*
+    🔴 `B-233` — THIS ASSERTED THE RAW ITEM ID, and it was right about the old copy.
+
+    Golden rule 11 replaced it: the strip names the GRAPHIC that is on the layer, in the
+    operator's words, and the id is RELOCATED to the row's `title` rather than deleted.
+
+    ⭐ It names the template and NOT the row, which is `B-232`'s own note being obeyed:
+    naming the owner by its layer "would just repeat the coordinate the sentence has already
+    printed two words earlier". The first attempt at this fix passed the slot anyway, and
+    this spec is what caught it — it rendered "put there by layer 10 (not a row) · …", saying
+    the coordinate twice and calling a layer an item owns "not a row".
+  */
+  await expect(banner).toContainText('News Composite');
+  await expect(banner, 'the raw item id is back in the sentence').not.toContainText(
+    'item-irib-news',
+  );
+  await expect(
+    banner.locator('[title*="item-irib-news"]'),
+    'the id was deleted rather than relocated to the title',
+  ).toHaveCount(1);
   await expect(banner).toContainText('Out or Remove the item');
   // No direct Clear on an owned layer — the strip offers no controls at all.
   await expect(banner.getByRole('button')).toHaveCount(0);

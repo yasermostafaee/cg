@@ -375,7 +375,20 @@ test.describe('retention carries the row state (B-107 / B-109 / B-108)', () => {
     await expect(notice).toBeVisible();
     // How many, WHICH, and what to do about it — a count alone is not an answer.
     await expect(notice).toContainText('1 row did not come back');
-    await expect(notice).toContainText('item-72');
+    /*
+      🔴 `B-233` — WHICH row, in the operator's words rather than as `item-72`.
+
+      The skip carries its own naming now (`RestoreSkipSchema.templateId` / `.slot`),
+      because a row that did not come back is by definition absent from the stack and there
+      is nothing on the renderer side to join against.
+
+      Here the retained coordinate is layer 72, which this reconfigured station has just
+      handed to playout — so the strip says "layer 72 (not a row)", which is both honest and
+      the REASON the row is gone. That is exactly the case `placeName` exists for, and it is
+      asserted rather than smoothed away.
+    */
+    await expect(notice).toContainText('layer 72 (not a row)');
+    await expect(notice, 'the raw item id is back in the sentence').not.toContainText('item-72');
     await expect(notice).toContainText('no layer was free');
   });
 
