@@ -33,9 +33,6 @@ import {
   LockReleaseChannel,
   LockStateChangedChannel,
   LockStateChannel,
-  SettingsChangedChannel,
-  SettingsGetChannel,
-  SettingsSetChannel,
   PlayoutLayersClearChannel,
   PlayoutLayersStateChangedChannel,
   PlayoutLayersStateChannel,
@@ -927,7 +924,6 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     backing.emptiedAirChanged.subscribe((n) => push(EmptiedAirNoticeChangedChannel, n)),
     backing.lockChanged.subscribe((l) => push(LockStateChangedChannel, l)),
     backing.updateChanged.subscribe((u) => push(UpdateStateChangedChannel, u)),
-    backing.settingsChanged.subscribe((s) => push(SettingsChangedChannel, s)),
     // R-021 stage 2a — fixed-bank config + per-slot state.
     backing.fixedConfigChanged.subscribe((c) => push(FixedLayersConfigChangedChannel, c)),
     backing.fixedStateChanged.subscribe((s) => push(FixedLayersStateChangedChannel, s)),
@@ -1285,9 +1281,6 @@ export function buildRoutes(
     route(RehearseStateChannel, 'read', () => b.rehearseState()),
     route(RehearseEnterChannel, 'operator', (r: { itemId: string }) => b.enterRehearse(r.itemId)),
     route(RehearseExitChannel, 'operator', (r: { itemId: string }) => b.exitRehearse(r.itemId)),
-
-    route(SettingsGetChannel, 'read', () => b.settingsGet()),
-    route(SettingsSetChannel, 'operator', (r: Partial<{ telemetry: never }>) => b.settingsSet(r)),
   ];
 
   const routes = new Map(entries.map((e) => [e.channel.name, e]));

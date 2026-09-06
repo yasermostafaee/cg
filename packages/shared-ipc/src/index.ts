@@ -49,7 +49,6 @@ export * from './channels/preview.js';
 export * from './channels/templates.js';
 export * from './channels/audit.js';
 export * from './channels/updates.js';
-export * from './channels/settings.js';
 export * from './channels/fixedLayers.js';
 export * from './channels/playoutLayers.js';
 // B-145 acceptance 1 (display half) — the bridge's OWN Live Source ledger, the

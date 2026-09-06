@@ -16,7 +16,6 @@ import type {
   PLAYOUT_CLEAR_REASONS,
   PlayoutLayerState,
   LiveLayerState,
-  Settings,
   TemplateInfo,
   DelimiterOption,
   Rehearsal,
@@ -66,7 +65,6 @@ type PlayoutClearReason = (typeof PLAYOUT_CLEAR_REASONS)[number];
 
 type FieldValues = StackItemState['fields'];
 
-const SETTINGS_KEY = 'cg-runtime:settings';
 const DELIMITERS_KEY = 'cg-runtime:delimiters';
 const SOURCE_CATALOG_KEY = 'cg-runtime:source-catalog';
 const SOURCE_ASSIGNMENTS_KEY = 'cg-runtime:source-assignments';
@@ -146,7 +144,6 @@ export class MockRuntime {
   readonly orphansChanged = new Emitter<OrphanLayer[]>();
   readonly ownedOccupancyChanged = new Emitter<OwnedOccupancyWarning[]>();
   readonly lockChanged = new Emitter<LockState>();
-  readonly settingsChanged = new Emitter<Settings>();
   readonly updateChanged = new Emitter<PendingUpdate | null>();
   // R-021 stage 2a — fixed-bank parity.
   readonly fixedConfigChanged = new Emitter<FixedLayerBank | null>();
@@ -1818,27 +1815,6 @@ export class MockRuntime {
     }
     this.rehearseChanged.emit(this.rehearseState());
     return { ok: true };
-  }
-
-  settingsGet(): Settings {
-    try {
-      const raw = localStorage.getItem(SETTINGS_KEY);
-      if (raw !== null) return JSON.parse(raw) as Settings;
-    } catch {
-      /* fall through to default */
-    }
-    return { telemetry: 'off' };
-  }
-
-  settingsSet(patch: Partial<Settings>): Settings {
-    const next: Settings = { ...this.settingsGet(), ...patch };
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
-    } catch {
-      /* non-persistent fallback is acceptable */
-    }
-    this.settingsChanged.emit(next);
-    return next;
   }
 
   // ── update gate ─────────────────────────────────────────────────────

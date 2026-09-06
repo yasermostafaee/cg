@@ -78,9 +78,6 @@ import type {
   UpdateCancelChannel,
   UpdateRequestChannel,
   UpdateStateChannel,
-  Settings,
-  SettingsGetChannel,
-  SettingsSetChannel,
   SourceAssignments,
   SourceCatalog,
   SourcesAssignmentsChannel,
@@ -551,14 +548,6 @@ export interface RuntimeBridge {
     state(): Promise<ChannelResponse<typeof UpdateStateChannel>>;
     cancel(): Promise<ChannelResponse<typeof UpdateCancelChannel>>;
     onStateChanged(handler: (pending: PendingUpdate | null) => void): Unsubscribe;
-  };
-
-  settings: {
-    get(): Promise<ChannelResponse<typeof SettingsGetChannel>>;
-    set(
-      req: ChannelRequest<typeof SettingsSetChannel>,
-    ): Promise<ChannelResponse<typeof SettingsSetChannel>>;
-    onChanged(handler: (next: Settings) => void): Unsubscribe;
   };
 
   /**

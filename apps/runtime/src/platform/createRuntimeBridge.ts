@@ -293,17 +293,6 @@ export function createMockBridge(): RuntimeBridge {
       onStateChanged: (handler) => mock.updateChanged.subscribe(handler),
     },
 
-    settings: {
-      get: () => Promise.resolve(mock.settingsGet()),
-      // Drop absent keys so `exactOptionalPropertyTypes` stays happy and a
-      // missing field never overwrites the stored value with `undefined`.
-      set: (req) =>
-        Promise.resolve(
-          mock.settingsSet(req.telemetry !== undefined ? { telemetry: req.telemetry } : {}),
-        ),
-      onChanged: (handler) => mock.settingsChanged.subscribe(handler),
-    },
-
     // R-034 — offline parity. The mock stands in for the bridge's disk-persisted
     // list; it uses `localStorage`, which is the closest thing test mode has to
     // "survives a restart". Cross-browser sharing is the one property the mock

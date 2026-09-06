@@ -22,9 +22,6 @@ import {
   LockReleaseChannel,
   LockStateChangedChannel,
   LockStateChannel,
-  SettingsChangedChannel,
-  SettingsGetChannel,
-  SettingsSetChannel,
   PlayoutLayersClearChannel,
   PlayoutLayersStateChangedChannel,
   PlayoutLayersStateChannel,
@@ -104,7 +101,6 @@ import {
   type LiveLayerState,
   type RestoreMigration,
   type RestoreSkip,
-  type Settings,
   type TemplateInfo,
   type TemplateReference,
 } from '@cg/shared-ipc';
@@ -306,7 +302,6 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #fixedStateSubs = new Subs<FixedSlotState[]>();
   readonly #lockSubs = new Subs<LockState>();
   readonly #updateSubs = new Subs<PendingUpdate | null>();
-  readonly #settingsSubs = new Subs<Settings>();
   /** R-034 — the bridge-owned delimiter list, pushed on every change. */
   readonly #delimiterSubs = new Subs<DelimiterOption[]>();
   /** R-030 — the bridge-owned channel raster + video-mode reading. */
@@ -791,11 +786,6 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#rehearseSubs.emit(p.data);
         break;
       }
-      case SettingsChangedChannel.name: {
-        const p = SettingsChangedChannel.payload.safeParse(payload);
-        if (p.success) this.#settingsSubs.emit(p.data);
-        break;
-      }
       default:
         break;
     }
@@ -1190,12 +1180,6 @@ export class WebSocketRuntime implements RuntimeBridge {
     cancel: () => this.#invoke(UpdateCancelChannel, undefined),
     onStateChanged: (handler: (pending: PendingUpdate | null) => void) =>
       this.#updateSubs.add(handler),
-  };
-
-  readonly settings = {
-    get: () => this.#invoke(SettingsGetChannel, undefined),
-    set: (req: ChannelRequest<typeof SettingsSetChannel>) => this.#invoke(SettingsSetChannel, req),
-    onChanged: (handler: (next: Settings) => void) => this.#settingsSubs.add(handler),
   };
 
   /** R-030 — the per-channel output raster, owned and disk-persisted by the bridge. */

@@ -215,7 +215,14 @@ describe('B-152 — a malformed response rejects its caller instead of crashing 
     });
 
     await waitFor(() => runtime?.link.status() === 'live');
-    await expect(runtime.settings.get()).rejects.toThrow(/older build/i);
+    /*
+      ⚠ Any REQUEST channel does; this used `settings.get`, which no longer exists (its
+      whole `settings.*` namespace was dead code and was deleted). `delimiters.list` is a
+      like-for-like stand-in — a plain read whose response the fake bridge answers with
+      something unshaped — and the claim being made is about the ENVELOPE, not about which
+      channel carries it.
+    */
+    await expect(runtime.delimiters.list()).rejects.toThrow(/older build/i);
     // …and the process is still standing: the skew check resolved rather than exploding.
     await new Promise((r) => setTimeout(r, 50));
     expect(runtime.link.status()).toBe('live');

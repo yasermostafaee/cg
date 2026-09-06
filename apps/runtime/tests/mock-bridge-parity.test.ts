@@ -60,8 +60,6 @@ const BACKING_METHODS = [
   'updateRequest',
   'updateState',
   'updateCancel',
-  'settingsGet',
-  'settingsSet',
 ] as const;
 
 /** Every emitter the bridge's `wirePublishes()` subscribes to. */
@@ -74,7 +72,6 @@ const BACKING_EMITTERS = [
   'emptiedAirChanged',
   'lockChanged',
   'updateChanged',
-  'settingsChanged',
 ] as const;
 
 type BridgeMethodName = {
@@ -227,7 +224,6 @@ const BRIDGE_SURFACE: {
     // where the column disagrees with every other build.
     audit: ['recent', 'health', 'operatorName', 'setOperatorName'],
     update: ['request', 'state', 'cancel', 'onStateChanged'],
-    settings: ['get', 'set', 'onChanged'],
     /**
      * R-022 — REHEARSE belongs in this guard for exactly the reason
      * `playoutLayers.clear` and `fixedLayers.clearLayer` do: it is a SAFETY

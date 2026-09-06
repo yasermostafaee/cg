@@ -73,7 +73,6 @@ import {
   type OrphanLayer,
   type OwnedOccupancyWarning,
   type PendingUpdate,
-  type Settings,
   type TemplateInfo,
   type TemplateLook,
   type ChannelSettings,
@@ -722,7 +721,6 @@ export class CasparRuntime {
   readonly stackChanged = new Emitter<readonly StackItemState[]>();
   readonly healthChanged = new Emitter<ConnectionHealth>();
   readonly lockChanged = new Emitter<LockState>();
-  readonly settingsChanged = new Emitter<Settings>();
   readonly updateChanged = new Emitter<PendingUpdate | null>();
   /** R-010 — emitted after every successful `setConfig` apply. */
   readonly configChanged = new Emitter<ConnectionConfig>();
@@ -1279,7 +1277,6 @@ export class CasparRuntime {
   #audit: AuditEntry[] = [];
   #auditWriter: AuditWriter | null = null;
   #auditLogPath: string | null = null;
-  #settings: Settings = { telemetry: 'off' };
   #pendingUpdate: PendingUpdate | null = null;
 
   #started = false;
@@ -10314,15 +10311,6 @@ export class CasparRuntime {
     return [...(this.#outputChecks.get(label)?.values() ?? [])].sort(
       (a, b) => a.channel - b.channel,
     );
-  }
-
-  settingsGet(): Settings {
-    return this.#settings;
-  }
-  settingsSet(patch: Partial<Settings>): Settings {
-    this.#settings = { ...this.#settings, ...patch };
-    this.settingsChanged.emit(this.#settings);
-    return this.#settings;
   }
 
   updateRequest(

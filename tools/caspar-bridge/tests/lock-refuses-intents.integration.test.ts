@@ -281,7 +281,6 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'lock.state',
         'playoutLayers.state',
         'rehearse.state',
-        'settings.get',
         'sources.assignments',
         'sources.config',
         // The client's own reconnect machinery, unreachable from any operator control.
