@@ -1,9 +1,15 @@
+import { useMemo } from 'react';
 import type { OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { OperatorNames } from '../../ui/OperatorNames.js';
+import { operatorRowName } from '../../ui/operatorNaming.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
+import { useFixedBankState } from '../../hooks/useFixedLayers.js';
 import { useLink } from '../../hooks/useLink.js';
+import { useStack } from '../../hooks/useStack.js';
+import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import { runCommand } from '../status/commandFeedback.js';
 
@@ -102,6 +108,43 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
   const casparReach = useCasparReach();
   const clearRefusal = casparRefusalReason(linkDown, casparReach);
 
+  /*
+    🔴 `B-233` — WHAT THIS BANNER NEEDED IN ORDER TO NAME THE OWNING ROW.
+
+    `B-232` left the occupancy strip printing a raw `itemId` and said why: _"Naming the
+    owning item needs the STACK (to reach its templateId) and the REGISTRY, and this banner
+    holds neither."_ That was true and it is what these three hooks supply.
+
+    ⭐ **The hooks are called HERE rather than threaded from `App` as props.** `B-232` did
+    thread `emptiedAirRows` down, and the reason it gave was specific: the strip and the
+    marked ROWS had to describe the SAME set, which two independent subscriptions could not
+    guarantee. Nothing here is mirrored on a second surface — this strip is the only place
+    these warnings are named — so there is no agreement to protect, and three more props
+    through `App` would couple it to this banner's copy for nothing.
+
+    ⚠ No wire change, and the contrast with the restore-SKIPS strip is the instructive part:
+    an occupancy warning names an item whose LOAD raised it, so that item is ON the stack and
+    the join succeeds. A skipped row is by definition NOT on the stack, which is why that one
+    needed `RestoreSkipSchema` widened and this one does not.
+  */
+  const items = useStack();
+  const { bank } = useFixedBankState();
+  const templateIds = useMemo(() => items.map((i) => i.templateId), [items]);
+  const templates = useTemplateIndex(templateIds);
+  const ownerName = (w: OwnedOccupancyWarning): ReturnType<typeof operatorRowName> =>
+    operatorRowName(
+      {
+        itemId: w.itemId,
+        slot: { channel: w.channel, layer: w.layer },
+        ...(() => {
+          const templateId = items.find((i) => i.itemId === w.itemId)?.templateId;
+          return templateId !== undefined ? { templateId } : {};
+        })(),
+      },
+      bank,
+      templates,
+    );
+
   if (orphans.length === 0 && ownedOccupancy.length === 0) return null;
 
   // R-015 — the discriminator is the OBSERVED kind, never a layer number.
@@ -178,20 +221,33 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
         <div style={styles.strip} role="alert" aria-label="Owned-layer occupancy warnings">
           {ownedOccupancy.map((w) => {
             const name = `${String(w.channel)}-${String(w.layer)}`;
+            const owner = ownerName(w);
             return (
-              <div key={name} style={styles.row}>
+              /*
+                `B-233` / golden rule 11 — THE ID IS RELOCATED, NOT DELETED. A name can be
+                renamed or repeated and an id cannot, so the full `item …` / `template …`
+                pair stays reachable on the row's `title` for the moment somebody has to
+                quote it to an engineer. What changed is which of the two is in the
+                SENTENCE.
+              */
+              <div key={name} style={styles.row} title={owner.title}>
                 <span>
                   {/*
-                    ⚠ `B-233` — THIS ITEM ID IS STILL RAW, and deliberately left so rather
-                    than half-fixed. Naming the owning item needs the STACK (to reach its
-                    templateId) and the REGISTRY, and this banner holds neither; naming it
-                    by its LAYER instead would just repeat the coordinate the sentence has
-                    already printed two words earlier. Both halves are a change to what
-                    this strip is handed and a decision about its copy, which is more than
-                    `B-232`'s sweep should take on its own authority.
+                    `B-233` — THE OWNING ROW, IN THE OPERATOR'S WORDS. This said
+                    `under item "item-e602d912-…"`.
+
+                    ⭐ It names the row and its template rather than repeating the
+                    coordinate: `Layer 1-70` is already the first two words of the sentence,
+                    and `B-232`'s note was right that naming the owner by its layer would
+                    say the same thing twice. What the operator is missing is WHICH of his
+                    rows put it there — and that is a name, which is what he will look for
+                    in the table below.
+
+                    Each name in its own `<bdi>`: the row name is Persian, the template name
+                    is usually Latin, and the ` · ` between them is a neutral.
                   */}
-                  ⚠ Layer {name} may still show a previous session’s graphic on the primary under
-                  item “{w.itemId}”{' '}
+                  ⚠ Layer {name} may still show a previous session’s graphic on the primary, put
+                  there by <OperatorNames name={owner} />{' '}
                   <span style={styles.detail}>
                     ({w.producer} producer observed when the item loaded and the primary could not
                     be cleared — Out or Remove the item to clear it)

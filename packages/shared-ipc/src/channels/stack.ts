@@ -2,6 +2,7 @@ import { z } from 'zod';
 import {
   FieldValuesSchema,
   IdSchema,
+  LayerSlotSchema,
   LiveSourceLookOverrideSchema,
   PositionSchema,
   RetainedStackItemSchema,
@@ -637,6 +638,39 @@ export const RestoreSkipSchema = z.object({
    * already on air, which is the half that makes the refusal actionable.
    */
   detail: z.string().optional(),
+  /**
+   * 🔴 `B-233` — **WHAT THE OPERATOR CALLS THE ROW THAT DID NOT COME BACK.**
+   *
+   * The strip said `item-e602d912-… — its template is no longer registered`. Golden rule 11
+   * forbids that: an operator-facing sentence names things in the operator's words, and the
+   * two words he uses for this row are its NAME («لوگوی اصلی») and its template's.
+   *
+   * ── WHY THE WIRE HAD TO WIDEN, WHICH WAS NOT OBVIOUS ────────────────────────
+   *
+   * The sibling `RestoreMigration` needed no such change: a MIGRATED row came back, so it is
+   * on the stack and `LayersPanel` joins its `itemId` against `items` to reach a
+   * `templateId`. A SKIPPED row did not come back — it is by definition absent from the
+   * stack, absent from the snapshot, and absent from every map the renderer holds. There is
+   * nothing on that side to join against, so the naming has to travel with the report or
+   * not exist.
+   *
+   * ⭐ The producer pays nothing for it. `CasparRuntime.restore()` has the whole
+   * `RetainedStackItem` in scope at every one of its five skip sites, and that item already
+   * carries both fields — this is the bridge forwarding what it is holding, not computing
+   * anything new.
+   *
+   * ⚠ **OPTIONAL and ADDITIVE, exactly like `detail` above.** A bridge that predates this
+   * still validates, and its skips still render: `operatorRowName` falls back to a shortened
+   * id, which is the documented last resort rather than a blank. Nothing about `reason` or
+   * `detail` moves.
+   */
+  templateId: IdSchema.optional(),
+  /**
+   * The coordinate the row was RETAINED on — where the operator last saw it, which is the
+   * row he will go and look at. `LayerSlotSchema` and not a bare number: `placeName` needs
+   * the channel to tell a bank row from a layer that is not a row at all.
+   */
+  slot: LayerSlotSchema.optional(),
 });
 export type RestoreSkip = z.infer<typeof RestoreSkipSchema>;
 

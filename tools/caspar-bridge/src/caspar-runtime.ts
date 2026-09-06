@@ -691,6 +691,33 @@ class Emitter<T> {
  * Integration-tested ONLY against `tools/amcp-mock` (NOT real hardware — the
  * on-hardware AMCP-sequence validation is Phase 3b).
  */
+
+/**
+ * `B-233` — the naming a `RestoreSkip` carries, in ONE place.
+ *
+ * Every skip site in `restore()` spreads this, rather than each repeating
+ * `templateId: item.templateId, ...(item.slot ? { slot: item.slot } : {})`. Six copies of a
+ * two-field spread is six chances for the next skip reason to be added without it, and a
+ * skip with no naming renders as a shortened id — the exact defect this closes, arriving
+ * one reason later.
+ *
+ * The row is named by where it was RETAINED (`item.slot`), which is where the operator last
+ * saw it and where he will look. `exactOptionalPropertyTypes` is on, so an absent slot is
+ * OMITTED rather than set to `undefined`.
+ *
+ * ⚠ The return type is a `Pick` of the WIRE type, not a hand-written shape. The first
+ * spelling annotated `slot` as `@cg/caspar-client`'s `LayerSlot` — which is a different
+ * type from the schema's, missing its `server` field — and it did not compile. Naming the
+ * destination is what keeps this honest: the helper's job is to produce two fields of a
+ * `RestoreSkip`, so it says exactly that and cannot drift from the schema it feeds.
+ */
+function restoreSkipNaming(item: RetainedStackItem): Pick<RestoreSkip, 'templateId' | 'slot'> {
+  return {
+    templateId: item.templateId,
+    ...(item.slot !== undefined ? { slot: item.slot } : {}),
+  };
+}
+
 export class CasparRuntime {
   readonly stackChanged = new Emitter<readonly StackItemState[]>();
   readonly healthChanged = new Emitter<ConnectionHealth>();
@@ -2329,16 +2356,20 @@ export class CasparRuntime {
       // is still there, backed by the live bridge, so nothing is lost and B-108's
       // surface deliberately says nothing about it.
       if (this.#reconciler.get(item.itemId) !== null) {
-        skipped.push({ itemId: item.itemId, reason: 'already-held' });
+        skipped.push({ itemId: item.itemId, reason: 'already-held', ...restoreSkipNaming(item) });
         continue;
       }
       if (!this.#templates.has(item.templateId)) {
-        skipped.push({ itemId: item.itemId, reason: 'unknown-template' });
+        skipped.push({
+          itemId: item.itemId,
+          reason: 'unknown-template',
+          ...restoreSkipNaming(item),
+        });
         continue;
       }
       const placement = this.#slotForRestore(item);
       if ('skip' in placement) {
-        skipped.push({ itemId: item.itemId, reason: placement.skip });
+        skipped.push({ itemId: item.itemId, reason: placement.skip, ...restoreSkipNaming(item) });
         continue;
       }
       const { slot } = placement;
@@ -2389,6 +2420,7 @@ export class CasparRuntime {
           skipped.push({
             itemId: item.itemId,
             reason: 'multibox-already-on-air',
+            ...restoreSkipNaming(item),
             // The bridge's own sentence, naming BOTH halves. `RestoreSkipReason` is a
             // fixed code and cannot say WHICH template is already on air — the same gap
             // `stack.take`'s `message` exists to fill, and filled the same way.
@@ -2415,6 +2447,7 @@ export class CasparRuntime {
           skipped.push({
             itemId: item.itemId,
             reason: 'looks-none-authored',
+            ...restoreSkipNaming(item),
             detail: noLooksRestore.message,
           });
           continue;
@@ -2436,7 +2469,7 @@ export class CasparRuntime {
         // nothing, which no verb can clear.
         if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
         else this.#layers.deallocate(slot);
-        skipped.push({ itemId: item.itemId, reason: 'already-held' });
+        skipped.push({ itemId: item.itemId, reason: 'already-held', ...restoreSkipNaming(item) });
         continue;
       }
       this.#slots.set(item.itemId, slot);

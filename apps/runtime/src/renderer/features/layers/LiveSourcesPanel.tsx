@@ -342,9 +342,22 @@ export function LiveSourcesPanel({
     */
     const stillStranded = releaseScopeOf(rowsRef.current, row.itemId).some((r) => r.releasable);
     if (!stillStranded) {
+      /*
+        `B-233` / golden rule 11 — THE LAYERS, NOT THE ITEM ID. This read
+        `Nothing was sent — item-e602d912-… is no longer stranded.`, which put a raw UUID in
+        front of an operator at the one moment he is being told his press did nothing.
+
+        ⭐ **The id is not relocated here, it is DROPPED, and that is the right call rather
+        than an exception to the rule.** A toast has no `title` and no copy button, so there
+        is nowhere to put it — but there is also nothing to put: the SUBJECT of this sentence
+        is the layer set the operator just pressed Release on, his button said
+        `Release stranded live layer 1-10`, and `R-028` keeps that coordinate visible for
+        exactly this reason. Naming it back to him is a more direct reference than any id,
+        and the owning row is named on the panel row beside the toast.
+      */
       reportCommandError(
-        `Nothing was sent — ${row.itemId} is no longer stranded. Its row is back on the stack, ` +
-          `so use that row's own verbs.`,
+        `Nothing was sent — ${names} ${many ? 'are' : 'is'} no longer stranded. The row that ` +
+          `owns ${many ? 'them' : 'it'} is back on the stack, so use that row's own verbs.`,
       );
       return { accepted: false, cancelled: true };
     }

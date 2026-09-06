@@ -4,7 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalSto
 // the count must not be able to drift back to the bare predicate by an innocent edit.
 import { removeIsRefused } from './removeGate.js';
 import type { StackItemState } from '@cg/shared-schema';
-import type { EmptiedAirRow, RestoreMigration } from '@cg/shared-ipc';
+import type { EmptiedAirRow, RestoreMigration, RestoreSkip } from '@cg/shared-ipc';
 import {
   CircleArrowOutDownRight,
   LoaderCircle,
@@ -326,7 +326,23 @@ export function LayersPanel({
   );
 
   // Template identity for every bound row, joined once for the whole list.
-  const templates = useTemplateIndex(items.map((i) => i.templateId));
+  /*
+    🔴 `B-233` — THE SKIPPED ROWS' TEMPLATES ARE IN THIS SET, AND THAT IS NOT AN OPTIMISATION.
+
+    The index was `items.map(i => i.templateId)` — the templates of rows ON THE STACK. A
+    restore SKIP is a row that is NOT on the stack, so its template was never fetched, and
+    handing `operatorRowName` a `templateId` the index cannot resolve produced the row's name
+    with the template's silently missing. Caught by the spec, not by reasoning: widening the
+    wire is only half a fix if the consumer never looks the value up.
+
+    The list is the union, so a template referenced ONLY by a skip is still fetched.
+    `useTemplateIndex` keys its effect on the SET's identity (a sorted joined string), so a
+    skip arriving and clearing does not re-fetch on every stack publish.
+  */
+  const templates = useTemplateIndex([
+    ...items.map((i) => i.templateId),
+    ...restoreSkips.map((s) => s.templateId).filter((id): id is string => id !== undefined),
+  ]);
 
   /*
     `B-232` — how the restore strips name a row. This panel already holds all three
@@ -360,6 +376,30 @@ export function LayersPanel({
           const templateId = items.find((i) => i.itemId === m.itemId)?.templateId;
           return templateId !== undefined ? { templateId } : {};
         })(),
+      },
+      bank,
+      templates,
+    );
+
+  /**
+   * 🔴 `B-233` — the SKIPPED row's name, and the asymmetry with `migrationName` above is
+   * the whole reason the wire had to change.
+   *
+   * A MIGRATED row came back, so `items` holds it and the join above reaches its
+   * `templateId`. A SKIPPED row did not come back — it is absent from `items`, from the
+   * snapshot and from every map this panel has — so there is nothing here to join against
+   * and the naming has to arrive WITH the report (`RestoreSkipSchema.templateId` / `.slot`).
+   *
+   * A bridge that predates that widening sends neither, and `operatorRowName` then falls
+   * back to a shortened id — the documented last resort, and still better than the raw UUID
+   * this strip used to print.
+   */
+  const skipName = (s: RestoreSkip): OperatorRowName =>
+    operatorRowName(
+      {
+        itemId: s.itemId,
+        ...(s.templateId !== undefined ? { templateId: s.templateId } : {}),
+        ...(s.slot !== undefined ? { slot: s.slot } : {}),
       },
       bank,
       templates,
@@ -948,7 +988,23 @@ export function LayersPanel({
                       come back
                     </strong>{' '}
                     after the bridge restarted:{' '}
-                    {restoreSkips.map((s) => `${s.itemId} — ${restoreSkipReason(s)}`).join('; ')}.
+                    {/*
+                      `B-233` — THE ROWS, IN THE OPERATOR'S WORDS. This printed
+                      `item-e602d912-… — its template is no longer registered`: a raw item id
+                      in a sentence about rows the operator knows by name, in the panel that
+                      names them. Same composition as the migrations strip below, through the
+                      same module — and each name in its own `<bdi>`, because a Persian row
+                      name beside a Latin template name with ` · ` between them is exactly
+                      the mixture whose layout the bidi algorithm would otherwise decide.
+                    */}
+                    {restoreSkips.map((s, i) => (
+                      <span key={s.itemId}>
+                        {i > 0 ? '; ' : ''}
+                        <OperatorNames name={skipName(s)} />
+                        {` — ${restoreSkipReason(s)}`}
+                      </span>
+                    ))}
+                    .
                   </span>
                   <Button
                     variant="ghost"
