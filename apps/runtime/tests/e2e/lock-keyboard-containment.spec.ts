@@ -44,8 +44,10 @@ test('Tab cannot reach a control behind the lock screen', async ({ app }) => {
   // Engage the lock through the operator's own path.
   await app.page.getByRole('button', { name: /Lock/ }).click();
   const promptDialog = app.page.getByRole('dialog');
-  await promptDialog.getByLabel(/Lock PIN/).fill('1234');
-  await promptDialog.getByRole('button', { name: 'Lock' }).click();
+  // `STATION-CHROME-01` §7 — the PIN is asked TWICE, so engaging means filling both.
+  await promptDialog.getByLabel(/^Lock PIN \(/).fill('1234');
+  await promptDialog.getByLabel('Lock PIN again').fill('1234');
+  await promptDialog.getByRole('button', { name: 'Lock', exact: true }).click();
 
   const lockScreen = app.page.getByRole('dialog', { name: 'Lock screen' });
   await expect(lockScreen).toBeVisible();

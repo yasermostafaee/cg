@@ -353,14 +353,125 @@ describe('Lock PIN — R-020 (both ends of the comparison normalize)', () => {
     await act(async () => {
       lockButton?.click();
     });
-    const pinInput = document.querySelector<HTMLInputElement>('input[type="password"]');
-    if (pinInput === null) throw new Error('lock prompt input not rendered');
-    await setInput(pinInput, '۱۲۳۴');
+    /*
+      ⭐ `STATION-CHROME-01` §7 — THE PIN IS ASKED TWICE, so R-020's claim is now checked on
+      BOTH ends AND on the comparison between them, which is strictly more than it was.
+
+      That comparison is where normalisation earns its keep a second time: `۱۲۳۴` typed into
+      one field and `1234` into the other are the same number to everyone except a byte
+      comparison, and a match check on the RAW strings would refuse a PIN the operator typed
+      correctly. So the two fields below deliberately use DIFFERENT digit systems.
+    */
+    const fields = [...document.querySelectorAll<HTMLInputElement>('input[type="password"]')];
+    expect(fields, 'the engage form asks for the PIN twice').toHaveLength(2);
+    await setInput(fields[0] as HTMLInputElement, '۱۲۳۴');
+    await setInput(fields[1] as HTMLInputElement, '1234');
     const submit = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Lock');
     await act(async () => {
       submit?.click();
       await Promise.resolve();
     });
     expect(engage).toHaveBeenCalledWith({ pin: '1234' });
+  });
+
+  it('🔴 §7 — two DIFFERENT PINs are refused, and nothing is engaged', async () => {
+    const engage = vi.fn(() => Promise.resolve({ ok: true }));
+    const health: ConnectionHealth = {
+      primary: { label: 'A', state: 'healthy', amcpAxisOk: true },
+      currentPrimary: 'A',
+      strategy: 'mirror-sync',
+    };
+    const stub = {
+      connections: {
+        health: () => Promise.resolve(health),
+        onHealthChanged: () => () => undefined,
+        failover: () => Promise.resolve({ ok: false, newPrimary: 'A' as const }),
+      },
+      lock: {
+        state: () => Promise.resolve({ engaged: false }),
+        onStateChanged: () => () => undefined,
+        engage,
+      },
+      link: {
+        status: () => 'live' as const,
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
+    };
+    (window as unknown as { cg: typeof stub }).cg = stub;
+    const el = await render(createElement(StatusBar));
+    const lockButton = [...el.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').includes('Lock…'),
+    );
+    await act(async () => {
+      lockButton?.click();
+    });
+
+    const fields = [...document.querySelectorAll<HTMLInputElement>('input[type="password"]')];
+    await setInput(fields[0] as HTMLInputElement, '1234');
+    await setInput(fields[1] as HTMLInputElement, '1235');
+    const submit = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Lock');
+    await act(async () => {
+      submit?.click();
+      await Promise.resolve();
+    });
+
+    /*
+      🔴 THE WHOLE POINT: the lock does NOT engage. A mistyped PIN here locks the operator out
+      of a live console — the lock refuses everything, the only way out is the PIN, and there
+      is no reset. This is the one form in the app where a single keystroke error is
+      unrecoverable.
+    */
+    expect(engage, 'a mismatched PIN must not engage the lock').not.toHaveBeenCalled();
+    const said = document.body.textContent ?? '';
+    expect(said).toContain('The two PINs are different');
+    // …and the form stays open, on the fields, so he can fix it.
+    expect(document.querySelectorAll('input[type="password"]')).toHaveLength(2);
+  });
+
+  it('a PIN shorter than the floor is refused with the rule, not silently dropped', async () => {
+    const engage = vi.fn(() => Promise.resolve({ ok: true }));
+    const health: ConnectionHealth = {
+      primary: { label: 'A', state: 'healthy', amcpAxisOk: true },
+      currentPrimary: 'A',
+      strategy: 'mirror-sync',
+    };
+    const stub = {
+      connections: {
+        health: () => Promise.resolve(health),
+        onHealthChanged: () => () => undefined,
+        failover: () => Promise.resolve({ ok: false, newPrimary: 'A' as const }),
+      },
+      lock: {
+        state: () => Promise.resolve({ engaged: false }),
+        onStateChanged: () => () => undefined,
+        engage,
+      },
+      link: {
+        status: () => 'live' as const,
+        onStatusChanged: () => () => undefined,
+        resyncing: () => false,
+        onResyncingChanged: () => () => undefined,
+      },
+    };
+    (window as unknown as { cg: typeof stub }).cg = stub;
+    const el = await render(createElement(StatusBar));
+    const lockButton = [...el.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').includes('Lock…'),
+    );
+    await act(async () => {
+      lockButton?.click();
+    });
+    const fields = [...document.querySelectorAll<HTMLInputElement>('input[type="password"]')];
+    await setInput(fields[0] as HTMLInputElement, '12');
+    await setInput(fields[1] as HTMLInputElement, '12');
+    const submit = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Lock');
+    await act(async () => {
+      submit?.click();
+      await Promise.resolve();
+    });
+    expect(engage).not.toHaveBeenCalled();
+    expect(document.body.textContent ?? '').toContain('at least 4 characters');
   });
 });

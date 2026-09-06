@@ -221,11 +221,27 @@ describe('Station setup — Servers (R-010)', () => {
       },
     });
     const el = await renderStationSetup({ section: 'servers' });
+    /*
+      ⭐ `STATION-CHROME-01` §6 — the backup is added through the same small second dialog
+      every other Add uses, instead of a toggle that revealed three empty fields in place.
+      It adds the record to the Servers DRAFT; APPLY SERVERS is still what reaches the bridge,
+      which is exactly what the rest of this case asserts.
+    */
     const addBackup = el.querySelector<HTMLButtonElement>('button[aria-label="Add backup"]');
     await act(async () => {
       addBackup?.click();
+      await Promise.resolve();
     });
-    await setSetupInput(el, 'Backup host', '192.168.1.51');
+    const sub = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
+    if (sub === undefined) throw new Error('the Add backup dialog did not open');
+    await setSetupInput(sub, 'New backup host', '192.168.1.51');
+    await setSetupInput(sub, 'New backup AMCP port', '5251');
+    await setSetupInput(sub, 'New backup OSC port', '6251');
+    const confirm = [...sub.querySelectorAll('button')].find((b) => b.textContent === 'Add backup');
+    await act(async () => {
+      confirm?.click();
+      await Promise.resolve();
+    });
     await act(async () => {
       applyButton(el).click();
       await Promise.resolve();

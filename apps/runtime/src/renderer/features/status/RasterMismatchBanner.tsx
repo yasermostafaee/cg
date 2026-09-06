@@ -76,9 +76,23 @@ export function RasterMismatchBanner(): JSX.Element | null {
             {line}
           </span>
         ))}
+        {/*
+          🔴 `STATION-CHROME-01` §4 — THIS SENTENCE HAD TO CHANGE WITH THE CONTROL, and the
+          rule-9 sweep is what caught it: it told the operator to "correct the channel raster
+          in settings", and settings no longer lets him. A remedy that cannot be performed is
+          worse than none — he goes looking, finds a read-only value, and concludes the
+          console is broken.
+
+          What it says instead is what is actually true: the SERVER owns the value, the
+          console reports it, and the two numbers below are the disagreement. The stored
+          raster is corrected by `channel-settings.json` on the bridge — which is also the gap
+          `ChannelSection` records as owed to the bridge, and this line is where an operator
+          would meet it.
+        */}
         <span style={styles.detail}>
-          Correct the channel raster in settings, or the channel’s video mode in casparcg.config —
-          they must agree before placement can be trusted.
+          The server owns this value: fix the channel’s video mode in casparcg.config, or the stored
+          raster in the bridge’s channel-settings.json. They must agree before placement can be
+          trusted — the console reports the raster, it does not set it.
         </span>
       </span>
     </div>

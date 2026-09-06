@@ -70,62 +70,76 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   await expect(dialog.getByText('TEMPLATE PLATES')).toHaveCount(0);
   await expect(dialog.getByText('guest-1')).toHaveCount(0);
 
-  // Define a source. The bridge is authoritative; the modal adopts only what it
-  // accepts, so seeing the row appear IS the round-trip.
-  await dialog.getByLabel('New source name').fill('Studio A');
-  await dialog
-    .getByRole('region', { name: 'Live sources' })
-    .getByRole('button', { name: 'Add' })
-    .click();
+  /*
+    Define a source. The bridge is authoritative; the section adopts only what it accepts,
+    so seeing the row appear IS the round-trip.
+
+    ⭐ `STATION-CHROME-01` §5/§6 — the kind and its fields are in the small SECOND dialog
+    every Add and Edit opens, and the ROW shows the kind's fields as LABELLED PARTS. Every
+    claim below is the one it always made; what moved is where the field is typed and how
+    the row is read.
+  */
+  await app.addLiveSource('Studio A', {
+    kind: 'route',
+    fields: { 'Route source channel': '3' },
+  });
   await expect(dialog.getByText(/Nothing is defined yet/)).toHaveCount(0);
-  // A fresh entry starts as a route, and the resolved form is shown in the
-  // words the bridge will send.
-  await expect(dialog.getByText('route://1')).toBeVisible();
+  const row = dialog.locator('[data-source-parts]').first();
+  await expect(row).toContainText('Channel');
+  await expect(row).toContainText('3');
 
-  await dialog.getByLabel('Route channel for Studio A').fill('3');
-  await expect(dialog.getByText('route://3')).toBeVisible();
-
-  // The FORMAT is a picker and the aspect DERIVES from it — a hand-entered
-  // aspect is a number that can be wrong on air while looking reasonable.
-  await dialog.getByLabel('Signal format for Studio A').selectOption('1080i5000');
+  // The FORMAT is a picker and the aspect DERIVES from it — a hand-entered aspect is a
+  // number that can be wrong on air while looking reasonable.
+  await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit live source' });
+  await edit.getByLabel('Signal format').selectOption('1080i5000');
+  await edit.getByRole('button', { name: 'Save' }).click();
   await expect(dialog.getByText('aspect: 16:9 (from the format)')).toBeVisible();
 
-  // C-025 — the FIFTH kind: an internet stream by URL. The kind is labelled as
-  // a feed, choosing it shows a URL field, a scheme outside the client's
-  // allowlist is refused BY NAME at the config boundary (the mock runs the
-  // bridge's own validator, so this refusal is the real station's), and an
-  // accepted URL reads back prefixed `stream` — a feed, distinguishable from a
-  // clip by a second operator reading the config.
-  await dialog.getByLabel('Producer kind for Studio A').selectOption('stream');
-  await expect(dialog.getByLabel('Stream URL for Studio A')).toBeVisible();
-  await dialog.getByLabel('Stream URL for Studio A').fill('ftp://server/feed.ts');
+  /*
+    C-025 — the FIFTH kind: an internet stream by URL. The kind is labelled as a feed,
+    choosing it shows a URL field, a scheme outside the client's allowlist is refused BY NAME
+    at the config boundary (the mock runs the bridge's own validator, so this refusal is the
+    real station's), and an accepted URL reads back under a URL LABEL — a feed, and one a
+    second operator reading the config can tell from a clip.
+  */
+  await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
+  await edit.getByLabel('Source kind').selectOption('stream');
+  await expect(edit.getByLabel('Stream URL')).toBeVisible();
+  await edit.getByLabel('Stream URL').fill('ftp://server/feed.ts');
+  await edit.getByRole('button', { name: 'Save' }).click();
   await expect(dialog.getByText(/accepted scheme/)).toBeVisible();
-  await dialog.getByLabel('Stream URL for Studio A').fill('srt://10.0.0.20:9000');
-  await expect(dialog.getByText('stream srt://10.0.0.20:9000')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
+  await edit.getByLabel('Source kind').selectOption('stream');
+  await edit.getByLabel('Stream URL').fill('srt://10.0.0.20:9000');
+  await edit.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog.locator('[data-source-kind="stream"]')).toHaveCount(1);
+  await expect(dialog.locator('[data-source-parts]').first()).toContainText('srt://10.0.0.20:9000');
 
-  // ONE source, a fill/key DEVICE PAIR: the pair is a property of the
-  // INSTALLATION, and no template ever names it (design.md §1a). The pair is
-  // STORED — and, C-027, it is not yet SENT: `producerArgument` emits the fill
-  // alone, so the summary must describe the fill alone and the modal must say
-  // out loud that the key device does not reach CasparCG. Asserting the absence
-  // AND the sentence together is the point: dropping the term without saying
-  // anything would trade a line that overclaims for one that hides.
-  await dialog.getByLabel('Producer kind for Studio A').selectOption('decklink');
-  await dialog.getByLabel('Decklink key device for Studio A').fill('2');
-  await expect(dialog.getByText('DECKLINK DEVICE 1', { exact: true })).toBeVisible();
+  /*
+    ONE source, a fill/key DEVICE PAIR: the pair is a property of the INSTALLATION, and no
+    template ever names it (design.md §1a). The pair is STORED — and, C-027, it is not yet
+    SENT: `producerArgument` emits the fill alone, so the row must describe the fill alone
+    and must say out loud that the key device does not reach CasparCG. Asserting the absence
+    AND the sentence together is the point: dropping the term without saying anything would
+    trade a line that overclaims for one that hides.
+  */
+  await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
+  await edit.getByLabel('Source kind').selectOption('decklink');
+  await edit.getByLabel('DeckLink key device index').fill('2');
+  await edit.getByRole('button', { name: 'Save' }).click();
+  await expect(dialog.locator('[data-source-parts]').first()).toContainText('Device');
   await expect(dialog.getByText('DECKLINK DEVICE 1 + KEY 2')).toHaveCount(0);
-  await expect(
-    dialog.getByText(/Key device 2 is stored, but it is not sent to CasparCG/),
-  ).toBeVisible();
+  await expect(dialog.getByText(/not sent to CasparCG/)).toBeVisible();
 
-  // A duplicate NAME is refused, and the refusal is a SENTENCE — never a wire
-  // identifier and never a reason code.
-  await dialog.getByLabel('New source name').fill('Studio A');
-  await dialog
-    .getByRole('region', { name: 'Live sources' })
-    .getByRole('button', { name: 'Add' })
-    .click();
-  await expect(dialog.getByText(/Another source already has that name/)).toBeVisible();
+  // A duplicate NAME is refused, and the refusal is a SENTENCE — never a wire identifier and
+  // never a reason code. The Add dialog answers this one itself, in its own region.
+  await dialog.getByRole('button', { name: 'Add live source' }).click();
+  const dup = page.getByRole('dialog', { name: 'Add live source' });
+  await dup.getByLabel('Source name', { exact: true }).fill('Studio A');
+  await dup.getByRole('button', { name: 'Add source' }).click();
+  await expect(dup.getByText(/There is already a source called Studio A/)).toBeVisible();
+  await dup.getByRole('button', { name: 'Cancel' }).click();
 
   // The band must be disjoint from the operator's candidate bank. The mock's
   // seeded bank starts at 70, so 50–75 reaches into it and the refusal names
@@ -147,16 +161,17 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   // stored `keyDevice` survives with it — C-027 keeps the FIELD precisely so a
   // pair the operator already wrote is not deleted — and the not-sent sentence
   // comes back with it rather than being a one-shot toast at edit time.
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await app.closeStationSetup();
   await expect(dialog).toBeHidden();
   await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
-  await expect(dialog.getByText('DECKLINK DEVICE 1', { exact: true })).toBeVisible();
-  await expect(dialog.getByLabel('Decklink key device for Studio A')).toHaveValue('2');
-  await expect(
-    dialog.getByText(/Key device 2 is stored, but it is not sent to CasparCG/),
-  ).toBeVisible();
+  await expect(dialog.locator('[data-source-parts]').first()).toContainText('Device');
+  await expect(dialog.getByText(/not sent to CasparCG/)).toBeVisible();
+  // …and the stored key device survives, which is what C-027 keeps the FIELD for.
+  await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
+  await expect(edit.getByLabel('DeckLink key device index')).toHaveValue('2');
+  await edit.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog.getByText(/Currently 10–59/)).toBeVisible();
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await app.closeStationSetup();
 });
 
 test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says which it freed', async ({
@@ -169,14 +184,8 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
 
   // Two sources to choose between, so the picker is a real choice.
   await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
-  for (const name of ['Studio A', 'Baku']) {
-    await dialog.getByLabel('New source name').fill(name);
-    await dialog
-      .getByRole('region', { name: 'Live sources' })
-      .getByRole('button', { name: 'Add' })
-      .click();
-  }
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  for (const name of ['Studio A', 'Baku']) await app.addLiveSource(name);
+  await app.closeStationSetup();
 
   // Load the template onto a row and select it — that is what shows its plates.
   const first = await app.loadTemplate(TWO_BOX);
@@ -231,7 +240,7 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   // The template is named the way the operator knows it (the imported file
   // name, cleaned), never by its id.
   await expect(dialog.getByText(/two box \/ guest-1/)).toBeVisible();
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await app.closeStationSetup();
 
   // …and the plate is back to needing a source, which is a state the whole
   // feature already handles, rather than a dangling binding nobody can see.
@@ -244,16 +253,11 @@ test('library: DELETE FROM STATION is a different verb from the row REMOVE, and 
   app,
 }) => {
   const page = app.page;
-  const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
   await registerTwoBox(app);
   await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
-  await dialog.getByLabel('New source name').fill('Studio A');
-  await dialog
-    .getByRole('region', { name: 'Live sources' })
-    .getByRole('button', { name: 'Add' })
-    .click();
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await app.addLiveSource('Studio A');
+  await app.closeStationSetup();
 
   // Bind a plate, which is what makes this template the one the reported bug hit:
   // binding requires SELECTING the template, which requires LOADING it onto a row.

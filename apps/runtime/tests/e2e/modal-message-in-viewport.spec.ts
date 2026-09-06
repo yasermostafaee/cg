@@ -65,13 +65,7 @@ test('a refusal stays in the viewport when the modal body is scrolled away from 
   await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
   await expect(dialog).toBeVisible();
 
-  for (const name of NAMES) {
-    await dialog.getByLabel('New source name').fill(name);
-    await dialog
-      .getByRole('region', { name: 'Live sources' })
-      .getByRole('button', { name: 'Add' })
-      .click();
-  }
+  for (const name of NAMES) await app.addLiveSource(name);
   await expect(dialog.locator('[data-source-id]')).toHaveCount(NAMES.length);
 
   /*
@@ -81,24 +75,33 @@ test('a refusal stays in the viewport when the modal body is scrolled away from 
     region's direction handling were wrong the two would fight for the same line
     box, and this is the spec that has a real layout engine to notice.
 
-    Addressed through the ENTRY, not through the field's accessible name: that
-    name is derived from the source's own name, so it changes under the locator
-    the moment the field is filled.
+    ⭐ `STATION-CHROME-01` §6 — names are typed in the Add dialog now, so the Persian one is
+    given at creation rather than by editing a row's inline field afterwards. The property
+    under test is unchanged: a real RTL name is on the list while the refusal below is Latin.
   */
-  const secondName = dialog.locator('[data-source-id]').nth(1).getByRole('textbox').first();
-  await secondName.fill('مهمان دو');
-  await expect(secondName).toHaveValue('مهمان دو');
+  await app.addLiveSource('مهمان دو');
+  await expect(dialog.locator('[data-source-id]')).toHaveCount(NAMES.length + 1);
+  await expect(dialog.getByText('مهمان دو')).toBeVisible();
 
-  const body = dialog.locator('[data-modal-body]');
+  /*
+    ⭐ `STATION-CHROME-01` §2 MOVED THE SCROLL CONTAINER, and this spec is where that shows.
+
+    Station setup is tabbed now: the modal's body holds the RAIL and the section PANE side by
+    side, and it must not scroll them together or the rail would slide away from the section
+    it names. So the pane scrolls and the body does not. The message region is unaffected and
+    that is the point — it lives OUTSIDE both, pinned above the footer, which is exactly the
+    property this spec exists to hold.
+  */
+  const body = dialog.locator('[data-station-pane]');
   const message = dialog.locator('[data-modal-message]');
 
-  // THE PRECONDITION, ASSERTED AND NOT ASSUMED: the body genuinely scrolls. A
-  // spec that quietly stopped scrolling — a narrower entry, a taller viewport —
-  // would keep passing while testing nothing at all.
+  // THE PRECONDITION, ASSERTED AND NOT ASSUMED: the pane genuinely scrolls. A spec that
+  // quietly stopped scrolling — a shorter list, a taller viewport — would keep passing while
+  // testing nothing at all.
   const overflow = await body.evaluate((el) => el.scrollHeight - el.clientHeight);
   expect(
     overflow,
-    'the dialog body must genuinely scroll for this spec to mean anything',
+    'the section pane must genuinely scroll for this spec to mean anything',
   ).toBeGreaterThan(80);
 
   // Refuse something. The band must be disjoint from the candidate bank, which the
@@ -120,13 +123,18 @@ test('a refusal stays in the viewport when the modal body is scrolled away from 
   await expect(message).toBeInViewport({ ratio: 1 });
   // …and the action row it is pinned to is still reachable, which is the other
   // half of the same promise: a long message may not push Done off the bottom.
-  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeInViewport({ ratio: 1 });
+  // The Live sources tab commits as it goes, so its one footer action is a quiet Close
+  // (§2) — the assertion is that the ACTION ROW is still reachable, whichever word it wears.
+  await expect(
+    dialog.locator('.cg-modal-footer').getByRole('button', { name: 'Close' }),
+  ).toBeInViewport({ ratio: 1 });
 
   // ── the negative control: this check can fail ──────────────────────────────
   // The last element INSIDE the scrolling body — where the refusal used to be
   // appended — is off-screen at this scroll position. So the message being in view
   // is a property of where it lives, not of the dialog being short.
   const lastInBody = body.locator('p').last();
+  await expect(lastInBody).toHaveCount(1);
   await expect(lastInBody).not.toBeInViewport();
 
   // The message did not steal the operator's place, either: it is a sibling of the

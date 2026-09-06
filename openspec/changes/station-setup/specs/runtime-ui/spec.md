@@ -38,6 +38,10 @@ The on-air refusal that pre-disables `APPLY SERVERS` SHALL name its scope, and n
 
 - **WHEN** Station setup renders **THEN** the footer holds `Cancel` and `APPLY SERVERS` only, the candidate-layer section carries its own `Apply candidate layers`, the raster section carries its own per-channel `Set raster`, and the Live sources and Text file delimiters sections read `Saves as you go`
 
+> ⚠ **SUPERSEDED by `STATION-CHROME-01` §2/§4 (2026-09-07):** each TAB owns its own
+> footer, so the bank commits from its own (`Apply layers`) and the raster is read-only.
+> The as-you-go legends are unchanged.
+
 #### Scenario: Cancel dismisses and commits nothing
 
 - **WHEN** the operator edits the Servers draft and presses Cancel **THEN** nothing is sent to any bridge channel and the dialog closes by the same path as the close affordance and Escape
@@ -45,6 +49,17 @@ The on-air refusal that pre-disables `APPLY SERVERS` SHALL name its scope, and n
 ### Requirement: The channel raster is set from Station setup, through the bridge alone
 
 Station setup SHALL offer, for each channel the install declares, its configured raster as editable width and height, what the server reports for that channel, the canonical raster verdict, and a per-channel control that sends `channelSettings.set` with the typed raster. The section SHALL add no second writer and no second guard: an accepted change is reported as a notice and a refusal is shown with the rule for the bridge's reason and the bridge's own message.
+
+> 🔴 **SUPERSEDED by `STATION-CHROME-01` §4 (2026-09-07): the raster is REPORTED, not set.**
+> The configured value reaches AIR (the bridge appends it to the served URL as `?cw=&ch=`),
+> the served page can already derive it from CEF's own viewport, and the console can already
+> derive it from `INFO <channel>`. No case was found where a typed raster is more correct than
+> what the channel reports about itself, so the control went and `channelSettings.set` has no
+> renderer call site again. See `ChannelSection.tsx`.
+>
+> ⚠ The note sits BELOW the requirement sentence on purpose: `openspec validate --strict`
+> reads only a requirement's FIRST line looking for `SHALL`, so a block quote above it fails
+> the change.
 
 #### Scenario: A raster is set and is durable
 

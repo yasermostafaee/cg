@@ -250,12 +250,20 @@ describe('the Live sources section of Station setup defines sources and binds no
     expect(dialog).not.toBeNull();
     const section = dialog?.querySelector('[data-station-section="sources"]');
     expect(section).not.toBeNull();
-    // It still DEFINES sources…
-    expect(section?.textContent).toContain('SOURCES');
+    /*
+      It still DEFINES sources…
+
+      ⭐ `STATION-CHROME-01` §5/§6 — the heading is CATALOGUE (the mockup's word, and the one
+      that distinguishes the installation's list from the per-template bindings), and a row
+      SHOWS its name rather than holding it in an inline input: names are edited in the small
+      second dialog now. The claim this case makes is unchanged — the section lists the
+      station's sources — so only how it reads them moved.
+    */
+    expect(section?.textContent).toContain('CATALOGUE');
     expect(
-      [...(section?.querySelectorAll<HTMLInputElement>('input[aria-label^="Name of"]') ?? [])].map(
-        (i) => i.value,
-      ),
+      [...(section?.querySelectorAll<HTMLElement>('[data-source-id] bdi') ?? [])]
+        .map((el) => el.textContent)
+        .filter((t) => t === 'Studio A' || t === 'Baku'),
     ).toEqual(['Studio A', 'Baku']);
     // …and carries no trace of the binding job it briefly held. Asserted on the WHOLE
     // dialog, the plate ids AND the control, because any one of them surviving anywhere in
@@ -265,14 +273,34 @@ describe('the Live sources section of Station setup defines sources and binds no
     expect(dialog?.querySelector('[data-plate-unassigned]')).toBeNull();
     expect(dialog?.querySelector('select[aria-label^="Source for"]')).toBeNull();
 
-    // Edit the catalog through the section — rename a source — and the assignments
-    // channel is never written: the two shapes stay separately stored.
-    const name = section?.querySelector<HTMLInputElement>('input[aria-label="Name of Studio A"]');
+    /*
+      Edit the catalogue through the section — rename a source — and the assignments channel
+      is never written: the two shapes stay separately stored.
+
+      ⭐ §6 — the rename happens in the small second dialog now, so the edit goes: press
+      Edit, type, press Save. The CLAIM is untouched and this is if anything a stronger
+      exercise of it, because it drives the whole commit path rather than one keystroke.
+    */
+    const edit = [...(section?.querySelectorAll('button') ?? [])].find(
+      (b) => b.getAttribute('aria-label') === 'Edit Studio A',
+    );
+    if (edit === undefined) throw new Error('no Edit button on the Studio A row');
+    await act(async () => {
+      edit.click();
+      await Promise.resolve();
+    });
+    const sub = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
+    const name = sub?.querySelector<HTMLInputElement>('input[aria-label="Source name"]');
     const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
     await act(async () => {
       if (name === null || name === undefined) throw new Error('no name field');
       setter?.call(name, 'Studio One');
       name.dispatchEvent(new Event('input', { bubbles: true }));
+      await Promise.resolve();
+    });
+    const save = [...(sub?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Save');
+    await act(async () => {
+      save?.click();
       await Promise.resolve();
     });
     await act(async () => {

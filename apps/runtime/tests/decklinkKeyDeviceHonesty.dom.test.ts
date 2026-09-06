@@ -117,11 +117,31 @@ async function setInput(dialog: HTMLElement, ariaLabel: string, value: string): 
   await settle();
 }
 
-async function selectKind(dialog: HTMLElement, name: string, kind: string): Promise<void> {
-  const select = dialog.querySelector<HTMLSelectElement>(
-    `select[aria-label="Producer kind for ${name}"]`,
-  );
-  if (select === null) throw new Error(`no kind picker for ${name}`);
+/**
+ * ⭐ `STATION-CHROME-01` §5/§6 — the kind picker and its per-kind fields live in the small
+ * SECOND dialog every Add and Edit opens, not inline on the row. Both axes this file
+ * measures are unchanged; the surface half is simply reached through that dialog now.
+ */
+function subDialog(): HTMLElement {
+  const all = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')];
+  const last = all[all.length - 1];
+  if (last === undefined || all.length < 2) throw new Error('the Add dialog is not open');
+  return last;
+}
+
+async function clickIn(scope: HTMLElement, label: string): Promise<void> {
+  const button = [...scope.querySelectorAll('button')].find((b) => b.textContent === label);
+  if (button === undefined) throw new Error(`no “${label}” button`);
+  await act(async () => {
+    button.click();
+    await Promise.resolve();
+  });
+  await settle();
+}
+
+async function selectKind(scope: HTMLElement, kind: string): Promise<void> {
+  const select = scope.querySelector<HTMLSelectElement>('select[aria-label="Source kind"]');
+  if (select === null) throw new Error('no kind picker');
   const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
   await act(async () => {
     setter?.call(select, kind);
@@ -130,15 +150,17 @@ async function selectKind(dialog: HTMLElement, name: string, kind: string): Prom
   await settle();
 }
 
-async function addSource(dialog: HTMLElement, name: string): Promise<void> {
-  await setInput(dialog, 'New source name', name);
-  const add = [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Add');
-  if (add === undefined) throw new Error('no Add button');
-  await act(async () => {
-    add.click();
-    await Promise.resolve();
-  });
-  await settle();
+/**
+ * Define one DeckLink source with the given key device, through the real Add flow.
+ * `keyDevice` empty means "no pair".
+ */
+async function addDecklink(dialog: HTMLElement, name: string, keyDevice: string): Promise<void> {
+  await clickIn(dialog, 'Add source');
+  const sub = subDialog();
+  await setInput(sub, 'Source name', name);
+  await selectKind(sub, 'decklink');
+  if (keyDevice !== '') await setInput(sub, 'DeckLink key device index', keyDevice);
+  await clickIn(sub, 'Add source');
 }
 
 /** THE WIRE: the real builder the bridge uses, not a second spelling of it. */
@@ -150,9 +172,7 @@ describe('C-027 — a stored `keyDevice` never reaches the wire, and the modal s
   it('the summary describes the FILL ALONE, and the wire agrees for the SAME value', async () => {
     stubBridge();
     const dialog = await renderModal();
-    await addSource(dialog, 'Studio A');
-    await selectKind(dialog, 'Studio A', 'decklink');
-    await setInput(dialog, 'Decklink key device for Studio A', '2');
+    await addDecklink(dialog, 'Studio A', '2');
 
     // The value under test — ONE object, both axes read from it.
     const configured: SourceProducer = { kind: 'decklink', device: 1, keyDevice: 2 };
@@ -160,7 +180,15 @@ describe('C-027 — a stored `keyDevice` never reaches the wire, and the modal s
     // AXIS 1 — the operator surface. The summary is "what this source resolves
     // to, in the words the bridge will send", so a key term here would be a
     // sentence about a signal path that does not exist.
-    expect(dialog.textContent).toContain('DECKLINK DEVICE 1');
+    /*
+      ⭐ THE ROW NAMES ITS FIELDS NOW (§5), so the assertion is on the LABELLED parts rather
+      than on one derived sentence. The claim is the same and is if anything sharper: the FILL
+      is shown as `Device 1`, and a stored key is shown as `Key device (not sent)` — never as
+      part of one string that reads like a signal path the wire does not carry.
+    */
+    const parts = dialog.querySelector('[data-source-parts]')?.textContent ?? '';
+    expect(parts).toContain('Device');
+    expect(parts).toContain('1');
     expect(dialog.textContent).not.toContain('DECKLINK DEVICE 1 + KEY 2');
     expect(dialog.textContent).not.toContain('+ KEY');
 
@@ -173,9 +201,7 @@ describe('C-027 — a stored `keyDevice` never reaches the wire, and the modal s
   it('a stored `keyDevice` is REPORTED to the operator as not yet sent', async () => {
     stubBridge();
     const dialog = await renderModal();
-    await addSource(dialog, 'Studio A');
-    await selectKind(dialog, 'Studio A', 'decklink');
-    await setInput(dialog, 'Decklink key device for Studio A', '2');
+    await addDecklink(dialog, 'Studio A', '2');
 
     // In the modal, in plain words — not a tooltip, not a log line. The message
     // must name the device it is talking about and say where it does NOT go.
@@ -190,8 +216,7 @@ describe('C-027 — a stored `keyDevice` never reaches the wire, and the modal s
   it('POSITIVE CONTROL: with no `keyDevice`, the summary and the wire are unchanged', async () => {
     stubBridge();
     const dialog = await renderModal();
-    await addSource(dialog, 'Studio A');
-    await selectKind(dialog, 'Studio A', 'decklink');
+    await addDecklink(dialog, 'Studio A', '');
 
     const plain: SourceProducer = { kind: 'decklink', device: 1 };
 
@@ -199,7 +224,9 @@ describe('C-027 — a stored `keyDevice` never reaches the wire, and the modal s
     // the SAME wire text the paired case produces, which is precisely the claim
     // — a stored key device changes NEITHER. Without it, "no `+ KEY` rendered"
     // could be satisfied by a modal that had stopped rendering the arm at all.
-    expect(dialog.textContent).toContain('DECKLINK DEVICE 1');
+    const parts = dialog.querySelector('[data-source-parts]')?.textContent ?? '';
+    expect(parts).toContain('Device');
+    expect(parts).toContain('1');
     expect(wire(plain)).toBe('DECKLINK DEVICE 1');
 
     // …and the not-sent message is ABSENT, because there is nothing unsent.

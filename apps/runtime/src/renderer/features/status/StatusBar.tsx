@@ -1,13 +1,13 @@
+import { useState } from 'react';
 import { stoppedChannelsOf } from '@cg/shared-ipc';
 import { useConnections } from '../../hooks/useConnections.js';
 import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useLock } from '../../hooks/useLock.js';
+import { EngageLockDialog } from '../lock/EngageLockDialog.js';
 import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
-import { normalizeDigits } from '../../ui/NumericInput.js';
-import { usePrompt } from '../../ui/useDialog.js';
 import { LinkIndicator } from './LinkIndicator.js';
 
 interface Props {
@@ -257,6 +257,8 @@ function staleTitle(state: string): string {
 export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props = {}): JSX.Element {
   const health = useConnections();
   const lock = useLock();
+  /** §7 — is the engage form open? */
+  const [engaging, setEngaging] = useState(false);
   const link = useLink();
   const simulated = link === 'offline-mock';
   // B-081 — the link that DELIVERS health is down, so every reading below is unverifiable.
@@ -269,7 +271,6 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
    */
   const casparReach = resolveCasparReach(link, health);
   // Above the loading early return: a hook cannot be called conditionally.
-  const { prompt, promptDialog } = usePrompt();
 
   if (health === null) {
     return (
@@ -548,32 +549,32 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
       {lock.engaged ? (
         <span style={styles.lock}>🔒 LOCKED</span>
       ) : (
-        <Button
-          onClick={() => {
-            void (async () => {
-              // The native prompt let a too-short PIN through and this handler then dropped
-              // it on the floor — the operator pressed Lock, nothing happened, and nothing
-              // said why. The dialog now holds the rule itself: submit stays disabled until
-              // the PIN is long enough.
-              const pin = await prompt({
-                title: 'Lock the Runtime',
-                body: 'While locked, every on-air control is disabled until the PIN is re-entered.',
-                label: 'Lock PIN (4–64 characters)',
-                submitLabel: 'Lock',
-                type: 'password',
-                minLength: 4,
-              });
-              // R-020 — digits normalize to Latin BEFORE the PIN is stored, and
-              // LockOverlay normalizes the release PIN the same way, so the two
-              // ends of the comparison can never disagree about ۱۲۳۴ vs 1234.
-              if (pin !== null) await window.cg.lock.engage({ pin: normalizeDigits(pin) });
-            })();
-          }}
-        >
-          🔒 Lock…
-        </Button>
+        /*
+          🔴 `STATION-CHROME-01` §7 — ENGAGING ASKS FOR THE PIN TWICE.
+
+          It used to be a one-field `prompt`, which meant a mistyped PIN locked the operator
+          out of a live console with no remedy short of restarting the bridge: the lock
+          refuses everything, the only way out is the PIN, and the PIN is whatever was typed.
+          `EngageLockDialog` confirms it and refuses to lock unless the two match — see its
+          own header for why this is the one form in the app that earns a confirmation field.
+
+          The button STAYS on the status bar: a PIN set fresh at every engage belongs where
+          the engage is, and it is ephemeral (`#lockPin`, in memory, nulled on release), so
+          there is no stored setting for a settings page to hold.
+        */
+        <Button onClick={() => setEngaging(true)}>🔒 Lock…</Button>
       )}
-      {promptDialog}
+      {engaging && (
+        <EngageLockDialog
+          onCancel={() => setEngaging(false)}
+          onEngage={(pin) => {
+            setEngaging(false);
+            // Already digit-normalised by the dialog, which is also where the two entries
+            // were compared — one normalisation, one place (R-020).
+            void window.cg.lock.engage({ pin });
+          }}
+        />
+      )}
     </footer>
   );
 }

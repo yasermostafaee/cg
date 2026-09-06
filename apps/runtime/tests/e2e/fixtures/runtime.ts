@@ -161,6 +161,49 @@ export class RuntimeApp {
   get inspector(): Locator {
     return this.page.getByRole('complementary', { name: 'Inspector' });
   }
+
+  /**
+   * Dismiss Station setup from its FOOTER.
+   *
+   * Two controls answer to "Close" — the footer's button and the modal's ✕ — so `getByRole`
+   * is strict and refuses the ambiguity. Correctly: they are different affordances, and a
+   * spec should say which one it means.
+   */
+  async closeStationSetup(): Promise<void> {
+    await this.page
+      .getByRole('dialog', { name: 'Station setup' })
+      .locator('.cg-modal-footer')
+      .getByRole('button', { name: /^(Close|Cancel)$/ })
+      .click();
+  }
+
+  /**
+   * `STATION-CHROME-01` §6 — **define one live source through the Add dialog.**
+   *
+   * Station setup must already be open at Live sources. Every Add and every Edit in the
+   * settings dialog now opens the same small SECOND dialog, so the two-step
+   * "type a name, press Add" that four specs each spelled out by hand is one call here —
+   * which is also what stops the next change to that flow costing four edits.
+   *
+   * `kindFields` names the per-kind inputs to fill by their accessible label (§5: each kind
+   * has its own, labelled). A source added with none of them keeps its kind's defaults.
+   */
+  async addLiveSource(
+    name: string,
+    options: { kind?: string; fields?: Record<string, string> } = {},
+  ): Promise<void> {
+    const setup = this.page.getByRole('dialog', { name: 'Station setup' });
+    await setup.getByRole('button', { name: 'Add live source' }).click();
+    const sub = this.page.getByRole('dialog', { name: 'Add live source' });
+    await expect(sub).toBeVisible();
+    await sub.getByLabel('Source name', { exact: true }).fill(name);
+    if (options.kind !== undefined) await sub.getByLabel('Source kind').selectOption(options.kind);
+    for (const [label, value] of Object.entries(options.fields ?? {})) {
+      await sub.getByLabel(label, { exact: true }).fill(value);
+    }
+    await sub.getByRole('button', { name: 'Add source' }).click();
+    await expect(sub).toBeHidden();
+  }
   /**
    * R-028 — the fixed-layers panel WAS its own region; it is now the Layers
    * list itself. Kept as an alias so specs that reason about "the panel with

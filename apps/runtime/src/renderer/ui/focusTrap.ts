@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 /**
  * `B-229` — **ONE FOCUS TRAP, FOR THE TWO SURFACES THAT COVER THE WHOLE SCREEN.**
@@ -23,6 +23,48 @@ import { useEffect, type RefObject } from 'react';
  * to disagree about what "focusable" means, which is this repo's most-repeated defect
  * (`B-100` / `P-012`, and golden rule 6 for the general case).
  */
+
+/*
+ * ── `STATION-CHROME-01` §6 — THE LAYER STACK, AND WHY A TRAP NEEDED ONE ─────
+ *
+ * Every Add and every Edit now opens a small SECOND dialog on top of the settings dialog,
+ * so two trapping surfaces are on screen at once for the first time. Both listen on
+ * `document` in the CAPTURE phase, so both see every key — and that is not a detail, it is
+ * the defect:
+ *
+ *   · **TAB STOPPED MOVING.** A sub-dialog portals to `body`, so it is NOT a descendant of
+ *     the dialog beneath it. The outer trap's `B-229` clause — "focus that is already
+ *     outside is pulled back" — is therefore true of focus sitting in the sub-dialog, and
+ *     it fires first (it armed first) and drags focus into the outer dialog; the inner trap
+ *     then drags it back to ITS first control. Net effect on every press: focus returns to
+ *     the sub-dialog's first control. The operator could not reach the second field.
+ *     ⚠ A containment-only test PASSES on that, because focus does end up inside the
+ *     sub-dialog. `nestedDialog.dom.test.ts` asserts ADVANCEMENT for exactly this reason.
+ *   · **ESCAPE CLOSED BOTH.** `Modal` called `e.stopPropagation()` and its comment claimed
+ *     Escape "belongs to the top-most dialog". It does not: `stopPropagation` stops
+ *     propagation to other NODES, and both handlers sit on the SAME node, so the second one
+ *     still ran. `stopImmediatePropagation` would stop a sibling — but only if registration
+ *     order matched layer order, which is mount order, which in general it is not.
+ *
+ * ONE STACK ANSWERS BOTH, and it is here rather than in `Modal` because the LOCK screen
+ * traps too and must be able to win: whichever surface armed LAST is the one the key
+ * belongs to, and the lock always arms over whatever is already up.
+ */
+const layers: symbol[] = [];
+
+function pushLayer(token: symbol): void {
+  layers.push(token);
+}
+
+function popLayer(token: symbol): void {
+  const i = layers.lastIndexOf(token);
+  if (i >= 0) layers.splice(i, 1);
+}
+
+/** Is `token` the surface the keyboard currently belongs to? */
+function isTopLayer(token: symbol): boolean {
+  return layers.length > 0 && layers[layers.length - 1] === token;
+}
 
 /**
  * What the trap will move focus to. Deliberately NOT the full a11y focusable set: these
@@ -105,12 +147,21 @@ export function useFocusTrap(
   ref: RefObject<HTMLElement>,
   enabled: boolean,
   options: { restoreFocus?: boolean; initialFocusSelector?: string } = {},
-): void {
+): TrapLayer {
   const { restoreFocus = true, initialFocusSelector } = options;
+  /*
+    ONE token per mounted trap, stable for its life. `useRef` and not `useMemo`: a memo may
+    be re-computed at React's discretion, and a token that changed identity would leave a
+    ghost on the stack that nothing could ever pop.
+  */
+  const token = useRef<symbol | null>(null);
+  token.current ??= Symbol('focus-trap');
+  const self = token.current;
 
   useEffect(() => {
     if (!enabled) return;
 
+    pushLayer(self);
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const nominated =
       initialFocusSelector === undefined
@@ -119,11 +170,15 @@ export function useFocusTrap(
     (nominated ?? focusableWithin(ref.current)[0])?.focus();
 
     const onKeyDown = (e: KeyboardEvent): void => {
+      // The key belongs to the TOP-MOST trapping surface. A trap with something above it
+      // does nothing at all — see the stack's note for what happens when both act.
+      if (!isTopLayer(self)) return;
       trapTabKey(ref.current, e);
     };
     document.addEventListener('keydown', onKeyDown, true);
     return () => {
       document.removeEventListener('keydown', onKeyDown, true);
+      popLayer(self);
       if (restoreFocus) previous?.focus();
     };
     /*
@@ -151,4 +206,24 @@ export function useFocusTrap(
       is what records it.
     */
   }, [enabled]);
+
+  /*
+    Returned as a FUNCTION rather than a boolean, deliberately: whether this surface is on
+    top changes when a SIBLING mounts, which does not re-render this one. A boolean captured
+    at render time would be stale in exactly the case it exists for — an Escape pressed
+    after a sub-dialog opened.
+
+    And the OBJECT is stable (a ref, not a fresh literal), because callers put it in an
+    effect's dependency list. A new identity per render would re-register that effect on
+    every keystroke — `B-230`'s defect, in a new place.
+  */
+  const api = useRef<TrapLayer | null>(null);
+  api.current ??= { isTop: () => isTopLayer(self) };
+  return api.current;
+}
+
+/** What a trapping surface gets back, so it can gate its OWN keys on the same stack. */
+export interface TrapLayer {
+  /** Is this surface the one the keyboard belongs to right now? */
+  isTop: () => boolean;
 }

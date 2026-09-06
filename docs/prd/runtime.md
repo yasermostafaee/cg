@@ -1521,7 +1521,7 @@ of `live-source-multibox`'s scope. **This item therefore stays `[~]` carrying ex
 more than usual: if [[C-019]] ships template audio before this is decided, every audio template
 authored in the meantime bakes in whichever behaviour the exporter allowed at the time.
 
-## [ ] R-030 — output placement must know the channel raster ⟨priority: medium⟩ — UI landed 2026-09-06: `Station setup ▸ Channel raster` (`STATION-SETUP-02`, `openspec/changes/station-setup/`) is the FIRST control `channelSettings.set` has had; before it the raster could be read (the mismatch banner) and written only by editing `channel-settings.json` by hand
+## [ ] R-030 — output placement must know the channel raster ⟨priority: medium⟩ — the raster is REPORTED, not set: `Station setup ▸ Channel` shows it read-only beside Outputs (`STATION-CHROME-01` §4, 2026-09-07). `STATION-SETUP-02` briefly gave `channelSettings.set` its first UI and the owner’s response was «I don’t know what this is for»; the facts agreed — the configured value reaches AIR through the served URL’s `?cw=&ch=`, and both the page and the console can already derive it from the server. ⚠ ONE GAP IS OPEN: the stored raster defaults to 1920×1080 and only a writer changes it, so a non-1080 install now shows a standing mismatch with no in-console remedy. The fix belongs in the bridge — adopt `observed` when the verdict is `mismatch` and the mode was readable, one change in `channel-settings-store.ts`
 
 **What:** Give play-out placement the real channel geometry, and scale the stage to it. R-011's
 "author small, place anywhere" is already implemented — but against a **hardcoded 1920×1080

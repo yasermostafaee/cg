@@ -55,7 +55,8 @@ test('the PIN dialog focuses its field on open, and KEEPS it while the operator 
   const dialog = app.page.getByRole('dialog');
   await expect(dialog).toBeVisible();
 
-  const field = dialog.getByLabel(/Lock PIN/);
+  // §7 — the FIRST of the two PIN fields; this spec is about where focus lands and stays.
+  const field = dialog.getByLabel(/^Lock PIN \(/);
   await expect(field).toBeVisible();
 
   // ── 1. focus LANDS on the field, not on the close affordance ──────────────

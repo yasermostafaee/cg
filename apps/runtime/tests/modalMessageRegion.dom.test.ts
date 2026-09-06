@@ -114,6 +114,14 @@ function expectMessageThroughTheRegion(dialog: HTMLElement, role: 'refusal' | 'n
   expect(body?.querySelectorAll('[data-notice]').length ?? 0).toBe(0);
 }
 
+/** The TOP dialog — the sub-dialog when one is open, the settings dialog otherwise. */
+function lastDialog(): HTMLElement {
+  const all = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')];
+  const last = all[all.length - 1];
+  if (last === undefined) throw new Error('no dialog is open');
+  return last;
+}
+
 describe('the census — every section of Station setup that can speak, speaks through the region', () => {
   /** `Candidate layers`: the reference implementation, now a section. */
   /*
@@ -165,15 +173,26 @@ describe('the census — every section of Station setup that can speak, speaks t
     ).not.toBeNull();
   });
 
-  /** `Live sources`: adopted the region, kept its own 2.13:1 red. */
-  it('Live sources routes its refusal through the region', async () => {
+  /*
+    `Live sources` and `Text file delimiters`: both ADD through the same small second dialog
+    since `STATION-CHROME-01` §6, so the census follows them there.
+
+    ⭐ AND THE RULE THE CENSUS ENFORCES IS UNCHANGED, one layer in: a refusal is rendered
+    through a pinned message REGION and never appended to a body. What changed is WHICH
+    region — the sub-dialog's own, because that is where the field the refusal is about is.
+    Putting it in the parent's would be §2's defect at a smaller scale: a sentence about a
+    form the operator can no longer see.
+  */
+  it('Live sources routes its refusal through the region — the Add dialog’s own', async () => {
     stationSetupStub();
     const dialog = await renderStationSetup({ section: 'sources' });
-    // Add with an empty name: the form's own refusal, no bridge round-trip needed.
-    await clickSetupButton(dialog, 'Add');
+    await clickSetupButton(dialog, 'Add source');
+    // Confirm with an empty name: the form's own refusal, no bridge round-trip needed.
+    const sub = lastDialog();
+    await clickSetupButton(sub, 'Add source');
 
-    expectMessageThroughTheRegion(dialog, 'refusal');
-    const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
+    expectMessageThroughTheRegion(sub, 'refusal');
+    const text = sub.querySelector('[data-modal-message]')?.textContent ?? '';
     expect(text).toContain('Give the source a name');
   });
 
@@ -181,23 +200,13 @@ describe('the census — every section of Station setup that can speak, speaks t
   it('Text file delimiters routes its refusal through the region, not the body', async () => {
     stationSetupStub();
     const dialog = await renderStationSetup({ section: 'delimiters' });
-    // The delimiter section's Add — the second "Add" in the dialog, so it is found
-    // inside its own section rather than by label alone.
-    const section = dialog.querySelector('[data-station-section="delimiters"]');
-    const add = [...(section?.querySelectorAll('button') ?? [])].find(
-      (b) => b.textContent === 'Add',
-    );
-    if (add === undefined) throw new Error('no Add in the delimiters section');
-    await act(async () => {
-      add.click();
-      await Promise.resolve();
-    });
-    await act(async () => {
-      for (let i = 0; i < 8; i++) await Promise.resolve();
-    });
+    await clickSetupButton(dialog, 'Add delimiter');
+    const sub = lastDialog();
+    // Confirm with an empty name: the form's own refusal.
+    await clickSetupButton(sub, 'Add delimiter');
 
-    expectMessageThroughTheRegion(dialog, 'refusal');
-    const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
+    expectMessageThroughTheRegion(sub, 'refusal');
+    const text = sub.querySelector('[data-modal-message]')?.textContent ?? '';
     expect(text).toContain('Give the delimiter a name');
   });
 

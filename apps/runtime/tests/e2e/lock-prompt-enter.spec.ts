@@ -74,9 +74,17 @@ test('Enter locks and CLOSES the PIN dialog, exactly as the button does', async 
   await expect(page.getByRole('status', { name: 'Bridge link' })).not.toContainText('DISCONNECTED');
 
   await page.getByRole('button', { name: /Lock/ }).click();
-  const field = page.getByLabel(/Lock PIN/);
+  /*
+    `STATION-CHROME-01` §7 — the PIN is asked TWICE. Enter is pressed from the SECOND field,
+    which is where an operator who has just finished typing actually is; the claim this spec
+    makes (Enter submits AND closes, leaving exactly one dialog) is unchanged, and the
+    `preventDefault` discipline it pins moved with the form into `RecordDialog`.
+  */
+  const field = page.getByLabel(/^Lock PIN \(/);
+  const again = page.getByLabel('Lock PIN again');
   await field.fill('1234');
-  await field.press('Enter');
+  await again.fill('1234');
+  await again.press('Enter');
 
   // The lock DID engage — Enter still submits; this is not a fix that disabled it.
   const lockScreen = page.getByRole('dialog', { name: 'Lock screen' });

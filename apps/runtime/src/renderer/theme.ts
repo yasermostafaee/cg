@@ -456,6 +456,15 @@ export const cssVars = {
   '--r-divider-drag-fill': 'rgba(56, 189, 248, 0.22)',
   '--r-scrim': 'rgba(0, 0, 0, 0.45)',
   '--r-modal-scrim': 'rgba(0, 0, 0, 0.6)',
+  /**
+   * `STATION-CHROME-01` §6 — the scrim a SECOND dialog lays over the first.
+   *
+   * LIGHTER than the base scrim, and that is the whole reason it is its own role: the
+   * operator has to keep seeing the dialog he came from, or a small Add form reads as
+   * having replaced his settings rather than as sitting on top of them. Stacking the base
+   * scrim twice would double its opacity and black the parent out.
+   */
+  '--r-modal-scrim-sub': 'rgba(0, 0, 0, 0.4)',
   '--r-lock-scrim': 'rgba(15, 23, 42, 0.94)',
   '--r-shadow-menu': '0 4px 16px rgba(0, 0, 0, 0.45)',
   '--r-shadow-drawer': '-8px 0 24px rgba(0, 0, 0, 0.45)',

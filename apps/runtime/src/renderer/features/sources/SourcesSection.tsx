@@ -2,22 +2,20 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Trash2 } from 'lucide-react';
 import {
   aspectForFormat,
-  LIVE_SOURCE_FORMATS,
   nextSourceId,
   sourceAspect,
   SUGGESTED_LIVE_SOURCE_LAYER_RANGE,
-  type LiveSourceFormat,
   type SourceCatalog,
   type SourceDefinition,
-  type SourceProducer,
   type TemplateInfo,
   type TemplateSourceAssignment,
 } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
+import { LiveSourceDialog } from './LiveSourceDialog.js';
+import { KIND_BADGE, producerParts } from './sourceKinds.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import type { ModalMessage } from '../../ui/Modal.js';
-import { Notice } from '../../ui/Notice.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { templateDisplayName } from '../library/templateName.js';
 import {
@@ -95,6 +93,40 @@ const styles = {
     gap: '0.4rem',
   },
   row: { display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' as const },
+  tableHead: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.6rem',
+    marginBottom: '0.35rem',
+  },
+  rowTop: { display: 'flex', gap: '0.5rem', alignItems: 'center' },
+  spacer: { flex: 1 },
+  name: { fontSize: '0.9rem', fontWeight: 600, minWidth: 0 },
+  /** The kind PILL — a word, never a colour alone. */
+  kind: {
+    fontSize: '0.68rem',
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase' as const,
+    color: colors.textMuted,
+    border: `1px solid ${colors.border}`,
+    borderRadius: '0.25rem',
+    padding: '0.1rem 0.4rem',
+    whiteSpace: 'nowrap' as const,
+  },
+  /** §5 — the LABELLED parts of "where it comes from". */
+  parts: {
+    display: 'flex',
+    flexWrap: 'wrap' as const,
+    gap: '0.15rem 0.9rem',
+    alignItems: 'baseline',
+  },
+  part: { display: 'inline-flex', gap: '0.35rem', alignItems: 'baseline', minWidth: 0 },
+  partLabel: { fontSize: '0.7rem', color: colors.textMuted },
+  partValue: {
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    fontSize: '0.78rem',
+    overflowWrap: 'anywhere' as const,
+  },
   field: { display: 'flex', flexDirection: 'column' as const, gap: '0.15rem' },
   fieldLabel: { fontSize: '0.72rem', color: colors.textMuted },
   derived: { fontSize: '0.72rem', color: colors.textMuted, alignSelf: 'center' },
@@ -111,98 +143,6 @@ const styles = {
   },
   hint: { fontSize: '0.72rem', color: colors.textMuted, margin: '0.5rem 0 0' },
 } as const;
-
-/**
- * The producer kinds, in the order an operator is most likely to need them.
- *
- * `stream` (C-025) sits WITH the signal-bearing producers, after them because it
- * is the newest and least established; `media` stays LAST because it is the odd
- * one out — "the one producer that needs no signal" in a list of lives — and an
- * operator scanning for a feed should not meet the clip in the middle of them.
- */
-const PRODUCER_KINDS: readonly SourceProducer['kind'][] = [
-  'route',
-  'decklink',
-  'ndi',
-  'stream',
-  'media',
-];
-
-const KIND_LABEL: Record<SourceProducer['kind'], string> = {
-  route: 'Route from a channel',
-  decklink: 'Decklink input',
-  ndi: 'NDI source',
-  stream: 'Internet stream (URL)',
-  media: 'Media file',
-};
-
-/**
- * A fresh producer of the chosen kind.
- *
- * Switching kinds DISCARDS the previous arm's fields rather than trying to carry
- * them across. A device number and a channel number are not the same number, and
- * quietly reusing one as the other is how a source comes to point at hardware
- * nobody chose.
- */
-function emptyProducer(kind: SourceProducer['kind']): SourceProducer {
-  switch (kind) {
-    case 'route':
-      return { kind: 'route', channel: 1 };
-    case 'decklink':
-      return { kind: 'decklink', device: 1 };
-    case 'ndi':
-      return { kind: 'ndi', source: 'NDI SOURCE' };
-    case 'stream':
-      // The default must PASS the scheme allowlist: every edit round-trips the
-      // bridge, so a default the validator refuses would refuse the kind switch
-      // itself and the operator could never reach the URL field to fix it.
-      return { kind: 'stream', url: 'rtmp://server/live/stream' };
-    case 'media':
-      return { kind: 'media', file: 'AMB' };
-  }
-}
-
-/**
- * What this source resolves to, **in the words the bridge will send**.
- *
- * 🔴 **THAT SENTENCE IS THE CONTRACT, NOT A DESCRIPTION OF ONE.** This line's only
- * job is to be the wire text an operator can check a config against, so it may
- * carry a term ONLY when `producerArgument` (`@cg/caspar-bridge`'s
- * `command-builder.ts`) actually emits it. The two functions live in different
- * packages and each package's suite was green while they disagreed — which is
- * exactly how this line came to render `DECKLINK DEVICE 1 + KEY 2` for a wire
- * that has never carried more than `DECKLINK DEVICE 1`. An operator who
- * configured a fill/key pair was shown a signal path that does not exist, got
- * the fill alone, and had nothing on any surface saying so.
- *
- * `apps/runtime/tests/decklinkKeyDeviceHonesty.dom.test.ts` asserts BOTH halves
- * against the SAME value and is what fails if they drift again.
- *
- * ⚠ **A term dropped from here must reappear somewhere the operator reads.**
- * Being silent about a stored `keyDevice` would trade a line that overclaims for
- * one that hides — see {@link ProducerFields}, which says it in plain words.
- */
-function describeProducer(p: SourceProducer): string {
-  switch (p.kind) {
-    case 'route':
-      return p.layer === undefined
-        ? `route://${String(p.channel)}`
-        : `route://${String(p.channel)}-${String(p.layer)}`;
-    case 'decklink':
-      // The FILL alone, `keyDevice` set or not: `producerArgument` emits exactly
-      // this and nothing else. Seating the key is a second producer on its own
-      // layer, which is C-027 and is not built.
-      return `DECKLINK DEVICE ${String(p.device)}`;
-    case 'ndi':
-      return `NDI ${p.source}`;
-    case 'stream':
-      // Prefixed so a second operator reading the config can tell a FEED from a
-      // clip at a glance — the C-025 finding was precisely that they could not.
-      return `stream ${p.url}`;
-    case 'media':
-      return `media ${p.file}`;
-  }
-}
 
 /** `1.7778` is not an answer an operator can check; `16:9` is. */
 function describeAspect(source: SourceDefinition): string {
@@ -226,55 +166,6 @@ function parseLayerNumber(raw: string): number | null {
   return Number.isInteger(n) && n >= 0 && n <= 9999 ? n : null;
 }
 
-/**
- * A text field whose stored value cannot legally be empty (a source NAME, an NDI
- * source name, a media file).
- *
- * It holds a DRAFT while the operator types and commits only a non-empty value,
- * so clearing the field to retype it never sends the wire an entry that its own
- * schema rejects. On blur an empty draft snaps back to the stored value: the
- * committed state is the truth, and a field left blank must not read as a value
- * that was saved.
- */
-function RequiredText({
-  value,
-  label,
-  ariaLabel,
-  placeholder,
-  onCommit,
-}: {
-  value: string;
-  label: string;
-  ariaLabel: string;
-  placeholder?: string;
-  onCommit: (next: string) => void;
-}): JSX.Element {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => {
-    setDraft(value);
-  }, [value]);
-  return (
-    <label style={styles.field}>
-      <span style={styles.fieldLabel}>{label}</span>
-      <input
-        className="cg-field"
-        type="text"
-        value={draft}
-        aria-label={ariaLabel}
-        {...(placeholder !== undefined ? { placeholder } : {})}
-        onChange={(e) => {
-          const next = e.target.value;
-          setDraft(next);
-          if (next.trim() !== '') onCommit(next);
-        }}
-        onBlur={() => {
-          if (draft.trim() === '') setDraft(value);
-        }}
-      />
-    </label>
-  );
-}
-
 export function SourcesSection({
   report,
 }: {
@@ -282,7 +173,12 @@ export function SourcesSection({
 }): JSX.Element {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   const catalog = currentSourceCatalog();
-  const [newName, setNewName] = useState('');
+  /*
+    §6 — WHICH RECORD THE SECOND DIALOG IS SHOWING. `null` = closed; `{ source: null }` =
+    Add; `{ source }` = Edit. One piece of state for both, because they ARE one dialog —
+    that is the whole point of §6, and two flags would let them drift apart.
+  */
+  const [editing, setEditing] = useState<{ source: SourceDefinition | null } | null>(null);
   const [bandStart, setBandStart] = useState('');
   const [bandEnd, setBandEnd] = useState('');
   const [templates, setTemplates] = useState<readonly TemplateInfo[]>([]);
@@ -334,36 +230,6 @@ export function SourcesSection({
     };
   };
 
-  const replaceSource = (index: number, entry: SourceDefinition): void => {
-    commitCatalog({
-      ...catalog,
-      sources: catalog.sources.map((s, i) => (i === index ? entry : s)),
-    });
-  };
-
-  const addSource = (): void => {
-    const name = newName.trim();
-    // The LOCAL checks are about what was typed into this form; the BRIDGE
-    // re-checks the whole catalog and is authoritative. These exist so the form
-    // can answer instantly, not to be the only guard.
-    if (name === '') {
-      refuse('Give the source a name — it is what the operator picks, e.g. Studio A.');
-      return;
-    }
-    setNewName('');
-    commitCatalog({
-      ...catalog,
-      sources: [
-        ...catalog.sources,
-        {
-          id: nextSourceId(catalog.sources.map((s) => s.id)),
-          name,
-          producer: emptyProducer('route'),
-        },
-      ],
-    });
-  };
-
   const applyBand = (): void => {
     const start = parseLayerNumber(bandStart);
     const end = parseLayerNumber(bandEnd);
@@ -386,7 +252,16 @@ export function SourcesSection({
         ONE line per sub-heading, attached to the thing it concerns — never a block of
         prose above the form. What survives is the fact that changes what the operator does.
       */}
-      <div style={styles.subTitle}>SOURCES</div>
+      <div style={styles.tableHead}>
+        <span style={styles.subTitle}>CATALOGUE</span>
+        <Button
+          variant="add"
+          aria-label="Add live source"
+          onClick={() => setEditing({ source: null })}
+        >
+          Add source
+        </Button>
+      </div>
       {catalog.sources.length === 0 ? (
         <div style={styles.empty} role="status">
           Nothing is defined yet — a template&rsquo;s live plate cannot be taken until it is
@@ -394,16 +269,30 @@ export function SourcesSection({
         </div>
       ) : (
         <div style={styles.list}>
+          {/*
+            🔴 §5 — THE COLUMNS DEPEND ON THE KIND.
+
+            The old row printed one derived string — `DECKLINK DEVICE 1`, `NDI CG-INGEST`,
+            `stream srt://…` — into an unlabelled column, forcing three addressing schemes
+            into one shape and naming none of them: an operator reading `1` could not tell a
+            device from a channel from a layer. `producerParts` gives each kind the fields it
+            actually has, each with its own LABEL, and the row renders them.
+
+            ⚠ Every operator-visible string is isolated in its own `<bdi>`: a source name may
+            be Persian, a URL is Latin, and the labels between them are neutrals whose
+            placement bidi would otherwise decide (golden rule 11).
+          */}
           {catalog.sources.map((source, index) => (
             <div key={source.id} style={styles.entry} data-source-id={source.id}>
-              <div style={styles.row}>
-                <RequiredText
-                  value={source.name}
-                  label="Name"
-                  ariaLabel={`Name of ${source.name}`}
-                  onCommit={(name) => replaceSource(index, { ...source, name })}
-                />
-                <span style={styles.derived}>{describeProducer(source.producer)}</span>
+              <div style={styles.rowTop}>
+                <bdi style={styles.name}>{source.name}</bdi>
+                <span style={styles.kind} data-source-kind={source.producer.kind}>
+                  {KIND_BADGE[source.producer.kind]}
+                </span>
+                <span style={styles.spacer} />
+                <Button aria-label={`Edit ${source.name}`} onClick={() => setEditing({ source })}>
+                  Edit
+                </Button>
                 <Button
                   variant="danger"
                   aria-label={`Remove ${source.name}`}
@@ -417,82 +306,35 @@ export function SourcesSection({
                   <Icon icon={Trash2} />
                 </Button>
               </div>
-
-              <div style={styles.row}>
-                <label style={styles.field}>
-                  <span style={styles.fieldLabel}>Kind</span>
-                  <select
-                    className="cg-field"
-                    style={{ width: 'auto' }}
-                    aria-label={`Producer kind for ${source.name}`}
-                    value={source.producer.kind}
-                    onChange={(e) =>
-                      replaceSource(index, {
-                        ...source,
-                        producer: emptyProducer(e.target.value as SourceProducer['kind']),
-                      })
-                    }
-                  >
-                    {PRODUCER_KINDS.map((kind) => (
-                      <option key={kind} value={kind}>
-                        {KIND_LABEL[kind]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label style={styles.field}>
-                  <span style={styles.fieldLabel}>Format</span>
-                  <select
-                    className="cg-field"
-                    style={{ width: 'auto' }}
-                    aria-label={`Signal format for ${source.name}`}
-                    value={source.format ?? ''}
-                    onChange={(e) => {
-                      const format = e.target.value;
-                      const { format: _drop, ...rest } = source;
-                      replaceSource(
-                        index,
-                        format === '' ? rest : { ...rest, format: format as LiveSourceFormat },
-                      );
-                    }}
-                  >
-                    <option value="">— not stated —</option>
-                    {LIVE_SOURCE_FORMATS.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+              <div style={styles.parts} data-source-parts="">
+                {producerParts(source.producer).map((part) => (
+                  <span key={part.label} style={styles.part}>
+                    <span style={styles.partLabel}>{part.label}</span>
+                    <bdi style={styles.partValue}>{part.value}</bdi>
+                  </span>
+                ))}
+                <span style={styles.part}>
+                  <span style={styles.partLabel}>Format</span>
+                  <bdi style={styles.partValue}>{source.format ?? '— not stated —'}</bdi>
+                </span>
                 <span style={styles.derived}>{describeAspect(source)}</span>
               </div>
-
-              <ProducerFields
-                source={source}
-                onChange={(producer) => replaceSource(index, { ...source, producer })}
-              />
             </div>
           ))}
         </div>
       )}
 
-      <div style={styles.row}>
-        <label style={styles.field}>
-          <span style={styles.fieldLabel}>New source name</span>
-          <input
-            className="cg-field"
-            type="text"
-            value={newName}
-            aria-label="New source name"
-            placeholder="Studio A"
-            onChange={(e) => setNewName(e.target.value)}
-          />
-        </label>
-        <Button variant="add" onClick={addSource}>
-          Add
-        </Button>
-      </div>
+      {/*
+        §5's other half, and it is a decision rather than a caption: the CATALOGUE is
+        installation-wide; WHICH PLATE uses which source is per-template, in the Inspector.
+        Merging the two SURFACES was right; merging the two SHAPES would make an assignment
+        installation-wide, which is the defect `LiveSourceSwapDialog`'s own intro exists to
+        prevent.
+      */}
+      <p style={styles.hint}>
+        The station&rsquo;s catalogue of sources. Which plate uses which source is set per template
+        in the Inspector — one catalogue here, the bindings there.
+      </p>
 
       <div style={styles.subsection}>
         <div style={styles.subTitle}>LAYER BAND</div>
@@ -534,174 +376,44 @@ export function SourcesSection({
             : `Currently ${String(band.start)}–${String(band.end)}.`}
         </p>
       </div>
+
+      {/*
+        §6 — THE SAME SMALL SECOND DIALOG for Add and for Edit. It holds a DRAFT and reaches
+        the catalogue only on the confirming press, which is a real change from the inline
+        editors this replaced: those sent every keystroke to the bridge.
+      */}
+      {editing !== null && (
+        <LiveSourceDialog
+          source={editing.source}
+          existingNames={catalog.sources
+            .filter((s) => s.id !== editing.source?.id)
+            .map((s) => s.name)}
+          onCancel={() => setEditing(null)}
+          onCommit={(draft) => {
+            const current = editing.source;
+            const next: SourceDefinition =
+              current === null
+                ? { id: nextSourceId(catalog.sources.map((s) => s.id)), ...draft }
+                : {
+                    ...current,
+                    ...draft,
+                    ...(draft.format === undefined ? { format: undefined } : {}),
+                  };
+            const cleaned =
+              next.format === undefined ? (({ format: _drop, ...rest }) => rest)(next) : next;
+            commitCatalog({
+              ...catalog,
+              sources:
+                current === null
+                  ? [...catalog.sources, cleaned as SourceDefinition]
+                  : catalog.sources.map((s) =>
+                      s.id === current.id ? (cleaned as SourceDefinition) : s,
+                    ),
+            });
+            setEditing(null);
+          }}
+        />
+      )}
     </>
   );
-}
-
-/**
- * The per-kind fields.
- *
- * `keyDevice` appears on the DECKLINK arm ALONE, and that is the schema's shape
- * rather than a layout choice: a fill/key pair is two physical SDI inputs, so
- * offering the field beside a route or an NDI name would invite an operator to
- * configure a pair that cannot exist.
- *
- * ⚠ **The field is KEPT even though nothing sends it, and it is kept on purpose.**
- * A fill/key pair is a real concept carried over from the plant's previous
- * automation, the schema is deliberately shaped for it, and an operator may
- * already have written one — removing the field would DELETE that configuration.
- * What is not acceptable is keeping it silently, so where a `keyDevice` is stored
- * this component says in plain words that it does not reach CasparCG. Seating the
- * pair is **C-027**.
- */
-function ProducerFields({
-  source,
-  onChange,
-}: {
-  source: SourceDefinition;
-  onChange: (producer: SourceProducer) => void;
-}): JSX.Element {
-  const p = source.producer;
-  /**
-   * ⚠ `min` IS THE SCHEMA'S OWN FLOOR, not decoration. A channel, a fill device
-   * and a key device are all `z.number().int().positive()`, so committing a
-   * typed `0` sends the bridge a catalog its own schema rejects — and the answer
-   * the operator gets is the frame validator's, naming an IPC channel. The
-   * control must not be able to produce a value the contract forbids.
-   */
-  const numeric = (
-    label: string,
-    aria: string,
-    value: number | undefined,
-    min: number,
-    apply: (n: number | undefined) => void,
-    optional = false,
-  ): JSX.Element => (
-    // A <div>, not a <label>: the caption sits beside the control and the
-    // accessible name comes from the input's own `aria-label` — the pattern the
-    // a11y rule can verify.
-    <div style={styles.field}>
-      <span style={styles.fieldLabel}>{label}</span>
-      <NumericInput
-        className="cg-field"
-        style={{ width: '5rem' }}
-        aria-label={`${aria} for ${source.name}`}
-        value={value === undefined ? '' : String(value)}
-        placeholder={optional ? '—' : '1'}
-        onValueChange={(next) => {
-          const trimmed = next.trim();
-          if (trimmed === '') {
-            apply(undefined);
-            return;
-          }
-          const n = Number(trimmed);
-          if (Number.isInteger(n) && n >= min) apply(n);
-        }}
-      />
-    </div>
-  );
-
-  switch (p.kind) {
-    case 'route':
-      return (
-        <div style={styles.row}>
-          {numeric('Channel', 'Route channel', p.channel, 1, (n) =>
-            onChange({ ...p, channel: n ?? 1 }),
-          )}
-          {numeric(
-            'Layer (optional)',
-            'Route layer',
-            p.layer,
-            0,
-            (n) =>
-              onChange(
-                n === undefined ? { kind: 'route', channel: p.channel } : { ...p, layer: n },
-              ),
-            true,
-          )}
-        </div>
-      );
-    case 'decklink':
-      return (
-        <>
-          <div style={styles.row}>
-            {numeric('Fill device', 'Decklink fill device', p.device, 1, (n) =>
-              onChange({ ...p, device: n ?? 1 }),
-            )}
-            {numeric(
-              'Key device (optional)',
-              'Decklink key device',
-              p.keyDevice,
-              1,
-              (n) =>
-                onChange(
-                  n === undefined ? { kind: 'decklink', device: p.device } : { ...p, keyDevice: n },
-                ),
-              true,
-            )}
-          </div>
-          {/*
-            🔴 THE GAP, SAID OUT LOUD. The value above is accepted, validated and
-            persisted — and then `producerArgument` emits the FILL alone. Without
-            this the operator's only evidence would be a picture with no key in
-            it, discovered at take.
-
-            `noticeRole="notice"` and NOT `refusal`, deliberately: nothing was
-            refused. The device is stored, it is in force as configuration, and it
-            will be used the moment C-027 lands. Dressing that as a refusal would
-            spend the amber attention treatment on a state that is not an error —
-            the mistake `Notice`'s own table was written to stop. The sentence is
-            what carries the weight, and it names the device rather than gesturing
-            at "a key device" so a second operator can match it to the field.
-          */}
-          {p.keyDevice !== undefined && (
-            <Notice
-              noticeRole="notice"
-              aria="status"
-              text={`Key device ${String(p.keyDevice)} is stored, but it is not sent to CasparCG yet.`}
-              detail={`This source goes to air as its fill alone — DECKLINK DEVICE ${String(p.device)}. Seating a fill/key pair needs a second producer on its own layer, which is not built yet; the device is kept so nothing is lost when it is.`}
-            />
-          )}
-        </>
-      );
-    case 'ndi':
-      return (
-        <div style={styles.row}>
-          <RequiredText
-            value={p.source}
-            label="NDI source name"
-            ariaLabel={`NDI source name for ${source.name}`}
-            placeholder="STUDIO (CAM 2)"
-            onCommit={(next) => onChange({ ...p, source: next })}
-          />
-        </div>
-      );
-    case 'stream':
-      // Committed like every text field here — the bridge validates and is
-      // authoritative, so a scheme outside the allowlist comes back as the
-      // NAMED refusal in the message region rather than being silently kept.
-      return (
-        <div style={styles.row}>
-          <RequiredText
-            value={p.url}
-            label="Stream URL"
-            ariaLabel={`Stream URL for ${source.name}`}
-            placeholder="rtmp://server/live/stream"
-            onCommit={(next) => onChange({ ...p, url: next })}
-          />
-        </div>
-      );
-    case 'media':
-      return (
-        <div style={styles.row}>
-          <RequiredText
-            value={p.file}
-            label="Media file"
-            ariaLabel={`Media file for ${source.name}`}
-            placeholder="AMB"
-            onCommit={(next) => onChange({ ...p, file: next })}
-          />
-        </div>
-      );
-  }
 }

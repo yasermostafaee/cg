@@ -65,6 +65,8 @@ const styles = {
     zIndex: 1000,
     padding: '1rem',
   },
+  /** A dialog opened FROM a dialog: above it, and through a lighter scrim. */
+  scrimSub: { background: cssVars['--r-modal-scrim-sub'], zIndex: 1001 },
   dialog: {
     background: colors.panel,
     border: `1px solid ${colors.border}`,
@@ -305,6 +307,18 @@ interface ModalProps {
    * `runtime-modal-contract` change was written to end.
    */
   size?: 'prose' | 'wide';
+  /**
+   * `STATION-CHROME-01` §6 — which LAYER this dialog is on.
+   *
+   * `sub` is a dialog opened FROM another dialog: every Add and every Edit. It stacks
+   * above the base layer and lays a lighter scrim, so the dialog underneath stays visible
+   * and the operator can see he is one step deeper rather than somewhere else.
+   *
+   * ⚠ It is a z-index and a scrim, and NOTHING about the keyboard. Which surface owns
+   * Escape and Tab is decided by the trap STACK in `focusTrap.ts` — arm order, not a prop
+   * — so a caller cannot get the two out of step by forgetting this.
+   */
+  layer?: 'base' | 'sub';
 }
 
 const WIDTHS: Record<'prose' | 'wide', string> = {
@@ -320,6 +334,7 @@ export function Modal({
   children,
   ariaLabel,
   size = 'prose',
+  layer: layerLevel = 'base',
 }: ModalProps): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
   // One shape downstream, so the region never has to ask which form it was given.
@@ -345,13 +360,28 @@ export function Modal({
     the trap rather than by a competing `autoFocus` attribute. One thing moves focus, so
     there is no race to win: see `usePrompt`, the one caller that needs it.
   */
-  useFocusTrap(ref, true, { initialFocusSelector: '[data-modal-autofocus]' });
+  const layer = useFocusTrap(ref, true, { initialFocusSelector: '[data-modal-autofocus]' });
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
       if (e.key !== 'Escape') return;
-      // Capture-phase + stop: Escape belongs to the top-most dialog, not to whatever is
-      // behind the scrim.
+      /*
+        🔴 `STATION-CHROME-01` §6 — ESCAPE BELONGS TO THE TOP-MOST DIALOG, and until this
+        change that sentence was a COMMENT rather than a mechanism.
+
+        It used to read "Capture-phase + stop: Escape belongs to the top-most dialog" above
+        a bare `e.stopPropagation()`. That is not what `stopPropagation` does: it stops the
+        event reaching other NODES, and every dialog registers this handler on the SAME node
+        (`document`), so a second dialog's handler still ran. With an Add dialog open over
+        Station setup, one Escape closed BOTH — the operator lost the settings dialog he was
+        working in because he cancelled a small form on top of it.
+
+        `layer.isTop()` reads the shared trap stack, so the answer is the same one the TAB
+        trap gives — one notion of "which surface owns the keyboard", not two that can drift.
+        `stopPropagation` stays for the ordinary case (a key must not reach the console
+        behind the scrim); it is simply no longer load-bearing for the nesting.
+      */
+      if (!layer.isTop()) return;
       e.stopPropagation();
       onClose();
     }
@@ -360,12 +390,13 @@ export function Modal({
     return () => {
       document.removeEventListener('keydown', onKeyDown, true);
     };
-  }, [onClose]);
+  }, [onClose, layer]);
 
   return createPortal(
     <div
-      style={styles.scrim}
+      style={layerLevel === 'sub' ? { ...styles.scrim, ...styles.scrimSub } : styles.scrim}
       role="presentation"
+      data-modal-layer={layerLevel}
       onClick={onClose}
       onContextMenu={(e) => e.preventDefault()}
     >

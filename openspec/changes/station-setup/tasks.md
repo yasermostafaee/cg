@@ -43,7 +43,11 @@
       editor, and the explainer as the section's empty state); Configure and "What the bridge
       needs" are deep links; Apply/Revert in the section; an accepted apply reports and stays.
 - [x] 2.4 Channel raster → `ChannelRasterSection`, the first UI for `channelSettings.set`.
+      ⚠ SUPERSEDED 2026-09-07 by `STATION-CHROME-01` §4 — the raster is REPORTED, in a
+      read-only `Channel` tab (`ChannelSection.tsx`); `ChannelRasterSection` is deleted.
 - [x] 2.5 Reserved / live layers → `StationLayersSection`, read-only.
+      ⚠ SUPERSEDED 2026-09-07 by `STATION-CHROME-01` §3 — Station layers left settings for
+      the panel it already has; the live-layer LEDGER moved with it rather than vanishing.
 - [x] 2.6 The four old dialog modules deleted; every entry point either a deep link or gone.
 
 ## 3. What must not move — proved

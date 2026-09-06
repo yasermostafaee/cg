@@ -15,6 +15,7 @@ import { Tabs, type TabSpec } from '../../ui/Tabs.js';
 import { CandidateLayersSection } from '../fixedLayers/CandidateLayersSection.js';
 import { DelimitersSection } from '../inspector/DelimitersSection.js';
 import { SourcesSection } from '../sources/SourcesSection.js';
+import { BackupServerDialog } from './BackupServerDialog.js';
 import { ChannelSection } from './ChannelSection.js';
 import {
   DEFAULT_STATION_SETUP_SECTION,
@@ -279,6 +280,8 @@ export function StationSetupDialog({
    * exist before the section renders into it, and a ref does not re-render.
    */
   const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
+  /** §6 — the backup server's own small second dialog. */
+  const [addingBackup, setAddingBackup] = useState(false);
 
   /** Stable reporters, one per section, so a section's effect deps do not churn. */
   const reporters = useMemo(() => {
@@ -608,7 +611,14 @@ export function StationSetupDialog({
           idPrefix="station"
           orientation="vertical"
         >
-          <div style={styles.pane}>
+          {/*
+            THE PANE IS THE SCROLL CONTAINER now, not the modal's body: the body holds the
+            rail and the pane side by side and must not scroll them together, or the rail
+            would slide away from the section it is naming. The message region is still
+            OUTSIDE both, pinned above the footer — which is what `modal-message-in-viewport`
+            measures, and why that spec now takes its overflow reading here.
+          */}
+          <div style={styles.pane} data-station-pane="">
             {active === 'channel' && (
               <SetupSection id="channel">
                 <ChannelSection health={health} />
@@ -633,7 +643,7 @@ export function StationSetupDialog({
                       <Button
                         variant="add"
                         aria-label="Add backup"
-                        onClick={() => setBackupEnabled(true)}
+                        onClick={() => setAddingBackup(true)}
                       >
                         Add backup
                       </Button>
@@ -794,6 +804,21 @@ export function StationSetupDialog({
           </div>
         </Tabs>
       </div>
+
+      {/*
+        §6 — THE SAME SMALL SECOND DIALOG. It adds the record to the Servers DRAFT; APPLY
+        SERVERS is still what reaches the bridge, and the dialog says so.
+      */}
+      {addingBackup && (
+        <BackupServerDialog
+          onCancel={() => setAddingBackup(false)}
+          onAdd={(draft) => {
+            setBackup(draft);
+            setBackupEnabled(true);
+            setAddingBackup(false);
+          }}
+        />
+      )}
     </Modal>
   );
 }
