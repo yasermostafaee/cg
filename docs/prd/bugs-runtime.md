@@ -11479,7 +11479,12 @@ into `low.aliases` correctly (`FixedBankConfigModal.tsx:295`, `:311`); nothing i
   (ids relocated, never deleted), [[B-223]] (engineering off the operator surface),
   [[B-225]] (the notice this names the rows of), `R-028` (why the layer number stays
   visible), `operator-surface` §2 (which upheld that reasoning against a tooltip).
-- **Owed:** a Linux `gate:e2e` — this alters what renders.
+- **Owed:** ~~a Linux `gate:e2e`~~ — **DISCHARGED for `57ca77d3`**, the commit that carries
+  the change: <https://github.com/yasermostafaee/cg/actions/runs/34027203380>. Run
+  `status: completed` / `conclusion: success`; the `E2E (Playwright)` job's OWN conclusion
+  is `success` and it RAN for 593 s with its `E2E` step `success` — a `skipped` job would
+  have discharged nothing (`P-029`). `Lint • Typecheck • Test • Build` also RAN (267 s,
+  `success`), so the whole tree at that SHA is verified on Linux, not just the diff.
 
 ## [ ] B-233 — three more operator-facing surfaces still print raw item ids, and one of them cannot be fixed without widening the wire ⟨priority: medium — the same defect as [[B-232]], in three places that sweep could not honestly close⟩
 
