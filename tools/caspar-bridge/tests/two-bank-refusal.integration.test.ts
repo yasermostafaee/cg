@@ -115,6 +115,42 @@ function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
   };
 }
 
+/**
+ * 🔴 `STATION-SETUP-02` §R3 — WAIT FOR THE BRIDGE'S OWN STARTUP HOUSEKEEPING TO LAND.
+ *
+ * `R-022` re-asserts `MIXER <ch>-<layer> VOLUME 1` on EVERY declared row on the first sweep
+ * tick after the server goes live (`#reassertDeclaredVolumes`, one-shot per process). That is
+ * a REAL command on the wire, sent in every boot — and it lands on layer 95, the very layer the
+ * MIGRATES spec below asserts sees "nothing at all".
+ *
+ * Measured (12/12 rounds, idle box): the re-assert reaches the mock 140–160 ms after HEALTHY
+ * (the 150 ms `sweepMs` tick), while the spec's trace read happened 2–12 ms after HEALTHY. So
+ * the spec passed only when its read WON A RACE against a timer, and lost it once under gate
+ * load, where a 492 ms test put the read after the tick (`gate-20260906T134813Z-18848.log`).
+ * The command was SENT, not observed late — `traceFlush` is a barrier, and the line is in every
+ * trace given 600 ms.
+ *
+ * So `boot()` now waits until the re-assert has landed in full — a deterministic barrier on the
+ * wire, not a widened window — and the MIGRATES spec measures the MIGRATION's traffic alone,
+ * from a baseline taken after it. What the spec claims is unchanged: the re-homed row touches
+ * the old layer not at all. What changed is that the claim is no longer conflated with the
+ * boot-time blanket that was never the migration's.
+ */
+async function awaitStartupVolumeReassert(): Promise<void> {
+  const expected = [...fixedBankSlots(BANK)].length;
+  const deadline = Date.now() + HEALTH_MS;
+  for (;;) {
+    const lines = await recvLines();
+    if (lines.filter((l) => /^MIXER 1-\d+ VOLUME 1$/.test(l)).length >= expected) return;
+    if (Date.now() > deadline) {
+      throw new Error(
+        `the R-022 startup volume re-assert did not land within ${String(HEALTH_MS)} ms`,
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
 async function boot(): Promise<CasparRuntime> {
   const oscPort = await freeUdpPort();
   tracePath = path.join(
@@ -133,6 +169,7 @@ async function boot(): Promise<CasparRuntime> {
   r.templateImport(BED, HTML);
   r.templateImport(SUPER, HTML);
   await r.whenServerHealthy(HEALTH_MS);
+  await awaitStartupVolumeReassert();
   return r;
 }
 
@@ -179,6 +216,10 @@ it('🔴 a retained BED held against an operator row MIGRATES to a bed row, repo
     },
   ];
 
+  // §R3 — the baseline: everything on the wire BEFORE the migration, which by now includes the
+  // startup volume blanket `boot()` waited for. Only lines after this index are the migration's.
+  const baseline = (await recvLines()).length;
+
   const result = await r.restore(retained);
 
   expect(result.restored).toBe(1);
@@ -206,8 +247,12 @@ it('🔴 a retained BED held against an operator row MIGRATES to a bed row, repo
     happen is either half of the on-air pair: no `PLAY` on the new row, and NOTHING AT ALL
     on the old one — a producer surviving from before the upgrade is left exactly as it is,
     for the operator to clear through the bank's own door.
+
+    §R3 — measured from the baseline, so the claim is about the MIGRATION's traffic. The
+    boot-time volume blanket (`R-022`) legitimately names 1-95 and is excluded by having
+    been waited for, not by widening anything.
   */
-  const lines = await recvLines();
+  const lines = (await recvLines()).slice(baseline);
   expect(lines.filter((l) => /^CG 1-2 PLAY/.test(l))).toEqual([]);
   expect(lines.filter((l) => /\b1-95\b/.test(l))).toEqual([]);
 }, 40_000);
