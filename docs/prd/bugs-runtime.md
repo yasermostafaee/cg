@@ -10613,7 +10613,7 @@ the fix is a ceiling rather than a smaller share, so the width is deterministic.
   Cross-checked against the registry's dated pointer — _"Next free after this session is
   `B-224`"_ — headings and pointer AGREE. One number taken.
 
-## [~] B-225 — CasparCG restarting under a running bridge empties air and the console says nothing: the reconnect resets every row to IDLE, the browser mirrors that back as `cleared`, and nothing distinguishes "the server restarted" from "the socket blinked" ⟨priority: high — with NSSM auto-restart the channel returns emitting a valid, correctly-timed BLACK picture, which is not a fault to anything downstream⟩ — FILED 2026-09-05 by `RESTART-RESTORE-01`; **CLOSED IN CODE 2026-09-06 by `RESTART-NOTICE-01` §B** on the owner's choice of option (2), DETECT AND SAY; the plant check is the OWNER's (§D below) and a Linux `gate:e2e` is OWED
+## [~] B-225 — CasparCG restarting under a running bridge empties air and the console says nothing: the reconnect resets every row to IDLE, the browser mirrors that back as `cleared`, and nothing distinguishes "the server restarted" from "the socket blinked" ⟨priority: high — with NSSM auto-restart the channel returns emitting a valid, correctly-timed BLACK picture, which is not a fault to anything downstream⟩ — FILED 2026-09-05 by `RESTART-RESTORE-01`; **CLOSED IN CODE 2026-09-06 by `RESTART-NOTICE-01` §B** on the owner's choice of option (2), DETECT AND SAY; Linux `gate:e2e` DISCHARGED for `c4477d1c` (carries `0e4aae58`) — <https://github.com/yasermostafaee/cg/actions/runs/34000690814> (`E2E (Playwright)` RAN 626 s, `success`; `Lint • Typecheck • Test • Build` RAN 523 s, `success`; read 2026-09-06); the plant check is the OWNER's (§D below) and remains OWED
 
 ### ✅ 2026-09-06 — SHIPPED: the console says so, and one press puts the rows back (`RESTART-NOTICE-01` §B)
 
@@ -10984,7 +10984,7 @@ claim.
 
 ---
 
-## [~] B-227 — 🔴 the live-seat LEDGER outlives what it describes: after a CasparCG restart the reconciler resets the row to IDLE and `#liveLayers` goes on naming layers whose producers are gone, so `#ownsLiveSeats` reads TRUE for a row the console shows stopped — and an UPDATE on it puts bare video on air ⟨priority: HIGHEST — a configuration verb seating producers over black, on a row nobody has taken, after an event the operator was never told about⟩ — FILED AND CLOSED IN CODE 2026-09-06 by `RESTART-NOTICE-01` §A; a Linux `gate:e2e` is OWED
+## [~] B-227 — 🔴 the live-seat LEDGER outlives what it describes: after a CasparCG restart the reconciler resets the row to IDLE and `#liveLayers` goes on naming layers whose producers are gone, so `#ownsLiveSeats` reads TRUE for a row the console shows stopped — and an UPDATE on it puts bare video on air ⟨priority: HIGHEST — a configuration verb seating producers over black, on a row nobody has taken, after an event the operator was never told about⟩ — FILED AND CLOSED IN CODE 2026-09-06 by `RESTART-NOTICE-01` §A; Linux `gate:e2e` DISCHARGED for `c4477d1c` (carries `0e4aae58`) — <https://github.com/yasermostafaee/cg/actions/runs/34000690814> (`E2E (Playwright)` RAN 626 s, `success`; `Lint • Typecheck • Test • Build` RAN 523 s, `success`; read 2026-09-06)
 
 **Found** by `RESTART-NOTICE-01` §A while acting on [[B-225]]'s findings; **measured at the wire**, not
 inferred. It is [[B-161]]'s defect reached through a stale BELIEF instead of through the rehearse flag
@@ -11071,7 +11071,7 @@ the row to read stopped; press UPDATE with any input change.
 
 ---
 
-## [~] B-228 — 🔴 REMOVE ALL's gate omits BOTH exemptions the per-row REMOVE and the bridge apply, so the bulk button is disabled for a press the bridge would accept — the exact UI↔wire disagreement `#removeRefusal`'s own doc says must not exist ⟨priority: high — it is the same withheld-graceful-remedy shape as [[B-226]], and it stood behind a RED Linux `e2e` on `dev`⟩ — FILED AND CLOSED IN CODE 2026-09-06 by `RESTART-NOTICE-01` (owner: "close it"); a Linux `gate:e2e` is OWED
+## [~] B-228 — 🔴 REMOVE ALL's gate omits BOTH exemptions the per-row REMOVE and the bridge apply, so the bulk button is disabled for a press the bridge would accept — the exact UI↔wire disagreement `#removeRefusal`'s own doc says must not exist ⟨priority: high — it is the same withheld-graceful-remedy shape as [[B-226]], and it stood behind a RED Linux `e2e` on `dev`⟩ — FILED AND CLOSED IN CODE 2026-09-06 by `RESTART-NOTICE-01` (owner: "close it"); Linux `gate:e2e` DISCHARGED for `c4477d1c` — <https://github.com/yasermostafaee/cg/actions/runs/34000690814> (`E2E (Playwright)` RAN 626 s, `success`; `Lint • Typecheck • Test • Build` RAN 523 s, `success`; read 2026-09-06). **`dev`'s Linux `e2e` is GREEN again** — the two runs this item named as red are superseded by this one
 
 ### ✅ 2026-09-06 — SHIPPED: the bridge publishes the exemption; both surfaces read it
 
@@ -11226,12 +11226,14 @@ default); the only on-air row is the restore-blocked seed.
   [[B-212]] (the orphan the second exemption exists for), `R-021` stage 4 d1 (the first exemption's
   rule), [[B-122]] (the prohibition the `:386` comment correctly honours), `P-028` (why the gate could
   not catch it).
-- **Owed:** nothing built. `dev`'s Linux `e2e` is RED until this is fixed — runs
-  <https://github.com/yasermostafaee/cg/actions/runs/33992738274> (`b07d2fad`) and
+- **Owed:** ~~nothing built~~ — CLOSED, see above. `dev`'s Linux `e2e` was RED from `b07d2fad` until
+  this landed — runs <https://github.com/yasermostafaee/cg/actions/runs/33992738274> (`b07d2fad`) and
   <https://github.com/yasermostafaee/cg/actions/runs/33997761591> (`0e4aae58`), both `E2E (Playwright)`
-  `failure`, same single test, `Lint • Typecheck • Test • Build` `success` in both. **Every
-  `gate:e2e` debt on `dev` is therefore undischargeable until this lands**, including [[B-225]]'s and
-  [[B-227]]'s.
+  `failure`, same single test, `Lint • Typecheck • Test • Build` `success` in both. Every `gate:e2e`
+  debt on `dev` was undischargeable across that span, [[B-225]]'s and [[B-227]]'s included; all three
+  are discharged by `c4477d1c`'s run. ⭐ **Worth keeping: for two commits `dev` carried a green `ci`
+  and a red `e2e`, and the only thing standing between that and the owner's end-of-day merge was
+  somebody reading the run.**
 - **Number:** highest `B-` HEADING across the three bug files was **`B-227`**
   (`git grep -n -E "^## \[.\] B-2[0-9][0-9]"`); `git grep -n "B-228" HEAD` returned only the registry's
   own "Next free" pointers and one back-reference inside the `B-227` entry, and `git grep -n "B-229"

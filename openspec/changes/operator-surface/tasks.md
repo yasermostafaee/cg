@@ -136,6 +136,14 @@ Wave 1 of the landing order. Independent of every other section here.
       Remove-All to unblock Apply and then asserts "No items loaded". After Clear-All the rows
       correctly REMAIN, idle — so the assertion changes SHAPE. Assert the CLAIM (Apply became
       available AND the rows survived), which is strictly more than the old test checked.
+      🔴 **DONE FOR PART 1 ONLY, AND TICKED ANYWAY — this is where the red `e2e` came from.**
+      That file holds TWO tests. Part 1 was rewritten and now asserts Remove-All is DISABLED;
+      part 2, nine lines below, went on clicking it to unblock Apply, so the click waited the
+      full 30 s on a control that could never enable. `pnpm gate` does not run Playwright
+      (`P-028`), so nothing local could see it and the tick was taken on a green gate. Closed
+      2026-09-06 by `RESTART-NOTICE-01` ([[B-228]]): part 2 now uses Clear-All **plus** an
+      added assertion pinning the exemption count. ⚠ The lesson is the tick, not the miss — a
+      task naming ONE spec file must be verified against every test in it.
 - [x] 1.10 ⟨GATE: §5⟩ Refusals reach the operator through the command toast, worded identically
       however issued. Assert the WORDING is one string from one place, not two that match today.
 
@@ -260,8 +268,16 @@ Wave 5. **A no-op if the owner answers (A).**
 - [ ] 7.4 Real-hardware pass: **OWED BY SECTION 1, which has now landed.** R-017's refusal is on an
       on-air path: with a row on air the operator must see REMOVE held with its reason, REMOVE ALL
       withheld, and a blocked Apply naming Clear-All. Not dischargeable on the mock.
-- [ ] 7.5 **Linux `gate:e2e` OWED for section 1's commit.** It alters UI and rendering (the row's
-      verb state, the header button, the settings copy) and rewrites
+- [x] 7.5 **Linux `gate:e2e` OWED for section 1's commit — DISCHARGED 2026-09-06.** It alters UI
+      and rendering (the row's verb state, the header button, the settings copy) and rewrites
       `apps/runtime/tests/e2e/server-settings.spec.ts`. Only a COMPLETED, GREEN `e2e` job on
-      GitHub Actions for the carrying commit discharges it; a Windows pass does not. Write the run
-      URL here beside the tick.
+      GitHub Actions for the carrying commit discharges it; a Windows pass does not.
+      <https://github.com/yasermostafaee/cg/actions/runs/34000690814> — `c4477d1c`, conclusion
+      `success`; **`E2E (Playwright)` RAN, 626 s** (00:12:56 → 00:23:22 Z) and
+      **`Lint • Typecheck • Test • Build` RAN, 523 s** (00:12:56 → 00:21:39 Z), both `success`.
+      ⚠ `b07d2fad` — section 1's own commit — is an ANCESTOR of `c4477d1c` (verified with
+      `git merge-base --is-ancestor`), so the run carries this change; section 1's OWN run
+      (<https://github.com/yasermostafaee/cg/actions/runs/33992738274>) was RED on `1.9` above
+      and discharges nothing.
+      🔴 **7.4 is still OPEN and is NOT discharged by this** — the hardware pass is a different
+      debt on a different instrument, and a green mock suite says nothing about it.
