@@ -11252,7 +11252,7 @@ default); the only on-air row is the restore-blocked seed.
 HEAD` returned nothing. Cross-checked against the registry's dated pointer — _"Next free after this
   session is `B-228`"_ — headings and pointer AGREE. One number taken.
 
-## [ ] B-229 — the lock screen holds the POINTER and not the KEYBOARD: with the console locked, Tab still reaches every on-air control behind the scrim, and nothing but the overlay itself ever reads `lock.engaged` ⟨priority: high — an engaged lock is the one state in which the console promises it cannot be operated, and it can be⟩
+## [~] B-229 — the lock screen holds the POINTER and not the KEYBOARD: with the console locked, Tab still reaches every on-air control behind the scrim, and nothing but the overlay itself ever reads `lock.engaged` ⟨priority: high — an engaged lock is the one state in which the console promises it cannot be operated, and it can be⟩
 
 **What:** `LockOverlay` puts up a `position: fixed; inset: 0` scrim at `z-index: 1000` carrying
 `role="dialog"` + `aria-modal="true"` (`LockOverlay.tsx:123`), and that scrim is the whole barrier.
@@ -11307,7 +11307,44 @@ only enforcement there is. Found by `MODALS-AND-SETTINGS-01` §1 while inventory
   (the PIN's digit normalisation, unaffected).
 - **Owed:** nothing built — report only.
 
-## [ ] B-230 — `usePrompt` declares `autoFocus` on its input and the modal primitive silently takes the focus away: the lock PIN dialog opens with the caret on the ✕ ⟨priority: medium — it is the console's only PIN entry, and the operator's first keystrokes go nowhere⟩
+### ✅ IMPLEMENTED 2026-09-06 by `MODAL-CONTRACT-02` (`fface751`)
+
+**Both halves, because either alone is the defect.** The renderer trap moved to
+`ui/focusTrap.ts` and BOTH full-window surfaces call it — `Modal` composes it with its
+exits, `LockOverlay` composes it alone. `Modal.tsx`'s note justified withholding the three
+EXITS from a lock screen and that reasoning was always right; it never applied to the TRAP,
+and reading the one as the other is why the lock inherited neither.
+
+The bridge gates at `handleMessage`, the single chokepoint every request passes, and each of
+its 60 routes now declares a `LockPolicy` as a REQUIRED argument — 25 `read`, 32
+`operator`, plus `lock.release` (the way out), `stack.restore` (reconnect machinery,
+unreachable from any operator control) and `templates.import` (split on the `redelivery`
+flag the wire already carries). A CENSUS walks the whole table, so "the lock refuses
+everything" is asserted of every channel rather than sampled.
+
+⭐ **The owner declined the emergency carve-out** (2026-09-06): CLEAR, CLEAR ALL and STOP are
+refused too. The reasoning is recorded beside the rule so nobody harmonises it with
+[[B-226]] later — a lock is a DELIBERATE act with a KNOWN PIN, so the verb is two seconds
+away, whereas `B-226`'s disabled CLEAR is a system condition the operator cannot undo and
+withholding it there would strand him. Falsified against the tree first: no documented
+emergency path, operator-guide sentence or spec requires a verb to survive the lock.
+
+One exported constant, `LOCK_ENGAGED_REFUSAL`, per the `R-017` discipline. It rides the
+frame error — the one shape all 60 channels share — and `bridgeErrorFrom` passes a non-skew
+message through verbatim, so it reaches all fourteen existing `err.message` surfaces with no
+renderer change ([[B-152]]).
+
+⚠ **The MOCK takes no parity here, and that is recorded rather than missed.** `R-017`'s
+parity rule applies to a refusal the UI must RENDER; the lock's is AIR SAFETY, and the mock's
+link is a constant `offline-mock` with no socket and no playout server, so there is no air
+for it to protect. The exemption expires the day the lock grows a rule the UI must render.
+
+⚠ **A residual, named:** a dialog left OPEN when the lock engages portals to `document.body`
+and so paints above the non-portalled overlay, and both would install a trap. The bridge half
+neutralises the consequence — no intent from that dialog executes — so it is a cosmetic
+overlap rather than an air-safety hole, and it is not fixed here.
+
+## [~] B-230 — `usePrompt` declares `autoFocus` on its input and the modal primitive silently takes the focus away: the lock PIN dialog opens with the caret on the ✕ ⟨priority: medium — it is the console's only PIN entry, and the operator's first keystrokes go nowhere⟩
 
 **What:** `useDialog.tsx:171` puts `autoFocus` on the prompt's `<input>`. `Modal.tsx:306` runs
 `ref.current?.querySelector(FOCUSABLE)?.focus()` in a `useEffect` on open, and the first focusable
@@ -11352,6 +11389,39 @@ one that generalises; the second is smaller and keeps the rule in one file. Foun
 - **Cross-refs:** [[B-229]] (focus and the lock, one layer out), `Modal.tsx:365`–`369` (why the ✕ is
   the right default for every dialog that is not a form).
 - **Owed:** nothing built — report only.
+
+### ✅ IMPLEMENTED 2026-09-06 by `MODAL-CONTRACT-02` (`fface751`, `a24bc948`)
+
+🔴 **The filed diagnosis was RIGHT about the symptom and WRONG about the mechanism, and the
+difference decides the fix.** It reads "the modal primitive silently takes the focus away" —
+a one-time race at open. Measured in a real browser against `fface751~1`, driving the actual
+lock-PIN dialog:
+
+| step                              | `document.activeElement` |
+| --------------------------------- | ------------------------ |
+| dialog opens                      | `BUTTON` — the ✕         |
+| focus placed on the field BY HAND | `INPUT.cg-field`         |
+| after ONE keystroke               | `BUTTON` — the ✕ again   |
+| after TWO keystrokes              | `BUTTON` — the ✕         |
+
+The primitive's effect depended on `onClose`, which every caller passes as an INLINE ARROW —
+a new identity every render — so it tore down and set up again on EVERY COMMIT, and its setup
+moves focus. Tuning `autoFocus` to win the open-time race would have left that untouched.
+
+🔴 **AND THE SYMPTOM NOBODY HAD PREDICTED: the PIN comes out BACKWARDS.** Focus leaving and
+returning resets a controlled input's caret to 0, so each character is inserted before the
+last — the probe typed `1` then `2` and the field held **`21`**. An operator typing
+`1234` at the lock screen got `4321`, and his correct PIN was refused with nothing on
+screen explaining why. This item was filed as `medium`; on that evidence it was closer to a
+lockout.
+
+**The fix is structural.** The trap arms ONCE (`useFocusTrap`, deps `[enabled]`) and the
+dialog NOMINATES where focus lands (`data-modal-autofocus`), so exactly one thing moves
+focus and there is no race to win. The dead `autoFocus` attribute is GONE rather than left
+reading as if it worked — the same defect class as a correct comment above incorrect code.
+`tests/e2e/modal-initial-focus.spec.ts` asserts the VALUE as well as the focus, because
+`pressSequentially` re-focuses per key and focus alone reads correct at the end while the
+value is wrong.
 
 ## [ ] B-231 — a renamed bridge config file was left on the station's disk with no migration and no warning: `bridge-source-mappings.json` is still there, read by nothing ⟨priority: low — the configuration it held was silently abandoned, and the class is the one any settings consolidation will meet again⟩
 
@@ -11486,7 +11556,7 @@ into `low.aliases` correctly (`FixedBankConfigModal.tsx:295`, `:311`); nothing i
   have discharged nothing (`P-029`). `Lint • Typecheck • Test • Build` also RAN (267 s,
   `success`), so the whole tree at that SHA is verified on Linux, not just the diff.
 
-## [ ] B-233 — three more operator-facing surfaces still print raw item ids, and one of them cannot be fixed without widening the wire ⟨priority: medium — the same defect as [[B-232]], in three places that sweep could not honestly close⟩
+## [~] B-233 — three more operator-facing surfaces still print raw item ids, and one of them cannot be fixed without widening the wire ⟨priority: medium — the same defect as [[B-232]], in three places that sweep could not honestly close⟩
 
 **What:** [[B-232]] wrote the rule down and fixed the two surfaces that could be fixed from
 the renderer. Three remain, each for a different reason:
@@ -11527,3 +11597,42 @@ should not be bundled with it. Found by `MODALS-AND-SETTINGS-01`'s delta sweep.
 - **Cross-refs:** [[B-232]] (the rule and the two fixes), [[B-211]], `CLAUDE.md` golden
   rule 11.
 - **Owed:** nothing built — report only.
+
+### ✅ IMPLEMENTED 2026-09-06 by `MODAL-CONTRACT-02` (`e7d896b1`)
+
+All three go THROUGH `ui/operatorNaming.ts`, per golden rule 11 — this is application, not
+invention.
+
+**1. The restore-SKIPS strip — the WIRE widened, and it is the only one here that needed to.**
+`RestoreSkipSchema` gains `templateId` and `slot`, OPTIONAL and ADDITIVE exactly like its
+existing `detail`, so a bridge that predates this still validates and its skips render as a
+SHORTENED id (the module's documented last resort). **Producers:** one —
+`CasparRuntime.restore()`, whose six skip sites all had the `RetainedStackItem` in scope
+already carrying both fields; they spread ONE helper so the next skip reason cannot be added
+without the naming. `MockRuntime` is not a producer ([[B-108]]: test mode has no retention).
+**Consumers:** `useRestoreSkips` → the `LayersPanel` strip, and `restoreSkipReason`, which
+reads only `reason`/`detail` and is untouched.
+
+⭐ **One ripple the spec caught and reasoning had not:** the panel's template index was built
+from the STACK's items, so a skipped row's `templateId` was never fetched and the name
+rendered with the template silently missing. **Widening a wire is half a fix if the consumer
+never looks the value up.**
+
+**2. The owned-occupancy strip — NO wire change, and the contrast is the finding.** An
+occupancy warning names an item whose LOAD raised it, so that item IS on the stack and the
+`itemId → templateId` join succeeds. `B-232`'s note said this banner "holds neither the
+stack nor the registry"; it now calls those hooks itself rather than taking props, because
+nothing here is mirrored on a second surface (the reason `B-232` threaded `emptiedAirRows`
+from `App` does not apply). The id is RELOCATED not deleted — the full pair is on the row's
+`title` — and the LAYER NUMBER stays in the sentence per `R-028`.
+
+**3. The stranded-release toast** now names the layers the operator actually pressed Release
+on. Here the id is DROPPED rather than relocated: a toast has no `title` and no copy button,
+and there is nothing to relocate — the SUBJECT of the sentence is the coordinate his button
+was labelled with.
+
+⚠ **The three exemptions hold** (the audit `IdChip`, `title=` tooltips, `ownerLabelFor`),
+with one residual named rather than changed: `ownerLabelFor` falls back to the FULL raw
+`itemId` when an item is on the stack but its template is unknown, and that value reaches
+"Seated for …" on the Live Sources tab. It is the same last-resort shape `operatorRowName`
+already blesses, but `shortId` would serve it better. Left alone under the brief.
