@@ -2602,7 +2602,7 @@ runs it before writing code.
 **Env:** Runtime + bridge, owner's plant. Source: `DEBT.md:119`, `DEBT.md:248` (the full
 write-up), `DEBT.md:409`.
 
-## [ ] B-116 — every bridge boot warns that a template is corrupt and tells the operator to re-import it, because `delimiters.json` is stored inside the templates directory ⟨priority: medium⟩
+## [~] B-116 — every bridge boot warns that a template is corrupt and tells the operator to re-import it, because `delimiters.json` is stored inside the templates directory ⟨priority: medium⟩ — FIXED 2026-09-06 by `STATION-SETUP-02` §5 (`openspec/changes/station-setup/`): the registry admits only its OWN records (`isRegistryRecordName`, a rule from the writer's shape), nothing moves on disk; Linux `gate:e2e` for the commit OWED
 
 **What:** `DelimiterStore` persists to `delimiters.json` **inside** `--templates-dir`
 (`~/.cg-runtime/bridge-templates/`), and `TemplateRegistry`'s loader reads every `*.json` in that
@@ -2639,6 +2639,21 @@ first operator to set a raster turns one false boot warning into two**, so a fix
 filename by name rather than fixing the placement rule would be wrong on the day it landed.
 `source-catalog-store.ts:42`–`51` already writes the rule down correctly and names this item while
 doing so; the two stores above predate it and never got it.
+
+**CLOSED 2026-09-06 by `STATION-SETUP-02` §5 — by a RULE, not a filename, and without a move.**
+The channel raster's first UI (Station setup ▸ Channel raster) is the control that would have
+created `channel-settings.json` on this host for the first time, so this was fixed as a
+precondition. Of the two candidate fixes above, MOVING the files is a data migration (an existing
+`delimiters.json` has to be moved or is silently abandoned) and was not authorised; the registry
+side was chosen, as a rule derived from the writer: `#fileFor` names every record
+`<slug>-<12 hex of sha256(id)>.json`, and `loadPersisted` now admits a file iff
+`isRegistryRecordName` matches that shape (`template-registry.ts`). A sibling store's file is
+neither loaded nor warned about; a corrupt record named as the registry names them still warns
+with the same message. Red-first (`tests/template-registry-siblings.test.ts`): both files written
+by the REAL `DelimiterStore` and `ChannelSettingsStore` into one directory showed `skipped: 2`
+before the fix and `{ loaded: 0, skipped: 0 }` with no warning after; the registry's own record
+beside them still loads. The placement rule `source-catalog-store.ts` states stands for NEW
+stores — the two existing files stay where they are. All three acceptance bullets hold.
 
 ## [x] B-117 — a reachability gate disabled the ENTIRE console in TEST MODE, because it asked "is a real CasparCG healthy?" instead of "will this command be executed?" ⟨priority: medium⟩ — **CLOSED 2026-08-03 WITHOUT ANY WORK BEING DONE: the defect was already gone when this item was filed, and the item says so in its own text. See the closing note at the foot of this entry.**
 

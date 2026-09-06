@@ -32,12 +32,12 @@ import {
  *
  * ── ⚠ WHERE THE FILE LIVES ─────────────────────────────────────────────────
  *
- * NOT in `templatesDir`, and the trap is closer here than for any other config
- * because this file is ABOUT templates: `TemplateRegistry.loadPersisted` reads
- * EVERY `*.json` there as a template (`template-registry.ts:75,87` — a bare
- * `.endsWith('.json')` include-filter is the only filter there is), so a file
- * placed beside the templates becomes a "skipping unusable persisted template"
- * warning on every boot (B-116). It is resolved from its own
+ * NOT in `templatesDir`, and the trap was closest here because this file is ABOUT
+ * templates: `TemplateRegistry.loadPersisted` used to read EVERY `*.json` there as
+ * a template, so a file placed beside the templates became a "skipping unusable
+ * persisted template" warning on every boot (B-116 — closed 2026-09-06: the registry
+ * now admits only its own records, `isRegistryRecordName`). The placement rule still
+ * stands for a new store. This one is resolved from its own
  * `--source-assignments-path` flag, defaulting to
  * `~/.cg-runtime/bridge-source-assignments.json`.
  *

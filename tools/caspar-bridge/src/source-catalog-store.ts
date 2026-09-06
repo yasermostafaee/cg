@@ -41,13 +41,14 @@ import { EMPTY_SOURCE_CATALOG, SourceCatalogSchema, type SourceCatalog } from '@
  *
  * ── ⚠ WHERE THE FILE LIVES ─────────────────────────────────────────────────
  *
- * NOT in `templatesDir`. `TemplateRegistry.loadPersisted` reads EVERY `*.json`
- * there as a template (`template-registry.ts:75,87` — a bare `.endsWith('.json')`
- * include-filter is the only filter there is), so a config file placed beside
- * the templates becomes a "skipping unusable persisted template" warning on
- * every boot. That is B-116, already filed for `delimiters.json` landing in the
- * same trap, and this file does not repeat it: it is resolved from its own
- * `--source-catalog-path` flag, defaulting to
+ * NOT in `templatesDir`. `TemplateRegistry.loadPersisted` used to read EVERY `*.json`
+ * there as a template, so a config file placed beside the templates became a
+ * "skipping unusable persisted template" warning on every boot. That was B-116
+ * (`delimiters.json`, and latently `channel-settings.json`), CLOSED 2026-09-06 by a
+ * rule in the registry — it now admits only files it would have written
+ * (`isRegistryRecordName`). The placement rule still stands for a NEW store: a
+ * config file does not belong beside the templates, and this one is resolved from
+ * its own `--source-catalog-path` flag, defaulting to
  * `~/.cg-runtime/bridge-source-catalog.json`.
  */
 

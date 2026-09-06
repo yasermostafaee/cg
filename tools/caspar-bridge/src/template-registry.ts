@@ -30,6 +30,45 @@ const PersistedTemplateSchema = z.object({
 });
 
 /**
+ * 🔴 `B-116` — **a template record is a file THIS registry would have written, and
+ * nothing else.** `#fileFor` names every record `<slug>-<12 hex of sha256(id)>.json`;
+ * this is that shape as a predicate, and `loadPersisted` admits a file iff it matches.
+ *
+ * Two sibling stores persist INTO the same directory — `DelimiterStore`
+ * (`delimiters.json`) and `ChannelSettingsStore` (`channel-settings.json`) — and the loader
+ * used to read every `*.json` there as a template, so each boot warned that a template was
+ * corrupt and told the operator to re-import it, on a machine where nothing was wrong. The
+ * second file had never been seen only because it is written on the first raster change.
+ *
+ * It is a RULE about the writer's shape, deliberately not a list of filenames to skip: a
+ * list is wrong on the day the next sibling lands (it was — the second file had already
+ * landed in code). And the files are not moved, because that is a data migration and not
+ * this registry's call. The slug is bounded at 60 characters of `[A-Za-z0-9._-]`, the hash
+ * is exactly 12 lowercase hex — both from `#fileFor`, which is the only writer.
+ */
+const RECORD_NAME = /^[A-Za-z0-9._-]{1,60}-[0-9a-f]{12}\.json$/;
+
+/** Whether a directory entry is a record this registry wrote (see {@link RECORD_NAME}). */
+export function isRegistryRecordName(name: string): boolean {
+  return RECORD_NAME.test(name);
+}
+
+/**
+ * The file name for a template id: a bounded sanitised slug plus a hash of the FULL id for
+ * uniqueness — never decoded back (the id lives in the record). `IdSchema` permits
+ * filename-hostile strings of any length, which is why the slug is sanitised and bounded.
+ *
+ * Exported so a test that plants a record on disk names it the way the registry does; the
+ * loader admits nothing else (`B-116`), and a fixture with its own naming would be testing a
+ * looseness the loader no longer has.
+ */
+export function registryRecordFileName(templateId: string): string {
+  const slug = templateId.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60);
+  const hash = createHash('sha256').update(templateId, 'utf8').digest('hex').slice(0, 12);
+  return `${slug}-${hash}.json`;
+}
+
+/**
  * Store of imported templates for the bridge (B-038 Phase 2), PERSISTED to
  * disk since R-028 (owner call o1: the BRIDGE owns the template catalogue —
  * one bridge, many browsers, and a bridge restart must not empty the library).
@@ -47,7 +86,8 @@ const PersistedTemplateSchema = z.object({
  * `savePersistedConnection` stance). A corrupt individual file at boot is
  * warned about and SKIPPED, never fatal: losing one template's durability
  * must not take the whole bridge down, and the browser that imported it can
- * re-deliver it on reconnect.
+ * re-deliver it on reconnect. A file that is NOT a record of this registry's
+ * (`isRegistryRecordName`) is neither loaded nor warned about — see `B-116`.
  *
  * Registry contents are DURABILITY, not row identity: what is ON A LAYER
  * after a bridge restart is decided by restore/occupancy, never inferred from
@@ -84,7 +124,9 @@ export class TemplateRegistry {
     let skipped = 0;
     const records: { info: TemplateInfo; html: string; importedAt: string }[] = [];
     for (const name of names) {
-      if (!name.endsWith('.json')) continue;
+      // `B-116` — only the registry's OWN records. A sibling store's config file in this
+      // directory is not a template and must not be reported as a corrupt one.
+      if (!isRegistryRecordName(name)) continue;
       const file = path.join(this.#persistDir, name);
       try {
         const record = PersistedTemplateSchema.parse(JSON.parse(fs.readFileSync(file, 'utf8')));
@@ -192,15 +234,9 @@ export class TemplateRegistry {
     }
   }
 
-  /**
-   * The persisted file for an id. `IdSchema` permits filename-hostile strings
-   * of any length, so the name is a bounded sanitised slug plus a hash of the
-   * FULL id for uniqueness — never decoded back (the id lives in the record).
-   */
+  /** The persisted file for an id — see {@link registryRecordFileName}. */
   #fileFor(templateId: string): string {
-    const slug = templateId.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60);
-    const hash = createHash('sha256').update(templateId, 'utf8').digest('hex').slice(0, 12);
     // this.#persistDir is checked by every caller before reaching here.
-    return path.join(this.#persistDir ?? '', `${slug}-${hash}.json`);
+    return path.join(this.#persistDir ?? '', registryRecordFileName(templateId));
   }
 }
