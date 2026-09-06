@@ -2595,3 +2595,49 @@ it is the same defect with a second filename and a new number would have split o
 
 ⇒ **Next free after this session is `B-232`** (`B-001` … `B-231`, no gaps), **`D-161`**, **`C-034`**
 and **`P-044`** (unchanged).
+
+### 2026-09-06 — `B-232` · `B-233` (`MODALS-AND-SETTINGS-01`, delta: the restart notice speaks in ids)
+
+| kind | id      | one line                                                                                                        | home                               | status                   |
+| ---- | ------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------ |
+| `B-` | `B-232` | the emptied-air notice listed its rows as `1-9 · e506e319-…` — a channel-layer and a raw template UUID          | [bugs-runtime.md](bugs-runtime.md) | FILED and CLOSED IN CODE |
+| `B-` | `B-233` | three more operator-facing surfaces still print raw item ids; one needs the wire widened before it can be fixed | [bugs-runtime.md](bugs-runtime.md) | FILED, report only       |
+
+The owner reported `B-232` from the plant and asked for it to be fixed **with the rule
+stated, not as a one-off** — it being the third complaint of the same shape they could name
+from memory. The sweep found it was the **fourth**: the audit log (`B-210`/`B-211`), the
+output alarm (`B-223`), the stack row and Inspector (`useTemplateIndex`'s own header), and
+this. So the rule is now `CLAUDE.md` golden rule 11 and one module, `ui/operatorNaming.ts`.
+
+⭐ **Two numbers, and the split between them is the honest part.** `B-232` fixed the two
+surfaces the renderer can fix; `B-233` carries the three it cannot — the restore-SKIPS
+strip needs `RestoreSkipSchema` widened (a skipped row is by definition not on the stack,
+so there is nothing to join against), the owned-occupancy strip needs a new prop AND new
+copy, and the stranded-release toast is on another tab. Sweeping those in would have meant
+a schema change and a copy decision the brief did not authorise.
+
+⚠ **A second defect was found in the fix itself and is recorded as a PRECAUTION, not an
+incident.** The first spelling joined the names into one text node, which leaves the
+placement of the `·` separators and the trailing coordinate to the bidi algorithm rather
+than to the author — Persian row names beside Latin template names is exactly that mixture.
+The owner raised a display concern, then **withdrew it**; the `<bdi>` isolation was kept on
+its own merits under the standing Persian/RTL rule, and the comments and specs that had
+cited it as a plant report were corrected rather than left standing.
+
+⭐ **And one claim was checked instead of believed.** The plant screenshot showed `Bed 1`
+where the table read «لوگوی اصلی», which looked like an alias failing to resolve for the bed
+half. Reading the station's own `bridge-fixed-layers.json` settled it: `low.aliases` is
+absent, layer 9 is a bed nobody has named, and the table's first row is layer 99 — a
+different row. Nothing was wrong, and a fix would have been damage.
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the
+three bug files was **`B-231`** (`bugs-runtime.md`, filed earlier the same day by this
+session, `git grep -n -E "^## \[.\] B-2[0-9][0-9]"`); `git grep` for `B-232` / `B-233`
+returned only this file's own "Next free" pointer. The duplicate audit printed exactly
+`B-056` and `B-080`. **Cross-check against the dated pointer:** the entry above ends _"Next
+free after this session is `B-232`"_ — headings and pointer **AGREE**. Two numbers taken,
+both filed in `bugs-runtime.md`. No `C-`, `D-` or `P-` number was taken; nothing was deleted
+or translated.
+
+⇒ **Next free after this session is `B-234`** (`B-001` … `B-233`, no gaps), **`D-161`**,
+**`C-034`** and **`P-044`** (unchanged).

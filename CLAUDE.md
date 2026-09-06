@@ -84,6 +84,29 @@ Persian / RTL is a core requirement.
     holds seats) at EVERY door — `update`, `swapLiveSource`, `setActiveLook`, a volume raise —
     and gate the one path the verbs share rather than making two paths agree.
 
+11. 🔴 **AN OPERATOR-FACING SURFACE NAMES THINGS IN THE OPERATOR'S WORDS.** Internal ids —
+    item ids, template UUIDs, slot indexes, persistent consumer ids — live behind a `title`
+    or on a TECHNICAL surface. They never appear in the sentence he reads under pressure.
+    The one canonical composition is `renderer/ui/operatorNaming.ts` (`operatorRowName`);
+    call it, never compose a label locally.
+    ⚠ **The id is not DELETED, it is RELOCATED.** `B-211` settled that half and it still
+    holds: a name can be renamed or repeated and an id cannot, so the audit record keeps
+    both — shortened for the eye, complete in the `title` and on a copy button. The rule is
+    about which of the two is in the SENTENCE.
+    ⭐ **Keep the real LAYER NUMBER visible** where a row is named. `R-028`'s reason —
+    _"an operator may need it to clear that layer by hand"_ — is about the moment the
+    console is NOT helping, so a hover does not discharge it; `operator-surface` §2 upheld
+    exactly this when it declined to hide the number behind a tooltip.
+    ⚠ **And isolate every name you render.** Row names are Persian, template names are
+    often Latin, and separators and coordinates are NEUTRALS: joined into one text node
+    their placement is decided by the bidi algorithm rather than by you. Each piece of
+    operator data goes in its own `<bdi>` (`ui/OperatorNames.tsx`) and the line itself stays
+    LTR chrome — `dir="auto"` on the line would flip the English clauses beside the name.
+    **Four surfaces learned this separately before it was written down** — `B-210`/`B-211`
+    (the audit log), `B-223` (the output alarm), `useTemplateIndex`'s own header (the stack
+    row and Inspector), and `B-232` (the emptied-air notice, measured on the plant as
+    `1-9 · e506e319-…`). A rule nobody can point at is re-learned per surface.
+
 ## Where features go
 
 | Feature kind                                    | Location                                                                                                                                                                                                                                                                                                                           |

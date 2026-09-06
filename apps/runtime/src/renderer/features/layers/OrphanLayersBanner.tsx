@@ -181,6 +181,15 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
             return (
               <div key={name} style={styles.row}>
                 <span>
+                  {/*
+                    ⚠ `B-233` — THIS ITEM ID IS STILL RAW, and deliberately left so rather
+                    than half-fixed. Naming the owning item needs the STACK (to reach its
+                    templateId) and the REGISTRY, and this banner holds neither; naming it
+                    by its LAYER instead would just repeat the coordinate the sentence has
+                    already printed two words earlier. Both halves are a change to what
+                    this strip is handed and a decision about its copy, which is more than
+                    `B-232`'s sweep should take on its own authority.
+                  */}
                   ⚠ Layer {name} may still show a previous session’s graphic on the primary under
                   item “{w.itemId}”{' '}
                   <span style={styles.detail}>

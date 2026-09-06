@@ -1,13 +1,3 @@
-import type { AuditEntry } from '@cg/shared-schema';
-import {
-  defaultLayerAlias,
-  isFixedBankLayer,
-  layerAlias,
-  type FixedLayerBank,
-  type TemplateInfo,
-} from '@cg/shared-ipc';
-import { templateDisplayName } from '../library/templateName.js';
-
 /**
  * `B-210` / `B-211` — how one audit row is READ.
  *
@@ -34,7 +24,27 @@ import { templateDisplayName } from '../library/templateName.js';
  * Kept React-free so the two facts above are unit-testable: a fixed instant in a fixed
  * zone renders a fixed string, and a fixed pair of records tells the date band when to
  * appear.
+ *
+ * ── WHAT MOVED OUT, AND WHY THIS FILE STILL EXPORTS IT ──────────────────────
+ *
+ * `shortId`, `placeName` and `templateName` are no longer defined here: `B-232` found the
+ * FOURTH surface printing a raw id at an operator, so the naming rule they implement now
+ * lives where a rule belongs — `ui/operatorNaming.ts`, which states it in one place and
+ * serves every surface. They are re-exported rather than re-imported at each call site so
+ * this file's readers and tests keep one path to them. It is the same implementation; a
+ * second copy is precisely what the move exists to prevent.
+ *
+ * What stays here is what is genuinely the AUDIT LOG's own: the local-clock reading of a
+ * record's UTC stamp.
  */
+
+export {
+  placeName,
+  shortId,
+  templateName,
+  type NameableSlot,
+  type OperatorRowName,
+} from '../../ui/operatorNaming.js';
 
 export interface AuditTimeParts {
   /** `YYYY-MM-DD` in the display zone — shown only where it changes down the list. */
@@ -73,44 +83,4 @@ export function auditTimeParts(ts: string, timeZone?: string): AuditTimeParts {
     time: `${get('hour')}:${get('minute')}:${get('second')}`,
     utc: ts,
   };
-}
-
-/**
- * A UUID-shaped id, shortened for display: an `item-` prefix is kept (it says what KIND
- * of id this is), then the first eight hex characters, then an ellipsis. Anything short
- * enough to read is left alone. The full id always travels beside it — see the header.
- */
-export function shortId(id: string): string {
-  const match = /^(item-)?([0-9a-f]{8})-[0-9a-f-]{20,}$/i.exec(id);
-  if (match === null) return id.length > 20 ? `${id.slice(0, 19)}…` : id;
-  return `${match[1] ?? ''}${match[2] ?? ''}…`;
-}
-
-/**
- * What the operator calls the layer an entry names.
- *
- * A layer inside the declared bank is the ROW the operator sees — its configured alias,
- * else the default `Layer N` / `Bed N`, through the SAME two functions the layer table
- * uses (never a second spelling of the naming rule). A layer outside every bank is named
- * as CasparCG names it, with the fact that it is not a row said out loud: the two items
- * on layers 60 and 61 on 2026-09-04 were exactly that, and every surface that called them
- * "stack items" sent the operator to look for rows that did not exist.
- */
-export function placeName(slot: AuditEntry['slot'], bank: FixedLayerBank | null): string | null {
-  if (slot === undefined) return null;
-  if (bank !== null && isFixedBankLayer(bank, slot.channel, slot.layer)) {
-    return layerAlias(bank, slot.layer) ?? defaultLayerAlias(bank, slot.layer);
-  }
-  const channel = bank === null || bank.channel !== slot.channel ? `${String(slot.channel)}-` : '';
-  return `layer ${channel}${String(slot.layer)} (not a row)`;
-}
-
-/** The template's display name — the one rule every surface uses — or null when unknown. */
-export function templateName(
-  templateId: string | undefined,
-  templates: ReadonlyMap<string, TemplateInfo>,
-): string | null {
-  if (templateId === undefined) return null;
-  const info = templates.get(templateId);
-  return info === undefined ? null : templateDisplayName(info);
 }

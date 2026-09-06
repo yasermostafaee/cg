@@ -4,6 +4,8 @@ import { Button } from '../../ui/Button.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
+import { useOperatorNames } from '../../hooks/useOperatorNames.js';
+import { OperatorNames } from '../../ui/OperatorNames.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import { runCommand } from '../status/commandFeedback.js';
 
@@ -33,6 +35,18 @@ const styles = {
   detail: { color: colors.text, fontSize: '0.78rem' },
   rows: { color: colors.text, fontSize: '0.78rem', margin: 0, paddingInlineStart: '1.1rem' },
   refusal: { color: '#FCD34D' },
+  /**
+   * `B-232` — the layer coordinate, QUIET but present.
+   *
+   * Muted and a size down, so the operator's own words carry the line and the number
+   * does not compete with them — but rendered, not hidden behind a hover, because
+   * `R-028` names the one moment it is needed: clearing that layer BY HAND, which is
+   * done when the console is not helping and a pointer may not be.
+   *
+   * `dir="ltr"` on the element: `1-9` is a coordinate, and in a line whose names are
+   * Persian the bidi algorithm would otherwise be free to reorder it.
+   */
+  layer: { color: colors.textMuted, fontSize: '0.72rem' },
 } as const;
 
 /** How each refusal reads to an operator. Every member of the union, named. */
@@ -44,10 +58,17 @@ const REFUSAL_TEXT: Record<EmptiedAirRefusal, string> = {
   refused: 'the take was refused',
 };
 
-const rowLabel = (row: Notice['rows'][number]): string =>
-  row.slot === undefined
-    ? row.templateId
-    : `${String(row.slot.channel)}-${String(row.slot.layer)} · ${row.templateId}`;
+/*
+  🔴 `B-232` — THIS LINE USED TO READ `1-9 · e506e319-6e68-4603-a5f4-290b21616250`.
+
+  A channel-layer and a raw template UUID, in the one sentence an operator reads when air
+  has just gone empty under him. He knows those rows as «لوگوی اصلی» and «زیرنویس اصلی» —
+  the NAME column two panels below — and has never typed a UUID in his life.
+
+  The naming now comes from `ui/operatorNaming.ts`, which states the rule for every
+  surface rather than for this one. See its header for the four places this same defect
+  has been reported from.
+*/
 
 /**
  * 🔴 **`B-225` — THE PLAYOUT SERVER STOPPED CARRYING WHAT THIS CONSOLE PUT ON AIR.**
@@ -100,6 +121,9 @@ export function EmptiedAirNotice({ notice }: Props): JSX.Element | null {
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
   const refusal = casparRefusalReason(linkDown, casparReach);
+  // `B-232` — above the early return with the rest of the hooks; an empty list when there
+  // is no notice, which is what the strip is doing every second it is not needed.
+  const nameOf = useOperatorNames(notice?.rows ?? []);
 
   if (notice === null) return null;
 
@@ -184,14 +208,30 @@ export function EmptiedAirNotice({ notice }: Props): JSX.Element | null {
           </span>
         </div>
         <ul style={styles.rows}>
-          {notice.rows.map((row) => (
-            <li key={row.itemId}>
-              {rowLabel(row)}
-              {row.refusal !== undefined && (
-                <span style={styles.refusal}> — not put back: {REFUSAL_TEXT[row.refusal]}</span>
-              )}
-            </li>
-          ))}
+          {notice.rows.map((row) => {
+            const name = nameOf(row);
+            return (
+              /*
+                The ids go on the `title` and nowhere else. Nothing forensic is lost —
+                `B-211`'s rule that an id is the only unrepeatable handle still holds; it
+                is about which of the two is in the SENTENCE.
+              */
+              <li key={row.itemId} title={name.title} data-emptied-row="">
+                <OperatorNames name={name} />
+                {name.layer !== null && (
+                  <>
+                    {' '}
+                    <span style={styles.layer} dir="ltr" data-emptied-layer="">
+                      {name.layer}
+                    </span>
+                  </>
+                )}
+                {row.refusal !== undefined && (
+                  <span style={styles.refusal}> — not put back: {REFUSAL_TEXT[row.refusal]}</span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </div>
       {confirmDialog}

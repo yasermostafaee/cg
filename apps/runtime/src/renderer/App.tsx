@@ -305,6 +305,9 @@ export function App(): JSX.Element {
                     {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed
                     Layers panels, with the playout system's layers on their own tab. */}
                     <LayersPanel
+                      /* `B-232` (owner) — the SAME notice the strip above renders, so the
+                         marked rows and the strip's list are one reading, not two. */
+                      emptiedAirRows={emptiedAir?.rows ?? []}
                       onSelectionChange={setSelectedId}
                       selectedId={selectedId}
                       layout={layout}

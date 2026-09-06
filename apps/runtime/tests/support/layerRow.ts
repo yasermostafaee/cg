@@ -170,6 +170,8 @@ export async function renderLayerRow(options: {
   defaultAlias?: string;
   /** Render the row as already SELECTED (drives the toggle-select assertions). */
   selected?: boolean;
+  /** `B-232` — render the row as one the emptied-air notice names. */
+  emptiedAir?: boolean;
   /** Observe what a row click reports back to the panel. */
   onSelect?: (itemId: string | null) => void;
   onUpdate?: (itemId: string) => Promise<{ accepted: boolean }>;
@@ -255,6 +257,7 @@ export async function renderLayerRow(options: {
           rehearsing: options.rehearsing ?? false,
           defaultAlias: options.defaultAlias ?? 'Layer 1',
           selected: options.selected ?? false,
+          emptiedAir: options.emptiedAir ?? false,
           dirty: options.dirty ?? false,
           seatedPlates: options.seatedPlates ?? [],
           onSelect: options.onSelect ?? ((): void => undefined),

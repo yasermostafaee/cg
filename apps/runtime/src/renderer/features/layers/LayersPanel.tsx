@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalSto
 // the count must not be able to drift back to the bare predicate by an innocent edit.
 import { removeIsRefused } from './removeGate.js';
 import type { StackItemState } from '@cg/shared-schema';
+import type { EmptiedAirRow, RestoreMigration } from '@cg/shared-ipc';
 import {
   CircleArrowOutDownRight,
   LoaderCircle,
@@ -19,6 +20,8 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Panel } from '../../ui/Panel.js';
 import { Tabs, type TabSpec } from '../../ui/Tabs.js';
+import { OperatorNames } from '../../ui/OperatorNames.js';
+import { operatorRowName, type OperatorRowName } from '../../ui/operatorNaming.js';
 import type { ShellLayout } from '../../hooks/useShellLayout.js';
 import { useElementWidth } from '../../hooks/useElementWidth.js';
 import { useConfirm } from '../../ui/useDialog.js';
@@ -69,7 +72,20 @@ interface Props {
   /** Narrow screens only: is the Inspector overlay showing? */
   inspectorOpen: boolean;
   onToggleInspector: () => void;
+  /**
+   * `B-232` (owner) — the rows the standing emptied-air notice names, so the table can
+   * MARK them and the operator can see which rows one press of PUT BACK ON AIR would put
+   * back, instead of carrying their names down from the strip.
+   *
+   * Passed from `App`, which already reads the notice for the strip itself, so the strip
+   * and the marked rows are ONE reading of ONE snapshot. Optional and defaulted, so every
+   * existing caller and spec keeps its current meaning: nothing said, nothing marked.
+   */
+  emptiedAirRows?: readonly EmptiedAirRow[];
 }
+
+/** A stable empty default, so the memo below does not see a new array every render. */
+const NO_EMPTIED_AIR_ROWS: readonly EmptiedAirRow[] = [];
 
 /**
  * §0 — what the panel says while the row states are not in yet.
@@ -190,6 +206,7 @@ export function LayersPanel({
   layout,
   inspectorOpen,
   onToggleInspector,
+  emptiedAirRows = NO_EMPTIED_AIR_ROWS,
 }: Props): JSX.Element {
   /**
    * §3 — THE LIST AND WHETHER IT HAS ARRIVED, never the list alone.
@@ -310,6 +327,43 @@ export function LayersPanel({
 
   // Template identity for every bound row, joined once for the whole list.
   const templates = useTemplateIndex(items.map((i) => i.templateId));
+
+  /*
+    `B-232` — how the restore strips name a row. This panel already holds all three
+    inputs the rule needs (the bank, the stack, the registry), so it calls
+    `operatorRowName` DIRECTLY rather than through `useOperatorNames`: the hook exists
+    for the sibling strips in `App`, which hold none of them, and taking a second copy
+    of two snapshots here to reach the same function would be the duplication the shared
+    module exists to end.
+  */
+  /*
+    `B-232` (owner) — the item ids the standing emptied-air notice names, as a set, so the
+    row marking below is a lookup rather than a scan per row.
+
+    ⚠ It is a PROP and not a second `useEmptiedAir()` here, deliberately. `App` already
+    holds that snapshot for the strip itself and renders both surfaces, so passing it down
+    makes ONE reading serve both: the strip and the marked rows cannot come to describe
+    different sets, which two independent subscriptions to the same channel could. Same
+    reasoning as `rehearsing` and `seatedPlates` one level down.
+  */
+  const emptiedAirItemIds = useMemo(
+    () => new Set(emptiedAirRows.map((r) => r.itemId)),
+    [emptiedAirRows],
+  );
+
+  const migrationName = (m: RestoreMigration): OperatorRowName =>
+    operatorRowName(
+      {
+        itemId: m.itemId,
+        slot: m.to,
+        ...(() => {
+          const templateId = items.find((i) => i.itemId === m.itemId)?.templateId;
+          return templateId !== undefined ? { templateId } : {};
+        })(),
+      },
+      bank,
+      templates,
+    );
 
   // Live draft chips (staged-but-unapplied edits). Subscribe only — this panel
   // RENDERS drafts, it no longer prunes them.
@@ -921,16 +975,24 @@ export function LayersPanel({
                       came back on a different row
                     </strong>{' '}
                     after the bridge restarted:{' '}
-                    {restoreMigrations
-                      .map(
-                        (m) =>
-                          `${m.itemId} — it declares live plates, so it moved from layer ` +
+                    {/*
+                      `B-232` — THE ROW, IN THE OPERATOR'S WORDS. This said
+                      `item-e602d912-… — it declares live plates, so it moved…`: a raw
+                      item id in a sentence about a row the operator can see, two panels
+                      from the NAME column that names it. The row is named by where it
+                      came back (`to`), which is where he will now find it.
+                    */}
+                    {restoreMigrations.map((m, i) => (
+                      <span key={m.itemId}>
+                        {i > 0 ? '; ' : ''}
+                        <OperatorNames name={migrationName(m)} />
+                        {` — it declares live plates, so it moved from layer ` +
                           `${String(m.from.layer)} to bed layer ${String(m.to.layer)}` +
                           (m.demoted
                             ? ', and came back NOT on air — clear its old layer before taking it'
-                            : ''),
-                      )
-                      .join('; ')}
+                            : '')}
+                      </span>
+                    ))}
                     .
                   </span>
                   <Button
@@ -1029,6 +1091,15 @@ export function LayersPanel({
                       acceptsBank={isLowBankLayer(bank, slot.layer) ? 'low' : 'high'}
                       density={density}
                       selected={item !== null && item.itemId === selectedId}
+                      /*
+                        `B-232` (owner) — mark the rows the notice above is about, so the
+                        operator can SEE which rows one press of PUT BACK ON AIR would
+                        restore instead of carrying their names down from the strip.
+                        Matched on `itemId`, which is what the restore is addressed by
+                        (`emptiedAir.restore({ itemIds })`), so the mark and the press can
+                        never disagree about the set.
+                      */
+                      emptiedAir={item !== null && emptiedAirItemIds.has(item.itemId)}
                       /*
                         B-139 — the applied-plate baseline is SUPPLIED, through the
                         canonical `appliedPlateSources` the Inspector already uses.

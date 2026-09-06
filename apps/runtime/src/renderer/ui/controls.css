@@ -1837,9 +1837,27 @@ input[type='checkbox']:disabled:checked {
  */
 .cg-row:not(.has-template) {
   cursor: default;
+  /*
+     AND IT IS NOW DARKER THAN THE PANEL, NOT MERELY UNLIFTED. Exact value specified by
+     the owner, as `.has-template`'s `rgb(30 38 51)` was.
+
+     The pair is the point: a row with something on it is LIFTED off the panel and a row
+     with nothing on it is SUNK below it, so the two read as different kinds of surface
+     rather than as one surface with and without a tint. That widens the same semantic
+     difference `has-template` already carries — it is not striping — and it is what lets
+     the eye find the occupied rows in a bank of thirty without reading any of them.
+  */
+  background: #10141e;
 }
 .cg-row:not(.has-template):hover {
-  background: transparent;
+  /*
+     UNCHANGED IN MEANING: an empty row does not react to the pointer. It has to restate
+     the colour rather than say `transparent`, because `.cg-row:hover` above sets a fill
+     and this is what withholds it — with `transparent` the row would now go LIGHTER under
+     the pointer than at rest, which is the false affordance this block exists to remove,
+     inverted.
+  */
+  background: #10141e;
 }
 
 /*
@@ -1871,6 +1889,57 @@ input[type='checkbox']:disabled:checked {
   background: rgba(56, 189, 248, 0.1);
   box-shadow: inset 0 0 0 2px var(--r-accent);
 }
+
+/*
+ * `B-232` — THE ROWS THE EMPTIED-AIR NOTICE IS TALKING ABOUT, marked on the rows
+ * themselves (owner).
+ *
+ * The strip above the list names them and offers ONE PRESS to put them back. Until now
+ * the list below said nothing, so the operator had to carry two or three row names in his
+ * head from the strip down to the table to see which rows the press would touch. This is
+ * that mapping, made visible: the marked rows ARE the rows PUT BACK ON AIR restores.
+ *
+ * ── THE THREE CONSTRAINTS IT HAD TO SATISFY ─────────────────────────────────
+ *
+ *  1. **THE NOTICE'S OWN VALUES, not a new colour and not an approximation of one.**
+ *     Both numbers below are copied from `EmptiedAirNotice`'s `styles.strip` — the wash is
+ *     its `background` (`rgba(180, 83, 9, 0.12)`) and the edge bars are its `border`
+ *     colour (`#B45309`) — so a marked row is visibly the same object as the box holding
+ *     the PUT BACK ON AIR button (owner). Amber is also the attention role this palette
+ *     already uses for OCCUPIED / UNKNOWN / UNCONFIRMED. Never the air colour: air is
+ *     EMPTY, which is a condition to fix and not a graphic on transmission — the notice's
+ *     own header settles that.
+ *     ⚠ If the strip's two values ever change, these change with them; they are one
+ *     statement wearing one skin, and a drift between them would be worse than either.
+ *  2. **NOTHING MOVES.** `R-033`'s grid promise is that a row's controls do not shift
+ *     under the finger. This is one `background-image`, which occupies no layout box: the
+ *     bars are the gradient's first and last 3px, not elements and not borders.
+ *     ⭐ **BOTH EDGES, and the RIGHT one is the one that earns its keep** (owner): it
+ *     lands beside the verb buttons, which is where the operator's eye and hand already
+ *     are when he is deciding what to do about the row. A single left bar is read only by
+ *     someone already scanning the left gutter. Being symmetric also makes the mark
+ *     direction-agnostic, so it does not need a logical-property rewrite for RTL.
+ *  3. **IT MUST NOT FIGHT SELECTION.** The selected row's cue is the `box-shadow` ring,
+ *     which this does not touch, so a row can be both marked and selected and still show
+ *     both. That is why the mark is a background LAYER and not the `background`
+ *     shorthand, which would have clobbered the selection wash.
+ *
+ * Hover is listed explicitly for the reason `has-template` already is: `:hover` sets the
+ * `background` SHORTHAND, which resets `background-image` to `none` — so without these
+ * selectors the mark would vanish under the pointer, exactly when the operator is
+ * reaching for the row.
+ */
+.cg-row.is-emptied-air,
+.cg-row.has-template.is-emptied-air,
+.cg-row.is-selected.is-emptied-air,
+.cg-row.is-selected.has-template.is-emptied-air,
+.cg-row.is-emptied-air:hover,
+.cg-row.has-template.is-emptied-air:hover {
+  background-image: 
+  linear-gradient(90deg, #b45309 0 3px, rgb(35 30 38) 3px calc(100% - 3px), #b45309 calc(100% - 3px))
+}
+
+
 .cg-row:focus-visible {
   outline: none;
   /* Focus and selection can coexist; the focus ring is inset further so both read. */

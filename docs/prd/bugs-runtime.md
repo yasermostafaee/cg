@@ -11387,3 +11387,138 @@ inventorying where each setting is stored, by listing the live bridge host's con
 - **Cross-refs:** [[B-116]] (the other thing wrong with `~/.cg-runtime/` layout — a config file
   inside `templatesDir`), `1608a804` (the rename).
 - **Owed:** nothing built — report only.
+
+## [~] B-232 — the emptied-air notice spoke in IDS: it listed the rows it was offering to put back on air as `1-9 · e506e319-6e68-4603-a5f4-290b21616250` ⟨priority: high — the one sentence an operator reads when air has just gone empty under him, naming the rows in a language he has never typed⟩ — FILED AND CLOSED IN CODE 2026-09-06 by `MODALS-AND-SETTINGS-01`'s delta prompt
+
+**What:** `EmptiedAirNotice`'s `rowLabel` was
+`` `${channel}-${layer} · ${row.templateId}` `` — a channel-layer coordinate and a RAW
+TEMPLATE UUID. The operator knows those rows as «لوگوی اصلی» and «زیرنویس اصلی», the NAME
+column two panels below, and has never typed a UUID.
+
+Confirmed on the plant the same day: the notice fires, PUT BACK ON AIR works, the picture
+comes back — the naming was the only defect left in the surface.
+
+**Why it is filed as a CLASS and not as a one-off:** this is the FOURTH surface to print an
+id at an operator, and each previous fix was made where it was found.
+
+| where                           | what it printed                            | fixed by              |
+| ------------------------------- | ------------------------------------------ | --------------------- |
+| The audit log                   | `item-e602d912-… · f00a5363-…` per row     | [[B-210]] / [[B-211]] |
+| The program-output alarm        | persistent ids, slot indexes, driver names | [[B-223]]             |
+| The stack row and the Inspector | the raw `templateId`                       | `useTemplateIndex`    |
+| **The emptied-air notice**      | **`1-9 · e506e319-…`**                     | **this item**         |
+
+Four surfaces, one rule, and nowhere that stated it. **So the rule is now written down**
+(`CLAUDE.md` golden rule 11) and implemented once, in `renderer/ui/operatorNaming.ts`:
+_an operator-facing surface names things in the operator's words; internal ids live behind
+a tooltip or on the technical surface, never in the sentence he reads under pressure._
+
+⚠ **The id is RELOCATED, not deleted.** [[B-211]]'s finding stands — a name can be renamed
+or repeated and an id cannot — so both ids move to the line's `title`.
+
+**Acceptance:**
+
+- The notice lists the ROW'S NAME first and the template's name second. — **done**
+- The real layer number survives as a quiet secondary, VISIBLE and not hover-only, per
+  `R-028`'s "he may need it to clear that layer by hand". — **done**
+- No UUID on the visible line; both ids on the `title`. — **done**
+- A row with no alias falls back to `Layer N` / `Bed N` through the canonical
+  `defaultLayerAlias`. — **done**
+- A layer outside every bank still says so rather than being given an invented name, and
+  the coordinate is not printed twice. — **done**
+
+**What else the sweep found, and what was done about each:**
+
+- **`LayersPanel`'s restore-MIGRATIONS strip** printed `${m.itemId} — it declares live
+plates, so it moved…`. Same family, same chrome, and the panel already holds all three
+  inputs the rule needs. **Fixed here.**
+- **`LayersPanel`'s restore-SKIPS strip** prints `${s.itemId} — <reason>`. **NOT fixable in
+  the renderer** and filed as [[B-233]]: `RestoreSkipSchema` carries only `itemId`, and a
+  skipped row is by definition NOT on the stack, so there is nothing to join against.
+- **`OrphanLayersBanner`'s owned-occupancy strip** prints `under item “<itemId>”`. Filed as
+  part of [[B-233]] — it needs a new prop AND a copy decision, which is more than this
+  sweep should take on its own authority.
+- **`LiveSourcesPanel`'s stranded-release toast** prints `Nothing was sent — ${row.itemId}
+is no longer stranded`, while the SAME function uses the resolved `names` two lines
+  later. A different tab, so out of this surface's family; filed as part of [[B-233]].
+- **Deliberate and left alone:** the audit log's `IdChip` ([[B-211]] — forensic, shortened +
+  `title` + copy button); `Inspector.tsx:473` and `useTemplatePicker.tsx:454`, which put the
+  id in a `title`, which is exactly what the rule permits; and `liveLayerRows.ts`'s
+  `ownerLabelFor`, whose id fallback is reasoned in place — a friendly placeholder there
+  would be indistinguishable from the stranded state the function exists to detect.
+
+**⭐ A SECOND DEFECT WAS FOUND IN THE FIX ITSELF, and it is worth keeping.** The first
+spelling rendered `names.join(' · ')` as ONE text node. Row names are Persian, template
+names often Latin, and the `·` separators and the trailing coordinate are NEUTRALS — so
+in a line whose base direction is the chrome's LTR, which side of a name they land on stops
+being something the author chose. Each name now renders in its own `<bdi>`
+(`ui/OperatorNames.tsx`) with the separators outside the isolates, and **the audit log had
+the identical defect for the identical reason** — both compose the same `names` array — so
+it was fixed in the same commit. ⚠ Recorded honestly: **this was a precaution, not an
+incident.** The owner raised a display concern and then withdrew it; the isolation was kept
+on its own merits, under the standing rule that Persian/RTL is non-negotiable and mixed
+RTL/LTR is tested rather than assumed.
+
+**⭐ AND THE OWNER'S ADDITION, built in the same commit:** the rows the notice names are now
+MARKED in the layer table itself, in the notice's own amber, so the operator can SEE which
+rows one press of PUT BACK ON AIR would restore instead of carrying two or three names in
+his head from the strip down to the list. Matched on `itemId` — the same key
+`emptiedAir.restore({ itemIds })` is addressed by — so the mark and the press cannot
+disagree about the set. One `background-image`, so nothing moves (`R-033`) and the
+selection ring is untouched (a row can be both marked and selected and shows both).
+
+**A claim checked rather than assumed:** the plant screenshot showed `Bed 1 · 3ghab` for
+one row while the table's first row read «لوگوی اصلی». That looked like a second defect —
+an alias failing to resolve for the bed half — and it is not. Reading the station's own
+`~/.cg-runtime/bridge-fixed-layers.json`: `aliases` holds `98` and `99`, and `low.aliases`
+is ABSENT. Layer 9 is a bed nobody has named, so `Bed 1` is the correct fallback, and the
+table's first row is layer 99 — a different row. The `Configure` modal splits bed aliases
+into `low.aliases` correctly (`FixedBankConfigModal.tsx:295`, `:311`); nothing is wrong.
+
+- **Cross-refs:** [[B-233]] (the three surfaces this sweep did not fix, and why), [[B-211]]
+  (ids relocated, never deleted), [[B-223]] (engineering off the operator surface),
+  [[B-225]] (the notice this names the rows of), `R-028` (why the layer number stays
+  visible), `operator-surface` §2 (which upheld that reasoning against a tooltip).
+- **Owed:** a Linux `gate:e2e` — this alters what renders.
+
+## [ ] B-233 — three more operator-facing surfaces still print raw item ids, and one of them cannot be fixed without widening the wire ⟨priority: medium — the same defect as [[B-232]], in three places that sweep could not honestly close⟩
+
+**What:** [[B-232]] wrote the rule down and fixed the two surfaces that could be fixed from
+the renderer. Three remain, each for a different reason:
+
+1. **`LayersPanel`'s restore-SKIPS strip** (`LayersPanel.tsx`, `role="alert"`,
+   "N rows did not come back after the bridge restarted: `${s.itemId} — <reason>`").
+   🔴 **This one needs a WIRE change.** `RestoreSkipSchema` carries `itemId`, `reason` and
+   an optional `detail` — no slot and no templateId — and a skipped row is BY DEFINITION
+   not on the stack, so the renderer has nothing to join against. The bridge does hold both
+   at the moment it decides (`caspar-runtime.ts:2327`–`2341` iterates `items`, each with its
+   `templateId`, and `#slotForRestore` has the placement), so the fix is to carry them in
+   the skip. **This is the worst of the three**: it is the strip that names rows the
+   operator has just LOST, and it names them in the one language he cannot act on.
+2. **`OrphanLayersBanner`'s owned-occupancy strip** — `under item “<itemId>”`. Needs the
+   stack passed in (a new prop from `App`, which already holds `items`) AND a copy
+   decision: naming it by its LAYER would repeat the coordinate the sentence prints two
+   words earlier, so the sentence has to change shape, not just its value.
+3. **`LiveSourcesPanel`'s stranded-release toast** — `Nothing was sent — ${row.itemId} is no
+longer stranded`. The cheapest of the three and the clearest: the SAME function already
+   resolves `names` and uses it two lines later, so this is one identifier out of step with
+   its own neighbours. A different tab, which is the only reason [[B-232]] left it.
+
+**Why:** filed rather than swept because each needs something [[B-232]]'s brief did not
+authorise — a schema change, a new prop plus new copy, and a surface outside the family.
+Left un-filed they would be re-found one at a time, which is the pattern golden rule 11 now
+exists to stop.
+
+**Acceptance:**
+
+- Each of the three names its subject in the operator's words, through `operatorRowName`.
+- `RestoreSkipSchema` carries what the naming needs; the bridge fills it at the point it
+  already holds it.
+- No id is deleted — each moves to a `title`, per [[B-211]].
+
+**Notes:** (3) is a five-minute change and could go on its own. (1) is the valuable one and
+should not be bundled with it. Found by `MODALS-AND-SETTINGS-01`'s delta sweep.
+
+- **Cross-refs:** [[B-232]] (the rule and the two fixes), [[B-211]], `CLAUDE.md` golden
+  rule 11.
+- **Owed:** nothing built — report only.

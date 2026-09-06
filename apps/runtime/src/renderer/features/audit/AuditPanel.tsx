@@ -13,6 +13,7 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Notice } from '../../ui/Notice.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
+import { OperatorNames } from '../../ui/OperatorNames.js';
 import { auditTimeParts, placeName, shortId, templateName } from './auditFormat.js';
 
 interface Props {
@@ -473,8 +474,15 @@ function Row({
       <span>{entry.action}</span>
       <span>
         {names.length > 0 ? (
+          /*
+            `B-232` — EACH NAME IN ITS OWN ISOLATE, not one joined string. This column is
+            almost entirely Persian aliases beside Latin template names, which is the
+            mixture the bidi algorithm reorders around the neutral separator; the audit
+            log had the same defect as the emptied-air notice and for the same reason —
+            both compose the same `names` array. See `ui/OperatorNames.tsx`.
+          */
           <span style={styles.names} data-audit-names="">
-            {names.join(' · ')}
+            <OperatorNames name={{ names, layer: null, title: '' }} />
           </span>
         ) : null}
         <span style={styles.ids}>

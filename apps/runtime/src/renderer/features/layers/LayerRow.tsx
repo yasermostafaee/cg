@@ -92,6 +92,19 @@ interface Props {
    */
   acceptsBank: 'low' | 'high';
   selected: boolean;
+  /**
+   * `B-232` (owner) — is this one of the rows the emptied-air notice is about, and that
+   * its PUT BACK ON AIR press would restore?
+   *
+   * Resolved by the PANEL from the one standing notice, for the same reason `rehearsing`
+   * and `seatedPlates` are: one snapshot for the whole table keeps thirty rows agreeing
+   * by construction, and a per-row subscription to the same fact is how two rows come to
+   * disagree about it.
+   *
+   * Optional and defaulted, so every existing caller — the tests included — keeps its
+   * current meaning: a row nobody says anything about is not marked.
+   */
+  emptiedAir?: boolean;
   dirty: boolean;
   /**
    * R-022 — is this row in REHEARSE? Resolved by the PANEL from the bridge's
@@ -284,6 +297,7 @@ export function LayerRow({
   defaultAlias,
   acceptsBank,
   selected,
+  emptiedAir = false,
   dirty,
   rehearsing,
   seatedPlates = [],
@@ -692,8 +706,17 @@ export function LayerRow({
     <div
       // `has-template` lifts a row that holds something above the empty ones — a
       // semantic difference, not a striping pattern (see `controls.css`).
-      className={`cg-row${item !== null ? ' has-template' : ''}${selected ? ' is-selected' : ''}`}
+      className={`cg-row${item !== null ? ' has-template' : ''}${selected ? ' is-selected' : ''}${
+        emptiedAir ? ' is-emptied-air' : ''
+      }`}
       style={{ ...styles.row, gridTemplateColumns: gridTemplateColumns(density) }}
+      /*
+        `B-232` — the hook a test asserts on, rather than the amber. Same rule as
+        `data-row-state` directly below: the claim is "this row is one the notice is
+        about", and a test matching a hex value would fail the next palette tune while
+        saying nothing about the property that matters.
+      */
+      {...(emptiedAir ? { 'data-emptied-air': '' } : {})}
       // The row's stable anchor is the LAYER NUMBER — the declared identity that
       // survives every load, unlike an itemId.
       data-layer={String(slot.layer)}
