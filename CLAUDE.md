@@ -248,6 +248,15 @@ every byte the gate prints into `.gate-logs/gate-<stamp>-<pid>.log` (gitignored,
 twenty kept) and names the file before the gate starts and again on failure. When a
 pre-push gate fails naming no task — the first push of `96090c49` did — read that file, not
 the terminal's tail. Logging is fail-open: a checkout that cannot write it still gates.
+⚠ **Read the FOOTER first (P-045).** A gate log that ends without its `---- gate ended`
+line is a gate whose PROCESS died, not a task that failed: read it as "the capture died
+here", never as "the gate failed here". Until 2026-09-06 the Stop hook itself was the
+killer — it buffered the gate's output under Node's default 1 MiB `spawnSync` cap and every
+green gate printed within 4 % of it — so a green gate could read red with a footer-less log
+behind it. The hook now streams the child's output into its log through a file descriptor
+(`tools/gate-hook/src/gate-run.mjs`), so there is no capture buffer left to cross; a
+footer-less log today means the host killed the gate, and the hook's own message says
+"died", never "failed", in that case.
 
 **Docs-only carve-out (archive).** An OpenSpec **archive** operation — folding a
 merged change into `openspec/specs/` + the PRD status flip to `[x]` — touches only

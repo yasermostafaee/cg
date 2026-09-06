@@ -2881,7 +2881,7 @@ strip-derived value it never had. That commit staged one path by name.
   dated pointer reads _"`P-044` (unchanged)"_ — headings and pointer AGREE. Two numbers taken here
   (`P-044`, `P-045`); the space stays contiguous.
 
-## [ ] P-045 — the Stop hook's 1 MiB `spawnSync` buffer KILLS a gate that prints too much, and truncates the very log `P-040` says to read ⟨priority: high — it manufactures a red from a green gate, and it does it exactly when output grows⟩ — FILED ONLY 2026-09-06 by `MODAL-CONTRACT-02`
+## [~] P-045 — the Stop hook's 1 MiB `spawnSync` buffer KILLS a gate that prints too much, and truncates the very log `P-040` says to read ⟨priority: high — it manufactures a red from a green gate, and it does it exactly when output grows⟩ — FILED 2026-09-06 by `MODAL-CONTRACT-02`; FIXED 2026-09-06 by `STATION-SETUP-02` §R1 (`tools/gate-hook/src/gate-run.mjs`, streamed rather than raised — see the closing note)
 
 **What:** `.claude/hooks/gate-stop.mjs` runs the turn-end gate as
 `spawnSync(command, { cwd: root, shell: true, encoding: 'utf8', windowsHide: true })` with no
@@ -2936,6 +2936,36 @@ failed here".
   as a failing task
 - WHEN a session needs a gate verdict before this is fixed THEN it reads the foreground run's own
   output, not `.gate-logs/`
+
+**CLOSED 2026-09-06 by `STATION-SETUP-02` §R1 — STREAMED, not raised.** The one-line fix this
+entry proposed (`maxBuffer: 256 MiB`) was declined because it keeps the SHAPE of the defect: a
+limit nobody measures that bites only when output grows, and output grows when a gate fails. The
+hook now hands the child its own log file's descriptor as stdout and stderr
+(`runGateCommand`, `tools/gate-hook/src/gate-run.mjs`) — there is no pipe, so there is no
+`maxBuffer`, so there is nothing to cross — and slices the 120-line tail FROM THE FILE after the
+child exits, bounded at read time (256 KiB) rather than at capture time. The exit code is
+therefore always the gate's own; the hook's red message now says `died (<signal>)` for a
+`null` status, distinct from `failed (exit N)`, so a host-killed gate can never again read as a
+failing task. Fail-open on the log, like P-040's tee: a log that cannot be opened runs the gate
+through the old pipe shape with an explicit 256 MiB buffer and says so in the tail.
+
+⭐ **Proved by a RUN, not by reading the constant** (`tools/gate-hook/tests/gate-run.test.ts`):
+a child printing 2 MiB to stdout plus a stderr marker and exiting 3 is run through the SAME
+function the hook calls — status 3, no signal, every byte in the log, the last line in the tail.
+The POSITIVE CONTROL runs the same child through the OLD shape and asserts the measured death:
+`status: null`, `signal: SIGTERM`, `error.code: ENOBUFS`, the capture cut at 1,114,112 bytes,
+last line absent. Without that control the survival test would prove only that the child was
+not chatty enough.
+
+🔴 **The anchors in this entry were re-measured before the fix, and two moved.** On 2026-09-06
+at 14:47 the tee logs read: complete green gates from 954,627 to **1,013,268** B (the entry's
+table said 934,010–971,008), the two truncated ones unchanged at 1,048,320 and 1,048,786, and one
+HAND-RUN red gate at **1,138,246 B with its footer intact** — which is the cleanest proof that
+the cap lived only in the hook's spawn: a gate run outside the hook crossed 1 MiB and survived.
+The margin on the latest green gate was ~35 KB, not ~40.
+
+`P-040`'s remedy text is corrected in `CLAUDE.md` in the same act: read the footer first, and
+a footer-less log is a capture that died, never a task that failed.
 
 - **Cross-refs:** [[P-040]] (the remedy this disarms), [[P-009]] (the Stop hook), [[P-013]] (the
   chokepoint the tee shares with the lock), [[P-038]] (the same blindness one level up, in CI).
