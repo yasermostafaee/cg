@@ -187,7 +187,40 @@ export function usePrompt(): {
             onKeyDown={(e) => {
               // Enter submits, but never past the length rule — the native prompt let a
               // too-short PIN through and the caller silently dropped it.
-              if (e.key === 'Enter' && !tooShort) settle(value);
+              if (e.key !== 'Enter' || tooShort) return;
+              /*
+                🔴 **`preventDefault` FIRST, AND IT IS NOT DEFENSIVE — IT IS THE FIX FOR A
+                REGRESSION THIS DIALOG ACQUIRED THE DAY ENTER STARTED WORKING (owner, 2026-09-06).**
+
+                Reported from the plant: pressing the Lock BUTTON locks and closes the dialog,
+                but pressing ENTER locks and leaves the dialog open on top of the lock screen.
+                Reproduced against a real bridge; the offline mock does NOT show it, and that
+                difference is the whole mechanism:
+
+                  1. Enter closes this dialog (`settle`), so the `Modal` unmounts;
+                  2. the focus trap's cleanup restores focus to whatever had it when the trap
+                     armed — the status bar's own `🔒 Lock…` BUTTON, which is what the operator
+                     pressed to get here;
+                  3. the browser then runs the Enter keydown's DEFAULT ACTION, and the default
+                     action of Enter on a focused button is to CLICK it — so the prompt
+                     re-opens, while the engage that is already in flight raises the lock
+                     screen behind it.
+
+                Against the mock, `engage` resolves fast enough that `lock.engaged` flips and
+                the status bar has already REPLACED that button with the `🔒 LOCKED` chip, so
+                there is nothing left for the default action to click. With a real bridge the
+                round-trip is slower, the button is still mounted, and it fires. A race whose
+                outcome depends on socket latency is exactly the kind that reaches the plant
+                and never the suite.
+
+                ⚠ It could not happen before `B-230`: focus used to be stolen to the ✕ on every
+                keystroke, so Enter never reached this handler at all. Fixing one focus defect
+                is what exposed this one — which is why the fix is to stop the default action
+                rather than to make the trap restore focus somewhere else. The restore is
+                correct; a synthetic click the operator never made is not.
+              */
+              e.preventDefault();
+              settle(value);
             }}
           />
         </label>

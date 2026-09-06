@@ -2670,3 +2670,29 @@ translated.
 
 ⇒ **Next free after this session is `P-046`** (`P-001` … `P-045`, no gaps), **`B-234`**,
 **`D-161`** and **`C-034`** (unchanged).
+
+### 2026-09-06 — `B-234` (`MODAL-CONTRACT-02`, the owner's plant report, same day)
+
+| kind | id      | one line                                                                                       | home                               | status          |
+| ---- | ------- | ---------------------------------------------------------------------------------------------- | ---------------------------------- | --------------- |
+| `B-` | `B-234` | Enter on the lock PIN dialog locks the console and leaves the dialog open over the lock screen | [bugs-runtime.md](bugs-runtime.md) | FILED and FIXED |
+
+A regression of [[B-230]]'s own fix, reported by the owner within the hour of it landing and
+fixed in the same session. Before `B-230`, focus was stolen to the ✕ on every keystroke, so
+Enter never reached the field's handler; making Enter work exposed the second consumer of
+that key — the browser's DEFAULT ACTION, which clicks whatever holds focus once the dialog
+closes, and the trap has just restored that to the button that OPENED it.
+
+⚠ **It does not reproduce against the offline mock**, in the dev server or the built bundle.
+The race is with SOCKET LATENCY: the mock resolves `lock.engage` fast enough that the status
+bar has already replaced that button with the `🔒 LOCKED` chip. That is why the regression
+spec pays for a real bridge.
+
+**Derivation for `B-`, from headings as the rule requires:** highest `B-` HEADING across the
+three bug files was `B-233`; `git grep -n "B-234"` returned only this file's own "Next free"
+pointer. **Cross-check against the dated pointer:** the entry above ends _"Next free after
+this session is `B-234`"_ — headings and pointer **AGREE**. One number taken. No `C-`, `D-`
+or `P-` number was taken.
+
+⇒ **Next free after this session is `B-235`** (`B-001` … `B-234`, no gaps), **`D-161`**,
+**`C-034`** and **`P-046`** (unchanged).

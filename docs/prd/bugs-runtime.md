@@ -11636,3 +11636,63 @@ with one residual named rather than changed: `ownerLabelFor` falls back to the F
 `itemId` when an item is on the stack but its template is unknown, and that value reaches
 "Seated for …" on the Live Sources tab. It is the same last-resort shape `operatorRowName`
 already blesses, but `shortId` would serve it better. Left alone under the brief.
+
+## [~] B-234 — ENTER on the lock PIN dialog locks the console and leaves the dialog OPEN on top of the lock screen ⟨priority: high — a regression this session introduced, reported from the plant within the hour, and it hides the lock screen behind a dialog the operator did not ask for⟩ — FIXED 2026-09-06 by `MODAL-CONTRACT-02`
+
+**Reported by the owner, 2026-09-06, in the running console:** pressing the dialog's `Lock`
+BUTTON locks the console and closes the dialog, which is right. Pressing **ENTER** locks the
+console and the dialog **stays open**, stacked over the lock screen.
+
+### 🔴 It is a regression of [[B-230]]'s fix, and that is the honest framing
+
+Before `B-230`, focus was stolen to the ✕ on every keystroke, so **Enter never reached the
+field's handler at all** — it activated the ✕ instead, closing the dialog and locking
+nothing. Making Enter work is what exposed this. Fixing one focus defect uncovered a second
+that had been unreachable behind it.
+
+### The mechanism, measured rather than reasoned about
+
+1. Enter closes the prompt (`settle`), so `Modal` unmounts;
+2. the focus trap's cleanup restores focus to whatever held it when the trap armed — the
+   status bar's own `🔒 Lock…` BUTTON, which is what the operator pressed to get here;
+3. the browser then runs the Enter keydown's **DEFAULT ACTION**, and Enter on a focused
+   button is a **CLICK** — so the prompt re-opens, while the `engage` already in flight
+   raises the lock screen behind it.
+
+⚠ **It does NOT reproduce against the offline mock** — tried in the dev server and in the
+built bundle before the cause was found. The mock resolves `lock.engage` fast enough that
+`lock.engaged` has already flipped and the status bar has swapped that button for the
+`🔒 LOCKED` chip, so there is nothing left for the default action to click. A **real
+bridge** is slower, the button is still mounted, and it fires.
+
+⭐ **The lesson worth keeping: a race whose outcome depends on SOCKET LATENCY is one the
+offline mock cannot exhibit.** Every local surface said the fix was complete; the plant
+disagreed within the hour. When a fix changes WHICH element has focus at the end of an
+event, the default action is a second consumer of that key and has to be accounted for.
+
+### The fix
+
+`e.preventDefault()` on the Enter that submits, INSIDE the length guard — so no default
+action survives the submit whatever receives focus next. The trap's focus restore is
+correct and unchanged; a synthetic click the operator never made is not.
+
+**Acceptance:**
+
+- WHEN the operator presses Enter on the lock PIN dialog THEN the console locks and the
+  dialog closes, exactly as the button does — one dialog on screen, the lock screen
+- WHEN the PIN is too short THEN Enter neither submits NOR prevents the default, so the
+  `minLength` rule is still visible rather than silently eating the key
+- WHEN a dialog's key handler closes that dialog THEN it prevents the default action, because
+  focus will have moved by the time the browser runs it
+
+**Verified:** `tests/usePrompt.enter.dom.test.ts` (the mechanism — `preventDefault`, plus a
+negative control on the too-short path, red without the fix) and
+`tests/e2e/lock-prompt-enter.spec.ts` (the outcome, against a REAL bridge, asserting the
+full set of open dialogs rather than one being hidden).
+
+- **Cross-refs:** [[B-230]] (the fix this regressed from), [[B-229]] (the focus trap whose
+  restore is the second half of the chain).
+- **Prefix class:** `B-`, a runtime bug.
+- **Number:** highest `B-` HEADING across the three bug files was `B-233`; the registry's
+  dated pointer reads _"Next free after this session is `B-234`"_ — headings and pointer
+  AGREE.
