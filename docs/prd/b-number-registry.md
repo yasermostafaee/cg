@@ -2641,3 +2641,32 @@ or translated.
 
 ⇒ **Next free after this session is `B-234`** (`B-001` … `B-233`, no gaps), **`D-161`**,
 **`C-034`** and **`P-044`** (unchanged).
+
+### 2026-09-06 — `P-044` · `P-045` (`MODAL-CONTRACT-02`, the dev-loop pair the owner accepted mid-session)
+
+| kind | id      | one line                                                                                           | home                       | status             |
+| ---- | ------- | -------------------------------------------------------------------------------------------------- | -------------------------- | ------------------ |
+| `P-` | `P-044` | `git add -A` swept the owner's mid-tuning hand edit into `57ca77d3`; the allowlist twin of `P-035` | [platform.md](platform.md) | FILED, report only |
+| `P-` | `P-045` | the Stop hook's 1 MiB `spawnSync` buffer kills a loud gate and truncates `P-040`'s own log         | [platform.md](platform.md) | FILED, report only |
+
+⭐ **The owner named the second one `P-045` and it is filed under that number — because the
+first one took `P-044`.** Had only one been filed it would have been `P-044`; taking `P-045`
+alone would have left a hole at `P-044`, which this registry's contiguity rule forbids. Two
+numbers, both taken, no gap, and the owner's label lands where he put it.
+
+🔴 **`P-045` was MEASURED, not accepted on the report.** The claim arrived as "the gate log is
+capped at ~1 MiB". `gate-log.mjs` has no cap in it at all, so the number had to come from
+somewhere else. Twenty logs in `.gate-logs/` split perfectly: eighteen carrying the footer at
+934,010-971,008 B, two ending mid-line at 1,048,320-1,048,786 B, no overlap. The cap is Node's
+default `maxBuffer` at `.claude/hooks/gate-stop.mjs:131` — and it does not merely truncate, it
+KILLS the gate, so the entry says something stronger than the report did.
+
+**Derivation for `P-`, from headings as the rule requires:** highest `P-` HEADING in
+[platform.md](platform.md) was `P-043`; `git grep -n "P-044"` returned only this file's own
+"Next free" pointers and `git grep -n "P-045"` returned nothing anywhere in the tree.
+**Cross-check against the dated pointer:** the entry above ends _"`P-044` (unchanged)"_ —
+headings and pointer **AGREE**. No `B-`, `C-` or `D-` number was taken; nothing was deleted or
+translated.
+
+⇒ **Next free after this session is `P-046`** (`P-001` … `P-045`, no gaps), **`B-234`**,
+**`D-161`** and **`C-034`** (unchanged).

@@ -2822,3 +2822,122 @@ leave the dev host. Nothing was sent to `192.168.21.114`.
   _"`P-043` (unchanged)"_ — headings and pointer AGREE.
 - **Cross-refs:** [[B-222]] §D (which measured that the move this entry costs buys no paints anyway),
   [[R-030]] (the `cw`/`ch` raster the bridge appends, and why it is not CasparCG's `width=`).
+
+## [ ] P-044 — `git add -A` commits whatever else changed the tree: a hand edit nobody reviewed shipped inside `57ca77d3` ⟨priority: high — the value that reached `dev` was chosen by neither the author nor the owner⟩ — FILED ONLY 2026-09-06 by `MODAL-CONTRACT-02`
+
+**What:** `57ca77d3` shipped `rgb(35 30 38)` as the emptied-air marked-row wash. Nobody picked
+that value. The session that wrote the rule intended the notice strip's own
+`rgba(180, 83, 9, 0.12)` — its comment says so in as many words — and the owner was mid-tuning the
+same declaration in his working tree when the commit was staged with `git add -A`. The sweep took
+his in-progress value, the comment kept describing the intended one, and the commit message
+described neither. Three artifacts, three different colours, one `git add`.
+
+🔴 **The damage is not the colour, it is that the commit LOOKED reviewed.** A diff nobody read
+rode inside a diff somebody did, under a message that described only the second. The comment above
+the rule then documented a value the file did not contain — the repo's
+_"a correct comment above incorrect code"_ class, arrived at by staging rather than by editing.
+
+**Why `P-035` could not catch it.** `P-035` is a DENYLIST: it refuses a commit that stages a path
+on `.claude/never-stage`. `controls.css` is not on that list and must not be — it is a file
+sessions legitimately edit every day. The guard answers _"is this path forbidden?"_; the question
+that was open is _"did this session write this hunk?"_, which no denylist can answer.
+
+**The two candidate guards, and the recommendation.**
+
+1. **Stage by path, never `git add -A` / `git add .` / `git commit -a`.** Free, immediate, and
+   already in force for this session. But it is discipline, and `P-035`'s own header is the
+   argument against relying on it alone: _"A rule that depends on remembering is the one that
+   already failed."_ The `git add <directory>` instruction that preceded `P-035` "existed, was
+   repeated three times, and was followed until it wasn't."
+2. ⭐ **RECOMMENDED — an opt-in staged-set ALLOWLIST, as `P-035`'s twin at the same hook.** The
+   session writes the paths it means to commit to a gitignored manifest; `.husky/pre-commit`
+   compares `git diff --cached --name-only` against it and refuses on any path not listed, naming
+   the surprise and printing the `git restore --staged` line for it. FAIL-OPEN on an absent
+   manifest, so the owner's own commits are untouched and the guard costs nothing when it is not
+   armed — the same escape-hatch shape `CG_ALLOW_NEVER_STAGE` already has. It reuses
+   `never-stage-cli.mjs`'s structure and its pure/CLI split, and it runs FIRST for the reason
+   `P-035` documents: `lint-staged` rewrites staged files, so a guard that ran second would have
+   already reformatted the file it exists to keep untouched.
+
+**Acceptance:**
+
+- WHEN a commit stages a path the session did not declare THEN the commit is refused, the
+  surprising path is named, and the `git restore --staged` line for it is printed
+- WHEN no manifest is present THEN the hook does nothing and exits 0 — the owner's own commits
+  never see it
+- WHEN the override is used THEN it says so LOUDLY on stderr, never silently, per `P-035`
+- WHEN a session commits at all THEN it stages by explicit path and names those paths in its report
+
+**Notes:** the marked-row wash is now the owner's own `rgb(145 93 5)`, committed as `262d0f5b`
+with the comment corrected to state the real reason (opacity, for visibility) rather than the
+strip-derived value it never had. That commit staged one path by name.
+
+- **Cross-refs:** [[P-035]] (the denylist this is the allowlist twin of, and the source of the
+  "a rule that depends on remembering" argument), [[B-232]] (the change that carried the
+  unreviewed hunk), [[P-009]] (the Stop hook, the other consumer of a session's own diff).
+- **Prefix class:** `P-`, platform — a property of the dev loop, not of either app's code.
+- **Number:** highest `P-` HEADING in this file was `P-043`; `git grep -n "P-044"` returned only
+  the registry's own "Next free" pointers and `git grep -n "P-045"` nothing at all. The registry's
+  dated pointer reads _"`P-044` (unchanged)"_ — headings and pointer AGREE. Two numbers taken here
+  (`P-044`, `P-045`); the space stays contiguous.
+
+## [ ] P-045 — the Stop hook's 1 MiB `spawnSync` buffer KILLS a gate that prints too much, and truncates the very log `P-040` says to read ⟨priority: high — it manufactures a red from a green gate, and it does it exactly when output grows⟩ — FILED ONLY 2026-09-06 by `MODAL-CONTRACT-02`
+
+**What:** `.claude/hooks/gate-stop.mjs` runs the turn-end gate as
+`spawnSync(command, { cwd: root, shell: true, encoding: 'utf8', windowsHide: true })` with no
+`maxBuffer`, so Node's default of `1024 * 1024` applies. When the gate's combined stdout+stderr
+crosses 1 MiB, `spawnSync` **kills the child** and returns what it had. Three things follow, and
+the third is the one that matters:
+
+1. `run.status` is `null` for a signal death, so `run.status !== 0` is TRUE — the hook reports the
+   gate as RED, prints the last 120 lines of a truncated capture, and blocks the turn. **A green
+   gate reads as a failing one.**
+2. `.gate-logs/<session>.log` — the file the hook's own message tells the reader to open — holds
+   the same truncated capture.
+3. The gate's OWN tee (`gate-lock-cli.mjs` writing `.gate-logs/gate-<stamp>-<pid>.log`) stops
+   mid-line too, because the process writing it was killed. So `P-040`'s remedy — _"When a
+   pre-push gate fails naming no task, read that file, not the terminal's tail"_ — finds a log
+   with no footer and no verdict. **The diagnostic is disarmed by a limit in a DIFFERENT file,
+   one that P-040 never had reason to look at.**
+
+🔴 **MEASURED, and the separation is total.** Twenty gate logs in `.gate-logs/` on 2026-09-06:
+
+| outcome                   | count | size range              |
+| ------------------------- | ----- | ----------------------- |
+| ends with the footer line | 18    | 934,010 - 971,008 B     |
+| ends mid-line, no footer  | 2     | 1,048,320 - 1,048,786 B |
+
+Every complete log is under 1,048,576; both truncated ones are within 300 bytes of it. There is no
+overlap between the two ranges. The largest COMPLETE log is **92.6 %** of the cap — the headroom on
+an ordinary green 233.6 s gate is about **78 KB**, roughly 8 %.
+
+⚠ **That margin is the finding.** Output grows when a gate FAILS (stack traces, diffs, a suite's
+verbose output), so the cap is crossed precisely in the case the log exists to explain. A limit
+that only bites on the bad path is indistinguishable from a flaky tool.
+
+⭐ **The general shape, which is why this is filed rather than fixed in passing: a documented
+diagnostic can be disarmed by a limit nobody measured.** `P-040` is correct, tested, and wired at
+the right chokepoint. It fails anyway, because the thing that decides whether its file is complete
+lives in another process's spawn options. The lesson is the one `P-034` taught about a bound and
+its siblings, one layer over: when you build a mechanism, measure the thing that can silence it.
+
+**The fix, and what holds until then.** Pass an explicit generous `maxBuffer` at the `spawnSync`
+call — the gate's own tee is the durable record, so the hook's in-memory copy only needs to
+survive long enough to slice a tail from. Until that lands, **the FOREGROUND gate's own output
+supersedes the log**: a gate run in the foreground is the authoritative reading, and a truncated
+`.gate-logs/gate-*.log` with no footer must be read as "the capture died", never as "the gate
+failed here".
+
+**Acceptance:**
+
+- WHEN a gate prints more than 1 MiB THEN it runs to completion and its exit code is the gate's
+  own, never a signal death from the capture buffer
+- WHEN a gate log ends without its footer THEN that is reported as a truncated capture rather than
+  as a failing task
+- WHEN a session needs a gate verdict before this is fixed THEN it reads the foreground run's own
+  output, not `.gate-logs/`
+
+- **Cross-refs:** [[P-040]] (the remedy this disarms), [[P-009]] (the Stop hook), [[P-013]] (the
+  chokepoint the tee shares with the lock), [[P-038]] (the same blindness one level up, in CI).
+- **Prefix class:** `P-`, platform — the dev loop's tooling.
+- **Number:** taken in the same sweep as `P-044` above; see its Number note for the derivation.
