@@ -1901,16 +1901,28 @@ input[type='checkbox']:disabled:checked {
  *
  * ── THE THREE CONSTRAINTS IT HAD TO SATISFY ─────────────────────────────────
  *
- *  1. **THE NOTICE'S OWN VALUES, not a new colour and not an approximation of one.**
- *     Both numbers below are copied from `EmptiedAirNotice`'s `styles.strip` — the wash is
- *     its `background` (`rgba(180, 83, 9, 0.12)`) and the edge bars are its `border`
- *     colour (`#B45309`) — so a marked row is visibly the same object as the box holding
- *     the PUT BACK ON AIR button (owner). Amber is also the attention role this palette
- *     already uses for OCCUPIED / UNKNOWN / UNCONFIRMED. Never the air colour: air is
- *     EMPTY, which is a condition to fix and not a graphic on transmission — the notice's
- *     own header settles that.
- *     ⚠ If the strip's two values ever change, these change with them; they are one
- *     statement wearing one skin, and a drift between them would be worse than either.
+ *  1. **THE NOTICE'S AMBER — one value inherited, one chosen by hand.**
+ *     The EDGE BARS are `EmptiedAirNotice`'s `styles.strip` `border` colour (`#B45309`)
+ *     verbatim, so a marked row is visibly the same object as the box holding the PUT BACK
+ *     ON AIR button (owner). ⚠ If the strip's border ever changes, this changes with it.
+ *
+ *     🔴 **THE WASH IS NOT THE STRIP'S `background`, AND THAT IS DELIBERATE (owner).** It
+ *     is `rgb(145 93 5)` — an OPAQUE amber the owner tuned by hand, because the strip's
+ *     translucent `rgba(180, 83, 9, 0.12)` composited over the row's own fill to a
+ *     near-neutral `rgb(48 43 46)` that he could not see across the table. A wash nobody
+ *     notices does not do this mark's one job: mapping the strip's names onto the rows the
+ *     press will touch. Opacity is the whole reason the value differs — do NOT "restore"
+ *     it to the strip's, and do NOT re-derive it from the strip's alpha.
+ *
+ *     Amber is the attention role this palette already uses for OCCUPIED / UNKNOWN /
+ *     UNCONFIRMED, and at full opacity this mark is the LOUDEST of them — a deliberate
+ *     trade the owner made for visibility. Never the air colour: air is EMPTY, which is a
+ *     condition to fix and not a graphic on transmission — the notice's own header settles
+ *     that.
+ *     ⚠ At `rgb(145 93 5)` the row's PRIMARY text (`colors.text`) holds 4.50:1, but the
+ *     two MUTED columns (the bank number and the description, `colors.textMuted`) fall to
+ *     2.19:1. Raising those two on a marked row is the remedy if it is ever wanted; moving
+ *     the fill is not.
  *  2. **NOTHING MOVES.** `R-033`'s grid promise is that a row's controls do not shift
  *     under the finger. This is one `background-image`, which occupies no layout box: the
  *     bars are the gradient's first and last 3px, not elements and not borders.
@@ -1935,10 +1947,13 @@ input[type='checkbox']:disabled:checked {
 .cg-row.is-selected.has-template.is-emptied-air,
 .cg-row.is-emptied-air:hover,
 .cg-row.has-template.is-emptied-air:hover {
-  background-image: 
-  linear-gradient(90deg, #b45309 0 3px, rgb(35 30 38) 3px calc(100% - 3px), #b45309 calc(100% - 3px))
+  background-image: linear-gradient(
+    90deg,
+    #b45309 0 3px,
+    rgb(145 93 5) 3px calc(100% - 3px),
+    #b45309 calc(100% - 3px)
+  );
 }
-
 
 .cg-row:focus-visible {
   outline: none;
