@@ -1683,6 +1683,13 @@ beforehand: 85/85, `0 cached`.
       block**, and do not add a seventh button without adding its head in the same change. The
       conditional-presence reasoning quoted above is `§4.2`'s answer and belongs beside the C6
       boundary in `PlayoutPanel.tsx`, not restated a fourth time.
+      ✅ **WRITTEN DOWN 2026-09-07 by `STALE-CLAIMS-02` §3, and the file above has been renamed.**
+      The C6 boundary now lives in `StationLayersPanel.tsx` (R-055 renamed the surface), and the
+      menu rule sits beside it as a THIRD case; the block's own half is at `layerTable.ts`'s
+      `VERB_COUNT` and in `LayerTableHeader.tsx`'s `VERB_HEADS`. The reconciliation had to include
+      `operator-surface`'s `specs/runtime-ui/spec.md`, whose ADDED requirement said a
+      presence-varying control SHALL be reached through the INSPECTOR — normative text that would
+      have archived a rule forbidding this task's own shipped placement.
       Original: **Reachable in one or two actions from the row.** Used under pressure, on air: not in
       settings, not behind a modal chain, not anywhere the operator must first find the item.
 - [x] 6.9f **RECORDED 2026-08-14 — both remain out of scope, and the reasons are the

@@ -41,7 +41,35 @@ adds the button. The verb block is a rigid grid of N columns whose sticky header
 directly above each glyph, which is why admission is a rule rather than a preference.
 
 A control whose PRESENCE varies by row SHALL NOT be placed in the verb block. Such a control
-SHALL instead be reached through the Inspector, with at most an indicator on the row.
+SHALL instead be reached through the row's CONTEXT MENU, or through the Inspector, with at most an
+indicator on the row.
+
+**The verb BLOCK and the context MENU take different rules, and the reason is SPATIAL.** In the
+block, availability may vary by STATE and presence SHALL NOT vary at all: a control that appears
+and disappears moves the target under a reaching hand, and shifts every head to its right onto the
+wrong glyph. In the MENU there is no target to move — a list opened on demand may vary in length —
+so a control MAY be offered only on the rows it applies to, and a permanently-dead entry in thirty
+row menus SHALL NOT be preferred to its absence, because it teaches the operator to stop reading
+the menu.
+
+> 🔴 **RECONCILED by `STALE-CLAIMS-02` §3 (2026-09-07), as ONE act with `design.md` `§4.1` and
+> `§4.2`.** This sentence said such a control SHALL be reached _through the Inspector_ — and the
+> shipped answer is the context menu, twice: R-048's SOURCE swap (`bee6ba3`) and C-015 6.5f's
+> plate AUDIO (`6c56217`), each placed there by a session that rediscovered the constraint from
+> `layerTable.ts`'s own module comment, with the verb block left at six. **The spec was the side
+> that was wrong**, and it was wrong in the most expensive direction available to it: this is an
+> ADDED requirement, so it archives into `openspec/specs/` as normative text FORBIDDING what the
+> product does.
+>
+> ⭐ **Why the three could not be settled apart.** `§4.1` and `§4.2` are both "write the rule down
+> where a violation is actually made"; this line is the rule's normative statement. Confirming
+> either task while this stood would archive a requirement contradicting the comment the task had
+> just written, and editing this line without them would leave the rule stated nowhere a violating
+> change is authored. Whichever was touched first would have made the other two read as the error.
+>
+> ⚠ The Inspector is KEPT as an alternative rather than replaced, because it is where a control
+> too large for a menu belongs; what changes is that the menu is now named first and the rule that
+> distinguishes them is stated instead of being rediscovered per control.
 
 This rule exists because a misaligned head does not read as a layout defect: it puts a word
 above the wrong control, and this product's STOP (graceful outro, producer resident) and CLEAR

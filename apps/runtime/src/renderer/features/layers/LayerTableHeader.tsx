@@ -35,7 +35,23 @@ import {
  * label drift away from the column it names.
  */
 
-/** The word above each verb glyph, in the order `layerRowActions` emits buttons. */
+/**
+ * The word above each verb glyph, in the order `layerRowActions` emits buttons.
+ *
+ * 🔴 **THE ADMISSION RULE — this list is one of the two places a violation is actually
+ * made, so it is stated here as well as at `VERB_COUNT`.** A control joins the block ONLY
+ * IF it is declared for EVERY row, and its head is added HERE in the same change that adds
+ * the button. Availability may vary by STATE (a disabled button keeps its column, which is
+ * the established pattern); PRESENCE may not vary by ROW — a conditional button shifts every
+ * head to its right onto the wrong glyph, and this product's STOP/CLEAR inversion is exactly
+ * where a misread costs a graphic.
+ *
+ * A control that is needed on some rows and not others goes to the row's CONTEXT MENU (or
+ * the Inspector). Two controls have already arrived at that answer independently — R-048's
+ * SOURCE swap and C-015 6.5f's plate AUDIO — and the count stayed at six both times. The
+ * menu's own, deliberately DIFFERENT rule is recorded beside the C6 boundary in
+ * `PlayoutPanel.tsx`; the two are not the same rule and must not be harmonised.
+ */
 const VERB_HEADS: readonly { label: string; title: string }[] = [
   {
     /*

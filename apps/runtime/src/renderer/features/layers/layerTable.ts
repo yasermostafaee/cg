@@ -71,6 +71,23 @@ const VERB_GAP_PX = 12;
  * CLEAR (hard kill) are the inverse of the reference product's, and the header word
  * is precisely the channel that retires the misread. Adding a button here without
  * adding its head to `VERB_HEADS` re-opens it.
+ *
+ * 🔴 **THE ADMISSION RULE, and the half two sessions had to work out for themselves.**
+ * A control enters this block ONLY IF it is declared for EVERY row of the surface, and
+ * its head joins `VERB_HEADS` in the SAME change that adds the button.
+ *
+ *   · availability that varies by STATE is fine — a disabled button in its own fixed
+ *     column, which is the established pattern;
+ *   · PRESENCE that varies by ROW is not. It either shifts every head to its right
+ *     onto the wrong glyph, or claims a column whose head is a word most rows make
+ *     false.
+ *
+ * Anything conditional goes to the row's CONTEXT MENU (or the Inspector), never into
+ * the block. That is not a preference: `operator-surface` `§4` records SOURCE (R-048)
+ * and plate AUDIO (C-015 6.5f) each arriving at it independently, from this comment,
+ * with the block left at six both times. Written down here so the FOURTH control does
+ * not rediscover it by collision. The MENU's own rule — and why it is different — sits
+ * beside the C6 boundary in `PlayoutPanel.tsx`.
  */
 export const VERB_COUNT = 6;
 

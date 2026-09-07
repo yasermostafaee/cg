@@ -164,6 +164,30 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
    *
    * The layer-state gate is untouched: a control that `stationLayerOccupancy` refuses
    * to offer is still ABSENT, not disabled, whatever this says.
+   *
+   * ── A THIRD CASE: THE ROW'S CONTEXT MENU, WHICH TAKES THE OPPOSITE RULE TO THE
+   *    VERB BLOCK, AND THE REASON IS SPATIAL ─────────────────────────────────────
+   *
+   * `operator-surface` `§4.2` — the two cases above are both about a control's own
+   * state. This one is about WHERE a control lives, and it is recorded here because
+   * this comment is the boundary a later reader consults, not because it is a fourth
+   * spelling of it.
+   *
+   * In the fixed verb BLOCK, availability varies by STATE and presence NEVER does: a
+   * control that appears and disappears moves the target under a reaching hand, and
+   * shifts every header word to its right onto the wrong glyph (`layerTable.ts`'s
+   * `VERB_COUNT` note owns that half). In the MENU there is no target to move — a list
+   * opened on demand may vary in length — so a control MAY be offered only on the rows
+   * it applies to, and a permanently-dead entry in thirty row menus is furniture that
+   * teaches the operator to stop reading the menu (`live-source-multibox` 6.9e, where
+   * the decision was made and argued when the control shipped).
+   *
+   * ⚠ **So "present but disabled" is the block's rule and NOT the menu's, and
+   * harmonising the two would be a regression in whichever direction it went.** The
+   * shipped instances are R-048's SOURCE swap and C-015 6.5f's plate AUDIO, both
+   * conditionally spread on `hasLivePlates`, both asserted over the full state matrix
+   * in `layerRow.dom.test.ts`. One residual cost, recorded rather than resolved: the
+   * menu's LENGTH varies by row, so `menuLast` keeps REMOVE last in both shapes.
    */
   const clearRefusal = casparRefusalReason(linkDown, casparReach);
 
