@@ -11,8 +11,13 @@ import { test, expect } from './fixtures/runtime.js';
  * not fail a jsdom test — it renders a page with no colours on it. Only a real browser
  * with real cascade can say otherwise, which is what this spec is.
  *
- * The values asserted are the ones that shipped BEFORE the move, so this doubles as the
- * "no rendered pixel changed" evidence at the surfaces the prompt names.
+ * ⚠ THE VALUES BELOW ARE NO LONGER "WHAT SHIPPED BEFORE THE MOVE". They were, and that
+ * second job is finished: `STATION-CHROME-01` moved 120 colours into `theme.ts` without
+ * moving a pixel, and this spec was the evidence. `RUNTIME-REDESIGN-01` Phase 2 then
+ * repainted the console from the owner's approved reference, ON PURPOSE, so the accent
+ * here is now the reference's blue. What survives — and what this spec is actually for —
+ * is the mechanism: the tokens REACH the browser, and nothing on the page is painted
+ * with an unresolved `var()`.
  */
 
 const rgb = (r: number, g: number, b: number): string => `rgb(${r}, ${g}, ${b})`;
@@ -35,11 +40,11 @@ test('the --r-* tokens resolve in the browser, and the LAYERS table keeps its gr
     };
   });
   expect(applied.hasStyle, 'applyThemeVars did not install its <style>').toBe(true);
-  expect(applied.accent.toLowerCase()).toBe('#38bdf8');
+  expect(applied.accent.toLowerCase()).toBe('#74cdf6');
   // The ADD role is its own declaration, and equal in VALUE to the accent today —
-  // which is exactly the property that makes "no pixel moved" true and the owner's
-  // one-line edit possible at the same time.
-  expect(applied.add.toLowerCase()).toBe('#38bdf8');
+  // which is exactly the property that lets the whole palette move at once and the
+  // owner's one-line edit to the Add colour stay possible at the same time.
+  expect(applied.add.toLowerCase()).toBe('#74cdf6');
   // 🔴 the owner's marked-row fill, byte for byte, through the token.
   expect(applied.markedFill).toBe('rgb(145 93 5)');
   expect(applied.lockScrim).toBe('rgba(15, 23, 42, 0.94)');

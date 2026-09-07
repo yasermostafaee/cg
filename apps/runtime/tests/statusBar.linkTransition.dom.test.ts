@@ -6,6 +6,25 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { ConnectionHealth, LockState } from '@cg/shared-ipc';
 import type { BridgeLinkStatus } from '../src/shared/runtime-bridge.js';
 import { StatusBar } from '../src/renderer/features/status/StatusBar.js';
+import { colors, cssVars } from '../src/renderer/theme.js';
+
+/**
+ * A theme token as the DOM will report it back — `#E5E7EB` comes out of an inline
+ * `style.color` as `rgb(229, 231, 235)`, so the token has to go through the same
+ * normalisation before it can be compared.
+ *
+ * ⚠ THE COMPARISONS BELOW USED TO SPELL THOSE `rgb(…)` TRIPLES BY HAND, and
+ * `RUNTIME-REDESIGN-01` Phase 2 is what showed the cost: the palette moved, both
+ * literals went stale, and three assertions failed while every property they exist
+ * to protect was intact. The property is "the confident treatment, positively
+ * matched" (see the note above `confidentIn`) — not a particular hex — and reading
+ * the token keeps the match positive without pinning the artefact (`PROMPT.md` §11).
+ */
+function asRendered(token: string): string {
+  const probe = document.createElement('span');
+  probe.style.color = token;
+  return probe.style.color;
+}
 
 /**
  * B-080 — the StatusBar must leave "Loading…" when the bridge comes up, WITHOUT a refresh.
@@ -186,7 +205,7 @@ function primaryPill(el: HTMLElement): string {
  * unchanged and is what these assertions protect.
  *
  * WHAT CHANGED IS THE MECHANISM, NOT THE ASSERTION. Confident health used to be
- * the emerald `#10B981`. The status bar may no longer borrow the on-air green or
+ * the `--r-success` emerald. The status bar may no longer borrow the on-air green or
  * the ready sky at any weight — a glance at green in the footer reads as
  * "something is on air", and those two hues already mean something on the layer
  * table (owner's call; see `StatusBar`'s style block). Health is now the primary
@@ -195,7 +214,7 @@ function primaryPill(el: HTMLElement): string {
  * than a weaker "not muted" check: the original would have gone green-blind, and
  * so would a loosened rewrite.
  */
-const OK_INK = 'rgb(229, 231, 235)';
+const OK_INK = asRendered(colors.text);
 
 function confidentIn(scope: HTMLElement | undefined): string[] {
   if (scope === undefined) return [];
@@ -310,7 +329,7 @@ describe('StatusBar — B-080/B-081 link transitions, without a refresh', () => 
  * Asserted on the DOT specifically rather than on the pill's text, because the
  * text was right the whole time.
  */
-const LED_GREEN = 'rgb(16, 185, 129)';
+const LED_GREEN = asRendered(cssVars['--r-success']);
 
 const PRIMARY_OFFLINE: ConnectionHealth = {
   ...HEALTHY,
@@ -376,9 +395,9 @@ describe('the BACKUP LED agrees with its own label too', () => {
   /**
    * `colors.errorText` — `styles.failedHard`, the tone a down server wears. Error TEXT on the
    * dark status bar is the owner's `rgb(255 28 28)` (2026-09-04); the background red
-   * (`colors.error`, 2.13:1 as text) is for the banners.
+   * (`colors.error`, 2.08:1 as text) is for the banners.
    */
-  const FAULT_RED = 'rgb(255, 28, 28)';
+  const FAULT_RED = asRendered(colors.errorText);
 
   function hollowDot(scope: HTMLElement | undefined): HTMLElement | undefined {
     return [...(scope?.querySelectorAll<HTMLElement>('span') ?? [])].find(

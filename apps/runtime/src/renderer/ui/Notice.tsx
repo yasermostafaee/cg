@@ -4,28 +4,32 @@ import { colors, cssVars } from '../theme.js';
 /**
  * THE ONE SPELLING OF A MESSAGE TREATMENT IN THE RUNTIME.
  *
- * Before this there were five, all local, and two of them were illegible. Measured
- * against the modal surface (`chrome.panel` `#111827`):
+ * Before this there were five, all local, and two of them were illegible.
  *
- * | where                                    | foreground | ratio     |
- * | ---------------------------------------- | ---------- | --------- |
- * | `SourcesModal` `styles.error`            | `#991B1B`  |  2.13:1 ✗ |
- * | `DelimitersModal` `styles.error`         | `#991B1B`  |  2.13:1 ✗ |
- * | `ServerSettingsPanel` `styles.error`     | `#991B1B`  |  2.13:1 ✗ |
- * | `ServerSettingsPanel` `styles.blocked`   | `#FCA5A5`  |  8.66:1   |
- * | `FixedBankConfigModal` `styles.refusal`  | `#FCD34D`  | 11.21:1   |
+ * ⚠ RE-MEASURED IN `RUNTIME-REDESIGN-01` PHASE 2, when the modal surface moved to the
+ * reference's ground. Each row now NAMES what it is measured against — the old table
+ * said "the modal surface" for all five while two of its numbers were in fact against
+ * other grounds, which is the failure a table of ratios is least able to show.
+ *
+ * | where                                   | foreground | on             | ratio     |
+ * | --------------------------------------- | ---------- | -------------- | --------- |
+ * | `SourcesModal` `styles.error`           | `#991B1B`  | `--r-surface`  |  2.08:1 ✗ |
+ * | `DelimitersModal` `styles.error`        | `#991B1B`  | `--r-surface`  |  2.08:1 ✗ |
+ * | `ServerSettingsPanel` `styles.error`    | `#991B1B`  | `--r-surface`  |  2.08:1 ✗ |
+ * | `ServerSettingsPanel` `styles.blocked`  | `#ffaaa7`  | `--r-surface`  |  9.53:1   |
+ * | `FixedBankConfigModal` `styles.refusal` | `#f3cd88`  | the amber fill | 10.39:1   |
  *
  * `#991B1B` is `colors.error`, and it is a BACKGROUND colour in this palette — the
  * command toast, the connection banner and the raster banner all fill with it and
- * put white on top. Used as a FOREGROUND on a dark panel it measures 2.13:1, which
+ * put white on top. Used as a FOREGROUND on a dark panel it measures 2.08:1, which
  * is below even the 3:1 large-text floor: that is the owner's report, and it was
  * three independent copies of the same mistake rather than one.
  *
  * ── NO NEW COLOUR IS INTRODUCED HERE ────────────────────────────────────────
  *
  * `refusal` is `FixedBankConfigModal`'s treatment, moved rather than redesigned —
- * the same border, the same 12% amber fill, the same `#FCD34D`. It measures
- * 11.21:1. The red spellings are DELETED, not replaced by a second red: per
+ * the same border, the same 12% amber fill, the same `--r-caution-text`. It measures
+ * 10.39:1. The red spellings are DELETED, not replaced by a second red: per
  * `theme.ts`, red means error or destructive intent, and a refusal is neither. It
  * is the palette's ATTENTION case, which is amber — the hue `pending`, `OCCUPIED`
  * and `UNKNOWN` already carry.
@@ -65,9 +69,9 @@ const ROLE_STYLE: Record<NoticeRole, CSSProperties> = {
  *
  * It was `colors.textMuted` inside the amber box. The hierarchy now comes from SIZE
  * and not from a grey that has to survive an unusual backdrop: `colors.text` on the
- * amber fill measures 13.06:1, `colors.textMuted` on the neutral fill 5.78:1. Both
+ * amber fill measures 14.07:1, `colors.textMuted` on the neutral fill 5.64:1. Both
  * clear AA, which the old pairing did only by luck of the backdrop it happened to
- * sit on.
+ * sit on. (Re-measured in Phase 2; they were 13.06:1 and 5.78:1 on the old surfaces.)
  */
 const DETAIL_COLOR: Record<NoticeRole, string> = {
   refusal: colors.text,

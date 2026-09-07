@@ -37,7 +37,7 @@ describe('§1 — the token home reaches the document', () => {
     // `cssVars` entry were somehow empty — the instrument has to be shown live.
     applyThemeVars(document.documentElement);
     const text = document.getElementById('cg-theme-vars')?.textContent ?? '';
-    expect(text).toContain('--r-btn-add: #38BDF8;');
+    expect(text).toContain('--r-btn-add: #74cdf6;');
     expect(text).toContain('--r-row-marked-fill: rgb(145 93 5);');
     expect(text.split('\n').length).toBeGreaterThan(Object.keys(cssVars).length);
   });

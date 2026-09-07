@@ -618,7 +618,7 @@
 
      🔴 R-055 — THESE ARE THE REHEARSING WEIGHTS, and they belong ONLY to a toggle
      whose base fill is `--r-rehearsing-strong`. They are written as tokens now
-     rather than as the three literals `#8b5cf6` / `#a78bfa` / `#6d28d9` that used
+     rather than as the three literals `#8b5cf6` / the rehearse violet / `#6d28d9` that used
      to sit here, because the middle one IS `--r-rehearsing` and nothing said so:
      the maximised panel's sky toggle inherited this rule at higher specificity
      and wore the PVW hue on hover, in a place where "this row is on PVW" cannot
@@ -1882,7 +1882,7 @@ input[type='checkbox']:disabled:checked {
  * ── THE THREE CONSTRAINTS IT HAD TO SATISFY ─────────────────────────────────
  *
  *  1. **THE NOTICE'S AMBER — one value inherited, one chosen by hand.**
- *     The EDGE BARS are `EmptiedAirNotice`'s `styles.strip` INK (`#FCD34D`, the colour its
+ *     The EDGE BARS are `EmptiedAirNotice`'s `styles.strip` INK (`--r-caution-text`, the colour its
  *     heading and its refusals are written in), so a marked row is visibly the same object
  *     as the box holding the PUT BACK ON AIR button (owner). ⚠ If the strip's ink ever
  *     changes, this changes with it.
@@ -1890,7 +1890,7 @@ input[type='checkbox']:disabled:checked {
  *     against the opaque fill below that measured 1.11:1: the bars had effectively vanished,
  *     and with them the right-edge job in constraint 2. Removing them was the honest
  *     alternative; the ink was chosen instead because it keeps the "same object" identity
- *     the bars exist for and measures 3.86:1 on the fill — visible as a bar (the 3:1 graphic
+ *     the bars exist for and measures 3.68:1 on the fill — visible as a bar (the 3:1 graphic
  *     floor) without competing with the text on the row.
  *
  *     🔴 **THE WASH IS NOT THE STRIP'S `background`, AND THAT IS DELIBERATE (owner).** It
@@ -1906,10 +1906,10 @@ input[type='checkbox']:disabled:checked {
  *     trade the owner made for visibility. Never the air colour: air is EMPTY, which is a
  *     condition to fix and not a graphic on transmission — the notice's own header settles
  *     that.
- *     ⚠ At `rgb(145 93 5)` the row's PRIMARY text (`colors.text`) holds 4.50:1, but the
+ *     ⚠ At `rgb(145 93 5)` the row's PRIMARY text (`colors.text`) holds 4.99:1, but the
  *     MUTED texts (`colors.textMuted` — the bank number and the "(not in this browser)"
  *     marker; there is NO description column, whatever an older copy of this note said)
- *     fell to 2.19:1. `STATION-SETUP-02` §R2 raised them ON A MARKED ROW ONLY, to
+ *     fell to 2.03:1. `STATION-SETUP-02` §R2 raised them ON A MARKED ROW ONLY, to
  *     `colors.markedRowInk` (5.06:1), as an inline style in `LayerRow.tsx` — inline because
  *     the muted role is inline there and a stylesheet rule cannot out-rank one. The fill
  *     is untouched. `emptiedAirRowContrast.dom.test.ts` asserts both ratios against the

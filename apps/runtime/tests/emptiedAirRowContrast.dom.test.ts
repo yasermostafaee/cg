@@ -12,8 +12,17 @@ import { itemWith, renderLayerRow } from './support/layerRow.js';
  * `emptiedAirRowMark.dom.test.ts` asserts the HOOK and deliberately never a colour. This
  * file is the other half, and it names colours on purpose: the mark's fill is
  * `rgb(145 93 5)` (the owner's opaque amber, tuned by hand), and on it `colors.textMuted`
- * measured 2.19:1 — the bank number on exactly the rows the notice is pointing at was
+ * measures 2.03:1 — the bank number on exactly the rows the notice is pointing at was
  * unreadable. Raising those texts on a marked row is the remedy; the fill is not moved.
+ *
+ * ⚠ `RUNTIME-REDESIGN-01` PHASE 2 re-measured the whole set against the new palette. The
+ * two ratios the owner decided are UNCHANGED, because neither of their values moved:
+ * `markedRowInk` still reads 5.06:1 on the fill. What moved is the CONTROL — `textMuted`
+ * went `#9CA3AF` → `#8e9eaf`, so the number the control quotes went 2.19:1 → 2.03:1,
+ * further below the floor rather than nearer it. The edge bars are the one measured
+ * figure that DID change (3.86:1 → 3.68:1) and they are asserted here only against the
+ * 3:1 graphic floor, deliberately — see `--r-row-marked-edge` in `theme.ts` for why they
+ * were allowed to follow the notice's ink.
  *
  * ── WHY THE FILL IS PARSED FROM THE STYLESHEET, NOT TYPED HERE ─────────────────
  *
@@ -115,8 +124,8 @@ describe('§R2 — the marked row’s muted texts clear AA on the owner’s ambe
   it('POSITIVE CONTROL: the ordinary muted grey really is unreadable on that fill', () => {
     const ratio = contrast(parseColour(colors.textMuted), fill);
     expect(ratio).toBeLessThan(3);
-    // The number the report quotes — 2.19:1 — so a reader can check the instrument.
-    expect(ratio).toBeCloseTo(2.19, 1);
+    // The number the report quotes — 2.03:1 — so a reader can check the instrument.
+    expect(ratio).toBeCloseTo(2.03, 1);
   });
 
   it('the bank number and the missing-template marker measure at least 4.5:1 on a MARKED row', async () => {
@@ -132,8 +141,8 @@ describe('§R2 — the marked row’s muted texts clear AA on the owner’s ambe
     const number = row?.children[0] as HTMLElement | undefined;
     expect(number?.textContent).toBe('1');
     // The INNERMOST span: the template cell's own textContent contains the marker's, and the
-    // cell is `colors.text` — which measures 4.497:1 here, the hair-under-AA figure the
-    // theme note quotes. Matching on the exact trimmed text picks the marker itself.
+    // cell is `colors.text` — 4.99:1 here since Phase 2 (it was 4.497:1, a hair under
+    // AA). Matching on the exact trimmed text picks the marker itself.
     const marker = [...(row?.querySelectorAll<HTMLElement>('span') ?? [])].find(
       (s) => (s.textContent ?? '').trim() === '(not in this browser)',
     );

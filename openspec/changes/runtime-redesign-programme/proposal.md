@@ -14,8 +14,9 @@ sequence of styling commits. **A redesign that implements only what is drawn del
 that is not, and nobody notices until the night it was needed.** The reference is a prototype: its
 sample data, its timers and its JavaScript simulation are not the app's logic, it draws no alarm
 that fires on a rare fault, and it has no equivalent for a surface whose whole job is to appear
-when something has gone wrong. Twenty-six such surfaces exist in the app today and none of them is
-in the reference.
+when something has gone wrong. Twenty-seven such surfaces exist in the app today and none of them is
+in the reference — twenty-six the redesign must not lose, and one (the audit log's actor column) it
+must ADD BACK, by the owner's answer recorded in `design.md` §5b.
 
 **This change is the programme's memory.** Ten phases, ordered, each taken by one session. The
 phase state lives in `tasks.md`; a later session reads that to choose a phase rather than assuming.

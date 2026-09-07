@@ -225,7 +225,7 @@ const styles = {
   missingTemplate: { color: colors.textMuted, fontStyle: 'italic' as const },
   /**
    * `B-232` §R2 — the MUTED texts on a MARKED row take a legible ink. The mark's opaque
-   * amber puts `textMuted` at 2.19:1; this is 5.06:1 on it (`theme.ts`). Applied LAST in
+   * amber puts `textMuted` at 2.03:1; this is 5.06:1 on it (`theme.ts`). Applied LAST in
    * the spread so it wins over the empty-row grey too: on that fill, legibility is the
    * only role that matters. (There is no description column any more — see the note by
    * the template cell — so the two muted texts are the bank number and this marker.)

@@ -56,7 +56,7 @@ function visual(status: BridgeLinkStatus, reach: CasparReach): Visual {
         return {
           /*
             NO HUE — primary ink against the bar's muted base, and the weight in
-            `StatusBar` carries the rest. This was the emerald `#10B981`, which is
+            `StatusBar` carries the rest. This was `--r-success`, which is
             the ON-AIR green family at a different weight, and a glance at green in
             the footer can read as "something is on air". Green means air on the
             layer table and sky means READY; the status bar reports TRANSPORT

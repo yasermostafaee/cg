@@ -1,7 +1,23 @@
 /**
- * Centralized design tokens for the Runtime renderer. The shared page-chrome
- * palette comes from `@cg/ui` (kept in lockstep with the Designer, Phase 6
- * §1); the air-state colors stay here.
+ * Centralized design tokens for the Runtime renderer.
+ *
+ * ── `RUNTIME-REDESIGN-01` PHASE 2 — THE PAGE CHROME IS NO LONGER `@cg/ui`'s ──
+ *
+ * It used to be: `chrome.*` came from `@cg/ui`, "kept in lockstep with the
+ * Designer". The owner's approved reference
+ * (`docs/ui-reference/runtime-redesign/`) is a palette for THIS console, and
+ * `@cg/ui` is shared with the Designer and is tokens-only by the design-system
+ * rule — so adopting the reference through `@cg/ui` would have repainted the
+ * Designer from a reference drawn of the Runtime. The chrome therefore moved
+ * HERE, where every other Runtime role already lives, and the lockstep with the
+ * Designer is deliberately broken. `@cg/ui` is untouched.
+ *
+ * ⚠ ONE RESIDUE, NAMED SO IT IS NOT MISTAKEN FOR AN OVERSIGHT: `@cg/ui`'s
+ * `theme.css` still paints `body` and the scrollbars from its own `--cg-*`
+ * values. The app shell covers the body ground completely (`layout.ts`
+ * `appShell.page` is `100vh` and paints `colors.background`), so nothing of the
+ * old ground is visible; the SCROLLBAR thumb is still `--cg-border`. Moving that
+ * is a `@cg/ui` change and is not this phase's to make.
  *
  * ON AIR IS GREEN, AND RED MEANS ERROR OR DANGER — NOTHING ELSE.
  *
@@ -27,21 +43,107 @@
  */
 
 import type { StackItemStatus } from '@cg/shared-schema';
-import { chrome } from '@cg/ui';
+
+/*
+ * ── `RUNTIME-REDESIGN-01` PHASE 2 — THE REFERENCE PALETTE ────────────────────
+ *
+ * The nineteen values the owner's approved reference declares in its own `:root`
+ * (`docs/ui-reference/runtime-redesign/04-playout-layers.html`), transcribed once.
+ * Module-private, like every other base constant in this file: NOTHING outside
+ * `theme.ts` may name them, and no component reads one. A component reads a ROLE.
+ *
+ * They are named for the reference's own role words rather than for their hue,
+ * because that is what makes the mapping below checkable against the source: a
+ * reader can put this block beside the reference's `:root` and see nineteen
+ * values, one for one, with nothing invented in between.
+ *
+ * 🔴 THE RULE THAT DECIDED WHICH APP ROLE ADOPTS WHICH VALUE, stated here because
+ * the next phase will have to apply it again: **a role adopts a reference value
+ * IFF the reference declares a value for THAT role** — either one of these
+ * nineteen, or a value the reference's own CSS spells for that exact role (its
+ * `.btn:hover`, its `input` border, its `.btn.primary:hover`). Where the
+ * reference declares nothing for a role, the role KEEPS its value. The one
+ * extension is a value DERIVED from a role that moved (an alpha wash of the
+ * accent, a shared base constant), where the derivation is re-applied so a
+ * family stays one hue instead of splitting into two.
+ *
+ * What that rule deliberately did NOT move is listed at `--r-onair`, `--r-caution`
+ * and the alarm family below. Each says why in its own place.
+ */
+/** The page ground — the deepest surface, behind every panel. */
+const REF_BG = '#0b1017';
+/** A PANEL's ground. */
+const REF_SURFACE = '#141b25';
+/** One notch up from a panel: a bar, a header, a row that stands proud. */
+const REF_RAISED = '#1b2532';
+/** A WELL SUNK INTO a surface — every input in the app. */
+const REF_INSET = '#0e151e';
+/** The line around a surface. */
+const REF_LINE = '#2d3a49';
+/** The QUIETER line: the rule between two rows of one table, repeated a dozen times. */
+const REF_SOFT = '#24303d';
+/** Primary ink. */
+const REF_TEXT = '#eef3f9';
+/** The second rank of ink — present, but not the sentence's subject. */
+const REF_SECONDARY = '#bbc8d7';
+/** The third rank: a coordinate, a unit, a label beside a value. */
+const REF_MUTED = '#8e9eaf';
+/** INTERACTIVE, and READY. The reference spends one blue on both (see `--r-ready`). */
+const REF_BLUE = '#74cdf6';
+/** …and the ground that blue sits on when it fills something. */
+const REF_BLUE_BG = '#173243';
+/** OK / healthy / acknowledged. NOT on air — see `--r-onair`. */
+const REF_MINT = '#85e4b6';
+const REF_MINT_BG = '#18372d';
+/** PVW / rehearse. */
+const REF_PURPLE = '#c3acff';
+const REF_PURPLE_BG = '#302645';
+/** ATTENTION, as INK. The reference's amber is never a fill — `REF_AMBER_BG` is. */
+const REF_AMBER = '#f3cd88';
+const REF_AMBER_BG = '#352d1e';
+/** DANGER / failed, as INK. */
+const REF_RED = '#ffaaa7';
+const REF_RED_BG = '#3a242a';
 
 export const colors = {
-  // Page chrome (shared)
-  background: chrome.background,
-  panel: chrome.panel,
-  panelMuted: chrome.panelMuted,
-  border: chrome.border,
-  text: chrome.text,
-  textMuted: chrome.textMuted,
+  // Page chrome — the reference's own, since Phase 2 (see the header).
+  background: REF_BG,
+  panel: REF_SURFACE,
+  panelMuted: REF_RAISED,
+  border: REF_LINE,
+  text: REF_TEXT,
+  /**
+   * THE SECOND RANK OF INK, and it is new in Phase 2 rather than a rename.
+   *
+   * The app had exactly two ranks — `text` and `textMuted` — so anything that was
+   * neither the subject of a line nor a footnote had to pick one and be slightly
+   * wrong. The reference declares three. Nothing reads this yet; the surfaces that
+   * want it are dressed in Phases 3–9.
+   */
+  textSecondary: REF_SECONDARY,
+  textMuted: REF_MUTED,
 
   // Air-state contract (Phase 6 §1)
   idle: '#3F3F46',
-  /** READY. The brighter sky of the mock-up, not the deeper `--r-accent-strong`. */
-  ready: '#38BDF8',
+  /**
+   * READY. The reference's blue — the same value as `--r-accent`, exactly as the
+   * reference itself spends it (`.badge.ready` is `var(--blue)`, and so is every
+   * interactive affordance). The two names stay separate for the reason
+   * `--r-ready` gives at length: they are identical in value and opposite in rule.
+   */
+  ready: REF_BLUE,
+  /**
+   * ATTENTION — TAKING, UNCONFIRMED, OCCUPIED, EXIT… and the bridge-skew band's FILL.
+   *
+   * 🔴 HELD AT `#F59E0B` IN PHASE 2, AND THE REASON IS A DEFECT WORTH THE OWNER'S EYE:
+   * this ONE token is used both as an INK on a dark surface (`rowState.ts`, the status
+   * bar's OSC-silent word, the unassigned-plate mark) and as a FILL with dark ink on
+   * top (`BridgeSkewBanner`'s band). The reference splits those — `REF_AMBER` is an ink
+   * that appears only as `color:`, `REF_AMBER_BG` is the ground under it — so there is
+   * no single reference value this token can take without making one of its two jobs
+   * worse. Splitting it is a component edit, and Phase 2 changes no component.
+   * The ink half moved where it is unambiguous: see `--r-caution-text`.
+   */
   pending: '#F59E0B',
   /**
    * ON AIR. Green, per the owner's decision above — the ONE colour that may say a
@@ -50,19 +152,36 @@ export const colors = {
    * The exact value the owner specified, and deliberately the most saturated thing
    * in the palette: this is the mark an operator has to find from across a gallery,
    * so it is the one place allowed to be loud. Nothing else may approach it —
-   * `--r-success` stays a softer emerald precisely so an ack flash on a button
+   * `--r-success` stays a softer green precisely so an ack flash on a button
    * cannot be misread as an air claim.
+   *
+   * 🔴 **PHASE 2 — THE ONE PLACE THE REFERENCE AND THIS PALETTE DISAGREE, AND IT IS
+   * HELD RATHER THAN RESOLVED.** The reference has ONE green, `REF_MINT`, and spends
+   * it on `.badge.live` AND on `.badge.success` AND on the footer's `healthy` — that
+   * is, it uses the same colour for "this is on air" and for "this connection is
+   * fine". This palette does not, and the split is the older decision: `--r-onair`
+   * and `--r-success` are two greens on purpose so an ack flash cannot be read as an
+   * air claim. Adopting `REF_MINT` here would collapse them into one. So `REF_MINT`
+   * went to the OK/healthy role, where it means what the reference means by it, and
+   * this value did not move. **That is a difference from the approved design and the
+   * owner is the one to settle it** — not something to tidy away in a later phase.
    */
   onAir: 'rgb(44 255 122)',
+  /** EXIT. Shares `pending`'s amber, and is held for the same reason — see there. */
   exit: '#F59E0B',
   /**
    * ERROR. Red, which now means only this and destructive intent.
    *
    * ⚠ A BACKGROUND colour: the alarm banners, the command toast and the refusal
    * `Notice` paint it behind white text. As TEXT on this palette's dark surfaces it
-   * measures 2.13:1 — illegible — which `Modal`, `Notice` and the Server settings
+   * measures 2.08:1 — illegible — which `Modal`, `Notice` and the Server settings
    * panel each discovered separately. Error TEXT on a dark background takes
    * `errorText` below.
+   *
+   * HELD in Phase 2: the reference draws no dark red FILL at all — its danger
+   * treatment is `REF_RED` ink on `REF_RED_BG`, which is a different treatment
+   * rather than a different value for this one. Re-dressing the alarm surfaces is
+   * Phase 9's, where each of them is brought into the new design as a whole.
    */
   error: '#991B1B',
   /**
@@ -73,6 +192,15 @@ export const colors = {
    * Inspector's file error and the audit log's `failed` outcome all read through
    * this. Saturated on purpose, like `onAir`: it is the mark an operator has to find,
    * and it is the other colour that means one thing.
+   *
+   * 🔴 **PHASE 2 — THIS IS THE ONE INK THE NEW SURFACES PUSHED BELOW AA, AND IT IS THE
+   * OWNER'S VALUE, SO IT IS REPORTED AND NOT RE-TUNED.** It measures **4.48:1** on
+   * `--r-surface` (was 4.59:1 — it was already marginal) and **4.00:1** on
+   * `--r-surface-raised` (was 3.80:1 — it was already failing there, and Phase 2
+   * improved it). Against the page ground it reads 4.94:1 and clears AA. Nothing
+   * here may move it: raising the ink is the owner's call, and the alternative —
+   * darkening the surfaces the app puts it on — is a Phase 9 question about the
+   * status bar and the row, not a token edit.
    */
   errorText: 'rgb(255 28 28)',
   offline: '#94A3B8',
@@ -90,13 +218,21 @@ export const colors = {
    * emptied-air notice has MARKED.
    *
    * The mark's fill is the owner's opaque amber, `rgb(145 93 5)` (`controls.css`,
-   * `.cg-row.is-emptied-air`), and on it `textMuted` measures 2.19:1 — below even the
+   * `.cg-row.is-emptied-air`), and on it `textMuted` measures 2.03:1 — below even the
    * 3:1 large-text floor — so the bank number and the "(not in this browser)" marker
-   * were unreadable on exactly the rows the notice is pointing at. `text` itself holds
-   * only 4.498:1 there, a hair under AA. This is one weight lighter, 5.06:1 on the fill,
-   * and it is spent ONLY on a marked row: everywhere else the muted role keeps its grey.
-   * Moving the FILL is not the remedy — the value is the owner's — so the ink moves.
+   * were unreadable on exactly the rows the notice is pointing at. This is one weight
+   * lighter, 5.06:1 on the fill, and it is spent ONLY on a marked row: everywhere else
+   * the muted role keeps its grey. Moving the FILL is not the remedy — the value is
+   * the owner's — so the ink moves.
    * `emptiedAirRowContrast.dom.test.ts` asserts the ratio against the real fill.
+   *
+   * ⚠ PHASE 2 RE-MEASURED THIS PAIR AND ONLY THE CONTROL MOVED. Both values here are
+   * unchanged, so **5.06:1 is unchanged**. What moved is `textMuted` (`#9CA3AF` →
+   * `#8e9eaf`), which took the positive control from 2.19:1 to **2.03:1** — still far
+   * below 3:1, so the remedy is still needed and still works. And `text` on the fill
+   * went from 4.498:1 to **4.99:1**: the primary ink now clears AA there on its own,
+   * which is a bonus and NOT a reason to withdraw this ink, whose job is the MUTED
+   * texts.
    */
   markedRowInk: '#F3F4F6',
   /**
@@ -119,8 +255,13 @@ export const colors = {
    * And per the rule this whole module is built on, the hue is never alone: the
    * state carries its own SHAPE (a monitor, unique among a set of circles) and its
    * own WORD as well.
+   *
+   * PHASE 2 — moved to the reference's own violet, which it spends on exactly this:
+   * `.badge.pvw`, `.pvw-active`, `.pvw-label`, `.pvw-text`. The four reasons above
+   * are reasons about the HUE and every one of them still holds; the value is one
+   * weight lighter and reads 8.79:1 on the panel where `#A78BFA` read 6.52:1.
    */
-  rehearsing: '#A78BFA',
+  rehearsing: REF_PURPLE,
 } as const;
 
 /**
@@ -136,9 +277,10 @@ export const colors = {
  *
  * `--r-onair` and `--r-success` are both greens now, deliberately DIFFERENT ones:
  * on-air is the vivid green of the mock-up because it is the mark an operator has
- * to find from across a gallery, while success stays the softer emerald of an ack
+ * to find from across a gallery, while success stays the softer mint of an ack
  * flash. Same family, different jobs — and they keep separate names so a tweak to
- * one cannot silently move the other.
+ * one cannot silently move the other. ⚠ The reference does NOT keep them apart —
+ * see `colors.onAir` for the disagreement and who has to settle it.
  */
 /*
  * ── SHARED BASE VALUES ──────────────────────────────────────────────────────
@@ -153,23 +295,36 @@ const INK_LIGHT = '#FFFFFF';
 /** The near-black ink a BRIGHT fill takes — the verb hovers, the file chip. */
 const INK_DEEP = '#10151F';
 /** The interactive sky. `--r-accent`'s value, shared with the Add role. */
-const ACCENT_SKY = '#38BDF8';
+const ACCENT_SKY = REF_BLUE;
+/** The sky's LIFT — what a lit control rises to under the pointer (`.btn.primary:hover`). */
+const ACCENT_LIFT = '#a7e2fc';
 /** Amber as TEXT on a dark ground. */
-const CAUTION_TEXT = '#FCD34D';
+const CAUTION_TEXT = REF_AMBER;
 /** The sky at a tenth — what a SELECTED surface is washed with on this ground. */
-const SELECTED_WASH = 'rgba(56, 189, 248, 0.1)';
-/** The line weight an ACCENTED surface takes: the sky, darkened until it is a border. */
-const ACCENT_LINE = '#2F7BA8';
+const SELECTED_WASH = 'rgba(116, 205, 246, 0.1)';
+/** The line weight an ACCENTED surface takes: the reference's `.badge.ready` edge. */
+const ACCENT_LINE = '#31556a';
 
 export const cssVars = {
   // Semantic colors
-  '--r-surface': chrome.panel,
-  '--r-surface-raised': chrome.panelMuted,
-  '--r-surface-sunken': chrome.background,
-  '--r-border': chrome.border,
+  '--r-surface': colors.panel,
+  '--r-surface-raised': colors.panelMuted,
+  '--r-surface-sunken': colors.background,
+  '--r-border': colors.border,
   '--r-border-strong': '#4B5563',
-  '--r-text': chrome.text,
-  '--r-text-muted': chrome.textMuted,
+  /**
+   * THE QUIETER LINE — the reference's `--soft`, new in Phase 2.
+   *
+   * `--r-border` is the line around a SURFACE. This is the rule BETWEEN two rows of
+   * one table, and the reference gives it its own value for the reason
+   * `--r-table-rule` already argues at length: a full-strength line repeated down
+   * twelve rows stops being a separator and becomes a grid.
+   */
+  '--r-border-soft': REF_SOFT,
+  '--r-text': colors.text,
+  /** The second rank of ink. New in Phase 2; see `colors.textSecondary`. */
+  '--r-text-secondary': colors.textSecondary,
+  '--r-text-muted': colors.textMuted,
   '--r-accent': ACCENT_SKY, // sky — interactive / secondary
   '--r-accent-strong': '#0EA5E9',
   /**
@@ -180,8 +335,11 @@ export const cssVars = {
    * sky one had no lighter weight to lift to, which is why the maximised panel's
    * hover borrowed the violet and with it the PVW meaning. One more weight of the
    * same hue — NOT a state colour, and it must not become one.
+   *
+   * PHASE 2 — the reference declares this weight itself (`.btn.primary:hover`), so
+   * the lift moved with the sky rather than being re-derived from it.
    */
-  '--r-accent-lift': '#7DD3FC',
+  '--r-accent-lift': ACCENT_LIFT,
   /**
    * THE ACCENTED ACTION — the same sky, in the weights a FILLED control needs.
    *
@@ -200,7 +358,13 @@ export const cssVars = {
    * `controls.css` for why this may live in the Inspector and may not spread to
    * the layer table.
    */
-  '--r-accent-fill': '#153B56',
+  /**
+   * PHASE 2 — this is the reference's `--bluebg`: the ground its blue sits on when
+   * the blue fills something (`.badge.ready`). The HOVER weight below has no
+   * reference value and therefore did not move; it is still the lighter of the two,
+   * so a filled accent control still LIFTS under the pointer rather than darkening.
+   */
+  '--r-accent-fill': REF_BLUE_BG,
   '--r-accent-fill-hover': '#1A4A6B',
   '--r-accent-line': ACCENT_LINE,
   '--r-accent-line-hover': '#4AA8E0',
@@ -218,18 +382,39 @@ export const cssVars = {
    * surface rather than a second one tuned to look close. Two surfaces tuned to
    * match are two surfaces that drift at the next change.
    */
-  '--r-field-bg': '#0E1822',
-  '--r-field-line': '#2D4150',
+  '--r-field-bg': REF_INSET,
+  '--r-field-line': '#435367',
   '--r-onair': colors.onAir, // sacred GREEN — ON AIR only (see the header)
+  /**
+   * AMBER AS A FILL — the bridge-skew band, and the caution role generally.
+   *
+   * HELD in Phase 2. `colors.pending` carries the argument: this token is an ink in
+   * some places and a fill in others, the reference splits those into `REF_AMBER`
+   * and `REF_AMBER_BG`, and un-splitting the app's one token is a component edit.
+   * ⚠ It must stay AMBER whatever else changes: the bridge-skew banner reports and
+   * never gates, and a red one would stand beside DISCONNECTED — an operator who
+   * discounts one will discount both (`B-153`, and `design.md` §3 item 5).
+   */
   '--r-caution': '#F59E0B', // amber — Out / EXIT / UNCONFIRMED / dirty
-  '--r-danger': '#DC2626', // Remove
+  '--r-danger': '#DC2626', // Remove — a FILL; the reference draws none, so it is held
   '--r-danger-strong': '#B91C1C',
-  '--r-success': '#10B981', // ack / healthy
+  /**
+   * ACK / HEALTHY — the reference's mint, which is exactly what it spends the colour
+   * on (`.bottom-bar .healthy`, `.badge.success`, the toast tick).
+   *
+   * ⚠ `apps/runtime/index.html` MIRRORS this value as `--cg-ok` for the boot splash's
+   * PLAY triangles, because the splash paints before the bundle and cannot read a
+   * token. `splashCss.test.ts` asserts the two agree, so this value and that literal
+   * move together or the suite goes red — which is the point of the mirror.
+   * 🔴 It is NOT `--r-onair`, and the reference's own use of one green for both is
+   * the disagreement recorded at `colors.onAir`.
+   */
+  '--r-success': REF_MINT,
   '--r-dirty': '#F59E0B',
   /**
    * READY — the state a row is in when it is loaded and selected and not playing.
    *
-   * 🔴 **IDENTICAL IN VALUE TO `--r-accent` (`#38BDF8`) AND OPPOSITE IN RULE, which is
+   * 🔴 **IDENTICAL IN VALUE TO `--r-accent` (`#74cdf6`) AND OPPOSITE IN RULE, which is
    * exactly why the choice has to be made deliberately rather than by whichever name comes
    * to hand.** `--r-accent` is the INTERACTIVE sky and its own comment says it _"IS NOT A
    * STATE COLOUR AND MUST NOT BECOME ONE"_. This one IS the state colour. Anything saying
@@ -273,13 +458,15 @@ export const cssVars = {
    * The distinction that matters is indicator-vs-control, never which component it is in.
    */
   '--r-rehearsing': colors.rehearsing,
+  /** The reference's `--purplebg`: the ground its PVW violet sits on. New in Phase 2. */
+  '--r-rehearsing-bg': REF_PURPLE_BG,
   '--r-rehearsing-strong': '#7C3AED',
   /**
    * R-055 — the REHEARSING toggle's HOVER and PRESS weights.
    *
    * They lived as three bare literals inside `controls.css`'s `.is-on` rules, and
-   * that is precisely how the defect hid: the hover's border was `#A78BFA`, which
-   * IS `--r-rehearsing`, and nothing on the page said so. A sky-based toggle that
+   * that is precisely how the defect hid: the hover's border was spelled as the very
+   * value `--r-rehearsing` held, and nothing on the page said so. A sky-based toggle that
    * inherited those rules wore the PVW hue while claiming to be about the chrome.
    * Named here so the next reader can see whose colour they are.
    */
@@ -334,8 +521,17 @@ export const cssVars = {
    * be checked AGAINST. A literal with no token behind it is a colour nobody can find
    * when the palette moves.
    *
+   * ⚠ PHASE 2 HELD THIS WHOLE FAMILY, AND THAT IS THE RULE THIS BLOCK ALREADY STATES
+   * RATHER THAN AN EXEMPTION FROM IT: these values are tuned for large tracked-out type
+   * on a lifted ground and are deliberately NOT tied to the chrome, _"[t]ying them to
+   * the chrome tokens would mean a chrome tweak silently repainting the product's first
+   * frame."_ Phase 2 IS that chrome tweak. The one relationship that mattered survived
+   * it intact — the splash ground is still LIGHTER than the console's, and by more than
+   * before. The single splash value that did move is `--cg-ok` in `index.html`, and it
+   * moved because it is a MIRROR of `--r-success` and not a splash value at all.
+   *
    * WHY THEIR OWN FAMILY rather than reuse of `--r-surface-*`: the splash ground is a
-   * PANEL LIFTED ABOVE the console — lighter than `--r-surface-sunken` (#0F172A) rather
+   * PANEL LIFTED ABOVE the console — lighter than `--r-surface-sunken` (#0b1017) rather
    * than the near-black it started as — so the dismissal reads as a curtain rising off
    * the app instead of one dark screen becoming another. Its inks are tuned for large
    * tracked-out type on that ground, not for panel text. Tying them to the chrome tokens
@@ -409,13 +605,33 @@ export const cssVars = {
   '--r-ink-on-verb': INK_DEEP,
   /** The dark ink on the caution BAND (the connection / bridge-skew banners). */
   '--r-ink-on-band': '#0B0B0C',
-  /** DANGER as TEXT on a dark ground — the outlined Remove, the error badge. */
-  '--r-danger-text': '#FCA5A5',
-  /** CAUTION as TEXT on a dark ground — a notice's ink, the audit log's timeout. */
+  /**
+   * DANGER as TEXT on a dark ground — the outlined Remove, the error badge.
+   *
+   * PHASE 2 — the reference's `--red`, which it spends on exactly this
+   * (`.btn.danger`, `.badge.failed`, `.notice.error`). It is NOT `colors.errorText`:
+   * that one is the owner's exact saturated red for a row's ERROR mark and a hard
+   * link failure, and the reference collapses the two where this palette keeps them
+   * apart. 9.53:1 on `--r-surface`.
+   */
+  '--r-danger-text': REF_RED,
+  /** The reference's `--redbg`: the ground its red sits on. New in Phase 2. */
+  '--r-danger-bg': REF_RED_BG,
+  /**
+   * CAUTION as TEXT on a dark ground — a notice's ink, the audit log's timeout.
+   *
+   * PHASE 2 — the reference's `--amber`, the half of the caution role that is
+   * unambiguously an INK (`.notice.warn`, `.badge.warn`, `.badge.blocked`). The FILL
+   * half stayed put; `--r-caution` says why.
+   */
   '--r-caution-text': CAUTION_TEXT,
+  /** The reference's `--amberbg`: the ground its amber sits on. New in Phase 2. */
+  '--r-caution-bg': REF_AMBER_BG,
   '--r-caution-hover': '#D97706',
   /** OK as TEXT on a dark ground — the audit log's succeeded outcome. */
-  '--r-ok-text': '#86EFAC',
+  '--r-ok-text': REF_MINT,
+  /** The reference's `--mintbg`: the ground its mint sits on. New in Phase 2. */
+  '--r-ok-bg': REF_MINT_BG,
 
   /*
    * THE ADD BUTTONS — the owner's own acceptance test for this section:
@@ -430,27 +646,57 @@ export const cssVars = {
    * which is the entire point.
    */
   '--r-btn-add': ACCENT_SKY,
-  '--r-btn-add-bg': chrome.panelMuted,
+  '--r-btn-add-bg': colors.panelMuted,
 
-  // Control chrome — the hover weights a neutral control lifts to.
-  '--r-control-hover-bg': '#2C3A4E',
-  '--r-control-hover-line': '#64748B',
+  /*
+   * Control chrome — the hover weights a neutral control lifts to.
+   * PHASE 2 — the reference declares this pair itself, as `.btn:hover`.
+   */
+  '--r-control-hover-bg': '#304258',
+  '--r-control-hover-line': '#5e748b',
   /** A ticked checkbox under the pointer — the sky's own lift, see `--r-accent-lift`. */
-  '--r-toggle-on-hover': '#6DD3FB',
+  '--r-toggle-on-hover': ACCENT_LIFT,
 
-  // The layer table's grounds.
+  /*
+   * The layer table's grounds.
+   *
+   * ⚠ HELD IN PHASE 2 BY DESIGN, NOT BY OVERSIGHT. `PROMPT.md` §3 names the table's
+   * own values — `16px 17px` cells, hover `#1b2a3a`, selected `#192e40` with an
+   * `inset 3px 0 0` blue — so the table's grounds are adopted in PHASE 3, as one
+   * piece, against a measured reference-vs-app property table. Moving three of them
+   * here would leave the other three to be argued twice.
+   * They already sit within a couple of points of the reference's `--raised` and
+   * `--inset`, so nothing looks stranded in the meantime.
+   */
   '--r-row-bg': 'rgb(30 38 51)',
   '--r-row-empty-bg': '#10141E',
   '--r-row-selected-fill': SELECTED_WASH,
   /**
    * 🔴 THE OWNER'S MARKED-ROW FILL. `rgb(145 93 5)`, tuned by hand, and it moved
    * here BYTE FOR BYTE — `emptiedAirRowContrast.dom.test.ts` still measures
-   * `colors.markedRowInk` at 5.06:1 and the edge bars at 3.86:1 against this exact
-   * value, resolved through the token. A "tidier" nearby amber is a regression.
+   * `colors.markedRowInk` at 5.06:1 and the edge bars at 3.68:1 (3.86:1 before Phase 2
+   * moved the ink they follow) against this exact value, resolved through the token.
+   * A "tidier" nearby amber is a regression.
    */
   '--r-row-marked-fill': 'rgb(145 93 5)',
-  /** The marked row's two edge bars. Its own name, not `--r-caution-text`'s: R2
-   * measured 3.86:1 against the fill above and that ratio is a property of THIS pair. */
+  /**
+   * The marked row's two edge bars — `EmptiedAirNotice`'s strip INK, so a marked row
+   * is visibly the same object as the box holding PUT BACK ON AIR (owner).
+   *
+   * It has its OWN NAME, and the name is not decoration: it is the decision point at
+   * which "does this follow the caution ink?" gets answered deliberately and the
+   * ratio re-measured, rather than dragged along by an edit somewhere else.
+   *
+   * 🔴 **PHASE 2 ANSWERED IT: IT FOLLOWS, AND THE MEASURED RATIO MOVED — 3.86:1 →
+   * 3.68:1 on the owner's fill.** Both notes that govern this pair were read first
+   * and they point the same way: `controls.css`'s rule says in as many words _"if the
+   * strip's ink ever changes, this changes with it"_, because the bars exist to carry
+   * the strip's identity down onto the rows. Pinning the value would have preserved a
+   * NUMBER by silently discarding the DESIGN the number was serving. It still clears
+   * the 3:1 graphic floor, so the bars still read as bars.
+   * ⚠ **Reported, not re-tuned** (`PROMPT.md` §2.3). Restoring 3.86:1 would mean
+   * choosing a new amber, and that is the owner's to choose.
+   */
   '--r-row-marked-edge': CAUTION_TEXT,
   '--r-table-head-bg': 'rgb(45 55 69)',
 
@@ -469,7 +715,7 @@ export const cssVars = {
    * What is taken from the mockup is the ROLE and the GEOMETRY; the hue stays ours.
    */
   /** A rail item under the pointer — one notch raised off the rail's sunken ground. */
-  '--r-rail-hover-fill': chrome.panelMuted,
+  '--r-rail-hover-fill': colors.panelMuted,
   /** The SELECTED rail item's wash. Its own name; the layer row's selection is not it. */
   '--r-rail-selected-fill': SELECTED_WASH,
   /** …and the subtle line around that wash, so the selection has an edge as well as a fill. */
@@ -477,13 +723,17 @@ export const cssVars = {
   /**
    * A RECORD TABLE's hairline — under the column headers and between the rows.
    *
-   * Lighter than `--r-border`, deliberately: a full-strength line repeated down twelve
-   * rows stops being a separator and becomes a grid, which is what the mockup's own
-   * alpha-blended `--line` is avoiding.
+   * QUIETER than `--r-border`, deliberately: a full-strength line repeated down twelve
+   * rows stops being a separator and becomes a grid.
+   *
+   * PHASE 2 — it is now the reference's `--soft`, which is that colour and is drawn
+   * for exactly this job (`.layer-table td { border-bottom: 1px solid var(--soft) }`).
+   * It was an alpha blend of the OLD `--r-border`, so leaving it would have left an
+   * alpha of a value that no longer exists. Same name, same role, same argument.
    */
-  '--r-table-rule': 'rgba(55, 65, 81, 0.55)',
+  '--r-table-rule': REF_SOFT,
   /** A record row under the pointer. Raised off the card's sunken ground, not accented. */
-  '--r-table-row-hover': chrome.panel,
+  '--r-table-row-hover': colors.panel,
   /**
    * DANGER as a WASH — the fill a quiet destructive control takes ON HOVER ONLY.
    *
@@ -493,10 +743,16 @@ export const cssVars = {
    */
   '--r-danger-soft': 'rgba(220, 38, 38, 0.16)',
 
-  // Washes, scrims and shadows — the sky at low alpha, and black at several.
-  '--r-focus-halo': 'rgba(56, 189, 248, 0.35)',
-  '--r-menu-hover-fill': 'rgba(56, 189, 248, 0.16)',
-  '--r-divider-drag-fill': 'rgba(56, 189, 248, 0.22)',
+  /*
+   * Washes, scrims and shadows — the sky at low alpha, and black at several.
+   * PHASE 2 — these are DERIVED from `--r-accent`, so the derivation was re-applied
+   * when the sky moved (`rgba(56, 189, 248, …)` → `rgba(116, 205, 246, …)`). Leaving
+   * them would have split the interactive hue in two: a focus ring in the old sky
+   * around a control painted in the new one.
+   */
+  '--r-focus-halo': 'rgba(116, 205, 246, 0.35)',
+  '--r-menu-hover-fill': 'rgba(116, 205, 246, 0.16)',
+  '--r-divider-drag-fill': 'rgba(116, 205, 246, 0.22)',
   '--r-scrim': 'rgba(0, 0, 0, 0.45)',
   '--r-modal-scrim': 'rgba(0, 0, 0, 0.6)',
   /**
@@ -537,6 +793,12 @@ export const cssVars = {
    * box stayed identical throughout, which is why that spec measures two edges and not one.
    *
    * The value is the modal button row's own floor (36px) plus this footer's padding.
+   *
+   * ⚠ PHASE 2 RE-READ THIS AND CHANGED NOTHING, WHICH IS THE POINT. `PROMPT.md` §2.2
+   * says in as many words: _keep `--r-modal-foot-h` as a FLOOR_. The geometry block
+   * below brings the reference's own heights in as tokens; none of them is this one,
+   * and none of them may be composed into this one. A footer's height belongs to
+   * being a footer.
    */
   '--r-modal-foot-h': '59px',
   '--r-lock-scrim': 'rgba(15, 23, 42, 0.94)',
@@ -620,6 +882,46 @@ export const cssVars = {
    * See `.cg-panel-header` in `controls.css`.
    */
   '--r-panel-bar-h': '52px',
+  /*
+   * ── `RUNTIME-REDESIGN-01` PHASE 2 §2.2 — THE REFERENCE'S GEOMETRY ────────────
+   *
+   * The reference's own row padding, action-button heights and icon-button boxes,
+   * transcribed as tokens so the numbers have a home before anything reads them.
+   *
+   * 🔴 **NOTHING READS THEM YET, AND THAT IS DELIBERATE.** Applying them is a LAYOUT
+   * change and Phase 2 changes no layout — `PROMPT.md` §3 adopts the table's geometry
+   * as one piece, against a measured reference-vs-app property table, in Playwright
+   * (jsdom has no layout, golden rule 12c). Declaring them here is what lets §3 be an
+   * adoption rather than a second transcription: if a number below is wrong, it is
+   * wrong in ONE place and the reference is one `git diff` away.
+   *
+   * ⚠ These are NOT steps on the spacing scale and must not be folded into it. A
+   * scale step exists so several things move together; each of these is one
+   * component's own dimension, measured off a drawing.
+   */
+  /** A layer-table cell: `.layer-table td { padding: 16px 17px }`. */
+  '--r-row-pad': '16px 17px',
+  /** A general action button's floor: `.btn { min-height: 39px }`. */
+  '--r-btn-h': '39px',
+  /** …and the compact one: `.btn.small { min-height: 33px }`. */
+  '--r-btn-h-small': '33px',
+  /** A ROW VERB's floor — smaller than a general button: `.row-actions .btn`. */
+  '--r-row-action-h': '34px',
+  /** A general icon button is a SQUARE: `.icon-btn { width: 36px; height: 36px }`. */
+  '--r-icon-btn-box': '36px',
+  /**
+   * A row verb's icon button is NOT square — `.row-actions .icon-btn` is 32 × 34, so
+   * it stands exactly as tall as the text verbs beside it while taking less width.
+   * Two tokens rather than one box for that reason.
+   */
+  '--r-row-icon-btn-w': '32px',
+  '--r-row-icon-btn-h': '34px',
+  /**
+   * …and narrower still inside the DESTRUCTIVE group, which the reference splits off
+   * behind a left border: `.row-actions .destructive-group .icon-btn { width: 30px }`.
+   * The height is unchanged, so the row of verbs still reads as one row.
+   */
+  '--r-row-icon-btn-narrow-w': '30px',
   // Motion
   '--r-dur-fast': '120ms',
   '--r-dur-med': '200ms',

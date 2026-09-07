@@ -96,7 +96,7 @@ const styles = {
    *
    * 🔴 **TOKENS, NEVER THE HEX.** Same discipline `B-156` applied to the predicate: the badge
    * and the row's marks must be INCAPABLE of disagreeing, so they read one token as well as
-   * one predicate. ⚠ `colors.ready` and `--r-accent` are the same value (`#38BDF8`) and are
+   * one predicate. ⚠ `colors.ready` and `--r-accent` are the same value (`#74cdf6`) and are
    * NOT interchangeable — the accent's own comment says it is not a state colour and must not
    * become one. Taking the wrong one compiles, looks identical today, and drifts the day
    * either is retuned.

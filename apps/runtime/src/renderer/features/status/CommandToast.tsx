@@ -21,7 +21,7 @@ const styles = {
     border: `1px solid ${colors.error}`,
   },
   // Green success, mirroring the error toast's dark-bg / light-text weight.
-  // `#10B981` is the `--r-success` token (ack / healthy).
+  // The border is the `--r-success` token (ack / healthy) — read, never spelled.
   success: {
     background: cssVars['--r-toast-ok-bg'],
     color: cssVars['--r-toast-ok-ink'],

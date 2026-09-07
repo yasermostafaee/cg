@@ -27,7 +27,7 @@ import {
  * That file proves the PRIMITIVE pins its message outside the scroll container.
  * It proved nothing about whether the dialogs use it, and three of them did not:
  * `Live sources` and `Server connection` adopted the region and handed it a node
- * carrying their own `color: colors.error` (2.13:1 on the dialog surface — the
+ * carrying their own `color: colors.error` (2.08:1 on the dialog surface — the
  * owner's report), and `Text file delimiters` skipped the region entirely and
  * rendered `<p role="alert">` as the last child of its scrolling body, which is
  * the exact defect the region was built to end.
@@ -44,7 +44,7 @@ import {
  * The MECHANISM: the message is a `[data-notice]` inside `[data-modal-message]`,
  * that region is not inside `[data-modal-body]`, and the dialog's own body
  * contains no announcement of its own. NEVER a colour — a test that pinned
- * `#FCD34D` would go red the next time the palette moves and would say nothing
+ * `#f3cd88` would go red the next time the palette moves and would say nothing
  * about whether the shared rule is being followed. The contrast ratios that
  * justify the palette are recorded in `ui/Notice.tsx`, where the values are.
  */

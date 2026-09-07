@@ -166,7 +166,7 @@ async function renderPanel(reach: Reachability): Promise<HTMLDivElement> {
  * The colour assertions below read the TOKEN, never a hex literal — that is the
  * repo's rule (`data-row-state` exists because a hex assertion fails the next time
  * the palette is tuned while saying nothing about the property that matters). But
- * the DOM normalises `#9CA3AF` to `rgb(156, 163, 175)`, so the token has to go
+ * the DOM normalises `#8e9eaf` to `rgb(142, 158, 175)`, so the token has to go
  * through the same normalisation before it can be compared.
  */
 function asRendered(token: string): string {

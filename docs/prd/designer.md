@@ -4254,7 +4254,7 @@ one:** one dialog, legible, whose message is only unreachable when the body actu
 ⭐ **Derive the roles; do NOT copy the Runtime's two blind.** Recorded because it is the part most
 likely to be got wrong by a session that reads only the diff: the Runtime's `refusal` and `notice`
 were an **EXTRACTION of treatments that already existed in that app**, not an invention —
-`refusal` **IS** `FixedBankConfigModal`'s amber box (`#FCD34D`, 11.21:1), **moved rather than
+`refusal` **IS** `FixedBankConfigModal`'s amber box (`--r-caution-text`, 10.39:1), **moved rather than
 redesigned**, and the three red spellings were **deleted** rather than replaced because in `theme.ts`
 red means error or destructive intent and a refusal is neither. **The Designer's roles must be
 derived the same way: audit its dialogs first, then extract.** Adopting `refusal`/`notice` because

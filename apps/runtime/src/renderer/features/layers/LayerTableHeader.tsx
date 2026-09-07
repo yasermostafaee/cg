@@ -179,7 +179,7 @@ const styles = {
    */
   errorCount: {
     // Error TEXT on the dark header — the owner's `rgb(255 28 28)`, never the
-    // background red (2.13:1 here).
+    // background red (2.08:1 here).
     color: colors.errorText,
     fontSize: '12px',
   },

@@ -6,10 +6,29 @@ file records which are done. **Each session takes the next unfinished phase, fin
 reports.** Do not start a later phase because an earlier one looks easy — the ordering is
 load-bearing and stated at each step.
 
-**Phase state at 2026-09-07:** Phase 1 COMPLETE. Phases 2–10 not started. Next: **Phase 2**.
+**Phase state at 2026-09-07:** Phases 1 and 2 COMPLETE. Phases 3–10 not started. Next: **Phase 3**.
 
 **Every phase from 2 onward owes a Linux `e2e` run URL beside its ticked item.** A ticked box with
 no URL is not a discharge — it is a claim, and the next reader cannot check it (golden rule 12).
+
+---
+
+## OWNER ANSWERS ON RECORD — read these before any phase that touches them
+
+- **A1 · The audit-name picker STAYS** (`PROMPT.md` §8 point 8, answered 2026-09-07). Kept, made
+  small, and kept BESIDE the actor column in the audit panel; the objection was visual clutter, not
+  the capability. It is NOT relocated to Station setup, and `B-143`'s caveat does not move. The
+  reference draws no actor column, so **Phase 8 must ADD ONE BACK** in the new tokens. Recorded in
+  `design.md` §5b and filed as **guard item 27** (§3), whose test is owed by Phase 8.
+- **A2 · `docs/design/station-setup-{mockup,redesigned}.html` are ABANDONED** — untracked, not
+  relevant, not to be committed. `PROMPT.md` §7's "mark them superseded" is discharged by
+  `design.md` §6. **Phase 7 must not chase them.**
+- **A3 · The §4 single-channel finding was TOO STRONG and is corrected.** `itemId` is one stack
+  item = one operator ROW, and `StackItemStateSchema.slot` carries `{channel, layer, server}`, so
+  the channel lives INSIDE the item and the per-row verbs are **already channel-agnostic**. The
+  real gap is exactly three things — the five `z.void()` bulk verbs, no channel-discovery call, and
+  `fixedLayers` as the single channel authority. `silenceAllLivePlates` stays unscoped ON PURPOSE.
+  Restated in `design.md` §4.
 
 ---
 
@@ -23,13 +42,17 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
 - [x] 1.2 **THE MAP** — `design.md` §1, in four tables (shell and chrome · the layers card · the
       Inspector and monitors · the dialogs) plus the token home. Every surface the reference
       touches, the component that renders it today, and the bridge channel that feeds it.
-- [x] 1.3 **THE DELETION GUARD** — `design.md` §3. **Twenty-six surfaces**, built from the source
+- [x] 1.3 **THE DELETION GUARD** — `design.md` §3. **Twenty-seven surfaces**, built from the source
       tree rather than taken from `PROMPT.md` §1.3 (which supplies seven). Each carries where it
       lives now, what it looks like after the redesign, and a named test. **Twenty-one already have
       a test that asserts they render under their condition; five do not and are owed by Phase 9** —
       `BridgeSkewBanner`, `RasterMismatchBanner`, `FailoverBanner`, the restore-MIGRATIONS strip,
       the delegated `Tooltip`, and the context-menu suppression. (That is five components plus the
       suppression, which shares no component of its own.)
+      ⭐ **Item 27 was added in PHASE 2** by owner answer A1 — the audit log's ACTOR COLUMN, its
+      `B-143` caveat and the picker that writes it. Its caveat has three green tests; **the COLUMN
+      has none and is owed by Phase 8** (`auditPanel.actorColumn.dom.test.ts`). It is the one guard
+      item the redesign must ADD BACK rather than merely preserve.
 - [x] 1.4 **The change document** — this change: `proposal.md`, `design.md`, `tasks.md` and the
       `runtime-ui` spec delta that makes the guard a requirement rather than a note.
 - [x] 1.5 **The two open questions surfaced, not decided** — `design.md` §4 (where the bridge is
@@ -42,23 +65,40 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
 - [x] 1.7 **No product file changed.** The reference itself is committed by path in this session so
       the authority for all ten phases is in the repo rather than in one machine's working tree.
 
-## Phase 2 — Tokens and primitives _(no visible change beyond colour)_
+## Phase 2 — Tokens and primitives _(no visible change beyond colour)_ — COMPLETE
 
-- [ ] 2.1 Bring the reference's palette into `renderer/theme.ts` as ROLE tokens — `--bg #0b1017`,
-      `--surface #141b25`, `--raised #1b2532`, `--inset #0e151e`, `--line #2d3a49`, `--soft #24303d`,
-      `--text #eef3f9`, `--secondary #bbc8d7`, `--muted #8e9eaf`, and the accent pairs `blue #74cdf6`
-      / `mint #85e4b6` / `purple #c3acff` / `amber #f3cd88` / `red #ffaaa7` with their `*bg`
-      companions. 🔴 No literal anywhere; `tokenHome.test.ts` stays green, its positive control
-      included.
-- [ ] 2.2 Geometry becomes tokens — row padding, action-button heights, the icon-button box.
-      ⚠ Keep `--r-modal-foot-h` as a FLOOR: a height that belongs to being a footer cannot be a
-      function of what a section puts in it.
-- [ ] 2.3 🔴 State what the new palette does to the measured decisions and do NOT overwrite them:
-      the marked-row fill `rgb(145 93 5)` and the inks measured at 5.06:1 and 3.86:1. If contrast
-      changes, report the new numbers and ASK.
-- [ ] 2.4 Re-measure every semantic ink against the new surfaces — on air, refusal amber, danger
-      red — and say which now fail their ratio.
-- [ ] 2.5 `pnpm --filter @cg/runtime test:e2e` run locally, and a Linux `e2e` run URL recorded here.
+The record is `design.md` §7: the mapping rule, what moved, what was held and why, the geometry
+tokens, the full contrast table, and the two things escalated to the owner.
+
+- [x] 2.1 The nineteen reference values are module-private constants in `renderer/theme.ts` and the
+      app's roles point at them by the rule in `design.md` §7.1 — **a role adopts a reference value
+      IFF the reference declares a value for THAT role**, otherwise it keeps its own. Twenty roles
+      moved, six token roles are new (`--r-text-secondary`, `--r-border-soft`, `--r-caution-bg`,
+      `--r-danger-bg`, `--r-ok-bg`, `--r-rehearsing-bg`) plus `colors.textSecondary`. The
+      reference's `--bluebg` had a home already: it went to `--r-accent-fill`.
+      🔴 No literal outside the token home: `tokenHome.test.ts` green, positive control included.
+      ⚠ `@cg/ui` is UNTOUCHED — it is shared with the Designer and tokens-only, so the Runtime's
+      page chrome moved out of `chrome.*` and into its own home rather than repainting the Designer.
+- [x] 2.2 Geometry tokens declared: `--r-row-pad`, `--r-btn-h`, `--r-btn-h-small`,
+      `--r-row-action-h`, `--r-icon-btn-box`, `--r-row-icon-btn-w`/`-h`, `--r-row-icon-btn-narrow-w`.
+      **Read by nothing** — applying them is a layout change and Phase 3 owns it.
+      ⚠ `--r-modal-foot-h` unchanged at `59px` and still a FLOOR; nothing above may compose into it.
+- [x] 2.3 🔴 The measured decisions, stated and NOT re-tuned. `rgb(145 93 5)` untouched;
+      `markedRowInk` still **5.06:1**. **The edge bars CHANGED: 3.86:1 → 3.68:1**, because
+      `controls.css`'s own rule says they follow the notice's ink and Phase 2 moved that ink —
+      pinning the value would have kept a NUMBER by discarding the DESIGN it served. Still above the
+      3:1 graphic floor. Reported, not re-tuned; restoring 3.86:1 means choosing a new amber and
+      that is the owner's.
+- [x] 2.4 Every semantic ink re-measured — `design.md` §7.5, fourteen inks × six surfaces.
+      🔴 **Two fails, both escalated in §7.6:** `colors.errorText` (the owner's `rgb(255 28 28)`,
+      untouched — the SURFACES moved under it) now reads 4.48 / 4.00 / 3.94 / 3.12 on panel, raised,
+      row and table header; and `--r-text-muted` reads 4.39 on the table header, which Phase 3
+      closes when it adopts the reference's own header ground.
+      ⭐ **The alarm severity split is INTACT and was checked:** the bridge-skew band still fills
+      with the held amber and cannot read red; the output alarm and raster banner still fill red.
+- [x] 2.5 `pnpm --filter @cg/runtime test:e2e` — **116 passed (1.5 m)**, Windows, against a fresh
+      `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a). Linux `e2e` run URL: _owed — record
+      the completed, green run for the commit that carries this phase._
 
 ## Phase 3 — The layers table
 
@@ -121,9 +161,13 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
       earlier mockups in `docs/design/` superseded in ONE line; do not work from them.
 - [ ] 7.2 The channel list is shaped to be filled from an API — a UI shape, not a schema migration.
 - [ ] 7.3 🔴 Per-channel settings and state separated by channel id; station-wide settings keep
-      their real scope. ⚠ No persisted key, file or schema change. **Read `design.md` §4 first** —
-      the single-channel gap is already filed per namespace, and `stack` carries no channel at all.
-      Invent no multi-channel contract, and do not re-scope `silenceAllLivePlates` in passing.
+      their real scope. ⚠ No persisted key, file or schema change. **Read `design.md` §4 first, and
+      read the SUPERSEDED paragraph in it** — the earlier finding that "a second channel's rows
+      cannot be addressed today" is WRONG (owner answer A3). `itemId` is one row, `slot` carries
+      `{channel, layer, server}`, so the per-row verbs are already channel-agnostic. The real gap is
+      three things: the five `z.void()` bulk verbs, no channel-discovery call, and `fixedLayers` as
+      the single channel authority. Invent no multi-channel contract, and do NOT re-scope
+      `silenceAllLivePlates` — its scope is not the caller's to choose.
 - [ ] 7.4 Everything already decided about this dialog survives: one Settings entry point, the fixed
       frame measured on TWO edges, per-section footers and refusals, the footer rule (a section with
       a commit gets `Revert` + `Apply …`; one without gets `Close`), `B-237`'s confirmation that
@@ -136,18 +180,23 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
 - [ ] 8.1 Library and import follow `01` and `02`. ⚠ The real `.vcg` validation and import path is
       preserved EXACTLY — the prototype's import is theatre. Proved by the existing import tests.
 - [ ] 8.2 The audit log follows `03`.
-- [ ] 8.3 🔴 **BLOCKED ON THE OWNER.** Removing the manual console-name picker must not remove the
-      audit's ability to say WHO. `design.md` §5 has the measurement: the picker is the ONLY writer
-      of the actor in the product, and the reference draws no actor column at all, so `B-143`'s
-      caveat has no column to sit beside. The owner picks (a) keep the picker, (b) accept a
-      permanently `unattributed` log and say so plainly, or (c) supply a different identity. Do not
-      quietly ship a log that names nobody.
+- [ ] 8.3 ✅ **ANSWERED — the picker STAYS** (owner, 2026-09-07; `design.md` §5b). Keep it, make it
+      SMALL, and keep it BESIDE the actor column in the audit panel. Do NOT move it to Station setup
+      — `stationSetupScope.dom.test.ts` asserts the caveat is absent there, and moving it separates
+      `B-143`'s caveat from the column it qualifies. All three caveat tests stay green and none is
+      weakened.
+      🔴 **And the positive obligation this creates: the reference draws NO actor column, so this
+      phase must ADD IT BACK** in the new tokens — header and per-row value — as guard item 27.
+      Write the test it is owed: `apps/runtime/tests/auditPanel.actorColumn.dom.test.ts`, asserting
+      the header, a row's value, and the caveat beside them. A grep of `apps/runtime/tests` finds
+      `actor` only as fixture data today, so nothing currently stops the column being dropped.
 - [ ] 8.4 e2e run, URL recorded here.
 
 ## Phase 9 — The surfaces the reference does not draw
 
-- [ ] 9.1 Bring every one of `design.md` §3's twenty-six items into the new design, dressed in the
-      new tokens, each still appearing when its condition holds.
+- [ ] 9.1 Bring `design.md` §3's guard items 1–26 into the new design, dressed in the new tokens,
+      each still appearing when its condition holds. ⚠ **Item 27 is PHASE 8's**, not this phase's —
+      it is the audit log's actor column, which Phase 8 builds and tests.
 - [ ] 9.2 🔴 The lock screen keeps its own chrome and its no-exit contract. It is deliberately NOT
       on the modal primitive, and the reference's own `unlock-dialog` must not be used as an
       argument to put it there.

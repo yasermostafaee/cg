@@ -328,7 +328,7 @@ interface ModalProps {
    * ── IT IS NOT A `ReactNode` ANY MORE, AND THAT IS THE FIX ──────────────────
    *
    * It was, and every one of the four dialogs that used it passed a node carrying
-   * its OWN style — three of them `color: colors.error`, which measures 2.13:1 on
+   * its OWN style — three of them `color: colors.error`, which measures 2.08:1 on
    * this dialog's surface. The region was adopted; the treatment was not, because
    * a `ReactNode` prop asks each caller to decide what a message looks like, and
    * four callers gave four answers.

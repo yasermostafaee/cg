@@ -1,8 +1,14 @@
-# Phase 1 — the map, the deletion guard, and two questions for the owner
+# The map, the deletion guard, the owner's answers, and the palette
 
-**Prompt ID:** `RUNTIME-REDESIGN-01`, Phase 1. Read against the tree at `869e2719` on branch `dev`
-(working tree carrying only the untracked `docs/ui-reference/`, `docs/design/`, `.codex/`,
-`AGENTS.md`). Nothing below is a proposal; every claim names the file that decides it.
+**Prompt ID:** `RUNTIME-REDESIGN-01`. §§0–5 are **Phase 1**, read against the tree at `869e2719` on
+branch `dev`. §§5b–7 are **Phase 2**. Nothing below is a proposal; every claim names the file that
+decides it.
+
+- §0–§3 — Phase 1: method, the MAP, and the DELETION GUARD (twenty-seven items).
+- §4, §5 — Phase 1's two open questions, **both now answered**: §4 carries the owner's correction
+  in place, §5b is the answer to §5.
+- §5b, §6 — the owner's answers, recorded in Phase 2.
+- §7 — Phase 2's own record: the palette, what moved, what was held, and the contrast table.
 
 ## §0 — Method, and what contradicted the prompt
 
@@ -126,14 +132,19 @@ than the page, a declared output never started, a restore came back short. A pro
 reason to draw any of them, and a redesign that ships what is drawn deletes all of them silently.
 
 The list below is built from the source tree, not taken from `PROMPT.md` §1.3. Seven of the
-twenty-six are the ones §1.3 names; nineteen are not.
+twenty-seven are the ones §1.3 names; twenty are not.
 
 ## §3 — THE DELETION GUARD
 
 For each: where it lives now, what it looks like after the redesign, and the test that proves it
 still appears. **A ✅ test already exists and asserts the surface renders under its condition. A 🔴
-test does NOT exist and is owed by Phase 9** — five of the twenty-six, each verified by grep against
-`apps/runtime/tests` rather than assumed.
+test does NOT exist and is owed** — six of the twenty-seven, each verified by grep against
+`apps/runtime/tests` rather than assumed. Five are owed by Phase 9; item 27 is owed by Phase 8,
+which is the phase that builds the surface it guards.
+
+⭐ **Item 27 was added in PHASE 2, by the owner's answer to §5.** It is the only entry that guards a
+surface the reference does not draw _and that the owner has ruled must come back_ — everything
+above it is a surface the redesign must not lose, while 27 is one the redesign must re-add.
 
 ### Alarms in the banner region (`App.tsx`, above the workspace)
 
@@ -375,6 +386,36 @@ After: preserved on the Channel tab, below the metrics.
 ✅ `apps/runtime/tests/outputsSection.dom.test.ts`,
 `apps/runtime/tests/decklinkKeyDeviceHonesty.dom.test.ts`.
 
+### The audit log's WHO — added in Phase 2 by the owner's answer
+
+**27. The actor column, the `B-143` caveat, and the console-name picker that writes it**
+(`B-143`, `audit-actor-console-name`)
+Now: three pieces of ONE surface, and the guard covers all three because deleting any one of them
+silently empties the other two.
+_The picker_ — `#audit-operator`, `AuditPanel.tsx:278-298`, labelled `This console`, placeholder
+`unattributed`; the only writer of the actor in the product (`audit.setOperatorName` →
+`platform/operatorName.ts` → `localStorage['cg.runtime.operatorName']`).
+_The caveat_ — the sentence beside it: _"It is a LABEL you typed, not a verified sign-in — it says
+which console, not which person, and it does not change when somebody else takes the chair."_
+_The column_ — the `actor` header at `AuditPanel.tsx:331` and `entry.actor` in each row at
+`AuditPanel.tsx:473`.
+🔴 **The reference draws NONE of it.** Its audit table is `Time · UTC | Action | Item | Result` and
+its detail list is `Time | Channel | Action`; there is no WHO anywhere in it. So this is the one
+guard item where the redesign must ADD a surface back rather than merely preserve one.
+After: **the picker stays**, made small and kept BESIDE the actor column in the audit panel; the
+column comes back in the new tokens; the caveat stays where it is. It does NOT move to Station
+setup — `stationSetupScope.dom.test.ts` asserts it is absent there, and moving it would separate
+`B-143`'s caveat from the column it qualifies.
+✅ **the caveat**, in three places, all green and none of which may be weakened:
+`auditPanel.legibility.dom.test.ts:264-265`, e2e `audit-legibility.spec.ts:50`, and
+`stationSetupScope.dom.test.ts:113-126` (which also asserts the field is in the AUDIT panel and
+NOT in Station setup).
+🔴 **the COLUMN has no test at all.** A tree-wide grep finds `actor` in `apps/runtime/tests` only
+as FIXTURE data — no assertion anywhere that the table renders an actor header or that a row
+displays `entry.actor`. Owed by **Phase 8**:
+`apps/runtime/tests/auditPanel.actorColumn.dom.test.ts`, asserting the header, a row's value, and
+the caveat beside them.
+
 ### Recorded as NOT at risk
 
 Checked and found DRAWN by the reference, so no guard entry is owed: the backup-server editor
@@ -414,17 +455,34 @@ What IS channel-keyed today, and what is not — read off the Zod schemas in
 | `audit`           | 🔴 no channel in the request; records carry one                                        |
 | `lock`            | 🔴 station-wide, and arguably correct — a locked console is locked                     |
 
-🔴 **The one that decides the phase is `stack`.** `stack.load`, `take`, `update`, `stop`, `out`,
-`remove`, `setPosition`, `setActiveLook`, `swapLiveSource`, `setPlateVolume(s)` are all addressed by
-`itemId`, and the bulk verbs `clearAll` / `stopAll` / `removeAll` / `silenceAllLivePlates` take no
-arguments at all. A `channel` field occurs nowhere in `stack.ts` except inside
-`StackRestoreChannel`'s migration report, as a description of where a row came back. **So a second
-channel's rows cannot be addressed today, and a bulk verb cannot be scoped to one channel.**
+🔴 **The one that decides the phase is `stack`** — but NOT in the way this section first said, and
+the correction is recorded here rather than edited away because Phase 7 would otherwise inherit a
+finding that is too strong.
 
-⚠ And a scoping question that is not merely additive: `stack.silenceAllLivePlates` is the PANIC
-verb, and it takes no arguments **on purpose** — the scope is not the caller's to choose. Making it
-channel-scoped would be a change to an emergency control's contract, not a widening. That is the
-owner's call, and Phase 7 must not make it in passing.
+⚠ **SUPERSEDED, by the owner, 2026-09-07:** _"a second channel's rows cannot be addressed today"_ is
+**wrong**. `itemId` identifies one STACK ITEM, which is one operator ROW, and
+`StackItemStateSchema.slot` carries `{ channel, layer, server }` — **the channel lives INSIDE the
+item, and the ids are globally unique.** So `stack.load`, `take`, `update`, `stop`, `out`, `remove`,
+`setPosition`, `setActiveLook`, `swapLiveSource` and `setPlateVolume(s)` are **already
+channel-agnostic**: a per-row verb reaches a row on any channel, because the row itself knows which
+channel it is on. What is true is that no REQUEST carries a `channel` field, which is a different
+and much smaller statement.
+
+**THE REAL SINGLE-CHANNEL GAP IS EXACTLY THREE THINGS:**
+
+1. **Five verbs take `z.void()`** — `removeAll`, `clearAll`, `stopAll`, `snapshot` and
+   `silenceAllLivePlates` — and therefore mean _"everything the bridge knows about"_. That is the
+   only place a channel cannot be named.
+2. **There is no channel-discovery call on the contract at all.** Nothing asks the bridge what
+   channels exist.
+3. **`fixedLayers` declares ONE bank on ONE channel, and it is the app's only channel authority.**
+   `features/channels/ChannelScope.tsx:30` reads `bank?.channel ?? 1` and builds a one-element tab
+   array; `FixedLayerBankSchema.channel` is documented _"one channel per bank, v1"_.
+
+⚠ And the trap that belongs beside that list: **`stack.silenceAllLivePlates` stays unscoped ON
+PURPOSE.** It is the PANIC verb, and the scope of a panic is not the caller's to choose. Making it
+channel-scoped would be a change to an emergency control's CONTRACT, not a widening of it. That is
+the owner's call, and Phase 7 must not make it in passing.
 
 **What Phase 7 can therefore do without inventing a contract:** shape the channel strip as a list
 whose length is data; key browser-local per-channel UI state (selected tab, panel geometry) by
@@ -467,7 +525,219 @@ Three further facts the owner will want when deciding:
   identity one, and a login in front of an emergency console is wrong), and a per-connection client
   id (rejected — it identifies a browser, and nobody disputes which browser did something).
 
-🔴 **Not decided here.** Phase 8 needs the owner's answer to one of: (a) keep the picker, moving it
-to Station setup — which contradicts `stationSetupScope.dom.test.ts` and separates the caveat from
-the column; (b) drop the picker and accept a permanently `unattributed` log, said plainly on the
-surface; (c) supply a different identity, which is new work and outside this programme.
+## §5b — ANSWERED BY THE OWNER, 2026-09-07: THE PICKER STAYS
+
+**The picker is KEPT. It is made SMALL, and it stays BESIDE the actor column in the audit panel.**
+The objection recorded in `PROMPT.md` §8 point 8 was **visual clutter, not the capability** — so
+the answer is a size and a placement, not a deletion.
+
+**It is NOT relocated to Station setup**, and the two reasons are independent:
+`stationSetupScope.dom.test.ts:113-126` asserts the caveat is not there, and moving the picker would
+separate `B-143`'s _"self-declared and unverified"_ caveat from the column it qualifies — which is
+the one thing `B-143` exists to prevent. **The caveat does not move. All three pinning tests stay
+green and none of them is weakened.**
+
+🔴 **The consequence for the build, and it is the reason this became guard item 27:** the
+reference's audit table draws **no actor column at all**, so the redesign must **ADD IT BACK**,
+dressed in the new tokens. That is a positive obligation, not a preservation, and it is filed as
+§3's twenty-seventh guard item with the test it is owed — because a surface the reference does not
+draw is exactly the kind that gets built out of existence.
+
+**What the three options above resolved to:** (a) — with the correction that the picker stays in
+the audit panel rather than moving to Station setup, which the option as originally written had it
+doing. Options (b) and (c) are closed.
+
+## §6 — THE EARLIER SETTINGS MOCKUPS: ABANDONED, NOT SUPERSEDED
+
+`PROMPT.md` §7 says to mark `docs/design/station-setup-{mockup,redesigned}.html` superseded in one
+line. **Owner, 2026-09-07: they are ABANDONED — not relevant, never committed, and not to be
+committed.** They existed only in one machine's untracked working tree. §7's obligation is
+discharged by this line; **Phase 7 must not chase them.**
+
+## §7 — PHASE 2: WHAT THE PALETTE MOVE ACTUALLY DID
+
+### 7.1 The rule that decided each role
+
+`PROMPT.md` §2.1 names nineteen values and calls them ROLE tokens; it does not say which of the
+app's ~120 roles takes which. That mapping is the phase's real work, so it was made mechanical and
+written into `theme.ts` where the next phase will read it:
+
+> **A role adopts a reference value IFF the reference declares a value for THAT role** — one of the
+> nineteen in its `:root`, or a value its own CSS spells for that exact role (`.btn:hover`, the
+> `input` border, `.btn.primary:hover`). Where the reference declares nothing for a role, the role
+> KEEPS its value. The one extension is a value DERIVED from a role that moved — an alpha wash of
+> the accent, a shared base constant — where the derivation is re-applied so a family stays one hue.
+
+The rule matters because the alternative is taste, and taste is what produces a palette nobody can
+audit against the drawing it came from.
+
+### 7.2 What moved
+
+The nineteen reference values live as module-private constants in `apps/runtime/src/renderer/theme.ts`,
+transcribed from `04-playout-layers.html`'s `:root`. `@cg/ui` is **untouched** — it is shared with
+the Designer and tokens-only by the design-system rule, so the Runtime's chrome moved OUT of
+`chrome.*` and into its own token home rather than repainting the Designer from a Runtime reference.
+
+| app role                                                                 | was                  | now                   | the reference role it took |
+| ------------------------------------------------------------------------ | -------------------- | --------------------- | -------------------------- |
+| `--r-surface-sunken` / `background`                                      | `#0F172A`            | `#0b1017`             | `--bg`                     |
+| `--r-surface` / `panel`                                                  | `#111827`            | `#141b25`             | `--surface`                |
+| `--r-surface-raised` / `panelMuted`                                      | `#1F2937`            | `#1b2532`             | `--raised`                 |
+| `--r-field-bg`                                                           | `#0E1822`            | `#0e151e`             | `--inset`                  |
+| `--r-border` / `border`                                                  | `#374151`            | `#2d3a49`             | `--line`                   |
+| `--r-table-rule`                                                         | `rgba(55,65,81,.55)` | `#24303d`             | `--soft`                   |
+| `--r-text` / `text`                                                      | `#E5E7EB`            | `#eef3f9`             | `--text`                   |
+| `--r-text-muted` / `textMuted`                                           | `#9CA3AF`            | `#8e9eaf`             | `--muted`                  |
+| `--r-accent`, `--r-btn-add`, `--r-ready`                                 | `#38BDF8`            | `#74cdf6`             | `--blue`                   |
+| `--r-accent-fill`                                                        | `#153B56`            | `#173243`             | `--bluebg`                 |
+| `--r-accent-lift`, `--r-toggle-on-hover`                                 | `#7DD3FC`/`#6DD3FB`  | `#a7e2fc`             | `.btn.primary:hover`       |
+| `--r-accent-line`, `--r-rail-selected-line`                              | `#2F7BA8`            | `#31556a`             | `.badge.ready` border      |
+| `--r-field-line`                                                         | `#2D4150`            | `#435367`             | `input` border             |
+| `--r-control-hover-bg`                                                   | `#2C3A4E`            | `#304258`             | `.btn:hover`               |
+| `--r-control-hover-line`                                                 | `#64748B`            | `#5e748b`             | `.btn:hover`               |
+| `--r-success`, `--r-ok-text`                                             | `#10B981`/`#86EFAC`  | `#85e4b6`             | `--mint`                   |
+| `--r-rehearsing` / `rehearsing`                                          | `#A78BFA`            | `#c3acff`             | `--purple`                 |
+| `--r-caution-text`                                                       | `#FCD34D`            | `#f3cd88`             | `--amber`                  |
+| `--r-danger-text`                                                        | `#FCA5A5`            | `#ffaaa7`             | `--red`                    |
+| `--r-focus-halo`/`-menu-hover-fill`/`-divider-drag-fill`/`SELECTED_WASH` | `rgba(56,189,248,α)` | `rgba(116,205,246,α)` | derived from the accent    |
+
+**Seven roles are NEW**, because the reference declares a value the app had no name for:
+`--r-text-secondary` (`--secondary`), `--r-border-soft` (`--soft`), `--r-caution-bg`
+(`--amberbg`), `--r-danger-bg` (`--redbg`), `--r-ok-bg` (`--mintbg`), `--r-rehearsing-bg`
+(`--purplebg`), and `colors.textSecondary`. Nothing reads them yet; Phases 3–9 dress the surfaces
+that want them.
+
+⚠ One value outside the token home moved with them: **`apps/runtime/index.html`'s `--cg-ok`**, which
+is a documented MIRROR of `--r-success` for the boot splash (the splash paints before the bundle and
+cannot read a token). `splashCss.test.ts` asserts the two agree, so the lockstep is enforced rather
+than remembered. **The rest of the splash family is HELD** — it is tuned for large tracked-out type on
+a lifted ground and its own note forbids tying it to the chrome; the relationship that mattered (the
+splash ground is LIGHTER than the console's) survives and is now wider than before.
+
+### 7.3 What was HELD, and why
+
+| held                                                                                                                                                         | why                                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--r-onair` `rgb(44 255 122)`                                                                                                                                | 🔴 owner's exact value; the reference's mint is its ONE green for BOTH air and health — see 7.5                                              |
+| `colors.errorText` `rgb(255 28 28)`                                                                                                                          | 🔴 owner's exact value (`RUNTIME-FIX-0904`); it is the ink that now fails AA — see 7.5                                                       |
+| `--r-row-marked-fill` `rgb(145 93 5)`, `markedRowInk`                                                                                                        | the owner's measured pair; both unchanged, so **5.06:1 is unchanged**                                                                        |
+| `--r-caution` / `pending` / `exit` `#F59E0B`                                                                                                                 | ONE token used as an INK and as a FILL; the reference splits those, and un-splitting it is a component edit                                  |
+| `colors.error`, `--r-danger`, `--r-alarm-*`, `--r-toast-ok-*`, `--r-band-stripe-*`, `--r-notice-*`                                                           | the alarm/notice FILL families; the reference draws no dark fill, it draws ink-on-`*bg`. Phase 9 dresses them                                |
+| `--r-row-bg`, `--r-row-empty-bg`, `--r-table-head-bg`, `--r-row-selected-fill`                                                                               | the layer table's grounds — `PROMPT.md` §3 names its own hover `#1b2a3a` and selected `#192e40`, so Phase 3 takes them as one piece          |
+| `--r-splash-*`                                                                                                                                               | its own family by its own documented rule; only the `--cg-ok` mirror moved                                                                   |
+| `--r-accent-strong`, `--r-accent-fill-hover`, `--r-accent-line-hover`, `--r-accent-ink`, `--r-rehearsing-strong/mid/deep`, `--r-border-strong`, `--r-verb-*` | the reference declares no value for these weights; each keeps the relationship it had (a hover still LIFTS, a strong weight is still darker) |
+
+### 7.4 The geometry tokens (§2.2)
+
+Declared, **read by nothing** — applying them is a LAYOUT change and Phase 2 changes no layout.
+Phase 3 adopts the table against a measured property table in Playwright (jsdom has no layout,
+golden rule 12c); declaring the numbers here is what makes that an adoption rather than a second
+transcription.
+
+`--r-row-pad: 16px 17px` · `--r-btn-h: 39px` · `--r-btn-h-small: 33px` · `--r-row-action-h: 34px` ·
+`--r-icon-btn-box: 36px` · `--r-row-icon-btn-w: 32px` · `--r-row-icon-btn-h: 34px` ·
+`--r-row-icon-btn-narrow-w: 30px`
+
+⚠ **`--r-modal-foot-h` is unchanged at `59px` and is still a FLOOR.** None of the heights above may
+be composed into it: a height that belongs to BEING a footer cannot be a function of what a section
+puts in it (`B-240`, `station-setup-frame.spec.ts`).
+
+### 7.5 🔴 THE CONTRAST TABLE — every semantic ink, re-measured against the new surfaces
+
+WCAG 2.x relative luminance, the same arithmetic `emptiedAirRowContrast.dom.test.ts` uses. AA text
+floor **4.5**; graphic/large-text floor **3.0**. Surfaces: `page` = `--r-surface-sunken`,
+`panel` = `--r-surface`, `raised` = `--r-surface-raised`, `inset` = `--r-field-bg`,
+`row` = `--r-row-bg` and `head` = `--r-table-head-bg` (both HELD for Phase 3).
+
+| semantic ink                              | value             | page  | panel      | raised     | inset | row        | head       |
+| ----------------------------------------- | ----------------- | ----- | ---------- | ---------- | ----- | ---------- | ---------- |
+| text (primary)                            | `#eef3f9`         | 17.10 | 15.52      | 13.87      | 16.44 | 13.64      | 10.79      |
+| secondary _(new, unused yet)_             | `#bbc8d7`         | 11.23 | 10.18      | 9.10       | 10.79 | 8.95       | 7.08       |
+| muted                                     | `#8e9eaf`         | 6.96  | 6.31       | 5.64       | 6.69  | 5.55       | **4.39** ✗ |
+| **ON AIR** _(sacred, held)_               | `rgb(44 255 122)` | 14.26 | 12.93      | 11.56      | 13.71 | 11.37      | 9.00       |
+| ready / accent sky                        | `#74cdf6`         | 10.73 | 9.73       | 8.70       | 10.31 | 8.55       | 6.77       |
+| caution amber _(ink, `--r-caution-text`)_ | `#f3cd88`         | 12.63 | 11.46      | 10.24      | 12.14 | 10.07      | 7.97       |
+| caution amber _(fill role, held)_         | `#F59E0B`         | 8.88  | 8.06       | 7.20       | 8.54  | 7.08       | 5.61       |
+| danger red as TEXT                        | `#ffaaa7`         | 10.50 | 9.53       | 8.52       | 10.10 | 8.38       | 6.63       |
+| **errorText** _(owner's, held)_           | `rgb(255 28 28)`  | 4.94  | **4.48** ✗ | **4.00** ✗ | 4.75  | **3.94** ✗ | **3.12** ✗ |
+| ok / success mint                         | `#85e4b6`         | 12.51 | 11.35      | 10.15      | 12.03 | 9.98       | 7.90       |
+| rehearsing violet                         | `#c3acff`         | 9.69  | 8.79       | 7.86       | 9.32  | 7.73       | 6.12       |
+| offline grey _(held)_                     | `#94A3B8`         | 7.44  | 6.75       | 6.03       | 7.15  | 5.93       | 4.70       |
+| emptyRow _(owner's, held)_                | `rgb(91 93 96)`   | 2.89  | 2.62       | 2.34       | 2.78  | 2.30       | 1.82       |
+| idle mark _(held)_                        | `#3F3F46`         | 1.83  | 1.66       | 1.48       | 1.76  | 1.46       | 1.15       |
+
+⚠ **The last two rows are BELOW every floor and neither is a Phase 2 regression.** `emptyRow` is
+the owner's exact value and its whole job is to RECEDE (an empty row must not compete with a row
+that can do something); `idle` is a MARK, and `rowState.ts`'s rule pairs every state with its own
+SHAPE and its own WORD so the hue is never the sole carrier. Both were below the floor before this
+phase and both moved slightly UP. They are listed because "every semantic ink" means every one.
+
+**Inks on their own companion ground, as the reference composes them** (all clear AA comfortably,
+which is what the `*bg` pairs are for): blue on `--r-accent-fill` **7.50** · mint on `--r-ok-bg`
+**8.48** · violet on `--r-rehearsing-bg` **7.16** · amber on `--r-caution-bg` **8.99** · red on
+`--r-danger-bg` **7.89**.
+
+**Fills with their inks, unchanged by Phase 2:** white on `colors.error` 8.31 · `--r-alarm-ink` on
+`--r-alarm-bg` 9.16 · `--r-ink-on-band` on the skew band's amber 9.16 · `--r-toast-ok-ink` on
+`--r-toast-ok-bg` 7.29 · white on `--r-danger` 4.83.
+
+**The measured decisions of §2.3, restated exactly:**
+
+| pair                                            | before  | after                                             |
+| ----------------------------------------------- | ------- | ------------------------------------------------- |
+| `markedRowInk` on `rgb(145 93 5)`               | 5.06:1  | **5.06:1 — UNCHANGED**                            |
+| marked-row EDGE BARS on the same fill           | 3.86:1  | **3.68:1 — CHANGED**                              |
+| _(positive control)_ `textMuted` on the fill    | 2.19:1  | 2.03:1 (still ≪ 3, so the remedy is still needed) |
+| `text` on the fill                              | 4.498:1 | 4.99:1 (was a hair under AA, now clears it)       |
+| `Notice` refusal detail on the amber fill       | 13.06:1 | 14.07:1                                           |
+| `Notice` neutral detail on `--r-surface-raised` | 5.78:1  | 5.64:1                                            |
+| `Notice` refusal ink on the amber fill          | 11.21:1 | 10.39:1                                           |
+| `colors.error` as TEXT (the illegible one)      | 2.13:1  | 2.08:1                                            |
+
+### 7.6 🔴 TWO THINGS FOR THE OWNER. Reported, and stopped at.
+
+**(1) `errorText` now fails AA on three of the surfaces it is used on.** `rgb(255 28 28)` is the
+owner's exact value (2026-09-04, `RUNTIME-FIX-0904`) and Phase 2 did not touch it — the SURFACES
+moved under it. It reads **4.48:1** on `--r-surface` (was 4.59:1, i.e. it was already marginal),
+**4.00:1** on `--r-surface-raised` (was 3.80:1 — it was already FAILING there and Phase 2 improved
+it) and **3.94:1** on the layer row and **3.12:1** on the table header. It is the row's ERROR mark, the header's in-error count, the
+status bar's hard failure, the link indicator, the lock overlay's refusal, the Inspector's file error
+and the audit log's `failed` outcome. ⚠ **Every one of those pairs a WORD and a SHAPE with the hue**
+(`rowState.ts`'s rule), so nothing is unreadable — but the ink itself is below the floor and the
+value is not this programme's to move. Two ways out, both the owner's: lift the ink, or darken the
+surfaces those particular components sit on (a Phase 9 question about the status bar and the row).
+
+**(1b) And one ink Phase 2 DID move now fails on ONE surface: `--r-text-muted` on the layer
+table's HEADER.** `#8e9eaf` on `--r-table-head-bg` (`rgb(45 55 69)`) reads **4.39:1**, where
+`#9CA3AF` read 4.74:1. It is the column-header labels. ⭐ **This one closes itself in Phase 3**: the
+header ground is HELD only because `PROMPT.md` §3 takes the table's grounds as one piece, and the
+reference's own row/header separator is `--soft` `#24303d`, on which the same ink reads **4.89:1**
+and clears AA. It is named here rather than silently deferred, because a fail that is expected to
+close is still a fail until the phase that closes it has run.
+
+**(2) The reference has ONE green where this palette has two, and it is on the sacred colour.**
+The reference spends `--mint` on `.badge.live` AND `.badge.success` AND the footer's `healthy` —
+the same colour for "this is on air" and for "this connection is fine". This palette forbids that:
+`--r-onair` is the owner's `rgb(44 255 122)` and `--r-success` is deliberately a different, softer
+green so an ack flash on a button cannot be misread as an air claim. **Phase 2 gave `REF_MINT` to
+the OK/healthy role — where it means what the reference means by it — and left `--r-onair` alone.**
+So the console does not match the drawing on its single most safety-critical colour, on purpose, and
+the owner is the one to settle which of the two rules wins. Nothing later in the programme should
+resolve it in passing.
+
+⭐ **And the severity split the guarded alarms depend on is INTACT and was checked, not assumed:**
+the bridge-skew banner still fills with `colors.pending` (amber, `#F59E0B` held) and is still
+incapable of reading red; the output alarm and the raster-mismatch banner still fill with
+`colors.error` (red). No role token collapsed the distinction, because the alarm FILL family was
+held as a whole.
+
+### 7.7 What Phase 2 did NOT do
+
+- **No layout, no behaviour, no refusal, no component structure changed.** The geometry tokens are
+  declared and read by nothing.
+- **`@cg/ui` is untouched.** ⚠ One residue, named so it is not read as an oversight: `@cg/ui`'s
+  `theme.css` still paints `body` and the SCROLLBARS from its own `--cg-*` values. The app shell is
+  `100vh` and paints `colors.background`, so no old ground is visible; the scrollbar thumb is still
+  `--cg-border` `#374151`. Moving it is a `@cg/ui` change and is not this phase's to make.
+- **The layer table's grounds and the alarm/notice fills are untouched** — Phases 3 and 9 own them,
+  and each is listed in 7.3 with the reason.

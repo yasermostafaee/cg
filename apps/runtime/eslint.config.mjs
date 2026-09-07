@@ -37,7 +37,7 @@ export default [
     // A dialog's message — "why that did not happen" — belongs in `Modal`'s pinned
     // region, which sits OUTSIDE the scrolling body and immediately above the action
     // row. `DelimitersModal` rendered `<p role="alert">` as the last child of its
-    // Modal instead: below the fold on a long list, in a red measuring 2.13:1 on the
+    // Modal instead: below the fold on a long list, in a red measuring 2.08:1 on the
     // dialog surface. It was on the primitive and went around this one contract.
     //
     // The COLOUR half of that hole is closed by the type system — `Modal`'s `message`
