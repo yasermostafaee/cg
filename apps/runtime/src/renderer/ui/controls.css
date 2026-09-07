@@ -2471,3 +2471,39 @@ input[type='checkbox']:disabled:checked {
   line-height: 1.55;
   color: var(--r-text-muted);
 }
+
+/*
+ * ── `B-239` — THE FOOTER'S COMMIT CONTRACT, MARKED AS A LABEL ───────────────
+ *
+ * A section's footer carries one standing sentence: how this section's edits reach the
+ * bridge. It is pinned, and it never changes.
+ *
+ * 🔴 **The defect was that it looked exactly like an event.** It was a muted-grey sentence in
+ * the corner an amber `Notice` arrives in, so the operator read it as a report of something
+ * that had happened and then learned to ignore it — which is the worst of both, because the
+ * line he stopped reading is the one that says what a button will do.
+ *
+ * ⚠ **The first fix attempted was to DELETE it, and that was wrong.** The section's own legend
+ * says the same thing, but the legend SCROLLS AWAY with the pane while this stays pinned. What
+ * needed to change was the treatment, not the presence.
+ *
+ * ⚠ **AND IT IS NOT UPPERCASE, WHICH THE FIRST ATTEMPT MADE IT.** The app's label vocabulary —
+ * `.cg-card__title`, `.cg-rail-group`, a table header — IS small tracked-out uppercase, so
+ * reaching for it here was the obvious move. Rendered, it was wrong: those labels are one to
+ * three WORDS and these are sentences, and `THE CATALOGUE SAVES AS YOU GO. THE LAYER BAND IS
+ * APPLIED BY THE BUTTON IN ITS OWN SECTION.` shouts a paragraph across the bottom of the
+ * dialog. `STATION-CHROME-02` §3 had just taken the shouting OFF this dialog's buttons and
+ * titles for exactly that reason; putting it back on a longer string would have been the same
+ * mistake, larger.
+ *
+ * So the separation is by WEIGHT and SIZE rather than by case: this is the smallest, quietest
+ * text in the footer, and it never changes. The event it must not be mistaken for is a
+ * `Notice` — a bordered, amber-filled box that APPEARS, in the region above. Those two were
+ * never as alike as the report suggested (a refusal is amber, not grey); what this fixes is
+ * that the contract now recedes instead of competing.
+ */
+.cg-footer-contract {
+  font-size: var(--r-text-xs);
+  color: var(--r-text-muted);
+  line-height: 1.45;
+}

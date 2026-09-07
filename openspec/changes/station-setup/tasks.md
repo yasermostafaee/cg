@@ -151,3 +151,54 @@
       `E2E (Playwright)` **RAN** (not skipped) and passed, 08:32:37 → 08:43:04 (**627 s**),
       run `conclusion: success`, with `Lint • Typecheck • Test • Build` green beside it
       (200 s). The local `pnpm gate` was `0 cached, 93 total`, exit 0, 257 s.
+
+## 11. `SOURCE-DELETE-GATE-03` — one destroys without asking, one refuses without saying
+
+- [x] 11.1 🔴 `B-237` — the live-source bin and Edit now ASK. The fallout is computed IN
+      ADVANCE with the bridge's own `pruneAssignmentsForCatalog`, on the bridge's own published
+      assignments, so the question names every template and plate — and HOW MANY BOXES a
+      multi-box template binds. ⚠ NO bridge refusal was added: §1's on-air-refuse row was
+      WITHDRAWN by the owner against `sources.ts`'s written decision (an installation must be
+      able to retire a live), and the cascade takes nothing off air — level 2 is frozen at
+      take. Red-first proved by reverting the guard: **4 failed / 3 passed**.
+- [x] 11.2 🔴 `B-238` — the Layers remove. TWO defects: it CONFIRMED where `R-017` refuses
+      (`Remove and clear (ON AIR)`), and the refusal that came back rendered NOTHING because
+      `stack.remove` RESOLVES `{ accepted: false, errorCode: 'on-air' }` and the result was
+      discarded, with `reportCommandError` only in a `catch` the refusal never enters.
+      Measured on the running app before the fix: item stays on air, `msg: null`, no toast.
+      Fixed by consuming `removeIsRefused` (the published answer) and `errorCodeMessage`
+      (which has mapped the code to `REMOVE_ON_AIR_REASON` all along).
+- [x] 11.3 🔴 `B-239` — **and my first fix for it was wrong.** The reported diagnosis was that
+      a standing sentence OCCUPIED the message region; measurement showed the region is
+      conditional and ABSENT at rest on four of five tabs, with `footerRest` a separate node
+      one row below. The silence was that nothing was ever reported (11.2). The sentence stays
+      — it is the commit contract, pinned while the legend that duplicates it scrolls away —
+      and now wears the app's LABEL treatment so it cannot be read as an event. The first
+      red-first spec asserted the deletion and was rewritten before being made green.
+- [x] 11.4 🔴 `B-240` — the footer's three answers for one job. `Close` removed from every
+      section footer (dismissal is the ✕ / Escape / backdrop); `Cancel` → `Revert`, section
+      scoped, shown only when dirty from the SAME read the rail's dot makes; read-only and
+      as-you-go tabs carry no buttons. And the thing it hid: dismissing with unapplied edits
+      now asks, naming the sections.
+- [x] 11.5 `B-241` FILED — a route returning a field its response schema does not declare has
+      it silently stripped by `safeParse`. `StackRemoveChannel` is the measured instance: the
+      bridge composes a layer-naming sentence that never reaches the wire. NOT fixed by
+      widening the schema (§7): `errorCodeMessage` already yields the canonical sentence.
+- [x] 11.6 `B5` — `useTemplatePicker`'s stale comment (`there is no code to quote`) corrected;
+      it now quotes the code, which `R-017` added.
+- [ ] 11.7 `B-242` FILED, not taken — a removed delimiter's attached field falls back to
+      showing its raw characters (`\n (in use)`) instead of the name it had. Behaviour is
+      unchanged and correct (the VALUE is stored, not the id, so nothing re-splits); only the
+      human label is lost.
+- [ ] 11.8 `B-243` FILED, not taken — a MOCK/BRIDGE PARITY gap found by verifying 11.2 on the
+      running app. `item-blocked-restore` is `on-air` AND publishes `removeExempt: true`, so
+      `removeIsRefused` correctly leaves its control LIVE (the real bridge's `#removeRefusal`
+      consults `#removeExempt` and would accept). But `MockRuntime.remove()` refuses on bare
+      `isOnAirStatus`, ignoring the exemption it itself published — measured:
+      `{ accepted: false, errorCode: 'on-air' }`. The mock's own note explains why the OTHER
+      exemption (`B-212`, an item on no declared row) is unreachable there, and is silent about
+      this one. One line to fix (`&& !item.removeExempt`), but it changes mock behaviour that
+      other specs may lean on, so it is filed rather than taken here. ⭐ It is also the reason
+      11.2's second half is not hypothetical: this is a live case where the control is
+      correctly enabled and the answer comes back a refusal.
+- [ ] 11.9 Linux `gate:e2e` for `SOURCE-DELETE-GATE-03` — OWED.

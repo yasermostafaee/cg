@@ -3,6 +3,9 @@ import { Pencil, Trash2 } from 'lucide-react';
 import {
   aspectForFormat,
   nextSourceId,
+  // `B-237` — the BRIDGE's own cascade function, run in advance on the bridge's own published
+  // assignments, so the question names exactly what the act will do.
+  pruneAssignmentsForCatalog,
   sourceAspect,
   SUGGESTED_LIVE_SOURCE_LAYER_RANGE,
   type SourceCatalog,
@@ -18,8 +21,10 @@ import { Icon } from '../../ui/Icon.js';
 import type { ModalMessage } from '../../ui/Modal.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { templateDisplayName } from '../library/templateName.js';
+import { useConfirm } from '../../ui/useDialog.js';
 import {
   commitSourceCatalog,
+  currentSourceAssignments,
   currentSourceCatalog,
   sourcesVersion,
   subscribeSources,
@@ -146,6 +151,8 @@ export function SourcesSection({
   const [bandStart, setBandStart] = useState('');
   const [bandEnd, setBandEnd] = useState('');
   const [templates, setTemplates] = useState<readonly TemplateInfo[]>([]);
+  /** `B-237` — the question asked before a catalogue entry is dropped or re-pointed. */
+  const { confirm, confirmDialog } = useConfirm();
 
   // Pulled at OPEN, not subscribed: the catalogue is browser-local (B-085) and
   // the dialog is short-lived. It is read for ONE purpose — turning the
@@ -180,6 +187,64 @@ export function SourcesSection({
     });
   };
 
+  /**
+   * 🔴 `B-237` — **WHAT WOULD BE LOST, WORKED OUT BEFORE THE ACT RATHER THAN READ BACK AFTER IT.**
+   *
+   * ── WHY THIS IS A CONFIRMATION AND NOT A REFUSAL ────────────────────────────
+   *
+   * Deleting a source that is bound is ALLOWED, and that is a written decision, not an
+   * oversight: `@cg/shared-ipc`'s `sources.ts` records it verbatim — _"an installation must be
+   * able to retire a live"_ — and the deletion CASCADES rather than dangling. The first
+   * spelling of this fix added a bridge refusal for the on-air case and was withdrawn: a
+   * published decision beats a re-derived one, and the fact settles it too, because the
+   * cascade takes nothing off air. Level 2 is frozen at take, so what is up stays up; only the
+   * NEXT take refuses, with `live-source-unassigned`.
+   *
+   * The real gap the decision never addressed is that the act was never ASKED. One press of a
+   * bin dropped a catalogue entry and every plate binding to it, across every template, and
+   * said so only afterwards.
+   *
+   * ── THE FALLOUT IS COMPUTED WITH THE BRIDGE'S OWN FUNCTION ──────────────────
+   *
+   * `pruneAssignmentsForCatalog` is the exact function the bridge runs on the way through, and
+   * it is run here on the PUBLISHED assignments against the catalogue this press would send.
+   * That is not the `B-228` mistake: both inputs are the bridge's own published values and the
+   * function is the bridge's own, exported for this. What would have been the mistake is
+   * hand-rolling a `some(a => a.sourceId === id)` beside it.
+   *
+   * ⚠ **AND WHAT IT CANNOT SAY, said plainly rather than guessed.** The confirmation names
+   * every template and plate that WOULD BE DROPPED. It does NOT say which of them is on air at
+   * this moment: that answer is the frozen-at-take level 2 (`assignmentInForce`) plus per-look
+   * and per-row overrides, which live on the stack item and not in this store — so the
+   * renderer cannot answer it without re-resolving the take, which is precisely the derivation
+   * `B-228` forbids. It is a gap in the sentence, not a gap in the guard, and closing it means
+   * the bridge publishing the answer.
+   */
+  const bindingsFor = (sourceId: string): readonly TemplateSourceAssignment[] => {
+    const next: SourceCatalog = {
+      ...catalog,
+      sources: catalog.sources.filter((s) => s.id !== sourceId),
+    };
+    return pruneAssignmentsForCatalog(currentSourceAssignments(), next).dropped;
+  };
+
+  /** The templates and boxes a set of bindings covers, in the operator's words. */
+  const describeBindings = (bound: readonly TemplateSourceAssignment[]): string => {
+    const byTemplate = new Map<string, number>();
+    for (const a of bound) byTemplate.set(a.templateId, (byTemplate.get(a.templateId) ?? 0) + 1);
+    const named = [...byTemplate.entries()].map(([templateId, boxes]) => {
+      const template = templates.find((t) => t.templateId === templateId);
+      const label = template === undefined ? templateId : templateDisplayName(template);
+      /*
+        ⚠ §1 — HOW MANY BOXES, not just how many templates. A multi-box template may bind one
+        source to several of its plates, and "used by 1 template" would understate what
+        disappears from the screen by a factor of four.
+      */
+      return boxes === 1 ? label : `${label} (${String(boxes)} boxes)`;
+    });
+    return named.join(', ');
+  };
+
   /** The deletion report, in the operator's vocabulary: template names, not ids. */
   const describeDropped = (dropped: readonly TemplateSourceAssignment[]): ModalMessage => {
     const named = dropped.map((a) => {
@@ -209,6 +274,30 @@ export function SourcesSection({
   };
 
   const band = catalog.layerRange;
+
+  /** `B-237` — ask, name the fallout, and only then send. */
+  const removeSource = async (source: SourceDefinition, index: number): Promise<void> => {
+    const bound = bindingsFor(source.id);
+    const boxes = bound.length;
+    const templateCount = new Set(bound.map((a) => a.templateId)).size;
+    const confirmed = await confirm({
+      title: `Delete the source “${source.name}”?`,
+      body:
+        boxes === 0
+          ? `Nothing is bound to it, so no template changes. The source is removed from the ` +
+            `station's catalogue and cannot be picked again until it is re-defined.`
+          : `${String(boxes)} ${boxes === 1 ? 'plate' : 'plates'} on ` +
+            `${String(templateCount)} ${templateCount === 1 ? 'template' : 'templates'} ` +
+            `${boxes === 1 ? 'is' : 'are'} bound to it — ${describeBindings(bound)}. Deleting it ` +
+            `unassigns ${boxes === 1 ? 'that plate' : 'those plates'}: anything already on air ` +
+            `stays up, and the next take of ${templateCount === 1 ? 'that template' : 'those templates'} ` +
+            `is refused until a new source is assigned in the Inspector.`,
+      confirmLabel: 'Delete source',
+      tone: 'remove',
+    });
+    if (!confirmed) return;
+    commitCatalog({ ...catalog, sources: catalog.sources.filter((_, i) => i !== index) });
+  };
 
   return (
     <>
@@ -306,12 +395,7 @@ export function SourcesSection({
                             className="cg-list-remove"
                             aria-label={`Remove ${source.name}`}
                             title="Remove this source"
-                            onClick={() =>
-                              commitCatalog({
-                                ...catalog,
-                                sources: catalog.sources.filter((_, i) => i !== index),
-                              })
-                            }
+                            onClick={() => void removeSource(source, index)}
                           >
                             <Icon icon={Trash2} size={15} />
                           </Button>
@@ -415,19 +499,58 @@ export function SourcesSection({
                   };
             const cleaned =
               next.format === undefined ? (({ format: _drop, ...rest }) => rest)(next) : next;
-            commitCatalog({
-              ...catalog,
-              sources:
-                current === null
-                  ? [...catalog.sources, cleaned as SourceDefinition]
-                  : catalog.sources.map((s) =>
-                      s.id === current.id ? (cleaned as SourceDefinition) : s,
-                    ),
+            const send = (): void => {
+              commitCatalog({
+                ...catalog,
+                sources:
+                  current === null
+                    ? [...catalog.sources, cleaned as SourceDefinition]
+                    : catalog.sources.map((s) =>
+                        s.id === current.id ? (cleaned as SourceDefinition) : s,
+                      ),
+              });
+              setEditing(null);
+            };
+            /*
+              🔴 `B-237` — **EDIT IS THE WORSE OF THE TWO, AND IT HAD NO GATE AT ALL.**
+
+              A delete at least announced itself afterwards, through `describeDropped`. An edit
+              REMOVES NOTHING, so that notice never fired — and re-pointing a bound source's
+              device index, NDI name or URL silently redefines what every plate on it is
+              showing, including the ones on air. The binding survives; what it resolves to
+              does not.
+
+              Same question, same computation, different verb: the bindings are the ones a
+              DELETE would drop, which is exactly the set an edit re-points.
+
+              ⚠ Only when it is BOUND, and only when it is an EDIT. Adding a source and
+              editing an unbound one change nothing on screen and are not worth a question —
+              a confirmation the operator meets for nothing is one he stops reading.
+            */
+            const bound = current === null ? [] : bindingsFor(current.id);
+            if (bound.length === 0) {
+              send();
+              return;
+            }
+            const templateCount = new Set(bound.map((a) => a.templateId)).size;
+            void confirm({
+              title: `Change “${current?.name ?? ''}” while it is in use?`,
+              body:
+                `${String(bound.length)} ${bound.length === 1 ? 'plate' : 'plates'} on ` +
+                `${String(templateCount)} ${templateCount === 1 ? 'template' : 'templates'} ` +
+                `${bound.length === 1 ? 'is' : 'are'} bound to this source — ` +
+                `${describeBindings(bound)}. They keep the binding and start showing whatever ` +
+                `this now points at. Anything already on air keeps the picture it took; the ` +
+                `change reaches it at the next take.`,
+              confirmLabel: 'Change source',
+            }).then((ok) => {
+              if (ok) send();
             });
-            setEditing(null);
           }}
         />
       )}
+      {/* `B-237` — the confirmation, portalled above this dialog. */}
+      {confirmDialog}
     </>
   );
 }

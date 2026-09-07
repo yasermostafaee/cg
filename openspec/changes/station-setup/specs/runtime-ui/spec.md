@@ -94,6 +94,59 @@ A rail item SHALL carry no box at rest, and its selected and hover states SHALL 
 
 - **WHEN** the operator edits the Servers draft and presses Cancel **THEN** nothing is sent to any bridge channel and the dialog closes by the same path as the close affordance and Escape
 
+### Requirement: A destructive act in Station setup asks before it acts, and a refused one says so
+
+Every control in Station setup that destroys or redefines something SHALL either ASK first, naming the fallout in the operator's words, or — where the act is refused — SHALL be unavailable with the reason on it. A refusal that arrives from the bridge SHALL be rendered in the dialog's pinned message region, in the refusal treatment, naming the row and the template.
+
+An act that is refused because something is on air SHALL NOT be offered as a confirmation: the operator is not asked to authorise it. Both the pre-emptive refusal and the message that answers the bridge SHALL read the one exported reason, and the renderer SHALL consult the bridge's published answer rather than re-deriving the rule.
+
+Deleting a bound source SHALL NOT be refused — an installation must be able to retire a live — but SHALL be confirmed, and the confirmation SHALL name every template and plate that would be unassigned, with the count and, for a multi-box template, how many boxes bind it. Editing a bound source SHALL ask the same question, because it redefines what those plates show while removing nothing.
+
+#### Scenario: A row that is on air refuses its remove, and says why
+
+- **WHEN** a candidate-layer row's item is on air **THEN** its remove control is unavailable and carries the canonical on-air reason, and no confirmation is offered
+- **WHEN** the bridge refuses a remove that was nevertheless attempted **THEN** the dialog's pinned region shows that same reason in the refusal treatment, naming the row and the template, and never in a transient surface outside the dialog
+- **WHEN** an item's air state cannot be verified **THEN** the act is confirmed rather than refused, and the confirmation says the item may be on air
+
+#### Scenario: Deleting a source names what goes with it
+
+- **WHEN** the operator presses the bin on a source bound to three plates of a four-box template and one plate of another **THEN** a confirmation names both templates, says how many boxes the multi-box one binds, and states that anything already on air stays up and the next take is refused until a source is assigned
+- **WHEN** the operator presses the bin on a source bound to nothing **THEN** a plain confirmation is still shown
+- **WHEN** the operator declines **THEN** nothing is sent to the sources channel
+
+#### Scenario: Editing a bound source asks, and editing an unbound one does not
+
+- **WHEN** the operator saves an edit to a source that plates are bound to **THEN** a confirmation names those templates and plates before anything is sent
+- **WHEN** the source is bound to nothing, or the operator is ADDING a source **THEN** no question is asked
+
+#### Scenario: A dropped binding is visible, not blank
+
+- **WHEN** a source is deleted and a template's plate was bound to it **THEN** that plate reads as needing a source in the Inspector, and a take of that template is refused with the existing live-source-unassigned reason
+
+### Requirement: One job, one control, one name in the dialog's footer
+
+A section's footer SHALL carry that section's own actions and no others. Dismissal SHALL be dialog-level — the close affordance, Escape and the backdrop — and SHALL NOT appear in any section's footer. Discard SHALL be section-level, SHALL be called `Revert` on every section that has one, and SHALL be offered only when that section holds unapplied changes, read from the same condition the rail's marker reads. Commit SHALL be `Apply <section>` in sentence case. A read-only or save-as-you-go section SHALL carry no footer buttons at all.
+
+Dismissing the dialog while any section holds unapplied changes SHALL ask first, naming those sections.
+
+The footer's standing sentence SHALL state that section's commit contract and SHALL be presented as a LABEL, distinguishable by treatment from an event message, which appears in the pinned region and is absent at rest.
+
+#### Scenario: The footer offers one name per job
+
+- **WHEN** any tab is shown **THEN** its footer carries no dismissal and no control named `Cancel`
+- **WHEN** a read-only or save-as-you-go tab is shown **THEN** its footer carries no buttons, only its contract
+- **WHEN** a section holds unapplied changes **THEN** its footer offers `Revert`, and the rail marks the same section
+
+#### Scenario: Leaving with unapplied changes asks
+
+- **WHEN** the operator dismisses the dialog while a section holds unapplied changes **THEN** a confirmation names that section and the dialog stays open until it is answered
+- **WHEN** nothing is unapplied **THEN** the dialog closes without a question
+
+#### Scenario: The contract stands and the event appears
+
+- **WHEN** nothing has happened **THEN** every tab shows its commit contract and the pinned message region is absent
+- **WHEN** a refusal arrives **THEN** the contract is unchanged and the refusal appears beside it, outside the footer, in the refusal treatment
+
 ### Requirement: The channel raster is set from Station setup, through the bridge alone
 
 Station setup SHALL offer, for each channel the install declares, its configured raster as editable width and height, what the server reports for that channel, the canonical raster verdict, and a per-channel control that sends `channelSettings.set` with the typed raster. The section SHALL add no second writer and no second guard: an accepted change is reported as a notice and a refusal is shown with the rule for the bridge's reason and the bridge's own message.

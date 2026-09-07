@@ -16,9 +16,15 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import type { ModalMessage } from '../../ui/Modal.js';
 import { useConfirm } from '../../ui/useDialog.js';
+import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { fixedLayersReasonMessage } from '../../ui/fixedLayersReasonMessage.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { displayLabel } from '../library/templateName.js';
+// 🔴 `B-238` — R-017's two canonical pieces, consumed rather than re-spelled: the ONE
+// renderer-side remove decision (which reads the bridge's published `removeExempt`), and the
+// ONE refusal sentence, which `errorCodeMessage` already maps `REMOVE_ON_AIR_CODE` to.
+import { removeIsRefused } from '../layers/removeGate.js';
+import { REMOVE_ON_AIR_REASON } from '../layers/layerRowActions.js';
 import { useFixedBankState, useFixedSlotsState } from '../../hooks/useFixedLayers.js';
 import { useStack } from '../../hooks/useStack.js';
 import { useLink } from '../../hooks/useLink.js';
@@ -334,6 +340,34 @@ function BankEditor({
     </>
   );
 
+  /**
+   * 🔴 `B-238` — REMOVE THE TEMPLATE ON A ROW, and the two things that were wrong with it.
+   *
+   * ── 1. IT ASKED WHERE `R-017` SAYS IT MUST REFUSE ───────────────────────────
+   *
+   * The row's confirm had an ON-AIR branch — _"This item is ON AIR. Removing it CLEARS layer
+   * 88"_ with a `Remove and clear (ON AIR)` button. That is a confirmation asking an operator
+   * to authorise damage under time pressure, which is exactly what `R-017` decided against:
+   * _"A confirmation asks; a refusal declines. R-017 is the refusal."_ The layer row itself
+   * has refused since R-017; this copy of the same act, one surface over, still asked.
+   *
+   * The branch is GONE rather than re-worded, because the control that reaches it is now
+   * disabled — see `removeRefused` at the call site.
+   *
+   * ── 2. THE REFUSAL THAT ARRIVED ANYWAY REACHED NOBODY ───────────────────────
+   *
+   * `window.cg.stack.remove` **RESOLVES** a refusal — `{ accepted: false, errorCode: 'on-air' }`,
+   * measured against the running mock — and this function discarded the result, reporting only
+   * from a `catch` that the refusal path never enters. So the operator confirmed, nothing
+   * happened, and nothing was said. A silent refusal is indistinguishable from a broken button,
+   * and the next move is to press again or to stop trusting the surface.
+   *
+   * ⚠ The bridge composes a specific, layer-naming sentence for this — and it never arrives:
+   * `StackRemoveChannel`'s response schema declares no `message`, so zod strips it at the route
+   * (`B-241`). The schema is deliberately NOT widened here: `errorCodeMessage` has mapped this
+   * code to `REMOVE_ON_AIR_REASON` all along, which is the canonical R-017 sentence, and the
+   * row's own name is known locally. One sentence, from the one place, plus our own detail.
+   */
   async function removeTemplate(slot: FixedSlotState): Promise<void> {
     if (slot.binding === null) return;
     const { itemId } = slot.binding;
@@ -346,25 +380,38 @@ function BankEditor({
       slot.binding.templateType;
     const item = stack.find((i) => i.itemId === itemId);
     // FAIL CLOSED on the destructive dialog's wording: only a settled idle/loaded status
-    // may claim the graphic is off air.
+    // may claim the graphic is off air. An item the stack cannot show us at all is the
+    // UNVERIFIABLE case, and it keeps its confirm — `removeIsRefused` needs an item to
+    // judge, and "we cannot see it" is not "it is safe".
     const offAir = item !== undefined && (item.status === 'idle' || item.status === 'loaded');
-    const onAir = item?.status === 'on-air' || item?.status === 'playing';
     const rowName = slot.alias ?? defaultLayerAlias(bank, slot.layer);
     const confirmed = await confirm({
       title: `Remove “${name}” from ${rowName}?`,
-      body: onAir
-        ? `This item is ON AIR. Removing it CLEARS layer ${String(slot.layer)} — the graphic ` +
-          `leaves the output immediately, with no outro.`
-        : offAir
-          ? `The item is removed from the row and layer ${String(slot.layer)} is cleared.`
-          : `This item MAY BE ON AIR (its state cannot be verified right now). Removing it ` +
-            `CLEARS layer ${String(slot.layer)} — anything live there leaves the output ` +
-            `immediately, with no outro.`,
-      confirmLabel: onAir ? 'Remove and clear (ON AIR)' : 'Remove template',
+      body: offAir
+        ? `The item is removed from the row and layer ${String(slot.layer)} is cleared.`
+        : `This item MAY BE ON AIR (its state cannot be verified right now). Removing it ` +
+          `CLEARS layer ${String(slot.layer)} — anything live there leaves the output ` +
+          `immediately, with no outro.`,
+      confirmLabel: 'Remove template',
     });
     if (!confirmed) return;
     try {
-      await window.cg.stack.remove({ itemId });
+      const res = await window.cg.stack.remove({ itemId });
+      if (!res.accepted) {
+        /*
+          THE SEAM THAT WAS MISSING. Reported into THIS DIALOG's pinned region — the same
+          place every other refusal in this section lands (`apply`, above) — and not to the
+          global command toast, which is a transient surface outside the modal the operator
+          is standing in.
+        */
+        report({
+          role: 'refusal',
+          text: errorCodeMessage(res.errorCode) ?? 'The bridge did not accept the removal.',
+          // Golden rule 11: the ROW and the TEMPLATE in the operator's words. The itemId is
+          // not in the sentence he reads under pressure.
+          detail: `${rowName} · ${name}`,
+        });
+      }
     } catch (err) {
       reportCommandError(err instanceof Error ? err.message : 'Remove failed.');
     }
@@ -434,6 +481,15 @@ function BankEditor({
                   // claim the wire cannot back, and remove could not reach the bridge anyway.
                   const showBinding = !linkDown && bound !== null;
                   const rowName = slot?.alias ?? defaultLayerAlias(bank, layer);
+                  /*
+                    🔴 `B-238` — the PUBLISHED answer, read once per row (see the control).
+                    An item the stack cannot show us is NOT refused here: "we cannot see it"
+                    is not "it is on air", and that case keeps the confirm that says so
+                    (`removeTemplate`), plus the bridge's own refusal — which now renders.
+                  */
+                  const boundItem =
+                    bound === null ? undefined : stack.find((i) => i.itemId === bound.itemId);
+                  const removeRefused = boundItem !== undefined && removeIsRefused(boundItem);
                   return (
                     <tr key={layer} data-candidate-layer={String(layer)}>
                       {/* ⭐ `R-028` — THE REAL LAYER NUMBER STAYS VISIBLE beside the row's
@@ -488,6 +544,23 @@ function BankEditor({
                       <td className="cg-table__actions">
                         {showBinding && (
                           /*
+                            🔴 `B-238` / `R-017` — ON AIR IS A REFUSAL, NOT A QUESTION.
+
+                            `removeIsRefused` is `B-228`'s ONE renderer-side spelling of this
+                            decision, and it reads the bridge's PUBLISHED `removeExempt` rather
+                            than recomputing the rule — which the renderer could not do anyway,
+                            since the second exemption is bridge knowledge.
+
+                            This section used to derive its own answer for the confirm's
+                            wording: `item?.status === 'on-air' || item?.status === 'playing'`.
+                            That is `isOnAirStatus` minus `updating`, `unconfirmed` and
+                            `exiting`, and minus both exemptions — so it told the operator a
+                            row was safe to destroy on three statuses where it was not, and
+                            would have sat asking on rows the bridge would have accepted. The
+                            B-228 shape, a third time, in the function that already held the
+                            item it needed.
+                          */
+                          /*
                             🔴 `STATION-CHROME-02` §3 — WAS A RED `Remove…` BOX ON EVERY BOUND
                             ROW, and the mockup still draws one. §3 names it as part of the
                             defect, and a written decision beats the reference (the mockup's
@@ -502,7 +575,12 @@ function BankEditor({
                             variant="quiet"
                             className="cg-list-remove"
                             aria-label={`Remove the template on ${rowName}`}
-                            title="Remove the template from this row — asks first, then clears the layer"
+                            disabled={removeRefused}
+                            title={
+                              removeRefused
+                                ? REMOVE_ON_AIR_REASON
+                                : 'Remove the template from this row — asks first, then clears the layer'
+                            }
                             onClick={() => {
                               if (slot !== undefined) void removeTemplate(slot);
                             }}

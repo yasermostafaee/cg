@@ -22,14 +22,15 @@ import { test, expect } from './fixtures/runtime.js';
  */
 
 /**
- * The FOOTER's Close, scoped.
+ * Dismiss the dialog.
  *
- * Two controls answer to the name "Close": this one and the modal's ✕. `getByRole` is
- * strict and fails on the ambiguity — correctly, because the two are genuinely different
- * affordances and a spec should say which it means.
+ * ⭐ `B-240` — this was `footerClose`, and it had to be scoped to `.cg-modal-footer` because
+ * TWO controls answered to "Close": a per-section footer button and the primitive's ✕. That
+ * ambiguity was the defect, not an inconvenience — dismissal is a property of the DIALOG, and
+ * putting it in a section's footer made leaving look like a property of the tab you happened
+ * to be standing on. There is one now.
  */
-const footerClose = (dialog: Locator): Locator =>
-  dialog.locator('.cg-modal-footer').getByRole('button', { name: 'Close' });
+const dismiss = (dialog: Locator): Locator => dialog.getByRole('button', { name: 'Close' });
 
 /** The rail, in the owner's order. */
 const TABS = ['Channel', 'Servers', 'Live sources', 'Text file delimiters', 'Layers'];
@@ -84,7 +85,7 @@ test('the rail: Settings opens on Channel, and every section is one press away',
   );
   await expect(dialog.getByRole('button', { name: 'Apply band' })).toBeVisible();
 
-  await footerClose(dialog).click();
+  await dismiss(dialog).click();
   await expect(dialog).toBeHidden();
 });
 
@@ -121,7 +122,8 @@ test('🔴 the refusal stays with its own section, and the rail says which one i
   await serversTab.click();
   await expect(dialog.getByText(/Apply is blocked for Servers/)).toBeVisible();
 
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  // `B-240` — the way out is the dialog's ✕, not a per-section footer button.
+  await dismiss(dialog).click();
 });
 
 /**
@@ -167,7 +169,7 @@ test('§1 — the surviving deep links still land on their own tab', async ({ ap
   await app.openStationSetupAt('Live sources');
   await expect(shown).toHaveAttribute('data-station-section', 'sources');
   await expect(page.getByRole('dialog')).toHaveCount(1);
-  await footerClose(dialog).click();
+  await dismiss(dialog).click();
 
   await app.openStationSetupAt('Layers');
   await expect(shown).toHaveAttribute('data-station-section', 'candidate-layers');
@@ -175,16 +177,16 @@ test('§1 — the surviving deep links still land on their own tab', async ({ ap
   await expect(layers.getByLabel('Show layer 70')).toBeChecked();
   // ⭐ §2 — the bank's commit is in ITS OWN FOOTER now, not in the body.
   await expect(dialog.getByRole('button', { name: 'Apply layers' })).toBeVisible();
-  await footerClose(dialog).click();
+  await dismiss(dialog).click();
 
   await app.openStationSetupAt('Text file delimiters');
   await expect(shown).toHaveAttribute('data-station-section', 'delimiters');
-  await footerClose(dialog).click();
+  await dismiss(dialog).click();
 
   // A bare Settings press lands on CHANNEL — the tab that asks nothing of the operator.
   await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
   await expect(shown).toHaveAttribute('data-station-section', 'channel');
-  await footerClose(dialog).click();
+  await dismiss(dialog).click();
 });
 
 /**
@@ -225,5 +227,5 @@ test('the Channel tab REPORTS the raster and the outputs, and offers no way to t
   await expect(dialog.locator('[data-section-footer="channel"]')).toContainText('Nothing to apply');
   await expect(dialog.getByRole('button', { name: 'Apply server settings' })).toHaveCount(0);
 
-  await footerClose(dialog).click();
+  await dismiss(dialog).click();
 });

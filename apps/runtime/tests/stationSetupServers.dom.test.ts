@@ -181,11 +181,18 @@ describe('Station setup — Servers (R-010)', () => {
   });
 
   /**
-   * CANCEL SENDS NOTHING — the Servers section is a FORM. Edited fields, then Cancel: no
-   * `setConfig` call at all, and the dialog closes by the same path as the ✕, Escape and
-   * the backdrop.
+   * REVERT SENDS NOTHING — the Servers section is a FORM.
+   *
+   * ⚠ **REWRITTEN by `B-240` (2026-09-07).** This drove a footer `Cancel` and asserted it
+   * both sent nothing AND closed the dialog. That control did two jobs under one name: it was
+   * named for discarding the draft and it also dismissed, while one tab along `Revert`
+   * discarded without dismissing. The two are separated now — discard is `Revert`, section
+   * scoped, on every tab that has a draft; dismissal is the ✕ / Escape / backdrop.
+   *
+   * The claim survives and is sharper: an edited draft, then Revert — nothing reaches the
+   * bridge, the fields go back to what it holds, and the dialog STAYS OPEN.
    */
-  it('Cancel leaves the bridge config byte-identical — nothing is sent', async () => {
+  it('Revert leaves the bridge config byte-identical — nothing is sent, and it does not dismiss', async () => {
     const { setConfig } = stub();
     let closed = false;
     const el = await renderStationSetup({
@@ -198,17 +205,23 @@ describe('Station setup — Servers (R-010)', () => {
     // Edit the draft, so there is genuinely something that COULD have been sent.
     await setSetupInput(el, 'Primary host', '192.168.1.99');
 
-    const cancel = [...el.querySelectorAll<HTMLButtonElement>('.cg-modal-footer button')].find(
-      (b) => b.textContent === 'Cancel',
+    const revert = [...el.querySelectorAll<HTMLButtonElement>('.cg-modal-footer button')].find(
+      (b) => b.textContent === 'Revert',
     );
-    if (cancel === undefined) throw new Error('Cancel not rendered in the action row');
+    if (revert === undefined) throw new Error('Revert not rendered in the action row');
     await act(async () => {
-      cancel.click();
+      revert.click();
       await Promise.resolve();
     });
 
-    expect(setConfig, 'Cancel must not reach the bridge').not.toHaveBeenCalled();
-    expect(closed, 'Cancel takes the same path out as the ✕ and Escape').toBe(true);
+    expect(setConfig, 'Revert must not reach the bridge').not.toHaveBeenCalled();
+    expect(closed, 'discarding a draft is not leaving the dialog').toBe(false);
+    // …and the field is back to what the bridge holds, which is what "revert" means.
+    expect(el.querySelector<HTMLInputElement>('input[aria-label="Primary host"]')?.value).toBe(
+      '127.0.0.1',
+    );
+    // …so the rail's dot has gone out too — one condition, read twice.
+    expect(el.querySelector('[role="tab"]#station-servers [data-tab-badge="edited"]')).toBeNull();
   });
 
   it('adding a backup submits servers.B; the bridge refusal message is surfaced', async () => {

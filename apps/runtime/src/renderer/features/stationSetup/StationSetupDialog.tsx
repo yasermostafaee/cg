@@ -12,6 +12,7 @@ import { Modal, ModalAction, modalActionVariant, type ModalMessage } from '../..
 import { Notice } from '../../ui/Notice.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { Tabs, type TabSpec } from '../../ui/Tabs.js';
+import { useConfirm } from '../../ui/useDialog.js';
 import { CandidateLayersSection } from '../fixedLayers/CandidateLayersSection.js';
 import { DelimitersSection } from '../inspector/DelimitersSection.js';
 import { SourcesSection } from '../sources/SourcesSection.js';
@@ -283,6 +284,8 @@ export function StationSetupDialog({
   const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
   /** §6 — the backup server's own small second dialog. */
   const [addingBackup, setAddingBackup] = useState(false);
+  /** `B-240` — the question asked before an unapplied draft is dropped. */
+  const { confirm: confirmDismiss, confirmDialog: dismissDialog } = useConfirm();
 
   /** Stable reporters, one per section, so a section's effect deps do not churn. */
   const reporters = useMemo(() => {
@@ -465,6 +468,66 @@ export function StationSetupDialog({
   const activeSpec = sectionSpec(active);
   const activeMessages = messagesFor(active);
 
+  /**
+   * 🔴 `B-240` — **DISMISSING WITH UNAPPLIED EDITS ASKS, AND NAMES WHAT WOULD BE LOST.**
+   *
+   * This is the thing the footer's three names were hiding. `Close` dismissed and discarded
+   * nothing it warned about; `Cancel`, one tab along, dismissed AND dropped the Servers draft
+   * while being named for the drop. Neither said what was about to be lost, and an operator
+   * could not tell from the button which of the two he was pressing.
+   *
+   * With dismissal now living only in the ✕, Escape and the backdrop — one path, three
+   * affordances, all routed here — the question is asked once, in one place.
+   *
+   * ⭐ **`isDirty` is the SAME read the rail's blue dot makes.** Not "the two agree": one
+   * read, consulted twice. A second derivation of "does this section hold a draft" is the
+   * `B-228` shape, and it would look right until the day either side gained a section.
+   *
+   * ⚠ It asks ONLY when there is something to lose. A confirmation an operator meets every
+   * time he leaves a dialog is one he learns to dismiss without reading, which is how a real
+   * warning stops working — the same argument `R-017` makes against confirming an on-air act.
+   */
+  const dirtySections = STATION_SETUP_SECTIONS.filter((s) => isDirty(s.id));
+
+  /**
+   * `B-240` — DISCARD THIS SECTION'S DRAFT, and nothing else. The Layers tab's `Revert` has
+   * always meant exactly this; the Servers tab's control was called `Cancel` and dismissed the
+   * whole dialog instead. Same name, same act, same scope, on both tabs now.
+   *
+   * It restores from `loaded` — what the bridge last told us is stored — which is the same
+   * baseline `serversDirty` measures against, so pressing it necessarily clears the dot.
+   */
+  const revertServers = (): void => {
+    if (loaded === null) return;
+    setPrimary(toDraft(loaded.servers.A));
+    setBackupEnabled(loaded.servers.B !== undefined);
+    if (loaded.servers.B !== undefined) setBackup(toDraft(loaded.servers.B));
+    setStrategy(loaded.strategy);
+    setAutoFailover(loaded.autoFailoverEnabled);
+    setServeHost(loaded.templateServeHost ?? '');
+    setServePort(loaded.templateServePort === undefined ? '' : String(loaded.templateServePort));
+    setRefusal(null);
+    setStatus(null);
+  };
+
+  const dismiss = (): void => {
+    if (dirtySections.length === 0) {
+      onClose();
+      return;
+    }
+    const names = dirtySections.map((s) => s.title).join(', ');
+    void confirmDismiss({
+      title: `Leave Station setup without applying ${names}?`,
+      body:
+        `${names} ${dirtySections.length === 1 ? 'holds' : 'hold'} changes that have not been ` +
+        `applied, and leaving drops them. Nothing that saves as you go is affected — the ` +
+        `catalogue and the delimiters are already stored.`,
+      confirmLabel: 'Leave and discard',
+    }).then((confirmed) => {
+      if (confirmed) onClose();
+    });
+  };
+
   const endpointRows = (
     draft: EndpointDraft,
     set: (next: EndpointDraft) => void,
@@ -514,13 +577,40 @@ export function StationSetupDialog({
         rows and Layers is thirty-four. See `Modal`'s `styles.dialogFixed`.
       */
       size="fixed"
-      onClose={onClose}
+      /*
+        🔴 `B-240` — the ✕, Escape and the backdrop all route here, and all three now ask
+        before dropping an unapplied draft. One path, so the guard cannot be reachable by one
+        affordance and not another.
+      */
+      onClose={dismiss}
       {...(activeMessages.length > 0 ? { message: activeMessages } : {})}
       footer={
         <>
-          {/* This section's commit contract, in the footer, where the operator is looking
-              when he wants to know what pressing something will do. */}
-          <span style={styles.footNote} data-section-footer={active}>
+          {/*
+            🔴 `B-239` — THIS IS A LABEL, AND IT NOW SAYS SO.
+
+            The section's COMMIT CONTRACT — what pressing something here will do. It stays,
+            and the first attempt to fix `B-239` by DELETING it was wrong: the section's own
+            legend says the same thing fifteen lines up, and that legend SCROLLS AWAY while
+            this is pinned.
+
+            What was genuinely wrong is that it looked like a message. It was the same muted
+            grey sentence in the same corner an event would arrive in, so the operator read it
+            as a report and then ignored it as furniture. It now wears the app's existing
+            "this is chrome, not content" treatment — small, tracked-out, uppercase, the same
+            one a card title, a rail group and a table header wear — and declares its role, so
+            a test can prove the distinction rather than assert it.
+
+            ⚠ The EVENT never lands here. It lands in the pinned region ABOVE the footer, as an
+            amber `Notice`. `data-modal-message` is conditional and absent at rest; this is
+            unconditional and never changes. Two elements, two treatments, two lifetimes.
+          */}
+          <span
+            style={styles.footNote}
+            className="cg-footer-contract"
+            data-section-footer={active}
+            data-footer-role="contract"
+          >
             {activeSpec.footerRest}
           </span>
           {/* The slot a section's own commit controls portal into (the bank's). */}
@@ -528,18 +618,29 @@ export function StationSetupDialog({
           {active === 'servers' ? (
             <>
               {/*
-                CANCEL: the Servers draft is dropped and nothing is sent; the sections that
-                save as they go are ALREADY saved, and the tooltip says so. Routes to the same
-                `onClose` as the ✕, Escape and the backdrop. First in DOM order, so APPLY keeps
-                the corner every dialog's primary has.
+                🔴 `B-240` — REVERT, NOT CANCEL, AND ONLY WHEN THERE IS A DRAFT.
+
+                This was `Cancel`, and it routed to `onClose` — so it DISMISSED THE DIALOG
+                while being named for discarding a draft. One tab along, `Revert` discarded a
+                draft without dismissing. Two names for one act, and one of them silently did
+                a second thing.
+
+                Discard is SECTION-level and is called Revert everywhere. Dismissal is
+                DIALOG-level and lives in the ✕, Escape and the backdrop — see the guard on
+                `dismiss` below, which is what the two blurred names were hiding.
+
+                `serversDirty` is the SAME read the rail's blue dot makes, so the button and
+                the dot cannot disagree about whether there is anything to revert.
               */}
-              <ModalAction
-                actionRole="cancel"
-                onClick={onClose}
-                title="Leaves without applying the Servers draft. The sections that save as you go are already saved."
-              >
-                Cancel
-              </ModalAction>
+              {serversDirty && (
+                <ModalAction
+                  actionRole="cancel"
+                  onClick={revertServers}
+                  title="Puts the Servers fields back to what the bridge holds. Nothing is sent, and the dialog stays open."
+                >
+                  Revert
+                </ModalAction>
+              )}
               {/*
                 Apply servers — `primary`, and named for its SCOPE. It commits the Servers
                 section and nothing else; the bank, the catalogue and the delimiters each
@@ -597,26 +698,21 @@ export function StationSetupDialog({
                 Apply servers
               </AsyncButton>
             </>
-          ) : (
-            /*
-              EVERY OTHER TAB gets a quiet CLOSE and nothing else. A read-only tab has nothing
-              to commit; a save-as-you-go tab has already committed. "Cancel" would be a lie on
-              both — it would read as undoing what is already stored.
-            */
-            <ModalAction
-              actionRole="cancel"
-              onClick={onClose}
-              /*
-                §5's rule one control along: this used to read "Nothing here is waiting to be
-                applied", which is false on the two tabs that DO hold something waiting — the
-                bank's draft, and the layer band. What is true of Close on every tab is that
-                pressing it applies nothing, so that is what it says.
-              */
-              title="Dismisses the dialog. It applies nothing."
-            >
-              Close
-            </ModalAction>
-          )}
+          ) : null}
+          {/*
+            🔴 `B-240` — AND EVERY OTHER TAB CARRIES NOTHING AT ALL.
+
+            They used to carry a quiet `Close`. It was the THIRD answer to one job: the ✕,
+            Escape and the backdrop already dismiss, on every tab, from the primitive — so a
+            per-section `Close` made leaving the dialog look like a property of whichever tab
+            the operator happened to be standing on, and only some tabs had it.
+
+            ⭐ A footer holding only its message is not unfinished. A footer holding a button
+            that does nothing its neighbours do not already do is.
+
+            The bank's own `Revert` / `Apply layers` still portal into `footerSlot` above —
+            those are that SECTION's actions, which is what a section footer is for.
+          */}
         </>
       }
     >
@@ -848,6 +944,9 @@ export function StationSetupDialog({
         §6 — THE SAME SMALL SECOND DIALOG. It adds the record to the Servers DRAFT; APPLY
         SERVERS is still what reaches the bridge, and the dialog says so.
       */}
+      {/* `B-240` — the dismissal question, portalled above this dialog like every other
+          second-level one. */}
+      {dismissDialog}
       {addingBackup && (
         <BackupServerDialog
           onCancel={() => setAddingBackup(false)}

@@ -164,12 +164,25 @@ describe('Station setup — Candidate layers', () => {
     ).toEqual([]);
   });
 
-  it('R-028 (2.4) — Remove… on an occupied row confirms, states ON AIR, and removal implies clear', async () => {
+  /**
+   * ⚠ **SUPERSEDED IN PART by `B-238` / `R-017` (2026-09-07), and rewritten rather than
+   * deleted.** This spec asserted that an ON-AIR row CONFIRMS — _"states ON AIR"_, with a
+   * `Remove and clear (ON AIR)` button. That is a confirmation asking an operator to
+   * authorise damage under time pressure, which R-017 decided against: on air is a REFUSAL.
+   * The on-air case now lives in `removeRowRefusal.dom.test.ts`, where the control is
+   * asserted DEAD with the canonical reason on it.
+   *
+   * What this spec was really protecting survives intact and is what it now drives: an
+   * occupied row names its template, the act is gated by a confirm, nothing is sent until the
+   * operator agrees, and REMOVAL IMPLIES CLEAR. Driven on a settled `loaded` row — the one
+   * state where the dialog may honestly say the graphic is off air.
+   */
+  it('R-028 (2.4) — an occupied row confirms by name, sends nothing until agreed, and removal implies clear', async () => {
     const onAirItem: StackItemState = {
       itemId: 'item-1',
       templateId: 'tpl-1',
       fields: {},
-      status: 'playing',
+      status: 'loaded',
       pending: false,
     };
     const slots: FixedSlotState[] = [
@@ -202,16 +215,15 @@ describe('Station setup — Candidate layers', () => {
       await Promise.resolve();
     });
 
-    // The confirm dialog is a SECOND portalled dialog, and it says ON AIR in words.
+    // The confirm dialog is a SECOND portalled dialog, and it names the template and the act.
     const confirm = allDialogs().at(-1);
     expect(confirm?.textContent).toContain('ساعت اذان');
-    expect(confirm?.textContent).toContain('ON AIR');
-    expect(confirm?.textContent).toContain('CLEARS layer 70');
+    expect(confirm?.textContent).toContain('layer 70 is cleared');
 
     // Nothing sent until confirmed…
     expect(stub.remove).not.toHaveBeenCalled();
     const act2 = [...(confirm?.querySelectorAll('button') ?? [])].find((b) =>
-      b.textContent?.startsWith('Remove and clear'),
+      b.textContent?.startsWith('Remove template'),
     );
     await act(async () => {
       act2?.click();

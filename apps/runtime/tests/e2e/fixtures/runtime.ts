@@ -184,17 +184,22 @@ export class RuntimeApp {
   }
 
   /**
-   * Dismiss Station setup from its FOOTER.
+   * Dismiss Station setup.
    *
-   * Two controls answer to "Close" — the footer's button and the modal's ✕ — so `getByRole`
-   * is strict and refuses the ambiguity. Correctly: they are different affordances, and a
-   * spec should say which one it means.
+   * ⭐ `B-240` — THERE IS NOW EXACTLY ONE WAY, which is why this no longer has to say which
+   * it means. The footer used to carry a `Close` on three tabs and a `Cancel` on a fourth,
+   * beside the primitive's ✕ — three answers to one job — so this helper had to disambiguate
+   * with a regex. Dismissal is dialog-level now: the ✕, Escape and the backdrop, and nothing
+   * in any section's footer.
+   *
+   * ⚠ It presses the ✕ WITHOUT answering a question, so it is for specs that have left no
+   * unapplied draft behind. A tab holding one now asks before dropping it — deliberately, and
+   * `setupFooterVocabulary.dom.test.ts` is where that is driven.
    */
   async closeStationSetup(): Promise<void> {
     await this.page
       .getByRole('dialog', { name: 'Station setup' })
-      .locator('.cg-modal-footer')
-      .getByRole('button', { name: /^(Close|Cancel)$/ })
+      .getByRole('button', { name: 'Close' })
       .click();
   }
 

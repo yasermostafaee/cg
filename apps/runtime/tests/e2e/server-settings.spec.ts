@@ -54,16 +54,21 @@ test('settings panel: blocked while on air, Clear-All unblocks and the ROWS SURV
     This dialog used to hand-roll its chrome, and its dedicated `Close` BUTTON was
     the odd one out in the app: every other dialog dismisses with the ✕ glyph. The
     modal primitive now owns the chrome, so the word is spent nowhere and the ✕ is
-    the close affordance here as everywhere else — plus a real `Cancel` in the
-    action row, because this dialog is a FORM and leaving without applying is a
-    deliberate choice.
+    the close affordance here as everywhere else.
+
+    ⭐ `B-240` — AND IT IS NOW THE ONLY ONE. This paragraph used to end "plus a real
+    `Cancel` in the action row, because this dialog is a FORM and leaving without
+    applying is a deliberate choice". Both halves of that were true and together they
+    made one control do two jobs: it was named for discarding the draft AND it
+    dismissed, while `Revert` one tab along discarded without dismissing. The form's
+    deliberate choice is `Revert` now, section-scoped; leaving is the ✕.
 
     Pinned, not merely updated: if the hand-rolled button ever comes back, this
     fails.
   */
   await expect(panel.getByRole('button', { name: 'Close server settings' })).toHaveCount(0);
   await expect(panel.getByRole('button', { name: 'Close', exact: true })).toBeVisible();
-  await panel.getByRole('button', { name: 'Cancel' }).click();
+  await panel.getByRole('button', { name: 'Close' }).click();
   await expect(panel).toBeHidden();
 
   /*
@@ -187,7 +192,7 @@ test('settings panel: the serve address sits beside the server hosts, offers can
   await expect(panel.getByText(/^Applied\./)).toBeVisible();
 
   // The value survives a close/reopen — which is the whole point of giving it a stored layer.
-  await panel.getByRole('button', { name: 'Cancel' }).click();
+  await panel.getByRole('button', { name: 'Close' }).click();
   await openServers(page);
   await expect(panel.getByLabel('Template serve host')).toHaveValue('192.168.21.93');
   await expect(panel.getByLabel('Template serve port')).toHaveValue('7911');

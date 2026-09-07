@@ -106,6 +106,12 @@ export interface StationSetupStubOptions {
   assignments?: SourceAssignments;
   templates?: readonly TemplateInfo[];
   delimitersSetResult?: { ok: boolean; message?: string };
+  /**
+   * `B-238` — what `stack.remove` RESOLVES with. It resolves a refusal rather than throwing
+   * (`{ accepted: false, errorCode: 'on-air' }`, measured against the real mock), and a
+   * spec that cannot say so cannot test the case where the refusal arrives anyway.
+   */
+  removeResult?: { accepted: boolean; errorCode?: string; message?: string };
 }
 
 export interface StationSetupStub {
@@ -125,7 +131,7 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
   const sourcesSetConfig = vi.fn(options.sourcesSetConfig ?? (() => Promise.resolve({ ok: true })));
   const sourcesSetAssignments = vi.fn(() => Promise.resolve({ ok: true }));
   const delimitersSet = vi.fn(() => Promise.resolve(options.delimitersSetResult ?? { ok: true }));
-  const remove = vi.fn(() => Promise.resolve({ accepted: true }));
+  const remove = vi.fn(() => Promise.resolve(options.removeResult ?? { accepted: true }));
   const stub = {
     link: {
       status: () => 'live' as const,

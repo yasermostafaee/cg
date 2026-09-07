@@ -12,6 +12,7 @@ import {
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
+import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { requestRowFocus } from '../layers/rowFocus.js';
 import { reportCommandSuccess } from '../status/commandFeedback.js';
@@ -378,8 +379,21 @@ export function useTemplatePicker(): {
       try {
         const res = await window.cg.stack.remove({ itemId: reference.itemId });
         if (!res.accepted) {
-          // `stack.remove` answers a bare `accepted`; there is no code to quote.
-          setMessage({ role: 'refusal', text: `The item ${place} could not be removed.` });
+          /*
+            ⚠ This read `stack.remove answers a bare accepted; there is no code to quote` —
+            and that stopped being true when `R-017` added `errorCode` to the response
+            (`stack.ts` records the history). So the refusal said only that something could
+            not be removed, on the one path where the reason is the whole point: an item on
+            air is refused, and the operator needs to be told to take it off air first.
+
+            `errorCodeMessage` maps the code to the ONE canonical sentence
+            (`REMOVE_ON_AIR_REASON`), with our own placing as the detail.
+          */
+          setMessage({
+            role: 'refusal',
+            text: errorCodeMessage(res.errorCode) ?? `The item ${place} could not be removed.`,
+            detail: `The item ${place}.`,
+          });
           return;
         }
         setReferences((current) => current.filter((r) => r.itemId !== reference.itemId));

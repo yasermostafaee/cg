@@ -137,15 +137,44 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
     expectDismissOnly(lastFooterAction(dialog), 'Close', onClose);
   });
 
-  it('🔴 Station setup: Cancel DISMISSES — the Servers draft is dropped, nothing is sent, the saved sections stay saved', async () => {
+  /**
+   * ⚠ **SUPERSEDED by `B-240` (2026-09-07) and rewritten.** This asserted that Station setup's
+   * footer carried a `Cancel` which DISMISSED. It did both jobs at once — it was named for
+   * discarding the Servers draft and it also closed the dialog — while one tab along `Revert`
+   * discarded without closing. Two names for one act, and one of them silently did a second
+   * thing.
+   *
+   * The two jobs are separated now: DISCARD is `Revert`, section-scoped, everywhere; DISMISS
+   * is the ✕ / Escape / backdrop, dialog-scoped, and asks first when a draft would be lost
+   * (`setupFooterVocabulary.dom.test.ts`).
+   *
+   * The CLAIM this spec exists for is unchanged and is what it still drives: **dismissing
+   * Station setup sends nothing to any bridge channel.**
+   */
+  it('🔴 Station setup: dismissing sends NOTHING to any bridge channel', async () => {
     const stub = stationSetupStub();
     const onClose = vi.fn();
-    // The SERVERS tab: it is the only one with a draft, so it is the only one whose
-    // dismissing button can be called Cancel at all.
     const dialog = await renderStationSetup({ section: 'servers', onClose });
-    const cancel = footerActions(dialog).find((b) => b.textContent === 'Cancel');
-    if (cancel === undefined) throw new Error('no Cancel in the footer');
-    expectDismissOnly(cancel, 'Cancel', onClose);
+
+    // No draft, so the ✕ dismisses without a question — and it is the ONLY dismissal on
+    // screen: the footer carries no `Close` and no `Cancel` on any tab.
+    expect(footerActions(dialog).map((b) => b.textContent)).not.toContain('Cancel');
+    expect(footerActions(dialog).map((b) => b.textContent)).not.toContain('Close');
+    /*
+      ⚠ Asserted directly rather than through `expectDismissOnly`: that helper checks a
+      FOOTER ACTION's role and treatment (`data-modal-role="cancel"`, `cg-btn--neutral`), and
+      the point of B-240 is that this dismissal is not a footer action at all. It is the
+      primitive's ✕ — a `ghost`, with neither attribute — so passing it through the helper
+      would be asserting the shape this change removed.
+    */
+    const x = dialog.querySelector<HTMLButtonElement>('button[aria-label="Close"]');
+    if (x === null) throw new Error('the dialog has no dismiss affordance');
+    await act(async () => {
+      x.click();
+      await Promise.resolve();
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+
     expect(stub.setConfig).not.toHaveBeenCalled();
     expect(stub.fixedSetConfig).not.toHaveBeenCalled();
     expect(stub.rasterSet).not.toHaveBeenCalled();
@@ -188,8 +217,14 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
     */
     stationSetupStub();
 
+    /*
+      ⭐ `B-240` — REWRITTEN. Servers used to read `Cancel · Apply servers` and every other
+      tab a lone `Close`: three answers for dismissing, and two names for discarding. Now a
+      footer carries only THAT SECTION's actions — so a clean Servers tab carries its commit
+      alone, and a save-as-you-go tab carries nothing at all.
+    */
     const dialog = await renderStationSetup({ section: 'servers' });
-    expect(footerActions(dialog).map((b) => b.textContent)).toEqual(['Cancel', 'Apply servers']);
+    expect(footerActions(dialog).map((b) => b.textContent)).toEqual(['Apply servers']);
     /*
       …then the OTHER tabs, from the SAME dialog, by pressing the rail. Reusing one dialog is
       not convenience: a second `renderStationSetup` leaves the first mounted and
@@ -197,17 +232,13 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
       about the wrong tab — green, and measuring nothing.
     */
     await selectSetupTab(dialog, 'candidate-layers');
-    expect(footerActions(dialog).map((b) => b.textContent)).toEqual([
-      'Revert',
-      'Apply layers',
-      'Close',
-    ]);
+    expect(footerActions(dialog).map((b) => b.textContent)).toEqual(['Revert', 'Apply layers']);
     for (const section of ['channel', 'sources', 'delimiters'] as const) {
       await selectSetupTab(dialog, section);
       expect(
         footerActions(dialog).map((b) => b.textContent),
-        `${section} carries a commit action it should not have`,
-      ).toEqual(['Close']);
+        `${section} carries a button it should not have`,
+      ).toEqual([]);
     }
   });
 
