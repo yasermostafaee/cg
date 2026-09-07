@@ -35,15 +35,23 @@ import { OutputsSection } from '../connections/OutputsSection.js';
  * guarded and persisted, with no renderer call site — which is where it was before
  * `STATION-SETUP-02`, and the honest place for a writer nothing in the UI should reach.
  *
- * ⚠ ONE GAP IS OPEN AND IS REPORTED RATHER THAN PAPERED OVER. The stored raster defaults to
- * `REFERENCE_RASTER` (1920×1080) for every declared channel and is only ever changed by a
- * writer. With the control gone, an install whose channel is NOT 1920×1080 shows a standing
- * mismatch banner and has no in-console remedy. The fix belongs in the bridge — adopt
- * `observed` into `settings` when the verdict is `mismatch` and the mode was readable, one
- * change in `channel-settings-store.ts` — and it is bridge LEDGER work, not chrome, so it is
- * not done here. Re-adding a typed field would not close it either: it would answer "the
- * server says 1280×720" with "type 1280×720", which is the guess this section exists to
- * prevent.
+ * ✅ `B-236` — THE GAP THIS SECTION RECORDED IS CLOSED, in the bridge, where it said it
+ * belonged. The stored raster defaults to `REFERENCE_RASTER` (1920×1080) for every declared
+ * channel and is only ever changed by a writer; with the control gone there was no writer
+ * left, so an install whose channel is NOT 1920×1080 showed a standing mismatch banner with
+ * no in-console remedy — a claim with no author. `ChannelSettingsStore.adoptObserved` is
+ * that writer, and the value it writes is the server's own: on a `mismatch` whose mode was
+ * READABLE it replaces the stored raster with `observed`, persists it, and sends nothing.
+ * Re-adding a typed field would not have closed it — it would answer "the server says
+ * 1280×720" with "type 1280×720", which is the guess this section exists to prevent.
+ *
+ * ⚠ TWO CASES SURVIVE ADOPTION, and both are visible above rather than assumed away.
+ * `unreadable` — the token is unmapped or was never read — can never be adopted, because
+ * there is no raster to adopt; the stored value stands and the Check says so. And adoption
+ * is DECLINED while anything is on air (it would re-point live plate geometry under a
+ * template already carrying the old raster), so a mismatch can stand for the length of a
+ * show. `declaredBy` below therefore reports the value's real provenance PER VERDICT rather
+ * than claiming the server's authority for a number the server has just contradicted.
  */
 
 const styles = {
@@ -83,12 +91,30 @@ function modeLine(state: ChannelSettingsState, channel: number): string {
   return observed.mode;
 }
 
-/** Where the value in force came from — the honest half of "reported, not set". */
+/**
+ * Where the value in force came from — the honest half of "reported, not set".
+ *
+ * 🔴 `B-236` — KEYED ON THE VERDICT, not on whether a reading merely EXISTS. The earlier
+ * spelling answered "casparcg.config, read back from the server" for every channel with any
+ * observation at all, which is a false attribution in exactly the two cases that matter: on
+ * a `mismatch` the number shown is the stored one and the server has just contradicted it,
+ * and on `unreadable` the reading carries no raster to have come from. Claiming the server's
+ * authority for a value the server did not supply is the same defect the mismatch check
+ * exists to catch, one layer up — so each verdict names its own source.
+ */
 function declaredBy(state: ChannelSettingsState, channel: number): string {
-  const observed = state.observed.find((o) => o.channel === channel);
-  return observed === undefined
-    ? 'the stored channel settings — the server has not been read'
-    : 'casparcg.config, read back from the server';
+  switch (rasterVerdict(state, channel)) {
+    case 'match':
+      return 'casparcg.config, read back from the server';
+    case 'mismatch':
+      return 'the stored channel settings — the server reports a different raster';
+    case 'unreadable':
+      return state.observed.some((o) => o.channel === channel)
+        ? 'the stored channel settings — the server’s video mode could not be mapped'
+        : 'the stored channel settings — the server has not been read';
+    case 'unconfigured':
+      return 'nothing — this channel has no stored settings';
+  }
 }
 
 export function ChannelSection({ health }: { health: ConnectionHealth | null }): JSX.Element {

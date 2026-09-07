@@ -104,7 +104,11 @@ import {
   type EmptiedAirRefusal,
 } from '@cg/shared-ipc';
 import { operatorActor } from './actor-context.js';
-import { ChannelSettingsStore } from './channel-settings-store.js';
+import {
+  ChannelSettingsStore,
+  adoptionNotice,
+  type AdoptedRaster,
+} from './channel-settings-store.js';
 import {
   OUTPUT_RECHECK_MS,
   creatableMissingConsumer,
@@ -10023,6 +10027,48 @@ export class CasparRuntime {
   }
 
   /**
+   * `B-236` — adopt the server's raster over a contradicting config, unless something is
+   * ON AIR. Returns what changed, or null.
+   *
+   * ── WHY THE GATE, WHEN THE PRE-STATE IS ALREADY BROKEN ──────────────────────
+   *
+   * A standing mismatch means every graphic on the channel is ALREADY mis-placed, so the
+   * instinct is that correcting it can only help. It cannot, mid-show, and the reason is
+   * that the raster reaches air by TWO routes with different timings. The template gets it
+   * once, at `CG ADD`, baked into `?cw=&ch=`; a Live Source plate gets it every time
+   * `liveSourceFitFor` recomputes, which a look switch does with pure `MIXER FILL` and no
+   * re-ADD. Adopt under a live row and the next switch fills the plate against the NEW
+   * raster while the template above it still holds the OLD one — the plate leaves its own
+   * template's box, on air, mid-shot. Uniformly mis-placed is a worse picture than correct;
+   * it is a better picture than coming apart.
+   *
+   * Reuses `#onAirCount` — the SAME predicate `setChannelSettings` and R-010's `setConfig`
+   * read, never a second local list of what counts as live (golden rule 6). Fails closed:
+   * `unconfirmed` / `pending` count as on air.
+   *
+   * ⚠ **This is NOT the operator refusal `setChannelSettings` performs, and the difference
+   * is which way the value moves.** That one refuses a new CLAIM of unknown truth. This one
+   * declines, for now, to delete a claim already known false. So there is no message and no
+   * refusal shape: nothing was asked for, and nothing is owed an answer.
+   *
+   * ⭐ **The window this leaves open, stated rather than papered over.** The mode read is
+   * ONE-SHOT per (channel, primary), so a deferral is retried only when the next reading
+   * arrives — a reconnect, a failover or a restart. An install that has never adopted and
+   * whose bridge restarts mid-show therefore keeps the wrong raster until the show ends.
+   * That is the state it was already in, so nothing regresses; it is simply not yet closed.
+   * Closing it means retrying when air clears, and what would justify building that is a
+   * measurement on the plant of whether a mid-show adopt really does separate a plate from
+   * its template — the thing this gate is currently assuming on argument alone.
+   */
+  #adoptChannelRaster(channel: number): AdoptedRaster | null {
+    if (this.#onAirCount() > 0) return null;
+    const adopted = this.#channelSettings.adoptObserved(channel);
+    if (adopted === null) return null;
+    process.stderr.write(adoptionNotice(adopted));
+    return adopted;
+  }
+
+  /**
    * R-030 — read the channel's REAL video mode off the server and compare it
    * with what config claims.
    *
@@ -10087,7 +10133,11 @@ export class CasparRuntime {
         mode,
         raster: videoModeRaster(mode) ?? null,
       });
-      if (!changed) return;
+      const adopted = this.#adoptChannelRaster(channel);
+      // Adoption runs BEFORE the publish, so a mismatch the console corrects in the same
+      // breath never reaches a browser: the red banner must not flash for one frame on
+      // every boot of a non-1080 install and then vanish.
+      if (!changed && adopted === null) return;
       this.#announceChannelSettings(channel);
     } catch {
       // See above: an unreadable mode stays absent, never guessed.

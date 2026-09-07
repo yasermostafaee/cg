@@ -24,6 +24,16 @@ import { useChannelSettings } from '../../hooks/useChannelSettings.js';
  * is one this build cannot map) from `mismatch`, and only the latter is an
  * alarm — an unreadable mode is a gap in the check, not evidence of a fault, and
  * treating the two alike would train the operator to dismiss the banner.
+ *
+ * ⭐ `B-236` — SINCE ADOPTION SHIPPED, A VISIBLE BANNER MEANS SOMETHING NARROWER
+ * than it used to, and the copy had to say which. The bridge now adopts the
+ * server's raster as soon as it reads one that contradicts config, so the
+ * ordinary wrong-default case corrects itself and never reaches a browser. What
+ * is left, and all that is left, is a mismatch adoption DECLINED: something is on
+ * air, so correcting it would re-point live plate geometry under a template that
+ * already carries the old raster. That is why the remedy line below names air
+ * rather than a file — telling the operator to hand-edit `channel-settings.json`
+ * would name a remedy adoption is about to overwrite.
  */
 
 /** Matches `ConnectionBanner`'s strip geometry — loud is the colour, not the height. */
@@ -83,16 +93,18 @@ export function RasterMismatchBanner(): JSX.Element | null {
           worse than none — he goes looking, finds a read-only value, and concludes the
           console is broken.
 
-          What it says instead is what is actually true: the SERVER owns the value, the
-          console reports it, and the two numbers below are the disagreement. The stored
-          raster is corrected by `channel-settings.json` on the bridge — which is also the gap
-          `ChannelSection` records as owed to the bridge, and this line is where an operator
-          would meet it.
+          🔴 `B-236` — AND IT HAD TO CHANGE AGAIN WITH THE WRITER, for exactly the same
+          reason one step along. The replacement named `channel-settings.json` on the bridge,
+          which was true while nothing wrote that file; adoption writes it now, so a hand-edit
+          is a remedy the console would silently overwrite on its next read. The line names
+          the ONE thing that is both true and actionable: the banner is up because adoption
+          was declined, and what declines it is AIR.
         */}
         <span style={styles.detail}>
-          The server owns this value: fix the channel’s video mode in casparcg.config, or the stored
-          raster in the bridge’s channel-settings.json. They must agree before placement can be
-          trusted — the console reports the raster, it does not set it.
+          The server owns this value — the console adopts the channel’s real raster when it reads
+          one, but never while anything is on air, because that would move a live graphic. This
+          clears once air is empty and the bridge reads the channel again. If the SERVER is the one
+          that is wrong, fix the channel’s video mode in casparcg.config.
         </span>
       </span>
     </div>

@@ -158,6 +158,14 @@ Station setup SHALL offer, for each channel the install declares, its configured
 > what the channel reports about itself, so the control went and `channelSettings.set` has no
 > renderer call site again. See `ChannelSection.tsx`.
 >
+> ✅ **AND THE GAP THAT LEFT IS CLOSED — `B-236` (2026-09-07).** Removing the last writer left
+> the stored raster defaulting to 1920×1080 with nothing able to change it, so an install whose
+> channel is not 1080 carried a standing mismatch with no in-console remedy: a claim with no
+> author. The bridge is the writer now — `ChannelSettingsStore.adoptObserved` replaces the
+> stored raster with `observed` on a `mismatch` whose mode was READABLE, persists it, and sends
+> NOTHING to CasparCG. `unreadable` never adopts, and adoption is declined while anything is on
+> air. The section stays read-only; what changed is who corrects the value, not who displays it.
+>
 > ⚠ The note sits BELOW the requirement sentence on purpose: `openspec validate --strict`
 > reads only a requirement's FIRST line looking for `SHALL`, so a block quote above it fails
 > the change.

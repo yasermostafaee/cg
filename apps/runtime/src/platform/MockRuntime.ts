@@ -1680,11 +1680,27 @@ export class MockRuntime {
   }
 
   #mockRaster(): ChannelRaster {
+    // `B-236` parity — a STORED value that contradicts the mode is not honoured, for the
+    // same reason the bridge adopts over one: with the typed field gone there is no writer
+    // left to correct it, so a stale entry would stand as a permanent mismatch banner with
+    // no remedy. This tier's stale entry is a browser that used the field BEFORE
+    // `STATION-CHROME-01` removed it — a real state on a real dev machine, not a
+    // hypothetical. Adoption here is a READ-time decision: nothing is written back, so this
+    // adds no persisted key and no schema (the bridge owns the durable half).
+    const observed = videoModeRaster(MOCK_VIDEO_MODE);
     try {
       const raw = localStorage.getItem(CHANNEL_SETTINGS_KEY);
       if (raw !== null) {
         const parsed = ChannelRasterSchema.safeParse(JSON.parse(raw));
-        if (parsed.success) return parsed.data;
+        if (parsed.success) {
+          if (
+            observed === null ||
+            (parsed.data.width === observed.width && parsed.data.height === observed.height)
+          ) {
+            return parsed.data;
+          }
+          return { ...observed };
+        }
       }
     } catch {
       // Unusable storage falls through to the reference raster — the same

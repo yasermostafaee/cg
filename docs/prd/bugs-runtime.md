@@ -11713,3 +11713,90 @@ full set of open dialogs rather than one being hidden).
 - **Number:** highest `B-` HEADING across the three bug files was `B-233`; the registry's
   dated pointer reads _"Next free after this session is `B-234`"_ — headings and pointer
   AGREE.
+
+---
+
+## [~] B-236 — the stored channel raster is a claim with no author: removing the typed field left the value defaulting to 1920×1080 with nothing able to change it, so an install whose channel is not 1080 carries a standing mismatch banner and no in-console remedy ⟨priority: high — the value reaches AIR on the served template URL, so every graphic on such a channel is mis-placed, silently, and only where nobody in this app can see it⟩ — FILED AND CLOSED IN CODE 2026-09-07 by `STALE-CLAIMS-02` §1
+
+**Observed 2026-09-07**, and reported honestly by the session that created it rather than found
+by a later one: `STATION-CHROME-01` §4 made the Channel tab read-only on four findings that all
+hold — the configured raster reaches air as `?cw=&ch=`, the served page can derive it from CEF's
+own viewport, the console can derive it from `INFO <channel>`, and no case exists where a typed
+raster is more correct than what the channel reports about itself. What it did not have a place
+to fix was the consequence: `ChannelSettingsStore.hydrate` back-fills every DECLARED channel with
+`REFERENCE_RASTER`, and that value is only ever changed by a **writer**. With the field gone
+there was no writer left.
+
+**Repro:** point the bridge at a channel whose `video-mode` is not 1080 (`720p5000` is the
+`C-018` box). The console shows CHANNEL RASTER MISMATCH permanently; the Channel tab shows the
+stored 1920×1080 with no control; every `CG ADD` carries `cw=1920&ch=1080`.
+**Expected:** the console holds the raster the channel actually has.
+**Actual (before):** it holds 1920×1080 for ever, and says so in red with no remedy it can name.
+
+⭐ **Re-adding the typed field would NOT have closed it.** It answers _"the server says
+1280×720"_ with _"type 1280×720"_ — the guess `ChannelSection` exists to prevent, and a second
+source of truth for a number that reaches air.
+
+**Fix — the bridge is the writer, and the value it writes is the server's own.**
+`ChannelSettingsStore.adoptObserved(channel)` replaces the stored raster with `observed` and
+persists it. Three properties, each load-bearing:
+
+- **`unreadable` NEVER adopts, and never becomes agreement.** The gate is the canonical
+  `rasterVerdict` (golden rule 6): `mismatch` is the only verdict meaning both sides are known
+  and disagree. An unmapped token or an absent reading is a recorded GAP — the check could not be
+  performed — and a gap repaired as though it were a disagreement is the defect the check exists
+  to catch. Proved load-bearing by PLANTING the plausible wrong spelling (`!== 'match'` with the
+  null check dropped): three specs redden, the stored raster becomes `{}`, and the log line reads
+  `(undefined×undefined)`.
+- **It corrects a BELIEF; it does not ACT.** It writes the settings entry, `channel-settings.json`
+  and one stderr line, publishes `channelSettings.changed`, and puts NOTHING on the wire — no
+  `PLAY`, `MIXER`, `CLEAR`, `LOADBG` or `STOP`, measured on the mock with a positive control. What
+  is already on air keeps the `?cw=&ch=` it was served with; the correction reaches the next
+  `CG ADD` and the next `liveSourceFitFor`.
+- **Declined while anything is ON AIR**, reusing `#onAirCount`. This is NOT the operator refusal
+  `setChannelSettings` performs and the difference is which way the value moves: that one refuses
+  a new CLAIM of unknown truth, this one declines for now to delete a claim already known false.
+  The reason it must decline is that the raster reaches air by two routes with different timings —
+  the template gets it once at `CG ADD`, a Live Source plate gets it every time a look switch
+  recomputes `MIXER FILL` with no re-ADD — so adopting mid-show pulls the plate out from under
+  its own template's box. Uniformly mis-placed is a worse picture than correct and a better one
+  than coming apart.
+
+**Parity:** `MockRuntime.#mockRaster` declines a stored value that contradicts `MOCK_VIDEO_MODE`
+for the same reason, at READ time (no persisted key or schema changes). Its stale entry is a real
+state, not a hypothetical: a browser that used the typed field before `STATION-CHROME-01` removed
+it.
+
+⚠ **THE WINDOW THIS LEAVES OPEN, stated rather than papered over.** The mode read is ONE-SHOT per
+`(channel, primary)` (`#modeReadFrom`, the `B-189` latch), so a DEFERRED adoption is retried only
+when the next reading arrives — a reconnect, a failover or a restart. An install that has never
+adopted and whose bridge restarts mid-show therefore keeps the wrong raster until air clears and
+the channel is read again. Nothing regresses: that is the state it was already in. Closing it
+means retrying when air clears, and what would justify building that is a measurement ON THE PLANT
+of whether a mid-show adopt really does separate a plate from its template — the proposition this
+gate currently rests on by argument alone.
+
+**Operator copy changed with the behaviour, both halves:** the mismatch banner no longer names
+`channel-settings.json` as the remedy (adoption would overwrite a hand-edit) and names AIR, which
+is what actually holds the correction back; and `ChannelSection`'s _"Declared by"_ line is keyed
+on the VERDICT rather than on whether any reading exists, because answering _"read back from the
+server"_ beside a number the server has just contradicted tells the operator the opposite of the
+fact that row is there to give him.
+
+**Regression-test note:** `tools/caspar-bridge/tests/channel-settings-store.test.ts`
+(`adoptObserved` — B-236 block: adopts + persists, the two `unreadable` doors, the `match` and
+`unconfigured` no-ops, and no file written on a no-op);
+`tools/caspar-bridge/tests/channel-raster.integration.test.ts` (adoption end-to-end with the
+wire-silence measurement and its positive control, the unreadable case, the on-air deferral);
+`apps/runtime/tests/channelSectionProvenance.dom.test.ts` (the provenance sentence, red against
+the old spelling).
+
+- **Cross-refs:** [[B-189]] (the latch that makes the read one-shot, and so bounds the retry),
+  [[B-145]] (boot adoption — why a live channel can meet a standing mismatch at all), [[R-030]],
+  [[R-022]] (PVW is a browser render, so the preview's raster reaches no server).
+- **Prefix class:** `B-`, a runtime bug.
+- **Number:** assigned by the prompt. Verified free — `git grep B-236` returned only this
+  session's own files. ⚠ **The registry's dated pointer was EIGHT numbers behind**: it reads
+  _"Next free after this session is `B-235`"_, while `B-235` and `B-237`–`B-242` are all in use
+  in code, tests and `openspec/changes/station-setup/tasks.md` with no PRD heading of their own.
+  B-236 was the one genuine gap in that span. Pointer corrected in the registry.

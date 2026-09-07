@@ -1157,8 +1157,12 @@ Cinegy CG (its LAYOUT, never its vocabulary — see the verb trap below).
 
 - WHEN the operator loads from a row THEN the item binds that row's EXACT layer via the
   exact-slot path, never automatic allocation
-- WHEN any row is displayed THEN its REAL CasparCG layer number is visible (a display index may
-  sit beside it, never instead of it) — an operator may need it to clear that layer by hand
+- WHEN any row is displayed THEN its REAL CasparCG layer number is REACHABLE from that row without
+  leaving it — the row's `title` and `aria-label`, and the Inspector — and a display index may sit
+  beside it, never instead of it; and WHEN a surface names a row in a SENTENCE (the audit log, the
+  emptied-air notice, the orphan banner) THEN the number is VISIBLE there, never behind a hover.
+  **AMENDED 2026-09-07 — see the supersession note below.** The original read _"its REAL CasparCG
+  layer number is visible … an operator may need it to clear that layer by hand"_
 - WHEN a candidate layer is unticked THEN its row hides AND the layer stays fenced — unticking
   never returns a layer to an allocatable pool
 - WHEN the operator tries to untick a row that is occupied, OR whose occupancy is UNKNOWN THEN it
@@ -1208,6 +1212,30 @@ reaching for the number in order to clear that layer BY HAND, which is done when
 NOT helping. Resolved either way by `design.md` `§2`; whichever candidate the owner picks, **this
 bullet's text must move**, because shipping against an unmet criterion is worse than either
 answer.
+
+✅ **RESOLVED 2026-09-07 by `STALE-CLAIMS-02` §4 — the owner answered `§2` with (A), the
+supersession STANDS, and the bullet above has been amended. That amendment was the DELIVERABLE,
+not a side effect of it.** Recorded here rather than only in the change, because this is the
+document that carries the criterion.
+
+- **What was decided:** tooltip + `aria-label` + Inspector are enough for the layer TABLE. The
+  LAYER column does not come back. `layerTable.ts`'s density ladder keeps the width it bought.
+- **What the amendment does NOT concede**, and this is the half that stopped it being a plain
+  retreat: the number stays VISIBLE wherever a row is named in a SENTENCE. `operatorRowName`
+  returns the coordinate as a quiet secondary and `EmptiedAirNotice` renders it, because a notice
+  is read once under pressure and a hover needs a working pointer and a dwell. So the amended
+  bullet is two clauses, not one weakened clause.
+- ⚠ **The cost is NAMED, not hidden.** The scenario the original bullet cited — an operator
+  reaching for the number in order to clear that layer BY HAND, which is done precisely when the
+  console is not helping — is slower now on the layers table: a hover, or the Inspector. The owner
+  weighed that and chose it. It is written down so the next reader does not "restore" the column
+  believing nobody considered the case, and does not delete the coordinate from the notices
+  believing the tooltip covers it.
+- ⚠ **Two places MISCITED this answer and have been corrected.** `operatorNaming.ts` and
+  CLAUDE.md's golden rule 11 both said `operator-surface` `§2` _"declined to hide the number
+  behind a tooltip"_ — the opposite of the recorded answer. The RULE they state is right and
+  unchanged; only the citation was wrong, and it was wrong in the direction that would have made a
+  later reader re-litigate a settled decision.
 
 **Also confirmed here rather than assumed:** the PLAYOUT tab does not leak ownership class three.
 It reads `playoutLayers.state` — the declared RESERVED set only — and there is no `liveLayers()`
@@ -1610,6 +1638,18 @@ with the 1920×1080 default (`channel-settings-store.ts:106`), a declared-but-un
 channel does produce a `mismatch` and the banner does fire. The gap that remains is a channel
 whose mode `INFO` cannot read: the verdict is `unreadable`, the banner stays silent **by design**,
 and placement silently uses 1920×1080.
+
+⚠ **AMENDED 2026-09-07 by [[B-236]] — the first half above is no longer what happens, and the
+second half is now the WHOLE of the gap.** The declared-but-unconfigured 720p channel no longer
+sits at a standing mismatch: the bridge ADOPTS the server's raster the moment it reads one that
+contradicts config (`ChannelSettingsStore.adoptObserved`), persists it, and places against it, so
+that case self-corrects and the banner clears. It had to, because `STATION-CHROME-01` §4 removed
+the typed field and left the value with no writer at all. What survives unchanged is exactly the
+`unreadable` channel — no raster to adopt, so nothing to correct — plus one case adoption
+declines: while anything is ON AIR, because re-pointing plate geometry under a template that
+already carries the old raster would pull a live plate out of its own box. **Source 2 is still
+unreachable and this item's acceptance is still unmet**; adoption narrows the exposure, it does
+not close R-030's own bullet.
 
 **This is recorded as an unmet acceptance of THIS item, not as a new defect** — the behaviour it
 describes is the behaviour this item was filed to deliver. Closing `R-030` means either making

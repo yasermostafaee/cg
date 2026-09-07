@@ -5,6 +5,7 @@ import {
   ChannelSettingsSchema,
   REFERENCE_RASTER,
   rasterVerdict,
+  type ChannelRaster,
   type ChannelSettings,
   type ChannelSettingsState,
   type ChannelVideoMode,
@@ -54,6 +55,32 @@ export function defaultChannelSettings(channel: number): ChannelSettings {
 export interface SetRefusal {
   reason: 'unknown-channel';
   message: string;
+}
+
+/** `B-236` — what one adoption changed. Returned so the caller can say it out loud. */
+export interface AdoptedRaster {
+  channel: number;
+  /** The `video-mode` token the decision was made on, verbatim. */
+  mode: string;
+  from: ChannelRaster;
+  to: ChannelRaster;
+}
+
+/**
+ * `B-236` — the stderr line for an adoption.
+ *
+ * A persisted value that changes by itself and says nothing is a new silent thing, which is
+ * the species of defect this whole feature removes. It names both rasters and the token the
+ * decision rests on, the way {@link ChannelSettingsStore.mismatchWarning} does — an operator
+ * reading the service log has to be able to see WHY the stored number moved.
+ */
+export function adoptionNotice(adopted: AdoptedRaster): string {
+  return (
+    `[caspar-bridge] CHANNEL ${String(adopted.channel)} RASTER ADOPTED — the server reports ` +
+    `video-mode ${adopted.mode} (${String(adopted.to.width)}×${String(adopted.to.height)}), so the ` +
+    `stored ${String(adopted.from.width)}×${String(adopted.from.height)} has been replaced with it. ` +
+    `Placement follows the channel from now on; nothing already on air was touched.\n`
+  );
 }
 
 export class ChannelSettingsStore {
@@ -150,6 +177,57 @@ export class ChannelSettingsStore {
     }
     this.#observed.set(reading.channel, reading);
     return true;
+  }
+
+  /**
+   * `B-236` — **adopt the server's raster when config CONTRADICTS it.** Returns what
+   * changed, or null when there was nothing to adopt.
+   *
+   * ── WHY A WRITER HAD TO EXIST AT ALL ────────────────────────────────────────
+   *
+   * The stored raster defaults to `REFERENCE_RASTER` for every declared channel and is
+   * only ever changed by a writer. `STATION-CHROME-01` §4 removed the last one — the typed
+   * field — on the finding that a typed raster is never more correct than what the channel
+   * reports about itself. That left an install whose channel is NOT 1920×1080 carrying a
+   * standing mismatch banner with no in-console remedy: a claim with no author. Re-adding
+   * the field would answer "the server says 1280×720" with "type 1280×720", so the writer
+   * is this one, and the value it writes is the server's own.
+   *
+   * 🔴 **`unreadable` NEVER adopts, and never becomes agreement.** The gate is the canonical
+   * `rasterVerdict` (golden rule 6), not a local "did we get a number": `mismatch` is the
+   * ONLY verdict that means both sides are known and disagree. An unmapped token or an
+   * absent reading is a recorded GAP — the check could not be performed — and repairing a
+   * gap as though it were a disagreement is exactly the "renders as a pass" failure the
+   * check exists to prevent.
+   *
+   * ⚠ **This corrects a BELIEF; it must not ACT.** It writes the settings entry and the
+   * file, and nothing else: no AMCP, no re-load, no channel restart. What is already on air
+   * keeps the `?cw=&ch=` it was served with; the correction reaches the NEXT `CG ADD`. The
+   * ON-AIR gate is not here for the same reason `set`'s is not — it needs the reconciler's
+   * view of what is live, so it sits in `CasparRuntime`.
+   *
+   * PERSISTS, deliberately. Without it every boot would serve templates the wrong raster
+   * until that boot's first `INFO` reply landed, and the correction would have to be
+   * rediscovered on every restart.
+   */
+  adoptObserved(channel: number): AdoptedRaster | null {
+    const observed = this.#observed.get(channel);
+    // UNREADABLE leaves by its own door — no reading, or a token this build cannot map —
+    // rather than through a type narrowing further down where it would read as incidental.
+    if (observed?.raster == null) return null;
+    // `unconfigured`: no claim to correct. Adopting here would INVENT one, and placement's
+    // reference-frame fallback (`rasterFor`) is already the answer for such a channel.
+    const configured = this.#settings.get(channel);
+    if (configured === undefined) return null;
+    if (rasterVerdict(this.state(), channel) !== 'mismatch') return null;
+    this.#settings.set(channel, { channel, raster: { ...observed.raster } });
+    this.#persist();
+    return {
+      channel,
+      mode: observed.mode,
+      from: configured.raster,
+      to: { ...observed.raster },
+    };
   }
 
   /**

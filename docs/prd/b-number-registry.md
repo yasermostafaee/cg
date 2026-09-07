@@ -2696,3 +2696,43 @@ or `P-` number was taken.
 
 ⇒ **Next free after this session is `B-235`** (`B-001` … `B-234`, no gaps), **`D-161`**,
 **`C-034`** and **`P-046`** (unchanged).
+
+---
+
+## 2026-09-07 — `STALE-CLAIMS-02` · `B-236` taken, and the pointer above corrected by EIGHT
+
+| prefix | number  | one line                                                                                                                              | file                               | state          |
+| ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------------- |
+| `B-`   | `B-236` | the stored channel raster is a claim with no author — the read-only Channel tab left it defaulting to 1920×1080 with no writer at all | [bugs-runtime.md](bugs-runtime.md) | closed in code |
+
+🔴 **THE POINTER ABOVE WAS WRONG, AND IT IS THE KIND OF WRONG THIS REGISTRY EXISTS TO PREVENT.**
+It reads _"Next free after this session is `B-235`"_. Measured today: `B-235` and `B-237`–`B-242`
+are ALL in use — in renderer source, in tests, and in `openspec/changes/station-setup/tasks.md` —
+while **none of them has a `##` heading in any of the three bug files**. So the derivation rule
+(_"highest `B-` HEADING"_) and the dated pointer agreed with each other and both disagreed with
+reality, because the sessions that took those seven numbers recorded them in a change's task list
+rather than as PRD items.
+
+⚠ **This is why the rule must be "highest number IN USE", not "highest heading".** Two independent
+instruments that read the same narrow place are one instrument. A `git grep` for each candidate
+number is the cheap check that closes it, and it is what found the gap here:
+
+```
+B-235 → in use (StationLayersPanel, App.tsx, 2 specs)   B-239 → in use (StationSetupDialog, 3 specs)
+B-236 → FREE (this entry takes it)                       B-240 → in use (StationSetupDialog, 9 files)
+B-237 → in use (SourcesSection, 3 specs)                 B-241 → in use (CandidateLayersSection)
+B-238 → in use (CandidateLayersSection, 4 specs)         B-242 → in use (station-setup tasks.md)
+```
+
+**`B-236` was the one genuine gap in that span**, which is exactly why the prompt could assign it:
+the raster session named its own defect and declined to number it, and the number beside it stayed
+free while its neighbours were consumed.
+
+⭐ **What is NOT claimed here:** that `B-235` and `B-237`–`B-242` are mis-filed. They are real,
+they are closed, and they are documented where their work lives. What is claimed is only that the
+POINTER could not see them. Retro-filing seven PRD headings is not this session's work and is not
+done; the pointer is corrected so the next session does not re-take a live number.
+
+⇒ **Next free after this session is `B-243`** (`B-001` … `B-242`, no gaps, verified by grep per
+number across the whole tree rather than by headings alone), **`D-161`**, **`C-034`** and
+**`P-046`** (unchanged).

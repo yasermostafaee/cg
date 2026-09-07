@@ -275,6 +275,148 @@ it('refuses a raster change while anything is on air — it would move what is l
   );
 }, 30000);
 
+/**
+ * `B-236` — the ADOPTION cases, end to end.
+ *
+ * A mode the mock reports as `720p5000` against the default 1920×1080 config is the exact
+ * shape of the gap `STATION-CHROME-01` §4 recorded and could not close from the renderer:
+ * a standing mismatch on an install whose channel is not 1080, with no in-console writer
+ * left to correct it.
+ */
+
+/** Boot with the server reporting a mode of our choosing, and a switch to hold the reply back. */
+async function bootWithMode(mode: string): Promise<{ release: () => void }> {
+  const oscPort = await freeUdpPort();
+  mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
+  let speakable = false;
+  mock.setHandler('INFO', (req) => {
+    if (req.args.length === 0) {
+      return { kind: 'ok-multi', code: 200, verb: 'INFO', lines: [`1 ${mode} PLAYING`] };
+    }
+    if (!speakable) return { kind: 'err', code: 501, verb: 'INFO' };
+    return {
+      kind: 'ok-line',
+      code: 201,
+      verb: 'INFO',
+      data: `<?xml version="1.0" encoding="utf-8"?>\n<channel>\n   <format>${mode}</format>\n</channel>\n`,
+    };
+  });
+  runtime = new CasparRuntime(singleServer(mock.amcpPort, oscPort), {}, { sweepMs: 60 });
+  runtime.start();
+  await runtime.startServing();
+  runtime.templateImport(TEMPLATE, HTML);
+  await runtime.whenServerHealthy(HEALTH_MS);
+  return {
+    release: () => {
+      speakable = true;
+    },
+  };
+}
+
+it('B-236 — adopts the server’s raster over a contradicting config, and it reaches the ADD', async () => {
+  const { release } = await bootWithMode('720p5000');
+
+  // Before the reading lands the console holds the default it was born with — the claim
+  // with no author, which is the whole defect.
+  expect(runtime!.channelSettingsState().settings).toEqual([
+    { channel: 1, raster: { width: 1920, height: 1080 } },
+  ]);
+
+  /*
+    ADOPTION CORRECTS A BELIEF; IT MUST NOT ACT. Record every verb that can change what is
+    on the channel, so "nothing reached the wire" is a MEASUREMENT rather than a claim about
+    intent. The positive control is at the bottom of this test: the same recorder must fill
+    when a real load runs, or its silence here proves nothing
+    (`negative-observation-needs-positive-control`).
+  */
+  const acted: string[] = [];
+  // `CG` is deliberately NOT stubbed: the mock's own `CG ADD` bookkeeping is what
+  // `lastCgAdd` reads below, and replacing the handler would blind the very assertion this
+  // test ends on. `MIXER` carries the positive control instead — the pre-ADD mute is a
+  // send the load genuinely makes (R-042), so the recorder is proved live by real traffic
+  // rather than by a probe written to tickle it.
+  for (const verb of ['PLAY', 'MIXER', 'CLEAR', 'LOADBG', 'STOP']) {
+    mock!.setHandler(verb, (req) => {
+      acted.push(`${verb} ${req.args.join(' ')}`);
+      return { kind: 'ok', code: 202, verb };
+    });
+  }
+
+  release();
+  await vi.waitFor(
+    () => {
+      expect(runtime!.channelSettingsState().settings).toEqual([
+        { channel: 1, raster: { width: 1280, height: 720 } },
+      ]);
+    },
+    { timeout: HEALTH_MS, interval: 25 },
+  );
+
+  // The check now agrees, because the belief was corrected — not because the gap was
+  // papered over.
+  expect(rasterVerdict(runtime!.channelSettingsState(), 1)).toBe('match');
+  // NOTHING on the wire: no `PLAY`, no `MIXER`, no `CLEAR`, no `LOADBG`, no `STOP`. A
+  // configuration verb is never a playout verb (golden rule 10), and this one is not even
+  // an operator's — it is the console deleting a belief it can prove false.
+  expect(acted).toEqual([]);
+
+  // …and the corrected value is what the NEXT served template is told.
+  expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
+  expect(mock!.lastCgAdd(SLOT)?.template).toContain('cw=1280&ch=720');
+  // POSITIVE CONTROL — the recorder is live. The load just made a send it records (the
+  // pre-ADD mute), so the emptiness asserted above is a MEASUREMENT and not a dead
+  // instrument reading zero.
+  expect(acted.some((line) => line.startsWith('MIXER '))).toBe(true);
+}, 30000);
+
+it('B-236 — an UNREADABLE mode is never adopted, and never reads as agreement', async () => {
+  const { release } = await bootWithMode('holographic');
+  release();
+
+  await vi.waitFor(
+    () => {
+      expect(runtime!.channelSettingsState().observed).toHaveLength(1);
+    },
+    { timeout: HEALTH_MS, interval: 25 },
+  );
+
+  const state = runtime!.channelSettingsState();
+  // The token is kept verbatim so the operator can carry it to a rack; the raster is null
+  // because this build cannot map it, and a guess here would be compared against config and
+  // reported as agreement or disagreement on no evidence.
+  expect(state.observed[0]).toEqual({ channel: 1, mode: 'holographic', raster: null });
+  expect(state.settings).toEqual([{ channel: 1, raster: { width: 1920, height: 1080 } }]);
+  expect(rasterVerdict(state, 1)).toBe('unreadable');
+}, 30000);
+
+it('B-236 — adoption is DEFERRED while anything is on air: it would move a live graphic', async () => {
+  const { release } = await bootWithMode('720p5000');
+
+  // Put a graphic up BEFORE the reading lands — the mid-show bridge restart (`B-145` boot
+  // adoption) is the one case where a standing mismatch meets a live channel.
+  expect((await runtime!.load('item1', 'lower-third', {})).accepted).toBe(true);
+  expect((await runtime!.take('item1')).accepted).toBe(true);
+
+  release();
+  await vi.waitFor(
+    () => {
+      expect(runtime!.channelSettingsState().observed).toHaveLength(1);
+    },
+    { timeout: HEALTH_MS, interval: 25 },
+  );
+
+  /*
+    The reading landed and CONTRADICTS config — and the stored value stands. Adopting here
+    would re-point `liveSourceFitFor`'s plate geometry at a new raster while the template
+    already on air still carries the `?cw=&ch=` it was loaded with, so the next look switch
+    would pull the plate out from under its own template's box. Mis-placed-but-consistent
+    beats mis-placed-and-coming-apart, mid-shot.
+  */
+  const state = runtime!.channelSettingsState();
+  expect(rasterVerdict(state, 1)).toBe('mismatch');
+  expect(state.settings).toEqual([{ channel: 1, raster: { width: 1920, height: 1080 } }]);
+}, 30000);
+
 it('refuses a channel this install never declared', async () => {
   await boot();
   const refused = runtime!.setChannelSettings({
