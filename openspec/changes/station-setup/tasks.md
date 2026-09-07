@@ -146,5 +146,8 @@
       titles. Fixed in live code, tests and e2e; the mockup and historical records left as
       records. It found `server-settings.spec.ts` matching a card title's SHOUTED form, which
       the shared `text-transform` had made unmatchable.
-- [ ] 10.8 Linux `gate:e2e` for `STATION-CHROME-02` — OWED. This change is entirely about what
-      renders.
+- [x] 10.8 Linux `gate:e2e` for `STATION-CHROME-02` — **DISCHARGED** on `6fad13d6`, the head
+      carrying this work: <https://github.com/yasermostafaee/cg/actions/runs/34101121005> —
+      `E2E (Playwright)` **RAN** (not skipped) and passed, 08:32:37 → 08:43:04 (**627 s**),
+      run `conclusion: success`, with `Lint • Typecheck • Test • Build` green beside it
+      (200 s). The local `pnpm gate` was `0 cached, 93 total`, exit 0, 257 s.
