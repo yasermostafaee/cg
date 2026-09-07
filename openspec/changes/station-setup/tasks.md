@@ -180,10 +180,31 @@
       scoped, shown only when dirty from the SAME read the rail's dot makes; read-only and
       as-you-go tabs carry no buttons. And the thing it hid: dismissing with unapplied edits
       now asks, naming the sections.
-- [x] 11.5 `B-241` FILED — a route returning a field its response schema does not declare has
-      it silently stripped by `safeParse`. `StackRemoveChannel` is the measured instance: the
-      bridge composes a layer-naming sentence that never reaches the wire. NOT fixed by
-      widening the schema (§7): `errorCodeMessage` already yields the canonical sentence.
+- [x] 11.5 `B-241` FILED, and **SWEPT — the sweep found a worse, live instance than the one
+      that was filed.** The class: `bridge.ts:890` puts `route.channel.response.safeParse(result).data`
+      on the wire, so a handler returning a field its schema does not declare has it deleted
+      with no error anywhere. Nothing type-checks the two against each other — `Route.handle`
+      is `(req: unknown) => unknown` (`bridge.ts:440`), so a hand-written TS annotation is the
+      only thing that can disagree with the Zod schema, and a conditional spread defeats even
+      that. Boundary: all 80 `defineChannel`s, 62 routed; 12 are arrays/unions and structurally
+      immune at the top level; the other 50 strip. **8 hits:** - 🔴 **`stack.out` loses `errorCode` — LIVE, UNMITIGATED, and its own bug.** The schema
+      declares `{ accepted }` ALONE (`stack.ts:149`) while the handler returns
+      `{ accepted, errorCode? }` (`caspar-runtime.ts:3839`). `B-141` widened the
+      IMPLEMENTATION to add that code and never widened the channel — so **B-141's fix has
+      been reverted on the wire for its entire life.** `LayerRow`'s CLEAR feeds
+      `asyncResultMessage`, whose both branches then die, and the operator is told
+      `"Not accepted."` on the console's ESCAPE HATCH — the verb `caspar-runtime.ts:3894`
+      itself calls _"the verb where it matters MOST"_. Filed as `B-244`. - 🔴 `stack.remove` loses `message` — the original instance, confirmed. Degraded rather
+      than blank (the code maps to the canonical sentence), but the LAYER NUMBER the bridge
+      computed is lost, which matters at the two call sites with no row context. - DEAD WEIGHT ×6: `command` on `out`/`take`/`update`/`stop`/`next` (it feeds the audit
+      entry, which the renderer reads from `audit.recent`, not from the verb), and `sent` on
+      `set-plate-volume` (consumed inside the bridge only).
+      ⚠ The REQUEST direction strips identically (`bridge.ts:844`) and is sharper: for the five
+      whole-object config channels the stripped copy is what gets PERSISTED
+      (`bridge.ts:1118/1164/1260/1266/1274`), so a newer browser's field is dropped AND the
+      drop written to the station's config file.
+      Neither is fixed here: §7 forbids a schema change unless required, and B-238 does not
+      require one.
 - [x] 11.6 `B5` — `useTemplatePicker`'s stale comment (`there is no code to quote`) corrected;
       it now quotes the code, which `R-017` added.
 - [ ] 11.7 `B-242` FILED, not taken — a removed delimiter's attached field falls back to
