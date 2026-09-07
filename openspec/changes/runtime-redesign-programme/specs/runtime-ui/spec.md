@@ -1,0 +1,86 @@
+## ADDED Requirements
+
+### Requirement: A redesign never deletes a surface merely because the reference omits it
+
+The Runtime SHALL keep every operator surface it has today that the approved design reference does
+not draw, each still rendering under the condition that raises it. A visual reference is a design
+for the console WORKING; the surfaces at risk exist because something has gone wrong, so a
+prototype has no reason to draw one and a redesign that ships only what is drawn deletes all of
+them at once.
+
+The set is enumerated in this change's `design.md` §3, built from the source tree rather than from
+any list supplied with the reference. Each entry SHALL name where the surface lives now, what it
+becomes after the redesign, and a test.
+
+An entry SHALL NOT be discharged by a test that merely renders the component. The test SHALL assert
+that the surface APPEARS under its own condition, and — where the surface has a silent state — that
+it renders NOTHING when the condition is absent. Presence-only assertions pass against an
+implementation that renders the thing and means nothing by it.
+
+#### Scenario: An alarm still fires after the surface is re-dressed
+
+- **WHEN** the condition that raises a guarded alarm holds — a reconnect that took air away, an
+  unowned lit layer, a bridge older than the page, a declared output that is not running, a
+  configured raster contradicting the server, a link that is not live, a restore that came back
+  short **THEN** that alarm renders, carrying the same claim it carried before the redesign
+
+#### Scenario: A guarded surface stays silent when its condition is absent
+
+- **WHEN** a guarded surface's condition does not hold **THEN** it renders nothing at all, and no
+  reassuring or placeholder variant is rendered in its place
+
+#### Scenario: A footer pill is not accepted as a full-width alarm
+
+- **WHEN** the link is not live **THEN** the not-live state is stated by a full-width alert and not
+  by a status pill alone, because a pill beside a healthy-looking pill is the failure `R-006`
+  records
+
+#### Scenario: Every guarded surface names a test that runs
+
+- **WHEN** the programme's final phase is reported **THEN** each entry in `design.md` §3 cites a
+  test that exists in the tree and asserts that entry's condition, and no entry cites a test that
+  only constructs the component
+
+### Requirement: The console lock keeps its own chrome and its no-exit contract
+
+The lock screen SHALL NOT be built on the shared modal primitive, and SHALL offer no dismissal path
+other than a correct PIN. A lock with a way out is not a lock. The reference draws its own lock as a
+dialog inside the Station-setup shadow root; that is a property of a prototype whose lock guards
+nothing, and it SHALL NOT be read as an argument to move the product's lock onto a primitive that
+closes on Escape, on a backdrop click, or on a dismiss control.
+
+While engaged, the lock SHALL contain the keyboard as well as the pointer, and on release SHALL
+hand the keyboard back to the application.
+
+#### Scenario: The lock cannot be dismissed except by its PIN
+
+- **WHEN** the console is locked and the operator presses Escape, clicks outside the card, or
+  reaches for a close control **THEN** the lock stays engaged and no close control exists to reach
+
+#### Scenario: The keyboard cannot leave the lock
+
+- **WHEN** the console is locked and focus is on the last control inside the lock and Tab is
+  pressed **THEN** focus returns to the first control inside the lock rather than moving to any
+  element of the application behind it
+
+### Requirement: The programme's phase state is recorded where the next session reads it
+
+Each phase of this programme SHALL record its completion in this change's `tasks.md`, and a session
+SHALL read that state before choosing a phase rather than inferring it. The phases are ordered and
+the ordering is load-bearing; a later phase is not started because an earlier one looks easy.
+
+A phase that alters what the operator surface renders SHALL cite, beside its ticked item, the URL
+of a completed, green Linux `e2e` job that RAN on the commit carrying the change. A ticked item with
+no URL is a claim, not a discharge.
+
+#### Scenario: A session picks the next phase from the recorded state
+
+- **WHEN** a session begins work on this programme **THEN** it reads the phase state in `tasks.md`
+  and takes the next unfinished phase, and reports at the top of its report which phase it took and
+  which remain
+
+#### Scenario: A render phase is not reported complete on a green gate alone
+
+- **WHEN** a phase that changes what a surface renders is reported **THEN** its evidence is a
+  completed green Linux `e2e` job on the code head, cited by URL, and a green `pnpm gate` is not
+  offered in its place
