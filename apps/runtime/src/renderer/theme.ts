@@ -524,6 +524,21 @@ export const cssVars = {
   '--r-modal-w-wide': 'min(720px, 94vw)',
   '--r-modal-w-fixed': 'min(1000px, 100%)',
   '--r-modal-h-fixed': 'min(680px, calc(100vh - 48px))',
+  /**
+   * 🔴 THE FIXED FRAME'S FOOTER BAR — a FLOOR, not an intrinsic height, and the distinction
+   * is the whole point. It is the same argument `--r-panel-bar-h` makes one surface over: a
+   * height that belongs to BEING a footer cannot be a function of what a given section
+   * happens to put in it.
+   *
+   * `B-240` is what forced it. Removing the per-section `Close` left three of the five tabs
+   * with NO footer buttons, so their footer collapsed from 59px to 41px — and the footer's
+   * TOP EDGE moved 18px as the operator walked the rail, which is precisely what
+   * `STATION-CHROME-02` §2 forbids and what `station-setup-frame.spec.ts` measures. The outer
+   * box stayed identical throughout, which is why that spec measures two edges and not one.
+   *
+   * The value is the modal button row's own floor (36px) plus this footer's padding.
+   */
+  '--r-modal-foot-h': '59px',
   '--r-lock-scrim': 'rgba(15, 23, 42, 0.94)',
   '--r-shadow-menu': '0 4px 16px rgba(0, 0, 0, 0.45)',
   '--r-shadow-drawer': '-8px 0 24px rgba(0, 0, 0, 0.45)',

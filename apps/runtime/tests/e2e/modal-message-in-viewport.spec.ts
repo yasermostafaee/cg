@@ -121,13 +121,18 @@ test('a refusal stays in the viewport when the modal body is scrolled away from 
 
   // ── the assertion the debt owed ────────────────────────────────────────────
   await expect(message).toBeInViewport({ ratio: 1 });
-  // …and the action row it is pinned to is still reachable, which is the other
-  // half of the same promise: a long message may not push Done off the bottom.
-  // The Live sources tab commits as it goes, so its one footer action is a quiet Close
-  // (§2) — the assertion is that the ACTION ROW is still reachable, whichever word it wears.
-  await expect(
-    dialog.locator('.cg-modal-footer').getByRole('button', { name: 'Close' }),
-  ).toBeInViewport({ ratio: 1 });
+  /*
+    …and the action row it is pinned to is still reachable, which is the other half of the
+    same promise: a long message may not push the footer off the bottom.
+
+    ⚠ `B-240` — asserted on the FOOTER ITSELF, not on a button in it. This read
+    `getByRole('button', { name: 'Close' })`, and the Live sources tab has no footer button at
+    all now: dismissal moved to the dialog's ✕ (one job, one control, one name) and a
+    save-as-you-go section has nothing of its own to commit. The claim was never about a
+    particular word — it is that the pinned row survives a long message — so it is now made
+    against the row.
+  */
+  await expect(dialog.locator('.cg-modal-footer')).toBeInViewport({ ratio: 1 });
 
   // ── the negative control: this check can fail ──────────────────────────────
   // The last element INSIDE the scrolling body — where the refusal used to be

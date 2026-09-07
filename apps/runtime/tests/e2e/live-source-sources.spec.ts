@@ -236,9 +236,20 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   // take is learning too late.
   await app.openStationSetupAt('Live sources');
   await dialog.getByRole('button', { name: 'Remove Studio A' }).click();
+  /*
+    🔴 `B-237` — IT ASKS FIRST NOW, and the question names the fallout BEFORE the act rather
+    than reporting it after. That is strictly more than this spec used to assert: the same
+    template and plate are named, and they are named while the operator can still say no.
+  */
+  const confirm = page.getByRole('dialog', { name: /^Delete the source/ });
+  await expect(confirm).toBeVisible();
+  await expect(confirm.getByText(/two box/)).toBeVisible();
+  await expect(confirm.getByText(/already on air stays up/)).toBeVisible();
+  await confirm.getByRole('button', { name: 'Delete source' }).click();
+
+  // …and the cascade still reports what it freed, naming the template the way the operator
+  // knows it (the imported file name, cleaned), never by its id.
   await expect(dialog.getByText(/need.* a new one/)).toBeVisible();
-  // The template is named the way the operator knows it (the imported file
-  // name, cleaned), never by its id.
   await expect(dialog.getByText(/two box \/ guest-1/)).toBeVisible();
   await app.closeStationSetup();
 

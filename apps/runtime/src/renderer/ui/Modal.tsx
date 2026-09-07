@@ -197,6 +197,14 @@ const styles = {
     padding: '0.7rem 1rem',
     borderTop: `1px solid ${colors.border}`,
     background: colors.panelMuted,
+    /*
+      🔴 A FLOOR, so the bar's height does not depend on whether this section has buttons.
+      Without it a tab carrying none collapses the footer and its TOP EDGE moves — see
+      `--r-modal-foot-h` for the measurement that forced this, and `styles.dialogFixed` for
+      why a moving edge is the defect this frame exists to remove.
+    */
+    minHeight: cssVars['--r-modal-foot-h'],
+    boxSizing: 'border-box' as const,
   },
   /** The fixed frame's body fills the frame; only the scroll container inside it scrolls. */
   bodyFixed: { flex: 1, padding: 0, gap: 0 },
