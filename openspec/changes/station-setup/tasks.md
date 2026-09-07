@@ -222,4 +222,31 @@
       other specs may lean on, so it is filed rather than taken here. ⭐ It is also the reason
       11.2's second half is not hypothetical: this is a live case where the control is
       correctly enabled and the answer comes back a refusal.
-- [ ] 11.9 Linux `gate:e2e` for `SOURCE-DELETE-GATE-03` — OWED.
+- [x] 11.9 Linux `gate:e2e` for `SOURCE-DELETE-GATE-03` — **DISCHARGED** on `b9325b25`, the
+      head carrying this work: <https://github.com/yasermostafaee/cg/actions/runs/34108923579>
+      — `E2E (Playwright)` **RAN** (not skipped) and passed, 09:58:21 → 10:08:13 (**592 s**),
+      run `conclusion: success`, with `Lint • Typecheck • Test • Build` green beside it
+      (183 s). Local `pnpm gate`: `0 cached, 93 total`, 1225 tests.
+      🔴 **The FIRST run of this work was RED and is recorded rather than hidden.**
+      `95181658` → <https://github.com/yasermostafaee/cg/actions/runs/34106268123>, `e2e`
+      **failure**, 3 specs of 116. All three were consequences of `B-240` and all three live
+      in the suite `pnpm gate` does not run (`P-028`), so a green local gate said nothing
+      about any of them:
+      · `station-setup-frame.spec.ts` — **the real one, and §2's own assertion caught it.**
+      Removing the per-section `Close` left three tabs with NO footer buttons, so their
+      footer collapsed 59px → 41px and its TOP EDGE moved 18px along the rail. The outer box
+      stayed identical (`220,110,1000,680`) the whole time, which is exactly why that spec
+      measures two edges. Fixed with `--r-modal-foot-h`, a FLOOR — the same argument
+      `--r-panel-bar-h` makes: a height that belongs to BEING a footer is not a function of
+      what a section puts in it. Measured after: `footTop 730`, `footH 59`, all five.
+      · `live-source-sources.spec.ts` — now answers the delete CONFIRMATION before asserting
+      the cascade notice. It asserts strictly more than before: the template and plate are
+      named while the operator can still decline.
+      · `modal-message-in-viewport.spec.ts` — asserts the FOOTER ROW stays in view rather than
+      a `Close` button in it. The claim was never about a particular word.
+      ⚠ **The process lesson:** the frame was measured after `STATION-CHROME-02` and NOT
+      re-measured after `B-240` changed the footer's contents, because `pnpm gate` was green.
+      A green gate is not evidence about anything that renders. The local runtime e2e is now
+      run before pushing render work — it caught all three (116 passed after the fix), and one
+      further local red (`assignment-freeze`) proved to be a `page.goto` load flake that
+      passes in isolation and never touches these gates.
