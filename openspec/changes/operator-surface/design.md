@@ -811,6 +811,34 @@ R-010's own gate is FROZEN either way. Only the remedy wording and the recovery 
 
 ---
 
+## ✅ §7 CLOSED — 2026-09-07 by `STALE-CLAIMS-02` §4, and NOT as it was asked
+
+**The gate text below is left VERBATIM**, the way `PREMISE CORRECTED` and `OWNER ANSWERS` are:
+the section is the record of what was ASKED, and a question rewritten to match its answer
+destroys both.
+
+**THE RESERVATION HALF IS TRUE AND CLOSES. THE LABEL HALF WAS NEVER TRUE.**
+
+- ✅ **Reserved:** `MonitorStrip` renders both in their final positions inside the workspace,
+  height persisted and keyboard-nudgeable through `ShellDivider`, fullscreen-able because
+  `Panel` gives every panel that control. R-033 point 7 asked for them "now"; they are there.
+- 🔴 **"labelled NOT CONNECTED" — false, and false in BOTH halves.** PROGRAM's `emptyLabel` is
+  `No program return`. PREVIEW has no empty label at all any more: `R-022` replaced the reserved
+  box with `PreviewPanel`, a LOCAL browser render of every rehearsing row, with no CasparCG
+  involvement and nothing ever sent. And the phrase was never right even before that —
+  `MonitorPanel`'s own header records the first draft labelling both "NOT CONNECTED" as a
+  **category error**, because PREVIEW has no link to be down: _"Telling an operator that PREVIEW
+  is 'not connected' would send them looking for a link that is not part of the design."_
+- **Where the false sentence came from, and where it went:** a stale comment in `App.tsx`
+  repeated it (_"black and explicitly labelled NOT CONNECTED"_), and this gate borrowed it. The
+  comment is corrected in place; this block records the finding.
+
+⭐ **Why this is worth a block rather than a tick:** the claim is about what an operator READS,
+and it was carried in a document, a code comment and a gate, all agreeing with each other and
+none with the screen. Ticking `tasks.md` 6.1 as written would have archived the third copy.
+
+---
+
 ## §7 — CONFIRM: PGM / Preview are already reserved
 
 R-033 point 7 asks for them "now". **They are already there** — `MonitorStrip` in `App.tsx`,
@@ -819,6 +847,40 @@ fullscreen-able because `Panel` gives every panel that control (point 12).
 
 Nothing to decide unless the owner wants something different from what shipped. Listed so the
 item can be closed against evidence rather than left open because nobody checked.
+
+---
+
+## ✅ §8 CLOSED — 2026-09-07 by `STALE-CLAIMS-02` §4: THE ASYMMETRY DOES NOT EXIST
+
+**Gate text below left VERBATIM**, same reason as `§7`.
+
+**BOTH clears are confirm-gated. There is no asymmetry to record, and recording one would have
+planted a false fact exactly where a later reader was invited to act on it.**
+
+- The station-layers CLEAR (ours-vs-theirs, `StationLayersPanel`) is confirm-gated per layer
+  (`confirmAndClearOne`), and CLEAR ALL carries one confirm naming the count, the layer numbers,
+  that these are not our layers, and the exclusions. That half of the gate text is accurate.
+- 🔴 **The ROW's CLEAR is confirm-gated too** — `LayerRow.tsx` wraps it in `withConfirm` with an
+  occupancy-dependent body: three branches, chosen by what the WIRE says about the layer
+  (`unknown` → say the console cannot see; `producer` → name the kind; `empty` → say so), every
+  branch naming the layer NUMBER. The gate below asserts the reverse: _"not confirm-gated at
+  all, because it is the escape hatch"_.
+- ⚠ **And it was not a drift — it was never true.** Checked at `ec65480`, the tree this design
+  was written against: `git show ec65480:…/LayerRow.tsx` already contains `withConfirm`,
+  `occupancySentence` and both `Clear layer` dialogs. So this is a recon error, not staleness,
+  and the distinction matters: re-reading a later tree would not have caught it.
+
+**What IS open is a different question, and `tasks.md` 6.2 is re-pointed at it:** whether the
+row's CLEAR should KEEP its confirm. The argument the gate below makes for removing it — an
+escape hatch, and a confirm on a remedy is a delay on a graphic stuck on air — is real and
+unanswered. It is now stated as the question it is, rather than as the description of a
+behaviour that does not exist.
+
+⭐ **The cost of ticking this as written, spelled out because it is the whole reason for the
+block:** `tasks.md` 6.2 says to record the asymmetry _"where a later reader would try to
+harmonise it, in BOTH directions"_. A reader who found that note, checked the row's CLEAR and
+saw a confirm would conclude the code had drifted from a decision — and "fix" it by DELETING a
+confirm from a destructive on-air verb.
 
 ---
 

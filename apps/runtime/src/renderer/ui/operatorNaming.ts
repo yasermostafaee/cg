@@ -123,9 +123,18 @@ export interface OperatorRowName {
    * `1-9` — the real CasparCG coordinate, kept as a QUIET SECONDARY and never dropped.
    *
    * `R-028`: _"an operator may need it to clear that layer by hand"_ — which is done
-   * when the console is not helping, so it must be VISIBLE and not a tooltip. A hover
-   * needs a working pointer and a dwell, and `operator-surface` §2 upheld exactly this
-   * reasoning when it declined to hide the number behind one.
+   * when the console is not helping, so on a surface that names a row in a SENTENCE it
+   * must be VISIBLE and not a tooltip. A hover needs a working pointer and a dwell.
+   *
+   * ⚠ **CITATION CORRECTED 2026-09-07 (`STALE-CLAIMS-02` §4).** This said
+   * `operator-surface` §2 _"upheld exactly this reasoning when it declined to hide the
+   * number behind one"_. It did not: the owner answered §2 with **(A) — the supersession
+   * STANDS**, so the layer TABLE keeps the number in its `title`/`aria-label` and the
+   * LAYER column does not return. The rule above is unchanged and still right, because
+   * it governs a DIFFERENT surface class — a notice or a log entry, read once, where
+   * there is no density ladder to pay and no hover to rely on. Only the borrowed
+   * authority was false, and it was false in the direction that invites a later reader
+   * to re-open a settled decision.
    *
    * `null` when there is no slot, and — the case worth naming — when `names` ALREADY
    * carries the coordinate, because an out-of-bank layer is named `layer 60 (not a

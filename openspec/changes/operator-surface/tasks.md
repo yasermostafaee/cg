@@ -158,14 +158,32 @@ travel with the work rather than being rediscovered.
       R-010 uses"_. **DELETED rather than reworded** — after §6(A) the two paths genuinely
       differ: Clear-All leaves every row on the stack, so every reference survives it and R-005's
       refusal would repeat forever. Both now name the per-item remedy only.
-- [ ] 1b.2 **`openspec/specs/runtime-caspar-bridge/spec.md`'s `stack.remove-all` scenario is now
-      FALSE and no delta covers it** — _"Refused while on air, accepted after Remove-All"_
-      describes a press wave 1 refuses bridge-side. `pnpm openspec validate --all --strict` will
-      NOT catch it: it is a semantic contradiction, not a structural one. Needs a
-      `## MODIFIED Requirements` delta in this change's `specs/`.
-- [ ] 1b.3 **`openspec/specs/runtime-template-library/spec.md` still names Remove-All as R-005's
-      unblock path**, which `B-212` already falsified on 2026-09-04 and wave 1 makes doubly wrong
-      (that control is now disabled in the on-air case). Same treatment as 1b.2.
+- [x] 1b.2 **DONE 2026-09-07 (`STALE-CLAIMS-02` §2) — the delta is
+      `specs/runtime-caspar-bridge/spec.md`, and the verdict is AGAINST THE SPEC.**
+      _"Refused while on air, accepted after Remove-All"_ describes a press wave 1 refuses
+      bridge-side, and the paragraph above it calls Remove-All _"the sanctioned path to unblock
+      reconfiguration"_. The code is not merely different, it is the DECIDED behaviour: the owner
+      answered `§6` with (A), for a stated reason (Apply gates on the on-air COUNT, not on an
+      empty list), and naming a control disabled precisely by the condition being reported is the
+      defect `§6` exists to remove. The delta replaces both, names CLEAR-ALL, and adds a third
+      bullet asserting Remove-All is refused so it cannot be the unblock path.
+      ⚠ **`pnpm openspec validate --all --strict` passed on the false text throughout** — it
+      validates SHAPE, not TRUTH. That is why this survived, and it is the reason the sweep had to
+      be done by reading rather than by running the validator.
+- [x] 1b.3 **DONE 2026-09-07 (`STALE-CLAIMS-02` §2) — the delta is
+      `specs/runtime-template-library/spec.md`, verdict AGAINST THE SPEC again.** Two independent
+      decisions had already falsified _"per-item Remove, or Remove-All … is the unblock path"_:
+      `B-212` (2026-09-04) rebuilt the refusal so Remove-All is **not mentioned at all**, with a
+      per-reference remedy (`Show <row>` / `Remove item`) built from `describeTemplateReferences`;
+      and wave 1 refuses Remove-All while anything is on air. The delta states the per-ITEM,
+      per-REFERENCE remedy and forbids naming a BULK control — including Clear-All, which is
+      useless here because it leaves every row and therefore every reference standing (the reason
+      `1b.1` deleted the shared-remedy sentence).
+      ⚠ **One clause of the delta was drafted WRONG and corrected before landing:** it first said
+      an on-air item must always be taken off air before removal. `#removeRefusal` exempts an item
+      on a layer OUTSIDE the declared bank — no row, so no STOP and no CLEAR to press — which is
+      `B-212`'s own measured case and precisely the path the picker's `Remove item` uses. The
+      delta now states the exemption as part of the rule.
 - [ ] 1b.4 The PRD's own copies of the same vocabulary — `docs/prd/runtime.md`'s `R-005` body,
       `R-010` entry, and `R-017`'s RIPPLE bullet (which is where `1.8`'s four-site list and the
       false _"No items loaded"_ claim originate). Rides the PRD status flip in `6.3`, not this
@@ -201,10 +219,22 @@ table and immediately need extending, or written twice — the exact drift `§3`
 
 Wave 3. Alone. **If the owner answers (A), this section is a DOCS change, not a code change.**
 
-- [ ] 3.1 ⟨GATE: §2⟩ If (A) — the supersession stands: **amend R-028's acceptance bullet**
-      ("WHEN any row is displayed THEN its REAL CasparCG layer number is visible"). Shipping
-      against an unmet criterion is worse than either answer, and this is the task that closes
-      it.
+- [x] 3.1 ⟨GATE: §2⟩ **DONE 2026-09-07 (`STALE-CLAIMS-02` §4). (A) was the answer, so this was the
+      deliverable and not a side effect.** `docs/prd/runtime.md`'s bullet is amended IN PLACE (it
+      is a living document) with the original quoted inside it, and the 🔴 unmet-criterion block
+      below it now records the resolution: the LAYER column does not return; the number lives in
+      the row's `title`/`aria-label` and the Inspector.
+      ⭐ **The amendment is TWO clauses, not one weakened clause.** It concedes the table and
+      keeps the other half explicitly: wherever a row is named in a SENTENCE — the audit log, the
+      emptied-air notice, the orphan banner — the coordinate stays VISIBLE (`operatorRowName`
+      returns it; `EmptiedAirNotice` renders it), because a notice is read once under pressure
+      and a hover needs a working pointer and a dwell. The cost the original bullet named is
+      recorded rather than dropped.
+      ⚠ **Two places MISCITED this gate's answer and were corrected in the same act:**
+      `operatorNaming.ts` and CLAUDE.md's golden rule 11 both said `§2` _"declined to hide the
+      number behind a tooltip"_, which is the opposite of (A). The RULE each states is right and
+      is unchanged; the borrowed authority was false, and false in the direction that would make a
+      later reader re-open a settled decision.
 - [ ] 3.2 ⟨GATE: §2⟩ If (B) — restore the layer number as a fixed-width secondary at `full` and
       `compact`, dropped at `tight`. `minWidthFor` and `gridTemplateColumns` both change and both
       are unit-tested; extend the density tests rather than adding a parallel set. **INVERSE:**
@@ -219,21 +249,32 @@ and AUDIO went to the context menu, twice, correctly, by two sessions that each 
 constraint from the same module comment. What is left is writing the constraint down so the
 FOURTH control does not rediscover it, and answering the one question the collision never raised.
 
-- [ ] 4.1 ⟨GATE: §4.1⟩ Write the admission rule into `layerTable.ts`'s `VERB_COUNT` note and into
-      `LayerTableHeader.tsx`'s head list — **the two places a violation is actually made**, not a
-      third document. The rule already half-exists there ("Adding a button here without adding its
-      head to `VERB_HEADS` re-opens it"); this completes it with the CONDITIONAL case, which is
-      the half two sessions had to work out for themselves.
-- [ ] 4.2 ⟨GATE: §4.2⟩ Record the BLOCK-vs-MENU rule **as a third case beside the C6 boundary in
-      `PlayoutPanel.tsx`** — never as a fourth statement of it. The decision itself is already
-      made and argued (`live-source-multibox` 6.9e: _"a permanently-disabled entry in thirty row
-      menus is furniture that teaches the operator to stop reading the menu"_); what is missing is
-      that the rule lives nowhere. **Assert the CLAIM, not the presence:** a test that a row
-      WITHOUT plates offers no SOURCE/AUDIO menu entry and a row WITH plates offers both — not
-      that some string appears somewhere.
-- [ ] 4.3 ⟨GATE: §4.1⟩ Cross-reference from `live-source-multibox` task 6.9e to the rule, both
-      ways. 6.9e is DONE — the pointer records why the placement is what it is, so nobody
-      "improves" it back into the verb block.
+🔴 **4.1, 4.2 AND `specs/runtime-ui/spec.md` 43-44 WERE SETTLED AS ONE ACT, 2026-09-07
+(`STALE-CLAIMS-02` §3), and they could not have been settled apart.** Those two lines are an
+ADDED requirement — text that archives into `openspec/specs/` — and they said a control whose
+PRESENCE varies by row SHALL be reached through the **Inspector**. The shipped answer is the
+CONTEXT MENU, twice. Whichever of the three was edited first would have made the other two read
+as the error: confirming 4.1/4.2 alone archives a normative requirement forbidding what the
+product does, and editing 43-44 alone leaves the rule stated nowhere a violating change is
+authored. One commit, one reasoning.
+
+- [x] 4.1 ⟨GATE: §4.1⟩ **DONE.** The admission rule is written into `layerTable.ts`'s `VERB_COUNT`
+      note and `LayerTableHeader.tsx`'s `VERB_HEADS` — the two places a violation is actually
+      made. Each states the STATE-vs-PRESENCE distinction and sends anything conditional to the
+      context menu, and each points at the OTHER rule's home rather than restating it.
+- [x] 4.2 ⟨GATE: §4.2⟩ **DONE — as a third case beside the C6 boundary, which has MOVED.** The
+      boundary now lives in `StationLayersPanel.tsx`: `PlayoutPanel.tsx` no longer exists (R-055
+      renamed the surface, as this document's own `PREMISE CORRECTED` block records), so the task
+      as written named a file that is gone. The block-vs-menu rule sits there as a third case,
+      with its spatial reason and the `menuLast` residual cost.
+      ✅ **The CLAIM test already exists and was verified rather than duplicated:**
+      `layerRow.dom.test.ts` asserts the resolved action set over the FULL matrix
+      (`item.status` × `hasNext` × `linkDown` × `hasLivePlates`) equals `WITH_PLATES` or `BASE`,
+      and `liveSourceSwap.dom.test.ts` / `livePlateAudio.dom.test.ts` each assert absence on a row
+      without plates. That is the proposition, not the presence of a string.
+- [x] 4.3 ⟨GATE: §4.1⟩ **DONE, both ways.** `live-source-multibox` 6.9e now points at the rule's
+      three homes and records that the C6 boundary's file was renamed; the rule's own comments
+      point back at 6.9e as the argued decision.
 
 ## 5. The picker's fate ⟨GATE: §1⟩
 
@@ -247,10 +288,29 @@ Wave 5. **A no-op if the owner answers (A).**
 
 ## 6. PRD, docs, cross-references
 
-- [ ] 6.1 ⟨GATE: §7⟩ Close R-033 point 7 against the shipped `MonitorStrip` evidence, or record
-      what the owner wants instead.
-- [ ] 6.2 ⟨GATE: §8⟩ Record the confirm-gate asymmetry — our layer versus someone else's — where
-      a later reader would try to harmonise it, in BOTH directions.
+- [x] 6.1 ⟨GATE: §7⟩ **CLOSED 2026-09-07 (`STALE-CLAIMS-02` §4) — by writing what is true, not by
+      ticking.** The RESERVATION half is real and closes: `MonitorStrip` renders both in their
+      final positions, height persisted through `ShellDivider`, fullscreen via `Panel`. The LABEL
+      half of `§7` — _"labelled NOT CONNECTED"_ — **was never true, in both halves**: PROGRAM
+      reads `No program return`, and PREVIEW is not an empty box at all since `R-022` made it
+      `PreviewPanel`, a local browser render. `MonitorPanel`'s own header calls labelling PREVIEW
+      "not connected" a CATEGORY ERROR — it has no link to be down. The stale `App.tsx` comment
+      that carried the phrase is corrected in place; `§7` carries a dated closure block above the
+      gate text, which is left verbatim.
+- [x] 6.2 ⟨GATE: §8⟩ **CLOSED 2026-09-07 (`STALE-CLAIMS-02` §4) — THERE IS NO ASYMMETRY TO
+      RECORD.** `§8` asks the owner to confirm that the row's CLEAR is _"not confirm-gated at
+      all"_. It is: `LayerRow.tsx` wraps it in `withConfirm` with three occupancy-dependent
+      bodies, every branch naming the layer number. Verified at `ec65480` too
+      (`git show ec65480:…/LayerRow.tsx`), so this is a RECON ERROR and not drift — re-reading a
+      later tree would not have caught it.
+      🔴 **Recording the asymmetry as asked would have been actively dangerous**, which is why
+      this is a rewrite and not a tick: the task says to record it _"where a later reader would
+      try to harmonise it"_, so a reader who found that note, checked the row's CLEAR and saw a
+      confirm would conclude the CODE had drifted — and delete a confirm from a destructive
+      on-air verb.
+      **What is genuinely open is re-pointed rather than dropped:** whether the row's CLEAR should
+      KEEP its confirm. `§8`'s escape-hatch argument (a confirm on a remedy is a delay on a
+      graphic stuck on air) is real and unanswered, and is now stated as a question.
 - [ ] 6.3 ⟨GATE: §2, §3, §4⟩ Flip the PRD items to their true state once their gates resolve.
       R-031 and R-032 are candidates for `[x]` on the recon alone; R-033 is `[ ]` and is mostly
       built. **Not this session** — status flips ride the change that implements the gate.

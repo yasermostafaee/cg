@@ -242,10 +242,18 @@ export function App(): JSX.Element {
             Load lives on the row and does import+load in one action. */}
             {showWorkspace && (
               <section style={styles.workspace}>
-                {/* PGM / PREVIEW — reserved in their final positions, black and
-                explicitly labelled NOT CONNECTED. Hidden only when the LAYER
-                LIST is the fullscreen panel; a fullscreen monitor is still the
-                strip, showing one box. */}
+                {/* PGM / PREVIEW — reserved in their final positions. Hidden only
+                when the LAYER LIST is the fullscreen panel; a fullscreen monitor is
+                still the strip, showing one box.
+
+                ⚠ CORRECTED 2026-09-07 (`STALE-CLAIMS-02` §4): this said the two were
+                "black and explicitly labelled NOT CONNECTED", and neither half is
+                true. PROGRAM reads `No program return` — it is genuinely awaiting a
+                feed (C-016) — and PREVIEW is no longer an empty box at all: R-022
+                made it `PreviewPanel`, a LOCAL browser render of every rehearsing
+                row. `MonitorPanel`'s own header calls labelling PREVIEW "not
+                connected" a category error, because it has no link to be down, so
+                this comment contradicted the module it describes. */}
                 {layout.focus !== 'layers' && (
                   <>
                     <div

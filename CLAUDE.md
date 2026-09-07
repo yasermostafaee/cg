@@ -96,10 +96,14 @@ Persian / RTL is a core requirement.
     holds: a name can be renamed or repeated and an id cannot, so the audit record keeps
     both — shortened for the eye, complete in the `title` and on a copy button. The rule is
     about which of the two is in the SENTENCE.
-    ⭐ **Keep the real LAYER NUMBER visible** where a row is named. `R-028`'s reason —
-    _"an operator may need it to clear that layer by hand"_ — is about the moment the
-    console is NOT helping, so a hover does not discharge it; `operator-surface` §2 upheld
-    exactly this when it declined to hide the number behind a tooltip.
+    ⭐ **Keep the real LAYER NUMBER visible** where a row is named IN A SENTENCE — a notice,
+    a log entry, a banner. `R-028`'s reason — _"an operator may need it to clear that layer by
+    hand"_ — is about the moment the console is NOT helping, so a hover does not discharge it
+    there. ⚠ **The layer TABLE is the deliberate exception, and the citation here used to say
+    the opposite:** `operator-surface` §2 was answered **(A) — the supersession STANDS**, so the
+    table keeps the number in its `title`/`aria-label` and the LAYER column does not come back
+    (`R-028`'s acceptance bullet was amended to match, 2026-09-07). Two surface classes, two
+    answers: the table pays a density ladder for every column and the notice pays nothing.
     ⚠ **And isolate every name you render.** Row names are Persian, template names are
     often Latin, and separators and coordinates are NEUTRALS: joined into one text node
     their placement is decided by the bidi algorithm rather than by you. Each piece of
