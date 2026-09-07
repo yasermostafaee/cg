@@ -150,8 +150,13 @@ tokens, the full contrast table, and the two things escalated to the owner.
       the status bar's LED takes the mark **and** its word takes the text (both halves, positively).
       Plus **A4's pin**: `--r-onair` is NOT `--r-success`/`--r-ok-text`, asserted as a DIFFERENCE
       with a positive control, never as a literal.
-- [x] 2A.6 `pnpm --filter @cg/runtime test:e2e` run locally, and the Linux `e2e` run URL recorded
-      here.
+- [x] 2A.6 `pnpm --filter @cg/runtime test:e2e` — **116 passed (1.2 m)**, Windows, against a fresh
+      `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `cb2a7dad`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34164735377> — run `conclusion: success`,
+      10 m 26 s. The **`E2E (Playwright)` job RAN** (21:53:37Z → 22:03:48Z, 10 m 11 s,
+      `conclusion: success`); it was not skipped, which is the half a green run alone does not
+      prove (golden rule 12b). `Lint • Typecheck • Test • Build` also ran green.
 
 ## Phase 3 — The layers table
 
