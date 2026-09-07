@@ -131,15 +131,33 @@ Persian / RTL is a core requirement.
     jsdom has no layout, so `getBoundingClientRect()` is all zeros there and a dom spec
     asserting a box, an edge or an overflow passes against a surface of ANY shape, including a
     broken one. A geometry claim is measured in a real engine or it is not measured.
-    **Written down because it has now been learned three times in three sessions:**
-    `STATION-SETUP-02` pushed a red `e2e` behind a green gate (golden rule 9 records the
-    wording half); `STATION-CHROME-01` shipped a rail whose every visited tab kept a white box
-    that no unit test could see; and `SOURCE-DELETE-GATE-03` moved a dialog's footer edge 18 px
-    on three of five tabs. In all three the gate was green at the moment of the push.
+    ⚠ **And jsdom's CASCADE is not Chrome's, either** — a narrower trap than the missing
+    layout and the one that actually hid the rail's white box. A `getComputedStyle` COLOUR,
+    keyword or declared length IS real there (`cssstyle` resolves the cascade), which is what
+    makes the contrast specs and `live-source-frame.test.ts` legitimate; but an edge case the
+    two engines resolve differently — a border whose colour declarations were deleted, leaving
+    a width and a style — reads one way in jsdom and another on screen. So a computed-style
+    assertion is REAL for the value a stylesheet declares and UNSAFE as a proxy for what the
+    browser paints.
+    **Written down because it has been learned three times in three sessions — by three
+    different mechanisms, which is the point of naming them separately:** `STATION-SETUP-02`
+    pushed a red `e2e` on a WORDING change, where layout never came into it and the miss was
+    simply that the gate does not run the suite (golden rule 9 owns the remedy); the
+    `STATION-CHROME-01` white box was the CASCADE divergence just above, not the missing
+    layout; and only `SOURCE-DELETE-GATE-03`'s footer edge — 18 px on three of five tabs — is
+    face (c) proper. In all three the gate was green at the moment of the push.
     ⭐ And the corollary that makes such an assertion worth writing: **measure the property the
     operator actually notices, not the one that is easy to reach.** That footer edge was found
     only because `STATION-CHROME-02` had been made to measure it in a browser — the dialog's
     outer box stayed identical on all five tabs the whole time the footer moved underneath it.
+    ⚠ **The hazard in (c) is REAL and currently UNEXERCISED, and both halves are measured.**
+    Every one of the 131 jsdom test files was swept for layout reads and **none was found** —
+    no `getBoundingClientRect`, no `offset*`/`client*`/`scroll*` dimension, and the three
+    `getComputedStyle` reads in the tree are cascade facts. So there is no vacuous geometry
+    test to delete today. That the hazard bites was proved by planting one: a spec asserting
+    `rect.width === 0`, `offsetWidth === 0` and `scrollHeight === 0` on a **1000 × 680** dialog
+    **passed**. Do not add the first one — and do not "fix" a vacuous assertion by weakening
+    it to something jsdom can answer, which is the same defect with a fresh coat.
 
 ## Where features go
 
