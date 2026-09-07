@@ -19,7 +19,7 @@ test('§6 — every Add opens the SAME small second dialog, and the keyboard bel
   const page = app.page;
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
-  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
+  await app.openStationSetupAt('Live sources');
   await expect(dialog).toBeVisible();
 
   // ── the SOURCES Add ───────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ test('§5 — the live-source fields change with the kind, and the row labels wh
   const page = app.page;
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
-  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
+  await app.openStationSetupAt('Live sources');
   await dialog.getByRole('button', { name: 'Add live source' }).click();
   const sub = page.getByRole('dialog', { name: 'Add live source' });
 

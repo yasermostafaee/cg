@@ -857,26 +857,17 @@ export function LayersPanel({
             REMOVE ALL
           </Button>
           {/*
-            CONFIGURE — offered whether or not a bank exists, and since `STATION-SETUP-02`
-            a DEEP LINK into Station setup's Candidate layers section rather than a dialog
-            of its own. It used to be gated on `bank !== null`, which meant the ONE screen
-            that tells the operator to go and configure something was the one screen with
-            no way to do it. The section is still honest about which parts it cannot change
-            (channel, start and count are fixed at install).
+            🔴 `STATION-CHROME-02` §1 — CONFIGURE IS GONE FROM THIS BAR.
+
+            It was a deep link into Station setup's Layers tab, and it was the THIRD door
+            into a room the status bar already has one of. The owner's decision is one door;
+            the settings dialog opens from SETTINGS and its rail names this section.
+
+            ⚠ What it was protecting is kept, and is the reason the EMPTY STATE below still
+            deep-links: an operator with no declared bank is looking at a list that cannot
+            explain itself, and that screen must carry its own way to the explanation. A bar
+            button beside thirty populated rows was never doing that job.
           */}
-          {/* `neutral`, not `ghost`: a ghost has an icon button's tight padding, so
-              beside the bulk verbs it read as a label rather than a control. */}
-          <Button
-            variant="neutral"
-            title={
-              bank === null
-                ? 'No candidate layers are declared yet — see what the bridge needs (Station setup)'
-                : 'Show or hide rows, and name them (Station setup)'
-            }
-            onClick={() => openStationSetup('candidate-layers')}
-          >
-            Configure
-          </Button>
           {/* NARROW — the hamburger that brings the Inspector up as an overlay.
               Only on small screens: with two columns the Inspector is already
               there and a toggle would be a control that does nothing visible. */}
@@ -954,9 +945,12 @@ export function LayersPanel({
                 layers are fixed at install: set them in the bridge&rsquo;s fixed-layers config file
                 and restart it.
               </span>
+              {/* `STATION-CHROME-02` §1 — this used to name a Configure button in the bar
+                  above. That button is gone, so the sentence names where the section
+                  actually is: one door, and the rail inside it. */}
               <span>
-                Once a range exists, <strong>Configure</strong> is where you show or hide individual
-                rows and give them names.
+                Once a range exists, <strong>SETTINGS ▸ Layers</strong> is where you show or hide
+                individual rows and give them names.
               </span>
               <Button variant="secondary" onClick={() => openStationSetup('candidate-layers')}>
                 What the bridge needs

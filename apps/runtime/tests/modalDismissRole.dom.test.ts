@@ -158,13 +158,18 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
       🔴 THE NEGATIVE CONTROL, and without it this file would be enforcing "no dialog has a
       primary action", which is a different and much worse rule.
 
-      APPLY SERVERS sends `connections.setConfig`. It keeps the `primary` role — and it is
+      `Apply servers` sends `connections.setConfig`. It keeps the `primary` role — and it is
       named for the ONE section it commits, because four other tabs sit beside it.
+
+      ⭐ `STATION-CHROME-02` §3 — SENTENCE CASE. It read `APPLY SERVERS` until this change,
+      which was a leftover from the dialog it grew out of: the modal contract already says a
+      dialog's title is sentence case and never shouting, and `Apply layers` one tab along was
+      already right. Two spellings of one rule inside one dialog.
     */
     stationSetupStub();
     const dialog = await renderStationSetup({ section: 'servers' });
     const apply = lastFooterAction(dialog);
-    expect(apply.textContent).toBe('APPLY SERVERS');
+    expect(apply.textContent).toBe('Apply servers');
     expect(apply.getAttribute('data-modal-role')).toBe('primary');
     expect(apply.getAttribute('aria-label')).toBe('Apply server settings');
   });
@@ -184,7 +189,7 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
     stationSetupStub();
 
     const dialog = await renderStationSetup({ section: 'servers' });
-    expect(footerActions(dialog).map((b) => b.textContent)).toEqual(['Cancel', 'APPLY SERVERS']);
+    expect(footerActions(dialog).map((b) => b.textContent)).toEqual(['Cancel', 'Apply servers']);
     /*
       …then the OTHER tabs, from the SAME dialog, by pressing the rail. Reusing one dialog is
       not convenience: a second `renderStationSetup` leaves the first mounted and
@@ -212,11 +217,33 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
     expect(dialog.querySelector('[data-section-footer="channel"]')?.textContent).toContain(
       'Nothing to apply',
     );
+    /*
+      🔴 `STATION-CHROME-02` §5 — LIVE SOURCES DOES NOT SAY "there is nothing waiting to be
+      applied", because that was UNTRUE: the LAYER BAND in the same tab carries an
+      `Apply band`, and the band is genuinely applied. The footer now states both contracts
+      and says where the second one's control is. A signal must not say what it does not mean.
+    */
     await selectSetupTab(dialog, 'sources');
-    expect(dialog.querySelector('[data-section-footer="sources"]')?.textContent).toContain(
-      'Saved as you go',
+    const sourcesFoot = dialog.querySelector('[data-section-footer="sources"]')?.textContent ?? '';
+    expect(sourcesFoot).toContain('The catalogue saves as you go');
+    expect(sourcesFoot).toContain('The layer band is applied by the button in its own section');
+    expect(sourcesFoot, 'the sentence that was untrue must not come back').not.toContain(
+      'there is nothing waiting to be applied',
     );
-    // …and the section's own legend agrees with its footer.
-    expect(sectionOf(dialog, 'sources').textContent).toContain('Saves as you go');
+    // …and the section's own legend agrees with its footer rather than repeating the lie.
+    expect(sectionOf(dialog, 'sources').textContent).toContain(
+      'The catalogue saves as you go; the layer band is applied',
+    );
+    // The band's own control is right there, which is what makes the footer's claim checkable.
+    expect(
+      [...sectionOf(dialog, 'sources').querySelectorAll('button')].map((b) => b.textContent),
+    ).toContain('Apply band');
+
+    // DELIMITERS genuinely has nothing waiting, and still says so — the negative control that
+    // stops this being read as "no tab may ever say it".
+    await selectSetupTab(dialog, 'delimiters');
+    expect(dialog.querySelector('[data-section-footer="delimiters"]')?.textContent).toContain(
+      'there is nothing waiting to be applied',
+    );
   });
 });

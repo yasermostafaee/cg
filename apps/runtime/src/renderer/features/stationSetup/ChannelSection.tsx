@@ -48,21 +48,6 @@ import { OutputsSection } from '../connections/OutputsSection.js';
 
 const styles = {
   lede: { fontSize: '0.8rem', color: colors.textMuted, margin: 0 },
-  card: {
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    padding: '0.6rem 0.75rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.5rem',
-  },
-  cardTitle: {
-    fontSize: '0.72rem',
-    fontWeight: 700,
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase' as const,
-    color: colors.textMuted,
-  },
   kv: {
     display: 'grid',
     gridTemplateColumns: 'minmax(7rem, auto) 1fr',
@@ -73,7 +58,6 @@ const styles = {
   },
   dt: { color: colors.textMuted },
   dd: { margin: 0, fontVariantNumeric: 'tabular-nums' as const },
-  note: { fontSize: '0.78rem', color: colors.textMuted, lineHeight: 1.5 },
   channel: { fontSize: '0.85rem', fontWeight: 700 },
   verdict: {
     match: { color: colors.textMuted },
@@ -116,39 +100,45 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
         What the channel actually is, and what it is coming out of. Reported, not set.
       </p>
 
-      <section style={styles.card} aria-label="Raster">
-        <span style={styles.cardTitle}>Raster</span>
-        {state.settings.length === 0 ? (
-          <span style={styles.empty} role="status">
-            No channel is declared yet — the channels come from the bridge’s fixed-layers config at
-            start.
-          </span>
-        ) : (
-          state.settings.map((s) => {
-            const verdict = rasterVerdict(state, s.channel);
-            const channel = String(s.channel);
-            return (
-              <div key={s.channel} data-raster-channel={channel}>
-                <span style={styles.channel}>Channel {channel}</span>
-                <dl style={styles.kv}>
-                  <dt style={styles.dt}>Video mode</dt>
-                  <dd style={styles.dd}>{modeLine(state, s.channel)}</dd>
-                  <dt style={styles.dt}>Raster</dt>
-                  <dd style={styles.dd}>
-                    {String(s.raster.width)} × {String(s.raster.height)}
-                  </dd>
-                  <dt style={styles.dt}>Declared by</dt>
-                  <dd style={styles.dd}>{declaredBy(state, s.channel)}</dd>
-                  <dt style={styles.dt}>Check</dt>
-                  <dd style={{ ...styles.dd, ...styles.verdict[verdict] }}>
-                    <span data-raster-verdict={verdict}>{VERDICT_TEXT[verdict]}</span>
-                  </dd>
-                </dl>
-              </div>
-            );
-          })
-        )}
-        <p style={styles.note}>
+      {/* `STATION-CHROME-02` §3 — the shared card rhythm: an uppercase head, one body
+          padding, and the explanation as a muted note under the body. */}
+      <section className="cg-card" aria-label="Raster">
+        <div className="cg-card__head">
+          <span className="cg-card__title">Raster</span>
+        </div>
+        <div className="cg-card__body">
+          {state.settings.length === 0 ? (
+            <span style={styles.empty} role="status">
+              No channel is declared yet — the channels come from the bridge’s fixed-layers config
+              at start.
+            </span>
+          ) : (
+            state.settings.map((s) => {
+              const verdict = rasterVerdict(state, s.channel);
+              const channel = String(s.channel);
+              return (
+                <div key={s.channel} data-raster-channel={channel}>
+                  <span style={styles.channel}>Channel {channel}</span>
+                  <dl style={styles.kv}>
+                    <dt style={styles.dt}>Video mode</dt>
+                    <dd style={styles.dd}>{modeLine(state, s.channel)}</dd>
+                    <dt style={styles.dt}>Raster</dt>
+                    <dd style={styles.dd}>
+                      {String(s.raster.width)} × {String(s.raster.height)}
+                    </dd>
+                    <dt style={styles.dt}>Declared by</dt>
+                    <dd style={styles.dd}>{declaredBy(state, s.channel)}</dd>
+                    <dt style={styles.dt}>Check</dt>
+                    <dd style={{ ...styles.dd, ...styles.verdict[verdict] }}>
+                      <span data-raster-verdict={verdict}>{VERDICT_TEXT[verdict]}</span>
+                    </dd>
+                  </dl>
+                </div>
+              );
+            })
+          )}
+        </div>
+        <p className="cg-card__note">
           The console needs this because plate geometry, the rehearsal preview and the on-air
           position boxes are computed in channel pixels. It is <b>not</b> typed here: the server
           owns the value, and a second place to set it would be a second source of truth — a wrong

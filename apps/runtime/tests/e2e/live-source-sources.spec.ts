@@ -58,7 +58,7 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
   await registerTwoBox(app);
-  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
+  await app.openStationSetupAt('Live sources');
   await expect(dialog).toBeVisible();
 
   // NOTHING DEFINED is a real, common and important state, and it is said
@@ -163,7 +163,7 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   // comes back with it rather than being a one-shot toast at edit time.
   await app.closeStationSetup();
   await expect(dialog).toBeHidden();
-  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
+  await app.openStationSetupAt('Live sources');
   await expect(dialog.locator('[data-source-parts]').first()).toContainText('Device');
   await expect(dialog.getByText(/not sent to CasparCG/)).toBeVisible();
   // …and the stored key device survives, which is what C-027 keeps the FIELD for.
@@ -183,7 +183,7 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   await registerTwoBox(app);
 
   // Two sources to choose between, so the picker is a real choice.
-  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
+  await app.openStationSetupAt('Live sources');
   for (const name of ['Studio A', 'Baku']) await app.addLiveSource(name);
   await app.closeStationSetup();
 
@@ -234,7 +234,7 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   // Deleting a source that is in use is ALLOWED, CASCADES, and says at the
   // moment of deletion which plates it freed — an operator who learns at the
   // take is learning too late.
-  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
+  await app.openStationSetupAt('Live sources');
   await dialog.getByRole('button', { name: 'Remove Studio A' }).click();
   await expect(dialog.getByText(/need.* a new one/)).toBeVisible();
   // The template is named the way the operator knows it (the imported file
@@ -255,7 +255,7 @@ test('library: DELETE FROM STATION is a different verb from the row REMOVE, and 
   const page = app.page;
 
   await registerTwoBox(app);
-  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
+  await app.openStationSetupAt('Live sources');
   await app.addLiveSource('Studio A');
   await app.closeStationSetup();
 

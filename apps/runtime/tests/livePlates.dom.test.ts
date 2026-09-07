@@ -259,7 +259,13 @@ describe('the Live sources section of Station setup defines sources and binds no
       second dialog now. The claim this case makes is unchanged — the section lists the
       station's sources — so only how it reads them moved.
     */
-    expect(section?.textContent).toContain('CATALOGUE');
+    /*
+      ⚠ `STATION-CHROME-02` §3 — the word is `Catalogue` in the DOM and UPPERCASE on screen:
+      the card head's `text-transform` is the ONE treatment, in `.cg-card__title`, rather than
+      a shouted string per section. Asserting the shouted form here would have pinned the old
+      hand-spelled uppercase and re-created the drift the shared class removes.
+    */
+    expect(section?.textContent).toContain('Catalogue');
     expect(
       [...(section?.querySelectorAll<HTMLElement>('[data-source-id] bdi') ?? [])]
         .map((el) => el.textContent)

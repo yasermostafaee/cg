@@ -83,7 +83,8 @@ export const STATION_SETUP_SECTIONS: readonly StationSetupSectionSpec[] = [
     title: 'Servers',
     commit: 'apply-servers',
     group: 'Playout',
-    legend: 'Applied together by APPLY SERVERS below. Refused while anything is on air.',
+    /* §3 — the legend NAMES the button, so it moved to sentence case with it. */
+    legend: 'Applied together by Apply servers below. Refused while anything is on air.',
     footerRest: 'Applied together. Refused while anything is on air.',
   },
   {
@@ -91,8 +92,22 @@ export const STATION_SETUP_SECTIONS: readonly StationSetupSectionSpec[] = [
     title: 'Live sources',
     commit: 'immediate',
     group: 'Content',
-    legend: 'Saves as you go.',
-    footerRest: 'Saved as you go — there is nothing waiting to be applied.',
+    /* §5 again, one line up: the legend cannot say "saves as you go" flat either. */
+    legend: 'The catalogue saves as you go; the layer band is applied.',
+    /*
+     * 🔴 `STATION-CHROME-02` §5 — THE SENTENCE THAT WAS UNTRUE.
+     *
+     * It read `Saved as you go — there is nothing waiting to be applied.` while the LAYER
+     * BAND, six inches above it in the same tab, carried an `Apply band` button. One of the
+     * two was lying and it was the footer: the band genuinely is applied, and typing two
+     * numbers without pressing it changes nothing.
+     *
+     * A signal must not say what it does not mean — the same rule that decided the dismiss
+     * buttons. The footer now states BOTH contracts, because this tab genuinely has two, and
+     * says where the second one's control is rather than pretending it is absent.
+     */
+    footerRest:
+      'The catalogue saves as you go. The layer band is applied by the button in its own section.',
   },
   {
     id: 'delimiters',

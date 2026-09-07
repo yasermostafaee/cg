@@ -1,6 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
 import { Settings2, Trash2 } from 'lucide-react';
-import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import type { ModalMessage } from '../../ui/Modal.js';
@@ -24,7 +23,7 @@ import {
  * not about the playout server — so it is its own SECTION with its own heading, not a row
  * under Servers; (2) the server panel's Apply is gated while anything is on air, which is
  * wrong for choosing what a comma means — so this section COMMITS AS YOU GO and says so in
- * its legend, and the footer's APPLY SERVERS neither covers it nor gates it. The gear
+ * its legend, and the footer's Apply servers neither covers it nor gates it. The gear
  * beside the picker still opens it, as a deep link into this section, so it is still found
  * where the need is discovered.
  *
@@ -42,21 +41,13 @@ import {
  */
 
 const styles = {
-  list: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.35rem',
-  },
-  row: { display: 'flex', gap: '0.5rem', alignItems: 'center' },
-  label: { flex: 1, minWidth: 0, overflowWrap: 'anywhere' as const },
+  /** A delimiter's own characters, monospaced — `\n` and `،` must be told apart on sight. */
   sample: {
-    fontFamily: 'monospace',
-    fontSize: '0.8rem',
-    color: colors.textMuted,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+    fontSize: '0.78rem',
     whiteSpace: 'pre' as const,
   },
-  addRow: { display: 'flex', gap: '0.4rem', alignItems: 'center', flexWrap: 'wrap' as const },
-  hint: { fontSize: '0.72rem', color: colors.textMuted, margin: 0 },
+  splitsOn: { width: '9rem' },
 } as const;
 
 export function DelimitersSection({
@@ -75,41 +66,80 @@ export function DelimitersSection({
 
   return (
     <>
-      <div style={styles.list}>
-        {delimiters.map((d) => (
-          <div key={d.id} style={styles.row}>
-            <span style={styles.label}>{d.label}</span>
-            <span style={styles.sample}>{d.value}</span>
-            <Button
-              variant="danger"
-              aria-label={`Remove delimiter ${d.label}`}
-              onClick={() => void removeDelimiter(d.id).then(say)}
-            >
-              <Icon icon={Trash2} />
-            </Button>
+      {/* `STATION-CHROME-02` §3 — ONE card rhythm, and the block's own Add in its head. */}
+      <section className="cg-card" aria-label="Delimiters">
+        <div className="cg-card__head">
+          <span className="cg-card__title">Delimiters</span>
+          <span className="cg-card__spacer" />
+          {/*
+            🔴 §3 — SECONDARY, not `danger`, and this is a correction of a stated argument
+            rather than a preference. The old note called it destructive "because it
+            discards every delimiter the operator added". It restores the SHIPPED SET: no
+            file is lost, no graphic leaves air, and the list is rebuildable in the dialog
+            it is standing in. Red is reserved for danger on this console, and a red button
+            that is not dangerous is a red button the operator learns to ignore.
+          */}
+          <Button
+            variant="neutral"
+            aria-label="Reset delimiters to defaults"
+            title="Puts the shipped delimiters back"
+            onClick={() => void resetDelimiters().then(say)}
+          >
+            Reset to defaults
+          </Button>
+          <Button variant="add" aria-label="Add delimiter" onClick={() => setAdding(true)}>
+            Add delimiter
+          </Button>
+        </div>
+        <div className="cg-card__body cg-card__body--table">
+          <div className="cg-table-scroll">
+            <table className="cg-table">
+              <thead>
+                <tr>
+                  <th scope="col">Name</th>
+                  <th scope="col" style={styles.splitsOn}>
+                    Splits on
+                  </th>
+                  <th scope="col" className="cg-table__actions">
+                    <span className="cg-visually-hidden">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {delimiters.map((d) => (
+                  <tr key={d.id} data-delimiter-id={d.id}>
+                    {/* Every operator string in its own `<bdi>`: a delimiter may be named in
+                        Persian and split on a Latin character, and the two must not decide
+                        each other's placement (golden rule 11). */}
+                    <td>
+                      <bdi>{d.label}</bdi>
+                    </td>
+                    <td>
+                      <bdi style={styles.sample}>{d.value}</bdi>
+                    </td>
+                    <td className="cg-table__actions">
+                      {/* §3 — QUIET at rest, red on intent. It was a permanently
+                          red-bordered bin on every row. */}
+                      <Button
+                        variant="quiet"
+                        className="cg-list-remove"
+                        aria-label={`Remove delimiter ${d.label}`}
+                        title="Remove this delimiter"
+                        onClick={() => void removeDelimiter(d.id).then(say)}
+                      >
+                        <Icon icon={Trash2} size={15} />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        ))}
-      </div>
-
-      <div style={styles.addRow}>
-        <Button variant="add" aria-label="Add delimiter" onClick={() => setAdding(true)}>
-          Add delimiter
-        </Button>
-        {/*
-          `danger`, because it is: it discards every delimiter the operator added. The
-          in-body destructive vocabulary is the trash icon's `danger`; the footer's solid
-          amber belongs to `ModalAction`, and this control is not in a footer.
-        */}
-        <Button
-          variant="danger"
-          aria-label="Reset delimiters to defaults"
-          onClick={() => void resetDelimiters().then(say)}
-        >
-          Reset to defaults
-        </Button>
-      </div>
-
-      <p style={styles.hint}>Removing a delimiter does not change any field already using it.</p>
+        </div>
+        <p className="cg-card__note">
+          Removing a delimiter does not change any field already using it.
+        </p>
+      </section>
 
       {adding && <AddDelimiterDialog onClose={() => setAdding(false)} onReport={say} />}
     </>

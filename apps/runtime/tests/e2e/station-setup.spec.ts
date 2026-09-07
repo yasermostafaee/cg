@@ -59,10 +59,12 @@ test('the rail: Settings opens on Channel, and every section is one press away',
     'channel',
   );
 
-  // SERVERS is the one tab with an APPLY, and it is named for its scope.
+  // SERVERS is the one tab with an APPLY, and it is named for its scope — in SENTENCE case
+  // since `STATION-CHROME-02` §3, like `Apply layers` one tab along and like every dialog
+  // title. The shout was a leftover from the dialog this grew out of.
   await rail.getByRole('tab', { name: /^Servers/ }).click();
   await expect(dialog.getByRole('button', { name: 'Apply server settings' })).toHaveText(
-    'APPLY SERVERS',
+    'Apply servers',
   );
 
   // Every other tab: a quiet Close and no commit action at all.
@@ -72,7 +74,15 @@ test('the rail: Settings opens on Channel, and every section is one press away',
     'sources',
   );
   await expect(dialog.getByRole('button', { name: 'Apply server settings' })).toHaveCount(0);
-  await expect(dialog.locator('[data-section-footer="sources"]')).toContainText('Saved as you go');
+  /*
+    🔴 `STATION-CHROME-02` §5 — the Live-sources footer used to read "Saved as you go — there
+    is nothing waiting to be applied" with an `Apply band` six inches above it. One of the two
+    was lying, and it was the footer.
+  */
+  await expect(dialog.locator('[data-section-footer="sources"]')).toContainText(
+    'The catalogue saves as you go. The layer band is applied by the button in its own section.',
+  );
+  await expect(dialog.getByRole('button', { name: 'Apply band' })).toBeVisible();
 
   await footerClose(dialog).click();
   await expect(dialog).toBeHidden();
@@ -114,21 +124,52 @@ test('🔴 the refusal stays with its own section, and the rail says which one i
   await dialog.getByRole('button', { name: 'Cancel' }).click();
 });
 
-test('every deep link lands on ITS TAB — SOURCES, the delimiters gear, and Configure', async ({
+/**
+ * 🔴 `STATION-CHROME-02` §1 — **ONE DOOR, AND THE DEEP LINKS THAT SURVIVE IT.**
+ *
+ * There were three ways into this dialog: the status bar's SETTINGS, the status bar's
+ * SOURCES, and the Layers panel's `Configure`. The owner's decision is one. This spec is the
+ * assertion of both halves — the two buttons are GONE from the surfaces that carried them,
+ * and the MECHANISM they used is untouched, so the two entry points that sit BESIDE the thing
+ * they configure still land on their tab.
+ */
+test('§1 — one settings door on the status bar, and no second one in the Layers bar', async ({
   app,
 }) => {
+  const page = app.page;
+
+  // The status bar carries SETTINGS and nothing else that opens this dialog.
+  await expect(page.getByRole('button', { name: 'Open Station setup', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Open Station setup at Live sources' }),
+    'the SOURCES button is gone',
+  ).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'SOURCES', exact: true })).toHaveCount(0);
+
+  // …and the Layers panel's bar no longer offers `Configure`.
+  await expect(
+    page.getByRole('button', { name: 'Configure', exact: true }),
+    'the Layers bar is not a third door',
+  ).toHaveCount(0);
+
+  // POSITIVE CONTROL: the neighbours that are NOT settings doors are untouched, so this is
+  // not passing because the status bar failed to render.
+  await expect(page.getByRole('button', { name: 'Open audit log' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Manual failover' })).toBeVisible();
+});
+
+test('§1 — the surviving deep links still land on their own tab', async ({ app }) => {
   const page = app.page;
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
   const shown = dialog.locator('[data-station-section]');
 
-  // SOURCES on the status bar.
-  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
+  // The rail itself — the one door, then the section.
+  await app.openStationSetupAt('Live sources');
   await expect(shown).toHaveAttribute('data-station-section', 'sources');
   await expect(page.getByRole('dialog')).toHaveCount(1);
   await footerClose(dialog).click();
 
-  // Configure on the Layers panel.
-  await page.getByRole('button', { name: 'Configure', exact: true }).click();
+  await app.openStationSetupAt('Layers');
   await expect(shown).toHaveAttribute('data-station-section', 'candidate-layers');
   const layers = dialog.getByRole('region', { name: 'Layers', exact: true });
   await expect(layers.getByLabel('Show layer 70')).toBeChecked();
@@ -136,12 +177,7 @@ test('every deep link lands on ITS TAB — SOURCES, the delimiters gear, and Con
   await expect(dialog.getByRole('button', { name: 'Apply layers' })).toBeVisible();
   await footerClose(dialog).click();
 
-  // The Inspector's delimiter gear — the third deep link.
-  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
-  await dialog
-    .getByRole('tablist', { name: 'Station setup sections' })
-    .getByRole('tab', { name: 'Text file delimiters' })
-    .click();
+  await app.openStationSetupAt('Text file delimiters');
   await expect(shown).toHaveAttribute('data-station-section', 'delimiters');
   await footerClose(dialog).click();
 

@@ -137,9 +137,15 @@ describe('a deep link opens ONE dialog at the named section', () => {
     expect(shown(dialog)).toBe('channel');
   });
 
-  it('SOURCES on the status bar lands on Live sources; SERVERS on Servers — the same dialog both times', async () => {
+  /**
+   * 🔴 `STATION-CHROME-02` §1 — **ONE DOOR.** This spec used to assert that SETTINGS and
+   * SOURCES both stood on the bar and opened the same dialog one tab apart. The owner's
+   * decision is one entry point, so the assertion inverts: SETTINGS is there, SOURCES is
+   * NOT, and the DEEP-LINK MECHANISM the removed button used is untouched (the next two
+   * specs drive it from the store and from the two surfaces that still carry it).
+   */
+  it('the status bar has ONE settings door — SETTINGS, and no SOURCES beside it', async () => {
     const onOpenSettings = vi.fn();
-    const onOpenSources = vi.fn();
     const health: ConnectionHealth = {
       primary: { label: 'A', state: 'healthy', amcpAxisOk: true },
       currentPrimary: 'A',
@@ -171,41 +177,42 @@ describe('a deep link opens ONE dialog at the named section', () => {
     // `createElement` overloads resolve to the props-less form; name the props type here.
     const Bar = StatusBar as FunctionComponent<{
       onOpenSettings?: () => void;
-      onOpenSources?: () => void;
     }>;
     await act(async () => {
-      r.render(
-        createElement(StrictMode, null, createElement(Bar, { onOpenSettings, onOpenSources })),
-      );
+      r.render(createElement(StrictMode, null, createElement(Bar, { onOpenSettings })));
     });
     await settle();
-    const sources = container.querySelector<HTMLButtonElement>(
-      'button[aria-label="Open Station setup at Live sources"]',
-    );
-    const servers = container.querySelector<HTMLButtonElement>(
+    const settings = container.querySelector<HTMLButtonElement>(
       'button[aria-label="Open Station setup"]',
     );
-    expect(sources?.textContent).toBe('SOURCES');
     /*
       ⭐ `STATION-CHROME-01` §2 — RENAMED from SERVERS, and the rename is a correction. This
       button opens the dialog at its DEFAULT tab, which is Channel now, so "SERVERS" would
-      name a section the press does not land on. SOURCES keeps its name because it still IS a
-      deep link, to the section it names.
+      name a section the press does not land on.
     */
-    expect(servers?.textContent).toBe('SETTINGS');
+    expect(settings?.textContent).toBe('SETTINGS');
     await act(async () => {
-      sources?.click();
-    });
-    expect(onOpenSources).toHaveBeenCalledTimes(1);
-    await act(async () => {
-      servers?.click();
+      settings?.click();
     });
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
-    // …and `App` wires those two props to the store's deep links. Settings takes the
-    // DEFAULT (Channel) rather than naming a section — §2's "Settings opens on Channel".
+
+    // §1 — and nothing else on this bar opens the settings dialog. Asserted on BOTH the
+    // accessible name and the visible word, because either could have survived the other.
+    expect(
+      container.querySelector('button[aria-label="Open Station setup at Live sources"]'),
+    ).toBeNull();
+    expect([...container.querySelectorAll('button')].map((b) => b.textContent)).not.toContain(
+      'SOURCES',
+    );
+
+    // …and `App` wires the one prop to the store's deep link, taking the DEFAULT (Channel)
+    // rather than naming a section — §2's "Settings opens on Channel". The `onOpenSources`
+    // wiring is gone with the button; the STORE's deep link is not (next spec).
     const app = readFileSync(join(process.cwd(), 'src', 'renderer', 'App.tsx'), 'utf8');
     expect(app).toContain('onOpenSettings={() => openStationSetup()}');
-    expect(app).toContain("onOpenSources={() => openStationSetup('sources')}");
+    // Matched on the PROP being passed, not on the word: `App`'s own comment names the prop
+    // it dropped, and a guard that forbade the name would forbid the explanation.
+    expect(app).not.toContain('onOpenSources={');
   });
 
   it('the store: a request opens the dialog at its section; a repeat while open MOVES the mark; close closes', async () => {
@@ -238,11 +245,35 @@ describe('a deep link opens ONE dialog at the named section', () => {
     expect(openDialog()).toBeNull();
   });
 
-  it('the Layers panel’s Configure and the Inspector’s delimiter gear deep-link, and render no dialog of their own', () => {
+  /**
+   * §1 — **WHAT STILL DEEP-LINKS, AND WHY THOSE TWO AND NOT THE THIRD.**
+   *
+   * The mechanism is kept and only the duplicate BUTTONS went. What survives are the two
+   * entry points that sit BESIDE the thing they configure, where a bar button could not:
+   *
+   *   · the Inspector's delimiter gear — discovered at the moment a from-file field needs a
+   *     delimiter that does not exist yet;
+   *   · the Layers panel's EMPTY STATE — a list with no declared bank cannot explain itself,
+   *     so that screen must carry its own way to the explanation.
+   *
+   * The Layers panel's bar button (`Configure`) was neither: it stood beside thirty
+   * populated rows offering a door the status bar already had.
+   */
+  it('the delimiter gear and the empty Layers list still deep-link; Configure is gone', () => {
     const renderer = join(process.cwd(), 'src', 'renderer');
     const layers = readFileSync(join(renderer, 'features', 'layers', 'LayersPanel.tsx'), 'utf8');
     expect(layers).toContain("openStationSetup('candidate-layers')");
     expect(layers).not.toMatch(/FixedBankConfigModal|configOpen/);
+    // §1 — the bar button is gone, and so is the sentence that named it. A stale sentence
+    // pointing at a removed control is the rule-9 failure this sweep exists to catch.
+    expect(layers, 'the Layers panel bar must not offer a second settings door').not.toContain(
+      '>\n            Configure\n          </Button>',
+    );
+    expect(layers).not.toMatch(/<strong>Configure<\/strong>/);
+    expect(layers, 'the empty state names where the section actually is').toContain(
+      'SETTINGS ▸ Layers',
+    );
+
     const fromFile = readFileSync(
       join(renderer, 'features', 'inspector', 'FromFileControl.tsx'),
       'utf8',

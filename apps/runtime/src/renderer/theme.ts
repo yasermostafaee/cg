@@ -156,6 +156,10 @@ const INK_DEEP = '#10151F';
 const ACCENT_SKY = '#38BDF8';
 /** Amber as TEXT on a dark ground. */
 const CAUTION_TEXT = '#FCD34D';
+/** The sky at a tenth — what a SELECTED surface is washed with on this ground. */
+const SELECTED_WASH = 'rgba(56, 189, 248, 0.1)';
+/** The line weight an ACCENTED surface takes: the sky, darkened until it is a border. */
+const ACCENT_LINE = '#2F7BA8';
 
 export const cssVars = {
   // Semantic colors
@@ -198,7 +202,7 @@ export const cssVars = {
    */
   '--r-accent-fill': '#153B56',
   '--r-accent-fill-hover': '#1A4A6B',
-  '--r-accent-line': '#2F7BA8',
+  '--r-accent-line': ACCENT_LINE,
   '--r-accent-line-hover': '#4AA8E0',
   '--r-accent-ink': '#CFE8F8',
   /**
@@ -437,7 +441,7 @@ export const cssVars = {
   // The layer table's grounds.
   '--r-row-bg': 'rgb(30 38 51)',
   '--r-row-empty-bg': '#10141E',
-  '--r-row-selected-fill': 'rgba(56, 189, 248, 0.1)',
+  '--r-row-selected-fill': SELECTED_WASH,
   /**
    * 🔴 THE OWNER'S MARKED-ROW FILL. `rgb(145 93 5)`, tuned by hand, and it moved
    * here BYTE FOR BYTE — `emptiedAirRowContrast.dom.test.ts` still measures
@@ -449,6 +453,45 @@ export const cssVars = {
    * measured 3.86:1 against the fill above and that ratio is a property of THIS pair. */
   '--r-row-marked-edge': CAUTION_TEXT,
   '--r-table-head-bg': 'rgb(45 55 69)',
+
+  /*
+   * ── `STATION-CHROME-02` §3 — THE SETTINGS DIALOG'S OWN VOCABULARY ────────────
+   *
+   * The rail, the record tables and the cards. Each is named for what it is FOR, and
+   * where a value is one another role already has, the two point at a shared base
+   * constant rather than at each other — so retuning the rail cannot silently move the
+   * layer table.
+   *
+   * ⚠ THE MOCKUP'S HEXES ARE DELIBERATELY NOT TRANSPLANTED. `docs/design/station-setup-
+   * mockup.html` is drawn on its own palette (`#0a0e16` / `#3b7fe0` / `#d9534f`); this app's
+   * palette is `@cg/ui`'s and is TOKENS-ONLY by the design-system rule. Adopting the
+   * mockup's values would repaint the whole console from a reference drawn of one dialog.
+   * What is taken from the mockup is the ROLE and the GEOMETRY; the hue stays ours.
+   */
+  /** A rail item under the pointer — one notch raised off the rail's sunken ground. */
+  '--r-rail-hover-fill': chrome.panelMuted,
+  /** The SELECTED rail item's wash. Its own name; the layer row's selection is not it. */
+  '--r-rail-selected-fill': SELECTED_WASH,
+  /** …and the subtle line around that wash, so the selection has an edge as well as a fill. */
+  '--r-rail-selected-line': ACCENT_LINE,
+  /**
+   * A RECORD TABLE's hairline — under the column headers and between the rows.
+   *
+   * Lighter than `--r-border`, deliberately: a full-strength line repeated down twelve
+   * rows stops being a separator and becomes a grid, which is what the mockup's own
+   * alpha-blended `--line` is avoiding.
+   */
+  '--r-table-rule': 'rgba(55, 65, 81, 0.55)',
+  /** A record row under the pointer. Raised off the card's sunken ground, not accented. */
+  '--r-table-row-hover': chrome.panel,
+  /**
+   * DANGER as a WASH — the fill a quiet destructive control takes ON HOVER ONLY.
+   *
+   * `--r-danger` at low alpha. It exists so a bin can be neutral at rest and unmistakably
+   * red at the moment of intent, without a solid red fill: a row of solid red boxes reads
+   * as a row of alarms, which is the whole complaint `STATION-CHROME-02` §3 opens with.
+   */
+  '--r-danger-soft': 'rgba(220, 38, 38, 0.16)',
 
   // Washes, scrims and shadows — the sky at low alpha, and black at several.
   '--r-focus-halo': 'rgba(56, 189, 248, 0.35)',
@@ -465,6 +508,22 @@ export const cssVars = {
    * scrim twice would double its opacity and black the parent out.
    */
   '--r-modal-scrim-sub': 'rgba(0, 0, 0, 0.4)',
+  /*
+   * ── `STATION-CHROME-02` §2 — A DIALOG'S FRAME IS A SIZE, AND SIZES LIVE HERE TOO ──
+   *
+   * These were a `WIDTHS` map inside `Modal.tsx`, which is the same defect §1 moved 120
+   * colours out of `controls.css` for: a value with no home has no reviewer. They are
+   * named for the FRAME they describe, never for the number.
+   *
+   * `--r-modal-w-fixed` / `--r-modal-h-fixed` are the mockup's own
+   * `min(1000px, 100%)` / `min(680px, calc(100vh - 48px))`. The HEIGHT is the part that
+   * matters and the part no other dialog has: it is what stops the frame moving when the
+   * operator switches tab (see `Modal`'s `size` prop).
+   */
+  '--r-modal-w-prose': 'min(460px, 92vw)',
+  '--r-modal-w-wide': 'min(720px, 94vw)',
+  '--r-modal-w-fixed': 'min(1000px, 100%)',
+  '--r-modal-h-fixed': 'min(680px, calc(100vh - 48px))',
   '--r-lock-scrim': 'rgba(15, 23, 42, 0.94)',
   '--r-shadow-menu': '0 4px 16px rgba(0, 0, 0, 0.45)',
   '--r-shadow-drawer': '-8px 0 24px rgba(0, 0, 0, 0.45)',

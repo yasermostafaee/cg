@@ -124,43 +124,23 @@ const styles = {
   },
   /** UNAPPLIED CHANGES. The sky, never the amber — amber is "you are blocked". */
   dotEdited: { background: cssVars['--r-accent'] },
-  // ── the RAIL (vertical) ──────────────────────────────────────────────────
-  rail: {
-    flexDirection: 'column' as const,
-    alignItems: 'stretch',
-    gap: '0.1rem',
-    borderBottom: 'none',
-    borderRight: `1px solid ${colors.border}`,
-    background: colors.background,
-    padding: '0.4rem 0.35rem',
-    overflowY: 'auto' as const,
-  },
-  railTab: {
-    justifyContent: 'flex-start',
-    textAlign: 'start' as const,
-    padding: '0.4rem 0.5rem',
-    borderRadius: '0.25rem',
-    border: '1px solid transparent',
-    borderBottom: '1px solid transparent',
-    fontWeight: 600,
-    letterSpacing: 0,
-    fontSize: '0.85rem',
-  },
-  railActiveTab: {
-    color: colors.text,
-    background: cssVars['--r-row-selected-fill'],
-    borderColor: colors.border,
-  },
-  railLabel: { flex: 1, minWidth: 0 },
-  railGroup: {
-    padding: '0.6rem 0.5rem 0.25rem',
-    fontSize: '0.62rem',
-    fontWeight: 700,
-    letterSpacing: '0.1em',
-    textTransform: 'uppercase' as const,
-    color: colors.textMuted,
-  },
 } as const satisfies Record<string, CSSProperties>;
+
+/*
+ * 🔴 `STATION-CHROME-02` §3 — **THE RAIL'S STYLES LEFT THIS FILE, AND THAT IS A BUG FIX.**
+ *
+ * They were four inline style objects here (`rail`, `railTab`, `railActiveTab`,
+ * `railGroup`). The selected tab merged a `borderColor` LONGHAND over the `border`
+ * SHORTHAND, and on deselect React removes the longhand — which deletes the
+ * border-*-color declarations the shorthand contributed too, leaving a width and a style
+ * with no colour. Chrome paints that WHITE, so every tab the operator had visited kept a
+ * white box around it. The source said `1px solid transparent` throughout and explained
+ * nothing; only a computed-style reading found it.
+ *
+ * `.cg-rail*` in `controls.css` is the fix: the selected state is a SELECTOR, so there is
+ * no diff to get wrong, and the rail gains the quiet HOVER that inline styles could never
+ * have expressed. `railWhiteBox.dom.test.ts` is the regression.
+ */
 
 export function Tabs({
   tabs,
@@ -179,35 +159,25 @@ export function Tabs({
   return (
     <>
       <div
-        style={
-          vertical
-            ? { ...styles.strip, ...styles.rail, width: railWidth, flexShrink: 0 }
-            : outer
-              ? { ...styles.strip, ...styles.outerStrip }
-              : styles.strip
-        }
+        {...(vertical
+          ? { className: 'cg-rail', style: { width: railWidth } }
+          : {
+              style: outer ? { ...styles.strip, ...styles.outerStrip } : styles.strip,
+            })}
         role="tablist"
         aria-label={ariaLabel}
         {...(vertical ? { 'aria-orientation': 'vertical' as const } : {})}
       >
         {tabs.map((tab) => {
           const active = tab.id === activeId;
-          const base = vertical
-            ? { ...styles.tab, ...styles.railTab }
-            : outer
-              ? { ...styles.tab, ...styles.outerTab }
-              : styles.tab;
-          const activeStyle = vertical
-            ? styles.railActiveTab
-            : outer
-              ? styles.outerActiveTab
-              : styles.activeTab;
+          const base = outer ? { ...styles.tab, ...styles.outerTab } : styles.tab;
+          const activeStyle = outer ? styles.outerActiveTab : styles.activeTab;
           const heading = vertical && tab.group !== undefined && tab.group !== lastGroup;
           if (vertical) lastGroup = tab.group;
           return (
             <Fragment key={tab.id}>
               {heading && (
-                <span style={styles.railGroup} aria-hidden="true">
+                <span className="cg-rail-group" aria-hidden="true">
                   {tab.group}
                 </span>
               )}
@@ -217,10 +187,12 @@ export function Tabs({
                 id={`${idPrefix}-${tab.id}`}
                 aria-selected={active}
                 aria-controls={`${idPrefix}panel-${tab.id}`}
-                style={active ? { ...base, ...activeStyle } : base}
+                {...(vertical
+                  ? { className: 'cg-rail-tab' }
+                  : { style: active ? { ...base, ...activeStyle } : base })}
                 onClick={() => onSelect(tab.id)}
               >
-                {vertical ? <span style={styles.railLabel}>{tab.label}</span> : tab.label}
+                {vertical ? <span className="cg-rail-tab__label">{tab.label}</span> : tab.label}
                 {tab.badge !== undefined && (
                   // The dot is decorative; the LABEL beside it is what a screen
                   // reader announces, so the signal never depends on colour.

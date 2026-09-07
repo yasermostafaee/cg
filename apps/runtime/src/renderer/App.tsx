@@ -418,10 +418,11 @@ export function App(): JSX.Element {
             </div>
           </>
         )}
+        {/* `STATION-CHROME-02` §1 — ONE settings door. `onOpenSources` is gone; the
+            deep-link mechanism it used is not (see `StatusBar`'s Props note). */}
         <StatusBar
           onOpenAudit={() => setAuditOpen(true)}
           onOpenSettings={() => openStationSetup()}
-          onOpenSources={() => openStationSetup('sources')}
         />
         <CommandToast />
         {/* THE tooltip, mounted ONCE. Every control carrying a `title` inherits it

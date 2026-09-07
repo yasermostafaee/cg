@@ -162,7 +162,13 @@ test('settings panel: the serve address sits beside the server hosts, offers can
   */
   const serve = panel.getByRole('region', { name: 'Template serve address' });
   await expect(serve).toBeVisible();
-  await expect(serve.getByText(/HOW THOSE SERVERS REACH THIS MACHINE/)).toBeVisible();
+  /*
+    ⚠ `STATION-CHROME-02` §3 — matched case-INSENSITIVELY on purpose. The card head's
+    `text-transform: uppercase` is the ONE treatment now (`.cg-card__title`), so the string in
+    the DOM is sentence case while the pixels are uppercase; Playwright matches the DOM. Pinning
+    either spelling would pin the mechanism rather than the words, and the words are the claim.
+  */
+  await expect(serve.getByText(/how those servers reach this machine/i)).toBeVisible();
 
   // The port's meaning is stated where it is set: empty is today's behaviour, pinning it is what
   // makes a firewall rule possible — the only reason the field exists.

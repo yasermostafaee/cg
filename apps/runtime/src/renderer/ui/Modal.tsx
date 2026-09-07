@@ -70,7 +70,10 @@ const styles = {
   dialog: {
     background: colors.panel,
     border: `1px solid ${colors.border}`,
-    borderRadius: '0.4rem',
+    // `STATION-CHROME-02` §0 — from the token home. It was a bare `0.4rem`, which is a
+    // radius spelled at a call site: the guard only reads `controls.css`, so this one had
+    // no reviewer. Same corner, one declaration.
+    borderRadius: cssVars['--r-radius-md'],
     boxShadow: cssVars['--r-shadow-2'],
     padding: '1rem 1.25rem',
     display: 'flex',
@@ -86,6 +89,37 @@ const styles = {
     maxHeight: '88vh',
     minHeight: 0,
   },
+  /**
+   * 🔴 `STATION-CHROME-02` §2 — **THE FIXED FRAME.**
+   *
+   * A dialog whose HEIGHT is declared rather than derived from its content, and whose
+   * chrome therefore goes FLUSH: no padding on the shell, a rule under the head, a rule
+   * over the footer, and a body that owns its own edges so an internal rail can reach
+   * them.
+   *
+   * ── WHY A HEIGHT, WHICH NO OTHER DIALOG HAS ─────────────────────────────
+   *
+   * Station setup is five sections behind five tabs, and their content lengths have
+   * nothing to do with each other — Delimiters is five rows, Layers is thirty-four. With
+   * an intrinsic height the dialog GREW AND SHRANK under the operator as he moved along
+   * the rail: the frame he was aiming at, and everything he could see behind it, moved
+   * on every press. That is the one property he notices immediately and no unit test
+   * would have caught, so `station-setup-frame.spec.ts` measures the box on all five.
+   *
+   * ⚠ **A SHORT SECTION MUST NOT STRETCH TO FILL IT.** The empty space below Delimiters
+   * is correct; growing a card to swallow it would be worse than the space. Only the
+   * PANE is `flex: 1` — nothing inside it is.
+   *
+   * ⚠ `padding: 0` here means a `fixed` dialog's BODY has no padding either, and its
+   * content is expected to bring its own (Station setup's rail and pane each do). That
+   * is deliberate: a padded body cannot host a rail that touches the frame.
+   */
+  dialogFixed: {
+    padding: 0,
+    gap: 0,
+    height: cssVars['--r-modal-h-fixed'],
+    maxHeight: cssVars['--r-modal-h-fixed'],
+  },
   /** The title row: heading on one side, the close affordance on the other. */
   titleRow: {
     display: 'flex',
@@ -93,6 +127,12 @@ const styles = {
     justifyContent: 'space-between',
     gap: '0.75rem',
     flexShrink: 0,
+  },
+  /** The fixed frame's head: its own padding, and the rule that separates it. */
+  titleRowFixed: {
+    alignItems: 'center',
+    padding: '0.85rem 1rem',
+    borderBottom: `1px solid ${colors.border}`,
   },
   title: { fontSize: '1rem', fontWeight: 700, margin: 0 },
   /**
@@ -148,6 +188,20 @@ const styles = {
     alignItems: 'center',
     flexShrink: 0,
   },
+  /**
+   * The fixed frame's footer BAR — its own padding, a rule above it, and the raised
+   * surface that makes it read as chrome rather than as the last row of the content.
+   * §2's assertion measures its top edge: it must not move as the tab changes.
+   */
+  footerFixed: {
+    padding: '0.7rem 1rem',
+    borderTop: `1px solid ${colors.border}`,
+    background: colors.panelMuted,
+  },
+  /** The fixed frame's body fills the frame; only the scroll container inside it scrolls. */
+  bodyFixed: { flex: 1, padding: 0, gap: 0 },
+  /** The pinned region keeps clear of the flush frame's edges. */
+  messageFixed: { padding: '0.6rem 1rem 0' },
 } as const;
 
 /**
@@ -305,8 +359,15 @@ interface ModalProps {
    * requirement is in `openspec/specs/runtime-ui` — this comment points at it rather
    * than being the only place it exists, which is the drift the whole
    * `runtime-modal-contract` change was written to end.
+   *
+   * ⭐ `fixed` is the third, and it is a FRAME rather than a width: a declared height as
+   * well as a declared width, and flush chrome to go with them. Its criterion is narrow —
+   * a dialog whose content is SWITCHED rather than scrolled, so that an intrinsic height
+   * would move the frame under the operator as he switches. Station setup's five tabs are
+   * the only case today. Do not reach for it to make a dialog "look important"; see
+   * `styles.dialogFixed`.
    */
-  size?: 'prose' | 'wide';
+  size?: 'prose' | 'wide' | 'fixed';
   /**
    * `STATION-CHROME-01` §6 — which LAYER this dialog is on.
    *
@@ -321,9 +382,11 @@ interface ModalProps {
   layer?: 'base' | 'sub';
 }
 
-const WIDTHS: Record<'prose' | 'wide', string> = {
-  prose: 'min(460px, 92vw)',
-  wide: 'min(720px, 94vw)',
+/** `STATION-CHROME-02` §2 — the frames, resolved from the token home and never spelled here. */
+const WIDTHS: Record<'prose' | 'wide' | 'fixed', string> = {
+  prose: cssVars['--r-modal-w-prose'],
+  wide: cssVars['--r-modal-w-wide'],
+  fixed: cssVars['--r-modal-w-fixed'],
 };
 
 export function Modal({
@@ -337,6 +400,8 @@ export function Modal({
   layer: layerLevel = 'base',
 }: ModalProps): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
+  /** `STATION-CHROME-02` §2 — one read of the frame decision, four places apply it. */
+  const fixed = size === 'fixed';
   // One shape downstream, so the region never has to ask which form it was given.
   const messages: readonly ModalMessage[] =
     message === undefined ? [] : Array.isArray(message) ? message : [message as ModalMessage];
@@ -406,10 +471,15 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel ?? title}
-        style={{ ...styles.dialog, width: WIDTHS[size] }}
+        data-modal-size={size}
+        style={{
+          ...styles.dialog,
+          ...(fixed ? styles.dialogFixed : {}),
+          width: WIDTHS[size],
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div style={styles.titleRow}>
+        <div style={fixed ? { ...styles.titleRow, ...styles.titleRowFixed } : styles.titleRow}>
           <h2 style={styles.title}>{title}</h2>
           {/*
             THE CLOSE AFFORDANCE, in the primitive so EVERY modal has one.
@@ -435,7 +505,11 @@ export function Modal({
           </Button>
         </div>
         {children !== undefined && (
-          <div style={styles.body} className="cg-modal-body" data-modal-body="">
+          <div
+            style={fixed ? { ...styles.body, ...styles.bodyFixed } : styles.body}
+            className="cg-modal-body"
+            data-modal-body=""
+          >
             {children}
           </div>
         )}
@@ -449,7 +523,11 @@ export function Modal({
           both as one would re-flatten the distinction the roles exist to keep.
         */}
         {messages.length > 0 && (
-          <div style={styles.message} className="cg-modal-message" data-modal-message="">
+          <div
+            style={fixed ? { ...styles.message, ...styles.messageFixed } : styles.message}
+            className="cg-modal-message"
+            data-modal-message=""
+          >
             {messages.map((m, i) => (
               <Notice
                 key={`${m.role}:${String(i)}`}
@@ -460,7 +538,10 @@ export function Modal({
             ))}
           </div>
         )}
-        <div style={styles.footer} className="cg-modal-footer">
+        <div
+          style={fixed ? { ...styles.footer, ...styles.footerFixed } : styles.footer}
+          className="cg-modal-footer"
+        >
           {footer}
         </div>
       </div>

@@ -163,6 +163,27 @@ export class RuntimeApp {
   }
 
   /**
+   * 🔴 `STATION-CHROME-02` §1 — **OPEN STATION SETUP AT A SECTION, THROUGH THE ONE DOOR.**
+   *
+   * Six specs used to press a `SOURCES` button on the status bar. That button is gone: the
+   * owner's decision is one entry point, so every one of them now opens SETTINGS and presses
+   * the rail tab — which is also what the operator does, so the specs got MORE faithful
+   * rather than less by losing their shortcut.
+   *
+   * It is one method for the same reason `addLiveSource` is: six copies of "click, then
+   * click the tab" is six edits the next change to the rail would cost.
+   */
+  async openStationSetupAt(tab: string): Promise<void> {
+    await this.page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+    const setup = this.page.getByRole('dialog', { name: 'Station setup' });
+    await expect(setup).toBeVisible();
+    await setup
+      .getByRole('tablist', { name: 'Station setup sections' })
+      .getByRole('tab', { name: new RegExp(`^${tab}`) })
+      .click();
+  }
+
+  /**
    * Dismiss Station setup from its FOOTER.
    *
    * Two controls answer to "Close" — the footer's button and the modal's ✕ — so `getByRole`

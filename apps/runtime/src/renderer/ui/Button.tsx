@@ -33,6 +33,14 @@ export type ButtonVariant =
   | 'verb'
   | 'neutral'
   | 'icon'
+  /**
+   * `STATION-CHROME-02` §3 — A QUIET ROW ACTION: `icon`'s geometry with no fill and no
+   * border at rest, appearing under the pointer. For the ACTIONS COLUMN of a record table
+   * and nothing else — the framing that column supplies is what licenses it. Add
+   * `className="cg-list-remove"` to make it the destructive one (red on intent, never at
+   * rest). See `.cg-btn--quiet` in `controls.css` for the ghost-trap argument.
+   */
+  | 'quiet'
   | 'default';
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
@@ -49,6 +57,7 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   verb: 'cg-btn--verb',
   neutral: 'cg-btn--neutral',
   icon: 'cg-btn--icon',
+  quiet: 'cg-btn--quiet',
   default: '',
 };
 
@@ -92,6 +101,10 @@ export const VARIANT_ACCENT: Record<ButtonVariant, string | undefined> = {
   // third geometry — see `controls.css`: `--verb`'s `width: 100%` is column geometry
   // and stretches anything that is not in a sized column.
   icon: undefined,
+  // A QUIET row action carries no accent at rest either — that IS the variant. Its
+  // destructive form takes its red from `.cg-list-remove`'s hover, never from a resting
+  // colour, so a right-click item mirroring one stays neutral like the button.
+  quiet: undefined,
   default: undefined,
 };
 

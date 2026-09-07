@@ -62,7 +62,7 @@ test('a refusal stays in the viewport when the modal body is scrolled away from 
   const page = app.page;
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
-  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
+  await app.openStationSetupAt('Live sources');
   await expect(dialog).toBeVisible();
 
   for (const name of NAMES) await app.addLiveSource(name);

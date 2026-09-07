@@ -25,8 +25,14 @@ import {
  *    `message` (which names the layer / both ranges) — in the dialog's pinned region;
  *  - an accepted change REPORTS and stays open (the bridge republishes itself; there is
  *    no dialog of this section's own to close) — the one behaviour the move changed;
- *  - R-028 (2.4) — an occupied row offers "Remove…" behind the row's own
- *    confirm gate, stating ON AIR explicitly when the item is.
+ *  - R-028 (2.4) — an occupied row offers a REMOVE behind the row's own confirm gate,
+ *    stating ON AIR explicitly when the item is.
+ *
+ * ⚠ `STATION-CHROME-02` §3 — that remove is a QUIET ICON in the table's actions column now,
+ * where it was a red `Remove…` box on every bound row. §3 named a row of red boxes as
+ * reading like a row of alarms on a console where red means danger. The specs below are
+ * therefore anchored on the button's ACCESSIBLE NAME rather than on its label; the gate they
+ * drive is unchanged, and it is the gate — not the colour — that protects the layer.
  */
 
 afterEach(async () => {
@@ -181,10 +187,16 @@ describe('Station setup — Candidate layers', () => {
     // The occupied row names its template and offers the gate.
     const section = sectionOf(dialog, 'candidate-layers');
     expect(section.textContent).toContain('ساعت اذان');
-    const removeButton = [...section.querySelectorAll('button')].find(
-      (b) => b.textContent === 'Remove…',
+    /*
+      ⚠ `STATION-CHROME-02` §3 — the row's destructive action is a QUIET ICON in the table's
+      actions column now, not a red `Remove…` box, so it is found by its ACCESSIBLE NAME.
+      The ellipsis that said "this asks first" moved to the `title`; what actually protects
+      the layer is the confirm gate this spec drives, and that is untouched.
+    */
+    const removeButton = section.querySelector<HTMLButtonElement>(
+      'button[aria-label^="Remove the template on"]',
     );
-    expect(removeButton).toBeDefined();
+    expect(removeButton).not.toBeNull();
     await act(async () => {
       removeButton?.click();
       await Promise.resolve();
@@ -221,8 +233,8 @@ describe('Station setup — Candidate layers', () => {
       ],
     });
     const dialog = await renderStationSetup({ section: 'candidate-layers' });
-    const removeButton = [...sectionOf(dialog, 'candidate-layers').querySelectorAll('button')].find(
-      (b) => b.textContent === 'Remove…',
+    const removeButton = sectionOf(dialog, 'candidate-layers').querySelector<HTMLButtonElement>(
+      'button[aria-label^="Remove the template on"]',
     );
     await act(async () => {
       removeButton?.click();

@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Trash2 } from 'lucide-react';
 import {
   bankPosition,
   defaultLayerAlias,
@@ -12,6 +13,7 @@ import {
 } from '@cg/shared-ipc';
 import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import type { ModalMessage } from '../../ui/Modal.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { fixedLayersReasonMessage } from '../../ui/fixedLayersReasonMessage.js';
@@ -24,8 +26,10 @@ import { useLink } from '../../hooks/useLink.js';
 /**
  * R-021 stage 2b / R-028 — the candidate-layer bank's configuration: per-layer VISIBILITY
  * ticks + aliases, the bound template per row with a Remove… behind the row's own confirm
- * gate. A SECTION of Station setup since `STATION-SETUP-02`; the Layers panel's Configure
- * opens the dialog here.
+ * gate. A SECTION of Station setup since `STATION-SETUP-02`, reached from the ONE settings
+ * door and this rail — the Layers panel's `Configure` was the third door into this room and
+ * `STATION-CHROME-02` §1 removed it. That panel's EMPTY STATE still deep-links here, because
+ * a list with no declared bank cannot explain itself.
  *
  * ── THE TWO DIALOGS THIS USED TO BE (`FixedBankConfigModal`) ─────────────────
  *
@@ -60,47 +64,10 @@ import { useLink } from '../../hooks/useLink.js';
 
 const styles = {
   fixedFacts: { fontSize: '0.85rem', color: colors.textMuted },
-  field: { display: 'flex', flexDirection: 'column' as const, gap: '0.3rem' },
-  /**
-   * ONE grid for the WHOLE list, not a grid per row — declared columns, one declaration,
-   * every row contributing exactly the same cells (an empty span where a value is absent).
-   */
-  aliasGrid: {
-    display: 'grid',
-    gridTemplateColumns: '4.5rem 5.5rem minmax(8rem, 1fr) minmax(0, 11rem) auto',
-    alignItems: 'center',
-    columnGap: '0.6rem',
-    rowGap: '0.45rem',
-  },
-  aliasLabel: {
-    fontSize: '0.85rem',
-    fontVariantNumeric: 'tabular-nums' as const,
-    display: 'flex',
-    alignItems: 'baseline',
-    gap: '0.35rem',
-    whiteSpace: 'nowrap' as const,
-  },
   /** The real CasparCG layer, quieter than the position — same ranking as the row. */
   aliasLayerHint: { fontSize: '0.72rem', color: colors.textMuted, whiteSpace: 'nowrap' as const },
-  aliasHead: {
-    fontSize: '0.62rem',
-    fontWeight: 700,
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase' as const,
-    color: colors.textMuted,
-    whiteSpace: 'nowrap' as const,
-  },
-  groupHead: {
-    gridColumn: '1 / -1',
-    marginTop: '0.55rem',
-    paddingTop: '0.45rem',
-    borderTop: `1px solid ${colors.border}`,
-    fontSize: '0.62rem',
-    fontWeight: 700,
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase' as const,
-    color: colors.textMuted,
-  },
+  showCol: { width: '4.5rem' },
+  templateCol: { width: '30%' },
   needsConfig: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -119,13 +86,13 @@ const styles = {
     whiteSpace: 'pre' as const,
     overflowX: 'auto' as const,
   },
-  tick: { display: 'flex', alignItems: 'center', gap: '0.55rem', fontSize: '0.8rem' },
+  tick: { display: 'flex', alignItems: 'center', gap: '0.5rem' },
   bound: {
-    fontSize: '0.8rem',
     color: colors.textMuted,
     whiteSpace: 'nowrap' as const,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+    display: 'block',
     minWidth: 0,
   },
   actions: { display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' },
@@ -416,94 +383,146 @@ function BankEditor({
         from the panel only — the layer stays fenced from automatic allocation, and an occupied (or
         unverifiable) row cannot be unticked until its template is removed.
       </div>
-      <div style={styles.field}>
-        Candidate layers, highest first — same order as the Layers list. Tick = row shown; the name
-        is what the row displays.
-        <div style={styles.aliasGrid}>
-          <span style={styles.aliasHead}>Row</span>
-          <span style={styles.aliasHead}>Show</span>
-          <span style={styles.aliasHead}>Name</span>
-          <span style={styles.aliasHead}>Template</span>
-          <span />
-          {[
-            ...layers.map((layer) => ({ head: null, layer })),
-            { head: 'Graphics beds — composited BELOW the live plates', layer: -1 },
-            ...bedLayers.map((layer) => ({ head: null, layer })),
-          ].map(({ head, layer }) => {
-            if (head !== null) {
-              return (
-                <span key="bed-head" style={styles.groupHead}>
-                  {head}
-                </span>
-              );
-            }
-            const slot = slotFor(layer);
-            const bound = slot?.binding ?? null;
-            const position = bankPosition(bank, layer);
-            // B-087 mask, same as the row: with the link down the frozen binding is a
-            // claim the wire cannot back, and Remove… could not reach the bridge anyway.
-            const showBinding = !linkDown && bound !== null;
-            return (
-              <Fragment key={layer}>
-                <span style={styles.aliasLabel}>
-                  <strong>{String(position)}</strong>
-                  <span style={styles.aliasLayerHint}>· {String(layer)}</span>
-                </span>
-                <label style={styles.tick}>
-                  <input
-                    type="checkbox"
-                    aria-label={`Show layer ${String(layer)}`}
-                    checked={visible[String(layer)] ?? true}
-                    onChange={(e) => {
-                      setVisible({ ...visible, [String(layer)]: e.target.checked });
-                    }}
-                  />
-                  Show
-                </label>
-                <input
-                  className="cg-field"
-                  type="text"
-                  dir="auto"
-                  aria-label={`Name for layer ${String(layer)} (row ${String(position)})`}
-                  placeholder={defaultLayerAlias(bank, layer)}
-                  value={aliases[String(layer)] ?? ''}
-                  onChange={(e) => {
-                    setAliases({ ...aliases, [String(layer)]: e.target.value });
-                  }}
-                />
-                {showBinding && bound !== null ? (
-                  <span
-                    style={styles.bound}
-                    dir="auto"
-                    title={bound.templateId ?? bound.templateType}
-                  >
-                    {displayLabel({
-                      name: bound.templateName,
-                      sourceFileName: bound.sourceFileName,
-                    }) ??
-                      bound.templateId ??
-                      bound.templateType}
-                  </span>
-                ) : (
-                  <span />
-                )}
-                {showBinding ? (
-                  <Button
-                    variant="danger"
-                    onClick={() => {
-                      if (slot !== undefined) void removeTemplate(slot);
-                    }}
-                  >
-                    Remove…
-                  </Button>
-                ) : (
-                  <span />
-                )}
-              </Fragment>
-            );
-          })}
+      {/*
+        `STATION-CHROME-02` §3 — A REAL TABLE, with the same column headers, row height,
+        cell padding and hover as the delimiter and catalogue lists. It was a CSS grid whose
+        header row was five styled `<span>`s: it looked like a table and announced nothing,
+        so a screen reader read thirty-four unlabelled cells and the graphics-bed heading was
+        a `grid-column: 1 / -1` span rather than a group.
+      */}
+      <section className="cg-card" aria-label="Candidate rows">
+        <div className="cg-card__head">
+          <span className="cg-card__title">Rows</span>
         </div>
-      </div>
+        <div className="cg-card__body cg-card__body--table">
+          <div className="cg-table-scroll">
+            <table className="cg-table">
+              <thead>
+                <tr>
+                  <th scope="col" className="cg-table__num">
+                    Row
+                  </th>
+                  <th scope="col" style={styles.showCol}>
+                    Show
+                  </th>
+                  <th scope="col">Name</th>
+                  <th scope="col" style={styles.templateCol}>
+                    Template
+                  </th>
+                  <th scope="col" className="cg-table__actions">
+                    <span className="cg-visually-hidden">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  ...layers.map((layer) => ({ head: null, layer })),
+                  { head: 'Graphics beds — composited BELOW the live plates', layer: -1 },
+                  ...bedLayers.map((layer) => ({ head: null, layer })),
+                ].map(({ head, layer }) => {
+                  if (head !== null) {
+                    return (
+                      <tr key="bed-head" className="cg-table__group">
+                        <td colSpan={5}>{head}</td>
+                      </tr>
+                    );
+                  }
+                  const slot = slotFor(layer);
+                  const bound = slot?.binding ?? null;
+                  const position = bankPosition(bank, layer);
+                  // B-087 mask, same as the row: with the link down the frozen binding is a
+                  // claim the wire cannot back, and remove could not reach the bridge anyway.
+                  const showBinding = !linkDown && bound !== null;
+                  const rowName = slot?.alias ?? defaultLayerAlias(bank, layer);
+                  return (
+                    <tr key={layer} data-candidate-layer={String(layer)}>
+                      {/* ⭐ `R-028` — THE REAL LAYER NUMBER STAYS VISIBLE beside the row's
+                          position, because an operator may need it to clear that layer by
+                          hand, at the moment this console is NOT helping (golden rule 11). */}
+                      <td className="cg-table__num">
+                        <strong>{String(position)}</strong>
+                        <span style={styles.aliasLayerHint}> · {String(layer)}</span>
+                      </td>
+                      <td>
+                        <label style={styles.tick}>
+                          <input
+                            type="checkbox"
+                            aria-label={`Show layer ${String(layer)}`}
+                            checked={visible[String(layer)] ?? true}
+                            onChange={(e) => {
+                              setVisible({ ...visible, [String(layer)]: e.target.checked });
+                            }}
+                          />
+                          Show
+                        </label>
+                      </td>
+                      <td>
+                        <input
+                          className="cg-field"
+                          type="text"
+                          dir="auto"
+                          aria-label={`Name for layer ${String(layer)} (row ${String(position)})`}
+                          placeholder={defaultLayerAlias(bank, layer)}
+                          value={aliases[String(layer)] ?? ''}
+                          onChange={(e) => {
+                            setAliases({ ...aliases, [String(layer)]: e.target.value });
+                          }}
+                        />
+                      </td>
+                      <td>
+                        {showBinding && bound !== null ? (
+                          <bdi
+                            style={styles.bound}
+                            title={bound.templateId ?? bound.templateType}
+                            dir="auto"
+                          >
+                            {displayLabel({
+                              name: bound.templateName,
+                              sourceFileName: bound.sourceFileName,
+                            }) ??
+                              bound.templateId ??
+                              bound.templateType}
+                          </bdi>
+                        ) : null}
+                      </td>
+                      <td className="cg-table__actions">
+                        {showBinding && (
+                          /*
+                            🔴 `STATION-CHROME-02` §3 — WAS A RED `Remove…` BOX ON EVERY BOUND
+                            ROW, and the mockup still draws one. §3 names it as part of the
+                            defect, and a written decision beats the reference (the mockup's
+                            own header says so).
+
+                            The ellipsis said "this asks first" and the icon cannot, so the
+                            `title` says it instead — and the CONFIRM GATE is the protection
+                            either way, which is the same argument `controls.css` already
+                            makes for the layer table's neutral row verbs.
+                          */
+                          <Button
+                            variant="quiet"
+                            className="cg-list-remove"
+                            aria-label={`Remove the template on ${rowName}`}
+                            title="Remove the template from this row — asks first, then clears the layer"
+                            onClick={() => {
+                              if (slot !== undefined) void removeTemplate(slot);
+                            }}
+                          >
+                            <Icon icon={Trash2} size={15} />
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p className="cg-card__note">
+          Highest first — the same order as the Layers list. Tick = row shown; the name is what the
+          row displays.
+        </p>
+      </section>
       {/*
         `STATION-CHROME-01` §2 — THE ACTIONS GO IN THE DIALOG'S FOOTER when there is one to go
         in. This section's own note recorded that they sat in the body only because "the

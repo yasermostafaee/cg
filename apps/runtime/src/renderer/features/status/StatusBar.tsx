@@ -12,18 +12,24 @@ import { LinkIndicator } from './LinkIndicator.js';
 
 interface Props {
   onOpenAudit?: () => void;
-  /** R-010 / `STATION-SETUP-02` — opens Station setup at its Servers section. */
-  onOpenSettings?: () => void;
   /**
-   * D-137 / C-015 — opens Station setup at its Live sources section.
+   * 🔴 `STATION-CHROME-02` §1 — **THE ONE DOOR INTO SETTINGS.** Opens Station setup at
+   * its default tab.
    *
-   * ⭐ The button STAYS, beside SERVERS, though both now open the same dialog: this is the
+   * ── `onOpenSources` IS GONE, AND THE ARGUMENT FOR IT IS RECORDED, NOT DELETED ───
+   *
+   * There was a SOURCES button here, and its own note argued for keeping it: _"this is the
    * section the operator opens most, and the surface without which a template declaring a
-   * live source cannot be taken at all. It is a DEEP LINK into one home, never a second
-   * surface. It is not a per-row or per-field concern, so it does not belong beside a
-   * control the way the delimiter gear does.
+   * live source cannot be taken at all"_. That is still true, and the owner overruled it:
+   * three doors into one room is confusion, not a shortcut. An operator who cannot find one
+   * button will not be helped by a second one beside it.
+   *
+   * ⚠ The DEEP-LINK MECHANISM is untouched — `openStationSetup(section)` still lands on a
+   * named tab, and the two entry points that are genuinely BESIDE the thing they configure
+   * keep it: the Inspector's delimiter gear, and the Layers panel's empty state. What went is
+   * the pair of buttons that duplicated a door already on this bar.
    */
-  onOpenSources?: () => void;
+  onOpenSettings?: () => void;
 }
 
 const styles = {
@@ -254,7 +260,7 @@ function staleTitle(state: string): string {
 }
 
 /** Bottom-of-window status bar (Phase 6 §2). Never hidden, never re-flows. */
-export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props = {}): JSX.Element {
+export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Element {
   const health = useConnections();
   const lock = useLock();
   /** §7 — is the engage form open? */
@@ -518,8 +524,11 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
           rather than a preference: this button opens the dialog at its DEFAULT tab, which
           is now Channel, so a label reading "Servers" would name a section the press does
           not land on. A control whose name and destination disagree is worse than an
-          unlabelled one. The SOURCES button beside it keeps its name because it still IS a
-          deep link, to a section it names.
+          unlabelled one.
+
+          🔴 `STATION-CHROME-02` §1 — and it is now the ONLY one. SOURCES stood beside it
+          and opened the same dialog one tab along; see the `Props` note for the argument
+          that was made for it and overruled.
         */
         <Button
           onClick={onOpenSettings}
@@ -527,15 +536,6 @@ export function StatusBar({ onOpenAudit, onOpenSettings, onOpenSources }: Props 
           title="Station setup — the station's settings, in one place"
         >
           SETTINGS
-        </Button>
-      )}
-      {onOpenSources !== undefined && (
-        <Button
-          onClick={onOpenSources}
-          aria-label="Open Station setup at Live sources"
-          title="Station setup — Live sources"
-        >
-          SOURCES
         </Button>
       )}
       {/* LOG, not AUDIT (owner). "Audit" names the FILE FORMAT the bridge writes;

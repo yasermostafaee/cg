@@ -67,3 +67,34 @@ the bug; the first operator to use the new control would have created it.
 - No `@cg/shared-ipc` change, no bridge route change, no persisted key or file change.
 - `R-054` is partly discharged (one home, deep links, legible commit contract) and partly
   declined (tabs; the sources table; the shared `Select`) — see `design.md`.
+
+## `STATION-CHROME-02` (2026-09-07) — the container changed, the contents did not
+
+`STATION-CHROME-01` collected the sections into a tabbed container and kept their old
+internals: the rail, the tabs and the footers were right, and almost nothing inside them was.
+The instruction had no acceptance test, so nothing said it had not been carried out. This
+amendment adds the test and the missing work.
+
+- **One entry point** (§1). The status bar's `SOURCES` and the Layers bar's `Configure` are
+  removed; `SETTINGS` is the one door. The DEEP-LINK MECHANISM stays, and the two surfaces
+  that sit beside their subject keep it — the Inspector's delimiter gear, and the Layers
+  empty state, whose copy now reads `SETTINGS ▸ Layers` instead of naming a removed button.
+- **One frame** (§2). `Modal` gains `size="fixed"`: a declared width AND height from the
+  token home, flush chrome, and only the pane scrolling. `station-setup-frame.spec.ts`
+  asserts the dialog's box and the footer's top edge are identical on all five tabs — in a
+  real engine, because jsdom has no layout and would pass against any shape.
+- **One vocabulary** (§3). `.cg-rail*`, `.cg-table*`, `.cg-card*` and `.cg-btn--quiet` in
+  `controls.css`, with six new role tokens. The destructive row actions stop being
+  permanently red; the record lists become real tables; the blocks become cards; the Servers
+  action becomes sentence case.
+- **A defect the container hid** (§3). Every VISITED rail tab kept a white box, because the
+  selected inline style merged a `borderColor` longhand over a `border` shorthand and React's
+  removal of the longhand deleted the shorthand's colours too. Owner-reported and measured;
+  the rail is a stylesheet now, so the failure mode does not exist.
+- **A sentence that was untrue** (§5). Live sources' footer claimed nothing was waiting to be
+  applied while its own `Apply band` sat above it.
+- Operator-facing strings changed (rule-9 sweep, `git grep -n -i --untracked`, bare phrases):
+  `APPLY SERVERS` → `Apply servers`; the Live-sources footer and legend; the Layers empty
+  state's `Configure` → `SETTINGS ▸ Layers`; `Close`'s tooltip. The five card titles moved
+  from hand-spelled uppercase to sentence case under one `text-transform`.
+- No persisted key, file or schema change; no bridge change; no palette change.

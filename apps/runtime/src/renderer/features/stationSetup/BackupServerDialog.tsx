@@ -33,7 +33,7 @@ export function BackupServerDialog({
     <RecordDialog
       title="Add backup server (B)"
       confirmLabel="Add backup"
-      lede="Applied with the rest of Servers — this adds it to the draft; APPLY SERVERS sends it."
+      lede="Applied with the rest of Servers — this adds it to the draft; Apply servers sends it."
       onCancel={onCancel}
       onSubmit={() => {
         if (host.trim() === '') {

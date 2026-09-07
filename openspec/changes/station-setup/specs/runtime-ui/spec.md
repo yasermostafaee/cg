@@ -1,20 +1,29 @@
 ## ADDED Requirements
 
-### Requirement: The station's installation-wide settings have ONE home, opened at a section
+### Requirement: The station's installation-wide settings have ONE home, behind ONE door
 
-The Runtime SHALL present the station's installation-wide settings in one dialog, `Station setup`, whose sections all render at once — the CasparCG servers, the program outputs, the channel raster, the live-source catalog, the text-file delimiters, the candidate-layer bank, and the reserved and live layers — and every surface that used to open one of those settings SHALL open this dialog at the matching section, never a second dialog.
+The Runtime SHALL present the station's installation-wide settings in one dialog, `Station setup`, opened from exactly one control on the status bar, and SHALL offer no second button that opens the same dialog at a different section.
 
-A refusal or outcome raised by any section SHALL be shown in the dialog's pinned message region, prefixed with the section's name, so it is visible without hunting for the section that raised it.
+The deep-link mechanism SHALL remain: a surface that sits beside the thing it configures — the Inspector's delimiter gear, and the Layers panel's empty state — SHALL open Station setup at the matching section, never a second dialog.
 
-#### Scenario: SERVERS and SOURCES open the same dialog at different sections
+A refusal or outcome raised by a section SHALL be shown in the dialog's pinned message region, above that section's own footer.
 
-- **WHEN** the operator presses SERVERS on the status bar **THEN** Station setup opens with the Servers section marked as requested and focused
-- **WHEN** the operator presses SOURCES on the status bar **THEN** the same dialog opens with the Live sources section marked as requested, focused and in view, and no second dialog exists
+> ⭐ **`STATION-CHROME-02` §1 (2026-09-07) — ONE DOOR.** There were three: the status bar's
+> SETTINGS, the status bar's SOURCES, and the Layers panel's `Configure`. The argument for
+> keeping SOURCES was recorded and overruled by the owner — it is the section an operator
+> opens most, and three doors into one room is confusion rather than a shortcut. What went is
+> the two BUTTONS; the mechanism they used is untouched, which is why the two entry points
+> that are genuinely beside their subject still carry it.
 
-#### Scenario: Configure and the delimiter gear deep-link
+#### Scenario: One settings door on the status bar
 
-- **WHEN** the operator presses Configure in the Layers panel **THEN** Station setup opens at Candidate layers
+- **WHEN** the console renders **THEN** the status bar carries exactly one control that opens Station setup, and no `SOURCES` button beside it
+- **WHEN** the Layers panel renders with a declared bank **THEN** its bar carries no `Configure` control
+
+#### Scenario: The surviving deep links land on their own tab
+
 - **WHEN** the operator presses the delimiter gear beside a from-file field **THEN** Station setup opens at Text file delimiters
+- **WHEN** the Layers list has no declared bank and the operator presses its empty state's control **THEN** Station setup opens at Layers, and that screen's copy names `SETTINGS ▸ Layers` rather than a control that no longer exists
 
 #### Scenario: A request while the dialog is open moves to the new section
 
@@ -26,21 +35,60 @@ A refusal or outcome raised by any section SHALL be shown in the dialog's pinned
 
 ### Requirement: Each section states its commit contract, and the footer commits Servers only
 
-Every section of Station setup SHALL carry a legend beside its heading stating how its edits reach the bridge — applied by the footer, applied by a control in the section, saved as you go, or read-only — and the dialog's footer SHALL carry exactly two actions: a `cancel`-role dismissal and a `primary`-role `APPLY SERVERS` that commits the Servers section alone.
+Every section of Station setup SHALL carry a legend beside its heading stating how its edits reach the bridge — applied by the footer, applied by a control in the section, saved as you go, or read-only — and each tab's footer SHALL carry that section's commit action and no other's, in sentence case.
 
-The on-air refusal that pre-disables `APPLY SERVERS` SHALL name its scope, and no other section SHALL inherit it: the raster's refusal is the bridge's own, surfaced; the catalog, the delimiters and the candidate layers are not gated on air.
+A section's stated commit contract SHALL be TRUE OF EVERY CONTROL IN IT: a section holding a control that is applied SHALL NOT say that nothing is waiting to be applied.
+
+The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and no other section SHALL inherit it: the catalog, the delimiters and the candidate layers are not gated on air.
 
 #### Scenario: The on-air block is scoped to Servers
 
-- **WHEN** anything is on air or unsettled **THEN** `APPLY SERVERS` is disabled and the pinned region reads that Apply is blocked for Servers and every other section stays editable
+- **WHEN** anything is on air or unsettled **THEN** `Apply servers` is disabled and the pinned region reads that Apply is blocked for Servers and every other section stays editable
 
-#### Scenario: Sections that commit from the body grow no footer action
+#### Scenario: Each tab's footer carries its own commit, in sentence case
 
-- **WHEN** Station setup renders **THEN** the footer holds `Cancel` and `APPLY SERVERS` only, the candidate-layer section carries its own `Apply candidate layers`, the raster section carries its own per-channel `Set raster`, and the Live sources and Text file delimiters sections read `Saves as you go`
+- **WHEN** the Servers tab is shown **THEN** its footer holds `Cancel` and a `primary`-role `Apply servers`, and no other tab's action
+- **WHEN** the Layers tab is shown **THEN** its footer holds `Revert`, `Apply layers` and a quiet `Close`
+- **WHEN** a read-only or save-as-you-go tab is shown **THEN** its footer holds a quiet `Close` alone
+
+#### Scenario: The Live sources footer tells the truth about the layer band
+
+- **WHEN** the Live sources tab is shown **THEN** its footer reads that the catalogue saves as you go and that the layer band is applied by the button in its own section, and does NOT read that there is nothing waiting to be applied
+- **WHEN** the Text file delimiters tab is shown **THEN** its footer does read that there is nothing waiting to be applied, because that is true of every control in it
 
 > ⚠ **SUPERSEDED by `STATION-CHROME-01` §2/§4 (2026-09-07):** each TAB owns its own
 > footer, so the bank commits from its own (`Apply layers`) and the raster is read-only.
-> The as-you-go legends are unchanged.
+> 🔴 **AMENDED AGAIN by `STATION-CHROME-02` §3/§5 (2026-09-07):** the Servers action is
+> `Apply servers`, not `APPLY SERVERS` — the modal contract already made a dialog's title
+> sentence case and its buttons had never been brought to the same rule, while `Apply layers`
+> one tab along was already right. And the Live-sources footer's flat "saved as you go" was
+> UNTRUE: the layer band in that same tab is applied by a button, so the footer said what it
+> did not mean.
+
+### Requirement: Station setup's frame does not move as the operator switches section
+
+Station setup SHALL render in a FIXED frame — a declared width and a declared height, clamped to the viewport — so that its edges, and the top edge of its footer, are identical on every tab. Only the section pane SHALL scroll, and a section shorter than the frame SHALL sit at the top of it rather than stretching to fill it.
+
+#### Scenario: The box is the same on every tab
+
+- **WHEN** the operator selects each of the five tabs in turn **THEN** the dialog's bounding box is identical on all five, and the footer's top edge does not move
+- **WHEN** the tallest section is shown **THEN** the pane scrolls inside the frame and the rail does not scroll with it
+- **WHEN** the shortest section is shown **THEN** its content sits at the top of the pane with empty space below it
+
+### Requirement: One control vocabulary across the settings dialog
+
+The sections of Station setup SHALL be built from shared, tokenised primitives rather than per-section styles: a record list SHALL be a table with column headers, one row height, one cell padding and one hover; a block SHALL be a card with a head, a body and its explanatory sentence as a note under the body; a destructive row action SHALL be a quiet icon control that takes its danger colour on hover only.
+
+A rail item SHALL carry no box at rest, and its selected and hover states SHALL come from the stylesheet rather than from an inline style object.
+
+#### Scenario: A destructive row action is quiet at rest
+
+- **WHEN** the delimiter list, the live-source catalogue or the candidate-layer rows render **THEN** each row's remove control is quiet at rest and reddens only under the pointer, and no row carries a permanently red control
+
+#### Scenario: A visited rail item keeps no box
+
+- **WHEN** the operator selects a rail item and then selects another **THEN** the first item carries no border of its own, in any state
+- **WHEN** the rail renders **THEN** its group headings are visibly distinct from the items under them — a different ink, a smaller tracked-out uppercase, and a rule above the group
 
 #### Scenario: Cancel dismisses and commits nothing
 

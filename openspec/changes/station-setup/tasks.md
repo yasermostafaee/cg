@@ -111,3 +111,40 @@
       new e2e matched region names by substring (`Outputs` also found `Program outputs`) and
       set a raster while the seed's rows were on air. Fixed in `30a0cf17`; a failing run
       discharges nothing.
+
+## 10. `STATION-CHROME-02` — the container changed, the contents did not
+
+- [x] 10.1 §1 ONE DOOR. The status bar's `SOURCES` and the Layers bar's `Configure` are gone
+      (`StatusBar.tsx`, `App.tsx`, `LayersPanel.tsx`); `onOpenSources` deleted from the props.
+      The DEEP-LINK MECHANISM is untouched and two entry points still carry it: the Inspector's
+      delimiter gear, and the Layers empty state. The empty state's sentence, which NAMED the
+      removed button, now reads `SETTINGS ▸ Layers`.
+- [x] 10.2 §2 ONE FRAME. `Modal` gains `size="fixed"` — `min(1000px,100%)` ×
+      `min(680px, 100vh-48px)` from the token home, flush chrome, body `flex: 1`, footer bar.
+      `station-setup-frame.spec.ts` measures the dialog box AND the footer's top edge on all
+      five tabs, plus the pane's overflow and the short section's slack. It found a real
+      regression: §5's longer footer sentence wrapped against `maxWidth: 58ch` and moved the
+      footer's top edge.
+- [x] 10.3 §3 ONE VOCABULARY, in `controls.css`: `.cg-rail*`, `.cg-table*`, `.cg-card*`,
+      `.cg-btn--quiet` + the canonical `.cg-list-remove` hover. Six new role tokens in
+      `theme.ts` (rail hover/selected fill+line, table rule + row hover, danger wash) and four
+      frame sizes. No new literal at a call site; `tokenHome.test.ts` green.
+- [x] 10.4 🔴 THE WHITE BOX (owner-reported, and measured before the fix). A rail tab's
+      selected style merged the `borderColor` LONGHAND over the `border` SHORTHAND; React
+      removes the longhand on deselect, which deletes the shorthand's colour declarations too,
+      leaving a width and a style with no colour — Chrome paints it WHITE. Every visited tab
+      kept a white box. Fixed by moving the rail to classes; `railWhiteBox.dom.test.ts` guards
+      the structure, and the rail gains the hover inline styles could never express.
+- [x] 10.5 The group headings are distinct from their items (owner, same day): items to full
+      `--r-text`, headings muted + smaller + tracked out + a rule above. Separated on three
+      channels rather than by dimming, which would have pushed a small uppercase label under
+      4.5:1.
+- [x] 10.6 §5 The Live-sources footer no longer claims nothing is waiting while `Apply band`
+      sits above it. `Close`'s tooltip corrected on the same rule.
+- [x] 10.7 The sweep (golden rule 9), `git grep -n -i --untracked`: `APPLY SERVERS`,
+      `Open Station setup at Live sources`, `Saved as you go`, `Remove…`, the five card
+      titles. Fixed in live code, tests and e2e; the mockup and historical records left as
+      records. It found `server-settings.spec.ts` matching a card title's SHOUTED form, which
+      the shared `text-transform` had made unmatchable.
+- [ ] 10.8 Linux `gate:e2e` for `STATION-CHROME-02` — OWED. This change is entirely about what
+      renders.

@@ -89,41 +89,42 @@ interface Props {
 }
 
 const styles = {
-  shell: { display: 'flex', flex: 1, minHeight: 0, gap: 0, margin: '-0.25rem 0' },
+  shell: { display: 'flex', flex: 1, minHeight: 0, gap: 0 },
+  /**
+   * `STATION-CHROME-02` §2 — THE ONE SCROLL CONTAINER. The frame is fixed, the rail and
+   * the footer never move, and this is the only thing that scrolls; its scrollbar is
+   * therefore inside the pane rather than against the dialog's edge.
+   *
+   * ⚠ `justifyContent` is deliberately NOT `stretch`, and no child is `flex: 1`: a short
+   * section sits at the TOP with empty space below it. Growing Delimiters' card to fill a
+   * 680px frame would be worse than the space it leaves.
+   */
   pane: {
     flex: 1,
     minWidth: 0,
     minHeight: 0,
     overflowY: 'auto' as const,
-    padding: '0.25rem 0 0.25rem 0.9rem',
+    padding: '1rem 1.1rem 1.25rem',
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.75rem',
   },
-  /** The footer's standing sentence — what this section's commit contract is. */
+  /**
+   * The footer's standing sentence — what this section's commit contract is.
+   *
+   * ⚠ `STATION-CHROME-02` §2 — NO WIDTH CAP. It had `maxWidth: 58ch`, and §5's corrected
+   * Live-sources sentence is longer than that: the note wrapped to two lines, the footer
+   * grew, and its TOP EDGE MOVED on that one tab — the exact property §2 forbids and
+   * `station-setup-frame.spec.ts` measures. The cap was protecting against a note running
+   * the full width of a very wide dialog; the frame is 1000px and the note shares the row
+   * with one button, so flex already does that job.
+   */
   footNote: {
     marginInlineEnd: 'auto',
+    minWidth: 0,
     fontSize: '0.78rem',
     color: colors.textMuted,
     textAlign: 'start' as const,
-    maxWidth: '58ch',
-  },
-  sub: {
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    padding: '0.6rem 0.75rem',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.5rem',
-  },
-  subTitle: {
-    fontSize: '0.78rem',
-    fontWeight: 700,
-    letterSpacing: '0.06em',
-    color: colors.textMuted,
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
   },
   row: { display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.85rem' },
   label: { width: 92, color: colors.textMuted },
@@ -507,7 +508,12 @@ export function StationSetupDialog({
     <Modal
       title="Station setup"
       ariaLabel="Station setup"
-      size="wide"
+      /*
+        🔴 `STATION-CHROME-02` §2 — A FIXED FRAME, not a wide one. `wide` sized the dialog to
+        its content, so the box moved every time the operator changed tab: Delimiters is five
+        rows and Layers is thirty-four. See `Modal`'s `styles.dialogFixed`.
+      */
+      size="fixed"
       onClose={onClose}
       {...(activeMessages.length > 0 ? { message: activeMessages } : {})}
       footer={
@@ -535,9 +541,15 @@ export function StationSetupDialog({
                 Cancel
               </ModalAction>
               {/*
-                APPLY SERVERS — `primary`, and named for its SCOPE. It commits the Servers
+                Apply servers — `primary`, and named for its SCOPE. It commits the Servers
                 section and nothing else; the bank, the catalogue and the delimiters each
                 commit from their own tab.
+
+                ⭐ `STATION-CHROME-02` §3 — SENTENCE CASE. It shipped as `APPLY SERVERS`, and
+                the shout was a leftover from the dialog this grew out of: the modal contract
+                already says a dialog's TITLE is sentence case and never shouting, and its
+                buttons had simply never been brought to the same rule. `Apply layers`, one
+                tab along, was already right — two spellings of one rule in one dialog.
               */}
               <AsyncButton
                 variant={modalActionVariant('primary')}
@@ -582,7 +594,7 @@ export function StationSetupDialog({
                   return { accepted: true };
                 }}
               >
-                APPLY SERVERS
+                Apply servers
               </AsyncButton>
             </>
           ) : (
@@ -594,7 +606,13 @@ export function StationSetupDialog({
             <ModalAction
               actionRole="cancel"
               onClick={onClose}
-              title="Dismisses the dialog. Nothing here is waiting to be applied."
+              /*
+                §5's rule one control along: this used to read "Nothing here is waiting to be
+                applied", which is false on the two tabs that DO hold something waiting — the
+                bank's draft, and the layer band. What is true of Close on every tab is that
+                pressing it applies nothing, so that is what it says.
+              */
+              title="Dismisses the dialog. It applies nothing."
             >
               Close
             </ModalAction>
@@ -627,14 +645,22 @@ export function StationSetupDialog({
 
             {active === 'servers' && (
               <SetupSection id="servers">
-                <section style={styles.sub} aria-label="Primary server">
-                  <span style={styles.subTitle}>PRIMARY (A)</span>
-                  {endpointRows(primary, setPrimary, 'Primary')}
+                {/* `STATION-CHROME-02` §3 — the shared card rhythm, so this tab is built from
+                    the same blocks as every other one. The heads used to SHOUT their titles
+                    in hand-spelled uppercase; `.cg-card__title` is the one treatment. */}
+                <section className="cg-card" aria-label="Primary server">
+                  <div className="cg-card__head">
+                    <span className="cg-card__title">Primary (A)</span>
+                  </div>
+                  <div className="cg-card__body">
+                    {endpointRows(primary, setPrimary, 'Primary')}
+                  </div>
                 </section>
 
-                <section style={styles.sub} aria-label="Backup server">
-                  <span style={styles.subTitle}>
-                    BACKUP (B)
+                <section className="cg-card" aria-label="Backup server">
+                  <div className="cg-card__head">
+                    <span className="cg-card__title">Backup (B)</span>
+                    <span className="cg-card__spacer" />
                     {backupEnabled ? (
                       <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>
                         Remove backup
@@ -648,13 +674,13 @@ export function StationSetupDialog({
                         Add backup
                       </Button>
                     )}
-                  </span>
+                  </div>
                   {backupEnabled ? (
-                    endpointRows(backup, setBackup, 'Backup')
+                    <div className="cg-card__body">{endpointRows(backup, setBackup, 'Backup')}</div>
                   ) : (
-                    <span style={styles.status}>
+                    <p className="cg-card__note">
                       No backup declared — single-server operation (B-046: quiet by design).
-                    </span>
+                    </p>
                   )}
                 </section>
 
@@ -664,106 +690,119 @@ export function StationSetupDialog({
                   here offers to: `connections.set-config` rebuilds template serving on the
                   running process.
                 */}
-                <section style={styles.sub} aria-label="Template serve address">
-                  <span style={styles.subTitle}>HOW THOSE SERVERS REACH THIS MACHINE</span>
-                  {/* ⚠ This copy deliberately does not say "NO TEMPLATE" — that phrase is the
-                      ALARM, asserted ABSENT on a healthy apply, and ambient copy would drain it. */}
-                  <span style={styles.status}>
-                    The address CasparCG fetches templates from. Leave it empty to derive it. Get it
-                    wrong and those servers show live sources with no graphic over them, while CG
-                    ADD still reports success.
-                  </span>
-                  <div style={styles.row}>
-                    <span style={styles.label}>Serve host</span>
-                    <input
-                      className="cg-field"
-                      style={styles.host}
-                      aria-label="Template serve host"
-                      value={serveHost}
-                      onChange={(e) => setServeHost(e.target.value)}
-                    />
+                <section className="cg-card" aria-label="Template serve address">
+                  <div className="cg-card__head">
+                    <span className="cg-card__title">How those servers reach this machine</span>
                   </div>
-                  {flagServeHost === undefined ? null : (
-                    <div style={styles.maskedNote} data-testid="serve-host-masked">
-                      <span style={styles.inForce}>In force: {flagServeHost}</span>
-                      <span>(set by --template-serve-host)</span>
-                      <span style={styles.maskedStored}>
-                        {serveHost.trim().length === 0 ? 'empty (would derive)' : serveHost}
-                      </span>
-                      <span>
-                        not in force — overridden by --template-serve-host. It takes over at the
-                        next start without the flag, so it stays editable.
-                      </span>
-                    </div>
-                  )}
-                  {serveCandidates.length === 0 ? null : (
-                    <div style={styles.candidates}>
-                      {/* ⚠ CANDIDATES, NEVER A VERDICT: the bridge enumerates this machine's
-                          interfaces; it cannot know which one the plant routes to. */}
-                      <span style={styles.status}>
-                        Candidates — this machine&apos;s addresses, not a verdict about which one
-                        those servers can reach:
-                      </span>
-                      {serveCandidates.map((candidate) => (
-                        <Button
-                          key={candidate}
-                          aria-label={`Use serve host ${candidate}`}
-                          onClick={() => setServeHost(candidate)}
-                        >
-                          {candidate}
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                  <div style={styles.row}>
-                    <span style={styles.label}>Serve port</span>
-                    <NumericInput
-                      className="cg-field"
-                      style={styles.port}
-                      aria-label="Template serve port"
-                      value={servePort}
-                      onValueChange={setServePort}
-                    />
+                  <div className="cg-card__body">
+                    {/* ⚠ This copy deliberately does not say "NO TEMPLATE" — that phrase is the
+                        ALARM, asserted ABSENT on a healthy apply, and ambient copy would drain it. */}
                     <span style={styles.status}>
-                      Empty = ephemeral (today&apos;s default). Pin it to make a firewall rule
-                      possible.
+                      The address CasparCG fetches templates from. Leave it empty to derive it. Get
+                      it wrong and those servers show live sources with no graphic over them, while
+                      CG ADD still reports success.
                     </span>
-                  </div>
-                  {flagServePort === undefined ? null : (
-                    <div style={styles.maskedNote} data-testid="serve-port-masked">
-                      <span style={styles.inForce}>In force: {String(flagServePort)}</span>
-                      <span>(set by --template-serve-port)</span>
-                      <span style={styles.maskedStored}>
-                        {servePort.trim().length === 0 ? 'empty (ephemeral)' : servePort}
-                      </span>
-                      <span>not in force — overridden by --template-serve-port.</span>
+                    <div style={styles.row}>
+                      <span style={styles.label}>Serve host</span>
+                      <input
+                        className="cg-field"
+                        style={styles.host}
+                        aria-label="Template serve host"
+                        value={serveHost}
+                        onChange={(e) => setServeHost(e.target.value)}
+                      />
                     </div>
-                  )}
+                    {flagServeHost === undefined ? null : (
+                      <div style={styles.maskedNote} data-testid="serve-host-masked">
+                        <span style={styles.inForce}>In force: {flagServeHost}</span>
+                        <span>(set by --template-serve-host)</span>
+                        <span style={styles.maskedStored}>
+                          {serveHost.trim().length === 0 ? 'empty (would derive)' : serveHost}
+                        </span>
+                        <span>
+                          not in force — overridden by --template-serve-host. It takes over at the
+                          next start without the flag, so it stays editable.
+                        </span>
+                      </div>
+                    )}
+                    {serveCandidates.length === 0 ? null : (
+                      <div style={styles.candidates}>
+                        {/* ⚠ CANDIDATES, NEVER A VERDICT: the bridge enumerates this machine's
+                          interfaces; it cannot know which one the plant routes to. */}
+                        <span style={styles.status}>
+                          Candidates — this machine&apos;s addresses, not a verdict about which one
+                          those servers can reach:
+                        </span>
+                        {serveCandidates.map((candidate) => (
+                          <Button
+                            key={candidate}
+                            aria-label={`Use serve host ${candidate}`}
+                            onClick={() => setServeHost(candidate)}
+                          >
+                            {candidate}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                    <div style={styles.row}>
+                      <span style={styles.label}>Serve port</span>
+                      <NumericInput
+                        className="cg-field"
+                        style={styles.port}
+                        aria-label="Template serve port"
+                        value={servePort}
+                        onValueChange={setServePort}
+                      />
+                      <span style={styles.status}>
+                        Empty = ephemeral (today&apos;s default). Pin it to make a firewall rule
+                        possible.
+                      </span>
+                    </div>
+                    {flagServePort === undefined ? null : (
+                      <div style={styles.maskedNote} data-testid="serve-port-masked">
+                        <span style={styles.inForce}>In force: {String(flagServePort)}</span>
+                        <span>(set by --template-serve-port)</span>
+                        <span style={styles.maskedStored}>
+                          {servePort.trim().length === 0 ? 'empty (ephemeral)' : servePort}
+                        </span>
+                        <span>not in force — overridden by --template-serve-port.</span>
+                      </div>
+                    )}
+                  </div>
                 </section>
 
-                <section style={styles.sub} aria-label="Redundancy options">
-                  <div style={styles.row}>
-                    <span style={styles.label}>Strategy</span>
-                    <select
-                      className="cg-field"
-                      style={{ width: 'auto' }}
-                      aria-label="Redundancy strategy"
-                      value={strategy}
-                      onChange={(e) => setStrategy(e.target.value as ConnectionConfig['strategy'])}
-                    >
-                      <option value="mirror-sync">mirror-sync</option>
-                      <option value="mirror-async">mirror-async</option>
-                      <option value="journal-replay">journal-replay</option>
-                    </select>
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
-                      <input
-                        type="checkbox"
-                        aria-label="Auto-failover enabled"
-                        checked={autoFailover}
-                        onChange={(e) => setAutoFailover(e.target.checked)}
-                      />
-                      auto-failover
-                    </label>
+                <section className="cg-card" aria-label="Redundancy options">
+                  <div className="cg-card__head">
+                    <span className="cg-card__title">Redundancy</span>
+                  </div>
+                  <div className="cg-card__body">
+                    <div style={styles.row}>
+                      <span style={styles.label}>Strategy</span>
+                      <select
+                        className="cg-field"
+                        style={{ width: 'auto' }}
+                        aria-label="Redundancy strategy"
+                        value={strategy}
+                        onChange={(e) =>
+                          setStrategy(e.target.value as ConnectionConfig['strategy'])
+                        }
+                      >
+                        <option value="mirror-sync">mirror-sync</option>
+                        <option value="mirror-async">mirror-async</option>
+                        <option value="journal-replay">journal-replay</option>
+                      </select>
+                      <label
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                      >
+                        <input
+                          type="checkbox"
+                          aria-label="Auto-failover enabled"
+                          checked={autoFailover}
+                          onChange={(e) => setAutoFailover(e.target.checked)}
+                        />
+                        auto-failover
+                      </label>
+                    </div>
                   </div>
                 </section>
 

@@ -209,7 +209,7 @@ test('the two plate states are told apart WITHOUT reading the label', async ({ a
   await expect(marker(page, 'guest-1')).toContainText('PLACEHOLDER');
 
   // Define a source, then BIND it to one plate through the Inspector.
-  await page.getByRole('button', { name: 'Open Station setup at Live sources' }).click();
+  await app.openStationSetupAt('Live sources');
   // `STATION-CHROME-01` §6 — through the Add dialog every Add opens; the fixture owns the
   // flow so a change to it does not cost this spec an edit.
   await app.addLiveSource('Studio A');

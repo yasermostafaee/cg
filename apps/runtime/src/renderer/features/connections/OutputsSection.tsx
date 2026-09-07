@@ -176,22 +176,35 @@ function ServerBlock({ server }: { server: ServerHealth }): JSX.Element {
  */
 export function OutputsSection({ health }: { health: ConnectionHealth | null }): JSX.Element {
   return (
-    <section style={styles.section} aria-label="Program outputs">
-      <span style={styles.sectionTitle}>OUTPUTS — WHAT casparcg.config DECLARES vs WHAT RUNS</span>
-      <span style={styles.status}>
-        Read over AMCP: INFO CONFIG for the declaration, INFO &lt;channel&gt; for the running set,
-        re-read every minute. A program output (decklink, bluefish, ndi, ffmpeg, artnet) that is
-        declared and not running is the operator alarm; a preview window or the local sound device
-        is noted here only.
-      </span>
-      {health === null ? (
-        <span style={styles.status}>No health reading from the bridge yet.</span>
-      ) : (
-        <>
-          <ServerBlock server={health.primary} />
-          {health.backup !== undefined && <ServerBlock server={health.backup} />}
-        </>
-      )}
+    /*
+      `STATION-CHROME-02` §3 — the same card rhythm as every other block in the dialog. The
+      title used to SHOUT its whole sentence in a tracked-out uppercase run
+      (`OUTPUTS — WHAT casparcg.config DECLARES vs WHAT RUNS`); the card head takes the NAME
+      and the sentence becomes the note under the body, which is what it always was.
+    */
+    <section className="cg-card" aria-label="Program outputs">
+      <div className="cg-card__head">
+        <span className="cg-card__title">Outputs</span>
+      </div>
+      <div className="cg-card__body">
+        <span style={styles.status}>
+          What <code>casparcg.config</code> declares versus what is running. Read over AMCP: INFO
+          CONFIG for the declaration, INFO &lt;channel&gt; for the running set, re-read every
+          minute.
+        </span>
+        {health === null ? (
+          <span style={styles.status}>No health reading from the bridge yet.</span>
+        ) : (
+          <>
+            <ServerBlock server={health.primary} />
+            {health.backup !== undefined && <ServerBlock server={health.backup} />}
+          </>
+        )}
+      </div>
+      <p className="cg-card__note">
+        A program output (decklink, bluefish, ndi, ffmpeg, artnet) that is declared and not running
+        is the operator alarm; a preview window or the local sound device is noted here only.
+      </p>
     </section>
   );
 }

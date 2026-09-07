@@ -74,6 +74,17 @@ async function click(scope: HTMLElement, label: string): Promise<void> {
   await settleSetup();
 }
 
+/** Click by ACCESSIBLE NAME — for the icon-only row actions, which carry no text. */
+async function clickByLabel(scope: HTMLElement, label: string): Promise<void> {
+  const button = scope.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  if (button === null) throw new Error(`no button named “${label}”`);
+  await act(async () => {
+    button.click();
+    await Promise.resolve();
+  });
+  await settleSetup();
+}
+
 /** The Add/Edit dialog — the SECOND dialog, so the last one in the document. */
 function subDialog(): HTMLElement {
   const all = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')];
@@ -241,7 +252,13 @@ describe('§5 — the columns depend on the kind', () => {
     await click(subDialog(), 'Add source');
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
 
-    await click(sectionOf(dialog, 'sources'), 'Edit');
+    /*
+      ⚠ `STATION-CHROME-02` §3 — the row's two actions are ICONS in the table's actions
+      column now, so there is no button whose TEXT is `Edit`. Found by its accessible name,
+      which is what an operator's screen reader says and what the icon has always carried —
+      a stronger anchor than the label was, and the one the mockup's own row uses.
+    */
+    await clickByLabel(sectionOf(dialog, 'sources'), 'Edit Studio A');
     // The SAME dialog shape, carrying the record rather than a blank.
     expect(openDialog()).not.toBeNull();
     const name = subDialog().querySelector<HTMLInputElement>('input[aria-label="Source name"]');

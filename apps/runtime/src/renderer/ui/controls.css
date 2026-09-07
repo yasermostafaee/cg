@@ -694,7 +694,8 @@
  * deliberate: the bar wanted a small fixed neutral square, which is precisely what this
  * already is, and a shape per site is how a design system stops being one.
  */
-.cg-btn--icon {
+.cg-btn--icon,
+.cg-btn--quiet {
   flex: 0 0 auto;
   width: 28px;
   min-width: 28px;
@@ -703,6 +704,46 @@
   padding: 0;
   font-size: var(--r-text-md);
   line-height: 1;
+}
+
+/*
+ * ── `STATION-CHROME-02` §3 — THE QUIET ROW ACTION ───────────────────────────
+ *
+ * `--icon`'s geometry (shared above, not copied) with NO fill and NO border at rest:
+ * the control appears under the pointer and recedes otherwise. Exactly one place uses
+ * it — the ACTIONS COLUMN of a record table.
+ *
+ * ── THIS IS THE `--ghost` TRAP, ENTERED DELIBERATELY, WITH ITS CONDITION MET ─
+ *
+ * Read the `--ghost` warning above first: neutral is not invisible, and a bare glyph
+ * standing on its own reads as static text. Ghost is licensed only "where surrounding
+ * chrome already frames the control and its position names it", and that exception was
+ * narrowed once already because a PANEL BAR does not always supply the frame.
+ *
+ * A record table does, and unconditionally: every row is the same height, the actions
+ * column is the last column of every row, and the pair (edit, remove) is rendered
+ * together or not at all — so a glyph here is read as "this row's action" by POSITION,
+ * repeated a dozen times down the column. That is a stronger frame than the modal chrome
+ * the exception was written for. Each still carries its own `title` and accessible name,
+ * and both hover and focus-visible give it a full boundary.
+ *
+ * ⚠ If an operator ever reports that he cannot find the bin, the remedy is a RESTING
+ * BORDER on this one class — not a red one, which is what it had and what §3 removed.
+ */
+.cg-btn--quiet {
+  background: transparent;
+  border-color: transparent;
+  color: var(--r-text-muted);
+}
+.cg-btn--quiet:hover:not(:disabled) {
+  background: var(--r-control-hover-bg);
+  border-color: var(--r-control-hover-line);
+  color: var(--r-text);
+  filter: none; /* the lifted fill IS the hover; brightness on top muddies it */
+}
+.cg-btn--quiet:disabled {
+  color: var(--r-text-muted);
+  opacity: 0.5;
 }
 
 /*
@@ -1374,11 +1415,25 @@ textarea.cg-field--autogrow {
  * because position is what split the cluster across 1800px. The small leading gap
  * is the residue of it: enough that a thumb reaching for ↓ does not land here,
  * not enough to break the cluster into two objects.
+ *
+ * ⭐ `STATION-CHROME-02` §3 — **THIS IS NOW THE CANONICAL DESTRUCTIVE ROW ACTION,
+ * and the hover below is the ONE declaration of it.** Three more surfaces adopted it —
+ * the delimiter rows, the live-source rows and the candidate-layer rows — each of which
+ * had been carrying a permanently red-bordered control instead. A row of red boxes reads
+ * as a row of alarms on a console where red means danger, and a signal spent where there
+ * is no danger is a signal drained where there is.
+ *
+ * The MARGIN rule stays scoped to the list minis (it is about that cluster's spacing);
+ * only the LOOK is shared, which is the same `--verb`/`--neutral` split the button
+ * variants already make.
  */
 .cg-list-item__tools .cg-btn--icon.cg-list-remove {
   margin-inline-start: var(--r-space-1);
 }
-.cg-btn--icon.cg-list-remove:hover:not(:disabled) {
+.cg-btn.cg-list-remove:hover:not(:disabled) {
+  /* The WASH, not a solid fill: loud enough to be unmistakable under the pointer,
+     quiet enough that it is still the row's action rather than an alarm. */
+  background: var(--r-danger-soft);
   border-color: var(--r-danger);
   color: var(--r-danger-text);
 }
@@ -2139,4 +2194,280 @@ input[type='checkbox']:disabled:checked {
   box-shadow: inset 0 0 0 2px var(--r-surface);
   color: var(--r-accent-ink);
   font-weight: 700;
+}
+
+/* ══ STATION-CHROME-02 §3 — THE SETTINGS DIALOG'S SHARED VOCABULARY ═════════
+ *
+ * The rail, the record tables and the cards. In this stylesheet rather than in each
+ * section's own style object, because §3's whole finding was that the sections had been
+ * COLLECTED into a new container while keeping their old internals — five sections each
+ * spelling its own list, its own heading and its own destructive control. A vocabulary
+ * that lives in one file is the thing that cannot be hand-matched into drifting.
+ *
+ * These are also the states inline styles cannot express at all: hover on a rail item,
+ * hover on a table row, the focus ring on either.
+ */
+
+/* ── THE RAIL — a vertical tab strip ────────────────────────────────────────
+ *
+ * 🔴 IT IS A CLASS NOW, AND THAT IS A BUG FIX AS MUCH AS A RESTYLE.
+ *
+ * The rail was inline styles, and the SELECTED tab merged `borderColor` (a longhand)
+ * over `border` (the shorthand). On DESELECT React removes the longhand — which deletes
+ * the border-*-color declarations the SHORTHAND had contributed as well, since they are
+ * the same four properties — leaving `border-width: 1px; border-style: solid` with no
+ * colour at all. The browser paints that WHITE. So every tab the operator had visited
+ * kept a white box around it, and reading the source found `1px solid transparent` and
+ * explained nothing. Measured live before the fix; owner-reported the same day.
+ *
+ * The general rule, which is why this is worth the words: NEVER mix a shorthand with one
+ * of its own longhands across renders in one inline style object. A stylesheet has no
+ * such failure mode — the selected state is a SELECTOR here, not a diff.
+ */
+.cg-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  flex-shrink: 0;
+  padding: var(--r-space-2) var(--r-space-2);
+  overflow-y: auto;
+  background: var(--r-surface-sunken);
+  border-right: 1px solid var(--r-border);
+}
+
+/*
+ * THE RAIL'S GROUP HEADINGS — and they must not look like the items under them.
+ *
+ * Owner, 2026-09-07: «استایل و رنگ دسته بندی در منو از آیتمهای هر دسته بندی مشخص تر باشه».
+ * They were the SAME ink as a resting tab (`--r-text-muted` on both), so PLAYOUT read as a
+ * disabled tab rather than as the heading over two of them — the one thing a heading may
+ * never be mistaken for is a member of its own list.
+ *
+ * The separation is made on THREE channels rather than one, and in the direction that keeps
+ * the contrast floor: the heading stays MUTED and the items go up to full `--r-text` (the
+ * mockup's own relationship — a faint group over brighter items), the heading is smaller,
+ * tracked out and uppercase, and a hairline rule above it makes it a section break. Dimming
+ * the heading further would have been the obvious move and would have pushed a small
+ * uppercase label under 4.5:1 on this ground.
+ */
+.cg-rail-group {
+  margin-top: var(--r-space-2);
+  padding: var(--r-space-3) var(--r-space-2) var(--r-space-1);
+  border-top: 1px solid var(--r-table-rule);
+  font-size: var(--r-text-xs);
+  font-weight: var(--r-weight-bold);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--r-text-muted);
+}
+
+/* The first group heads the rail; a rule above it would be a line under the dialog's own. */
+.cg-rail-group:first-child {
+  margin-top: 0;
+  padding-top: var(--r-space-1);
+  border-top: 0;
+}
+
+/*
+ * A RAIL ITEM. No box at rest — §3: "The rail loses its per-item boxes." The border is
+ * declared and transparent rather than absent so that selecting an item cannot change
+ * its size by a pixel.
+ */
+.cg-rail-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  width: 100%;
+  text-align: start;
+  padding: var(--r-space-2) var(--r-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-radius-md);
+  background: transparent;
+  /* FULL ink, not muted — see `.cg-rail-group`: the heading is the muted one, and the two
+     must not be the same colour. */
+  color: var(--r-text);
+  font: inherit;
+  font-size: var(--r-text-sm);
+  cursor: pointer;
+  transition:
+    background var(--r-dur-fast) ease,
+    color var(--r-dur-fast) ease;
+}
+
+.cg-rail-tab:hover {
+  background: var(--r-rail-hover-fill);
+}
+
+.cg-rail-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-accent);
+}
+
+/* SELECTED: a soft accent wash with a subtle edge — never a heavier box. */
+.cg-rail-tab[aria-selected='true'] {
+  background: var(--r-rail-selected-fill);
+  border-color: var(--r-rail-selected-line);
+  color: var(--r-text);
+  font-weight: var(--r-weight-medium);
+}
+
+.cg-rail-tab__label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── RECORD TABLES — the delimiter list, the catalogue, the candidate rows ───
+ *
+ * ONE row height, ONE cell padding, ONE hover, and REAL column headers, because a
+ * stack of bordered cards cannot be read down a column and a list of records is read
+ * exactly that way: which of these is the pipe, which of these is a DeckLink.
+ */
+.cg-table-scroll {
+  overflow-x: auto;
+}
+
+.cg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--r-text-sm);
+}
+
+/* Small, uppercase, muted, with a rule under them. */
+.cg-table th {
+  text-align: start;
+  font-size: var(--r-text-xs);
+  font-weight: var(--r-weight-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--r-text-muted);
+  padding: 0 var(--r-space-2) var(--r-space-2);
+  border-bottom: 1px solid var(--r-table-rule);
+  white-space: nowrap;
+}
+
+.cg-table td {
+  padding: var(--r-space-2);
+  border-bottom: 1px solid var(--r-table-rule);
+  vertical-align: middle;
+  /*
+   * FULL INK, not the modal body's muted default — a §4 measurement found this and §3 did
+   * not name it. A record's own values (a delimiter's name, a source's name) are the CONTENT
+   * of the table; muting them makes the whole list read as secondary text and leaves the
+   * column HEADERS, which are chrome, at the same weight as the data under them.
+   */
+  color: var(--r-text);
+}
+
+/* The last row's rule would sit on the card's own edge, doubling it. */
+.cg-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.cg-table tbody tr:hover td {
+  background: var(--r-table-row-hover);
+}
+
+/*
+ * THE ACTIONS COLUMN — as narrow as its contents, at the row's end, on every row.
+ * Its unconditional presence is what licenses the quiet icon buttons inside it; see
+ * the `--quiet` note beside the button variants.
+ */
+.cg-table__actions {
+  width: 1%;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.cg-table__actions-group {
+  display: inline-flex;
+  gap: var(--r-space-1);
+  justify-content: flex-end;
+}
+
+/* A numeric first column — the row number, the slot, the layer. */
+.cg-table__num {
+  width: 5.5rem;
+  color: var(--r-text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* A group heading INSIDE a table — the graphics beds under the operator rows. */
+.cg-table__group td {
+  padding-top: var(--r-space-4);
+  font-size: var(--r-text-xs);
+  font-weight: var(--r-weight-bold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--r-text-muted);
+  border-bottom: 1px solid var(--r-table-rule);
+}
+
+/* ── CARDS — one rhythm for every block in the dialog ────────────────────────
+ *
+ * A card HEAD (a small uppercase title, and the block's own Add if it has one), a BODY
+ * with one padding, and the explanatory sentence as a muted NOTE under the body rather
+ * than as body text competing with the controls.
+ */
+.cg-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-md);
+  background: var(--r-surface-sunken);
+}
+
+.cg-card__head {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  padding: var(--r-space-2) var(--r-space-3);
+  border-bottom: 1px solid var(--r-table-rule);
+}
+
+.cg-card__title {
+  font-size: var(--r-text-xs);
+  font-weight: var(--r-weight-semibold);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--r-text-muted);
+}
+
+/* Pushes a card head's own control (an Add) to the end of the row. */
+.cg-card__spacer {
+  flex: 1;
+}
+
+/*
+ * A CARD HEAD IS CHROME, so it decides its controls' height — the same argument, and the
+ * same 28px, as `.cg-panel-header .cg-btn` above. Without it the head was 53px against the
+ * mockup's 37.5px, because a full-size `--add` button set the height of the strip that
+ * labels the block. Measured by §4's comparison; the panel bar had already learned it.
+ */
+.cg-card__head .cg-btn {
+  min-height: 28px;
+  height: 28px;
+  padding-block: 0;
+}
+
+.cg-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-3);
+  padding: var(--r-space-3);
+}
+
+/* A body holding a TABLE: the table's own cell padding supplies the inset. */
+.cg-card__body--table {
+  padding: var(--r-space-3) var(--r-space-1) var(--r-space-1);
+  gap: 0;
+}
+
+.cg-card__note {
+  margin: 0;
+  padding: 0 var(--r-space-3) var(--r-space-3);
+  font-size: var(--r-text-xs);
+  line-height: 1.55;
+  color: var(--r-text-muted);
 }
