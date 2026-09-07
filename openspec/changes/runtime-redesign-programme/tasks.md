@@ -6,8 +6,8 @@ file records which are done. **Each session takes the next unfinished phase, fin
 reports.** Do not start a later phase because an earlier one looks easy — the ordering is
 load-bearing and stated at each step.
 
-**Phase state at 2026-09-08 (later):** Phases 1, 2 (with addendum 2A) and **3** COMPLETE, 3.6's
-Linux `e2e` URL pending the run on the code head. Phases 4–10 not started. Next: **Phase 4**.
+**Phase state at 2026-09-08 (later):** Phases 1, 2 (with addendum 2A) and **3** COMPLETE, each
+with its Linux `e2e` URL beside the ticked item. Phases 4–10 not started. Next: **Phase 4**.
 ⚠ Phase 3 found `PROMPT.md` §3's numbers to be dead CSS — read `design.md` §10.1 before Phase 4
 reads any number off the reference's stylesheet: **measure the file in a browser, never quote its
 first rules.**
@@ -162,7 +162,7 @@ tokens, the full contrast table, and the two things escalated to the owner.
       `conclusion: success`); it was not skipped, which is the half a green run alone does not
       prove (golden rule 12b). `Lint • Typecheck • Test • Build` also ran green.
 
-## Phase 3 — The layers table — COMPLETE (3.6's Linux URL pending)
+## Phase 3 — The layers table — COMPLETE
 
 The record is `design.md` §10: the contradiction, the measured table, the corrected tokens, A6's
 closing number, the red-first proof and the guard.
@@ -208,8 +208,12 @@ closing number, the red-first proof and the guard.
       by arithmetic and in the browser; the ink not re-tuned (§10.4).
 - [x] 3.6 `pnpm --filter @cg/runtime test:e2e` — **120 passed (1.2 m)**, Windows, against a fresh
       `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
-      🔴 **Linux `e2e` on the code head: PENDING — URL to be recorded here when the run completes
-      green and its `E2E (Playwright)` job is confirmed to have RUN.**
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `9fa0393a`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34169950446> — run `conclusion: success`,
+      10 m 29 s (23:24:50Z → 23:35:19Z). The **`E2E (Playwright)` job RAN** (23:25:04Z → 23:35:11Z,
+      10 m 07 s, `conclusion: success`); it was not skipped, which is the half a green run alone
+      does not prove (golden rule 12b). `Lint • Typecheck • Test • Build` also ran green
+      (23:25:04Z → 23:29:41Z).
 
 ## Phase 4 — Looks
 
