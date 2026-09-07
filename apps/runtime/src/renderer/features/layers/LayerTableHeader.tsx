@@ -107,16 +107,18 @@ const styles = {
     display: 'grid',
     alignItems: 'end',
     columnGap: ROW_GEOMETRY.columnGap,
-    padding: `0.35rem ${String(12)}px 0.3rem`,
+    // The SAME horizontal padding the rows take, so the first column's edge is one
+    // edge. It was a bare `12` here beside the model's own number — a second spelling.
+    padding: `0.35rem ${ROW_GEOMETRY.headerPaddingX} 0.3rem`,
     // STICKY, so column names and verb words survive a scrolled list.
     position: 'sticky' as const,
     top: 0,
     zIndex: 2,
     // Opaque: rows scroll UNDER this, so any transparency shows them through it.
-    // Exact value specified by the owner, and a literal rather than a token
-    // because it is this header's own colour — it is deliberately lighter than
-    // both row backgrounds so the sticky band reads as a lid on the list rather
-    // than as one more row of it.
+    // `RUNTIME-REDESIGN-01` Phase 3 (owner answer A6): the reference's `--soft`, on
+    // which the muted column labels read 4.89:1 — the owner's earlier `rgb(45 55 69)`
+    // put them at 4.39:1 once Phase 2 moved the ink. It is still lighter than a loaded
+    // row, so the sticky band still reads as a lid on the list rather than as a row.
     background: cssVars['--r-table-head-bg'],
     borderBottom: `1px solid ${colors.border}`,
     fontSize: '0.62rem',

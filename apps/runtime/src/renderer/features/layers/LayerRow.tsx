@@ -149,6 +149,8 @@ const styles = {
     // The gap between the main line and the LOOK line. Inert until Stage E: every
     // row before it was a single grid row, so this adds nothing to any other row.
     rowGap: '0.4rem',
+    // `RUNTIME-REDESIGN-01` Phase 3 — the token (`--r-row-pad`), through the shared
+    // geometry, so the row and the header cannot be padded from two spellings.
     padding: ROW_GEOMETRY.padding,
     minHeight: `${String(VERB_TARGET_PX + 10)}px`,
     borderBottom: `1px solid ${colors.border}`,

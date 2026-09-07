@@ -6,8 +6,11 @@ file records which are done. **Each session takes the next unfinished phase, fin
 reports.** Do not start a later phase because an earlier one looks easy — the ordering is
 load-bearing and stated at each step.
 
-**Phase state at 2026-09-08:** Phases 1 and 2 COMPLETE, plus the owner-ordered addendum
-**Phase 2A**. Phases 3–10 not started. Next: **Phase 3**.
+**Phase state at 2026-09-08 (later):** Phases 1, 2 (with addendum 2A) and **3** COMPLETE, 3.6's
+Linux `e2e` URL pending the run on the code head. Phases 4–10 not started. Next: **Phase 4**.
+⚠ Phase 3 found `PROMPT.md` §3's numbers to be dead CSS — read `design.md` §10.1 before Phase 4
+reads any number off the reference's stylesheet: **measure the file in a browser, never quote its
+first rules.**
 
 ⚠ **2A IS AN ADDENDUM, NOT A PHASE.** The programme still has TEN phases; 2A is recorded under
 Phase 2 because it closes something Phase 2 escalated, and numbering it as an eleventh would make
@@ -63,7 +66,8 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
 - [x] 1.3 **THE DELETION GUARD** — `design.md` §3. **Twenty-seven surfaces**, built from the source
       tree rather than taken from `PROMPT.md` §1.3 (which supplies seven). Each carries where it
       lives now, what it looks like after the redesign, and a named test. **Twenty-one already have
-      a test that asserts they render under their condition; five do not and are owed by Phase 9** —
+      a test that asserts they render under their condition; five do not and are owed by Phase 9**
+      _(as of Phase 1 — Phase 3 discharged the restore-migrations strip, so four remain, see 9.3)_ —
       `BridgeSkewBanner`, `RasterMismatchBanner`, `FailoverBanner`, the restore-MIGRATIONS strip,
       the delegated `Tooltip`, and the context-menu suppression. (That is five components plus the
       suppression, which shares no component of its own.)
@@ -158,25 +162,54 @@ tokens, the full contrast table, and the two things escalated to the owner.
       `conclusion: success`); it was not skipped, which is the half a green run alone does not
       prove (golden rule 12b). `Lint • Typecheck • Test • Build` also ran green.
 
-## Phase 3 — The layers table
+## Phase 3 — The layers table — COMPLETE (3.6's Linux URL pending)
 
-- [ ] 3.1 🔴 **RED-FIRST, BEFORE TOUCHING THE TABLE: `Update` does not take.** For a row that does
-      not own the live layer, an Update must cause no `PLAY`, no un-mute and no fill (golden rule
-      10). Its own test, red first.
-- [ ] 3.2 Adopt precisely: row height and cell padding (`16px 17px`), the `#`/State/Name/Template/
-      verbs widths (55px · 135px · 33%), the table `min-width`, hover `#1b2a3a`, selected `#192e40`
-      with `inset 3px 0 0` the blue, the empty-row title treatment, the Graphics-beds divider row.
-- [ ] 3.3 The six row verbs keep a fixed place and size. Header labels, in order: Item, Play, On
-      PVW, Next, Stop, Clear. `min-height 34px` text buttons, 32×34 icon buttons, the destructive
-      group split off by a left border with 30px buttons. Each verb its own hover; the top bar's
-      Clear all and Remove all too. Look buttons keep their large click target.
-- [ ] 3.4 The command contract is unchanged: Load, Take, Update, Stop, Clear, Remove keep their
-      exact meanings. `R-017`'s on-air REMOVE refusal keeps its canonical sentence; the bulk gates
-      and the published `removeExempt` answer stay. Do not re-derive an answer the bridge publishes.
-- [ ] 3.5 A measured property table (row height, paddings, the six verb boxes, hover and selected
-      colours) reference-vs-app, every delta fixed or argued. Geometry measured in Playwright, never
-      jsdom (golden rule 12c).
-- [ ] 3.6 e2e run, URL recorded here.
+The record is `design.md` §10: the contradiction, the measured table, the corrected tokens, A6's
+closing number, the red-first proof and the guard.
+
+- [x] 3.1 🔴 **RED-FIRST, BEFORE TOUCHING THE TABLE: `Update` does not take.**
+      `tools/caspar-bridge/tests/update-does-not-take.integration.test.ts` — five cases on the mock's
+      real AMCP trace: a never-taken row under a field-only update; the same row binding a NEW
+      input; **TAKE → OUT → UPDATE with a swapped input, then the next TAKE seats the swap** (the
+      owner's plant sequence, uncovered until now); TAKE → STOP → settled off air → UPDATE; and a
+      POSITIVE CONTROL on an on-air row that must `PLAY`. **RED with `#ownsLiveSeats`'s gate
+      neutralised (four `PLAY`s on each of the three owns-nothing cases), GREEN with it restored,
+      5 / 5.** Spec delta: `specs/runtime-live-source-routing/spec.md`.
+- [x] 3.2 ⚠ **ADOPTED FROM THE REFERENCE AS RENDERED, NOT AS THIS ITEM QUOTES IT** — the numbers
+      here (`16px 17px`, 55/135/33%, `#1b2a3a`, `#192e40` + `inset 3px 0 0`, the `.row-title`
+      treatment) are the stylesheet's FIRST wave, overridden four times in the same file and
+      matching no element the prototype emits; measured in Chromium the reference paints 67 px rows
+      with `15px 12px` cells, hover `#1F2937`, a 2 px selection frame and `rgb(91 93 96)` empty rows
+      — this console's own table (`design.md` §10.1). Every delta against the RENDERED reference is
+      fixed or argued in §10.2. FIXED: the Graphics-beds band (25 px, `4px 12px`, panel ground,
+      strong top rule — `--r-bed-divider-h`), the geometry tokens corrected and READ
+      (`--r-row-pad`, `--r-row-icon-btn-w/-h`, `--r-row-verb-gap`), the header ground (A6).
+      ARGUED: the palette-only deltas, `B-224`'s columns, the density model in place of a
+      `min-width`, the band's wording. **The wave-1 geometry was NOT applied** — it would shrink a
+      hit target the model calls a floor, to match a drawing nobody can see; if the owner wants
+      that iteration it is a token flip, and the report asks.
+- [x] 3.3 The six verbs keep a fixed place and size: `48 × 36` in `repeat(6, 48px)` gapped 12, from
+      the tokens, measured; header words `ITEM · PLAY · ON PVW · NEXT · STOP · CLEAR` in order (the
+      reference paints the same six upper-cased by CSS). The verb glyph is now the reference's
+      20 px (`--r-row-verb-glyph`). Each verb's own hover is pinned by `rehearse-layout.spec.ts`;
+      **STOP ALL and CLEAR ALL's hovers and REMOVE ALL's refused-does-not-light are now pinned in
+      Playwright** (`layer-table-geometry.spec.ts`). The `32 × 34` / `34px` / destructive-group
+      `30px` this item names are the dead wave-1 rules — `--r-row-icon-btn-narrow-w` is kept,
+      documented as dead and read by nothing, for the owner's decision. Look buttons untouched at
+      their 36 px target.
+- [x] 3.4 The command contract is unchanged and asserted unchanged: no verb, gate, refusal or
+      sentence was touched; `REMOVE_ON_AIR_REASON`, the bulk gates and the published `removeExempt`
+      keep every test they had (`design.md` §10.7). Nothing re-derives a bridge answer.
+- [x] 3.5 The measured property table — `design.md` §10.2, thirty rows, reference-vs-app, both
+      columns Chromium readings; the app's side is asserted by
+      `apps/runtime/tests/e2e/layer-table-geometry.spec.ts` against the token home (four tests:
+      the row and its verbs; hover and selection; the header's AA contrast and the band; the top
+      bar's hovers). **A6 closes: `--r-text-muted` on the header ground 4.39:1 → 4.89:1**, measured
+      by arithmetic and in the browser; the ink not re-tuned (§10.4).
+- [x] 3.6 `pnpm --filter @cg/runtime test:e2e` — **120 passed (1.2 m)**, Windows, against a fresh
+      `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
+      🔴 **Linux `e2e` on the code head: PENDING — URL to be recorded here when the run completes
+      green and its `E2E (Playwright)` job is confirmed to have RUN.**
 
 ## Phase 4 — Looks
 
@@ -258,11 +291,14 @@ tokens, the full contrast table, and the two things escalated to the owner.
 - [ ] 9.2 🔴 The lock screen keeps its own chrome and its no-exit contract. It is deliberately NOT
       on the modal primitive, and the reference's own `unlock-dialog` must not be used as an
       argument to put it there.
-- [ ] 9.3 Write the five owed tests: `bridgeSkewBanner.dom.test.ts`, `rasterMismatchBanner.dom.test.ts`
+- [ ] 9.3 Write the owed tests: `bridgeSkewBanner.dom.test.ts`, `rasterMismatchBanner.dom.test.ts`
       (including that `unreadable` and `unconfigured` render NOTHING), `failoverBanner.dom.test.ts`
-      (including the `offline-mock` suppression), `layersPanel.restoreMigrations.dom.test.ts`,
-      `tooltip.dom.test.ts`, and `contextMenuSuppression.dom.test.ts` (both halves). Strengthen the
-      engage-lock assertion off `numericInput.dom.test.ts`.
+      (including the `offline-mock` suppression), `tooltip.dom.test.ts`, and
+      `contextMenuSuppression.dom.test.ts` (both halves). Strengthen the engage-lock assertion off
+      `numericInput.dom.test.ts`.
+      ✅ **`layersPanel.restoreMigrations.dom.test.ts` was DISCHARGED BY PHASE 3** (six cases,
+      green), written before the table it lives beside was restructured — guard item 11 is no
+      longer owed here. Four owed, not five.
 - [ ] 9.4 One test per guarded surface, each proving it still renders under its condition; the
       lock's contract asserted unchanged. e2e run URL recorded here.
 

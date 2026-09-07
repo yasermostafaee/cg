@@ -63,6 +63,47 @@ hand the keyboard back to the application.
   pressed **THEN** focus returns to the first control inside the lock rather than moving to any
   element of the application behind it
 
+### Requirement: The layers table takes its geometry from the token home and is measured in a real engine
+
+The Runtime SHALL render the layers table's geometry — a row's padding, the box of each of its six
+verbs, the gap between them, the verb glyph and the Graphics-beds band — from the `--r-row-*`
+tokens declared in the token home, and the column model SHALL do its arithmetic on the same
+declared numbers rather than on a second spelling. The values SHALL be those the approved reference
+PAINTS in a browser, not the first rules its stylesheet happens to contain; a token transcribed
+from a rule the reference does not render is corrected, not applied.
+
+The six verbs SHALL keep a fixed place and size on every row, under the header words `Item`,
+`Play`, `On PVW`, `Next`, `Stop` and `Clear` in that order. The sticky header's ground SHALL be one
+on which the muted column labels clear the 4.5:1 AA text floor, and the ink SHALL NOT be re-tuned
+to reach it.
+
+Every geometry claim about this table SHALL be verified in a real layout engine. A jsdom assertion
+about a box, an edge or a height compares zeros and is not evidence.
+
+#### Scenario: A row is what the token home declares
+
+- **WHEN** the table is rendered in a browser **THEN** a row's padding equals `--r-row-pad`, its
+  height equals the padding above plus the verb height plus the padding below plus its rule, each
+  of its six verbs is `--r-row-icon-btn-w` by `--r-row-icon-btn-h` in a six-column grid gapped by
+  `--r-row-verb-gap`, and the Graphics-beds band is `--r-bed-divider-h` tall
+
+#### Scenario: The header's labels clear AA on the header's ground
+
+- **WHEN** the sticky header is rendered **THEN** the contrast of its label ink against its ground,
+  computed from the colours the browser resolved, is at least 4.5:1
+
+#### Scenario: Hover and selection are distinct and honest
+
+- **WHEN** the pointer rests on a loaded row **THEN** the row lifts to the raised surface; **WHEN**
+  it rests on an empty row **THEN** the row does not react; **WHEN** a row is selected **THEN** it
+  carries the selection wash and a two-pixel inset frame in the interactive accent
+
+#### Scenario: The top bar's bulk verbs hover to their own colours and a refused one does not light
+
+- **WHEN** the pointer rests on STOP ALL or CLEAR ALL while they are enabled **THEN** each takes
+  its own verb colour; **WHEN** REMOVE ALL is withheld because a row is on air **THEN** it does not
+  take the remove colour under the pointer
+
 ### Requirement: The programme's phase state is recorded where the next session reads it
 
 Each phase of this programme SHALL record its completion in this change's `tasks.md`, and a session

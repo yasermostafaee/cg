@@ -9,6 +9,9 @@ decides it.
   in place, §5b is the answer to §5.
 - §5b, §6 — the owner's answers, recorded in Phase 2.
 - §7 — Phase 2's own record: the palette, what moved, what was held, and the contrast table.
+- §8, §9 — Phase 2A (the error red split) and three more owner answers.
+- §10 — **Phase 3**: the layers table measured in Chromium, the prompt's dead-CSS numbers, the
+  corrected geometry tokens, A6 closed at 4.89:1, the red-first Update proof, guard item 11.
 
 ## §0 — Method, and what contradicted the prompt
 
@@ -138,9 +141,9 @@ twenty-seven are the ones §1.3 names; twenty are not.
 
 For each: where it lives now, what it looks like after the redesign, and the test that proves it
 still appears. **A ✅ test already exists and asserts the surface renders under its condition. A 🔴
-test does NOT exist and is owed** — six of the twenty-seven, each verified by grep against
-`apps/runtime/tests` rather than assumed. Five are owed by Phase 9; item 27 is owed by Phase 8,
-which is the phase that builds the surface it guards.
+test does NOT exist and is owed** — six of the twenty-seven at Phase 1, each verified by grep
+against `apps/runtime/tests` rather than assumed. Phase 3 discharged item 11, so **four are owed by
+Phase 9**; item 27 is owed by Phase 8, which is the phase that builds the surface it guards.
 
 ⭐ **Item 27 was added in PHASE 2, by the owner's answer to §5.** It is the only entry that guards a
 surface the reference does not draw _and that the owner has ruled must come back_ — everything
@@ -243,8 +246,12 @@ _"THE NO-FALSE-ALARM CASE: nothing is announced when nothing was lost"_.
 Now: `LayersPanel.tsx:1030`, `data-restore-migrations`, `role="alert"`. Fed by
 `stack.onRestoreMigrations`. A SEPARATE seam from item 10 on purpose: these rows DID come back, on
 a different row.
-🔴 **No test exists** — `data-restore-migrations` occurs in exactly one file in the tree, and it is
-the component. Owed: `apps/runtime/tests/layersPanel.restoreMigrations.dom.test.ts`.
+✅ **DISCHARGED IN PHASE 3** — `apps/runtime/tests/layersPanel.restoreMigrations.dom.test.ts`, six
+cases: _"a row that came back on a DIFFERENT row is announced — by its row name, with where it came
+from and where it landed"_, _"a DEMOTED row says it came back NOT on air, and what to do before
+taking it"_, the no-false-alarm case, its own seam beside the skips strip, and content-keyed
+dismissal. Written BEFORE Phase 3 restructured the file it lives in (§10.6). Until then
+`data-restore-migrations` occurred in exactly one file in the tree, the component.
 
 **12. Awaiting-rows strip**
 Now: `LayersPanel.tsx:1067`, `data-layers-awaiting`, `role="status"` on an always-present wrapper
@@ -843,3 +850,174 @@ record of the change, not as an outstanding item.
 It stays on the owed list **until Phase 3 has actually run** — not before. The reference's own
 row/header separator is `--soft`, on which the same ink reads 4.89:1; that is the expectation, and
 an expectation is not a discharge.
+
+## §10 — PHASE 3: THE LAYERS TABLE, MEASURED — AND WHAT THE PROMPT GOT FROM DEAD CSS
+
+**Phase 3, 2026-09-08.** Read against the tree at `41a01ed7`. Method first, because the finding
+depends on it: the reference was not read as a stylesheet, it was **rendered in Chromium and
+measured** (`getComputedStyle` + `getBoundingClientRect` on the real elements, at 1280 × 800, with
+the pointer moved onto a row and a verb for the hover readings and a row clicked for the selected
+one), and the app was measured the same way against its built `dist/` booted as the e2e harness
+boots it. Golden rule 12(c): a geometry claim is measured in a real engine or it is not measured.
+
+### 10.1 🔴 What contradicted the prompt — §3's numbers come from rules the prototype does not draw
+
+`PROMPT.md` §3 names `16px 17px` cells, `55px · 135px · 33%` columns, hover `#1b2a3a`, selected
+`#192e40` with `inset 3px 0 0`, a `.row-title` empty-row treatment, `min-height 34px` text verbs,
+`32 × 34` icon verbs and a destructive group split off by a left border with 30 px buttons. **Every
+one of those is in the reference's stylesheet, and none of them is what the reference paints.**
+
+The prototype's single `<style>` (lines 7–307) was appended to in **four waves**, each restating
+`.layer-table` at equal or higher specificity, so the LAST wave wins in a browser:
+
+| property               | wave 1 (what §3 quotes)                                                          | wave 4 (what a browser paints)                                    |
+| ---------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| cell                   | `td{padding:16px 17px}`                                                          | `…>td{height:67px;padding:15px 12px}`                             |
+| columns `#`/State/Name | `55px · 135px · 33%`                                                             | `46px · 162px · auto · 30% · 372px`, `table-layout:fixed`         |
+| `min-width`            | `835px`                                                                          | `980px`                                                           |
+| hover                  | `tr:hover{#1b2a3a}`                                                              | `tr[data-select-row]:hover{#1F2937}`, empty rows do not react     |
+| selected               | `#192e40` + `inset 3px 0 0 var(--blue)`                                          | `rgba(56,189,248,.1)` + a **2 px inset frame on all four sides**  |
+| row verbs              | `.row-actions .btn 34px`, `.icon-btn 32×34`, `.destructive-group .icon-btn 30px` | `.row-verb{width:48px;height:36px}` ×6 in `repeat(6,48px)` gap 12 |
+| empty-row title        | `.empty-row .row-title{#8899ac;400}`                                             | `.empty-row .row-name{rgb(91 93 96);500}`, template italic        |
+| header                 | `th{padding:11px 17px;#101a26}`                                                  | `th{padding:5.6px 12px 4.8px;#2d3745;#9CA3AF;.62rem 700 .06em}`   |
+
+And the second half, which settles it: **`.row-title`, `.destructive-group`, `.row-actions .btn`
+and `.row-actions .icon-btn` match NO element the prototype emits.** Its row renderer (line 460)
+writes six `<button class="row-verb" data-verb-tone=…>` in one `.row-actions` grid under a
+`.verb-labels` row reading `Item · Play · On PVW · Next · Stop · Clear`, a `<bdi class="row-name">`,
+a `.template-cell`, and a `.bed-divider` row. There is no text verb, no destructive group and no
+`.row-title` anywhere in the markup or the script. The dead selectors are an earlier iteration
+left in the file.
+
+**The rendered table is this console's own table.** Wave 4 is the app's layer table transcribed
+into the prototype in the app's pre-Phase-2 hexes — `#111827`, `#1F2937`, `#38BDF8`, `#9CA3AF`,
+`#4B5563`, `rgb(91 93 96)` and `rgb(44 255 122)` (the owner's exact empty-row and on-air values),
+67 px rows, `15px 12px` cells, `48 × 36` verbs, the 2 px selection frame that `controls.css` says
+_replaces a 4px left bar, which the mock-up supersedes_. Phase 2's geometry tokens were transcribed
+from wave 1, so they too described the dead iteration.
+
+**What this phase did about it, and did not.** `PROMPT.md` §0 says the approved thing is the
+LOOK, and the look is what the file renders. So the table was NOT moved to the dead numbers:
+shrinking the verbs from 48 × 36 to 32 × 34 and 30 would have cut a hit target the column model
+documents as a floor never traded away, on the one surface pressed under time pressure, to match a
+drawing nobody can see. Instead the geometry tokens were **corrected to the rendered values and
+wired** (10.3), every delta against the RENDERED reference was measured and fixed or argued (10.2),
+and the dead-rule token (`--r-row-icon-btn-narrow-w`) was kept, documented as dead, read by
+nothing, for the owner's decision. ⚠ **If the owner in fact wants the wave-1 iteration — the
+smaller verbs, the left-bar selection, the 16/17 cells — that is a token flip in one file and a
+decision the report asks for, not something to infer from a stylesheet's first draft.**
+
+### 10.2 🔴 THE MEASURED PROPERTY TABLE — rendered reference vs app, every delta FIXED or ARGUED
+
+Both columns are Chromium readings. "Palette" means the same ROLE, whose value Phase 2 moved by
+the owner's mapping rule; the prototype's table keeps the app's OLD hex for that role as a literal.
+
+| property                   | reference (rendered)                                                               | app (after this phase)                                                                                                                          | verdict                                                                                                                                            |
+| -------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| row height                 | 67 px                                                                              | **67 px** = 15 + 36 + 15 + 1                                                                                                                    | identical                                                                                                                                          |
+| cell padding               | `15px 12px`                                                                        | `15px 12px` — `--r-row-pad`, now READ                                                                                                           | identical; **FIXED** (token wired)                                                                                                                 |
+| verb box ×6                | 48 × 36, radius 4                                                                  | 48 × 36, radius 4 — `--r-row-icon-btn-w/-h`                                                                                                     | identical; **FIXED** (token wired)                                                                                                                 |
+| verb grid                  | `repeat(6,48px)`, gap 12                                                           | `repeat(6,48px)`, gap 12 — `--r-row-verb-gap`                                                                                                   | identical                                                                                                                                          |
+| verb glyph                 | 20 px                                                                              | **20 px** (was 17) — `--r-row-verb-glyph`                                                                                                       | **FIXED**                                                                                                                                          |
+| verb at rest               | `#1F2937` / `#4B5563` / `#E5E7EB`                                                  | `--r-surface-raised` / `--r-border-strong` / `--r-text`                                                                                         | ARGUED: palette                                                                                                                                    |
+| verb disabled              | transparent, `#9CA3AF`, opacity .6                                                 | transparent, `--r-text-muted`, opacity .6                                                                                                       | identical up to palette                                                                                                                            |
+| verb hover, per tone       | `#ff0000 #22dd7a #2ebea1 #b38d18 #de5105`, ink `#10151f`                           | the same six `--r-verb-*`, ink `--r-ink-on-verb`                                                                                                | identical (pinned by `rehearse-layout.spec.ts`)                                                                                                    |
+| ON PVW hover               | `#2c3a4e`, ink `#f4ecff`                                                           | `--r-control-hover-bg` `#304258` / `#5e748b`                                                                                                    | ARGUED: both are the reference's; Phase 2 mapped the control-hover role to its `.btn:hover`                                                        |
+| header ground              | `#2d3745`                                                                          | **`--soft` `#24303d`** (was `rgb(45 55 69)` = `#2d3745`)                                                                                        | **FIXED — owner answer A6**, see 10.4                                                                                                              |
+| header ink                 | `#9CA3AF` (a literal, 4.74:1)                                                      | `--r-text-muted` `#8e9eaf`, **4.89:1** on the new ground                                                                                        | ARGUED: the ink is not re-tuned (A6)                                                                                                               |
+| header type                | 9.92 px 700 .06em uppercase, `5.6px 12px 4.8px`                                    | 9.92 px 700 .06em uppercase, `5.6px 12px 4.8px`                                                                                                 | identical                                                                                                                                          |
+| header height              | 25.8 px                                                                            | 28.3 px                                                                                                                                         | ARGUED: `B-224`'s State tally wraps inside the head; the reference has no tally                                                                    |
+| verb labels                | `Item · Play · On PVW · Next · Stop · Clear`, 9.28 px 700 .02em, uppercased by CSS | the same six words, 9.28 px 700 .02em, uppercase                                                                                                | identical (the DOM text is upper-case; the paint is the same)                                                                                      |
+| `#` / name / template type | 13.6 px 700 muted / 16.8 px 600 / 13.6 px 400 centred                              | the same three                                                                                                                                  | identical                                                                                                                                          |
+| state mark and word        | 25 px svg; 11.52 px 700 .05em                                                      | 25 px svg; 11.52 px 700 .05em                                                                                                                   | identical                                                                                                                                          |
+| columns                    | 46 / 162 / auto / 30% / 372, `table-layout:fixed`                                  | 34 / 150 / [150–220] / [160+, 2fr] / 348 + 12 gap                                                                                               | ARGUED: `B-224`'s measured columns (the longest real Persian name, the tally) are the owner's later decision; contents start at the same x (58 px) |
+| table `min-width`          | 980 px, then a horizontal scrollbar                                                | none — the density model narrows text, never a verb                                                                                             | ARGUED: `R-033` / `layerTable.ts`: a control is never clipped and the list never scrolls sideways                                                  |
+| loaded row at rest         | `rgb(30 38 51)`                                                                    | `--r-row-bg` `rgb(30 38 51)`                                                                                                                    | identical                                                                                                                                          |
+| loaded row hover           | `#1F2937`                                                                          | `--r-surface-raised` `#1b2532`                                                                                                                  | ARGUED: palette (the reference's literal IS the old raised surface)                                                                                |
+| empty row, and its hover   | `#10141E`, unchanged under the pointer                                             | `--r-row-empty-bg` `#10141E`, unchanged                                                                                                         | identical                                                                                                                                          |
+| empty row text             | `rgb(91 93 96)`; name 500; template italic                                         | `colors.emptyRow` `rgb(91 93 96)`; 500; italic                                                                                                  | identical                                                                                                                                          |
+| selected                   | `rgba(56,189,248,.1)` + 2 px `#38BDF8` frame                                       | `--r-row-selected-fill` + 2 px `--r-accent` frame                                                                                               | ARGUED: palette (same design; the accent moved in Phase 2)                                                                                         |
+| row rule                   | `1px #374151`                                                                      | `1px --r-border #2d3a49`                                                                                                                        | ARGUED: palette                                                                                                                                    |
+| Graphics-beds band         | 25 px, `4px 12px`, `#111827`, top rule `#4b5563`, 10 px 700 untracked              | **25 px, `4px 12px`, `--r-surface`, top rule `--r-border-strong`** (was 27.9 px, `8px 9.6px 4px`, transparent, `--r-border`); 9.92 px 700 .06em | **FIXED** (band); ARGUED (type keeps the sticky header's voice)                                                                                    |
+| band text                  | GRAPHICS BEDS — BELOW LIVE PLATES                                                  | GRAPHICS BEDS — BELOW THE LIVE PLATES                                                                                                           | ARGUED: wording is not this phase's (§0: nothing translated, nothing reworded)                                                                     |
+| Stop all / Clear all hover | `#b38d18` / `#de5105`, ink `#10151f`                                               | `--r-verb-stop` / `--r-verb-clear`, ink `--r-ink-on-verb`                                                                                       | identical (now pinned in Playwright)                                                                                                               |
+| Remove all, withheld       | disabled: `#1d2733`, no hover                                                      | disabled: transparent, no hover (`R-017`)                                                                                                       | identical in kind                                                                                                                                  |
+| top-bar button box         | 32 px, `5px 8px`, quiet (transparent, `--line`, `--secondary`)                     | 28 px, `0 12px`, neutral (raised)                                                                                                               | ARGUED: `--r-panel-bar-h` — a panel bar decides its controls' height, and the bulk verbs are neutral by item 10's rule                             |
+| Look buttons               | 38 px tall, min-width 100                                                          | 36 px tall                                                                                                                                      | ARGUED: unchanged by this phase; the target is kept large (above the verb floor)                                                                   |
+
+**What the owner will see change on screen:** the sticky column header is a shade darker (the
+`--soft` ground); the Graphics-beds band is a tighter 25 px rule instead of a 28 px label; the six
+verb glyphs are a size larger inside unchanged boxes. Nothing else moved — the rest of the table was
+already the rendered reference, up to the palette Phase 2 applied.
+
+### 10.3 The geometry tokens — corrected and, for the first time, read
+
+`theme.ts` now carries `LAYER_ROW_PX` (`padY 15 · padX 12 · verbW 48 · verbH 36 · verbGap 12 ·
+verbGlyph 20 · bedDividerH 25`), each cited to the RENDERED rule, and derives `--r-row-pad`,
+`--r-row-action-h`, `--r-row-icon-btn-w/-h`, `--r-row-verb-gap`, `--r-row-verb-glyph` and
+`--r-bed-divider-h` from it. `layerTable.ts` does its arithmetic on the same object instead of
+spelling `36`, `48`, `12` and `15` a second time; `.cg-btn--verb`, `.cg-btn--neutral`, the row, the
+header and the band read the tokens. `--r-btn-h`, `--r-btn-h-small` and `--r-icon-btn-box` are
+untouched — `.btn`, `.btn.small` and `.icon-btn` are live rules for surfaces later phases dress.
+
+### 10.4 🔴 A6 — closed, with the number
+
+`#8e9eaf` on the header ground: **4.39:1** on `rgb(45 55 69)` (the accepted fail) → **4.89:1** on
+`--soft` `#24303d`. Above the 4.5 AA text floor. Measured twice: by the WCAG arithmetic in this
+record, and in Chromium by `layer-table-geometry.spec.ts`, which computes the ratio from the colours
+the browser actually resolved on the header and asserts ≥ 4.5. The ink was not re-tuned.
+
+⚠ Two facts the next reader needs. First, the rendered reference's header clears AA (4.74:1) only
+because its ink is the app's OLD muted `#9CA3AF` as a literal on the OLD ground; taking that pair
+would be re-tuning the ink, which A6 forbids. Second, the lid relationship the owner chose the old
+ground for survives, narrowed: `--soft` is 1.13:1 over a loaded row and 1.29:1 over the panel, and
+the header keeps its rule beneath it. Restoring the stronger lid means choosing a ground that is
+both lighter than the rows and ≥ 4.5 under this ink, and that choice is the owner's.
+
+### 10.5 The red-first proof — `Update` does not take
+
+`tools/caspar-bridge/tests/update-does-not-take.integration.test.ts`, five cases on the mock's real
+AMCP trace (never a UI): a loaded, never-taken row under a field-only update; the same row binding a
+NEW input; **the operator-verb route the owner walked on the plant — TAKE, then OUT, then UPDATE
+with a swapped input, and the next TAKE seats the swap**; TAKE, then STOP, settled off air, then
+UPDATE; and a POSITIVE CONTROL in which the same update on the same row while it IS on air must put
+a `PLAY` on the wire. The two operator-verb routes were UNCOVERED before this phase: every existing
+`B-161` / `B-216` case reached "owns nothing" through never-taking, rehearsing or a server restart.
+
+**Red, then green, source stashed** (§11): with `#ownsLiveSeats`'s gate neutralised in
+`caspar-runtime.ts` the three "owns nothing" cases went RED — four `PLAY 1-…` each — while the
+field-only case and the positive control stayed green; with the gate restored, **5 / 5 green**.
+That the field-only case cannot go red even without the gate is recorded rather than hidden: a
+field-only update never enters the binding transaction, so it pins the contract without exercising
+the predicate. The three that exercise it are the ones that went red.
+
+### 10.6 The deletion guard — item 11 discharged, and the guard tests are green
+
+`apps/runtime/tests/layersPanel.restoreMigrations.dom.test.ts` (six cases) was written BEFORE the
+table was touched: a migration is announced by ROW NAME through `operatorRowName` in its own `<bdi>`,
+with where it came from and where it landed; a DEMOTED row says it came back NOT on air and what to
+do; nothing is announced when nothing migrated; it is its own seam beside the skips strip and the
+two can stand together; and dismissing one report does not silence the next. Item 11 in §3 moves
+from 🔴 to ✅. The other four `LayersPanel` guard items — restore-skips, awaiting-rows, loading and
+no-candidate-layers — were re-run and are green (18 tests across four files), before and after the
+restructure. Phase 9.3's owed list is one shorter.
+
+### 10.7 The command contract — unchanged, and asserted unchanged
+
+No verb's meaning, gate or refusal was touched. `REMOVE_ON_AIR_REASON` and its consumers
+(`removeOnAir.agreement.dom.test.ts`, `removeRowRefusal.dom.test.ts`,
+`remove-on-air-refusal.integration.test.ts`), the bulk gates (`layersPanel.clearAll.dom.test.ts`,
+`layersPanel.removeAll.dom.test.ts`) and the published `removeExempt` (`removeGate.ts` and its
+tests) are all as they were, and the full `pnpm gate` runs them. Nothing re-derives an answer the
+bridge publishes.
+
+### 10.8 What Phase 3 did NOT do
+
+- It did not convert the grid of rows into an HTML `<table>`. The reference's `<table>` is its
+  markup, not its look; the app's grid is what makes `B-224`'s measured columns and the density
+  model possible, and every e2e handle (`[data-layer]`, `[data-row-body]`, `getByRole('row')` for
+  the header) lives on it.
+- It did not adopt the wave-1 geometry, for the reason in 10.1; it did not reword the band, rename
+  the header words in the DOM, or touch the Look buttons, the top bar's height or the column widths
+  (each argued in 10.2).
+- It did not close the A6 lid question — the number is closed, the trade is reported.

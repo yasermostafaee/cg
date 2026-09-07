@@ -19,18 +19,26 @@
  * Pure and React-free: the density arithmetic is the kind of thing that is wrong
  * by 30px and invisible until an operator drags a panel, so it is unit-testable
  * without a DOM.
+ *
+ * `RUNTIME-REDESIGN-01` PHASE 3 — THE NUMBERS LIVE IN THE TOKEN HOME. The verb box,
+ * the verb gap and the row padding are `LAYER_ROW_PX` in `theme.ts`, where the
+ * `--r-row-*` tokens the stylesheet reads are derived from the same object. This
+ * module does the arithmetic on them; it no longer spells them. A second copy here
+ * is how a header word comes to sit above a column of a different width.
  */
 
+import { LAYER_ROW_PX } from '../../theme.js';
+
 /**
- * The minimum hit target for a row verb, in px.
+ * The minimum hit target for a row verb, in px — the verb's own height.
  *
  * These get pressed under time pressure by someone half-watching a monitor, so
  * this is a FLOOR that density is never allowed to trade away — the columns drop
  * text to make room, never shrink the buttons. Sits between WCAG 2.5.8's 24px
- * minimum and 2.5.5's 44px enhanced target: 34 is comfortable for a mouse in a
+ * minimum and 2.5.5's 44px enhanced target: 36 is comfortable for a mouse in a
  * gallery while keeping ~30 rows scannable in one list.
  */
-export const VERB_TARGET_PX = 36;
+export const VERB_TARGET_PX: number = LAYER_ROW_PX.verbH;
 
 /**
  * Width of one verb column, in px — WIDER than the hit-target floor, and set by
@@ -39,10 +47,10 @@ export const VERB_TARGET_PX = 36;
  * Icon-only verbs are only safe because the sticky header prints the word each
  * glyph stands for directly above it, so a verb column has to be wide enough for
  * its longest word ("REMOVE", ~37px at the header's type size). Sizing the column
- * to the 34px button instead would have produced a header of clipped stumps —
+ * to the 36px button instead would have produced a header of clipped stumps —
  * which is the one thing that would make the icons unsafe again.
  */
-const VERB_COL_PX = 48;
+const VERB_COL_PX: number = LAYER_ROW_PX.verbW;
 
 /**
  * Gap between verb buttons, in px.
@@ -57,7 +65,7 @@ const VERB_COL_PX = 48;
  * quarter of the button. The 4px it replaces read as a seam in one control block
  * rather than as five separate controls.
  */
-const VERB_GAP_PX = 12;
+const VERB_GAP_PX: number = LAYER_ROW_PX.verbGap;
 
 /**
  * How many verbs get a BUTTON on the row (the rest are right-click only).
@@ -91,21 +99,14 @@ const VERB_GAP_PX = 12;
  */
 export const VERB_COUNT = 6;
 
-/** Gap between table columns, and the row's horizontal padding, in px. */
+/** Gap between table columns, in px. */
 const COL_GAP_PX = 12;
-const ROW_PAD_PX = 12;
-
 /**
- * The row's VERTICAL padding, in px — above and below the tallest cell.
- *
- * Taken from the owner's mock-up, where a row is roughly twice its button's height.
- * The first version had effectively none (content plus a 10px allowance), so the
- * list read as a dense ledger rather than a set of separate rows. Padding is what
- * makes a row a target the eye can land on and the hand can hit, which matters more
- * on this surface than fitting a 31st row on screen — the list scrolls, and a
- * mis-click does not.
+ * The row's horizontal padding — the token home's `padX` (`--r-row-pad`). The
+ * VERTICAL padding is the same token's `padY`; the width model never needs it, and
+ * the row takes both through `ROW_GEOMETRY.padding` below.
  */
-const ROW_PAD_Y_PX = 15;
+const ROW_PAD_PX: number = LAYER_ROW_PX.padX;
 
 /**
  * Fixed column widths in px. The `alias` column is the flexible one.
@@ -305,7 +306,13 @@ export function gridTemplateColumns(density: Density): string {
 /** Shared row geometry, so the header and the rows are padded identically. */
 export const ROW_GEOMETRY = {
   columnGap: `${String(COL_GAP_PX)}px`,
-  padding: `${String(ROW_PAD_Y_PX)}px ${String(ROW_PAD_PX)}px`,
+  /**
+   * The row's padding, READ FROM THE TOKEN (`--r-row-pad`) rather than composed from
+   * the numbers above — the numbers above are the same values, but the row must take
+   * them the way the stylesheet does, so a Playwright measurement of the row and a
+   * read of the token home are one fact. `minWidthFor` still sums the numbers.
+   */
+  padding: 'var(--r-row-pad)',
   /** The header keeps the horizontal padding but sets its own vertical rhythm. */
   headerPaddingX: `${String(ROW_PAD_PX)}px`,
 } as const;

@@ -15,7 +15,7 @@ import {
   X,
   XSquare,
 } from 'lucide-react';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Panel } from '../../ui/Panel.js';
@@ -49,7 +49,7 @@ import { LayerRow } from './LayerRow.js';
 import { onRowFocus } from './rowFocus.js';
 import { resolveRowBinding } from './rowState.js';
 import { LayerTableHeader } from './LayerTableHeader.js';
-import { resolveDensity } from './layerTable.js';
+import { ROW_GEOMETRY, resolveDensity } from './layerTable.js';
 import { StationLayersPanel } from './StationLayersPanel.js';
 import { LiveSourcesPanel } from './LiveSourcesPanel.js';
 import {
@@ -161,15 +161,28 @@ const styles = {
    * The break between the operator rows and the graphics beds. Quiet on purpose — it is a
    * label for a boundary, not a warning about one — and it uses the same uppercase-muted
    * treatment the table header does, so it reads as structure rather than as a row.
+   *
+   * `RUNTIME-REDESIGN-01` PHASE 3 — the BAND is the reference's `.bed-divider`, measured
+   * in Chromium: a 25 px row (`--r-bed-divider-h`) with `4px 12px` padding on the PANEL
+   * ground, ruled off above by the strong line. The type keeps the header's treatment
+   * rather than the reference's 10 px / untracked one, because this band and the sticky
+   * header are the two pieces of structure in the list and they must read as one voice;
+   * the reference draws its header the same way this console's is drawn and its divider
+   * a hair differently, and one voice wins over a hair.
    */
   bedGroupHead: {
-    padding: '0.5rem 0.6rem 0.25rem',
+    boxSizing: 'border-box' as const,
+    minHeight: 'var(--r-bed-divider-h)',
+    display: 'flex',
+    alignItems: 'center',
+    padding: `var(--r-space-1) ${ROW_GEOMETRY.headerPaddingX}`,
     fontSize: '0.62rem',
     fontWeight: 700,
     letterSpacing: '0.06em',
     textTransform: 'uppercase' as const,
     color: colors.textMuted,
-    borderTop: `1px solid ${colors.border}`,
+    background: colors.panel,
+    borderTop: `1px solid ${cssVars['--r-border-strong']}`,
   },
   awaitingStrip: {
     height: '1.65rem',

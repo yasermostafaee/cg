@@ -652,19 +652,29 @@
 
 /* The icon-only row verb adds only its GEOMETRY on top of the neutral look. */
 .cg-btn--verb {
-  /* The hit target floor. Mirrors `VERB_TARGET_PX` in `layerTable.ts`, which
-     budgets the verb column's width from the same number. */
-  min-width: 36px;
-  min-height: 36px;
-  /* Fill the column the header sized, so the word above sits over the button. */
+  /* The hit target floor — the verb's own height, a square target. `VERB_TARGET_PX`
+     in `layerTable.ts` is the SAME number, read from the token home's `LAYER_ROW_PX`,
+     and it budgets the verb column's width from it. (`RUNTIME-REDESIGN-01` Phase 3:
+     the token, never a second spelling of the number.) */
+  min-width: var(--r-row-icon-btn-h);
+  min-height: var(--r-row-icon-btn-h);
+  /* Fill the column the header sized (`--r-row-icon-btn-w` wide), so the word above
+     sits over the button. */
   width: 100%;
   padding: 0;
+}
+/* The verb's glyph — the reference draws it at 20px, larger than the general icon
+   button's 17px, because it is read across a gallery rather than beside a label. CSS
+   outranks the `size` attribute lucide sets, so the box and the glyph are both tokens. */
+.cg-btn--verb svg {
+  width: var(--r-row-verb-glyph);
+  height: var(--r-row-verb-glyph);
 }
 
 /* A neutral TEXT button keeps the base `.cg-btn` padding; it only needs a floor on
    its height so it matches the row verbs' weight in the same header. */
 .cg-btn--neutral {
-  min-height: 36px;
+  min-height: var(--r-row-action-h);
   padding: 0.4rem 0.75rem;
 }
 

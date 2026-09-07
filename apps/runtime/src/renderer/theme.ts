@@ -335,6 +335,49 @@ const ACCENT_LIFT = '#a7e2fc';
 const CAUTION_TEXT = REF_AMBER;
 /** The sky at a tenth — what a SELECTED surface is washed with on this ground. */
 const SELECTED_WASH = 'rgba(116, 205, 246, 0.1)';
+
+/*
+ * ── `RUNTIME-REDESIGN-01` PHASE 3 — THE LAYER ROW'S GEOMETRY, AS THE REFERENCE RENDERS IT ──
+ *
+ * The numbers behind the `--r-row-*` tokens below, exported as NUMBERS because the
+ * table's column model (`features/layers/layerTable.ts`) does arithmetic on them —
+ * `minWidthFor`, `gridTemplateColumns` — and a CSS string cannot be added up. ONE
+ * declaration, two readers: the stylesheet reads the token, the model reads the
+ * number, and neither may spell the value again.
+ *
+ * 🔴 **MEASURED IN CHROMIUM, NOT READ OFF THE STYLESHEET.** Phase 2 transcribed these
+ * from the FIRST `.layer-table` rules in `04-playout-layers.html` — `td{padding:16px
+ * 17px}`, `.row-actions .icon-btn{width:32px;height:34px}`, a `.destructive-group` —
+ * and Phase 3 found that stylesheet appended to in four waves, the last of which
+ * overrides every one of those (`…>td{height:67px;padding:15px 12px}`,
+ * `.row-verb{width:48px;height:36px}`), while `.destructive-group` and `.row-title`
+ * match NO element the prototype's own renderer emits. The values here are what a
+ * browser paints for that file, measured at 1280 × 800 (`design.md` §10). If a number
+ * is wrong it is wrong in ONE place, and the reference is one measurement away.
+ */
+export const LAYER_ROW_PX = {
+  /**
+   * A row's vertical and horizontal padding — `…tr>td{padding:15px 12px}`.
+   *
+   * The vertical 15 is what makes a row roughly twice its button's height. The first
+   * version had effectively none (content plus a 10px allowance), so the list read as
+   * a dense ledger rather than a set of separate rows. Padding is what makes a row a
+   * target the eye can land on and the hand can hit, which matters more on this
+   * surface than fitting a 31st row on screen — the list scrolls, and a mis-click
+   * does not.
+   */
+  padY: 15,
+  padX: 12,
+  /** One row verb's box — `.row-verb{width:48px;height:36px;min-height:36px}`. */
+  verbW: 48,
+  verbH: 36,
+  /** Between two verbs — `.row-actions{gap:12px}`. */
+  verbGap: 12,
+  /** The verb's glyph — `.row-verb svg{width:20px;height:20px}`. */
+  verbGlyph: 20,
+  /** The Graphics-beds divider band — `.layer-table .bed-divider>td{height:25px}`. */
+  bedDividerH: 25,
+} as const;
 /** The line weight an ACCENTED surface takes: the reference's `.badge.ready` edge. */
 const ACCENT_LINE = '#31556a';
 
@@ -745,7 +788,26 @@ export const cssVars = {
    * choosing a new amber, and that is the owner's to choose.
    */
   '--r-row-marked-edge': CAUTION_TEXT,
-  '--r-table-head-bg': 'rgb(45 55 69)',
+  /**
+   * The sticky column header's ground.
+   *
+   * 🔴 **PHASE 3 — OWNER ANSWER A6, CLOSED.** It was the owner's `rgb(45 55 69)`, chosen
+   * to sit LIGHTER than both row grounds so the sticky band reads as a lid. Phase 2 moved
+   * `--r-text-muted` to the reference's `--muted`, and on that ground the column labels
+   * fell to **4.39:1** — below the 4.5 AA text floor. A6 accepted the fail and named the
+   * remedy: the reference's own `--soft`, on which the same ink reads **4.89:1**. The
+   * ground moves; the ink is NOT re-tuned.
+   *
+   * ⚠ What the reference actually draws, so the next reader does not "correct" this back:
+   * its rendered header ground IS `rgb(45 55 69)` — the app's old value, pasted into the
+   * prototype — and its header ink is the app's OLD muted `#9CA3AF` as a literal, which is
+   * how the drawing clears AA (4.74:1) where this console no longer could. Taking that
+   * pair would mean re-tuning the ink, which A6 forbids; taking `--soft` closes the fail
+   * with a token that already exists. The lid relationship survives, narrowed: this is
+   * 1.13:1 over a loaded row and 1.29:1 over the panel, and the header keeps its rule
+   * beneath it.
+   */
+  '--r-table-head-bg': REF_SOFT,
 
   /*
    * ── `STATION-CHROME-02` §3 — THE SETTINGS DIALOG'S OWN VOCABULARY ────────────
@@ -930,43 +992,60 @@ export const cssVars = {
    */
   '--r-panel-bar-h': '52px',
   /*
-   * ── `RUNTIME-REDESIGN-01` PHASE 2 §2.2 — THE REFERENCE'S GEOMETRY ────────────
+   * ── `RUNTIME-REDESIGN-01` PHASE 2 §2.2 / PHASE 3 §3 — THE REFERENCE'S GEOMETRY ──
    *
-   * The reference's own row padding, action-button heights and icon-button boxes,
-   * transcribed as tokens so the numbers have a home before anything reads them.
+   * The reference's own row padding, action-button heights and icon-button boxes, as
+   * tokens, so the numbers have ONE home. Phase 2 declared them; Phase 3 applies them —
+   * the layer row, its verbs, the sticky header and the Graphics-beds divider now READ
+   * the `--r-row-*` family, and `layerTable.ts` reads the same numbers through
+   * `LAYER_ROW_PX` (declared beside `SELECTED_WASH`, above).
    *
-   * 🔴 **NOTHING READS THEM YET, AND THAT IS DELIBERATE.** Applying them is a LAYOUT
-   * change and Phase 2 changes no layout — `PROMPT.md` §3 adopts the table's geometry
-   * as one piece, against a measured reference-vs-app property table, in Playwright
-   * (jsdom has no layout, golden rule 12c). Declaring them here is what lets §3 be an
-   * adoption rather than a second transcription: if a number below is wrong, it is
-   * wrong in ONE place and the reference is one `git diff` away.
+   * 🔴 **PHASE 3 CORRECTED THE ROW VALUES.** Phase 2 transcribed them from the FIRST
+   * `.layer-table` rules in the reference's stylesheet, and those rules are overridden
+   * four times further down the same file; the prototype as a browser renders it draws
+   * `padding:15px 12px` cells 67 px tall and `48 × 36` verbs (`design.md` §10, measured
+   * in Chromium). The general-button tokens below are untouched: `.btn`, `.btn.small`
+   * and `.icon-btn` ARE live rules, and later phases dress the surfaces that wear them.
    *
    * ⚠ These are NOT steps on the spacing scale and must not be folded into it. A
    * scale step exists so several things move together; each of these is one
-   * component's own dimension, measured off a drawing.
+   * component's own dimension, measured off the drawing.
    */
-  /** A layer-table cell: `.layer-table td { padding: 16px 17px }`. */
-  '--r-row-pad': '16px 17px',
+  /** A layer-table cell — `…tr>td{padding:15px 12px}` (the RENDERED rule). */
+  '--r-row-pad': `${String(LAYER_ROW_PX.padY)}px ${String(LAYER_ROW_PX.padX)}px`,
   /** A general action button's floor: `.btn { min-height: 39px }`. */
   '--r-btn-h': '39px',
   /** …and the compact one: `.btn.small { min-height: 33px }`. */
   '--r-btn-h-small': '33px',
-  /** A ROW VERB's floor — smaller than a general button: `.row-actions .btn`. */
-  '--r-row-action-h': '34px',
+  /**
+   * The floor every VERB-WEIGHT control shares — the row verb's own height
+   * (`.row-verb{min-height:36px}`), which the panel's text bulk verbs also take so
+   * the two read as one weight. Phase 2 had it at 34 from `.row-actions .btn`, a rule
+   * the prototype renders for no element.
+   */
+  '--r-row-action-h': `${String(LAYER_ROW_PX.verbH)}px`,
   /** A general icon button is a SQUARE: `.icon-btn { width: 36px; height: 36px }`. */
   '--r-icon-btn-box': '36px',
   /**
-   * A row verb's icon button is NOT square — `.row-actions .icon-btn` is 32 × 34, so
-   * it stands exactly as tall as the text verbs beside it while taking less width.
-   * Two tokens rather than one box for that reason.
+   * A row verb's box is NOT square — `.row-verb{width:48px;height:36px}`: wider than
+   * tall, because the sticky header prints a WORD above each glyph and `REMOVE` needs
+   * the width. Two tokens rather than one box for that reason. (Phase 2 had 32 × 34,
+   * from the dead `.row-actions .icon-btn` rule.)
    */
-  '--r-row-icon-btn-w': '32px',
-  '--r-row-icon-btn-h': '34px',
+  '--r-row-icon-btn-w': `${String(LAYER_ROW_PX.verbW)}px`,
+  '--r-row-icon-btn-h': `${String(LAYER_ROW_PX.verbH)}px`,
+  /** Between two verbs — `.row-actions{gap:12px}`. Read by the column model. */
+  '--r-row-verb-gap': `${String(LAYER_ROW_PX.verbGap)}px`,
+  /** The verb's glyph — `.row-verb svg{width:20px;height:20px}`. */
+  '--r-row-verb-glyph': `${String(LAYER_ROW_PX.verbGlyph)}px`,
+  /** The Graphics-beds divider band — `.layer-table .bed-divider>td{height:25px}`. */
+  '--r-bed-divider-h': `${String(LAYER_ROW_PX.bedDividerH)}px`,
   /**
-   * …and narrower still inside the DESTRUCTIVE group, which the reference splits off
-   * behind a left border: `.row-actions .destructive-group .icon-btn { width: 30px }`.
-   * The height is unchanged, so the row of verbs still reads as one row.
+   * ⚠ **DEAD IN THE REFERENCE, kept for the owner's decision.** Transcribed by Phase 2
+   * from `.row-actions .destructive-group .icon-btn { width: 30px }`; Phase 3 found
+   * that no element in the prototype carries `destructive-group` — the row renderer
+   * emits six `.row-verb`s in one grid and splits nothing off. Read by nothing.
+   * Deleting it is a one-line change once the owner confirms the group is not wanted.
    */
   '--r-row-icon-btn-narrow-w': '30px',
   // Motion
