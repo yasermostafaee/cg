@@ -47,6 +47,9 @@ Persian / RTL is a core requirement.
    nothing local could catch it — **one grep would have**, and the same sweep also found a
    `tasks.md` still quoting the old sentence as shipped fact. The rule is the sweep, not "run the
    E2E": the E2E is slow and non-authoritative here, while the grep is cheap and total.
+   ⚠ That clause about the gate is stated here only to explain why a GREP is the remedy for a
+   STRING. As a fact about the gate it belongs to **golden rule 12**, which is where it is
+   argued and where its three faces are named — do not grow a second copy of it here.
 
    ⚠ **`git grep`, NOT `grep -r` and NOT ripgrep — a sweep whose tool can go blind is not a
    sweep.** A file containing a **NUL byte** reads as BINARY to those two and is skipped **in
@@ -106,6 +109,37 @@ Persian / RTL is a core requirement.
     (the audit log), `B-223` (the output alarm), `useTemplateIndex`'s own header (the stack
     row and Inspector), and `B-232` (the emptied-air notice, measured on the plant as
     `1-9 · e506e319-…`). A rule nobody can point at is re-learned per surface.
+
+12. 🔴 **A GREEN GATE IS NO EVIDENCE ABOUT ANYTHING THAT RENDERS.** `pnpm gate` does not run
+    Playwright (`P-028`), so **render work is UNVERIFIED until an e2e has actually run.** The
+    gate proves the code compiles, lints and passes its unit tests; it says nothing whatsoever
+    about what appears on screen. Never let a green gate stand in for that — and never report
+    render work as verified on the strength of one.
+    ⭐ **The practical rule: run `pnpm --filter @cg/<app> test:e2e` locally before pushing
+    render work**, and re-run it after any later edit that changes what a surface CONTAINS —
+    not only after the edit that changed how it looks.
+    ⚠ **It has three faces, and each has been met separately.** They are named together
+    because each looks like a different problem while being this one.
+    (a) **A WINDOWS pass does not discharge a LINUX e2e.** The host that gives a green local
+    `gate:e2e` is the host carrying the `B-098` load-flake class; a Windows run is a useful
+    signal and never a discharge (see "E2E coverage").
+    (b) **A GREEN CI JOB CAN BE A SKIPPED ONE.** CI skips `e2e` when the diff is classified as
+    unable to affect rendering (`P-029`). Check the job **RAN** — a run whose `e2e` was skipped
+    proves nothing about the suite, and `conclusion: success` on the run does not distinguish
+    the two.
+    (c) **THE GATE DOES NOT RUN THE RENDERER AT ALL.** No amount of unit green covers layout:
+    jsdom has no layout, so `getBoundingClientRect()` is all zeros there and a dom spec
+    asserting a box, an edge or an overflow passes against a surface of ANY shape, including a
+    broken one. A geometry claim is measured in a real engine or it is not measured.
+    **Written down because it has now been learned three times in three sessions:**
+    `STATION-SETUP-02` pushed a red `e2e` behind a green gate (golden rule 9 records the
+    wording half); `STATION-CHROME-01` shipped a rail whose every visited tab kept a white box
+    that no unit test could see; and `SOURCE-DELETE-GATE-03` moved a dialog's footer edge 18 px
+    on three of five tabs. In all three the gate was green at the moment of the push.
+    ⭐ And the corollary that makes such an assertion worth writing: **measure the property the
+    operator actually notices, not the one that is easy to reach.** That footer edge was found
+    only because `STATION-CHROME-02` had been made to measure it in a browser — the dialog's
+    outer box stayed identical on all five tabs the whole time the footer moved underneath it.
 
 ## Where features go
 
