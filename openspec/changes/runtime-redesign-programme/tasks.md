@@ -6,7 +6,12 @@ file records which are done. **Each session takes the next unfinished phase, fin
 reports.** Do not start a later phase because an earlier one looks easy — the ordering is
 load-bearing and stated at each step.
 
-**Phase state at 2026-09-07:** Phases 1 and 2 COMPLETE. Phases 3–10 not started. Next: **Phase 3**.
+**Phase state at 2026-09-08:** Phases 1 and 2 COMPLETE, plus the owner-ordered addendum
+**Phase 2A**. Phases 3–10 not started. Next: **Phase 3**.
+
+⚠ **2A IS AN ADDENDUM, NOT A PHASE.** The programme still has TEN phases; 2A is recorded under
+Phase 2 because it closes something Phase 2 escalated, and numbering it as an eleventh would make
+the ledger lie about how much of the programme is done.
 
 **Every phase from 2 onward owes a Linux `e2e` run URL beside its ticked item.** A ticked box with
 no URL is not a discharge — it is a claim, and the next reader cannot check it (golden rule 12).
@@ -29,6 +34,19 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
   real gap is exactly three things — the five `z.void()` bulk verbs, no channel-discovery call, and
   `fixedLayers` as the single channel authority. `silenceAllLivePlates` stays unscoped ON PURPOSE.
   Restated in `design.md` §4.
+
+- **A4 · 🔴 TWO GREENS IS A RULE, NOT AN OVERSIGHT** (2026-09-08; `design.md` §9). The reference
+  spends one mint on `.badge.live`, `.badge.success` and the footer's `healthy`; the console keeps
+  `--r-onair` distinct at `rgb(44 255 122)`. Vivid saturated = ON AIR, pastel mint = healthy, because
+  an operator must never read "the bridge is fine" as "this row is on air" and _alarm severity by
+  air-criticality_ cannot survive one hue carrying both. **Here the drawing is wrong and the console
+  is right.** Pinned by assertion in `theme.test.ts` — that they DIFFER, never what either is.
+  🔴 **No later phase may collapse them.**
+- **A5 · The marked-row edge bars at 3.68:1 are CORRECT and stay.** `controls.css`'s rule says they
+  follow the notice's ink; holding 3.86:1 would have kept a measurement and discarded the design it
+  measured. Above the 3:1 graphic floor. **Closed, not owed.**
+- **A6 · `--r-text-muted` at 4.39:1 on the table header is an ACCEPTED FAIL that Phase 3 closes.**
+  It stays on the owed list **until Phase 3 has actually run** — an expectation is not a discharge.
 
 ---
 
@@ -103,6 +121,37 @@ tokens, the full contrast table, and the two things escalated to the owner.
       9 m 43 s. The **`E2E (Playwright)` job RAN** (17:32:47Z → 17:42:12Z, `conclusion: success`);
       it was not skipped, which is the half a green run alone does not prove (golden rule 12b).
       `Lint • Typecheck • Test • Build` also ran green.
+
+### Phase 2A — the error red splits _(owner-ordered addendum to Phase 2, 2026-09-08)_ — COMPLETE
+
+⚠ An ADDENDUM, not an eleventh phase. It closes what 2.4 escalated. Record: `design.md` §8.
+
+- [x] 2A.1 🔴 **The owner's reading, and the thing to carry forward: ONE TOKEN WAS DOING TWO JOBS
+      WITH TWO DIFFERENT FLOORS.** `rgb(255 28 28)` fails the 4.5 AA TEXT floor on four of six
+      grounds and passes the 3.0 GRAPHIC floor on all six (worst 3.12). **So the answer is a SPLIT,
+      not a re-tune** — the ink was never wrong, it was being asked two questions.
+- [x] 2A.2 `--r-error-mark` KEEPS `rgb(255 28 28)` byte for byte — not lifted, not darkened, not
+      derived. `--r-error-text` becomes `REF_RED` `#ffaaa7`, the reference's own red, already in
+      the palette. **No colour invented.** `tokenHome.test.ts` green.
+- [x] 2A.3 All **nine** sites classified from what they RENDER, not what they are called
+      (`design.md` §8.3). ⚠ Phase 2's own note named SEVEN and was wrong — `OutputsSection.air`
+      and `ChannelSection.verdict.mismatch` were missing; both are WORD. **Four sites are BOTH** —
+      the row's state cell, the header tally, the status bar's health pill and the link indicator —
+      and each takes BOTH tokens at the seam that already existed.
+      ⚠ **One ambiguous call, declared:** the status bar's `⚠ NO SERVER — SIMULATED` glyph is
+      INSIDE the string at text size, so it is classified WORD; giving it its own colour would mean
+      splitting a sentence, which this phase forbids.
+- [x] 2A.4 🔴 **Re-measured, both roles, all six grounds** (`design.md` §8.2). **NO SITE IS BELOW
+      ITS OWN FLOOR**, and the stronger form holds: the MARK's worst reading anywhere is **3.12**
+      (floor 3.0) and the TEXT's is **6.63** (floor 4.5), so no site can fail whichever ground it
+      turns out to sit on — which is what makes this survive Phase 3 moving the table's grounds.
+- [x] 2A.5 Assertions added: the two error roles are DISTINCT and the ERROR state hands each half
+      to the right element; every other state leaves `labelColor` absent so the split cannot leak;
+      the status bar's LED takes the mark **and** its word takes the text (both halves, positively).
+      Plus **A4's pin**: `--r-onair` is NOT `--r-success`/`--r-ok-text`, asserted as a DIFFERENCE
+      with a positive control, never as a literal.
+- [x] 2A.6 `pnpm --filter @cg/runtime test:e2e` run locally, and the Linux `e2e` run URL recorded
+      here.
 
 ## Phase 3 — The layers table
 

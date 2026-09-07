@@ -87,7 +87,9 @@ references, bank)`, `WebSocketRuntime.#references`.
       `serverSettingsPanel.dom.test.ts` 15/15.
 
 - [x] 6.4 Owner decision mid-session (2026-09-04): _"use rgb(255 28 28) for errors on dark
-      backgrounds"_. `colors.errorText` added to the runtime theme; the tally's `(N in error)`, the
+      backgrounds"_. `colors.errorText` added to the runtime theme (SPLIT into `colors.errorMark` +
+      `colors.errorText` by `RUNTIME-REDESIGN-01` Phase 2A — the value below is now `errorMark`);
+      the tally's `(N in error)`, the
       row's ERROR mark, the status bar's hard failure, the link indicator, the lock overlay's
       refusal, the Inspector's file error and the audit log's `failed` outcome read through it.
       `colors.error` stays the BACKGROUND red for the banners and the toast.

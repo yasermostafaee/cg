@@ -393,11 +393,18 @@ describe('the BACKUP LED agrees with its own label too', () => {
   };
 
   /**
-   * `colors.errorText` — `styles.failedHard`, the tone a down server wears. Error TEXT on the
-   * dark status bar is the owner's `rgb(255 28 28)` (2026-09-04); the background red
-   * (`colors.error`, 2.08:1 as text) is for the banners.
+   * PHASE 2A — the down-server fault is TWO reds now, and the pill paints both.
+   *
+   * The ●/○ LED is a GRAPHIC and keeps the owner's `rgb(255 28 28)` (`errorMark`,
+   * judged at the 3.0 floor); the word `OFFLINE` is TEXT and takes `errorText`, which
+   * clears 4.5 on this bar where the mark red does not. They are two weights of one
+   * fault, not two claims — the assertion below checks BOTH halves for that reason,
+   * because a split whose word half is unasserted is a split that can silently
+   * collapse back onto the mark. The background red (`colors.error`, 2.08:1 as text)
+   * is for the banners and appears in neither.
    */
-  const FAULT_RED = asRendered(colors.errorText);
+  const FAULT_MARK = asRendered(colors.errorMark);
+  const FAULT_WORD = asRendered(colors.errorText);
 
   function hollowDot(scope: HTMLElement | undefined): HTMLElement | undefined {
     return [...(scope?.querySelectorAll<HTMLElement>('span') ?? [])].find(
@@ -414,9 +421,17 @@ describe('the BACKUP LED agrees with its own label too', () => {
     const scope = pill(el, 'BACKUP');
     expect(scope?.textContent ?? '').toContain('OFFLINE');
     expect(greenDots(scope), 'a green LED beside an OFFLINE backup').toBe(0);
-    expect(hollowDot(scope)?.style.color, 'the backup LED must read as the fault').toBe(FAULT_RED);
+    expect(hollowDot(scope)?.style.color, 'the backup LED must read as the fault').toBe(FAULT_MARK);
     // The shape is still the backup's, so the pair stays tellable apart.
     expect(hollowDot(scope)).toBeDefined();
+    // PHASE 2A — and the WORD beside it carries the fault in the legible weight.
+    // Asserted positively: without this, the split could collapse back to one red
+    // and only the half that is checked would notice.
+    const word = [...(scope?.querySelectorAll<HTMLElement>('span') ?? [])].find(
+      (x) => x.textContent?.trim() === 'OFFLINE',
+    );
+    expect(word?.style.color, 'the OFFLINE word takes the legible error ink').toBe(FAULT_WORD);
+    expect(FAULT_WORD, 'the mark and the word must be two values').not.toBe(FAULT_MARK);
   });
 
   it('a HEALTHY backup lights green, and keeps its hollow shape', async () => {

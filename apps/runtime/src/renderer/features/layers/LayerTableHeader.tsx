@@ -178,11 +178,23 @@ const styles = {
    * count: it is a fact about this console's reach, not about air.
    */
   errorCount: {
-    // Error TEXT on the dark header — the owner's `rgb(255 28 28)`, never the
-    // background red (2.08:1 here).
+    // PHASE 2A — the NUMBER is text and takes the error TEXT role (6.63:1 on this
+    // header; the mark red would read 3.12:1, below the 4.5 floor). Never the
+    // background red (2.08:1 here). The warning triangle beside it is a graphic and
+    // takes the MARK role instead — see `errorTally` below.
     color: colors.errorText,
     fontSize: '12px',
   },
+  /**
+   * PHASE 2A — the tally's warning triangle, which is a MARK and not a word.
+   *
+   * It sits inside `errorCount`'s span and would otherwise inherit the text red.
+   * An 11 px glyph is a graphic: it is judged against the 3.0 floor, where the
+   * owner's `rgb(255 28 28)` clears on every ground (3.12 here, its worst), and it
+   * is the value `RUNTIME-FIX-0904` fixed. Two reds side by side is the intended
+   * result — the loud one marks, the legible one reads.
+   */
+  errorTallyMark: { color: colors.errorMark },
   verbHead: {
     textAlign: 'center' as const,
     overflow: 'hidden',
@@ -297,7 +309,9 @@ export function LayerTableHeader({
             data-error-tally={String(tally.inError)}
             title={`${String(tally.inError)} in error — rows whose last command CasparCG refused. Nothing is claimed about what those layers show; open the row or the audit log for the code.`}
           >
-            {spec.showStateLabel && <Icon icon={TriangleAlert} size={11} />}
+            {spec.showStateLabel && (
+              <Icon icon={TriangleAlert} size={11} style={styles.errorTallyMark} />
+            )}
             {tally.inError}
           </span>
         )}

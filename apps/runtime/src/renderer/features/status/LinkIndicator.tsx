@@ -107,7 +107,17 @@ function visual(status: BridgeLinkStatus, reach: CasparReach): Visual {
       };
     case 'disconnected':
       return {
-        // Error TEXT on the dark status bar — the owner's `rgb(255 28 28)`.
+        /*
+          PHASE 2A — the pill's two halves take the two halves of the error red.
+
+          The ● is a graphic and is judged at the 3.0 contrast floor, so it keeps
+          the owner's `rgb(255 28 28)` — the loud mark. The SENTENCE is text and is
+          judged at 4.5, which that red does not clear on this bar, so it takes the
+          error TEXT role. Same fault, two weights; `dotColor` is stated explicitly
+          here rather than left to the fallback below precisely because the two are
+          no longer the same value.
+        */
+        dotColor: colors.errorMark,
         color: colors.errorText,
         text: 'DISCONNECTED — reconnecting…',
         title: 'Lost the bridge connection; commands are rejected until it reconnects',
@@ -166,6 +176,12 @@ export function LinkIndicator({
 
         It falls back to the label's own colour, so the fault states keep a dot
         that agrees with their words rather than a green one contradicting them.
+
+        ⚠ PHASE 2A — `disconnected` now sets `dotColor` too, and NOT to disagree
+        with its word: the dot takes the error MARK red and the sentence the error
+        TEXT red, which are two weights of one fault chosen against two different
+        contrast floors (3.0 for a graphic, 4.5 for text). The fallback still covers
+        every other fault state, where one value clears both.
       */}
       <span style={{ color: v.dotColor ?? v.color }}>●</span>
       <span style={{ color: v.color }}>{v.text}</span>

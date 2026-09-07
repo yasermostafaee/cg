@@ -86,7 +86,24 @@ const styles = {
   healthDot: { color: cssVars['--r-success'] },
   backup: { color: colors.textMuted },
   failed: { color: colors.offline },
+  /**
+   * A server that is DOWN, as a WORD — `OFFLINE`, and the `NO SERVER — SIMULATED`
+   * line. PHASE 2A: text is judged at the 4.5 floor and this clears it (9.53:1 on
+   * this bar). The LED beside the word is a MARK and takes `failedHardDot`.
+   */
   failedHard: { color: colors.errorText },
+  /**
+   * …and the same fault as the ●/○ LED. The owner's `rgb(255 28 28)` — the value
+   * `RUNTIME-FIX-0904` chose, kept byte for byte by Phase 2A and judged at the 3.0
+   * graphic floor a dot answers to.
+   *
+   * ⚠ It exists so the dot and the word can be two weights of the SAME fault rather
+   * than one value chosen for whichever job shouts loudest. `healthDotStyle` is the
+   * only thing that may read it — B-081's rule that the light and the label must
+   * never contradict each other is enforced by that one function, and a second
+   * reader is how the two would drift apart.
+   */
+  failedHardDot: { color: colors.errorMark },
   ok: { color: colors.text, fontWeight: 700 },
   // B-081 — the look of health we CANNOT currently verify: muted, never a confident color.
   stale: { color: colors.textMuted },
@@ -137,9 +154,19 @@ const UNKNOWN: SessionLabel = { text: 'UNKNOWN', style: styles.stale };
  * Only a genuine HEALTHY gets the green LED; every other state — degraded,
  * offline, unknown, stale, connecting — takes the label's own colour, so the two
  * halves of the pill physically cannot disagree.
+ *
+ * ⚠ PHASE 2A ADDS A SECOND EXCEPTION, AND IT IS NOT A HOLE IN THE RULE ABOVE.
+ * A down server's LED takes `failedHardDot` where its word takes `failedHard`.
+ * That is the SAME fault in two weights, not two claims: a dot is a graphic judged
+ * at the 3.0 contrast floor and a word is text judged at 4.5, and one red could
+ * not clear both on this palette. The rule the paragraph above protects — the light
+ * and the label may never say different THINGS — is untouched, and it is still
+ * enforced here rather than at the two call sites.
  */
 function healthDotStyle(label: SessionLabel): { color: string } {
-  return label.style === styles.ok ? styles.healthDot : label.style;
+  if (label.style === styles.ok) return styles.healthDot;
+  if (label.style === styles.failedHard) return styles.failedHardDot;
+  return label.style;
 }
 
 function sessionLabel(state: string): SessionLabel {

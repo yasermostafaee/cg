@@ -813,7 +813,27 @@ export function LayerRow({
             ? { style: { animation: 'cg-spin 1s linear infinite' } }
             : {})}
         />
-        {spec.showStateLabel && <span style={styles.stateLabel}>{state.label}</span>}
+        {/*
+          PHASE 2A — the WORD may need a different red from the MARK beside it.
+
+          The wrapper's `color` paints the 25px icon, which is a GRAPHIC and is
+          judged at the 3.0 contrast floor; this label is TEXT and is judged at 4.5,
+          and on these surfaces one red could not clear both. `rowState` supplies
+          `labelColor` for exactly the states where the two must differ (today:
+          `error`) and nothing otherwise, so every other state's word goes on
+          inheriting the mark's hue — which is what keeps the two agreeing.
+        */}
+        {spec.showStateLabel && (
+          <span
+            style={
+              state.labelColor !== undefined
+                ? { ...styles.stateLabel, color: state.labelColor }
+                : styles.stateLabel
+            }
+          >
+            {state.label}
+          </span>
+        )}
       </span>
       {/* THE ALIAS — primary. Dimmed on a row with nothing on it, so occupied rows
           own the attention. */}

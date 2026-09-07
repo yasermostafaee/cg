@@ -184,25 +184,58 @@ export const colors = {
    * Phase 9's, where each of them is brought into the new design as a whole.
    */
   error: '#991B1B',
-  /**
-   * ERROR, as TEXT on a dark background. The exact value the owner specified
-   * (2026-09-04, `RUNTIME-FIX-0904`): _"use rgb(255 28 28) for errors on dark
-   * backgrounds"_. The row's ERROR mark, the header's in-error count, the
-   * status bar's hard failure, the link indicator, the lock overlay's refusal, the
-   * Inspector's file error and the audit log's `failed` outcome all read through
-   * this. Saturated on purpose, like `onAir`: it is the mark an operator has to find,
-   * and it is the other colour that means one thing.
+  /*
+   * ── PHASE 2A — ONE ERROR RED BECAME TWO, BECAUSE IT WAS DOING TWO JOBS ──────
    *
-   * 🔴 **PHASE 2 — THIS IS THE ONE INK THE NEW SURFACES PUSHED BELOW AA, AND IT IS THE
-   * OWNER'S VALUE, SO IT IS REPORTED AND NOT RE-TUNED.** It measures **4.48:1** on
-   * `--r-surface` (was 4.59:1 — it was already marginal) and **4.00:1** on
-   * `--r-surface-raised` (was 3.80:1 — it was already failing there, and Phase 2
-   * improved it). Against the page ground it reads 4.94:1 and clears AA. Nothing
-   * here may move it: raising the ink is the owner's call, and the alternative —
-   * darkening the surfaces the app puts it on — is a Phase 9 question about the
-   * status bar and the row, not a token edit.
+   * 🔴 **THE OWNER'S READING, and it is the thing to carry forward: a token whose
+   * sites answer to TWO DIFFERENT FLOORS is a token that has to split.** Phase 2
+   * measured `rgb(255 28 28)` below the 4.5 AA TEXT floor on four grounds
+   * (`--r-surface` 4.48, `--r-surface-raised` 4.00, the row 3.94, the table header
+   * 3.12) — and against the 3.0 GRAPHIC floor the very same ink passes on all six,
+   * worst case 3.12. So the ink was never wrong; it was being asked two questions.
+   * The answer is a SPLIT, not a re-tune, and neither half is a new colour:
+   * `errorMark` keeps the owner's value byte for byte and `errorText` takes the
+   * approved reference's own red, which the palette already carries.
+   *
+   * ⚠ WHICH ONE A SITE TAKES IS DECIDED BY WHAT IT RENDERS, NEVER BY ITS NAME.
+   * A glyph, an LED, an icon → `errorMark`. A word, a sentence, a number →
+   * `errorText`. **A site that renders BOTH takes BOTH** — the row's state cell,
+   * the header's in-error tally, the status bar's health pill and the link
+   * indicator each paint a mark and a word beside it, and each now passes two
+   * colours rather than picking a winner.
    */
-  errorText: 'rgb(255 28 28)',
+  /**
+   * ERROR, as a MARK — a glyph, an icon, an LED. **The exact value the owner
+   * specified** (2026-09-04, `RUNTIME-FIX-0904`) and it is not lifted, not
+   * darkened and not derived: `rgb(255 28 28)`, byte for byte.
+   *
+   * Saturated on purpose, like `onAir`: it is the mark an operator has to find from
+   * across a gallery. It is judged against the **3.0 graphic floor** and clears it
+   * on every ground the app puts it on — worst case 3.12 on `--r-table-head-bg`.
+   *
+   * Worn by: the row's 25 px ERROR ✕ (`airStateVisual`), the header tally's
+   * `TriangleAlert`, the status bar's ●/○ health LED when a server is down, and the
+   * link indicator's ● when the bridge is gone.
+   */
+  errorMark: 'rgb(255 28 28)',
+  /**
+   * ERROR, as a WORD on a dark background — the reference's own red, already in
+   * this palette (`REF_RED`) and not invented for this.
+   *
+   * Judged against the **4.5 AA text floor** and clears it everywhere: page 10.50 ·
+   * panel 9.53 · raised 8.52 · inset 10.10 · row 8.38 · head 6.63.
+   *
+   * Worn by: the header's in-error count, the status bar's hard failure and its
+   * `NO SERVER — SIMULATED` line, the link indicator's `DISCONNECTED` sentence, the
+   * lock overlay's refusal, the Inspector's file error, the audit log's `failed`
+   * outcome, the raster `MISMATCH` verdict and the outputs `AIR —` line.
+   *
+   * ⚠ SAME VALUE AS `--r-danger-text`, DIFFERENT NAME AND DIFFERENT ROLE. Danger is
+   * destructive INTENT (the outlined Remove); error is something that FAILED. They
+   * point at one base constant so neither can be retuned by accident through the
+   * other, which is this file's standing rule for two roles that agree today.
+   */
+  errorText: REF_RED,
   offline: '#94A3B8',
   /**
    * An EMPTY layer row — its mark and all of its text. Exact value from the owner.
@@ -617,6 +650,20 @@ export const cssVars = {
   '--r-danger-text': REF_RED,
   /** The reference's `--redbg`: the ground its red sits on. New in Phase 2. */
   '--r-danger-bg': REF_RED_BG,
+  /*
+   * ── PHASE 2A — THE ERROR PAIR, AS TOKENS ────────────────────────────────────
+   *
+   * The two halves of what used to be one `errorText`, declared here so a
+   * stylesheet can reach them too. The argument for the split, and the rule for
+   * deciding which a site takes, is at `colors.errorMark` above — it is not
+   * repeated here, because a rule with two homes is a rule that drifts.
+   *
+   * 🔴 A MARK IS NOT A WORD. `--r-error-mark` is measured against 3.0 and
+   * `--r-error-text` against 4.5. Pointing a sentence at the mark is how the
+   * defect Phase 2A closed comes back.
+   */
+  '--r-error-mark': colors.errorMark,
+  '--r-error-text': colors.errorText,
   /**
    * CAUTION as TEXT on a dark ground — a notice's ink, the audit log's timeout.
    *
@@ -1018,7 +1065,24 @@ export function readyDetail(status: StackItemStatus): string | undefined {
 }
 
 export interface AirStateVisual {
+  /**
+   * The state's colour — and, where a state renders BOTH a mark and a word, the
+   * MARK's colour specifically. The consumer paints the icon with this.
+   */
   color: string;
+  /**
+   * PHASE 2A — the WORD's colour, present ONLY where it differs from `color`.
+   *
+   * `error` is the one state today: its ✕ is a graphic judged at the 3.0 floor and
+   * its `ERROR` label is text judged at 4.5, so one value cannot serve both. Every
+   * other state returns nothing here and its label goes on inheriting `color`,
+   * which is the behaviour that must not change.
+   *
+   * ⚠ It is OPTIONAL rather than always-present on purpose: a consumer that reads
+   * `labelColor ?? color` cannot accidentally flatten the states that legitimately
+   * paint their mark and their word the same.
+   */
+  labelColor?: string;
   icon: string;
   label: string;
 }
@@ -1029,7 +1093,11 @@ export interface AirStateVisual {
  */
 export function airStateVisual(status: StackItemStatus, pending: boolean): AirStateVisual {
   if (status === 'disconnected') return { color: colors.offline, icon: '⚠', label: 'OFFLINE' };
-  if (status === 'error') return { color: colors.errorText, icon: '✕', label: 'ERROR' };
+  // PHASE 2A — the one state that paints a MARK and a WORD in two different reds:
+  // the ✕ is a graphic (3.0 floor), the word ERROR is text (4.5). See `colors.errorMark`.
+  if (status === 'error') {
+    return { color: colors.errorMark, labelColor: colors.errorText, icon: '✕', label: 'ERROR' };
+  }
   if (status === 'on-air') return { color: colors.onAir, icon: '●', label: 'ON AIR' };
   if (status === 'playing')
     return pending

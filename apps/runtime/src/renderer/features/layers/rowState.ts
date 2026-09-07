@@ -57,6 +57,21 @@ export interface RowStateVisual {
   icon: LucideIcon;
   /** The hue. Reinforcement for the shape, never the signal on its own. */
   color: string;
+  /**
+   * PHASE 2A — the WORD's hue, present only where it must differ from the MARK's.
+   *
+   * The state cell sets `color` on the wrapper and both the 25 px icon and the
+   * label inherit it, which is right for every state whose mark and word may be
+   * the same red/green/sky. `error` is the exception: its ✕ is a graphic judged at
+   * the 3.0 contrast floor and its word is text judged at 4.5, and one value could
+   * not clear both on this palette's surfaces.
+   *
+   * ⚠ It is dropped when the row's colour is OVERRIDDEN (greyed, or a simulated
+   * air claim) — a label colour that outlived the mark colour it was chosen
+   * against would be a word disagreeing with the mark beside it, which is the
+   * whole failure class this file exists to prevent.
+   */
+  labelColor?: string;
   /** The word an operator reads, and a test locates. */
   label: string;
   /** The role class, so the state cell can share `controls.css`'s tones. */
@@ -460,10 +475,15 @@ export function rowState({
    * `ready`, and `data-row-state` goes on saying so.
    */
   const greyed = unverifiable && tone === 'ready';
+  // PHASE 2A — the mark/word split survives only while the MARK colour is the one
+  // `airStateVisual` chose. Both overrides below replace it, so the word must go
+  // back to inheriting rather than keep a hue picked against a colour that is gone.
+  const overridden = greyed || (simulated && claimsAir);
 
   return {
     icon: iconForStatus(status, pending),
     color: greyed ? colors.textMuted : simulated && claimsAir ? colors.pending : visual.color,
+    ...(!overridden && visual.labelColor !== undefined ? { labelColor: visual.labelColor } : {}),
     label,
     tone: simulated && claimsAir ? 'attention' : tone,
     ...(unverifiable ? { unverifiable: true } : {}),

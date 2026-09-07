@@ -9691,7 +9691,7 @@ uses" broke both on the first local run — recorded so the next wording change 
 
 ---
 
-## [~] B-213 — the layer table's `State (n)` counts rows in ERROR as on air ⟨priority: high — a refused take rendered as a graphic on air, in the sacred air colour⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` (run `33880494176`, see [[B-209]]); the `(N in error)` text reads the owner's `rgb(255 28 28)` (`colors.errorText`, `79b66c33`)
+## [~] B-213 — the layer table's `State (n)` counts rows in ERROR as on air ⟨priority: high — a refused take rendered as a graphic on air, in the sacred air colour⟩ — CLOSED IN CODE 2026-09-04, `openspec/changes/take-refusal-surfaces/`; Linux `gate:e2e` DISCHARGED for `79b66c33` (run `33880494176`, see [[B-209]]); the `(N in error)` mark reads the owner's `rgb(255 28 28)` (`colors.errorMark`; it was `colors.errorText` at `79b66c33`, split into a mark and a text role by `RUNTIME-REDESIGN-01` Phase 2A — the warning triangle keeps his value, the NUMBER beside it takes the legible `colors.errorText` so it clears the 4.5 text floor on the header)
 
 **Observed 2026-09-04:** `State (2)` in green with exactly two occupied rows, both in `ERROR`
 (two refused takes); earlier `(3)` = two refused rows plus one genuinely on air from another

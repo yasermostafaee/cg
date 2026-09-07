@@ -616,16 +616,16 @@ splash ground is LIGHTER than the console's) survives and is now wider than befo
 
 ### 7.3 What was HELD, and why
 
-| held                                                                                                                                                         | why                                                                                                                                          |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--r-onair` `rgb(44 255 122)`                                                                                                                                | 🔴 owner's exact value; the reference's mint is its ONE green for BOTH air and health — see 7.5                                              |
-| `colors.errorText` `rgb(255 28 28)`                                                                                                                          | 🔴 owner's exact value (`RUNTIME-FIX-0904`); it is the ink that now fails AA — see 7.5                                                       |
-| `--r-row-marked-fill` `rgb(145 93 5)`, `markedRowInk`                                                                                                        | the owner's measured pair; both unchanged, so **5.06:1 is unchanged**                                                                        |
-| `--r-caution` / `pending` / `exit` `#F59E0B`                                                                                                                 | ONE token used as an INK and as a FILL; the reference splits those, and un-splitting it is a component edit                                  |
-| `colors.error`, `--r-danger`, `--r-alarm-*`, `--r-toast-ok-*`, `--r-band-stripe-*`, `--r-notice-*`                                                           | the alarm/notice FILL families; the reference draws no dark fill, it draws ink-on-`*bg`. Phase 9 dresses them                                |
-| `--r-row-bg`, `--r-row-empty-bg`, `--r-table-head-bg`, `--r-row-selected-fill`                                                                               | the layer table's grounds — `PROMPT.md` §3 names its own hover `#1b2a3a` and selected `#192e40`, so Phase 3 takes them as one piece          |
-| `--r-splash-*`                                                                                                                                               | its own family by its own documented rule; only the `--cg-ok` mirror moved                                                                   |
-| `--r-accent-strong`, `--r-accent-fill-hover`, `--r-accent-line-hover`, `--r-accent-ink`, `--r-rehearsing-strong/mid/deep`, `--r-border-strong`, `--r-verb-*` | the reference declares no value for these weights; each keeps the relationship it had (a hover still LIFTS, a strong weight is still darker) |
+| held                                                                                                                                                         | why                                                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--r-onair` `rgb(44 255 122)`                                                                                                                                | 🔴 owner's exact value; the reference's mint is its ONE green for BOTH air and health — see 7.5                                                 |
+| `colors.errorText` `rgb(255 28 28)`                                                                                                                          | 🔴 owner's exact value (`RUNTIME-FIX-0904`); it is the ink that failed AA — **superseded by PHASE 2A §8, which split it rather than moving it** |
+| `--r-row-marked-fill` `rgb(145 93 5)`, `markedRowInk`                                                                                                        | the owner's measured pair; both unchanged, so **5.06:1 is unchanged**                                                                           |
+| `--r-caution` / `pending` / `exit` `#F59E0B`                                                                                                                 | ONE token used as an INK and as a FILL; the reference splits those, and un-splitting it is a component edit                                     |
+| `colors.error`, `--r-danger`, `--r-alarm-*`, `--r-toast-ok-*`, `--r-band-stripe-*`, `--r-notice-*`                                                           | the alarm/notice FILL families; the reference draws no dark fill, it draws ink-on-`*bg`. Phase 9 dresses them                                   |
+| `--r-row-bg`, `--r-row-empty-bg`, `--r-table-head-bg`, `--r-row-selected-fill`                                                                               | the layer table's grounds — `PROMPT.md` §3 names its own hover `#1b2a3a` and selected `#192e40`, so Phase 3 takes them as one piece             |
+| `--r-splash-*`                                                                                                                                               | its own family by its own documented rule; only the `--cg-ok` mirror moved                                                                      |
+| `--r-accent-strong`, `--r-accent-fill-hover`, `--r-accent-line-hover`, `--r-accent-ink`, `--r-rehearsing-strong/mid/deep`, `--r-border-strong`, `--r-verb-*` | the reference declares no value for these weights; each keeps the relationship it had (a hover still LIFTS, a strong weight is still darker)    |
 
 ### 7.4 The geometry tokens (§2.2)
 
@@ -659,7 +659,7 @@ floor **4.5**; graphic/large-text floor **3.0**. Surfaces: `page` = `--r-surface
 | caution amber _(ink, `--r-caution-text`)_ | `#f3cd88`         | 12.63 | 11.46      | 10.24      | 12.14 | 10.07      | 7.97       |
 | caution amber _(fill role, held)_         | `#F59E0B`         | 8.88  | 8.06       | 7.20       | 8.54  | 7.08       | 5.61       |
 | danger red as TEXT                        | `#ffaaa7`         | 10.50 | 9.53       | 8.52       | 10.10 | 8.38       | 6.63       |
-| **errorText** _(owner's, held)_           | `rgb(255 28 28)`  | 4.94  | **4.48** ✗ | **4.00** ✗ | 4.75  | **3.94** ✗ | **3.12** ✗ |
+| **errorText** _(owner's, held — see §8)_  | `rgb(255 28 28)`  | 4.94  | **4.48** ✗ | **4.00** ✗ | 4.75  | **3.94** ✗ | **3.12** ✗ |
 | ok / success mint                         | `#85e4b6`         | 12.51 | 11.35      | 10.15      | 12.03 | 9.98       | 7.90       |
 | rehearsing violet                         | `#c3acff`         | 9.69  | 8.79       | 7.86       | 9.32  | 7.73       | 6.12       |
 | offline grey _(held)_                     | `#94A3B8`         | 7.44  | 6.75       | 6.03       | 7.15  | 5.93       | 4.70       |
@@ -696,7 +696,7 @@ which is what the `*bg` pairs are for): blue on `--r-accent-fill` **7.50** · mi
 
 ### 7.6 🔴 TWO THINGS FOR THE OWNER. Reported, and stopped at.
 
-**(1) `errorText` now fails AA on three of the surfaces it is used on.** `rgb(255 28 28)` is the
+**(1) ✅ ANSWERED IN PHASE 2A — SEE §8. `errorText` fails AA on four of the surfaces it is used on.** `rgb(255 28 28)` is the
 owner's exact value (2026-09-04, `RUNTIME-FIX-0904`) and Phase 2 did not touch it — the SURFACES
 moved under it. It reads **4.48:1** on `--r-surface` (was 4.59:1, i.e. it was already marginal),
 **4.00:1** on `--r-surface-raised` (was 3.80:1 — it was already FAILING there and Phase 2 improved
@@ -741,3 +741,105 @@ held as a whole.
   `--cg-border` `#374151`. Moving it is a `@cg/ui` change and is not this phase's to make.
 - **The layer table's grounds and the alarm/notice fills are untouched** — Phases 3 and 9 own them,
   and each is listed in 7.3 with the reason.
+
+## §8 — PHASE 2A: ONE ERROR RED BECAME TWO, BECAUSE IT WAS DOING TWO JOBS
+
+**An owner-ordered addendum to Phase 2, 2026-09-08. Not one of the ten phases.** §7.6 (1) is
+answered here and is superseded by it.
+
+### 8.1 The owner's reading, which is the part worth carrying forward
+
+Phase 2 reported `colors.errorText` (`rgb(255 28 28)`) below the **4.5 AA TEXT floor** on four of
+the six grounds this palette puts it on. Against the **3.0 GRAPHIC floor** the very same ink passes
+on all six, worst case 3.12. **So ONE TOKEN WAS DOING TWO JOBS WITH TWO DIFFERENT FLOORS, and the
+answer is a SPLIT, not a re-tune.** The ink was never wrong; it was being asked two questions.
+
+Neither half is a new colour. `--r-error-mark` keeps the owner's value byte for byte — not lifted,
+not darkened, not derived. `--r-error-text` takes `REF_RED` `#ffaaa7`, the reference's own red,
+already in the palette and already measured in §7.5.
+
+⭐ **The generalisation, for whoever meets this shape again:** when a role fails one floor and
+passes another, ask which floors its SITES actually answer to before touching the value. A token
+worn by both a 25 px glyph and a 12 px sentence has no single correct contrast, and re-tuning it
+can only trade one site's legibility for another's.
+
+### 8.2 🔴 THE RE-MEASURED TWO-ROLE TABLE
+
+| role                       | judged at | page  | panel | raised | inset | row  | head |
+| -------------------------- | --------- | ----- | ----- | ------ | ----- | ---- | ---- |
+| `--r-error-mark` (graphic) | **3.0**   | 4.94  | 4.48  | 4.00   | 4.75  | 3.94 | 3.12 |
+| `--r-error-text` (text)    | **4.5**   | 10.50 | 9.53  | 8.52   | 10.10 | 8.38 | 6.63 |
+
+🔴 **NO SITE IS LEFT BELOW ITS OWN FLOOR — and the claim is stronger than a site-by-site check.**
+The MARK's worst reading across **all six** grounds is **3.12** (floor 3.0) and the TEXT's worst is
+**6.63** (floor 4.5). Both clear on _every_ ground, so no site can fail regardless of which surface
+it turns out to sit on — which is what makes this survivable when Phase 3 moves the table's grounds.
+
+### 8.3 Every site, classified from what it RENDERS
+
+Nine style declarations read the old token. ⚠ **Phase 2's own note named SEVEN of them and it was
+wrong** — `OutputsSection.air` and `ChannelSection.verdict.mismatch` were missing. Both are WORD.
+Each row below was resolved by reading the JSX, never the identifier:
+
+| site                                                           | renders                                          | class    |
+| -------------------------------------------------------------- | ------------------------------------------------ | -------- |
+| `airStateVisual('error')` → `rowState` → `LayerRow` state cell | a 25 px `✕` **and** the word `ERROR`             | **BOTH** |
+| `LayerTableHeader.errorCount`                                  | an 11 px `TriangleAlert` **and** the number      | **BOTH** |
+| `StatusBar.failedHard`                                         | the ●/○ health LED **and** the word `OFFLINE`    | **BOTH** |
+| `LinkIndicator` `disconnected`                                 | the ● dot **and** `DISCONNECTED — reconnecting…` | **BOTH** |
+| `LockOverlay.error`                                            | the refusal sentence                             | WORD     |
+| `FromFileControl.error`                                        | the file-error sentence                          | WORD     |
+| `AuditPanel.outcomeFailed`                                     | `entry.outcome`                                  | WORD     |
+| `ChannelSection.verdict.mismatch`                              | `MISMATCH — every graphic … is mis-placed`       | WORD     |
+| `OutputsSection.air`                                           | `AIR — … Nothing on this channel reaches air.`   | WORD     |
+
+**The four BOTH sites take both tokens**, each at the seam that already existed rather than at a new
+one: `airStateVisual` gained an optional `labelColor` (present only where the mark and the word
+must differ, absent everywhere else so no other state's word stops inheriting its mark);
+`healthDotStyle` gained one branch; `LinkIndicator` states its `dotColor` explicitly instead of
+falling through; the header tally passes a style to its `Icon`.
+
+⚠ **THE ONE GENUINELY AMBIGUOUS CALL, declared rather than guessed silently.** The status bar's
+`⚠ NO SERVER — SIMULATED` carries a warning GLYPH **inside the string**, at text size, in the same
+text run as the words. **Classified WORD.** Two reasons: a character in a text run is judged as
+text, not as a graphical object; and giving it its own colour would mean splitting a sentence into
+two elements, which is a structure change this phase forbids. If the owner wants that glyph loud,
+it is a deliberate edit, not a classification.
+
+### 8.4 What is asserted, and why it is asserted that way
+
+- `theme.test.ts` — **the two error roles are DISTINCT**, the ERROR state hands the mark to the
+  icon and the text to the label, and **every other state leaves `labelColor` absent** so the split
+  cannot leak into states whose mark and word may legitimately agree.
+- `statusBar.linkTransition.dom.test.ts` — the down-server LED takes the mark **and** the word
+  takes the text. Both halves, positively: a split whose word half is unasserted is a split that
+  can silently collapse back onto the mark.
+- ⭐ **One literal IS pinned, and only one:** `colors.errorMark === 'rgb(255 28 28)'`. It is the
+  value the owner fixed by name, so if it ever moves it must be because he moved it. Everything
+  else is asserted as a property (`PROMPT.md` §11).
+
+## §9 — THREE MORE OWNER ANSWERS, 2026-09-08
+
+**A4 · 🔴 TWO GREENS IS A RULE, NOT AN OVERSIGHT.** §7.6 (2) is answered: the reference spends one
+mint on `.badge.live`, `.badge.success` and the footer's `healthy`; the console keeps `--r-onair`
+distinct at `rgb(44 255 122)`. **Vivid saturated = ON AIR, pastel mint = healthy.** An operator must
+never read _"the bridge is fine"_ as _"this row is on air"_, and the standing decision that alarm
+severity follows AIR-CRITICALITY cannot survive one hue carrying both meanings — if healthy and
+on-air are the same green, _"is anything on air?"_ stops being answerable by looking.
+**Here the drawing is wrong and the console is right.** Not an open question; not for a later phase
+to resolve in passing.
+✅ **Pinned by assertion**, in `theme.test.ts`: `--r-onair` is NOT `--r-success` and NOT
+`--r-ok-text`, with a positive control proving the comparison can fail. It asserts that they
+DIFFER, never what either is — a test pinning `rgb(44 255 122)` would go red at the next palette
+tune while saying nothing about the property (the §11 rule, and the one `splashCss` was rewritten
+for in Phase 2).
+
+**A5 · The marked-row edge bars at 3.68:1 are CORRECT and STAY.** `controls.css`'s own rule says
+they follow the notice's ink, and holding 3.86:1 would have kept a MEASUREMENT while discarding the
+DESIGN it measured. Above the 3:1 graphic floor. **Closed, not owed** — §7.5's row stands as the
+record of the change, not as an outstanding item.
+
+**A6 · `--r-text-muted` at 4.39:1 on the table header is an ACCEPTED FAIL that Phase 3 closes.**
+It stays on the owed list **until Phase 3 has actually run** — not before. The reference's own
+row/header separator is `--soft`, on which the same ink reads 4.89:1; that is the expectation, and
+an expectation is not a discharge.
