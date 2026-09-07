@@ -97,8 +97,12 @@ tokens, the full contrast table, and the two things escalated to the owner.
       ⭐ **The alarm severity split is INTACT and was checked:** the bridge-skew band still fills
       with the held amber and cannot read red; the output alarm and raster banner still fill red.
 - [x] 2.5 `pnpm --filter @cg/runtime test:e2e` — **116 passed (1.5 m)**, Windows, against a fresh
-      `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a). Linux `e2e` run URL: _owed — record
-      the completed, green run for the commit that carries this phase._
+      `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `fdf8f19f`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34148037877> — run `conclusion: success`,
+      9 m 43 s. The **`E2E (Playwright)` job RAN** (17:32:47Z → 17:42:12Z, `conclusion: success`);
+      it was not skipped, which is the half a green run alone does not prove (golden rule 12b).
+      `Lint • Typecheck • Test • Build` also ran green.
 
 ## Phase 3 — The layers table
 
