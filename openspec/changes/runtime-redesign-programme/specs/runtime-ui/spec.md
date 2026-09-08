@@ -260,6 +260,113 @@ monitor caption are not adopted (owner answer A12).
   state cell — and the look picker, the Inspector and the monitors say which look, which fields
   and which rehearsal, never whether the row is on air
 
+### Requirement: Live plates are the seated layers, never the source catalogue
+
+The LIVE SOURCES tab SHALL list the layers the bridge itself has seated for rows' live plates —
+read from the bridge's live-layer ledger and nothing else — and SHALL NOT read, list or edit the
+installation's source catalogue, which is Station setup's. A plate is a seated layer; the
+catalogue is the set of inputs a plate may be pointed at. The tab SHALL say so in its own words,
+and SHALL keep every disposition's sentence visible where that sentence is an alarm or a caveat
+(stranded, blind, adopted-unconfirmed, held).
+
+#### Scenario: The tab lists seats and only seats
+
+- **WHEN** the bridge's ledger holds two seated layers for one row and the catalogue holds six
+  inputs **THEN** the tab shows two rows, one per seat, each naming its coordinate, its plate
+  handle, the producer actually sent and its owning row, and no input appears that is not seated
+
+### Requirement: The plate controls and the audio dialog open by right-click and by the keyboard
+
+The console SHALL open a row's context menu — which carries AUDIO — on a right-click on the row
+and, equally, on the `ContextMenu` key or `Shift+F10` while the row (or a control inside it) has
+focus. On the LIVE SOURCES tab the console SHALL open the audio dialog of a seated plate's OWNING
+ROW, with that plate's fader focused, on a right-click on the plate's row and, equally, on the
+same two keys while the plate's row has focus. Keyboard parity is not optional: every pointer
+door SHALL have a keyboard twin that reaches the same dialog. The app-wide suppression of the
+browser's own menu SHALL stay in force, with editable fields exempt (guard item 23), and a plate
+that has no owner to open (stranded, blind) SHALL open nothing and SHALL NOT cancel the event.
+
+#### Scenario: The row's menu opens by pointer and by keyboard
+
+- **WHEN** the operator right-clicks a row, or focuses it and presses `Shift+F10` or the
+  `ContextMenu` key **THEN** the row's own menu opens with AUDIO in it, the browser's menu does
+  not, and AUDIO opens the row's audio dialog listing every plate the row's template declares
+
+#### Scenario: A seated plate opens its owner's audio on that plate
+
+- **WHEN** the operator right-clicks a seated plate on LIVE SOURCES, or focuses its row and
+  presses `Shift+F10` or the `ContextMenu` key **THEN** the owning row's audio dialog opens,
+  named in the operator's words with the row's ids on hover, listing every plate of that row —
+  its hidden frames included, each reading `on <coordinate>` — and focus is on the fader of the
+  plate pointed at
+
+#### Scenario: A text field keeps the browser's menu
+
+- **WHEN** the operator right-clicks inside an Inspector text field **THEN** the browser's own
+  menu is not suppressed, and a right-click on chrome with no menu of its own is
+
+### Requirement: The audio dialog says what the ledger says, and ON is full volume
+
+The audio dialog SHALL state each plate's audio in the console's one vocabulary, read from the
+ledger — AUDIBLE, SILENT, HIDDEN BY THIS LOOK, ARMED · HIDDEN BY THIS LOOK — and SHALL read a
+plate with no seat as NOT SEATED, never as audible: a raised plate on a row that owns nothing is
+a recorded intent, not sound on air. The dialog SHALL carry `ON = 100 % · OFF = 0 %` and SOLO's
+scope (the row's other frames, hidden frames included, with no un-solo) on its own surface, not
+behind a hover, and SHALL offer ON, OFF and SOLO per plate with no second name for OFF.
+
+#### Scenario: A ready row's raised plate does not read as audible
+
+- **WHEN** a plate is raised on a row that owns no seats and the dialog is opened **THEN** that
+  plate reads NOT SEATED at the raised percentage, and no plate in the dialog reads AUDIBLE
+
+#### Scenario: A held plate reads as hidden
+
+- **WHEN** the dialog is opened on a row whose ledger holds a held seat **THEN** that plate
+  reads HIDDEN BY THIS LOOK with its coordinate beside it, and its ON, OFF and SOLO stay live
+
+### Requirement: The Inspector is headed by the selected row's operator name
+
+The Inspector SHALL head its body with the SELECTED ROW's name in the operator's words, through
+the one naming composition (`operatorRowName`) fed by the declared bank and the registry — in its
+own bidi isolate, with every id the row has on the heading's `title` and never in the sentence —
+and SHALL change that heading when the selection changes. The template the row carries SHALL move
+to the line beneath, with its disambiguating stub when two templates share a name and its id on
+hover; a row with no place in the bank SHALL be headed by its template, stub included.
+
+#### Scenario: The heading names the row and follows the selection
+
+- **WHEN** the operator selects a row **THEN** the Inspector's heading is exactly what the naming
+  composition names that row from the bank the bridge publishes, the row's ids are on its
+  `title` and absent from its text, and selecting a different row changes the heading to that
+  row's name
+
+### Requirement: A control that hides a safety surface does not persist its hidden state
+
+A hiding control SHALL NOT persist its hidden state across a reload — that is, a control whose
+effect is to HIDE a surface that shows the operator what is about to go to air or what is on it,
+the monitors' `Hide monitors` first among them. The console prefers a known safe state after a
+restart over a remembered one, the same call as the unpersisted rehearsal flag and reset-to-idle
+on reconnect (owner answer A13, `R-060`).
+
+#### Scenario: The monitors come back on reload
+
+- **WHEN** the operator hides the monitors and reloads the console **THEN** the monitors are
+  shown, and the shell's other persisted geometry is unaffected
+
+### Requirement: The live plates pane and the audio dialog take their geometry from the token home, measured in a real engine
+
+The LIVE SOURCES pane and the audio dialog SHALL take their rendered geometry — the toolbar, the
+table head and rows, the fader and its readout, the verb boxes, the dialog's rows and verbs —
+from `--r-plate-*` and `--r-audio-*` tokens declared in the token home from the reference as
+RENDERED (`07-live-plates.html`, `08-live-audio.html` at 1280 × 800), never from a stylesheet
+rule quoted from the file; every claim about a box SHALL be measured in Chromium, never in jsdom.
+
+#### Scenario: The plates table and the dialog verbs measure to their tokens
+
+- **WHEN** the built console shows a seated plate at 1280 × 800 and its owner's audio dialog is
+  opened **THEN** the table head, the ordinary row, the fader, the `ON`/`OFF`/`SOLO` boxes and the
+  dialog's rows and verbs measure to the token home's values, read back from the page
+
 ### Requirement: The programme's phase state is recorded where the next session reads it
 
 Each phase of this programme SHALL record its completion in this change's `tasks.md`, and a session

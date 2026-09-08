@@ -2605,3 +2605,336 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-text-muted);
   line-height: 1.45;
 }
+
+/* ── `RUNTIME-REDESIGN-01` Phase 6 — the LIVE PLATES table ─────────────────────── */
+
+/*
+ * `07-live-plates.html` as RENDERED (Chromium, 1280 × 800; `design.md` §13.3): a 40 px toolbar
+ * over a seven-column table with a 30 px head and 42 px rows. Every number is a `--r-plate-*`
+ * token from `PLATES_PX`; every colour is a role token. The grid is one declaration, read by
+ * the head, each row, and the audio strip (as a SUBGRID of its row), so the seven columns
+ * cannot drift apart between the three.
+ *
+ * ⚠ The reference's `td` cells are 13 px on a 19.5 px line; the app's row is a GRID rather
+ * than a `<table>` because a row must be one focusable element (right-click / `Shift+F10`
+ * open the audio dialog on it) and a `<tr>` with a `tabindex` reads inconsistently across
+ * assistive tech. The roles say what the grid is.
+ */
+.cg-plate-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--r-plate-toolbar-gap);
+  min-height: var(--r-plate-toolbar-h);
+  padding: var(--r-plate-toolbar-pad);
+  font-size: var(--r-plate-toolbar-text);
+  color: var(--r-text-secondary);
+  border-bottom: 1px solid var(--r-border);
+}
+.cg-plate-toolbar > strong {
+  color: var(--r-text);
+  font-weight: var(--r-weight-semibold);
+  white-space: nowrap;
+}
+.cg-plate-count {
+  color: var(--r-text-muted);
+  white-space: nowrap;
+}
+.cg-plate-spacer {
+  flex: 1;
+}
+.cg-plate-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r-radius-sm);
+  color: var(--r-text-muted);
+  cursor: help;
+}
+.cg-plate-help:focus-visible {
+  outline: var(--r-focus-ring) solid var(--r-accent);
+}
+/* The panic button keeps its own variant; only its floor height is the reference's. */
+.cg-plate-toolbar .cg-btn {
+  min-height: var(--r-plate-panic-h);
+}
+
+.cg-plate-table {
+  --cg-plate-columns: var(--r-plate-coord-w) minmax(0, 1fr) minmax(var(--r-plate-col-owner), auto)
+    minmax(var(--r-plate-col-picture), auto) var(--r-plate-col-audio) var(--r-plate-col-gain)
+    var(--r-plate-col-controls);
+  overflow: auto;
+  min-height: 0;
+  font-size: var(--r-plate-cell-text);
+}
+.cg-plate-head,
+.cg-plate-row {
+  display: grid;
+  grid-template-columns: var(--cg-plate-columns);
+  align-items: center;
+  min-width: max-content;
+}
+.cg-plate-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  min-height: var(--r-plate-head-h);
+  background: var(--r-surface-raised);
+  border-bottom: 1px solid var(--r-border);
+  color: var(--r-text-muted);
+  font-size: var(--r-plate-head-text);
+  font-weight: var(--r-weight-medium);
+}
+.cg-plate-head > span {
+  padding: var(--r-plate-cell-pad);
+  white-space: nowrap;
+}
+.cg-plate-head-note {
+  color: var(--r-text-muted);
+  font-weight: 400;
+}
+.cg-plate-row {
+  min-height: var(--r-plate-row-min-h);
+  border-bottom: 1px solid var(--r-border-soft);
+  cursor: default;
+}
+.cg-plate-row:hover {
+  background: var(--r-table-row-hover);
+}
+.cg-plate-row:focus-visible {
+  outline: var(--r-focus-ring) solid var(--r-accent);
+  outline-offset: calc(-1 * var(--r-focus-ring));
+}
+.cg-plate-row > [role='cell'],
+.cg-plate-strip > span {
+  padding: var(--r-plate-cell-pad);
+  min-width: 0;
+}
+.cg-plate-coord {
+  font-size: var(--r-plate-coord-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cg-plate-source {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+}
+.cg-plate-slot {
+  color: var(--r-text-muted);
+  font-size: var(--r-plate-slot-text);
+  white-space: nowrap;
+}
+.cg-plate-producer {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cg-plate-owner {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-1);
+  white-space: nowrap;
+  font-size: var(--r-plate-owner-text);
+}
+.cg-plate-owner-lead {
+  color: var(--r-text-muted);
+}
+.cg-plate-owner .cg-btn {
+  min-height: var(--r-plate-owner-btn-h);
+  font-size: var(--r-plate-owner-text);
+}
+.cg-plate-picture {
+  font-size: var(--r-plate-word-text);
+  white-space: nowrap;
+}
+/* The strip: the last three columns, laid out as a subgrid of the row. */
+.cg-plate-strip {
+  grid-column: 5 / 8;
+  display: grid;
+  grid-template-columns: subgrid;
+  align-items: center;
+  min-width: 0;
+}
+.cg-plate-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-plate-pill-gap);
+  font-size: var(--r-plate-word-text);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.cg-plate-pill-dot {
+  flex: none;
+  width: var(--r-plate-pill-dot);
+  height: var(--r-plate-pill-dot);
+  border-radius: var(--r-radius-full);
+}
+.cg-plate-pill-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cg-plate-gain {
+  display: flex;
+  align-items: center;
+  gap: var(--r-plate-gain-gap);
+}
+.cg-plate-gain input[type='range'] {
+  flex: none;
+  width: var(--r-plate-gain-w);
+  min-height: var(--r-plate-gain-h);
+  padding: 0;
+}
+.cg-plate-readout {
+  width: var(--r-plate-readout-w);
+  font-size: var(--r-plate-readout-text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--r-text-secondary);
+}
+.cg-plate-verbs {
+  display: flex;
+  align-items: center;
+  gap: var(--r-plate-verb-gap);
+  white-space: nowrap;
+}
+.cg-plate-verbs .cg-btn {
+  min-width: var(--r-plate-verb-w);
+  height: var(--r-plate-verb-h);
+  min-height: var(--r-plate-verb-h);
+  padding: 0;
+  font-size: var(--r-plate-verb-text);
+}
+.cg-plate-verbs .cg-btn:last-child {
+  min-width: var(--r-plate-solo-w);
+}
+/* A row that needs attention keeps its sentence, across every column, under the cells. */
+.cg-plate-detail {
+  grid-column: 1 / -1;
+  padding-top: 0;
+  font-size: var(--r-plate-word-text);
+  color: var(--r-text-secondary);
+  white-space: normal;
+}
+
+/* ── `RUNTIME-REDESIGN-01` Phase 6 — the LIVE PLATE AUDIO dialog ───────────────── */
+
+/*
+ * `08-live-audio.html` as RENDERED (`design.md` §13.3): a subtitle naming the row; a context
+ * line; a three-column head; 85 px rows of index chip · name and seat line · fader with its
+ * readout and state word · `ON OFF SOLO`; the footer sentence beside the action. Numbers are
+ * `--r-audio-*` (`AUDIO_DIALOG_PX`); colours are role tokens.
+ */
+.cg-audio-subtitle {
+  margin: 0 0 var(--r-space-2);
+  font-size: var(--r-audio-subtitle-text);
+  color: var(--r-text-muted);
+}
+.cg-audio-context {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  padding: var(--r-audio-context-pad-y) 0;
+  border-top: 1px solid var(--r-border);
+  border-bottom: 1px solid var(--r-border);
+  font-size: var(--r-audio-context-text);
+}
+.cg-audio-hint {
+  margin-left: auto;
+  font-size: var(--r-audio-hint-text);
+  color: var(--r-text-muted);
+}
+.cg-audio-intro {
+  margin: var(--r-space-2) 0 0;
+  font-size: var(--r-audio-hint-text);
+  line-height: 1.5;
+  color: var(--r-text-muted);
+}
+.cg-audio-head,
+.cg-audio-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--r-audio-col-gain) var(--r-audio-col-verbs);
+  gap: var(--r-audio-col-gap);
+  align-items: center;
+}
+.cg-audio-head {
+  padding: var(--r-audio-head-pad-y) 0;
+  border-bottom: 1px solid var(--r-border-strong);
+  font-size: var(--r-audio-head-text);
+  color: var(--r-text-secondary);
+}
+.cg-audio-row {
+  padding: var(--r-audio-row-pad-y) 0;
+  min-height: var(--r-audio-row-min-h);
+  border-bottom: 1px solid var(--r-border-soft);
+}
+.cg-audio-source {
+  display: flex;
+  align-items: center;
+  gap: var(--r-space-2);
+  min-width: 0;
+}
+.cg-audio-index {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: var(--r-audio-index-box);
+  height: var(--r-audio-index-box);
+  border: 1px solid var(--r-border-strong);
+  border-radius: var(--r-radius-sm);
+  background: var(--r-surface-raised);
+  font-size: var(--r-audio-index-text);
+  color: var(--r-text-secondary);
+}
+.cg-audio-name {
+  display: block;
+  font-size: var(--r-audio-name-text);
+  font-weight: var(--r-weight-semibold);
+  overflow-wrap: anywhere;
+}
+.cg-audio-seat {
+  display: block;
+  margin-top: 3px;
+  font-size: var(--r-audio-seat-text);
+  color: var(--r-text-secondary);
+}
+.cg-audio-slider {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--r-audio-readout-w);
+  gap: 0 var(--r-audio-slider-gap);
+  align-items: center;
+}
+.cg-audio-slider input[type='range'] {
+  min-height: var(--r-audio-slider-h);
+  padding: 0;
+}
+.cg-audio-readout {
+  font-size: var(--r-audio-readout-text);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.cg-audio-state {
+  grid-column: 1 / -1;
+  font-size: var(--r-audio-state-text);
+  font-weight: var(--r-weight-bold);
+  letter-spacing: 0.03em;
+}
+.cg-audio-verbs {
+  display: grid;
+  grid-template-columns: repeat(3, var(--r-audio-verb-w));
+  gap: var(--r-audio-verb-gap);
+}
+.cg-audio-verbs .cg-btn {
+  min-width: var(--r-audio-verb-w);
+  height: var(--r-audio-verb-h);
+  min-height: var(--r-audio-verb-h);
+  padding: 0;
+  font-size: var(--r-audio-verb-text);
+}
+.cg-audio-foot-info {
+  margin-right: auto;
+  font-size: var(--r-audio-foot-text);
+  line-height: 1.5;
+  color: var(--r-text-muted);
+}

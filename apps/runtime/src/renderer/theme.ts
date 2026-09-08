@@ -462,6 +462,110 @@ export const INSPECTOR_PX = {
   /** The hint under the buttons — `.inspector-foot .target-hint{font-size:11px}`. */
   hintText: 11,
 } as const;
+/*
+ * ── `RUNTIME-REDESIGN-01` PHASE 6 — LIVE PLATES AND THE AUDIO DIALOG, AS THE REFERENCE RENDERS ──
+ *
+ * Measured in Chromium at 1280 × 800 on `07-live-plates.html` and `08-live-audio.html`
+ * (`design.md` §13.3), never read off the stylesheet: `.plate-table` is restated TWENTY times
+ * in that file, `.plate-toolbar` eleven, `.audio-modal` ten, and only the last unconditional
+ * wave paints (`PROMPT.md` §0). What paints for the plates pane: a 40 px toolbar (`4px 12px`,
+ * 12 px text); a 30 px table head at 11 px on the raised ground; 42 px rows with `4px 10px`
+ * cells at 13 px (the coordinate 12 px, the plate handle 11 px muted); a 5 px audio dot on a
+ * 12 px word; a 140 × 26 fader with an 11 px readout; `ON · OFF` at 40 × 32 and `SOLO` at
+ * 46 × 32, 11 px, gapped 5. For the dialog: a 13 px subtitle; a context line padded `11px`;
+ * a three-column body (`1fr · 269 · 190`, gapped 18) whose rows are 85 px (`12px 0`); a 29 px
+ * index chip; 14 px name over a 12 px seat line; a 28 px fader with a 43 px readout and a 12 px
+ * state word; `ON · OFF · SOLO` at 58 × 36, gapped 8; a 12 px footer sentence.
+ *
+ * ⚠ NOT here, deliberately: the reference's per-verb hover hues (the app's Button primitive
+ * owns its variants' hovers), its owner-filter select and help icon (argued in §13.3), and its
+ * `On air` context badge (A12). Each is argued rather than transcribed.
+ */
+export const PLATES_PX = {
+  /** The toolbar — `.plate-toolbar{min-height:40px;padding:4px 12px;gap:10px;font-size:12px}`. */
+  toolbarH: 40,
+  toolbarPadY: 4,
+  toolbarPadX: 12,
+  toolbarGap: 10,
+  toolbarText: 12,
+  /** The table head — `th{height:30px;padding:4px 10px;font-size:11px}`. */
+  headH: 30,
+  headText: 11,
+  /** A row and its cells — `tr{height:42px}`, `td{padding:4px 10px;font-size:13px}`. */
+  rowMinH: 42,
+  cellPadY: 4,
+  cellPadX: 10,
+  cellText: 13,
+  /** The coordinate cell — 65 px wide, 12 px, nowrap. */
+  coordW: 65,
+  coordText: 12,
+  /** The plate handle beside the producer — `.plate-slot{font-size:11px}`. */
+  slotText: 11,
+  /** The owner link — `.plate-owner-link{min-height:30px;font-size:12px}`. */
+  ownerBtnH: 30,
+  ownerText: 12,
+  /** The picture and audio words — 12 px; the audio dot 5 px, gapped 6. */
+  wordText: 12,
+  pillDot: 5,
+  pillGap: 6,
+  /** The fader — `.plate-gain input{min-width:140px;min-height:26px}`, its readout 34 px / 11 px. */
+  gainW: 140,
+  gainH: 26,
+  gainGap: 9,
+  readoutW: 34,
+  readoutText: 11,
+  /** The verbs — `ON`/`OFF` 40 × 32, `SOLO` 46 × 32, 11 px, gapped 5. */
+  verbW: 40,
+  soloW: 46,
+  verbH: 32,
+  verbText: 11,
+  verbGap: 5,
+  /** The panic button — `.plate-panic{min-height:30px}`. */
+  panicH: 30,
+  /** The remaining columns as rendered: owner 95, picture 90, audio 140, gain 207, controls 157. */
+  colOwner: 95,
+  colPicture: 90,
+  colAudio: 140,
+  colGain: 207,
+  colControls: 157,
+} as const;
+export const AUDIO_DIALOG_PX = {
+  /** The subtitle under the title — `#audio-subtitle{font-size:13px;margin-top:3px}`. */
+  subtitleText: 13,
+  /** The context line — `.audio-context{padding:11px 20px;font-size:13px}`, its hint 12 px. */
+  contextPadY: 11,
+  contextText: 13,
+  hintText: 12,
+  /** The column head — `.audio-head{padding:10px 0;font-size:12px}`. */
+  headPadY: 10,
+  headText: 12,
+  /** The three columns — `minmax(0,1fr) 269px 190px`, gapped 18. */
+  colGain: 269,
+  colVerbs: 190,
+  colGap: 18,
+  /** One mixer row — `padding:12px 0;min-height:83px` (85 rendered with its rule). */
+  rowPadY: 12,
+  rowMinH: 83,
+  /** The frame index chip — 29 × 29, radius 4, 13 px. */
+  indexBox: 29,
+  indexText: 13,
+  /** The name and the seat line — `strong{font-size:14px}`, `small{font-size:12px;margin-top:3px}`. */
+  nameText: 14,
+  seatText: 12,
+  /** The fader — `input{min-height:28px}`, the readout 43 px / 13 px, the state word 12 px. */
+  sliderH: 28,
+  sliderGap: 10,
+  readoutW: 43,
+  readoutText: 13,
+  stateText: 12,
+  /** The verbs — 58 × 36, 12 px, gapped 8. */
+  verbW: 58,
+  verbH: 36,
+  verbGap: 8,
+  verbText: 12,
+  /** The footer sentence — `.foot-info{font-size:12px}`. */
+  footText: 12,
+} as const;
 /** The line weight an ACCENTED surface takes: the reference's `.badge.ready` edge. */
 const ACCENT_LINE = '#31556a';
 
@@ -1173,6 +1277,68 @@ export const cssVars = {
    * BEHIND it. Same family as `--r-shadow-1/-2`, cast upward.
    */
   '--r-insp-foot-shadow': '0 -5px 12px rgba(0, 0, 0, 0.13)',
+  /*
+   * ── `RUNTIME-REDESIGN-01` PHASE 6 — the live plates pane (`PLATES_PX`) and the audio
+   * dialog (`AUDIO_DIALOG_PX`), cited to the RENDERED reference; see the constants' note.
+   */
+  '--r-plate-toolbar-h': `${String(PLATES_PX.toolbarH)}px`,
+  '--r-plate-toolbar-pad': `${String(PLATES_PX.toolbarPadY)}px ${String(PLATES_PX.toolbarPadX)}px`,
+  '--r-plate-toolbar-gap': `${String(PLATES_PX.toolbarGap)}px`,
+  '--r-plate-toolbar-text': `${String(PLATES_PX.toolbarText)}px`,
+  '--r-plate-head-h': `${String(PLATES_PX.headH)}px`,
+  '--r-plate-head-text': `${String(PLATES_PX.headText)}px`,
+  '--r-plate-row-min-h': `${String(PLATES_PX.rowMinH)}px`,
+  '--r-plate-cell-pad': `${String(PLATES_PX.cellPadY)}px ${String(PLATES_PX.cellPadX)}px`,
+  '--r-plate-cell-text': `${String(PLATES_PX.cellText)}px`,
+  '--r-plate-coord-w': `${String(PLATES_PX.coordW)}px`,
+  '--r-plate-coord-text': `${String(PLATES_PX.coordText)}px`,
+  '--r-plate-slot-text': `${String(PLATES_PX.slotText)}px`,
+  '--r-plate-owner-btn-h': `${String(PLATES_PX.ownerBtnH)}px`,
+  '--r-plate-owner-text': `${String(PLATES_PX.ownerText)}px`,
+  '--r-plate-word-text': `${String(PLATES_PX.wordText)}px`,
+  '--r-plate-pill-dot': `${String(PLATES_PX.pillDot)}px`,
+  '--r-plate-pill-gap': `${String(PLATES_PX.pillGap)}px`,
+  '--r-plate-gain-w': `${String(PLATES_PX.gainW)}px`,
+  '--r-plate-gain-h': `${String(PLATES_PX.gainH)}px`,
+  '--r-plate-gain-gap': `${String(PLATES_PX.gainGap)}px`,
+  '--r-plate-readout-w': `${String(PLATES_PX.readoutW)}px`,
+  '--r-plate-readout-text': `${String(PLATES_PX.readoutText)}px`,
+  '--r-plate-verb-w': `${String(PLATES_PX.verbW)}px`,
+  '--r-plate-solo-w': `${String(PLATES_PX.soloW)}px`,
+  '--r-plate-verb-h': `${String(PLATES_PX.verbH)}px`,
+  '--r-plate-verb-text': `${String(PLATES_PX.verbText)}px`,
+  '--r-plate-verb-gap': `${String(PLATES_PX.verbGap)}px`,
+  '--r-plate-panic-h': `${String(PLATES_PX.panicH)}px`,
+  '--r-plate-col-owner': `${String(PLATES_PX.colOwner)}px`,
+  '--r-plate-col-picture': `${String(PLATES_PX.colPicture)}px`,
+  '--r-plate-col-audio': `${String(PLATES_PX.colAudio)}px`,
+  '--r-plate-col-gain': `${String(PLATES_PX.colGain)}px`,
+  '--r-plate-col-controls': `${String(PLATES_PX.colControls)}px`,
+  '--r-audio-subtitle-text': `${String(AUDIO_DIALOG_PX.subtitleText)}px`,
+  '--r-audio-context-pad-y': `${String(AUDIO_DIALOG_PX.contextPadY)}px`,
+  '--r-audio-context-text': `${String(AUDIO_DIALOG_PX.contextText)}px`,
+  '--r-audio-hint-text': `${String(AUDIO_DIALOG_PX.hintText)}px`,
+  '--r-audio-head-pad-y': `${String(AUDIO_DIALOG_PX.headPadY)}px`,
+  '--r-audio-head-text': `${String(AUDIO_DIALOG_PX.headText)}px`,
+  '--r-audio-col-gain': `${String(AUDIO_DIALOG_PX.colGain)}px`,
+  '--r-audio-col-verbs': `${String(AUDIO_DIALOG_PX.colVerbs)}px`,
+  '--r-audio-col-gap': `${String(AUDIO_DIALOG_PX.colGap)}px`,
+  '--r-audio-row-pad-y': `${String(AUDIO_DIALOG_PX.rowPadY)}px`,
+  '--r-audio-row-min-h': `${String(AUDIO_DIALOG_PX.rowMinH)}px`,
+  '--r-audio-index-box': `${String(AUDIO_DIALOG_PX.indexBox)}px`,
+  '--r-audio-index-text': `${String(AUDIO_DIALOG_PX.indexText)}px`,
+  '--r-audio-name-text': `${String(AUDIO_DIALOG_PX.nameText)}px`,
+  '--r-audio-seat-text': `${String(AUDIO_DIALOG_PX.seatText)}px`,
+  '--r-audio-slider-h': `${String(AUDIO_DIALOG_PX.sliderH)}px`,
+  '--r-audio-slider-gap': `${String(AUDIO_DIALOG_PX.sliderGap)}px`,
+  '--r-audio-readout-w': `${String(AUDIO_DIALOG_PX.readoutW)}px`,
+  '--r-audio-readout-text': `${String(AUDIO_DIALOG_PX.readoutText)}px`,
+  '--r-audio-state-text': `${String(AUDIO_DIALOG_PX.stateText)}px`,
+  '--r-audio-verb-w': `${String(AUDIO_DIALOG_PX.verbW)}px`,
+  '--r-audio-verb-h': `${String(AUDIO_DIALOG_PX.verbH)}px`,
+  '--r-audio-verb-gap': `${String(AUDIO_DIALOG_PX.verbGap)}px`,
+  '--r-audio-verb-text': `${String(AUDIO_DIALOG_PX.verbText)}px`,
+  '--r-audio-foot-text': `${String(AUDIO_DIALOG_PX.footText)}px`,
   // Motion
   '--r-dur-fast': '120ms',
   '--r-dur-med': '200ms',

@@ -80,6 +80,14 @@ async function render(info: TemplateInfo): Promise<HTMLDivElement> {
     templates: {
       get: vi.fn(() => Promise.resolve(info)),
       list: vi.fn(() => Promise.resolve([info])),
+      onChanged: () => () => undefined,
+    },
+    // Phase 6 — the Inspector names the ROW (`useOperatorNames`), so it reads the bank too.
+    fixedLayers: {
+      config: () => Promise.resolve(null),
+      onConfigChanged: () => () => undefined,
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
     },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
   };

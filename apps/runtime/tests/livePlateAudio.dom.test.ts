@@ -6,6 +6,8 @@ import { act } from 'react-dom/test-utils';
 import { toMenuItems } from '../src/renderer/ui/rowAction.js';
 import { layerRowActions } from '../src/renderer/features/layers/layerRowActions.js';
 import { LivePlateAudioDialog } from '../src/renderer/features/layers/LivePlateAudioDialog.js';
+import type { RowPlateAudio } from '../src/renderer/features/layers/plateAudio.js';
+import { operatorRowName } from '../src/renderer/ui/operatorNaming.js';
 import { bindingFor, itemWith, rowDeps, templateWith } from './support/layerRow.js';
 import { clearPortals, openDialog } from './support/dialog.js';
 
@@ -54,11 +56,19 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** The row named as the panel names it — through the one composition, no bank, this template. */
+const NAME = operatorRowName(
+  { itemId: 'item-1', templateId: 'tpl-1', slot: { channel: 1, layer: 70 } },
+  null,
+  new Map([[TEMPLATE.templateId, TEMPLATE]]),
+);
+
 function renderDialog(
   onApplyVolumes: (
     volumes: Record<string, number>,
   ) => Promise<{ ok: boolean; refused: readonly string[] }>,
   over: Parameters<typeof itemWith>[1] = {},
+  seatedPlates: readonly RowPlateAudio[] = [],
 ): void {
   host = document.createElement('div');
   document.body.append(host);
@@ -69,6 +79,8 @@ function renderDialog(
       createElement(LivePlateAudioDialog, {
         item: itemWith('on-air', over),
         template: TEMPLATE,
+        name: NAME,
+        seatedPlates,
         onApplyVolumes,
         onClose: () => undefined,
       }),
@@ -114,7 +126,7 @@ function releaseSlider(el: HTMLInputElement | undefined): void {
 const sliders = (): HTMLInputElement[] => [
   ...(openDialog()?.querySelectorAll<HTMLInputElement>('input[type="range"]') ?? []),
 ];
-const muteButtons = (): HTMLButtonElement[] => buttonsLabelled('MUTE');
+const offButtons = (): HTMLButtonElement[] => buttonsLabelled('OFF');
 
 describe('6.5f — the AUDIO verb is on the ROW, beside SOURCE', () => {
   it('a row whose template declares plates offers AUDIO', () => {
@@ -178,28 +190,52 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
     expect(text).toMatch(/this row/i);
   });
 
-  it('shows one control per plate, and says which are audible', () => {
-    renderDialog(() => Promise.resolve({ ok: true, refused: [] }), {
-      plateVolumes: { 'guest-1': 1 },
-    });
+  it('shows one control per plate, and says which are audible — from the LEDGER, in the one vocabulary', () => {
+    // `guest-1` is seated and shown; `guest-2` is seated and HELD. Audio is the one property
+    // of a graphic an operator cannot SEE, so the row has to say it in words — the SAME words
+    // the LIVE SOURCES strip uses (`plateAudioPill`), never a local "value > 0".
+    renderDialog(
+      () => Promise.resolve({ ok: true, refused: [] }),
+      { plateVolumes: { 'guest-1': 1 } },
+      [
+        { plateId: 'guest-1', volume: 1, held: false, coordinate: '1-10' },
+        { plateId: 'guest-2', volume: undefined, held: true, coordinate: '1-11' },
+      ],
+    );
     expect(sliders()).toHaveLength(2);
     const text = openDialog()?.textContent ?? '';
     expect(text).toContain('guest-1');
     expect(text).toContain('guest-2');
-    // Audio is the one property of a graphic an operator cannot SEE, so the row
-    // has to say it in words.
-    expect(text).toContain('audible on air');
+    expect(text).toContain('AUDIBLE');
+    expect(text).toContain('HIDDEN BY THIS LOOK');
     expect(text).toContain('100%');
+    // `R-028` — the real coordinate is in the sentence, not behind a hover.
+    expect(text).toContain('on 1-10');
   });
 
-  it('🔴 MUTE commits 0 in one press — the urgent direction is one gesture', () => {
+  it('🔴 A12 — a raised plate on a row that owns NO seat reads NOT SEATED, never AUDIBLE', () => {
+    // The old dialog printed "audible on air" under any plate whose value was > 0 — on a READY
+    // row a claim about air that nothing on the channel backed. The word now comes from the
+    // ledger, and with no seat there is no audibility to claim.
+    renderDialog(() => Promise.resolve({ ok: true, refused: [] }), {
+      plateVolumes: { 'guest-1': 1 },
+    });
+    const states = [...(openDialog()?.querySelectorAll('[data-plate-audio-state]') ?? [])].map(
+      (el) => el.getAttribute('data-plate-audio-state'),
+    );
+    expect(states).toEqual(['NOT SEATED', 'NOT SEATED']);
+    expect(states).not.toContain('AUDIBLE');
+    expect(openDialog()?.textContent).toContain('100%');
+  });
+
+  it('🔴 OFF commits 0 in one press — the urgent direction is one gesture', () => {
     // Dragging a slider to exactly zero under pressure is a worse gesture than
     // pressing one button, and an open microphone is the failure with seconds on it.
     const onApply = vi.fn(() => Promise.resolve({ ok: true, refused: [] }));
     renderDialog(onApply, { plateVolumes: { 'guest-1': 1 } });
 
     act(() => {
-      muteButtons()[0]?.click();
+      offButtons()[0]?.click();
     });
 
     // A MAP with one entry — the same door every audio gesture goes through, so a look
@@ -207,14 +243,24 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
     expect(onApply).toHaveBeenCalledWith({ 'guest-1': 0 });
   });
 
-  it('MUTE is disabled on a plate that is already silent', () => {
+  it('OFF stays pressable on a plate that is already silent — idempotent, never a toggle to read first', () => {
     renderDialog(() => Promise.resolve({ ok: true, refused: [] }), {
       plateVolumes: { 'guest-1': 1 },
     });
-    const [first, second] = muteButtons();
+    const [first, second] = offButtons();
     expect(first?.disabled).toBe(false);
-    // `guest-2` has no intent at all, so it is silent and there is nothing to mute.
-    expect(second?.disabled).toBe(true);
+    // `guest-2` has no intent at all; OFF on it is a no-op the operator may still press.
+    expect(second?.disabled).toBe(false);
+  });
+
+  it('the row is NAMED in the operator’s words, with its ids on the title (golden rule 11)', () => {
+    renderDialog(() => Promise.resolve({ ok: true, refused: [] }));
+    const subtitle = openDialog()?.querySelector<HTMLElement>('[data-audio-subtitle]');
+    expect(subtitle?.textContent).toContain(NAME.names[0] ?? '');
+    expect(subtitle?.textContent).not.toContain('item-1');
+    expect(subtitle?.getAttribute('title')).toContain('item-1');
+    // The reference's footer facts, in words the operator reads without hovering.
+    expect(openDialog()?.textContent).toMatch(/ON = 100% · OFF = 0%/);
   });
 
   it('🔴 the slider commits on RELEASE, not on every drag frame', () => {
@@ -243,7 +289,6 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
     });
     expect(sliders()[0]?.value).toBe('0');
     expect(sliders()[1]?.value).toBe('100');
-    expect(muteButtons()[0]?.disabled, 'nothing to mute on an already-silent plate').toBe(true);
   });
 
   it('🔴 a REFUSED change does not leave the control showing a value the bridge rejected', async () => {
@@ -308,7 +353,7 @@ describe('add-multibox-audio — ON / OFF and SOLO in the dialog', () => {
     // NOT 0.4 — full volume, which is what the copy promises.
     expect(onApply).toHaveBeenLastCalledWith({ 'guest-1': 1 });
     expect(openDialog()?.textContent).toMatch(/ON is full volume/i);
-    expect(openDialog()?.textContent).toMatch(/does not return a plate to its previous/i);
+    expect(openDialog()?.textContent).toMatch(/not a return to the previous fader level/i);
   });
 
   it('🔴 SOLO is ONE call — 1 for the plate and 0 for every sibling', () => {
@@ -358,6 +403,7 @@ describe('add-multibox-audio — ON / OFF and SOLO in the dialog', () => {
         createElement(LivePlateAudioDialog, {
           item: itemWith('on-air'),
           template: onePlate,
+          name: NAME,
           onApplyVolumes: () => Promise.resolve({ ok: true, refused: [] }),
           onClose: () => undefined,
         }),

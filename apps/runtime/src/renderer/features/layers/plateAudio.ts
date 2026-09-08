@@ -165,6 +165,26 @@ const PILL: Record<'audible' | 'silent', PlateAudioPill> = {
 };
 
 /**
+ * `RUNTIME-REDESIGN-01` Phase 6 — **a plate with NO SEAT, as the audio dialog lists it.**
+ *
+ * Not a fourth audio state: the three above answer "can this plate be heard", and a plate
+ * nothing has seated cannot be — there is no layer for a sample to reach. What the dialog has
+ * to say instead is that the fader still MEANS something: the intent is recorded now and the
+ * row's next take seats the plate at it (the arm-before-the-take affordance). The word replaces
+ * the dialog's old _"audible on air"_, which on a READY row was a claim about air that nothing
+ * on the channel backed — the A12 class (`design.md` §12.8).
+ *
+ * Muted, like SILENT: nothing is wrong, and nothing is on air.
+ */
+export const UNSEATED_PILL: PlateAudioPill = {
+  label: 'NOT SEATED',
+  tone: colors.textMuted,
+  detail:
+    'Nothing is on a layer for this plate yet. The volume is recorded now and applied when ' +
+    'this row’s next take seats the plate — nothing is sent until then.',
+};
+
+/**
  * `held`'s hue, kept beside the other two rather than in {@link plateAudioPill}'s body — the
  * three states' colours belong in one place even though this one's WORDING is computed.
  *
@@ -261,6 +281,13 @@ export interface RowPlateAudio {
   plateId: string;
   volume: number | undefined;
   held: boolean;
+  /**
+   * The seat's coordinate (`1-10`), for a surface that names the layer in a sentence
+   * (`R-028`: the real layer number stays visible). Optional because `audioSummary`'s callers
+   * never needed it and a test builds these without one; absent means "not carried", never
+   * "not seated" — every record here IS a seat.
+   */
+  coordinate?: string | undefined;
 }
 
 export interface AudioSummary {

@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { pct, plateAudioState, soloMap } from './plateAudio.js';
@@ -21,6 +20,13 @@ import type { LiveLayerRowView } from './liveLayerRows.js';
  * same ON/OFF and SOLO. This is the same information, always visible, on the tab that already
  * enumerates every seated plate.
  *
+ * ── `RUNTIME-REDESIGN-01` PHASE 6 — THREE CELLS OF THE PLATE TABLE ──────────
+ *
+ * The strip is the last three columns of the LIVE PLATES table (`07-live-plates.html` as
+ * rendered): the AUDIO word, the GAIN fader with its readout, and the AUDIO CONTROLS. It lays
+ * itself out as a SUBGRID of the row it sits in, so the words line up under the table head
+ * without this component knowing the row's columns. The numbers are `PLATES_PX` (`theme.ts`).
+ *
  * ── 🔴 A PILL, NEVER A METER ────────────────────────────────────────────────
  *
  * Everything here describes what was ASKED FOR. Nothing in this product can currently say
@@ -37,33 +43,6 @@ import type { LiveLayerRowView } from './liveLayerRows.js';
  * rule exists to preserve, and the bridge records that intent without sending anything. What
  * changes for a held plate is the WORDING, not the availability — see `plateAudioPill`.
  */
-
-const styles = {
-  strip: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(9rem, auto) minmax(6rem, 1fr) 3rem auto',
-    alignItems: 'center',
-    gap: '0.6rem',
-    padding: '0.35rem 0 0',
-  },
-  pill: { display: 'inline-flex', alignItems: 'center', gap: '0.35rem', minWidth: 0 },
-  dot: { fontSize: '0.7rem', lineHeight: 1 },
-  pillLabel: {
-    fontSize: '0.68rem',
-    fontWeight: 700,
-    letterSpacing: '0.06em',
-    whiteSpace: 'nowrap' as const,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
-  readout: {
-    fontSize: '0.75rem',
-    fontVariantNumeric: 'tabular-nums' as const,
-    textAlign: 'right' as const,
-    color: colors.textMuted,
-  },
-  buttons: { display: 'flex', gap: '0.35rem' },
-} as const;
 
 export interface PlateAudioStripProps {
   row: LiveLayerRowView;
@@ -115,9 +94,9 @@ export function PlateAudioStrip({
   };
 
   return (
-    <div style={styles.strip} data-plate-audio={row.plate}>
+    <div className="cg-plate-strip" data-plate-audio={row.plate}>
       <span
-        style={styles.pill}
+        className="cg-plate-pill"
         title={audio.pill.detail}
         /*
           🔴 `plateAudioState`, NOT a local ternary — golden rule 6, and the two versions had
@@ -133,40 +112,47 @@ export function PlateAudioStrip({
           never the only signal. A screen reader gets the word and the detail; a colour-blind
           operator gets the word.
         */}
-        <span aria-hidden="true" style={{ ...styles.dot, color: audio.pill.tone }}>
-          ●
+        <span
+          aria-hidden="true"
+          className="cg-plate-pill-dot"
+          style={{ backgroundColor: audio.pill.tone }}
+        />
+        <span className="cg-plate-pill-label" style={{ color: audio.pill.tone }}>
+          {audio.pill.label}
         </span>
-        <span style={{ ...styles.pillLabel, color: audio.pill.tone }}>{audio.pill.label}</span>
       </span>
-      <input
-        id={inputId}
-        className="cg-field"
-        type="range"
-        min={0}
-        max={100}
-        step={5}
-        value={Math.round(shown * 100)}
-        disabled={refusal !== undefined}
-        {...(refusal !== undefined ? { title: refusal } : {})}
-        aria-label={`Volume for ${row.plate} on ${row.coordinate}`}
-        onChange={(e) => {
-          setDragging(Number(e.target.value) / 100);
-        }}
-        // Committed on RELEASE, not on every drag frame: one AMCP command per decision
-        // rather than one per pixel.
-        onPointerUp={() => {
-          // `shown` already IS `dragging ?? published ?? 0` — see above. Re-testing `dragging`
-          // here would be a third place the same fall-through is spelled out.
-          void apply({ [row.plate]: shown }).catch(() => undefined);
-        }}
-        onKeyUp={() => {
-          // `shown` already IS `dragging ?? published ?? 0` — see above. Re-testing `dragging`
-          // here would be a third place the same fall-through is spelled out.
-          void apply({ [row.plate]: shown }).catch(() => undefined);
-        }}
-      />
-      <span style={styles.readout}>{pct(shown)}</span>
-      <span style={styles.buttons}>
+      <span className="cg-plate-gain">
+        <input
+          id={inputId}
+          className="cg-field"
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={Math.round(shown * 100)}
+          disabled={refusal !== undefined}
+          {...(refusal !== undefined ? { title: refusal } : {})}
+          aria-label={`Volume for ${row.plate} on ${row.coordinate}`}
+          aria-valuetext={pct(shown)}
+          onChange={(e) => {
+            setDragging(Number(e.target.value) / 100);
+          }}
+          // Committed on RELEASE, not on every drag frame: one AMCP command per decision
+          // rather than one per pixel.
+          onPointerUp={() => {
+            // `shown` already IS `dragging ?? published ?? 0` — see above. Re-testing `dragging`
+            // here would be a third place the same fall-through is spelled out.
+            void apply({ [row.plate]: shown }).catch(() => undefined);
+          }}
+          onKeyUp={() => {
+            void apply({ [row.plate]: shown }).catch(() => undefined);
+          }}
+        />
+        <output className="cg-plate-readout" htmlFor={inputId}>
+          {pct(shown)}
+        </output>
+      </span>
+      <span className="cg-plate-verbs">
         {/*
           ON and OFF as two buttons rather than one toggle.
 
@@ -190,7 +176,7 @@ export function PlateAudioStrip({
           run={() => apply({ [row.plate]: 0 })}
           onError={reportCommandError}
           disabled={refusal !== undefined}
-          {...(refusal !== undefined ? { title: refusal } : {})}
+          {...(refusal !== undefined ? { title: refusal } : { title: OFF_TITLE })}
           aria-label={`Silence ${row.plate}`}
         >
           OFF
@@ -230,6 +216,8 @@ export function PlateAudioStrip({
  */
 const ON_TITLE = 'ON = full volume (100%). It does not return to the previous fader level.';
 
+const OFF_TITLE = 'OFF = 0%. Silence this plate.';
+
 const SOLO_TITLE =
-  'Raise this plate and silence every other plate on this row. There is no un-solo — ' +
-  'raise the others again on their own faders.';
+  'Set this plate to 100% and every other plate on this row to 0%, including the frames the ' +
+  'current look hides. There is no un-solo — raise the others again on their own faders.';

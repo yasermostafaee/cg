@@ -1,110 +1,97 @@
 import { useState } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { Button } from '../../ui/Button.js';
+import { OperatorNames } from '../../ui/OperatorNames.js';
+import type { OperatorRowName } from '../../ui/operatorNaming.js';
+import { lookOptionsOf } from './LookPicker.js';
 // The ONE vocabulary, shared with the LIVE SOURCES strip and the row's summary — so the
-// dialog's SOLO and the panel's SOLO cannot address different sets or round differently.
-import { pct, soloMap } from './plateAudio.js';
+// dialog's SOLO and the panel's SOLO cannot address different sets, and the dialog's state
+// words cannot disagree with the strip's about whether a guest can be heard.
+import {
+  pct,
+  plateAudioPill,
+  soloMap,
+  UNSEATED_PILL,
+  type PlateAudioPill,
+  type RowPlateAudio,
+} from './plateAudio.js';
 
 /**
- * C-015 phase 6 (6.5f) — **RAISE (or mute) ONE PLATE's audio: the operator surface
- * for the explicit recorded intent the mute rule defers to.**
+ * C-015 phase 6 (6.5f) — **RAISE (or mute) ONE ROW's plates: the operator surface for the
+ * explicit recorded intent the mute rule defers to.**
  *
  * ── WHY THIS EXISTS AT ALL ─────────────────────────────────────────────────
  *
- * The audio rule is that every producer the bridge creates is created MUTED, and
- * audio is raised only by an explicit recorded intent NAMING THE LAYER. Phase 6
- * enumerated the MUTE half at five sub-tasks and never enumerated the surface that
- * records the intent — so until this existed **every Live Source plate was
- * permanently silent**. The mechanism was built and tested a session earlier; this
- * is the half an operator can reach.
+ * The audio rule is that every producer the bridge creates is created MUTED, and audio is
+ * raised only by an explicit recorded intent NAMING THE LAYER. Phase 6 of C-015 enumerated
+ * the MUTE half at five sub-tasks and never enumerated the surface that records the intent —
+ * so until this existed **every Live Source plate was permanently silent**.
  *
- * ── WHERE IT LIVES, AND THE TWO PLACEMENTS THAT WERE REJECTED ─────────────
+ * ── WHERE IT LIVES ─────────────────────────────────────────────────────────
  *
- * **ON THE ROW, beside the source swap** (owner, 2026-08-14). Under pressure, on
- * air, "which source" and "how loud" are one decision made in one place — and 6.9c
- * already settled that the audio intent belongs to the PLATE rather than to the
- * producer instance, so a control expressing a plate-level property belongs where
- * the plate's other per-run property already is.
- *
- * Rejected, recorded so neither is re-proposed: **inside the swap dialog** (it
- * turns a two-second adjustment into opening the swap flow, and couples two
- * independent acts), and **the PLAYOUT tab** (further from the operator's flow than
- * the row they are already looking at).
- *
- * ⚠ **It is a DIALOG rather than an inline row control, and that is forced by the
- * row rather than chosen.** A row carries a VARIABLE number of plates while the
- * verb block is a fixed six-column grid whose sticky header prints the word above
- * each glyph (`layerTable.ts`); a conditional inline control would misalign every
- * header word from its button — which that file names as the DANGEROUS failure,
- * because this product's STOP and CLEAR are the inverse of the reference
- * product's. So the affordance sits beside SOURCE in the row's own action set,
- * which is as close to the row as a per-plate control can get.
+ * **ON THE ROW, beside the source swap** (owner, 2026-08-14): under pressure, on air, "which
+ * source" and "how loud" are one decision made in one place. `RUNTIME-REDESIGN-01` Phase 6
+ * added the second door the reference wires — a RIGHT-CLICK (or `ContextMenu` / `Shift+F10`)
+ * on a seated plate in LIVE SOURCES opens this same dialog on the plate's OWNING ROW with that
+ * plate's fader focused. Two doors, one dialog, one map.
  *
  * ── WHAT IT COMMITS ───────────────────────────────────────────────────────
  *
- * Each control commits on release, with no Apply: an Apply is another action, and
- * under pressure another action is one that does not happen. `0` is a REAL value —
- * "the operator muted this plate" — and is recorded, never treated as a reset.
+ * Each control commits on release, with no Apply. Every gesture goes through the MAP door
+ * (`stack.set-plate-volumes`): SOLO is a CROSS-PLATE statement — _"this plate and NONE of its
+ * siblings"_ — and a sequence of single-plate calls cannot make one. The bridge holds the row's
+ * live-seat lock for the whole map, so a look switch cannot land in the middle of a SOLO.
  *
- * ── `add-multibox-audio` — WHAT CHANGED, AND WHAT DELIBERATELY DID NOT ────
+ * 🔴 **`ON = 100 % · OFF = 0 %`, and OFF-then-ON RETURNS TO 100 %, NOT TO THE PREVIOUS FADER
+ * VALUE** — the footer says so in the reference's own words. Restoring the previous level
+ * needs a SECOND store of intent beside the bridge's `#plateVolumes` (the `B-100` / `P-012`
+ * class): only one of the two would survive a blip, and a plate would come back at a volume
+ * nobody chose.
  *
- * The dialog gains **ON / OFF** and **SOLO** beside the fader, and every gesture now goes
- * through the MAP door (`stack.set-plate-volumes`) rather than the single-plate one. That is
- * not a refactor for tidiness: SOLO is a CROSS-PLATE statement — _"this plate and NONE of its
- * siblings"_ — and a sequence of single-plate calls cannot make one. The bridge holds the
- * row's live-seat lock for the whole map, so a look switch cannot land in the middle of a
- * SOLO and leave two guests up.
+ * 🔴 **SOLO is scoped to THIS ROW's plates — including the frames the active look HIDES — and
+ * nothing outside it.** The set is every plate the template declares plus every plate the
+ * ledger has seated for this row (a seated record is the bridge's own second way of accounting
+ * for a plate), which is the union pre-seat and therefore includes the held frames.
  *
- * 🔴 **OFF-then-ON RETURNS TO 100 %, NOT TO THE PREVIOUS FADER VALUE**, and the dialog says so
- * in words. Restoring the previous level needs a SECOND store of intent beside the bridge's
- * `#plateVolumes`, answering the same question a second way — the `B-100` / `P-012` class,
- * whose specific failure here is that only one of the two stores is retained, so a plate comes
- * back from a bridge blip at a volume nobody chose.
+ * ── A12 — NO SECOND CLAIM ABOUT AIR ────────────────────────────────────────
  *
- * ⚠ **This dialog did NOT become the only surface, and it did not stop being useful.** The
- * always-visible strip lives in LIVE SOURCES, where every seated plate is already enumerated;
- * this is where ONE ROW's plates are adjusted against each other, which is the thing a list of
- * every plate on the channel is worse at.
+ * The state word under each fader is `plateAudioPill`'s — AUDIBLE, SILENT, HIDDEN BY THIS
+ * LOOK — read from the LEDGER's `held`, and a plate with no seat reads NOT SEATED. This dialog
+ * used to derive `audible = value > 0` locally and print _"audible on air"_ under a raised
+ * plate, which on a READY row was a claim about air that nothing on the channel backed (and
+ * a second copy of the one predicate, golden rule 6). The reference's `On air` badge in its
+ * context line is NOT adopted for the same reason (`design.md` §12.8).
+ *
+ * ── THE MEASURED SHAPE (`08-live-audio.html`, Chromium, 1280 × 800) ─────────
+ *
+ * A subtitle naming the row under the title; a context line (`N frames · look`, and the hint
+ * that changes apply on release); a three-column head (`Frame / source · Requested gain ·
+ * Audio controls`); one 85 px row per plate — index chip, name and `Frame N · Layer c-l`;
+ * a 28 px fader with its readout and state word; `ON · OFF · SOLO` at 58 × 36 — and a footer
+ * carrying `ON = 100% · OFF = 0%` and SOLO's scope. The reference's MUTE-less verb row is
+ * adopted: MUTE was OFF's twin, and two names for one write is the pair a reader has to
+ * disambiguate under pressure. Numbers in `theme.ts` (`AUDIO_DIALOG_PX`).
  */
-
-const styles = {
-  intro: { margin: '0 0 0.9rem', fontSize: '0.8rem', lineHeight: 1.5, color: colors.textMuted },
-  row: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(6rem, 1fr) auto minmax(8rem, 1.2fr) 3.5rem',
-    gap: '0.6rem',
-    alignItems: 'center',
-    padding: '0.45rem 0',
-  },
-  /**
-   * The verb row, on its own line UNDER the fader rather than as three more grid columns.
-   *
-   * A dialog is not the layer table and has no fixed-column contract to protect, but the same
-   * arithmetic applies: three more columns would squeeze the fader — the control an operator
-   * spends the most time in — to make room for buttons they press once.
-   */
-  verbs: {
-    gridColumn: '1 / -1',
-    display: 'flex',
-    gap: '0.4rem',
-    padding: '0 0 0.35rem',
-  },
-  plate: { fontSize: '0.82rem', fontWeight: 600 },
-  note: { display: 'block', fontSize: '0.7rem', fontWeight: 400, color: colors.textMuted },
-  live: { color: colors.pending, fontSize: '0.7rem' },
-  readout: {
-    fontSize: '0.78rem',
-    fontVariantNumeric: 'tabular-nums' as const,
-    textAlign: 'right' as const,
-  },
-} as const;
 
 export interface LivePlateAudioDialogProps {
   item: StackItemState;
   template: TemplateInfo;
+  /**
+   * Golden rule 11 — the row named in the OPERATOR's words (`operatorRowName`), never composed
+   * here. Its ids ride on the subtitle's `title`.
+   */
+  name: OperatorRowName;
+  /**
+   * The plates the bridge's ledger holds a seat for on this row, with the two facts audibility
+   * needs and the coordinate each seat is on. Read off the SAME rows the LIVE SOURCES tab
+   * renders (`rowPlateAudioOf`), so the words here and the words there are one evaluation.
+   * Empty for a row that owns nothing — every declared plate then reads NOT SEATED.
+   */
+  seatedPlates?: readonly RowPlateAudio[] | undefined;
+  /** The plate whose fader takes focus when the dialog opens — the one the operator pointed at. */
+  focusPlateId?: string | undefined;
   /**
    * Apply a MAP of this row's plate volumes, in ONE call.
    *
@@ -118,9 +105,20 @@ export interface LivePlateAudioDialogProps {
   onClose: () => void;
 }
 
+/** One plate as the dialog lists it: declared or seated, with the facts the words need. */
+interface DialogPlate {
+  plateId: string;
+  /** Position in the template's declaration, 1-based; seated-only plates count on after it. */
+  index: number;
+  seated: RowPlateAudio | undefined;
+}
+
 export function LivePlateAudioDialog({
   item,
   template,
+  name,
+  seatedPlates = [],
+  focusPlateId,
   onApplyVolumes,
   onClose,
 }: LivePlateAudioDialogProps): React.JSX.Element {
@@ -128,20 +126,37 @@ export function LivePlateAudioDialog({
   /**
    * What the operator is dragging RIGHT NOW, before it is committed.
    *
-   * Kept apart from `item.plateVolumes` deliberately: the published state is the
-   * bridge's answer, and showing a slider position the bridge has not accepted
-   * would be the optimistic-UI lie this project refuses everywhere else. On a
-   * refusal this is dropped and the published value stands.
+   * Kept apart from `item.plateVolumes` deliberately: the published state is the bridge's
+   * answer, and showing a slider position the bridge has not accepted would be the
+   * optimistic-UI lie this project refuses everywhere else. On a refusal this is dropped and
+   * the published value stands.
    */
   const [dragging, setDragging] = useState<Record<string, number>>({});
 
-  const plates = template.liveSources?.sources ?? [];
   const intents = item.plateVolumes ?? {};
-
-  // `?? `, never `||`: a recorded intent of 0 is a REAL authored value ("muted by
-  // the operator") and must not fall through to the default that happens to equal
-  // it. Zero is falsy, and this repo has paid for that three times.
+  // `?? `, never `||`: a recorded intent of 0 is a REAL authored value ("muted by the
+  // operator") and must not fall through to the default that happens to equal it.
   const shown = (plateId: string): number => dragging[plateId] ?? intents[plateId] ?? 0;
+
+  /**
+   * THE ROW'S PLATES: every plate the template DECLARES, then every plate the ledger has
+   * SEATED for this row that the declaration does not name.
+   *
+   * Declared first, because this dialog can be opened on a row that is not on air, where
+   * there is no ledger to read and arming the plates ahead of the take is the whole point.
+   * Seated second, because a ledger record is the bridge's own second way of accounting for a
+   * plate (a stranded or adopted seat has no declaration to match) and SOLO must reach it.
+   * Deduplicated by plate id: a fill+key pair puts one `sourceId` on two ledger records.
+   */
+  const seatedById = new Map(seatedPlates.map((p) => [p.plateId, p]));
+  const declared = template.liveSources?.sources.map((p) => p.sourceId) ?? [];
+  const ids = [...new Set([...declared, ...seatedById.keys()])];
+  const plates: DialogPlate[] = ids.map((plateId, i) => ({
+    plateId,
+    index: i + 1,
+    seated: seatedById.get(plateId),
+  }));
+  const plateIds = plates.map((p) => p.plateId);
 
   /**
    * Apply a map and reconcile the optimistic state.
@@ -152,8 +167,6 @@ export function LivePlateAudioDialog({
   const commit = (volumes: Record<string, number>): void => {
     setRefusal(null);
     void onApplyVolumes(volumes).then((res) => {
-      // Dropped either way: on success the published state now carries it, and on failure it
-      // never happened.
       setDragging((d) => {
         const next = { ...d };
         for (const plateId of Object.keys(volumes)) delete next[plateId];
@@ -169,16 +182,15 @@ export function LivePlateAudioDialog({
     });
   };
 
-  /**
-   * SOLO's scope: every plate this TEMPLATE declares.
-   *
-   * ⚠ Declared, and not the ledger's seated set — this dialog is the only audio surface that
-   * can be opened on a row which is not on air, where there is no ledger to read and arming
-   * the plates ahead of the take is the whole point. Every declared plate is one the bridge
-   * accepts (it validates against this same declaration), and a `0` written to an unseated
-   * plate is a recorded intent with nothing sent — exactly what the mute rule wants.
-   */
-  const declaredIds = plates.map((p) => p.sourceId);
+  // The look whose name the context line carries — the ROW's recorded look, else the
+  // template's default, through the one helper the picker reads.
+  const looks = lookOptionsOf(template.liveSources);
+  const activeLook =
+    looks?.find((l) => l.id === item.activeLookId) ??
+    looks?.find((l) => l.id === template.liveSources?.defaultLookId) ??
+    null;
+  // Focus lands on the plate the operator pointed at, else the first fader.
+  const focusId = plateIds.includes(focusPlateId ?? '') ? focusPlateId : plateIds[0];
 
   return (
     <Modal
@@ -187,122 +199,155 @@ export function LivePlateAudioDialog({
       size="wide"
       {...(refusal !== null && { message: { role: 'refusal' as const, text: refusal } })}
       footer={
-        <ModalAction actionRole="cancel" onClick={onClose}>
-          Close
-        </ModalAction>
+        <>
+          {/*
+            🔴 THE TWO SENTENCES AN OPERATOR MUST NOT HAVE TO DISCOVER UNDER PRESSURE — the
+            reference's own footer words, kept beside the action they qualify.
+          */}
+          <span className="cg-audio-foot-info" data-audio-foot-info="">
+            ON = 100% · OFF = 0% — ON is full volume, not a return to the previous fader level.
+            <br />
+            SOLO silences all other frames of this row, including hidden frames. There is no un-solo
+            — raise the others again on their own faders.
+          </span>
+          <ModalAction actionRole="cancel" onClick={onClose}>
+            Close
+          </ModalAction>
+        </>
       }
     >
-      <p style={styles.intro}>
+      {/* Golden rule 11 — WHICH ROW this dialog is about, in the operator's words, ids on hover.
+          `R-028`: the real layer number stays visible in the sentence. */}
+      <p className="cg-audio-subtitle" data-audio-subtitle="" title={name.title}>
+        <OperatorNames name={name} />
+        {name.layer !== null && <span> · {name.layer}</span>}
+      </p>
+      <div className="cg-audio-context" data-audio-context="">
+        <span>
+          {String(plates.length)} {plates.length === 1 ? 'frame' : 'frames'}
+          {activeLook !== null && (
+            <>
+              {' · '}
+              <bdi>{activeLook.label}</bdi>
+            </>
+          )}
+        </span>
+        <span className="cg-audio-hint">Changes apply on release</span>
+      </div>
+      <p className="cg-audio-intro">
         Every live plate starts <strong>silent</strong> — a plate carries its guest’s live
         microphone, so nothing the bridge puts on a layer is audible until it is raised here. This
-        is a per-plate setting for <strong>this row</strong>, and it survives a source swap and a
-        bridge restart. It can be set before the take.
-        <br />
-        {/*
-          🔴 THE ONE SENTENCE AN OPERATOR MUST NOT HAVE TO DISCOVER UNDER PRESSURE.
-
-          ON is full volume, not "back to where it was". Someone who assumes otherwise puts a
-          guest back at 100 % having meant 40 %, on air, and there is nothing on screen that
-          would have told them. Restoring the previous level would need a second store of
-          intent beside the bridge's — the `B-100` / `P-012` class — and only one of the two
-          would be retained across a blip, so the plate would come back at a volume nobody
-          chose. The trade is deliberate; saying it here is the price of making it.
-        */}
-        <strong>ON is full volume (100 %)</strong> — it does not return a plate to its previous
-        fader level. <strong>SOLO</strong> raises one plate and silences the others on this row, and
-        there is no un-solo.
+        is a per-plate setting for <strong>this row</strong>; it survives a source swap and a bridge
+        restart, and it can be set before the take.
       </p>
+      <div className="cg-audio-head" aria-hidden="true">
+        <span>Frame / source</span>
+        <span>Requested gain</span>
+        <span>Audio controls</span>
+      </div>
       {plates.map((plate) => {
-        const value = shown(plate.sourceId);
-        const audible = value > 0;
+        const value = shown(plate.plateId);
+        const pill: PlateAudioPill =
+          plate.seated === undefined
+            ? UNSEATED_PILL
+            : // The PUBLISHED intent, not the drag value: the word says what the bridge holds.
+              plateAudioPill(intents[plate.plateId], plate.seated.held);
+        const inputId = `vol-${item.itemId}-${plate.plateId}`;
+        // `R-028` — the real coordinate stays visible in the sentence. Said as the coordinate
+        // (`on 1-10`), never a hand-built `Layer N`, which is a ROW's name (`cg/bank-shape`).
+        const seatLine =
+          plate.seated?.coordinate !== undefined ? `on ${plate.seated.coordinate}` : 'not seated';
         return (
-          <div key={plate.sourceId} style={styles.row}>
-            <label htmlFor={`vol-${item.itemId}-${plate.sourceId}`} style={styles.plate}>
-              {plate.sourceId}
-              <span style={styles.note}>
-                {audible ? <span style={styles.live}>audible on air</span> : 'silent'}
+          <div
+            key={plate.plateId}
+            className={`cg-audio-row${plate.plateId === focusId ? ' cg-audio-row--focused' : ''}`}
+            data-audio-plate={plate.plateId}
+            data-plate-audio-state={pill.label}
+          >
+            <div className="cg-audio-source">
+              <span className="cg-audio-index" aria-hidden="true">
+                {String(plate.index)}
               </span>
-            </label>
-            {/*
-              A MUTE button beside the slider, not only a slider at zero. Muting is
-              the urgent direction — an open microphone is the failure an operator
-              has seconds to fix — and dragging a slider to exactly zero under
-              pressure is a worse gesture than pressing one button.
-            */}
-            <Button
-              variant="secondary"
-              disabled={!audible}
-              onClick={() => {
-                commit({ [plate.sourceId]: 0 });
-              }}
-              aria-label={`Mute ${plate.sourceId}`}
-            >
-              MUTE
-            </Button>
-            <input
-              id={`vol-${item.itemId}-${plate.sourceId}`}
-              className="cg-field"
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={Math.round(value * 100)}
-              aria-label={`Volume for ${plate.sourceId}`}
-              onChange={(e) => {
-                const next = Number(e.target.value) / 100;
-                setDragging((d) => ({ ...d, [plate.sourceId]: next }));
-              }}
-              // Committed on RELEASE, not on every drag frame: one AMCP command per
-              // decision rather than one per pixel.
-              onPointerUp={() => {
-                commit({ [plate.sourceId]: shown(plate.sourceId) });
-              }}
-              onKeyUp={() => {
-                commit({ [plate.sourceId]: shown(plate.sourceId) });
-              }}
-            />
-            <span style={styles.readout}>{pct(value)}</span>
-            <span style={styles.verbs}>
+              <div>
+                <label htmlFor={inputId} className="cg-audio-name">
+                  <bdi>{plate.plateId}</bdi>
+                </label>
+                <small className="cg-audio-seat">
+                  Frame {String(plate.index)} · {seatLine}
+                </small>
+              </div>
+            </div>
+            <div className="cg-audio-slider">
+              <input
+                id={inputId}
+                className="cg-field"
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={Math.round(value * 100)}
+                aria-label={`Volume for ${plate.plateId}`}
+                aria-valuetext={pct(value)}
+                {...(plate.plateId === focusId ? { 'data-modal-autofocus': '' } : {})}
+                onChange={(e) => {
+                  const next = Number(e.target.value) / 100;
+                  setDragging((d) => ({ ...d, [plate.plateId]: next }));
+                }}
+                // Committed on RELEASE, not on every drag frame: one AMCP command per
+                // decision rather than one per pixel.
+                onPointerUp={() => {
+                  commit({ [plate.plateId]: shown(plate.plateId) });
+                }}
+                onKeyUp={() => {
+                  commit({ [plate.plateId]: shown(plate.plateId) });
+                }}
+              />
+              <output className="cg-audio-readout" htmlFor={inputId}>
+                {pct(value)}
+              </output>
+              <small className="cg-audio-state" style={{ color: pill.tone }} title={pill.detail}>
+                {pill.label}
+              </small>
+            </div>
+            <span className="cg-audio-verbs">
               {/*
-                ON and OFF as two named buttons rather than one toggle: a toggle has to be
-                READ before it can be pressed, and under pressure that read is a guess. OFF
-                always means silence whatever the plate was doing, which is the urgent
-                direction. MUTE above stays — it is OFF's twin beside the fader, and removing
-                a control an operator already reaches for to make room for a tidier set is not
-                an improvement.
+                ON and OFF as two named buttons rather than one toggle: a toggle has to be READ
+                before it can be pressed, and under pressure that read is a guess. OFF always
+                means silence whatever the plate was doing, which is the urgent direction.
               */}
               <Button
                 variant="secondary"
                 onClick={() => {
-                  commit({ [plate.sourceId]: 1 });
+                  commit({ [plate.plateId]: 1 });
                 }}
                 title="ON = full volume (100%). It does not return to the previous fader level."
-                aria-label={`Full volume for ${plate.sourceId} (100%, not the previous level)`}
+                aria-label={`Full volume for ${plate.plateId} (100%, not the previous level)`}
               >
                 ON
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => {
-                  commit({ [plate.sourceId]: 0 });
+                  commit({ [plate.plateId]: 0 });
                 }}
-                aria-label={`Silence ${plate.sourceId}`}
+                title="OFF = 0%. Silence this plate."
+                aria-label={`Silence ${plate.plateId}`}
               >
                 OFF
               </Button>
               <Button
                 variant="caution"
-                disabled={declaredIds.length < 2}
+                disabled={plateIds.length < 2}
                 onClick={() => {
-                  commit(soloMap(declaredIds, plate.sourceId));
+                  commit(soloMap(plateIds, plate.plateId));
                 }}
                 title={
-                  declaredIds.length < 2
-                    ? 'This template has only one plate — there is nothing to solo against.'
-                    : 'Raise this plate and silence every other plate on this row. There is no ' +
-                      'un-solo — raise the others again on their own faders.'
+                  plateIds.length < 2
+                    ? 'This row has only one plate — there is nothing to solo against.'
+                    : 'Set this plate to 100% and every other plate on this row to 0%, including ' +
+                      'the frames the current look hides. There is no un-solo.'
                 }
-                aria-label={`Solo ${plate.sourceId} — silences the other ${String(declaredIds.length - 1)} plate(s) on this row, with no restore`}
+                aria-label={`Solo ${plate.plateId} — silences the other ${String(plateIds.length - 1)} plate(s) on this row, with no restore`}
               >
                 SOLO
               </Button>

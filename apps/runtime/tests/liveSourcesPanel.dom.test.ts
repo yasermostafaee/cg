@@ -145,11 +145,14 @@ async function render(
   remove: ReturnType<typeof vi.fn>;
   onSelectOwner: ReturnType<typeof vi.fn>;
   applied: { itemId: string; volumes: Record<string, number> }[];
+  /** `RUNTIME-REDESIGN-01` Phase 6 — the (owner, plate) pairs the panel asked to open audio on. */
+  opened: { itemId: string; plateId: string }[];
   panics: number;
 }> {
   const { remove } = stubBridge(link, removeResult, reach);
   const onSelectOwner = vi.fn();
   const applied: { itemId: string; volumes: Record<string, number> }[] = [];
+  const opened: { itemId: string; plateId: string }[] = [];
   const counter = { panics: 0 };
   const blind = liveLayerBlindness(
     link === 'disconnected',
@@ -180,6 +183,9 @@ async function render(
             applied.push({ itemId, volumes });
             return Promise.resolve({ ok: true, refused: [] });
           },
+          onOpenAudio: (itemId, plateId) => {
+            opened.push({ itemId, plateId });
+          },
         }),
       ),
     );
@@ -189,6 +195,7 @@ async function render(
     remove,
     onSelectOwner,
     applied,
+    opened,
     get panics() {
       return counter.panics;
     },
@@ -197,6 +204,80 @@ async function render(
 
 const rowFor = (el: HTMLElement, coordinate: string): HTMLElement | null =>
   el.querySelector(`[data-live-layer="${coordinate}"]`);
+
+/**
+ * `RUNTIME-REDESIGN-01` Phase 6 — **the reference's gesture on a plate: right-click opens the
+ * OWNING ROW's audio on that plate, and the keyboard reaches the same door.**
+ */
+describe('RUNTIME-REDESIGN-01 Phase 6 — right-click and its keyboard twins open the owner’s audio', () => {
+  it('a right-click on a seated plate asks for the OWNING ROW’s audio on THAT plate, and cancels the native menu', async () => {
+    const { el, opened } = await render([
+      layer({ layer: 10, sourceId: 'guest-1' }),
+      layer({ layer: 11, sourceId: 'guest-2', held: true }),
+    ]);
+    const held = rowFor(el, '1-11');
+    const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+    act(() => {
+      held?.dispatchEvent(ev);
+    });
+    // The HIDDEN frame is a door too — arming a held plate before its look is the point.
+    expect(opened).toEqual([{ itemId: 'item-a', plateId: 'guest-2' }]);
+    expect(ev.defaultPrevented, 'our door, not the browser’s menu').toBe(true);
+  });
+
+  it('🔴 `Shift+F10` and the `ContextMenu` key on a focused plate row open the same door', async () => {
+    const { el, opened } = await render([layer({ layer: 10, sourceId: 'guest-1' })]);
+    const row = rowFor(el, '1-10');
+    expect(
+      row?.getAttribute('tabindex'),
+      'the row is focusable — the keyboard needs a target',
+    ).toBe('0');
+    act(() => {
+      row?.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'F10',
+          shiftKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+    act(() => {
+      row?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true, cancelable: true }),
+      );
+    });
+    expect(opened).toEqual([
+      { itemId: 'item-a', plateId: 'guest-1' },
+      { itemId: 'item-a', plateId: 'guest-1' },
+    ]);
+  });
+
+  it('a plain F10, or a key the row does not wire, opens nothing', async () => {
+    const { el, opened } = await render([layer({ layer: 10, sourceId: 'guest-1' })]);
+    const row = rowFor(el, '1-10');
+    act(() => {
+      row?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', bubbles: true }));
+      row?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    expect(opened).toEqual([]);
+  });
+
+  it('a STRANDED plate has no owner to open — right-click opens nothing, and the row says so', async () => {
+    const { el, opened } = await render([layer({ layer: 10, sourceId: 'guest-1' })], STRANDED);
+    const row = rowFor(el, '1-10');
+    expect(row?.getAttribute('data-live-layer-stranded')).toBe('true');
+    const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 });
+    act(() => {
+      row?.dispatchEvent(ev);
+    });
+    expect(opened).toEqual([]);
+    // Not cancelled here: the app-wide suppressor (guard item 23) owns that, and this panel
+    // must not pretend it opened something.
+    expect(ev.defaultPrevented).toBe(false);
+    expect(row?.getAttribute('aria-label')).not.toMatch(/right-click for audio/);
+  });
+});
 
 const buttonIn = (row: Element | null, label: string): HTMLButtonElement | undefined =>
   [...(row?.querySelectorAll('button') ?? [])].find((b) => b.textContent === label);

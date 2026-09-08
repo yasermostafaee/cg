@@ -53,3 +53,47 @@ emergency patch (level 4) included — and never re-derived from the template's 
 
 - **WHEN** the row is on look B in the sequence above **THEN** A's frames render nothing and B's
   frames render — the switch away really moved the picture before it was moved back
+
+### Requirement: Changing a plate's audio never puts a ready row on air
+
+The bridge SHALL treat every plate-audio verb — one plate's volume, a map of volumes (ON, OFF,
+a fader release, SOLO) — as a configuration statement and never as a playout verb. For a row that
+does not own its live seats (never taken, or taken off air by the operator's own OUT or STOP) a
+raise SHALL put no `PLAY`, no `MIXER … VOLUME` and no `MIXER … FILL` or `MIXER … CLIP` on the AMCP
+wire and SHALL leave the ledger empty, and SHALL still record the intent so that the row's next
+take seats each plate at the volume recorded. A row that DOES own its seats SHALL have a raise
+asserted on the wire at once, as one `MIXER … VOLUME` and nothing else. A silence (`0`) is never
+gated: it can put nothing on air.
+
+#### Scenario: A loaded, never-taken row is raised
+
+- **WHEN** a row is loaded and never taken, and the operator presses ON, releases a fader, or
+  presses SOLO on one of its plates **THEN** the change is accepted and recorded, nothing reaches
+  the wire on any layer, and the ledger stays empty
+
+#### Scenario: A row taken off air by the operator is then raised, and later re-taken
+
+- **WHEN** a row was on air, the operator presses OUT, the row settles off air, and the operator
+  then presses ON on a plate **THEN** nothing reaches the wire; and **WHEN** the row is next taken
+  **THEN** that plate is seated at the volume the off-air ON recorded
+
+#### Scenario: An on-air row is raised at once
+
+- **WHEN** the same ON is pressed on a row that is on air with seats in the ledger **THEN** exactly
+  one `MIXER … VOLUME 1` for that plate's layer reaches the wire, with no `PLAY` and no fill — the
+  instrument that reads the wire is proven live by this case
+
+### Requirement: SOLO is scoped to the owning row, hidden frames included
+
+A SOLO on one plate SHALL set that plate to full volume and every other plate of the SAME row to
+zero — the row's whole group: every plate the template declares plus every seat the ledger holds
+for the row, which is the union pre-seat and therefore includes the frames the active look hides —
+and SHALL touch nothing outside that row: no other row's layers on the wire, no other row's
+recorded intents, and no seat created anywhere.
+
+#### Scenario: SOLO names its owning row
+
+- **WHEN** two rows carry plates and every plate on both is raised, and the operator presses SOLO
+  on one plate of the first row **THEN** every `MIXER … VOLUME` that reaches the wire addresses a
+  layer the first row owns, the first row's hidden frame is silenced in the record, the second
+  row's intents are exactly as they were, and no `PLAY` was sent

@@ -1,6 +1,8 @@
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
+import { useFixedSlots } from '../../hooks/useFixedLayers.js';
+import { useOperatorNames } from '../../hooks/useOperatorNames.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import {
   aggregateHasFields,
@@ -145,6 +147,16 @@ const styles = {
     fontSize: '15px',
     fontWeight: 600,
     lineHeight: 1.35,
+    margin: '0 0 var(--r-space-1)',
+    overflowWrap: 'anywhere' as const,
+  },
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 6 (`R-061` (a)) — the TEMPLATE's line, under the row's name.
+   * The name the heading used to carry, one rank down: what the row CARRIES, not what it IS.
+   */
+  templateLine: {
+    color: colors.textSecondary,
+    fontSize: 'var(--r-text-md)',
     margin: '0 0 var(--r-space-3)',
     overflowWrap: 'anywhere' as const,
   },
@@ -346,6 +358,28 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
    * after typing an edit sent him to the wrong machine.
    */
   const applyRefusal = casparRefusalReason(linkDown, casparReach);
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 6 (`R-061` (a)) — golden rule 11: the heading names the ROW in
+   * the operator's words. Through the one composition (`operatorRowName`, fed by the bank and
+   * the registry), never a label composed here; the ids ride on the heading's `title`.
+   * Unconditional, like every hook: an empty ref list when nothing is selected.
+   */
+  const nameOf = useOperatorNames(
+    item === null ? [] : [{ itemId: item.itemId, templateId: item.templateId, slot: item.slot }],
+  );
+  /**
+   * WHICH ROW the item is on — the bank's own BINDING, which is what "the row I am editing"
+   * means to the operator, with the item's playout `slot` as the first answer when it carries
+   * one. The two agree on a bridge that sets `slot` at load; the offline mock binds a row
+   * without writing `slot` on the item, and a heading that fell back to the template there
+   * would be the same surface saying two different things on two backends.
+   */
+  const slots = useFixedSlots();
+  const boundSlot =
+    item === null ? undefined : slots.find((s) => s.binding?.itemId === item.itemId);
+  const rowSlot =
+    item?.slot ??
+    (boundSlot === undefined ? undefined : { channel: boundSlot.channel, layer: boundSlot.layer });
   // Re-render on any draft change so dirty markers + the draft-or-applied
   // values stay live (a push to `item` also re-renders via props).
   useSyncExternalStore(subscribeDrafts, draftsVersion);
@@ -481,6 +515,14 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
   // name, so the ordinary heading stays a name and nothing else.
   const ambiguous =
     info !== null && siblings.filter((t) => templateDisplayName(t) === label).length > 1;
+  /**
+   * The ROW's name for the heading — its alias or default (`Layer N` / `Bed N`) when it has a
+   * slot in the bank; `operatorRowName`'s own fallback order otherwise (the template, then a
+   * shortened id), so the heading is never empty. `names[0]` is that first choice by the
+   * module's contract ("in reading order: WHICH ROW, then WHAT IT WAS SHOWING").
+   */
+  const rowName = nameOf({ itemId: item.itemId, templateId: item.templateId, slot: rowSlot });
+  const heading = rowName.names[0] ?? label;
 
   return (
     <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
@@ -490,15 +532,39 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
         field the operator could ever see — and the Phase 5 field-box rules scope to it.
       */}
       <div className="cg-inspector-body" style={styles.scroll}>
-        <h3 style={styles.title} title={item.templateId}>
-          {label}
-          {ambiguous && (
+        {/*
+          `RUNTIME-REDESIGN-01` Phase 6 (`R-061` (a)) — THE ROW'S NAME IS THE HEADING, in its own
+          `<bdi>` (a Persian alias beside Latin chrome), with every id the row has on `title`.
+          Golden rule 11: now that drafts are per-row and survive a round trip, the risk of
+          editing the wrong row's draft is real, and the heading is what the operator reads.
+        */}
+        <h3 style={styles.title} title={rowName.title} data-inspector-heading="">
+          <bdi>{heading}</bdi>
+          {/* A row with no place in the bank is headed by its template; the stub stays with it. */}
+          {heading === label && ambiguous && (
             <span style={styles.titleStub} data-template-stub={templateIdStub(item.templateId)}>
               {' '}
               · {templateIdStub(item.templateId)}
             </span>
           )}
         </h3>
+        {/*
+          The TEMPLATE, one rank down — what the row carries. R-004's rule stands: the id is a
+          correlation key, tooltip only; `templateIdStub` appears only when another template
+          answers to the same name. Omitted when the heading already IS the template name (a
+          row with no slot), so nothing is said twice.
+        */}
+        {heading !== label && (
+          <div style={styles.templateLine} title={item.templateId} data-inspector-template="">
+            <bdi>{label}</bdi>
+            {ambiguous && (
+              <span style={styles.titleStub} data-template-stub={templateIdStub(item.templateId)}>
+                {' '}
+                · {templateIdStub(item.templateId)}
+              </span>
+            )}
+          </div>
+        )}
         {contentTitle !== '' && <div style={styles.contentTitle}>{contentTitle}</div>}
         {/* ALWAYS SHOWN, including the no-layer case: "no layer" is not an absence of
           information, it is the answer to "why is this not on air?". The old line rendered

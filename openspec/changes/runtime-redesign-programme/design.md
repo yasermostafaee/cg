@@ -360,10 +360,13 @@ Owed: `apps/runtime/tests/tooltip.dom.test.ts`.
 Now: `App.tsx:74-131` (`isEditable` + `suppressNativeMenu`). On a playout machine Reload and Back
 leave the running show; text inputs stay exempt because the Inspector is where Persian copy is
 typed and the browser's BiDi and spelling services are real editing affordances.
-After: preserved. ⚠ The reference wires right-click for plate controls without suppressing anything;
-Phase 6 must keep both — the app's own menus already call `preventDefault` themselves.
-🔴 **No test exists.** Owed: `apps/runtime/tests/contextMenuSuppression.dom.test.ts`, asserting both
-halves (suppressed on the surface, NOT suppressed in a text input).
+After: preserved, UNCHANGED, and both wired right-click doors Phase 6 added (the row's menu and
+the plate's dialog) call `preventDefault` themselves only when they opened something.
+✅ **DISCHARGED BY PHASE 6, before that phase touched right-click:**
+`apps/runtime/tests/contextMenuSuppression.dom.test.ts` on the whole `App` — (1) a right-click on
+chrome with no menu of its own is cancelled, (2) the same right-click in an Inspector text field
+is NOT, (3) the row's own menu still opens with the native one cancelled. Each half was taken RED
+against its own plant in `App.tsx` (§13.6) and (3) stayed green under both.
 
 ### Capability the reference's panels do not draw
 
@@ -1366,3 +1369,176 @@ phase does not adopt `3 rows on air` under PROGRAM (12.3). It is now a requireme
 `runtime-ui` spec delta and an owner answer in `tasks.md`, where Phase 6 (the audio modal's
 labels), Phase 8 (the audit log's row lines) and Phase 9 (the guard surfaces re-dressed) will
 read it before drawing a badge.
+
+## 13 — Phase 6: Live plates and audio
+
+The record for `PROMPT.md` §6 and the two owner answers that preceded it (A13, A14). What
+contradicted the prompt; the two seams, named by channel and file; the reference measured in a
+browser and counted by its waves; every plates-pane and dialog delta fixed or argued; the
+red-first matrix (the wire, the guard, the surfaces); guard item 23 discharged; and the numbers
+filed.
+
+### 13.1 What contradicted the prompt — and what did not
+
+- **The audio dialog was making a SECOND CLAIM ABOUT AIR, and on a READY row a false one.** It
+  derived `audible = value > 0` locally and printed _"audible on air"_ under any raised plate —
+  a local copy of the one audibility predicate (golden rule 6), blind to `held`, and on a row
+  that owned no seat a claim about air that nothing on the channel backed. A12's rule, met on
+  the very surface A12 said to read it before. Closed: the dialog now takes the LEDGER's word
+  through `plateAudioPill` — AUDIBLE, SILENT, HIDDEN BY THIS LOOK, ARMED · HIDDEN BY THIS
+  LOOK — and a plate with no seat reads NOT SEATED (`UNSEATED_PILL`, `plateAudio.ts`). The
+  reference's own `On air` badge in its context line is NOT adopted for the same reason.
+- **The row's AUDIO verb was reachable only by pointer.** `useContextMenu.open` took a
+  `MouseEvent`; the row's `onKeyDown` handled Enter and Space. The reference wires the
+  `ContextMenu` key and `Shift+F10`; the app wired neither. Built (13.2).
+- **The plates tab had no door to the dialog at all.** The reference's `[data-plate-coordinate]`
+  rows open the owner's audio on right-click; the app's LIVE SOURCES rows offered the strip and
+  OPEN ROW. Built (13.2).
+- **The mock's loaded items carry no `slot`** (`MockRuntime.load` writes `itemId`, `templateId`,
+  `fields`, `status`); the bridge's do. A heading that read `item.slot` alone named the row on one
+  backend and the template on the other. The Inspector now resolves WHICH ROW from the bank's
+  own BINDING (`useFixedSlots`, `binding.itemId === item.itemId`) with `item.slot` as the first
+  answer — the same fact from the surface that already renders the row.
+- **`PROMPT.md` §6's first line was already true and stays so.** The plates tab read the ledger
+  and nothing else before this phase; 13.2 names the seams so the report can say where each is
+  read from.
+- **What did NOT contradict the prompt:** the SOLO map was already scoped to the row's seated
+  set on the strip (`seatedPlatesOf`) and to the template's declared set in the dialog — the
+  latter now widened to the union of declared and seated, so a stranded or adopted seat with no
+  declaration (the bridge's own second way of accounting for a plate) is in scope too.
+
+### 13.2 What was built, and where each of the two source surfaces is read from
+
+🔴 **LIVE PLATES are read from the bridge's LEDGER**: channel `liveLayers.state` /
+`liveLayers.onStateChanged` → `hooks/useLiveLayers.ts` → `liveLayerRows()` in
+`features/layers/liveLayerRows.ts` → `LiveSourcesPanel`. One row per layer the bridge itself
+seated, whatever any status says. `git grep useLiveLayers` finds exactly one consumer,
+`LayersPanel.tsx`, which resolves the rows once and hands the same array to the tab, the tab
+dot and every row's audio summary.
+🔴 **The SOURCE CATALOGUE is installation-wide**: channel `sources.config` / `onConfigChanged`
+/ `setConfig` (and `assignments` / `setAssignments`) → `features/sources/sourceStore.ts` →
+Station setup's `SourcesSection` and the Inspector's `LivePlatesSection`. `LiveSourcesPanel`
+imports nothing from `features/sources/`. Different channel, different lifetime, different
+surface — and the pane now says so in its toolbar's scope note.
+
+| piece                         | where                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the keyboard's door           | `ui/useContextMenu.ts` — `isContextMenuKey` (the ONE predicate for `ContextMenu` / `Shift+F10`) and `openAt(e, anchor, target)`; `LayerRow`'s `onKeyDown` opens the row's menu from anywhere inside the row                                                                                                                  |
+| the plate's door              | `LiveSourcesPanel` rows are focusable (`tabIndex=0`), `onContextMenu` / `onKeyDown` → `onOpenAudio(itemId, plate)` for an OWNED row only; `LayersPanel` hosts the dialog (`plateAudioFor`), names the row through `operatorRowName`, hands it `rowPlateAudioOf(liveRows, itemId)` and `focusPlateId`                         |
+| the dialog                    | `LivePlateAudioDialog` — `name: OperatorRowName` (subtitle, ids on `title`), `seatedPlates` (+ `coordinate` on `RowPlateAudio`), `focusPlateId` → `data-modal-autofocus`; plates = declared ∪ seated; the per-plate word from `plateAudioPill` / `UNSEATED_PILL`; the reference's head, rows, verbs and footer; MUTE removed |
+| the plates pane               | `LiveSourcesPanel` — the toolbar (count, shown · held, scope note, PANIC) over a seven-column grid; `PlateAudioStrip` as a SUBGRID of its row (pill · gain · verbs); `LiveLayerRowView.plain` decides which rows keep their sentence visible                                                                                 |
+| the Inspector heading (A14 a) | `Inspector.tsx` — `useOperatorNames` + `useFixedSlots`; `<h3 data-inspector-heading title={ids}><bdi>row</bdi></h3>`, the template on `[data-inspector-template]` beneath, the stub wherever the template's name is                                                                                                          |
+| the tokens                    | `PLATES_PX` → `--r-plate-*` (34), `AUDIO_DIALOG_PX` → `--r-audio-*` (24), read by `controls.css`'s `.cg-plate-*` and `.cg-audio-*` rules; no colour literal                                                                                                                                                                  |
+| proofs                        | `audio-does-not-take.integration.test.ts` (wire), `contextMenuSuppression.dom.test.ts` (guard 23), `plateAudioAccess.dom.test.ts` and `inspectorHeading.dom.test.ts` (the whole `App`), `liveSourcesPanel.dom.test.ts` (+4), `livePlateAudio.dom.test.ts` (re-pointed), `e2e/live-plate-audio-access.spec.ts` (Chromium)     |
+
+### 13.3 🔴 THE MEASURED PROPERTY TABLES — rendered reference vs app, every delta FIXED or ARGUED
+
+Both columns are Chromium readings at 1280 × 800: the reference from `07-live-plates.html` and
+`08-live-audio.html` opened as files (the scratch script walked `getComputedStyle` and
+`getBoundingClientRect` on the real elements, hovering and focusing each control), the app from
+the built SPA on the e2e harness. "Palette" means the same ROLE, whose value Phase 2 moved.
+
+**The live plates pane (`07`)**
+
+| property           | reference (rendered)                                                                         | app (after this phase)                                                                             | verdict                                                                                                                                                                                      |
+| ------------------ | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the shape          | a toolbar over a seven-column table                                                          | a toolbar over a seven-column grid, `role="table"`                                                 | **FIXED** (was an intro paragraph over a stacked list)                                                                                                                                       |
+| toolbar            | 40 px, `4px 12px`, 12 px, gap 10, rule below                                                 | **40 px, `4px 12px`, 12 px, gap 10**, rule below (`--r-plate-toolbar-*`)                           | **FIXED**                                                                                                                                                                                    |
+| toolbar words      | `3 occupied layers` 600 · `2 shown · 1 held` muted                                           | **the same two, the same ranks**                                                                   | **FIXED**                                                                                                                                                                                    |
+| owner filter       | a 112 × 28 select, `All rows` / per owner                                                    | not built                                                                                          | ARGUED: a filter over a list of two to six rows; OPEN ROW and the Inspector already scope by owner; filed as nothing — it is a convenience the app's list does not need at this size         |
+| help glyph         | 27 × 28 info icon carrying the scope sentence                                                | 28 × 28 `Info` icon carrying the app's scope sentence (`title`, delegated Tooltip)                 | **FIXED**; the sentence is the app's own ("not the installation's source catalogue, which lives in Station setup")                                                                           |
+| panic              | `Silence all plates` 30 px, amber, 12 px 650                                                 | `SILENCE ALL BOXES`, `caution-strong`, 30 px floor                                                 | ARGUED: the app's verb name (pinned by its tests) and the button family's treatment; the floor height is the reference's                                                                     |
+| head               | 30 px, 11 px 550, muted ink on `#1c2735`, rule `--line`                                      | **30 px, 11 px** 500, muted on `--r-surface-raised`, rule `--r-border`; sticky                     | **FIXED** (height, size, ground, rule); ARGUED: 550 → 500 (the weight scale is 500 / 600 / 700)                                                                                              |
+| head words         | `Layer · Plate / source · Owner · Picture · Audio · Gain · ON = 100% · Audio controls`       | **the same seven**                                                                                 | **FIXED**                                                                                                                                                                                    |
+| columns            | 65 · 508 (fills) · 95 · 90 · 140 · 207 · 157                                                 | `65px · minmax(0,1fr) · minmax(95px,auto) · minmax(90px,auto) · 140px · 207px · 157px`             | **FIXED**; owner and picture grow because the app's words are longer                                                                                                                         |
+| row                | 42 px, cells `4px 10px` 13 px, rule `--soft`                                                 | **min 42 px, `4px 10px`, 13 px**, rule `--r-border-soft`; hover `--r-table-row-hover`              | **FIXED** for the ordinary row; ARGUED: a stranded, blind, adopted or held row adds its sentence on a second line — those sentences are the alarm or the caveat the deletion guard keeps     |
+| coordinate         | 12 px, nowrap, 65 px cell                                                                    | **12 px, nowrap, 65 px**                                                                           | **FIXED**                                                                                                                                                                                    |
+| plate / source     | handle 11 px muted + producer in a `<bdi>`, 13 px, gap 8                                     | **the same**                                                                                       | **FIXED**                                                                                                                                                                                    |
+| owner              | a 30 px link `Bed 1 ›`, 12 px accent                                                         | `Seated for <bdi>owner</bdi>` + `OPEN ROW` (ghost, 30 px, 12 px)                                   | ARGUED: the verb word stays — five tests pin it and `B-145` chose it; the owner is named beside it in its own isolate                                                                        |
+| picture            | `On screen` 12 px secondary / `Held` muted                                                   | the app's headline, 12 px, in the row's tone                                                       | **FIXED** (size, column); ARGUED: the words (`Held — not in the current look`, `Adopted — not confirmed`, `Stranded — no row owns this`) are `B-145` / `B-086` claims, nothing reworded (§0) |
+| audio word         | 5 px dot + 12 px `Audible` (sky) / `Silent` (muted), gap 6                                   | **5 px dot + 12 px** AUDIBLE / SILENT / HIDDEN BY THIS LOOK, gap 6                                 | **FIXED** (dot, size, gap); ARGUED: the upper-case vocabulary is the app's one (`plateAudio.ts`), shared with the row chip                                                                   |
+| gain               | range 140 × 26, radius 7; output 34 px, 11 px, right, secondary; gap 9                       | **range 140 × 26; output 34 px, 11 px, right, secondary; gap 9**                                   | **FIXED**; ARGUED: the range's radius is `.cg-field`'s                                                                                                                                       |
+| verbs              | `ON` / `OFF` 40 × 32, `SOLO` 46 × 32, 11 px 650, gap 5; hover ON sky, OFF purple, SOLO amber | **40 × 32 / 46 × 32, 11 px, gap 5**; `secondary` × 2, `caution`, the primitive's hovers            | **FIXED** (boxes); ARGUED: per-verb hover hues — the Button primitive owns its variants' states; SOLO wears the app's caution amber as the reference's does                                  |
+| row hover / focus  | `#182838`; focus `2px solid --blue`, offset 3                                                | `--r-table-row-hover`; `2px solid --r-accent`, offset −2 (inside)                                  | **FIXED** (hover, ring); ARGUED: an outside offset clips in a scrolling list                                                                                                                 |
+| right-click / keys | a row opens the owner's audio on that plate; `aria-label="… · right-click for audio"`        | **the same, on an OWNED row**; a stranded or blind row opens nothing and says nothing about a menu | **FIXED** (built, both doors, keyboard parity)                                                                                                                                               |
+
+**The audio dialog (`08`)**
+
+| property         | reference (rendered)                                                                                          | app (after this phase)                                                                                                                         | verdict                                                                                                                                                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| title            | `Live audio` 20 px 650 + a 42 px volume glyph                                                                 | `Live plate audio`, the modal primitive's title                                                                                                | ARGUED: the primitive's one treatment; the name is pinned by the row's tests                                                                                                                                                                                                       |
+| subtitle         | `Channel 1 · Bed 1 · 3ghab` 13 px muted, margin-top 3                                                         | **`<row> · <template> · 1-70` 13 px muted**, ids on `title`, each name in its own `<bdi>`                                                      | **FIXED** (built — golden rule 11; `R-028` keeps the coordinate in the sentence); ARGUED: `Channel 1` — the coordinate carries the channel                                                                                                                                         |
+| context line     | `On air` badge · `3 frames · 2 frames` · `Changes apply on release`; `11px 20px`, 13 px / 12 px               | **`N frames · <look label>` · `Changes apply on release`**, `11px 0`, 13 px / 12 px                                                            | **FIXED** (the line, the counts, the hint); the `On air` badge NOT adopted (A12); ARGUED: the look's LABEL rather than its frame count — the strip already counts frames                                                                                                           |
+| head             | `Frame / source · Requested gain · Audio controls`, 12 px, `1fr 269 190` gap 18, `10px 0`, rule               | **the same three, 12 px, `minmax(0,1fr) 269px 190px` gap 18, `10px 0`**, rule `--r-border-strong`                                              | **FIXED**                                                                                                                                                                                                                                                                          |
+| mixer row        | 85 px (`12px 0`, min 83), rule below                                                                          | **`12px 0`, min 83**, rule `--r-border-soft`                                                                                                   | **FIXED**                                                                                                                                                                                                                                                                          |
+| index chip       | 29 × 29, radius 4, 13 px, raised ground                                                                       | **29 × 29, radius 4, 13 px**, `--r-surface-raised`                                                                                             | **FIXED**                                                                                                                                                                                                                                                                          |
+| name / seat line | the PRODUCER's name 14 px 600; `Frame 1 · Layer 1-10` 12 px                                                   | the PLATE id 14 px 600 in a `<bdi>`; **`Frame 1 · on 1-10`** 12 px (or `· not seated`)                                                         | **FIXED** (ranks, seat line); ARGUED: the plate id, not the producer — it is the handle the strip, the row chip and the bridge all use, and the producer is one column over on the plates tab; `Layer N` is a ROW's name (`cg/bank-shape`), so the coordinate is said as `on 1-10` |
+| fader            | 28 px; output 43 px 13 px right; state word 12 px (`Audible · requested` mint / `Muted` / `… hidden by look`) | **28 px; 43 px 13 px right; 12 px state word** from the ledger — AUDIBLE / SILENT / HIDDEN BY THIS LOOK / ARMED · HIDDEN … / NOT SEATED        | **FIXED** (boxes, a per-plate word); ARGUED: the vocabulary is the app's one; `Audible · requested` in MINT is refused — mint is the reference's healthy hue and A4 keeps it off anything that reads like air                                                                      |
+| verbs            | 58 × 36, gap 8, 12 px, quiet; hover ON mint, OFF amber, SOLO sky                                              | **58 × 36, gap 8, 12 px**; `secondary` × 2, `caution`                                                                                          | **FIXED** (boxes); ARGUED: hover hues — ON's mint hover is the reference's live hue (A4)                                                                                                                                                                                           |
+| MUTE             | none                                                                                                          | **removed** — OFF was its twin, two names for one write                                                                                        | **FIXED**; its tests re-pointed to OFF, which stays pressable on a silent plate (idempotent, never a toggle to read first)                                                                                                                                                         |
+| footer           | `ON = 100% · OFF = 0%` / `SOLO silences all other frames of this row, including hidden frames.` 12 px; `Done` | **the same two sentences**, 12 px muted, plus the no-un-solo clause and "ON is full volume, not a return to the previous fader level"; `Close` | **FIXED** (sentences, on the surface); ARGUED: `Done` → `Close`, the primitive's cancel word                                                                                                                                                                                       |
+| box              | 860 wide, radius 14, `#141b25`, a 30 px shadow                                                                | the modal primitive's `wide`                                                                                                                   | ARGUED: the primitive                                                                                                                                                                                                                                                              |
+| focus            | the fader of the plate pointed at                                                                             | **the same** (`data-modal-autofocus`), else the first fader                                                                                    | **FIXED**                                                                                                                                                                                                                                                                          |
+
+**What the owner will see change on screen:** the LIVE SOURCES tab is a table now — a
+counting toolbar with the panic button at its right, seven headed columns, one 42 px line per
+seated plate with its fader and `ON OFF SOLO` at the right; a right-click (or `Shift+F10`) on
+any of those lines opens the owner's audio dialog on that plate. The dialog itself names its row
+under the title, lists frames as numbered rows with a coordinate under each name, says NOT
+SEATED where nothing is on a layer, has no MUTE, and carries `ON = 100% · OFF = 0%` in its
+footer. The Inspector is headed by the row's name with the template beneath it.
+
+### 13.4 The waves, counted — how the reference was read
+
+Counted in Chromium from the page's own CSSOM, as Phase 5 did (12.4): `.plate-table` **20**
+rules (19 unconditional, 1 under `@media`), `.plate-toolbar` 11 (6 + 5), `.plate-verb` 5,
+`.plate-audio` 5, `.plate-panic` 5 (4 + 1), `.plate-gain` 3, `.plate-picture` 3, `.plate-solo`
+2, `.plates-panel` 1; for the dialog `.audio-modal` **10** (8 + 2), `.modal-foot` 11 (6 + 5),
+`.audio-verbs` 8 (6 + 2), `.audio-slider` 6, `.audio-context` 6 (3 + 3), `.audio-mixer-row` 5
+(3 + 2), `.audio-source` 5 (4 + 1), `.audio-head` 3, `.foot-info` 3. Only the last
+unconditional wave paints at 1280 × 800; every number in 13.3 is what the browser read.
+
+### 13.5 🔴 The red-first proofs
+
+| proof                                   | file                                                                               | RED against                                                                                                                                                                                                                                                                                                          | GREEN                     |
+| --------------------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| changing audio does not take (the wire) | `tools/caspar-bridge/tests/audio-does-not-take.integration.test.ts`                | a planted seat-on-raise in `setLivePlateVolume` (`#planLiveSeating` + `#applyLivePlates` ahead of the gate for a row with no record): the three ready-row cases red with three `PLAY`s and seats each; the SOLO-scope case red too — the plant seated `item-2` PAST the one-carrier gate; the positive control green | restored, 5 / 5           |
+| SOLO scope names the owning row (wire)  | same file, §2                                                                      | the same plant (above)                                                                                                                                                                                                                                                                                               | 5 / 5                     |
+| guard item 23 (1) the surface           | `apps/runtime/tests/contextMenuSuppression.dom.test.ts`                            | `preventDefault` removed in `App.tsx`: exactly (1) red                                                                                                                                                                                                                                                               | 3 / 3                     |
+| guard item 23 (2) the text field        | same file                                                                          | the `isEditable` early return removed: exactly (2) red; (3) green under both plants                                                                                                                                                                                                                                  | 3 / 3                     |
+| keyboard parity, both doors             | `plateAudioAccess.dom.test.ts` §1–2, `liveSourcesPanel.dom.test.ts` (+4), Chromium | written before the keys were wired: `Shift+F10` and `ContextMenu` opened nothing (the row handled Enter and Space only; the panel had no handler)                                                                                                                                                                    | 5 / 5, 66 / 66, 4 / 4 e2e |
+| SOLO scope names the owning row (App)   | `plateAudioAccess.dom.test.ts` §3                                                  | asserts `item-looks`'s intents unchanged beside `item-irib-news`'s hidden `guest-2` at 0 — a SOLO that silenced everything, or one scoped to the visible look, fails it                                                                                                                                              | green                     |
+| the Inspector heading (A14 a)           | `inspectorHeading.dom.test.ts`, Chromium                                           | red against the shipped Inspector (heading = the template's display name; `h3[data-inspector-heading]` absent); a second red — the mock's items carry no `slot` — surfaced the binding fallback (13.1)                                                                                                               | 3 / 3, e2e                |
+
+The plants are not in the tree; each was reversed by hand and checked absent (`git grep
+PLANTED` finds nothing).
+
+### 13.6 The deletion guard — item 23 discharged, item 25 kept, the rest green
+
+**Item 23** — written FIRST, both halves red against their own plants (13.5), then the phase
+rewired right-click around it: the app-wide suppressor in `App.tsx` is byte-for-byte unchanged,
+and the two doors this phase added call `preventDefault` only when they opened something (a
+stranded plate's right-click is left to the suppressor, asserted). **Item 25** — the live-source
+swap on the row's context menu — is untouched: the menu keeps SOURCE beside AUDIO
+(`livePlateAudio.dom.test.ts` still pins the adjacency). **Item 5's sibling, the LIVE SOURCES
+tab's stranded and blind sentences**, keep their place on the surface through
+`LiveLayerRowView.plain` (13.3, the row's second line). Phase 9.3 now owes FOUR tests — the
+three banners and the tooltip.
+
+### 13.7 What Phase 6 did NOT do — and the numbers filed
+
+- It did not build the reference's owner filter, its per-verb hover hues, its `On air` context
+  badge (A12), its producer-named mixer rows, or its `Done` — each argued in 13.3.
+- It did not build `R-061` (b), the position-draft Reset — parked by the owner (A14).
+- It did not touch the bridge's audio path, the mixer's batch / `COMMIT` contract (COMMIT stays
+  channel-wide, the staging area stays shared, "commit the partial, then repair" stands), the
+  one-shot `#reassertDeclaredVolumes`, or R-022's boot re-assert — the wire test WAITS for that
+  traffic and baselines after it. The bridge's only diff is the removal of a plant that was
+  never committed.
+- It did not add a persisted key, file or schema; `persistedKeyCensus.test.ts` is unchanged.
+  `RowPlateAudio.coordinate` and `LiveLayerRowView.plain` are renderer view fields.
+- It did not translate anything, and reworded one sentence of the app's own (`audio is on the
+strip below` → `audio is on this row`, the strip having moved beside the row); the dialog's
+  _"audible on air"_ was REPLACED by the ledger's word, not reworded.
+- It did not measure any geometry in jsdom: every box is in `live-plate-audio-access.spec.ts`.
+- Numbers taken: none new. `R-060` closed (A13), `R-061` split (A14 — (a) done, (b) parked).

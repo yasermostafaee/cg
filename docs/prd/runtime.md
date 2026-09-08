@@ -3484,7 +3484,16 @@ named by where the operator meets it.
   `git stash list` empty; `git worktree list --porcelain` showed this checkout only.
   **Nothing is implemented by this item.**
 
-## [ ] R-060 — should "monitors hidden" survive a reload? The shell's `monitorsShown` flag is session-only by Phase 5's constraint ⟨priority: low⟩
+## [x] R-060 — should "monitors hidden" survive a reload? The shell's `monitorsShown` flag is session-only by Phase 5's constraint ⟨priority: low⟩
+
+**CLOSED by the owner, 2026-09-08 (`RUNTIME-REDESIGN-01` Phase 6, answer A13): `monitorsShown`
+does NOT persist.** It stays session-only, exactly as Phase 5 built it. The rule behind the
+answer, recorded for the phases that will meet it again: **a control that HIDES a safety surface
+does not persist its hidden state** — this product prefers a known safe state after a restart
+over a remembered one, the same call as the unpersisted rehearsal flag and reset-to-idle on
+reconnect. `shellLayout.monitorsShown.dom.test.ts`'s "is NOT persisted" case is the assertion
+of that decision, and `useShellLayout`'s interface note points here. Nothing is implemented by
+this item; it closes as a recorded decision.
 
 **What:** `RUNTIME-REDESIGN-01` Phase 5 built the reference's `Show monitors` / `Hide monitors`
 toggle (`useShellLayout.monitorsShown`, the Layers header button, `App` gating the strip). It is
@@ -3521,7 +3530,22 @@ call, not a session's.
   [b-number-registry.md](b-number-registry.md)'s own prose about gaps. `git stash list` empty.
   **Nothing is implemented by this item beyond what Phase 5 shipped as session state.**
 
-## [ ] R-061 — the Inspector should be titled by the ROW's name, with the template on the line beneath; and the position draft wants a Reset ⟨priority: medium⟩
+## [~] R-061 — the Inspector should be titled by the ROW's name, with the template on the line beneath; and the position draft wants a Reset ⟨priority: medium⟩
+
+**SPLIT by the owner, 2026-09-08 (`RUNTIME-REDESIGN-01` Phase 6, answer A14).** **(a) DONE in
+Phase 6:** the Inspector's heading is the selected ROW's operator name through `operatorRowName`
+(`useOperatorNames`), in its own `<bdi>`, with every id the row has on the heading's `title`; the
+template's display name (and its stub when two templates share a name, `title` carrying the id)
+moved to the line beneath (`data-inspector-template`). Golden rule 11's reason, now that drafts
+are per-row and survive a round trip: the risk of editing the wrong row's draft is real, and the
+heading is what the operator reads. Asserted as the PROPERTY, not the string —
+`apps/runtime/tests/inspectorHeading.dom.test.ts` (the heading carries what the one composition
+names the selected row, from the bank the mock publishes, and follows selection) and
+`tests/e2e/live-plate-audio-access.spec.ts` (Chromium). Sweep: `livePlates.dom.test.ts`'s two
+stub cases re-pointed from the `<h3>` to the template line; no e2e addressed the heading by
+template name. **(b) PARKED, not built:** a Reset for the position draft — Discard already undoes
+edits, and the owner declined a second control for the same gesture. The acceptance bullets
+below for (b) are kept as written for the record; they are not owed by any phase.
 
 **What:** two Inspector deltas Phase 5 measured against the rendered reference
 (`05-row-inspector.html`, `design.md` §12.3) and ARGUED rather than fixed, because each is a

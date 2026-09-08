@@ -108,6 +108,14 @@ function bridgeStub(templates: readonly TemplateInfo[], info: TemplateInfo | nul
     templates: {
       get: vi.fn(() => Promise.resolve(info)),
       list: vi.fn(() => Promise.resolve(templates)),
+      onChanged: () => () => undefined,
+    },
+    // Phase 6 — the Inspector names the ROW (`useOperatorNames`), so it reads the bank too.
+    fixedLayers: {
+      config: () => Promise.resolve(null),
+      onConfigChanged: () => () => undefined,
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
     },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
     sources: {
@@ -422,22 +430,30 @@ describe('the Inspector binds THIS template plates', () => {
   });
 });
 
-describe('two templates with the same name are told apart in the heading', () => {
+describe('two templates with the same name are told apart on the template line', () => {
   const TWIN_A: TemplateInfo = { ...TWO_BOX, templateId: 'aaaaaa11-1111', name: 'seghab' };
   const TWIN_B: TemplateInfo = { ...TWO_BOX, templateId: 'bbbbbb22-2222', name: 'seghab' };
 
+  /*
+    `RUNTIME-REDESIGN-01` Phase 6 (`R-061` (a)) — the heading is the ROW's name now, and the
+    template's name lives on the line beneath. This harness publishes NO bank, so the row has
+    no place to be named by and the template IS the heading (`operatorRowName`'s fallback
+    order); the stub rule is unchanged either way, which is why these two look for the stub
+    wherever the template's name is rendered rather than on one element.
+  */
   it('adds an id stub ONLY when another template answers to the same name', async () => {
     // R-040's class on a second surface: a display label derived from a
     // non-unique human name, with the unique key present but hidden.
     const el = await renderInspector(item('item-1', 'aaaaaa11-1111'), TWIN_A, [TWIN_A, TWIN_B]);
-    const heading = el.querySelector('h3');
-    expect(heading?.textContent).toContain('seghab');
-    expect(heading?.querySelector('[data-template-stub="aaaaaa"]')).not.toBeNull();
+    const named = el.querySelector('[data-inspector-template], [data-inspector-heading]');
+    expect(named?.textContent).toContain('seghab');
+    expect(named?.querySelector('[data-template-stub="aaaaaa"]')).not.toBeNull();
   });
 
-  it('leaves an unambiguous heading alone — a suffix on every one is noise', async () => {
+  it('leaves an unambiguous template name alone — a suffix on every one is noise', async () => {
     const el = await renderInspector(item('item-1', 'aaaaaa11-1111'), TWIN_A, [TWIN_A]);
-    expect(el.querySelector('h3')?.querySelector('[data-template-stub]')).toBeNull();
+    expect(el.textContent).toContain('seghab');
+    expect(el.querySelector('[data-template-stub]')).toBeNull();
   });
 });
 

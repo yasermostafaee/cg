@@ -6,13 +6,14 @@ file records which are done. **Each session takes the next unfinished phase, fin
 reports.** Do not start a later phase because an earlier one looks easy — the ordering is
 load-bearing and stated at each step.
 
-**Phase state at 2026-09-08 (night):** Phases 1, 2 (with addendum 2A), 3, 4 and **5** COMPLETE,
-each with its Linux `e2e` URL beside the ticked item. Phases 6–10 not started. Next: **Phase 6**.
+**Phase state at 2026-09-09:** Phases 1, 2 (with addendum 2A), 3, 4, 5 and **6** COMPLETE, each
+with its Linux `e2e` URL beside the ticked item. Phases 7–10 not started. Next: **Phase 7**.
 ⚠ `PROMPT.md` §0 carries the rule Phase 3 learned — **the reference is judged as RENDERED, not as
-authored: measure it in a browser at 1280 × 800 and quote what you read** — and Phase 5 counted
-the waves it hides (`.inspector` is restated 33 times; `design.md` §12.1). Read **A12** below
-before Phase 6 labels anything about air, and `design.md` §12 before touching the Inspector, the
-shell or the monitors.
+authored: measure it in a browser at 1280 × 800 and quote what you read** — Phase 5 counted the
+waves it hides (`.inspector` is restated 33 times; `design.md` §12.1) and Phase 6 counted the
+plates pane's and the dialog's (`.plate-table` 20, `.audio-modal` 10; `design.md` §13.4). Read
+**A12** below before any phase labels anything about air, **A13** before touching what a control
+persists, and `design.md` §13 before touching the plates tab or the audio dialog.
 
 ⚠ **2A IS AN ADDENDUM, NOT A PHASE.** The programme still has TEN phases; 2A is recorded under
 Phase 2 because it closes something Phase 2 escalated, and numbering it as an eleventh would make
@@ -72,6 +73,21 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
   `B-168`'s existing immediacy word and not a second claim. The same rule keeps the reference's
   `3 rows on air` monitor caption out. **Phase 6 (the audio modal), Phase 8 (the audit log's row
   lines) and Phase 9 (every guard surface re-dressed) read this before drawing a badge.**
+  ✅ Phase 6 applied it twice: the dialog's `On air` context badge is NOT adopted, and the
+  dialog's own _"audible on air"_ — printed under any raised plate, on a READY row included —
+  was replaced by the ledger's word (`design.md` §13.2).
+- **A13 · 🔴 `R-060` IS CLOSED: `monitorsShown` DOES NOT PERSIST** (2026-09-08, before Phase 6).
+  Session-only, exactly as Phase 5 built it. The rule behind it, for every later phase: **a
+  control that HIDES a safety surface does not persist its hidden state** — this product
+  prefers a known safe state after a restart over a remembered one, the same call as the
+  unpersisted rehearsal flag and reset-to-idle on reconnect. Off the owed list; recorded on
+  `R-060` and as a requirement in the `runtime-ui` spec delta.
+- **A14 · `R-061` IS SPLIT** (2026-09-08, before Phase 6). **(a) DONE in Phase 6:** the Inspector
+  is headed by the ROW's operator name (`operatorRowName`, ids on the heading's `title`, the
+  template on the line beneath) — golden rule 11, made urgent by per-row drafts that survive a
+  round trip. Asserted as the PROPERTY (the heading carries what the one composition names the
+  selected row, and follows selection), never the string. **(b) PARKED, not built:** a Reset
+  for the position draft — Discard already undoes edits.
 
 ---
 
@@ -333,17 +349,64 @@ air` — are ARGUED in §12.3, the last under A12.
       it was not skipped, which is the half a green run alone does not prove (golden rule 12b).
       `Lint • Typecheck • Test • Build` also ran green (09:16:36Z → 09:20:17Z).
 
-## Phase 6 — Live plates and audio
+## Phase 6 — Live plates and audio — COMPLETE
 
-- [ ] 6.1 🔴 Live plates are the layers occupied by inputs, NOT the source catalogue. Report where
-      each is read from — `design.md` §1.2 already names both seams; restate the measured answer.
-- [ ] 6.2 Plate controls and the audio modal open by right-click, plus `ContextMenu` and `Shift+F10`.
-      Keyboard parity is not optional. ⚠ The app's app-wide native-menu suppression stays, with text
-      inputs exempt (guard item 23).
-- [ ] 6.3 `ON = 100 % · OFF = 0 %`. 🔴 SOLO is scoped to the group belonging to the owning row —
-      including that row's hidden frames — and nothing outside it. The test names the owning row.
-- [ ] 6.4 🔴 RED-FIRST: changing audio must not put a ready row on air.
-- [ ] 6.5 e2e run, URL recorded here.
+The record is `design.md` §13: what contradicted the prompt, the two seams, the measured plates
+pane and dialog with every delta fixed or argued, the wave counts, the red-first matrix, guard
+item 23's discharge, A13/A14, and the numbers filed.
+
+- [x] 6.0 🔴 **BEFORE THE PHASE WORK — guard item 23 got its test FIRST**, both halves:
+      `apps/runtime/tests/contextMenuSuppression.dom.test.ts` on the whole `App` — (1) a
+      right-click on chrome with no menu of its own is cancelled, (2) the same right-click inside
+      an Inspector text field is NOT, (3) the row's own menu still opens with the native one
+      cancelled. **RED FIRST, twice, in `App.tsx`:** the exemption removed reddened exactly (2);
+      the `preventDefault` removed reddened exactly (1); (3) stayed green under both, which is
+      what makes it a control. 3 / 3 restored. **Discharged — Phase 9.3 now owes FOUR tests**
+      (`bridgeSkewBanner`, `rasterMismatchBanner`, `failoverBanner`, `tooltip`), not five.
+- [x] 6.1 🔴 Live plates are the layers occupied by inputs, NOT the source catalogue — measured,
+      not restated: **LIVE PLATES** are read from the bridge's LEDGER, channel `liveLayers.state`
+      / `onStateChanged`, through `hooks/useLiveLayers.ts` → `liveLayerRows()` → the LIVE SOURCES
+      tab (`LiveSourcesPanel`), one row per layer the bridge itself seated (a tree-wide grep for
+      the hook finds one consumer, `LayersPanel.tsx`). The **SOURCE CATALOGUE** is
+      installation-wide, channel `sources.config` / `onConfigChanged` / `setConfig`, through
+      `features/sources/sourceStore.ts`, edited in Station setup's `SourcesSection` — and
+      `LiveSourcesPanel` imports NOTHING from `sources/`. The pane says so in the toolbar's scope
+      note. Different channel, different lifetime, different surface.
+- [x] 6.2 Plate controls and the audio modal open by RIGHT-CLICK, plus `ContextMenu` and
+      `Shift+F10`, from BOTH doors: the layer row (right-click / the keys → the row's own menu →
+      AUDIO; `useContextMenu.openAt` is the keyboard's door, `isContextMenuKey` the ONE predicate
+      for the pair) and the seated plate on LIVE SOURCES (right-click / the keys → the OWNING
+      ROW's dialog with THAT plate's fader focused, `data-modal-autofocus`). Proved in jsdom on
+      the whole `App` (`plateAudioAccess.dom.test.ts`, 5 tests) and on the panel alone
+      (`liveSourcesPanel.dom.test.ts`, 4 new cases incl. a stranded plate opening nothing), and in
+      Chromium (`e2e/live-plate-audio-access.spec.ts`). ⚠ Guard item 23 stays: the app-wide
+      suppression is untouched, the panel's rows call `preventDefault` themselves only when they
+      opened something. Golden rule 11: the dialog names its row (`operatorRowName`, ids on
+      `title`); `R-028`: the coordinate stays in the sentence (`on 1-10`).
+- [x] 6.3 `ON = 100 % · OFF = 0 %` — on the dialog's footer in the reference's words and on
+      every ON/OFF control's `title`; MUTE (OFF's twin) removed to the reference. 🔴 SOLO is
+      scoped to the OWNING ROW's group — every plate the template declares plus every seat the
+      ledger holds for the row (the union pre-seat, HIDDEN frames included) — and nothing outside
+      it. **The tests NAME the owning row:** at the wire (`audio-does-not-take` §2 — SOLO on
+      `item-1` puts `MIXER … VOLUME` only on `item-1`'s layers, silences its held `live-3` in the
+      record, leaves `item-2`'s three intents at 1 and its ledger empty) and on the surface
+      (`plateAudioAccess` §3 — SOLO on `item-irib-news`'s `guest-1` zeroes its HIDDEN `guest-2`
+      and leaves `item-looks`'s intents untouched). A12: the per-plate word is the LEDGER's
+      (`plateAudioPill` / `NOT SEATED`), never a local `value > 0`.
+- [x] 6.4 🔴 RED-FIRST: changing audio must not put a ready row on air —
+      `tools/caspar-bridge/tests/audio-does-not-take.integration.test.ts`, at the wire: a
+      never-taken row under ON; the same under a SOLO map; TAKE → OUT → settled → ON, then the
+      next TAKE seats the plate at the recorded volume; a POSITIVE CONTROL (on air, ON → exactly
+      one `MIXER 1-N VOLUME 1`, no `PLAY`, no fill). **RED with a planted seat-on-raise in
+      `setLivePlateVolume`** (`#planLiveSeating` + `#applyLivePlates` ahead of the gate): the
+      three ready-row cases went red with three `PLAY`s and seats in the ledger each, the SOLO
+      scope case went red too (the plant seated `item-2` PAST the one-carrier gate), the positive
+      control stayed green. Restored, 5 / 5. Spec delta: `specs/runtime-live-source-routing`.
+- [ ] 6.5 `pnpm --filter @cg/runtime test:e2e` — **139 passed (1.7 m)**, Windows, against a fresh
+      `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
+      The Linux `e2e` on the CODE head is recorded here by the follow-up docs commit once the run
+      COMPLETES — a run that has not completed is not a result, and a ticked box with no URL is a
+      claim.
 
 ## Phase 7 — Settings and channels
 
@@ -392,12 +455,15 @@ air` — are ARGUED in §12.3, the last under A12.
       argument to put it there.
 - [ ] 9.3 Write the owed tests: `bridgeSkewBanner.dom.test.ts`, `rasterMismatchBanner.dom.test.ts`
       (including that `unreadable` and `unconfigured` render NOTHING), `failoverBanner.dom.test.ts`
-      (including the `offline-mock` suppression), `tooltip.dom.test.ts`, and
-      `contextMenuSuppression.dom.test.ts` (both halves). Strengthen the engage-lock assertion off
-      `numericInput.dom.test.ts`.
+      (including the `offline-mock` suppression) and `tooltip.dom.test.ts`. Strengthen the
+      engage-lock assertion off `numericInput.dom.test.ts`.
       ✅ **`layersPanel.restoreMigrations.dom.test.ts` was DISCHARGED BY PHASE 3** (six cases,
       green), written before the table it lives beside was restructured — guard item 11 is no
-      longer owed here. Four owed, not five.
+      longer owed here.
+      ✅ **`contextMenuSuppression.dom.test.ts` was DISCHARGED BY PHASE 6** (both halves plus the
+      row-menu control, each half taken red against its own plant in `App.tsx`), written BEFORE
+      that phase rewired right-click — guard item 23 is no longer owed here. **Four owed:** the
+      three banners and the tooltip.
 - [ ] 9.4 One test per guarded surface, each proving it still renders under its condition; the
       lock's contract asserted unchanged. e2e run URL recorded here.
 

@@ -66,7 +66,18 @@ function stubBridge(over: Record<string, unknown> = {}): void {
       onResyncingChanged: () => () => undefined,
     },
     connections: connectionsStub('both-up'),
-    templates: { get: () => Promise.resolve(null), list: () => Promise.resolve([]) },
+    templates: {
+      get: () => Promise.resolve(null),
+      list: () => Promise.resolve([]),
+      onChanged: () => () => undefined,
+    },
+    // Phase 6 — the Inspector names the ROW (`useOperatorNames`), so it reads the bank too.
+    fixedLayers: {
+      config: () => Promise.resolve(null),
+      onConfigChanged: () => () => undefined,
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+    },
     stack: {
       setPosition: () => Promise.resolve({ ok: true }),
       update: () => Promise.resolve({ accepted: true }),

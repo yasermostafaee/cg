@@ -5,7 +5,8 @@ import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Icon } from '../../ui/Icon.js';
 import { ContextMenu } from '../../ui/ContextMenu.js';
-import { useContextMenu } from '../../ui/useContextMenu.js';
+import { isContextMenuKey, useContextMenu } from '../../ui/useContextMenu.js';
+import { operatorRowName, type OperatorRowName } from '../../ui/operatorNaming.js';
 import { buttonActions, toMenuItems, withConfirm } from '../../ui/rowAction.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { DraftChip } from '../../ui/DraftChip.js';
@@ -131,6 +132,13 @@ interface Props {
    * is the correct reading for a row that owns no live layers.
    */
   seatedPlates?: readonly RowPlateAudio[];
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 6 — the row named in the OPERATOR's words (golden rule 11),
+   * resolved by the PANEL through `operatorRowName` (it holds the bank and the registry) and
+   * handed to the audio dialog, which names the row it is about. Optional for a row rendered
+   * on its own, where the dialog falls back to the module's own last resort.
+   */
+  operatorName?: OperatorRowName | undefined;
   /**
    * How much text this width can carry (see `layerTable.ts`). Defaults to the
    * widest — a row rendered on its own shows everything it has.
@@ -303,6 +311,7 @@ export function LayerRow({
   dirty,
   rehearsing,
   seatedPlates = [],
+  operatorName,
   density = 'full',
   onSelect,
   onUpdate,
@@ -315,7 +324,7 @@ export function LayerRow({
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
   const { pickTemplate, pickerDialog } = useTemplatePicker();
-  const { menu, open, close } = useContextMenu<number>();
+  const { menu, open, openAt, close } = useContextMenu<number>();
   // The row's own hidden `.vcg` input. `pickFile` turns it into a promise so the
   // whole import+load chain is ONE action's `run` — the button and its menu twin
   // then share it by construction, rather than the real work living in an
@@ -756,6 +765,17 @@ export function LayerRow({
       title={rowTitle}
       aria-label={`${rowTitle} · ${state.label}`}
       onKeyDown={(e) => {
+        /*
+          `RUNTIME-REDESIGN-01` Phase 6 — KEYBOARD PARITY for the row's menu: the `ContextMenu`
+          key and `Shift+F10` open the same menu a right-click does, anchored on the row, from
+          anywhere inside it (a focused verb button included — the reference resolves the
+          closest row, and so does this). The menu carries AUDIO, so the audio dialog is two
+          keys and one Enter away with no pointer.
+        */
+        if (isContextMenuKey(e)) {
+          openAt(e, e.currentTarget, slot.layer);
+          return;
+        }
         if (e.key !== 'Enter' && e.key !== ' ') return;
         // Never swallow a key aimed at a control inside the row.
         if (e.target !== e.currentTarget) return;
@@ -1047,6 +1067,20 @@ export function LayerRow({
         <LivePlateAudioDialog
           item={item}
           template={template}
+          /*
+            Golden rule 11 — the panel's `operatorRowName` when it supplied one; otherwise the
+            SAME module's composition against what this row holds (no bank, this one template),
+            never a label composed here.
+          */
+          name={
+            operatorName ??
+            operatorRowName(
+              { itemId: item.itemId, templateId: item.templateId, slot: item.slot },
+              null,
+              new Map([[template.templateId, template]]),
+            )
+          }
+          seatedPlates={seatedPlates}
           /*
             `add-multibox-audio` — the MAP door, not the single-plate one. SOLO is a
             cross-plate statement and the bridge holds the row's live-seat lock for the whole

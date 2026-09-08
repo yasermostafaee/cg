@@ -1,8 +1,11 @@
 import { useRef } from 'react';
+import { Info } from 'lucide-react';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { useConfirm } from '../../ui/useDialog.js';
+import { isContextMenuKey } from '../../ui/useContextMenu.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.js';
@@ -62,6 +65,12 @@ interface Props {
     volumes: Record<string, number>,
   ) => Promise<{ ok: boolean; refused: string[] }>;
   /**
+   * `RUNTIME-REDESIGN-01` Phase 6 — open the OWNING ROW's audio dialog on one plate. The
+   * reference's right-click (and its keyboard twins, `ContextMenu` / `Shift+F10`) on a seated
+   * plate; the dialog itself is hosted by the panel that holds the stack and the registry.
+   */
+  onOpenAudio: (itemId: string, plateId: string) => void;
+  /**
    * 🔴 **PANIC — and it takes NO SCOPE, which is the whole of the change.**
    *
    * It used to take one: the caller resolved the ON-AIR rows' seated plates from the stack and
@@ -80,38 +89,6 @@ interface Props {
 }
 
 const styles = {
-  intro: {
-    padding: '0.6rem 1rem',
-    fontSize: '0.8rem',
-    color: colors.textMuted,
-    borderBottom: `1px solid ${colors.border}`,
-  },
-  introHead: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: '0.75rem',
-  },
-  list: { overflowY: 'auto' as const, minHeight: 0 },
-  row: {
-    display: 'grid',
-    gridTemplateColumns: 'auto 1fr auto',
-    alignItems: 'center',
-    gap: '0.75rem',
-    padding: '0.5rem 1rem',
-    borderBottom: `1px solid ${colors.border}`,
-  },
-  coordinate: {
-    fontSize: '1rem',
-    fontWeight: 700,
-    fontVariantNumeric: 'tabular-nums' as const,
-    minWidth: '3.25rem',
-    textAlign: 'center' as const,
-  },
-  body: { display: 'flex', flexDirection: 'column' as const, gap: '0.15rem', minWidth: 0 },
-  headline: { fontSize: '0.9rem', fontWeight: 700 },
-  plate: { fontSize: '0.78rem', color: colors.textMuted },
-  detail: { fontSize: '0.78rem', color: colors.textMuted },
   empty: {
     padding: '1rem',
     fontSize: '0.85rem',
@@ -123,6 +100,13 @@ const styles = {
   },
   emptyHeadline: { fontWeight: 700, color: colors.text },
 } as const;
+
+/** The sentence the reference keeps behind its help icon — the tab's own statement of scope. */
+const SCOPE_NOTE =
+  'These are occupied layers created by this console for a row’s live plates — not the ' +
+  'installation’s source catalogue, which lives in Station setup. Repoint and off-air are the ' +
+  'owning row’s verbs. Audio is requested gain, not a measured signal. ON sets 100%; SOLO ' +
+  'affects one row’s plates, hidden frames included, with no restore.';
 
 /**
  * `B-145` acceptance 1, display half (`tasks.md` 2.8) — **the LIVE SOURCES tab: the
@@ -137,6 +121,14 @@ const styles = {
  * written-but-unreachable class this repo has filed four times, and it is why
  * `B-145` sat at `[~]` with half of its first acceptance unmet.
  *
+ * ── 🔴 LIVE PLATES ARE SEATED LAYERS, NOT THE CATALOGUE ────────────────────
+ *
+ * `RUNTIME-REDESIGN-01` §6: this pane reads the bridge's LEDGER (`liveLayers.state`, through
+ * `useLiveLayers` → `liveLayerRows`) — one row per layer the bridge itself seated. The SOURCE
+ * CATALOGUE is installation-wide, read from `sources.config` through `sourceStore` and edited
+ * in Station setup's `SourcesSection`; nothing here reads it. Different channel, different
+ * lifetime, different surface.
+ *
  * ── WHY A THIRD TAB AND NOT MORE ROWS IN EITHER OF THE OTHER TWO ────────────
  *
  * The bridge already enumerates THREE declared layer classes in one place
@@ -148,6 +140,16 @@ const styles = {
  * "these are NOT our layers", and its clear is gated on a producer kind of exactly
  * `html` while a live plate is a `route`, so every row would have arrived carrying
  * the wrong statement and the wrong control.
+ *
+ * ── THE SHAPE (`07-live-plates.html` as rendered, `design.md` §13.3) ────────
+ *
+ * A 40 px toolbar — the occupied count, shown · held, the scope note behind an info icon and
+ * the panic button — over a seven-column table: Layer · Plate / source · Owner · Picture ·
+ * Audio · Gain · Audio controls, 30 px head, 42 px rows. Every row is focusable and opens the
+ * owning row's audio dialog on RIGHT-CLICK, `ContextMenu` or `Shift+F10` — the reference's
+ * gesture, with keyboard parity. The words are the app's own (`liveLayerRows`); only the
+ * geometry moved. A row that needs attention — stranded, blind, adopted — keeps its full
+ * sentence on a second line, because that sentence is the alarm.
  *
  * ── WHAT IT DELIBERATELY DOES NOT DO ────────────────────────────────────────
  *
@@ -166,6 +168,7 @@ export function LiveSourcesPanel({
   blind,
   onSelectOwner,
   onApplyVolumes,
+  onOpenAudio,
   onPanic,
 }: Props): JSX.Element {
   const linkDown = useLink() === 'disconnected';
@@ -227,7 +230,7 @@ export function LiveSourcesPanel({
    * PANIC — silence every plate the BRIDGE holds a seat for, from one press.
    *
    * ⚠ **NO CONFIRM, deliberately.** An emergency control behind a dialog is one that does not
-   * happen; the dialog next door makes the same argument for its own MUTE button. Silencing is
+   * happen; the dialog next door makes the same argument for its own OFF button. Silencing is
    * also the RECOVERABLE direction — the faders are still there — which a CLEAR is not, and
    * that is the line this product draws for a confirm.
    *
@@ -389,54 +392,154 @@ export function LiveSourcesPanel({
     );
   }
 
+  // The toolbar's counts, off the SAME rows the table renders. A row whose audio the console
+  // cannot state (blind, stranded) is in neither count — "shown" and "held" are claims.
+  const shownCount = rows.filter((r) => r.audio !== null && !r.audio.held).length;
+  const heldCount = rows.filter((r) => r.audio?.held === true).length;
+
+  /**
+   * The reference's gesture: a right-click (or its keyboard twins) on a seated plate opens the
+   * OWNING ROW's audio dialog on that plate. Only a row the console can honestly state audio
+   * for — `audio !== null` — has an owner to open; a stranded or blind row does nothing here,
+   * and the app-wide suppressor keeps the browser's own menu away (guard item 23).
+   */
+  const openAudioFor = (row: LiveLayerRowView): boolean => {
+    if (row.audio === null) return false;
+    onOpenAudio(row.itemId, row.plate);
+    return true;
+  };
+
   return (
     <>
-      <div style={styles.intro}>
-        <div style={styles.introHead}>
-          <span>
-            These layers were created by this console to composite live sources behind a
-            template&rsquo;s holes. Repoint and off-air are the owning row&rsquo;s verbs — audio is
-            on each plate&rsquo;s own strip below.
-          </span>
-          {/*
-            PANIC AT THE HEAD, not per row: it is the only control here whose scope is EVERY
-            row, and a control that acts on the whole list belongs above the list rather than
-            repeated inside it. `caution-strong` and not `danger` — red is this palette's
-            error-and-destructive hue, and silencing is neither: the pictures stay on air and
-            the faders are still there.
-          */}
-          <AsyncButton
-            variant="caution-strong"
-            run={panic}
-            onError={reportCommandError}
-            disabled={audioRefusal !== undefined}
-            title={
-              audioRefusal ??
-              'Set EVERY live plate the bridge has seated to zero — including rows this ' +
-                'console does not show as on air. The pictures stay on air. There is no ' +
-                'un-panic — raise what you need again on its own fader.'
-            }
-            aria-label="Silence all boxes — set every live plate the bridge has seated to zero"
-          >
-            SILENCE ALL BOXES
-          </AsyncButton>
-        </div>
+      <div className="cg-plate-toolbar" data-plate-toolbar="">
+        <strong>
+          {String(rows.length)} occupied {rows.length === 1 ? 'layer' : 'layers'}
+        </strong>
+        <span className="cg-plate-count">
+          {String(shownCount)} shown · {String(heldCount)} held
+        </span>
+        <span className="cg-plate-spacer" />
+        {/*
+          The scope note behind the reference's info glyph, through the delegated Tooltip; the
+          same sentence is this tab's own doc-comment, and the toolbar's counts say the rest.
+        */}
+        <span className="cg-plate-help" title={SCOPE_NOTE} aria-label={SCOPE_NOTE} role="img">
+          <Icon icon={Info} size={16} />
+        </span>
+        {/*
+          PANIC AT THE HEAD, not per row: it is the only control here whose scope is EVERY
+          row, and a control that acts on the whole list belongs above the list rather than
+          repeated inside it. `caution-strong` and not `danger` — red is this palette's
+          error-and-destructive hue, and silencing is neither: the pictures stay on air and
+          the faders are still there.
+        */}
+        <AsyncButton
+          variant="caution-strong"
+          run={panic}
+          onError={reportCommandError}
+          disabled={audioRefusal !== undefined}
+          title={
+            audioRefusal ??
+            'Set EVERY live plate the bridge has seated to zero — including rows this ' +
+              'console does not show as on air. The pictures stay on air. There is no ' +
+              'un-panic — raise what you need again on its own fader.'
+          }
+          aria-label="Silence all boxes — set every live plate the bridge has seated to zero"
+        >
+          SILENCE ALL BOXES
+        </AsyncButton>
       </div>
-      <div style={styles.list}>
-        {rows.map((row) => (
-          <div
-            key={row.coordinate}
-            style={styles.row}
-            data-live-layer={row.coordinate}
-            data-live-layer-stranded={row.releasable ? 'true' : 'false'}
-          >
-            <span style={styles.coordinate}>{row.coordinate}</span>
-            <div style={styles.body}>
-              <span style={{ ...styles.headline, color: row.tone }}>{row.headline}</span>
-              <span style={styles.plate}>
-                {row.plate} — {row.producer}
+      <div className="cg-plate-table" role="table" aria-label="Occupied live-plate layers">
+        <div className="cg-plate-head" role="row">
+          <span role="columnheader">Layer</span>
+          <span role="columnheader">Plate / source</span>
+          <span role="columnheader">Owner</span>
+          <span role="columnheader">Picture</span>
+          <span role="columnheader">Audio</span>
+          <span role="columnheader">
+            Gain <span className="cg-plate-head-note">· ON = 100%</span>
+          </span>
+          <span role="columnheader">Audio controls</span>
+        </div>
+        {rows.map((row) => {
+          // Every disposition but the ordinary one keeps its sentence visible (see below).
+          const attention = !row.plain;
+          return (
+            <div
+              key={row.coordinate}
+              role="row"
+              className={`cg-plate-row${attention ? ' cg-plate-row--attention' : ''}`}
+              data-live-layer={row.coordinate}
+              data-live-layer-stranded={row.releasable ? 'true' : 'false'}
+              // The row is the keyboard's target for the audio dialog (`Shift+F10` /
+              // `ContextMenu`), exactly as the reference's `<tr tabindex="0">` is.
+              tabIndex={0}
+              aria-label={`${row.plate} on ${row.coordinate} · ${row.headline}${
+                row.audio !== null ? ' · right-click for audio' : ''
+              }`}
+              title={row.detail}
+              onContextMenu={(e) => {
+                if (openAudioFor(row)) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
+              onKeyDown={(e) => {
+                if (!isContextMenuKey(e)) return;
+                if (openAudioFor(row)) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+              }}
+            >
+              <span role="cell" className="cg-plate-coord">
+                {row.coordinate}
               </span>
-              <span style={styles.detail}>{row.detail}</span>
+              <span role="cell" className="cg-plate-source">
+                <span className="cg-plate-slot" title="Template plate handle">
+                  {row.plate}
+                </span>
+                <bdi className="cg-plate-producer" title={row.producer}>
+                  {row.producer}
+                </bdi>
+              </span>
+              <span role="cell" className="cg-plate-owner">
+                {row.releasable ? (
+                  <AsyncButton
+                    variant="caution-strong"
+                    run={() => releaseStranded(row)}
+                    onError={reportCommandError}
+                    disabled={releaseRefusal !== undefined}
+                    {...(releaseRefusal !== undefined ? { title: releaseRefusal } : {})}
+                    aria-label={releaseLabel(rows, row)}
+                  >
+                    RELEASE
+                  </AsyncButton>
+                ) : row.ownerLabel !== null ? (
+                  <>
+                    {/* The owner NAMED, in its own bidi isolate, then the way to it. */}
+                    <span className="cg-plate-owner-lead">Seated for</span>
+                    <bdi className="cg-plate-owner-name">{row.ownerLabel}</bdi>
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        onSelectOwner(row.itemId);
+                      }}
+                      title={`Open the row that owns live layer ${row.coordinate} and its Inspector`}
+                      aria-label={`Open the row that owns live layer ${row.coordinate}`}
+                    >
+                      OPEN ROW
+                    </Button>
+                  </>
+                ) : (
+                  // Blind: no owner resolved and no control, because neither the stranded
+                  // verdict nor the release could be trusted. The row says which blindness.
+                  <span aria-hidden="true">—</span>
+                )}
+              </span>
+              <span role="cell" className="cg-plate-picture" style={{ color: row.tone }}>
+                {row.headline}
+              </span>
               {/*
                 The audio strip renders itself away when the console cannot honestly state
                 this plate's audio — blind, or stranded. That decision lives on the ROW
@@ -450,35 +553,22 @@ export function LiveSourcesPanel({
                 refusal={audioRefusal}
                 onApply={(volumes) => applyAndReport(row.itemId, volumes)}
               />
+              {/*
+                Every row but the ordinary ON SCREEN one keeps its whole sentence VISIBLE, on a
+                second line across the table: for a stranded layer that sentence IS the alarm (a
+                live face on air that no row can reach), for an adopted one it is the caveat
+                that nothing has confirmed the layer, and for a held one it is why the guest is
+                silent. An alarm behind a hover is not an alarm. The ordinary row's sentence —
+                which the Owner cell already says — rides its `title`.
+              */}
+              {attention && (
+                <span role="cell" className="cg-plate-detail">
+                  {row.detail}
+                </span>
+              )}
             </div>
-            {row.releasable ? (
-              <AsyncButton
-                variant="caution-strong"
-                run={() => releaseStranded(row)}
-                onError={reportCommandError}
-                disabled={releaseRefusal !== undefined}
-                {...(releaseRefusal !== undefined ? { title: releaseRefusal } : {})}
-                aria-label={releaseLabel(rows, row)}
-              >
-                RELEASE
-              </AsyncButton>
-            ) : row.ownerLabel !== null ? (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  onSelectOwner(row.itemId);
-                }}
-                aria-label={`Open the row that owns live layer ${row.coordinate}`}
-              >
-                OPEN ROW
-              </Button>
-            ) : (
-              // Blind: no owner resolved and no control, because neither the stranded
-              // verdict nor the release could be trusted. The row says which blindness.
-              <span aria-hidden="true" />
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
       {confirmDialog}
     </>

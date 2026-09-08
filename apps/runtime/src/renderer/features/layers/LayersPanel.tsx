@@ -54,6 +54,7 @@ import { LayerTableHeader } from './LayerTableHeader.js';
 import { ROW_GEOMETRY, resolveDensity } from './layerTable.js';
 import { StationLayersPanel } from './StationLayersPanel.js';
 import { LiveSourcesPanel } from './LiveSourcesPanel.js';
+import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
 import {
   hasStrandedLiveLayer,
   liveLayerBlindness,
@@ -688,6 +689,15 @@ export function LayersPanel({
   );
   const liveStranded = hasStrandedLiveLayer(liveRows);
   /**
+   * `RUNTIME-REDESIGN-01` Phase 6 — the audio dialog opened FROM THE PLATES TAB, on one plate
+   * of one row. Hosted here rather than in the tab because the dialog needs the row's ITEM
+   * and its TEMPLATE, which only this panel holds; the tab hands up `(itemId, plateId)` and
+   * nothing else. The row's own AUDIO verb opens the same component from `LayerRow`.
+   */
+  const [plateAudioFor, setPlateAudioFor] = useState<{ itemId: string; plateId: string } | null>(
+    null,
+  );
+  /**
    * `add-multibox-audio` — the audio door, and PANIC's scope. Both resolved HERE because
    * both need the stack, which the tab below cannot see.
    *
@@ -1250,6 +1260,19 @@ export function LayersPanel({
                         AUDIBILITY rather than intent. Same rows, same pass, two questions.
                       */
                       seatedPlates={item === null ? [] : rowPlateAudioOf(liveRows, item.itemId)}
+                      /*
+                        Golden rule 11 — the row's operator name for its audio dialog, through
+                        the ONE composition, from the bank and the registry this panel holds.
+                      */
+                      operatorName={
+                        item === null
+                          ? undefined
+                          : operatorRowName(
+                              { itemId: item.itemId, templateId: item.templateId, slot: item.slot },
+                              bank,
+                              templates,
+                            )
+                      }
                       onSelect={onSelectionChange}
                       onUpdate={onUpdate}
                     />
@@ -1284,6 +1307,18 @@ export function LayersPanel({
               setActiveTab('layers');
             }}
             onApplyVolumes={applyPlateVolumes}
+            onOpenAudio={(itemId, plateId) => {
+              if (itemById.get(itemId) === undefined) {
+                // The ledger names an item the stack no longer carries — the STRANDED case,
+                // whose only verb is RELEASE. Nothing to open, and saying so beats silence.
+                reportCommandError(
+                  'No row on the stack owns this layer, so there is no audio dialog to open — ' +
+                    'release the layer from this tab instead.',
+                );
+                return;
+              }
+              setPlateAudioFor({ itemId, plateId });
+            }}
             onPanic={panic}
           />
         ) : (
@@ -1291,6 +1326,34 @@ export function LayersPanel({
         )}
       </Tabs>
       {confirmDialog}
+      {plateAudioFor !== null &&
+        (() => {
+          const audioItem = itemById.get(plateAudioFor.itemId);
+          if (audioItem === undefined) return null;
+          const audioTemplate = templates.get(audioItem.templateId);
+          if (audioTemplate === undefined) return null;
+          return (
+            <LivePlateAudioDialog
+              item={audioItem}
+              template={audioTemplate}
+              name={operatorRowName(
+                {
+                  itemId: audioItem.itemId,
+                  templateId: audioItem.templateId,
+                  slot: audioItem.slot,
+                },
+                bank,
+                templates,
+              )}
+              seatedPlates={rowPlateAudioOf(liveRows, audioItem.itemId)}
+              focusPlateId={plateAudioFor.plateId}
+              onApplyVolumes={(volumes) => applyPlateVolumes(audioItem.itemId, volumes)}
+              onClose={() => {
+                setPlateAudioFor(null);
+              }}
+            />
+          );
+        })()}
     </Panel>
   );
 }

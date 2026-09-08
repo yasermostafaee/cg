@@ -92,6 +92,14 @@ export interface LiveLayerRowView {
   /** Accent for the headline — never the only signal; the word always says it too. */
   tone: string;
   /**
+   * `RUNTIME-REDESIGN-01` Phase 6 — is this the ORDINARY disposition (on screen, owned,
+   * confirmed), whose sentence says nothing the row's other cells do not? `false` for every
+   * other case — blind, stranded, adopted, held — whose sentence is an alarm or a caveat and
+   * stays visible on the surface. Decided HERE with the words, not by a surface comparing
+   * headlines.
+   */
+  plain: boolean;
+  /**
    * `add-multibox-audio` — **THIS PLATE'S AUDIO, or `null` when the console cannot honestly
    * say.**
    *
@@ -251,6 +259,7 @@ export function liveLayerRow(
       releasable: false,
       needsAttention: false,
       tone: colors.textMuted,
+      plain: false,
       // Blind: the ledger is stale or the intent map has not arrived. See `audio`'s note —
       // SILENT is a claim, and this branch is the one that must not make one.
       audio: null,
@@ -277,6 +286,7 @@ export function liveLayerRow(
       releasable: true,
       needsAttention: true,
       tone: colors.pending,
+      plain: false,
     };
   }
   if (layer.unverified) {
@@ -308,6 +318,7 @@ export function liveLayerRow(
       releasable: false,
       needsAttention: false,
       tone: colors.textMuted,
+      plain: false,
     };
   }
   if (layer.held) {
@@ -322,6 +333,7 @@ export function liveLayerRow(
       releasable: false,
       needsAttention: false,
       tone: colors.text,
+      plain: false,
     };
   }
   return {
@@ -330,11 +342,12 @@ export function liveLayerRow(
     headline: 'On screen',
     detail:
       `Seated for ${ownerLabel}. Repoint and off-air are that row's verbs; audio is on ` +
-      `the strip below.`,
+      `this row.`,
     ownerLabel,
     releasable: false,
     needsAttention: false,
     tone: colors.text,
+    plain: true,
   };
 }
 
@@ -489,6 +502,7 @@ export function rowPlateAudioOf(
       plateId: r.plate,
       volume: r.audio?.volume,
       held: r.audio?.held ?? false,
+      coordinate: r.coordinate,
     }));
 }
 
