@@ -263,9 +263,15 @@ contradicted the prompt, the measured strip, the fixture, the two red-first proo
       GREEN restored, 3 / 3; the first red attempt landed on the positive control because the
       fixture's `solo` did not move frame 1, the fixture was corrected and the red taken again on
       the property (§11.5). Spec deltas in both `specs/` files.
-- [ ] 4.4 `pnpm --filter @cg/runtime test:e2e` — **123 passed (1.5 m)**, Windows, against a fresh
+- [x] 4.4 `pnpm --filter @cg/runtime test:e2e` — **123 passed (1.5 m)**, Windows, against a fresh
       `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
-      Linux `e2e` on the CODE head: **PENDING — URL to be recorded here when the run completes.**
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `382ff847`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34202226427> — run `conclusion: success`,
+      10 m 27 s (08:00:49Z → 08:11:16Z). The **`E2E (Playwright)` job RAN** (08:01:01Z → 08:11:11Z,
+      10 m 10 s, `conclusion: success`); it was not skipped, which is the half a green run alone
+      does not prove (golden rule 12b). `Lint • Typecheck • Test • Build` also ran green
+      (08:01:01Z → 08:06:09Z). ⚠ The same run covers `0572102e` (the `PROMPT.md` amendment): both
+      commits went up in one push, and the jobs are whole-tree.
 
 ## Phase 5 — Preview, program and the Inspector
 
