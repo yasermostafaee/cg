@@ -33,6 +33,17 @@ product already has.**
   shrink.
 - **The interface stays English and LTR for now**, and must render existing Persian text correctly (isolate
   it — the repo already has the rule). **Nothing is translated.**
+- 🔴 **THE REFERENCE IS JUDGED AS RENDERED, NOT AS AUTHORED** _(added 2026-09-08, after Phase 3)_. The
+  prototype's single stylesheet was appended to in **four waves**, each restating the same selectors at equal
+  or higher specificity, and a browser paints the **LAST**; wave 1's selectors (`.row-title`,
+  `.destructive-group`, `.row-actions .btn`, `.row-actions .icon-btn`) match **no element the prototype
+  emits**. **Every phase measures the reference in a browser at 1280 × 800 and quotes what it READ — never a
+  rule it found in the file.** The stylesheet is what was authored; the browser is what the owner approved.
+  ⚠ The rendered layer table is **this console's own table in its pre-Phase-2 hexes** — the prototype was
+  built FROM the product — so a delta against the rendered reference is usually a palette move Phase 2
+  already made, not a design decision (`design.md` §10.1). A number quoted from the stylesheet without a
+  browser reading beside it is not evidence; Phase 2 transcribed the dead wave into tokens that way, and
+  Phase 3 had to correct every one of them.
 
 ## §1 — PHASE 1: DISCOVERY AND THE DELETION GUARD _(no product code)_
 
@@ -80,14 +91,31 @@ for every semantic ink; **`pnpm --filter @cg/runtime test:e2e` run locally** (go
 
 ## §3 — PHASE 3: THE LAYERS TABLE
 
+> ⚠ **SUPERSEDED (2026-09-08) — the numbers this section quotes are wave-1 CSS that no browser paints.**
+> `16px 17px`, `55px · 135px · 33%`, the `835px` `min-width`, hover `#1b2a3a`, selected `#192e40` with
+> `inset 3px 0 0`, the `.row-title` empty-row treatment, `min-height 34px`, `32×34` and the 30px
+> destructive group were read off the stylesheet's FIRST wave, which the same file overrides four times
+> further down, and `.row-title` / `.destructive-group` / `.row-actions .btn` match no element the
+> prototype emits (§0's rendered-not-authored rule, added because of this). **The measured table is
+> `design.md` §10.2** — 67 px rows, `15px 12px` cells, six `48 × 36` verbs in a 12 px grid, hover `#1F2937`,
+> a 2 px selection frame, `rgb(91 93 96)` empty rows — and it is what Phase 3 built. **Owner answer A8: wave
+> 1 is REJECTED.** Nobody ever saw it rendered, and `32×34` with a 30px destructive group shrinks the STOP
+> and CLEAR hit targets on an on-air console; **`48 × 36` stays and no later phase reopens it** (the
+> dead-rule token was deleted under A9, not kept). The two paragraphs below are kept as written so the
+> error stays visible; read them as history, not as the target. §§4–10 were checked for the same defect
+> on 2026-09-08 and quote **no** number or selector from the stylesheet — §4's `authoredLooks(t) =
+t.layouts` is the prototype's SCRIPT, already flagged as its invention.
+
 **Adopt from the reference, precisely:** row height and cell padding (`16px 17px`), the
 `#`/State/Name/Template/verbs column widths (55px · 135px · 33%), the table's `min-width`, **hover
 `#1b2a3a`**, **selected `#192e40` with `inset 3px 0 0` the blue**, the empty-row title treatment, and **the
-Graphics-beds divider row**.
+Graphics-beds divider row**. _(superseded — see the note above)_
 **The six row verbs keep a fixed place and size** — header labels **`Item · Play · On PVW · Next · Stop ·
 Clear`**; `min-height 34px` for the text buttons, **32×34** for the icon buttons, and **the destructive
 group split off by a left border with 30px buttons**. **Each verb gets its own hover treatment**, and so do
 the top bar's **Clear all** and **Remove all**. **The Look buttons keep their large click target.**
+_(the sizes are superseded — see the note above; the header words, the per-verb hovers and the Look
+buttons' large target are rendered facts and stand)_
 
 🔴 **The command contract does not change, and this is the phase where it is most at risk:**
 
