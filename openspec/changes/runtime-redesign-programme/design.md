@@ -425,6 +425,17 @@ as FIXTURE data — no assertion anywhere that the table renders an actor header
 displays `entry.actor`. Owed by **Phase 8**:
 `apps/runtime/tests/auditPanel.actorColumn.dom.test.ts`, asserting the header, a row's value, and
 the caveat beside them.
+✅ **DISCHARGED BY PHASE 8 (2026-09-08; `§15.6`).** The column is BUILT BACK in the new tokens —
+`Actor`, second, between `Time` and `Action`; a row's cell carries `entry.actor` verbatim in its
+own `<bdi>` — the console field is SMALL (132 px, the select's height) in ONE strip with the
+caveat, and that strip sits above the table over its first columns. Five tests in
+`auditPanel.actorColumn.dom.test.ts` (the header and its order, the cell and its isolate, the
+strip's co-location and position, the field as the one writer with the wire limit, the actor
+FILTER); the geometry in `e2e/library-audit-geometry.spec.ts`. **RED FIRST by a plant that
+removed the header and the cell: the three column tests went red and the caveat's three older
+tests STAYED GREEN — which is precisely the hole this item named.** The three caveat tests are
+unchanged. What is still owed after this: **Phase 9** re-dresses items 1–26 and writes the four
+owed tests (`9.3`); **Phase 10** re-runs the guard end to end. Nothing of item 27 remains owed.
 
 ### Closed by evidence — added in Phase 7 by owner question A15
 
@@ -1857,3 +1868,237 @@ only?`; `How are outputs identified?`; the three contract tags) and no sentence 
   <https://github.com/yasermostafaee/cg/actions/runs/34225793746> — `conclusion: success`,
   11 m 03 s; the `E2E (Playwright)` job RAN 10 m 42 s (12:23:37Z → 12:34:19Z), its `E2E` step
   12:24:40Z → 12:34:10Z. Recorded beside `tasks.md` 7.5, as every phase before it.
+
+## 15 — Phase 8: Template library, import, and the audit log
+
+The record for `PROMPT.md` §8 and for owner answers A1 (applied) and A16 (recorded): the import
+path's evidence FIRST, what contradicted the prompt, what was built and where each fact is read
+from, the three surfaces measured in a browser with every delta fixed or argued, the wave counts
+and the shadow-root check, the red-first matrix, guard item 27 discharged, and what was not done.
+
+### 15.0 🔴 The import path — preserved exactly, and proved by the tests that were already there
+
+The prototype's import is theatre by its own words — its review step is headed `Simulated checks`
+and ends _"These are example outcomes, not verification of a real .vcg file."_ The product's is
+`importVcgFile` → `importTemplateFromBytes` → `produceTemplateDelivery`: `verify` (refuses with
+`failed verification: …`), `unpack` (`could not be unpacked: …`), the `B-196` runtime-contract
+guard BEFORE the render, the render (`could not be rendered: …`), and only then
+`templates.import`; a refusal registers nothing (`R-001`). **None of it was touched:**
+`git diff --stat` over `features/library/importVcgFile.ts`, `features/library/templateDelivery.ts`
+and `features/fixedLayers/fixedSlotLoad.ts` is empty, and `packages/vcg-format` is untouched. The
+proof is the existing suites, byte for byte as they were, green:
+
+| suite (unchanged)                                    | cases  | what it refuses or proves                                                                      |
+| ---------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------- |
+| `template-delivery.test.ts`                          | 16     | throws on bytes that fail verification; `B-196` refuses a newer build BEFORE the render; UTF-8 |
+| `import-starter-vcg.test.ts`                         | 4      | every D-119 starter crosses `verify → unpack → render`                                         |
+| `import-path-morph-vcg.test.ts`                      | 2      | a Designer path-morph package survives the boundary verbatim                                   |
+| `templateImportAssignments.test.ts`                  | 7      | a re-import keeps its bindings and drops a plate the new version lost                          |
+| `single-file-export-import.test.ts`                  | 1      | the produced HTML is self-contained                                                            |
+| `local-library.offline.test.ts`                      | 5      | the library registers what import delivered                                                    |
+| `templatePicker.dom.test.ts` / `templateRemoval.dom` | 6 / 10 | LOAD opens the picker with `Import a .vcg…` inside it; `Delete from station` and its refusals  |
+| e2e `import-vcg-template.spec.ts`                    | 2      | a verified package is registered and bound; **a broken one errors and registers nothing**      |
+| e2e `fixed-layers.spec.ts` / `live-source-carrier`   | 8 / 1  | import+load onto the exact slot; the carrier state on the picker's row                         |
+
+The only NEW import-facing behaviour is `02`'s drop zone, and it is proved to be the same path by
+the sentence the path's own `verify` produces: bytes that are not a package, dropped on the picker
+opened from a row, reach the row's error channel as `“garbage.vcg” failed verification…`
+(`templatePicker.library.dom.test.ts`, the last case). No test was rewritten to fit the surface.
+
+### 15.1 What contradicted the prompt — and what did not
+
+- **§8's open question was already answered.** A1 (2026-09-07, §5b) settles it: the picker
+  STAYS, made small, beside the actor column; the caveat does not move. Not re-derived here. The
+  positive obligation it creates — the reference draws NO actor column — is guard item 27, built
+  and discharged in this phase (15.6).
+- **The three dialogs are in the OUTER document, not a shadow root.** Checked in Chromium at each
+  `data-start`: `#template-dialog`, `#import-dialog` and `#audit-dialog` all answer
+  `getRootNode() === document`, and the page holds ZERO shadow hosts at those starts — the
+  Station-setup prototype only attaches its root when its own dialog opens. So the console's one
+  stylesheet (1067 rules) is what paints them, in the console's palette, unlike Phase 7's case.
+- **The reference's picker is SELECT-THEN-LOAD; the product's is ONE PRESS.** The reference's row
+  is `aria-pressed`, a detail aside describes the selection, and a footer `Load into Layer 5`
+  commits. The product's row control IS the load (`Load <name> onto this layer`), and that contract
+  is what `app.loadTemplate` drives through twenty specs. ARGUED, not adopted (15.3): every reason
+  the aside would show is already said on the row, and re-pointing the contract is the owner's
+  call — filed as a question in 15.8, not made in passing.
+- **The reference's import footer sentence is FALSE of this product.** _"Importing does not load a
+  row or take it on air."_ — here the picker's import is the row's own LOAD, and the package is
+  bound to the row (list-only, off air) in the same gesture. NOT adopted. The picker's own footer
+  sentence — _"Loading prepares the row. Use Play when you're ready to go on air."_ — is TRUE
+  (`fixedSlotLoad.ts`: a fixed-row LOAD sends no `CG ADD`; PLAY is the first wire contact), so it
+  is adopted verbatim.
+- **The reference's audit table names no channel or layer as a coordinate in the row's words** —
+  its small line carries `CH 1 · <template>`. Golden rule 11 ⭐ says a row named IN A LOG ENTRY
+  keeps its real layer number; the product's row did NOT (`OperatorNames` with `layer: null`).
+  FIXED beyond the reference: `on 1-98` on the item cell, from `entry.slot`.
+- **Phase 1's guard text cited `AuditPanel.tsx:278-298` / `:331` / `:473`.** Those lines moved
+  with the rewrite; the guard cites data attributes now (`[data-audit-console]`,
+  `[data-audit-actor-head]`, `[data-audit-actor]`), which a rewrite cannot silently re-number.
+- **What did NOT contradict:** §0's item 2 (no actor column, no caveat — confirmed at the
+  markup: `Time · UTC | Action | Item | Result`); §1.4's map for all three dialogs (the
+  components and channels are exactly as listed); A12 (no second air claim — the audit row's
+  outcome tag says `ok`/`failed`/`timeout` about a COMMAND, never about air, and the reference's
+  `Succeeded/Blocked/Failed` words were not adopted because the record's words are the schema's).
+
+### 15.2 What was built, and where each fact is read from
+
+| piece                       | where                                                                                                                                                                                                                                                                                                                                                                                                         |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the picker's look           | `fixedLayers/useTemplatePicker.tsx` — a `wide` modal with the reference's subtitle; a search (`Search templates`, by the display name and type); three kind chips (`All templates · Graphics · Graphics beds`, `aria-pressed`, `requiredBankFor` = the bridge's predicate); rows as `.cg-tpl-row`; the footer sentence; `02`'s drop zone                                                                      |
+| a picker row                | the LOAD is one press on the whole left (`Load <name> onto this layer`, id on `title`): a 56 × 49 thumbnail (`LayoutTemplate` / `Rows3` for a bed), the name in a `<bdi>`, a meta line from the CARRIER (`type · N fields · N looks · N plates`) with the reason chips (`Requires a bed row`, `Re-import required`, `Needs a source: …`); `Delete from station` at the right; the wrong-bank sentence beneath |
+| the drop                    | `onDragOver`/`onDrop` on `[data-template-body]` → `settle({ importFile })`; `LayerRow.load` runs `importAndLoadOntoFixedSlot(coord, () => Promise.resolve(file))` — the SAME function the OS chooser feeds, the picker checking nothing                                                                                                                                                                       |
+| the audit log's look        | `audit/AuditPanel.tsx` — a `ledger` modal (`--r-modal-w-ledger`) with the reference's subtitle; tools: search, `Action` (first select, `All actions` + the schema's fifteen), `Result` (`All results` + the schema's three, applied client-side), `Actor` filter (server-side, unchanged), `Refresh`; the console strip; the table; the footer count with `Reset filters`                                     |
+| the ACTOR column (guard 27) | `[data-audit-actor-head]` `Actor`, second; `[data-audit-actor]` per row, `<bdi>`; the strip `[data-audit-console]` = `#audit-operator` (132 px, `MAX_ACTOR_LENGTH`) + `[data-audit-caveat]` (the `B-143` sentence, unchanged), rendered before the table                                                                                                                                                      |
+| an audit row                | `Time` (local, UTC on `title`) · actor · action · item cell (names in isolates, **`on c-l`** from `entry.slot`, ids shortened + copyable, the refused line) · outcome as a `.cg-tag` (`ok` mint / `failed` the 2A error text / `timeout` caution) with the error code beneath it                                                                                                                              |
+| the search's subject        | what the row SHOWS — `placeName`, `templateName`, actor, action, outcome, ids, code, command — so a hit is always visible                                                                                                                                                                                                                                                                                     |
+| the panic label (A16)       | `layers/LiveSourcesPanel.tsx` — `SILENCE ALL BOXES · EVERY CHANNEL`; `aria-label` `Silence all boxes on every channel — …`; the tooltip names every channel this bridge drives and not only the selected one. `stack.silenceAllLivePlates` untouched by diff                                                                                                                                                  |
+| the primitives              | `Modal.tsx` — `size="ledger"` (a width, not a frame); `controls.css` — `.cg-tag*`, `.cg-tpl-*`, `.cg-audit-*`; no colour literal, no scale value re-spelled (`tokenHome.test.ts` 8 / 8)                                                                                                                                                                                                                       |
+| the tokens                  | `LIBRARY_PX` → `--r-tpl-*` (38), `AUDIT_LOG_PX` → `--r-audit-*` (36), `--r-modal-w-ledger`, `--r-ok-line` (the reference's `.badge.success` edge — the one edge with no home)                                                                                                                                                                                                                                 |
+| proofs                      | `auditPanel.actorColumn.dom.test.ts` (5), `auditPanel.filters.dom.test.ts` (5), `templatePicker.library.dom.test.ts` (6), `liveSourcesPanel.dom.test.ts` (+1 A16), e2e `library-audit-geometry.spec.ts` (2, Chromium)                                                                                                                                                                                         |
+
+### 15.3 🔴 THE MEASURED PROPERTY TABLES — rendered reference vs app, every delta FIXED or ARGUED
+
+The reference column is Chromium at 1280 × 800 on each file opened as a file, its own
+`data-start` opening the dialog, a scratch script reading `getComputedStyle` and
+`getBoundingClientRect` on the real elements (the import's later steps driven through the
+prototype's own `Use sample` and `Import sample` controls). The app column is the token the surface
+reads, asserted against the page by `library-audit-geometry.spec.ts` (Chromium, 1280 × 800) —
+never jsdom. "Palette" means the same ROLE, whose value Phase 2 moved.
+
+**The template picker (`01`)**
+
+| property         | reference (rendered)                                                                                                                                       | app (after this phase)                                                                                                      | verdict                                                                                                                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| frame            | 1118 wide (`min(1120px, 100vw − 56px)`), `776px 342px` — a main column and a detail aside                                                                  | the primitive's `wide`, 720                                                                                                 | ARGUED: without the aside the reference's main column is 776; `wide` is the primitive's width for a list read down (720), the same family every dialog uses                                             |
+| head             | 98 px, `22px 26px`, a 42 px emblem, title 22 px / 650, subtitle 13 px muted                                                                                | the primitive's head; **the subtitle** (`[data-modal-subtitle]`, 13 px muted)                                               | **FIXED** (subtitle, built on Phase 7's prop); ARGUED: the emblem and the title rank are the primitive's one treatment (as Phase 7 argued)                                                              |
+| subtitle words   | `Choose a template from this station's library.`                                                                                                           | `Choose a template already on this station, or import a .vcg package.`                                                      | ARGUED: "library" names a panel `R-028` deleted, and `templatePicker.dom` pins its absence                                                                                                              |
+| `Into` select    | a 145 × 35 destination select in the head                                                                                                                  | not built — the title names the row (`Load onto Bed 1`)                                                                     | ARGUED: the picker's door is the row, so the destination is fixed; a select here would be a second door with its own refusals                                                                           |
+| search           | 646 × 40 (`min-height 39`), `9px 11px 9px 35px`, radius 7, 14 px, a 16 px glyph at 12                                                                      | **39 floor, `9px 11px 9px 35px`, radius 7, 14 px, 16 px glyph at 12** (`--r-tpl-search-*`)                                  | **FIXED** (built)                                                                                                                                                                                       |
+| `Manage`         | a 70 × 33 quiet button opening a management list                                                                                                           | not built                                                                                                                   | ARGUED: `Delete from station` on every row IS the management, and `R-005`'s list is this one                                                                                                            |
+| kind chips       | three, 32 tall, `6px 10px`, radius 6, 12 px, gap 6; `padding-bottom 17` + a rule                                                                           | **three, 32, `6px 10px`, radius 6, 12 px, gap 6, 17 below + rule** (`neutral` + `active`, `aria-pressed`)                   | **FIXED** (built); ARGUED: the pressed fill is the console's `.is-on`, the reference's is its palette                                                                                                   |
+| list             | `padding 12`, rows 5 apart                                                                                                                                 | **12 above, 5 between**                                                                                                     | **FIXED**                                                                                                                                                                                               |
+| row              | 81 px, `15px 13px`, gap 14, radius 9, `56px minmax(0,1fr) 24px`; selected `#203649` + `#547d9a`; incompatible ink secondary                                | **`15px 13px`, gap 14, radius 9**, `minmax(0,1fr) auto`; hover `--r-table-row-hover`; incompatible ink `--r-text-secondary` | **FIXED** (padding, gap, radius, the dimmed ink); ARGUED: no selected state (one press loads); the third column is `Delete from station`, not a check circle                                            |
+| thumbnail        | 56 × 49, radius 7, raised ground, a glyph per kind                                                                                                         | **56 × 49, radius 7**, `--r-surface-raised`, `LayoutTemplate` / `Rows3`                                                     | **FIXED** (built)                                                                                                                                                                                       |
+| name             | 15 px / 550 in a `<bdi>`                                                                                                                                   | **15 px** / 500 in a `<bdi>`                                                                                                | **FIXED**; ARGUED: 550 → 500 (the weight scale)                                                                                                                                                         |
+| meta             | 12 px muted, gap 8: `Logo · 1 look`                                                                                                                        | **12 px muted, gap 8**: `lower-third · 3 fields · 2 looks · 1 plate` from the carrier                                       | **FIXED** (rank, gap); ARGUED: the words are the schema's (`templateType`, `fields`, `looks`, `sources`), never the prototype's `t.category` / `t.looks`                                                |
+| warn badge       | 11 px / 500, `2px 6px`, radius 5, amber: `Requires a bed row`                                                                                              | **11 px / 500, `2px 6px`, radius 5**, `--r-caution-*`: `Requires a bed row` / `Requires an operator row`                    | **FIXED** (built); the app's own sentence with the remedy stays beneath it (`[data-wrong-bank]`) — a chip cannot carry "load it onto one of the bed rows at the bottom"                                 |
+| carrier / plates | not drawn                                                                                                                                                  | `Re-import required` and `Needs a source: …` as the same warn chip, their `title`s kept                                     | kept (the deletion guard's "capability the panels do not draw"); dressed as the reference's chip                                                                                                        |
+| detail aside     | 342 px: destination card, `SELECTED TEMPLATE` eyebrow, a preview, `h2`, a hint, a `Type · Looks · Text fields · Availability` list, a compatibility notice | not built                                                                                                                   | ARGUED: it exists to describe a SELECTION the product's one-press row does not have; its facts are on the row (meta, chips, the sentence) or are the prototype's (`description`, `Availability · demo`) |
+| empty            | `40px 20px` centred muted, `h3` + `p`; `No templates found`                                                                                                | **`40px 20px` centred**, `h3` + `p`: `Nothing to load yet` / the pinned sentence; a search's `No templates found`           | **FIXED** (shape, the search words); ARGUED: the pinned sentence names the control, not a panel                                                                                                         |
+| footer           | 72 px, `16px 26px`; `.foot-info` 13 px muted; `Import .vcg` quiet 39 px + `Load into Layer 5` primary                                                      | the primitive's footer; **the sentence, 13 px muted**; `Cancel` + `Import a .vcg…` primary                                  | **FIXED** (the sentence, its rank); ARGUED: the primitive's bar and buttons; `Import a .vcg…` stays primary because with the row's press being the load it is the one primary left (§6's own reason)    |
+
+**The import surface (`02`)**
+
+| property            | reference (rendered)                                                                                                                      | app (after this phase)                                                                                                                                  | verdict                                                                                                                                                                                             |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a dialog of its own | 748 wide (`min(750px, 100vw − 48px)`), three steps `Choose package · Review · Complete`                                                   | none — the OS chooser opens from the picker's `Import a .vcg…`, exactly as before                                                                       | ARGUED: `import-vcg-template.spec.ts` and the fixture drive `Import a .vcg…` → `filechooser`; a dialog between them re-points the driver of every importing spec, and its steps are the prototype's |
+| drop zone           | `32px 20px`, dashed 1 px, radius 11, sunken ground; a 51 px glyph box radius 13; `h2` 18 px / 600; `p` 13 px muted; `Choose file` primary | **`32px 20px`, dashed, radius 11, `--r-surface-sunken`; 51 box radius 13; 18 px / 600; 13 px muted** at the foot of the picker's list; lit on drag-over | **FIXED** (built — the one honest interaction `02` has); ARGUED: no `Choose file` inside it — `Import a .vcg…` is that button, one control                                                          |
+| `Review` step       | a `selected-file` card, a `Simulated checks` list, `Import blocked` / `Import sample`, _"These are example outcomes…"_                    | not built                                                                                                                                               | ARGUED: theatre by its own disclaimer; the product's checks are `verify → unpack → B-196 → render`, and their verdict is the toast the operator already gets (15.0)                                 |
+| `Complete` step     | a mint check, `Added to the demo library`, `Nothing has been loaded or taken on air.`, `Choose a destination row`                         | not built                                                                                                                                               | ARGUED: FALSE here — the package IS bound to the row that opened the picker (list-only); the success toast says `Imported “X”.` and the row reads READY                                             |
+| footer sentence     | `Importing does not load a row or take it on air.`                                                                                        | not adopted                                                                                                                                             | ARGUED: false of this product (above); the picker's own sentence is the true one                                                                                                                    |
+
+**The audit log (`03`)**
+
+| property      | reference (rendered)                                                                                                                            | app (after this phase)                                                                                                                                                   | verdict                                                                                                                                                                                            |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| frame         | 1222 wide (`min(1250px, 100vw − 56px)`), `height min(815px, 100dvh − 56px)`                                                                     | **`min(1250px, 100vw − 56px)`** (`--r-modal-w-ledger`, 1224 at 1280), intrinsic height, the table scrolls                                                                | **FIXED** (width, built as the primitive's fourth size); ARGUED: the declared height is `fixed`'s criterion (content SWITCHED), and this content scrolls                                           |
+| head          | 98 px, an emblem, title 22 px / 650, subtitle 13 px muted; a `Sample records · UTC` badge                                                       | the primitive's head; **the subtitle** `Station actions and their recorded outcomes.`                                                                                    | **FIXED** (subtitle, the reference's own words); ARGUED: the badge is sample data, and `B-210` reads the control-room clock, not UTC                                                               |
+| tools         | `18px 25px`, gap 12: search 627 × 40; fields 132 wide with a 12 px / 500 label 5 above a 39 px select (`9px 11px`, radius 7, 13 px); Refresh 39 | **gap 12; search 39 floor, `9px 11px 9px 35px`, radius 7, 14 px; fields 132 wide, label 12 px / 500, 5 above, select 39, `9px 11px`, radius 7, 13 px; Refresh 39**       | **FIXED** (built); the primitive's body padding stands in for `18px 25px`                                                                                                                          |
+| filters       | search · `Action` · `Result` · `Date` · Refresh                                                                                                 | search · `Action` · `Result` · **`Actor`** · Refresh                                                                                                                     | **FIXED** (search and `Result` built, client-side over the 200-row tail); ARGUED: no `Date` — the band already prints it and the tail is one screen; the `Actor` filter is the app's own and stays |
+| filter words  | `All actions` / `Take · Stop · …`; `All results` / `Succeeded · Blocked · Failed`                                                               | `All actions` / the schema's fifteen; `All results` / `ok · failed · timeout`                                                                                            | **FIXED** (the `All …` heads); ARGUED: the options are derived from the schema (`B-141`), never a hand-kept list                                                                                   |
+| console strip | none                                                                                                                                            | `This console` · a 132 × 39 field · the `B-143` caveat at 12 px, one strip above the table                                                                               | **ADDED BACK** (guard item 27, A1); the field was 140 wide in a `0.85rem` row with a `0.75rem` caveat — now the select's box, "small"                                                              |
+| table head    | `th` 43 px, `12px 16px`, 12 px / 500 muted on `#1d2b3b`, rule `#40546b`; `Time · UTC                                                            | Action                                                                                                                                                                   | Item                                                                                                                                                                                               | Result` | **`12px 16px`, 12 px / 500 muted** on `--r-table-head-bg`, rule `--r-border-strong`; **`Time · Actor · Action · Item / detail · Outcome`**, sticky | **FIXED** (padding, rank, rule); **ADDED**: `Actor`; ARGUED: `Time` not `Time · UTC` (`B-210`); the app's column words stay; sticky because 200 rows scroll |
+| columns       | 125 · 100 · 762 · 206                                                                                                                           | **125** · 130 · 100 · `1fr` · 200                                                                                                                                        | **FIXED** (time, action); the actor column is the app's (130 for `MAX_ACTOR_LENGTH`)                                                                                                               |
+| row / cells   | 98 px (three lines), `td` `15px 16px` 13 px, secondary ink, item cell full ink; hover `#1b2b3d`; selected `#1e3549`                             | **`15px 16px` 13 px**, secondary ink, the item cell full ink; hover `--r-table-row-hover`                                                                                | **FIXED** (padding, rank, inks, hover); ARGUED: no selected row (no aside)                                                                                                                         |
+| time cell     | `12:34:03` + `small` date 11 px muted under it                                                                                                  | local `HH:MM:SS`, UTC on `title`; the date as a BAND once per day                                                                                                        | ARGUED: `B-210`'s band, pinned by two suites; the per-row date is redundant under it                                                                                                               |
+| item cell     | `strong` 13 px / 550 (`Layer 3`) · `small` 12 px muted (`CH 1 · <template>`) · `View event` 12 px link                                          | **`strong`** the names in isolates · **`small` 12 px** `on 1-98` · ids shortened + copy · the refused line                                                               | **FIXED** (ranks, the coordinate line — golden rule 11); ARGUED: no `View event` — `B-211` put the ids and the line ON the row                                                                     |
+| result cell   | a `.badge` 12 px / 500 `4px 8px` radius 5 (`Succeeded` mint / `Blocked` amber / `Failed` red) + `small` reason 11 px muted                      | **`.cg-tag` 12 px / 500 `4px 8px` radius 5** (`ok` `--r-ok-*` / `timeout` `--r-caution-*` / `failed` `--r-error-text` on `--r-danger-bg`) + the error code 11 px beneath | **FIXED** (built); ARGUED: the words are the record's (`AuditEntrySchema.outcome`), and `failed` takes the 2A alarm word's ink, not the reference's pastel                                         |
+| detail aside  | 325 px `Event details` with `Time · Channel · Action` and `Event ID · Item ID · Template ID` + `Copy event details`                             | not built                                                                                                                                                                | ARGUED: every one of those is on the row already (`B-211`), the copy per id included                                                                                                               |
+| footer        | 72 px `16px 26px`: `12 of 12 events` 12 px muted · `Follow new events` · `Reset filters` 13 px link · `Close` 39 quiet                          | the primitive's footer: **`N of M events` 12 px muted · `Reset filters` 13 px (while narrowing)** · `Close`                                                              | **FIXED** (count, reset); ARGUED: `Follow new events` — no live tail by design (`Refresh` is the door); `Close` is the cancel role                                                                 |
+| empty         | `55px 20px` centred `No events match these filters` + `Reset filters`                                                                           | `B-141`'s four sentences, unchanged; `Reset filters` in the footer                                                                                                       | ARGUED: the four empty states are a guard the reference cannot draw; a filter that empties the list still says "match this filter"                                                                 |
+
+**What the owner will see change on screen:** LOAD opens a wider picker with a search box and
+three kind chips over a list of rows, each a thumbnail, a name and a small meta line with amber
+chips where a reason applies, `Delete from station` at the right, a dashed "Drop a .vcg package
+here" zone under the list, and the sentence _Loading prepares the row. Use Play when you're ready
+to go on air._ beside `Cancel` and `Import a .vcg…`. The audit log fills the screen: a search,
+`Action` / `Result` / `Actor` selects and `Refresh` on one line; under them a small `This console`
+field with the caveat beside it; then a five-column table — `Time · Actor · Action · Item / detail
+· Outcome` — whose rows carry the row's name in bold, `on 1-9` under it, the ids with copy buttons,
+and a coloured `ok` / `failed` tag at the right; `N of M events` sits in the footer. On LIVE
+SOURCES the panic button reads `SILENCE ALL BOXES · EVERY CHANNEL`.
+
+### 15.4 The waves, counted — and the shadow-root check
+
+Counted in Chromium from the page's CSSOM, as the earlier phases did. **One stylesheet, 1067
+rules; no shadow root at any of the three starts** (`shadowRootsOnPage: []`; each dialog's
+`getRootNode()` is the document). `.btn` **16** (0 under `@media`), `.modal-head` **10** (7),
+`.template-detail` **9** (6), `.badge` 7, `.template-row` 6 (2), `.modal-foot` 6 (4),
+`.template-filter` 5 (2), `.icon-btn` 5, `.empty` 4, `.template-layout` 4 (3), `.search` 3,
+`.modal` 3 (1); `.import-step` **9** (2), `.review-row` 7, `.drop-zone` 6 (2), `.notice` 5,
+`.import-success` 4, `.import-steps` 2 (1), `.import-modal` 2 (1); `.audit-tools` **12** (7),
+`.audit-table` **10** (0), `.audit-surface` 5 (3), `.audit-detail` 5 (1), `.audit-time` 2,
+`.audit-item` 2, `.audit-result` 2, `.field` 2, `.audit-modal` 1. Only the unconditional waves
+paint at 1280 × 800; the `@media` ones are the ≤ 1000 / ≤ 720 / ≤ 390 px re-statements. Precedent:
+`.inspector` 33, `.plate-table` 20, `.settings` 17.
+
+### 15.5 🔴 The red-first proofs
+
+| proof                                           | file                                                    | RED against                                                                                                                                                                                                 | GREEN          |
+| ----------------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| guard item 27 — the actor column                | `apps/runtime/tests/auditPanel.actorColumn.dom.test.ts` | a PLANT removing the header cell and the row cell (the reference's table, with no WHO): the three column cases red; the two strip cases and the caveat's three older suites GREEN — the hole the item named | 5 / 5          |
+| the search reads the list                       | `apps/runtime/tests/templatePicker.library.dom.test.ts` | a PLANT making the query match everything: the search case red, the other five green                                                                                                                        | 6 / 6          |
+| A16 — the panic label names its scope           | `apps/runtime/tests/liveSourcesPanel.dom.test.ts`       | the label reverted to the bare verb: the A16 case red, the one-press-one-call case green                                                                                                                    | 68 / 68        |
+| the dropped file meets the chain's own `verify` | `templatePicker.library.dom.test.ts` (last case)        | not a plant — the proof is the SENTENCE `verify` produces (`“garbage.vcg” failed verification…`) reaching the row's error channel; a picker checking the bytes itself could not print it                    | green          |
+| the geometry                                    | `apps/runtime/tests/e2e/library-audit-geometry.spec.ts` | written to the tokens; its positive controls (the picker wider than the old `prose` 460, the log wider than the old `wide` 720) fail against the previous frames                                            | Chromium, 15.9 |
+
+No plant is in the tree.
+
+### 15.6 The deletion guard — item 27 discharged, and the rest green
+
+**Item 27 (A1)** discharged, as recorded in §3: the column, the strip and the field, five dom cases
+plus the Chromium measurement; the caveat's three pinning tests — `auditPanel.legibility.dom`
+(_"does NOT change the console caveat"_), e2e `audit-legibility.spec.ts:50`,
+`stationSetupScope.dom.test.ts` (_"still in the Audit panel, beside its caveat — and nowhere in
+Station setup"_) — unchanged and green. No other guarded surface was touched: the phase edits the
+picker, the audit panel, the plates toolbar's one label, `LayerRow.load`'s one branch, the modal's
+size table, the token home and the stylesheet. The whole runtime suite: **142 files, 1318 tests,
+green** after the change.
+
+### 15.7 What Phase 8 did NOT do — and the numbers filed
+
+- It did not build the reference's select-then-load picker, its detail aside, its `Into` select or
+  its `Manage` view; its import wizard's steps, review, completion or footer sentence; the audit's
+  `Time · UTC` per-row date, `Date` filter, `View event` aside, `Follow new events`, or its result
+  words — each argued in 15.3.
+- It did not re-point any existing test: every import, picker, removal, audit and Station-setup
+  suite is byte for byte what it was, except `liveSourcesPanel.dom.test.ts`'s finder for the panic
+  button (which now matches the verb and pins the scope — the one label the phase changed on
+  purpose, A16). Swept with `git grep`: the old label survives only as a quoted title in
+  `tools/caspar-bridge/tests/live-plate-panic.integration.test.ts`'s comment and in this
+  programme's own history; the e2e regex `/^Silence all boxes/` still matches.
+- It did not touch `importVcgFile.ts`, `templateDelivery.ts`, `fixedSlotLoad.ts`,
+  `packages/vcg-format`, the bridge, `silenceAllLivePlates`, the bank fencing, the refusal and
+  preflight paths, `reconcileOnReconnect` or the `LockPolicy` table (§11's hard stops).
+- It did not add a persisted key, file or schema: `persistedKeyCensus.test.ts` unchanged and green;
+  the picker's search and kind, the audit's search and result filter, and the drag state are
+  component state that resets when the dialog opens.
+- It did not translate anything; three surfaces gained the reference's OWN words (the picker's and
+  the audit's subtitles, `Loading prepares the row…`, `No templates found`, `All actions` / `All
+results`, `Reset filters`, `N of M events`) and the audit's head words moved to sentence case
+  (`Time · Actor · Action · Item / detail · Outcome`) — swept with `git grep`, no test or spec
+  quoted the lower-case heads.
+- It did not measure any geometry in jsdom: every box is in `library-audit-geometry.spec.ts`.
+- 🔴 **Filed for the owner, not decided:** whether the picker should become the reference's
+  SELECT-THEN-`Load into` flow. It is a CONTRACT change to the one-press row (the fixture's
+  `loadTemplate`, twenty specs) and the detail aside comes with it; this phase kept the contract
+  and argued the look. If the owner wants the reference's flow it is a decision for the record,
+  not a phase's re-dress.
+- Numbers taken: **A16** recorded on `R-062` (`docs/prd/runtime.md`). Numbers closed: guard item
+  **27**.
+
+### 15.8 The runs
+
+_(recorded in `tasks.md` 8.4 with the local Playwright count, the gate's `0 cached` line and the
+Linux `e2e` URL)_

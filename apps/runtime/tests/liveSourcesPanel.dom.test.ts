@@ -1106,8 +1106,30 @@ describe('add-multibox-audio — audio is visible without opening anything', () 
  * `tools/caspar-bridge/tests/live-plate-panic.integration.test.ts`, where a wire can be observed.
  */
 describe('PATCH-BX-01 — PANIC asks the bridge, and reads its answer out loud', () => {
+  /*
+    `RUNTIME-REDESIGN-01` Phase 8 (owner answer A16) — the label NAMES ITS SCOPE after the
+    verb, so the finder matches the verb and the scope test below pins the rest.
+  */
   const panicButton = (el: HTMLElement): HTMLButtonElement | undefined =>
-    [...el.querySelectorAll('button')].find((b) => b.textContent === 'SILENCE ALL BOXES');
+    [...el.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').startsWith('SILENCE ALL BOXES'),
+    );
+
+  /**
+   * 🔴 A16 — `silenceAllLivePlates` takes no arguments ON PURPOSE (`R-062`): PANIC's scope is
+   * the bridge's whole ledger, every channel it drives, and that is not the caller's to
+   * choose. The label says so in the operator's words, so that when multi-channel arrives
+   * the label is the thing that has to change and cannot be forgotten. Golden rule 11.
+   */
+  it('A16 — the panic label names its scope: every channel, not the one selected', async () => {
+    const { el } = await render([layer({ layer: 10, sourceId: 'guest-1' })], OWNED, 'live');
+    const button = panicButton(el);
+    expect(button).toBeDefined();
+    expect(button?.textContent).toBe('SILENCE ALL BOXES · EVERY CHANNEL');
+    expect(button?.getAttribute('aria-label')).toMatch(/^Silence all boxes on every channel/);
+    expect(button?.getAttribute('title')).toMatch(/every channel this bridge drives/i);
+    expect(button?.getAttribute('title')).toMatch(/not only the channel selected above/i);
+  });
 
   /**
    * The command feedback channel, captured directly.

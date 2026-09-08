@@ -3630,6 +3630,17 @@ multi-channel plant wants a per-channel panic beside the station-wide one is the
 and is recorded here as a question, not as a task. The other four bulk verbs are ordinary
 housekeeping and can take an optional channel without changing what a bare call means.
 
+✅ **ANSWERED by the owner — A16, `RUNTIME-REDESIGN-01` Phase 8 (2026-09-08).**
+`silenceAllLivePlates` STAYS UNSCOPED. It takes `z.void()` on purpose; PANIC's scope is not the
+caller's to choose. The scope question is a PRECONDITION OF EVER SHIPPING REAL MULTI-CHANNEL,
+decided then, with the operator's workflow in front of us — never in passing, and never by this
+item. That is the answer, not an open question. What Phase 8 did instead was make the assumption
+VISIBLE where the operator reads it: the plates toolbar's control is `SILENCE ALL BOXES · EVERY
+CHANNEL`, its accessible name and tooltip say the same (golden rule 11), so that when
+multi-channel arrives the LABEL is the thing that has to change and cannot be forgotten. One
+control, its label and its tooltip — no behaviour change, no wire change
+(`apps/runtime/tests/liveSourcesPanel.dom.test.ts`, "A16 — the panic label names its scope").
+
 **Acceptance (when this is taken):**
 
 - A channel-discovery channel on the contract (`channels.list` or the settings list carrying it),

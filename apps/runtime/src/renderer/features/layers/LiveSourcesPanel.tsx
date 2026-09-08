@@ -432,6 +432,17 @@ export function LiveSourcesPanel({
           repeated inside it. `caution-strong` and not `danger` — red is this palette's
           error-and-destructive hue, and silencing is neither: the pictures stay on air and
           the faders are still there.
+
+          🔴 `RUNTIME-REDESIGN-01` Phase 8, owner answer A16 — THE LABEL NAMES ITS SCOPE.
+          `stack.silenceAllLivePlates` takes no arguments ON PURPOSE (`R-062`): PANIC's scope
+          is the bridge's whole ledger — every seated plate on every channel this bridge
+          drives, not the channel selected above — and that scope is not the caller's to
+          choose. Whether a multi-channel plant wants a per-channel silence beside it is a
+          precondition of ever shipping real multi-channel, decided then, with the operator's
+          workflow in front of us. Until then the assumption is written where the operator
+          reads it, so that when multi-channel arrives THIS LABEL is the thing that has to
+          change and cannot be forgotten. Golden rule 11: the scope in the operator's words.
+          No behaviour change, no wire change.
         */}
         <AsyncButton
           variant="caution-strong"
@@ -440,13 +451,14 @@ export function LiveSourcesPanel({
           disabled={audioRefusal !== undefined}
           title={
             audioRefusal ??
-            'Set EVERY live plate the bridge has seated to zero — including rows this ' +
+            'Set EVERY live plate the bridge has seated to zero, on EVERY channel this bridge ' +
+              'drives — not only the channel selected above, and including rows this ' +
               'console does not show as on air. The pictures stay on air. There is no ' +
               'un-panic — raise what you need again on its own fader.'
           }
-          aria-label="Silence all boxes — set every live plate the bridge has seated to zero"
+          aria-label="Silence all boxes on every channel — set every live plate the bridge has seated to zero, whichever channel it is on"
         >
-          SILENCE ALL BOXES
+          SILENCE ALL BOXES · EVERY CHANNEL
         </AsyncButton>
       </div>
       <div className="cg-plate-table" role="table" aria-label="Occupied live-plate layers">

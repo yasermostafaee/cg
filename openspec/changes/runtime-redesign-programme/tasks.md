@@ -6,10 +6,14 @@ file records which are done. **Each session takes the next unfinished phase, fin
 reports.** Do not start a later phase because an earlier one looks easy — the ordering is
 load-bearing and stated at each step.
 
-**Phase state at 2026-09-08:** Phases 1, 2 (with addendum 2A), 3, 4, 5, 6 and **7** COMPLETE,
-each with its Linux `e2e` URL beside the ticked item. Phases 8–10 not started. Next: **Phase 8**.
+**Phase state at 2026-09-08:** Phases 1, 2 (with addendum 2A), 3, 4, 5, 6, 7 and **8** COMPLETE,
+each with its Linux `e2e` URL beside the ticked item. Phases 9–10 not started. Next: **Phase 9**.
 ⚠ Phase 7 answered owner question **A15** first (`design.md` §14.0) and filed the three
 single-channel gaps as **`R-062`** — read §14.7 before touching a bulk verb or the channel list.
+⚠ Phase 8 applied **A1** (the picker stays; guard item 27 built back and discharged, `design.md`
+§15.6) and recorded **A16** on `R-062` (PANIC stays unscoped; its label names its scope). Phase 9
+takes guard items 1–26 — item 27 is DONE — and reads `design.md` §15.7 for the one question Phase
+8 filed for the owner (the picker's select-then-load flow).
 ⚠ `PROMPT.md` §0 carries the rule Phase 3 learned — **the reference is judged as RENDERED, not as
 authored: measure it in a browser at 1280 × 800 and quote what you read** — Phase 5 counted the
 waves it hides (`.inspector` is restated 33 times; `design.md` §12.1) and Phase 6 counted the
@@ -99,6 +103,16 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
   OFF reaches every state MUTE reached and one more. Recorded as guard item **28, CLOSED**
   (`design.md` §3). Nothing restored. The rule for later phases: a removal the reference implies
   is still a REMOVAL and is written down with its wire evidence, never reported as a "Fixed" row.
+- **A16 · 🔴 `silenceAllLivePlates` STAYS UNSCOPED** (2026-09-08, Phase 8; recorded on `R-062`
+  in `docs/prd/runtime.md`). It takes `z.void()` on purpose — PANIC's scope is not the caller's
+  to choose — and the scope question is a PRECONDITION OF EVER SHIPPING REAL MULTI-CHANNEL,
+  decided then with the operator's workflow in front of us, never in passing. That is the
+  answer, not an open question. The assumption is made VISIBLE where the operator reads it: the
+  plates toolbar's control is `SILENCE ALL BOXES · EVERY CHANNEL`, its accessible name and
+  tooltip say the same (golden rule 11), so when multi-channel arrives the label is the thing
+  that has to change and cannot be forgotten. One control, its label and its tooltip — no
+  behaviour change, no wire change (`liveSourcesPanel.dom.test.ts`, "A16 — the panic label names
+  its scope"; `stack.silenceAllLivePlates` untouched by diff).
 
 ---
 
@@ -475,22 +489,56 @@ Channel pane with every delta fixed or argued, the wave counts, the red-first ma
       it was not skipped, which is the half a green run alone does not prove (golden rule 12b).
       `Lint • Typecheck • Test • Build` also ran green (12:23:36Z → 12:31:26Z).
 
-## Phase 8 — Template library, import, and the audit log
+## Phase 8 — Template library, import, and the audit log — COMPLETE
 
-- [ ] 8.1 Library and import follow `01` and `02`. ⚠ The real `.vcg` validation and import path is
-      preserved EXACTLY — the prototype's import is theatre. Proved by the existing import tests.
-- [ ] 8.2 The audit log follows `03`.
-- [ ] 8.3 ✅ **ANSWERED — the picker STAYS** (owner, 2026-09-07; `design.md` §5b). Keep it, make it
-      SMALL, and keep it BESIDE the actor column in the audit panel. Do NOT move it to Station setup
-      — `stationSetupScope.dom.test.ts` asserts the caveat is absent there, and moving it separates
-      `B-143`'s caveat from the column it qualifies. All three caveat tests stay green and none is
-      weakened.
-      🔴 **And the positive obligation this creates: the reference draws NO actor column, so this
-      phase must ADD IT BACK** in the new tokens — header and per-row value — as guard item 27.
-      Write the test it is owed: `apps/runtime/tests/auditPanel.actorColumn.dom.test.ts`, asserting
-      the header, a row's value, and the caveat beside them. A grep of `apps/runtime/tests` finds
-      `actor` only as fixture data today, so nothing currently stops the column being dropped.
-- [ ] 8.4 e2e run, URL recorded here.
+The record is `design.md` §15: the import path's evidence first (§15.0), what contradicted the
+prompt, what was built and where each fact is read from, the three surfaces measured in Chromium
+with every delta fixed or argued (§15.3), the wave counts and the shadow-root check (§15.4), the
+red-first matrix (§15.5), guard item 27 discharged (§15.6), and what was not done (§15.7).
+
+- [x] 8.1 Library and import follow `01` and `02` — as RENDERED (all three dialogs are in the OUTER
+      document; no shadow root at any of the three starts; `.modal-head` restated 10 times,
+      `.template-detail` 9, `.import-step` 9). The picker: a search, three kind chips by the
+      bridge's own `requiredBankFor`, rows as thumbnail · name · a meta line FROM THE CARRIER with
+      the reasons as chips, the reference's footer sentence (true here: a LOAD is list-only), the
+      primitive's `wide`; `02`'s drop zone at the foot of the list, feeding the SAME chain.
+      ⚠ **The real `.vcg` validation and import path is preserved EXACTLY:** `importVcgFile.ts`,
+      `templateDelivery.ts`, `fixedSlotLoad.ts` and `@cg/vcg-format` untouched by diff; the
+      existing import suites byte for byte unchanged and green (16 + 4 + 2 + 7 + 1 + 5 unit,
+      2 + 8 + 1 e2e — `design.md` §15.0); a DROPPED non-package reaches the row's error channel as
+      `“garbage.vcg” failed verification…`, the sentence only the chain's own `verify` produces.
+      The one-press load contract, `Delete from station` and `Import a .vcg…` unchanged (twenty
+      specs drive them). The reference's select-then-`Load into` flow, detail aside, `Into` select,
+      `Manage` view and import wizard are ARGUED (§15.3); the picker's flow is filed as a question
+      for the owner (§15.7), not decided.
+- [x] 8.2 The audit log follows `03` — a `ledger` frame (`--r-modal-w-ledger`, the primitive's
+      fourth width), the reference's subtitle, a tools row (search over what the row SHOWS,
+      `Action` first, `Result` from the schema's outcomes, the app's `Actor` filter kept,
+      `Refresh`), `12px 16px` head at 12 px, `15px 16px` cells at 13 px, the item cell's strong
+      line over small lines with **`on c-l` from `entry.slot`** (golden rule 11 ⭐ — the log entry
+      keeps the layer number; the row did not before), the outcome as a tag in the 2A inks, the
+      code beneath it, `N of M events` and `Reset filters` in the footer. `B-210`'s band, `B-211`'s
+      on-row ids and `B-141`'s four empty states unchanged; `View event`, the per-row date, `Date`
+      and `Follow` ARGUED (§15.3). `auditPanel.filters.dom.test.ts` (5).
+- [x] 8.3 ✅ **A1 APPLIED — the picker STAYS, small, beside the actor column; the caveat did not
+      move.** 🔴 **Guard item 27 BUILT BACK and DISCHARGED** (`design.md` §3, §15.6): `Actor`
+      heads the second column, a row's cell carries `entry.actor` in its own `<bdi>`, the field is
+      132 × 39 in ONE strip with the `B-143` caveat (byte for byte), the strip above the table over
+      its first columns; nothing in Station setup. `auditPanel.actorColumn.dom.test.ts` (5) — **RED
+      FIRST by a plant removing the header and the cell: the three column cases red while the
+      caveat's three older tests stayed green, which is exactly the hole the item named**; the
+      geometry in Chromium (`library-audit-geometry.spec.ts`). Still owed after 27: Phase 9's four
+      tests (`9.3`) for items 1–26, Phase 10's end-to-end pass. Nothing of 27.
+      ✅ **A16 done (the small part):** `SILENCE ALL BOXES · EVERY CHANNEL` — label, accessible
+      name and tooltip name the scope; `silenceAllLivePlates` untouched; recorded on `R-062`.
+- [x] 8.4 `pnpm gate` — **`93 successful, 93 total · 0 cached, 93 total`**, foreground, prettier
+      clean, OpenSpec `78 passed, 0 failed`. `pnpm --filter @cg/runtime test:e2e` — **143 passed
+      (1.9 m)**, Windows, against the gate's fresh build, after one geometry correction the first
+      run surfaced (the search box and the selects painted 41 / 42 under the console's inherited
+      1.55 line-height where the reference paints 40 / 39 — declared as heights with the
+      reference's line-height, the Phase 7 tab lesson again). ⚠ **NON-AUTHORITATIVE** (golden
+      rule 12a), so it is not what discharges this. Linux `e2e` URL: _(owed — recorded here once
+      the run on the code head completes)_.
 
 ## Phase 9 — The surfaces the reference does not draw
 

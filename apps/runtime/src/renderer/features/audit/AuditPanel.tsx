@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, RefreshCw, Search } from 'lucide-react';
 import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
 import {
   MAX_ACTOR_LENGTH,
@@ -7,7 +7,6 @@ import {
   type FixedLayerBank,
   type TemplateInfo,
 } from '@cg/shared-ipc';
-import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -38,126 +37,19 @@ const ACTION_OPTIONS = ['all', ...AuditEntrySchema.shape.action.options] as cons
 
 type ActionFilter = (typeof ACTION_OPTIONS)[number];
 
+/**
+ * `RUNTIME-REDESIGN-01` Phase 8 — the reference's `Result` filter, derived the same way
+ * from the schema's outcome set (`ok · failed · timeout`). Applied HERE, over the fetched
+ * tail, because `audit.recent` filters by action and actor only and this phase adds no
+ * request field: the tail is at most 200 rows, and a client-side narrowing of a list the
+ * bridge already answered is not a second source of truth.
+ */
+const OUTCOME_OPTIONS = ['all', ...AuditEntrySchema.shape.outcome.options] as const;
+
+type OutcomeFilter = (typeof OUTCOME_OPTIONS)[number];
+
 /** B-141 — the bridge's own answer to "is this instrument live?" (`audit.health`). */
 type AuditHealth = Awaited<ReturnType<typeof window.cg.audit.health>>;
-
-/*
-  `B-210` / `B-211` — the time column narrowed from an ISO stamp's width to a clock's,
-  and the detail column widened to carry a name line over an id line.
-*/
-const COLUMNS = '84px 110px 110px 1fr 80px';
-
-const styles = {
-  filters: {
-    display: 'flex',
-    gap: '0.5rem',
-    alignItems: 'center',
-    fontSize: '0.85rem',
-  },
-  actorInput: { width: 140 },
-  /*
-    B-141 follow-up — THIS CONSOLE's name, and its caveat, above the table rather than
-    tucked in a settings dialog somewhere else. It sits here because this is the only
-    surface where `actor` appears at all (the column and the filter below), so the
-    limits of the value are read in the same glance as the value itself.
-  */
-  console: {
-    display: 'flex',
-    gap: '0.5rem',
-    alignItems: 'baseline',
-    flexWrap: 'wrap' as const,
-    fontSize: '0.85rem',
-    paddingBottom: '0.5rem',
-  },
-  caveat: {
-    color: colors.textMuted,
-    fontSize: '0.75rem',
-    flex: '1 1 20rem',
-    lineHeight: 1.4,
-  },
-  table: {
-    flex: 1,
-    overflowY: 'auto' as const,
-    fontSize: '0.82rem',
-    fontFamily: 'monospace',
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-  },
-  row: {
-    display: 'grid',
-    gridTemplateColumns: COLUMNS,
-    gap: '0.6rem',
-    padding: '0.25rem 0.5rem',
-    borderBottom: `1px solid ${colors.border}`,
-    alignItems: 'start',
-  },
-  headerRow: {
-    display: 'grid',
-    gridTemplateColumns: COLUMNS,
-    gap: '0.6rem',
-    padding: '0.4rem 0.5rem',
-    background: colors.panelMuted,
-    fontWeight: 700,
-    fontSize: '0.72rem',
-    letterSpacing: '0.05em',
-    textTransform: 'uppercase' as const,
-    color: colors.textMuted,
-    position: 'sticky' as const,
-    top: 0,
-  },
-  /*
-    `B-210` — the DATE, once per day down the list, as a band rather than a column.
-    The list is newest-first, so a band sits above the first row of each day. It is
-    not a row: it names nothing that happened.
-  */
-  dateBand: {
-    padding: '0.2rem 0.5rem',
-    background: colors.panelMuted,
-    color: colors.textMuted,
-    fontSize: '0.72rem',
-    letterSpacing: '0.05em',
-    borderBottom: `1px solid ${colors.border}`,
-  },
-  /** `B-211` — the NAME line: what the operator calls the row and the template. */
-  names: { display: 'block' },
-  /** …and the ID line beneath it: muted, full id in the title, copy beside each. */
-  ids: {
-    display: 'flex',
-    flexWrap: 'wrap' as const,
-    gap: '0.35rem',
-    alignItems: 'center',
-    color: colors.textMuted,
-    fontSize: '0.72rem',
-  },
-  idCode: { fontFamily: 'monospace' },
-  /** `B-209` — the refused line, on its own line so a long URL does not push the ids off. */
-  command: {
-    display: 'block',
-    color: colors.textMuted,
-    fontSize: '0.72rem',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap' as const,
-  },
-  empty: {
-    padding: '1rem',
-    color: colors.textMuted,
-    fontStyle: 'italic' as const,
-  },
-  /*
-    B-141 — the two empty states that are NOT "quiet" are rendered through the
-    shared `Notice`, so this carries only the box they sit in. A local colour
-    treatment here is exactly what `Notice`'s header forbids: an exported style
-    object is copied, a component is consumed.
-  */
-  emptyFault: {
-    padding: '0.75rem',
-  },
-  outcomeOk: { color: cssVars['--r-ok-text'] },
-  // Error TEXT on a dark background — the owner's colour, through the theme.
-  outcomeFailed: { color: colors.errorText },
-  outcomeTimeout: { color: cssVars['--r-caution-text'] },
-} as const;
 
 /**
  * AuditPanel — modal showing the tail of the audit NDJSON file
@@ -173,6 +65,20 @@ const styles = {
  * display, full in the title, and copyable. The names are joined here, against the
  * same registry list and the same declared bank the Layers table reads, so the log
  * cannot call a row something the table does not.
+ *
+ * ── `RUNTIME-REDESIGN-01` PHASE 8 — `03-audit-log.html` AS RENDERED, PLUS THE ACTOR ──
+ *
+ * The look is the reference's (`AUDIT_LOG_PX`, `design.md` §15.3): a ledger-wide frame, a
+ * tools row of search and labelled selects with Refresh, a table whose head is the small
+ * muted rank and whose item cell stacks a strong line over small lines, an outcome tag,
+ * and a footer count beside Close. Its `View event` aside is NOT adopted — `B-211` put
+ * the names, the ids and the refused line ON the row on purpose — nor its per-row date
+ * (`B-210`'s band), its `Date` filter, or `Follow new events` (no live tail, above).
+ *
+ * 🔴 The reference draws NO ACTOR COLUMN, and no caveat beside one. This surface keeps
+ * both, and the field that writes the actor — guard item 27 (`design.md` §3), owner
+ * answer A1: the picker STAYS, made SMALL, BESIDE the column it qualifies, and never in
+ * Station setup. A log that names nobody is the `B-143` failure with the sign flipped.
  */
 export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [entries, setEntries] = useState<readonly AuditEntry[]>([]);
@@ -185,6 +91,8 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [health, setHealth] = useState<AuditHealth | null>(null);
   const [actionFilter, setActionFilter] = useState<ActionFilter>('all');
   const [actorFilter, setActorFilter] = useState<string>('');
+  const [outcomeFilter, setOutcomeFilter] = useState<OutcomeFilter>('all');
+  const [query, setQuery] = useState<string>('');
   /*
     B-141 follow-up — this console's own name. Browser-local, so it is read from the
     bridge surface once per opening rather than subscribed: another TAB on the same
@@ -233,13 +141,52 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
 
   if (!open) return null;
 
+  /*
+    The client-side half of the filters (see `OUTCOME_OPTIONS`): the outcome select and the
+    search, over the tail the bridge answered. The search reads what the ROW SHOWS — the
+    names the operator sees, the ids, the actor, the action, the code and the refused line
+    — so a hit is something visible, never a field the row keeps to itself.
+  */
+  const q = query.trim().toLocaleLowerCase();
+  const shown = entries.filter((e) => {
+    if (outcomeFilter !== 'all' && e.outcome !== outcomeFilter) return false;
+    if (q === '') return true;
+    const place = placeName(e.slot, bank);
+    const template = templateName(e.templateId, templates);
+    return [
+      place,
+      template,
+      e.actor,
+      e.action,
+      e.outcome,
+      e.itemId,
+      e.templateId,
+      e.errorCode,
+      e.command,
+    ]
+      .filter((v): v is string => typeof v === 'string' && v !== '')
+      .join(' ')
+      .toLocaleLowerCase()
+      .includes(q);
+  });
+  const filtered =
+    actionFilter !== 'all' || actorFilter.trim() !== '' || outcomeFilter !== 'all' || q !== '';
+  const resetFilters = (): void => {
+    setActionFilter('all');
+    setActorFilter('');
+    setOutcomeFilter('all');
+    setQuery('');
+  };
+
   return (
     <Modal
       /* §1 — SENTENCE case, like every other dialog. It was `AUDIT LOG`; the words
          are unchanged. */
       title="Audit log"
+      /* The reference's own line under its title. */
+      subtitle="Station actions and their recorded outcomes."
       ariaLabel="Audit log"
-      size="wide"
+      size="ledger"
       onClose={onClose}
       /*
         ONE action, and its role is `cancel` — not `primary` (owner).
@@ -252,13 +199,89 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
 
         The hand-rolled header's `Close` BUTTON is still gone — the primitive's ✕ is
         the close affordance here as it is everywhere else.
+
+        Phase 8 — the reference's footer count sits at the left, with `Reset filters`
+        beside it while a filter is narrowing the list.
       */
       footer={
-        <ModalAction actionRole="cancel" onClick={onClose}>
-          Close
-        </ModalAction>
+        <>
+          <span className="cg-audit-foot-info">
+            <span data-audit-count={String(shown.length)}>
+              {String(shown.length)} of {String(entries.length)} events
+            </span>
+            {filtered && (
+              <Button variant="ghost" onClick={resetFilters} data-audit-reset="">
+                Reset filters
+              </Button>
+            )}
+          </span>
+          <ModalAction actionRole="cancel" onClick={onClose}>
+            Close
+          </ModalAction>
+        </>
       }
     >
+      <div className="cg-audit-tools">
+        <label className="cg-audit-search">
+          <Icon icon={Search} size={16} />
+          <input
+            type="search"
+            className="cg-field"
+            placeholder="Search events or templates…"
+            aria-label="Search events, names, ids and actors"
+            autoComplete="off"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </label>
+        <div className="cg-audit-field">
+          <label htmlFor="audit-action">Action</label>
+          <select
+            id="audit-action"
+            className="cg-field"
+            value={actionFilter}
+            onChange={(e) => setActionFilter(e.target.value as ActionFilter)}
+          >
+            {ACTION_OPTIONS.map((a) => (
+              <option key={a} value={a}>
+                {a === 'all' ? 'All actions' : a}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="cg-audit-field">
+          <label htmlFor="audit-result">Result</label>
+          <select
+            id="audit-result"
+            className="cg-field"
+            value={outcomeFilter}
+            onChange={(e) => setOutcomeFilter(e.target.value as OutcomeFilter)}
+          >
+            {OUTCOME_OPTIONS.map((o) => (
+              <option key={o} value={o}>
+                {o === 'all' ? 'All results' : o}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="cg-audit-field">
+          <label htmlFor="audit-actor">Actor</label>
+          <input
+            id="audit-actor"
+            className="cg-field"
+            placeholder="any"
+            value={actorFilter}
+            onChange={(e) => setActorFilter(e.target.value)}
+          />
+        </div>
+        <AsyncButton
+          variant="neutral"
+          icon={RefreshCw}
+          run={() => refresh().then(() => ({ accepted: true }))}
+        >
+          Refresh
+        </AsyncButton>
+      </div>
       {/*
         ⭐ THE HONESTY HALF, ON THE SURFACE — not only in the design doc.
 
@@ -273,14 +296,15 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         read, in the operator's words, beside the column it qualifies.
 
         `B-211` did not touch this sentence, deliberately: naming the ROW and the
-        TEMPLATE better must not read as naming the PERSON better.
+        TEMPLATE better must not read as naming the PERSON better. Phase 8 (owner answer
+        A1) made the FIELD small and kept the strip directly above the ACTOR column; the
+        sentence is byte for byte what it was.
       */}
-      <div style={styles.console}>
+      <div className="cg-audit-console" data-audit-console="">
         <label htmlFor="audit-operator">This console</label>
         <input
           id="audit-operator"
           className="cg-field"
-          style={styles.actorInput}
           placeholder="unattributed"
           maxLength={MAX_ACTOR_LENGTH}
           value={operatorName}
@@ -289,68 +313,48 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
             window.cg.audit.setOperatorName(e.target.value);
           }}
         />
-        <span style={styles.caveat}>
+        <span className="cg-audit-caveat" data-audit-caveat="">
           Recorded as the <strong>actor</strong> of everything done from this console. It is a LABEL
           you typed, not a verified sign-in — it says which console, not which person, and it does
           not change when somebody else takes the chair. Left empty, actions record{' '}
           <strong>{UNATTRIBUTED_ACTOR}</strong>.
         </span>
       </div>
-      <div style={styles.filters}>
-        <label htmlFor="audit-action">Action</label>
-        <select
-          id="audit-action"
-          className="cg-field"
-          style={{ width: 'auto' }}
-          value={actionFilter}
-          onChange={(e) => setActionFilter(e.target.value as ActionFilter)}
-        >
-          {ACTION_OPTIONS.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </select>
-        <label htmlFor="audit-actor">Actor</label>
-        <input
-          id="audit-actor"
-          className="cg-field"
-          style={styles.actorInput}
-          placeholder="any"
-          value={actorFilter}
-          onChange={(e) => setActorFilter(e.target.value)}
-        />
-        <AsyncButton run={() => refresh().then(() => ({ accepted: true }))}>Refresh</AsyncButton>
-      </div>
-      <div style={styles.table}>
-        <div style={styles.headerRow}>
+      <div className="cg-audit-table" data-audit-table="">
+        <div className="cg-audit-head" data-audit-head="">
           {/* `B-210` — local wall-clock time; the record's UTC stamp is the cell's title. */}
           <span title="This console's local time, to the second. Hover a time for the record's own UTC stamp.">
-            time
+            Time
           </span>
-          <span>actor</span>
-          <span>action</span>
-          <span>item / detail</span>
-          <span>outcome</span>
+          {/*
+            Guard item 27 — THE ACTOR COLUMN, which the reference does not draw. Its header
+            carries the caveat's gist for the moment the strip above has scrolled away.
+          */}
+          <span
+            data-audit-actor-head=""
+            title="The console name typed above — a self-declared label, not a verified sign-in."
+          >
+            Actor
+          </span>
+          <span>Action</span>
+          <span>Item / detail</span>
+          <span>Outcome</span>
         </div>
-        {entries.length === 0 ? (
-          <EmptyState
-            health={health}
-            filtered={actionFilter !== 'all' || actorFilter.trim() !== ''}
-          />
+        {shown.length === 0 ? (
+          <EmptyState health={health} filtered={filtered} />
         ) : (
-          entries.map((e, idx) => {
+          shown.map((e, idx) => {
             /*
               `B-210` — the date band, where the LOCAL date changes down the list.
               Computed from the same parts the row renders, so the band and the row can
               never disagree about which day a 01:00 entry belongs to.
             */
             const parts = auditTimeParts(e.ts);
-            const previous = idx > 0 ? auditTimeParts(entries[idx - 1]?.ts ?? '').date : null;
+            const previous = idx > 0 ? auditTimeParts(shown[idx - 1]?.ts ?? '').date : null;
             return (
               <Fragment key={idx}>
                 {parts.date !== '' && parts.date !== previous ? (
-                  <div style={styles.dateBand} data-audit-date={parts.date} role="presentation">
+                  <div className="cg-audit-date" data-audit-date={parts.date} role="presentation">
                     {parts.date}
                   </div>
                 ) : null}
@@ -393,7 +397,7 @@ function EmptyState({
   filtered: boolean;
 }): JSX.Element {
   // Not asked yet — say nothing rather than guess. The read is one round trip away.
-  if (health === null) return <p style={styles.empty}>Reading the audit record…</p>;
+  if (health === null) return <p className="cg-audit-empty">Reading the audit record…</p>;
   /*
     `noticeRole="refusal"` is the palette's ATTENTION treatment (amber), which is
     what these two are — not `notice`, which is the neutral statement and would
@@ -404,7 +408,7 @@ function EmptyState({
   */
   if (!health.configured) {
     return (
-      <div style={styles.emptyFault}>
+      <div className="cg-audit-fault">
         <Notice
           noticeRole="refusal"
           aria="status"
@@ -416,7 +420,7 @@ function EmptyState({
   }
   if (health.errorCount > 0) {
     return (
-      <div style={styles.emptyFault}>
+      <div className="cg-audit-fault">
         <Notice
           noticeRole="refusal"
           aria="status"
@@ -432,10 +436,17 @@ function EmptyState({
   // nothing. The filtered variant is separate because "no rows match this filter"
   // is also not "nothing happened".
   return (
-    <p style={styles.empty}>
+    <p className="cg-audit-empty">
       {filtered ? 'No audit entries match this filter.' : 'No audit entries yet.'}
     </p>
   );
+}
+
+/** The outcome's tag — the alarm WORD's ink for `failed` (2A), caution for `timeout`. */
+function outcomeTag(outcome: AuditEntry['outcome']): string {
+  if (outcome === 'ok') return 'cg-tag cg-tag--ok';
+  if (outcome === 'timeout') return 'cg-tag cg-tag--warn';
+  return 'cg-tag cg-tag--error';
 }
 
 function Row({
@@ -449,12 +460,6 @@ function Row({
   templates: ReadonlyMap<string, TemplateInfo>;
   bank: FixedLayerBank | null;
 }): JSX.Element {
-  const outcomeStyle =
-    entry.outcome === 'ok'
-      ? styles.outcomeOk
-      : entry.outcome === 'timeout'
-        ? styles.outcomeTimeout
-        : styles.outcomeFailed;
   /*
     `B-211` — NAME PRIMARY, ID SECONDARY. The place (the row, or the layer with the
     fact that it is not a row) and the template, in the operator's words; then the
@@ -465,14 +470,24 @@ function Row({
   const template = templateName(entry.templateId, templates);
   const names = [place, template].filter((n): n is string => n !== null);
   return (
-    <div style={styles.row} data-audit-row="">
+    <div className="cg-audit-row" data-audit-row="">
       {/* `B-210` — the clock the operator is looking at; the UTC stamp on hover. */}
-      <span title={`Recorded as ${time.utc} (UTC)`} data-audit-time={time.utc}>
+      <span
+        className="cg-audit-time"
+        title={`Recorded as ${time.utc} (UTC)`}
+        data-audit-time={time.utc}
+      >
         {time.time}
       </span>
-      <span>{entry.actor}</span>
+      {/*
+        Guard item 27 — the WHO, in its own isolate (a console name can be Persian beside
+        this Latin chrome). Never composed with the names: it is a label somebody typed.
+      */}
+      <span className="cg-audit-actor" data-audit-actor={entry.actor}>
+        <bdi>{entry.actor}</bdi>
+      </span>
       <span>{entry.action}</span>
-      <span>
+      <span className="cg-audit-item">
         {names.length > 0 ? (
           /*
             `B-232` — EACH NAME IN ITS OWN ISOLATE, not one joined string. This column is
@@ -481,25 +496,49 @@ function Row({
             log had the same defect as the emptied-air notice and for the same reason —
             both compose the same `names` array. See `ui/OperatorNames.tsx`.
           */
-          <span style={styles.names} data-audit-names="">
+          <span className="cg-audit-names" data-audit-names="">
             <OperatorNames name={{ names, layer: null, title: '' }} />
           </span>
         ) : null}
-        <span style={styles.ids}>
+        {/*
+          Golden rule 11 ⭐ — the real LAYER NUMBER stays visible where a row is named in
+          a log entry: `R-028`'s reason is the moment the console is not helping, and an
+          operator clearing a layer by hand needs the coordinate, not the alias. The
+          reference's small line carries `CH 1`; this one carries the whole coordinate.
+        */}
+        {entry.slot !== undefined ? (
+          <span
+            className="cg-audit-slot"
+            data-audit-slot={`${String(entry.slot.channel)}-${String(entry.slot.layer)}`}
+          >
+            on {String(entry.slot.channel)}-{String(entry.slot.layer)}
+          </span>
+        ) : null}
+        <span className="cg-audit-ids">
           {entry.itemId !== undefined ? <IdChip kind="item" id={entry.itemId} /> : null}
           {entry.templateId !== undefined ? <IdChip kind="template" id={entry.templateId} /> : null}
-          {entry.errorCode !== undefined ? (
-            <span data-audit-error-code="">{entry.errorCode}</span>
-          ) : null}
         </span>
         {/* `B-209` — the line CasparCG refused, beside the code it refused it with. */}
         {entry.command !== undefined ? (
-          <span style={styles.command} data-audit-command="" title={entry.command}>
+          <span className="cg-audit-command" data-audit-command="" title={entry.command}>
             {entry.command}
           </span>
         ) : null}
       </span>
-      <span style={outcomeStyle}>{entry.outcome}</span>
+      <span className="cg-audit-outcome">
+        <span className={outcomeTag(entry.outcome)} data-audit-outcome={entry.outcome}>
+          {entry.outcome}
+        </span>
+        {/*
+          `B-209` — the CODE under the outcome it explains, as the reference's small reason
+          sits under its result tag. It moved here from the ids line; it is still on the row.
+        */}
+        {entry.errorCode !== undefined ? (
+          <span className="cg-audit-reason" data-audit-error-code="">
+            {entry.errorCode}
+          </span>
+        ) : null}
+      </span>
     </div>
   );
 }
@@ -514,9 +553,7 @@ function IdChip({ kind, id }: { kind: 'item' | 'template'; id: string }): JSX.El
   const [copied, setCopied] = useState(false);
   return (
     <span data-audit-id={kind} data-audit-full-id={id}>
-      <code style={styles.idCode} title={id}>
-        {shortId(id)}
-      </code>{' '}
+      <code title={id}>{shortId(id)}</code>{' '}
       <Button
         variant="neutral"
         aria-label={`Copy ${kind} id`}

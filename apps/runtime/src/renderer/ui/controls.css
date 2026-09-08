@@ -3322,3 +3322,488 @@ input[type='checkbox']:disabled:checked {
   font-size: var(--r-output-note-text);
   line-height: 1.6;
 }
+
+/* ── `RUNTIME-REDESIGN-01` Phase 8 — THE TAG, shared by the picker and the audit log ─── */
+
+/*
+ * The reference's `.badge` as RENDERED (`design.md` §15.3): 12 px / 500, `4px 8px`, radius 5,
+ * a hairline, a tinted ground — success mint, blocked amber, failed red, or the raised neutral.
+ * ONE treatment for both dialogs, so a `failed` outcome and a `Requires a bed row` reason are
+ * read as the same kind of mark. The picker's meta line takes the reference's smaller wave
+ * (`.template-meta .badge{font-size:.6875rem;padding:2px 6px}`) through `.cg-tpl-meta`.
+ */
+.cg-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-audit-badge-gap);
+  padding: var(--r-audit-badge-pad);
+  border: 1px solid var(--r-border-strong);
+  border-radius: var(--r-audit-badge-radius);
+  background: var(--r-surface-raised);
+  color: var(--r-text-secondary);
+  font-size: var(--r-audit-badge-text);
+  font-weight: var(--r-weight-medium);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.cg-tag--ok {
+  color: var(--r-ok-text);
+  background: var(--r-ok-bg);
+  border-color: var(--r-ok-line);
+}
+.cg-tag--warn {
+  color: var(--r-caution-text);
+  background: var(--r-caution-bg);
+  border-color: var(--r-notice-line);
+}
+/* The alarm WORD's ink (2A) on the reference's red ground. */
+.cg-tag--error {
+  color: var(--r-error-text);
+  background: var(--r-danger-bg);
+  border-color: var(--r-danger);
+}
+
+/* ── `RUNTIME-REDESIGN-01` Phase 8 — THE TEMPLATE PICKER (`01`) and the drop zone (`02`) ── */
+
+/*
+ * `01-template-picker.html` as RENDERED: a search box over three kind chips, a rule, then a
+ * list of 81 px rows — a 56 × 49 thumbnail, the name over a meta line with its badges — and a
+ * footer sentence beside the actions. Numbers are `--r-tpl-*` (`LIBRARY_PX`); colours are role
+ * tokens. The reference's detail aside, `Into` select and `Manage` view are argued away in
+ * `design.md` §15.3; `02`'s drop zone is the one honest interaction its import dialog has, so
+ * it lives at the foot of this list and feeds the SAME chain the OS chooser does.
+ */
+.cg-tpl-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.cg-tpl-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--r-tpl-tools-gap);
+  padding-bottom: var(--r-tpl-tools-pad-bottom);
+}
+.cg-tpl-search,
+.cg-audit-search {
+  position: relative;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cg-tpl-search > svg,
+.cg-audit-search > svg {
+  position: absolute;
+  inset-inline-start: var(--r-tpl-search-icon-inset);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--r-text-muted);
+  pointer-events: none;
+}
+/*
+ * A HEIGHT, not a floor, with the reference's 1.4 line-height: the console inherits 1.55, and
+ * under it a 14 px box padded 9 paints 41 where the reference paints 40 (`LIBRARY_PX.searchH`).
+ */
+.cg-tpl-search .cg-field {
+  height: var(--r-tpl-search-h);
+  min-height: var(--r-tpl-search-h);
+  padding: var(--r-tpl-search-pad);
+  border-radius: var(--r-tpl-search-radius);
+  font-size: var(--r-tpl-search-text);
+  line-height: 1.4;
+}
+.cg-tpl-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--r-tpl-chip-gap);
+  padding-bottom: var(--r-tpl-filter-pad-bottom);
+  border-bottom: 1px solid var(--r-border);
+}
+.cg-tpl-filter .cg-btn {
+  min-height: var(--r-tpl-chip-h);
+  height: var(--r-tpl-chip-h);
+  padding: var(--r-tpl-chip-pad);
+  border-radius: var(--r-tpl-chip-radius);
+  font-size: var(--r-tpl-chip-text);
+  font-weight: var(--r-weight-medium);
+}
+.cg-tpl-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-tpl-row-gap-below);
+  padding: var(--r-tpl-list-pad) 0 0;
+}
+.cg-tpl-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--r-tpl-row-gap);
+  padding: var(--r-tpl-row-pad);
+  border: 1px solid transparent;
+  border-radius: var(--r-tpl-row-radius);
+  transition:
+    background var(--r-dur-fast) ease,
+    border-color var(--r-dur-fast) ease;
+}
+.cg-tpl-row:hover {
+  background: var(--r-table-row-hover);
+}
+/* A row the destination cannot take: the reference dims its ink; the reason stays on the row. */
+.cg-tpl-row[data-template-incompatible='true'] {
+  color: var(--r-text-secondary);
+}
+/*
+ * THE LOAD CONTROL IS THE ROW'S WHOLE LEFT: thumbnail, name and meta in one press, as the
+ * reference's `.template-row` button is. A `ghost` in shape only — the row's frame is what
+ * makes it read as a control (the `--ghost` licence), and its accessible name is the verb.
+ */
+.cg-tpl-row__load.cg-btn {
+  display: grid;
+  grid-template-columns: var(--r-tpl-thumb-w) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--r-tpl-row-gap);
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  white-space: normal;
+  font-weight: var(--r-weight-medium);
+  line-height: 1.5;
+}
+.cg-tpl-row__load.cg-btn:hover:not(:disabled) {
+  background: transparent;
+  filter: none;
+}
+.cg-tpl-row__load.cg-btn:hover:not(:disabled) .cg-tpl-name {
+  color: var(--r-accent);
+}
+.cg-tpl-row__load.cg-btn:disabled {
+  opacity: 1;
+  color: var(--r-text-secondary);
+}
+.cg-tpl-thumb {
+  display: grid;
+  place-items: center;
+  width: var(--r-tpl-thumb-w);
+  height: var(--r-tpl-thumb-h);
+  border: 1px solid var(--r-border-strong);
+  border-radius: var(--r-tpl-thumb-radius);
+  background: var(--r-surface-raised);
+  color: var(--r-accent);
+}
+.cg-tpl-row[data-template-kind='bed'] .cg-tpl-thumb {
+  color: var(--r-ok-text);
+}
+.cg-tpl-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: var(--r-audit-line-gap);
+}
+.cg-tpl-name {
+  display: block;
+  font-size: var(--r-tpl-name-text);
+  font-weight: var(--r-weight-medium);
+  color: var(--r-text);
+  overflow-wrap: anywhere;
+}
+.cg-tpl-row[data-template-incompatible='true'] .cg-tpl-name {
+  color: var(--r-text-secondary);
+}
+.cg-tpl-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--r-tpl-meta-gap);
+  font-size: var(--r-tpl-meta-text);
+  font-weight: var(--r-weight-medium);
+  color: var(--r-text-muted);
+}
+.cg-tpl-meta .cg-tag {
+  padding: var(--r-tpl-badge-pad);
+  border-radius: var(--r-tpl-badge-radius);
+  font-size: var(--r-tpl-badge-text);
+}
+/* The row's REASON lines — the app's own sentences, under the meta, in the attention ink. */
+.cg-tpl-reason {
+  grid-column: 1 / -1;
+  font-size: var(--r-tpl-meta-text);
+  line-height: 1.5;
+  color: var(--r-caution-text);
+}
+.cg-tpl-row .cg-tpl-delete.cg-btn {
+  align-self: center;
+}
+.cg-tpl-empty {
+  padding: var(--r-tpl-empty-pad);
+  text-align: center;
+  color: var(--r-text-muted);
+}
+.cg-tpl-empty > h3 {
+  margin: 0 0 var(--r-space-1);
+  font-size: var(--r-tpl-empty-title-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-text);
+}
+.cg-tpl-empty > p {
+  margin: 0;
+}
+/* `02`'s drop zone, at the foot of the list: dashed, sunken, lit while a file is over it. */
+.cg-tpl-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--r-space-2);
+  margin-top: var(--r-tpl-list-pad);
+  padding: var(--r-tpl-drop-pad);
+  border: 1px dashed var(--r-border-strong);
+  border-radius: var(--r-tpl-drop-radius);
+  background: var(--r-surface-sunken);
+  text-align: center;
+  color: var(--r-text-muted);
+  font-size: var(--r-tpl-drop-text);
+  transition:
+    background var(--r-dur-fast) ease,
+    border-color var(--r-dur-fast) ease;
+}
+.cg-tpl-drop[data-template-drop-active='true'] {
+  border-color: var(--r-accent);
+  background: var(--r-accent-fill);
+}
+.cg-tpl-drop__icon {
+  display: grid;
+  place-items: center;
+  width: var(--r-tpl-drop-icon-box);
+  height: var(--r-tpl-drop-icon-box);
+  border: 1px solid var(--r-border-strong);
+  border-radius: var(--r-tpl-drop-icon-radius);
+  background: var(--r-surface-raised);
+  color: var(--r-accent);
+}
+.cg-tpl-drop > h3 {
+  margin: 0;
+  font-size: var(--r-tpl-drop-title-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-text);
+}
+.cg-tpl-drop > p {
+  margin: 0;
+}
+.cg-tpl-foot-info {
+  margin-right: auto;
+  font-size: var(--r-tpl-foot-text);
+  line-height: 1.5;
+  color: var(--r-text-muted);
+}
+
+/* ── `RUNTIME-REDESIGN-01` Phase 8 — THE AUDIT LOG (`03`) ─────────────────────────────── */
+
+/*
+ * `03-audit-log.html` as RENDERED: a tools row (search, labelled selects, Refresh), a table
+ * whose head is 12 px / 500 on the soft ground and whose cells are `15px 16px` at 13 px — a
+ * strong line over a small line in the item cell, a tag in the outcome cell — and a footer
+ * count beside Close. The ACTOR column is NOT in the reference: it is guard item 27, added back
+ * with its `B-143` caveat and the console-name field kept small beside it (owner answer A1).
+ */
+.cg-audit-tools {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--r-audit-tools-gap);
+  flex-wrap: wrap;
+}
+.cg-audit-search .cg-field {
+  height: var(--r-audit-search-h);
+  min-height: var(--r-audit-search-h);
+  padding: var(--r-audit-search-pad);
+  border-radius: var(--r-audit-search-radius);
+  font-size: var(--r-audit-search-text);
+  line-height: 1.4;
+}
+.cg-audit-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-audit-field-gap);
+  width: var(--r-audit-field-w);
+  flex: none;
+}
+.cg-audit-field > label {
+  font-size: var(--r-audit-field-label-text);
+  font-weight: var(--r-weight-medium);
+  color: var(--r-text-secondary);
+}
+/* The same HEIGHT-not-floor reason as the search: the reference's select is 39, the console's
+   line-height would paint it 42. */
+.cg-audit-field .cg-field {
+  height: var(--r-audit-select-h);
+  min-height: var(--r-audit-select-h);
+  padding: var(--r-audit-select-pad);
+  border-radius: var(--r-audit-select-radius);
+  font-size: var(--r-audit-select-text);
+  line-height: normal;
+}
+.cg-audit-tools .cg-btn {
+  min-height: var(--r-audit-select-h);
+}
+/*
+ * THE CONSOLE STRIP — `B-143`'s field and its caveat, small (A1), directly above the table and
+ * over its first columns, so the caveat is read in the same glance as the ACTOR column it
+ * qualifies. It is not in Station setup and must not move there (`stationSetupScope`).
+ */
+.cg-audit-console {
+  display: flex;
+  align-items: center;
+  gap: var(--r-audit-tools-gap);
+  font-size: var(--r-audit-field-label-text);
+}
+.cg-audit-console > label {
+  font-weight: var(--r-weight-medium);
+  color: var(--r-text-secondary);
+  white-space: nowrap;
+}
+.cg-audit-console .cg-field {
+  width: var(--r-audit-console-input-w);
+  flex: none;
+  height: var(--r-audit-select-h);
+  min-height: var(--r-audit-select-h);
+  padding: var(--r-audit-select-pad);
+  border-radius: var(--r-audit-select-radius);
+  font-size: var(--r-audit-select-text);
+  line-height: normal;
+}
+.cg-audit-caveat {
+  flex: 1 1 20rem;
+  min-width: 0;
+  font-size: var(--r-audit-caveat-text);
+  line-height: 1.4;
+  color: var(--r-text-muted);
+}
+.cg-audit-table {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-radius-sm);
+  font-size: var(--r-audit-td-text);
+}
+.cg-audit-head,
+.cg-audit-row {
+  display: grid;
+  grid-template-columns:
+    var(--r-audit-col-time) var(--r-audit-col-actor) var(--r-audit-col-action) minmax(0, 1fr)
+    var(--r-audit-col-outcome);
+  align-items: start;
+}
+.cg-audit-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--r-table-head-bg);
+  border-bottom: 1px solid var(--r-border-strong);
+  font-size: var(--r-audit-th-text);
+  font-weight: var(--r-weight-medium);
+  color: var(--r-text-muted);
+}
+.cg-audit-head > span {
+  padding: var(--r-audit-th-pad);
+  white-space: nowrap;
+}
+.cg-audit-row {
+  border-bottom: 1px solid var(--r-border);
+  color: var(--r-text-secondary);
+}
+.cg-audit-row:hover {
+  background: var(--r-table-row-hover);
+}
+.cg-audit-row > span {
+  display: block;
+  min-width: 0;
+  padding: var(--r-audit-td-pad);
+}
+.cg-audit-time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cg-audit-actor {
+  overflow-wrap: anywhere;
+}
+/* The item cell — full ink for the names, the small rank for the ids and the refused line. */
+.cg-audit-item {
+  color: var(--r-text);
+}
+.cg-audit-names {
+  display: block;
+  font-weight: var(--r-weight-medium);
+}
+.cg-audit-slot,
+.cg-audit-ids,
+.cg-audit-command {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--r-space-1) var(--r-space-2);
+  margin-top: var(--r-audit-line-gap);
+  font-size: var(--r-audit-small-text);
+  color: var(--r-text-muted);
+}
+.cg-audit-ids code {
+  font-family: var(--r-font-mono);
+}
+.cg-audit-ids .cg-btn {
+  min-height: 0;
+  padding: 0 var(--r-space-1);
+}
+.cg-audit-command {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cg-audit-outcome {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--r-audit-line-gap);
+}
+.cg-audit-reason {
+  font-size: var(--r-audit-reason-text);
+  color: var(--r-text-muted);
+  overflow-wrap: anywhere;
+}
+/* `B-210` — the date, once per day, as a band. */
+.cg-audit-date {
+  padding: var(--r-space-1) var(--r-audit-th-pad);
+  padding-left: var(--r-space-4);
+  background: var(--r-surface-raised);
+  border-bottom: 1px solid var(--r-border);
+  font-size: var(--r-audit-th-text);
+  letter-spacing: 0.05em;
+  color: var(--r-text-muted);
+}
+.cg-audit-empty {
+  padding: var(--r-space-4);
+  color: var(--r-text-muted);
+  font-style: italic;
+}
+.cg-audit-fault {
+  padding: var(--r-space-3);
+}
+.cg-audit-foot-info {
+  display: flex;
+  align-items: center;
+  gap: var(--r-audit-tools-gap);
+  margin-right: auto;
+  font-size: var(--r-audit-count-text);
+  color: var(--r-text-muted);
+}
+.cg-audit-foot-info .cg-btn {
+  font-size: var(--r-audit-reset-text);
+  font-weight: var(--r-weight-medium);
+  color: var(--r-accent);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}

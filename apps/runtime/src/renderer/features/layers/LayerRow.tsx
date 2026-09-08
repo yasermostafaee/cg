@@ -471,6 +471,14 @@ export function LayerRow({
       const chosen = await pickTemplate(`Load onto ${rowName}`, acceptsBank);
       // The operator's own dismissal: not a success, not a refusal to report.
       if (chosen === null) return { accepted: false, cancelled: true };
+      /*
+        `RUNTIME-REDESIGN-01` Phase 8 — a package DROPPED on the picker arrives with the
+        file in hand. It runs the SAME chain as the OS chooser, with a picker that already
+        has its answer: verify, register, bind — nothing about the import path differs.
+      */
+      if (typeof chosen === 'object' && 'importFile' in chosen) {
+        return importAndLoadOntoFixedSlot(coord, () => Promise.resolve(chosen.importFile));
+      }
       if (chosen !== 'import') return loadTemplateOntoFixedSlot(coord, chosen);
       const input = fileRef.current;
       if (input === null) return { accepted: false };

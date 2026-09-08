@@ -693,6 +693,149 @@ export const STATION_SETUP_PX = {
   detailsBodyGap: 9,
   detailsMaxCh: 70,
 } as const;
+/**
+ * `RUNTIME-REDESIGN-01` PHASE 8 — the template picker (`01-template-picker.html`) and the
+ * import surface (`02-template-import.html`) as RENDERED, measured in Chromium at 1280 × 800
+ * with each dialog opened by the page's own `data-start` (`design.md` §15.3). ⚠ All three of
+ * this phase's dialogs live in the OUTER document — none is a shadow-root prototype like Station
+ * setup; checked (`getRootNode() === document`, zero shadow hosts on the page at those starts).
+ * The one stylesheet holds 1067 rules; `.modal-head` is restated 10 times, `.template-detail`
+ * 9, `.template-row` 6, `.drop-zone` 6, `.import-step` 9 — the `@media` waves do not paint at
+ * this viewport, and the numbers here are what the browser painted.
+ *
+ * ⚠ NOT here, deliberately: the reference's `Into` destination select (the picker's door is the
+ * row, so the destination is fixed and named in the title), its detail aside with the
+ * `Compatible with this row` notice and its select-then-`Load into` footer (the row's one-click
+ * load is the contract twenty specs drive), its `Manage` view (the app's per-row Delete is the
+ * management), and the import wizard's `Review` step (simulated checks by its own disclaimer —
+ * the product's verification is `verify → unpack → runtimeShortfall → render`, unchanged). Each
+ * is argued in §15.3.
+ */
+export const LIBRARY_PX = {
+  /** The tools row — `.template-tools{padding:20px 24px 14px;gap:12px}`; the body is flush there, padded by the primitive here. */
+  toolsPadBottom: 14,
+  toolsGap: 12,
+  /**
+   * The search box — PAINTED 40 tall (authored `min-height:39px`, and 14 px at the reference's
+   * 1.4 line-height over `9px … 9px` is 39.6, which Chromium paints as 40), `9px 11px 9px 35px`,
+   * radius 7, 14 px; the glyph 16 px at 12. The console's own line-height (1.55) would paint 41, so
+   * the box is declared as a HEIGHT with the reference's line-height, not left to the floor.
+   */
+  searchH: 40,
+  searchPadY: 9,
+  searchPadX: 11,
+  searchPadStart: 35,
+  searchRadius: 7,
+  searchText: 14,
+  searchIcon: 16,
+  searchIconInset: 12,
+  /** The kind filter — `.template-filter{padding:0 24px 17px;gap:6px}` with a rule under it; a chip 32 tall, 12 px, `6px 10px`, radius 6. */
+  filterPadBottom: 17,
+  chipH: 32,
+  chipPadY: 6,
+  chipPadX: 10,
+  chipRadius: 6,
+  chipText: 12,
+  chipGap: 6,
+  /** The list — `.template-list{padding:12px}`; a row `15px 13px`, gap 14, radius 9, `56px minmax(0,1fr) 24px`, 5 px between rows. */
+  listPad: 12,
+  rowPadY: 15,
+  rowPadX: 13,
+  rowGap: 14,
+  rowRadius: 9,
+  rowGapBelow: 5,
+  /** The thumbnail — 56 × 49, radius 7, a 22 px glyph on the raised ground. */
+  thumbW: 56,
+  thumbH: 49,
+  thumbRadius: 7,
+  thumbIcon: 22,
+  /** The name 15 px / 550; the meta line 12 px muted, gap 8; a badge in it 11 px / 500, `2px 6px`, radius 5. */
+  nameText: 15,
+  metaText: 12,
+  metaGap: 8,
+  badgeText: 11,
+  badgePadY: 2,
+  badgePadX: 6,
+  badgeRadius: 5,
+  /** The empty state — `.empty{padding:40px 20px}` centred, muted; its title 15 px. */
+  emptyPadY: 40,
+  emptyPadX: 20,
+  emptyTitleText: 15,
+  /** The footer sentence — `.foot-info` 13 px muted. */
+  footText: 13,
+  /** `02`'s drop zone — `32px 20px`, a dashed rule, radius 11; the glyph box 51, radius 13, a 22 px glyph; title 18 px / 600; sentence 13 px. */
+  dropPadY: 32,
+  dropPadX: 20,
+  dropRadius: 11,
+  dropIconBox: 51,
+  dropIconRadius: 13,
+  dropIcon: 22,
+  dropTitleText: 18,
+  dropText: 13,
+} as const;
+/**
+ * `RUNTIME-REDESIGN-01` PHASE 8 — the audit log (`03-audit-log.html`) as RENDERED, same method
+ * (`design.md` §15.3). `.audit-tools` is restated 12 times (7 under `@media`), `.audit-table`
+ * 10, `.audit-surface` 5, `.audit-detail` 5.
+ *
+ * ⚠ NOT here, deliberately: the reference's `Time · UTC` column with a date under every row
+ * (`B-210` reads the control-room clock and bands the date), its `View event` detail aside
+ * (`B-211` put the names, the ids and the refused line ON the row), its `Date` filter, its
+ * `Follow new events` (the panel has no live tail by design), and its `Sample records · UTC`
+ * badge. And what the reference does NOT draw and this phase ADDS BACK: the ACTOR column, its
+ * `B-143` caveat and the console-name picker beside it — guard item 27 (`design.md` §3).
+ */
+export const AUDIT_LOG_PX = {
+  /** The frame — `.audit-modal{width:min(1250px,calc(100vw - 56px))}`; 1222 at 1280. */
+  frameW: 1250,
+  frameInset: 56,
+  /** The tools row — `.audit-tools{padding:18px 25px;gap:12px}`; the search PAINTED 40 tall (`min-height:39px` authored — see `LIBRARY_PX.searchH`), `9px 11px 9px 35px`, radius 7, 14 px. */
+  toolsGap: 12,
+  searchH: 40,
+  searchPadY: 9,
+  searchPadX: 11,
+  searchPadStart: 35,
+  searchRadius: 7,
+  searchText: 14,
+  searchIcon: 16,
+  searchIconInset: 12,
+  /** A filter field — 132 wide; its label 12 px / 500, 5 px above a 39 px select (`9px 11px`, radius 7, 13 px, `line-height: normal` — declared as a height here, since the console's 1.55 would paint 42). */
+  fieldW: 132,
+  fieldLabelText: 12,
+  fieldGap: 5,
+  selectH: 39,
+  selectPadY: 9,
+  selectPadX: 11,
+  selectRadius: 7,
+  selectText: 13,
+  /** The table — `th{padding:12px 16px;font-size:12px;font-weight:500}`, `td{padding:15px 16px}` at 13 px; the time column 125. */
+  thPadY: 12,
+  thPadX: 16,
+  thText: 12,
+  tdPadY: 15,
+  tdPadX: 16,
+  tdText: 13,
+  colTime: 125,
+  colActor: 130,
+  colAction: 100,
+  colOutcome: 200,
+  /** The item cell — `strong` 13 px / 550 over `small` 12 px muted (3 px between); the ids line and the refused line take the small rank. */
+  smallText: 12,
+  lineGap: 3,
+  /** The outcome badge — 12 px / 500, `4px 8px`, radius 5, gap 6; the reason under it 11 px muted. */
+  badgeText: 12,
+  badgePadY: 4,
+  badgePadX: 8,
+  badgeRadius: 5,
+  badgeGap: 6,
+  reasonText: 11,
+  /** The footer — the count 12 px muted; `Reset filters` 13 px. */
+  countText: 12,
+  resetText: 13,
+  /** The console strip (the app's own, kept small by owner answer A1) — the field 132 wide; the caveat 12 px. */
+  consoleInputW: 132,
+  caveatText: 12,
+} as const;
 /** The line weight an ACCENTED surface takes: the reference's `.badge.ready` edge. */
 const ACCENT_LINE = '#31556a';
 
@@ -1037,6 +1180,13 @@ export const cssVars = {
   '--r-ok-text': REF_MINT,
   /** The reference's `--mintbg`: the ground its mint sits on. New in Phase 2. */
   '--r-ok-bg': REF_MINT_BG,
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 8 — the reference's `.badge.success` edge (`border-color:
+   * #355d4d`), the line a mint tag draws on its mint ground. The amber tag takes
+   * `--r-notice-line` and the red one `--r-danger`, which already existed; only the mint edge
+   * had no home. Read by `.cg-tag--ok`.
+   */
+  '--r-ok-line': '#355d4d',
 
   /*
    * THE ADD BUTTONS — the owner's own acceptance test for this section:
@@ -1206,6 +1356,14 @@ export const cssVars = {
    */
   '--r-modal-w-prose': 'min(460px, 92vw)',
   '--r-modal-w-wide': 'min(720px, 94vw)',
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 8 — the LEDGER frame: a dialog that IS a table read across
+   * many columns, the audit log. The reference's `.audit-modal{width:min(1250px,calc(100vw -
+   * 56px))}`, 1222 at 1280 (`AUDIT_LOG_PX`). A width, not a frame: its height stays intrinsic
+   * and its table scrolls, so `fixed`'s criterion (content SWITCHED, not scrolled) does not
+   * apply. See `Modal`'s `size` prop.
+   */
+  '--r-modal-w-ledger': `min(${String(AUDIT_LOG_PX.frameW)}px, calc(100vw - ${String(AUDIT_LOG_PX.frameInset)}px))`,
   '--r-modal-w-fixed': `min(${String(STATION_SETUP_PX.frameW)}px, calc(100vw - ${String(STATION_SETUP_PX.frameInset)}px))`,
   '--r-modal-h-fixed': `min(${String(STATION_SETUP_PX.frameH)}px, calc(100vh - ${String(STATION_SETUP_PX.frameInset)}px))`,
   /**
@@ -1572,6 +1730,83 @@ export const cssVars = {
   '--r-setup-details-gap': `${String(STATION_SETUP_PX.detailsGap)}px`,
   '--r-setup-details-body-gap': `${String(STATION_SETUP_PX.detailsBodyGap)}px`,
   '--r-setup-details-max-w': `${String(STATION_SETUP_PX.detailsMaxCh)}ch`,
+  /*
+   * ── `RUNTIME-REDESIGN-01` PHASE 8 — the template picker (`LIBRARY_PX`) and the audit log
+   * (`AUDIT_LOG_PX`), cited to the RENDERED reference; see the constants' notes. Read by
+   * `controls.css`'s `.cg-tpl-*`, `.cg-audit-*` and `.cg-tag*` rules.
+   */
+  '--r-tpl-tools-pad-bottom': `${String(LIBRARY_PX.toolsPadBottom)}px`,
+  '--r-tpl-tools-gap': `${String(LIBRARY_PX.toolsGap)}px`,
+  '--r-tpl-search-h': `${String(LIBRARY_PX.searchH)}px`,
+  '--r-tpl-search-pad': `${String(LIBRARY_PX.searchPadY)}px ${String(LIBRARY_PX.searchPadX)}px ${String(LIBRARY_PX.searchPadY)}px ${String(LIBRARY_PX.searchPadStart)}px`,
+  '--r-tpl-search-radius': `${String(LIBRARY_PX.searchRadius)}px`,
+  '--r-tpl-search-text': `${String(LIBRARY_PX.searchText)}px`,
+  '--r-tpl-search-icon': `${String(LIBRARY_PX.searchIcon)}px`,
+  '--r-tpl-search-icon-inset': `${String(LIBRARY_PX.searchIconInset)}px`,
+  '--r-tpl-filter-pad-bottom': `${String(LIBRARY_PX.filterPadBottom)}px`,
+  '--r-tpl-chip-h': `${String(LIBRARY_PX.chipH)}px`,
+  '--r-tpl-chip-pad': `${String(LIBRARY_PX.chipPadY)}px ${String(LIBRARY_PX.chipPadX)}px`,
+  '--r-tpl-chip-radius': `${String(LIBRARY_PX.chipRadius)}px`,
+  '--r-tpl-chip-text': `${String(LIBRARY_PX.chipText)}px`,
+  '--r-tpl-chip-gap': `${String(LIBRARY_PX.chipGap)}px`,
+  '--r-tpl-list-pad': `${String(LIBRARY_PX.listPad)}px`,
+  '--r-tpl-row-pad': `${String(LIBRARY_PX.rowPadY)}px ${String(LIBRARY_PX.rowPadX)}px`,
+  '--r-tpl-row-gap': `${String(LIBRARY_PX.rowGap)}px`,
+  '--r-tpl-row-radius': `${String(LIBRARY_PX.rowRadius)}px`,
+  '--r-tpl-row-gap-below': `${String(LIBRARY_PX.rowGapBelow)}px`,
+  '--r-tpl-thumb-w': `${String(LIBRARY_PX.thumbW)}px`,
+  '--r-tpl-thumb-h': `${String(LIBRARY_PX.thumbH)}px`,
+  '--r-tpl-thumb-radius': `${String(LIBRARY_PX.thumbRadius)}px`,
+  '--r-tpl-thumb-icon': `${String(LIBRARY_PX.thumbIcon)}px`,
+  '--r-tpl-name-text': `${String(LIBRARY_PX.nameText)}px`,
+  '--r-tpl-meta-text': `${String(LIBRARY_PX.metaText)}px`,
+  '--r-tpl-meta-gap': `${String(LIBRARY_PX.metaGap)}px`,
+  '--r-tpl-badge-text': `${String(LIBRARY_PX.badgeText)}px`,
+  '--r-tpl-badge-pad': `${String(LIBRARY_PX.badgePadY)}px ${String(LIBRARY_PX.badgePadX)}px`,
+  '--r-tpl-badge-radius': `${String(LIBRARY_PX.badgeRadius)}px`,
+  '--r-tpl-empty-pad': `${String(LIBRARY_PX.emptyPadY)}px ${String(LIBRARY_PX.emptyPadX)}px`,
+  '--r-tpl-empty-title-text': `${String(LIBRARY_PX.emptyTitleText)}px`,
+  '--r-tpl-foot-text': `${String(LIBRARY_PX.footText)}px`,
+  '--r-tpl-drop-pad': `${String(LIBRARY_PX.dropPadY)}px ${String(LIBRARY_PX.dropPadX)}px`,
+  '--r-tpl-drop-radius': `${String(LIBRARY_PX.dropRadius)}px`,
+  '--r-tpl-drop-icon-box': `${String(LIBRARY_PX.dropIconBox)}px`,
+  '--r-tpl-drop-icon-radius': `${String(LIBRARY_PX.dropIconRadius)}px`,
+  '--r-tpl-drop-icon': `${String(LIBRARY_PX.dropIcon)}px`,
+  '--r-tpl-drop-title-text': `${String(LIBRARY_PX.dropTitleText)}px`,
+  '--r-tpl-drop-text': `${String(LIBRARY_PX.dropText)}px`,
+  '--r-audit-tools-gap': `${String(AUDIT_LOG_PX.toolsGap)}px`,
+  '--r-audit-search-h': `${String(AUDIT_LOG_PX.searchH)}px`,
+  '--r-audit-search-pad': `${String(AUDIT_LOG_PX.searchPadY)}px ${String(AUDIT_LOG_PX.searchPadX)}px ${String(AUDIT_LOG_PX.searchPadY)}px ${String(AUDIT_LOG_PX.searchPadStart)}px`,
+  '--r-audit-search-radius': `${String(AUDIT_LOG_PX.searchRadius)}px`,
+  '--r-audit-search-text': `${String(AUDIT_LOG_PX.searchText)}px`,
+  '--r-audit-search-icon': `${String(AUDIT_LOG_PX.searchIcon)}px`,
+  '--r-audit-search-icon-inset': `${String(AUDIT_LOG_PX.searchIconInset)}px`,
+  '--r-audit-field-w': `${String(AUDIT_LOG_PX.fieldW)}px`,
+  '--r-audit-field-label-text': `${String(AUDIT_LOG_PX.fieldLabelText)}px`,
+  '--r-audit-field-gap': `${String(AUDIT_LOG_PX.fieldGap)}px`,
+  '--r-audit-select-h': `${String(AUDIT_LOG_PX.selectH)}px`,
+  '--r-audit-select-pad': `${String(AUDIT_LOG_PX.selectPadY)}px ${String(AUDIT_LOG_PX.selectPadX)}px`,
+  '--r-audit-select-radius': `${String(AUDIT_LOG_PX.selectRadius)}px`,
+  '--r-audit-select-text': `${String(AUDIT_LOG_PX.selectText)}px`,
+  '--r-audit-th-pad': `${String(AUDIT_LOG_PX.thPadY)}px ${String(AUDIT_LOG_PX.thPadX)}px`,
+  '--r-audit-th-text': `${String(AUDIT_LOG_PX.thText)}px`,
+  '--r-audit-td-pad': `${String(AUDIT_LOG_PX.tdPadY)}px ${String(AUDIT_LOG_PX.tdPadX)}px`,
+  '--r-audit-td-text': `${String(AUDIT_LOG_PX.tdText)}px`,
+  '--r-audit-col-time': `${String(AUDIT_LOG_PX.colTime)}px`,
+  '--r-audit-col-actor': `${String(AUDIT_LOG_PX.colActor)}px`,
+  '--r-audit-col-action': `${String(AUDIT_LOG_PX.colAction)}px`,
+  '--r-audit-col-outcome': `${String(AUDIT_LOG_PX.colOutcome)}px`,
+  '--r-audit-small-text': `${String(AUDIT_LOG_PX.smallText)}px`,
+  '--r-audit-line-gap': `${String(AUDIT_LOG_PX.lineGap)}px`,
+  '--r-audit-badge-text': `${String(AUDIT_LOG_PX.badgeText)}px`,
+  '--r-audit-badge-pad': `${String(AUDIT_LOG_PX.badgePadY)}px ${String(AUDIT_LOG_PX.badgePadX)}px`,
+  '--r-audit-badge-radius': `${String(AUDIT_LOG_PX.badgeRadius)}px`,
+  '--r-audit-badge-gap': `${String(AUDIT_LOG_PX.badgeGap)}px`,
+  '--r-audit-reason-text': `${String(AUDIT_LOG_PX.reasonText)}px`,
+  '--r-audit-count-text': `${String(AUDIT_LOG_PX.countText)}px`,
+  '--r-audit-reset-text': `${String(AUDIT_LOG_PX.resetText)}px`,
+  '--r-audit-console-input-w': `${String(AUDIT_LOG_PX.consoleInputW)}px`,
+  '--r-audit-caveat-text': `${String(AUDIT_LOG_PX.caveatText)}px`,
   // Motion
   '--r-dur-fast': '120ms',
   '--r-dur-med': '200ms',

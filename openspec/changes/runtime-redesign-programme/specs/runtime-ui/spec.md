@@ -450,6 +450,81 @@ same `MIXER c-l VOLUME 0` through the same intent record.
 - **WHEN** OFF is pressed on a seated, audible plate **THEN** the bridge sends one `MIXER c-l
 VOLUME 0` for that plate and records `0` as its intent, exactly what MUTE sent and recorded
 
+### Requirement: The audit log records an actor, names it in its own column, and keeps the field that writes it beside that column
+
+The audit log SHALL render an ACTOR column — headed `Actor`, second, between `Time` and `Action`
+— carrying each record's actor verbatim in its own bidi isolate, whatever the approved reference
+draws; a log that names nobody is the `B-143` failure with the sign flipped. The actor SHALL be
+determined exactly as it is today: the console name typed into the audit panel's `This console`
+field (`audit.setOperatorName`, browser-local), sent with every control request and recorded by
+the bridge, `unattributed` when empty. That field SHALL stay in the audit panel — made small and
+kept beside the column it qualifies, never in Station setup — in ONE strip with `B-143`'s caveat
+(_"It is a LABEL you typed, not a verified sign-in — it says which console, not which person"_),
+and that strip SHALL sit above the table. The caveat's wording SHALL NOT change. The actor FILTER
+SHALL keep narrowing the tail on the bridge by the same column.
+
+#### Scenario: The column and the strip are on the surface
+
+- **WHEN** the audit log is opened with records from two consoles and an unattributed one **THEN**
+  the table's head reads `Time · Actor · Action · Item / detail · Outcome`, each row's actor cell
+  reads that record's actor in a `<bdi>`, and the `This console` field and the caveat are one strip
+  rendered before the table, outside it
+
+#### Scenario: The field is still the one writer
+
+- **WHEN** the operator types a console name into the field **THEN** `audit.setOperatorName` is
+  called with that value, the field is bounded by the wire's actor limit, and nothing in Station
+  setup offers the same field
+
+### Requirement: The template picker and the audit log take their geometry from the token home, and the import path is untouched
+
+The template picker SHALL take the reference's rendered geometry — the search box, the three kind
+chips, a row's padding, thumbnail and ranks, the footer sentence — from `--r-tpl-*` tokens declared
+in the token home from `01-template-picker.html` as RENDERED at 1280 × 800, and the audit log SHALL
+take its frame (`--r-modal-w-ledger`), tools, head, cells, tags and console strip from
+`--r-audit-*` likewise from `03-audit-log.html`; every claim about a box SHALL be measured in
+Chromium, never in jsdom. The picker's CONTRACT SHALL NOT change: one press on a row's load control
+loads that template onto the row that opened the picker, the wrong-bank refusal is the bridge's own
+predicate and is said on the row, `Delete from station` is the per-row management, and
+`Import a .vcg…` opens the OS chooser. A search SHALL narrow by the name the operator sees; the
+kind chips SHALL split beds from graphics by the same predicate the bridge refuses on; a search that
+finds nothing SHALL say so and never claim the browser holds no templates.
+
+The `.vcg` validation and import path SHALL be preserved exactly: `importVcgFile` → `verify` →
+`unpack` → the runtime-contract guard → the render, registering nothing on refusal, proved by the
+existing import tests unchanged. A package DROPPED on the picker SHALL resolve the pick with that
+file and run the SAME chain; the picker SHALL check nothing itself, not even the extension — the
+chain's `verify` is the one gate.
+
+#### Scenario: The picker and the log measure to their tokens
+
+- **WHEN** the built console opens the picker and the audit log at 1280 × 800 **THEN** the search
+  box, a chip, a row's thumbnail and ranks, the footer sentence, the ledger frame, a head cell, a
+  row cell, the outcome tag and the console field measure to the token home's values read back
+  from the page
+
+#### Scenario: A dropped package meets the chain's own verify
+
+- **WHEN** bytes that are not a package are dropped on the picker opened from a row **THEN** the
+  row reports `“<file>” failed verification…` through its error channel, exactly as the OS chooser's
+  path would, and nothing is registered
+
+### Requirement: The plates toolbar's panic names its scope in the operator's words
+
+The LIVE SOURCES toolbar's panic control SHALL name its scope on its label, its accessible name and
+its tooltip — every live plate the bridge has seated, on EVERY channel this bridge drives, not the
+channel selected above — so that when a multi-channel plant arrives the label is the thing that
+must change and cannot be forgotten. `stack.silenceAllLivePlates` SHALL stay unscoped (owner
+answer A16, `R-062`): the scope question is a precondition of ever shipping real multi-channel and
+is decided then, never in passing. No behaviour and no wire changes.
+
+#### Scenario: The label says every channel
+
+- **WHEN** the LIVE SOURCES tab is shown with a seated plate **THEN** the panic control reads
+  `SILENCE ALL BOXES · EVERY CHANNEL`, its accessible name begins `Silence all boxes on every
+channel`, its tooltip names every channel this bridge drives and not only the selected one, and
+  one press still makes exactly one unscoped call to the bridge
+
 ### Requirement: The programme's phase state is recorded where the next session reads it
 
 Each phase of this programme SHALL record its completion in this change's `tasks.md`, and a session

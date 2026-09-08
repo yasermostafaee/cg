@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
+import { LayoutTemplate, Rows3, Search, Trash2, Upload } from 'lucide-react';
 import {
   describeReferencePlace,
   liveSourceCarrierState,
@@ -9,8 +10,8 @@ import {
   type TemplateInfo,
   type TemplateReference,
 } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { useConfirm } from '../../ui/useDialog.js';
@@ -49,8 +50,9 @@ import { templateDisplayName } from '../library/templateName.js';
  * it. That is the part that cannot be dropped: on a fresh install the list is
  * empty, and a picker whose only advice is "import a .vcg first" while being the
  * one thing standing between the operator and importing would be a dead end.
- * `pickTemplate` therefore has THREE outcomes, not two — a template, `'import'`,
- * or a dismissal — and the caller owns the file chain exactly as before.
+ * `pickTemplate` therefore has FOUR outcomes, not two — a template, `'import'`
+ * (open the OS chooser), a DROPPED file, or a dismissal — and the caller owns the
+ * import chain exactly as before.
  *
  * The list is pulled at OPEN time rather than subscribed: it is browser-local
  * (B-085) and the dialog is short-lived, so a snapshot taken when it opens is
@@ -63,6 +65,29 @@ import { templateDisplayName } from '../library/templateName.js';
  * R-028 part B — this dialog is the ONLY template list in the product, so
  * R-005's library deletion lives here too. The bridge stays authoritative for the
  * refusal (refuse-while-referenced) and the wording is surfaced verbatim.
+ *
+ * ── `RUNTIME-REDESIGN-01` PHASE 8 — THE LOOK IS `01`'s, THE CONTRACT IS UNCHANGED ──
+ *
+ * `01-template-picker.html` as rendered: a search box over three kind chips, then a list
+ * of rows — a thumbnail, the name over a meta line with its badges — and a footer sentence
+ * beside the actions (`LIBRARY_PX`, `design.md` §15.3). What is NOT adopted, and why:
+ *
+ *   - its SELECT-THEN-`Load into` flow and the detail aside that flow exists to feed. The
+ *     row's one press IS the load here (`Load <name> onto this layer`), and twenty specs
+ *     drive that contract through `app.loadTemplate`; every reason a row can carry — the
+ *     wrong bank, an unrecorded carrier, a plate with no source — is already SAID ON THE
+ *     ROW rather than in a pane one selection away.
+ *   - its `Into` destination select: this dialog's door is the row, so the destination is
+ *     fixed and named in the title.
+ *   - its `Manage` view: the per-row `Delete from station` is the management.
+ *
+ * `02-template-import.html`'s import dialog is theatre by its own disclaimer ("Simulated
+ * checks"); the product's import is `importVcgFile` → `verify → unpack → runtimeShortfall →
+ * render`, and it is untouched. The one honest interaction `02` has — DROP A PACKAGE — is
+ * adopted: a `.vcg` dropped anywhere on this dialog resolves the pick with the File and the
+ * caller runs THE SAME chain the OS chooser feeds. Nothing is checked here first, not even
+ * the extension: the chain's own `verify` is the one gate, and a second one in front of it
+ * would be a place for the two to disagree.
  *
  * ── 🔴 A9 — TWO THINGS THIS SURFACE GOT WRONG, BOTH MEASURED ────────────────
  *
@@ -100,32 +125,6 @@ import { templateDisplayName } from '../library/templateName.js';
  */
 
 const styles = {
-  list: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.35rem',
-    maxHeight: '40vh',
-    overflowY: 'auto' as const,
-  },
-  row: { display: 'flex', flexDirection: 'column' as const, alignItems: 'stretch' },
-  rowActions: { display: 'flex', gap: '0.35rem', alignItems: 'center' },
-  meta: { fontSize: '0.75rem', color: colors.textMuted },
-  /**
-   * D-137 / C-015 — the re-import notice. AMBER (`pending`), not the muted meta
-   * grey it sits beside: amber is this palette's ATTENTION role — the one it
-   * already carries for OCCUPIED / UNKNOWN / UNCONFIRMED — and an unreadable
-   * carrier is exactly an UNKNOWN. Not red, which means error and destructive
-   * intent only: nothing is broken, the answer is simply not recorded yet.
-   */
-  stale: { fontSize: '0.75rem', color: colors.pending },
-  /**
-   * D-137 / C-015 — the same ATTENTION amber, for the same kind of statement:
-   * the template is fine, the work on it is not finished. A plate with no source
-   * refuses its take, so the row names WHICH plates rather than only that some
-   * exist — "2 plates need a source" sends the operator hunting.
-   */
-  unassigned: { fontSize: '0.75rem', color: colors.pending },
-  empty: { fontSize: '0.85rem', color: colors.textMuted, margin: 0 },
   /*
     `B-212` — the places a refused deletion named, one line each with its remedy
     beside it. Rendered in the BODY, under the list, because the pinned message region
@@ -134,15 +133,15 @@ const styles = {
   references: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.35rem',
-    marginTop: '0.75rem',
-    paddingTop: '0.5rem',
-    borderTop: `1px solid ${colors.border}`,
-    fontSize: '0.8rem',
+    gap: 'var(--r-space-1)',
+    marginTop: 'var(--r-space-3)',
+    paddingTop: 'var(--r-space-2)',
+    borderTop: '1px solid var(--r-border)',
+    fontSize: 'var(--r-text-sm)',
   },
   reference: {
     display: 'flex',
-    gap: '0.5rem',
+    gap: 'var(--r-space-2)',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
@@ -189,6 +188,27 @@ const UNASSIGNED_TITLE =
   'assign one to each plate in the Inspector — until then this template refuses its take, naming ' +
   'the plate.';
 
+/**
+ * Phase 8 — the reference's footer sentence, and it is TRUE of this product: a fixed-row
+ * LOAD is list-only on the bridge (`fixedSlotLoad.ts` — no adopt-`CLEAR`, no `CG ADD`), and
+ * PLAY is the row's first wire contact. Golden rule 10 in one line, where the operator
+ * reads it.
+ */
+const FOOT_INFO = 'Loading prepares the row. Use Play when you’re ready to go on air.';
+
+/** The reference's three kind chips, keyed by the bank a template belongs on. */
+type KindFilter = 'all' | 'graphic' | 'bed';
+const KIND_CHIPS: readonly { key: KindFilter; label: string }[] = [
+  { key: 'all', label: 'All templates' },
+  { key: 'graphic', label: 'Graphics' },
+  { key: 'bed', label: 'Graphics beds' },
+];
+
+/** `requiredBankFor` in the operator's words: a low-bank template is a graphics bed. */
+function kindOf(template: TemplateInfo): 'graphic' | 'bed' {
+  return requiredBankFor(template) === 'low' ? 'bed' : 'graphic';
+}
+
 interface PickRequest {
   title: string;
   templates: readonly TemplateInfo[];
@@ -211,8 +231,13 @@ interface PickRequest {
  * in a new `.vcg`". It is returned rather than handled here because the import
  * chain needs the ROW's hidden file input and its exact slot, both of which belong
  * to the caller (see `LayerRow`).
+ *
+ * Phase 8 — `{ importFile }` is the same answer with the file already in hand: the
+ * operator DROPPED a package on the dialog. The caller runs the identical chain
+ * (`importAndLoadOntoFixedSlot`) with a picker that resolves to this file instead of
+ * opening the OS chooser; nothing about what is verified, registered or bound differs.
  */
-export type TemplateChoice = TemplateInfo | 'import' | null;
+export type TemplateChoice = TemplateInfo | 'import' | { importFile: File } | null;
 
 export function useTemplatePicker(): {
   pickTemplate: (title: string, accepts: 'low' | 'high') => Promise<TemplateChoice>;
@@ -253,6 +278,15 @@ export function useTemplatePicker(): {
     names them, which is still somewhere the operator can find.
   */
   const [bank, setBank] = useState<FixedLayerBank | null>(null);
+  /*
+    Phase 8 — the reference's search and kind filter. Session state of the dialog: both
+    reset when it opens, because a filter left over from the last row's pick would hide
+    templates from this one without saying so.
+  */
+  const [query, setQuery] = useState('');
+  const [kind, setKind] = useState<KindFilter>('all');
+  /** Phase 8 — a package is being dragged over the dialog; lights the drop zone. */
+  const [dragging, setDragging] = useState(false);
   // D-137 / C-015 — SUBSCRIBED, unlike the template list beside it, because the
   // assignments are bridge-owned and a second console can bind a plate while
   // this dialog is open. The list is browser-local, so a snapshot is right for
@@ -273,6 +307,9 @@ export function useTemplatePicker(): {
       const templates = await window.cg.templates.list();
       return new Promise<TemplateChoice>((resolve) => {
         resolver.current = resolve;
+        setQuery('');
+        setKind('all');
+        setDragging(false);
         setRequest({ title, templates, accepts });
       });
     },
@@ -354,6 +391,7 @@ export function useTemplatePicker(): {
     setRequest(null);
     setMessage(null);
     setReferences([]);
+    setDragging(false);
     const resolve = resolver.current;
     resolver.current = null;
     resolve?.(choice);
@@ -411,14 +449,48 @@ export function useTemplatePicker(): {
     [bank, confirm],
   );
 
+  /*
+    Phase 8 — `02`'s drop zone, on the WHOLE dialog body. `dragover` must be cancelled or the
+    browser refuses the drop; the file, whatever it is, goes to the caller's chain untouched
+    (see the module note — the chain's `verify` is the one gate).
+  */
+  const onDragOver = useCallback((e: DragEvent<HTMLDivElement>): void => {
+    e.preventDefault();
+    setDragging(true);
+  }, []);
+  const onDragLeave = useCallback((e: DragEvent<HTMLDivElement>): void => {
+    // Leaving a CHILD fires this too; only a leave of the body itself dims the zone.
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setDragging(false);
+  }, []);
+  const onDrop = useCallback(
+    (e: DragEvent<HTMLDivElement>): void => {
+      e.preventDefault();
+      setDragging(false);
+      const file = e.dataTransfer.files[0];
+      if (file === undefined) return;
+      settle({ importFile: file });
+    },
+    [settle],
+  );
+
   const pickerDialog =
     request === null ? null : (
       <Modal
         title={request.title}
+        subtitle="Choose a template already on this station, or import a .vcg package."
+        size="wide"
         onClose={() => settle(null)}
         {...(message !== null ? { message } : {})}
         footer={
           <>
+            {/*
+              THE REFERENCE'S FOOTER SENTENCE — true of this product (see `FOOT_INFO`), on
+              the surface where the operator is about to press the control it qualifies.
+            */}
+            <span className="cg-tpl-foot-info" data-template-foot-info="">
+              {FOOT_INFO}
+            </span>
             {/*
               CANCEL FIRST IN DOM ORDER, like every other dialog. The row is
               right-aligned, so first-in-DOM is LEFTMOST and the primary action
@@ -439,7 +511,9 @@ export function useTemplatePicker(): {
               to import a `.vcg` with no way to do so. On a station with nothing
               loaded yet it is the only control that can do anything, which is
               exactly what makes it this dialog's PRIMARY — it now carries that
-              weight through its role rather than through being placed first.
+              weight through its role rather than through being placed first. The
+              reference paints it quiet beside a `Load into` primary; with the row's
+              press being the load, this is the one primary left.
             */}
             <ModalAction actionRole="primary" onClick={() => settle('import')}>
               Import a .vcg…
@@ -447,89 +521,50 @@ export function useTemplatePicker(): {
           </>
         }
       >
-        {request.templates.length === 0 ? (
-          <p style={styles.empty}>
-            No templates in this browser yet — <strong>Import a .vcg…</strong> to bring one in.
-          </p>
-        ) : (
-          <div style={styles.list}>
-            {/* Newest first: the template the operator most recently imported is
-                the one they are looking for. */}
-            {[...request.templates].reverse().map((t) => {
-              const label = templateDisplayName(t);
-              const carrier = liveSourceCarrierState(t);
-              const needsSource = unassigned(t);
-              // `single-clock-look-switch` — the SAME predicate the bridge refuses on.
-              const wrongBank = requiredBankFor(t) !== request.accepts;
-              return (
-                <div key={t.templateId} style={styles.row} data-template-id={t.templateId}>
-                  <div style={styles.rowActions}>
-                    <Button
-                      variant="secondary"
-                      aria-label={`Load ${label} onto this layer`}
-                      title={t.templateId}
-                      disabled={wrongBank}
-                      onClick={() => settle(t)}
-                    >
-                      {label}
-                    </Button>
-                    <Button
-                      variant="danger"
-                      aria-label={`Delete ${label} from this station`}
-                      onClick={() => void deleteTemplate(t)}
-                    >
-                      Delete from station
-                    </Button>
-                  </div>
-                  <span style={styles.meta}>{t.templateType}</span>
-                  {/*
-                    THE REASON, on the row, beside the control it disabled. A greyed button
-                    with nothing beside it is a dead end — and this one is not about the
-                    template being unfinished (the amber rows below are), it is about THIS
-                    ROW being the wrong kind of home for it.
-                  */}
-                  {wrongBank && (
-                    <span style={styles.stale} data-wrong-bank="">
-                      {request.accepts === 'low'
-                        ? 'This row is a graphics bed — it sits BELOW the live plates, so only a template that declares plates belongs here. Load this one onto an operator row.'
-                        : 'This template declares live plates, so it is a graphics bed and must sit BELOW them. Load it onto one of the bed rows at the bottom of the list.'}
-                    </span>
-                  )}
-                  {/*
-                    D-137 / C-015 — said on the row, not hidden behind a hover.
-                    `data-live-sources` carries the state machine-readably so the
-                    E2E asserts the STATE rather than the wording.
-                  */}
-                  {carrier === 'unknown' ? (
-                    <span
-                      style={styles.stale}
-                      data-live-sources="unknown"
-                      title={STALE_CARRIER_TITLE}
-                    >
-                      {STALE_CARRIER_LABEL}
-                    </span>
-                  ) : (
-                    <span hidden data-live-sources={carrier} />
-                  )}
-                  {/*
-                    D-137 / C-015 — the plates still owed a source, NAMED. The
-                    count alone would be a number the operator then has to go and
-                    resolve; the ids are what the assignment surface lists.
-                  */}
-                  {needsSource.length > 0 && (
-                    <span
-                      style={styles.unassigned}
-                      data-plates-unassigned={needsSource.join(',')}
-                      title={UNASSIGNED_TITLE}
-                    >
-                      Needs a source: {needsSource.join(', ')}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
+        <div
+          className="cg-tpl-body"
+          data-template-body=""
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+        >
+          {request.templates.length === 0 ? (
+            /*
+              The reference's `.empty` shape (a title over a sentence) carrying the app's own
+              sentence — it names the control that ends the emptiness rather than a panel
+              that no longer exists (§6).
+            */
+            <div className="cg-tpl-empty" data-template-empty="">
+              <h3>Nothing to load yet</h3>
+              <p>
+                No templates in this browser yet — <strong>Import a .vcg…</strong> to bring one in,
+                or drop a package here.
+              </p>
+            </div>
+          ) : (
+            <PickerList
+              request={request}
+              query={query}
+              onQuery={setQuery}
+              kind={kind}
+              onKind={setKind}
+              unassigned={unassigned}
+              onPick={settle}
+              onDelete={(t) => void deleteTemplate(t)}
+            />
+          )}
+          <div
+            className="cg-tpl-drop"
+            data-template-drop=""
+            data-template-drop-active={dragging ? 'true' : 'false'}
+          >
+            <span className="cg-tpl-drop__icon">
+              <Icon icon={Upload} size={22} />
+            </span>
+            <h3>Drop a .vcg package here</h3>
+            <p>It is verified and registered exactly as one chosen with Import a .vcg…</p>
           </div>
-        )}
+        </div>
         {/*
           `B-212` — WHERE the items are, each with the way there. A row the operator can
           see gets "Show <row>"; a layer no row shows gets the one-item removal. The
@@ -579,4 +614,220 @@ export function useTemplatePicker(): {
     );
 
   return { pickTemplate, pickerDialog };
+}
+
+/** Does a template answer the search? Its display name and its type, case-folded. */
+function matchesQuery(template: TemplateInfo, query: string): boolean {
+  const q = query.trim().toLocaleLowerCase();
+  if (q === '') return true;
+  return `${templateDisplayName(template)} ${template.templateType}`
+    .toLocaleLowerCase()
+    .includes(q);
+}
+
+/** `N look`/`N looks`, `N plate`/`N plates` — the reference's meta counts, from the carrier. */
+function count(n: number, one: string): string {
+  return `${String(n)} ${one}${n === 1 ? '' : 's'}`;
+}
+
+function PickerList({
+  request,
+  query,
+  onQuery,
+  kind,
+  onKind,
+  unassigned,
+  onPick,
+  onDelete,
+}: {
+  request: PickRequest;
+  query: string;
+  onQuery: (q: string) => void;
+  kind: KindFilter;
+  onKind: (k: KindFilter) => void;
+  unassigned: (t: TemplateInfo) => string[];
+  onPick: (t: TemplateInfo) => void;
+  onDelete: (t: TemplateInfo) => void;
+}): JSX.Element {
+  // Newest first: the template the operator most recently imported is the one they
+  // are looking for. Then the search, then the kind chip.
+  const shown = [...request.templates]
+    .reverse()
+    .filter((t) => matchesQuery(t, query))
+    .filter((t) => kind === 'all' || kindOf(t) === kind);
+  return (
+    <>
+      <div className="cg-tpl-tools">
+        <label className="cg-tpl-search">
+          <Icon icon={Search} size={16} />
+          <input
+            type="search"
+            className="cg-field"
+            placeholder="Search templates…"
+            aria-label="Search templates"
+            autoComplete="off"
+            value={query}
+            onChange={(e) => onQuery(e.target.value)}
+          />
+        </label>
+      </div>
+      <div className="cg-tpl-filter" role="group" aria-label="Template kind">
+        {KIND_CHIPS.map((chip) => (
+          <Button
+            key={chip.key}
+            variant="neutral"
+            active={kind === chip.key}
+            aria-pressed={kind === chip.key}
+            data-template-filter={chip.key}
+            onClick={() => onKind(chip.key)}
+          >
+            {chip.label}
+          </Button>
+        ))}
+      </div>
+      <div className="cg-tpl-list" data-template-list="">
+        {shown.length === 0 ? (
+          /* The reference's own words for a search that found nothing. */
+          <div className="cg-tpl-empty" data-template-empty="search">
+            <h3>No templates found</h3>
+            <p>Try a different search or kind, or import a template.</p>
+          </div>
+        ) : (
+          shown.map((t) => (
+            <PickerRow
+              key={t.templateId}
+              template={t}
+              accepts={request.accepts}
+              unassigned={unassigned(t)}
+              onPick={() => onPick(t)}
+              onDelete={() => onDelete(t)}
+            />
+          ))
+        )}
+      </div>
+    </>
+  );
+}
+
+function PickerRow({
+  template: t,
+  accepts,
+  unassigned: needsSource,
+  onPick,
+  onDelete,
+}: {
+  template: TemplateInfo;
+  accepts: 'low' | 'high';
+  unassigned: string[];
+  onPick: () => void;
+  onDelete: () => void;
+}): JSX.Element {
+  const label = templateDisplayName(t);
+  const carrier = liveSourceCarrierState(t);
+  const templateKind = kindOf(t);
+  // `single-clock-look-switch` — the SAME predicate the bridge refuses on.
+  const wrongBank = requiredBankFor(t) !== accepts;
+  const looks = t.liveSources?.looks?.length ?? 0;
+  const plates = t.liveSources?.sources.length ?? 0;
+  return (
+    <div
+      className="cg-tpl-row"
+      data-template-id={t.templateId}
+      data-template-kind={templateKind}
+      data-template-incompatible={wrongBank ? 'true' : 'false'}
+    >
+      {/*
+        THE LOAD, as one press on the whole row: thumbnail, name and meta. The id stays on
+        the `title` (golden rule 11), the accessible name is the verb.
+      */}
+      <Button
+        variant="ghost"
+        className="cg-tpl-row__load"
+        aria-label={`Load ${label} onto this layer`}
+        title={t.templateId}
+        disabled={wrongBank}
+        onClick={onPick}
+      >
+        <span className="cg-tpl-thumb" aria-hidden="true">
+          <Icon icon={templateKind === 'bed' ? Rows3 : LayoutTemplate} size={22} />
+        </span>
+        <span className="cg-tpl-text">
+          <bdi className="cg-tpl-name">{label}</bdi>
+          <span className="cg-tpl-meta">
+            <span>{templateKind === 'bed' ? 'Graphics bed' : t.templateType}</span>
+            <span aria-hidden="true">·</span>
+            <span>{count(t.fields.length, 'field')}</span>
+            {looks > 0 && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{count(looks, 'look')}</span>
+              </>
+            )}
+            {plates > 0 && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>{count(plates, 'plate')}</span>
+              </>
+            )}
+            {/*
+              THE REASON, on the row, beside the control it disabled — the reference's
+              warn badge with its own short words; the app's sentence, which carries the
+              remedy, stays beneath (`cg-tpl-reason`).
+            */}
+            {wrongBank && (
+              <span className="cg-tag cg-tag--warn">
+                {accepts === 'low' ? 'Requires an operator row' : 'Requires a bed row'}
+              </span>
+            )}
+            {/*
+              D-137 / C-015 — said on the row, not hidden behind a hover.
+              `data-live-sources` carries the state machine-readably so the
+              E2E asserts the STATE rather than the wording.
+            */}
+            {carrier === 'unknown' ? (
+              <span
+                className="cg-tag cg-tag--warn"
+                data-live-sources="unknown"
+                title={STALE_CARRIER_TITLE}
+              >
+                {STALE_CARRIER_LABEL}
+              </span>
+            ) : (
+              <span hidden data-live-sources={carrier} />
+            )}
+            {/*
+              D-137 / C-015 — the plates still owed a source, NAMED. The
+              count alone would be a number the operator then has to go and
+              resolve; the ids are what the assignment surface lists.
+            */}
+            {needsSource.length > 0 && (
+              <span
+                className="cg-tag cg-tag--warn"
+                data-plates-unassigned={needsSource.join(',')}
+                title={UNASSIGNED_TITLE}
+              >
+                Needs a source: {needsSource.join(', ')}
+              </span>
+            )}
+          </span>
+        </span>
+      </Button>
+      <Button
+        variant="danger"
+        className="cg-tpl-delete"
+        aria-label={`Delete ${label} from this station`}
+        onClick={onDelete}
+      >
+        <Icon icon={Trash2} size={14} />
+        Delete from station
+      </Button>
+      {wrongBank && (
+        <span className="cg-tpl-reason" data-wrong-bank="">
+          {accepts === 'low'
+            ? 'This row is a graphics bed — it sits BELOW the live plates, so only a template that declares plates belongs here. Load this one onto an operator row.'
+            : 'This template declares live plates, so it is a graphics bed and must sit BELOW them. Load it onto one of the bed rows at the bottom of the list.'}
+        </span>
+      )}
+    </div>
+  );
 }

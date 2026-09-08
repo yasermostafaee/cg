@@ -408,8 +408,14 @@ interface ModalProps {
    * would move the frame under the operator as he switches. Station setup's five tabs are
    * the only case today. Do not reach for it to make a dialog "look important"; see
    * `styles.dialogFixed`.
+   *
+   * ⭐ `ledger` is the fourth, and it is a WIDTH again, not a frame: a dialog that IS a table
+   * read across many columns — the audit log, whose one row carries a time, an actor, an
+   * action, names over ids over a refused line, and an outcome. `RUNTIME-REDESIGN-01` Phase 8
+   * took it from `03-audit-log.html` as rendered (`--r-modal-w-ledger`, 1222 at 1280). Its
+   * height stays intrinsic and its table scrolls, which is exactly why it is not `fixed`.
    */
-  size?: 'prose' | 'wide' | 'fixed';
+  size?: 'prose' | 'wide' | 'fixed' | 'ledger';
   /**
    * `STATION-CHROME-01` §6 — which LAYER this dialog is on.
    *
@@ -425,10 +431,11 @@ interface ModalProps {
 }
 
 /** `STATION-CHROME-02` §2 — the frames, resolved from the token home and never spelled here. */
-const WIDTHS: Record<'prose' | 'wide' | 'fixed', string> = {
+const WIDTHS: Record<'prose' | 'wide' | 'fixed' | 'ledger', string> = {
   prose: cssVars['--r-modal-w-prose'],
   wide: cssVars['--r-modal-w-wide'],
   fixed: cssVars['--r-modal-w-fixed'],
+  ledger: cssVars['--r-modal-w-ledger'],
 };
 
 export function Modal({
