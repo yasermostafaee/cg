@@ -566,6 +566,133 @@ export const AUDIO_DIALOG_PX = {
   /** The footer sentence — `.foot-info{font-size:12px}`. */
   footText: 12,
 } as const;
+/**
+ * `RUNTIME-REDESIGN-01` PHASE 7 — Station setup (`09-channel-settings.html`) as RENDERED, measured
+ * in Chromium at 1280 × 800 with the dialog opened by the page's own `data-start="channels"`
+ * (`design.md` §14.3). ⚠ The reference's Station setup is a SEPARATE prototype inside a shadow
+ * root (`createStationSetup`), with its own stylesheet (402 rules, one sheet: `.settings` restated
+ * 17 times, `.tab` 12, `.card` 12, `.metric` 13 — 10, 4, 3 and 8 of those under `@media`) and its
+ * OWN palette (`--surface #15191f`, a mint `--accent #8ce6d1`) that is NOT the console's approved
+ * palette. Only the GEOMETRY is transcribed here; every colour is a role token, and the mint stays
+ * where owner answer A4 put it — on healthy, never on air.
+ *
+ * ⚠ NOT here, deliberately: the reference's `Default sources · this channel` card (the prototype's
+ * own `t.defaultSources`, ruled out by `PROMPT.md` §0), its head-status `3 on air` (A12), its
+ * emblem, its `Preview` tag and its sidebar station card — each argued in §14.3.
+ */
+export const STATION_SETUP_PX = {
+  /** The frame — `.settings{width:min(1140px,calc(100vw - 64px));height:min(810px,calc(100dvh - 64px))}`. */
+  frameW: 1140,
+  frameH: 810,
+  frameInset: 64,
+  /** The head — `.settings-head{min-height:90px;padding:21px 28px;gap:14px}`, its subtitle 13 px, 3 px under the title. */
+  headMinH: 90,
+  headPadY: 21,
+  headPadX: 28,
+  headGap: 14,
+  subtitleText: 13,
+  subtitleGap: 3,
+  /** The rail — `.settings-body{grid-template-columns:226px …}`, `.sidebar{padding:24px 14px 18px}`. */
+  railW: 226,
+  railPadTop: 24,
+  railPadX: 14,
+  railPadBottom: 18,
+  railGap: 4,
+  /** A group heading — `.nav-group{font-size:11px;font-weight:600;letter-spacing:.11em;padding:18px 13px 7px}` (the first `padding-top:0`). */
+  groupText: 11,
+  groupTracking: '0.11em',
+  groupPadTop: 18,
+  groupPadX: 13,
+  groupPadBottom: 7,
+  /** A rail item — `.tab{min-height:44px;padding:11px 12px;gap:11px;border-radius:8px;font-size:14px;line-height:1.35}`, its icon 18 px. The line-height is unitless and lives in `controls.css`; it is what keeps the 44 a floor rather than a 45. */
+  tabMinH: 44,
+  tabPadY: 11,
+  tabPadX: 12,
+  tabGap: 11,
+  tabRadius: 8,
+  tabText: 14,
+  tabIcon: 18,
+  /** The pane — `.panel-scroll{padding:29px 32px 32px}`. */
+  panePadTop: 29,
+  panePadX: 32,
+  panePadBottom: 32,
+  /** The section head — `h2` 24 px / 650 / −.035em; the description 14 px, 7 px under, `max-width:61ch`; 23 px under the head. */
+  titleText: 24,
+  titleTracking: '-0.035em',
+  descriptionText: 14,
+  descriptionGap: 7,
+  descriptionMaxCh: 61,
+  headGapBelow: 23,
+  /** The contract tag — `.tag{font-size:12px;font-weight:550;padding:5px 8px;border-radius:6px;gap:6px}`. */
+  tagText: 12,
+  tagPadY: 5,
+  tagPadX: 8,
+  tagRadius: 6,
+  /** The footer — `.panel-foot{min-height:74px;padding:15px 32px;gap:14px}`, its message 13 px. */
+  footMinH: 74,
+  footPadY: 15,
+  footPadX: 32,
+  footGap: 14,
+  footText: 13,
+  /** A card — `.card{border-radius:12px}`, `.card-heading{padding:17px 20px;gap:12px}` with `h3` 16 px / 600, `.card-body{padding:20px}`, `.card-help{padding:14px 20px;font-size:13px}`; 20 px between cards. */
+  cardRadius: 12,
+  cardHeadPadY: 17,
+  cardHeadPadX: 20,
+  cardHeadGap: 12,
+  cardTitleText: 16,
+  cardBodyPad: 20,
+  cardHelpPadY: 14,
+  cardHelpPadX: 20,
+  cardHelpText: 13,
+  cardGap: 20,
+  /** The video-format card — `.video-heading{padding:19px 22px 0}`, `.eyebrow` 11 px / 600 / .11em, `.channel-token` 12 px mono `5px 8px` radius 6, `.video-mode{padding:5px 22px 21px;gap:12px}` with `strong` 46 px / 550 / −.055em and `.scan` 13 px, `.video-metrics{margin:0 22px;padding:17px 0 20px}` with `dt` 12 px (5 px under) and `dd` 15 px / 500, each metric inset 22 px behind a rule. */
+  videoHeadPadTop: 19,
+  videoPadX: 22,
+  eyebrowText: 11,
+  tokenText: 12,
+  tokenPadY: 5,
+  tokenPadX: 8,
+  tokenRadius: 6,
+  modePadTop: 5,
+  modePadBottom: 21,
+  modeGap: 12,
+  modeText: 46,
+  modeTracking: '-0.055em',
+  scanText: 13,
+  metricsPadTop: 17,
+  metricsPadBottom: 20,
+  metricText: 12,
+  metricGap: 5,
+  metricValueText: 15,
+  metricInset: 22,
+  /** The outputs block — `.outputs{margin-top:26px}`, `.subsection-head{margin-bottom:13px}` with `h3` 16 px / 600; `th{padding:12px 18px;font-size:12px;font-weight:450}`, `td{padding:15px 18px;font-size:14px}`, the slot column 80 px, `.slot` 29 × 28 mono 12 px radius 6, `.output-name{gap:10px;font-weight:500}` with a 17 px glyph, `.output-state{font-size:13px;gap:7px}` with a 15 px glyph, `.output-note{font-size:13px;margin-top:12px}`. */
+  outputsGapAbove: 26,
+  outputsHeadGap: 13,
+  outputsTitleText: 16,
+  thPadY: 12,
+  thPadX: 18,
+  thText: 12,
+  tdPadY: 15,
+  tdPadX: 18,
+  tdText: 14,
+  slotColW: 80,
+  slotW: 29,
+  slotH: 28,
+  slotText: 12,
+  slotRadius: 6,
+  outputNameGap: 10,
+  outputIcon: 17,
+  stateText: 13,
+  stateGap: 7,
+  stateIcon: 15,
+  noteText: 13,
+  noteGap: 12,
+  /** `.helper-details{font-size:13px;margin-top:17px}`, its paragraph 9 px under, `max-width:70ch`. */
+  detailsText: 13,
+  detailsGap: 17,
+  detailsBodyGap: 9,
+  detailsMaxCh: 70,
+} as const;
 /** The line weight an ACCENTED surface takes: the reference's `.badge.ready` edge. */
 const ACCENT_LINE = '#31556a';
 
@@ -1068,15 +1195,32 @@ export const cssVars = {
    * colours out of `controls.css` for: a value with no home has no reviewer. They are
    * named for the FRAME they describe, never for the number.
    *
-   * `--r-modal-w-fixed` / `--r-modal-h-fixed` are the mockup's own
-   * `min(1000px, 100%)` / `min(680px, calc(100vh - 48px))`. The HEIGHT is the part that
-   * matters and the part no other dialog has: it is what stops the frame moving when the
-   * operator switches tab (see `Modal`'s `size` prop).
+   * `--r-modal-w-fixed` / `--r-modal-h-fixed` were the abandoned mockup's own
+   * `min(1000px, 100%)` / `min(680px, calc(100vh - 48px))`; `RUNTIME-REDESIGN-01` Phase 7
+   * re-pointed them at the APPROVED reference as rendered — `.settings{width:min(1140px,calc(100vw
+   * - 64px));height:min(810px,calc(100dvh - 64px))}`, measured 1140 × 736 at 1280 × 800
+   * (`STATION_SETUP_PX`). The HEIGHT is the part that matters and the part no other dialog has:
+   * it is what stops the frame moving when the operator switches tab (see `Modal`'s `size`
+   * prop). The two-edge measurement (`station-setup-frame.spec.ts`) is about the frame being
+   * ONE box on every tab, and it holds at either size.
    */
   '--r-modal-w-prose': 'min(460px, 92vw)',
   '--r-modal-w-wide': 'min(720px, 94vw)',
-  '--r-modal-w-fixed': 'min(1000px, 100%)',
-  '--r-modal-h-fixed': 'min(680px, calc(100vh - 48px))',
+  '--r-modal-w-fixed': `min(${String(STATION_SETUP_PX.frameW)}px, calc(100vw - ${String(STATION_SETUP_PX.frameInset)}px))`,
+  '--r-modal-h-fixed': `min(${String(STATION_SETUP_PX.frameH)}px, calc(100vh - ${String(STATION_SETUP_PX.frameInset)}px))`,
+  /**
+   * The fixed frame's HEAD and FOOT paddings — Phase 7, from the reference as rendered
+   * (`.settings-head{min-height:90px;padding:21px 28px}`, `.panel-foot{padding:15px 32px}`).
+   * Frame chrome, so they live beside the frame and not in the `--r-setup-*` block: a second
+   * fixed dialog would take them unchanged.
+   */
+  '--r-modal-head-min-h-fixed': `${String(STATION_SETUP_PX.headMinH)}px`,
+  '--r-modal-head-pad-fixed': `${String(STATION_SETUP_PX.headPadY)}px ${String(STATION_SETUP_PX.headPadX)}px`,
+  '--r-modal-head-gap-fixed': `${String(STATION_SETUP_PX.headGap)}px`,
+  '--r-modal-foot-pad-fixed': `${String(STATION_SETUP_PX.footPadY)}px ${String(STATION_SETUP_PX.footPadX)}px`,
+  '--r-modal-foot-gap-fixed': `${String(STATION_SETUP_PX.footGap)}px`,
+  '--r-modal-subtitle-text': `${String(STATION_SETUP_PX.subtitleText)}px`,
+  '--r-modal-subtitle-gap': `${String(STATION_SETUP_PX.subtitleGap)}px`,
   /**
    * 🔴 THE FIXED FRAME'S FOOTER BAR — a FLOOR, not an intrinsic height, and the distinction
    * is the whole point. It is the same argument `--r-panel-bar-h` makes one surface over: a
@@ -1096,8 +1240,15 @@ export const cssVars = {
    * below brings the reference's own heights in as tokens; none of them is this one,
    * and none of them may be composed into this one. A footer's height belongs to
    * being a footer.
+   *
+   * ⭐ PHASE 7 MOVED ITS VALUE, NOT ITS ROLE. The reference's footer is
+   * `.panel-foot{min-height:74px}` — itself a floor — so the number is the measured one
+   * (`STATION_SETUP_PX.footMinH`) and it is still applied as `minHeight`, still read by
+   * nothing that composes into it, and still what `station-setup-frame.spec.ts` measures
+   * on every tab. 59 was the abandoned mockup's arithmetic (36 + padding); 74 is what the
+   * owner approved.
    */
-  '--r-modal-foot-h': '59px',
+  '--r-modal-foot-h': `${String(STATION_SETUP_PX.footMinH)}px`,
   '--r-lock-scrim': 'rgba(15, 23, 42, 0.94)',
   '--r-shadow-menu': '0 4px 16px rgba(0, 0, 0, 0.45)',
   '--r-shadow-drawer': '-8px 0 24px rgba(0, 0, 0, 0.45)',
@@ -1339,6 +1490,88 @@ export const cssVars = {
   '--r-audio-verb-gap': `${String(AUDIO_DIALOG_PX.verbGap)}px`,
   '--r-audio-verb-text': `${String(AUDIO_DIALOG_PX.verbText)}px`,
   '--r-audio-foot-text': `${String(AUDIO_DIALOG_PX.footText)}px`,
+  /*
+   * ── `RUNTIME-REDESIGN-01` PHASE 7 — Station setup (`STATION_SETUP_PX`, cited to the RENDERED
+   * reference; `design.md` §14.3). Read by `controls.css`'s `.cg-rail*`, `.cg-card*`,
+   * `.cg-setup-*`, `.cg-video-*` and `.cg-output-*` rules and by the dialog's inline shell.
+   */
+  /**
+   * The MONO face — for a channel token (`CH 01`), a slot number and a server-mode token,
+   * the reference's `--mono`. Declared here so the stylesheet's `var(--r-font-mono)` has a
+   * home; the console's body face is the shaping-capable stack `index.html` sets, untouched.
+   */
+  '--r-font-mono': '"SFMono-Regular", Consolas, "Liberation Mono", monospace',
+  '--r-setup-rail-w': `${String(STATION_SETUP_PX.railW)}px`,
+  '--r-setup-rail-pad': `${String(STATION_SETUP_PX.railPadTop)}px ${String(STATION_SETUP_PX.railPadX)}px ${String(STATION_SETUP_PX.railPadBottom)}px`,
+  '--r-setup-rail-gap': `${String(STATION_SETUP_PX.railGap)}px`,
+  '--r-setup-group-text': `${String(STATION_SETUP_PX.groupText)}px`,
+  '--r-setup-group-tracking': STATION_SETUP_PX.groupTracking,
+  '--r-setup-group-pad': `${String(STATION_SETUP_PX.groupPadTop)}px ${String(STATION_SETUP_PX.groupPadX)}px ${String(STATION_SETUP_PX.groupPadBottom)}px`,
+  '--r-setup-group-pad-first': `0 ${String(STATION_SETUP_PX.groupPadX)}px ${String(STATION_SETUP_PX.groupPadBottom)}px`,
+  '--r-setup-tab-min-h': `${String(STATION_SETUP_PX.tabMinH)}px`,
+  '--r-setup-tab-pad': `${String(STATION_SETUP_PX.tabPadY)}px ${String(STATION_SETUP_PX.tabPadX)}px`,
+  '--r-setup-tab-gap': `${String(STATION_SETUP_PX.tabGap)}px`,
+  '--r-setup-tab-radius': `${String(STATION_SETUP_PX.tabRadius)}px`,
+  '--r-setup-tab-text': `${String(STATION_SETUP_PX.tabText)}px`,
+  '--r-setup-tab-icon': `${String(STATION_SETUP_PX.tabIcon)}px`,
+  '--r-setup-pane-pad': `${String(STATION_SETUP_PX.panePadTop)}px ${String(STATION_SETUP_PX.panePadX)}px ${String(STATION_SETUP_PX.panePadBottom)}px`,
+  '--r-setup-title-text': `${String(STATION_SETUP_PX.titleText)}px`,
+  '--r-setup-title-tracking': STATION_SETUP_PX.titleTracking,
+  '--r-setup-description-text': `${String(STATION_SETUP_PX.descriptionText)}px`,
+  '--r-setup-description-gap': `${String(STATION_SETUP_PX.descriptionGap)}px`,
+  '--r-setup-description-max-w': `${String(STATION_SETUP_PX.descriptionMaxCh)}ch`,
+  '--r-setup-head-gap-below': `${String(STATION_SETUP_PX.headGapBelow)}px`,
+  '--r-setup-tag-text': `${String(STATION_SETUP_PX.tagText)}px`,
+  '--r-setup-tag-pad': `${String(STATION_SETUP_PX.tagPadY)}px ${String(STATION_SETUP_PX.tagPadX)}px`,
+  '--r-setup-tag-radius': `${String(STATION_SETUP_PX.tagRadius)}px`,
+  '--r-setup-foot-text': `${String(STATION_SETUP_PX.footText)}px`,
+  '--r-setup-card-radius': `${String(STATION_SETUP_PX.cardRadius)}px`,
+  '--r-setup-card-head-pad': `${String(STATION_SETUP_PX.cardHeadPadY)}px ${String(STATION_SETUP_PX.cardHeadPadX)}px`,
+  '--r-setup-card-head-gap': `${String(STATION_SETUP_PX.cardHeadGap)}px`,
+  '--r-setup-card-title-text': `${String(STATION_SETUP_PX.cardTitleText)}px`,
+  '--r-setup-card-body-pad': `${String(STATION_SETUP_PX.cardBodyPad)}px`,
+  '--r-setup-card-help-pad': `${String(STATION_SETUP_PX.cardHelpPadY)}px ${String(STATION_SETUP_PX.cardHelpPadX)}px`,
+  '--r-setup-card-help-text': `${String(STATION_SETUP_PX.cardHelpText)}px`,
+  '--r-setup-card-gap': `${String(STATION_SETUP_PX.cardGap)}px`,
+  '--r-video-head-pad': `${String(STATION_SETUP_PX.videoHeadPadTop)}px ${String(STATION_SETUP_PX.videoPadX)}px 0`,
+  '--r-video-eyebrow-text': `${String(STATION_SETUP_PX.eyebrowText)}px`,
+  '--r-video-token-text': `${String(STATION_SETUP_PX.tokenText)}px`,
+  '--r-video-token-pad': `${String(STATION_SETUP_PX.tokenPadY)}px ${String(STATION_SETUP_PX.tokenPadX)}px`,
+  '--r-video-token-radius': `${String(STATION_SETUP_PX.tokenRadius)}px`,
+  '--r-video-mode-pad': `${String(STATION_SETUP_PX.modePadTop)}px ${String(STATION_SETUP_PX.videoPadX)}px ${String(STATION_SETUP_PX.modePadBottom)}px`,
+  '--r-video-mode-gap': `${String(STATION_SETUP_PX.modeGap)}px`,
+  '--r-video-mode-text': `${String(STATION_SETUP_PX.modeText)}px`,
+  '--r-video-mode-tracking': STATION_SETUP_PX.modeTracking,
+  '--r-video-scan-text': `${String(STATION_SETUP_PX.scanText)}px`,
+  '--r-video-metrics-margin': `0 ${String(STATION_SETUP_PX.videoPadX)}px`,
+  '--r-video-metrics-pad': `${String(STATION_SETUP_PX.metricsPadTop)}px 0 ${String(STATION_SETUP_PX.metricsPadBottom)}px`,
+  '--r-video-metric-text': `${String(STATION_SETUP_PX.metricText)}px`,
+  '--r-video-metric-gap': `${String(STATION_SETUP_PX.metricGap)}px`,
+  '--r-video-metric-value-text': `${String(STATION_SETUP_PX.metricValueText)}px`,
+  '--r-video-metric-inset': `${String(STATION_SETUP_PX.metricInset)}px`,
+  '--r-output-gap-above': `${String(STATION_SETUP_PX.outputsGapAbove)}px`,
+  '--r-output-head-gap': `${String(STATION_SETUP_PX.outputsHeadGap)}px`,
+  '--r-output-title-text': `${String(STATION_SETUP_PX.outputsTitleText)}px`,
+  '--r-output-th-pad': `${String(STATION_SETUP_PX.thPadY)}px ${String(STATION_SETUP_PX.thPadX)}px`,
+  '--r-output-th-text': `${String(STATION_SETUP_PX.thText)}px`,
+  '--r-output-td-pad': `${String(STATION_SETUP_PX.tdPadY)}px ${String(STATION_SETUP_PX.tdPadX)}px`,
+  '--r-output-td-text': `${String(STATION_SETUP_PX.tdText)}px`,
+  '--r-output-slot-col-w': `${String(STATION_SETUP_PX.slotColW)}px`,
+  '--r-output-slot-w': `${String(STATION_SETUP_PX.slotW)}px`,
+  '--r-output-slot-h': `${String(STATION_SETUP_PX.slotH)}px`,
+  '--r-output-slot-text': `${String(STATION_SETUP_PX.slotText)}px`,
+  '--r-output-slot-radius': `${String(STATION_SETUP_PX.slotRadius)}px`,
+  '--r-output-name-gap': `${String(STATION_SETUP_PX.outputNameGap)}px`,
+  '--r-output-icon': `${String(STATION_SETUP_PX.outputIcon)}px`,
+  '--r-output-state-text': `${String(STATION_SETUP_PX.stateText)}px`,
+  '--r-output-state-gap': `${String(STATION_SETUP_PX.stateGap)}px`,
+  '--r-output-state-icon': `${String(STATION_SETUP_PX.stateIcon)}px`,
+  '--r-output-note-text': `${String(STATION_SETUP_PX.noteText)}px`,
+  '--r-output-note-gap': `${String(STATION_SETUP_PX.noteGap)}px`,
+  '--r-setup-details-text': `${String(STATION_SETUP_PX.detailsText)}px`,
+  '--r-setup-details-gap': `${String(STATION_SETUP_PX.detailsGap)}px`,
+  '--r-setup-details-body-gap': `${String(STATION_SETUP_PX.detailsBodyGap)}px`,
+  '--r-setup-details-max-w': `${String(STATION_SETUP_PX.detailsMaxCh)}ch`,
   // Motion
   '--r-dur-fast': '120ms',
   '--r-dur-med': '200ms',

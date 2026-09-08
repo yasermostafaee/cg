@@ -367,6 +367,89 @@ rule quoted from the file; every claim about a box SHALL be measured in Chromium
   opened **THEN** the table head, the ordinary row, the fader, the `ON`/`OFF`/`SOLO` boxes and the
   dialog's rows and verbs measure to the token home's values, read back from the page
 
+### Requirement: The channel list is a list of the channels the bridge names, and the selection is keyed by channel id
+
+The console's channel strip SHALL render one tab per channel the bridge already publishes — the
+union of the fixed bank's channel and every declared entry of the channel settings — and SHALL keep
+the operator's selection as a channel id, session-only, readable by every per-channel surface. It
+SHALL NOT invent a channel-discovery call, a channel name, or any persisted key to do so; where the
+bridge is single-channel the gap is filed (`R-062`), not closed.
+
+#### Scenario: Two declared channels are two tabs
+
+- **WHEN** the bridge's channel settings declare channels 1 and 2 **THEN** the strip renders
+  `CHANNEL 1` and `CHANNEL 2` in that order, and selecting the second records the choice `2`
+  where Station setup can read it
+
+#### Scenario: A choice the bridge stops naming falls back honestly
+
+- **WHEN** the operator has chosen channel 2 and the bridge then names only channel 1 **THEN** the
+  strip shows channel 1 selected, and the recorded choice is not written over
+
+### Requirement: Station setup reports the selected channel and keeps station-wide sections station-wide
+
+Station setup's Channel tab SHALL report exactly one channel — the console's selected channel — its
+raster verdict and its outputs, and SHALL show nothing of any other channel's; the dialog SHALL
+name that channel under its title. The Servers, Live sources, Text file delimiters and Layers
+sections SHALL NOT read the selection: they are the station's, and render the same whatever
+channel is selected.
+
+#### Scenario: Channel 2's verdict and outputs, and none of channel 1's
+
+- **WHEN** channels 1 and 2 are declared, channel 2's server contradicts its raster and has lost a
+  program output, and the operator selects channel 2 **THEN** the Channel tab shows channel 2's
+  `MISMATCH` and its AIR row, shows no block for channel 1, and the subtitle reads `Channel 2`
+
+#### Scenario: The station-wide sections do not move with the selection
+
+- **WHEN** the same dialog is opened under channel 1 and under channel 2 **THEN** the Servers, Live
+  sources and Text file delimiters sections render identical content
+
+### Requirement: The outputs check is a table over its engineering detail
+
+The Channel tab's Outputs block SHALL render, per server and per checked channel, one row per
+consumer `casparcg.config` declares — `Slot · Configured output · Runtime status` — with a `N of
+M running` count, the verdict counted per kind exactly as the bridge's `MissingConsumer` counts
+it; and SHALL keep every `B-223` sentence beneath the table: the declared and running sets, the
+AIR row with its addressing reading, restart paragraph and log recipe, the creation outcome and
+the local-monitor sentence. A missing PROGRAM output SHALL take the alarm word's ink; a missing
+local monitor the caution.
+
+#### Scenario: A missing DeckLink is a marked row and still the AIR row
+
+- **WHEN** the declaration is a DeckLink, a screen and system audio and only the last two run
+  **THEN** the table shows three rows, the first marked missing at air severity reading `Not
+running`, the count reads `2 of 3 running`, and exactly one AIR row with the remedy stands
+  beneath the table
+
+### Requirement: Station setup takes its geometry from the token home, measured in a real engine
+
+Station setup SHALL take its rendered geometry — the fixed frame, the head and its subtitle, the
+rail and its tabs, the pane inset, the section head, the cards and the footer's floor — from
+`--r-modal-*-fixed`, `--r-setup-*`, `--r-video-*` and `--r-output-*` tokens declared in the token
+home from the reference as RENDERED (`09-channel-settings.html` at 1280 × 800, through its shadow
+root), never from a stylesheet rule quoted from the file; every claim about a box SHALL be
+measured in Chromium, never in jsdom. `--r-modal-foot-h` SHALL remain a floor.
+
+#### Scenario: The frame, the rail, the pane and the footer measure to their tokens
+
+- **WHEN** the built console opens Station setup at 1280 × 800 **THEN** the frame is 1140 × 736,
+  the rail, a tab, the pane's inset and the footer's floor measure to the token home's values read
+  back from the page, and the frame is one box on every tab with its footer's top edge still
+
+### Requirement: A removal the reference implies is recorded with its wire evidence
+
+A control the app had that the reference does not draw SHALL NOT be removed on the reference's
+authority alone; its removal SHALL be recorded in the deletion guard with the evidence that the
+surviving control reaches the same wire command and the same stores, or the control SHALL be
+restored. The audio dialog's MUTE was removed on that evidence (owner question A15): OFF sends the
+same `MIXER c-l VOLUME 0` through the same intent record.
+
+#### Scenario: OFF is the one silence and reaches the wire as MUTE did
+
+- **WHEN** OFF is pressed on a seated, audible plate **THEN** the bridge sends one `MIXER c-l
+VOLUME 0` for that plate and records `0` as its intent, exactly what MUTE sent and recorded
+
 ### Requirement: The programme's phase state is recorded where the next session reads it
 
 Each phase of this programme SHALL record its completion in this change's `tasks.md`, and a session

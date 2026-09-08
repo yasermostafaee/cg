@@ -249,3 +249,116 @@ describe('B-223 — the states with nothing to alarm about are said plainly', ()
     expect(text).toContain('Server B: no output check has completed yet');
   });
 });
+
+/**
+ * `RUNTIME-REDESIGN-01` Phase 7 (`PROMPT.md` §7) — **the reference's Outputs TABLE**
+ * (`09-channel-settings.html` as rendered: `Slot · Configured output · Runtime status`, one row
+ * per consumer `casparcg.config` declares, a `N of M running` count beside the heading).
+ *
+ * RED FIRST against the shipped section, which rendered one prose line — `Declared: … Running:
+ * …` — and no table. Every B-223 assertion above stays: the AIR row, its remedy paragraphs and
+ * the local-monitor sentence live BENEATH the table, unchanged, because they are the engineering
+ * detail the banner points at and the deletion guard keeps.
+ *
+ * ⚠ A row's running/missing verdict is counted PER KIND, exactly as `MissingConsumer` is: the
+ * wire reports a running DeckLink only by port, so the first `running` declarations of a kind
+ * are the ones running and the rest are not. Nothing here matches a device to a port.
+ */
+describe('Phase 7 — the outputs table, one row per declared consumer', () => {
+  const rows = (el: HTMLElement): HTMLTableRowElement[] => [
+    ...el.querySelectorAll<HTMLTableRowElement>('[data-output-table] tbody tr'),
+  ];
+  const cells = (tr: HTMLTableRowElement): string[] =>
+    [...tr.querySelectorAll('td')].map((td) => (td.textContent ?? '').trim());
+
+  it('🔴 the head reads Slot · Configured output · Runtime status, and the rows are the declaration in order', async () => {
+    const el = await render(health(serverA('healthy', [missingDevice('23487013')])));
+    expect(
+      [...el.querySelectorAll('[data-output-table] th')].map((th) => th.textContent?.trim()),
+    ).toEqual(['Slot', 'Configured output', 'Runtime status']);
+    const r = rows(el);
+    expect(r).toHaveLength(3);
+    expect(cells(r[0] as HTMLTableRowElement)[0]).toBe('01');
+    expect(cells(r[1] as HTMLTableRowElement)[0]).toBe('02');
+    expect(cells(r[2] as HTMLTableRowElement)[0]).toBe('03');
+    // The configured output names the KIND and the device it declares, in the words the
+    // banner and the AIR row already use (`missingWords`).
+    expect(cells(r[0] as HTMLTableRowElement)[1]).toContain('decklink');
+    expect(cells(r[0] as HTMLTableRowElement)[1]).toContain('23487013');
+    expect(cells(r[1] as HTMLTableRowElement)[1]).toContain('screen');
+    expect(cells(r[2] as HTMLTableRowElement)[1]).toContain('system-audio');
+  });
+
+  it('🔴 a missing AIR consumer reads Not running in the alarm ink; a running one reads Running', async () => {
+    const el = await render(health(serverA('healthy', [missingDevice('23487013')])));
+    const r = rows(el);
+    expect(r[0]?.getAttribute('data-output-row')).toBe('missing');
+    expect(r[0]?.getAttribute('data-output-row-severity')).toBe('air');
+    expect(cells(r[0] as HTMLTableRowElement)[2]).toContain('Not running');
+    expect(r[1]?.getAttribute('data-output-row')).toBe('running');
+    expect(cells(r[1] as HTMLTableRowElement)[2]).toContain('Running');
+    expect(r[2]?.getAttribute('data-output-row')).toBe('running');
+    // …and the B-223 AIR row beneath the table is still exactly one element.
+    expect(el.querySelectorAll('[data-severity="air"]')).toHaveLength(1);
+  });
+
+  it('a missing LOCAL monitor is a missing row at local severity, not an alarm', async () => {
+    const el = await render(health(serverA('healthy', [SCREEN_ONLY])));
+    const r = rows(el);
+    expect(r.map((tr) => tr.getAttribute('data-output-row'))).toEqual([
+      'running',
+      'missing',
+      'running',
+    ]);
+    expect(r[1]?.getAttribute('data-output-row-severity')).toBe('local');
+    expect(el.querySelector('[data-severity="air"]')).toBeNull();
+  });
+
+  it('🔴 the count beside the heading says how many declared consumers run', async () => {
+    const two = await render(health(serverA('healthy', [SCREEN_ONLY])));
+    expect(two.querySelector('[data-output-count]')?.textContent).toBe('2 of 3 running');
+    await act(async () => {
+      root?.unmount();
+    });
+    root = null;
+    container?.remove();
+    const all = await render(
+      health(
+        serverA('healthy', [
+          {
+            ...SCREEN_ONLY,
+            running: [...SCREEN_ONLY.running, { port: 600, kind: 'screen' }],
+            missing: [],
+          },
+        ]),
+      ),
+    );
+    expect(all.querySelector('[data-output-count]')?.textContent).toBe('3 of 3 running');
+  });
+
+  it('two DeckLinks declared, one running: the FIRST declaration is the running one, per kind', async () => {
+    const check: ChannelOutputCheck = {
+      channel: 1,
+      declared: [
+        { kind: 'decklink', device: '1' },
+        { kind: 'decklink', device: '2' },
+      ],
+      running: [{ port: 301, kind: 'decklink' }],
+      missing: [{ kind: 'decklink', declared: 2, running: 1, devices: ['2'] }],
+      observedAt: '2026-09-05T14:08:44.000Z',
+    };
+    const el = await render(health(serverA('healthy', [check])));
+    expect(rows(el).map((tr) => tr.getAttribute('data-output-row'))).toEqual([
+      'running',
+      'missing',
+    ]);
+  });
+
+  it('an unreadable declaration renders no table and keeps its gap sentence', async () => {
+    const el = await render(
+      health(serverA('healthy', [{ ...SCREEN_ONLY, declared: null, missing: [] }])),
+    );
+    expect(el.querySelector('[data-output-table]')).toBeNull();
+    expect(el.textContent).toMatch(/could not be read/);
+  });
+});

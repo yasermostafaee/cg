@@ -6,8 +6,10 @@ file records which are done. **Each session takes the next unfinished phase, fin
 reports.** Do not start a later phase because an earlier one looks easy — the ordering is
 load-bearing and stated at each step.
 
-**Phase state at 2026-09-09:** Phases 1, 2 (with addendum 2A), 3, 4, 5 and **6** COMPLETE, each
-with its Linux `e2e` URL beside the ticked item. Phases 7–10 not started. Next: **Phase 7**.
+**Phase state at 2026-09-08:** Phases 1, 2 (with addendum 2A), 3, 4, 5, 6 and **7** COMPLETE,
+each with its Linux `e2e` URL beside the ticked item. Phases 8–10 not started. Next: **Phase 8**.
+⚠ Phase 7 answered owner question **A15** first (`design.md` §14.0) and filed the three
+single-channel gaps as **`R-062`** — read §14.7 before touching a bulk verb or the channel list.
 ⚠ `PROMPT.md` §0 carries the rule Phase 3 learned — **the reference is judged as RENDERED, not as
 authored: measure it in a browser at 1280 × 800 and quote what you read** — Phase 5 counted the
 waves it hides (`.inspector` is restated 33 times; `design.md` §12.1) and Phase 6 counted the
@@ -88,6 +90,15 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
   round trip. Asserted as the PROPERTY (the heading carries what the one composition names the
   selected row, and follows selection), never the string. **(b) PARKED, not built:** a Reset
   for the position draft — Discard already undoes edits.
+- **A15 · 🔴 MUTE'S REMOVAL WAS A DELIBERATE REMOVAL, DECIDED AT THE WIRE** (2026-09-08, before
+  Phase 7; `design.md` §14.0). Phase 6 removed the audio dialog's MUTE as "OFF's twin" without
+  evidence beside the claim. The evidence: MUTE's handler and OFF's were the same map
+  (`{ [plate]: 0 }`) through the same channel to the same bridge method and the same and ONLY
+  audio verb the builder has (`MIXER c-l VOLUME 0`); one intent record (`#plateVolumes`), one
+  published field, one boot adoption, one re-assert — no mute FLAG exists anywhere in the tree;
+  OFF reaches every state MUTE reached and one more. Recorded as guard item **28, CLOSED**
+  (`design.md` §3). Nothing restored. The rule for later phases: a removal the reference implies
+  is still a REMOVAL and is written down with its wire evidence, never reported as a "Fixed" row.
 
 ---
 
@@ -411,25 +422,53 @@ item 23's discharge, A13/A14, and the numbers filed.
       it was not skipped, which is the half a green run alone does not prove (golden rule 12b).
       `Lint • Typecheck • Test • Build` also ran green (10:55:24Z → 11:01:10Z).
 
-## Phase 7 — Settings and channels
+## Phase 7 — Settings and channels — COMPLETE
 
-- [ ] 7.1 Settings opens the full Station setup modal from `09-channel-settings.html`. ⚠ Mark the
-      earlier mockups in `docs/design/` superseded in ONE line; do not work from them.
-- [ ] 7.2 The channel list is shaped to be filled from an API — a UI shape, not a schema migration.
-- [ ] 7.3 🔴 Per-channel settings and state separated by channel id; station-wide settings keep
-      their real scope. ⚠ No persisted key, file or schema change. **Read `design.md` §4 first, and
-      read the SUPERSEDED paragraph in it** — the earlier finding that "a second channel's rows
-      cannot be addressed today" is WRONG (owner answer A3). `itemId` is one row, `slot` carries
-      `{channel, layer, server}`, so the per-row verbs are already channel-agnostic. The real gap is
-      three things: the five `z.void()` bulk verbs, no channel-discovery call, and `fixedLayers` as
-      the single channel authority. Invent no multi-channel contract, and do NOT re-scope
-      `silenceAllLivePlates` — its scope is not the caller's to choose.
-- [ ] 7.4 Everything already decided about this dialog survives: one Settings entry point, the fixed
-      frame measured on TWO edges, per-section footers and refusals, the footer rule (a section with
-      a commit gets `Revert` + `Apply …`; one without gets `Close`), `B-237`'s confirmation that
-      NAMES the templates and plates it would drop, and `B-238`'s refusal being shown.
-- [ ] 7.5 Channel-keyed state proved by test; `persistedKeyCensus.test.ts` unchanged; e2e run URL
-      recorded here.
+The record is `design.md` §14: A15 at the wire (§14.0), what contradicted the prompt, what was
+built and where each per-channel and station-wide fact is read from, the measured dialog and
+Channel pane with every delta fixed or argued, the wave counts, the red-first matrix, guard item
+28 closed, the three gaps filed as `R-062`, and what was not done.
+
+- [x] 7.0 🔴 **A15 ANSWERED FIRST** — MUTE's removal decided from the wire and the tree, not by
+      preference (`design.md` §14.0): OFF is exactly equivalent (same map, same channel, same
+      method, same and only verb `MIXER c-l VOLUME 0`; one intent record, no mute flag anywhere;
+      OFF ⊇ MUTE). Recorded as a DELIBERATE removal, guard item **28 CLOSED** (§3); owner answer
+      A15 on record above.
+- [x] 7.1 Settings opens the full Station setup modal from `09-channel-settings.html` — measured
+      in Chromium at 1280 × 800 through its shadow root (`design.md` §14.3–14.4: `.settings` is
+      restated 17 times, `.tab` 12; the outer page's `.channel-modal` rules paint no element) and
+      brought in as `STATION_SETUP_PX` → `--r-setup-*` / `--r-video-*` / `--r-output-*`, the fixed
+      frame and `--r-modal-foot-h` re-pointed at the reference (1140 × min(810, vh − 64); a 74 px
+      FLOOR, still a floor). The `docs/design/station-setup-{mockup,redesigned}.html` mockups are
+      ABANDONED (owner answer A2, `design.md` §6) — one line, not chased; they are untracked and
+      cannot be marked.
+- [x] 7.2 The channel list is a LIST shaped to be filled from an API — `channelIds(bank, settings)` — the union of the two channel sources the bridge already publishes — one
+      `CHANNEL N` tab each, the selection a channel id in `channelStore` (session-only). A UI
+      shape: no schema, no key, no discovery call invented (owner answer A3). Red-first:
+      `channelScope.dom.test.ts` (3 of 4 red against the one-element strip), `channelList.test.ts`.
+- [x] 7.3 🔴 Per-channel settings and state separated by channel id: Station setup's Channel tab
+      reports the SELECTED channel — its raster verdict and its outputs — and nothing of another's
+      (`ChannelSection` + `OutputsSection` with `channel`), the dialog's subtitle naming it;
+      station-wide sections (Servers, Live sources, Text file delimiters, Layers) render IDENTICAL
+      DOM under channel 1 and channel 2. Red-first: `stationSetupChannelKeyed.dom.test.ts` (4 of 5
+      red against the every-channel pane; the station-wide case is the control). The three gaps
+      are FILED as **`R-062`** with the trap written into it; `silenceAllLivePlates` and every
+      bulk verb untouched by diff. **OutputsSection re-shaped** to the reference table (`Slot · Configured output · Runtime status`) with its `N of M running` count, every B-223 row
+      kept beneath it (`outputsSection.dom.test.ts` 22 / 22, +6 red-first).
+- [x] 7.4 Everything already decided about this dialog survives, each still asserted: one Settings
+      entry point (`station-setup.spec.ts` §1); the fixed frame on TWO edges
+      (`station-setup-frame.spec.ts`, its short-section reading taken at the programme's 1280 ×
+      800); per-section footers and refusals; the footer rule (`Revert` + `Apply …` or nothing —
+      `B-240`); `B-237`'s naming confirmation; `B-238`'s shown refusal (`removeRowRefusal`
+      11 / 11). Sixteen Station setup, token-home and rail suites re-run green (128) with the four
+      new ones.
+- [x] 7.5 Channel-keyed state proved by test (7.2, 7.3); **`persistedKeyCensus.test.ts` unchanged**
+      — `git diff` on it is empty, it is green, and the new `features/channels/` modules spell no
+      storage (grep). `pnpm --filter @cg/runtime test:e2e` — **141 passed (1.8 m)**, Windows,
+      against a fresh `vite build`, after two geometry corrections the first run surfaced (a 45 px
+      tab under the console's line-height; the frame spec's slack read at 720 tall). ⚠
+      **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this. Linux `e2e` URL:
+      _recorded by the follow-up docs commit once the run on the code head completes._
 
 ## Phase 8 — Template library, import, and the audit log
 

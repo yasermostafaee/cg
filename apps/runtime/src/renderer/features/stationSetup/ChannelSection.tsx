@@ -1,12 +1,30 @@
 import { rasterVerdict, type ChannelSettingsState, type ConnectionHealth } from '@cg/shared-ipc';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
 import { colors } from '../../theme.js';
+import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { OutputsSection } from '../connections/OutputsSection.js';
+import { videoModeWords } from './videoModeWords.js';
 
 /**
  * `STATION-CHROME-01` §4 — **the channel, REPORTED. What it is, and what it is coming out
  * of.** Raster and Outputs in one read-only tab, because the raster is what the channel IS,
  * not a preference.
+ *
+ * ── `RUNTIME-REDESIGN-01` PHASE 7 — ONE CHANNEL, THE SELECTED ONE ─────────────────────
+ *
+ * The tab is keyed to the channel the console is scoped to (`useSelectedChannel`, the same
+ * read the channel strip makes), exactly as the reference keys a whole setup instance by
+ * channel (`stationSetupInstances.get(id)`; its subtitle reads `Channel 1 · …`). It used to
+ * map EVERY entry of `channelSettings.settings` into one pane: with two channels declared,
+ * channel 1's match and channel 2's mismatch stood together under a title naming neither.
+ * Per-channel settings and state are separated by channel id; the station-wide tabs do not
+ * read the selection at all. Nothing is lost at the alarm level — `RasterMismatchBanner` is
+ * station-wide and stays so. Proved by `stationSetupChannelKeyed.dom.test.ts`.
+ *
+ * The card is the reference's video-format card as rendered: an eyebrow and a `CH 01` token,
+ * the mode word and its scan, and three metrics — `Resolution · Frame rate · Server mode` —
+ * plus the app's own two, `Declared by` and `Check` (`B-236`), which the reference does not
+ * draw and the deletion guard keeps. Every number is a `--r-video-*` token.
  *
  * ── WHY THE CONTROL WENT, WITH THE EVIDENCE THAT DECIDED IT ─────────────────
  *
@@ -55,25 +73,12 @@ import { OutputsSection } from '../connections/OutputsSection.js';
  */
 
 const styles = {
-  lede: { fontSize: '0.8rem', color: colors.textMuted, margin: 0 },
-  kv: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(7rem, auto) 1fr',
-    columnGap: '0.9rem',
-    rowGap: '0.35rem',
-    margin: 0,
-    fontSize: '0.85rem',
-  },
-  dt: { color: colors.textMuted },
-  dd: { margin: 0, fontVariantNumeric: 'tabular-nums' as const },
-  channel: { fontSize: '0.85rem', fontWeight: 700 },
   verdict: {
     match: { color: colors.textMuted },
     mismatch: { color: colors.errorText, fontWeight: 700 },
     unreadable: { color: colors.textMuted },
     unconfigured: { color: colors.textMuted },
   },
-  empty: { fontSize: '0.82rem', color: colors.textMuted },
 } as const;
 
 const VERDICT_TEXT = {
@@ -117,68 +122,89 @@ function declaredBy(state: ChannelSettingsState, channel: number): string {
   }
 }
 
+/** `CH 01` — the reference's channel token. */
+function channelToken(channel: number): string {
+  return `CH ${String(channel).padStart(2, '0')}`;
+}
+
 export function ChannelSection({ health }: { health: ConnectionHealth | null }): JSX.Element {
   const state = useChannelSettings();
+  const { selected: channel } = useSelectedChannel();
+  const configured = state.settings.find((s) => s.channel === channel);
+  const observed = state.observed.find((o) => o.channel === channel);
+  const verdict = rasterVerdict(state, channel);
+  const words = videoModeWords(observed?.mode);
 
   return (
     <>
-      <p style={styles.lede}>
-        What the channel actually is, and what it is coming out of. Reported, not set.
-      </p>
-
-      {/* `STATION-CHROME-02` §3 — the shared card rhythm: an uppercase head, one body
-          padding, and the explanation as a muted note under the body. */}
-      <section className="cg-card" aria-label="Raster">
-        <div className="cg-card__head">
-          <span className="cg-card__title">Raster</span>
+      {/*
+        The reference's `.video-card`: eyebrow + token, the mode word and its scan, then the
+        metrics. `data-raster-channel` names the ONE channel this pane reports, so a test can
+        assert which channel is shown and, as important, which is NOT.
+      */}
+      <section className="cg-card" aria-label="Video format" data-raster-channel={String(channel)}>
+        <div className="cg-video-head">
+          <span className="cg-video-eyebrow">Video format</span>
+          <span className="cg-video-token">{channelToken(channel)}</span>
         </div>
-        <div className="cg-card__body">
-          {state.settings.length === 0 ? (
-            <span style={styles.empty} role="status">
-              No channel is declared yet — the channels come from the bridge’s fixed-layers config
-              at start.
-            </span>
-          ) : (
-            state.settings.map((s) => {
-              const verdict = rasterVerdict(state, s.channel);
-              const channel = String(s.channel);
-              return (
-                <div key={s.channel} data-raster-channel={channel}>
-                  <span style={styles.channel}>Channel {channel}</span>
-                  <dl style={styles.kv}>
-                    <dt style={styles.dt}>Video mode</dt>
-                    <dd style={styles.dd}>{modeLine(state, s.channel)}</dd>
-                    <dt style={styles.dt}>Raster</dt>
-                    <dd style={styles.dd}>
-                      {String(s.raster.width)} × {String(s.raster.height)}
-                    </dd>
-                    <dt style={styles.dt}>Declared by</dt>
-                    <dd style={styles.dd}>{declaredBy(state, s.channel)}</dd>
-                    <dt style={styles.dt}>Check</dt>
-                    <dd style={{ ...styles.dd, ...styles.verdict[verdict] }}>
-                      <span data-raster-verdict={verdict}>{VERDICT_TEXT[verdict]}</span>
-                    </dd>
-                  </dl>
-                </div>
-              );
-            })
-          )}
+        <div className="cg-video-mode">
+          <strong className="cg-video-mode__word" data-video-mode-word="">
+            {words.word}
+          </strong>
+          <span className="cg-video-mode__scan">{words.scan}</span>
         </div>
-        <p className="cg-card__note">
+        <dl className="cg-video-metrics">
+          <div className="cg-video-metric">
+            <dt>Resolution</dt>
+            <dd>
+              {configured === undefined
+                ? 'not configured'
+                : `${String(configured.raster.width)} × ${String(configured.raster.height)}`}
+            </dd>
+          </div>
+          <div className="cg-video-metric">
+            <dt>Frame rate</dt>
+            <dd>{words.rate}</dd>
+          </div>
+          <div className="cg-video-metric">
+            <dt>Server mode</dt>
+            <dd className="cg-video-metric__mono">{modeLine(state, channel)}</dd>
+          </div>
+        </dl>
+        {/* The app's own two facts (`B-236`) — the reference draws neither; the guard keeps both. */}
+        <dl className="cg-video-metrics">
+          <div className="cg-video-metric">
+            <dt>Declared by</dt>
+            <dd>{declaredBy(state, channel)}</dd>
+          </div>
+          <div className="cg-video-metric">
+            <dt>Check</dt>
+            <dd style={styles.verdict[verdict]}>
+              <span data-raster-verdict={verdict}>{VERDICT_TEXT[verdict]}</span>
+            </dd>
+          </div>
+        </dl>
+      </section>
+      {/* The reference folds the "why read only" paragraph under a summary; the app's own
+          sentence goes there unchanged. */}
+      <details className="cg-setup-details">
+        <summary>Why is the video format read only?</summary>
+        <p>
           The console needs this because plate geometry, the rehearsal preview and the on-air
           position boxes are computed in channel pixels. It is <b>not</b> typed here: the server
           owns the value, and a second place to set it would be a second source of truth — a wrong
           one moves every graphic without raising an error. If the console and the channel disagree,
           the mismatch banner says so.
         </p>
-      </section>
+      </details>
 
       {/*
         `B-223` — THE OUTPUT CHECK'S ENGINEERING DETAIL, read-only. Nothing in it is a
         control, so it gates nothing and is gated by nothing. `OutputsSection` renders its own
-        labelled region (`Program outputs`), which the output-missing banner's pointer names.
+        labelled region (`Program outputs`), which the output-missing banner's pointer names —
+        for THIS channel only.
       */}
-      <OutputsSection health={health} />
+      <OutputsSection health={health} channel={channel} />
     </>
   );
 }

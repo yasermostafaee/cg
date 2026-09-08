@@ -132,6 +132,25 @@ export const STATION_SETUP_SECTIONS: readonly StationSetupSectionSpec[] = [
   },
 ];
 
+/**
+ * `RUNTIME-REDESIGN-01` Phase 7 — the commit contract as the reference's section TAG
+ * (`Read only` · `Apply together` · `Auto-save`), shown at the end of the section head beside the
+ * legend that spells it out. ONE mapping from the contract, so the tag and the legend cannot say
+ * different things: `immediate` is the reference's `Auto-save`; both draft contracts are its
+ * `Apply together`, because each is applied by one button for the whole section.
+ */
+export function contractTag(commit: SectionCommit): string {
+  switch (commit) {
+    case 'read-only':
+      return 'Read only';
+    case 'immediate':
+      return 'Auto-save';
+    case 'apply-servers':
+    case 'section':
+      return 'Apply together';
+  }
+}
+
 /** The rail's groups, in order, each with its sections. */
 export const STATION_SETUP_GROUPS: readonly {
   readonly group: SectionGroup;

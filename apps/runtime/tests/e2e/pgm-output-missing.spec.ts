@@ -141,6 +141,15 @@ test.describe('C-029 — program output missing', () => {
       .getByRole('region', { name: 'Program outputs' });
     await expect(outputs).toContainText('decklink (device 23487013)');
     await expect(outputs).toContainText('Running: system-audio, screen');
+    // `RUNTIME-REDESIGN-01` Phase 7 — the reference's table over the same detail: one row per
+    // declared consumer, the missing DeckLink's row marked, the count beside the heading.
+    await expect(outputs.locator('[data-output-table] th')).toHaveText([
+      'Slot',
+      'Configured output',
+      'Runtime status',
+    ]);
+    await expect(outputs.locator('[data-output-row="missing"]')).toHaveCount(1);
+    await expect(outputs.locator('[data-output-count]')).toHaveText('2 of 3 running');
     await expect(outputs).toContainText('hardware persistent ID 23487013');
     await expect(outputs).toContainText('restart CasparCG');
     await page.keyboard.press('Escape');

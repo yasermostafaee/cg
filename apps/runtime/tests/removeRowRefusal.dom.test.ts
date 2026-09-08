@@ -284,8 +284,9 @@ describe('B-239 §3 — the contract is a LABEL; only an event looks like an eve
     /*
       The one thing that was genuinely wrong. A label and an event were the same muted grey
       sentence in the same corner. This pins the label TREATMENT — the app's existing
-      vocabulary for "this is chrome, not content", the same one `.cg-card__title`,
-      `.cg-rail-group` and a table header wear.
+      vocabulary for "this is chrome, not content", the same one `.cg-rail-group` and a table
+      header wear (`.cg-card__title` wore it too until `RUNTIME-REDESIGN-01` Phase 7 took the
+      card head to the reference's sentence-case rank; the footer contract is unchanged).
     */
     stationSetupStub({ slots: boundSlots, bank: SETUP_BANK });
     const dialog = await renderStationSetup({ section: 'candidate-layers' });

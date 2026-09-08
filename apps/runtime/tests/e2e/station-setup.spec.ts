@@ -211,7 +211,9 @@ test('the Channel tab REPORTS the raster and the outputs, and offers no way to t
     .getByRole('tab', { name: 'Channel' })
     .click();
 
-  const raster = dialog.getByRole('region', { name: 'Raster', exact: true });
+  // `RUNTIME-REDESIGN-01` Phase 7 — the card is the reference's VIDEO FORMAT card; the app's
+  // own facts (`Declared by`, `Check`) stay on it.
+  const raster = dialog.getByRole('region', { name: 'Video format', exact: true });
   await expect(raster).toContainText('1920 × 1080');
   await expect(raster).toContainText('1080i5000');
   await expect(raster).toContainText('casparcg.config');

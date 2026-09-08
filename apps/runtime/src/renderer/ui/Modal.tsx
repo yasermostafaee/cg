@@ -128,13 +128,34 @@ const styles = {
     gap: '0.75rem',
     flexShrink: 0,
   },
-  /** The fixed frame's head: its own padding, and the rule that separates it. */
+  /**
+   * The fixed frame's head: its own padding, and the rule that separates it. Phase 7 took the
+   * reference's `.settings-head` as rendered — a 90 px floor, `21px 28px` — from the token home.
+   */
   titleRowFixed: {
     alignItems: 'center',
-    padding: '0.85rem 1rem',
+    gap: cssVars['--r-modal-head-gap-fixed'],
+    minHeight: cssVars['--r-modal-head-min-h-fixed'],
+    padding: cssVars['--r-modal-head-pad-fixed'],
     borderBottom: `1px solid ${colors.border}`,
+    boxSizing: 'border-box' as const,
   },
   title: { fontSize: '1rem', fontWeight: 700, margin: 0 },
+  /** The title and its subtitle stack; the close affordance stays on the row's far end. */
+  titleStack: { display: 'flex', flexDirection: 'column' as const, minWidth: 0 },
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 7 — the SUBTITLE under the title, the reference's
+   * `.settings-subtitle` (13 px, muted, 3 px under). Optional: a dialog says WHAT it is scoped
+   * to here — Station setup names its channel and primary — and most dialogs have nothing to
+   * add. Not a message and not the body: it is chrome, pinned with the title.
+   */
+  subtitle: {
+    margin: `${cssVars['--r-modal-subtitle-gap']} 0 0`,
+    fontSize: cssVars['--r-modal-subtitle-text'],
+    fontWeight: 400,
+    lineHeight: 1.55,
+    color: colors.textMuted,
+  },
   /**
    * The body SCROLLS; the title and the footer do not. A dialog that asks a
    * destructive question must keep its buttons visible however long the content
@@ -194,9 +215,15 @@ const styles = {
    * §2's assertion measures its top edge: it must not move as the tab changes.
    */
   footerFixed: {
-    padding: '0.7rem 1rem',
+    padding: cssVars['--r-modal-foot-pad-fixed'],
+    gap: cssVars['--r-modal-foot-gap-fixed'],
     borderTop: `1px solid ${colors.border}`,
-    background: colors.panelMuted,
+    /*
+      Phase 7 — the DIALOG's own surface, as the reference paints its `.panel-foot`
+      (`background:var(--surface)`), not the raised one: the rule above it is what separates
+      it from the pane, and a raised band under a sunken pane read as a third surface.
+    */
+    background: colors.panel,
     /*
       🔴 A FLOOR, so the bar's height does not depend on whether this section has buttons.
       Without it a tab carrying none collapses the footer and its TOP EDGE moves — see
@@ -313,6 +340,13 @@ interface ModalProps {
    */
   title: string;
   /**
+   * `RUNTIME-REDESIGN-01` Phase 7 — one line under the title saying what this dialog is SCOPED
+   * to (Station setup: `Channel 1 · Primary A`). Chrome, pinned with the title, rendered
+   * `[data-modal-subtitle]`; see `styles.subtitle`. Pass nodes so a name can sit in its own
+   * `<bdi>` (golden rule 11).
+   */
+  subtitle?: ReactNode;
+  /**
    * The action buttons, built from {@link ModalAction} so the role decides the
    * treatment. CANCEL first in DOM order — the row is right-aligned, so first in
    * DOM is LEFTMOST and the primary/destructive action lands in the same corner of
@@ -399,6 +433,7 @@ const WIDTHS: Record<'prose' | 'wide' | 'fixed', string> = {
 
 export function Modal({
   title,
+  subtitle,
   footer,
   message,
   onClose,
@@ -488,7 +523,16 @@ export function Modal({
         onClick={(e) => e.stopPropagation()}
       >
         <div style={fixed ? { ...styles.titleRow, ...styles.titleRowFixed } : styles.titleRow}>
-          <h2 style={styles.title}>{title}</h2>
+          {subtitle === undefined ? (
+            <h2 style={styles.title}>{title}</h2>
+          ) : (
+            <div style={styles.titleStack}>
+              <h2 style={styles.title}>{title}</h2>
+              <p style={styles.subtitle} data-modal-subtitle="">
+                {subtitle}
+              </p>
+            </div>
+          )}
           {/*
             THE CLOSE AFFORDANCE, in the primitive so EVERY modal has one.
 

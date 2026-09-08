@@ -3593,3 +3593,58 @@ Neither is in `PROMPT.md` §5, and Phase 9 re-dresses the Inspector's chrome any
   falls back to); [[R-011]] (the picker).
 - **Number verification:** as for `R-060` — `R-061` returned no headings anywhere, only the
   registry's prose. **Nothing is implemented by this item.**
+
+## [ ] R-062 — the bridge is single-channel in exactly three places: five bulk verbs take `z.void()`, there is no channel-discovery call, and the fixed bank is the app's only channel authority ⟨priority: medium⟩
+
+**Filed by `RUNTIME-REDESIGN-01` Phase 7 (2026-09-08), from `design.md` §4 as corrected by owner
+answer A3 — a GAP FILED, not a design.** The earlier finding that _"a second channel's rows cannot
+be addressed today"_ was too strong and is withdrawn: `itemId` identifies one stack item = one
+operator row, `StackItemStateSchema.slot` carries `{ channel, layer, server }`, ids are globally
+unique, so `stack.load` / `take` / `update` / `stop` / `out` / `remove` / `setPosition` /
+`setActiveLook` / `swapLiveSource` / `setPlateVolume(s)` are ALREADY channel-agnostic. What is
+single-channel is exactly this:
+
+**What (the three gaps):**
+
+1. **Five verbs take `z.void()`** — `stack.removeAll`, `clearAll`, `stopAll`, `snapshot` and
+   `silenceAllLivePlates` — and therefore mean _"everything the bridge knows about"_. That is the
+   only place on the contract where a channel cannot be named.
+2. **There is no channel-discovery call on the contract.** Nothing asks the bridge which channels
+   exist. The renderer's list today (`features/channels/channelList.ts`, Phase 7) is the union of
+   the two channel sources the bridge already publishes — `fixedLayers.config.channel` and
+   `channelSettings.settings[].channel` — and is the one function a discovery call would feed.
+3. **`fixedLayers` declares ONE bank on ONE channel** (`FixedLayerBankSchema.channel`, documented
+   _"one channel per bank, v1"_), and the bank is the app's channel authority: the strip defaults to
+   it and the Layers section edits it.
+
+**Why it is an item and not a Phase 7 edit:** each is a CONTRACT change (a request shape, a new
+channel, a schema's cardinality) with producers and consumers on both tiers — precisely what
+`PROMPT.md` §7 and §11 forbid a UI phase from inventing in passing. Phase 7 built the UI SHAPE
+(a list, a keyed selection, a per-channel Channel tab) so that closing these is a bridge change
+and not a redesign.
+
+🔴 **The trap, written here so nobody closes gap 1 by widening it:** `silenceAllLivePlates` takes
+no arguments ON PURPOSE. It is PANIC, and the scope of a panic is not the caller's to choose;
+channel-scoping it would CHANGE an emergency control's contract, not widen it. Whether a
+multi-channel plant wants a per-channel panic beside the station-wide one is the OWNER's decision
+and is recorded here as a question, not as a task. The other four bulk verbs are ordinary
+housekeeping and can take an optional channel without changing what a bare call means.
+
+**Acceptance (when this is taken):**
+
+- A channel-discovery channel on the contract (`channels.list` or the settings list carrying it),
+  with `channelIds` reading it FIRST and the two existing sources kept as fallbacks; the strip and
+  Station setup unchanged in shape.
+- `removeAll`, `clearAll`, `stopAll` and `snapshot` accept an OPTIONAL channel; a bare call keeps
+  its meaning byte for byte (every existing test green unchanged).
+- `silenceAllLivePlates` is NOT re-scoped by this item; if the owner wants a per-channel silence it
+  is a NEW verb beside PANIC, never a parameter on it.
+- The bank's cardinality (one bank, one channel) is either kept and stated as the v1 constraint, or
+  changed by its own item naming every producer and consumer of `FixedLayerBankSchema` first.
+
+- **Cross-refs:** `openspec/changes/runtime-redesign-programme/design.md` §4 (the corrected
+  finding, per namespace) and §14 (Phase 7's UI shape); golden rule 10 (a configuration verb is
+  never a playout verb — the bulk verbs' gates must not move); `B-122` (PANIC's scope is the
+  ledger, and status is not asked); [[R-030]] (the channel-keyed settings list this would extend).
+- **Number verification:** `git grep -n "R-062"` over the tree returned nothing before this entry
+  was written. **Nothing is implemented by this item.**

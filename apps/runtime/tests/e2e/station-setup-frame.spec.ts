@@ -74,8 +74,9 @@ test('§2 — the frame does not move as the operator walks the rail', async ({ 
 
   /*
     POSITIVE CONTROL — without it, "every tab is the same" would also pass against a dialog
-    that never rendered, or against five readings of one tab. The frame is the mockup's
-    `min(1000px, 100%)` × `min(680px, 100vh - 48px)`, so at this viewport it is a real,
+    that never rendered, or against five readings of one tab. The frame is the reference's
+    `min(1140px, 100vw - 64px)` × `min(810px, 100vh - 64px)` (`RUNTIME-REDESIGN-01` Phase 7;
+    `station-setup-geometry.spec.ts` asserts the numbers), so at this viewport it is a real,
     NON-ZERO box, and the tabs genuinely differ in how much content they hold.
   */
   const [x, y, w, h] = first.dialog.split(',').map(Number);
@@ -87,6 +88,15 @@ test('§2 — the frame does not move as the operator walks the rail', async ({ 
 
 test('§2 — the BODY scrolls, and its scrollbar is inside the pane', async ({ app }) => {
   const page = app.page;
+  /*
+    `RUNTIME-REDESIGN-01` Phase 7 — measured at the programme's viewport (`PROMPT.md` §0:
+    1280 × 800), which is where the reference's frame was read. Playwright's default 720-tall
+    page gives the `min(810px, 100vh − 64px)` frame only 656 px, and the Delimiters card —
+    intrinsically sized, five rows plus its head and help band — then ends 12 px above the
+    pane's edge: not a stretched card, a short frame. The slack this asserts is a proxy for
+    "not stretched", so it is read where the frame has its measured height.
+  */
+  await page.setViewportSize({ width: 1280, height: 800 });
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
 
   await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
@@ -95,7 +105,7 @@ test('§2 — the BODY scrolls, and its scrollbar is inside the pane', async ({ 
     .getByRole('tab', { name: /^Layers/ })
     .click();
 
-  // The Layers tab is the long one — thirty-four rows against a 680px frame.
+  // The Layers tab is the long one — thirty-four rows against a frame no taller than 810px.
   const pane = dialog.locator('[data-station-pane]');
   const overflow = await pane.evaluate((el) => ({
     scrolls: el.scrollHeight > el.clientHeight,
@@ -112,7 +122,7 @@ test('§2 — the BODY scrolls, and its scrollbar is inside the pane', async ({ 
 
   /*
     ⚠ §2 — A SHORT SECTION MUST NOT STRETCH TO FILL THE FRAME. Delimiters holds five rows in
-    a 680px box, and the correct answer is empty space below the card, not a card grown to
+    a fixed box, and the correct answer is empty space below the card, not a card grown to
     swallow it. Measured as: the card's bottom sits well above the pane's bottom.
   */
   await dialog

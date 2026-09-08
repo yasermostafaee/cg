@@ -1,5 +1,7 @@
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
-import { colors, cssVars } from '../theme.js';
+import type { LucideIcon } from 'lucide-react';
+import { STATION_SETUP_PX, colors, cssVars } from '../theme.js';
+import { Icon } from './Icon.js';
 
 /**
  * R-028 part B — a minimal tab strip, for the Layers / Playout split.
@@ -35,6 +37,12 @@ export interface TabSpec {
    * group render one heading; a tab with no group renders none.
    */
   group?: string | undefined;
+  /**
+   * `RUNTIME-REDESIGN-01` Phase 7 — the rail item's glyph (vertical orientation only), the
+   * reference's `.tab>svg`: 18 px, muted at rest, the accent when selected. DECORATIVE — the
+   * label beside it is the name (see `Icon`), so a tab without one loses nothing.
+   */
+  icon?: LucideIcon | undefined;
 }
 
 interface Props {
@@ -151,7 +159,7 @@ export function Tabs({
   idPrefix = 'tab',
   level = 'inner',
   orientation = 'horizontal',
-  railWidth = '13rem',
+  railWidth = cssVars['--r-setup-rail-w'],
 }: Props): JSX.Element {
   const outer = level === 'outer';
   const vertical = orientation === 'vertical';
@@ -192,6 +200,12 @@ export function Tabs({
                   : { style: active ? { ...base, ...activeStyle } : base })}
                 onClick={() => onSelect(tab.id)}
               >
+                {/* A bare `<svg>`, not a wrapper: the tab's FIRST span stays its label, which is
+                    what `stationSetupTabs.dom.test.ts` reads off the rail. `.cg-rail-tab > svg`
+                    styles it. */}
+                {vertical && tab.icon !== undefined && (
+                  <Icon icon={tab.icon} size={STATION_SETUP_PX.tabIcon} />
+                )}
                 {vertical ? <span className="cg-rail-tab__label">{tab.label}</span> : tab.label}
                 {tab.badge !== undefined && (
                   // The dot is decorative; the LABEL beside it is what a screen

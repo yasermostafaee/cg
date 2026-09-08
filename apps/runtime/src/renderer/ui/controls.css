@@ -2938,3 +2938,387 @@ input[type='checkbox']:disabled:checked {
   line-height: 1.5;
   color: var(--r-text-muted);
 }
+
+/* ── `RUNTIME-REDESIGN-01` Phase 7 — STATION SETUP as rendered ──────────────────── */
+
+/*
+ * `09-channel-settings.html` as RENDERED (Chromium, 1280 × 800; `design.md` §14.3): a 226 px rail
+ * of 44 px icon tabs under 11 px group words, a pane inset 29/32, section heads of a 24 px title
+ * over a 14 px description with the commit contract as a tag, cards of radius 12 with a 16 px
+ * sentence-case head and a 20 px body, and a 74 px footer. Every number is a `--r-setup-*`,
+ * `--r-video-*` or `--r-output-*` token from `STATION_SETUP_PX`; every colour is a role token.
+ *
+ * ⚠ The reference's Station setup carries its OWN palette (a mint accent, its own surfaces) that
+ * is not the console's approved one; nothing of it is transcribed. The rail's rest ink stays FULL
+ * (owner, 2026-09-07 — the group must be the muted one), and the selected wash is the console's.
+ */
+.cg-rail {
+  gap: var(--r-setup-rail-gap);
+  padding: var(--r-setup-rail-pad);
+}
+
+.cg-rail-group {
+  padding: var(--r-setup-group-pad);
+  font-size: var(--r-setup-group-text);
+  font-weight: var(--r-weight-semibold);
+  letter-spacing: var(--r-setup-group-tracking);
+}
+
+.cg-rail-group:first-child {
+  padding: var(--r-setup-group-pad-first);
+}
+
+.cg-rail-tab {
+  min-height: var(--r-setup-tab-min-h);
+  gap: var(--r-setup-tab-gap);
+  padding: var(--r-setup-tab-pad);
+  border-radius: var(--r-setup-tab-radius);
+  font-size: var(--r-setup-tab-text);
+  /* The reference's `.tab{line-height:1.35}`: under the console's inherited 1.55 the label
+     overflowed the 44 px floor to 45 (measured in Chromium), which is exactly the kind of
+     delta a floor hides until a real engine reads it. Unitless, so no scale token owns it. */
+  line-height: 1.35;
+}
+
+/* The tab's glyph: muted at rest, the accent when selected — the reference's `.tab>svg`. */
+.cg-rail-tab > svg {
+  flex-shrink: 0;
+  color: var(--r-text-muted);
+}
+
+.cg-rail-tab[aria-selected='true'] > svg {
+  color: var(--r-accent);
+}
+
+/* The pane's inset — `.panel-scroll{padding:29px 32px 32px}`. */
+.cg-setup-pane {
+  padding: var(--r-setup-pane-pad);
+}
+
+/*
+ * THE SECTION HEAD — `.section-head`: the title as an `h2` (24 px, semibold, tracked in), the
+ * commit LEGEND as the description under it (14 px, muted, 7 px under, capped at 61ch), and the
+ * commit contract as a TAG at the end of the row. The head is 23 px above the first card.
+ */
+.cg-setup-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--r-space-4);
+  margin-bottom: var(--r-setup-head-gap-below);
+}
+
+.cg-setup-title {
+  margin: 0;
+  font-size: var(--r-setup-title-text);
+  font-weight: var(--r-weight-semibold);
+  letter-spacing: var(--r-setup-title-tracking);
+  line-height: 1.3;
+  color: var(--r-text);
+}
+
+.cg-setup-description {
+  margin: var(--r-setup-description-gap) 0 0;
+  max-width: var(--r-setup-description-max-w);
+  font-size: var(--r-setup-description-text);
+  line-height: 1.6;
+  color: var(--r-text-muted);
+}
+
+/* The contract tag — `.tag`: 12 px, medium, `5px 8px`, radius 6, a raised chip. */
+.cg-setup-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-space-1);
+  flex-shrink: 0;
+  margin-top: var(--r-space-1);
+  padding: var(--r-setup-tag-pad);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-setup-tag-radius);
+  background: var(--r-surface-raised);
+  font-size: var(--r-setup-tag-text);
+  font-weight: var(--r-weight-medium);
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--r-text-secondary);
+}
+
+/* The section body: cards 20 px apart. */
+.cg-setup-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-setup-card-gap);
+}
+
+/* ── CARDS, re-measured — `.card{border-radius:12px}` `.card-heading{padding:17px 20px}` … ── */
+.cg-card {
+  border-radius: var(--r-setup-card-radius);
+}
+
+.cg-card__head {
+  gap: var(--r-setup-card-head-gap);
+  padding: var(--r-setup-card-head-pad);
+}
+
+/*
+ * The card's TITLE is a sentence-case 16 px head now, not the small uppercase run — the reference
+ * paints `.card-heading h3{font-size:16px;font-weight:600}` and the owner approved it as drawn.
+ * `STATION-CHROME-02` §3's shouting titles were hand-spelled uppercase WORDS in the markup; the
+ * fix that took them off the markup stands, and the treatment moves to what was approved.
+ */
+.cg-card__title {
+  font-size: var(--r-setup-card-title-text);
+  font-weight: var(--r-weight-semibold);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--r-text);
+}
+
+.cg-card__body {
+  padding: var(--r-setup-card-body-pad);
+}
+
+.cg-card__body--table {
+  padding: 0;
+}
+
+/* The explanatory sentence is the card's HELP band: a rule above, its own inset, the sunken ground. */
+.cg-card__note {
+  padding: var(--r-setup-card-help-pad);
+  border-top: 1px solid var(--r-table-rule);
+  background: var(--r-surface-sunken);
+  font-size: var(--r-setup-card-help-text);
+  line-height: 1.6;
+}
+
+/* A `<details>` beneath a card — `.helper-details`: 13 px, muted, its paragraph 9 px under. */
+.cg-setup-details {
+  font-size: var(--r-setup-details-text);
+  color: var(--r-text-muted);
+}
+
+.cg-setup-details > summary {
+  cursor: pointer;
+  width: fit-content;
+  color: var(--r-text-secondary);
+}
+
+.cg-setup-details > p {
+  margin: var(--r-setup-details-body-gap) 0 0;
+  max-width: var(--r-setup-details-max-w);
+  line-height: 1.7;
+}
+
+/* ── THE VIDEO-FORMAT CARD — `.video-card` ─────────────────────────────────────── */
+.cg-video-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--r-video-head-pad);
+}
+
+.cg-video-eyebrow {
+  font-size: var(--r-video-eyebrow-text);
+  font-weight: var(--r-weight-semibold);
+  letter-spacing: var(--r-setup-group-tracking);
+  text-transform: uppercase;
+  color: var(--r-text-muted);
+}
+
+/* `CH 01` — the channel token, mono, in a hairline chip. */
+.cg-video-token {
+  padding: var(--r-video-token-pad);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-video-token-radius);
+  font-family: var(--r-font-mono);
+  font-size: var(--r-video-token-text);
+  color: var(--r-text-secondary);
+}
+
+.cg-video-mode {
+  display: flex;
+  align-items: baseline;
+  gap: var(--r-video-mode-gap);
+  padding: var(--r-video-mode-pad);
+}
+
+.cg-video-mode__word {
+  font-size: var(--r-video-mode-text);
+  font-weight: var(--r-weight-medium);
+  letter-spacing: var(--r-video-mode-tracking);
+  line-height: 1.25;
+  color: var(--r-text);
+}
+
+.cg-video-mode__scan {
+  font-size: var(--r-video-scan-text);
+  color: var(--r-text-secondary);
+}
+
+/* The metrics — a three-column `dl` behind a rule, each metric inset behind its own hairline. */
+.cg-video-metrics {
+  display: grid;
+  grid-template-columns: 1.1fr 0.75fr 1fr;
+  margin: var(--r-video-metrics-margin);
+  padding: var(--r-video-metrics-pad);
+  border-top: 1px solid var(--r-table-rule);
+}
+
+.cg-video-metric {
+  padding-left: var(--r-video-metric-inset);
+  border-left: 1px solid var(--r-table-rule);
+  min-width: 0;
+}
+
+.cg-video-metric:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.cg-video-metric > dt {
+  margin-bottom: var(--r-video-metric-gap);
+  font-size: var(--r-video-metric-text);
+  color: var(--r-text-muted);
+}
+
+.cg-video-metric > dd {
+  margin: 0;
+  font-size: var(--r-video-metric-value-text);
+  font-weight: var(--r-weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--r-text);
+  overflow-wrap: anywhere;
+}
+
+.cg-video-metric > dd.cg-video-metric__mono {
+  font-family: var(--r-font-mono);
+  font-size: var(--r-video-scan-text);
+}
+
+/* ── THE OUTPUTS BLOCK — `.outputs` ──────────────────────────────────────────── */
+.cg-output-block {
+  margin-top: var(--r-output-gap-above);
+}
+
+.cg-output-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--r-space-3);
+  margin-bottom: var(--r-output-head-gap);
+}
+
+.cg-output-head > h3 {
+  margin: 0;
+  font-size: var(--r-output-title-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-text);
+}
+
+/* One check's line — `Channel 1 on server A — checked …` — with its count tag at the row's end. */
+.cg-output-check {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--r-space-3);
+  margin: var(--r-space-3) 0 var(--r-space-2);
+  font-size: var(--r-output-state-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-text);
+}
+
+/* One row per DECLARED consumer: `Slot · Configured output · Runtime status`. */
+.cg-output-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--r-output-td-text);
+}
+
+.cg-output-table th {
+  padding: var(--r-output-th-pad);
+  border-bottom: 1px solid var(--r-border);
+  background: var(--r-surface-sunken);
+  text-align: start;
+  font-size: var(--r-output-th-text);
+  font-weight: var(--r-weight-medium);
+  color: var(--r-text-muted);
+  white-space: nowrap;
+}
+
+.cg-output-table td {
+  padding: var(--r-output-td-pad);
+  border-bottom: 1px solid var(--r-table-rule);
+  vertical-align: middle;
+  color: var(--r-text);
+}
+
+.cg-output-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.cg-output-table tbody tr:hover td {
+  background: var(--r-table-row-hover);
+}
+
+.cg-output-table th:first-child,
+.cg-output-table td:first-child {
+  width: var(--r-output-slot-col-w);
+}
+
+/* A missing row wears a caution wash; the alarm ink is on the status word (`--r-error-text`). */
+.cg-output-table tr[data-output-row='missing'] td {
+  background: var(--r-caution-bg);
+}
+
+.cg-output-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--r-output-slot-w);
+  height: var(--r-output-slot-h);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-output-slot-radius);
+  background: var(--r-surface-raised);
+  font-family: var(--r-font-mono);
+  font-size: var(--r-output-slot-text);
+  color: var(--r-text-secondary);
+}
+
+.cg-output-name {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-output-name-gap);
+  font-weight: var(--r-weight-medium);
+}
+
+.cg-output-name > svg {
+  color: var(--r-text-muted);
+}
+
+.cg-output-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-output-state-gap);
+  font-size: var(--r-output-state-text);
+  white-space: nowrap;
+  color: var(--r-ok-text);
+}
+
+/* Missing: a PROGRAM output takes the alarm word's ink (2A); a local monitor the caution. */
+.cg-output-state[data-output-state='missing'][data-output-row-severity='air'] {
+  color: var(--r-error-text);
+}
+
+.cg-output-state[data-output-state='missing'][data-output-row-severity='local'] {
+  color: var(--r-caution-text);
+}
+
+/* The engineering detail beneath the table — B-223's rows, unchanged in words. */
+.cg-output-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-1);
+  margin-top: var(--r-output-note-gap);
+  font-size: var(--r-output-note-text);
+  line-height: 1.6;
+}

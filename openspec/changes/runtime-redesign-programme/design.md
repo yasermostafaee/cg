@@ -426,6 +426,21 @@ displays `entry.actor`. Owed by **Phase 8**:
 `apps/runtime/tests/auditPanel.actorColumn.dom.test.ts`, asserting the header, a row's value, and
 the caveat beside them.
 
+### Closed by evidence — added in Phase 7 by owner question A15
+
+**28. The audio dialog's MUTE button** (`LivePlateAudioDialog.tsx` at `c5d07d9a~1`, lines
+227–241) — **CLOSED, a DELIBERATE removal, decided at the wire (`§14.0`).** Phase 6 removed it to
+the reference's MUTE-less verb row and called it "OFF's twin" without evidence beside the claim;
+A15 asked for the evidence. It is: MUTE's handler was `commit({ [plate.sourceId]: 0 })` and OFF's
+is `commit({ [plate.sourceId]: 0 })` — the same map through the same channel
+(`stack.setPlateVolumes`) to the same bridge method (`setLivePlateVolume(item, plate, 0)`) to the
+same and only audio verb the builder has (`mixerVolume` → `MIXER c-l VOLUME 0`); the same intent
+record (`#plateVolumes`), published as `StackItemState.plateVolumes`, adopted at boot and
+re-asserted at every seat; no mute flag anywhere in the schema, the ledger, retention or the
+persisted-key census. Not lost by accident: OFF reaches every state MUTE reached and one more (a
+silent plate can be told OFF, which re-sends the same `VOLUME 0`). Its tests were re-pointed to
+OFF in Phase 6 (`livePlateAudio.dom.test.ts`). Nothing to add back.
+
 ### Recorded as NOT at risk
 
 Checked and found DRAWN by the reference, so no guard entry is owed: the backup-server editor
@@ -498,6 +513,12 @@ the owner's call, and Phase 7 must not make it in passing.
 whose length is data; key browser-local per-channel UI state (selected tab, panel geometry) by
 channel id; and leave every bridge call exactly as it is, on the one channel the bank declares. The
 gap above is what a multi-channel bridge would have to close, and closing it is not this programme.
+
+✅ **FILED by Phase 7 (2026-09-08) as `R-062`** — the three gaps as one PRD item, with the trap
+written into its acceptance: `silenceAllLivePlates` is not re-scoped by that item either; its scope
+is the owner's decision, recorded there as a question and not as a task. Phase 7 built what this
+paragraph allows (`§14.2`) and nothing on the bridge: `git diff --stat` over `tools/caspar-bridge`
+is empty and over `packages/shared-ipc` is one pure token helper (`videoModeScan`).
 
 ## §5 — OPEN QUESTION FOR THE OWNER (B): the audit actor after the picker
 
@@ -1542,3 +1563,295 @@ strip below` → `audio is on this row`, the strip having moved beside the row);
   _"audible on air"_ was REPLACED by the ledger's word, not reworded.
 - It did not measure any geometry in jsdom: every box is in `live-plate-audio-access.spec.ts`.
 - Numbers taken: none new. `R-060` closed (A13), `R-061` split (A14 — (a) done, (b) parked).
+
+## 14 — Phase 7: Settings and channels
+
+The record for `PROMPT.md` §7 and for owner question A15, which was answered BEFORE the phase
+work: A15 at the wire; what contradicted the prompt; what was built and where each per-channel
+and station-wide fact is read from; the reference measured in a browser and counted by its
+waves, every delta fixed or argued; the red-first matrix; the guard (item 28 closed); the three
+gaps filed; and what was not done.
+
+### 14.0 🔴 A15 — MUTE's removal, decided by what reaches the wire
+
+Phase 6 removed MUTE from the audio dialog and reported it as a "Fixed" row. §6's own
+`ON = 100 % · OFF = 0 %` sanctions a two-state model, but MUTE was a control the app HAD and the
+reference does NOT draw — the exact deletion-by-omission class the guard exists to catch — and it
+was not named as a removal. Established from the tree at `c5d07d9a~1` (the commit before Phase 6)
+and at `HEAD`, not decided by preference:
+
+**1. What MUTE sent, and what OFF sends now — the same command.**
+
+| control     | handler at `c5d07d9a~1` (`LivePlateAudioDialog.tsx`)     | reaches                                                            |
+| ----------- | -------------------------------------------------------- | ------------------------------------------------------------------ |
+| MUTE (:234) | `commit({ [plate.sourceId]: 0 })`, `disabled={!audible}` | `onApplyVolumes` → `stack.setPlateVolumes` → `setLivePlateVolumes` |
+| OFF (:283)  | `commit({ [plate.sourceId]: 0 })`                        | the same three                                                     |
+
+Both maps arrive at `CasparRuntime.setLivePlateVolumes(itemId, volumes)`, which calls
+`setLivePlateVolume(itemId, plateId, 0)` per plate (`caspar-runtime.ts:7699-7710`), and that method
+sends exactly one thing when a seat exists and is not held: `this.#builder.mixerVolume(record.slot,
+0)` (`:7489-7493`), which is **`MIXER {channel}-{layer} VOLUME 0`** (`command-builder.ts:231-233`).
+That is the bridge's ONLY audio verb: `git grep -n "MUTE" -- packages/caspar-client/src
+tools/caspar-bridge/src packages/amcp-mock/src` finds `CREATED_MUTED_VOLUME = 0` (a VOLUME value),
+`ADD_MUTE_FAILED` (the error code for a `MIXER VOLUME 0` that did not land before a `CG ADD`), and
+prose — no flag, no second command. **A mixer mute flag and a `VOLUME 0` are indeed different
+things, and the tree has never emitted the former.** The `silencing` gate (`:7481`) treats both
+buttons' `0` identically: a silence is never gated on `#ownsLiveSeats`, so MUTE and OFF reached the
+wire under the same condition.
+
+**2. Nothing reads, persists, restores or re-asserts a mute FLAG — every path reads the VALUE.**
+
+- The intent record is `#plateVolumes: Map<itemId, LivePlateVolumes>` (`:1049`), written by
+  `setLivePlateVolume` for MUTE and OFF alike (`:7510`, `{ ...prev, [plateId]: volume }`).
+- The ledger's as-sent copy is `record.intendedVolume` (`:7500-7507`), written only after the
+  `VOLUME` landed.
+- Retention and restore: the item publishes `plateVolumes` on `StackItemState` (`:1953`), and the
+  bridge adopts it back at boot from the same field (`:2521-2522`). The mock's persisted keys are
+  the census's four `cg-runtime:*` names; none is a mute.
+- Re-assert: `#applyLivePlates` reads `intent[plateId] ?? CREATED_MUTED_VOLUME` at every seat
+  (`:6318`, `:6441`); a held seat is parked at `CREATED_MUTED_VOLUME` whatever the intent says
+  (`:6497`). `#reassertDeclaredVolumes` (`:3604-3612`) blankets the BANK's rows with
+  `INTENDED_VOLUME` and never addresses a plate layer (they lie below the band, by the
+  `low-bank-not-below-band` rule its own header cites). R-022's `#rehearsing … muted: boolean`
+  (`:1215`) records whether ENTRY's `MIXER VOLUME 0` landed on a TEMPLATE layer — a different
+  subject and a different layer.
+- The schemas: `StackItemStateSchema` carries `plateVolumes` (a record of numbers); `LiveLayerState`
+  carries `intendedVolume` and `held`; no field named mute exists in `packages/shared-ipc/src`.
+  So a reconnect, a boot adoption or a look switch restores `plateVolumes[plate] = 0` identically
+  whichever button wrote it: **the two cannot part on a re-assert, because there is one record.**
+
+**3. Was any operator state expressible under MUTE that is not under OFF? No — the reverse.**
+MUTE's reachable transition was `value > 0 → 0` (its `disabled={!audible}`); OFF's is
+`any → 0`. OFF's set contains MUTE's. The one observable delta runs the other way: OFF on an
+already-silent SEATED plate re-sends one `MIXER … VOLUME 0` (idempotent; MUTE was disabled there
+and sent nothing). Wording: `aria-label="Mute X"` became `Silence X`, nothing translated.
+
+**Verdict: OFF is exactly equivalent at the wire and in every store.** MUTE's removal is recorded
+as DELIBERATE — guard item **28, CLOSED** (§3) — so no later reader thinks it was lost by
+accident. The dialog's own header already argued the removal ("two names for one write");
+this section is the evidence that was missing beside it. Nothing was restored.
+
+### 14.1 What contradicted the prompt — and what did not
+
+- **"Station setup … lacks only OutputsSection" is not what the tree says.** The app has had
+  `OutputsSection` since `B-223` (17 dom cases, two e2e), on the Channel tab since
+  `STATION-CHROME-01` §4. What it lacked was the reference's SHAPE — a `Slot · Configured output ·
+Runtime status` table with a `N of M running` count — over a prose line. So "OutputsSection in"
+  meant RE-SHAPE, keeping every B-223 row beneath the table (14.3). The section set matched
+  one-for-one, as the prompt said.
+- **The reference's Station setup is a SEPARATE prototype**, not a pane of the console one:
+  `createStationSetup(host, adapter)` renders into a shadow root with its own 402-rule stylesheet
+  and its OWN PALETTE (`--surface #15191f`, a mint `--accent #8ce6d1`, its own ambers and reds)
+  that is not the console's approved palette. §0's rule was applied as written — measured in the
+  browser, only geometry transcribed, every colour a role token; the mint stays on healthy (A4).
+  The OUTER document carries four `.channel-modal` and three `.channel-settings-grid` rules for an
+  element the page never emits — the same dead-wave class Phase 3 met; nothing was read from them.
+- **The prototype's channel list IS a catalogue** (`channelCatalog = [{id:1,name:'News',…},
+{id:2,'Sports'},{id:3,'Clean feed'}]`, a `#channel-select` in the console head, one
+  `stationSetupInstances` entry per channel, `stationShared` for the servers, sources and
+  delimiters). That is the shape §7 asks for and 14.2 builds — with no NAME, because the bridge
+  publishes none and none is invented (A3).
+- **The Channel pane carries `Default sources · this channel`** — `t.defaultSources`, the
+  prototype's own template shape, ruled out by §0. NOT built; argued in 14.3.
+- **The app's fixed frame came from the ABANDONED mockups** (A2): `min(1000px, 100%)` ×
+  `min(680px, 100vh − 48px)` and a 59 px footer floor were `STATION-CHROME-02`'s transcription of
+  `docs/design/station-setup-redesigned.html`. The reference as rendered is `min(1140px, 100vw −
+64px)` × `min(810px, 100vh − 64px)` with a 74 px footer. FIXED, through the same tokens; the
+  two-edge property (`station-setup-frame.spec.ts`) is about ONE box on every tab and holds at
+  either size. The mockups themselves are not chased (`§6`, A2 — one line, as §7 asks).
+- **What did NOT contradict:** §4's corrected finding (A3) — `itemId` is one row, `slot` carries
+  `{channel, layer, server}`, the per-row verbs are channel-agnostic; the three real gaps are
+  exactly as listed; and `silenceAllLivePlates` stays `z.void()` — untouched, by diff.
+
+### 14.2 What was built, and where each fact is read from
+
+🔴 **PER-CHANNEL, keyed by channel id:** the channel strip (`ChannelScope`) is
+`channelIds(bank, settings)` — the union of `fixedLayers.config.channel` and every
+`channelSettings.settings[].channel`, the two channel sources the bridge already publishes —
+and its selection is a channel ID in `channelStore` (session-only; not persisted, no key).
+Station setup's Channel tab reads the SAME resolution (`useSelectedChannel`) and reports that one
+channel: its raster and verdict (`channelSettings`), and its outputs (`connections.health`,
+filtered to the channel per server). The dialog's subtitle names it — `Channel N · Primary A`.
+🔴 **STATION-WIDE, and never reading the selection:** Servers (`connections.config`), Live sources
+(`sources.*`), Text file delimiters (`delimiters.*`), Layers (`fixedLayers.*` — ONE bank, gap 3),
+templates and the lock. Proved as IDENTICAL DOM text under channel 1 and channel 2
+(`stationSetupChannelKeyed.dom.test.ts`, with a positive control on the text's length).
+
+| piece             | where                                                                                                                                                                                                                                                                                                                                              |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the channel list  | `features/channels/channelList.ts` — `channelIds` (union, de-duplicated, sorted; `[1]` when nothing is declared; `observed` deliberately not a source) and `resolveSelectedChannel` (choice → bank → first)                                                                                                                                        |
+| the choice        | `features/channels/channelStore.ts` — a channel id or `null`, `useSyncExternalStore`, test seam                                                                                                                                                                                                                                                    |
+| the one read      | `features/channels/useSelectedChannel.ts` — `{ channels, selected }`, used by the strip AND the dialog                                                                                                                                                                                                                                             |
+| the strip         | `ChannelScope.tsx` — one `CHANNEL N` tab per channel, `idPrefix="channel"`, `level="outer"`; with one channel it renders what it did                                                                                                                                                                                                               |
+| the dialog        | `StationSetupDialog.tsx` — `subtitle` (`Channel N · Primary A`), rail icons (`SECTION_ICONS`, lucide), the pane class, the footer text token                                                                                                                                                                                                       |
+| the Channel tab   | `ChannelSection.tsx` — the video-format card for the selected channel (`data-raster-channel`, `CH 01`, mode word + scan, `Resolution · Frame rate · Server mode`, then `Declared by · Check`), the "why read only" details, `OutputsSection` with `channel`                                                                                        |
+| the mode words    | `stationSetup/videoModeWords.ts` over `@cg/shared-ipc`'s `videoModeRaster` / `videoModeScan` (new, beside `videoModeFramePeriodMs` — one token grammar) / `videoModeFramePeriodMs`; an unreadable token prints its gap in every column                                                                                                             |
+| the outputs table | `connections/OutputsSection.tsx` — per server, per (selected) channel: the check line with a `N of M running` tag, a `Slot · Configured output · Runtime status` table (one row per DECLARED consumer, verdict counted PER KIND as `MissingConsumer` is, `data-output-row`, severity attribute), then every B-223 row unchanged in a detail column |
+| the section head  | `SetupSection.tsx` — `h2` title, the legend as description, the contract as a tag (`contractTag` in `sections.ts`: `Read only` · `Apply together` · `Auto-save`)                                                                                                                                                                                   |
+| the primitives    | `Modal.tsx` — `subtitle` prop (`[data-modal-subtitle]`), the fixed head's floor and padding, the fixed foot's padding, gap and surface; `Tabs.tsx` — `TabSpec.icon` (a bare `<svg>`, so a tab's first span stays its label), the rail width from the token home                                                                                    |
+| the tokens        | `STATION_SETUP_PX` → `--r-setup-*` (43), `--r-video-*` (19), `--r-output-*` (22), `--r-modal-*-fixed` / `--r-modal-subtitle-*` (7), `--r-font-mono`; the frame and `--r-modal-foot-h` re-pointed; read by `controls.css`'s Phase 7 block and the components; no colour literal                                                                     |
+| proofs            | `channelList.test.ts` (6), `channelScope.dom.test.ts` (4), `stationSetupChannelKeyed.dom.test.ts` (5), `outputsSection.dom.test.ts` (+6 = 22), e2e `station-setup-geometry.spec.ts` (2, Chromium), `pgm-output-missing.spec.ts` (+3 lines), `station-setup.spec.ts` re-pointed to the `Video format` region                                        |
+
+### 14.3 🔴 THE MEASURED PROPERTY TABLES — rendered reference vs app, every delta FIXED or ARGUED
+
+The reference column is Chromium at 1280 × 800 on `09-channel-settings.html` opened as a file,
+its `data-start="channels"` opening the dialog, a scratch script reading `getComputedStyle` and
+`getBoundingClientRect` through the shadow root (hovering where a hover is quoted). The app column
+is the token the surface reads, asserted against the page by `station-setup-geometry.spec.ts`
+(Chromium, 1280 × 800) — never jsdom. "Palette" means the reference's OWN palette, which is not
+the console's; the role token stands.
+
+**The frame and its chrome**
+
+| property       | reference (rendered)                                                                                                                                   | app (after this phase)                                                                                                                                      | verdict                                                                                                                                                                                             |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| frame          | 1140 × 736 (`min(1140px, 100vw − 64px)` × `min(810px, 100dvh − 64px)`), radius 16, a 100 px shadow                                                     | **1140 × 736** (`--r-modal-w-fixed` / `--r-modal-h-fixed`)                                                                                                  | **FIXED** (was 1000 × 680, the abandoned mockup's); ARGUED: radius and shadow are the modal primitive's, shared by every dialog                                                                     |
+| head           | 90 px floor, `21px 28px`, gap 14, rule below; a 44 px emblem; title 19 px / 650; `Preview` tag                                                         | **90 floor, `21px 28px`, gap 14**, rule below; the primitive's title                                                                                        | **FIXED** (floor, padding, gap); ARGUED: the emblem and the `Preview` tag are the prototype's furniture; the title rank is the primitive's one treatment                                            |
+| subtitle       | `Channel 1 · News · Primary A`, 13 px muted, 3 px under the title                                                                                      | **`Channel 1 · Primary A`, 13 px muted, 3 px under** (`[data-modal-subtitle]`)                                                                              | **FIXED** (built — the `Modal` gained a `subtitle`); ARGUED: no channel NAME — the bridge publishes none and none is invented (A3)                                                                  |
+| head status    | `● 3 on air` in mint                                                                                                                                   | not adopted                                                                                                                                                 | ARGUED (A12): a second claim about air, in the healthy hue; the Servers refusal already carries the count where it matters                                                                          |
+| close          | 38 × 38 icon button                                                                                                                                    | the primitive's 30 × 30 `✕`                                                                                                                                 | ARGUED: the primitive's close, shared by every dialog                                                                                                                                               |
+| body           | `226px minmax(0,1fr)`                                                                                                                                  | rail **226** (`--r-setup-rail-w`) + pane                                                                                                                    | **FIXED** (was 13rem = 208)                                                                                                                                                                         |
+| rail           | `24px 14px 18px`, sunken ground, rule right, gap 4                                                                                                     | **`24px 14px 18px`**, `--r-surface-sunken`, rule right, **gap 4**                                                                                           | **FIXED**                                                                                                                                                                                           |
+| group word     | 11 px / 600 / .11em uppercase muted; `0 13px 7px` first, `18px 13px 7px` after; `Playout · Content · Workspace`                                        | **11 px / 600 / .11em** uppercase muted, **the same paddings** + the app's hairline rule above later groups; `Playout · Content · Layers`                   | **FIXED** (size, tracking, paddings); ARGUED: the rule above a group is the owner's own (2026-09-07) and stays; `Layers` is the app's group word                                                    |
+| tab            | 44 min-height, `11px 12px`, gap 11, radius 8, 14 px; secondary ink at rest; hover `#1c222b` + full ink; selected `#20322f` / `#314b45` / `#c8f9ed` 550 | **44, `11px 12px`, gap 11, radius 8, 14 px**; full ink at rest (owner); hover `--r-rail-hover-fill`; selected `--r-rail-selected-*`, medium                 | **FIXED** (box, padding, gap, radius, size); ARGUED: rest ink is the owner's decision; selected and hover fills are the console's tokens (palette)                                                  |
+| tab glyph      | 18 px, muted, the accent when selected                                                                                                                 | **18 px** (`Icon`, lucide `Monitor · Server · Radio · Type · Layers`), muted, `--r-accent` when selected                                                    | **FIXED** (built)                                                                                                                                                                                   |
+| tab words      | `Channel · Servers · Live sources · Text delimiters · Layers`                                                                                          | `Channel · Servers · Live sources · Text file delimiters · Layers`                                                                                          | ARGUED: `Text file delimiters` is the app's name (pinned by five tests) and says what the list is for; nothing reworded                                                                             |
+| tab marks      | a mint count chip (unapplied), an amber lock glyph (blocked) + sr text                                                                                 | the sky dot (edited), the amber dot (blocked) + sr text (`data-tab-badge`)                                                                                  | ARGUED: `STATION-CHROME-01` §2's two dots express the same two states and are pinned by `stationSetupTabs`                                                                                          |
+| sidebar foot   | a station card (`A · Primary server · 192.168.21.114`) and a preview note                                                                              | not adopted                                                                                                                                                 | ARGUED: the primary and its host are on the status bar; the rail must stay short enough to stand still (`station-setup-frame` asserts it does not scroll); the primary goes in the subtitle instead |
+| pane           | `29px 32px 32px`                                                                                                                                       | **`29px 32px 32px`** (`--r-setup-pane-pad`)                                                                                                                 | **FIXED** (was `1rem 1.1rem 1.25rem`)                                                                                                                                                               |
+| section head   | `h2` 24 px / 650 / −.035em; description 14 px muted, 7 under, `max-width 61ch`; a tag; 23 px below                                                     | **`h2` 24 px / 600 / −.035em; description 14 px muted, 7 under, 61ch; the contract tag; 23 below**                                                          | **FIXED** (was a 0.95rem `h3` and a 0.72rem legend); ARGUED: 650 → 600 (the weight scale)                                                                                                           |
+| contract tag   | `.tag` 12 px / 550, `5px 8px`, radius 6, raised chip: `Read only` · `Apply together` · `Auto-save`                                                     | **12 px / 500, `5px 8px`, radius 6**, `--r-surface-raised`, the same three words from `contractTag`                                                         | **FIXED** (built); ARGUED: 550 → 500                                                                                                                                                                |
+| footer         | 74 floor, `15px 32px`, gap 14, rule above, the dialog's own surface; message 13 px muted with a glyph; `Close` / `Revert` + `Apply …`                  | **74 floor (`--r-modal-foot-h`), `15px 32px`, gap 14**, rule above, `--r-surface`; contract 13 px; the app's footer rule (`Revert` + `Apply …`, or nothing) | **FIXED** (floor, padding, gap, surface, size); ARGUED: the glyph (the `B-239` label must recede); the per-section `Close` was retired by `B-240`                                                   |
+| footer buttons | 40 px, `9px 15px`, radius 8, 14 px / 550                                                                                                               | the modal action family (36 px floor)                                                                                                                       | ARGUED: one button family across every dialog; a taller floor is a token flip on `--r-btn-*`, not this dialog's                                                                                     |
+
+**The Channel pane**
+
+| property        | reference (rendered)                                                                                                                                                                   | app (after this phase)                                                                                                                                                                                         | verdict                                                                                                                                 |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| description     | `Video format and outputs reported by the server.` · tag `Read only`                                                                                                                   | the section legend (`Read-only — reported by the server, not set here.`) · tag `Read only`                                                                                                                     | **FIXED** (shape); ARGUED: the app's sentence, nothing reworded                                                                         |
+| video card      | radius 12, a green-tinted gradient, `.video-heading{padding:19px 22px 0}`                                                                                                              | **radius 12** (`--r-setup-card-radius`), `--r-surface-sunken`, **`19px 22px 0`**                                                                                                                               | **FIXED** (radius, paddings); ARGUED: the tint is the prototype's palette                                                               |
+| eyebrow · token | `VIDEO FORMAT` 11 px / 600 / .11em; `CH 01` 12 px mono `5px 8px` radius 6                                                                                                              | **the same** (`--r-video-eyebrow-text`, `--r-video-token-*`, `--r-font-mono`)                                                                                                                                  | **FIXED** (built)                                                                                                                       |
+| mode word       | `1080i` 46 px / 550 / −.055em + `Interlaced` 13 px; `5px 22px 21px`, gap 12                                                                                                            | **`1080i` 46 px / 500 / −.055em + `Interlaced` 13 px; `5px 22px 21px`, gap 12**                                                                                                                                | **FIXED** (built, from `videoModeScan`); ARGUED: 550 → 500                                                                              |
+| metrics         | `Resolution · Frame rate · Server mode`; `1.1fr .75fr 1fr`, `0 22px`, `17px 0 20px`, rule above; `dt` 12 px muted (5 under), `dd` 15 px / 500, mono 13 px; each inset 22 behind a rule | **the same three, the same grid, paddings, ranks and rules** — then `Declared by · Check` in a second row                                                                                                      | **FIXED** (built); the second row is the app's own (`B-236`), kept by the guard — the reference draws neither                           |
+| frame rate      | `25 fps · 50 fields/s` for an interlaced mode, `50 fps` for progressive                                                                                                                | **the same words**, from `videoModeFramePeriodMs`                                                                                                                                                              | **FIXED**; displayed, never modelled (`channelSettings.ts` keeps rate out of the schema on purpose)                                     |
+| why read-only   | a `<details>` — `Why is the video format read only?` — 13 px, 17 above                                                                                                                 | **a `<details>` with the same summary**, the app's own paragraph inside, 13 px, 17 above                                                                                                                       | **FIXED** (shape; the sentence is the app's, unchanged)                                                                                 |
+| default sources | `Default sources · this channel` — a template select and one field per frame, `Save defaults`                                                                                          | not built                                                                                                                                                                                                      | ARGUED (§0): `t.defaultSources` is the prototype's template shape; the real per-look inputs live on the row and in the Inspector        |
+| outputs head    | `Outputs` 16 px / 600 · tag `2 of 3 running`; 26 above, 13 below                                                                                                                       | **`Outputs` 16 px / 600 · `N of M running` per check (`data-output-count`); 26 above, 13 below**                                                                                                               | **FIXED** (built)                                                                                                                       |
+| outputs table   | in a radius-12 card; `th` 12 px / 450 `12px 18px` on the sunken ground, rule; `td` 14 px `15px 18px`, soft rule; slot column 80; hover `#1d242d`                                       | **in a card; `th` 12 px / 500 `12px 18px` sunken, rule; `td` 14 px `15px 18px`, `--r-table-rule`; slot 80; hover `--r-table-row-hover`**                                                                       | **FIXED** (built); ARGUED: 450 → 500                                                                                                    |
+| table words     | `Slot · Configured output · Runtime status`; `01` · `DeckLink 1` · `DeckLink 1 running` / `Not running`                                                                                | **the same head**; `01` · `decklink (device 23487013)` · `Running` / `Not running`                                                                                                                             | **FIXED** (head, rows); ARGUED: the configured output is named as `missingWords` names it — the kind and device the banner already says |
+| slot chip       | 29 × 28 mono 12 px radius 6 raised                                                                                                                                                     | **29 × 28 mono 12 px radius 6**, `--r-surface-raised`                                                                                                                                                          | **FIXED**                                                                                                                               |
+| kind glyph      | 17 px muted (`card · monitor · radio`)                                                                                                                                                 | **17 px muted** (`CreditCard · Monitor · Radio · Film · Volume2 · Lightbulb · Cable`)                                                                                                                          | **FIXED**                                                                                                                               |
+| status word     | 13 px, gap 7, a 15 px glyph; mint when running; AMBER `Not running` (on an NDI — an AIR kind)                                                                                          | **13 px, gap 7, 15 px glyph**; `--r-ok-text` running; **`--r-error-text` for a missing PROGRAM output**, `--r-caution-text` for a local monitor                                                                | **FIXED** (box); ARGUED (A4, 2A): alarm severity by air-criticality — the reference's amber on an air loss is the drawing being wrong   |
+| missing row     | an amber wash (`#28241d40`)                                                                                                                                                            | `--r-caution-bg`                                                                                                                                                                                               | **FIXED** (palette)                                                                                                                     |
+| output note     | `NDI is configured but inactive.` (amber, 500) `Review output slot 3 on the server.` 13 px, 12 above                                                                                   | the B-223 AIR row (`AIR — decklink (device …) declared and not running. Nothing on this channel reaches air.`) + the addressing line, the restart paragraph, the recipe, the creation outcome; 13 px, 12 above | **FIXED** (place, size); ARGUED: the words are `B-223`'s, every one pinned; the guard keeps them                                        |
+| how identified  | a `<details>` — `How are outputs identified?`                                                                                                                                          | **a `<details>` with the same summary**, carrying the app's own `INFO CONFIG` / `INFO <channel>` sentence and the severity sentence                                                                            | **FIXED** (shape)                                                                                                                       |
+| channel line    | none (one instance per channel)                                                                                                                                                        | `Channel 1 on server A — checked hh:mm:ss` per check                                                                                                                                                           | ARGUED: `R-028` keeps the coordinate in the sentence; two servers can check one channel                                                 |
+
+**Cards on every tab** (the shared `.cg-card` rhythm, so Servers, Live sources, Delimiters and
+Layers moved with it): radius 12 (was 6) — **FIXED**; head `17px 20px`, gap 12, its title 16 px /
+600 sentence case (was a 0.72rem uppercase run) — **FIXED**; body 20 px (was 12) — **FIXED**;
+the note as a HELP band (`14px 20px`, 13 px, rule above, sunken ground) — **FIXED**; 20 px between
+cards — **FIXED**. Those tabs' own bodies (fields, lists, the band editor, the layer table) were
+NOT re-measured in this phase: §7 is the dialog and the Channel pane, and each of those bodies is
+a section `STATION-CHROME-02` built to the (now abandoned) mockups with its own tests. Stated as
+not done in 14.8.
+
+**What the owner will see change on screen:** SETTINGS opens a larger frame (1140 wide) whose
+title carries `Channel 1 · Primary A` beneath it; the rail is wider, its five tabs taller with a
+glyph each; every section is headed by a big title with its legend under it and a `Read only` /
+`Apply together` / `Auto-save` tag at the right; the cards have rounder corners, a sentence-case
+head and more room; the footer is taller. The Channel tab is a video-format card — `CH 01`, a large
+`1080i · Interlaced`, `Resolution · Frame rate · Server mode`, then `Declared by · Check` — a
+collapsed "Why is the video format read only?", and an Outputs block that, on the plant, draws a
+`Slot · Configured output · Runtime status` table with a `2 of 3 running` tag and a marked row
+for the missing DeckLink, the B-223 detail beneath it. Above the workspace, `CHANNEL 1` is the
+same one tab it was.
+
+### 14.4 The waves, counted — how the reference was read
+
+The dialog's stylesheet is the shadow root's ONE sheet, 402 rules. Counted from its CSSOM:
+`.settings` **17** (7 unconditional, 10 under `@media`), `.tab` **12** (8 + 4), `.card` 12 (9 + 3),
+`.metric` 13 (5 + 8), `.output-table` 9 (1 + 8), `.notice` 9, `.btn` 12 (11 + 1), `.video-mode` 6
+(3 + 3), `.foot-message` 6 (4 + 2), `.panel-foot` 5 (1 + 4), `.sidebar` 5 (2 + 3), `.section-head`
+5 (2 + 3), `.data-table` 5, `.tag` 5, `.output-state` 5 (3 + 2), `.panel-scroll` 4 (1 + 3),
+`.nav-group` 3 (2 + 1), `.settings-head` 3 (1 + 2), `.helper-details` 3, `.card-heading` 3,
+`.video-card` 1, `.slot` 1. Only the unconditional waves paint at 1280 × 800 (the `@media` ones are
+≤ 1000, ≤ 720, ≤ 390 and ≥ 1500 px). The OUTER document adds `.channel-modal` 4 and
+`.channel-settings-grid` 3 for an element it never emits — read nothing from them. Precedent:
+`.inspector` 33, `.plate-table` 20.
+
+### 14.5 🔴 The red-first proofs
+
+| proof                                            | file                                                      | RED against                                                                                                                                                                                                                                                                                 | GREEN              |
+| ------------------------------------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| the strip is a list, keyed by id                 | `apps/runtime/tests/channelScope.dom.test.ts`             | the shipped `ChannelScope` (`bank?.channel ?? 1`, `useState`): `['CHANNEL 1']` against two declared channels; the choice unreadable; the fallback case stranded on `channel-1` — 3 of 4 red (the one-channel control green both times)                                                      | 4 / 4              |
+| the Channel tab is keyed to the selected channel | `apps/runtime/tests/stationSetupChannelKeyed.dom.test.ts` | the shipped `ChannelSection` (every settings entry mapped, the whole health passed): `[data-raster-channel="1"]` present with channel 2 selected, and the mirror; the unconfigured channel absent — 4 of 5 red; the station-wide control green both times, which is what makes it a control | 5 / 5              |
+| the outputs table                                | `apps/runtime/tests/outputsSection.dom.test.ts` (+6)      | the shipped prose section: no `[data-output-table]`, no rows, no count — 5 of 6 red (the unreadable-declaration case green both times); every one of the 17 B-223 cases green throughout                                                                                                    | 22 / 22            |
+| the list and the resolution                      | `apps/runtime/tests/channelList.test.ts`                  | module-not-found on the first run (the weak form, noted); re-taken with the modules present before either component changed                                                                                                                                                                 | 6 / 6              |
+| the geometry                                     | `apps/runtime/tests/e2e/station-setup-geometry.spec.ts`   | written to the tokens; its positive control (`frame.w > 1000`) fails against the abandoned mockup's frame                                                                                                                                                                                   | Chromium, see 14.9 |
+
+The first run of the three new suites reddened on "module not found"; the two pure modules
+(`channelList.ts`, `channelStore.ts`) were added and the suites re-run BEFORE `ChannelScope` or
+`ChannelSection` changed, so the red on record is on the PROPERTY (`design.md` §11's warning about
+an assertion against a constant that does not exist yet). No plant is in the tree.
+
+### 14.6 The deletion guard — item 28 closed, every Station setup decision re-asserted
+
+**Item 28 (A15)** closed by evidence in 14.0. **Every decision already made about this dialog
+survives and is still asserted:** one Settings entry point (`station-setup.spec.ts` §1, the status
+bar's one door); the fixed frame measured on TWO edges (`station-setup-frame.spec.ts`, unchanged
+in what it asserts — the numbers it stood on moved with the tokens, its comments updated);
+per-section footers and refusals (`stationSetupTabs`, `stationSetupServers`,
+`setupFooterVocabulary`, `modalDismissRole`); the footer rule (`Revert` + `Apply …` on a section
+with a commit, nothing on one without — `B-240`, `setupFooterVocabulary`); `B-237`'s confirmation
+naming the templates and plates it would drop (`sourcesSection` / `livePlates` suites); `B-238`'s
+refusal shown (`removeRowRefusal`, 11 green). `--r-modal-foot-h` is still a floor: its value moved
+to the measured 74, its role did not (14.3, the token's own note). Re-run green after the change:
+the sixteen Station setup, token-home and rail suites (128 cases) plus the four new ones.
+
+### 14.7 The three gaps — filed, not closed; the trap not stepped on
+
+Filed as **`R-062`** (`docs/prd/runtime.md`), exactly as §4 lists them: (1) `removeAll`, `clearAll`,
+`stopAll`, `snapshot` and `silenceAllLivePlates` take `z.void()`; (2) no channel-discovery call
+on the contract; (3) `fixedLayers` declares one bank on one channel and is the app's only channel
+authority. Nothing was invented to close them: the strip and the dialog read channels the bridge
+already publishes, and `channelIds` is the one place a discovery call would feed.
+🔴 **`silenceAllLivePlates` is untouched** — by diff (`tools/caspar-bridge` and
+`packages/shared-ipc/src/channels/stack.ts` unchanged) and on purpose: PANIC's scope is not the
+caller's to choose, and `R-062` records the question for the owner rather than a task.
+
+### 14.8 What Phase 7 did NOT do — and the numbers filed
+
+- It did not build the reference's `Default sources · this channel` card (§0), its head status
+  (A12), its emblem, `Preview` tag and station card, its per-tab count chips and lock glyph, or its
+  40 px footer buttons — each argued in 14.3.
+- It did not re-measure the bodies of the Servers, Live sources, Delimiters and Layers tabs
+  (their fields, lists and editors); they took the shared card rhythm and nothing else.
+- It did not add a persisted key, file or schema: `persistedKeyCensus.test.ts` is byte-for-byte
+  unchanged (`git diff` empty) and green — the inventory it derives from the tree is identical, and
+  the new `features/channels/` modules spell no storage (`git grep -n "localStorage\|sessionStorage\|indexedDB\|openOpfsWorkspace" -- apps/runtime/src/renderer/features/channels` finds nothing).
+  `channelStore` is session-only by design. The one `@cg/shared-ipc` change is a pure helper.
+- It did not touch the bridge, the bulk verbs, `silenceAllLivePlates`, the bank fencing, the
+  refusal and preflight paths, `reconcileOnReconnect` or the `LockPolicy` table (§11's hard stops).
+- It did not translate anything; three surfaces gained the reference's OWN words (`Video format`
+  as the card's region name — was `Raster`, one e2e re-pointed; `Why is the video format read
+only?`; `How are outputs identified?`; the three contract tags) and no sentence of the app's was
+  reworded. Swept with `git grep`: the old region name and the removed lede survive only as
+  history in the PRD and a superseded spec.
+- It did not measure any geometry in jsdom: every box is in `station-setup-geometry.spec.ts`.
+- Numbers filed: **`R-062`** (the three gaps). Numbers closed: guard item **28** (A15).
+
+### 14.9 The runs
+
+- `pnpm --filter @cg/runtime test:e2e`, Windows, against a fresh `vite build`: the first run
+  **139 passed, 2 failed** — both geometry, both the kind a real engine finds and jsdom cannot:
+  the rail tab painted **45 px** against its 44 px floor (the console's inherited line-height
+  1.55 overflowing it; the reference's `.tab` is 1.35 — added), and `station-setup-frame`'s
+  short-section slack read **12 px** because Playwright's default 720-tall page gives the
+  `min(810px, 100vh − 64px)` frame 656 px (the reading is now taken at the programme's 1280 × 800,
+  where the reference was measured; the assertion is unchanged). Re-run: the three Station setup
+  specs **9 / 9**, then the whole suite green (the count is in `tasks.md` 7.5). ⚠
+  NON-AUTHORITATIVE (golden rule 12a).
+- `pnpm gate`: recorded in `tasks.md` 7.5 with its `0 cached` line.
+- The Linux `e2e` on the code head: URL, duration and that it RAN, recorded beside `tasks.md`
+  7.5 by the follow-up docs commit, as every phase before it.

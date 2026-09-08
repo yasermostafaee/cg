@@ -1,11 +1,18 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { colors } from '../../theme.js';
-import { sectionSpec, type StationSetupSection } from './sections.js';
+import { contractTag, sectionSpec, type StationSetupSection } from './sections.js';
 
 /**
  * ONE frame for every Station setup section: the heading, the commit legend beside it, and
  * the body. The frame is what makes "which contract is in force" legible per section — a
  * caller supplies its body and says nothing about how the heading reads.
+ *
+ * ── `RUNTIME-REDESIGN-01` PHASE 7 — THE HEAD IS THE REFERENCE'S `.section-head` ─────────
+ *
+ * As rendered (`09-channel-settings.html`, 1280 × 800): the title as a 24 px `h2`, the legend
+ * as the 14 px DESCRIPTION under it, and the commit contract as a TAG at the end of the row
+ * (`Read only` · `Apply together` · `Auto-save`). Three pieces from ONE spec (`sections.ts`), so
+ * the tag, the description and the footer's standing sentence are one fact told three ways
+ * and cannot disagree. Geometry from `--r-setup-*` (`STATION_SETUP_PX`); no literal here.
  *
  * ── WHAT `STATION-CHROME-01` §2 TOOK OUT OF THIS FILE ───────────────────────
  *
@@ -16,28 +23,6 @@ import { sectionSpec, type StationSetupSection } from './sections.js';
  * selection (`useEffect` on `requestId`), which keeps the number of things that move focus at
  * one (`B-230`): the modal's focus trap, at open.
  */
-const styles = {
-  section: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '0.6rem',
-  },
-  heading: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'baseline',
-    gap: '0.75rem',
-    flexWrap: 'wrap' as const,
-  },
-  title: {
-    fontSize: '0.95rem',
-    fontWeight: 700,
-    color: colors.text,
-    margin: 0,
-  },
-  legend: { fontSize: '0.72rem', color: colors.textMuted },
-} as const;
-
 export function SetupSection({
   id,
   children,
@@ -60,20 +45,17 @@ export function SetupSection({
   }, [id]);
 
   return (
-    <section
-      ref={ref}
-      style={styles.section}
-      aria-label={spec.title}
-      id={`station-setup-${id}`}
-      data-station-section={id}
-    >
-      <div style={styles.heading}>
-        <h3 style={styles.title}>{spec.title}</h3>
-        <span style={styles.legend} data-section-commit={spec.commit}>
-          {spec.legend}
+    <section ref={ref} aria-label={spec.title} id={`station-setup-${id}`} data-station-section={id}>
+      <div className="cg-setup-head">
+        <div>
+          <h2 className="cg-setup-title">{spec.title}</h2>
+          <p className="cg-setup-description">{spec.legend}</p>
+        </div>
+        <span className="cg-setup-tag" data-section-commit={spec.commit}>
+          {contractTag(spec.commit)}
         </span>
       </div>
-      {children}
+      <div className="cg-setup-body">{children}</div>
     </section>
   );
 }

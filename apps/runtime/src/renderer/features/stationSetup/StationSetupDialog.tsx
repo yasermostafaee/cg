@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Layers, Monitor, Radio, Server, Type, type LucideIcon } from 'lucide-react';
 import type { ConnectionConfig, TemplateServeInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { isLoopbackHost } from '../../../shared/loopback.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useStack } from '../../hooks/useStack.js';
 import { isOnAirStatus } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Modal, ModalAction, modalActionVariant, type ModalMessage } from '../../ui/Modal.js';
@@ -13,6 +14,7 @@ import { Notice } from '../../ui/Notice.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { Tabs, type TabSpec } from '../../ui/Tabs.js';
 import { useConfirm } from '../../ui/useDialog.js';
+import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { CandidateLayersSection } from '../fixedLayers/CandidateLayersSection.js';
 import { DelimitersSection } from '../inspector/DelimitersSection.js';
 import { SourcesSection } from '../sources/SourcesSection.js';
@@ -89,6 +91,19 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * `RUNTIME-REDESIGN-01` Phase 7 — the rail's glyphs, the reference's five (`#i-monitor`,
+ * `#i-server`, `#i-radio`, `#i-text`, `#i-layers`) as their lucide equivalents. Decorative — the
+ * label is the name — and kept here rather than in `sections.ts`, which stays data.
+ */
+const SECTION_ICONS: Record<StationSetupSection, LucideIcon> = {
+  channel: Monitor,
+  servers: Server,
+  sources: Radio,
+  delimiters: Type,
+  'candidate-layers': Layers,
+};
+
 const styles = {
   shell: { display: 'flex', flex: 1, minHeight: 0, gap: 0 },
   /**
@@ -105,7 +120,7 @@ const styles = {
     minWidth: 0,
     minHeight: 0,
     overflowY: 'auto' as const,
-    padding: '1rem 1.1rem 1.25rem',
+    /* Phase 7 — the inset is the reference's `.panel-scroll` padding, from `.cg-setup-pane`. */
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.75rem',
@@ -123,7 +138,8 @@ const styles = {
   footNote: {
     marginInlineEnd: 'auto',
     minWidth: 0,
-    fontSize: '0.78rem',
+    /* Phase 7 — the reference's `.foot-message` is 13 px; `.cg-footer-contract` keeps the weight. */
+    fontSize: cssVars['--r-setup-foot-text'],
     color: colors.textMuted,
     textAlign: 'start' as const,
   },
@@ -236,6 +252,12 @@ export function StationSetupDialog({
   const items = useStack();
   // B-223 — the output check's technical surface reads the same health the banner does.
   const health = useConnections();
+  /*
+    `RUNTIME-REDESIGN-01` Phase 7 — WHICH CHANNEL this dialog's per-channel tab reports: the
+    same read the channel strip makes (`useSelectedChannel`), so the subtitle, the strip and
+    the Channel tab cannot name three different channels. Station-wide tabs never read it.
+  */
+  const { selected: channel } = useSelectedChannel();
   const [active, setActive] = useState<StationSetupSection>(section);
   const [primary, setPrimary] = useState<EndpointDraft>({
     host: '127.0.0.1',
@@ -456,6 +478,7 @@ export function StationSetupDialog({
     id: s.id,
     label: s.title,
     group: s.group,
+    icon: SECTION_ICONS[s.id],
     // BLOCKED beats EDITED: a section you cannot apply is the more urgent fact, and two
     // dots on one row would be a puzzle rather than a signal.
     ...(isBlocked(s.id)
@@ -570,6 +593,17 @@ export function StationSetupDialog({
   return (
     <Modal
       title="Station setup"
+      /*
+        `RUNTIME-REDESIGN-01` Phase 7 — the reference's `.settings-subtitle` (`Channel 1 · News ·
+        Primary A`): the channel this dialog's per-channel tab reports, and which server is
+        primary. No channel NAME — the bridge publishes none, and none is invented (A3).
+      */
+      subtitle={
+        <>
+          Channel {String(channel)}
+          {health !== null && <> · Primary {health.currentPrimary}</>}
+        </>
+      }
       ariaLabel="Station setup"
       /*
         🔴 `STATION-CHROME-02` §2 — A FIXED FRAME, not a wide one. `wide` sized the dialog to
@@ -732,7 +766,7 @@ export function StationSetupDialog({
             OUTSIDE both, pinned above the footer — which is what `modal-message-in-viewport`
             measures, and why that spec now takes its overflow reading here.
           */}
-          <div style={styles.pane} data-station-pane="">
+          <div style={styles.pane} className="cg-setup-pane" data-station-pane="">
             {active === 'channel' && (
               <SetupSection id="channel">
                 <ChannelSection health={health} />

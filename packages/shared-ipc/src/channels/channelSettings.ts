@@ -222,6 +222,24 @@ export function videoModeFramePeriodMs(mode: string): number | null {
 }
 
 /**
+ * `RUNTIME-REDESIGN-01` Phase 7 — the SCAN TYPE a CasparCG mode token names, for a surface that
+ * REPORTS the channel (Station setup's video-format card reads `1080i · Interlaced` /
+ * `1080p · Progressive`), or `null` for a token this build cannot read.
+ *
+ * Beside {@link videoModeFramePeriodMs} because it is the same grammar — the `[ip]` that function
+ * matches and discards is the letter this one returns — and one home for the token's grammar is
+ * what keeps a renderer from growing a second regex that reads `1080i5000` differently. Same
+ * honesty contract as its neighbours: an unreadable token answers `null`, never a guess. PAL and
+ * NTSC carry no scan letter and answer `null` too, which is honest — a named SD mode is
+ * interlaced by definition, but that fact is not IN the token, and this reads only the token.
+ */
+export function videoModeScan(mode: string): 'interlaced' | 'progressive' | null {
+  const match = /^(?:dci)?\d+([ip])\d{4,5}$/.exec(mode.trim().toLowerCase());
+  if (match === null) return null;
+  return match[1] === 'i' ? 'interlaced' : 'progressive';
+}
+
+/**
  * Pull the video-mode token out of an `INFO <channel>` XML body, or null when
  * no mode element is present.
  *

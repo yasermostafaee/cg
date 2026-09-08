@@ -169,9 +169,10 @@ test('settings panel: the serve address sits beside the server hosts, offers can
   await expect(serve).toBeVisible();
   /*
     ⚠ `STATION-CHROME-02` §3 — matched case-INSENSITIVELY on purpose. The card head's
-    `text-transform: uppercase` is the ONE treatment now (`.cg-card__title`), so the string in
-    the DOM is sentence case while the pixels are uppercase; Playwright matches the DOM. Pinning
-    either spelling would pin the mechanism rather than the words, and the words are the claim.
+    treatment is the ONE treatment (`.cg-card__title`) — uppercase-by-CSS then, the reference's
+    16 px sentence case since `RUNTIME-REDESIGN-01` Phase 7 — and the string in the DOM was
+    sentence case throughout; Playwright matches the DOM. Pinning either spelling would pin the
+    mechanism rather than the words, and the words are the claim.
   */
   await expect(serve.getByText(/how those servers reach this machine/i)).toBeVisible();
 

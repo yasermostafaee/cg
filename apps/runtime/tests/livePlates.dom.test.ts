@@ -268,10 +268,12 @@ describe('the Live sources section of Station setup defines sources and binds no
       station's sources — so only how it reads them moved.
     */
     /*
-      ⚠ `STATION-CHROME-02` §3 — the word is `Catalogue` in the DOM and UPPERCASE on screen:
-      the card head's `text-transform` is the ONE treatment, in `.cg-card__title`, rather than
-      a shouted string per section. Asserting the shouted form here would have pinned the old
-      hand-spelled uppercase and re-created the drift the shared class removes.
+      ⚠ `STATION-CHROME-02` §3 — the word is `Catalogue` in the DOM, and the card head's
+      treatment is the ONE treatment, in `.cg-card__title`, rather than a shouted string per
+      section (it was uppercase-by-CSS; `RUNTIME-REDESIGN-01` Phase 7 took it to the
+      reference's 16 px sentence case — the string never changed). Asserting a shouted form
+      here would have pinned the old hand-spelled uppercase and re-created the drift the
+      shared class removes.
     */
     expect(section?.textContent).toContain('Catalogue');
     expect(
