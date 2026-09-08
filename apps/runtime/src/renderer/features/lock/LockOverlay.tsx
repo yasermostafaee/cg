@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { colors, cssVars } from '../../theme.js';
+import { Lock } from 'lucide-react';
+import { colors, cssVars, LOCK_PX } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { useFocusTrap } from '../../ui/focusTrap.js';
 import { normalizeDigits } from '../../ui/NumericInput.js';
 
@@ -27,39 +29,95 @@ const styles = {
     fontFamily: 'inherit',
     color: colors.text,
   },
+  /*
+    `RUNTIME-REDESIGN-01` PHASE 9 — the reference's `unlock-dialog` LOOK (`design.md` §16.3):
+    a 480 px card, a body padded `32px 24px 23px`, an icon box, a centred title and copy, the
+    PIN field, and one full-width submit in a ruled foot. The LOOK and nothing else: this is
+    the app's own scrim and card, still not a `<dialog>` and still without a way out (the
+    header below says why). The reference draws its box in the Station-setup shadow root's
+    teal; this console has one accent and the box takes it.
+  */
   card: {
     background: colors.panel,
     border: `1px solid ${colors.border}`,
-    borderRadius: '0.5rem',
-    padding: '2rem 2.5rem',
-    width: 360,
+    borderRadius: cssVars['--r-radius-lg'],
+    width: cssVars['--r-lock-card-w'],
+    maxWidth: 'calc(100vw - 32px)',
     display: 'flex',
     flexDirection: 'column' as const,
-    alignItems: 'center',
-    gap: '1rem',
+    overflow: 'hidden',
   },
-  title: { margin: 0, fontSize: '1.4rem', fontWeight: 700, letterSpacing: '0.05em' },
-  sub: { margin: 0, color: colors.textMuted, fontSize: '0.9rem' },
+  body: {
+    padding: cssVars['--r-lock-card-pad'],
+    display: 'flex',
+    flexDirection: 'column' as const,
+    alignItems: 'stretch',
+  },
+  iconBox: {
+    width: cssVars['--r-lock-icon-box'],
+    height: cssVars['--r-lock-icon-box'],
+    margin: '0 auto 20px',
+    display: 'grid',
+    placeItems: 'center',
+    background: cssVars['--r-accent-fill'],
+    border: `1px solid ${colors.border}`,
+    borderRadius: cssVars['--r-lock-icon-radius'],
+    color: cssVars['--r-accent'],
+  },
+  title: {
+    margin: '0 0 8px',
+    fontSize: cssVars['--r-lock-title-fs'],
+    fontWeight: 650,
+    letterSpacing: '-0.035em',
+    lineHeight: 1.3,
+    textAlign: 'center' as const,
+  },
+  sub: {
+    margin: '0 0 23px',
+    color: colors.textMuted,
+    fontSize: cssVars['--r-lock-copy-fs'],
+    textAlign: 'center' as const,
+  },
   metaRow: {
     display: 'flex',
+    justifyContent: 'center',
     gap: '0.5rem',
-    fontSize: '0.75rem',
+    fontSize: cssVars['--r-text-xs'],
     color: colors.textMuted,
+    margin: '0 0 16px',
   },
   chip: {
     padding: '0.1rem 0.5rem',
-    borderRadius: '0.7rem',
+    borderRadius: cssVars['--r-radius-full'],
     border: `1px solid ${colors.border}`,
     background: colors.panelMuted,
     letterSpacing: '0.05em',
   },
-  input: {
-    padding: '0.6rem 0.75rem',
-    fontSize: '1.2rem',
-    letterSpacing: '0.5em',
-    textAlign: 'center' as const,
+  label: {
+    fontSize: cssVars['--r-text-sm'],
+    fontWeight: 500,
+    color: colors.textSecondary,
+    marginBottom: 6,
   },
-  error: { color: colors.errorText, fontSize: '0.85rem', minHeight: '1rem' },
+  input: {
+    fontFamily: cssVars['--r-font-mono'],
+    fontSize: cssVars['--r-lock-pin-fs'],
+    letterSpacing: '0.3em',
+    height: cssVars['--r-lock-pin-h'],
+    padding: '10px 12px',
+  },
+  error: {
+    color: colors.errorText,
+    fontSize: cssVars['--r-text-sm'],
+    minHeight: '1.25rem',
+    marginTop: 8,
+  },
+  foot: {
+    padding: '16px 24px',
+    borderTop: `1px solid ${colors.border}`,
+    background: colors.panelMuted,
+  },
+  submit: { width: '100%', minHeight: cssVars['--r-lock-submit-h'] },
 } as const;
 
 /**
@@ -157,33 +215,54 @@ export function LockOverlay({ engaged, engagedAt, reason, onRelease }: Props): J
   return (
     <div style={styles.scrim} role="dialog" aria-label="Lock screen" aria-modal="true">
       <div ref={cardRef} style={styles.card}>
-        <h2 style={styles.title}>RUNTIME LOCKED</h2>
-        <p style={styles.sub}>Enter PIN to resume.</p>
-        <div style={styles.metaRow}>
-          {reason !== undefined && <span style={styles.chip}>{reason.toUpperCase()}</span>}
-          {elapsed !== '' && (
-            <span style={styles.chip} aria-label="Locked for">
-              {elapsed}
-            </span>
+        <div style={styles.body}>
+          <div style={styles.iconBox}>
+            <Icon icon={Lock} size={LOCK_PX.iconGlyph} />
+          </div>
+          {/* The reference's own words (`design.md` §16.3). True here as there: the bridge
+              refuses every console verb while locked, and air is untouched. */}
+          <h2 style={styles.title}>Console locked</h2>
+          <p style={styles.sub}>Playout continues. Enter your PIN to use the console.</p>
+          {/* Kept, and not drawn by the reference: an auto-idle lock and one an operator set
+              are different facts, and the clock says how long the console has been unattended. */}
+          {(reason !== undefined || elapsed !== '') && (
+            <div style={styles.metaRow}>
+              {reason !== undefined && <span style={styles.chip}>{reason.toUpperCase()}</span>}
+              {elapsed !== '' && (
+                <span style={styles.chip} aria-label="Locked for">
+                  {elapsed}
+                </span>
+              )}
+            </div>
           )}
+          <label htmlFor="lock-pin" style={styles.label}>
+            PIN
+          </label>
+          <input
+            id="lock-pin"
+            ref={inputRef}
+            className="cg-field"
+            style={styles.input}
+            type="password"
+            inputMode="numeric"
+            autoComplete="off"
+            value={pin}
+            onChange={(e) => setPin(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void submit();
+            }}
+            aria-label="PIN"
+          />
+          <div style={styles.error} role="status">
+            {error}
+          </div>
         </div>
-        <input
-          ref={inputRef}
-          className="cg-field"
-          style={styles.input}
-          type="password"
-          inputMode="numeric"
-          value={pin}
-          onChange={(e) => setPin(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void submit();
-          }}
-          aria-label="PIN"
-        />
-        <Button variant="primary" onClick={() => void submit()}>
-          UNLOCK
-        </Button>
-        <div style={styles.error}>{error}</div>
+        {/* ONE control, and it is the release path. No ✕, no Cancel, nothing that closes. */}
+        <div style={styles.foot}>
+          <Button variant="primary" style={styles.submit} onClick={() => void submit()}>
+            Unlock console
+          </Button>
+        </div>
       </div>
     </div>
   );

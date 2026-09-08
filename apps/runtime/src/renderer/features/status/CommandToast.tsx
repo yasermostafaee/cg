@@ -2,30 +2,36 @@ import { useEffect, useState } from 'react';
 import { colors, cssVars } from '../../theme.js';
 import { onCommandError, onCommandSuccess } from './commandFeedback.js';
 
+/*
+  `RUNTIME-REDESIGN-01` Phase 9 — the reference's `.global-toast` as rendered (`TOAST_PX` in the
+  token home): 42 px off the foot, `12px 17px`, radius 9, 14 px, its own shadow. The OK pair is
+  the reference's; the reference draws NO error toast (its toast has no command-refusal path),
+  so that half keeps `colors.error` with the fill ink. Weight stays 700 on both: a refusal at
+  400 reads as a caption, and the two must weigh the same (`design.md` §16.3).
+*/
 const styles = {
   base: {
     position: 'fixed' as const,
-    bottom: '3rem',
+    bottom: cssVars['--r-toast-bottom'],
     left: '50%',
     transform: 'translateX(-50%)',
-    padding: '0.5rem 1rem',
-    borderRadius: '0.35rem',
-    fontSize: '0.85rem',
+    maxWidth: 'calc(100vw - 30px)',
+    padding: cssVars['--r-toast-pad'],
+    borderRadius: cssVars['--r-toast-radius'],
+    fontSize: cssVars['--r-toast-fs'],
     fontWeight: 700,
     zIndex: 50,
-    boxShadow: cssVars['--r-shadow-2'],
+    boxShadow: cssVars['--r-toast-shadow'],
   },
   error: {
     background: colors.error,
-    color: cssVars['--r-alarm-ink'],
-    border: `1px solid ${colors.error}`,
+    color: cssVars['--r-ink-on-fill'],
+    border: `1px solid ${cssVars['--r-danger-strong']}`,
   },
-  // Green success, mirroring the error toast's dark-bg / light-text weight.
-  // The border is the `--r-success` token (ack / healthy) — read, never spelled.
   success: {
     background: cssVars['--r-toast-ok-bg'],
     color: cssVars['--r-toast-ok-ink'],
-    border: `1px solid ${cssVars['--r-success']}`,
+    border: `1px solid ${cssVars['--r-toast-ok-line']}`,
   },
 } as const;
 

@@ -89,7 +89,7 @@ test('Tab cannot reach a control behind the lock screen', async ({ app }) => {
     the bug it fixes.
   */
   await lockScreen.getByLabel('PIN').fill('1234');
-  await lockScreen.getByRole('button', { name: 'UNLOCK' }).click();
+  await lockScreen.getByRole('button', { name: 'Unlock console' }).click();
   await expect(lockScreen).toBeHidden();
 
   const target = app.layers.locator('button:not([disabled])').first();

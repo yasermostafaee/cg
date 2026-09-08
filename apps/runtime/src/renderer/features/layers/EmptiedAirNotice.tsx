@@ -14,15 +14,17 @@ interface Props {
 }
 
 const styles = {
+  /* The reference's `.notice.warn` box (`RUNTIME-REDESIGN-01` Phase 9, `NOTICE_PX`). */
   strip: {
     border: `1px solid ${cssVars['--r-notice-line']}`,
     background: cssVars['--r-notice-fill'],
-    borderRadius: '0.25rem',
-    padding: '0.5rem 0.75rem',
+    borderRadius: cssVars['--r-notice-radius'],
+    padding: cssVars['--r-notice-pad'],
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.4rem',
-    fontSize: '0.85rem',
+    fontSize: cssVars['--r-notice-fs'],
+    lineHeight: cssVars['--r-notice-lh'],
     color: cssVars['--r-caution-text'],
   },
   row: {

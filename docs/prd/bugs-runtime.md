@@ -6479,7 +6479,21 @@ bridge-side test that a take under that health lands on the backup.
   failover story — what happens after you press it), [[B-100]]/[[B-101]] (the same
   one-predicate-one-owner rule, from the other direction).
 
-## [ ] B-172 — the failover banner is ALARM RED for a failover that SUCCEEDED, and it is a hard-coded hex on a full-width slab ⟨priority: medium — red is this product's alarm colour and a completed manual failover is information⟩ — OPEN, filed 2026-08-24 from the two-server plant run
+## [x] B-172 — the failover banner is ALARM RED for a failover that SUCCEEDED, and it is a hard-coded hex on a full-width slab ⟨priority: medium — red is this product's alarm colour and a completed manual failover is information⟩ — CLOSED 2026-09-08 by `RUNTIME-REDESIGN-01` Phase 9 (guard item 9)
+
+**Closed, 2026-09-08 — `RUNTIME-REDESIGN-01` Phase 9, `openspec/changes/runtime-redesign-programme/design.md` §16.** The slab is gone
+and so is the one-colour rule: `FailoverBanner` is now an IN-FLOW strip in the shell's banner
+region (no `position: fixed`, no hex — `B-172`'s three raw hexes and the whole `--r-alarm-*` family
+they had become were deleted, read by nothing), and its tone is the SITUATION's, by token identity:
+a MANUAL failover that succeeded is a neutral notice (`role="status"`, the reference's plain
+`.notice` pair); an AUTOMATIC failover is the caution pair (`role="alert"`); a degraded or
+disconnected PRIMARY is the alarm (`colors.error`, `role="alert"`, and no Dismiss — broken state is
+never silently hidden). The `offline-mock` suppression moved from `App.tsx` INTO the component, which
+is what let it be tested at all. Pinned by `apps/runtime/tests/failoverBanner.dom.test.ts` (nine
+cases, each tone by token identity, the suppression with its positive control), taken RED against a
+plant that made the strip unreachable. ⚠ The owner's two cited constraints stay as recorded below:
+"a strip rather than a slab" is now MET; "one banner at a time" is NOT built — the banner region
+still stacks its strips with no arbitration, and that is a decision for the owner, not a re-dress.
 
 **What the owner saw, on the plant.**
 

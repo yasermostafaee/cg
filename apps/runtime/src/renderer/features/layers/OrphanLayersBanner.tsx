@@ -20,32 +20,37 @@ interface Props {
 }
 
 const styles = {
+  /* The reference's `.notice.warn` box (`RUNTIME-REDESIGN-01` Phase 9, `NOTICE_PX`). */
   strip: {
     border: `1px solid ${cssVars['--r-notice-line']}`,
     background: cssVars['--r-notice-fill'],
-    borderRadius: '0.25rem',
-    padding: '0.5rem 0.75rem',
+    borderRadius: cssVars['--r-notice-radius'],
+    padding: cssVars['--r-notice-pad'],
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.4rem',
-    fontSize: '0.85rem',
+    fontSize: cssVars['--r-notice-fs'],
+    lineHeight: cssVars['--r-notice-lh'],
     color: cssVars['--r-caution-text'],
   },
   // R-015 — the neutral strip: an occupied-but-not-ours VIDEO layer is a
-  // normal fact of the console, not a problem. Surface tones only (never
+  // normal fact of the console, not a problem. Neutral tones only (never
   // amber, never the on-air red) — there is essentially always a video layer
   // in play, and a warning colour here would permanently imply something is
-  // wrong when nothing is.
+  // wrong when nothing is. Phase 9: the reference's PLAIN `.notice` pair, which
+  // is what a neutral statement looks like there; it used to borrow the panel's
+  // own surface, which made the strip indistinguishable from a panel.
   neutralStrip: {
-    border: `1px solid ${colors.border}`,
-    background: colors.panel,
-    borderRadius: '0.25rem',
-    padding: '0.5rem 0.75rem',
+    border: `1px solid ${cssVars['--r-notice-neutral-line']}`,
+    background: cssVars['--r-notice-neutral-bg'],
+    borderRadius: cssVars['--r-notice-radius'],
+    padding: cssVars['--r-notice-pad'],
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.4rem',
-    fontSize: '0.85rem',
-    color: colors.textMuted,
+    fontSize: cssVars['--r-notice-fs'],
+    lineHeight: cssVars['--r-notice-lh'],
+    color: cssVars['--r-notice-neutral-text'],
   },
   row: {
     display: 'flex',

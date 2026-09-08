@@ -31,7 +31,6 @@ import { useConnections } from './hooks/useConnections.js';
 import { initDelimiters } from './features/inspector/delimiterStore.js';
 import { initSources } from './features/sources/sourceStore.js';
 import { useStackHousekeeping } from './hooks/useStackHousekeeping.js';
-import { useLink } from './hooks/useLink.js';
 import { useLock } from './hooks/useLock.js';
 import { useOrphans } from './hooks/useOrphans.js';
 import { useOwnedOccupancy } from './hooks/useOwnedOccupancy.js';
@@ -89,7 +88,6 @@ export function App(): JSX.Element {
   const rehearsals = useRehearse();
   const lock = useLock();
   const health = useConnections();
-  const link = useLink();
   const orphans = useOrphans();
   const ownedOccupancy = useOwnedOccupancy();
   const emptiedAir = useEmptiedAir();
@@ -217,12 +215,11 @@ export function App(): JSX.Element {
         <ConnectionBanner />
         {/* B-153 — the bridge PROCESS is older than this page. Reports, never gates. */}
         <BridgeSkewBanner />
-        {/* R-006 — the failover banner describes REAL servers. In test mode there are none,
-          and the mock now honestly reports them `disconnected`, so it would shout
-          "PRIMARY A unhealthy" about hardware that does not exist — new noise, and a fresh
-          implication that a real server is out there, broken. The TEST MODE banner is the
-          truth in that mode and supersedes it. */}
-        {link !== 'offline-mock' && <FailoverBanner health={health} />}
+        {/* R-006 — the failover banner describes REAL servers, so it renders NOTHING in test
+          mode. That gate lives INSIDE the component since `RUNTIME-REDESIGN-01` Phase 9 (it was
+          `link !== 'offline-mock' && …` here, where no component test could reach it and the
+          plant pass found the surface unguarded); see the component's header. */}
+        <FailoverBanner health={health} />
         {/* R-030 — a configured raster that contradicts the channel's real video mode
           mis-places EVERY graphic on that channel, and does it silently: nothing else
           in the app would notice, and it only looks wrong on air where nobody here can

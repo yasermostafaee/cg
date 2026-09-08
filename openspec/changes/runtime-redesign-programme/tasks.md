@@ -6,8 +6,12 @@ file records which are done. **Each session takes the next unfinished phase, fin
 reports.** Do not start a later phase because an earlier one looks easy — the ordering is
 load-bearing and stated at each step.
 
-**Phase state at 2026-09-08:** Phases 1, 2 (with addendum 2A), 3, 4, 5, 6, 7 and **8** COMPLETE,
-each with its Linux `e2e` URL beside the ticked item. Phases 9–10 not started. Next: **Phase 9**.
+**Phase state at 2026-09-08:** Phases 1, 2 (with addendum 2A), 3, 4, 5, 6, 7, 8 and **9**
+COMPLETE, each with its Linux `e2e` URL beside the ticked item. Phase 10 not started. Next:
+**Phase 10**.
+⚠ Phase 9 PLANT-TESTED every deletion-guard item (`design.md` §16.1): read that table before
+trusting any ✅ in §3 — a ✅ says a test exists; the table says what goes red when the surface
+is removed. Phase 10 re-runs the guard end to end and owes nothing else to the guard.
 ⚠ Phase 7 answered owner question **A15** first (`design.md` §14.0) and filed the three
 single-channel gaps as **`R-062`** — read §14.7 before touching a bulk verb or the channel list.
 ⚠ Phase 8 applied **A1** (the picker stays; guard item 27 built back and discharged, `design.md`
@@ -545,27 +549,59 @@ red-first matrix (§15.5), guard item 27 discharged (§15.6), and what was not d
       14:14:39Z); it was not skipped, which is the half a green run alone does not prove (golden
       rule 12b). `Lint • Typecheck • Test • Build` also ran green (14:03:33Z → 14:08:37Z).
 
-## Phase 9 — The surfaces the reference does not draw
+## Phase 9 — The surfaces the reference does not draw — COMPLETE
 
-- [ ] 9.1 Bring `design.md` §3's guard items 1–26 into the new design, dressed in the new tokens,
-      each still appearing when its condition holds. ⚠ **Item 27 is PHASE 8's**, not this phase's —
-      it is the audit log's actor column, which Phase 8 builds and tests.
-- [ ] 9.2 🔴 The lock screen keeps its own chrome and its no-exit contract. It is deliberately NOT
-      on the modal primitive, and the reference's own `unlock-dialog` must not be used as an
-      argument to put it there.
-- [ ] 9.3 Write the owed tests: `bridgeSkewBanner.dom.test.ts`, `rasterMismatchBanner.dom.test.ts`
-      (including that `unreadable` and `unconfigured` render NOTHING), `failoverBanner.dom.test.ts`
-      (including the `offline-mock` suppression) and `tooltip.dom.test.ts`. Strengthen the
-      engage-lock assertion off `numericInput.dom.test.ts`.
-      ✅ **`layersPanel.restoreMigrations.dom.test.ts` was DISCHARGED BY PHASE 3** (six cases,
-      green), written before the table it lives beside was restructured — guard item 11 is no
-      longer owed here.
-      ✅ **`contextMenuSuppression.dom.test.ts` was DISCHARGED BY PHASE 6** (both halves plus the
-      row-menu control, each half taken red against its own plant in `App.tsx`), written BEFORE
-      that phase rewired right-click — guard item 23 is no longer owed here. **Four owed:** the
-      three banners and the tooltip.
-- [ ] 9.4 One test per guarded surface, each proving it still renders under its condition; the
-      lock's contract asserted unchanged. e2e run URL recorded here.
+The record is `design.md` §16: what contradicted the prompt, the plant pass per guard item
+(§16.1), what was built, the measured notice / toast / lock (§16.3), the caution split (§16.4),
+the lock (§16.5), the red-first matrix (§16.6), what was not done (§16.7) and the runs (§16.8).
+
+- [x] 9.0 🔴 **THE PLANT PASS, FIRST — every guard item, not the four.** Each of the 28 items had
+      its render deleted (or its condition made unreachable), the whole runtime unit suite ran
+      against the plant, and what reddened was recorded; 33 unit plants (items 14, 16, 17 per
+      sub-surface) plus two Playwright plants for items 19 and 20 against a fresh build; every
+      plant reverted by its original bytes. **All 23 ✅ entries reddened; the four 🔴 entries (5, 7,
+      9, 22) stayed green, as the ledger said; item 28 has nothing to plant.** Two depths the pass
+      surfaced and this phase closed: item 16 rode on the digit suite alone, and item 22's first
+      new suite (component-only) was itself not a guard — the unmount plant stayed green under it
+      until an App-level case existed. Per-item table: `design.md` §16.1.
+- [x] 9.1 Guard items 1–26 dressed in the new tokens and still appearing under their conditions.
+      The reference gives three of them a SHAPE, measured in Chromium (§16.3): the `.notice` box
+      and its three pairs (`NOTICE_PX`, `--r-notice-*` — the warn pair MOVED, the plain pair NEW;
+      read by items 1–4, 5, 9 and `Notice`), the toast (`TOAST_PX`, `--r-toast-*`; item 18) and
+      the unlock dialog's look (`LOCK_PX`, `--r-lock-*`; item 15). The failover banner (item 9) is
+      a STRIP whose tone is the situation's — `B-172` CLOSED, the `--r-alarm-*` family deleted, the
+      `offline-mock` suppression moved into the component. Items 6, 8, 10–14, 17, 19–21, 23–26
+      already read tokens alone (`tokenHome.test.ts`) and were re-verified by plant, not
+      re-dressed. Item 27 was Phase 8's and is untouched.
+- [x] 9.2 🔴 The lock keeps its own chrome and its no-exit contract (§16.5): the reference's LOOK
+      (icon box, `Console locked`, the mono PIN field, `Unlock console` full width) over the app's
+      own scrim and card; not a `<dialog>`, no ✕ / Escape / backdrop, the same `useFocusTrap`.
+      Pinned as PROPERTIES in `lockOverlay.contract.dom.test.ts` (6) and, in a real engine, in
+      `e2e/guard-surfaces-geometry.spec.ts`. The prototype's own `#unlock-dialog` was measured
+      refusing its `cancel` event — even the drawing has no Escape. `RUNTIME LOCKED` / `UNLOCK`
+      swept (`git grep`): two e2e specs re-pointed, nothing else quoted them.
+- [x] 9.3 The owed tests written and each taken RED by re-planting the same removal (§16.6):
+      `bridgeSkewBanner.dom.test.ts` (5; amber-never-red by token identity),
+      `rasterMismatchBanner.dom.test.ts` (7; `unreadable` twice, `unconfigured` and `match` render
+      NOTHING), `failoverBanner.dom.test.ts` (9; the `offline-mock` suppression with its positive
+      control), `tooltip.dom.test.ts` (5; the contract AND the App-level mount). The engage-lock
+      assertion taken off `numericInput.dom.test.ts`: `engageLockDialog.dom.test.ts` (6, including
+      the status bar's door). Spec deltas in `specs/runtime-ui/spec.md`.
+      ✅ **`--r-caution` / `pending` SPLIT** (§16.4, the item Phase 2 held): the skew band takes the
+      reference's caution PAIR; the CLEAR verb reads `--r-caution-fill`; the ink token is read as
+      ink only, every reader grepped.
+- [x] 9.4 One test per guarded surface, each proving it still renders under its condition, and
+      each proved to REDDEN when the surface is removed (§16.1). `pnpm gate` — **`93 successful,
+  93 total · 0 cached, 93 total`**, foreground, 3 m 26 s, prettier clean, OpenSpec `78 passed,
+  0 failed` (its first run was red on ONE lint error in the new e2e spec, an inline `import()`
+      type — fixed, re-run green). `pnpm --filter @cg/runtime test:e2e` — **145 passed (3.8 m)**,
+      Windows, against the gate's fresh build, on the third run: the first two lost 1 and then 4
+      specs to `page.goto` load timeouts (the `B-098` class) with two STALE `vite preview` servers
+      from earlier sessions still on the host; with those stopped, the four re-ran 20 / 20 and the
+      full suite clean. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges
+      this.
+      🔴 **OWED — the Linux `e2e` on the code head, recorded here with its URL, duration and that
+      it RAN, by the follow-up docs commit** (as every phase before it).
 
 ## Phase 10 — Verification
 

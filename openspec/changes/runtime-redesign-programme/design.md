@@ -145,6 +145,14 @@ test does NOT exist and is owed** — six of the twenty-seven at Phase 1, each v
 against `apps/runtime/tests` rather than assumed. Phase 3 discharged item 11, so **four are owed by
 Phase 9**; item 27 is owed by Phase 8, which is the phase that builds the surface it guards.
 
+🔴 **PHASE 9 PLANT-TESTED EVERY ENTRY (§16.1), because a ✅ above was a claim about a test's
+EXISTENCE, not about what it guards.** Each item's render was deleted (or its condition made
+unreachable) and the whole suite run: twenty-one of the twenty-two unit-guarded entries reddened
+as their ✅ promised, two entries (19, 20) are Playwright-only by design and reddened there, the
+four 🔴 entries stayed green exactly as the ledger said and now have the tests that redden, item 16
+was found riding on a digit test alone and has its own, and item 28 has nothing to plant. The
+per-entry result, with the plant and the reddening file, is the table in §16.1.
+
 ⭐ **Item 27 was added in PHASE 2, by the owner's answer to §5.** It is the only entry that guards a
 surface the reference does not draw _and that the owner has ruled must come back_ — everything
 above it is a surface the redesign must not lose, while 27 is one the redesign must re-add.
@@ -191,9 +199,13 @@ Now: `features/status/BridgeSkewBanner.tsx`, `App.tsx:203`. Fed by `link.skew` /
 Amber, not red: it reports, it never gates.
 After: full-width amber strip in the new `--amber` pair. It must stay amber — red would put it
 beside DISCONNECTED and an operator who discounts one will discount both.
-🔴 **No test exists.** `apps/runtime/tests/bridgeSkew.test.ts` covers `shared/bridgeSkew.ts` — the
+🔴 **No test existed.** `apps/runtime/tests/bridgeSkew.test.ts` covers `shared/bridgeSkew.ts` — the
 message shaping and the connect-time handshake — and never renders the banner.
-Owed: `apps/runtime/tests/bridgeSkewBanner.dom.test.ts`.
+✅ **DISCHARGED BY PHASE 9 (§16.1, §16.6).** The plant that made the render unreachable left all
+1318 tests green; `apps/runtime/tests/bridgeSkewBanner.dom.test.ts` (5) now reddens under it —
+presence on a reported skew, silence on `null` and `[]`, the bridge's push followed, the names
+relocated to `title` (`B-152`), and AMBER-NEVER-RED by token identity against the three alarm
+fills. Dressed in the reference's warn pair (`--r-caution-text` on `--r-caution-bg`).
 
 **6. Output alarm** (`C-029` / `B-223`)
 Now: `features/status/OutputMissingBanner.tsx`, `App.tsx:220`. Fed by `connections.health` /
@@ -210,9 +222,12 @@ Now: `features/status/RasterMismatchBanner.tsx`, `App.tsx:215`. Fed by `channelS
 `onChanged` through `hooks/useChannelSettings.ts`. Renders only on a genuine `mismatch` verdict —
 `unreadable` is a gap in the check, not an alarm.
 After: red strip beside the others.
-🔴 **No test exists — no test file in the tree references this component at all.**
-Owed: `apps/runtime/tests/rasterMismatchBanner.dom.test.ts`, asserting `mismatch` renders and
-`unreadable` / `unconfigured` / `match` render nothing.
+🔴 **No test existed — no test file in the tree referenced this component at all.**
+✅ **DISCHARGED BY PHASE 9 (§16.1, §16.6).** The plant left 1318 green;
+`apps/runtime/tests/rasterMismatchBanner.dom.test.ts` (7) now reddens under it — `mismatch`
+renders naming both rasters and the air remedy (`B-236`); `unreadable` (a null raster AND an
+unanswered channel), `unconfigured` and `match` render nothing; adoption clearing the mismatch
+takes it down; it fills with the error role and never the caution ground (A4 / 2A).
 
 **8. Connection banner — DISCONNECTED and TEST MODE** (`R-006`)
 Now: `features/status/ConnectionBanner.tsx`, `App.tsx:201`. Fed by `link.status` /
@@ -230,8 +245,14 @@ Now: `features/connections/FailoverBanner.tsx`, `App.tsx:209`, suppressed while
 `link === 'offline-mock'` (in test mode there are no real servers to shout about).
 After: a strip rather than the current fixed slab with hard-coded hex — `B-172` already records the
 slab as the thing to move away from, so Phase 9 discharges that too.
-🔴 **No test exists.** Owed: `apps/runtime/tests/failoverBanner.dom.test.ts`, including the
-`offline-mock` suppression, which is the half most easily lost.
+🔴 **No test existed.**
+✅ **DISCHARGED BY PHASE 9 (§16.1, §16.2, §16.6) — and `B-172` CLOSED.** The plant left 1318
+green; `apps/runtime/tests/failoverBanner.dom.test.ts` (9) now reddens under it. The banner is an
+in-flow STRIP whose tone is the situation's by token identity (a manual success → the neutral
+notice pair, `status`; an automatic failover → the caution pair, `alert`; an unhealthy primary
+→ `colors.error`, `alert`, no Dismiss); the `offline-mock` suppression moved from `App.tsx` INTO
+the component and is asserted with its positive control; dismissal keyed by the event's
+timestamp; the `--r-alarm-*` family deleted.
 
 ### Notices inside the layers panel
 
@@ -292,6 +313,12 @@ line where that will be attempted.
 _"🔴 THE BUG: Tab off the LAST control wraps back inside instead of leaving the overlay"_, with the
 inverse _"🔴 THE INVERSE: released, it handles nothing — the app gets its keyboard back"_; e2e
 `apps/runtime/tests/e2e/lock-keyboard-containment.spec.ts`.
+✅ **PHASE 9 (§16.5):** the plant reddened the trap suite (4) and two digit cases; the LOOK was
+taken (`Console locked`, the icon box, the mono PIN field, `Unlock console` full width) over the
+app's own scrim and card, and the CONTRACT is now pinned in its own right by
+`apps/runtime/tests/lockOverlay.contract.dom.test.ts` (6): not a `<dialog>`, no dismiss control,
+every control is the release path, Escape and the scrim do nothing, a wrong PIN leaves it up, and
+only `engaged: false` takes it down.
 
 **16. Engage-lock dialog**
 Now: `features/lock/EngageLockDialog.tsx`, opened from `StatusBar.tsx:568`, sends `lock.engage`.
@@ -302,6 +329,11 @@ _"a Persian-typed engage PIN is stored in Latin (StatusBar → lock.engage)"_ �
 normalisation through this dialog, not that it appears; e2e
 `apps/runtime/tests/e2e/lock-prompt-enter.spec.ts` covers the prompt. Phase 9 should strengthen
 this to a presence-and-confirmation assertion rather than leave it riding on a digit test.
+✅ **STRENGTHENED BY PHASE 9 (§16.1, §16.6):** both plants (the mismatch refusal removed; the
+bar's door wired shut) reddened ONLY through `numericInput.dom.test.ts`;
+`apps/runtime/tests/engageLockDialog.dom.test.ts` (5) now asserts the dialog in its own right —
+two fields and the advisory, the short-PIN and mismatch refusals with their sentences and no
+engage, the match engaging once, Cancel as a way out of ENGAGING and not of the lock.
 
 ### Status-bar vocabulary
 
@@ -353,8 +385,12 @@ After: preserved; its palette is re-tokened in Phase 2.
 Now: `ui/Tooltip.tsx`, mounted once at `App.tsx:439`; every control carrying a `title` inherits it.
 The reference uses native `title` attributes throughout.
 After: preserved — and load-bearing, because golden rule 11's relocated ids live in `title`.
-🔴 **No test exists** — no file under `apps/runtime/tests` references `Tooltip`.
-Owed: `apps/runtime/tests/tooltip.dom.test.ts`.
+🔴 **No test existed** — no file under `apps/runtime/tests` referenced `Tooltip`.
+✅ **DISCHARGED BY PHASE 9 (§16.1, §16.6).** The plant that unmounted it from `App` left 1318
+green; `apps/runtime/tests/tooltip.dom.test.ts` (4) now reddens under it — the delegation
+contract: a control opts in by its `title` alone, the bubble appears after the dwell with the
+title's text, the native title is blanked while it is up and restored exactly on leave, Escape
+dismisses, and a control with no title shows nothing. Placement is not asserted in jsdom (12c).
 
 **23. App-wide native context-menu suppression, with editable fields exempt**
 Now: `App.tsx:74-131` (`isEditable` + `suppressNativeMenu`). On a playout machine Reload and Back
@@ -2113,3 +2149,290 @@ results`, `Reset filters`, `N of M events`) and the audit's head words moved to 
   <https://github.com/yasermostafaee/cg/actions/runs/34235812109> — `conclusion: success`,
   11 m 39 s; the `E2E (Playwright)` job RAN 11 m 14 s (14:03:37Z → 14:14:51Z), its `E2E` step
   14:04:57Z → 14:14:39Z. Recorded beside `tasks.md` 8.4, as every phase before it.
+
+## 16 — Phase 9: the surfaces the reference does not draw
+
+The record of `RUNTIME-REDESIGN-01` Phase 9 (2026-09-08): what contradicted the prompt (§16.0),
+the plant pass that redefined the phase and its result per guard item (§16.1), what was built
+(§16.2), the measured comparison for the three surfaces that borrow geometry the reference does
+draw (§16.3), the caution split (§16.4), the lock (§16.5), the red-first proofs (§16.6), what the
+phase did NOT do (§16.7) and the runs (§16.8).
+
+### 16.0 What contradicted the prompt
+
+- **`PROMPT.md` §9 asks for _"one test per guarded surface"_; the guard's own history says a test
+  is not a guard.** Phase 8's item 27 went red under a plant that removed the actor column WHILE
+  the three caveat tests stayed green — the column could be deleted and nothing failed. So this
+  phase did not write four tests and stop. It planted the removal of EVERY item in §3 — the render
+  deleted, or its raising condition made unreachable — ran the whole runtime unit suite against
+  each plant, and recorded what reddened. The honest measure of Phase 1's guard is the count in
+  §16.1, not the number of ✅ marks in §3. **And the phase met the lesson itself:** the first
+  `tooltip.dom.test.ts` mounted the component and passed, and the plant that unmounts it from
+  `App` STAYED GREEN under it — a suite that mounts the thing cannot notice the app no longer
+  does. The App-level case is what reddens.
+- **The reference draws a lock, and draws it on its dialog primitive** (§0 recorded this in Phase
+  1). Measured this phase: the prototype's `#unlock-dialog` is a `<dialog>` inside the
+  Station-setup shadow root, in THAT root's palette (`--surface:#15191f`, a teal `--accent:#8ce6d1`
+  the console does not have) — and the prototype's own lock refuses its `cancel` event
+  (`stillOpen: true` after a dispatched `cancel`), so even the drawing does not offer Escape as a
+  way out. §9 is right and §1.3's enumeration was loose: the LOOK was taken, the primitive was not
+  (§16.5).
+- **`PROMPT.md` §9's "dressed in the new tokens" was already true for most of the twenty-eight
+  items before this phase touched them.** Phase 2 moved the palette under every surface, and the
+  strips inside the layers panel (items 10–14), the status bar (17), the shell chrome (19–21), the
+  suppression (23) and the Inspector-side capabilities (24–26) read tokens and nothing else
+  (`tokenHome.test.ts`, green throughout). What this phase re-dressed is the set the reference
+  gives a SHAPE to — the notice pairs, the toast, the lock — and the one band that was still
+  carrying a token doing two jobs (§16.4).
+- **`B-172` said "get the constraints from the owner before designing"; the owner's prompt for this
+  phase said the failover banner _"should stop being B-172's hard-coded slab"_.** That is the
+  instruction. The slab and the one-colour rule are gone (§16.2); the owner's other cited
+  constraint, one banner at a time, is NOT built and stays recorded on `B-172` as the owner's.
+
+### 16.1 🔴 The plant pass — every guard item, its plant, and whether a test reddened
+
+Method: for each item, one edit that deletes the render or makes its raising condition
+unreachable (the substitution is in the table); the whole runtime unit suite (`vitest run`, 142
+files, 1318 tests, ~45 s) run to a JSON report; the failing tests recorded; the original bytes
+written back and verified. Twenty-eight items, thirty-three unit plants (items 14, 16 and 17 were
+planted per sub-surface) plus two Playwright plants for the two items that are e2e-only by design
+(a fresh `vite build` and only that item's specs, against the built app). Item 28 is a DELIBERATE
+removal (A15) and has nothing to plant. ⚠ Item 8's first run overlapped a token-home edit in the
+working tree and reported seven unrelated suite failures; it was re-run clean and the table
+carries the re-run.
+
+| item | surface                                 | the plant (one substitution, reverted)                | before this phase's tests                  | what reddened (file, cases)                                                                                  | with this phase's tests                                                                   |
+| ---- | --------------------------------------- | ----------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| 1    | emptied-air notice + PUT BACK ON AIR    | `if (notice === null) return null` → always null      | **REDDENED**                               | `emptiedAirNotice.dom` (15)                                                                                  | —                                                                                         |
+| 2    | orphan-layers WARNING strip             | `htmlOrphans` filtered to `[]`                        | **REDDENED**                               | `orphanLayersBanner.dom` (9)                                                                                 | —                                                                                         |
+| 3    | orphan-layers NEUTRAL strip             | `foreignLayers` filtered to `[]`                      | **REDDENED**                               | `orphanLayersBanner.dom` (3, the R-015 cases)                                                                | —                                                                                         |
+| 4    | owned-slot occupancy warning            | `ownedOccupancy.length > 0` → `< 0`                   | **REDDENED**                               | `orphanLayersBanner.dom` (2), `operatorNaming.strips.dom` (3)                                                | —                                                                                         |
+| 5    | bridge-skew banner                      | `missing.length === 0` → `>= 0` (always null)         | 🔴 **STAYED GREEN** (0 of 1318)            | nothing — the ledger's 🔴 was right                                                                          | **REDDENED**: `bridgeSkewBanner.dom` (4 of 5; the silence case green by design)           |
+| 6    | output alarm                            | `losing.length === 0` → `>= 0`                        | **REDDENED**                               | `outputMissingBanner.dom` (8)                                                                                | —                                                                                         |
+| 7    | raster-mismatch banner                  | `mismatched.length === 0` → `>= 0`                    | 🔴 **STAYED GREEN** (0 of 1318)            | nothing — the ledger's 🔴 was right                                                                          | **REDDENED**: `rasterMismatchBanner.dom` (3 of 7; the four silence cases green by design) |
+| 8    | connection banner (DISCONNECTED / TEST) | `if (link === 'live') return null` → always null      | **REDDENED** (re-run)                      | `bannerCompact.dom` (4), `testModeHonesty.dom` (2)                                                           | —                                                                                         |
+| 9    | failover banner                         | `if (!showRecent && !primaryUnhealthy)` → always null | 🔴 **STAYED GREEN** (0 of 1318)            | nothing — the ledger's 🔴 was right                                                                          | **REDDENED**: `failoverBanner.dom` (6 of 9; the three silence cases green by design)      |
+| 10   | restore-skips strip                     | `showSkips &&` → `showSkips && false &&`              | **REDDENED**                               | `layersPanel.restoreSkips.dom` (3), `operatorNaming.strips.dom` (3), `layersPanel.restoreMigrations.dom` (1) | —                                                                                         |
+| 11   | restore-migrations strip                | `showMigrations &&` → `&& false &&`                   | **REDDENED**                               | `layersPanel.restoreMigrations.dom` (5)                                                                      | —                                                                                         |
+| 12   | awaiting-rows strip                     | `awaitingRows > 0` → `< 0`                            | **REDDENED**                               | `layersPanel.awaitingNotice.dom` (3)                                                                         | —                                                                                         |
+| 13   | "Loading the layer list…"               | `!listReady ?` → `!listReady && false ?`              | **REDDENED**                               | `layersPanel.loading.dom` (2)                                                                                | —                                                                                         |
+| 14a  | "No candidate layers" empty state       | `bank === null ?` → `&& false ?`                      | **REDDENED**                               | `layersPanel.loading.dom` (1)                                                                                | —                                                                                         |
+| 14b  | `What the bridge needs` deep link       | `openStationSetup('candidate-layers')` → `undefined`  | **REDDENED**                               | `stationSetupDeepLink.dom` (1)                                                                               | —                                                                                         |
+| 15   | lock overlay                            | `if (!engaged) return null` → always null             | **REDDENED**                               | `lockOverlay.focusTrap.dom` (4), `numericInput.dom` (2)                                                      | + `lockOverlay.contract.dom` (5 of 6)                                                     |
+| 16a  | engage-lock: the mismatch refusal       | `if (first !== second)` → `&& false`                  | **REDDENED**, by ONE digit case            | `numericInput.dom` (1)                                                                                       | + `engageLockDialog.dom` (1)                                                              |
+| 16b  | engage-lock: the door on the bar        | `setEngaging(true)` → `setEngaging(false)`            | **REDDENED**, by the digit suite ALONE     | `numericInput.dom` (3)                                                                                       | + `engageLockDialog.dom` (1, the door)                                                    |
+| 17a  | status bar: OSC-silent word             | the `⚠ NO OSC FROM` word emptied                      | **REDDENED**                               | `statusBar.noOsc.dom` (1)                                                                                    | —                                                                                         |
+| 17b  | status bar: stopped channel             | the `NOT PRODUCING · CH` word emptied                 | **REDDENED**                               | `statusBar.deadChannel.dom` (1)                                                                              | —                                                                                         |
+| 17c  | status bar: single-server               | `○ NO BACKUP` emptied                                 | **REDDENED**                               | `statusBar.singleServer.dom` (1)                                                                             | —                                                                                         |
+| 17d  | status bar: not-connected honesty       | `stale = link === 'disconnected'` → `false`           | **REDDENED**                               | `statusBar.linkTransition.dom` (2) — ⚠ not `statusBar.notConnected.dom`, which stayed green                  | —                                                                                         |
+| 17e  | status bar: manual failover control     | the control made permanently `disabled`               | **REDDENED**                               | `statusBar.singleServer.dom` (1)                                                                             | —                                                                                         |
+| 18   | command toast                           | `if (feedback === null) return null` → always null    | **REDDENED**                               | `commandToast.dom` (3)                                                                                       | —                                                                                         |
+| 19   | the resizable shell (divider)           | `ShellDivider` returns null                           | unit **STAYED GREEN** — e2e-only by design | **e2e REDDENED**: `divider-across-iframe.spec` 3 failed (3 passed across it and `panel-scroll.spec`)         | —                                                                                         |
+| 20   | narrow-width Inspector overlay + scrim  | `layout.narrow && inspectorOpen &&` → `&& false &&`   | unit **STAYED GREEN** — e2e-only by design | **e2e REDDENED**: `inspector-open-close.spec` 3 failed of 6                                                  | —                                                                                         |
+| 21   | boot splash                             | `window.__CG_SPLASH__` not installed                  | **REDDENED**                               | `splash.dom` (10)                                                                                            | —                                                                                         |
+| 22   | the delegated Tooltip                   | `<Tooltip />` unmounted from `App`                    | 🔴 **STAYED GREEN** (0 of 1318)            | nothing — the ledger's 🔴 was right; ⚠ and STILL GREEN under the component-only suite (0 of 1354)            | **REDDENED**: `tooltip.dom` (1 — the App-level MOUNT case)                                |
+| 23   | native context-menu suppression         | the `contextmenu` listener never registered           | **REDDENED**                               | `contextMenuSuppression.dom` (1)                                                                             | —                                                                                         |
+| 24   | from-file field sources                 | `FromFileControl` returns null                        | **REDDENED**                               | `fromFileGrant.dom` (4)                                                                                      | —                                                                                         |
+| 25   | live-source swap dialog                 | `LiveSourceSwapDialog` returns null                   | **REDDENED**                               | `liveSourceSwap.dom` (6)                                                                                     | —                                                                                         |
+| 26   | the outputs technical surface           | `OutputsSection` returns null                         | **REDDENED**                               | `outputsSection.dom` (22), `stationSetupChannelKeyed.dom` (2), `stationSetupServers.dom` (1)                 | —                                                                                         |
+| 27   | the audit actor column                  | the `Actor` head and the row's `<bdi>` emptied        | **REDDENED**                               | `auditPanel.actorColumn.dom` (3) — the caveat's three older tests green, as Phase 8 found                    | —                                                                                         |
+| 28   | the audio dialog's MUTE                 | nothing to plant — a DELIBERATE removal (A15)         | n/a                                        | n/a                                                                                                          | n/a                                                                                       |
+
+**The count.** Twenty-three entries carried a ✅ (twenty-one unit, two Playwright) and **all
+twenty-three reddened** under their plants; the four 🔴 entries (5, 7, 9, 22) **stayed green**,
+exactly as the ledger said. So Phase 1's guard was worth what it claimed — with two qualifications
+the pass surfaced and this phase closed: item 16's ✅ was one digit-normalisation suite reaching
+the dialog on its way to `lock.engage` (the door plant reddened nothing else), and item 22's first
+NEW suite was itself a test that was not a guard. Nothing in the ledger "only looked guarded";
+what the pass measured is that a ✅ written from a grep is right about existence and silent about
+depth, which is why every entry now names the file AND the cases that go red.
+
+### 16.2 What was built
+
+- **Four tests that did not exist** — `bridgeSkewBanner.dom.test.ts` (5),
+  `rasterMismatchBanner.dom.test.ts` (7, every member of `RasterVerdict`),
+  `failoverBanner.dom.test.ts` (9, the three tones by token identity and the suppression with its
+  positive control) and `tooltip.dom.test.ts` (5: the delegation contract on the component, and
+  the MOUNT on the whole `App`) — each proved to redden by re-planting the same removal (§16.6).
+- **Two contracts pinned in their own right** — `lockOverlay.contract.dom.test.ts` (6: not a
+  `<dialog>`, no dismiss control, every control is the release path, Escape and the scrim do
+  nothing, a wrong PIN leaves it up, only `engaged: false` takes it down) and
+  `engageLockDialog.dom.test.ts` (6: two fields and the advisory, the short-PIN and mismatch
+  refusals, the match engages once, Cancel, and the status bar's DOOR) — item 16's guard no longer
+  rides on the digit-normalisation suite alone.
+- **The failover banner as a STRIP whose tone is the situation's** (`B-172` CLOSED): in the banner
+  region, `data-tone` notice / caution / alarm from the reference's notice pairs and
+  `colors.error`, `status` for a completed manual failover and `alert` for the rest, no Dismiss on
+  a broken primary; the `offline-mock` suppression moved from `App.tsx` INTO the component so it
+  can be tested; the `--r-alarm-*` family deleted (A9 — read by nothing).
+- **The bridge-skew banner in the reference's warn pair** — `--r-caution-text` on `--r-caution-bg`,
+  ruled by `--r-notice-line`, with the notice's icon and box — `data-tone="caution"`, still
+  `alert`, still amber and never red (asserted by token identity against the three alarm fills).
+- **The notice pairs as the reference renders them** — `--r-notice-fill` / `--r-notice-line`
+  MOVED to the warn pair (`#352d1e` / `#655334`; 8.99:1 under `--r-caution-text`), the PLAIN pair
+  added (`--r-notice-neutral-*`; 10.10:1), and the box (`13px 15px`, radius 8, 13 px / 1.6, an
+  18 px icon gapped 10) as `NOTICE_PX` → `--r-notice-*`; read by the emptied-air notice, the three
+  orphan / occupancy strips, `Notice` (both roles), the skew banner and the failover strip.
+- **The toast at the reference's place and palette** — `TOAST_PX` → `--r-toast-*`: 42 px off the
+  foot, `12px 17px`, radius 9, 14 px, the OK pair `#d6f3e3` on `#1d3b30` ruled `#4b7f68`
+  (10.34:1); the error toast keeps `colors.error` because the reference draws no error toast.
+- **The lock in the reference's LOOK over the app's own chrome** — `LOCK_PX` → `--r-lock-*`; the
+  icon box in the console's accent pair (7.50:1), `Console locked`, the reference's copy sentence,
+  a mono PIN field tracked `.3em`, `Unlock console` full width in a ruled foot; the scrim, the
+  focus trap, the reason and elapsed chips and the refusal line kept (§16.5).
+- **The caution split** (§16.4) — `--r-caution-fill` for the CLEAR verb; `--r-caution` /
+  `colors.pending` are now INK alone.
+- **`PROMPT.md` §11's hard stops respected:** no AMCP, nothing deleted on the owner's machine, the
+  bank fencing, the refusal and preflight paths, `reconcileOnReconnect` and `LockPolicy`
+  untouched; no persisted key, file or schema (`persistedKeyCensus.test.ts` unchanged); nothing
+  translated (the lock's two sentences are the reference's own English, swept with `git grep`);
+  no colour literal outside the token home (`tokenHome.test.ts` green); staged by path.
+
+### 16.3 🔴 The measured comparison — rendered reference vs app, every delta FIXED or ARGUED
+
+Measured in Chromium at 1280 × 800 on `04-playout-layers.html` with `data-start` switched
+(`PROMPT.md` §0), computed styles read off the element, never a rule quoted. The reference's
+`.notice` is a **single wave** — the only single-wave rule this programme has met (the nested
+`.small .notice`, `.audit-detail .notice` and `.template-detail .notice` restatements add margins
+only); `.global-toast` is restated **three** times and the last (`bottom:42px`) paints; the
+`unlock-dialog` lives inside the Station-setup **shadow root** and is drawn in THAT palette
+(`:host{--surface:#15191f;--accent:#8ce6d1…}`), which is not the console's.
+
+**The notice (guard items 1–4, 5, 9, `Notice`)**
+
+| property                                  | reference, as rendered                    | app, after Phase 9                                                                    | verdict                                                                                                                        |
+| ----------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| box                                       | `13px 15px`, radius 8, 1 px rule          | `--r-notice-pad` / `--r-notice-radius` (`NOTICE_PX`)                                  | **FIXED** on every strip and on `Notice`                                                                                       |
+| type                                      | 13 px / 400 on a 20.8 px line (1.6)       | `--r-notice-fs` / `--r-notice-lh`                                                     | **FIXED**; the strips' second lines keep their smaller size — the hierarchy is by size, as `Notice` records                    |
+| icon                                      | 18 px, 2 px down, gapped 10               | `--r-notice-icon` / `--r-notice-gap`; the skew banner and the failover strip draw one | **FIXED** where a strip has an icon; the emptied-air and orphan strips keep their `⚠` glyph (a rule-9 sweep protects its copy) |
+| WARN pair                                 | `#f3cd88` on `#352d1e`, ruled `#655334`   | `--r-caution-text` on `--r-notice-fill` (= `--r-caution-bg`), `--r-notice-line`       | **FIXED** (palette): the two amber tokens MOVED to the reference's pair; 8.99:1                                                |
+| PLAIN pair                                | `#bed6e5` on `#172736`, ruled `#2b4c62`   | `--r-notice-neutral-text/-bg/-line`, new                                              | **FIXED** (new roles): the video-layer strip, a manual failover, `Notice`'s `notice`; 10.10:1, muted detail 5.55:1             |
+| ERROR pair                                | `#ffaaa7` on `#3a242a`, ruled `#68414c`   | NOT taken by the air alarms — `colors.error` with `--r-ink-on-fill` (8.31:1)          | **ARGUED** (A4 / 2A): the reference spends its pastel error card on an import failure; an air alarm keeps the alarm fill       |
+| a strip's corners at the top of the shell | the reference draws no top-of-shell strip | the skew banner and the failover strip are full-width bands, radius 0, ruled below    | **ARGUED**: a card's corner belongs inside a panel; a band across the shell has no panel to sit in                             |
+
+**The toast (guard item 18)**
+
+| property | reference, as rendered                                         | app, after Phase 9                                        | verdict                                                                                                      |
+| -------- | -------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| place    | fixed, centred, 42 px off the foot                             | `--r-toast-bottom`                                        | **FIXED** (was 3 rem)                                                                                        |
+| box      | `12px 17px`, radius 9, 1 px rule, `0 8px 40px` shadow, 47 tall | `--r-toast-pad` / `--r-toast-radius` / `--r-toast-shadow` | **FIXED**                                                                                                    |
+| type     | 14 px / 400 on 21                                              | `--r-toast-fs`; weight stays 700                          | **FIXED** (size); ARGUED (weight): a refusal at 400 reads as a caption                                       |
+| OK pair  | `#d6f3e3` on `#1d3b30`, ruled `#4b7f68`, a 17 px mint tick     | `--r-toast-ok-ink/-bg/-line` moved; the tick not drawn    | **FIXED** (palette, 10.34:1); the tick ARGUED — the error toast has no glyph and the two must weigh the same |
+| ERROR    | the reference has no error toast (no refusal path)             | `colors.error` with `--r-ink-on-fill`, unchanged          | n/a — the surface the reference does not draw, kept                                                          |
+
+**The lock (guard item 15)**
+
+| property   | reference, as rendered (shadow palette)                                  | app, after Phase 9                                                                   | verdict                                                                                                                               |
+| ---------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| primitive  | a `<dialog>` inside Station setup, `::backdrop` `rgba(3,6,9,.62)` + blur | the app's own scrim (`--r-lock-scrim`) and card, `useFocusTrap`, no `<dialog>`       | **ARGUED** — §9: the primitive is not taken; the reference's own lock refuses its `cancel` event too (measured: `stillOpen: true`)    |
+| card       | 480 wide, `32px 24px 23px` body, radius 16, ruled `#3a424e`              | `--r-lock-card-w` / `--r-lock-card-pad`, `--r-radius-lg`, `colors.border`            | **FIXED** (box); the ground is the console's panel, not the shadow palette's                                                          |
+| icon box   | 56 × 56, radius 14, accent-dark ground, accent ink, 20 px glyph          | `--r-lock-icon-*`, `--r-accent-fill` under `--r-accent` (7.50:1), `Lock` from lucide | **FIXED** (box); the PAIR is the console's accent — the reference's teal is the shadow root's accent, not a colour this palette has   |
+| title      | `Console locked`, 24 px / 650, centred, tracked −.035em                  | the reference's words, `--r-lock-title-fs`, 650, centred                             | **FIXED**; `RUNTIME LOCKED` swept (two e2e specs re-pointed)                                                                          |
+| copy       | `Playout continues. Enter your PIN to use the console.`, 14 px muted     | the reference's sentence, `--r-lock-copy-fs`, `colors.textMuted` (6.31:1)            | **FIXED**; true here as there — the bridge refuses console verbs, air is untouched                                                    |
+| PIN field  | mono, 16 px, tracked `.3em`, 44 tall, inset ground, accent focus ring    | `--r-font-mono`, `--r-lock-pin-fs`, `.3em`, `--r-lock-pin-h`, `.cg-field`            | **FIXED** (was 1.2 rem tracked `.5em`)                                                                                                |
+| submit     | `Unlock console`, full width, 40 tall, primary                           | `Button primary`, full width, `--r-lock-submit-h`                                    | **FIXED**; `UNLOCK` swept                                                                                                             |
+| meta chips | none — the reference shows no reason and no elapsed time                 | kept: the reason chip and the `Locked for` clock                                     | **ARGUED** — an auto-idle lock and one an operator set are different facts, and a clock says how long the console has been unattended |
+| error line | `unlock-error` under the field                                           | kept under the submit, `--r-error-text`                                              | **FIXED** (palette, 9.53:1)                                                                                                           |
+
+### 16.4 The caution token, split — the one item Phase 2 held
+
+`colors.pending` / `--r-caution` (`#F59E0B`) was ONE token doing two jobs: an INK on a dark
+surface (the row's TAKING / UNCONFIRMED word, the status bar's OSC-silent word, the unassigned
+plate's dashed outline, the outlined verbs' edges) and a FILL with dark ink on top (the
+bridge-skew band, and the CLEAR verb). The reference splits those — `--amber` is only ever
+`color:`, `--amberbg` the ground under it — so no single value could serve both, and Phase 2 held
+it because un-splitting is a component edit. This is the phase that dressed the band, so:
+
+- the skew band takes the reference's PAIR — `--r-caution-text` on `--r-caution-bg`, ruled by
+  `--r-notice-line` — and stops reading `colors.pending` as a ground;
+- the CLEAR verb, the one remaining saturated amber fill, reads a role of its own,
+  `--r-caution-fill` (`.cg-btn--caution-strong`), the same value today and a different NAME, so the
+  verb's fill and the badge's word can be retuned apart;
+- `--r-caution` / `colors.pending` are read only as `color:` / `border-color:` (a `git grep` of
+  every reader: `rowState.ts`, `LinkIndicator`, `StatusBar`, `LivePlatesSection`,
+  `LooksBindingsSection`, `LiveSourceSwapDialog`, `liveLayerRows`, `LivePlateOverlay`,
+  `LayersPanel`'s skip strip, `Button`'s `VARIANT_ACCENT`, the `.cg-btn--caution` outline and the
+  four `.cg-badge--*` words — every one an ink or a line).
+
+Not re-tuned: the ink's value is untouched (7.20:1 on the raised ground), the verb's fill is
+untouched, and `--r-ink-on-caution` still sits on it. The split is a NAME, which is what a split
+was always going to be until somebody wants one half to move.
+
+### 16.5 The lock — the reference's look, not its primitive
+
+`PROMPT.md` §9 and the owner's prompt for this phase both name the attempt in advance: the
+reference draws its lock on the prototype's dialog primitive, and that is not permission. What was
+measured (§16.3) makes the point for them — the drawing's own `<dialog>` refuses its `cancel`
+event, so the prototype's lock has no Escape either. What changed is the LOOK: the reference's
+icon box, `Console locked`, `Playout continues. Enter your PIN to use the console.`, the mono PIN
+field and the full-width `Unlock console`, at the reference's measured geometry (`LOCK_PX`), over
+the app's own scrim and card. What did not change is everything `B-229` and `Modal.tsx`'s note
+protect: no `<dialog>`, no ✕, no Escape, no backdrop click, the SAME `useFocusTrap` the modal
+composes with its exits and the lock composes alone, and the bridge's `LOCK_ENGAGED_REFUSAL`
+behind it. The contract is asserted as PROPERTIES in `lockOverlay.contract.dom.test.ts` so the look
+can change and the contract cannot; the trap keeps its own suite and its real-engine e2e. The two
+old strings (`RUNTIME LOCKED`, `UNLOCK`) were swept with `git grep`: two e2e specs quoted them and
+were re-pointed; no doc or spec did.
+
+### 16.6 🔴 The red-first proofs
+
+| proof                                          | file                                            | RED against                                                                                                                     | GREEN |
+| ---------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| guard item 5 — the skew banner                 | `tests/bridgeSkewBanner.dom.test.ts`            | the render plant (§16.1): 4 of 5 red, the silence case green by design; 1318 green without the file                             | 5 / 5 |
+| guard item 7 — the raster banner               | `tests/rasterMismatchBanner.dom.test.ts`        | the render plant: 3 of 7 red, the four silence cases green by design                                                            | 7 / 7 |
+| guard item 9 — the failover strip              | `tests/failoverBanner.dom.test.ts`              | the render plant: 6 of 9 red (every tone, the strip, dismissal, the suppression's positive control); the suppression green      | 9 / 9 |
+| guard item 22 — the tooltip                    | `tests/tooltip.dom.test.ts`                     | the unmount plant: 0 red under the component-only suite (the file's own lesson), 1 red once the App-level case existed          | 5 / 5 |
+| guard item 15 — the lock's contract            | `tests/lockOverlay.contract.dom.test.ts`        | the render plant: 5 of 6 red (the not-engaged case green by design)                                                             | 6 / 6 |
+| guard item 16 — the engage dialog and its door | `tests/engageLockDialog.dom.test.ts`            | the mismatch plant: its refusal case red; the door plant: its door case red — each beside the digit suite that used to be alone | 6 / 6 |
+| items 19 and 20 — Playwright-only by design    | `divider-across-iframe`, `inspector-open-close` | the two e2e plants against a fresh build: 3 and 3 red                                                                           | green |
+
+No plant is in the tree: every plant was reverted by writing its original bytes back and
+re-reading them, and `git status` after the passes lists only this phase's own edits.
+
+### 16.7 What Phase 9 did NOT do — and the numbers filed
+
+- It did not take the reference's pastel ERROR notice for the air alarms (connection, raster,
+  output): those keep the saturated `colors.error` fill with light ink (A4 / 2A). The reference
+  spends its error card on an import failure, which is not an alarm about air.
+- It did not give the top-of-shell strips a card's corners or margins; a band across the shell has
+  no panel to sit in. It did not change the layers panel's own strips (10–14) beyond the palette
+  Phase 2 already moved under them — they are table chrome, not notices, and their geometry is
+  Phase 3's.
+- It did not build "one banner at a time": the banner region still stacks its strips with no
+  arbitration. Recorded on `B-172` as the owner's call.
+- It did not draw the toast's tick or take the reference's 400 weight on it — the error toast has
+  no glyph and the two must weigh the same.
+- It did not put a reason chip or a clock on the reference's lock because the reference has none;
+  it KEPT the console's, because an auto-idle lock and one an operator set are different facts.
+- It did not re-point any existing test except the two lock e2e specs that quoted the old title and
+  button word (rule 9); `numericInput.dom.test.ts` is byte for byte what it was.
+- It did not touch the bridge, the bank fencing, the refusal and preflight paths,
+  `reconcileOnReconnect`, `LockPolicy`, any persisted key, file or schema, or any string in Persian.
+- It did not measure any geometry in jsdom. The notice, toast and lock boxes are measured in
+  Chromium in `tests/e2e/guard-surfaces-geometry.spec.ts` against the token home.
+- Numbers closed: **`B-172`**. Numbers taken: none. Filed for the owner: nothing new — the two
+  decisions this phase made in the owner's place (the failover tones; the lock's kept chips) are
+  argued in §16.3 and §16.5 and are the kind a re-dress may make, but each is one line to reverse.
+
+### 16.8 The runs
+
+- The plant passes: 33 unit plants at ~45 s each (1318 tests before this phase's suites, 1354–1356
+  with them), two Playwright plants against a fresh `vite build`, two re-plant passes for the
+  suites this phase wrote (§16.1, §16.6). Every plant reverted by its original bytes;
+  `git status` after each pass lists only the phase's own edits.
+- `pnpm gate`: **`93 successful, 93 total · 0 cached, 93 total`**, foreground, 3 m 26 s; runtime
+  148 files / 1356 tests; prettier clean; OpenSpec `78 passed, 0 failed`. Its first run was red on
+  ONE lint error in the new e2e spec (an inline `import()` type annotation) — fixed, re-run green.
+  ⚠ The Stop hook's gate at the end of the phase's first turn was red on two things that were
+  mid-flight, not defects: the plant loop had item 23's plant applied at that moment, and the
+  token home was ahead of the two components that read the deleted `--r-alarm-*` family.
+- `pnpm --filter @cg/runtime test:e2e`, Windows, against the gate's build: **145 passed (3.8 m)**
+  on the third run. The first two lost 1 and then 4 specs to `page.goto` load timeouts — the
+  `B-098` class — with two STALE `vite preview` servers from earlier sessions (one from 11:11 that
+  morning) still listening on this host beside the owner's two dev servers and the live bridge;
+  with the two strays stopped, the four specs re-ran 20 / 20 and the full suite ran clean. ⚠
+  NON-AUTHORITATIVE (golden rule 12a).
+- The new geometry spec `guard-surfaces-geometry.spec.ts` (2) ran green in Chromium beside the
+  lock, orphan and lock-prompt specs (5 / 5, 11 s) and in the full suite.
+- The Linux `e2e` on the code head: recorded beside `tasks.md` 9.4 by the follow-up docs commit,
+  with its URL, duration and that it RAN.

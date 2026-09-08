@@ -41,6 +41,64 @@ implementation that renders the thing and means nothing by it.
   test that exists in the tree and asserts that entry's condition, and no entry cites a test that
   only constructs the component
 
+#### Scenario: A guard entry's test reddens when the surface is removed
+
+- **WHEN** a guarded surface's render is deleted or its raising condition is made unreachable, in
+  a plant that is then reverted **THEN** at least one test the entry cites fails, and an entry
+  whose cited tests stay green under such a plant is recorded as UNGUARDED regardless of how many
+  tests mention the component — a surface having tests is not the same as a surface being guarded
+
+### Requirement: The failover banner is a strip whose tone is the situation's, and it is silent in test mode
+
+The failover banner SHALL be an in-flow strip in the shell's banner region, never a fixed slab, and
+SHALL take its tone from what it reports rather than from one alarm colour: a manual failover that
+succeeded is a neutral notice announced as a status; an automatic failover is the caution pair
+announced as an alert; a degraded or disconnected primary is the alarm, announced as an alert and
+offering no dismissal. Every tone SHALL be a token of the token home, asserted by identity and
+never by hex.
+
+While the link is the offline mock the banner SHALL render nothing whatever the mock's health
+says, because in test mode there are no real servers to describe and the TEST MODE banner is the
+truth in that mode.
+
+#### Scenario: A completed manual failover is information
+
+- **WHEN** the health reading carries a manual failover event and the primary is healthy **THEN**
+  the strip renders in the neutral notice pair with a status role, names the server that is now
+  primary, and can be dismissed
+
+#### Scenario: A new failover re-shows a dismissed strip
+
+- **WHEN** the operator has dismissed one failover event and a later event with a different
+  timestamp arrives **THEN** the strip renders again
+
+#### Scenario: An unhealthy primary is the alarm and cannot be hidden
+
+- **WHEN** the primary's state is degraded or disconnected **THEN** the strip renders in the alarm
+  fill with an alert role and no dismiss control exists
+
+#### Scenario: The offline mock suppresses it
+
+- **WHEN** the link is `offline-mock` and the health reading would otherwise raise the strip
+  **THEN** nothing renders, and the same reading on a live link renders
+
+### Requirement: The caution hue is an ink, and its one saturated fill has its own role
+
+The caution token read as `color:` SHALL NOT be the same token any surface reads as a ground. The
+bridge-skew banner SHALL fill with the caution pair the reference draws — the caution ink on the
+caution ground — and SHALL be that pair and not any alarm fill, asserted by token identity; the
+one remaining saturated amber fill, the CLEAR verb, SHALL read its own fill role.
+
+#### Scenario: The bridge-skew banner is amber, never red
+
+- **WHEN** the bridge reports commands this page can issue that it does not route **THEN** the
+  banner renders as an alert filled with the caution ground, and its fill is none of the alarm,
+  danger or error fills
+
+#### Scenario: The skew banner is silent on an unanswered handshake
+
+- **WHEN** no skew is known, or the reported set is empty **THEN** the banner renders nothing
+
 ### Requirement: The console lock keeps its own chrome and its no-exit contract
 
 The lock screen SHALL NOT be built on the shared modal primitive, and SHALL offer no dismissal path
@@ -56,6 +114,14 @@ hand the keyboard back to the application.
 
 - **WHEN** the console is locked and the operator presses Escape, clicks outside the card, or
   reaches for a close control **THEN** the lock stays engaged and no close control exists to reach
+
+#### Scenario: The lock takes the reference's look and not its primitive
+
+- **WHEN** the console is locked **THEN** the lock renders the reference's look — an icon box, the
+  `Console locked` title, the PIN field and one full-width submit — as its own element that is not
+  a `<dialog>`, every control in it is the release path, Escape and a press on the scrim leave it
+  engaged, a wrong PIN is refused legibly with the lock still up, and it leaves only when the lock
+  state reports released
 
 #### Scenario: The keyboard cannot leave the lock
 

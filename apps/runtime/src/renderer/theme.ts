@@ -133,16 +133,19 @@ export const colors = {
    */
   ready: REF_BLUE,
   /**
-   * ATTENTION — TAKING, UNCONFIRMED, OCCUPIED, EXIT… and the bridge-skew band's FILL.
+   * ATTENTION, as INK — TAKING, UNCONFIRMED, OCCUPIED, EXIT, the status bar's OSC-silent
+   * word, the unassigned-plate mark. `color:` and a line, never a ground.
    *
-   * 🔴 HELD AT `#F59E0B` IN PHASE 2, AND THE REASON IS A DEFECT WORTH THE OWNER'S EYE:
-   * this ONE token is used both as an INK on a dark surface (`rowState.ts`, the status
-   * bar's OSC-silent word, the unassigned-plate mark) and as a FILL with dark ink on
-   * top (`BridgeSkewBanner`'s band). The reference splits those — `REF_AMBER` is an ink
-   * that appears only as `color:`, `REF_AMBER_BG` is the ground under it — so there is
-   * no single reference value this token can take without making one of its two jobs
-   * worse. Splitting it is a component edit, and Phase 2 changes no component.
-   * The ink half moved where it is unambiguous: see `--r-caution-text`.
+   * 🔴 HELD AT `#F59E0B` IN PHASE 2 because this ONE token was doing two jobs: an INK on a
+   * dark surface here, and a FILL with dark ink on top in `BridgeSkewBanner`'s band. The
+   * reference splits those — `REF_AMBER` is an ink that appears only as `color:`,
+   * `REF_AMBER_BG` is the ground under it — so no single value could serve both.
+   *
+   * ⭐ SPLIT IN PHASE 9 (`design.md` §16), the phase that dressed the band: the skew banner
+   * now takes the caution PAIR the reference draws (`--r-caution-text` on `--r-caution-bg`,
+   * ruled by `--r-notice-line`), and the one remaining amber FILL — the CLEAR verb — reads
+   * its own role, `--r-caution-fill`. Nothing reads `pending` / `--r-caution` as a ground
+   * any more, which is what makes the value below a decision about an INK alone.
    */
   pending: '#F59E0B',
   /**
@@ -418,6 +421,54 @@ export const LOOK_STRIP_PX = {
   thumbW: 27,
   thumbH: 19,
   thumbGap: 2,
+} as const;
+/*
+ * ── `RUNTIME-REDESIGN-01` PHASE 9 — THE SURFACES THE REFERENCE DOES NOT DRAW ──────────
+ *
+ * Three of them borrow geometry the reference DOES draw, measured in Chromium at
+ * 1280 × 800 (`design.md` §16.3): its `.notice` (one wave — the only single-wave rule this
+ * programme has met), its `.global-toast` (three waves; the last paints `bottom:42px`), and
+ * the `unlock-dialog` inside the Station-setup shadow root. Numbers, not rules.
+ */
+export const NOTICE_PX = {
+  /** `.notice{padding:13px 15px;border-radius:8px}`. */
+  padY: 13,
+  padX: 15,
+  radius: 8,
+  /** `font-size:.8125rem;line-height:1.6` — 13 px on a 20.8 px line. */
+  text: 13,
+  line: 1.6,
+  /** `gap:10px` between the 18 px icon and the text. */
+  gap: 10,
+  icon: 18,
+} as const;
+export const TOAST_PX = {
+  /** `.global-toast{bottom:42px}` — the LAST of three restatements, and the one that paints. */
+  bottom: 42,
+  /** `padding:12px 17px;border-radius:9px;font-size:.875rem`. */
+  padY: 12,
+  padX: 17,
+  radius: 9,
+  text: 14,
+} as const;
+export const LOCK_PX = {
+  /** The dialog box — 480 wide; `.sub-body{padding:32px 24px 23px}`. */
+  cardW: 480,
+  padTop: 32,
+  padX: 24,
+  padBottom: 23,
+  /** `.unlock-icon{width:56px;height:56px;border-radius:14px}` around a 20 px glyph. */
+  iconBox: 56,
+  iconRadius: 14,
+  iconGlyph: 20,
+  /** `.unlock-title` 24 px / 650, centred; `.unlock-copy` 14 px muted. */
+  titleText: 24,
+  copyText: 14,
+  /** `.pin-input` — 16 px mono, tracked `.3em`, a 44 px field. */
+  pinText: 16,
+  pinH: 44,
+  /** The full-width `Unlock console` — `.btn.primary` at 40 px. */
+  submitH: 40,
 } as const;
 /*
  * ── `RUNTIME-REDESIGN-01` PHASE 5 — THE INSPECTOR'S GEOMETRY, AS THE REFERENCE RENDERS IT ──
@@ -920,16 +971,22 @@ export const cssVars = {
   '--r-field-line': '#435367',
   '--r-onair': colors.onAir, // sacred GREEN — ON AIR only (see the header)
   /**
-   * AMBER AS A FILL — the bridge-skew band, and the caution role generally.
+   * AMBER AS INK — the caution role: Out / EXIT / UNCONFIRMED / dirty, a badge's word, an
+   * outlined button's edge.
    *
-   * HELD in Phase 2. `colors.pending` carries the argument: this token is an ink in
-   * some places and a fill in others, the reference splits those into `REF_AMBER`
-   * and `REF_AMBER_BG`, and un-splitting the app's one token is a component edit.
-   * ⚠ It must stay AMBER whatever else changes: the bridge-skew banner reports and
-   * never gates, and a red one would stand beside DISCONNECTED — an operator who
-   * discounts one will discount both (`B-153`, and `design.md` §3 item 5).
+   * HELD in Phase 2 while it was also a FILL (`colors.pending` carries the argument);
+   * SPLIT in Phase 9. This token is now read only as `color:` / `border-color:`; the
+   * two amber GROUNDS are `--r-caution-bg` (the reference's pair, under `--r-caution-text`)
+   * and `--r-caution-fill` (the CLEAR verb's saturated fill, directly below).
    */
   '--r-caution': '#F59E0B', // amber — Out / EXIT / UNCONFIRMED / dirty
+  /**
+   * AMBER AS A SATURATED FILL — the CLEAR verb (`.cg-btn--caution-strong`), the one place
+   * the caution hue is still a ground with dark ink on top. The same value as the ink
+   * today and a different NAME, so the verb's fill and the badge's word can be retuned
+   * apart — the split Phase 2 held and Phase 9 made (`design.md` §16).
+   */
+  '--r-caution-fill': '#F59E0B',
   '--r-danger': '#DC2626', // Remove — a FILL; the reference draws none, so it is held
   '--r-danger-strong': '#B91C1C',
   /**
@@ -1137,7 +1194,10 @@ export const cssVars = {
   '--r-ink-on-accent': '#04121F',
   '--r-ink-on-caution': '#1C1207',
   '--r-ink-on-verb': INK_DEEP,
-  /** The dark ink on the caution BAND (the connection / bridge-skew banners). */
+  /**
+   * The dark ink on the hazard BAND — the connection banner's TEST MODE stripes. (Until
+   * Phase 9 the bridge-skew banner read it too; that band now takes the caution PAIR.)
+   */
   '--r-ink-on-band': '#0B0B0C',
   /**
    * DANGER as TEXT on a dark ground — the outlined Remove, the error badge.
@@ -1411,20 +1471,76 @@ export const cssVars = {
   '--r-shadow-menu': '0 4px 16px rgba(0, 0, 0, 0.45)',
   '--r-shadow-drawer': '-8px 0 24px rgba(0, 0, 0, 0.45)',
 
-  // NOTICES — the amber-bordered advisory the app uses in five places.
-  '--r-notice-line': '#B45309',
-  '--r-notice-fill': 'rgba(180, 83, 9, 0.12)',
+  /*
+   * ── `RUNTIME-REDESIGN-01` PHASE 9 — THE NOTICE, AS THE REFERENCE RENDERS IT ──────────
+   *
+   * The reference's `.notice` is ONE wave (measured in Chromium at 1280 × 800, `design.md`
+   * §16.3): a `13px 15px` box, radius 8, 13 px on a 1.6 line, an 18 px icon gapped 10, in
+   * one of three pairs — plain (`#bed6e5` on `#172736`, ruled `#2b4c62`), warn (`--amber`
+   * on `--amberbg`, ruled `#655334`) and error (`--red` on `--redbg`, ruled `#68414c`).
+   *
+   * The WARN pair is what every amber strip in the app already meant — the emptied-air
+   * notice, the orphan and occupancy strips, `Notice`'s refusal, the amber tag — so
+   * `--r-notice-fill` / `--r-notice-line` MOVE to it (a role adopts a reference value IFF the
+   * reference declares one for that role, §7.1). The PLAIN pair is new: it dresses the
+   * neutral strips that used to borrow the panel's own surface (the video-layer strip, a
+   * completed manual failover, `Notice`'s `notice` role). The ERROR pair is NOT taken for
+   * the air alarms — those keep `colors.error` with light ink (A4 / 2A: alarm severity by
+   * air-criticality), and the reference spends its pastel error card on an import failure,
+   * which is not an alarm about air.
+   */
+  '--r-notice-line': '#655334',
+  '--r-notice-fill': REF_AMBER_BG,
+  '--r-notice-neutral-bg': '#172736',
+  '--r-notice-neutral-line': '#2b4c62',
+  '--r-notice-neutral-text': '#bed6e5',
+  '--r-notice-pad': `${String(NOTICE_PX.padY)}px ${String(NOTICE_PX.padX)}px`,
+  '--r-notice-radius': `${String(NOTICE_PX.radius)}px`,
+  '--r-notice-fs': `${String(NOTICE_PX.text)}px`,
+  '--r-notice-lh': String(NOTICE_PX.line),
+  '--r-notice-gap': `${String(NOTICE_PX.gap)}px`,
+  '--r-notice-icon': `${String(NOTICE_PX.icon)}px`,
 
-  // THE FAILOVER ALARM — its own deep red family, louder than `--r-error`.
-  '--r-alarm-bg': '#7F1D1D',
-  '--r-alarm-ink': '#FEF2F2',
-  '--r-alarm-line': '#B91C1C',
-  '--r-alarm-ink-line': 'rgba(254, 242, 242, 0.4)',
-  '--r-alarm-ink-line-strong': 'rgba(254, 242, 242, 0.5)',
+  /*
+   * THE FAILOVER ALARM's own `--r-alarm-*` family (a deep red slab, `B-172`) was DELETED in
+   * Phase 9: the banner is a strip whose tone is the situation's, and it reads the notice
+   * pairs above and `colors.error` like every other alarm. A token read by nothing is a
+   * trap (A9), so the family is gone rather than documented dead.
+   */
 
-  // THE COMMAND TOAST's acknowledged form.
-  '--r-toast-ok-bg': '#065F46',
-  '--r-toast-ok-ink': '#ECFDF5',
+  /*
+   * THE COMMAND TOAST — the reference's `.global-toast` as rendered (`design.md` §16.3):
+   * `#d6f3e3` on `#1d3b30`, ruled `#4b7f68`, radius 9, `12px 17px`, 14 px, 42 px off the
+   * foot, under `0 8px 40px` of shadow. The reference has no ERROR toast (its toast has no
+   * command-refusal path), so that half keeps `colors.error` with the fill ink.
+   */
+  '--r-toast-ok-bg': '#1d3b30',
+  '--r-toast-ok-ink': '#d6f3e3',
+  '--r-toast-ok-line': '#4b7f68',
+  '--r-toast-bottom': `${String(TOAST_PX.bottom)}px`,
+  '--r-toast-pad': `${String(TOAST_PX.padY)}px ${String(TOAST_PX.padX)}px`,
+  '--r-toast-radius': `${String(TOAST_PX.radius)}px`,
+  '--r-toast-fs': `${String(TOAST_PX.text)}px`,
+  '--r-toast-shadow': '0 8px 40px rgba(0, 0, 0, 0.53)',
+
+  /*
+   * THE LOCK SCREEN — the reference's `unlock-dialog` LOOK (`design.md` §16.3), over the
+   * app's OWN chrome and NOT its dialog primitive (§9; `Modal.tsx`'s note; `B-229`): a
+   * 480 px card, `32px 24px 23px` body, a 56 px icon box with a 14 px corner in the ACCENT
+   * pair, a 24 px / 650 centred title, 14 px muted copy, a mono PIN field tracked `.3em`,
+   * and one full-width primary submit. The reference draws the box in the Station-setup
+   * shadow palette (its teal accent); this console has one accent and the box takes it.
+   */
+  '--r-lock-card-w': `${String(LOCK_PX.cardW)}px`,
+  '--r-lock-card-pad': `${String(LOCK_PX.padTop)}px ${String(LOCK_PX.padX)}px ${String(LOCK_PX.padBottom)}px`,
+  '--r-lock-icon-box': `${String(LOCK_PX.iconBox)}px`,
+  '--r-lock-icon-radius': `${String(LOCK_PX.iconRadius)}px`,
+  '--r-lock-icon-glyph': `${String(LOCK_PX.iconGlyph)}px`,
+  '--r-lock-title-fs': `${String(LOCK_PX.titleText)}px`,
+  '--r-lock-copy-fs': `${String(LOCK_PX.copyText)}px`,
+  '--r-lock-pin-fs': `${String(LOCK_PX.pinText)}px`,
+  '--r-lock-pin-h': `${String(LOCK_PX.pinH)}px`,
+  '--r-lock-submit-h': `${String(LOCK_PX.submitH)}px`,
 
   // THE CONNECTION BAND's hazard stripe.
   '--r-band-stripe-a': '#F5C451',

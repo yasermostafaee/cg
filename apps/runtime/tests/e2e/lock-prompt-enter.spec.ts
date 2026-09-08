@@ -99,6 +99,8 @@ test('Enter locks and CLOSES the PIN dialog, exactly as the button does', async 
   */
   await expect.poll(() => openDialogs(page), { timeout: 5000 }).toEqual(['Lock screen']);
 
-  // …and the console is genuinely locked, not merely showing a screen.
-  await expect(page.getByText('RUNTIME LOCKED')).toBeVisible();
+  // …and the console is genuinely locked, not merely showing a screen. (`Console locked` is
+  // the reference's own title, taken in `RUNTIME-REDESIGN-01` Phase 9 — over the app's own
+  // chrome, not the reference's dialog primitive.)
+  await expect(page.getByText('Console locked')).toBeVisible();
 });

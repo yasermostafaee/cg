@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { colors, cssVars } from '../../theme.js';
+import { TriangleAlert } from 'lucide-react';
+import { Icon } from '../../ui/Icon.js';
+import { cssVars, NOTICE_PX } from '../../theme.js';
 
 /**
  * 🔴 **`B-153` — THE BRIDGE IS OLDER THAN THIS PAGE, SAID AT CONNECT.**
@@ -26,28 +28,33 @@ import { colors, cssVars } from '../../theme.js';
  * nothing is off air. There is work to do — restart the bridge — and until it is done some
  * commands are unavailable. Red would put this beside DISCONNECTED, which means nothing can
  * reach air at all, and an operator who learns to discount one will discount both.
+ *
+ * `RUNTIME-REDESIGN-01` Phase 9 — the band is the reference's `.notice.warn` PAIR
+ * (`--r-caution-text` on `--r-caution-bg`, ruled by `--r-notice-line`) in the notice's own
+ * box, as a full-width band. It used to fill with `colors.pending` under a dark ink — the one
+ * place the caution INK was being spent as a GROUND, which is the split Phase 2 held and this
+ * phase made (`design.md` §16.4). `bridgeSkewBanner.dom.test.ts` pins the pair by token
+ * identity against the three alarm fills: amber, never red, is an owner decision (A4).
  */
 
 const styles = {
   banner: {
     display: 'flex',
     alignItems: 'center',
-    gap: '0.75rem',
-    padding: '0.4rem 0.9rem',
-    fontSize: '0.8rem',
-    fontWeight: 700,
-    letterSpacing: '0.04em',
-    color: cssVars['--r-ink-on-band'],
-    background: colors.pending,
+    gap: cssVars['--r-notice-gap'],
+    padding: cssVars['--r-notice-pad'],
+    fontSize: cssVars['--r-notice-fs'],
+    lineHeight: cssVars['--r-notice-lh'],
+    color: cssVars['--r-caution-text'],
+    background: cssVars['--r-caution-bg'],
+    borderBottom: `1px solid ${cssVars['--r-notice-line']}`,
     flexShrink: 0,
   },
-  text: { flex: 1, minWidth: 0, lineHeight: 1.35 },
+  text: { flex: 1, minWidth: 0 },
+  headline: { fontWeight: 700, letterSpacing: '0.04em' },
   detail: {
     display: 'block',
-    fontWeight: 500,
-    letterSpacing: 0,
-    opacity: 0.85,
-    fontSize: '0.75rem',
+    opacity: 0.9,
   },
 } as const;
 
@@ -86,9 +93,10 @@ export function BridgeSkewBanner(): JSX.Element | null {
   if (missing === null || missing.length === 0) return null;
 
   return (
-    <div style={styles.banner} role="alert" data-bridge-skew-banner>
+    <div style={styles.banner} role="alert" data-bridge-skew-banner data-tone="caution">
+      <Icon icon={TriangleAlert} size={NOTICE_PX.icon} />
       <span style={styles.text}>
-        BRIDGE IS OUT OF DATE
+        <span style={styles.headline}>BRIDGE IS OUT OF DATE</span>
         <span style={styles.detail} title={[...missing].slice(0, NAMED).join(', ')}>
           {detailFor(missing)}
         </span>

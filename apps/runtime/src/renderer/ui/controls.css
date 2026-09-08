@@ -176,8 +176,10 @@
    read as one family, opposite weights so the consequence is legible — outline for
    the recoverable one, filled for the destructive one. */
 .cg-btn--caution-strong {
-  background: var(--r-caution);
-  border-color: var(--r-caution);
+  /* `--r-caution-fill`, not `--r-caution`: the caution INK and the one caution FILL were
+     split in RUNTIME-REDESIGN-01 Phase 9 (see the token home). */
+  background: var(--r-caution-fill);
+  border-color: var(--r-caution-fill);
   color: var(--r-ink-on-caution);
   font-weight: var(--r-weight-bold);
 }

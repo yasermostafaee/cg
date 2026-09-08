@@ -56,10 +56,15 @@ const ROLE_STYLE: Record<NoticeRole, CSSProperties> = {
     background: cssVars['--r-notice-fill'],
     color: cssVars['--r-caution-text'],
   },
+  /*
+    `RUNTIME-REDESIGN-01` Phase 9 — the reference's PLAIN `.notice` pair, which is what a
+    neutral statement looks like in the approved design. It used to borrow the panel's own
+    surface and border, which made a notice indistinguishable from a panel.
+  */
   notice: {
-    border: `1px solid ${colors.border}`,
-    background: colors.panelMuted,
-    color: colors.text,
+    border: `1px solid ${cssVars['--r-notice-neutral-line']}`,
+    background: cssVars['--r-notice-neutral-bg'],
+    color: cssVars['--r-notice-neutral-text'],
   },
 };
 
@@ -69,20 +74,26 @@ const ROLE_STYLE: Record<NoticeRole, CSSProperties> = {
  *
  * It was `colors.textMuted` inside the amber box. The hierarchy now comes from SIZE
  * and not from a grey that has to survive an unusual backdrop: `colors.text` on the
- * amber fill measures 14.07:1, `colors.textMuted` on the neutral fill 5.64:1. Both
+ * amber fill measures 12.18:1, `colors.textMuted` on the neutral fill 5.55:1. Both
  * clear AA, which the old pairing did only by luck of the backdrop it happened to
- * sit on. (Re-measured in Phase 2; they were 13.06:1 and 5.78:1 on the old surfaces.)
+ * sit on. (Re-measured in Phase 9 on the reference's pairs; Phase 2 read 14.07:1 and
+ * 5.64:1 on the previous fills.)
  */
 const DETAIL_COLOR: Record<NoticeRole, string> = {
   refusal: colors.text,
   notice: colors.textMuted,
 };
 
+/*
+  `RUNTIME-REDESIGN-01` Phase 9 — the reference's `.notice` box as rendered: `13px 15px`,
+  radius 8, 13 px on a 1.6 line (`NOTICE_PX` in the token home). The two lines stack, so the
+  reference's icon-to-text gap is not what `gap` means here; the inter-line gap stays small.
+*/
 const base: CSSProperties = {
-  borderRadius: '0.25rem',
-  padding: '0.5rem 0.7rem',
-  fontSize: '0.85rem',
-  lineHeight: 1.45,
+  borderRadius: cssVars['--r-notice-radius'],
+  padding: cssVars['--r-notice-pad'],
+  fontSize: cssVars['--r-notice-fs'],
+  lineHeight: cssVars['--r-notice-lh'],
   display: 'flex',
   flexDirection: 'column',
   gap: '0.2rem',
