@@ -537,8 +537,13 @@ red-first matrix (§15.5), guard item 27 discharged (§15.6), and what was not d
       run surfaced (the search box and the selects painted 41 / 42 under the console's inherited
       1.55 line-height where the reference paints 40 / 39 — declared as heights with the
       reference's line-height, the Phase 7 tab lesson again). ⚠ **NON-AUTHORITATIVE** (golden
-      rule 12a), so it is not what discharges this. Linux `e2e` URL: _(owed — recorded here once
-      the run on the code head completes)_.
+      rule 12a), so it is not what discharges this.
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `5f4793b4`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34235812109> — run `conclusion: success`,
+      11 m 39 s (14:03:20Z → 14:14:59Z). The **`E2E (Playwright)` job RAN** (14:03:37Z →
+      14:14:51Z, 11 m 14 s, `conclusion: success`, its `E2E` step executed 14:04:57Z →
+      14:14:39Z); it was not skipped, which is the half a green run alone does not prove (golden
+      rule 12b). `Lint • Typecheck • Test • Build` also ran green (14:03:33Z → 14:08:37Z).
 
 ## Phase 9 — The surfaces the reference does not draw
 

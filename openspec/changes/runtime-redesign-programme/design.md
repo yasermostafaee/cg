@@ -2100,5 +2100,16 @@ results`, `Reset filters`, `N of M events`) and the audit's head words moved to 
 
 ### 15.8 The runs
 
-_(recorded in `tasks.md` 8.4 with the local Playwright count, the gate's `0 cached` line and the
-Linux `e2e` URL)_
+- `pnpm --filter @cg/runtime test:e2e`, Windows, against a fresh build: the first run **141
+  passed, 2 failed** — both the new geometry spec, both the kind a real engine finds and jsdom
+  cannot: the search box painted **41** and the selects **42** under the console's inherited
+  1.55 line-height where the reference paints 40 and 39 (Phase 7's rail-tab lesson, one dialog
+  over). Declared as HEIGHTS with the reference's line-height (`LIBRARY_PX.searchH` = 40 as
+  painted, the selects 39); re-run **143 passed (1.9 m)** against the gate's build. ⚠
+  NON-AUTHORITATIVE (golden rule 12a).
+- `pnpm gate`: `93 successful, 93 total · 0 cached, 93 total`, foreground; ran again, uncached
+  and green, as the pre-push gate.
+- The Linux `e2e` on the code head `5f4793b4`:
+  <https://github.com/yasermostafaee/cg/actions/runs/34235812109> — `conclusion: success`,
+  11 m 39 s; the `E2E (Playwright)` job RAN 11 m 14 s (14:03:37Z → 14:14:51Z), its `E2E` step
+  14:04:57Z → 14:14:39Z. Recorded beside `tasks.md` 8.4, as every phase before it.
