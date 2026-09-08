@@ -3641,6 +3641,24 @@ multi-channel arrives the LABEL is the thing that has to change and cannot be fo
 control, its label and its tooltip — no behaviour change, no wire change
 (`apps/runtime/tests/liveSourcesPanel.dom.test.ts`, "A16 — the panic label names its scope").
 
+⭐ **GAP 1 IS NOW PINNED BY A TEST, and this is the half that makes the item self-defending**
+(`RUNTIME-REDESIGN-01` Phase 10, 2026-09-08; `design.md` §17.2).
+`apps/runtime/tests/channelIndependence.dom.test.ts` §3 asserts that all five verbs accept
+`undefined` and REJECT `{ channel }`, with a positive control beside it so the assertion cannot be
+satisfied by a schema that accepts anything. **The day someone adds a channel to one of them, that
+test goes red and this entry has to be read before the change lands** — which is the only thing
+keeping the ledger and the contract from drifting apart quietly. The test names this item in its
+own comment, so the pointer runs both ways.
+
+⚠ **And the reason the same phase could not prove channel INDEPENDENCE at the wire is these three
+gaps.** With the bridge single-channel there is no second channel to disturb, so a wire test would
+pass because the configuration cannot exist rather than because the property holds. Phase 10 said
+so rather than writing one (`design.md` §17.2), and proved what it could at the contract, UI and
+store levels instead. A fourth thing surfaced there and is filed with this item: **`MockRuntime.load()`
+writes no `item.slot`**, so the app's own mock cannot express two rows on two channels either —
+whoever takes this item will want that first, or the UI half stays unprovable after the bridge half
+is done.
+
 **Acceptance (when this is taken):**
 
 - A channel-discovery channel on the contract (`channels.list` or the settings list carrying it),
