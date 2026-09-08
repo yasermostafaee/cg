@@ -600,8 +600,12 @@ the lock (§16.5), the red-first matrix (§16.6), what was not done (§16.7) and
       from earlier sessions still on the host; with those stopped, the four re-ran 20 / 20 and the
       full suite clean. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges
       this.
-      🔴 **OWED — the Linux `e2e` on the code head, recorded here with its URL, duration and that
-      it RAN, by the follow-up docs commit** (as every phase before it).
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `be883e3c`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34251084406> — run `conclusion: success`,
+      12 m 38 s (16:26:44Z → 16:39:22Z). The **`E2E (Playwright)` job RAN** (16:26:55Z →
+      16:38:51Z, 11 m 56 s, `conclusion: success`, its `E2E` step executed 16:28:12Z → 16:37:50Z);
+      it was not skipped, which is the half a green run alone does not prove (golden rule 12b).
+      `Lint • Typecheck • Test • Build` also ran green (16:26:55Z → 16:30:46Z).
 
 ## Phase 10 — Verification
 

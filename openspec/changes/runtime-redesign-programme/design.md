@@ -2434,5 +2434,8 @@ re-reading them, and `git status` after the passes lists only this phase's own e
   NON-AUTHORITATIVE (golden rule 12a).
 - The new geometry spec `guard-surfaces-geometry.spec.ts` (2) ran green in Chromium beside the
   lock, orphan and lock-prompt specs (5 / 5, 11 s) and in the full suite.
-- The Linux `e2e` on the code head: recorded beside `tasks.md` 9.4 by the follow-up docs commit,
-  with its URL, duration and that it RAN.
+- The Linux `e2e` on the code head `be883e3c`:
+  <https://github.com/yasermostafaee/cg/actions/runs/34251084406> — `conclusion: success`,
+  12 m 38 s; the `E2E (Playwright)` job RAN 11 m 56 s (16:26:55Z → 16:38:51Z), its `E2E` step
+  16:28:12Z → 16:37:50Z, and `Lint • Typecheck • Test • Build` green in 3 m 51 s. Recorded beside
+  `tasks.md` 9.4, as every phase before it.
