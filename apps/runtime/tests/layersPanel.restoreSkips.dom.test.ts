@@ -145,6 +145,8 @@ async function renderPanel(): Promise<HTMLDivElement> {
             setFocus: () => undefined,
             reset: () => undefined,
             customized: false,
+            monitorsShown: true,
+            setMonitorsShown: () => undefined,
           },
           onUpdate: () => Promise.resolve({ accepted: true }),
           inspectorOpen: false,

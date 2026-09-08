@@ -14,7 +14,7 @@ import {
   type StackItemState,
 } from '@cg/shared-schema';
 import type { TemplateInfo } from '@cg/shared-ipc';
-import { airStateVisual, colors } from '../../theme.js';
+import { airStateVisual, colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { AutoGrowTextarea } from '../../ui/AutoGrowTextarea.js';
 import { Button } from '../../ui/Button.js';
@@ -133,7 +133,9 @@ const styles = {
     // No BOTTOM padding: the sticky commit bar owns the space down there, and a
     // container pad would sit BELOW the stuck bar (sticky offsets resolve against
     // the padding box), leaving a stripe of scrolling content under it.
-    padding: 'var(--r-space-6) var(--r-space-4) 0',
+    // `RUNTIME-REDESIGN-01` Phase 5 — `12px` on both axes, the reference's
+    // `.inspector-body{padding:12px}` as rendered (it was 24 / 16).
+    padding: 'var(--r-space-3) var(--r-space-3) 0',
     minHeight: 0,
     flex: 1,
     overflowY: 'auto' as const,
@@ -190,10 +192,15 @@ const styles = {
   actions: {
     display: 'flex',
     // CENTRED (owner request). Everything else about this bar — the sticky
-    // behaviour, the padding, the top border, the raised background and the DOM
-    // position — is unchanged and load-bearing; see the block comment above.
+    // behaviour, the top border, the raised background and the DOM position — is
+    // unchanged and load-bearing; see the block comment above.
     justifyContent: 'center',
-    gap: 'var(--r-space-3)',
+    // `RUNTIME-REDESIGN-01` Phase 5 — the reference's own footer, as rendered
+    // (`design.md` §12.3): buttons gapped 10, padded `9px 12px`, a stronger top rule
+    // and an upward shadow that lifts the pinned bar off the list scrolling under it.
+    // The bleed margin matches the body's `12px` pad above, so the bar still reaches
+    // the panel's edges. All from `INSPECTOR_PX` in the token home.
+    gap: 'var(--r-insp-foot-gap)',
     alignItems: 'center',
     flexWrap: 'wrap' as const,
     position: 'sticky' as const,
@@ -203,9 +210,10 @@ const styles = {
     // RAISED, matching the panel bar at the other end — the two pieces of chrome
     // that are not content read as the same kind of thing.
     background: colors.panelMuted,
-    borderTop: `1px solid ${colors.border}`,
-    marginInline: 'calc(var(--r-space-4) * -1)',
-    padding: 'var(--r-space-3) var(--r-space-4)',
+    borderTop: `1px solid ${cssVars['--r-border-strong']}`,
+    boxShadow: cssVars['--r-insp-foot-shadow'],
+    marginInline: 'calc(var(--r-space-3) * -1)',
+    padding: 'var(--r-insp-foot-pad)',
   },
   /*
    * THE FIELD HEADER — the authored name in PRIMARY ink, the binding key beside
@@ -476,7 +484,12 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
 
   return (
     <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
-      <div style={styles.scroll}>
+      {/*
+        `cg-inspector-body` on THIS branch too. It was only on the empty branch above, so the
+        container query `controls.css` writes against it (`@container inspector`) matched no
+        field the operator could ever see — and the Phase 5 field-box rules scope to it.
+      */}
+      <div className="cg-inspector-body" style={styles.scroll}>
         <h3 style={styles.title} title={item.templateId}>
           {label}
           {ambiguous && (
@@ -563,6 +576,37 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
             36px floor meant for the layer table's header. Same defect the field
             footers had. Layout stays in `styles.actions`. */}
         <div className="cg-inspector-actions" style={styles.actions}>
+          {/*
+            `RUNTIME-REDESIGN-01` Phase 5 — DISCARD FIRST, UPDATE LAST, as the reference
+            renders its `.inspector-save-bar` (`Discard · Update`): the commit sits at the
+            trailing end, where the primary action of a bar conventionally is, and the
+            keyboard reaches the reversible control before the one that reaches air. Both
+            buttons keep their names, variants, gates and behaviour; only the order moved.
+          */}
+          {/* NEUTRAL IS NOT INVISIBLE. This was a `ghost` — transparent fill,
+            transparent border, muted text — and it read as a line of static text
+            rather than a control. Removing COLOUR from a control never removes its
+            need for an AFFORDANCE: it still owes a visible boundary, a hover state
+            and a focus ring. `neutral` is the variant that carries all three without
+            a hue. See the `--ghost` warning in `controls.css`.
+
+            …AND NEITHER IS DISABLED, which is the half that was still missing.
+            `neutral:disabled` used to drop BOTH its fill and its border, so this
+            control vanished for exactly as long as there was nothing staged to
+            discard — i.e. every moment before the operator's first edit, which is
+            when they are learning where things are. An operator who cannot find how
+            to ABANDON an edit presses Update to get out of the panel, which is the
+            opposite of what they wanted and reaches air. `--neutral:disabled` keeps
+            its boundary now (`controls.css`); the row verbs' bare-glyph disabled
+            shape is untouched, because there a column of peers makes it legible. */}
+          <Button
+            variant="neutral"
+            aria-label="Discard staged edits"
+            disabled={!dirty}
+            onClick={() => onDiscard(itemId)}
+          >
+            Discard
+          </Button>
           {/* Apply stays enabled even with nothing staged — re-sending unchanged
             values is the operator's documented B-048 recovery path. */}
           {/* #334 — feedback goes to the command TOAST, never pinned inline in the panel.
@@ -627,31 +671,17 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
           >
             Update
           </AsyncButton>
-          {/* NEUTRAL IS NOT INVISIBLE. This was a `ghost` — transparent fill,
-            transparent border, muted text — and it read as a line of static text
-            rather than a control. Removing COLOUR from a control never removes its
-            need for an AFFORDANCE: it still owes a visible boundary, a hover state
-            and a focus ring. `neutral` is the variant that carries all three without
-            a hue. See the `--ghost` warning in `controls.css`.
-
-            …AND NEITHER IS DISABLED, which is the half that was still missing.
-            `neutral:disabled` used to drop BOTH its fill and its border, so this
-            control vanished for exactly as long as there was nothing staged to
-            discard — i.e. every moment before the operator's first edit, which is
-            when they are learning where things are. An operator who cannot find how
-            to ABANDON an edit presses Update to get out of the panel, which is the
-            opposite of what they wanted and reaches air. `--neutral:disabled` keeps
-            its boundary now (`controls.css`); the row verbs' bare-glyph disabled
-            shape is untouched, because there a column of peers makes it legible. */}
-          <Button
-            variant="neutral"
-            aria-label="Discard staged edits"
-            disabled={!dirty}
-            onClick={() => onDiscard(itemId)}
-          >
-            Discard
-          </Button>
           {dirty && <DraftChip label="unapplied edits" />}
+          {/*
+            The reference's `.target-hint`, adopted with its sentence. It is TRUE of this
+            button in both of its cases — on a row that owns no live layers Update lands in
+            STATE and the next take seats it; on a row on air it is `CG UPDATE`, never `PLAY`
+            — and it puts golden rule 10 (`B-161`) where the operator's eye is, which is the
+            one place the rule can do him any good at 2 a.m.
+          */}
+          <p className="cg-inspector-actions__hint">
+            Saves this row’s configuration. No Take is sent.
+          </p>
         </div>
       </div>
     </Panel>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { isOnAirStatus } from '@cg/shared-schema';
 import type { PositionAnchor, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
@@ -8,6 +8,13 @@ import { DraftChip } from '../../ui/DraftChip.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import { reportCommandError } from '../status/commandFeedback.js';
+import {
+  draftsVersion,
+  positionDraftOf,
+  stagePosition,
+  subscribeDrafts,
+  type PositionDraft,
+} from './draftStore.js';
 
 /** Row-major 3×3 anchor grid (the 9-point Position model). */
 const ANCHOR_GRID: readonly (readonly PositionAnchor[])[] = [
@@ -41,19 +48,30 @@ const styles = {
    * baseline of the controls, the three read as one row of controls.
    */
   offsets: { display: 'flex', gap: 'var(--r-space-3)', alignItems: 'flex-end' },
-  /** One nudge input with its own label ABOVE it, so the two never compete for a row. */
+  /**
+   * One nudge input with its own label ABOVE it, so the two never compete for a row.
+   *
+   * `RUNTIME-REDESIGN-01` Phase 5 — the two fields FILL the row between the anchor grid and
+   * the button, sharing it equally, instead of sitting at a fixed 74 px each: the reference
+   * renders `.position-controls` as `66px minmax(48px,1fr) minmax(48px,1fr) auto`, so X and Y
+   * grow with the panel and stay the same width as each other at every width (`design.md`
+   * §12.3). A 48 px floor keeps a digit legible when the panel is dragged narrow.
+   */
   offsetField: {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 'var(--r-space-1)',
+    flex: '1 1 var(--r-insp-offset-min-w)',
+    minWidth: 'var(--r-insp-offset-min-w)',
   },
+  /** The reference's label rank: 12 px, medium, the second ink — not the muted caption. */
   offsetLabel: {
-    color: colors.textMuted,
-    fontSize: '11px',
-    fontWeight: 600,
-    letterSpacing: '0.04em',
+    color: colors.textSecondary,
+    fontSize: 'var(--r-insp-label-text)',
+    fontWeight: 'var(--r-weight-medium)',
+    lineHeight: 'var(--r-insp-label-line)',
   },
-  offsetInput: { width: '74px' },
+  offsetInput: { width: '100%' },
   lock: {
     color: colors.textMuted,
     fontSize: 'var(--r-text-sm)',
@@ -102,9 +120,29 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
   // published state — never a renderer-local store, which would go stale on
   // reload/reconnect and miss delete-on-remove.
   const seed = item.position ?? defaultPositionOf(item.templateId);
-  const [anchor, setAnchor] = useState<PositionAnchor>(seed.anchor);
-  const [dx, setDx] = useState(String(seed.offset.x));
-  const [dy, setDy] = useState(String(seed.offset.y));
+  /*
+   * `RUNTIME-REDESIGN-01` PHASE 5 — THE DRAFT LIVES IN THE STORE, NOT HERE.
+   *
+   * This was three `useState`s. The picker is keyed by item so that switching items
+   * re-seeds it — and that same remount threw away whatever the operator had staged but not
+   * applied: move the anchor, glance at another row, come back, and the anchor was where the
+   * bridge last put it. Every other staged edit in the panel survives that round trip through
+   * `draftStore`; the position now does too (its header there says why it is a separate map
+   * and why DISCARD leaves it alone). The seed rule is unchanged (B-072): a draft when one is
+   * staged, else the APPLIED override, else the manifest default.
+   */
+  useSyncExternalStore(subscribeDrafts, draftsVersion);
+  const draft: PositionDraft = positionDraftOf(item.itemId) ?? {
+    anchor: seed.anchor,
+    x: String(seed.offset.x),
+    y: String(seed.offset.y),
+  };
+  const { anchor, x: dx, y: dy } = draft;
+  const stage = (patch: Partial<PositionDraft>): void =>
+    stagePosition(item.itemId, { ...draft, ...patch });
+  const setAnchor = (next: PositionAnchor): void => stage({ anchor: next });
+  const setDx = (next: string): void => stage({ x: next });
+  const setDy = (next: string): void => stage({ y: next });
   const locked = isPositionLocked(item);
 
   const offset = (raw: string): number => {

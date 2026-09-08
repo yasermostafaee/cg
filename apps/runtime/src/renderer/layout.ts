@@ -51,8 +51,9 @@ export const appShell = {
     // hidden): the workspace takes the space the library used to hold. The
     // columns are now COMPUTED per render (`useShellLayout`) — the operator
     // drags the divider, takes a panel fullscreen, or drops below the narrow
-    // breakpoint — so this is only the server-rendered default.
-    gridTemplateColumns: '1fr 6px 320px',
+    // breakpoint — so this is only the server-rendered default. The 396 is the reference's
+    // Inspector column as rendered (`DEFAULT_INSPECTOR_PX`, `RUNTIME-REDESIGN-01` Phase 5).
+    gridTemplateColumns: '1fr 6px 396px',
     /*
      * TIGHTER than the original 0.75rem (owner: the gap between panels is too big).
      *

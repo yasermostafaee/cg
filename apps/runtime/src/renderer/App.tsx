@@ -159,6 +159,22 @@ export function App(): JSX.Element {
   // means.
   const monitorFocused = layout.focus === 'pgm' || layout.focus === 'pvw';
   const showWorkspace = layout.focus !== 'inspector';
+  /*
+   * 🔴 `RUNTIME-REDESIGN-01` PHASE 5 — THE MONITORS ARE SHOWN OR NOT, AND NOTHING ELSE DECIDES IT.
+   *
+   * Three things stay independent here: which row is SELECTED (`selectedId`, this file),
+   * which rows are IN PVW (the bridge's rehearse set, `useRehearse`), and whether the
+   * monitors are SHOWN (`layout.monitorsShown`, the Layers header's toggle). Each is read and
+   * written by its own control and by nothing else in this tree — a selection never enters
+   * or leaves PVW, a PVW change never selects or deselects, and folding the strip away
+   * touches neither. `workspace-independence.spec.ts` drives all three pairs in both
+   * directions; `workspaceIndependence.dom.test.ts` is the same proof in jsdom.
+   *
+   * The two exceptions are FULLSCREEN, which is a different axis (focus) and was already
+   * here: a fullscreen monitor is still the strip, so it shows through a hidden toggle, and
+   * a fullscreen Layers list hides the strip as it always did.
+   */
+  const monitorsVisible = layout.focus !== 'layers' && (layout.monitorsShown || monitorFocused);
 
   /*
    * THE INSPECTOR IS OPEN IF, AND ONLY IF, SOMETHING IS SELECTED.
@@ -254,9 +270,12 @@ export function App(): JSX.Element {
                 row. `MonitorPanel`'s own header calls labelling PREVIEW "not
                 connected" a category error, because it has no link to be down, so
                 this comment contradicted the module it describes. */}
-                {layout.focus !== 'layers' && (
+                {monitorsVisible && (
                   <>
                     <div
+                      /* The toggle's `aria-controls` target and the specs' anchor. */
+                      id="monitor-strip"
+                      data-monitor-strip=""
                       style={
                         /*
                           BOTH branches bound the width (`minWidth: 0` + a clip).

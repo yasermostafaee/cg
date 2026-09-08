@@ -160,6 +160,8 @@ function panel(): ReturnType<typeof createElement> {
       setFocus: () => undefined,
       reset: () => undefined,
       customized: false,
+      monitorsShown: true,
+      setMonitorsShown: () => undefined,
     },
     onUpdate: () => Promise.resolve({ accepted: true }),
     inspectorOpen: false,

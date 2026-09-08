@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import type { ShellLayout } from './useShellLayout.js';
+import { DEFAULT_INSPECTOR_PX, DEFAULT_MONITOR_PX, type ShellLayout } from './useShellLayout.js';
 
 /**
  * The workspace geometry, available to any panel WITHOUT being threaded through
@@ -50,15 +50,19 @@ export function ShellLayoutProvider({
  * provider renders normally and simply offers no fullscreen toggle.
  */
 const INERT: ShellLayout = {
-  inspectorPx: 320,
-  monitorPx: 180,
+  // The hook's own defaults, imported rather than re-spelled: two copies of a number is how
+  // one of them comes to be wrong (they read 320 / 180 here after the defaults moved).
+  inspectorPx: DEFAULT_INSPECTOR_PX,
+  monitorPx: DEFAULT_MONITOR_PX,
   focus: 'none',
   // `narrow` suppresses the fullscreen control, which is exactly right here: with
   // no provider there is no shell to give a panel.
   narrow: true,
+  monitorsShown: true,
   setInspectorPx: () => undefined,
   setMonitorPx: () => undefined,
   setFocus: () => undefined,
+  setMonitorsShown: () => undefined,
   reset: () => undefined,
   customized: false,
 };

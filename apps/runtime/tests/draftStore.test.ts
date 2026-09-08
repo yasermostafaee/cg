@@ -9,9 +9,11 @@ import {
   hasStaged,
   isFieldDirty,
   isItemDirty,
+  positionDraftOf,
   pruneDrafts,
   snapshotDraft,
   stageField,
+  stagePosition,
   stagedValue,
 } from '../src/renderer/features/inspector/draftStore.js';
 
@@ -143,6 +145,45 @@ describe('discard + prune', () => {
     stageField(A, ['title'], 'x');
     pruneDrafts(live());
     expect(hasStaged(A, ['title'])).toBe(false);
+  });
+});
+
+/**
+ * `RUNTIME-REDESIGN-01` PHASE 5 — the POSITION draft lives in the store, per item, so a
+ * selection round trip cannot lose it (it used to be `PositionPicker`'s own `useState`,
+ * keyed by item and therefore remounted — and emptied — on every selection change).
+ */
+describe('the position draft — kept per item, swept by prune, left alone by Discard', () => {
+  const DRAFT = { anchor: 'top-left' as const, x: '42', y: '-7' };
+
+  it('stages and reads back, per item', () => {
+    stagePosition(A, DRAFT);
+    expect(positionDraftOf(A)).toEqual(DRAFT);
+    expect(positionDraftOf(B)).toBeUndefined();
+  });
+
+  it('keeps the offsets AS TYPED — an in-progress "-" is not flattened to 0', () => {
+    stagePosition(A, { anchor: 'center', x: '-', y: '1.' });
+    expect(positionDraftOf(A)).toEqual({ anchor: 'center', x: '-', y: '1.' });
+  });
+
+  it('is NOT dropped by clearDraft (Discard) and does NOT make the item dirty — UPDATE does not send it', () => {
+    stagePosition(A, DRAFT);
+    stageField(A, ['title'], 'x');
+    clearDraft(A);
+    expect(hasStaged(A, ['title'])).toBe(false);
+    expect(positionDraftOf(A)).toEqual(DRAFT);
+    expect(isItemDirty(A, {}, NO_PLATES)).toBe(false);
+  });
+
+  it('is swept by pruneDrafts once the row has left the stack, and only then', () => {
+    stagePosition(A, DRAFT);
+    stagePosition(B, DRAFT);
+    pruneDrafts({ ready: false });
+    expect(positionDraftOf(A)).toEqual(DRAFT);
+    pruneDrafts(live(B));
+    expect(positionDraftOf(A)).toBeUndefined();
+    expect(positionDraftOf(B)).toEqual(DRAFT);
   });
 });
 

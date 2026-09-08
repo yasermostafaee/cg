@@ -101,6 +101,8 @@ async function renderPanelWith(stack: StackItemState[]): Promise<HTMLDivElement>
             setFocus: () => undefined,
             reset: () => undefined,
             customized: false,
+            monitorsShown: true,
+            setMonitorsShown: () => undefined,
           },
           inspectorOpen: false,
           onUpdate: () => Promise.resolve({ accepted: true }),

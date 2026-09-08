@@ -150,6 +150,116 @@ PAINTS in a browser; every such claim SHALL be verified in a real layout engine.
   none of the current frames and back **THEN** every placeholder PVW drew before the round trip is
   drawn again with the same source name in the same box, the bound frame on its bound source
 
+### Requirement: The selection, the PVW set and the monitors' visibility are three independent things
+
+The Runtime SHALL keep three facts about the workspace independent of one another: which row is
+SELECTED, which rows are IN PVW, and whether the monitors are SHOWN. Each SHALL be read and
+written by its own control and by nothing else: selecting or deselecting a row SHALL neither enter
+nor leave PVW and SHALL neither show nor hide the monitors; putting a row on PVW or taking it off
+SHALL neither select nor deselect any row and SHALL neither show nor hide the monitors; showing or
+hiding the monitors SHALL neither select nor deselect any row and SHALL leave the PVW set exactly
+as it was. The PVW set is the bridge's rehearse state and is judged from the bridge, never from a
+badge.
+
+The monitors SHALL be shown or hidden by ONE toggle that carries `aria-expanded` and names the
+strip it controls. Its state is session state: it SHALL NOT be persisted, and the persisted shell
+layout SHALL keep its existing shape. The strip SHALL default to shown, and the layout reset SHALL
+bring it back. A fullscreen monitor is a different axis and SHALL still show through a hidden
+toggle; a fullscreen layer list SHALL still hide the strip.
+
+Each of the three pairs SHALL be proved by test in BOTH directions, because a single-direction
+test passes against a coupling that runs the other way.
+
+#### Scenario: Selecting a row leaves the PVW set and the monitors alone
+
+- **WHEN** row A is on PVW and the operator selects row B, then row A, then deselects row A
+  **THEN** the bridge's rehearse set still holds exactly row A throughout, and the monitors are
+  still in whichever state they were in — shown, or hidden
+
+#### Scenario: Putting a row on PVW leaves the selection and the monitors alone
+
+- **WHEN** row A is selected and the operator puts row B on PVW and then takes it off **THEN** row A
+  is still the selection and its Inspector is still open, row B is never selected, and the
+  monitors are still in whichever state they were in
+
+#### Scenario: Hiding the monitors leaves the selection and the PVW set alone
+
+- **WHEN** row A is selected and rows A and B are on PVW and the operator hides the monitors and
+  shows them again **THEN** row A is still the selection with its Inspector open, and the rehearse
+  set still holds exactly rows A and B, with each row's own verb still reading OFF PVW
+
+#### Scenario: The toggle folds the strip away and the reset brings it back
+
+- **WHEN** the operator hides the monitors **THEN** the strip and its resize divider are gone, the
+  layer list takes the height, nothing is written to the persisted layout for it, and the layout
+  reset control shows the strip again
+
+### Requirement: Every kind of staged edit survives a selection round trip
+
+The Runtime SHALL keep each row's draft — its staged field values, plate assignments, per-look
+inputs AND its unapplied on-air position, anchor and offsets as typed — for the session, keyed by
+the row, so that selecting another row and coming back shows the draft exactly as it was left. A
+draft is session state: no persisted key, file or schema carries it. The position draft has its
+own lifecycle — its own dirty mark and its own `Apply position` — and is NOT read by the row's
+UPDATE verb or dropped by DISCARD, because UPDATE does not send the position and a chip that lit
+for an edit UPDATE would not apply would be a control whose word lies. A draft for a row that has
+left the stack SHALL be swept with the rest.
+
+#### Scenario: A position draft survives deselect and reselect
+
+- **WHEN** the operator moves a row's anchor and types an in-progress offset, selects another row,
+  and selects the first row again **THEN** the anchor is where they left it, the offset reads
+  exactly what they typed, the position's dirty mark is up, and nothing was sent
+
+### Requirement: The Inspector's geometry is the reference's as rendered, measured in a real engine
+
+The Inspector SHALL keep its Update button pinned at the foot of the panel at every panel height,
+with content shorter and longer than the panel and at every scroll position of the field list. Its
+two position inputs SHALL align — same top, same height, same width, growing with the panel and
+staying equal — with `Apply position` on their baseline. An input's focus SHALL draw ONE ring: the
+browser's outline is off wherever a ring is drawn, exactly one shadow is drawn, and no ancestor
+draws a ring of its own. Subtitle items SHALL reorder by their grip handle under a pointer drag as
+well as by the keyboard.
+
+Its column default, body padding, section heading, field box, position box, footer padding,
+button floor and hint SHALL be the values the approved reference PAINTS in a browser, held in the
+token home as `--r-insp-*` and read from there. Every such claim SHALL be verified in a real
+layout engine; a jsdom assertion about a box, an edge or a pinned footer compares zeros and is not
+evidence.
+
+#### Scenario: The foot is pinned at more than one panel height
+
+- **WHEN** the Inspector is rendered at three viewport heights with a field list longer than the
+  panel, scrolled to its top and to its bottom each time **THEN** the foot's bottom edge is the
+  panel's bottom edge and Update is inside the foot and inside the viewport every time
+
+#### Scenario: X and Y align
+
+- **WHEN** the position section is rendered docked and then fullscreen **THEN** X and Y share a
+  top, a height and a width, `Apply position` shares their baseline, and at fullscreen both have
+  grown and are still equal
+
+#### Scenario: One ring
+
+- **WHEN** a position box, a text field or a subtitle item takes focus **THEN** its computed outline
+  is none, its box shadow is a single shadow, and no element between it and the panel has an
+  outline or a shadow
+
+### Requirement: No surface makes a second claim about air on a row that already says what is on air
+
+A surface SHALL NOT restate, on a row, whether that row is on air when the row's state cell
+already says so — not as a label, a caption, a badge or a count. Two claims about air on one row
+can disagree during a transition and the operator then has to choose which to believe. The one
+qualifier the console already spells for immediacy is `· NOW` (`B-168`), and it is not a second
+claim. This is why the reference's `ON AIR LOOK` / `Cut · now` look label and its `3 rows on air`
+monitor caption are not adopted (owner answer A12).
+
+#### Scenario: A row carries one air claim
+
+- **WHEN** any row is rendered on air **THEN** exactly one element on that row states it — the
+  state cell — and the look picker, the Inspector and the monitors say which look, which fields
+  and which rehearsal, never whether the row is on air
+
 ### Requirement: The programme's phase state is recorded where the next session reads it
 
 Each phase of this programme SHALL record its completion in this change's `tasks.md`, and a session

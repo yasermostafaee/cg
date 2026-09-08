@@ -3483,3 +3483,89 @@ named by where the operator meets it.
   [b-number-registry.md](b-number-registry.md)'s own retired "next free" pointer, never an item.
   `git stash list` empty; `git worktree list --porcelain` showed this checkout only.
   **Nothing is implemented by this item.**
+
+## [ ] R-060 — should "monitors hidden" survive a reload? The shell's `monitorsShown` flag is session-only by Phase 5's constraint ⟨priority: low⟩
+
+**What:** `RUNTIME-REDESIGN-01` Phase 5 built the reference's `Show monitors` / `Hide monitors`
+toggle (`useShellLayout.monitorsShown`, the Layers header button, `App` gating the strip). It is
+SESSION state: a reload starts with the strip shown, whatever the last session did. Every other
+piece of the shell's geometry — the Inspector width, the strip height, the fullscreen focus — is
+persisted per browser under `cg.runtime.shell-layout.v1`, and the flag is the one member of that
+family that is not. Decide whether it should join them.
+
+**Why it was NOT decided in Phase 5:** the phase's own constraint is _no persisted key, file or
+schema change_, and adding a field to the persisted shape is a shape change even under an
+unchanged key. And the two readings of "folded across a reload" are indistinguishable from the
+code: a remembered preference (the operator on a small screen who never wants the strip) or a
+lost safety surface (PVW is the last look before air; a console that boots with it folded away has
+deleted a surface by default — the deletion-guard argument, `design.md` §3). That is the owner's
+call, not a session's.
+
+**Acceptance:**
+
+- The owner answers: persisted (join `{inspectorPx, monitorPx, focus}` under the same key, with
+  `persistedKeyCensus.test.ts` unchanged because the KEY does not change) or session-only (this
+  item closes as a recorded decision and `useShellLayout`'s interface note points here).
+- If persisted: `shellLayout.monitorsShown.dom.test.ts`'s "is NOT persisted" case is REPLACED by
+  its opposite, never weakened; `reset()` still restores shown; and the boot default with no
+  stored value stays SHOWN.
+- Either way, the three-way independence (`workspaceIndependence.dom.test.ts`,
+  `workspace-independence.spec.ts`) is untouched — persistence is about the flag's lifetime, not
+  about what else reads it.
+
+- **Cross-refs:** `openspec/changes/runtime-redesign-programme/design.md` §12.2 / §12.7 (where
+  the flag lives and why it stopped short of persisting); [[R-028]] part B (the persisted shell
+  layout this would join); the deletion guard, item 19 (the resizable shell).
+- **Number verification:** highest `R-` HEADING across every ref was `R-059`; `R-060` returned
+  no headings anywhere, its only tree-wide occurrences being two lines of
+  [b-number-registry.md](b-number-registry.md)'s own prose about gaps. `git stash list` empty.
+  **Nothing is implemented by this item beyond what Phase 5 shipped as session state.**
+
+## [ ] R-061 — the Inspector should be titled by the ROW's name, with the template on the line beneath; and the position draft wants a Reset ⟨priority: medium⟩
+
+**What:** two Inspector deltas Phase 5 measured against the rendered reference
+(`05-row-inspector.html`, `design.md` §12.3) and ARGUED rather than fixed, because each is a
+wording or lifecycle decision rather than a geometry move:
+
+1. **The title.** The reference's head reads an eyebrow `Inspector`, then the ROW's name as the
+   heading (`Layer 3`, in a `<bdi>`), then a meta line: status badge · the template's name ·
+   a `PVW` mini-badge. The app's panel bar reads `INSPECTOR`, and the body's `<h3>` is the
+   TEMPLATE's display name (with the id stub when two templates share a name), then chips
+   (status · layer · channel · server). Golden rule 11 — _an operator-facing surface names things
+   in the operator's words_, through `operatorRowName` — sits on the reference's side: the
+   operator selected a ROW, and the row's name is what he reads under pressure; the template is
+   what it carries.
+2. **A reset for the position draft.** Phase 5 moved the unapplied on-air position (anchor and
+   offsets as typed) into `draftStore` so it survives a selection round trip, with its own dirty
+   mark and its own `Apply position` — and deliberately outside DISCARD and the row's UPDATE verb,
+   because UPDATE does not send the position (`draftStore`'s header says why a chip that lit for
+   it would lie). The reference draws a `Reset` link on the position section (`Discard the
+unapplied position draft`). The app's draft today clears only by convergence (the applied
+   value catching up) or by prune (the row leaving the stack): there is no way to abandon a
+   position edit short of typing it back.
+
+**Why it is an item and not a Phase 5 edit:** (1) is a user-facing wording change with its own
+golden-rule-9 sweep (every spec that finds the Inspector's heading by the template name), a
+`<bdi>` for a Persian row name beside a Latin template name, and a decision about where the id
+stub goes; (2) is a new control with a lifecycle question (does Reset revert to the APPLIED
+position or to the manifest default? — the reference reverts to the row's fields, i.e. applied).
+Neither is in `PROMPT.md` §5, and Phase 9 re-dresses the Inspector's chrome anyway.
+
+**Acceptance:**
+
+- The Inspector's heading is `operatorRowName(...)` in its own `<bdi>`, the template's display
+  name (with its stub when ambiguous, `title` carrying the id) on the meta line beneath; every
+  spec that addressed the heading by template name is re-pointed, and the sweep is recorded.
+- A `Reset` on the position section drops the item's position draft (`clearPositionDraft` —
+  the one export `draftStore` does not yet have) and the picker re-seeds from the applied override
+  or the manifest default, exactly as a reselect would with no draft; hidden or disabled when
+  the position is clean, present when dirty, and disabled while locked on air.
+- `positionPicker.dom.test.ts` gains the reset case beside the round-trip case; `draftStore.test.ts`
+  gains the clear case; the e2e `onair-position.spec.ts` drives it once.
+
+- **Cross-refs:** `openspec/changes/runtime-redesign-programme/design.md` §12.1 / §12.3 / §12.7
+  (the measured head and the argued deltas); golden rule 11 (`CLAUDE.md`); [[R-040]]'s class (the
+  id stub on the heading, which must not be lost in the move); [[B-072]] (the seed rule the reset
+  falls back to); [[R-011]] (the picker).
+- **Number verification:** as for `R-060` — `R-061` returned no headings anywhere, only the
+  registry's prose. **Nothing is implemented by this item.**

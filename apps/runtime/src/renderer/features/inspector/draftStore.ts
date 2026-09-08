@@ -1,4 +1,9 @@
-import { isFieldNamespace, type FieldValue, type FieldValues } from '@cg/shared-schema';
+import {
+  isFieldNamespace,
+  type FieldValue,
+  type FieldValues,
+  type PositionAnchor,
+} from '@cg/shared-schema';
 
 /**
  * R-003 — the Inspector's per-item DRAFT overlay. Edits stage here (renderer-
@@ -89,6 +94,59 @@ const plateDrafts = new Map<string, Map<string, string>>();
  * parses.
  */
 const lookBindingDrafts = new Map<string, Map<string, Map<string, string>>>();
+
+/**
+ * 🔴 **`RUNTIME-REDESIGN-01` PHASE 5 — THE POSITION DRAFT, per item: anchor and the two
+ * offsets AS TYPED.**
+ *
+ * ── WHY IT IS HERE AND NOT IN THE PICKER ─────────────────────────────────────
+ *
+ * `PositionPicker` used to hold the anchor and the offsets in `useState`, keyed by item, so
+ * the component REMOUNTED on every selection change and the operator's unapplied position
+ * went with it. Every other kind of staged edit in this panel — a field, a plate, a
+ * per-look input — survives a selection round trip because it lives in THIS store; the
+ * position was the one edit that did not, and `PROMPT.md` §5's rule is that a row's draft
+ * is kept: _selecting another row and coming back does not lose it._ Session state, like
+ * every map above it: no persisted key, file or schema (§5's own constraint).
+ *
+ * ── WHY IT IS A FOURTH MAP AND NOT A KEY IN THE FIELD OVERLAY ────────────────
+ *
+ * The same reason `plateDrafts` is: the field overlay IS the `stack.update` payload, and a
+ * position living in it would be sent to the template as a field it never declared. A
+ * position is applied through `stack.setPosition`, its own channel, by its own control.
+ *
+ * ── WHAT `clearDraft` DOES NOT DO, deliberately ──────────────────────────────
+ *
+ * `clearDraft` (the commit bar's DISCARD) leaves the position draft alone, and
+ * `isItemDirty` does not read it. Both halves follow from one fact: UPDATE does not send
+ * the position. If a position draft lit the row's `● draft` chip and enabled its UPDATE
+ * verb, pressing UPDATE would apply nothing of what the chip pointed at — a control whose
+ * word says "apply this" while leaving it staged. The position keeps its OWN lifecycle:
+ * its own dirty dot, its own `Apply position`, and its own honest-marker rule (the dot
+ * clears by itself when the applied value catches up, exactly as a field's does). A prune
+ * still sweeps it, because a draft for a row that has left the stack is unreachable.
+ *
+ * The offsets are kept as the STRINGS the operator typed, not as numbers: `"-"`, `"1."`
+ * and `""` are in-progress states a round trip must not flatten to `0`.
+ */
+export interface PositionDraft {
+  readonly anchor: PositionAnchor;
+  readonly x: string;
+  readonly y: string;
+}
+
+const positionDrafts = new Map<string, PositionDraft>();
+
+/** Stage the item's whole position draft (the picker writes all three together). */
+export function stagePosition(itemId: string, draft: PositionDraft): void {
+  positionDrafts.set(itemId, draft);
+  bump();
+}
+
+/** The item's staged position, or `undefined` when nothing is staged for it. */
+export function positionDraftOf(itemId: string): PositionDraft | undefined {
+  return positionDrafts.get(itemId);
+}
 
 /** The staged value for one `(look, plate)`, or `undefined` when nothing is staged. */
 function stagedLookBinding(itemId: string, lookId: string, plateId: string): string | undefined {
@@ -581,8 +639,10 @@ export function pruneDrafts(snapshot: StackPruneInput): void {
   const live = snapshot.liveItemIds;
   let changed = false;
   // EVERY map, from the one guard. A draft of any kind that outlived this sweep would be an
-  // unapplied edit the operator can no longer see or reach.
-  for (const map of [drafts, plateDrafts, lookBindingDrafts] as {
+  // unapplied edit the operator can no longer see or reach. The position draft is swept
+  // here too — it is the one map `clearDraft` leaves alone (see its header), and a prune
+  // is not a Discard: the row is GONE, so there is nothing left for the draft to belong to.
+  for (const map of [drafts, plateDrafts, lookBindingDrafts, positionDrafts] as {
     delete: (k: string) => boolean;
     keys: () => IterableIterator<string>;
   }[]) {
@@ -596,11 +656,12 @@ export function pruneDrafts(snapshot: StackPruneInput): void {
   if (changed) bump();
 }
 
-/** Test-only: wipe all drafts, both kinds. */
+/** Test-only: wipe all drafts, every kind. */
 export function __resetDraftsForTest(): void {
   drafts.clear();
   plateDrafts.clear();
   lookBindingDrafts.clear();
+  positionDrafts.clear();
   bump();
 }
 

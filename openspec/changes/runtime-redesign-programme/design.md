@@ -1178,3 +1178,191 @@ and one by Phase 8, unchanged.
   (golden rule 12c); the dom test pins the SET and the cell COUNT, which need no layout.
 - It did not invent a regular-weight text token to match the reference's 400; the segment is one
   step under the button family and the delta is argued in 11.3.
+
+## 12 — Phase 5: Preview, program and the Inspector
+
+The record for `PROMPT.md` §5. The three independent things and how each pair was proved red
+first; the reference measured in a browser and counted by its waves; every Inspector and monitor
+delta fixed or argued; the position draft that was being lost; the deletion guard re-run; and the
+one rule recorded for later phases (A12).
+
+### 12.1 What contradicted the prompt — and what did not
+
+- **The reference's Inspector and monitors are restated like its table and its look strip, and
+  worse.** Counted in Chromium from the page's own CSSOM (one sheet, every rule whose selector
+  names the token): `.inspector` **33** rules (26 unconditional, 7 under `@media`),
+  `.inspector-foot` 8, `.inspector-body` 6, `.position-controls` 10, `.anchor-grid` 8,
+  `.headline-item` 17; `.monitor-head` 10, `.monitor-stage` 8, `.monitor-controls` 7, `.monitors`
+  3, `.control-grid` 13. Only the last unconditional wave paints at 1280 × 800, and the monitors'
+  painting rules are not even under `.monitors` — they are the `#monitor-area .pvw-revision` /
+  `.pvw-compact` block appended after the `@media` blocks. Every number in 12.3 is what the
+  browser read, never what a rule says (`PROMPT.md` §0).
+- **"Whether the monitors are SHOWN" was not a thing the app had.** The reference keeps
+  `monitorsVisible` as a third variable with a `Show monitors` / `Hide monitors` toggle
+  (`aria-expanded`, `aria-controls="monitor-area"`). The app's only way to fold the strip away was
+  the Layers panel's FULLSCREEN — which also takes the Inspector column away: "monitors hidden"
+  coupled to "editor hidden", the very coupling §5 warns about, sitting in the shell as a feature.
+  The toggle is built (12.2); fullscreen stays as a separate axis.
+- **One kind of draft WAS being lost on the round trip §5 forbids.** Field, plate and per-look
+  drafts already survive a selection switch through `draftStore`; the on-air POSITION draft did
+  not — `PositionPicker` held anchor and offsets in `useState`, keyed by item, so the remount on
+  every selection change threw them away. Fixed, red first (12.5).
+- **§5's first line ("the preview is multi-layer, as 06 shows") was already true**: `R-022`
+  composites every rehearsing row and `rehearse-composite.spec.ts` pins it. The reference draws
+  the same thing (two `.pvw-composite-layer`s stacked by layer in one scaled 1920 × 1080 box,
+  read at 12.3). What was not true was the independence of that set from the selection and from
+  the strip's visibility, which is this phase's subject.
+- **The reference titles the Inspector with the ROW's name and puts the template on the meta
+  line; the app titles it with the TEMPLATE's name.** Golden rule 11 (name things in the
+  operator's words) sits on the reference's side. NOT changed here — it is a wording and
+  structure change with its own tests and it is not in §5 — and filed as `R-061` for the owner.
+- **The reference's monitor captions make air claims the app must not copy**: `3 rows on air ·
+demo` under PROGRAM and `ON AIR LOOK` / `Cut · now` on a row. Both are second claims about air
+  on a surface that already says what is on air; recorded as A12 (12.8) rather than argued
+  per site.
+
+### 12.2 What was built
+
+| piece                                  | where                                                                                                                                                                                                                                                                   |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the monitors toggle                    | `useShellLayout.monitorsShown` / `setMonitorsShown` (session state); the Layers header button; `App` gates the strip on `focus !== 'layers' && (monitorsShown \|\| monitorFocused)`; `reset()` restores it; `customized` counts it                                      |
+| the position draft                     | `draftStore.positionDrafts` (`stagePosition` / `positionDraftOf`, swept by `pruneDrafts`, left by `clearDraft`); `PositionPicker` reads and writes it                                                                                                                   |
+| the reference's defaults               | `DEFAULT_INSPECTOR_PX` 320 → **396**, `DEFAULT_MONITOR_PX` 180 → **230** (guard item 19's own rule: the reference supplies the defaults, never the constraint); `layout.ts`'s server-rendered default follows                                                           |
+| the Inspector's rendered geometry      | `INSPECTOR_PX` in the token home → `--r-insp-*`; read by `.cg-inspector-body .cg-field`, `.cg-inspector-section > h2`, `.cg-position-row`, `.cg-inspector-actions`, `PositionPicker`                                                                                    |
+| the foot                               | Discard · Update order, the `9px 12px` pad, the stronger top rule, the upward shadow, the 104 px button floor, and the reference's hint sentence under them                                                                                                             |
+| `cg-inspector-body` on the real branch | the class was only on the EMPTY branch, so `controls.css`'s `@container inspector` rule matched no field an operator could see                                                                                                                                          |
+| proofs                                 | `workspaceIndependence.dom.test.ts` (the whole `App` in jsdom on the mock bridge), `workspace-independence.spec.ts`, `inspector-geometry.spec.ts`, `shellLayout.monitorsShown.dom.test.ts`, the position cases in `draftStore.test.ts` and `positionPicker.dom.test.ts` |
+
+### 12.3 🔴 THE MEASURED PROPERTY TABLES — rendered reference vs app, every delta FIXED or ARGUED
+
+Both columns are Chromium readings at 1280 × 800: the reference from `05-row-inspector.html` /
+`06-preview-program.html` opened as files, the app from the built SPA on the e2e harness with a
+list-field template loaded and selected. "Palette" means the same ROLE, whose value Phase 2 moved
+by the owner's mapping rule.
+
+**The Inspector**
+
+| property           | reference (rendered)                                                                                  | app (after this phase)                                                                                                               | verdict                                                                                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| column             | **396 px**, `minmax(0,1fr) 396px`, gap 8                                                              | **396 px** default (was 320), resizable, 6 px divider + 0.35rem                                                                      | **FIXED** (default); ARGUED: the divider and clamps are guard item 19                                                                                                    |
+| panel box          | 1 px `--line`, radius 6, `--surface`                                                                  | 1 px `--r-border`, radius 4, `--r-surface`                                                                                           | ARGUED: radius is the panel primitive's, shared by all four panels                                                                                                       |
+| head               | 66 px, two rows: eyebrow `Inspector` 9 px + ROW name 14 px 600; meta: status badge · template · `PVW` | 53 px bar (`--r-panel-bar-h`): `INSPECTOR`; then in the body the TEMPLATE name 15 px 600 + chips (status · layer · channel · server) | ARGUED: one bar for four panels; the row-name title is `R-061` (golden rule 11 favours the reference)                                                                    |
+| head close control | 26 × 26 icon-btn                                                                                      | 28 × 28 `icon`                                                                                                                       | ARGUED: the primitive's box; +2 px on a hit target                                                                                                                       |
+| body padding       | `12px 12px 14px`                                                                                      | `12px 12px 0` (the foot owns the bottom)                                                                                             | **FIXED** (was `24px 16px 0`)                                                                                                                                            |
+| section heading    | 12 px 600, `.03em`, `rgb(182 200 218)`, no rule under it                                              | 12 px 600, `.03em`, `--r-text-secondary` `#bbc8d7`, rule under it                                                                    | **FIXED** (size, weight, tracking, ink rank; was 11 px 700 `.12em` muted); ARGUED: the rule is the same separation one edge over                                         |
+| section spacing    | `+` 15 px margin, 12 px pad, rule above                                                               | 32 px margin, rule under the heading                                                                                                 | ARGUED: the app's spacing GRADIENT (`controls.css`) is a design of its own, one scale, kept                                                                              |
+| field label        | 12 px 500 `rgb(187 200 215)`                                                                          | NAME 13 px 500 `--r-text` + key 11 px muted                                                                                          | ARGUED: 13 px is an owner decision ("a notch under the body scale"), the primary ink a written one                                                                       |
+| text input         | 31 px, `5px 8px`, 13 px, radius 4, `#0e151e`                                                          | **31 px, `5px 8px`, 13 px**, radius 4, `--r-field-bg`                                                                                | **FIXED** (was 33.2 px, `4.8px 8px`, 14.4 px); scoped to the Inspector so Station setup's inputs are untouched                                                           |
+| input focus        | border `--blue` + `inset 0 0 0 1px --blue`, outline none — ONE ring                                   | border `--r-accent` + `0 0 0 2px --r-accent`, outline none — ONE ring                                                                | identical in kind; ARGUED: inset vs outset. Pinned in Playwright with no ancestor ring                                                                                   |
+| anchor grid        | 66 × 64, 20 × 20 cells, radius 3                                                                      | 96 × 96, **30 × 30** cells, radius 3                                                                                                 | ARGUED: a 20 px cell is under the 24 px hit-target floor — the `A8` shape (wave 1's 32 × 34 verbs), and not reopened                                                     |
+| position row       | `66px minmax(48px,1fr) minmax(48px,1fr) auto`, gap 8, `align-items:end`                               | grid · `1 1 48px` · `1 1 48px` · auto, gap 12, `flex-end`                                                                            | **FIXED** — X and Y fill and stay equal (116.9 px each at 396; were fixed 74); gap ARGUED (the scale's step)                                                             |
+| position inputs    | 32 px, 90.3 px each, labels `X px` / `Y px` 12 px 500 on an 18 px line                                | **32 px**, 116.9 px each, labels `dx` / `dy` **12 px 500 secondary, 18 px line**                                                     | **FIXED** (height, label rank); ARGUED: the words — nothing reworded (§0), `dx`/`dy` are the app's                                                                       |
+| Apply position     | 32 px, 12 px 550, quiet                                                                               | 32 px, 12.8 px 600, `accent`                                                                                                         | ARGUED: palette and the accented-actions rule (owner)                                                                                                                    |
+| list item          | textarea 282 + handle 24 × 32 (`cursor: grab`) + remove 24 × 28                                       | textarea 284 + handle 24 × 28 + index + remove 26 × 28                                                                               | identical in kind; ARGUED: the cluster rule (`inspect-list-field.spec.ts`)                                                                                               |
+| grip handle        | a focusable button, `aria-label` "Move headline 1. Drag, or use Up and Down arrow keys.", ↑/↓         | a focusable button, `aria-label` "Reorder … item 1", ↑/↓; pointer drag pinned in Playwright                                          | identical in contract; ARGUED: wording (§0)                                                                                                                              |
+| Add item           | 29 px, 12 px 550, quiet                                                                               | 28 px, 12.8 px 600, `accent`                                                                                                         | ARGUED: the field-foot height rule + the accented-actions rule                                                                                                           |
+| foot box           | `9px 12px`, `#1e2938`, top rule `#52627a`, shadow `0 -5px 12px #0002`, 98.8 px tall                   | **`9px 12px`**, `--r-surface-raised`, top rule **`--r-border-strong`**, **shadow**, 77.5 px tall                                     | **FIXED** (pad, rule weight, shadow; was `12px 16px`, `--r-border`, none); ARGUED: palette; the status line (`Fields saved`) is not adopted — the chip is the app's word |
+| foot buttons       | `Discard` · `Update`, each **104 × 32**, 13 px, gap 10                                                | **`Discard` · `Update`, each 104 × 32, 13 px, gap 10**                                                                               | **FIXED** (order, floor, text, gap; were 71 / 69 wide at 12.8 px, Update first, gap 12)                                                                                  |
+| Update colour      | `#22dd7a` fill, dark ink                                                                              | `--r-onair` fill, dark ink (`variant="commit"`, PLAY's own token)                                                                    | identical up to palette — the owner's "same as PLAY" call, already made                                                                                                  |
+| foot hint          | `Saves this row’s configuration. No Take is sent.` 11 px muted                                        | **the same sentence**, 11 px muted                                                                                                   | **FIXED** (adopted; it is golden rule 10 on the surface)                                                                                                                 |
+| foot pinned        | foot bottom = panel bottom − 1 at 800 / 600 / 480                                                     | foot bottom = panel bottom − 1 at 800 / 600 / 480, short and long content                                                            | identical; pinned in Playwright at three heights                                                                                                                         |
+
+**The monitors**
+
+| property               | reference (rendered)                                                                                          | app (after this phase)                                                                                                   | verdict                                                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| the strip              | `#monitor-area`, **230 px**, two `1fr` monitors gapped 8, hidden unless `monitorsVisible`                     | **230 px** default (was 180), two `flex:1` panels gapped 12, resizable, hidden unless `monitorsShown`                    | **FIXED** (height, the toggle); ARGUED: the divider (item 19)                                                                                          |
+| the toggle             | top-bar `btn.quiet.monitor-toggle` 32 px, `Show monitors` / `Hide monitors`, `aria-expanded`, `aria-controls` | Layers-header `ghost` icon, **the same two names**, `aria-expanded`, `aria-controls="monitor-strip"`                     | **FIXED** (built); ARGUED: placement — the app has no app-head; this bar carries the shell's other layout control                                      |
+| monitor box            | radius 5, `#101722`, 1 px `--line`                                                                            | radius 4, `--r-surface`, 1 px `--r-border`                                                                               | ARGUED: palette + the panel primitive                                                                                                                  |
+| monitor head           | **32 px**, `3px 9px`, `#202b3a`; `PREVIEW` 11 px 650 purple / `PROGRAM` mint + `CH 1`                         | **53 px** `--r-panel-bar-h`; `PREVIEW (PVW)` / `PROGRAM (PGM)` 11 px 700 muted                                           | ARGUED: one bar height for all four panels (`--r-panel-bar-h`'s own rule); the purple/mint heads are A4's territory — a hue per monitor is not adopted |
+| PVW count              | head: `2 layers on PVW`                                                                                       | lifecycle bar: `Rehearsing 2 rows` (`rehearsalCaption`)                                                                  | ARGUED: the same count, one line lower, ONE place — not duplicated into the head                                                                       |
+| PVW controls row       | 31 px: `PLAY NEXT STOP` 25 px 11 px 550 · `ALL LAYERS` 9 px · zoom select 23 px · guides                      | 39 px: `PLAY NEXT STOP` 28.8 px 12.8 px 600 · caption · caveats toggle                                                   | ARGUED: the app's verbs keep the button family's box (a 25 px button is under the floor); zoom and guides are not built here                           |
+| PVW stage              | 165 px, `#030507`, composite 1920 × 1080 scaled 0.153 on flat `#26303e`                                       | **135.6 px** (was 85.6), `--r-video-ground`, frames 1920 × 1080 scaled 0.126 on the CHECKER                              | **FIXED** (+58 % stage); ARGUED: palette; the checker is the owner's own decision (alpha visible)                                                      |
+| PVW layers             | `.pvw-composite-layer` × N, `z-index` 1…N, `position:absolute; inset:0`                                       | `iframe[data-rehearsal-frame]` × N, `z-index` by real layer                                                              | identical in kind — multi-layer, as 06 shows                                                                                                           |
+| PGM head               | `PROGRAM CH 1` · `Server return`                                                                              | `PROGRAM (PGM)`                                                                                                          | ARGUED: nothing reworded (§0)                                                                                                                          |
+| PGM body               | `No return signal · 3 rows on air · demo`; `Program return unavailable` / `Playout may still be active.`      | `No program return` / `This will show what is on air, returned from the playout server. No return feed is arriving yet.` | ARGUED: the app's words are `C-016`'s; `3 rows on air` is a second air claim (A12); nothing invented (§5's own note)                                   |
+| what a black box means | a flat `#030507` box with words in it                                                                         | a black box with words in it                                                                                             | identical in kind — the words are what keep a black picture from reading as a dead feed (`MonitorPanel`)                                               |
+
+**What the owner will see change on screen:** the Inspector opens 76 px wider; its fields are a
+notch smaller and tighter (31 px boxes at 13 px, 12 px pad); X and Y stretch to fill the row and
+match; the section headings are a shade brighter and lighter; the foot carries `Discard · Update`
+at equal widths with a sentence under them and a faint shadow above; the monitor strip is 50 px
+taller with a visibly larger PVW stage; and the Layers bar has a monitor icon that folds the
+strip away and brings it back.
+
+### 12.4 The waves, counted — how the reference was read
+
+The count in 12.1 was taken by walking `document.styleSheets` in the loaded page and matching
+each rule's `selectorText` against the token, recording the `@media` condition it sits under —
+so it counts what the browser HOLDS, including the block the page's script appends, not what a
+text grep of the file finds. A rule under `(max-width: 1270px)` or `(max-width: 850px)` does not
+paint at 1280 × 800 and is listed as conditional. The unconditional restatements are the waves:
+26 for `.inspector`, and the one that paints is the last — `position: static; max-height: none;
+min-height: 0` with the `flex: column; overflow: hidden` block after it, which is the shape 12.3
+measured against.
+
+### 12.5 🔴 The red-first proofs
+
+**The three pairs, both directions, on the whole `App`.** Six couplings were PLANTED in
+`App.tsx`, three at a time, and both proofs run against each round:
+
+| round | planted couplings                                                  | jsdom (`workspaceIndependence.dom.test.ts`)                                                                                         | browser (`workspace-independence.spec.ts`) |
+| ----- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| A     | select → enter PVW · select → show monitors · PVW → show monitors  | RED: 1 (S→P), 3 (S→M), 5 (P→M); and 2 (P→S) via its precondition — the row it selects is now in PVW. GREEN: 4, 6, 7                 | the same four red, the same three green    |
+| B     | PVW → select · hide monitors → deselect · hide monitors → exit PVW | RED: 2 (P→S), 4 (M→S), 6 (M→P); and 3 (S→M) via its precondition — hiding deselects, so its deselect step reselects. GREEN: 1, 5, 7 | the same four red, the same three green    |
+| —     | none (the code as committed)                                       | 7 / 7 green                                                                                                                         | 7 / 7 green                                |
+
+Each of the six direction tests went red under its own coupling and green under the three of the
+other round, so no test can be passing on a coupling that runs the other way — which is the
+failure mode §5 names. The two precondition reds are recorded because they are what a coupling
+does: it reaches into the other test's setup, and the honest table shows that rather than a clean
+3 + 3. The plants are not in the tree; they were two edits to `App.tsx`, reversed by hand and
+checked absent (`git grep PLANTED` finds nothing).
+
+**The position draft.** `positionPicker.dom.test.ts` — _a position DRAFT survives a deselect →
+reselect — the anchor AND the offsets as typed_: mount, press `top-center`, type `-` into Y,
+unmount, mount the same item again. **RED against the `useState` picker** (`aria-pressed`
+`'false'` on `top-center` after the remount), **GREEN with the draft in the store**, 11 / 11 in
+the file and 24 / 24 in `draftStore.test.ts`.
+
+### 12.6 The deletion guard — items 19 and 20 re-run, and the rest green
+
+Both surfaces this phase touches have tests, and they were re-run on the built app after the
+change: **item 19, the resizable shell** — `divider-across-iframe.spec.ts` (3),
+`draft-survives-fullscreen.spec.ts` (2), `panel-scroll.spec.ts` (3), plus `shellLayout.test.ts`
+and `layout.test.ts` in the gate — and **item 20, the narrow Inspector overlay and its
+deselecting scrim** — `inspector-open-close.spec.ts` (6). All green; neither was absorbed into
+the new layout. The strip keeps its divider and both monitors keep fullscreen (`Panel`); the
+overlay keeps its scrim, and the scrim still deselects. The other twenty-five items are untouched
+by this phase — the diff is the Inspector, the picker, the draft store, the shell hook, the Layers
+header and the token home — and their tests ran in `pnpm gate`. Four are still owed by Phase 9,
+one by Phase 8, unchanged.
+
+### 12.7 What Phase 5 did NOT do — and the numbers filed
+
+- It did not persist `monitorsShown`. It is session state by the phase's own constraint (no
+  persisted key or shape change); whether it should join `cg.runtime.shell-layout.v1` is filed as
+  **`R-060`** — the owner's call, because a strip that stays folded across a reload is either a
+  remembered preference or a lost safety surface, and the two are indistinguishable from here.
+- It did not retitle the Inspector with the ROW name (the reference's `Layer 3` over the template
+  line) nor add the reference's `Reset` for the position draft. Both are filed as **`R-061`**:
+  the title is golden rule 11's territory and a wording change with its own sweep; the reset is
+  the one lifecycle gap the position draft still has (it clears by convergence, or by prune).
+- It did not adopt the monitors' 32 px heads, purple/mint head inks, the `CH 1` chip, the zoom
+  select or the safe-area guides toggle, the `Fields saved` status line, the reference's field
+  label size, or its 20 px anchor cells — each argued in 12.3.
+- It did not touch `RehearsalStage`, `PreviewPanel`, `MonitorPanel`, the bridge, any schema, any
+  persisted key, any refusal, or any wording that already existed. Nothing was translated.
+- It did not measure any geometry in jsdom: every box, edge, ring and pinned-foot claim is in
+  `inspector-geometry.spec.ts` and `workspace-independence.spec.ts` (golden rule 12c).
+
+### 12.8 A12 — recorded for the phases that will trip over it
+
+**A surface must never make a SECOND claim about air on a row that already says what is on
+air.** Two claims can disagree during a transition and the operator then has to choose which to
+believe. The row's state cell is the one claim; `· NOW` is `B-168`'s immediacy qualifier and not
+a second claim. This is why Phase 4 did not adopt `ON AIR LOOK` / `Cut · now` (11.2) and why this
+phase does not adopt `3 rows on air` under PROGRAM (12.3). It is now a requirement in the
+`runtime-ui` spec delta and an owner answer in `tasks.md`, where Phase 6 (the audio modal's
+labels), Phase 8 (the audit log's row lines) and Phase 9 (the guard surfaces re-dressed) will
+read it before drawing a badge.

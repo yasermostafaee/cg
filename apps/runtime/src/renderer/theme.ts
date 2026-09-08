@@ -419,6 +419,49 @@ export const LOOK_STRIP_PX = {
   thumbH: 19,
   thumbGap: 2,
 } as const;
+/*
+ * ── `RUNTIME-REDESIGN-01` PHASE 5 — THE INSPECTOR'S GEOMETRY, AS THE REFERENCE RENDERS IT ──
+ *
+ * Measured in Chromium at 1280 × 800 on `05-row-inspector.html` (`design.md` §12.3), never
+ * read off the stylesheet: `.inspector` is restated THIRTY-THREE times in that file (26 of
+ * them unconditional), `.inspector-foot` eight, `.position-controls` ten, and only the last
+ * restatement paints (`PROMPT.md` §0). What paints: a `12px` body pad; section headings at
+ * `12px` semibold, tracked `.03em`, in the second ink; field inputs `31 px` tall (`5px 8px`
+ * pad, `13px` text) and the two position inputs `32 px`, filling a `66px 1fr 1fr auto` grid
+ * with `12px`/500 labels on an `18px` line; a footer padded `9px 12px` carrying a top rule
+ * and an upward shadow, its two `32 px` buttons on a `104 px` floor at `13px`, gapped 10, and
+ * an `11px` hint line under them.
+ *
+ * ⚠ NOT here, deliberately: the anchor grid's `20 px` cells (the app keeps `30` — a hit
+ * target under the 24 px floor is the `A8` shape again), the field NAME's `13px` (owner
+ * decision, kept), and the reference's monitor head height (one `--r-panel-bar-h` for all
+ * four panels). Each is argued in `design.md` §12.3 rather than transcribed.
+ */
+export const INSPECTOR_PX = {
+  /** A section heading — `.inspector-section h3{font-size:12px;letter-spacing:.03em}`. */
+  sectionText: 12,
+  sectionTracking: '0.03em',
+  /** A control's label — `.inspector .field>label{font-size:12px}` on an 18 px line. */
+  labelText: 12,
+  labelLine: 18,
+  /** A field input — `.inspector input{height:31px;padding:5px 8px;font-size:13px}`. */
+  fieldText: 13,
+  fieldPadY: 5,
+  fieldPadX: 8,
+  fieldH: 31,
+  /** The two position inputs — `.inspector .position-controls input{height:32px}`. */
+  positionFieldH: 32,
+  /** …and the floor each takes in the `minmax(48px,1fr)` columns they fill. */
+  offsetMinW: 48,
+  /** The footer — `.inspector-foot{padding:9px 12px}`, its buttons and their gap. */
+  footPadY: 9,
+  footPadX: 12,
+  footGap: 10,
+  footBtnMinW: 104,
+  footBtnText: 13,
+  /** The hint under the buttons — `.inspector-foot .target-hint{font-size:11px}`. */
+  hintText: 11,
+} as const;
 /** The line weight an ACCENTED surface takes: the reference's `.badge.ready` edge. */
 const ACCENT_LINE = '#31556a';
 
@@ -1105,6 +1148,31 @@ export const cssVars = {
   '--r-look-thumb-w': `${String(LOOK_STRIP_PX.thumbW)}px`,
   '--r-look-thumb-h': `${String(LOOK_STRIP_PX.thumbH)}px`,
   '--r-look-thumb-gap': `${String(LOOK_STRIP_PX.thumbGap)}px`,
+  /**
+   * ── `RUNTIME-REDESIGN-01` PHASE 5 — the Inspector (`INSPECTOR_PX`, cited to the RENDERED
+   * rules above it). Read by `.cg-inspector-body`, `.cg-inspector-section`, `.cg-position-row`,
+   * `.cg-inspector-actions` and `PositionPicker`'s labels.
+   */
+  '--r-insp-section-text': `${String(INSPECTOR_PX.sectionText)}px`,
+  '--r-insp-section-tracking': INSPECTOR_PX.sectionTracking,
+  '--r-insp-label-text': `${String(INSPECTOR_PX.labelText)}px`,
+  '--r-insp-label-line': `${String(INSPECTOR_PX.labelLine)}px`,
+  '--r-insp-field-text': `${String(INSPECTOR_PX.fieldText)}px`,
+  '--r-insp-field-pad': `${String(INSPECTOR_PX.fieldPadY)}px ${String(INSPECTOR_PX.fieldPadX)}px`,
+  '--r-insp-field-h': `${String(INSPECTOR_PX.fieldH)}px`,
+  '--r-insp-position-field-h': `${String(INSPECTOR_PX.positionFieldH)}px`,
+  '--r-insp-offset-min-w': `${String(INSPECTOR_PX.offsetMinW)}px`,
+  '--r-insp-foot-pad': `${String(INSPECTOR_PX.footPadY)}px ${String(INSPECTOR_PX.footPadX)}px`,
+  '--r-insp-foot-gap': `${String(INSPECTOR_PX.footGap)}px`,
+  '--r-insp-foot-btn-min-w': `${String(INSPECTOR_PX.footBtnMinW)}px`,
+  '--r-insp-foot-btn-text': `${String(INSPECTOR_PX.footBtnText)}px`,
+  '--r-insp-hint-text': `${String(INSPECTOR_PX.hintText)}px`,
+  /**
+   * The footer's upward shadow — `.inspector-foot{box-shadow:0 -5px 12px #0002}`: what lifts
+   * the pinned bar off the field list it is stuck over, so scrolled content reads as passing
+   * BEHIND it. Same family as `--r-shadow-1/-2`, cast upward.
+   */
+  '--r-insp-foot-shadow': '0 -5px 12px rgba(0, 0, 0, 0.13)',
   // Motion
   '--r-dur-fast': '120ms',
   '--r-dur-med': '200ms',

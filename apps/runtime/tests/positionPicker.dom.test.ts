@@ -5,6 +5,7 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { PositionPicker } from '../src/renderer/features/inspector/PositionPicker.js';
+import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
 import { recordDefaultPosition } from '../src/renderer/features/stack/defaultPositionStore.js';
 
 /**
@@ -20,6 +21,11 @@ afterEach(() => {
   container?.remove();
   container = null;
   recordDefaultPosition('tpl-pos', undefined);
+  // Phase 5 — the position draft is SESSION state in the draft store now, keyed by item.
+  // Every case here renders `item-1`, so a draft one case stages would be the next case's
+  // seed — which is the behaviour the store exists to provide, and exactly why the tests
+  // must start each case from nothing.
+  __resetDraftsForTest();
   vi.restoreAllMocks();
 });
 
@@ -222,6 +228,48 @@ describe('PositionPicker — B-072 override read-back', () => {
     expect(
       el.querySelector('button[aria-label="Anchor bottom-right"]')?.getAttribute('aria-pressed'),
     ).toBe('true');
+  });
+
+  /**
+   * `RUNTIME-REDESIGN-01` PHASE 5 — a position DRAFT survives the round trip too.
+   *
+   * B-072 above proves the APPLIED override survives a deselect → reselect; this proves
+   * the UNAPPLIED one does. They are different claims with different mechanisms: the
+   * override comes back because the bridge publishes it on the item, the draft comes back
+   * only because it lives in the draft store rather than in the picker's own state. The
+   * picker is keyed by item and remounts on every selection change, so component state is
+   * precisely the thing a round trip destroys — which is what this test was RED against.
+   */
+  it('a position DRAFT survives a deselect → reselect — the anchor AND the offsets as typed', async () => {
+    stubBridge();
+    recordDefaultPosition('tpl-pos', { anchor: 'top-left', offset: { x: 5, y: 5 } });
+    const first = await render(withOverride());
+    await act(async () => {
+      first.querySelector<HTMLButtonElement>('button[aria-label="Anchor top-center"]')?.click();
+    });
+    const dy = first.querySelector<HTMLInputElement>('input[aria-label="Position offset Y"]');
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setter?.call(dy, '-'); // an IN-PROGRESS value, not yet a number
+      dy?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    // Staged, not applied: the dirty dot is up and nothing was sent.
+    expect(first.querySelector('[aria-label="Position has unapplied changes"]')).not.toBeNull();
+
+    // Deselect (unmount) → reselect (mount again, same item, same applied override).
+    container?.remove();
+    container = null;
+    const again = await render(withOverride());
+    expect(
+      again.querySelector('button[aria-label="Anchor top-center"]')?.getAttribute('aria-pressed'),
+    ).toBe('true');
+    expect(
+      again.querySelector<HTMLInputElement>('input[aria-label="Position offset Y"]')?.value,
+    ).toBe('-');
+    expect(
+      again.querySelector<HTMLInputElement>('input[aria-label="Position offset X"]')?.value,
+    ).toBe('-10');
+    expect(again.querySelector('[aria-label="Position has unapplied changes"]')).not.toBeNull();
   });
 
   it('BLAST-RADIUS GUARD: re-Apply without editing sends the OVERRIDE, never the default', async () => {

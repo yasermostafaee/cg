@@ -921,6 +921,25 @@ textarea.cg-field--autogrow {
 }
 
 /*
+ * `RUNTIME-REDESIGN-01` PHASE 5 — THE INSPECTOR'S FIELDS TAKE THE REFERENCE'S BOX.
+ *
+ * Scoped to the Inspector body rather than written into `.cg-field` itself: that class
+ * dresses every input in the app (Station setup's tabs included), and the reference sizes
+ * its Inspector inputs with an Inspector-scoped rule (`.inspector input{…}`) that its global
+ * input rule does not share. A `31 px` box at `13px` where the app had `33 px` at `14.4px` —
+ * the values are `INSPECTOR_PX` in the token home, measured, not the stylesheet's.
+ */
+.cg-inspector-body .cg-field {
+  font-size: var(--r-insp-field-text);
+  padding: var(--r-insp-field-pad);
+}
+.cg-inspector-body input.cg-field,
+.cg-inspector-body select.cg-field {
+  height: var(--r-insp-field-h);
+  min-height: var(--r-insp-field-h);
+}
+
+/*
  * A COMPACT field: label beside its control. Right for a checkbox, a number, a
  * colour swatch or a select — controls with an intrinsic, small width.
  *
@@ -1088,15 +1107,21 @@ textarea.cg-field--autogrow {
  * a region; it is not a heading competing with the field labels below it, which
  * are the thing the operator is actually reading.
  */
+/*
+ * `RUNTIME-REDESIGN-01` Phase 5 — the size, weight, tracking and ink are the reference's as
+ * rendered (`12px` semibold, `.03em`, the SECOND ink — it was 11 px bold, `.12em`, muted).
+ * The rule under it stays: the reference separates sections with a rule ABOVE each one
+ * after the first, which is the same separation drawn one edge over (design.md §12.3).
+ */
 .cg-inspector-section > h2 {
   margin: 0 0 var(--r-space-4);
   padding-bottom: var(--r-space-2);
   border-bottom: 1px solid var(--r-border);
-  font-size: 11px;
-  font-weight: var(--r-weight-bold);
-  letter-spacing: 0.12em;
+  font-size: var(--r-insp-section-text);
+  font-weight: var(--r-weight-semibold);
+  letter-spacing: var(--r-insp-section-tracking);
   text-transform: uppercase;
-  color: var(--r-text-muted);
+  color: var(--r-text-secondary);
 }
 
 /* ── Inspector control heights — a ROW decides, not the variants in it ──────
@@ -1131,17 +1156,43 @@ textarea.cg-field--autogrow {
   min-height: 28px;
   padding-block: 0;
 }
+/*
+ * `RUNTIME-REDESIGN-01` Phase 5 — the commit bar's buttons take the reference's floor and
+ * text too (`min-width:104px`, `13px`): two words on a wide enough box to press under
+ * pressure, and Update and Discard the same width whatever their labels measure.
+ */
 .cg-inspector-actions .cg-btn {
   height: 32px;
   min-height: 32px;
+  min-width: var(--r-insp-foot-btn-min-w);
+  font-size: var(--r-insp-foot-btn-text);
   padding-block: 0;
 }
 /* "Apply position" sits IN the nudge row and must line up with the two number
    boxes beside it, so it takes the field height rather than a button height. */
 .cg-position-row .cg-btn {
-  height: 32px;
-  min-height: 32px;
+  height: var(--r-insp-position-field-h);
+  min-height: var(--r-insp-position-field-h);
   padding-block: 0;
+}
+/* …and the two number boxes are that height, so X, Y and the button share one baseline —
+   `32 px` here against `31` for a text field, as the reference renders them. */
+.cg-position-row input.cg-field {
+  height: var(--r-insp-position-field-h);
+  min-height: var(--r-insp-position-field-h);
+}
+/*
+ * The hint under the commit bar — the reference's `.target-hint`, and its sentence: it says
+ * on the surface what golden rule 10 says in `CLAUDE.md`, that UPDATE is a configuration
+ * verb and never a take.
+ */
+.cg-inspector-actions__hint {
+  flex: 0 0 100%;
+  margin: 0;
+  text-align: center;
+  font-size: var(--r-insp-hint-text);
+  line-height: 1.5;
+  color: var(--r-text-muted);
 }
 
 /* ── Inspector metadata chips (status / layer / channel / server) ───────────

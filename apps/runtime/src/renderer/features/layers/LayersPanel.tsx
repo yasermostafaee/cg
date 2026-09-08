@@ -8,6 +8,8 @@ import type { EmptiedAirRow, OrphanLayer, RestoreMigration, RestoreSkip } from '
 import {
   CircleArrowOutDownRight,
   LoaderCircle,
+  Monitor,
+  MonitorOff,
   PanelRight,
   RotateCcw,
   Trash2,
@@ -895,6 +897,36 @@ export function LayersPanel({
               <Icon icon={PanelRight} />
             </Button>
           )}
+          {/*
+            🔴 `RUNTIME-REDESIGN-01` PHASE 5 — SHOW / HIDE THE MONITORS.
+
+            The reference's `Show monitors` / `Hide monitors` toggle (`aria-expanded`,
+            `aria-controls`), which the app did not have: its only way to fold the strip
+            away was this panel's FULLSCREEN, and that takes the Inspector column with it —
+            "monitors hidden" coupled to "editor hidden". This flips ONE flag on the shell
+            (`layout.monitorsShown`) and nothing else: not the selection, not the PVW set.
+
+            Placed HERE, not in a top bar — the app has no app-head; this bar already
+            carries the shell's other layout control (reset), and it is the bar the operator
+            reads the rows under. Hidden only while this panel is fullscreen, when the strip
+            is hidden by that axis anyway and the Layers bar is the whole screen.
+          */}
+          <Button
+            variant="ghost"
+            aria-label={layout.monitorsShown ? 'Hide monitors' : 'Show monitors'}
+            aria-expanded={layout.monitorsShown}
+            aria-controls="monitor-strip"
+            title={
+              layout.monitorsShown
+                ? 'Fold PREVIEW and PROGRAM away — the layer list takes the height'
+                : 'Bring PREVIEW and PROGRAM back above the layer list'
+            }
+            onClick={() => {
+              layout.setMonitorsShown(!layout.monitorsShown);
+            }}
+          >
+            <Icon icon={layout.monitorsShown ? MonitorOff : Monitor} />
+          </Button>
           {/* THE WAY BACK. Always reachable once anything is customised, so an
               operator who drags a panel somewhere useless at 2 a.m. is never
               stuck with it. */}

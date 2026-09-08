@@ -6,12 +6,13 @@ file records which are done. **Each session takes the next unfinished phase, fin
 reports.** Do not start a later phase because an earlier one looks easy — the ordering is
 load-bearing and stated at each step.
 
-**Phase state at 2026-09-08 (evening):** Phases 1, 2 (with addendum 2A), 3 and **4** COMPLETE,
-each with its Linux `e2e` URL beside the ticked item. Phases 5–10 not started. Next: **Phase 5**.
-⚠ `PROMPT.md` §0 now carries the rule Phase 3 learned — **the reference is judged as RENDERED,
-not as authored: measure it in a browser at 1280 × 800 and quote what you read** — and §3's dead
-numbers are marked superseded in place. Read `design.md` §10.1 and §11.2 before Phase 5 reads
-anything off `06-preview-program.html`.
+**Phase state at 2026-09-08 (night):** Phases 1, 2 (with addendum 2A), 3, 4 and **5** COMPLETE,
+each with its Linux `e2e` URL beside the ticked item. Phases 6–10 not started. Next: **Phase 6**.
+⚠ `PROMPT.md` §0 carries the rule Phase 3 learned — **the reference is judged as RENDERED, not as
+authored: measure it in a browser at 1280 × 800 and quote what you read** — and Phase 5 counted
+the waves it hides (`.inspector` is restated 33 times; `design.md` §12.1). Read **A12** below
+before Phase 6 labels anything about air, and `design.md` §12 before touching the Inspector, the
+shell or the monitors.
 
 ⚠ **2A IS AN ADDENDUM, NOT A PHASE.** The programme still has TEN phases; 2A is recorded under
 Phase 2 because it closes something Phase 2 escalated, and numbering it as an eleventh would make
@@ -63,6 +64,14 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
   1280 × 800 and quotes what it read); §3's quoted numbers are marked SUPERSEDED in place by
   `design.md` §10.2, the section kept so the error stays visible. §§4–10 quote no stylesheet
   number or selector — checked, none found.
+- **A12 · 🔴 NO SECOND CLAIM ABOUT AIR ON A ROW THAT ALREADY SAYS WHAT IS ON AIR** (recorded in
+  Phase 5, 2026-09-08; `design.md` §12.8; now a requirement in the `runtime-ui` spec delta). The
+  reference's `ON AIR LOOK` / `Cut · now` look label is NOT adopted, and the reason is a rule for
+  the whole programme: two claims about air on one row can disagree during a transition, and the
+  operator then has to choose which to believe. The state cell is the one claim; `· NOW` is
+  `B-168`'s existing immediacy word and not a second claim. The same rule keeps the reference's
+  `3 rows on air` monitor caption out. **Phase 6 (the audio modal), Phase 8 (the audit log's row
+  lines) and Phase 9 (every guard surface re-dressed) read this before drawing a badge.**
 
 ---
 
@@ -273,16 +282,52 @@ contradicted the prompt, the measured strip, the fixture, the two red-first proo
       (08:01:01Z → 08:06:09Z). ⚠ The same run covers `0572102e` (the `PROMPT.md` amendment): both
       commits went up in one push, and the jobs are whole-tree.
 
-## Phase 5 — Preview, program and the Inspector
+## Phase 5 — Preview, program and the Inspector — COMPLETE
 
-- [ ] 5.1 The preview is multi-layer, as `06-preview-program.html` shows.
-- [ ] 5.2 🔴 Three things stay INDEPENDENT: which row is SELECTED, which rows are IN PVW, and
-      whether the monitors are SHOWN. Independence proved by test for all three pairs.
-- [ ] 5.3 The Inspector is available the moment a row is selected, and each row's draft is kept — a
-      draft is not lost by selecting another row and coming back.
-- [ ] 5.4 The Update button stays pinned at the foot at every panel height; X and Y align; an input's
-      focus is one ring, not two; subtitle items reorder by their grip handle.
-- [ ] 5.5 e2e run, URL recorded here.
+The record is `design.md` §12: what contradicted the prompt, the measured Inspector and monitor
+tables with every delta fixed or argued, the wave count, the red-first matrix, the guard, the
+numbers filed and A12.
+
+- [x] 5.1 The preview is multi-layer, as `06-preview-program.html` shows — and already was
+      (`R-022`, `rehearse-composite.spec.ts`); the reference's two `.pvw-composite-layer`s stacked
+      by layer in one scaled raster are the app's `iframe[data-rehearsal-frame]`s by real layer.
+      The strip takes the reference's rendered **230 px** as its default (was 180: the PVW stage
+      grew from 86 to 136 px) and gains the reference's **`Show monitors` / `Hide monitors`**
+      toggle (`aria-expanded`, `aria-controls="monitor-strip"`) in the Layers header — the app had
+      no way to fold the strip away except the Layers fullscreen, which also took the Inspector
+      column. Session state, not persisted (`R-060` filed); `reset()` brings it back. The
+      monitors' other deltas — 32 px heads, a hue per monitor, `CH 1`, zoom, guides, `3 rows on
+air` — are ARGUED in §12.3, the last under A12.
+- [x] 5.2 🔴 Three things stay INDEPENDENT, proved for all three pairs in BOTH directions on the
+      whole `App` — `tests/workspaceIndependence.dom.test.ts` (jsdom, the mock bridge under
+      `App`) and `tests/e2e/workspace-independence.spec.ts` (Chromium). **RED FIRST in two rounds
+      of planted couplings** (§12.5): round A wired select → PVW, select → monitors, PVW →
+      monitors and reddened exactly tests 1, 3, 5 (plus 2 through its precondition); round B
+      wired the three reverse directions and reddened exactly 2, 4, 6 (plus 3 through its
+      precondition). 7 / 7 green in both engines with the plants removed. The PVW set is read
+      from the bridge, never from a badge. Spec delta: `specs/runtime-ui/spec.md`.
+- [x] 5.3 The Inspector opens the moment a row is selected (unchanged, `inspector-open-close`),
+      and every kind of draft survives a selection round trip — fields, plates and per-look inputs
+      already did through `draftStore`; **the on-air POSITION draft did not** (`PositionPicker`'s
+      `useState`, remounted per item) and now lives in the same store, per item, offsets kept as
+      typed, swept by prune and deliberately left by DISCARD (UPDATE does not send it). **RED
+      FIRST** — `positionPicker.dom.test.ts`'s round-trip case against the `useState` picker,
+      GREEN on the store; `draftStore.test.ts` covers the map. No persisted key, file or schema.
+- [x] 5.4 Geometry, in Playwright only (golden rule 12c) — `tests/e2e/inspector-geometry.spec.ts`:
+      the Update button pinned at the foot at **three** panel heights (800 / 620 / 480) with the
+      list shorter and longer than the panel, scrolled to top and bottom; X and Y on one top, one
+      height, one width and one baseline with `Apply position`, growing equal at fullscreen; one
+      ring on a position box, a text field and a list item with no ancestor ring; subtitle items
+      reordered by a real HTML5 drag of the grip handle. The rendered numbers the phase adopted
+      are read back from the token home (`--r-insp-*`, `INSPECTOR_PX`): 396 px column, 31 px /
+      13 px fields, 32 px position boxes, 12 px semibold headings in the second ink, a `9px 12px`
+      foot with its shadow, 104 × 32 `Discard · Update`, and the reference's hint sentence.
+      Guard items **19** (`divider-across-iframe`, `draft-survives-fullscreen`, `panel-scroll`)
+      and **20** (`inspector-open-close`) re-run green on the built app (§12.6).
+- [x] 5.5 `pnpm --filter @cg/runtime test:e2e` — **135 passed (1.6 m)**, Windows, against a fresh
+      `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
+      ⏳ **DISCHARGE PENDING** — the Linux `e2e` run on the code head is recorded here, with its
+      URL, duration and that it RAN, in the docs commit that follows the push.
 
 ## Phase 6 — Live plates and audio
 

@@ -5,13 +5,15 @@ import { useCallback, useEffect, useState } from 'react';
  * is, how tall the monitor strip is, whether one panel is taken fullscreen, and
  * whether the viewport is narrow enough that the Inspector becomes an overlay.
  *
- * THE BREAKPOINT: 900px. Chosen because the shell's default is a 1fr workspace
+ * THE BREAKPOINT: 900px. Chosen when the shell's default was a 1fr workspace
  * beside a 320px Inspector, and the Layers row needs roughly 520px before its
  * verb buttons start wrapping under the template name — 900 is the first round
  * number that keeps a usable row AND a usable Inspector side by side. Below it
  * the Inspector cannot be useful as a column, so it becomes an overlay instead
  * of being squeezed. Recorded under "Decisions taken fast" in the change's
- * DEBT.md.
+ * DEBT.md. (The default is 396 now — `RUNTIME-REDESIGN-01` Phase 5, below — and
+ * the breakpoint was NOT re-derived: between 900 and 1016 `clampInspector`
+ * already gives the workspace its floor and the Inspector what is left.)
  *
  * PERSISTENCE is per browser (`localStorage`), because it is a per-operator
  * preference about their own screen, not shared state — two operators on one
@@ -29,11 +31,28 @@ const STORAGE_KEY = 'cg.runtime.shell-layout.v1';
 /** Below this viewport width the Inspector stops being a column. */
 export const NARROW_BREAKPOINT_PX = 900;
 
-/** The Inspector's default column width, matching the pre-R-028 shell. */
-export const DEFAULT_INSPECTOR_PX = 320;
+/*
+ * `RUNTIME-REDESIGN-01` PHASE 5 — THE DEFAULTS ARE THE REFERENCE'S, THE CONSTRAINTS ARE OURS.
+ *
+ * The deletion guard's own rule for this shell (design.md §3, item 19): _the reference's
+ * geometry supplies the default sizes, not the constraint._ Both numbers below were READ off
+ * `05-row-inspector.html` / `06-preview-program.html` in Chromium at 1280 × 800 (§12.3), never
+ * off the stylesheet — `.inspector` is restated 33 times in that file and `.monitors` three,
+ * and only the last restatement paints (`PROMPT.md` §0). The clamps, the floors, the narrow
+ * breakpoint, the persisted key and the drag are untouched.
+ */
 
-/** The monitor strip's default height — two 16:9 boxes side by side, small. */
-export const DEFAULT_MONITOR_PX = 180;
+/**
+ * The Inspector's default column width — the reference's `.control-grid.with-inspector`
+ * renders `minmax(0,1fr) 396px`. (It was 320, the pre-R-028 shell's.)
+ */
+export const DEFAULT_INSPECTOR_PX = 396;
+
+/**
+ * The monitor strip's default height — the reference's `#monitor-area .pvw-revision` renders
+ * two 230 px monitors side by side. (It was 180: the PVW stage came out 86 px tall.)
+ */
+export const DEFAULT_MONITOR_PX = 230;
 
 /**
  * Hard floors, so a drag can never make either panel unusable. The Inspector's
@@ -74,9 +93,28 @@ export interface ShellLayout {
   focus: ShellFocus;
   /** True when the viewport is too narrow for a side-by-side Inspector. */
   narrow: boolean;
+  /**
+   * 🔴 `RUNTIME-REDESIGN-01` PHASE 5 — ARE THE MONITORS SHOWN? The third of three things
+   * `PROMPT.md` §5 keeps independent: which row is SELECTED, which rows are IN PVW, and
+   * whether the monitors are SHOWN. The reference has a `Show monitors` / `Hide monitors`
+   * toggle (`aria-expanded`, `aria-controls="monitor-area"`); before this the app's only way
+   * to hide the strip was the Layers panel's FULLSCREEN, which also takes the Inspector
+   * column away — that is "monitors hidden" coupled to "editor hidden", the coupling §5 says
+   * is the easiest mistake in the phase. This flag is that toggle, and nothing else reads or
+   * writes it: not the selection, not the rehearse set.
+   *
+   * ⚠ SESSION STATE, NOT PERSISTED — deliberately, and not for lack of a slot. Phase 5's
+   * constraint is _no persisted key, file or schema change_; this hook's `write()` keeps its
+   * `{inspectorPx, monitorPx, focus}` shape. Whether the flag should join it under
+   * `cg.runtime.shell-layout.v1` is filed for the owner (design.md §12.7). The default is
+   * SHOWN: PVW is the operator's last look before air, and a console that booted with it
+   * folded away would have deleted a safety surface by default.
+   */
+  monitorsShown: boolean;
   setInspectorPx: (px: number) => void;
   setMonitorPx: (px: number) => void;
   setFocus: (focus: ShellFocus) => void;
+  setMonitorsShown: (shown: boolean) => void;
   /** Back to the shipped default — the way out of any mess. */
   reset: () => void;
   /** Has the operator changed anything from the default? */
@@ -133,6 +171,8 @@ export function useShellLayout(): ShellLayout {
   const [inspectorPx, setInspectorPxRaw] = useState(persisted.inspectorPx ?? DEFAULT_INSPECTOR_PX);
   const [monitorPx, setMonitorPxRaw] = useState(persisted.monitorPx ?? DEFAULT_MONITOR_PX);
   const [focus, setFocusRaw] = useState<ShellFocus>(persisted.focus ?? 'none');
+  // Session-only — see the interface note. NOT read from `persisted`, NOT written by `write()`.
+  const [monitorsShown, setMonitorsShown] = useState(true);
   const [viewportPx, setViewportPx] = useState(() => globalThis.innerWidth ?? 1280);
   const [viewportHeightPx, setViewportHeightPx] = useState(() => globalThis.innerHeight ?? 800);
 
@@ -175,6 +215,9 @@ export function useShellLayout(): ShellLayout {
     setInspectorPxRaw(DEFAULT_INSPECTOR_PX);
     setMonitorPxRaw(DEFAULT_MONITOR_PX);
     setFocusRaw('none');
+    // The way out covers the monitors too: a strip folded away at 2 a.m. comes back with
+    // everything else, and the persisted shape written here is unchanged.
+    setMonitorsShown(true);
     write({ inspectorPx: DEFAULT_INSPECTOR_PX, monitorPx: DEFAULT_MONITOR_PX, focus: 'none' });
   }, []);
 
@@ -183,11 +226,16 @@ export function useShellLayout(): ShellLayout {
     monitorPx: clampMonitor(monitorPx, viewportHeightPx),
     focus,
     narrow: viewportPx < NARROW_BREAKPOINT_PX,
+    monitorsShown,
     setInspectorPx,
     setMonitorPx,
     setFocus,
+    setMonitorsShown,
     reset,
     customized:
-      inspectorPx !== DEFAULT_INSPECTOR_PX || monitorPx !== DEFAULT_MONITOR_PX || focus !== 'none',
+      inspectorPx !== DEFAULT_INSPECTOR_PX ||
+      monitorPx !== DEFAULT_MONITOR_PX ||
+      focus !== 'none' ||
+      !monitorsShown,
   };
 }
