@@ -402,11 +402,14 @@ item 23's discharge, A13/A14, and the numbers filed.
       three ready-row cases went red with three `PLAY`s and seats in the ledger each, the SOLO
       scope case went red too (the plant seated `item-2` PAST the one-carrier gate), the positive
       control stayed green. Restored, 5 / 5. Spec delta: `specs/runtime-live-source-routing`.
-- [ ] 6.5 `pnpm --filter @cg/runtime test:e2e` — **139 passed (1.7 m)**, Windows, against a fresh
+- [x] 6.5 `pnpm --filter @cg/runtime test:e2e` — **139 passed (1.7 m)**, Windows, against a fresh
       `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
-      The Linux `e2e` on the CODE head is recorded here by the follow-up docs commit once the run
-      COMPLETES — a run that has not completed is not a result, and a ticked box with no URL is a
-      claim.
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `c5d07d9a`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34217958356> — run `conclusion: success`,
+      11 m 17 s (10:55:13Z → 11:06:30Z). The **`E2E (Playwright)` job RAN** (10:55:24Z →
+      11:06:23Z, 10 m 59 s, `conclusion: success`, its `E2E` step executed 10:56:28Z → 11:06:07Z);
+      it was not skipped, which is the half a green run alone does not prove (golden rule 12b).
+      `Lint • Typecheck • Test • Build` also ran green (10:55:24Z → 11:01:10Z).
 
 ## Phase 7 — Settings and channels
 
