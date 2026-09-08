@@ -654,7 +654,10 @@ position (§17.6)** and the runs (§17.7).
       verb gains a channel) reddened **only after rebuilding `@cg/shared-ipc`** — recorded,
       because a plant against a workspace dependency is not a plant until it is built.
 - [x] 10.3 🔴 **`B-242` SWEPT IN FULL — no remainder** (§17.3). All **154** non-e2e test files
-      under `apps/runtime/tests`, in two `git grep` passes (never `grep -r`/ripgrep): the
+      under `apps/runtime/tests` **as the tree stood at the sweep** — 155 in the commit, the
+      difference being this phase's own spec, which was untracked while `git grep` ran and is
+      named rather than folded into the count (§17.3); pass 1 re-run with it present returns the
+      same single comment hit. In two `git grep` passes (never `grep -r`/ripgrep): the
       mechanical layout reads returned **one hit, and it is a comment**; the wide geometry-word net
       returned **45 `expect` lines, every one read and classified**, not sampled. **ZERO instances
       of the class** — 15 incidental word matches, 9 pure-function arithmetic, 13 declared
@@ -688,7 +691,20 @@ position (§17.6)** and the runs (§17.7).
       it is many heads back and covered by six later green runs whose `E2E (Playwright)` job was
       confirmed to have RUN (Phases 2A, 3, 4, 5, 6, 7, 8, 9 above), and the jobs are whole-tree.
       Not chased.
-      `pnpm gate` — **`93 successful, 93 total · 0 cached, 93 total`**, foreground, prettier clean,
-      OpenSpec `78 passed, 0 failed`. `pnpm --filter @cg/runtime test:e2e` — Windows,
+      `pnpm gate` — **`93 successful, 93 total · 0 cached, 93 total`**, foreground, 3 m 17 s,
+      prettier clean, OpenSpec `78 passed, 0 failed` (its first run was red on two REAL lint
+      errors this phase introduced and fixed — four literal `U+FEFF` characters in the BOM guard's
+      own comments, and a hand-built `Layer ${n}` alias the `cg/bank-shape` rule caught on a test
+      fixture; see `design.md` §17.4). `pnpm --filter @cg/runtime test:e2e` — **145 passed
+      (1.7 m)**, Windows, against a re-stamped build (the staleness guard refused the first
+      attempt, correctly: the `C2` plant had rebuilt `@cg/shared-ipc` under the app's `dist`).
       ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
-      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `<pending>`:** _(filled in below on the push)_
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `86e67dc1`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34259488065> — run `conclusion: success`,
+      10 m 47 s (17:50:23Z → 18:01:10Z). The **`E2E (Playwright)` job RAN** (17:50:33Z →
+      18:01:04Z, 10 m 31 s, `conclusion: success`, its `E2E` step executed 17:51:16Z → 18:00:53Z,
+      9 m 37 s); it was not skipped, which is the half a green run alone does not prove (golden
+      rule 12b). `Lint • Typecheck • Test • Build` also ran green (17:50:33Z → 17:56:26Z), and
+      `Docs check` green. ⭐ The `e2e` job running at all was predicted before the push rather than
+      hoped for: `classifyChangedSet` over this commit's eleven paths returns
+      `{ kind: 'code', needsE2e: true }` (`P-029`).

@@ -2595,9 +2595,17 @@ bridge and left each other alone. That claim is not available today and this fil
 
 ### 17.3 `B-242` — the jsdom-geometry sweep, in full
 
-**Scope:** every non-e2e test file under `apps/runtime/tests` — **154 files** (`git ls-files`,
-`tests/e2e/**` excluded; `apps/runtime/src` holds no test files). Swept in two passes, both
-`git grep` (never `grep -r`, never ripgrep — golden rule 9's NUL-blindness clause).
+**Scope:** every non-e2e test file under `apps/runtime/tests` — **154 files as the tree stood at
+the sweep** (`git ls-files`, `tests/e2e/**` excluded; `apps/runtime/src` holds no test files).
+Swept in two passes, both `git grep` (never `grep -r`, never ripgrep — golden rule 9's
+NUL-blindness clause).
+
+⚠ **The count is 155 in the commit, and the difference is this phase's own new spec.**
+`channelIndependence.dom.test.ts` was untracked while the sweep ran, and `git grep` does not see
+untracked files — so it is named here rather than folded into the number. Pass 1 was re-run after
+staging with the file present and returns the same single comment hit; the spec makes no geometry
+assertion of any kind. Nothing else was untracked at sweep time (`git status` carried only
+`.codex/`, `AGENTS.md` and `docs/design/`, none of them test files).
 
 **Pass 1 — the mechanical layout reads.** `getBoundingClientRect`, `getClientRects`,
 `offsetWidth/Height/Top/Left`, `clientWidth/Height/Top/Left`, `scrollWidth/Height/Top/Left`,
@@ -2773,4 +2781,26 @@ FILED WITH OWNERS, not unfinished phase work.
 - The BOM hook proved end to end in a throwaway git repository, removed afterwards.
 - `pnpm --filter @cg/runtime exec vitest run` — **149 files / 1364 tests passed** (37.7 s).
 - `pnpm --filter @cg/caspar-bridge exec vitest run` — **103 files / 836 tests passed** (32.3 s).
-- `pnpm gate`, OpenSpec and the Linux `e2e` are recorded beside `tasks.md` 10.3.
+- `pnpm gate` — **`93 successful, 93 total · 0 cached, 93 total`**, foreground, 3 m 17 s; prettier
+  clean; OpenSpec `78 passed, 0 failed`. ⚠ Its FIRST run was red on **two real lint errors this
+  phase introduced**, both worth naming rather than burying: four literal `U+FEFF` characters in
+  the BOM guard's own comments and test (`no-irregular-whitespace` — §17.4), and a hand-built
+  `Layer ${n}` alias in the channel-independence fixture, caught by `cg/bank-shape`, the rule
+  `B-203` exists to enforce. **A test fixture is exactly where a second spelling of a name starts**,
+  so the rule firing there is the rule working.
+- `pnpm --filter @cg/runtime test:e2e` — **145 passed (1.7 m)**, Windows, ⚠ NON-AUTHORITATIVE
+  (golden rule 12a). Its first attempt was REFUSED by the `P-036` staleness guard, correctly: the
+  `C2` plant had rebuilt `@cg/shared-ipc` under the app's `dist`, and two runs of a stale bundle
+  agree perfectly while proving nothing. `pnpm build --force` re-stamped it.
+- ✅ **The Linux `e2e` on the code head `86e67dc1`:**
+  <https://github.com/yasermostafaee/cg/actions/runs/34259488065> — `conclusion: success`,
+  10 m 47 s; the `E2E (Playwright)` job **RAN** 10 m 31 s (17:50:33Z → 18:01:04Z) with its `E2E`
+  step executing 9 m 37 s (17:51:16Z → 18:00:53Z), and `Lint • Typecheck • Test • Build` green in
+  5 m 53 s. Recorded beside `tasks.md` 10.5, as every phase before it.
+- ⭐ **That the `e2e` job would RUN was predicted before the push, not hoped for.**
+  `classifyChangedSet` over this commit's eleven paths returns `{ kind: 'code', needsE2e: true }`
+  — three of them classify as render-affecting. `P-029`'s skip is the one thing that would have
+  made a green run worthless here, and it was checked in advance rather than discovered after.
+- ⚠ **The `e2e` owed on `b9325b25` is DECLARED SUPERSEDED**, on the owner's instruction: it is many
+  heads back and covered by seven later green runs whose `E2E (Playwright)` job was confirmed to
+  have RUN, and those jobs are whole-tree (the reasoning `P-030` sets out). Not chased.
