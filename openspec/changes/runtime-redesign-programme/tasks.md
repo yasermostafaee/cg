@@ -326,8 +326,12 @@ air` — are ARGUED in §12.3, the last under A12.
       and **20** (`inspector-open-close`) re-run green on the built app (§12.6).
 - [x] 5.5 `pnpm --filter @cg/runtime test:e2e` — **135 passed (1.6 m)**, Windows, against a fresh
       `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
-      ⏳ **DISCHARGE PENDING** — the Linux `e2e` run on the code head is recorded here, with its
-      URL, duration and that it RAN, in the docs commit that follows the push.
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `d71f4ed2`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34209072709> — run `conclusion: success`,
+      10 m 57 s (09:16:21Z → 09:27:18Z). The **`E2E (Playwright)` job RAN** (09:16:36Z →
+      09:27:10Z, 10 m 34 s, `conclusion: success`, its `E2E` step executed 09:17:28Z → 09:26:59Z);
+      it was not skipped, which is the half a green run alone does not prove (golden rule 12b).
+      `Lint • Typecheck • Test • Build` also ran green (09:16:36Z → 09:20:17Z).
 
 ## Phase 6 — Live plates and audio
 
