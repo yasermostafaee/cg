@@ -6,11 +6,12 @@ file records which are done. **Each session takes the next unfinished phase, fin
 reports.** Do not start a later phase because an earlier one looks easy — the ordering is
 load-bearing and stated at each step.
 
-**Phase state at 2026-09-08 (later):** Phases 1, 2 (with addendum 2A) and **3** COMPLETE, each
-with its Linux `e2e` URL beside the ticked item. Phases 4–10 not started. Next: **Phase 4**.
-⚠ Phase 3 found `PROMPT.md` §3's numbers to be dead CSS — read `design.md` §10.1 before Phase 4
-reads any number off the reference's stylesheet: **measure the file in a browser, never quote its
-first rules.**
+**Phase state at 2026-09-08 (evening):** Phases 1, 2 (with addendum 2A), 3 and **4** COMPLETE,
+each with its Linux `e2e` URL beside the ticked item. Phases 5–10 not started. Next: **Phase 5**.
+⚠ `PROMPT.md` §0 now carries the rule Phase 3 learned — **the reference is judged as RENDERED,
+not as authored: measure it in a browser at 1280 × 800 and quote what you read** — and §3's dead
+numbers are marked superseded in place. Read `design.md` §10.1 and §11.2 before Phase 5 reads
+anything off `06-preview-program.html`.
 
 ⚠ **2A IS AN ADDENDUM, NOT A PHASE.** The programme still has TEN phases; 2A is recorded under
 Phase 2 because it closes something Phase 2 escalated, and numbering it as an eleventh would make
@@ -50,6 +51,18 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
   measured. Above the 3:1 graphic floor. **Closed, not owed.**
 - **A6 · `--r-text-muted` at 4.39:1 on the table header is an ACCEPTED FAIL that Phase 3 closes.**
   It stays on the owed list **until Phase 3 has actually run** — an expectation is not a discharge.
+  ✅ Closed by Phase 3 at 4.89:1 (`design.md` §10.4).
+- **A8 · 🔴 WAVE 1 IS REJECTED** (2026-09-08, before Phase 4; `design.md` §11.1). The reference's
+  stylesheet's first wave — `32×34` icon verbs, a 30 px destructive group, `16px 17px` cells — was
+  never rendered by anyone and shrinks the STOP and CLEAR hit targets on an on-air console.
+  **`48 × 36` stays. No later phase reopens it.**
+- **A9 · `--r-row-icon-btn-narrow-w` is DELETED**, not kept documented-dead: a token read by
+  nothing with a comment saying it is dead is a trap. Gone from the token home in Phase 4.
+- **A10 / A11 · `PROMPT.md` amended, by path, in its own commit (`0572102e`)**: §0 gains THE
+  REFERENCE IS JUDGED AS RENDERED, NOT AS AUTHORED (every phase measures it in a browser at
+  1280 × 800 and quotes what it read); §3's quoted numbers are marked SUPERSEDED in place by
+  `design.md` §10.2, the section kept so the error stays visible. §§4–10 quote no stylesheet
+  number or selector — checked, none found.
 
 ---
 
@@ -104,6 +117,8 @@ tokens, the full contrast table, and the two things escalated to the owner.
 - [x] 2.2 Geometry tokens declared: `--r-row-pad`, `--r-btn-h`, `--r-btn-h-small`,
       `--r-row-action-h`, `--r-icon-btn-box`, `--r-row-icon-btn-w`/`-h`, `--r-row-icon-btn-narrow-w`.
       **Read by nothing** — applying them is a layout change and Phase 3 owns it.
+      _(Phase 3 corrected the `--r-row-*` values to the rendered ones; Phase 4 DELETED
+      `--r-row-icon-btn-narrow-w` under owner answer A9.)_
       ⚠ `--r-modal-foot-h` unchanged at `59px` and still a FLOOR; nothing above may compose into it.
 - [x] 2.3 🔴 The measured decisions, stated and NOT re-tuned. `rgb(145 93 5)` untouched;
       `markedRowInk` still **5.06:1**. **The edge bars CHANGED: 3.86:1 → 3.68:1**, because
@@ -196,7 +211,8 @@ closing number, the red-first proof and the guard.
       Playwright** (`layer-table-geometry.spec.ts`). The `32 × 34` / `34px` / destructive-group
       `30px` this item names are the dead wave-1 rules — `--r-row-icon-btn-narrow-w` is kept,
       documented as dead and read by nothing, for the owner's decision. Look buttons untouched at
-      their 36 px target.
+      their 36 px target. _(ANSWERED before Phase 4 — A8: wave 1 rejected, `48 × 36` stays; A9:
+      the token deleted. Phase 4 then took the Look buttons to the rendered 38 × ≥100.)_
 - [x] 3.4 The command contract is unchanged and asserted unchanged: no verb, gate, refusal or
       sentence was touched; `REMOVE_ON_AIR_REASON`, the bulk gates and the published `removeExempt`
       keep every test they had (`design.md` §10.7). Nothing re-derives a bridge answer.
@@ -215,17 +231,41 @@ closing number, the red-first proof and the guard.
       does not prove (golden rule 12b). `Lint • Typecheck • Test • Build` also ran green
       (23:25:04Z → 23:29:41Z).
 
-## Phase 4 — Looks
+## Phase 4 — Looks — COMPLETE
 
-- [ ] 4.1 The number and arrangement of Looks are read from the TEMPLATE's own definition, through
-      the real schema's equivalent of the prototype's `authoredLooks(t) = t.layouts`. Only the looks
-      the template actually declares are shown.
-- [ ] 4.2 🔴 A six-frame template may declare looks of 1, 2, 3, 4, 5 and 6 frames. Frame count, look
-      count and look id are three different things; none may stand in for another. No look is
+The record is `design.md` §11: the owner's answers and the amended authority file, what
+contradicted the prompt, the measured strip, the fixture, the two red-first proofs and the guard.
+
+- [x] 4.1 The number and arrangement of Looks are read from the TEMPLATE's own definition: the real
+      equivalent of `authoredLooks(t) = t.layouts` is `TemplateLiveSources.looks` — the export
+      (`collectLookCarrier`) of the scene's authored `LookGroup` — which `lookOptionsOf` reads and
+      which now also supplies each look's ARRANGEMENT: a segment carries a frame thumbnail drawn
+      from that look's own rects over the carrier's resolution, not from the prototype's invented
+      `--cols` grid. The strip took the RENDERED reference's geometry (38 px, 100 px floor,
+      `5px 12px`, radius 5, 13 px, 27 × 19 thumbnail, gaps 8 / 10 / 79) as `--r-look-*` tokens from
+      `LOOK_STRIP_PX`, measured reference-vs-app in `design.md` §11.3; the reference's
+      `ON AIR LOOK` / `Cut · now` label was NOT adopted (§11.2, argued). Only the looks the template
+      declares are shown — nothing in the tree derives one from a frame count (§11.2).
+- [x] 4.2 🔴 Frame count, look count and look id proved to be three different things against an
+      IRREGULAR set: the e2e-armed library's `e2e-looks-six` — six frames, FIVE looks of 1, 2, 3, 4
+      and 6 frames (no five-frame look), word ids with irregular membership (`pair` = frames 2 and
+      5). `lookPicker.dom.test.ts` pins five options, `[1,2,3,4,6]`, `pair`'s membership and one
+      rendered cell per frame; `look-set-and-switch.spec.ts` drives it on the built app — five
+      segments, no `[data-look-frames="5"]`, `trio` (the authored default, third) marked. No look is
       invented from the frame count.
-- [ ] 4.3 🔴 RED-FIRST: switching a look preserves the source-to-frame relationship. Switch away and
-      back — the same source is on the same frame.
-- [ ] 4.4 e2e run, URL recorded here.
+- [x] 4.3 🔴 RED-FIRST, twice, same defect shape (a switch that forgets the ROW's composition and
+      re-derives frames from the TEMPLATE), each round trip carrying a per-look binding so a
+      re-derivation cannot pass for the answer. **Wire:**
+      `tools/caspar-bridge/tests/look-switch-preserves-bindings.integration.test.ts` — RED with the
+      bridge's `setActiveLook` neutralised (frame 1 back on `route://2` instead of `route://9`),
+      GREEN restored, 2 / 2, no `PLAY` on the way back. **Surface:** the spec's third test on PVW —
+      RED with the mock's `setActiveLook` neutralised (`l-3` read `Studio 1` after the round trip),
+      GREEN restored, 3 / 3; the first red attempt landed on the positive control because the
+      fixture's `solo` did not move frame 1, the fixture was corrected and the red taken again on
+      the property (§11.5). Spec deltas in both `specs/` files.
+- [ ] 4.4 `pnpm --filter @cg/runtime test:e2e` — **123 passed (1.5 m)**, Windows, against a fresh
+      `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
+      Linux `e2e` on the CODE head: **PENDING — URL to be recorded here when the run completes.**
 
 ## Phase 5 — Preview, program and the Inspector
 

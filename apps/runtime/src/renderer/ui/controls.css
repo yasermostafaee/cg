@@ -2180,8 +2180,17 @@ input[type='checkbox']:disabled:checked {
  * wearing it would put a second, unrelated air claim on the same row. Which look is
  * chosen is a SELECTION fact, which is what --r-accent-fill is for.
  *
- * Sized in ch so a two-digit look number does not resize the segment, and `flex: 0 0
- * auto` so the strip scrolls rather than the segments squashing.
+ * `flex: 0 0 auto` so the strip scrolls rather than the segments squashing.
+ *
+ * `RUNTIME-REDESIGN-01` PHASE 4 — the GEOMETRY is the reference's look button AS RENDERED
+ * (`design.md` §11.2, Chromium at 1280 × 800): 38 px tall, a 100 px floor, `5px 12px`
+ * padding, radius 5, 13 px text, a frame THUMBNAIL gapped 8 from the word. Every number is a
+ * `--r-look-*` token from `LOOK_STRIP_PX`; the strip used to be a 2.4ch chip sized for an
+ * ordinal, which the authored-name label had already outgrown. The COLOURS stay the app's
+ * tokens (ARGUED: palette — the reference's `#151e2c` / `#56667d` / `#285273` / `#91d7ff`
+ * are literals of the pre-Phase-2 console, and selection here is the accent-fill rule).
+ * ⚠ 38 × 100 is a LARGER target than the row verbs' 48 × 36 — `PROMPT.md` §3's "the Look
+ * buttons keep their large click target" is a rendered fact and stands.
  */
 .cg-btn.cg-look-cell {
   flex: 0 0 auto;
@@ -2189,12 +2198,16 @@ input[type='checkbox']:disabled:checked {
      otherwise stretch every segment to the strip. Stated here rather than relied on from
      the variant, so a future variant change cannot silently reflow the strip. */
   width: auto;
-  min-width: 2.4ch;
-  padding: 0.15rem 0.5rem;
-  font-size: var(--r-text-xs);
+  min-width: var(--r-look-btn-min-w);
+  height: var(--r-look-btn-h);
+  min-height: var(--r-look-btn-h);
+  padding: var(--r-look-btn-pad);
+  gap: var(--r-look-btn-gap);
+  font-size: var(--r-look-btn-text);
+  font-weight: var(--r-weight-medium);
   font-variant-numeric: tabular-nums;
   border: 1px solid var(--r-border-strong);
-  border-radius: 3px;
+  border-radius: var(--r-look-btn-radius);
   background: var(--r-surface-sunken);
 }
 
@@ -2203,7 +2216,31 @@ input[type='checkbox']:disabled:checked {
   border-color: var(--r-accent-line);
   box-shadow: inset 0 0 0 2px var(--r-surface);
   color: var(--r-accent-ink);
-  font-weight: 700;
+  font-weight: var(--r-weight-bold);
+}
+
+/*
+ * The look's FRAME THUMBNAIL — a 27 × 19 box (the reference's `.look-thumb`) holding one
+ * cell per frame THIS LOOK declares, each placed at the look's own rect over the scene
+ * (`TemplateLook.rects` / `resolution`, normalised in `lookOptionsOf`). The prototype drew a
+ * `--cols` grid it invented per look; the schema has the real geometry and that is what is
+ * drawn (`PROMPT.md` §0). `currentColor`, so a pressed segment's ink recolours its frames
+ * with the word. Positions are inline (they are the template's DATA, not chrome); the box,
+ * the seam and the line weight live here.
+ */
+.cg-look-thumb {
+  position: relative;
+  flex: 0 0 auto;
+  width: var(--r-look-thumb-w);
+  height: var(--r-look-thumb-h);
+  opacity: 0.85;
+}
+
+.cg-look-frame {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid currentColor;
+  border-radius: 1px;
 }
 
 /* ══ STATION-CHROME-02 §3 — THE SETTINGS DIALOG'S SHARED VOCABULARY ═════════

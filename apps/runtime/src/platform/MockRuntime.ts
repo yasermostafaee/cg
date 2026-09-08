@@ -2302,7 +2302,71 @@ export function seedLooksTemplate(): TemplateInfo[] {
         defaultLookId: 'left',
       },
     } as TemplateInfo,
+    seedSixFrameLooksTemplate(),
   ];
+}
+
+/**
+ * `RUNTIME-REDESIGN-01` Phase 4 — a SIX-FRAME template with an IRREGULAR look set, in the
+ * e2e-armed LIBRARY only (no row carries it; a spec loads it onto an empty row).
+ *
+ * 🔴 **Frame count, look count and look id are three different things, and this fixture is
+ * built so that no one of them can stand in for another** (`PROMPT.md` §4): six frames,
+ * FIVE looks (1, 2, 3, 4 and 6 frames — there is deliberately no 5-frame look, so a picker
+ * that invented a look per frame count would show a sixth segment the template never
+ * declared), and ids that are WORDS (`pair` places frames 2 and 5; `quad` places 1, 2, 4
+ * and 6), so nothing can read a frame count out of an id. The membership is irregular on
+ * purpose — the prototype's own `bed6` fixture is the same shape.
+ */
+const SIX_LOOKS_TEMPLATE_ID = 'e2e-looks-six';
+
+function seedSixFrameLooksTemplate(): TemplateInfo {
+  const keys = ['l-1', 'l-2', 'l-3', 'l-4', 'l-5', 'l-6'];
+  // A 3 × 2 grid of 640 × 540 frames over the 1920 × 1080 scene.
+  const grid = Object.fromEntries(
+    keys.map((k, i) => [
+      k,
+      { x: (i % 3) * 640, y: Math.floor(i / 3) * 540, width: 640, height: 540 },
+    ]),
+  );
+  const pick = (ks: string[]) => Object.fromEntries(ks.map((k) => [k, grid[k]]));
+  const look = (id: string, name: string, ks: string[]) => ({
+    id,
+    name,
+    entered: { mode: 'cut' as const },
+    rects: pick(ks),
+  });
+  return {
+    templateId: SIX_LOOKS_TEMPLATE_ID,
+    name: 'Panel — 6 frames',
+    templateType: 'custom',
+    fields: [],
+    liveSources: {
+      resolution: { width: 1920, height: 1080 },
+      defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+      sources: keys.map((k) => ({
+        elementId: `el-${k}`,
+        sourceId: k,
+        rect: grid[k],
+        dynamic: false,
+      })),
+      looks: [
+        // SOLO fills the raster with frame 1 — the same PLATE at a different RECT, which is
+        // what makes a switch to it and back a real move of the picture rather than a no-op.
+        {
+          id: 'solo',
+          name: 'Solo',
+          entered: { mode: 'cut' as const },
+          rects: { 'l-1': { x: 0, y: 0, width: 1920, height: 1080 } },
+        },
+        look('pair', 'Pair', ['l-2', 'l-5']),
+        look('trio', 'Trio', ['l-1', 'l-3', 'l-5']),
+        look('quad', 'Quad', ['l-1', 'l-2', 'l-4', 'l-6']),
+        look('panel', 'Panel', keys),
+      ],
+      defaultLookId: 'trio',
+    },
+  } as TemplateInfo;
 }
 
 /** The look-bearing row’s stack item, or [] when the seed is not armed. */

@@ -104,6 +104,52 @@ about a box, an edge or a height compares zeros and is not evidence.
   its own verb colour; **WHEN** REMOVE ALL is withheld because a row is on air **THEN** it does not
   take the remove colour under the pointer
 
+### Requirement: A row's looks are the template's own declaration, and nothing is invented from a frame count
+
+The Runtime SHALL offer, on a row whose template declares looks, exactly the looks that template
+declares — read from the template's carrier (`TemplateLiveSources.looks`, the export of the
+scene's authored look group) — in authored order, each labelled by its authored name and each
+carrying its own frames (the rects the look itself places over the scene). Frame count, look count
+and look id are three different things: the Runtime SHALL NOT derive a look from the template's
+number of frames, number looks by position, or read a frame count out of a look id. A template
+declaring an irregular look set — six frames, five looks of one, two, three, four and six frames,
+with word ids whose membership is irregular — SHALL render exactly those five and no sixth. A
+template with no look group SHALL show no picker and be refused nothing.
+
+The look strip's geometry — the button's height, its width floor, its padding, radius and text
+size, the frame thumbnail's box, and the gaps between label, strip and buttons — SHALL come from
+the `--r-look-*` tokens in the token home, and those SHALL be the values the approved reference
+PAINTS in a browser; every such claim SHALL be verified in a real layout engine.
+
+#### Scenario: An irregular look set renders exactly its own looks
+
+- **WHEN** a six-frame template declaring looks `solo` (one frame), `pair` (frames two and five),
+  `trio` (three frames), `quad` (four frames) and `panel` (six frames) is loaded onto a row **THEN**
+  the row's picker shows those five segments in that order, labelled by their authored names, each
+  segment's thumbnail holds that look's own frames — one, two, three, four and six cells, `pair`'s
+  being frames two and five — no segment declares five frames, and the authored default is the
+  one segment marked current
+
+#### Scenario: A look's frame count is its own, not the template's
+
+- **WHEN** a segment's tooltip is read **THEN** it states that look's frame count in the operator's
+  words (`1 frame`, `2 frames`) and the authored id, and never the template's total
+
+#### Scenario: The strip is what the token home declares
+
+- **WHEN** a look-bearing row is rendered in a browser **THEN** each look button is
+  `--r-look-btn-h` tall with a `--r-look-btn-min-w` floor, padded `--r-look-btn-pad`, cornered
+  `--r-look-btn-radius`, set in `--r-look-btn-text`, its thumbnail `--r-look-thumb-w` by
+  `--r-look-thumb-h`, the buttons gapped `--r-look-strip-gap` and the label column
+  `--r-look-ctx-min-w` wide, gapped `--r-look-ctx-gap` from the strip
+
+#### Scenario: Switching a look on the console preserves the source on its frame
+
+- **WHEN** a row rehearsing on PVW has one frame of its current look bound, for that look only, to
+  a source other than the template's default, and the operator switches the row to a look placing
+  none of the current frames and back **THEN** every placeholder PVW drew before the round trip is
+  drawn again with the same source name in the same box, the bound frame on its bound source
+
 ### Requirement: The programme's phase state is recorded where the next session reads it
 
 Each phase of this programme SHALL record its completion in this change's `tasks.md`, and a session

@@ -30,3 +30,26 @@ its seats, so a row reconfigured after them owns nothing and SHALL be treated as
 - **WHEN** the same update is applied to a row that is on air with seats in the ledger **THEN** a
   `PLAY` reaches the wire and every seat the row held before is still held after — the instrument
   that reads the wire is proven live by this case
+
+### Requirement: A look switch preserves the source-to-frame relationship
+
+The bridge SHALL preserve, across any sequence of look switches on one row, the relationship
+between each frame the row's looks place and the source seated for it: the frame's producer (the
+wire argument its seat was created with) and the rect it renders at when its look is active. In
+particular, switching a row away from a look and back to it SHALL leave every frame that look
+places on the same producer at the same rect, and SHALL rebuild no producer (no `PLAY`) on the way
+back. The relationship SHALL be the ROW's — the row's per-look composition (level 3) and its
+emergency patch (level 4) included — and never re-derived from the template's assignment alone.
+
+#### Scenario: Switch away and back, with a per-look binding in force
+
+- **WHEN** an on-air row on look A has one of A's frames bound, for look A only, to a source other
+  than the template's default, and the operator switches to a look B that places none of A's
+  frames and then back to A **THEN** every frame A places is on the same producer at the same rect
+  as before the round trip, including the bound frame on its bound source, and no `PLAY` was sent
+  on the way back
+
+#### Scenario: The instrument is proven live
+
+- **WHEN** the row is on look B in the sequence above **THEN** A's frames render nothing and B's
+  frames render — the switch away really moved the picture before it was moved back

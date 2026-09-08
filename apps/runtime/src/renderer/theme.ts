@@ -378,6 +378,47 @@ export const LAYER_ROW_PX = {
   /** The Graphics-beds divider band — `.layer-table .bed-divider>td{height:25px}`. */
   bedDividerH: 25,
 } as const;
+
+/*
+ * ── `RUNTIME-REDESIGN-01` PHASE 4 — THE LOOK STRIP'S GEOMETRY, AS THE REFERENCE RENDERS IT ──
+ *
+ * Measured in Chromium at 1280 × 800 on `04-playout-layers.html` (`design.md` §11.2), never
+ * read off the stylesheet — the look strip is restated FIVE times in that file and only the
+ * last restatement paints (`PROMPT.md` §0, rendered-not-authored). The rendered strip: a
+ * `.look-switch` flex line gapped 10 with a 79 px two-line context label, then a
+ * `.look-button-strip` gapped 8 whose buttons are `38 px` tall, `min-width 100`, padded
+ * `5px 12px`, radius 5, `13px` text, each carrying a `27 × 19` frame thumbnail.
+ *
+ * The thumbnail's cells are the LOOK's OWN rects (`TemplateLook.rects`, scene px over the
+ * carrier's `resolution`), not the prototype's `columns` grid — the prototype invents a column
+ * count per look; the schema has the real geometry, and it wins (`PROMPT.md` §0).
+ */
+export const LOOK_STRIP_PX = {
+  /** One look button — `.look-switch button{height:38px;min-height:38px}`. */
+  btnH: 38,
+  /** …its floor width — `min-width:100px`: a large target, above the verb's 48. */
+  btnMinW: 100,
+  /** …its padding — `padding:5px 12px`. */
+  btnPadY: 5,
+  btnPadX: 12,
+  /** …its corner — `border-radius:5px` (between the scale's 4 and 6; the drawing's own). */
+  btnRadius: 5,
+  /** …its word — `font-size:13px`. */
+  btnText: 13,
+  /** Between the thumbnail and the word inside a button — `gap:8px`. */
+  btnGap: 8,
+  /** Between two look buttons — `.look-button-strip{gap:8px}`. */
+  stripGap: 8,
+  /** Between the context label and the strip — `.look-switch{gap:10px}`. */
+  ctxGap: 10,
+  /** The context label's column — `.look-context{min-width:79px}`, 11 px 600. */
+  ctxMinW: 79,
+  ctxText: 11,
+  /** The frame thumbnail — `.look-thumb{width:27px;height:19px;gap:2px}`. */
+  thumbW: 27,
+  thumbH: 19,
+  thumbGap: 2,
+} as const;
 /** The line weight an ACCENTED surface takes: the reference's `.badge.ready` edge. */
 const ACCENT_LINE = '#31556a';
 
@@ -1040,14 +1081,30 @@ export const cssVars = {
   '--r-row-verb-glyph': `${String(LAYER_ROW_PX.verbGlyph)}px`,
   /** The Graphics-beds divider band — `.layer-table .bed-divider>td{height:25px}`. */
   '--r-bed-divider-h': `${String(LAYER_ROW_PX.bedDividerH)}px`,
-  /**
-   * ⚠ **DEAD IN THE REFERENCE, kept for the owner's decision.** Transcribed by Phase 2
-   * from `.row-actions .destructive-group .icon-btn { width: 30px }`; Phase 3 found
-   * that no element in the prototype carries `destructive-group` — the row renderer
-   * emits six `.row-verb`s in one grid and splits nothing off. Read by nothing.
-   * Deleting it is a one-line change once the owner confirms the group is not wanted.
+  /*
+   * ⚠ There is deliberately NO `--r-row-icon-btn-narrow-w` here any more. Phase 2 transcribed
+   * a `30px` destructive-group width from a stylesheet rule the prototype renders for no
+   * element; Phase 3 kept it "documented as dead" for the owner's decision, and the owner
+   * answered (A8/A9, 2026-09-08): wave 1 is REJECTED and the token is DELETED — a token read
+   * by nothing with a comment saying it is dead is a trap, not a record. Do not re-add it.
    */
-  '--r-row-icon-btn-narrow-w': '30px',
+  /**
+   * ── `RUNTIME-REDESIGN-01` PHASE 4 — the look strip (`LOOK_STRIP_PX`, cited to the RENDERED
+   * rules above it). Read by `.cg-look-cell`, `.cg-look-thumb` and `LookPicker`'s label.
+   */
+  '--r-look-btn-h': `${String(LOOK_STRIP_PX.btnH)}px`,
+  '--r-look-btn-min-w': `${String(LOOK_STRIP_PX.btnMinW)}px`,
+  '--r-look-btn-pad': `${String(LOOK_STRIP_PX.btnPadY)}px ${String(LOOK_STRIP_PX.btnPadX)}px`,
+  '--r-look-btn-radius': `${String(LOOK_STRIP_PX.btnRadius)}px`,
+  '--r-look-btn-text': `${String(LOOK_STRIP_PX.btnText)}px`,
+  '--r-look-btn-gap': `${String(LOOK_STRIP_PX.btnGap)}px`,
+  '--r-look-strip-gap': `${String(LOOK_STRIP_PX.stripGap)}px`,
+  '--r-look-ctx-gap': `${String(LOOK_STRIP_PX.ctxGap)}px`,
+  '--r-look-ctx-min-w': `${String(LOOK_STRIP_PX.ctxMinW)}px`,
+  '--r-look-ctx-text': `${String(LOOK_STRIP_PX.ctxText)}px`,
+  '--r-look-thumb-w': `${String(LOOK_STRIP_PX.thumbW)}px`,
+  '--r-look-thumb-h': `${String(LOOK_STRIP_PX.thumbH)}px`,
+  '--r-look-thumb-gap': `${String(LOOK_STRIP_PX.thumbGap)}px`,
   // Motion
   '--r-dur-fast': '120ms',
   '--r-dur-med': '200ms',

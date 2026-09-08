@@ -4,7 +4,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TemplateInfo } from '@cg/shared-ipc';
-import { LookPicker, lookOptionsOf } from '../src/renderer/features/layers/LookPicker.js';
+import {
+  LookPicker,
+  frameCountLabel,
+  lookOptionsOf,
+} from '../src/renderer/features/layers/LookPicker.js';
 import { lookSwitchRefusal } from '../src/renderer/features/layers/lookSwitch.js';
 import {
   gridTemplateColumns,
@@ -50,9 +54,9 @@ afterEach(async () => {
 });
 
 const LOOKS = [
-  { id: 'left', label: 'Left pair' },
-  { id: 'right', label: 'Right pair' },
-  { id: 'all', label: 'All four' },
+  { id: 'left', label: 'Left pair', frames: [] },
+  { id: 'right', label: 'Right pair', frames: [] },
+  { id: 'all', label: 'All four', frames: [] },
 ];
 
 async function render(
@@ -262,8 +266,8 @@ describe('🔴 whether a picker exists at all — absent is NOT empty', () => {
       }),
     );
     expect(opts).toEqual([
-      { id: 'a', label: 'A' },
-      { id: 'b', label: 'B' },
+      { id: 'a', label: 'A', frames: [] },
+      { id: 'b', label: 'B', frames: [] },
     ]);
   });
 
@@ -271,6 +275,136 @@ describe('🔴 whether a picker exists at all — absent is NOT empty', () => {
     // A template the registry has not answered for yet, and one that declares no live
     // sources, are the same answer here: nothing to pick.
     expect(lookOptionsOf(undefined)).toBeNull();
+  });
+});
+
+// ── `RUNTIME-REDESIGN-01` §4 — THE SET IS THE TEMPLATE'S OWN ─────────────────
+
+describe('🔴 §4 — frame count, look count and look id are three different things', () => {
+  /*
+    A SIX-frame template declaring FIVE looks of 1, 2, 3, 4 and 6 frames — no 5-frame look —
+    with word ids whose membership is irregular (`pair` places frames 2 and 5). Built so that
+    no one of the three can stand in for another: a picker that invented a look per frame
+    count would produce a sixth entry; one that numbered looks would lose `pair`; one that
+    read a count out of an id would have nothing to read.
+  */
+  const SCENE = { width: 1920, height: 1080 };
+  const cell = (i: number) => ({
+    x: (i % 3) * 640,
+    y: Math.floor(i / 3) * 540,
+    width: 640,
+    height: 540,
+  });
+  const KEYS = ['l-1', 'l-2', 'l-3', 'l-4', 'l-5', 'l-6'];
+  const rects = (ks: string[]) =>
+    Object.fromEntries(ks.map((k) => [k, cell(KEYS.indexOf(k))] as const));
+  const look = (id: string, name: string, ks: string[]) => ({
+    id,
+    name,
+    entered: { mode: 'cut' as const },
+    rects: rects(ks),
+  });
+  const sixFrames = (): TemplateInfo['liveSources'] => ({
+    resolution: SCENE,
+    defaultPosition: { anchor: 'center', offset: { x: 0, y: 0 } },
+    sources: KEYS.map((k, i) => ({
+      elementId: `el-${k}`,
+      sourceId: k,
+      rect: cell(i),
+      dynamic: false,
+    })),
+    looks: [
+      {
+        id: 'solo',
+        name: 'Solo',
+        entered: { mode: 'cut' as const },
+        rects: { 'l-1': { x: 0, y: 0, width: 1920, height: 1080 } },
+      },
+      look('pair', 'Pair', ['l-2', 'l-5']),
+      look('trio', 'Trio', ['l-1', 'l-3', 'l-5']),
+      look('quad', 'Quad', ['l-1', 'l-2', 'l-4', 'l-6']),
+      look('panel', 'Panel', KEYS),
+    ],
+    defaultLookId: 'trio',
+  });
+
+  it('🔴 renders exactly the looks the template declares — five, in authored order, not six', () => {
+    const opts = lookOptionsOf(sixFrames());
+    // Non-empty first, then identity.
+    expect(opts).not.toBeNull();
+    expect(opts?.map((o) => o.id)).toEqual(['solo', 'pair', 'trio', 'quad', 'panel']);
+    expect(opts?.map((o) => o.label)).toEqual(['Solo', 'Pair', 'Trio', 'Quad', 'Panel']);
+    // Six frames, FIVE looks: no look is invented from the frame count.
+    expect(opts?.length).toBe(5);
+    expect(sixFrames()?.sources.length).toBe(6);
+  });
+
+  it('🔴 each look carries ITS OWN frames — a count per look, and membership, never the template’s', () => {
+    const opts = lookOptionsOf(sixFrames()) ?? [];
+    expect(opts.map((o) => o.frames.length)).toEqual([1, 2, 3, 4, 6]);
+    // No look has five frames, and nothing here can produce one.
+    expect(opts.some((o) => o.frames.length === 5)).toBe(false);
+    // `pair` is frames 2 and 5 — the id says nothing about which, and the count says nothing
+    // about which either; only the look's own rects do.
+    expect(opts[1]?.frames.map((f) => f.plateId)).toEqual(['l-2', 'l-5']);
+    expect(opts[3]?.frames.map((f) => f.plateId)).toEqual(['l-1', 'l-2', 'l-4', 'l-6']);
+  });
+
+  it('a frame is normalised to the SCENE, so the thumbnail draws the look’s real arrangement', () => {
+    const opts = lookOptionsOf(sixFrames()) ?? [];
+    // `solo`: the same PLATE as trio's first frame, at a different rect — the whole raster.
+    expect(opts[0]?.frames[0]).toEqual({ plateId: 'l-1', x: 0, y: 0, w: 1, h: 1 });
+    // `pair`: frame 2 is the top-middle cell, frame 5 the bottom-middle — a 3 × 2 grid.
+    expect(opts[1]?.frames[0]).toEqual({ plateId: 'l-2', x: 1 / 3, y: 0, w: 1 / 3, h: 0.5 });
+    expect(opts[1]?.frames[1]).toEqual({ plateId: 'l-5', x: 1 / 3, y: 0.5, w: 1 / 3, h: 0.5 });
+  });
+
+  it('🔴 the rendered strip has one segment per declared look, each thumbnail with that look’s cells', async () => {
+    const opts = lookOptionsOf(sixFrames()) ?? [];
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const r = root;
+    await act(async () => {
+      r.render(
+        createElement(LookPicker, {
+          looks: opts,
+          activeId: 'trio',
+          refusal: undefined,
+          onPick: vi.fn(),
+          rowName: 'Bed 1',
+          target: 'air',
+        }),
+      );
+    });
+    const segs = [...container.querySelectorAll<HTMLElement>('[data-look-id]')];
+    expect(segs.map((s) => s.getAttribute('data-look-id'))).toEqual([
+      'solo',
+      'pair',
+      'trio',
+      'quad',
+      'panel',
+    ]);
+    expect(segs.map((s) => s.getAttribute('data-look-frames'))).toEqual(['1', '2', '3', '4', '6']);
+    expect(segs.map((s) => s.querySelectorAll('[data-look-frame]').length)).toEqual([
+      1, 2, 3, 4, 6,
+    ]);
+    expect(
+      [...(segs[1]?.querySelectorAll('[data-look-frame]') ?? [])].map((c) =>
+        c.getAttribute('data-look-frame'),
+      ),
+    ).toEqual(['l-2', 'l-5']);
+    // The tooltip names the look's own frame count in the operator's words, then the id.
+    expect(segs[0]?.getAttribute('title')).toBe('1 frame · solo');
+    expect(segs[1]?.getAttribute('title')).toBe('2 frames · pair');
+    // The thumbnail is decoration for a control that already names its frames.
+    expect(segs[0]?.querySelector('[data-look-thumb]')?.getAttribute('aria-hidden')).toBe('true');
+    expect(pressed(container)).toEqual(['trio']);
+  });
+
+  it('frameCountLabel — one frame, N frames', () => {
+    expect(frameCountLabel(1)).toBe('1 frame');
+    expect(frameCountLabel(6)).toBe('6 frames');
   });
 });
 

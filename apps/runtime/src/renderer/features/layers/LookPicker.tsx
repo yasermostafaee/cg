@@ -1,6 +1,6 @@
 import type { TemplateLiveSources } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
-import { colors } from '../../theme.js';
+import { colors, cssVars, LOOK_STRIP_PX } from '../../theme.js';
 
 /**
  * 🔴 **§14.5 / `tasks.md` 7.1 — THE LOOK PICKER. It IS the on-air readout AND the switch.**
@@ -41,12 +41,45 @@ import { colors } from '../../theme.js';
  *
  * `aria-pressed` is what the CSS keys on, so the painting and the announcement can
  * never disagree about which look is live — the anchor cell's rule, inherited.
+ *
+ * ── `RUNTIME-REDESIGN-01` PHASE 4 — WHERE THE LOOKS COME FROM, AND WHAT A SEGMENT SHOWS ──
+ *
+ * 🔴 **The looks are the TEMPLATE'S OWN DECLARATION and nothing else.** The Designer authors a
+ * `LookGroup` (`@cg/shared-schema` `looks.ts`); the `.vcg` export reduces it to the carrier
+ * (`collectLookCarrier` → `TemplateLiveSources.looks`, one `TemplateLook` per authored look,
+ * in authored order, each with the RECTS of the frames it places); the bridge and this picker
+ * read that carrier. The prototype's `authoredLooks(t) = t.layouts` is its own invention and
+ * enters nothing here (`PROMPT.md` §0).
+ *
+ * ⭐⭐ **Frame count, look count and look id are THREE DIFFERENT THINGS.** A six-frame template
+ * may declare looks of 1, 2, 3, 4 and 6 frames and no 5-frame look at all; a look called
+ * `pair` may place frames 2 and 5. Nothing here counts the template's sources to invent a look,
+ * numbers looks by position, or reads a frame count out of an id: the SET is `looks[]`, the
+ * ORDER is authored order, the NAME is `look.name`, and the FRAMES drawn in a segment's
+ * thumbnail are that look's own `rects` (`lookOptionsOf`). A template with an irregular look
+ * set renders exactly its own looks — `lookPicker.dom.test.ts` pins the shape and
+ * `look-set-and-switch.spec.ts` drives it on the surface.
  */
 
-/** A look, as the picker needs it: an id and something to call it. */
+/** One frame of one look, as a FRACTION of the scene — where the thumbnail draws its cell. */
+export interface LookFrame {
+  plateId: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** A look, as the picker needs it: an id, something to call it, and the frames it places. */
 export interface LookOption {
   id: string;
   label: string;
+  /**
+   * THIS look's frames, in the carrier's order, normalised to the scene — read from
+   * `TemplateLook.rects` over `TemplateLiveSources.resolution`. `frames.length` is the look's
+   * frame count, which is NOT the template's frame count and NOT anything about the id.
+   */
+  frames: readonly LookFrame[];
 }
 
 /**
@@ -69,7 +102,11 @@ export interface LookOption {
  */
 export function lookOptionsOf(live: TemplateLiveSources | undefined): LookOption[] | null {
   const looks = live?.looks;
-  if (looks === undefined || looks.length === 0) return null;
+  if (live === undefined || looks === undefined || looks.length === 0) return null;
+  // A raster is positive by schema; the guard keeps a malformed carrier from producing
+  // `Infinity` fractions rather than a blank thumbnail.
+  const sceneW = live.resolution.width > 0 ? live.resolution.width : 1;
+  const sceneH = live.resolution.height > 0 ? live.resolution.height : 1;
   return looks.map((l) => ({
     id: l.id,
     /*
@@ -84,7 +121,21 @@ export function lookOptionsOf(live: TemplateLiveSources | undefined): LookOption
       A long name widens the strip rather than the row: the line scrolls inside itself.
     */
     label: l.name,
+    // THIS LOOK's rects, and only this look's — a source absent from a look has no entry
+    // (`TemplateLiveSourcesSchema.looks`), so a look's frame count is the size of its map.
+    frames: Object.entries(l.rects).map(([plateId, r]) => ({
+      plateId,
+      x: r.x / sceneW,
+      y: r.y / sceneH,
+      w: r.width / sceneW,
+      h: r.height / sceneH,
+    })),
   }));
+}
+
+/** The operator's word for a look's frame count — the reference's `· N frames` tooltip. */
+export function frameCountLabel(n: number): string {
+  return n === 1 ? '1 frame' : `${String(n)} frames`;
 }
 
 const styles = {
@@ -97,21 +148,36 @@ const styles = {
     gridColumn: '1 / -1',
     display: 'flex',
     alignItems: 'center',
-    gap: '0.4rem',
+    // The reference's `.look-switch{gap:10px}` between the context label and the strip.
+    gap: cssVars['--r-look-ctx-gap'],
     // Never widens the row: if the looks outgrow the panel the STRIP scrolls, rather
     // than the grid growing and pushing the verb block off the edge — the failure the
     // fixed-px column model exists to prevent.
     minWidth: 0,
     overflowX: 'auto' as const,
   },
+  /**
+   * The context label — the reference's `.look-context`: 11 px 600 in the SECOND rank of
+   * ink, on a 79 px column so the strips of two rows start at one x. Phase 2's
+   * `--r-text-secondary` is the palette's value for the literal the reference paints.
+   */
   label: {
-    fontSize: '0.68rem',
-    fontWeight: 700,
-    letterSpacing: '0.04em',
-    color: colors.textMuted,
+    fontSize: cssVars['--r-look-ctx-text'],
+    fontWeight: 600,
+    color: colors.textSecondary,
+    minWidth: cssVars['--r-look-ctx-min-w'],
     flex: '0 0 auto',
   },
-  strip: { display: 'flex', gap: '0.25rem', flex: '0 0 auto' },
+  /**
+   * The button strip — the reference's `.look-button-strip{gap:8px;padding:3px}`. The 3 px
+   * is what keeps a segment's focus ring inside the line's own scroll box.
+   */
+  strip: {
+    display: 'flex',
+    gap: cssVars['--r-look-strip-gap'],
+    padding: '3px',
+    flex: '0 0 auto',
+  },
   /**
    * `B-168` — the immediacy mark. Dimmer than the label it follows, because it is a QUALIFIER
    * on that word rather than a second signal competing with it: the operator reads `LOOK` and
@@ -128,6 +194,35 @@ const styles = {
 const IMMEDIATE_TITLE =
   'Pressing a look applies it IMMEDIATELY — on an on-air row that is a cut. It does not wait ' +
   'for UPDATE, unlike the per-look inputs in the Inspector.';
+
+/** Half the thumbnail's seam, so two adjacent frames read as two cells and not one box. */
+const FRAME_SEAM_PX = LOOK_STRIP_PX.thumbGap / 2;
+
+const pct = (f: number): string => `${String(Math.round(f * 10000) / 100)}%`;
+
+/**
+ * The look's frame thumbnail. `aria-hidden`: the accessible name and the tooltip already say
+ * how many frames, and a screen reader has no use for a picture of where they sit.
+ */
+function LookThumb({ frames }: { frames: readonly LookFrame[] }): JSX.Element {
+  return (
+    <span className="cg-look-thumb" aria-hidden="true" data-look-thumb="">
+      {frames.map((f) => (
+        <span
+          key={f.plateId}
+          className="cg-look-frame"
+          data-look-frame={f.plateId}
+          style={{
+            left: `calc(${pct(f.x)} + ${String(FRAME_SEAM_PX)}px)`,
+            top: `calc(${pct(f.y)} + ${String(FRAME_SEAM_PX)}px)`,
+            width: `calc(${pct(f.w)} - ${String(2 * FRAME_SEAM_PX)}px)`,
+            height: `calc(${pct(f.h)} - ${String(2 * FRAME_SEAM_PX)}px)`,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
 
 interface Props {
   looks: readonly LookOption[];
@@ -182,6 +277,13 @@ export function LookPicker({
         row already spends its colour vocabulary on air state, and a new hue here would be a
         second thing to learn. The word the operator already reads on the PVW panel is the
         word that appears on the control that drives it.
+
+        ⚠ `RUNTIME-REDESIGN-01` Phase 4 — the reference's context label reads `ON AIR LOOK` on
+        an on-air row. NOT adopted, on purpose: the picker says which LOOK is selected and the
+        state cell alone says whether the row is on air (the "never a second air claim on the
+        same row" rule the segments' colour is built on, pinned in `lookPicker.dom.test.ts`).
+        The reference's second line — `Cut · now` / `Apply · now` — is `B-168`'s `· NOW`
+        qualifier, which the console already spells; nothing is reworded (`PROMPT.md` §0).
       */}
       {/*
         🔴 **`B-168` — THE LABEL SAYS THIS CONTROL COMMITS IMMEDIATELY.**
@@ -204,7 +306,7 @@ export function LookPicker({
       <span style={styles.label} title={IMMEDIATE_TITLE}>
         {preview ? 'PVW LOOK' : 'LOOK'} <span style={styles.now}>· NOW</span>
       </span>
-      <span style={styles.strip}>
+      <span style={styles.strip} data-look-strip="">
         {looks.map((look) => {
           const live = look.id === activeId;
           return (
@@ -224,7 +326,15 @@ export function LookPicker({
               // The CSS keys on this, so the paint and the announcement are one fact.
               aria-pressed={live}
               disabled={refusal !== undefined}
-              {...(refusal !== undefined ? { title: refusal } : { title: look.id })}
+              /*
+                The tooltip: this look's OWN frame count (the reference's `· N frames`) and the
+                authored id — the technical handle, relocated here and out of the sentence
+                (golden rule 11). The immediacy clause the reference appends is already on the
+                label's tooltip and is not spelled twice. A refusal replaces it wholesale.
+              */
+              {...(refusal !== undefined
+                ? { title: refusal }
+                : { title: `${frameCountLabel(look.frames.length)} · ${look.id}` })}
               /*
                 🔴 “CURRENT”, never “on air”. The picker says which LOOK is selected; whether
                 the row is on air is the state cell’s claim and its alone. An off-air row’s
@@ -238,6 +348,7 @@ export function LookPicker({
                 `${live ? ' — current' : ''}`
               }
               data-look-id={look.id}
+              data-look-frames={String(look.frames.length)}
               onClick={() => {
                 /*
                   🔴 **A RE-PRESS IS SENT, and an earlier version of this dropped it.**
@@ -263,6 +374,7 @@ export function LookPicker({
                 onPick(look.id);
               }}
             >
+              <LookThumb frames={look.frames} />
               {look.label}
             </Button>
           );

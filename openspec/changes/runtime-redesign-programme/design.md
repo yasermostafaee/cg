@@ -645,6 +645,10 @@ transcription.
 `--r-icon-btn-box: 36px` · `--r-row-icon-btn-w: 32px` · `--r-row-icon-btn-h: 34px` ·
 `--r-row-icon-btn-narrow-w: 30px`
 
+⚠ _Historical values._ Phase 3 found these transcribed from the stylesheet's dead first wave and
+corrected the `--r-row-*` family to the rendered numbers (§10.3); **`--r-row-icon-btn-narrow-w` was
+DELETED in Phase 4 under owner answer A9** (§11.1) — it does not exist in the token home any more.
+
 ⚠ **`--r-modal-foot-h` is unchanged at `59px` and is still a FLOOR.** None of the heights above may
 be composed into it: a height that belongs to BEING a footer cannot be a function of what a section
 puts in it (`B-240`, `station-setup-frame.spec.ts`).
@@ -907,6 +911,13 @@ nothing, for the owner's decision. ⚠ **If the owner in fact wants the wave-1 i
 smaller verbs, the left-bar selection, the 16/17 cells — that is a token flip in one file and a
 decision the report asks for, not something to infer from a stylesheet's first draft.**
 
+✅ **ANSWERED (2026-09-08, before Phase 4 — owner answers A8 and A9, §11.1).** Wave 1 is
+REJECTED: nobody ever saw it rendered, and `32×34` with a 30 px destructive group shrinks the STOP
+and CLEAR targets on an on-air console; `48 × 36` stays and no later phase reopens it. And the
+dead-rule token was DELETED, not kept: a token read by nothing with a comment saying it is dead is
+a trap. `PROMPT.md` §0 now carries the rendered-not-authored rule and §3 is marked superseded in
+place (commit `0572102e`).
+
 ### 10.2 🔴 THE MEASURED PROPERTY TABLE — rendered reference vs app, every delta FIXED or ARGUED
 
 Both columns are Chromium readings. "Palette" means the same ROLE, whose value Phase 2 moved by
@@ -1021,3 +1032,149 @@ bridge publishes.
   the header words in the DOM, or touch the Look buttons, the top bar's height or the column widths
   (each argued in 10.2).
 - It did not close the A6 lid question — the number is closed, the trade is reported.
+
+## 11 — Phase 4: Looks
+
+**Phase 4, 2026-09-08.** Read against the tree at `0572102e` (the amended `PROMPT.md`). Method as
+Phase 3's, now the rule (`PROMPT.md` §0, rendered-not-authored): the reference was **rendered in
+Chromium at 1280 × 800 and measured** on its three look-bearing rows (`getComputedStyle` +
+`getBoundingClientRect`, the pointer moved onto an idle segment for the hover, a row clicked for
+the selected readings), and the app was measured the same way against its built `dist/` booted as
+the e2e harness boots it, on row 89.
+
+### 11.1 The owner's answers, and the authority file amended first
+
+- **A8 — wave 1 is REJECTED.** Nobody ever saw it rendered, and `32×34` verbs with a 30 px
+  destructive group shrink the STOP and CLEAR hit targets on an on-air console. **`48 × 36` stays
+  and no later phase reopens it.** Recorded in `PROMPT.md` §3's supersession note and in §10.1.
+- **A9 — `--r-row-icon-btn-narrow-w` is DELETED**, not kept documented-dead: a token read by
+  nothing with a comment saying it is dead is a trap. Gone from `theme.ts` (a note stands where it
+  was so it is not re-added); `tokenHome.test.ts` and `theme-tokens.spec.ts` green; §7.4's list is
+  annotated as historical.
+- **A10 / A11 — `PROMPT.md` amended, by path, in its own commit (`0572102e`) before any phase
+  work.** §0 gains THE REFERENCE IS JUDGED AS RENDERED, NOT AS AUTHORED; §3's quoted numbers are
+  marked SUPERSEDED in place by §10.2 with one line saying why, the section kept so the error stays
+  visible. **§§4–10 were checked and quote NO number or selector from the stylesheet** — §4's
+  `authoredLooks(t) = t.layouts` is the prototype's SCRIPT, already flagged as its invention.
+
+### 11.2 What contradicted the prompt — and what did not
+
+- **§4's premise was already true in the code, so the phase's code is SURFACE plus PROOF, not a
+  re-plumbing.** "The number and arrangement of Looks are read from the template's own definition,
+  through the real schema's equivalent of `authoredLooks(t) = t.layouts`" — that equivalent is
+  `TemplateLiveSources.looks`: the Designer authors a `LookGroup` (`@cg/shared-schema` `looks.ts`),
+  `collectLookCarrier` (`@cg/vcg-format`) reduces it at export to one `TemplateLook` per authored
+  look with the rects it places, and `lookOptionsOf` (`LookPicker.tsx`) reads exactly that. A
+  tree-wide read found **nothing** deriving a look from a frame count: no consumer counts
+  `sources[]` to make looks, the renderer never reads `arrangements` (the A′ carrier, a different
+  schema), and `activeLookOf` resolves by id → authored default → first, never by position. What
+  the surface did NOT show was the ARRANGEMENT — a segment was a text chip — and nothing PROVED the
+  three-things rule against an irregular set. Both are this phase's.
+- **The reference's look strip is restated five times in its stylesheet and only the last paints**
+  (the same shape as §10.1, one component over): `.look-switch button` is declared at 21 px, then
+  24 px, then 38 px with `min-width:78px`, then `min-width:100px`. Measured, it is 38 × ≥100 —
+  11.3 quotes the browser, not the file.
+- **The reference's thumbnail is its own invention.** `makeLook(id,name,plateIds,columns)` draws a
+  `--cols` grid per look; the real carrier has each look's actual rects over the scene, so the app
+  draws THOSE (a `solo` look that fills the raster shows one full box; `pair` shows two cells at
+  their real places). The schema wins (`PROMPT.md` §0), and the thumbnail is more truthful than the
+  drawing it comes from.
+- **The reference's context label reads `ON AIR LOOK` / `Cut · now` on an on-air row, `PVW LOOK` /
+  `Preview · now` rehearsing, `LOOK` / `Apply · now` otherwise. NOT adopted.** The picker says
+  which LOOK is selected and the state cell alone says whether the row is on air — the "never a
+  second, unbacked air claim on the same row" rule the segments' colour is built on and
+  `lookPicker.dom.test.ts` pins (_"never 'on air'"_). The second line is `B-168`'s immediacy
+  qualifier, which the console already spells `· NOW`; nothing is reworded (§0). ARGUED, not
+  fixed — the owner can overrule it in one word.
+- **The reference draws the strip as a second `<tr class="look-detail">` under a 51 px main row;
+  the app keeps its ONE grid row** (Phase 3's decision, §10.8). The vertical rhythm comes out the
+  same anyway — see the first two rows of 11.3.
+
+### 11.3 🔴 THE MEASURED PROPERTY TABLE — rendered reference vs app, every delta FIXED or ARGUED
+
+Both columns are Chromium readings. "Palette" means the same ROLE, whose value Phase 2 moved by the
+owner's mapping rule; the prototype keeps a pre-Phase-2 literal for that role.
+
+| property                    | reference (rendered)                                                                | app (after this phase)                                                                                  | verdict                                                                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| look-bearing row, total     | 51 + 65.89 = **116.89 px** (main row + `.look-detail` row)                          | **117.39 px** = 15 + 36 + 6.4 + 3 + 38 + 3 + 15 + 1 (one grid row)                                      | identical within 0.5 px; ARGUED: one row, not two (§10.8)                                                              |
+| verb line → look button     | 6.4 (detail pad) + 3 (strip pad) = 9.4 px                                           | 6.4 (`rowGap`) + 3 (strip pad) = 9.4 px                                                                 | identical                                                                                                              |
+| line gap (label → strip)    | `.look-switch{gap:10px}`                                                            | 10 px — `--r-look-ctx-gap`                                                                              | identical; **FIXED** (was 6.4)                                                                                         |
+| context label               | 11 px 600, `#bac7d8`, `min-width:79px`, two lines                                   | 11 px 600, `--r-text-secondary` `#bbc8d7`, `min-width` 79 — `--r-look-ctx-*`                            | **FIXED** (size, weight, ink rank, column); ARGUED: palette                                                            |
+| context label words         | `ON AIR LOOK` / `Cut · now` · `PVW LOOK` / `Preview · now` · `LOOK` / `Apply · now` | `LOOK · NOW` · `PVW LOOK · NOW`                                                                         | ARGUED: no second air claim on the row; `B-168`'s word; nothing reworded (§0)                                          |
+| strip gap, padding          | `gap:8px;padding:3px`                                                               | 8 px — `--r-look-strip-gap`; 3 px                                                                       | identical; **FIXED** (gap was 4)                                                                                       |
+| button box                  | **38 px** tall, `min-width:100px`, `padding:5px 12px`, radius 5                     | **38 px**, 100 px floor, `5px 12px`, radius 5 — `--r-look-btn-*`                                        | identical; **FIXED** (was a 2.4ch chip, `0.15rem 0.5rem`, radius 3, ~24 px tall)                                       |
+| button text                 | 13 px 400, `gap:8px` to the thumbnail                                               | 13 px, `--r-weight-medium` 500, gap 8 — `--r-look-btn-text/-gap`                                        | **FIXED** (size, gap); ARGUED: weight — one step under the button family's semibold; no 400 token exists to invent one |
+| button at rest              | `#151e2c` / `#56667d` / `#dbe4f0`                                                   | `--r-surface-sunken` `#0b1017` / `--r-border-strong` `#4b5563` / `--r-text`                             | ARGUED: palette                                                                                                        |
+| button hover                | `#30465c` / `#8dbad7`                                                               | `--r-control-hover-bg` `#304258` / `#5e748b`                                                            | identical up to palette (the same pair as §10.2's ON PVW hover)                                                        |
+| button selected             | `#285273` / `#91d7ff` / `#fff`, `inset 0 0 0 1px #91d7ff`                           | `--r-accent-fill` `rgb(23 50 67)` / `--r-accent-line` / `--r-accent-ink`, `inset 0 0 0 2px --r-surface` | ARGUED: palette — the anchor-cell selection rule (`controls.css`), kept                                                |
+| thumbnail box               | `27 × 19`, opacity .85                                                              | `27 × 19`, opacity .85 — `--r-look-thumb-w/-h`                                                          | identical; **FIXED** (there was none)                                                                                  |
+| thumbnail cell              | 1 px `currentColor`, radius 1, one cell per frame in a `--cols` grid                | 1 px `currentColor`, radius 1, one cell per frame **at the look's own rect** (`rects`/`resolution`)     | **FIXED** — the schema's arrangement, not the prototype's grid                                                         |
+| segment tooltip             | `<name> · N frames · cuts on air immediately`                                       | `N frame(s) · <id>`                                                                                     | ARGUED: the immediacy clause is on the label's tooltip already; the id relocates here (golden rule 11)                 |
+| segment count, order, label | one per `layouts[]`, authored order, authored name                                  | one per `looks[]`, authored order, authored name                                                        | identical in kind — and now PROVED against an irregular set (11.4)                                                     |
+| Look button click target    | 38 × ≥100                                                                           | 38 × ≥100                                                                                               | identical — "keeps its large click target" (§3) holds; larger than the 48 × 36 verb                                    |
+
+**What the owner will see change on screen:** every look segment is a 38 px button with a 100 px
+floor instead of a small chip, and each one now carries a little **frame map** — the frames THAT
+look places, where it places them — beside its name; the `LOOK · NOW` label is a shade brighter and
+the strip sits 10 px from it. Nothing about which looks appear, their names or their order changed;
+that was already the template's own declaration, and is now proved to be.
+
+### 11.4 The fixture — six frames, five looks, word ids
+
+`MockRuntime.seedLooksTemplate()` now also seeds `e2e-looks-six` into the **e2e-armed LIBRARY**
+(no row carries it; a spec loads it): six frames in a 3 × 2 grid and FIVE looks — `solo` (frame 1,
+full raster), `pair` (frames 2 and 5), `trio` (1, 3, 5 — the authored default), `quad` (1, 2, 4, 6) and `panel` (all six). **There is deliberately no five-frame look**, so a picker inventing a look
+per frame count would show a sixth segment; the ids are words, so nothing can read a count out of
+one; `pair`'s membership is irregular, so a count cannot stand in for it. `lookPicker.dom.test.ts`
+pins the shape (five options, `[1,2,3,4,6]` frames, `pair` = `['l-2','l-5']`, one cell per frame in
+the rendered strip, the tooltip words) and `look-set-and-switch.spec.ts` drives it on the built
+app — five segments, `data-look-frames` `1 2 3 4 6`, no `[data-look-frames="5"]`, `trio` marked.
+
+### 11.5 🔴 The red-first proofs — switch away and back, the same source on the same frame
+
+Two instruments, one defect shape: **a switch that forgets the ROW's composition and re-derives
+its frames from the TEMPLATE.** Each round trip carries a per-look binding (level 3) precisely so
+that defect cannot pass for the right answer — every frame on the template default would come
+back the same under a re-derivation too.
+
+- **At the wire** — `tools/caspar-bridge/tests/look-switch-preserves-bindings.integration.test.ts`
+  on the mock server's real AMCP state: take on `left`, bind `live-1 → src-preset` for `left`
+  only, read every LEFT frame's `{producer, layer, rendered rect}`, switch to the disjoint `right`
+  (positive control: frame 1 renders nothing, frame 3 renders), switch back, and assert the
+  readings identical; a second case pins that the way back sends `MIXER FILL`s and no `PLAY`.
+  **RED with `setActiveLook` neutralised to `#lookSourceBindings.delete(itemId)`** — frame 1 came
+  back on `"route://2"` (the template's `src-1`) instead of `"route://9"` — **GREEN with the line
+  removed, 2 / 2.** The neutralisation diff is not in the tree; it was a one-line stash.
+- **On the surface** — the third test of `look-set-and-switch.spec.ts`, on PVW where the console
+  draws the join (`R-049`): load the six, ON PVW, select, bind `trio:l-3 → Studio 3` through the
+  Inspector's Look inputs and UPDATE, read every placeholder's name and box, switch to `solo`
+  (positive control: frames 3 and 5 gone, frame 1 a different box), switch back, assert the
+  placeholders identical. **RED with the mock's `setActiveLook` neutralised the same way** —
+  `l-3` read `Studio 1` after the round trip — **GREEN with it restored, 3 / 3.** ⚠ The first red
+  attempt stopped at the positive control, not the property: the fixture's `solo` reused frame 1's
+  grid cell, so its box never moved. The fixture was corrected (a solo look fills the raster) and
+  the red was taken again on the property itself. Recorded because a red that lands on the wrong
+  line proves nothing about the right one.
+
+Spec deltas: `specs/runtime-live-source-routing/spec.md` (the wire property) and
+`specs/runtime-ui/spec.md` (the set, the geometry, the surface round trip).
+
+### 11.6 The deletion guard — untouched, and still green
+
+No guarded surface was touched: the phase edits `LookPicker.tsx`, `controls.css`'s look rules,
+the token home and the mock's e2e seed. `pnpm gate` re-ran every guard test in §3 (the
+`LayersPanel` strips, the banners, the toast, the lock). Twenty-seven items; four owed by Phase 9
+and one by Phase 8, unchanged.
+
+### 11.7 What Phase 4 did NOT do
+
+- It did not adopt `ON AIR LOOK` / `Cut · now` / `Apply · now` (11.2), reword the tooltip's
+  immediacy clause, or move the picker into a second table row.
+- It did not touch the Inspector's LOOK INPUTS section, the bridge's look switch, `setActiveLook`'s
+  contract, any schema or persisted key, or the unarmed mock library (`templateName.test.ts` pins
+  its count; the six-frame template is e2e-armed only).
+- It did not measure the app's strip in jsdom — all geometry is in `look-set-and-switch.spec.ts`
+  (golden rule 12c); the dom test pins the SET and the cell COUNT, which need no layout.
+- It did not invent a regular-weight text token to match the reference's 400; the segment is one
+  step under the button family and the delta is argued in 11.3.
