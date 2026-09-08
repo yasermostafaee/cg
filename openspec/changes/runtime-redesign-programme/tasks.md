@@ -6,9 +6,11 @@ file records which are done. **Each session takes the next unfinished phase, fin
 reports.** Do not start a later phase because an earlier one looks easy — the ordering is
 load-bearing and stated at each step.
 
-**Phase state at 2026-09-08:** Phases 1, 2 (with addendum 2A), 3, 4, 5, 6, 7, 8 and **9**
-COMPLETE, each with its Linux `e2e` URL beside the ticked item. Phase 10 not started. Next:
-**Phase 10**.
+**Phase state at 2026-09-08: THE PROGRAMME IS COMPLETE.** All ten phases (1, 2 with addendum
+2A, 3, 4, 5, 6, 7, 8, 9 and **10**) are done, each with its Linux `e2e` URL beside the ticked
+item. **The closing position — the deletion guard's final count, all sixteen owner answers and
+where each is recorded, what remains open and who owns it, and whether any phase left a
+remainder — is `design.md` §17.6.** Read that before opening any follow-up work.
 ⚠ Phase 9 PLANT-TESTED every deletion-guard item (`design.md` §16.1): read that table before
 trusting any ✅ in §3 — a ✅ says a test exists; the table says what goes red when the surface
 is removed. Phase 10 re-runs the guard end to end and owes nothing else to the guard.
@@ -607,13 +609,86 @@ the lock (§16.5), the red-first matrix (§16.6), what was not done (§16.7) and
       it was not skipped, which is the half a green run alone does not prove (golden rule 12b).
       `Lint • Typecheck • Test • Build` also ran green (16:26:55Z → 16:30:46Z).
 
-## Phase 10 — Verification
+## Phase 10 — Verification — COMPLETE
 
-- [ ] 10.1 The air-sensitive scenarios end to end: an Update on a row that does not own the live
-      layer sends nothing; REMOVE on air is refused with its sentence; CLEAR/STOP behave as
-      contracted; an audio change plays nothing; a look switch preserves sources; the restart notice
-      fires and PUT BACK ON AIR restores.
-- [ ] 10.2 Channel independence: an action on one channel does not disturb another's state.
-- [ ] 10.3 `pnpm gate` uncached, in the foreground, `0 cached` stated; OpenSpec validated strictly;
+The record is `design.md` §17: what contradicted the prompt (§17.0), the six scenarios at the
+wire and their plant pass (§17.1), channel independence with its honest bound (§17.2), the
+`B-242` sweep in full with its positive control (§17.3), the `P-025` hook and the live
+turbo-inputs hole it exposed (§17.4), what was not done (§17.5), **the programme's closing
+position (§17.6)** and the runs (§17.7).
+
+- [x] 10.1 🔴 The six air-sensitive scenarios END TO END, in ONE operator session on ONE bridge,
+      asserted at the WIRE — `tools/caspar-bridge/tests/air-sensitive-endtoend.integration.test.ts`.
+      Not a copy of the six suites that own these properties: it proves they survive COMPOSITION,
+      on a row that has been updated, taken, refused a REMOVE, look-switched, stopped, resumed,
+      cleared, re-taken and had its air taken by a server restart. Every reading is the mock's
+      AMCP trace, the mock's layer state or the bridge's ledger — never a UI. **UPDATE on a row
+      owning no live layer sends nothing** (with a TAKE beside it as the positive control that
+      the trace is live); **REMOVE on air is refused** with `REMOVE_ON_AIR_CODE`, naming STOP and
+      CLEAR, destroying nothing and keeping every seated plate; **an audio change reaches nothing**
+      yet records its intent; **a look switch preserves the source-to-frame relationship** through
+      a disjoint look, by `MIXER FILL` and no `PLAY`; **STOP sends `CG STOP`** with no CLEAR and
+      no re-ADD, the resume is a bare `PLAY`, and **CLEAR destroys**; **the restart notice fires,
+      nothing reaches the wire between the restart and the press, and PUT BACK ON AIR restores** —
+      `B-225`/`B-227`'s DETECT AND SAY, ONE PRESS, exercised as the PRESS.
+      ⚠ **The canonical SENTENCE is honestly split** (§17.1): the bridge is Node and
+      `REMOVE_ON_AIR_REASON` is a renderer constant, so the wire proves the refusal and the shared
+      code, and `removeRowRefusal.dom.test.ts` proves that code becomes the sentence. Together
+      they are it; neither alone is.
+      🔴 **Green on a first run is not evidence: six plants, six reddenings** (§17.1.1) — each
+      applied alone to `caspar-runtime.ts`, each landing on the assertion that names it, each
+      reverted by its ORIGINAL BYTES (`Buffer.equals` confirmed). P4 was refined into P4b because
+      its redness landed on the notice wait rather than on the contract's own assertion.
+- [x] 10.2 Channel independence — **proved at the STORE and UI level, and bounded out loud**
+      (§17.2): `apps/runtime/tests/channelIndependence.dom.test.ts`, 8 tests in four sections that
+      each name their level. 🔴 **It is NOT provable at the wire and this phase says so rather
+      than dressing a UI test as a contract test:** the bridge is single-channel in exactly three
+      places (`R-062`), so there is no second channel to disturb, and `MockRuntime.load()` writes
+      no `item.slot` either. What IS proved: §1 the ADDRESS is the item and the CHANNEL rides
+      inside it, and no per-row verb accepts a channel; §2 two rows **on the same layer number,
+      different channels** — the discriminating case — and STOP on one dispatches that row's
+      `{ itemId }` (re-parsed through the channel's own request schema) while the other is
+      `outerHTML`-identical; §3 the five bulk verbs PINNED as `z.void()`, so §10's sentence is
+      FALSE for them BY DESIGN (owner answer A16) and the day one gains a channel this reddens;
+      §4 the selection is a pure scope change. Plants: C1 (dispatch by layer) reddened; C2 (a bulk
+      verb gains a channel) reddened **only after rebuilding `@cg/shared-ipc`** — recorded,
+      because a plant against a workspace dependency is not a plant until it is built.
+- [x] 10.3 🔴 **`B-242` SWEPT IN FULL — no remainder** (§17.3). All **154** non-e2e test files
+      under `apps/runtime/tests`, in two `git grep` passes (never `grep -r`/ripgrep): the
+      mechanical layout reads returned **one hit, and it is a comment**; the wide geometry-word net
+      returned **45 `expect` lines, every one read and classified**, not sampled. **ZERO instances
+      of the class** — 15 incidental word matches, 9 pure-function arithmetic, 13 declared
+      values (style objects, emitted CSS/SVG text, manifest data), 7 inline styles each with a
+      positive control beside it, and `layerTableHeader:140` investigated as the one candidate and
+      CLEARED (`styles.stateHead` is a real inline object whose sibling `styles.cell` sets
+      `overflow: hidden`, so the realistic regression reddens it). `packages/*/tests` and
+      `tools/*/tests` return zero too. Nothing to move to Playwright, nothing to delete.
+      🔴 **THE POSITIVE CONTROL:** a probe spec asserting `rect.width === 0`, `offsetWidth === 0`,
+      `scrollHeight === 0` and the verb block `!== 48` on a REAL `LayerRow` (67 px with `48 × 36`
+      verbs in Chromium) **PASSED** — the hazard is live — and the sweep's own grep went from 8
+      hits to 1 when the probe was deleted, so the instrument is proven live too. Probe deleted.
+- [x] 10.4 🔴 **`P-025` — the commit-msg BOM hook, IN and PROVED BOTH WAYS** (§17.4).
+      `.husky/commit-msg` → `commit-msg-cli.mjs` → `commit-msg-decision.mjs` (+ `types/`, 8 unit
+      tests, every case written in BYTES rather than a string literal, because a text round trip
+      is what makes this defect invisible). It refuses only a mark at byte 0, names which one, and
+      **FAILS OPEN** on anything unreadable. Proved against a real `git commit` in a throwaway
+      repository: **the positive control first** — a clean message carrying an em-dash and Persian
+      COMMITTED with no BOM in `git cat-file` — then the same message plus three bytes REFUSED with
+      its one-line remedy, and `rev-list --count` = 1.
+      ⚠ **`be883e3c` and `e800fd4e` STAND** — no force-push, no rewrite; the owner's call.
+      ⭐ **And the new `types/` file exposed a LIVE turbo-inputs hole, closed in the same commit:**
+      `typecheck` and `lint` both READ `types/**` (tsconfig `include`, the eslint node tier) and
+      neither hashed it. **Measured, not asserted** — a real type error planted there came back
+      `cache hit, replaying logs` with exit 0; with `types/**` added to both tasks' `inputs` the
+      same plant is a cache MISS and exit 2.
+- [x] 10.5 `pnpm gate` uncached, in the foreground, `0 cached` stated; OpenSpec validated strictly;
       and a COMPLETED, GREEN Linux `e2e` job on the CODE head with its URL, duration, and
       confirmation that it RAN — not that it was skipped.
+      ⚠ **The Linux `e2e` owed on `b9325b25` is DECLARED SUPERSEDED, on the owner's instruction:**
+      it is many heads back and covered by six later green runs whose `E2E (Playwright)` job was
+      confirmed to have RUN (Phases 2A, 3, 4, 5, 6, 7, 8, 9 above), and the jobs are whole-tree.
+      Not chased.
+      `pnpm gate` — **`93 successful, 93 total · 0 cached, 93 total`**, foreground, prettier clean,
+      OpenSpec `78 passed, 0 failed`. `pnpm --filter @cg/runtime test:e2e` — Windows,
+      ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `<pending>`:** _(filled in below on the push)_

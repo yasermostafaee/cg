@@ -2439,3 +2439,338 @@ re-reading them, and `git status` after the passes lists only this phase's own e
   12 m 38 s; the `E2E (Playwright)` job RAN 11 m 56 s (16:26:55Z → 16:38:51Z), its `E2E` step
   16:28:12Z → 16:37:50Z, and `Lint • Typecheck • Test • Build` green in 3 m 51 s. Recorded beside
   `tasks.md` 9.4, as every phase before it.
+
+## §17 — PHASE 10: VERIFICATION, AND THE PROGRAMME'S CLOSING POSITION
+
+### 17.0 What contradicted the prompt
+
+**Three things, all of them factual and none of them fatal.**
+
+1. 🔴 **There is no owner answer A7, A17 or A18.** The Phase 10 brief asks for _"every owner answer
+   A1–A18"_. The record holds **sixteen**, numbered **A1–A6 and A8–A16**; `git grep` over the whole
+   tree returns nothing for `A7`, `A17` or `A18`, in this change or anywhere else. A7 is a
+   numbering gap left when Phase 2's escalations closed at A6 and Phase 3's opened at A8; A17 and
+   A18 were never issued. The sixteen that exist are enumerated in §17.6 with where each is
+   recorded. **Nothing was invented to fill the range.**
+2. ⚠ **`B-242` is DOUBLE-BOOKED, and the brief uses the second meaning.** In
+   `docs/prd/b-number-registry.md` (line 2724) `B-242` is _"in use (station-setup tasks.md)"_ —
+   `openspec/changes/station-setup/tasks.md` 11.7, a removed delimiter's attached field falling
+   back to its raw characters. Independently, four runtime e2e specs cite `B-242` for golden rule
+   12c's jsdom-has-no-layout hazard (`inspector-geometry`, `layer-table-geometry`,
+   `library-audit-geometry`, `station-setup-geometry`). The brief means the second. Neither entry
+   has a `##` heading in `docs/prd/bugs-runtime.md`, which is how two sessions came to take the
+   same free number for different things. **Filed for the owner in §17.6; not renumbered here,
+   because renumbering a `B-` in flight is exactly what the registry exists to stop.**
+3. ⚠ **`CLAUDE.md`'s green-gate section says `test` inputs do not hash `bin/**`. They do.**
+`turbo.json`'s `test`task reads`["src/**", "tests/**", "bin/**", "scripts/**", …]`. The
+"⚠ STILL OPEN" note is stale — the notch was closed and the sentence was not. Flagged rather
+than edited: `CLAUDE.md` is shared config the next session picks up, and a correction there is
+   the owner's to take. **A different, LIVE instance of the same class was found and closed in
+   this phase — see §17.4.**
+
+### 17.1 The six air-sensitive scenarios, end to end, at the wire
+
+**What was built:** `tools/caspar-bridge/tests/air-sensitive-endtoend.integration.test.ts` — ONE
+`it`, ONE bridge, ONE mock, ONE AMCP trace, driven through all six scenarios in the order an
+operator performs them, with the state each verb leaves carried into the next.
+
+⚠ **It is not a copy of the six suites that already own these properties.** Each of
+`update-does-not-take`, `remove-on-air-refusal`, `stop-verb`, `audio-does-not-take`,
+`look-switch-preserves-bindings` and `emptied-air-notice` boots a clean runtime and exercises one
+verb. What none of them can show — and what this file exists for — is that the properties survive
+COMPOSITION: a row that has been updated, taken, refused a REMOVE, had its looks switched, been
+stopped, resumed, cleared, re-taken and then had its air taken away by a server restart.
+
+**Every reading is the mock's AMCP trace, the mock's own layer state, or the bridge's ledger.**
+Never a UI, never a status field standing in for a command.
+
+| #   | Scenario                             | What the wire had to show                                                                                                                                                                                                |
+| --- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | UPDATE on a row owning no live layer | Fields AND a per-look input swap in one press ⇒ **no `PLAY`, no `CG ADD`, no `MIXER … VOLUME`, no `MIXER … FILL`/`CLIP`**, no seats, the layer still `empty`                                                             |
+| —   | _positive control_                   | The same bridge, one TAKE ⇒ ADDs and PLAYs on the wire, and the take seats the UPDATE's input (`route://9`) — so scenario 1's silence is a reading, not a dead trace                                                     |
+| 2   | REMOVE on air                        | `accepted: false`, `errorCode === REMOVE_ON_AIR_CODE`, the message names STOP **and** CLEAR, **nothing on the wire**, the producer alive, **every live plate still seated**, the row still on the stack                  |
+| 3   | An audio change                      | A raise and a SOLO map on a never-taken row ⇒ nothing on the wire, no seats, not on air — **and the intent IS recorded** (`livePlateVolumes`), which is what makes it a configuration change rather than a no-op         |
+| 4   | A look switch                        | The row's LEVEL-3 per-look binding survives a switch away and back: same producer, same layer, same rendered rect; coming back is `MIXER FILL` and **no `PLAY`**                                                         |
+| —   | _positive control_                   | On the disjoint look, frame 1 is off screen and frame 3 is on — the picture really moved before it was moved back                                                                                                        |
+| 5   | STOP and CLEAR                       | STOP ⇒ `CG 1-1 STOP`, **no `CLEAR`, no re-ADD**, producer resident, row at `loaded`; the resume ⇒ bare `CG PLAY`, **no ADD**; CLEAR ⇒ producer destroyed and the row's plates released                                   |
+| 6   | The restart notice, and the PRESS    | A real mock restart ⇒ the notice names the row; **in a 400 ms window between the restart and the press, nothing reaches the wire**; then `restoreEmptiedAir(['row-a'])` ⇒ ADD + PLAY, the row on air, the notice retired |
+
+🔴 **Scenario 6 exercises the PRESS, not only the notice** — `B-225`/`B-227`'s contract is DETECT
+AND SAY, ONE PRESS, and automatic restore was REFUSED. A test that asserted only the notice would
+be green on a build that restored by itself, which is the one outcome the owner ruled out.
+
+**One honest bound on scenario 2, stated in the file's own header.** `PROMPT.md` §10 asks for the
+_canonical sentence_. `REMOVE_ON_AIR_REASON` is a RENDERER constant and the bridge is Node — golden
+rule 1's seam. What crosses it is `REMOVE_ON_AIR_CODE`, in `@cg/shared-ipc`, imported by both
+sides. So the wire proves the refusal, the code and the named way out; `removeRowRefusal.dom.test.ts`
+(`errorCodeMessage(REMOVE_ON_AIR_CODE) === REMOVE_ON_AIR_REASON`, plus the row tooltip and the
+toast) proves the code becomes that sentence. **Together they are the sentence; neither alone is**,
+and the file says so rather than asserting a string it cannot see.
+
+**What the fixture had to discover rather than assume.** The first run was refused `wrong-bank`: a
+plate-bearing package is classified `low` by `requiredBankFor`, so it can only be loaded onto a LOW
+bank row — a plate-bearing package on a high row composites its background OVER its own plates.
+The rows moved to layers 1 and 2. Taken from the refusal, not from reading the code.
+
+#### 17.1.1 🔴 The plant pass — five plants, five reddenings, each on the assertion that names it
+
+Green on a first run is not evidence. Every plant was applied alone to
+`tools/caspar-bridge/src/caspar-runtime.ts`, the suite run, and the file **reverted by its original
+bytes** (verified `Buffer.equals`, not by git).
+
+| Plant | What it broke                                      | Result       | The assertion that fired                                                       |
+| ----- | -------------------------------------------------- | ------------ | ------------------------------------------------------------------------------ |
+| P1    | `#ownsLiveSeats` always `true`                     | **REDDENED** | _"UPDATE on a row that owns nothing"_ — four `PLAY`s on the wire               |
+| P2    | `#removeRefusal` never refuses                     | **REDDENED** | _"the BRIDGE refuses, not merely the control"_                                 |
+| P3    | `setActiveLook` neutralised                        | **REDDENED** | _"frame 1 is off screen in RIGHT"_ — the positive control caught it            |
+| P4    | the notice restores automatically, immediately     | **REDDENED** | timed out waiting for the notice (it was cleared before it was read)           |
+| P4b   | the notice restores automatically **120 ms later** | **REDDENED** | _"the notice is a sentence, not an action"_ — five `PLAY`s in the quiet window |
+| P5    | `stopItem` escalates to `out` (a CLEAR)            | **REDDENED** | _"STOP sends CG STOP"_                                                         |
+
+⭐ **P4 was refined into P4b on purpose.** P4's redness was real but landed on the notice WAIT, not
+on the assertion that guards the contract — an auto-restore fast enough to beat the read would have
+been detected for the wrong reason. P4b delays the plant past the notice, and then the exact
+assertion fires. A plant that reddens the wrong line is a weaker proof than one that reddens the
+right one, and the difference is worth the second run.
+
+With every plant reverted the suite is **GREEN** and the source is byte-identical.
+
+### 17.2 Channel independence — proved at the level it can be, and bounded
+
+🔴 **This is the section the phase exists to get right, and the honest answer is that channel
+independence is NOT provable at the wire in this repo today.** `PROMPT.md` §10 asks that _"an
+action on one channel does not disturb another's state"_. The bridge is single-channel in exactly
+three places (`R-062`, filed by Phase 7 under owner answer A3): five verbs take `z.void()`, there is
+no channel-discovery call, and `fixedLayers` declares ONE bank on ONE channel. **There is no second
+channel to disturb**, so a wire test asserting the property would pass because the configuration
+cannot exist — not because the property holds. The app's own mock cannot express it either:
+`MockRuntime.load()` writes no `item.slot` at all.
+
+**What was built:** `apps/runtime/tests/channelIndependence.dom.test.ts` — 8 tests, four sections,
+each naming its own level.
+
+- **§1 — THE CONTRACT (proved).** The ADDRESS of a per-row verb is the ITEM; the CHANNEL is a fact
+  carried inside it (`StackItemStateSchema.slot.channel`, asserted non-empty first, then identity).
+  `StackTakeChannel` / `StackStopChannel` / `StackOutChannel` accept `{ itemId }`, **reject
+  `{ channel }`** and reject `undefined`. This is the contract half of owner answer A3, and it is
+  what makes the per-row verbs channel-**agnostic** rather than channel-**blind**.
+- **§2 — THE UI (proved).** Two rows in ONE React tree on ONE bridge stub, **on the same layer
+  number, on different channels** — the discriminating case, because a console keyed by layer alone
+  would collide there and pass everywhere else. Pressing STOP on channel 1's row dispatches
+  `{ itemId: 'item-ch1' }` exactly once; `take`, `out` and `remove` are untouched; channel 2's row
+  is `outerHTML`-identical before and after. The payload is then re-parsed through
+  `StackStopChannel.request` — so the row is not merely passing a unique id, it is using the only
+  address the contract offers. Positive control: the same press on channel 2's row names channel 2's.
+- **§3 — THE BOUND, PINNED SO IT CANNOT ROT (proved as a limit).** The five bulk verbs
+  (`removeAll`, `clearAll`, `stopAll`, `snapshot`, `silenceAllLivePlates`) are asserted to take
+  `z.void()` and to REJECT a channel. **For these, §10's sentence is FALSE by design, not by
+  defect** — and for `silenceAllLivePlates` that is owner answer A16, decided rather than deferred.
+  Pinning it means the day one of them gains a channel this test goes red and `R-062` must be read
+  before the change lands. Positive control: `StackTakeChannel.request` rejects `undefined`, so the
+  `safeParse(undefined).success === true` above is not satisfied by a schema that accepts anything.
+- **§4 — THE SELECTION (proved).** The console's only channel-scoped ACTION today is choosing which
+  channel the per-channel surfaces report on: every per-channel surface is read-only
+  (`ChannelSection` displays the raster and does not type it — Phase 7's §14.0 evidence;
+  `OutputsSection` reports). So the strongest true statement is that a selection is a pure scope
+  change: `channelStore` holds a CHOICE and no channel state, and a round trip through channel 2
+  returns the same answer for channel 1, with both channels' settings untouched. Positive control
+  inside the round trip: the resolution really moves to 2 first.
+
+#### 17.2.1 The plant pass for §2 and §3
+
+| Plant | What it broke                                                          | Result       | Note                                                      |
+| ----- | ---------------------------------------------------------------------- | ------------ | --------------------------------------------------------- |
+| C1    | `LayerRow` dispatches STOP by its LAYER coordinate instead of its item | **REDDENED** | `{ itemId: 'layer-70' }` — both rows collide, as designed |
+| C2    | `StackClearAllChannel` gains an optional `{ channel }`                 | **REDDENED** | _only after rebuilding `@cg/shared-ipc`_ — see below      |
+
+⚠ **C2 STAYED GREEN on the first attempt, and that is worth recording rather than hiding.**
+`apps/runtime` resolves `@cg/shared-ipc` from its BUILT `dist/`, so editing the package source
+changes nothing until `tsc -b` runs. The plant was re-run with a rebuild and reddened on the exact
+line (_"stack.clear-all cannot be scoped to a channel"_). The lesson generalises: **a plant against
+a workspace dependency is not a plant until it is built**, and a plant that "stays green" may be
+measuring the build, not the code.
+
+**What is NOT claimed by any of the four sections:** that two channels have been driven on a real
+bridge and left each other alone. That claim is not available today and this file does not make it.
+
+### 17.3 `B-242` — the jsdom-geometry sweep, in full
+
+**Scope:** every non-e2e test file under `apps/runtime/tests` — **154 files** (`git ls-files`,
+`tests/e2e/**` excluded; `apps/runtime/src` holds no test files). Swept in two passes, both
+`git grep` (never `grep -r`, never ripgrep — golden rule 9's NUL-blindness clause).
+
+**Pass 1 — the mechanical layout reads.** `getBoundingClientRect`, `getClientRects`,
+`offsetWidth/Height/Top/Left`, `clientWidth/Height/Top/Left`, `scrollWidth/Height/Top/Left`,
+`elementFromPoint`, `IntersectionObserver`. **ONE hit, and it is a comment** —
+`modalPrimitive.dom.test.ts:209`, explaining why a `getBoundingClientRect` would be meaningless
+there. **Zero assertions.**
+
+**Pass 2 — the wide net.** Every `expect(` line in those 154 files whose text mentions a geometry
+word (`width`, `height`, `overflow`, `rect`, `bounding`, `edge`, `clip`, `px`, `top`, `left`,
+`right`, `bottom`, `gap`, `padding`, `margin`, `inset`, `scroll`). **45 lines**, every one read and
+classified — not sampled:
+
+| Bucket                                                                                                                                                                                                                                                                                                                                                     | Count | Verdict                                                                                                                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The word matched incidentally (a look id `left`/`right`, `focus left the overlay`, `ENOSPC … left on device`, `pos=bottom-right`, layer variables `top`/`bottom`, `clip-path` inside emitted SVG)                                                                                                                                                          | 15    | Not geometry at all                                                                                                                                                                                                                                 |
+| A PURE FUNCTION's arithmetic (`livePlateGeometry` plate rects ×7, `frameBox` ×2)                                                                                                                                                                                                                                                                           | 9     | Real — no DOM is read; `livePlateGeometry:331` even carries a differ-control                                                                                                                                                                        |
+| A DECLARED value: the vanilla-extract style OBJECT (`layout.test.ts` ×5), the emitted CSS/SVG TEXT (`splashCss` ×4, `railWhiteBox`), manifest data (`frameEnvironment` ×2, `template-delivery`)                                                                                                                                                            | 13    | Real — these are cascade/source facts, which jsdom resolves faithfully (golden rule 12's own carve-out)                                                                                                                                             |
+| An INLINE style the component itself writes, asserted with a positive control beside it (`lookPicker:461` `overflowX` with `gridColumn`/`minWidth`; `previewPanel:185` `zIndex` ordering; `frameEnvironment:166–167` unchanged under a transform; `awaitingNotice:294/305`; `bannerCompact:56–57` and `outputMissingBanner:143` with `flexShrink === '0'`) | 7     | Real — reads the whole cascade for these elements (`features/shell` uses no `className`), and reddens under its own regression                                                                                                                      |
+| `layerTableHeader:140` — `air.parentElement.style.overflow` is `not 'hidden'`                                                                                                                                                                                                                                                                              | 1     | **Investigated as the one candidate, and CLEARED**: `styles.stateHead` is a genuine inline style object, its sibling `styles.cell` DOES set `overflow: 'hidden'`, and re-pointing one at the other is the realistic regression — which this reddens |
+
+⇒ **ZERO instances of `B-242`'s class in the runtime's dom tests. Nothing to move to Playwright,
+nothing to delete, and NO REMAINDER.** The same two passes over `packages/*/tests` and
+`tools/*/tests` return zero as well.
+
+🔴 **THE POSITIVE CONTROL, because a negative observation is void without one.** A temporary probe
+spec was planted at `apps/runtime/tests/zzz-b242-probe.dom.test.ts`, rendering a REAL `LayerRow`
+(contractually 67 px tall with `48 × 36` verbs — Phase 3, measured in Chromium) and asserting
+`rect.width === 0`, `rect.height === 0`, `offsetWidth === 0`, `offsetHeight === 0`,
+`scrollHeight === 0`, the verb block's width `=== 0` **and** `!== 48`, and that nothing ever
+overflows. **It PASSED.** Two things follow, and the second is the one that matters:
+
+1. the hazard is LIVE in this tree today — a box claim and its own contradiction are both green;
+2. **the sweep's instrument is live too** — with the probe present pass 1 returned **8** hits;
+   with it deleted, **1** (the comment). A grep that could not see the planted defect would have
+   made the clean result meaningless.
+
+The probe was deleted; it is not in the commit.
+
+### 17.4 `P-025` — the commit-message BOM guard, and a live turbo-inputs hole it exposed
+
+**The hook.** `.husky/commit-msg` → `tools/gate-hook/src/commit-msg-cli.mjs` →
+`commit-msg-decision.mjs`, the repo's existing decision/CLI split (`never-stage-*`,
+`pre-push-*`), with `types/commit-msg-decision.d.ts` and 8 unit tests.
+
+- It refuses a message whose **first bytes** are a BOM — `EF BB BF`, and the two UTF-16 marks, each
+  named in the refusal. A BOM later in the message is a paste or a quoted file and passes.
+- Every test case is written in **BYTES, never a string literal**: a `'﻿…'` literal would be
+  testing the test file's own encoding, and this defect is precisely one a text round trip makes
+  invisible.
+- **FAIL-OPEN** on a missing argument, an unreadable file or a short read. A guard that blocks
+  every commit when its own input is unreadable is worse than the defect.
+- The refusal names the remedy in one line: write the message file without a BOM and
+  `git commit -F <file>` — because `Out-File` / `Set-Content -Encoding utf8` / `>` all prepend one
+  on Windows PowerShell 5.1.
+
+⭐ **The first draft of these three files CONTAINED four literal `U+FEFF` characters** — in the
+comments that describe the mark, and in the mid-message test case. `eslint`'s
+`no-irregular-whitespace` caught all four on the gate's first run. Golden rule 9's NUL clause
+generalises one character over: **a file that talks about an invisible byte must not contain
+one.** The comments now spell it `<U+FEFF>` and the test builds it with
+`String.fromCharCode(0xfeff)`, which is also the honest thing for a test whose whole point is
+that a text round trip makes this defect vanish. Recorded rather than quietly fixed, because
+the trap caught the person writing the guard against it.
+
+🔴 **Proved BOTH WAYS against a real `git commit`**, in a throwaway repository outside the tree
+(`os.tmpdir()`, removed afterwards; nothing on the owner's machine touched):
+
+1. **the positive control FIRST** — a clean message _"feat(probe): a clean subject — with an
+   em-dash and سلام"_ **COMMITTED**, and `git cat-file commit HEAD` shows no BOM. Without this, "it
+   refused" would be satisfied by a hook that refuses everything;
+2. a message identical but for three leading bytes **REFUSED**, printing the one-line remedy;
+3. `git rev-list --count HEAD` = **1** — the refused commit really did not land.
+
+⚠ **`be883e3c` and `e800fd4e` STAND.** The owner's answer: nothing parses commit subjects, and
+rewriting shared history costs more than the byte. No force-push, no rewrite. The hook exists so
+there is no fourth.
+
+🔴 **AND THE HOLE THE NEW FILE EXPOSED — `turbo.json` did not hash `types/**`.** Adding
+`types/commit-msg-decision.d.ts`widened what`typecheck`READS;`tools/gate-hook/tsconfig.json`includes`types/**/\*`and its eslint config lints`types/**/\*.ts`, but neither task's turbo
+`inputs` listed it. **Measured, not asserted** (`CLAUDE.md`: this class fails silently and ONLY
+under a cache HIT, so neither `pnpm gate`'s forced run nor a cold CI runner can catch it):
+
+| Step                                                       | Before the fix                              | After                                |
+| ---------------------------------------------------------- | ------------------------------------------- | ------------------------------------ |
+| warm the cache                                             | `cache miss, executing` — exit 0            | `cache miss, executing` — exit 0     |
+| plant a real type error in `types/**`, change nothing else | **`cache hit, replaying logs` — exit 0** 🔴 | `cache miss, executing` — **exit 2** |
+| revert                                                     | `cache hit` — exit 0                        | `cache hit` — exit 0                 |
+
+`types/**` was added to BOTH `typecheck` and `lint` inputs **in this same commit**, per the rule.
+`tools/gate-hook` is the only workspace with a `types/` directory today (`git ls-files`), so the
+fix is complete rather than partial.
+
+### 17.5 What Phase 10 did NOT do, and why
+
+- It did **not** change one line of product behaviour. Phase 10 verifies; every red-first proof for
+  these properties belongs to the phase that built it (§10.3, §11.5, §13.5, §16.6). The only source
+  files touched outside tests are `turbo.json` (the inputs fix above) and the new hook.
+- It did **not** write a wire test for channel independence. §17.2 says why, at length, rather than
+  writing one that would pass for the wrong reason.
+- It did **not** move or delete any dom assertion for `B-242`: there were none of that class. It
+  also did not "tidy" the seven narrow inline-style assertions into something jsdom can answer
+  better — weakening an assertion to suit the engine is the same defect with a fresh coat.
+- It did **not** renumber `B-242`, and did **not** edit `CLAUDE.md`'s stale `bin/**` sentence. Both
+  are filed for the owner in §17.6.
+- It did **not** force-push, amend or rewrite `be883e3c` / `e800fd4e`.
+- It did **not** touch the bridge's refusal or preflight paths, the bank fencing,
+  `reconcileOnReconnect`, `LockPolicy`, any persisted key, file or schema, any colour literal, or
+  any string in Persian.
+
+### 17.6 🔴 THE PROGRAMME'S CLOSING POSITION
+
+**The ten phases are COMPLETE.** Phase 2 carries addendum 2A (an addendum, not an eleventh phase).
+Every phase from 2 onward has a completed, green Linux `e2e` run URL beside its ticked item, with
+the `E2E (Playwright)` job confirmed to have RUN.
+
+**The deletion guard: 28 items, ALL DISCHARGED.**
+
+- 26 items (1–26) preserved through the redesign and re-dressed in the new tokens (Phase 9.1).
+- Item **27** — the audit log's ACTOR column with its `B-143` caveat and the picker — is the one
+  item the redesign had to ADD BACK rather than preserve; built and discharged in Phase 8 under
+  owner answer A1.
+- Item **28** — the audio dialog's MUTE — is **CLOSED as a DELIBERATE REMOVAL**, decided at the
+  wire under owner answer A15, not lost.
+- 🔴 Every item was **PLANT-TESTED** in Phase 9.0 (§16.1): 33 unit plants plus two Playwright
+  plants, each item's render deleted or its condition made unreachable. All 23 ✅ entries reddened;
+  the four 🔴 entries (5, 7, 9, 22) stayed green exactly as the ledger predicted and now have the
+  tests that redden. Phase 10 re-ran the guard end to end: **149 runtime files / 1364 tests green**,
+  and items 19 / 20 / the lock geometry in Playwright.
+
+**The sixteen owner answers, and where each is recorded** _(there is no A7, A17 or A18 — §17.0)_:
+
+| #   | Answer                                                                    | Recorded in                                                             |
+| --- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| A1  | The audit-name picker STAYS, beside the actor column                      | `tasks.md` header · `design.md` §5b, §15.6 · guard 27                   |
+| A2  | The `docs/design/` settings mockups are ABANDONED                         | `tasks.md` header · `design.md` §6                                      |
+| A3  | The §4 single-channel finding was too strong; three gaps                  | `tasks.md` header · `design.md` §4 · `R-062`                            |
+| A4  | TWO GREENS is a rule — on-air green ≠ healthy mint                        | `tasks.md` header · `design.md` §9 · `theme.test.ts`                    |
+| A5  | The marked-row edge bars at 3.68:1 are correct and stay                   | `tasks.md` header · `design.md` §9                                      |
+| A6  | `--r-text-muted` 4.39:1 was an accepted fail; Phase 3 closed it at 4.89:1 | `tasks.md` header · `design.md` §9, §10.4                               |
+| A8  | 🔴 WAVE 1 IS REJECTED — `48 × 36` stays                                   | `tasks.md` header · `design.md` §11.1 · `PROMPT.md` §3                  |
+| A9  | `--r-row-icon-btn-narrow-w` is DELETED, not documented-dead               | `tasks.md` header · `design.md` §11.1                                   |
+| A10 | `PROMPT.md` §0 gains RENDERED-NOT-AUTHORED                                | `PROMPT.md` §0 (commit `0572102e`) · `design.md` §11.1                  |
+| A11 | `PROMPT.md` §3's numbers marked SUPERSEDED in place                       | `PROMPT.md` §3 (commit `0572102e`) · `design.md` §11.1                  |
+| A12 | 🔴 No SECOND claim about air on a row that already says                   | `tasks.md` header · `design.md` §12.8 · `runtime-ui` spec               |
+| A13 | `R-060` closed: `monitorsShown` does NOT persist                          | `tasks.md` header · `R-060` · `runtime-ui` spec                         |
+| A14 | `R-061` SPLIT — (a) done in Phase 6, (b) PARKED                           | `tasks.md` header · `design.md` §13 · `R-061`                           |
+| A15 | 🔴 MUTE's removal was DELIBERATE, decided at the wire                     | `tasks.md` header · `design.md` §14.0 · guard 28                        |
+| A16 | 🔴 `silenceAllLivePlates` stays UNSCOPED; its label says so               | `tasks.md` header · `R-062` · `liveSourcesPanel.dom.test.ts` · §17.2 §3 |
+
+**What remains OPEN, and who owns it:**
+
+| Open item                                   | State                                                                                                                                                                                                                                                                                    | Owner                           |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| `R-061(b)` — a Reset for the position draft | **PARKED**, not built. Discard already undoes edits (owner answer A14).                                                                                                                                                                                                                  | owner, when he wants it         |
+| `R-062` — the three single-channel gaps     | **OPEN.** (1) five `z.void()` bulk verbs — now PINNED by test (§17.2 §3); (2) no channel-discovery call — `channelIds` is the function one would feed; (3) `fixedLayers` = one bank, one channel. Each is a CONTRACT change, which `PROMPT.md` §7/§11 forbids a UI phase from inventing. | a bridge change, not a redesign |
+| The mock's missing `slot`                   | **OPEN, filed.** `MockRuntime.load()` writes no `item.slot`, so the app's mock cannot express two channels — which is half of why §17.2 is bounded as it is.                                                                                                                             | small, unowned                  |
+| `P2.DEL`                                    | **OWNER-GATED, gate MET, and NOT part of this programme.** `multibox-layout-switch` §1b; `D-160` records that the plant record meets its gate and the "no transitions" decision turns its two PARKED rows into DELETE rows. Nothing in `RUNTIME-REDESIGN-01` touches it.                 | owner                           |
+| `B-242` double-booked                       | **FILED HERE** (§17.0 item 2). Two meanings, one number, neither with a `##` heading in `bugs-runtime.md`.                                                                                                                                                                               | owner / next `B-` audit         |
+| `CLAUDE.md`'s stale `bin/**` note           | **FILED HERE** (§17.0 item 3). The notch it calls open is closed; the sentence was not updated.                                                                                                                                                                                          | owner (shared config)           |
+
+**Did any phase leave a remainder?** **No.** Every phase's `tasks.md` items are ticked, each with
+its Linux `e2e` URL; Phase 9 discharged the last four owed guard tests; Phase 10's `B-242` sweep
+was completed in full over all 154 files with no remainder. The four items above are OPEN WORK
+FILED WITH OWNERS, not unfinished phase work.
+
+### 17.7 The runs
+
+- The two plant passes: 5 + 1 plants on the bridge (§17.1.1) and 2 on the renderer / contract
+  (§17.2.1), each applied alone, each reverted **by its original bytes** with `Buffer.equals`
+  confirming byte-identity, and the suite green again after every revert.
+- The `B-242` probe and the turbo-inputs probe, both in the scratchpad, both reverted; the probe
+  spec deleted (`git status` carries none of them).
+- The BOM hook proved end to end in a throwaway git repository, removed afterwards.
+- `pnpm --filter @cg/runtime exec vitest run` — **149 files / 1364 tests passed** (37.7 s).
+- `pnpm --filter @cg/caspar-bridge exec vitest run` — **103 files / 836 tests passed** (32.3 s).
+- `pnpm gate`, OpenSpec and the Linux `e2e` are recorded beside `tasks.md` 10.3.

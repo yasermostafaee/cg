@@ -1,0 +1,14 @@
+# P-025 — REFUSE a commit message that begins with a byte-order mark.
+#
+# PowerShell 5.1's `Out-File`, `Set-Content -Encoding utf8` and `>` all prepend
+# `EF BB BF`. git stores the message verbatim, so the subject then renders as
+# `<BOM>docs(runtime): …` in every log, forever. It has happened three times.
+# Nothing parses commit subjects, so each one is cheap — but removing one after
+# the fact means rewriting pushed history, which is not. Cheap to prevent,
+# expensive to undo: that asymmetry is what this hook is for.
+#
+# FAIL-OPEN by construction: a missing path, an unreadable file or a missing node
+# all pass. The only thing that refuses is a BOM actually found at byte 0.
+#
+# Logic + tests: tools/gate-hook/src/commit-msg-decision.mjs.
+node tools/gate-hook/src/commit-msg-cli.mjs "$1" || exit 1

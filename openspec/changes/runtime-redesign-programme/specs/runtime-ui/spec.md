@@ -612,3 +612,34 @@ no URL is a claim, not a discharge.
 - **WHEN** a phase that changes what a surface renders is reported **THEN** its evidence is a
   completed green Linux `e2e` job on the code head, cited by URL, and a green `pnpm gate` is not
   offered in its place
+
+### Requirement: A row verb is addressed by its item, and only the bulk verbs are station-wide
+
+The Runtime SHALL address every per-row playout verb by the item it acts on, never by a channel or
+a layer coordinate. The channel a row belongs to is a fact carried inside the item
+(`StackItemState.slot.channel`), so two rows sharing a layer number on different channels are two
+distinct addresses; a surface that dispatched by layer would collide there and behave correctly
+everywhere else, which is why the property is asserted on exactly that case.
+
+The five bulk verbs — `stack.removeAll`, `stack.clearAll`, `stack.stopAll`, `stack.snapshot` and
+`stack.silenceAllLivePlates` — take no argument and are therefore station-wide BY CONTRACT. That is
+recorded as a bound rather than a defect: for `silenceAllLivePlates` it is the owner's decision
+(A16 — the scope of a panic is not the caller's to choose), and for the other four it is the state
+`R-062` describes. A test SHALL pin their request shape so that adding a channel to one of them
+cannot land without that ledger being read.
+
+Channel independence beyond this is NOT claimed. The bridge is single-channel in three places, so
+no test in this repository can drive two channels and observe one leaving the other alone; a
+verification SHALL state that bound rather than asserting the property from a surface that cannot
+see it.
+
+#### Scenario: Two rows on the same layer number, different channels
+
+- **WHEN** a playout verb is pressed on a row belonging to one channel, while another row on a
+  different channel declares the same layer number **THEN** exactly one dispatch is made, carrying
+  that row's item id in the verb channel's own request shape, and the other row is unchanged
+
+#### Scenario: A bulk verb cannot be pointed at a channel
+
+- **WHEN** a bulk verb's request shape is read **THEN** it accepts no argument and rejects a
+  channel, and the ledger entry that explains why is cited beside the assertion

@@ -20,6 +20,7 @@
       "inputs": [
         "src/**",
         "tests/**",
+        "types/**",
         "tsconfig.json",
         "tsconfig.typecheck.json",
         "vite.config.*",
@@ -30,7 +31,15 @@
     "lint": {
       "dependsOn": ["@cg/eslint-config#build"],
       "outputs": [],
-      "inputs": ["src/**", "tests/**", "bin/**", ".eslintrc*", "eslint.config.*", "package.json"]
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "types/**",
+        "bin/**",
+        ".eslintrc*",
+        "eslint.config.*",
+        "package.json"
+      ]
     },
     "test": {
       "dependsOn": ["^build", "build"],
