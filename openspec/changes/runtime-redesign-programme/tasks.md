@@ -591,10 +591,10 @@ the lock (§16.5), the red-first matrix (§16.6), what was not done (§16.7) and
       reference's caution PAIR; the CLEAR verb reads `--r-caution-fill`; the ink token is read as
       ink only, every reader grepped.
 - [x] 9.4 One test per guarded surface, each proving it still renders under its condition, and
-      each proved to REDDEN when the surface is removed (§16.1). `pnpm gate` — **`93 successful,
-  93 total · 0 cached, 93 total`**, foreground, 3 m 26 s, prettier clean, OpenSpec `78 passed,
-  0 failed` (its first run was red on ONE lint error in the new e2e spec, an inline `import()`
-      type — fixed, re-run green). `pnpm --filter @cg/runtime test:e2e` — **145 passed (3.8 m)**,
+      each proved to REDDEN when the surface is removed (§16.1). `pnpm gate` —
+      **`93 successful, 93 total · 0 cached, 93 total`**, foreground, 3 m 26 s, prettier clean,
+      OpenSpec 78 passed / 0 failed (its first run was red on ONE lint error in the new e2e spec,
+      an inline `import()` type — fixed, re-run green). `pnpm --filter @cg/runtime test:e2e` — **145 passed (3.8 m)**,
       Windows, against the gate's fresh build, on the third run: the first two lost 1 and then 4
       specs to `page.goto` load timeouts (the `B-098` class) with two STALE `vite preview` servers
       from earlier sessions still on the host; with those stopped, the four re-ran 20 / 20 and the
