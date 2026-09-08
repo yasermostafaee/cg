@@ -1853,5 +1853,7 @@ only?`; `How are outputs identified?`; the three contract tags) and no sentence 
   specs **9 / 9**, then the whole suite green (the count is in `tasks.md` 7.5). ⚠
   NON-AUTHORITATIVE (golden rule 12a).
 - `pnpm gate`: recorded in `tasks.md` 7.5 with its `0 cached` line.
-- The Linux `e2e` on the code head: URL, duration and that it RAN, recorded beside `tasks.md`
-  7.5 by the follow-up docs commit, as every phase before it.
+- The Linux `e2e` on the code head `f9fd0d03`:
+  <https://github.com/yasermostafaee/cg/actions/runs/34225793746> — `conclusion: success`,
+  11 m 03 s; the `E2E (Playwright)` job RAN 10 m 42 s (12:23:37Z → 12:34:19Z), its `E2E` step
+  12:24:40Z → 12:34:10Z. Recorded beside `tasks.md` 7.5, as every phase before it.

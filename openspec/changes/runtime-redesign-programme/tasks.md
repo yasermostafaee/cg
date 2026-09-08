@@ -467,8 +467,13 @@ Channel pane with every delta fixed or argued, the wave counts, the red-first ma
       storage (grep). `pnpm --filter @cg/runtime test:e2e` — **141 passed (1.8 m)**, Windows,
       against a fresh `vite build`, after two geometry corrections the first run surfaced (a 45 px
       tab under the console's line-height; the frame spec's slack read at 720 tall). ⚠
-      **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this. Linux `e2e` URL:
-      _recorded by the follow-up docs commit once the run on the code head completes._
+      **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `f9fd0d03`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34225793746> — run `conclusion: success`,
+      11 m 03 s (12:23:22Z → 12:34:25Z). The **`E2E (Playwright)` job RAN** (12:23:37Z →
+      12:34:19Z, 10 m 42 s, `conclusion: success`, its `E2E` step executed 12:24:40Z → 12:34:10Z);
+      it was not skipped, which is the half a green run alone does not prove (golden rule 12b).
+      `Lint • Typecheck • Test • Build` also ran green (12:23:36Z → 12:31:26Z).
 
 ## Phase 8 — Template library, import, and the audit log
 
