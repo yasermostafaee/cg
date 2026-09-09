@@ -92,7 +92,13 @@ interface Props {
 
 export function MonitorPanel({ id, title, icon, emptyLabel, detail }: Props): JSX.Element {
   return (
-    <Panel id={id} title={title} style={{ flex: 1, minWidth: 0 }}>
+    <Panel
+      id={id}
+      title={title}
+      /* REPAIR-03 A1, audit row 38 — the monitor box's own ground (--r-monitor-bg), a
+         shade below the panels around it so the screen reads as inset. */
+      style={{ flex: 1, minWidth: 0, background: cssVars['--r-monitor-bg'] }}
+    >
       {/*
         `role="img"` with a name, NOT a bare decorative box: a screen reader user
         needs the same fact a sighted operator gets from the label — there is an

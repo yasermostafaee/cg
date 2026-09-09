@@ -75,6 +75,7 @@ test('§3 — a row, its cells and its six verbs are exactly what the token home
       rowBg: read('--r-row-bg'),
       emptyBg: read('--r-row-empty-bg'),
       raised: read('--r-surface-raised'),
+      rowHover: read('--r-row-hover-bg'),
       selectedFill: read('--r-row-selected-fill'),
       accent: read('--r-accent'),
     };
@@ -157,6 +158,7 @@ test('§3 — hover lifts a loaded row and leaves an empty one alone; selection 
     const read = (n: string): string => cs.getPropertyValue(n).trim();
     return {
       raised: read('--r-surface-raised'),
+      rowHover: read('--r-row-hover-bg'),
       emptyBg: read('--r-row-empty-bg'),
       selectedFill: read('--r-row-selected-fill'),
       accent: read('--r-accent'),
@@ -171,9 +173,18 @@ test('§3 — hover lifts a loaded row and leaves an empty one alone; selection 
   const expectBg = (layer: number, rgb: string): Promise<void> =>
     expect.poll(() => bg(layer), { message: `layer ${String(layer)} background` }).toBe(rgb);
 
-  // HOVER — the loaded row lifts to the raised surface.
+  /*
+    HOVER — the loaded row LIFTS.
+
+    ⚠ `REPAIR-03` A2 — it used to read `--r-surface-raised`, which measured **1.02:1** against
+    the row and was DARKER than it: an invisible hover on the one table whose whole interaction
+    is clicking a row. The reference is no better at 1.04:1, so there was nothing to adopt and
+    the row now has its own `--r-row-hover-bg` at 1.20:1. The RATIO is asserted in
+    `layer-row-hover.spec.ts`; what this line pins is that the row reads the token it is
+    supposed to read.
+  */
   await app.layerRow(70).locator('[data-row-body]').hover();
-  await expectBg(70, await cssColour(page, t.raised));
+  await expectBg(70, await cssColour(page, t.rowHover));
   // …and the EMPTY row does not react: it has nothing to select and must not invite it.
   await app.layerRow(74).locator('[data-row-body]').hover();
   await expectBg(74, await cssColour(page, t.emptyBg));

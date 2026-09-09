@@ -1398,6 +1398,39 @@ export const cssVars = {
    * `--inset`, so nothing looks stranded in the meantime.
    */
   '--r-row-bg': 'rgb(30 38 51)',
+  /**
+   * 🔴 `REPAIR-03` A2 — THE LAYER ROW'S HOVER. **A defect in both trees, fixed with a value
+   * from neither.**
+   *
+   * The row hover read `--r-surface-raised` `#1b2532`, which is **1.02:1 against the row** and
+   * DARKER than it — on a table whose whole interaction is "click a row to select it", that is
+   * an invisible affordance. The reference is no better: its `#1F2937` measures **1.04:1**. So
+   * this is not a delta to adopt in either direction; it is a usability failure the drawing
+   * shares, and copying it would have been copying the bug.
+   *
+   * **`#283443` — 1.20:1 against `--r-row-bg`**, and LIGHTER, because a row that darkens under
+   * the pointer reads as pressed and, worse, as an EMPTY row (an unloaded row is darker here).
+   *
+   * ── THE CEILING IS AA, AND IT IS WHY THIS IS NOT LIGHTER ─────────────────────────────
+   *
+   * The binding constraint is the muted ink the row actually carries — `--r-text-muted`
+   * `#8e9eaf` on the row NUMBER (13.6 px / 700) and the `REMOVE` label (12.8 px / 600), neither
+   * of which is WCAG "large text". It measures **4.61:1** on this fill; one step lighter
+   * (`#2a3646`) drops it to 4.47 and breaks AA. So 1.20 is the most contrast this hover can
+   * have while the row's own text stays legible, and the value is the ceiling rather than a
+   * preference.
+   *
+   * ⚠ **REPORTED, NOT RE-TUNED: hover vs the SELECTED fill is 1.04:1, and it cannot be widened
+   * from here.** The selection wash (`--r-row-selected-fill` over the row) sits at 1.25:1, i.e.
+   * almost exactly where the AA ceiling puts the hover. Separating them by FILL would mean
+   * either dropping `--r-text-muted` below AA on a hovered row or moving the selection wash —
+   * both the owner's calls. What distinguishes them today is the selection's **2 px accent
+   * frame at 8.55:1**, which is the property `layerRowHover.spec.ts` asserts.
+   *
+   * Every ink re-measured on this fill: `--r-text` 11.32:1, `--r-text-secondary` 6.47:1,
+   * `--r-text-muted` 4.61:1.
+   */
+  '--r-row-hover-bg': '#283443',
   '--r-row-empty-bg': '#10141E',
   '--r-row-selected-fill': SELECTED_WASH,
   /**
@@ -1551,8 +1584,28 @@ export const cssVars = {
    * prop). The two-edge measurement (`station-setup-frame.spec.ts`) is about the frame being
    * ONE box on every tab, and it holds at either size.
    */
-  '--r-modal-w-prose': 'min(460px, 92vw)',
-  '--r-modal-w-wide': 'min(720px, 94vw)',
+  /*
+   * ── 🔴 `REPAIR-03` B — THE MODAL WIDTH TABLE, WHICH IS THE REFERENCE'S OWN ──────────────
+   *
+   * Measured in Chromium at 1280 × 800 by OPENING each `<dialog>`, never read off the
+   * stylesheet: `.modal`'s width is restated twice and the second restatement
+   * (`width:100vw`) is inside a narrow `@media`, so the file's "last rule" is NOT what paints
+   * at this viewport. Every number below is what the browser reported.
+   *
+   *   `.modal.small`   min(500px, 100vw − 32)   → the confirm dialog        → `prose`
+   *   `.audio-modal`   860px                    → the live-plate audio      → `wide`
+   *   `.audit-modal`   min(1250px, 100vw − 56)  → the audit log             → `ledger`  (already)
+   *   `.settings`      min(1140px, 100vw − 64)  → Station setup             → `fixed`   (already)
+   *   `.modal` base    min(1120px, 100vw − 56)  → the template picker       → audit row 97, NOT this session
+   *   `.import-modal`  750px                    → the import wizard         → audit row 107, not built
+   *
+   * ⚠ `wide` is also worn by the picker and the live-source swap dialog. Moving it 720 → 860
+   * takes the picker TOWARD its own 1120 rather than away from it, and the swap dialog has no
+   * reference equivalent at all; the picker's own width stays audit row 97's, which the owner
+   * placed outside this session.
+   */
+  '--r-modal-w-prose': 'min(500px, calc(100vw - 32px))',
+  '--r-modal-w-wide': 'min(860px, 94vw)',
   /**
    * `RUNTIME-REDESIGN-01` Phase 8 — the LEDGER frame: a dialog that IS a table read across
    * many columns, the audit log. The reference's `.audit-modal{width:min(1250px,calc(100vw -
@@ -1603,6 +1656,79 @@ export const cssVars = {
    * Scoped `-fixed` because the reference gives its several dialogs several values for each
    * of these — see `Modal.tsx`'s `dialogFixed` for the numbers and the argument.
    */
+  /*
+   * ── 🔴 `REPAIR-03` B — THE OUTER `.modal` FAMILY, AS RENDERED ───────────────────────────
+   *
+   * The reference has THREE dialog families and this is the first of them: `.modal` in the
+   * OUTER document (picker, import, audit log, live audio, `#confirm-dialog`). The other two
+   * are `.settings` and `.sub-dialog`, both inside the Station-setup SHADOW ROOT with their
+   * own stylesheet and their own mint palette — see the `-fixed` block below and §20.2.
+   *
+   * Measured by opening each `<dialog>` at 1280 × 800. Wave counts in the outer sheet (one
+   * `<style>`, 82,256 bytes, 1,067 rules): `.modal` 2 (the second is a narrow `@media`),
+   * `.modal-head` 3, `.modal-foot` 3, `.modal-body` 1, `.modal-icon` 2, `.btn` 1.
+   *
+   * ⚠ THE FRAME'S CHROME IS FLUSH — a head band with its own ground and a rule under it, a
+   * body that owns its padding, and a footer band with its own ground and a rule over it. The
+   * `fixed` size already worked this way; this brings the other three into the same shape,
+   * which is one treatment instead of two rather than a second one.
+   */
+  '--r-modal-radius': '14px',
+  '--r-modal-shadow': '0 30px 100px rgba(0, 0, 0, 0.667)',
+  /** The frame's edge — `#3a4c60`, a step brighter than `--r-border`, so a dialog reads as lifted. */
+  '--r-modal-line': '#3a4c60',
+  /** `.modal-head{padding:22px 26px;gap:14px;background:#172230}`. */
+  '--r-modal-head-pad': '22px 26px',
+  '--r-modal-head-gap': '14px',
+  '--r-modal-head-bg': '#172230',
+  /** Its title — 18 px / 650, which resolves to the 700 face here (A3). */
+  '--r-modal-title-text': '18px',
+  /** `.modal-body{padding:22px}` on the confirm dialog; the audio dialog insets `0 20px`. */
+  '--r-modal-body-pad': '22px',
+  /** `.modal-foot{padding:16px 26px;gap:12px;background:#14202d}`, rendered 72 px tall. */
+  '--r-modal-foot-pad': '16px 26px',
+  '--r-modal-foot-gap': '12px',
+  '--r-modal-foot-bg': '#14202d',
+  /**
+   * 🔴 THE FOOTER FLOOR FOR EVERY DIALOG THAT IS NOT `fixed` — 72 px, measured.
+   *
+   * ⚠ THERE ARE NOW TWO FLOORS AND EACH BELONGS TO ONE FAMILY. `--r-modal-foot-h` below is
+   * **74 px** and is the `fixed` frame's, from the reference's `.panel-foot{min-height:74px}`;
+   * this one is **72 px** and is the outer `.modal` family's, from its `.modal-foot`. Neither
+   * is "the" floor and neither may be composed from what a section puts in it — a height that
+   * belongs to BEING a footer cannot be a function of its contents (`B-240`). The 59 px that
+   * appears in this file's history was the abandoned mockup's arithmetic and is neither.
+   */
+  '--r-modal-foot-h-base': '72px',
+  /**
+   * THE HEAD EMBLEM — `.modal-icon`, 42 × 42, radius 10, on `#20384d` with a `#3b5770` edge
+   * and a `#9edcfa` glyph. Audit rows 62, 98 and 113 (the audio dialog, the picker and the
+   * audit log); row 72 is the `fixed` frame's, which the reference draws at the same box.
+   *
+   * ⚠ The reference's `#confirm-dialog` has NO emblem, and that is a decision rather than an
+   * omission: a confirmation asks a question in words, and a decorative mark beside a
+   * destructive one adds furniture where the sentence is the whole content.
+   */
+  '--r-modal-emblem-box': '42px',
+  '--r-modal-emblem-radius': '10px',
+  '--r-modal-emblem-bg': '#20384d',
+  '--r-modal-emblem-line': '#3b5770',
+  '--r-modal-emblem-ink': '#9edcfa',
+  '--r-modal-emblem-glyph': '20px',
+  /**
+   * ── THE BUTTON FAMILY (audit rows 87 and 106) ────────────────────────────────────────
+   *
+   * The reference's outer `.btn` renders `min-height:39px`, `border-radius:7px`,
+   * `padding:9px 14px`, `14px / 550`; its `.btn.small` 33 px / 13 px. The app's modal footer
+   * button was 36 px, radius 4, `12.8px / 600`.
+   *
+   * ⚠ The Station-setup family's is DIFFERENT AGAIN — 40 px, radius 8, `9px 15px` — which is
+   * why this is scoped to the modal footer rather than applied to `.cg-btn` at large. One
+   * primitive, two footers, and the drawing gives two numbers.
+   */
+  '--r-modal-btn-h': '39px',
+  '--r-modal-btn-radius': '7px',
+  '--r-modal-btn-text': '14px',
   '--r-modal-radius-fixed': `${String(STATION_SETUP_PX.frameRadius)}px`,
   '--r-modal-shadow-fixed': '0 32px 100px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.2)',
   '--r-modal-title-text-fixed': `${String(STATION_SETUP_PX.titleTextFrame)}px`,
@@ -1731,6 +1857,19 @@ export const cssVars = {
    * reference. The checkers are the "no picture here" stand-in behind a rehearsal
    * plate, and the hatch is the "this plate is not in this look" fill.
    */
+  /**
+   * `REPAIR-03` A1, audit row 38's other half — THE MONITOR BOX's own ground, adopted.
+   *
+   * The reference paints `.monitor` on `#101722`, a near-black between its `--bg` and its
+   * `--surface` and declared as neither. `MONITORS-01` argued it away with the stale-hex
+   * claim; run against the owner's narrow test it FAILS part (b) — `#101722` is nowhere in
+   * §7's "was" column — so it is the drawing's own decision and it is taken.
+   *
+   * It is a MONITOR ground, not a panel ground: the box holds a picture, and sitting it a
+   * shade below the panels around it is what makes the screen read as inset rather than as
+   * another card. `--r-video-ground` below is still the SCREEN itself and still black.
+   */
+  '--r-monitor-bg': '#101722',
   '--r-video-ground': '#000',
   '--r-checker-a': '#3D4253',
   '--r-checker-b': '#5B6075',
@@ -1762,46 +1901,31 @@ export const cssVars = {
   '--r-weight-semibold': '600',
   '--r-weight-bold': '700',
   /*
-   * ── 🔴 `MONITORS-01` — THE REFERENCE'S HALF-STEPS, AND WHAT THIS APP'S FONT DOES WITH THEM ──
+   * ── 🔴 `REPAIR-03` A3 — THE REFERENCE'S HALF-STEPS ARE NOT DECLARED HERE, AND THAT IS THE
+   *    DECISION, NOT AN OVERSIGHT ────────────────────────────────────────────────────────
    *
-   * The reference's type scale has 450, 550 and 650 as well as the whole hundreds, and six
-   * surfaces in the audit's cheap bucket are one of them (`.outputs th` 450, `.tag` /
-   * `.video-mode strong` / `.plate-table th` / `.btn.small` 550, `.panel-scroll h2` 650). This
-   * console had quantised every one onto the three steps above, which is the delta.
+   * The reference's type scale uses 450, 550 and 650 as well as the whole hundreds (`.outputs
+   * th` 450; `.tag` / `.video-mode strong` / `.plate-table th` / `.btn.small` 550;
+   * `.panel-scroll h2` 650). `MONITORS-01` declared `--r-weight-450/550/650` for them. They are
+   * DELETED, because a token that cannot render is the same class as a dead token and dead
+   * tokens are deleted rather than documented-dead (owner answer A9).
    *
-   * 🔴 **THESE ARE NOT HALF STEPS ON SCREEN, AND THAT IS MEASURED, NOT ASSUMED.** This app
-   * ships Exo 2 as FIVE STATIC FACES (400/500/600/700/800, `fonts.css`) — there is no variable
-   * axis — so CSS font matching snaps a half step to a neighbour. Measured in Chromium with the
-   * real faces inlined, at 40 px, by rendered width:
+   * 🔴 **MEASURED, NOT ASSUMED — BOTH TREES.** This app ships Exo 2 as FIVE STATIC FACES
+   * (400/500/600/700/800, `fonts.css`); there is no variable axis, so CSS font matching snaps a
+   * half step to a neighbour. In Chromium at 40 px with the real faces inlined, by rendered
+   * width: `450 → 500`, `550 → 600`, `650 → 700`. So each rule now spells the face that
+   * actually paints, and NOTHING ON SCREEN MOVED when the three tokens went.
    *
-   *     400 → 466.17    450 → 469.61    500 → 469.61     ⇒ 450 renders AS 500
-   *     550 → 476.84    600 → 476.84                     ⇒ 550 renders AS 600
-   *     650 → 484.97    700 → 484.97                     ⇒ 650 renders AS 700
+   * ⭐ **FINDING, recorded because it changes how the drawing should be read: the reference
+   * does not render its own half steps either.** Its stack is `Inter, "Segoe UI", …` and
+   * `document.fonts` is EMPTY — no face is loaded at all — so it falls back and groups
+   * {400, 450} / {500, 550, 600} / {650, 700}. The drawing declares a scale finer than anything
+   * that draws it, its own browser included. A half step in that file is therefore evidence of
+   * INTENT (heavier / lighter than its neighbour), never of a value to transcribe.
    *
-   * ⚠ **The reference does not render them as half steps either.** Its own stack is
-   * `Inter, "Segoe UI", …` with NO face loaded (`document.fonts` is empty), so on the measuring
-   * host it falls to Segoe UI and groups {400, 450} / {500, 550, 600} / {650, 700}. The drawing
-   * declares a scale finer than anything that draws it.
-   *
-   * SO WHY DECLARE THEM AT ALL? Because the token then says what the REFERENCE says, and the
-   * app's rendered weight follows from the font rather than from a second decision nobody
-   * recorded. Two consequences the owner should know, both reported rather than tuned away:
-   *
-   *   • `--r-weight-450` is a VISUAL NO-OP here — it resolves to the same face as
-   *     `--r-weight-medium`. It is declared so `.outputs th` cites the drawing instead of
-   *     coinciding with it; nothing on screen moves.
-   *   • `--r-weight-550` and `--r-weight-650` each land ONE STEP HEAVIER than the value they
-   *     replace (500 → 600, 600 → 700). That is a real change and it is the reference's own
-   *     direction; if a shipped variable Exo 2 ever lands, these resolve to the true half step
-   *     with no edit here.
-   *
-   * ⚠ Do NOT "simplify" these to 500/600/700 — that deletes the citation and re-introduces the
-   * quantisation, and it would look like a tidy-up rather than a decision.
-   */
-  '--r-weight-450': '450',
-  '--r-weight-550': '550',
-  '--r-weight-650': '650',
-  // Borders / elevation
+   * ⚠ Do NOT re-add these, and do NOT add font faces to make them real — shipping a variable
+   * Exo 2 is a font-loading decision with a bundle cost, and it is the owner's to make.
+   */ // Borders / elevation
   '--r-focus-ring': '2px',
   '--r-shadow-1': '0 1px 3px rgba(0, 0, 0, 0.35)',
   '--r-shadow-2': '0 4px 16px rgba(0, 0, 0, 0.4)',
@@ -1905,6 +2029,29 @@ export const cssVars = {
    * ── `RUNTIME-REDESIGN-01` PHASE 4 — the look strip (`LOOK_STRIP_PX`, cited to the RENDERED
    * rules above it). Read by `.cg-look-cell`, `.cg-look-thumb` and `LookPicker`'s label.
    */
+  /*
+   * ── 🔴 `REPAIR-03` A1 — THE LOOK SEGMENT'S OWN COLOURS (audit rows 20 and 21), ADOPTED ──
+   *
+   * `MONITORS-01` argued these away as "the prototype's fourth wave is painted in this
+   * console's retired hexes". That argument is right about SOME values and was applied too
+   * widely, so the owner narrowed it to a two-part test: a reference value is stale ONLY when
+   * it is (a) absent from the reference's own nineteen declared `:root` colours AND (b) equal
+   * to a hex this app RETIRED in Phase 2. Everything else is adopted.
+   *
+   * Run per value, none of these six is retired — `#151e2c`, `#56667d`, `#dbe4f0`, `#285273`,
+   * `#91d7ff`, `#ffffff` appear nowhere in §7's "was" column. They fail (b), so they are the
+   * drawing's own decisions and they are taken.
+   *
+   * ⚠ THE SELECTED FRAME IS A 1 px INSET IN `#91d7ff`, not the app's 2 px inset in
+   * `--r-surface`. The app's device drew a dark gap; the reference's draws a bright edge, and
+   * with the fill it is what says "this look is the one".
+   */
+  '--r-look-btn-bg': '#151e2c',
+  '--r-look-btn-line': '#56667d',
+  '--r-look-btn-ink': '#dbe4f0',
+  '--r-look-btn-sel-bg': '#285273',
+  '--r-look-btn-sel-line': '#91d7ff',
+  '--r-look-btn-sel-ink': '#ffffff',
   '--r-look-btn-h': `${String(LOOK_STRIP_PX.btnH)}px`,
   '--r-look-btn-min-w': `${String(LOOK_STRIP_PX.btnMinW)}px`,
   '--r-look-btn-pad': `${String(LOOK_STRIP_PX.btnPadY)}px ${String(LOOK_STRIP_PX.btnPadX)}px`,

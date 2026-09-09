@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Volume2 } from 'lucide-react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { Modal, ModalAction } from '../../ui/Modal.js';
@@ -195,6 +196,8 @@ export function LivePlateAudioDialog({
   return (
     <Modal
       title="Live plate audio"
+      /* `REPAIR-03` B, audit row 62 — the reference draws a 42 px volume emblem in this head. */
+      emblem={Volume2}
       onClose={onClose}
       size="wide"
       {...(refusal !== null && { message: { role: 'refusal' as const, text: refusal } })}

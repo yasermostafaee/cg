@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Layers, Monitor, Radio, Server, Type, type LucideIcon } from 'lucide-react';
+import {
+  Layers,
+  Monitor,
+  Radio,
+  Server,
+  SlidersHorizontal,
+  Type,
+  type LucideIcon,
+} from 'lucide-react';
 import type { ConnectionConfig, TemplateServeInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { isLoopbackHost } from '../../../shared/loopback.js';
@@ -593,6 +601,8 @@ export function StationSetupDialog({
   return (
     <Modal
       title="Station setup"
+      /* `REPAIR-03` B, audit row 72 — the reference draws an emblem in this head. */
+      emblem={SlidersHorizontal}
       /*
         `RUNTIME-REDESIGN-01` Phase 7 — the reference's `.settings-subtitle` (`Channel 1 · News ·
         Primary A`): the channel this dialog's per-channel tab reports, and which server is

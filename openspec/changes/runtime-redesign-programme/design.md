@@ -3273,3 +3273,184 @@ identified that wave correctly and then its RECOMMENDATION section sorted the sa
 "cheap, should have been adopted". **The two halves of that document disagree, and Part 3 is the
 one that measured.** The owner should decide whether the remaining bucket-C colour rows inherit
 this disposition before anyone spends a session on them one at a time.
+
+## §20 — `REPAIR-03`: THE MODAL FAMILY, AND THREE CORRECTIONS TO `REPAIR-02`
+
+**2026-09-09, after `MONITORS-01`.** This closes the audit's remaining MODAL items — the four
+dialog emblems from the medium bucket, the modal width table and button family from the
+structural one, and the two dialogs that had never been compared to anything at all.
+
+### 20.0 THE ENUMERATION, FROM THE TREE
+
+Written from the tree rather than from memory, because the audit's two bucket-D dialogs were
+missed exactly once already by an enumeration that was not.
+
+| #   | surface                  | app                                       | reference                                              | family     |
+| --- | ------------------------ | ----------------------------------------- | ------------------------------------------------------ | ---------- |
+| 1   | Audit log                | `AuditPanel` `ledger`                     | `#audit-dialog` (`data-start=audit`)                   | `.modal`   |
+| 2   | Station setup            | `StationSetupDialog` `fixed`              | `.settings` (`data-start=channels`)                    | **shadow** |
+| 3   | Live plate audio         | `LivePlateAudioDialog` `wide`             | `#audio-dialog` (`data-start=audio`)                   | `.modal`   |
+| 4   | Live source for this row | `LiveSourceSwapDialog` `wide`             | **none**                                               | —          |
+| 5   | Template picker          | `useTemplatePicker` `wide`                | `#template-dialog` (`data-start=templates`)            | `.modal`   |
+| 6   | **Confirm ×15**          | `useConfirm` `prose`                      | **`#confirm-dialog`** (`.modal.small`) — audit row 139 | `.modal`   |
+| 7   | Prompt                   | `usePrompt` `prose`                       | none (no production call site)                         | —          |
+| 8   | Add delimiter            | `RecordDialog` `prose`/`sub`              | `#editor` `.sub-dialog`                                | **shadow** |
+| 9   | **Engage lock**          | `EngageLockDialog` `prose`/`base`         | `#editor` `.sub-dialog` — audit row 140                | **shadow** |
+| 10  | Add backup server        | `RecordDialog` `prose`/`sub`              | `#editor` `.sub-dialog`                                | **shadow** |
+| 11  | Add / edit live source   | `LiveSourceDialog` `prose`/`sub`          | `#editor` `.sub-dialog`                                | **shadow** |
+| 12  | Import wizard            | **not built** — a drop zone in the picker | `#import-dialog`                                       | `.modal`   |
+| 13  | Console locked           | `LockOverlay` — **off the primitive**     | `#unlock-dialog` `.sub-dialog`                         | **shadow** |
+
+**No reference equivalent:** #4 (the live-source swap) and #7 (prompt). **Built differently on
+purpose:** #12 (audit row 107) and #13 (`B-229`, hard stop C1).
+
+### 20.1 🔴 SHADOW ROOTS AND WAVES — CHECKED FIRST, AND BOTH ANSWERS SURPRISED
+
+- **The shadow root exists on ONE surface and is created on demand.** `04-playout-layers.html`
+  has **no shadow root at all**; `attachShadow` appears once and `createStationSetup` twice, so
+  the root only exists once the settings dialog is opened (`data-start=channels`). An
+  enumeration that probed `04` for it — the obvious thing to do — would have concluded there
+  was none.
+- ⚠ **`document.styleSheets` IS UNREADABLE over `file://`.** Chromium blocks CSSOM there, so a
+  `cssRules` probe reports **zero rules** for a file with 1,067 of them — and a wave count
+  built on it reads "0 waves" for everything, which looks like an answer. Waves are counted
+  from the FILE TEXT (they are a property of what was authored); every VALUE is still
+  `getComputedStyle` in the browser.
+
+| stylesheet                    | bytes  | rules | `.modal`/`.settings` | head | foot | `.btn` | `.btn.primary` |
+| ----------------------------- | ------ | ----- | -------------------- | ---- | ---- | ------ | -------------- |
+| outer (1 `<style>`)           | 82,256 | 1,067 | **2**                | 3    | 3    | 1      | 1              |
+| shadow (`createStationSetup`) | 29,098 | 402   | **4**                | 3    | 4    | 2      | 1              |
+
+⭐ **A REFINEMENT TO "ONLY THE LAST WAVE PAINTS", and it matters here.** `.modal`'s second
+restatement is `width:100vw;height:100dvh;border-radius:0` — which is NOT what paints at
+1280 × 800, because it sits inside a narrow `@media`. The rule is about restatements at equal
+specificity in the same conditional context; a media query is a different context. Every width
+below was therefore taken by OPENING the dialog and reading the box, not by walking the file.
+
+### 20.2 🔴 THE REFERENCE HAS THREE DIALOG FAMILIES, NOT ONE
+
+This is the finding that shapes everything else, and "adopt the modals pixel for pixel" cannot
+be executed without it: there is no single value for a modal's corner, head, footer or button.
+
+|         | `.modal` (outer)                                | `.settings` (shadow)                     | `.sub-dialog` (shadow)        |
+| ------- | ----------------------------------------------- | ---------------------------------------- | ----------------------------- |
+| frame   | radius **14**, `0 30px 100px rgba(0,0,0,.667)`  | radius **16**, `0 32px 100px` + hairline | **480 px**, radius 16         |
+| head    | `22px 26px`, gap 14, on `#172230`, 42 px emblem | `21px 28px`, min-h 90, transparent       | `21px 24px 17px`, h2 18/650   |
+| body    | `22px` (confirm) / `0 20px` (audio)             | rail + pane, no padding                  | `23px 24px`                   |
+| foot    | `16px 26px`, gap 12, on `#14202d`, **72 px**    | `15px 32px`, gap 14, **74 px**           | `16px 24px`, gap 9, **73 px** |
+| button  | 39 px, radius 7, `9px 14px`, 14/550             | **40 px, radius 8, `9px 15px`**          | 40 px, radius 8               |
+| primary | `--blue` **`#74cdf6`**                          | mint **`#8ce6d1`**                       | mint `#8ce6d1`                |
+
+The app has ONE primitive with four sizes, so the mapping is by family: `prose`/`wide`/`ledger`
+take the outer family, `fixed` keeps `.settings` (Phase 7 + `MONITORS-01`), and the `layer='sub'`
+dialogs ride `prose` — 20 px and 2 px off `.sub-dialog`, a gap the drawing does not reconcile
+between its own two families either.
+
+⭐ **AND THE REFERENCE'S OWN PRIMARY IS NOT ONE COLOUR.** Its outer `.btn.primary` is
+`#74cdf6` — which IS this app's `--r-accent`, so the outer dialogs already agreed. Only the
+SHADOW family is mint. The owner's green rule therefore bites on exactly four controls, and
+§20.5 records that all four already wore an app variant.
+
+### 20.3 THE WIDTH TABLE, ADOPTED
+
+| app size | reference                            | was              | now             |
+| -------- | ------------------------------------ | ---------------- | --------------- |
+| `prose`  | `.modal.small` `min(500, 100vw−32)`  | `min(460, 92vw)` | **500**         |
+| `wide`   | `.audio-modal` `860`                 | `min(720, 94vw)` | **860**         |
+| `ledger` | `.audit-modal` `min(1250, 100vw−56)` | same             | 1224 ✅ already |
+| `fixed`  | `.settings` `min(1140, 100vw−64)`    | same             | 1140 ✅ already |
+
+⚠ `wide` is also worn by the picker and the live-source swap. The picker moves 720 → 860,
+**toward** its own reference width of 1120 rather than away; its width and its 342 px detail
+aside stay audit rows 97 and 104, which the owner placed outside this session.
+
+### 20.4 🔴 C3 — WHICH FOOTER FLOOR APPLIES TO WHICH DIALOG
+
+Two numbers, each belonging to one family, and neither composed from what a section puts in it:
+
+- **`--r-modal-foot-h` = 74 px — the `fixed` frame's**, from `.panel-foot{min-height:74px}`.
+  Unchanged, still what `station-setup-frame.spec.ts` measures on all five tabs.
+- **`--r-modal-foot-h-base` = 72 px — every other dialog's**, from `.modal-foot`, new here.
+- **59 px was neither.** It was the abandoned mockup's arithmetic (36 + padding) and is gone.
+
+`B-240`'s rule is intact in both: a height that belongs to BEING a footer cannot be a function
+of its contents, so both are `minHeight` and neither is derived from a button row.
+
+### 20.5 🔴 THE GREEN RULE — AND IT COST NOTHING, WHICH IS THE POINT
+
+The reference paints its add / apply / primary buttons in its mint `#8ce6d1`. **Not adopted.**
+This console spends green on AIR and HEALTH, and the standing two-greens rule keeps `--r-onair`
+distinct from the healthy mint precisely because an operator must never read one as the other.
+A green PRIMARY ACTION spends the same hue on something that is not a state at all, and every
+extra green makes the on-air green cheaper. **In CG Control green means air or health; it does
+not mean "this is the main button".**
+
+⭐ **The screenshot was a SAMPLE and was not eyedropped.** The role it shows already exists:
+`R-055`'s variant family carries `add` (`--r-btn-add` on `--r-btn-add-bg` — a dark fill, a sky
+border, a sky label) for "every add-a-thing-to-this-list control", and `primary`
+(`--r-accent-strong`) for the rest. Checked at the call sites, **`Add delimiter` and
+`Add source` already pass `variant="add"` and every dialog confirm already passes `primary`** —
+so the exception required NO code change at all. Nothing was invented and no role fell through
+to `default`. Ratios: primary ink **6.82:1**, add ink **8.70:1**.
+
+### 20.6 THE DELTAS
+
+**FIXED — 17.**
+
+| #    | what                           | reference                           | was                    |
+| ---- | ------------------------------ | ----------------------------------- | ---------------------- |
+| 62   | audio dialog emblem            | 42 px, radius 10                    | absent                 |
+| 72   | Station setup emblem           | same box                            | absent                 |
+| 98   | picker emblem                  | same box                            | absent                 |
+| 113  | audit log emblem               | same box                            | absent                 |
+| 70a  | `wide` width                   | 860                                 | 720                    |
+| 70b  | frame radius                   | 14                                  | 6                      |
+| 70c  | frame shadow                   | `0 30px 100px`                      | `0 4px 16px`           |
+| 87a  | footer button height           | 39 px                               | 36 px                  |
+| 87b  | footer button radius           | 7                                   | 4                      |
+| 87c  | footer button type             | 14 px                               | 12.8 px                |
+| 106a | footer inset                   | `16px 26px`                         | none                   |
+| 106b | footer floor                   | 72 px                               | none (36 px intrinsic) |
+| 106c | footer ground + rule           | `#14202d` + rule                    | none                   |
+| 139a | confirm width                  | 500                                 | 460                    |
+| 139b | head band + inset              | `22px 26px` on `#172230`            | no band                |
+| 139c | body inset                     | 22 px                               | none                   |
+| 140  | the engage-lock editor's frame | rides `prose`, now the outer family | 460 / radius 6         |
+
+Plus the three A-corrections: **A1** adopted 9 values across rows 3, 4, 20, 21 and 38; **A2**
+replaced the row hover; **A3** deleted three tokens that could not render.
+
+**🔴 ARGUED — 5, and each names its bucket.**
+
+| #   | delta                                       | bucket | reason                                                                                                                                                                                                                                                                            |
+| --- | ------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| —   | the reference's mint primary                | **A**  | the owner's own rule, made before this session and counted here rather than re-argued: green means air or health                                                                                                                                                                  |
+| 3   | verb at rest `#1F2937` / `#E5E7EB`          | **B**  | stale by the narrow test AND it lowers the ink 13.87 → 11.86                                                                                                                                                                                                                      |
+| 4a  | ON PVW hover fill `#2c3a4e`                 | **B**  | stale by the narrow test AND it lowers the lift 1.48 → 1.32                                                                                                                                                                                                                       |
+| 4b  | ON PVW hover ink `#f4ecff`                  | **A**  | NOT stale — argued on `R-055` instead: a per-verb hover ink puts the REHEARSE hue on a control that is not rehearsing, the exact claim `R-055` scoped out after it shipped once                                                                                                   |
+| 10  | selection `rgba(56,189,248,.1)` + `#38BDF8` | **B**  | stale by the narrow test AND it lowers the frame 8.55 → 7.10                                                                                                                                                                                                                      |
+| 87d | the footer button's PADDING                 | **A**  | the app's shaping-capable Persian-first font sits high in its box, so the reference's symmetric `9px 14px` puts every dialog label low — a property of the font we ship, not of the drawing. The dead `--r-modal-btn-pad` written for it was deleted rather than left to lie (A9) |
+
+**5 of 22 = 23 %, under the quarter.** (Counting the owner's green rule as instructed. Without
+it, 4 of 21 = 19 %.) The session does **not** stop.
+
+### 20.7 REPORTED, NOT RE-TUNED
+
+Every TEXT ratio clears AA — the full table is in the session report. Three adopted values sit
+below the 3.0 graphic floor, all of them the drawing's own, and all decorative rather than
+identifying (WCAG 1.4.11 covers boundaries **essential to identify a control**; none of these
+is): the look segment's rest border **2.86:1** (the segment is identified by its fill and its
+label), the modal frame's edge **1.96:1** (identified by the scrim and a 100 px shadow) and the
+emblem's edge **1.60:1** (pure decoration). Reported for the owner; not changed.
+
+### 20.8 WHAT REMAINS
+
+- **Medium bucket:** 43, 44, 45 (PVW zoom, guides, `ALL LAYERS`), 34, 51, 52, 115, 119, 101,
+  111, 80, 82, 83, 126, 127. The four emblems (62, 72, 98, 113) are **closed**.
+- **Structural bucket:** 24 + 39 (panel head shape), 26 (Inspector spacing), 97 + 104 (picker
+  width and aside), 112 (audit log height). The width table and button family (70, 87, 106) are
+  **closed**; 131 + 132 + the toolbar split were closed by `AUDIT-CLOSE-01`.
+- **Bucket D:** 139 and 140 are **closed** — both measured, both now on the outer family. The
+  four Station-setup tab bodies (134–137), the status bar (133), `Station layers` (138), the
+  Inspector's look/plate sections (141) and the PVW stage content (142) remain unmeasured.

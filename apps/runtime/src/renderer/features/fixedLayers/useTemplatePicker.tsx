@@ -479,6 +479,8 @@ export function useTemplatePicker(): {
       <Modal
         title={request.title}
         subtitle="Choose a template already on this station, or import a .vcg package."
+        /* `REPAIR-03` B, audit row 98 — the reference draws a 42 px emblem in this head. */
+        emblem={LayoutTemplate}
         size="wide"
         onClose={() => settle(null)}
         {...(message !== null ? { message } : {})}

@@ -43,12 +43,20 @@ test('§8 — the picker measures to `LIBRARY_PX` at 1280 × 800', async ({ app 
     };
   });
 
-  // THE FRAME — the primitive's `wide`: 720 at this viewport (argued in §15.3 against the
-  // reference's 1118, whose right 342 px is the detail aside this product does not draw).
+  /*
+    THE FRAME — the primitive's `wide`, now **860** at this viewport.
+
+    ⚠ `REPAIR-03` B moved `wide` from 720 to the reference's own `.audio-modal` width, which is
+    the size that family measures (audit row 70). The PICKER rides `wide`, so it moved too —
+    TOWARD its own reference width of 1120 rather than away from it. The picker's own width and
+    its 342 px detail aside are audit rows 97 and 104, which the owner placed outside that
+    session; §15.3's argument about the aside is untouched.
+  */
   const frame = await dialog.evaluate((el) => Math.round(el.getBoundingClientRect().width));
-  expect(frame).toBe(720);
-  // POSITIVE CONTROL: the picker was `prose` (460) before this phase.
-  expect(frame).toBeGreaterThan(460);
+  expect(frame).toBe(860);
+  // POSITIVE CONTROL: the picker was `prose` (460) before Phase 8, and `wide`'s old 720 before
+  // `REPAIR-03` — so this number moving is a real change and not a re-read of the same box.
+  expect(frame).toBeGreaterThan(720);
 
   // THE SEARCH — 39 tall at 14 px, the glyph inside its start padding.
   const search = dialog.getByRole('searchbox', { name: 'Search templates' });

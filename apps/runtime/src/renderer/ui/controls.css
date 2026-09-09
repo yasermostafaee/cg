@@ -919,7 +919,27 @@
  * them a matched pair whatever variants a caller passes.
  */
 .cg-modal-footer .cg-btn {
-  min-height: 36px;
+  /* 🔴 REPAIR-03 B, audit rows 87 and 106 — the reference's outer .btn renders 39 px tall,
+     radius 7, 9px 14px, 14px/550. This was 36 px, radius 4, 12.8px/600.
+     ⚠ SCOPED TO THE MODAL FOOTER, not applied to .cg-btn at large: the Station-setup family
+     inside the reference's shadow root is a DIFFERENT box again (40 px, radius 8, 9px 15px),
+     so one primitive meets two footers and the drawing gives two numbers. */
+  min-height: var(--r-modal-btn-h);
+  border-radius: var(--r-modal-btn-radius);
+  font-size: var(--r-modal-btn-text);
+  font-weight: var(--r-weight-semibold);
+  /* ⚠ THE PADDING IS NOT ADOPTED, and it is the one half of row 87 that is argued.
+     The reference's `9px 14px` is symmetric; the asymmetric shorthand at the end of this
+     rule exists because THIS app's shaping-capable Persian-first font sits high in its box,
+     so an even top/bottom leaves every dialog label riding low — a defect this app already
+     found and fixed once. That is a property of the font we ship and not of the drawing's,
+     so there is nothing to transcribe. A `--r-modal-btn-pad` token was written here first and
+     was DEAD on arrival, overridden twelve lines below; the declaration and the token are both
+     gone rather than left to lie (owner answer A9).
+     ⚠ Its name is spelled bare above and NOT as a `var(…)` call, deliberately: `tokenHome`'s
+     "every var(--r-…) the stylesheet reads is declared" guard scans the RAW file, so a
+     var-shaped mention inside a comment reads as a live reference to a token that no longer
+     exists — which is exactly how it caught this paragraph's first draft. */
   /* A shared MIN-WIDTH as well as a shared height (owner's rule). Cancel and Apply
      are peers, and two peers whose widths are set by their word lengths still read
      as a big control beside a small one — `Done` next to `Reset to defaults` was the
@@ -2021,7 +2041,13 @@ input[type='checkbox']:disabled:checked {
 /* Hover outranks both, and must beat `has-template`'s specificity. */
 .cg-row:hover,
 .cg-row.has-template:hover {
-  background: var(--r-surface-raised);
+  /* 🔴 REPAIR-03 A2 — its OWN token, and a value from neither tree. This read
+     `--r-surface-raised`, which is 1.02:1 against the row and DARKER than it: an invisible
+     hover on the one table whose whole interaction is clicking a row. The reference's
+     `#1F2937` is 1.04:1, so there was nothing to adopt. See `--r-row-hover-bg` for the
+     measurement, the AA ceiling that fixes the value, and the 1.04:1 against the selected
+     fill that is reported rather than tuned. */
+  background: var(--r-row-hover-bg);
 }
 
 /*
@@ -2428,16 +2454,23 @@ input[type='checkbox']:disabled:checked {
      a `--r-weight-regular` would be a scale step nothing else reads. */
   font-weight: 400;
   font-variant-numeric: tabular-nums;
-  border: 1px solid var(--r-border-strong);
+  /* REPAIR-03 A1, audit row 20 — the segment's own rest colours, adopted. None of the three
+     is a retired app hex, so the narrow stale test does not reach them. */
+  border: 1px solid var(--r-look-btn-line);
   border-radius: var(--r-look-btn-radius);
-  background: var(--r-surface-sunken);
+  background: var(--r-look-btn-bg);
+  color: var(--r-look-btn-ink);
 }
 
 .cg-btn.cg-look-cell[aria-pressed='true'] {
-  background: var(--r-accent-fill);
-  border-color: var(--r-accent-line);
-  box-shadow: inset 0 0 0 2px var(--r-surface);
-  color: var(--r-accent-ink);
+  /* REPAIR-03 A1, audit row 21 — the selected segment, adopted. The frame is a 1 px inset in
+     `--r-look-btn-sel-line`, not the app's 2 px inset in `--r-surface`: the app's device drew a
+     dark GAP, the drawing's draws a bright EDGE, and with the fill that is what says "this
+     look is the one". */
+  background: var(--r-look-btn-sel-bg);
+  border-color: var(--r-look-btn-sel-line);
+  box-shadow: inset 0 0 0 1px var(--r-look-btn-sel-line);
+  color: var(--r-look-btn-sel-ink);
   /* MONITORS-01 audit row 19 — the selected segment is the same weight as the others in the
      drawing; the FILL and the frame are what say it is selected. Inherited from the rule
      above rather than restated, so the two can never disagree again. */
@@ -2857,8 +2890,8 @@ input[type='checkbox']:disabled:checked {
   border-bottom: 1px solid var(--r-border);
   color: var(--r-text-muted);
   font-size: var(--r-plate-head-text);
-  /* MONITORS-01 audit row 54 — the reference's `.plate-table th` renders 550, not 500. */
-  font-weight: var(--r-weight-550);
+  /* Audit row 54 — the reference's `.plate-table th` renders 550 → the 600 face here. */
+  font-weight: var(--r-weight-semibold);
 }
 .cg-plate-head > span {
   padding: var(--r-plate-cell-pad);
@@ -3191,9 +3224,10 @@ input[type='checkbox']:disabled:checked {
 .cg-setup-title {
   margin: 0;
   font-size: var(--r-setup-title-text);
-  /* MONITORS-01 audit row 84 — the reference's `h2` renders 650, not 600. See
-     `--r-weight-650`: on this app's static Exo 2 that resolves to 700. */
-  font-weight: var(--r-weight-650);
+  /* Audit row 84 — the reference's `h2` renders 650. MEASURED, that resolves to the 700
+     face on this app's static Exo 2 (`REPAIR-03` A3), so the token that renders is the one
+     spelled: a `--r-weight-650` would be a name for a step no face can draw. */
+  font-weight: var(--r-weight-bold);
   letter-spacing: var(--r-setup-title-tracking);
   line-height: 1.3;
   color: var(--r-text);
@@ -3219,8 +3253,8 @@ input[type='checkbox']:disabled:checked {
   border-radius: var(--r-setup-tag-radius);
   background: var(--r-surface-raised);
   font-size: var(--r-setup-tag-text);
-  /* MONITORS-01 audit row 85 — the reference's `.tag` renders 550, not 500. */
-  font-weight: var(--r-weight-550);
+  /* Audit row 85 — the reference's `.tag` renders 550, which resolves to the 600 face here. */
+  font-weight: var(--r-weight-semibold);
   line-height: 1.3;
   white-space: nowrap;
   color: var(--r-text-secondary);
@@ -3327,8 +3361,8 @@ input[type='checkbox']:disabled:checked {
 
 .cg-video-mode__word {
   font-size: var(--r-video-mode-text);
-  /* MONITORS-01 audit row 90 — the reference's `.video-mode strong` renders 550. */
-  font-weight: var(--r-weight-550);
+  /* Audit row 90 — the reference's `.video-mode strong` renders 550 → the 600 face here. */
+  font-weight: var(--r-weight-semibold);
   letter-spacing: var(--r-video-mode-tracking);
   line-height: 1.25;
   color: var(--r-text);
@@ -3424,10 +3458,10 @@ input[type='checkbox']:disabled:checked {
   background: var(--r-surface-sunken);
   text-align: start;
   font-size: var(--r-output-th-text);
-  /* MONITORS-01 audit row 92 — the reference's `.outputs th` renders 450. ⚠ On this
-     app's static Exo 2 that resolves to the SAME face as 500, so nothing moves on
-     screen; the token is here so the rule cites the drawing. See `--r-weight-450`. */
-  font-weight: var(--r-weight-450);
+  /* Audit row 92 — the reference's `.outputs th` renders 450, which resolves to the SAME
+     500 face this rule already had (`REPAIR-03` A3). The delta was a visual no-op and the
+     token that expressed it could not render, so both are gone and this is 500 again. */
+  font-weight: var(--r-weight-medium);
   color: var(--r-text-muted);
   white-space: nowrap;
 }

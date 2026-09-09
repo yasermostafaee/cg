@@ -259,7 +259,12 @@ export function PreviewPanel(): JSX.Element {
     channelSettings.settings.find((s) => s.channel === channel)?.raster ?? REFERENCE_RASTER;
 
   return (
-    <Panel id="pvw" title="PREVIEW (PVW)" style={{ flex: 1, minWidth: 0 }}>
+    <Panel
+      id="pvw"
+      title="PREVIEW (PVW)"
+      /* `REPAIR-03` A1, audit row 38 — the monitor box's own ground; see `--r-monitor-bg`. */
+      style={{ flex: 1, minWidth: 0, background: cssVars['--r-monitor-bg'] }}
+    >
       {subjects.length === 0 ? (
         <div
           style={styles.screen}

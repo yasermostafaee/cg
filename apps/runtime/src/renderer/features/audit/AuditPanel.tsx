@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Check, Copy, RefreshCw, Search } from 'lucide-react';
+import { Check, Copy, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
 import {
   MAX_ACTOR_LENGTH,
@@ -183,6 +183,8 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       /* §1 — SENTENCE case, like every other dialog. It was `AUDIT LOG`; the words
          are unchanged. */
       title="Audit log"
+      /* `REPAIR-03` B, audit row 113 — the reference draws a 42 px emblem in this head. */
+      emblem={ScrollText}
       /* The reference's own line under its title. */
       subtitle="Station actions and their recorded outcomes."
       ariaLabel="Audit log"

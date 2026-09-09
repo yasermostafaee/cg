@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { X } from 'lucide-react';
+import { X, type LucideIcon } from 'lucide-react';
 import { colors, cssVars } from '../theme.js';
 import { Button, type ButtonVariant } from './Button.js';
 import { useFocusTrap } from './focusTrap.js';
@@ -73,12 +73,22 @@ const styles = {
     // `STATION-CHROME-02` §0 — from the token home. It was a bare `0.4rem`, which is a
     // radius spelled at a call site: the guard only reads `controls.css`, so this one had
     // no reviewer. Same corner, one declaration.
-    borderRadius: cssVars['--r-radius-md'],
-    boxShadow: cssVars['--r-shadow-2'],
-    padding: '1rem 1.25rem',
+    borderRadius: cssVars['--r-modal-radius'],
+    boxShadow: cssVars['--r-modal-shadow'],
+    /*
+      🔴 `REPAIR-03` B — FLUSH CHROME FOR EVERY SIZE, not only `fixed`.
+
+      This was `padding: '1rem 1.25rem'` with a `0.75rem` gap, so the head, body and footer
+      were three stacked blocks inside one padded box and none of them had an edge of its
+      own. The reference draws a head BAND with its own ground and a rule under it, a body
+      that owns its padding, and a footer BAND with its own ground and a rule over it — which
+      is exactly the shape `fixed` already had. Generalising it is one treatment instead of
+      two, not a second one.
+    */
+    padding: 0,
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: '0.75rem',
+    gap: 0,
     color: colors.text,
     /**
      * Bounded by the VIEWPORT, so a dialog whose content grows with config —
@@ -147,10 +157,33 @@ const styles = {
   /** The title row: heading on one side, the close affordance on the other. */
   titleRow: {
     display: 'flex',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '0.75rem',
+    // `REPAIR-03` B — the reference's `.modal-head`: its own band, ground and rule.
+    gap: cssVars['--r-modal-head-gap'],
+    padding: cssVars['--r-modal-head-pad'],
+    background: cssVars['--r-modal-head-bg'],
+    borderBottom: `1px solid ${colors.border}`,
+    boxSizing: 'border-box' as const,
     flexShrink: 0,
+  },
+  /**
+   * `REPAIR-03` B — THE HEAD EMBLEM (audit rows 62, 72, 98, 113), a 42 px box holding one
+   * glyph. Optional: the reference draws it on the picker, the import wizard, the audit log,
+   * the audio dialog and Station setup, and deliberately NOT on its confirm dialog — a
+   * question asked in words does not want a decorative mark beside it.
+   */
+  emblem: {
+    width: cssVars['--r-modal-emblem-box'],
+    height: cssVars['--r-modal-emblem-box'],
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: cssVars['--r-modal-emblem-radius'],
+    background: cssVars['--r-modal-emblem-bg'],
+    border: `1px solid ${cssVars['--r-modal-emblem-line']}`,
+    color: cssVars['--r-modal-emblem-ink'],
   },
   /**
    * The fixed frame's head: its own padding, and the rule that separates it. Phase 7 took the
@@ -158,17 +191,32 @@ const styles = {
    */
   titleRowFixed: {
     alignItems: 'center',
+    /*
+      ⚠ TRANSPARENT, and that is a restatement rather than an omission. `REPAIR-03` B gave
+      the BASE head band the outer family's `#172230` ground; the reference's
+      `.settings-head` has none — it sits on the frame's own surface — so the `fixed` frame
+      must put it back to nothing or it would inherit a ground Phase 7 measured as absent.
+    */
+    background: 'transparent',
     gap: cssVars['--r-modal-head-gap-fixed'],
     minHeight: cssVars['--r-modal-head-min-h-fixed'],
     padding: cssVars['--r-modal-head-pad-fixed'],
     borderBottom: `1px solid ${colors.border}`,
     boxSizing: 'border-box' as const,
   },
-  title: { fontSize: '1rem', fontWeight: 700, margin: 0 },
+  title: {
+    // REPAIR-03 B — the reference's .modal-head title renders 18 px / 650; 650 resolves
+    // to the 700 face on this app's static Exo 2 (A3), so 700 is what is spelled.
+    fontSize: cssVars['--r-modal-title-text'],
+    fontWeight: Number(cssVars['--r-weight-bold']),
+    margin: 0,
+  },
   /** `MONITORS-01` audit row 74 — the `fixed` frame's own title: 19 px / 650, as measured. */
   titleFixed: {
     fontSize: cssVars['--r-modal-title-text-fixed'],
-    fontWeight: Number(cssVars['--r-weight-650']),
+    // The reference's `.settings-head h2` renders 650; on this app's static Exo 2 that
+    // resolves to the 700 face (`REPAIR-03` A3), so the weight that renders is the one named.
+    fontWeight: Number(cssVars['--r-weight-bold']),
   },
   /** The title and its subtitle stack; the close affordance stays on the row's far end. */
   titleStack: { display: 'flex', flexDirection: 'column' as const, minWidth: 0 },
@@ -199,6 +247,8 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '0.75rem',
+    // REPAIR-03 B — the body owns its inset now that the frame is flush.
+    padding: cssVars['--r-modal-body-pad'],
   },
   /**
    * §3 — THE MESSAGE REGION, PINNED TO THE ACTION ROW.
@@ -233,10 +283,22 @@ const styles = {
   },
   footer: {
     display: 'flex',
-    gap: '0.5rem',
     justifyContent: 'flex-end',
     alignItems: 'center',
     flexShrink: 0,
+    /*
+      `REPAIR-03` B — the reference's `.modal-foot`: its own band, ground, rule and FLOOR.
+
+      ⚠ 72 px here is the OUTER `.modal` family's floor; `footerFixed` below keeps 74 px,
+      which is the Station-setup frame's. Two families, two measured numbers, and neither is
+      composed from what a section puts in it — see `--r-modal-foot-h-base`.
+    */
+    gap: cssVars['--r-modal-foot-gap'],
+    padding: cssVars['--r-modal-foot-pad'],
+    background: cssVars['--r-modal-foot-bg'],
+    borderTop: `1px solid ${colors.border}`,
+    minHeight: cssVars['--r-modal-foot-h-base'],
+    boxSizing: 'border-box' as const,
   },
   /**
    * The fixed frame's footer BAR — its own padding, a rule above it, and the raised
@@ -389,6 +451,17 @@ interface ModalProps {
    */
   subtitle?: ReactNode;
   /**
+   * 🔴 `REPAIR-03` B — THE HEAD EMBLEM (audit rows 62, 72, 98, 113): one lucide icon in a
+   * 42 px box at the start of the head band, as the reference draws it on the picker, the
+   * import wizard, the audit log, the audio dialog and Station setup.
+   *
+   * ⚠ OPTIONAL ON PURPOSE, and the omission is a decision the drawing makes too: its own
+   * `#confirm-dialog` has none. A confirmation asks a question in words and a decorative mark
+   * beside a destructive one is furniture where the sentence is the whole content. So a
+   * dialog that ASKS gets no emblem; a dialog that is a PLACE gets one.
+   */
+  emblem?: LucideIcon;
+  /**
    * The action buttons, built from {@link ModalAction} so the role decides the
    * treatment. CANCEL first in DOM order — the row is right-aligned, so first in
    * DOM is LEFTMOST and the primary/destructive action lands in the same corner of
@@ -483,6 +556,7 @@ const WIDTHS: Record<'prose' | 'wide' | 'fixed' | 'ledger', string> = {
 export function Modal({
   title,
   subtitle,
+  emblem,
   footer,
   message,
   onClose,
@@ -578,6 +652,19 @@ export function Modal({
         onClick={(e) => e.stopPropagation()}
       >
         <div style={fixed ? { ...styles.titleRow, ...styles.titleRowFixed } : styles.titleRow}>
+          {/*
+            🔴 `REPAIR-03` B — THE HEAD EMBLEM (audit rows 62, 72, 98, 113).
+
+            Optional, and `aria-hidden` through `Icon`'s own default: it is a MARK, not a
+            control and not information. The dialog's name is its title, which is what the
+            accessible name comes from; an emblem that announced itself would make every
+            dialog open with a decorative word before its own.
+          */}
+          {emblem !== undefined && (
+            <span style={styles.emblem} data-modal-emblem="">
+              <Icon icon={emblem} size={Number.parseFloat(cssVars['--r-modal-emblem-glyph'])} />
+            </span>
+          )}
           {subtitle === undefined ? (
             <h2 style={titleStyle}>{title}</h2>
           ) : (
