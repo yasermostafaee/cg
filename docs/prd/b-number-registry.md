@@ -2736,3 +2736,44 @@ done; the pointer is corrected so the next session does not re-take a live numbe
 ⇒ **Next free after this session is `B-243`** (`B-001` … `B-242`, no gaps, verified by grep per
 number across the whole tree rather than by headings alone), **`D-161`**, **`C-034`** and
 **`P-046`** (unchanged).
+
+---
+
+## 2026-09-09 — `DOCS-TRUTH-01` · `B-242` un-double-booked, `B-245` taken, and the pointer above corrected AGAIN
+
+| prefix | number  | one line                                                                                                                                          | file                                                                                                      | state                 |
+| ------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | --------------------- |
+| `B-`   | `B-242` | a removed delimiter's attached field falls back to showing its raw characters instead of the name it had — behaviour correct, only the label lost | [station-setup/tasks.md](../../openspec/changes/station-setup/tasks.md) §11.7                             | filed, not taken      |
+| `B-`   | `B-245` | golden rule 12c's jsdom-has-no-layout hazard — a dom spec asserting a box, an edge or an overflow passes against a surface of ANY shape           | [runtime-redesign-programme/design.md](../../openspec/changes/runtime-redesign-programme/design.md) §17.3 | swept, zero instances |
+
+🔴 **`B-242` WAS DOUBLE-BOOKED, and the tie-break was git history — not heading order, not which
+document a reader opens first.** Two sessions took the same free number for two unrelated defects:
+
+- the **delimiter fallback**, filed in `openspec/changes/station-setup/tasks.md` §11.7, which
+  entered the tree in `95181658` at **2026-09-07T12:53:32+03:30**;
+- the **jsdom-geometry hazard**, cited by four runtime e2e specs, whose first citation entered in
+  `9fa0393a` at **2026-09-08T02:49:21+03:30**.
+
+Different commits, **fourteen hours apart**, so the order is a fact rather than a judgement.
+**First filed keeps the number**: `B-242` is the delimiter fallback, and the jsdom hazard is
+`B-245`. Every citation was re-anchored in the same commit — four e2e spec header comments
+(comment text only; no test name and no assertion changed), `runtime-redesign-programme`'s
+`design.md` and `tasks.md`, and a pointer at `B-242`'s own filing so a reader arriving at either
+number lands right.
+
+⚠ **THE POINTER ABOVE WAS WRONG AGAIN, IN EXACTLY THE WAY ITS OWN ENTRY DESCRIBES.** It reads
+_"Next free after this session is `B-243`"_, and that was true on 2026-09-07. It is not true now:
+`B-243` (a MOCK/BRIDGE PARITY gap) and `B-244` (`stack.out` losing `errorCode` on the wire) were
+both taken by `openspec/changes/station-setup/tasks.md` §11.8 and §11.5 **after** that pointer was
+written — again in a change's task list rather than as a PRD heading, which is precisely the blind
+spot the 2026-09-07 entry was correcting. The pointer did not lie; it went stale the moment the
+next session took a number without touching it.
+
+⭐ **The lesson is not "correct the pointer harder".** A dated pointer is a MEASUREMENT, and a
+measurement ages. The only instrument that does not is `git grep --untracked` for the candidate
+number across the whole tree, run at the moment of allocation. `B-245` was chosen that way:
+`B-243` and `B-244` returned hits, `B-245` and `B-246` returned none.
+
+⇒ **Next free after this session is `B-246`** (`B-001` … `B-245`, no gaps, verified by
+`git grep --untracked` per number across the whole tree — `B-243`/`B-244` in `station-setup`'s task
+list, `B-245` taken here), **`D-161`**, **`C-034`** and **`P-046`** (unchanged).

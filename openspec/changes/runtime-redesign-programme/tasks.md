@@ -627,7 +627,7 @@ the lock (§16.5), the red-first matrix (§16.6), what was not done (§16.7) and
 
 The record is `design.md` §17: what contradicted the prompt (§17.0), the six scenarios at the
 wire and their plant pass (§17.1), channel independence with its honest bound (§17.2), the
-`B-242` sweep in full with its positive control (§17.3), the `P-025` hook and the live
+`B-245` sweep in full with its positive control (§17.3), the `P-025` hook and the live
 turbo-inputs hole it exposed (§17.4), what was not done (§17.5), **the programme's closing
 position (§17.6)** and the runs (§17.7).
 
@@ -667,7 +667,7 @@ position (§17.6)** and the runs (§17.7).
       §4 the selection is a pure scope change. Plants: C1 (dispatch by layer) reddened; C2 (a bulk
       verb gains a channel) reddened **only after rebuilding `@cg/shared-ipc`** — recorded,
       because a plant against a workspace dependency is not a plant until it is built.
-- [x] 10.3 🔴 **`B-242` SWEPT IN FULL — no remainder** (§17.3). All **154** non-e2e test files
+- [x] 10.3 🔴 **`B-245` SWEPT IN FULL — no remainder** (§17.3). All **154** non-e2e test files
       under `apps/runtime/tests` **as the tree stood at the sweep** — 155 in the commit, the
       difference being this phase's own spec, which was untracked while `git grep` ran and is
       named rather than folded into the count (§17.3); pass 1 re-run with it present returns the

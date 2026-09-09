@@ -8,7 +8,7 @@ import { expect, test } from './fixtures/runtime.js';
  *
  * jsdom has no layout: `getBoundingClientRect()` is all zeros there, so a dom spec asserting
  * a row's height, a verb's box or a band's padding compares zeros and cannot fail (golden
- * rule 12c, `B-242`). Every number below is read from Chromium, and every expectation is
+ * rule 12c, `B-245`). Every number below is read from Chromium, and every expectation is
  * read from the TOKEN HOME — the row is asserted to be exactly what `--r-row-pad`,
  * `--r-row-icon-btn-w/-h` and `--r-bed-divider-h` declare, never what a literal here
  * happens to say. A literal would go red at the next palette tune while saying nothing

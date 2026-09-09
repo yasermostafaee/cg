@@ -276,9 +276,14 @@ Session BS is the measured instance: it flipped `tools/caspar-bridge`'s typechec
 invalidate a cached typecheck (closed in `85e3c27e`). The notch BS named one further out was real
 too: all four `bin/`-bearing workspaces run `eslint .`, which lints their `bin/**/*.mjs` (9 files),
 and a planted `no-unused-vars` error in `tools/soak-runner/bin/cg-soak.mjs` came back `cache hit,
-replaying logs` with `pnpm lint` exit 0 — until `bin/**` joined `lint` inputs. ⚠ STILL OPEN: `test`
-inputs do not hash `bin/**` either, and `tools/caspar-bridge/tests/live-layers-default.test.ts`
-SPAWNS `bin/caspar-bridge.mjs` as a child process.
+replaying logs` with `pnpm lint` exit 0 — until `bin/**` joined `lint` inputs (`db32fd14`,
+2026-08-22). ⚠ **The sibling notch BS left open is CLOSED — `test` inputs hash the same glob as of
+`7dd8140d`, 2026-08-23 — and WHY it had to be closed is the whole rule in one file:**
+`tools/caspar-bridge/tests/live-layers-default.test.ts` **SPAWNS `bin/caspar-bridge.mjs` as a child
+process**, so while the cache key ignored that file the test written to catch a defect in it could
+not be invalidated by an edit to it. Measured before the fix: the real defect planted in the CLI
+(deleting its `liveLayersPath` option) failed a direct vitest run and came back `cache hit,
+replaying logs`, exit 0, through `pnpm test`. A green suite over a bridge that had lost its ledger.
 
 **Never background a push.** The pre-push gate must run in the FOREGROUND, or a
 second gate can start alongside it — two gates in one workspace collide over

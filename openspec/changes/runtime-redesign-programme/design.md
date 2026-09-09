@@ -2546,18 +2546,33 @@ re-reading them, and `git status` after the passes lists only this phase's own e
 2. ⚠ **`B-242` is DOUBLE-BOOKED, and the brief uses the second meaning.** In
    `docs/prd/b-number-registry.md` (line 2724) `B-242` is _"in use (station-setup tasks.md)"_ —
    `openspec/changes/station-setup/tasks.md` 11.7, a removed delimiter's attached field falling
-   back to its raw characters. Independently, four runtime e2e specs cite `B-242` for golden rule
+   back to its raw characters. Independently, four runtime e2e specs then cited `B-242` for golden rule
    12c's jsdom-has-no-layout hazard (`inspector-geometry`, `layer-table-geometry`,
    `library-audit-geometry`, `station-setup-geometry`). The brief means the second. Neither entry
    has a `##` heading in `docs/prd/bugs-runtime.md`, which is how two sessions came to take the
    same free number for different things. **Filed for the owner in §17.6; not renumbered here,
    because renumbering a `B-` in flight is exactly what the registry exists to stop.**
+   ✅ **RESOLVED 2026-09-09 by `DOCS-TRUTH-01`, and the finding above was right about both
+   meanings.** The order was settled from git history, not from heading order: the delimiter
+   fallback entered the tree in `95181658` (2026-09-07T12:53:32+03:30) and the jsdom hazard in
+   `9fa0393a` (2026-09-08T02:49:21+03:30) — different commits, fourteen hours apart. **First filed
+   keeps the number**, so `B-242` is the delimiter fallback and **the jsdom-geometry hazard is now
+   `B-245`**; every citation in this file, in `tasks.md` and in the four e2e specs was re-anchored
+   in the same commit. `B-245` — not `B-243`, which the registry's dated pointer still named as
+   free: `B-243` and `B-244` were both taken by `station-setup`'s task list after that pointer was
+   written, which is the same "the pointer could not see them" failure the pointer's own entry was
+   correcting. Verified by `git grep --untracked` per number, never by a heading.
 3. ⚠ **`CLAUDE.md`'s green-gate section says `test` inputs do not hash `bin/**`. They do.**
 `turbo.json`'s `test`task reads`["src/**", "tests/**", "bin/**", "scripts/**", …]`. The
 "⚠ STILL OPEN" note is stale — the notch was closed and the sentence was not. Flagged rather
-than edited: `CLAUDE.md` is shared config the next session picks up, and a correction there is
+than edited: `CLAUDE.md`is shared config the next session picks up, and a correction there is
    the owner's to take. **A different, LIVE instance of the same class was found and closed in
    this phase — see §17.4.**
+   ✅ **RESOLVED 2026-09-09 by`DOCS-TRUTH-01`.** The finding was correct: the notch closed in
+   `7dd8140d`(2026-08-23) and the sentence did not.`CLAUDE.md`now states the closure with that
+   commit, and keeps the SPAWN fact — which is still true and is why the hashing matters. The same
+   stale sentence was also carried by the untracked`AGENTS.md`mirror and by
+  `docs/handoff/2026-08-22-session-bu.md` §1.4; both were corrected in the same commit.
 
 ### 17.1 The six air-sensitive scenarios, end to end, at the wire
 
@@ -2684,7 +2699,7 @@ measuring the build, not the code.
 **What is NOT claimed by any of the four sections:** that two channels have been driven on a real
 bridge and left each other alone. That claim is not available today and this file does not make it.
 
-### 17.3 `B-242` — the jsdom-geometry sweep, in full
+### 17.3 `B-245` — the jsdom-geometry sweep, in full
 
 **Scope:** every non-e2e test file under `apps/runtime/tests` — **154 files as the tree stood at
 the sweep** (`git ls-files`, `tests/e2e/**` excluded; `apps/runtime/src` holds no test files).
@@ -2717,7 +2732,7 @@ classified — not sampled:
 | An INLINE style the component itself writes, asserted with a positive control beside it (`lookPicker:461` `overflowX` with `gridColumn`/`minWidth`; `previewPanel:185` `zIndex` ordering; `frameEnvironment:166–167` unchanged under a transform; `awaitingNotice:294/305`; `bannerCompact:56–57` and `outputMissingBanner:143` with `flexShrink === '0'`) | 7     | Real — reads the whole cascade for these elements (`features/shell` uses no `className`), and reddens under its own regression                                                                                                                      |
 | `layerTableHeader:140` — `air.parentElement.style.overflow` is `not 'hidden'`                                                                                                                                                                                                                                                                              | 1     | **Investigated as the one candidate, and CLEARED**: `styles.stateHead` is a genuine inline style object, its sibling `styles.cell` DOES set `overflow: 'hidden'`, and re-pointing one at the other is the realistic regression — which this reddens |
 
-⇒ **ZERO instances of `B-242`'s class in the runtime's dom tests. Nothing to move to Playwright,
+⇒ **ZERO instances of `B-245`'s class in the runtime's dom tests. Nothing to move to Playwright,
 nothing to delete, and NO REMAINDER.** The same two passes over `packages/*/tests` and
 `tools/*/tests` return zero as well.
 
@@ -2796,7 +2811,7 @@ fix is complete rather than partial.
   files touched outside tests are `turbo.json` (the inputs fix above) and the new hook.
 - It did **not** write a wire test for channel independence. §17.2 says why, at length, rather than
   writing one that would pass for the wrong reason.
-- It did **not** move or delete any dom assertion for `B-242`: there were none of that class. It
+- It did **not** move or delete any dom assertion for `B-245`: there were none of that class. It
   also did not "tidy" the seven narrow inline-style assertions into something jsdom can answer
   better — weakening an assertion to suit the engine is the same defect with a fresh coat.
 - It did **not** renumber `B-242`, and did **not** edit `CLAUDE.md`'s stale `bin/**` sentence. Both
@@ -2854,20 +2869,21 @@ the `E2E (Playwright)` job confirmed to have RUN.
 | `R-062` — the three single-channel gaps     | **OPEN.** (1) five `z.void()` bulk verbs — now PINNED by test (§17.2 §3); (2) no channel-discovery call — `channelIds` is the function one would feed; (3) `fixedLayers` = one bank, one channel. Each is a CONTRACT change, which `PROMPT.md` §7/§11 forbids a UI phase from inventing. | a bridge change, not a redesign |
 | The mock's missing `slot`                   | **OPEN, filed.** `MockRuntime.load()` writes no `item.slot`, so the app's mock cannot express two channels — which is half of why §17.2 is bounded as it is.                                                                                                                             | small, unowned                  |
 | `P2.DEL`                                    | **OWNER-GATED, gate MET, and NOT part of this programme.** `multibox-layout-switch` §1b; `D-160` records that the plant record meets its gate and the "no transitions" decision turns its two PARKED rows into DELETE rows. Nothing in `RUNTIME-REDESIGN-01` touches it.                 | owner                           |
-| `B-242` double-booked                       | **FILED HERE** (§17.0 item 2). Two meanings, one number, neither with a `##` heading in `bugs-runtime.md`.                                                                                                                                                                               | owner / next `B-` audit         |
-| `CLAUDE.md`'s stale `bin/**` note           | **FILED HERE** (§17.0 item 3). The notch it calls open is closed; the sentence was not updated.                                                                                                                                                                                          | owner (shared config)           |
+| `B-242` double-booked                       | ✅ **CLOSED 2026-09-09** by `DOCS-TRUTH-01` (§17.0 item 2). First-filed keeps it: `B-242` is the delimiter fallback; the jsdom hazard is now `B-245`, every citation re-anchored.                                                                                                        | done                            |
+| `CLAUDE.md`'s stale `bin/**` note           | ✅ **CLOSED 2026-09-09** by `DOCS-TRUTH-01` (§17.0 item 3). The sentence now states the closure (`7dd8140d`) and keeps the SPAWN fact that makes the hashing matter.                                                                                                                     | done                            |
 
 **Did any phase leave a remainder?** **No.** Every phase's `tasks.md` items are ticked, each with
-its Linux `e2e` URL; Phase 9 discharged the last four owed guard tests; Phase 10's `B-242` sweep
-was completed in full over all 154 files with no remainder. The four items above are OPEN WORK
-FILED WITH OWNERS, not unfinished phase work.
+its Linux `e2e` URL; Phase 9 discharged the last four owed guard tests; Phase 10's `B-245` sweep
+was completed in full over all 154 files with no remainder. The items above are OPEN WORK FILED
+WITH OWNERS, not unfinished phase work — bar the two record repairs `DOCS-TRUTH-01` closed on
+2026-09-09, which were filings against the RECORD rather than against the code.
 
 ### 17.7 The runs
 
 - The two plant passes: 5 + 1 plants on the bridge (§17.1.1) and 2 on the renderer / contract
   (§17.2.1), each applied alone, each reverted **by its original bytes** with `Buffer.equals`
   confirming byte-identity, and the suite green again after every revert.
-- The `B-242` probe and the turbo-inputs probe, both in the scratchpad, both reverted; the probe
+- The `B-245` probe and the turbo-inputs probe, both in the scratchpad, both reverted; the probe
   spec deleted (`git status` carries none of them).
 - The BOM hook proved end to end in a throwaway git repository, removed afterwards.
 - `pnpm --filter @cg/runtime exec vitest run` — **149 files / 1364 tests passed** (37.7 s).

@@ -12,7 +12,7 @@ import { test, expect } from './fixtures/runtime.js';
  * `--r-modal-*`) and compared against what the page paints, so a token that stops being read
  * fails here rather than passing on a coincidence.
  *
- * ⚠ Geometry belongs in Playwright (golden rule 12c / `B-242`): jsdom has no layout, so a dom
+ * ⚠ Geometry belongs in Playwright (golden rule 12c / `B-245`): jsdom has no layout, so a dom
  * spec asserting any of these boxes compares zeros. `station-setup-frame.spec.ts` keeps the
  * TWO-EDGE property (one box on every tab, the footer's top edge still); this file asserts what
  * the box IS.

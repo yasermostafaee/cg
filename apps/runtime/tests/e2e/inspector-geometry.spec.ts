@@ -5,7 +5,7 @@ import { buildListFieldVcg, expect, test } from './fixtures/runtime.js';
  * `RUNTIME-REDESIGN-01` PHASE 5 — THE INSPECTOR'S GEOMETRY, MEASURED IN A REAL ENGINE.
  *
  * Every claim here is a box, an edge, an overflow or a computed style under focus, and jsdom
- * has no layout (golden rule 12c, `B-242`): a dom spec asserting any of it compares zeros and
+ * has no layout (golden rule 12c, `B-245`): a dom spec asserting any of it compares zeros and
  * cannot fail. So the four geometry claims of `PROMPT.md` §5 live here:
  *
  *   - the Update button stays PINNED at the foot of the panel, at MORE THAN ONE panel height

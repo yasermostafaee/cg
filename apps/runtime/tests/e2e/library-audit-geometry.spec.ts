@@ -13,7 +13,7 @@ import { buildValidVcg, expect, test } from './fixtures/runtime.js';
  * and compared against what the page paints, so a token that stops being read fails here
  * rather than passing on a coincidence.
  *
- * ⚠ Geometry belongs in Playwright (golden rule 12c / `B-242`): jsdom has no layout, so the
+ * ⚠ Geometry belongs in Playwright (golden rule 12c / `B-245`): jsdom has no layout, so the
  * dom specs beside this one assert structure and words, never a box.
  */
 

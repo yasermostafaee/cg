@@ -211,6 +211,11 @@
       showing its raw characters (`\n (in use)`) instead of the name it had. Behaviour is
       unchanged and correct (the VALUE is stored, not the id, so nothing re-splits); only the
       human label is lost.
+      ⭐ **`B-242` IS THIS DEFECT AND ONLY THIS ONE.** The number was briefly double-booked: the
+      `RUNTIME-REDESIGN-01` programme also used it for golden rule 12c's jsdom-has-no-layout
+      hazard. `DOCS-TRUTH-01` settled it on 2026-09-09 from git history — this filing landed in
+      `95181658` (2026-09-07), the hazard's first citation in `9fa0393a` (2026-09-08), so
+      first-filed keeps the number and **the jsdom hazard is now `B-245`**.
 - [ ] 11.8 `B-243` FILED, not taken — a MOCK/BRIDGE PARITY gap found by verifying 11.2 on the
       running app. `item-blocked-restore` is `on-air` AND publishes `removeExempt: true`, so
       `removeIsRefused` correctly leaves its control LIVE (the real bridge's `#removeRefusal`

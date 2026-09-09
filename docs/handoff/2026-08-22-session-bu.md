@@ -90,6 +90,11 @@ deliverable was fully reachable without it. It is recorded in the new `CLAUDE.md
 next reader inherits a pointer rather than a rediscovery. **The fix is one line** — adding the
 `bin` glob to the `test` task's `inputs` — **and it needs an owner's yes, not an investigation.**
 
+⭐ **TAKEN the next day — `7dd8140d`, 2026-08-23: the `test` task's `inputs` gained the glob.** This
+section stands as the record of the day it was found; only the "LEFT OPEN" in its heading is
+history. Added 2026-09-09 (`DOCS-TRUTH-01`), because the `CLAUDE.md` sentence this section planted
+outlived its own subject by seventeen days.
+
 ---
 
 # `E2E-PNG-01` — the `bb-step*.png` dirt wart
