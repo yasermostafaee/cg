@@ -778,3 +778,82 @@ position (§17.6)** and the runs (§17.7).
       `conclusion: success`); it was **not skipped**, which is the half a green run alone does not
       prove (golden rule 12b, `P-029`). `Lint • Typecheck • Test • Build` also ran green
       (11:10:33Z → 11:14:42Z, 4 m 09 s), `Docs check` green, `required` green.
+
+## `REPAIR-03` — the modal family, and three corrections (2026-09-09)
+
+- [x] **A — ENUMERATED FROM THE TREE:** 13 dialog surfaces, each mapped to its reference file or
+      `data-start` state (`design.md` §20.0). The two with NO reference equivalent are the
+      live-source swap dialog and `usePrompt`; the two built differently on purpose are the
+      import wizard (audit row 107) and the lock (`B-229`). The two bucket-D dialogs the audit
+      named are `#confirm-dialog` = `useConfirm` (×15 call sites) and the engage-lock editor =
+      `EngageLockDialog`.
+- [x] 🔴 **SHADOW ROOT AND WAVES, CHECKED FIRST — and both answers surprised.** The shadow root
+      does NOT exist on `04-playout-layers.html`: `attachShadow` runs once and
+      `createStationSetup` builds it on demand, so it appears only under `data-start=channels`.
+      And **CSSOM is blocked over `file://`** — `document.styleSheets` reports ZERO rules for a
+      file with 1,067 — so waves are counted from the file TEXT and every value from
+      `getComputedStyle`. Outer sheet: 82,256 bytes / 1,067 rules (`.modal` 2, head 3, foot 3,
+      body 1, icon 2, `.btn` 1). Shadow sheet: 29,098 / 402 (`.settings` 4, `.panel-foot` 4,
+      `.tab` 3, `.sub-dialog` 2, `.btn` 2).
+      ⭐ **A refinement to "only the last wave paints":** `.modal`'s second restatement is
+      `width:100vw` inside a narrow `@media`, so it is NOT what paints at 1280 × 800. The rule
+      governs restatements at equal specificity in the SAME conditional context; every width
+      here was taken by opening the dialog.
+- [x] 🔴 **THE REFERENCE HAS THREE DIALOG FAMILIES** (`design.md` §20.2), with three radii, three
+      footer floors and two different primaries. The app's four sizes are mapped by family.
+- [x] **B — the four EMBLEMS (62, 72, 98, 113), the WIDTH TABLE (70) and the BUTTON FAMILY
+      (87, 106)**, all measured before they were applied. `prose` 460 → **500**, `wide` 720 →
+      **860**; `ledger` and `fixed` already matched. Frame radius 6 → **14**, shadow
+      `0 4px 16px` → **`0 30px 100px`**; footer band + **72 px** floor; footer button 36 → **39**,
+      radius 4 → **7**.
+- [x] 🔴 **THE GREEN RULE — and it cost ZERO code.** The reference's mint primary is not adopted
+      (green means AIR or HEALTH here). The screenshot was a SAMPLE and was not eyedropped:
+      `R-055`'s family already carries `add` and `primary`, and at the call sites **`Add
+delimiter` and `Add source` already pass `variant="add"`** and every dialog confirm already
+      passes `primary`. No role fell through to `default`. Counted as the owner's bucket-A
+      ARGUED, not re-argued. ⭐ The reference's own OUTER `.btn.primary` is `#74cdf6` — this
+      app's `--r-accent` — so only its shadow family was ever mint.
+- [x] **A1 — `AUDIT.md` CORRECTED IN PLACE.** Its recommendation section contradicted its own
+      Part 3. Under the owner's narrow test, **9 of the 15 values in rows 3/4/20/21/38 are
+      ADOPTIONS**: rows 20, 21 and 38's ground taken whole, row 3's border a no-op, row 4's ink
+      argued on `R-055` instead. The six that stay argued each carry a re-measurement rather than
+      the label (verb ink 13.87 vs 11.86, PVW hover 1.48 vs 1.32, selection frame 8.55 vs 7.10).
+- [x] **A2 — the row hover was a DEFECT IN BOTH TREES** (1.02:1 here, 1.04:1 in the reference).
+      Now `#283443` at **1.20:1**, from neither, capped there by the AA floor on the row's own
+      muted ink (**4.61:1**). Asserted as PROPERTIES in `layer-row-hover.spec.ts`.
+      ⚠ **Reported:** hover vs the SELECTED fill is 1.04:1 and cannot be widened without either
+      dropping `--r-text-muted` below AA or moving the selection wash — both the owner's calls.
+      The 2 px accent frame (8.55:1) is what separates them, and that is what is asserted.
+- [x] **A3 — `--r-weight-450/550/650` DELETED** (owner answer A9: a token that cannot render is
+      a dead token). Exo 2 ships five static faces, so they resolved to 500/600/700 and one was
+      a visual no-op; each rule now spells the face that paints and **nothing on screen moved**.
+      ⭐ **FINDING:** the reference loads NO face at all (`document.fonts` empty), so it does not
+      render its own half steps either — a half step there is evidence of INTENT, never a value
+      to transcribe. No faces were added; that is a font-loading decision and the owner's.
+- [x] **HARD STOPS HELD.** The lock stays off the primitive — `lockOverlay.contract.dom.test.ts`
+      re-run unchanged (C1); the `Revert + Apply …` / `Close` footer rule untouched (C2);
+      `--r-modal-foot-h` stays a FLOOR and the two numbers are disambiguated by family — **74 px
+      `fixed`, 72 px base, and 59 was neither** (C3, `design.md` §20.4); `B-237`/`B-238`/`R-052`
+      untouched (C4); `modal-message-containment.spec.ts` green plus a new §C5 assertion that no
+      region is full-bleed on a NON-fixed dialog either (C5).
+- [x] 🔴 **THE BUDGET — FIXED 17 · ARGUED 5 = 23 %, UNDER the quarter**, so the session did not
+      stop. Counting the owner's green rule as instructed; without it, 4 of 21 = 19 %.
+- [x] ⚠ **REPORTED, NOT RE-TUNED.** Every TEXT ratio clears AA. Three adopted values sit below
+      the 3.0 graphic floor — all the drawing's own, all decorative rather than identifying
+      (WCAG 1.4.11 covers boundaries essential to identify a control): the look segment's rest
+      border **2.86:1**, the modal frame's edge **1.96:1**, the emblem's edge **1.60:1**.
+- [x] **The runs.**
+      `pnpm gate` — **`93 successful, 93 total · 0 cached, 93 total`**, foreground, **245.3 s**,
+      footer `---- gate ended 2026-09-09T12:32:07.948Z (exit 0, 245.3s)`; OpenSpec `78 passed,
+0 failed`; `format:check` clean. ⚠ Its FIRST run was RED on `tokenHome.test.ts` — a
+      `var(--r-modal-btn-pad)` spelled inside a COMMENT, which that guard reads as a live
+      reference because it scans the raw file. A real catch of a real dangling name.
+      `pnpm exec playwright test` — **157 passed (2.1 m)**, Windows, against a fresh build.
+      ⚠ **NON-AUTHORITATIVE** (golden rule 12a); its first run was 2 failed, both value tests
+      pinning numbers this session moved (the hover fill and the picker's 720).
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `720ff69c`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34352223429> — run
+      `conclusion: success`. The **`E2E (Playwright)` job RAN** (12:38:58Z → 12:49:45Z,
+      **10 m 47 s**, `conclusion: success`); it was **not skipped** (golden rule 12b, `P-029`).
+      `Lint • Typecheck • Test • Build` also ran green (12:38:58Z → 12:41:53Z, 2 m 55 s),
+      `Docs check` and `required` green.
