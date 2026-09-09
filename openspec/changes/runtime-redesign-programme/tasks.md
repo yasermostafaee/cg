@@ -909,5 +909,19 @@ delimiter` and `Add source` already pass `variant="add"`** and every dialog conf
       discharges, so neither inherits the other's:
       <https://github.com/yasermostafaee/cg/actions/runs/34380878473> — `conclusion: success`,
       `E2E (Playwright)` **RAN** 17:06:43Z → 17:18:31Z (11 m 48 s). Not skipped (`P-029`).
+- [x] 🔴 **THE SPAN DISCHARGED, after `P-046` left it undischarged.** `acf3cf1a` (the owner's
+      commit) hit `P-046` and its `e2e` job died before the suite, so `6fe7ffb6` and `eb92725f`
+      landed on top of an undischarged tree. Closed by `CI-BROWSER-DEPS-01` at `1c86f0c1`:
+      <https://github.com/yasermostafaee/cg/actions/runs/34401286747> — `conclusion: success`,
+      `E2E (Playwright)` **RAN** 20:29:48Z → 20:40:45Z (**10 m 57 s**). Not skipped, not cancelled.
+      ⚠ The `e2e` job runs the WHOLE Playwright suite with no `--filter` and no changed-file
+      input, so a run that EXECUTED it verifies the tree at that SHA — the same whole-tree
+      reasoning `P-030` rests on. This one therefore covers **`acf3cf1a`, `6fe7ffb6`, `eb92725f`
+      and `1c86f0c1`**.
+      ⚠ It is a `workflow_dispatch` run, and deliberately: a push of `.github/workflows/**` +
+      `CLAUDE.md` + a PRD file classifies as unable to affect rendering, so the push run SKIPPED
+      both heavy jobs (run 34401133859). The dispatch lever exists in `pr.yml` for exactly this —
+      _"a manual run always runs BOTH heavy jobs … the correct behaviour for a recovery lever"_ —
+      and it takes the classifier's fail-safe branch, so it can only ever over-run.
 - [ ] NOT BUILT, recorded in §22.7: the row hover's second channel; the import wizard's
       `Review`/`Complete` steps; the reference's 24 px check circle.

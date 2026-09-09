@@ -3073,11 +3073,30 @@ fallback), so it cannot go green on a browser the suite would not use. It was pr
 before shipping: with no bundled browser it exits 1 naming the missing executable; with one it
 prints the version and exits 0.
 
-🔴 **WHY THIS IS `[~]` AND NOT `[x]`.** The outage ENDED before the fix shipped — a third re-run of
-job `102629045993` passed the same step cleanly, so Google's CDN had recovered. A green run now
-therefore exercises the **retry wrapper and the probe** (both run every time) but **NOT the
-escalation**, which only fires on a first failure. A green run that never met the failure is no
-evidence about the part of the fix that handles it.
+🔴 **WHY THIS IS `[~]` AND NOT `[x]` — MEASURED, NOT PREDICTED.** The outage ENDED before the fix
+shipped: a third re-run of job `102629045993` passed the same step cleanly, so Google's CDN had
+recovered. The first run of the shipped fix
+(<https://github.com/yasermostafaee/cg/actions/runs/34401286747>, green, `E2E` RAN 10 m 57 s) says
+so in its own log, which is why the markers are there to read:
+
+```
+P-046: install-deps attempt 1 of 3
+P-046: install-deps SUCCEEDED on attempt 1
+P-046 probe: Chromium 148.0.7778.96 launched and painted OK
+```
+
+`RETRY PATH EXERCISED`, `ESCALATION EXERCISED` and `TOLERATED` are all **absent**. So:
+
+| part of the remedy                          | exercised?                                          |
+| ------------------------------------------- | --------------------------------------------------- |
+| the retry WRAPPER (it logs every attempt)   | yes — `attempt 1 of 3`                              |
+| the RETRY path (a second attempt)           | **no** — apt succeeded first time                   |
+| the ESCALATION (dropping third-party lists) | **no** — it only fires after a failure              |
+| the launch PROBE                            | **yes**, and it passed — a new, always-on guarantee |
+
+**A green run that never met the failure is no evidence about the part of the fix that handles
+it.** The probe is genuinely proved in production; the failure path is not, and this item stays
+open until it is.
 
 **What would exercise it** — proposed, NOT run against `dev`: a `workflow_dispatch` variant of the
 `e2e` job that writes a deliberately broken `sources.list.d` entry (an unreachable host, or a
