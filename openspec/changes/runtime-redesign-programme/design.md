@@ -2985,3 +2985,25 @@ surface looks like the first time somebody actually decides it. The owner should
 - Not touched, by the owner's own scope: the 24 cheap token values, the 19 medium items, and the
   remaining structural ones — `--r-panel-bar-h`, the Inspector's spacing gradient, the picker's
   width and its detail aside, the modal width table and the button family.
+
+### 18.5 The runs
+
+- `pnpm gate`, foreground, twice: **93 successful, 93 total · 0 cached, 93 total** (3 m 30 s and
+  3 m 22 s). Runtime 150 files / 1377 tests; OpenSpec 78 passed, 0 failed. Both logs carry their
+  `---- gate ended … exit 0` footer (`P-045`).
+- `pnpm --filter @cg/runtime exec playwright test`, Windows, against a fresh `vite build`:
+  **150 passed**. ⚠ NON-AUTHORITATIVE (golden rule 12a).
+- The red-first runs, each taken before its fix and reverted by its ORIGINAL BYTES:
+  - `modal-message-containment.spec.ts` — 2 failed on `Expected: >= 297 / Received: 87`, both
+    sections; green after.
+  - `layerFilter.test.ts` — the override's early return removed: **4 of 13 red**, the three
+    override cases and the tally that depends on them; reverted with `Buffer.equals` confirming
+    byte-identity and `PLANTED` absent; 13 / 13 green.
+- The P-025 commit-message BOM hook, proved BOTH ways in this session: a planted `EF BB BF`
+  message was REFUSED (exit 1, with the guidance it prints), and all four of this session's real
+  subjects begin `0x66`.
+- 🔴 **The Linux `e2e`, on the code head that carries B, C1 and C2:**
+  <https://github.com/yasermostafaee/cg/actions/runs/34312162059> — `9cbcbbcd`,
+  `conclusion: success`, and the **`E2E (Playwright)` job RAN** 04:45:00Z → 04:55:47Z (10 m 47 s),
+  beside `Lint · Typecheck · Test · Build` 04:45:00Z → 04:48:49Z. Not skipped (`P-029`), not
+  cancelled — the two ways a green run proves nothing.
