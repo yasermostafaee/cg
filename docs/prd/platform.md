@@ -2983,3 +2983,52 @@ matches an accessible name as a SUBSTRING, so a `region` named `Outputs` also fi
   chokepoint the tee shares with the lock), [[P-038]] (the same blindness one level up, in CI).
 - **Prefix class:** `P-`, platform — the dev loop's tooling.
 - **Number:** taken in the same sweep as `P-044` above; see its Number note for the derivation.
+
+## [ ] P-046 — CI's `Install system deps for cached browser` fails on an apt index download, and takes the whole `e2e` job with it ⟨priority: high — it leaves every commit UNDISCHARGED while `ci` stays green, and it poisons the `dev` → `main` backstop⟩ — FILED 2026-09-09 by `RUNTIME-REPAIR-05`
+
+**What happens.** The `e2e` job's `Install system deps for cached browser` step runs
+`pnpm --filter @cg/designer exec playwright install-deps chromium`. Its `apt-get update` fails
+to fetch one or more index files — `E: Some index files failed to download. They have been
+ignored, or old ones used instead.` — and `playwright install-deps` exits **100**, so the step
+fails, `Build (workspace)` and `E2E` are both **skipped**, and the job is red in ~55 s.
+
+**Measured on `acf3cf1a`, twice, on the same step:**
+
+| attempt    | run                                                             | job          | outcome                                                 |
+| ---------- | --------------------------------------------------------------- | ------------ | ------------------------------------------------------- |
+| 1          | <https://github.com/yasermostafaee/cg/actions/runs/34384364734> | 102576887292 | 17:40:54Z → 17:41:48Z, failed at `Install system deps`  |
+| 2 (re-run) | the same run, re-run of the failed job                          | 102580651348 | 17:51:56Z → 17:52:51Z, **failed at the identical step** |
+
+Two attempts, one step, one error — **so it is not a flake and it was not re-run a third time.**
+
+🔴 **WHY IT MATTERS MORE THAN A RED TICK.** The suite NEVER RAN, so the red says nothing
+whatsoever about the code — the mirror image of `P-029`'s green-but-skipped job, and the same
+trap read from the other side (golden rule 12b). Every commit that lands while this step is
+broken is **undischarged**: `ci` is green, `e2e` is red, and there is no e2e result to cite.
+
+⚠ **And it poisons the `dev` → `main` backstop.** `P-030`'s guard skips the merge run's heavy
+jobs only on a **positive, complete match** — a prior run for that exact `head_sha` that is
+`completed` + `success` with `ci` AND `e2e` both actually RAN. A red run is not such a match, so
+the merge run correctly does the work — and then hits the same broken step. **Every merge
+inherits the failure until the step is fixed**; the backstop is not bypassed, it is simply
+unable to complete.
+
+**What it is not.** Not the product, not the specs, not `P-036`'s staleness guard. `ci`
+(`Lint · Typecheck · Test · Build`) passed on the same commit, and the immediately preceding
+commit `6b4e29c4` ran the full suite green
+(<https://github.com/yasermostafaee/cg/actions/runs/34380878473>, 11 m 48 s) — so the breakage
+arrived with the runner's apt state, not with a change in this repo.
+
+**Where to look.** `.github/workflows/pr.yml`, the `Install system deps for cached browser`
+step. Candidate remedies, in order of how little they hide: make the step retry `apt-get update`
+before failing; or fall back to the bundled-browser path (`Install Playwright Chromium (+ deps)`,
+which this run SKIPPED because the browser cache hit); or pin/refresh the mirror list.
+⚠ Do **not** make the step `continue-on-error` — that converts a job that cannot run the suite
+into a job that silently does not, which is exactly the `P-029` hole this repo already closed.
+
+- **Cross-refs:** [[P-029]] (a skipped `e2e` is not evidence — this is its inverse), [[P-030]]
+  (the merge backstop this blocks), [[P-038]] (CI's own blindness class), [[P-027]].
+- **Prefix class:** `P-`, platform — CI and the dev loop's tooling.
+- **Number:** `P-046`, verified free at allocation with `git grep -n --untracked "P-046"` across
+  the whole tree: the only hits were the registry's own "Next free" pointers, never an item.
+  `P-047` returned nothing at all. The space stays contiguous (`P-001` … `P-046`).

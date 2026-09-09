@@ -2777,3 +2777,16 @@ number across the whole tree, run at the moment of allocation. `B-245` was chose
 ⇒ **Next free after this session is `B-246`** (`B-001` … `B-245`, no gaps, verified by
 `git grep --untracked` per number across the whole tree — `B-243`/`B-244` in `station-setup`'s task
 list, `B-245` taken here), **`D-161`**, **`C-034`** and **`P-046`** (unchanged).
+
+### 2026-09-09 — `P-046` taken by `RUNTIME-REPAIR-05`, and the pointer was right this time
+
+`P-046` was allocated for CI's `Install system deps for cached browser` step failing an apt index
+download and taking the whole `e2e` job with it (twice on `acf3cf1a`, same step, so not a flake).
+
+Checked the way the entry above prescribes rather than by reading the pointer: `git grep -n
+--untracked "P-046"` returned **four hits, all of them the registry's own "Next free" sentences
+and none of them an item**; `P-047` returned nothing. So the pointer and the tree agreed, which
+is worth recording precisely because the previous entry is about the time they did not.
+
+⇒ **Next free after this session is `B-246`** (`B-001` … `B-245`, no gaps), **`D-161`**,
+**`C-034`** and **`P-047`** (`P-001` … `P-046`, no gaps, `P-046` taken here).
