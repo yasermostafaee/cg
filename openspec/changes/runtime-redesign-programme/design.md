@@ -2088,6 +2088,13 @@ never jsdom. "Palette" means the same ROLE, whose value Phase 2 moved.
 
 **The template picker (`01`)**
 
+> ⭐ **THIS TABLE IS PHASE 8's RECORD AND IS NO LONGER A DESCRIPTION OF THE SURFACE.** It is
+> kept as written because it is the evidence of what was measured and decided then. Three of
+> its ARGUED rows have since been overturned by the owner and BUILT — the frame and the detail
+> aside (`REPAIR-04`, §21), and the select-then-load flow, the aside's selection read-out and
+> `Manage` (`REPAIR-05`, §22). Its `subtitle words`, `row` and `empty` rows quote strings §22.5
+> has since shortened. Read §21 and §22 for what the picker IS.
+
 | property         | reference (rendered)                                                                                                                                       | app (after this phase)                                                                                                      | verdict                                                                                                                                                                                                 |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | frame            | 1118 wide (`min(1120px, 100vw − 56px)`), `776px 342px` — a main column and a detail aside                                                                  | the primitive's `wide`, 720                                                                                                 | ARGUED: without the aside the reference's main column is 776; `wide` is the primitive's width for a list read down (720), the same family every dialog uses                                             |
@@ -3878,3 +3885,38 @@ for: it recorded them where the owner could find and overrule them.
 - **The import wizard's `Review` and `Complete` steps** — see the ARGUED row above.
 - **The check circle** — if the owner wants the reference's third column, it is one cell and one
   token; it is refused here on the reason above, not on effort.
+
+### 22.8 THE RUNS
+
+- `pnpm gate`, foreground, uncached: **93 successful, 93 total · 0 cached, 93 total**, footer
+  `---- gate ended 2026-09-09T16:29:00.814Z (exit 0, 267.7s)` (`P-040`/`P-045`). Runtime 153
+  files / **1395 tests**; OpenSpec 78 passed, 0 failed.
+- `pnpm --filter @cg/runtime exec playwright test`, Windows, against a fresh `vite build`:
+  **159 passed**. ⚠ NON-AUTHORITATIVE (golden rule 12a).
+- 🔴 **RED-FIRST, AND THE INSTRUMENT PROVED BY PLANTING.** `templatePicker.select.dom.test.ts`
+  passed 8/8 on its first run, which proves nothing on its own — so the commit gate
+  (`if (!loadable(template)) return;`) was DELETED and the suite re-run: **one case went red**,
+  and it was the right one, on the right assertion (_"no gesture may commit a template this row
+  cannot take"_). Reverted from a byte copy taken before the plant; `PLANTED` absent and the
+  bytes confirmed identical.
+- **What the contract change actually cost the tests.** Nine spec files reach a load, all
+  through `RuntimeApp.loadTemplate`: **four lines in one fixture method**, and 157 of 159 specs
+  passed unchanged on the first run afterwards. The two that did not were both refusal-readers,
+  and both were re-pointed rather than weakened — `import-vcg-template` now reads the refusal in
+  the import dialog (the toast is asserted EMPTY, so the A9 defect cannot come back unnoticed),
+  and `library-audit-geometry` measures the aside's read-out where it used to measure the drop
+  zone.
+- **`templateRemoval.dom.test.ts`: TEN CASES, ZERO DIFF.** §3 asked that the deletion suite stay
+  green and that its diff be no more than mechanical. It is not even mechanical — the file was
+  not touched, because relocating the LOAD contract does not reach the deletion path at all.
+- **The rule-9 sweep found one test going VACUOUS**, which is the hazard §3 names: an assertion
+  forbidding `No templates in this browser yet` — a sentence §2.5 had shortened out of existence,
+  so no change could ever have failed it. Re-pointed at the sentence that exists today.
+- **§6 — the chrome above the first data row did NOT move: 181.45 px, 7 rows**, measured with
+  `shell-chrome.spec.ts`'s own anchors against a fresh build (the mock's 46.2 px `TEST MODE`
+  band subtracted). Identical to §21's figure to the hundredth; the picker is a dialog.
+- 🔴 **The Linux `e2e`, on the code head:**
+  <https://github.com/yasermostafaee/cg/actions/runs/34377894915> — `a28e0687`,
+  `conclusion: success`, and the **`E2E (Playwright)` job RAN** 16:37:49Z → 16:48:55Z
+  (**11 m 6 s**), beside `Lint · Typecheck · Test · Build` 16:37:50Z → 16:41:36Z. Not skipped
+  (`P-029`), not cancelled.

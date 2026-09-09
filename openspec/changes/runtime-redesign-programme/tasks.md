@@ -881,3 +881,29 @@ delimiter` and `Add source` already pass `variant="add"`** and every dialog conf
 - [ ] NOT BUILT, recorded in §21.9: the row hover's SECOND channel (lift the row's own ink one
       step on hover, muted → secondary — it moves away from the AA floor that capped the ground);
       and the import wizard, which is a FEATURE and not a delta (audit row 107).
+
+### `RUNTIME-REPAIR-05` — the picker split in two (2026-09-09)
+
+- [x] 🔴 **The library was proved LOAD-BEARING before anything was built** (§22.0). The owner
+      had authorised removing it; all four questions say it stays, and the fourth is decisive —
+      `LibraryStore` persists to OPFS and `WebSocketRuntime` reconciles it TO the bridge on every
+      connect, so the browser-local library IS the registry.
+- [x] **Templates**: a row SELECTS (`aria-pressed`), the aside reads the selection out with a
+      verdict, the footer's primary commits it onto the named row; `Enter` and double-click
+      route through the same `commit`. `templatePicker.select.dom.test.ts` (8).
+- [x] **Import**: its own 750 px dialog (the reference's `#import-dialog`), the drop zone and
+      **`Choose file` inside it — audit row 111 CLOSED**. It registers to the station and binds
+      no row; `fixedSlotLoad.test.ts` asserts that as a flat invariant.
+- [x] 🔴 **No refusal condition changed** (§22.4). `requiredBankFor` is still the only thing
+      that stops a load; the import chain's refusals are the same chain as before, now shown
+      inside the import dialog rather than in a toast rendered under its own backdrop.
+- [x] **§3 — the messages express state**: the two-line paragraph under every refused row is
+      gone, its sentence read from ONE source by the chip, the tooltip and the aside. Nothing on
+      a row over 4 words; the header sub-line 6. 1054 → 754 characters, 28 % shorter.
+- [x] **§4 — the reversed decision is written in all seven places** the old one was recorded,
+      dated, with the reason (§22.2). §15.1's filed question is ANSWERED.
+- [x] Linux `e2e` DISCHARGED on the code head `a28e0687`:
+      <https://github.com/yasermostafaee/cg/actions/runs/34377894915> — `conclusion: success`,
+      `E2E (Playwright)` **RAN** 16:37:49Z → 16:48:55Z (11 m 6 s). Not skipped (`P-029`).
+- [ ] NOT BUILT, recorded in §22.7: the row hover's second channel; the import wizard's
+      `Review`/`Complete` steps; the reference's 24 px check circle.

@@ -178,10 +178,18 @@ describe('§8 — the picker follows `01`: search, kind chips, the meta line and
     expect(rowsOf(dialog)).toEqual(['tpl-plain']);
     await type(search as HTMLInputElement, 'zzz');
     expect(rowsOf(dialog)).toEqual([]);
-    // The reference's own words for a search that found nothing — and never the panel's
-    // "nothing imported yet" sentence, which would be false.
+    /*
+      The reference's own words for a search that found nothing — and never the EMPTY-STATION
+      sentence, which would be false: this browser does hold templates, the search just found
+      none of them.
+
+      ⚠ `RUNTIME-REPAIR-05` — re-pointed at the sentence that exists TODAY. It forbade
+      "No templates in this browser yet", which §3 shortened out of existence, so the
+      assertion had quietly become one that no change could ever fail: exactly the "a test
+      that stays green when its surface is deleted" hazard. Found by the rule-9 sweep.
+    */
     expect(dialog.textContent).toContain('No templates found');
-    expect(dialog.textContent).not.toContain('No templates in this browser yet');
+    expect(dialog.textContent).not.toContain('Nothing on this station yet');
   });
 
   it('the kind chips split beds from graphics by the SAME predicate the bridge refuses on', async () => {
