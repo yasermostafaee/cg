@@ -3668,3 +3668,43 @@ Recorded because a prompt that cannot be disproved produces a session that canno
   disclaimer and whose `Complete` step is false of this product (§15.3). Filed, nothing built.
 - Not touched, by the owner's own scope: the 53 px panel bar, the Inspector's spacing gradient,
   the PVW zoom / guides / `ALL LAYERS`, the audit `Date` filter, and the Station-setup rail fills.
+
+### 21.10 🔴 THE FLUSH BODY IS A THIRD CASE, AND §C5 IS NOT WEAKENED BY IT
+
+`REPAIR-03`'s §C5 asserts that no modal region is full-bleed against its pane or its footer, and
+it measures the AUDIT LOG — a `ledger` dialog, untouched here and still inset on both sides.
+`library` joins `fixed` as a size whose BODY is deliberately flush, because the aside's rule has
+to reach the head band and the footer exactly as the reference's does. The inset did not
+disappear; it moved to the columns (`.template-tools{padding:20px 24px 14px}`, the aside's 22).
+The defect §C5 exists to forbid was a REFUSAL BAND spanning a rail it did not belong to and
+meeting the footer flush — the message region, which is outside the body, keeps its own inset in
+every size but `fixed` and is untouched by this.
+
+### 21.11 THE RUNS
+
+- `pnpm gate`, foreground, uncached: **93 successful, 93 total · 0 cached, 93 total**, footer
+  `---- gate ended 2026-09-09T14:32:51.719Z (exit 0, 285.1s)` (`P-040`/`P-045`). Runtime 152 files
+  / **1387 tests**; OpenSpec 78 passed, 0 failed.
+- `pnpm --filter @cg/runtime exec playwright test`, Windows, against a fresh `vite build`:
+  **159 passed** (157 before this session; +2 from `picker-manage-geometry.spec.ts`).
+  ⚠ NON-AUTHORITATIVE (golden rule 12a).
+- **The red-first run, and the instrument proved before it was believed.** The first run of
+  `templatePicker.manage.dom.test.ts` failed 5/5 on `Cannot read properties of undefined
+(reading 'sources')` — a FIXTURE fault (`initSources` takes the bridge), not a red on the
+  property. Corrected, the same file failed 5/5 again on the right things: _"expected
+  &lt;button&gt; to be null"_ for the delete still on the row, and _"no button matching Manage"_
+  for the door that did not exist. Green after the build.
+- **Two existing suites moved and neither was weakened.** `templateRemoval.dom.test.ts`: 10/10
+  green, its diff one added `press('Manage')` per case plus two selectors re-pointed at the list
+  now on screen. `live-source-sources.spec.ts` — the e2e that proves the CASCADE and the
+  CONFIRM — green, still asserting `every browser` and `1 plate binding` in the confirm and
+  `still use this template` in the dialog's own message region.
+- **§6 — the chrome above the first data row did NOT move.** Measured with
+  `shell-chrome.spec.ts`'s own anchors against a fresh build: **181.45 px, 7 rows**, with the
+  mock's `TEST MODE` band (46.2 px) subtracted — identical to §19.4's 181.5 to the tenth. The
+  picker is a dialog; it was never going to, and it did not.
+- 🔴 **The Linux `e2e`, on the code head:**
+  <https://github.com/yasermostafaee/cg/actions/runs/34364994282> — `885e89f0`,
+  `conclusion: success`, and the **`E2E (Playwright)` job RAN** 14:39:08Z → 14:50:14Z
+  (**11 m 6 s**), beside `Lint · Typecheck · Test · Build` 14:39:07Z → 14:43:01Z. Not skipped
+  (`P-029`), not cancelled — the two ways a green run proves nothing.

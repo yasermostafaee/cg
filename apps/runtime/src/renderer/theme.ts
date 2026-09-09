@@ -869,12 +869,15 @@ export const STATION_SETUP_PX = {
  * this viewport, and the numbers here are what the browser painted.
  *
  * ⚠ NOT here, deliberately: the reference's `Into` destination select (the picker's door is the
- * row, so the destination is fixed and named in the title), its detail aside with the
- * `Compatible with this row` notice and its select-then-`Load into` footer (the row's one-click
- * load is the contract twenty specs drive), its `Manage` view (the app's per-row Delete is the
- * management), and the import wizard's `Review` step (simulated checks by its own disclaimer —
- * the product's verification is `verify → unpack → runtimeShortfall → render`, unchanged). Each
- * is argued in §15.3.
+ * row, so the destination is fixed — and `RUNTIME-REPAIR-04`'s aside now NAMES it, which is the
+ * fact that select carried), its aside's SELECTED-TEMPLATE half with the `Compatible with this
+ * row` notice and its select-then-`Load into` footer (the row's one-click load is the contract
+ * twenty specs drive), and the import wizard's `Review` step (simulated checks by its own
+ * disclaimer — the product's verification is `verify → unpack → runtimeShortfall → render`,
+ * unchanged). Each is argued in §15.3 and §21.1.
+ *
+ * ⭐ The `Manage` view and the aside's FRAME are no longer in that list — both are built, and
+ * their measured values are in this record (`frameW`, `asideW`, `manageRow*`).
  */
 export const LIBRARY_PX = {
   /**
@@ -1642,10 +1645,10 @@ export const cssVars = {
    *   `.modal` base    min(1120px, 100vw − 56)  → the template picker       → audit row 97, NOT this session
    *   `.import-modal`  750px                    → the import wizard         → audit row 107, not built
    *
-   * ⚠ `wide` is also worn by the picker and the live-source swap dialog. Moving it 720 → 860
-   * takes the picker TOWARD its own 1120 rather than away from it, and the swap dialog has no
-   * reference equivalent at all; the picker's own width stays audit row 97's, which the owner
-   * placed outside this session.
+   * ⚠ `wide` WAS also worn by the picker. `RUNTIME-REPAIR-04` gave the picker its own
+   * `--r-modal-w-library` (audit row 97), so `wide` is now the `.audio-modal`'s 860 and nothing
+   * else: the live plate audio dialog, which is where the number comes from, and the
+   * live-source swap dialog, which has no reference equivalent at all.
    */
   '--r-modal-w-prose': 'min(500px, calc(100vw - 32px))',
   '--r-modal-w-wide': 'min(860px, 94vw)',

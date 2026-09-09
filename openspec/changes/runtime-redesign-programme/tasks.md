@@ -857,3 +857,25 @@ delimiter` and `Add source` already pass `variant="add"`** and every dialog conf
       **10 m 47 s**, `conclusion: success`); it was **not skipped** (golden rule 12b, `P-029`).
       `Lint • Typecheck • Test • Build` also ran green (12:38:58Z → 12:41:53Z, 2 m 55 s),
       `Docs check` and `required` green.
+
+### `RUNTIME-REPAIR-04` — the picker family (2026-09-09)
+
+- [x] The picker's frame and its second column, at the reference's measured values — 1120 wide
+      (`--r-modal-w-library`, a fifth `Modal` size), split `776px 342px`, the aside 342 at its
+      own ground and rule. `design.md` §21.0–§21.1, `library-audit-geometry.spec.ts`.
+- [x] The `Manage` view (audit row 101), through the owner's gate: 2 new controls, no new data —
+      the usage count is the stack snapshot the layer table already reads. §21.2,
+      `picker-manage-geometry.spec.ts`.
+- [x] 🔴 `Delete from station` is OFF EVERY ROW and behind `Manage` (`design.md` §18.4, decided
+      there and built here). What it DECIDES is unchanged: confirm first, the scope and the
+      plate-binding cascade named in the confirm, the bridge authoritative on the refusal,
+      `B-212`'s places and remedies intact. §21.4, `templatePicker.manage.dom.test.ts` (5) and
+      `templateRemoval.dom.test.ts` (10, one added press per case).
+- [x] The drop zone moved into the aside — the audit's own finding that it sat below the fold at
+      the foot of the list.
+- [x] Linux `e2e` DISCHARGED on the code head `885e89f0`:
+      <https://github.com/yasermostafaee/cg/actions/runs/34364994282> — `conclusion: success`,
+      `E2E (Playwright)` **RAN** 14:39:08Z → 14:50:14Z (11 m 6 s). Not skipped (`P-029`).
+- [ ] NOT BUILT, recorded in §21.9: the row hover's SECOND channel (lift the row's own ink one
+      step on hover, muted → secondary — it moves away from the AA floor that capped the ground);
+      and the import wizard, which is a FEATURE and not a delta (audit row 107).
