@@ -3590,20 +3590,109 @@ input[type='checkbox']:disabled:checked {
  * `01-template-picker.html` as RENDERED: a search box over three kind chips, a rule, then a
  * list of 81 px rows — a 56 × 49 thumbnail, the name over a meta line with its badges — and a
  * footer sentence beside the actions. Numbers are `--r-tpl-*` (`LIBRARY_PX`); colours are role
- * tokens. The reference's detail aside, `Into` select and `Manage` view are argued away in
- * `design.md` §15.3; `02`'s drop zone is the one honest interaction its import dialog has, so
- * it lives at the foot of this list and feeds the SAME chain the OS chooser does.
+ * tokens.
+ *
+ * ⭐ AMENDED BY `RUNTIME-REPAIR-04` — the frame, the ASIDE and the `Manage` view are BUILT.
+ * This comment used to say all three were "argued away in §15.3", and two of them no longer
+ * are: the dialog is the reference's own base 1120 with its `776 342` split, and `Manage` is
+ * the home the owner bound `Delete from station` to (`design.md` §18.4, §21).
+ *
+ * ⚠ What is still NOT taken, and the reason is the CONTRACT rather than the look: the aside's
+ * `Selected template` half — a preview, a `Type · Looks · Text fields` list and a
+ * `Compatible with this row` notice — reads out a SELECTION, and this picker's row has none
+ * (one press IS the load, which twenty specs drive through `app.loadTemplate`). So the column
+ * carries what this product actually knows at that moment: the DESTINATION it was opened from,
+ * and the drop zone — which the audit itself found sat below the fold at the foot of the list.
+ */
+/*
+ * THE LIBRARY FRAME IS FLUSH, so the aside's rule can reach the head band and the footer as
+ * the reference's does. Every inset the modal body used to supply now belongs to the column
+ * that needs it — which is also why the tools row gained a full `padding` above.
+ *
+ * ⚠ That flush body is set in `Modal.tsx`, NOT here. The body's padding is an INLINE style,
+ * so a `[data-modal-size='library'] .cg-modal-body` rule at this end loses to it silently and
+ * the columns simply render 44 px narrow — which is what the first cut of this did.
  */
 .cg-tpl-body {
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
+/* `.template-layout{grid-template-columns:776px 342px}` — the ASIDE is the fixed half. */
+.cg-tpl-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--r-tpl-aside-w);
+  min-height: 0;
+  flex: 1 1 auto;
+}
+.cg-tpl-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.cg-tpl-aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-3);
+  padding: var(--r-tpl-aside-pad);
+  border-inline-start: 1px solid var(--r-border);
+  background: var(--r-tpl-aside-bg);
+  overflow-y: auto;
+  min-height: 0;
+}
+/*
+ * The DESTINATION card — the reference's own first block in this column, and the one part of
+ * it this product can fill honestly. The row the picker was opened from is named here instead
+ * of only in the title, which is where golden rule 11 wants it: the operator's word for the
+ * row, with the coordinate beside it and the id behind a `title`.
+ */
+.cg-tpl-dest {
+  display: flex;
+  gap: var(--r-space-2);
+  align-items: flex-start;
+  padding: var(--r-space-3);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-tpl-row-radius);
+  background: var(--r-surface);
+}
+.cg-tpl-dest__icon {
+  display: grid;
+  place-items: center;
+  color: var(--r-accent);
+  flex: none;
+}
+.cg-tpl-dest__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-1);
+  min-width: 0;
+}
+.cg-tpl-dest__name {
+  font-size: var(--r-tpl-name-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-text);
+}
+.cg-tpl-dest__meta {
+  font-size: var(--r-tpl-meta-text);
+  line-height: 1.5;
+  color: var(--r-text-muted);
+}
 .cg-tpl-tools {
   display: flex;
   align-items: center;
   gap: var(--r-tpl-tools-gap);
+  padding: var(--r-tpl-tools-pad);
   padding-bottom: var(--r-tpl-tools-pad-bottom);
+}
+/* `.btn.quiet.small` at the end of the tools row — 69.9 × 33, radius 7, `6px 10px`, 13 px. */
+.cg-tpl-manage-btn.cg-btn {
+  flex: none;
+  min-height: var(--r-tpl-manage-btn-h);
+  height: var(--r-tpl-manage-btn-h);
+  padding: var(--r-tpl-manage-btn-pad);
+  border-radius: var(--r-tpl-manage-btn-radius);
+  font-size: var(--r-tpl-manage-btn-text);
 }
 .cg-tpl-search,
 .cg-audit-search {
@@ -3637,7 +3726,7 @@ input[type='checkbox']:disabled:checked {
   display: flex;
   flex-wrap: wrap;
   gap: var(--r-tpl-chip-gap);
-  padding-bottom: var(--r-tpl-filter-pad-bottom);
+  padding: 0 var(--r-tpl-filter-pad-x) var(--r-tpl-filter-pad-bottom);
   border-bottom: 1px solid var(--r-border);
 }
 .cg-tpl-filter .cg-btn {
@@ -3652,11 +3741,19 @@ input[type='checkbox']:disabled:checked {
   display: flex;
   flex-direction: column;
   gap: var(--r-tpl-row-gap-below);
-  padding: var(--r-tpl-list-pad) 0 0;
+  padding: var(--r-tpl-list-pad);
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
 }
+/*
+ * ONE COLUMN, since `RUNTIME-REPAIR-04` moved `Delete from station` off the row: the load
+ * control is the row's whole width, and the wrong-bank sentence spans beneath it. It was
+ * `minmax(0,1fr) auto`, which left a 0 px column standing where the delete used to be.
+ */
 .cg-tpl-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: var(--r-tpl-row-gap);
   padding: var(--r-tpl-row-pad);
@@ -3774,13 +3871,20 @@ input[type='checkbox']:disabled:checked {
 .cg-tpl-empty > p {
   margin: 0;
 }
-/* `02`'s drop zone, at the foot of the list: dashed, sunken, lit while a file is over it. */
+/*
+ * `02`'s drop zone — dashed, sunken, lit while a file is over it.
+ *
+ * ⭐ MOVED INTO THE ASIDE by `RUNTIME-REPAIR-04`. It used to sit at the FOOT OF THE LIST, and
+ * the audit's own reading of surface 01 is why it moved: _"the drop zone only becomes visible
+ * after scrolling past every template"_. Nothing about the DROP changed — the handler is on
+ * the whole `[data-template-body]` and always was, so a package dropped anywhere on this
+ * dialog still reaches the same chain; what moved is the affordance that says so.
+ */
 .cg-tpl-drop {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--r-space-2);
-  margin-top: var(--r-tpl-list-pad);
   padding: var(--r-tpl-drop-pad);
   border: 1px dashed var(--r-border-strong);
   border-radius: var(--r-tpl-drop-radius);
@@ -3814,6 +3918,63 @@ input[type='checkbox']:disabled:checked {
 }
 .cg-tpl-drop > p {
   margin: 0;
+}
+/*
+ * ── THE `Manage` VIEW (`#library-management`) ──────────────────────────────────────────
+ *
+ * The reference REPLACES the whole selection layout with it — tools, filter, list and aside
+ * all go — and swaps the footer's primary for `Back to selection`. One surface at a time, which
+ * is the point: the operator is either choosing a template or maintaining the station's list,
+ * and a destructive control has no business being on screen during the first.
+ */
+.cg-tpl-manage {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+.cg-tpl-manage__note {
+  padding: var(--r-tpl-manage-pad);
+}
+.cg-tpl-manage-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--r-tpl-manage-row-gap);
+  min-height: var(--r-tpl-manage-row-h);
+  padding: var(--r-tpl-manage-row-pad);
+  border-bottom: 1px solid var(--r-border);
+}
+.cg-tpl-manage-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-space-1);
+  min-width: 0;
+}
+.cg-tpl-manage-row__name {
+  font-size: var(--r-tpl-name-text);
+  font-weight: var(--r-weight-medium);
+  color: var(--r-text);
+}
+.cg-tpl-manage-row__use {
+  font-size: var(--r-tpl-meta-text);
+  color: var(--r-text-muted);
+}
+/*
+ * The row's Delete takes the reference's `.btn.small` BOX (33 px, radius 7, 13 px) — the same
+ * one `Manage` wears, so the two controls of this view are one family.
+ *
+ * ⚠ Its COLOUR is not the reference's. The drawing paints this `quiet` and then DISABLES it in
+ * every state it ships. Here it is pressable and it deletes from every browser, so it wears the
+ * app's `danger` variant: severity by token, never by hex, and never quieter than what it does.
+ */
+.cg-tpl-manage-row .cg-tpl-delete.cg-btn {
+  min-height: var(--r-tpl-manage-btn-h);
+  height: var(--r-tpl-manage-btn-h);
+  padding: var(--r-tpl-manage-btn-pad);
+  border-radius: var(--r-tpl-manage-btn-radius);
+  font-size: var(--r-tpl-manage-btn-text);
 }
 .cg-tpl-foot-info {
   margin-right: auto;

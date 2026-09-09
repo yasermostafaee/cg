@@ -574,12 +574,10 @@ take its frame (`--r-modal-w-ledger`), tools, head, cells, tags and console stri
 `--r-audit-*` likewise from `03-audit-log.html`; every claim about a box SHALL be measured in
 Chromium, never in jsdom. The picker's CONTRACT SHALL NOT change: one press on a row's load control
 loads that template onto the row that opened the picker, the wrong-bank refusal is the bridge's own
-predicate and is said on the row, `Delete from station` is the per-row management, and
-`Import a .vcg…` opens the OS chooser. A search SHALL narrow by the name the operator sees; the
+predicate and is said on the row, and `Import a .vcg…` opens the OS chooser. A search SHALL narrow by the name the operator sees; the
 kind chips SHALL split beds from graphics by the same predicate the bridge refuses on; a search that
 finds nothing SHALL say so and never claim the browser holds no templates.
 
-The `.vcg` validation and import path SHALL be preserved exactly: `importVcgFile` → `verify` →
 `unpack` → the runtime-contract guard → the render, registering nothing on refusal, proved by the
 existing import tests unchanged. A package DROPPED on the picker SHALL resolve the pick with that
 file and run the SAME chain; the picker SHALL check nothing itself, not even the extension — the
@@ -597,6 +595,61 @@ chain's `verify` is the one gate.
 - **WHEN** bytes that are not a package are dropped on the picker opened from a row **THEN** the
   row reports `“<file>” failed verification…` through its error channel, exactly as the OS chooser's
   path would, and nothing is registered
+
+### Requirement: A station-wide deletion is not offered on a row of the picker
+
+The template picker SHALL NOT place `Delete from station` on any template row. It SHALL offer a
+`Manage` control that opens a management view, that view SHALL replace the selection layout rather
+than sit beside it, and the station-wide deletion SHALL be reachable only from there. What the
+deletion DOES SHALL be unchanged by its location: it confirms first, the confirm names the scope
+and the plate bindings it takes with it, the bridge remains the authority on the refusal, and a
+refused deletion still names the places that hold the template with a remedy beside each.
+
+The management view MAY state how many rows hold each template, and that count SHALL NOT gate the
+control: a snapshot the console has not yet received may not stand in front of a lawful deletion.
+
+#### Scenario: No row of the picker carries the deletion
+
+- **WHEN** the operator opens the picker on a row **THEN** every template row offers its load
+  control and none offers a deletion, and a `Manage` control is visible in the same dialog
+
+#### Scenario: The deletion is one press away, and unchanged
+
+- **WHEN** the operator presses `Manage` and then the deletion for a template **THEN** the confirm
+  appears BEFORE anything is asked of the bridge, names that the template goes for every browser
+  and cannot be undone, and names the plate bindings deleted with it
+
+#### Scenario: A refused deletion still says where the template is held
+
+- **WHEN** the bridge refuses the deletion because a row still references the template **THEN** the
+  reason appears in the dialog's own message region, the template is still listed in the management
+  view, and each place that holds it is named with the way there beside it
+
+#### Scenario: The count informs and does not forbid
+
+- **WHEN** the management view reports that a template is used by one or more rows **THEN** its
+  deletion control is still pressable and the refusal, if any, comes from the bridge
+
+### Requirement: The picker takes the reference's frame and its second column
+
+The template picker SHALL take the reference's own base modal width and its two-column split from
+the token home, measured by opening the reference dialog at 1280 × 800 rather than read from its
+stylesheet. The second column SHALL name the DESTINATION the picker was opened from — the row's
+operator-facing name with its real coordinate — and SHALL carry the drop zone, which SHALL NOT
+require scrolling past the template list to be seen.
+
+#### Scenario: The dialog is the reference's frame with its aside beside the list
+
+- **WHEN** the picker is open at 1280 × 800 **THEN** the dialog is the reference's base width, the
+  aside is the reference's fixed column width, the list column takes the remainder, and the drop
+  zone is inside the aside
+
+#### Scenario: The aside names where the load is going
+
+- **WHEN** the picker is opened from a row **THEN** the aside names that row as the destination and
+  states its real channel-layer coordinate in the sentence
+
+The `.vcg` validation and import path SHALL be preserved exactly: `importVcgFile` → `verify` →
 
 ### Requirement: The plates toolbar's panic names its scope in the operator's words
 

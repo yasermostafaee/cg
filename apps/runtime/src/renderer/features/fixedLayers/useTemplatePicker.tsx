@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
-import { LayoutTemplate, Rows3, Search, Trash2, Upload } from 'lucide-react';
+import { Layers, LayoutTemplate, Rows3, Search, Trash2, Upload } from 'lucide-react';
 import {
   describeReferencePlace,
   liveSourceCarrierState,
@@ -72,14 +72,33 @@ import { templateDisplayName } from '../library/templateName.js';
  * of rows — a thumbnail, the name over a meta line with its badges — and a footer sentence
  * beside the actions (`LIBRARY_PX`, `design.md` §15.3). What is NOT adopted, and why:
  *
- *   - its SELECT-THEN-`Load into` flow and the detail aside that flow exists to feed. The
- *     row's one press IS the load here (`Load <name> onto this layer`), and twenty specs
- *     drive that contract through `app.loadTemplate`; every reason a row can carry — the
- *     wrong bank, an unrecorded carrier, a plate with no source — is already SAID ON THE
- *     ROW rather than in a pane one selection away.
+ *   - its SELECT-THEN-`Load into` flow, and with it the half of the detail aside that flow
+ *     exists to feed. The row's one press IS the load here (`Load <name> onto this layer`),
+ *     and twenty specs drive that contract through `app.loadTemplate`; every reason a row can
+ *     carry — the wrong bank, an unrecorded carrier, a plate with no source — is already SAID
+ *     ON THE ROW rather than in a pane one selection away.
  *   - its `Into` destination select: this dialog's door is the row, so the destination is
- *     fixed and named in the title.
- *   - its `Manage` view: the per-row `Delete from station` is the management.
+ *     fixed. It is now NAMED in the aside as well as the title (below), which is what that
+ *     select exists to tell the operator.
+ *
+ * ── `RUNTIME-REPAIR-04` — THE FRAME, THE ASIDE AND `Manage`, WHICH THIS NOTE USED TO REFUSE ──
+ *
+ * Measured by opening `#template-dialog` at 1280 x 800: the picker wears the OUTER `.modal`
+ * family's BASE width (1120, `--r-modal-w-library`) with a `776px 342px` split, and its
+ * `Manage` control opens a management list that REPLACES the selection layout entirely.
+ *
+ * Two of the three refusals above are withdrawn, and the third is sharpened rather than
+ * repeated. The aside is NOT a column of categories or filters — it is a read-out of the
+ * SELECTED template (a preview, `Type / Looks / Text fields / Availability`, a compatibility
+ * notice), so adopting it whole means adopting select-then-load, which is the contract
+ * question `design.md` §15.1 filed to the owner and did not answer. What this column carries
+ * instead is what the product genuinely knows while the list is open: the DESTINATION the
+ * picker was opened from, and the drop zone — which the audit found sitting below the fold at
+ * the foot of the list.
+ *
+ * `Manage` is where the owner's decided-but-unbuilt item lands (`design.md` §18.4): the red
+ * `Delete from station` is OFF THE ROW. Its behaviour, its confirm and its refusal path are
+ * untouched — this moved a control, it did not re-decide what the control does.
  *
  * `02-template-import.html`'s import dialog is theatre by its own disclaimer ("Simulated
  * checks"); the product's import is `importVcgFile` → `verify → unpack → runtimeShortfall →
@@ -196,6 +215,18 @@ const UNASSIGNED_TITLE =
  */
 const FOOT_INFO = 'Loading prepares the row. Use Play when you’re ready to go on air.';
 
+/**
+ * `RUNTIME-REPAIR-04` — the management view's own footer sentence.
+ *
+ * The reference says _"Deleting affects the station library. Templates in use are protected in
+ * this demo."_ The second half is FALSE here and is not adopted: nothing is "protected" by this
+ * surface at all. The BRIDGE refuses a template a row still references and names the places
+ * (`B-212`), which is a refusal the operator can act on rather than a control they cannot press.
+ */
+const MANAGE_FOOT_INFO =
+  'Deleting removes a template from this station for every browser. A row still holding one ' +
+  'must be cleared with the row’s own REMOVE first.';
+
 /** The reference's three kind chips, keyed by the bank a template belongs on. */
 type KindFilter = 'all' | 'graphic' | 'bed';
 const KIND_CHIPS: readonly { key: KindFilter; label: string }[] = [
@@ -209,9 +240,27 @@ function kindOf(template: TemplateInfo): 'graphic' | 'bed' {
   return requiredBankFor(template) === 'low' ? 'bed' : 'graphic';
 }
 
+/**
+ * `RUNTIME-REPAIR-04` — WHERE this pick is going, for the aside's destination card.
+ *
+ * The reference draws `Destination · Layer 5` over `Graphic row · Empty` at the top of its
+ * detail column, and it is the one block there that does not depend on a selection. Every
+ * field is something `LayerRow` already has in hand at the moment it opens the picker, so
+ * nothing here is derived, fetched or guessed.
+ */
+export interface PickDestination {
+  /** The row's name as the Layers table gives it — golden rule 11, the operator's word. */
+  rowName: string;
+  /** `channel-layer`, kept in the sentence: `R-028` — the number is how a layer is cleared by hand. */
+  coord: string;
+  /** The template the row holds today, if any. Its NAME, never its id. */
+  holding: string | null;
+}
+
 interface PickRequest {
   title: string;
   templates: readonly TemplateInfo[];
+  destination: PickDestination | null;
   /**
    * `single-clock-look-switch` — which half of the bank the row asking belongs to, so a
    * template the bridge would refuse (`wrong-bank`) is shown REFUSED here instead of being
@@ -240,7 +289,11 @@ interface PickRequest {
 export type TemplateChoice = TemplateInfo | 'import' | { importFile: File } | null;
 
 export function useTemplatePicker(): {
-  pickTemplate: (title: string, accepts: 'low' | 'high') => Promise<TemplateChoice>;
+  pickTemplate: (
+    title: string,
+    accepts: 'low' | 'high',
+    destination?: PickDestination,
+  ) => Promise<TemplateChoice>;
   pickerDialog: JSX.Element | null;
 } {
   const [request, setRequest] = useState<PickRequest | null>(null);
@@ -287,6 +340,22 @@ export function useTemplatePicker(): {
   const [kind, setKind] = useState<KindFilter>('all');
   /** Phase 8 — a package is being dragged over the dialog; lights the drop zone. */
   const [dragging, setDragging] = useState(false);
+  /*
+    `RUNTIME-REPAIR-04` — the `Manage` view, and HOW MANY ROWS hold each template.
+
+    The count is pulled when the view opens, not subscribed: this hook is mounted by every
+    `LayerRow`, and a stack subscription here would be thirty of them for a number that is
+    read while one short-lived list is on screen. It is the same reason the template list and
+    the bank are pulled rather than subscribed (see `bank`).
+
+    ⚠ IT IS INFORMATION, NEVER A GATE. The reference DISABLES its Delete for a template in
+    use; this console does not, and must not. `window.cg.stack.snapshot()` can legitimately
+    answer `[]` inside the `B-092` bootstrap window, and a control disabled on that would
+    refuse a lawful deletion with nothing the operator could do about it. The BRIDGE decides
+    — it refuses `in-use` and names the places, and `B-212` turns each into a remedy.
+  */
+  const [manage, setManage] = useState(false);
+  const [usage, setUsage] = useState<ReadonlyMap<string, number>>(new Map());
   // D-137 / C-015 — SUBSCRIBED, unlike the template list beside it, because the
   // assignments are bridge-owned and a second console can bind a plate while
   // this dialog is open. The list is browser-local, so a snapshot is right for
@@ -303,18 +372,53 @@ export function useTemplatePicker(): {
   );
 
   const pickTemplate = useCallback(
-    async (title: string, accepts: 'low' | 'high'): Promise<TemplateChoice> => {
+    async (
+      title: string,
+      accepts: 'low' | 'high',
+      destination?: PickDestination,
+    ): Promise<TemplateChoice> => {
       const templates = await window.cg.templates.list();
       return new Promise<TemplateChoice>((resolve) => {
         resolver.current = resolve;
         setQuery('');
         setKind('all');
         setDragging(false);
-        setRequest({ title, templates, accepts });
+        // The management view is never what a LOAD opens on — the door is always the list.
+        setManage(false);
+        setUsage(new Map());
+        setRequest({ title, templates, accepts, destination: destination ?? null });
       });
     },
     [],
   );
+
+  /**
+   * Open the management view, with the usage counts the stack already answers for.
+   *
+   * A failure to read the stack is NOT a failure to open: the counts are a courtesy line under
+   * each name, and withholding the whole surface because one of them is unknown would hide the
+   * only place a template can be deleted. An unknown count simply does not claim a number.
+   */
+  const openManage = useCallback(async (): Promise<void> => {
+    setMessage(null);
+    setReferences([]);
+    setManage(true);
+    /*
+      ⚠ `try`, not `.catch` — a bridge whose `stack` has no `snapshot` at all throws
+      SYNCHRONOUSLY, and a rejection handler never sees it. That is not hypothetical here: this
+      hook is mounted by every `LayerRow`, so it meets every stub any row suite installs, and an
+      earlier cut of this file took seven unrelated suites red by assuming a channel was there.
+    */
+    let items: readonly { templateId: string }[] = [];
+    try {
+      items = await window.cg.stack.snapshot();
+    } catch {
+      items = [];
+    }
+    const counts = new Map<string, number>();
+    for (const item of items) counts.set(item.templateId, (counts.get(item.templateId) ?? 0) + 1);
+    setUsage(counts);
+  }, []);
 
   /**
    * R-005, re-homed. The BRIDGE decides whether a removal is allowed (it
@@ -392,6 +496,7 @@ export function useTemplatePicker(): {
     setMessage(null);
     setReferences([]);
     setDragging(false);
+    setManage(false);
     const resolve = resolver.current;
     resolver.current = null;
     resolve?.(choice);
@@ -481,7 +586,7 @@ export function useTemplatePicker(): {
         subtitle="Choose a template already on this station, or import a .vcg package."
         /* `REPAIR-03` B, audit row 98 — the reference draws a 42 px emblem in this head. */
         emblem={LayoutTemplate}
-        size="wide"
+        size="library"
         onClose={() => settle(null)}
         {...(message !== null ? { message } : {})}
         footer={
@@ -491,7 +596,7 @@ export function useTemplatePicker(): {
               the surface where the operator is about to press the control it qualifies.
             */}
             <span className="cg-tpl-foot-info" data-template-foot-info="">
-              {FOOT_INFO}
+              {manage ? MANAGE_FOOT_INFO : FOOT_INFO}
             </span>
             {/*
               CANCEL FIRST IN DOM ORDER, like every other dialog. The row is
@@ -502,9 +607,11 @@ export function useTemplatePicker(): {
               which reads as a line of static text rather than a control. `cancel`
               resolves to `neutral`: neutral must not mean invisible.
             */}
-            <ModalAction actionRole="cancel" onClick={() => settle(null)}>
-              Cancel
-            </ModalAction>
+            {!manage && (
+              <ModalAction actionRole="cancel" onClick={() => settle(null)}>
+                Cancel
+              </ModalAction>
+            )}
             {/*
               §6 — IMPORT LIVES IN HERE, and it is not a convenience.
 
@@ -517,9 +624,27 @@ export function useTemplatePicker(): {
               reference paints it quiet beside a `Load into` primary; with the row's
               press being the load, this is the one primary left.
             */}
-            <ModalAction actionRole="primary" onClick={() => settle('import')}>
-              Import a .vcg…
-            </ModalAction>
+            {manage ? (
+              /*
+                `RUNTIME-REPAIR-04` — the reference swaps its footer's PRIMARY for this while its
+                management view is up, and the swap is the point: the way out of a destructive
+                surface should be the most obvious control on it.
+              */
+              <ModalAction
+                actionRole="primary"
+                onClick={() => {
+                  setManage(false);
+                  setMessage(null);
+                  setReferences([]);
+                }}
+              >
+                Back to selection
+              </ModalAction>
+            ) : (
+              <ModalAction actionRole="primary" onClick={() => settle('import')}>
+                Import a .vcg…
+              </ModalAction>
+            )}
           </>
         }
       >
@@ -530,92 +655,211 @@ export function useTemplatePicker(): {
           onDragLeave={onDragLeave}
           onDrop={onDrop}
         >
-          {request.templates.length === 0 ? (
-            /*
-              The reference's `.empty` shape (a title over a sentence) carrying the app's own
-              sentence — it names the control that ends the emptiness rather than a panel
-              that no longer exists (§6).
-            */
-            <div className="cg-tpl-empty" data-template-empty="">
-              <h3>Nothing to load yet</h3>
-              <p>
-                No templates in this browser yet — <strong>Import a .vcg…</strong> to bring one in,
-                or drop a package here.
-              </p>
-            </div>
-          ) : (
-            <PickerList
-              request={request}
-              query={query}
-              onQuery={setQuery}
-              kind={kind}
-              onKind={setKind}
-              unassigned={unassigned}
-              onPick={settle}
+          {manage ? (
+            <ManageView
+              templates={request.templates}
+              usage={usage}
               onDelete={(t) => void deleteTemplate(t)}
-            />
-          )}
-          <div
-            className="cg-tpl-drop"
-            data-template-drop=""
-            data-template-drop-active={dragging ? 'true' : 'false'}
-          >
-            <span className="cg-tpl-drop__icon">
-              <Icon icon={Upload} size={22} />
-            </span>
-            <h3>Drop a .vcg package here</h3>
-            <p>It is verified and registered exactly as one chosen with Import a .vcg…</p>
-          </div>
-        </div>
-        {/*
-          `B-212` — WHERE the items are, each with the way there. A row the operator can
-          see gets "Show <row>"; a layer no row shows gets the one-item removal. The
-          sentence above names them; these are the remedies it used to withhold.
-        */}
-        {references.length > 0 && (
-          <div style={styles.references} data-in-use-references="">
-            {references.map((reference) => {
-              const rowName = referenceRowName(reference, bank);
-              const slot = reference.slot;
-              const place = describeReferencePlace(reference, bank);
-              return (
-                <div
-                  key={reference.itemId}
-                  style={styles.reference}
-                  data-in-use-reference={reference.itemId}
-                >
-                  <span>{place}</span>
-                  {rowName !== null && slot !== undefined ? (
-                    <Button
-                      variant="secondary"
-                      onClick={() => {
-                        // Close first, then ask the table to go there: the picker sits
-                        // over the list, and a scroll under a backdrop is not a remedy.
-                        settle(null);
-                        requestRowFocus(slot.layer);
-                      }}
-                    >
-                      Show {rowName}
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="danger"
-                      aria-label={`Remove the item ${place}`}
-                      onClick={() => void removeReference(reference)}
-                    >
-                      Remove item
-                    </Button>
-                  )}
+            >
+              {/*
+                `B-212` — WHERE the items are, each with the way there. A row the operator can
+                see gets "Show <row>"; a layer no row shows gets the one-item removal. The
+                sentence above names them; these are the remedies it used to withhold.
+
+                `RUNTIME-REPAIR-04` — rendered INSIDE the management view, because that is now
+                the only surface a deletion can be refused from. It is the same block, moved
+                with the control whose refusal it explains.
+              */}
+              {references.length > 0 && (
+                <div style={styles.references} data-in-use-references="">
+                  {references.map((reference) => {
+                    const rowName = referenceRowName(reference, bank);
+                    const slot = reference.slot;
+                    const place = describeReferencePlace(reference, bank);
+                    return (
+                      <div
+                        key={reference.itemId}
+                        style={styles.reference}
+                        data-in-use-reference={reference.itemId}
+                      >
+                        <span>{place}</span>
+                        {rowName !== null && slot !== undefined ? (
+                          <Button
+                            variant="secondary"
+                            onClick={() => {
+                              // Close first, then ask the table to go there: the picker sits
+                              // over the list, and a scroll under a backdrop is not a remedy.
+                              settle(null);
+                              requestRowFocus(slot.layer);
+                            }}
+                          >
+                            Show {rowName}
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="danger"
+                            aria-label={`Remove the item ${place}`}
+                            onClick={() => void removeReference(reference)}
+                          >
+                            Remove item
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
+            </ManageView>
+          ) : (
+            /*
+              `RUNTIME-REPAIR-04` — the reference's `.template-layout`: a main column that reads
+              the list DOWN, and a 342 px aside beside it. The aside is fixed and the main
+              column takes the rest, which is the drawing's own arrangement.
+            */
+            <div className="cg-tpl-layout" data-template-layout="">
+              <div className="cg-tpl-main">
+                {request.templates.length === 0 ? (
+                  /*
+                    The reference's `.empty` shape (a title over a sentence) carrying the app's
+                    own sentence — it names the control that ends the emptiness rather than a
+                    panel that no longer exists (§6).
+                  */
+                  <div className="cg-tpl-empty" data-template-empty="">
+                    <h3>Nothing to load yet</h3>
+                    <p>
+                      No templates in this browser yet — <strong>Import a .vcg…</strong> to bring
+                      one in, or drop a package here.
+                    </p>
+                  </div>
+                ) : (
+                  <PickerList
+                    request={request}
+                    query={query}
+                    onQuery={setQuery}
+                    kind={kind}
+                    onKind={setKind}
+                    unassigned={unassigned}
+                    onPick={settle}
+                    onManage={() => void openManage()}
+                  />
+                )}
+              </div>
+              <aside className="cg-tpl-aside" data-template-aside="" aria-label="Destination">
+                {request.destination !== null && (
+                  <div className="cg-tpl-dest" data-template-destination="">
+                    <span className="cg-tpl-dest__icon" aria-hidden="true">
+                      <Icon icon={Layers} size={18} />
+                    </span>
+                    <span className="cg-tpl-dest__text">
+                      <span className="cg-tpl-dest__name">
+                        Destination · <bdi>{request.destination.rowName}</bdi>
+                      </span>
+                      {/*
+                        `R-028` — the real coordinate stays in the sentence, because this is
+                        where an operator finds the layer they may have to clear by hand.
+                      */}
+                      <span className="cg-tpl-dest__meta">
+                        {request.accepts === 'low' ? 'Graphics bed row' : 'Operator row'} · on{' '}
+                        {request.destination.coord}
+                      </span>
+                      <span className="cg-tpl-dest__meta">
+                        {request.destination.holding === null ? (
+                          'Empty — nothing loaded on it.'
+                        ) : (
+                          <>
+                            Holding <bdi>{request.destination.holding}</bdi>. Loading replaces it.
+                          </>
+                        )}
+                      </span>
+                    </span>
+                  </div>
+                )}
+                <div
+                  className="cg-tpl-drop"
+                  data-template-drop=""
+                  data-template-drop-active={dragging ? 'true' : 'false'}
+                >
+                  <span className="cg-tpl-drop__icon">
+                    <Icon icon={Upload} size={22} />
+                  </span>
+                  <h3>Drop a .vcg package here</h3>
+                  <p>It is verified and registered exactly as one chosen with Import a .vcg…</p>
+                </div>
+              </aside>
+            </div>
+          )}
+        </div>
         {confirmDialog}
       </Modal>
     );
 
   return { pickTemplate, pickerDialog };
+}
+
+/**
+ * 🔴 `RUNTIME-REPAIR-04` — THE MANAGEMENT VIEW, and the only place a template is deleted.
+ *
+ * `design.md` §18.4: the owner decided the red `Delete from station` comes OFF THE ROW, and
+ * bound its destination to this view. The reason is the console it runs on — a destructive
+ * control repeated down every row of a list is one mis-aimed press away from deleting a
+ * template while something is on air, and the reference has no destructive control on a row
+ * at all.
+ *
+ * It REPLACES the selection layout rather than sitting beside it, as the reference's does: the
+ * operator is either choosing a template or maintaining the list, never both at once.
+ *
+ * ⚠ The counts are a line of information under a name. They do not disable anything — see
+ * the note at `usage` for why this console does not follow the drawing there.
+ */
+function ManageView({
+  templates,
+  usage,
+  onDelete,
+  children,
+}: {
+  templates: readonly TemplateInfo[];
+  usage: ReadonlyMap<string, number>;
+  onDelete: (t: TemplateInfo) => void;
+  children?: React.ReactNode;
+}): JSX.Element {
+  return (
+    <div className="cg-tpl-manage" data-template-manage="">
+      <p className="cg-tpl-manage__note" data-template-manage-note="">
+        Deleting a template here removes it from this station for every browser, and cannot be
+        undone — the .vcg must be re-imported. Clearing a ROW never deletes anything from here.
+      </p>
+      {[...templates].reverse().map((t) => {
+        const label = templateDisplayName(t);
+        const used = usage.get(t.templateId) ?? 0;
+        return (
+          <div className="cg-tpl-manage-row" key={t.templateId} data-manage-template={t.templateId}>
+            <span className="cg-tpl-thumb" aria-hidden="true">
+              <Icon icon={kindOf(t) === 'bed' ? Rows3 : LayoutTemplate} size={22} />
+            </span>
+            <span className="cg-tpl-manage-row__text">
+              {/* Golden rule 11 — the operator's word in the sentence, the id on the `title`. */}
+              <bdi className="cg-tpl-manage-row__name" title={t.templateId}>
+                {label}
+              </bdi>
+              <span className="cg-tpl-manage-row__use" data-manage-usage={String(used)}>
+                {used === 0 ? 'Not on any row' : `Used by ${count(used, 'row')}`}
+              </span>
+            </span>
+            <Button
+              variant="danger"
+              className="cg-tpl-delete"
+              aria-label={`Delete ${label} from this station`}
+              onClick={() => onDelete(t)}
+            >
+              <Icon icon={Trash2} size={14} />
+              Delete from station
+            </Button>
+          </div>
+        );
+      })}
+      {children}
+    </div>
+  );
 }
 
 /** Does a template answer the search? Its display name and its type, case-folded. */
@@ -640,7 +884,7 @@ function PickerList({
   onKind,
   unassigned,
   onPick,
-  onDelete,
+  onManage,
 }: {
   request: PickRequest;
   query: string;
@@ -649,7 +893,7 @@ function PickerList({
   onKind: (k: KindFilter) => void;
   unassigned: (t: TemplateInfo) => string[];
   onPick: (t: TemplateInfo) => void;
-  onDelete: (t: TemplateInfo) => void;
+  onManage: () => void;
 }): JSX.Element {
   // Newest first: the template the operator most recently imported is the one they
   // are looking for. Then the search, then the kind chip.
@@ -672,6 +916,19 @@ function PickerList({
             onChange={(e) => onQuery(e.target.value)}
           />
         </label>
+        {/*
+          `RUNTIME-REPAIR-04` — the door to the management view, where the reference puts it:
+          at the end of the tools row, quiet, beside the search. It is the ONLY route to a
+          station-wide deletion now, which is why it is a plain word rather than a glyph.
+        */}
+        <Button
+          variant="neutral"
+          className="cg-tpl-manage-btn"
+          data-template-manage-open=""
+          onClick={onManage}
+        >
+          Manage
+        </Button>
       </div>
       <div className="cg-tpl-filter" role="group" aria-label="Template kind">
         {KIND_CHIPS.map((chip) => (
@@ -702,7 +959,6 @@ function PickerList({
               accepts={request.accepts}
               unassigned={unassigned(t)}
               onPick={() => onPick(t)}
-              onDelete={() => onDelete(t)}
             />
           ))
         )}
@@ -716,13 +972,11 @@ function PickerRow({
   accepts,
   unassigned: needsSource,
   onPick,
-  onDelete,
 }: {
   template: TemplateInfo;
   accepts: 'low' | 'high';
   unassigned: string[];
   onPick: () => void;
-  onDelete: () => void;
 }): JSX.Element {
   const label = templateDisplayName(t);
   const carrier = liveSourceCarrierState(t);
@@ -813,15 +1067,6 @@ function PickerRow({
             )}
           </span>
         </span>
-      </Button>
-      <Button
-        variant="danger"
-        className="cg-tpl-delete"
-        aria-label={`Delete ${label} from this station`}
-        onClick={onDelete}
-      >
-        <Icon icon={Trash2} size={14} />
-        Delete from station
       </Button>
       {wrongBank && (
         <span className="cg-tpl-reason" data-wrong-bank="">

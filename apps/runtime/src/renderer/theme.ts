@@ -877,6 +877,49 @@ export const STATION_SETUP_PX = {
  * is argued in §15.3.
  */
 export const LIBRARY_PX = {
+  /**
+   * `RUNTIME-REPAIR-04` §3.1 — THE FRAME AND ITS TWO COLUMNS, measured by opening the dialog.
+   *
+   * `.modal{width:min(1120px,calc(100vw - 56px))}` — the picker wears the OUTER family's BASE
+   * width, not a width of its own, which is why `wide` (the `.audio-modal`'s 860) was never
+   * going to reach it. 1120 at 1280, and the layout inside is `776px 342px`: a main column
+   * that keeps `minmax(0,1fr)` here so the aside is the fixed half, as the drawing has it.
+   *
+   * ⚠ The reference's `@media(max-width:1180px)` restates this frame at `100vw`; that is a
+   * DIFFERENT CONDITIONAL CONTEXT and not "the last wave", so it is not what 1280 paints.
+   */
+  frameW: 1120,
+  frameInset: 56,
+  asideW: 342,
+  asidePad: 22,
+  /**
+   * The tools row — `.template-tools{padding:20px 24px 14px}`. It used to inherit its top and
+   * side insets from the modal body; with the layout going edge to edge (the aside's rule must
+   * reach both bands) the column owns them.
+   */
+  toolsPadY: 20,
+  toolsPadX: 24,
+  /** `.template-filter{padding:0 24px 17px}` — the same side inset as the tools row above it. */
+  filterPadX: 24,
+  /**
+   * `Manage` — `.btn.quiet.small`, 69.9 × 33, radius 7, `6px 10px`, 13 px. The reference puts
+   * it at the end of the tools row, beside the search, and hides it while its own view is up.
+   */
+  manageBtnH: 33,
+  manageBtnRadius: 7,
+  manageBtnPadY: 6,
+  manageBtnPadX: 10,
+  manageBtnText: 13,
+  /**
+   * A `.manage-row` — 84 px, `padding:17px`, `gap:12px`, a rule under each. Its name is an
+   * `h3` and its usage line a `p`; the thumbnail is the picker row's own 56 × 49 tile.
+   */
+  manageRowH: 84,
+  manageRowPad: 17,
+  manageRowGap: 12,
+  /** The view's own notice — the reference wraps it `padding:20px 25px` above the first row. */
+  managePadY: 20,
+  managePadX: 25,
   /** The tools row — `.template-tools{padding:20px 24px 14px;gap:12px}`; the body is flush there, padded by the primitive here. */
   toolsPadBottom: 14,
   toolsGap: 12,
@@ -1614,6 +1657,17 @@ export const cssVars = {
    * apply. See `Modal`'s `size` prop.
    */
   '--r-modal-w-ledger': `min(${String(AUDIT_LOG_PX.frameW)}px, calc(100vw - ${String(AUDIT_LOG_PX.frameInset)}px))`,
+  /**
+   * `RUNTIME-REPAIR-04` §3.1 — the LIBRARY frame: the picker, which is the one dialog that
+   * reads a list DOWN and a description ACROSS. The reference's base `.modal` width
+   * (`min(1120px, calc(100vw - 56px))`, `LIBRARY_PX`), measured by opening `#template-dialog`
+   * at 1280 × 800 rather than read off the sheet — `.modal` is restated inside a narrow
+   * `@media` that does not paint here.
+   *
+   * A fifth size rather than a wider `wide`: `wide` IS the `.audio-modal`'s 860 and is worn by
+   * the live plate audio dialog and the live-source swap, neither of which wants 1120.
+   */
+  '--r-modal-w-library': `min(${String(LIBRARY_PX.frameW)}px, calc(100vw - ${String(LIBRARY_PX.frameInset)}px))`,
   '--r-modal-w-fixed': `min(${String(STATION_SETUP_PX.frameW)}px, calc(100vw - ${String(STATION_SETUP_PX.frameInset)}px))`,
   '--r-modal-h-fixed': `min(${String(STATION_SETUP_PX.frameH)}px, calc(100vh - ${String(STATION_SETUP_PX.frameInset)}px))`,
   /**
@@ -2240,6 +2294,27 @@ export const cssVars = {
    * (`AUDIT_LOG_PX`), cited to the RENDERED reference; see the constants' notes. Read by
    * `controls.css`'s `.cg-tpl-*`, `.cg-audit-*` and `.cg-tag*` rules.
    */
+  '--r-tpl-aside-w': `${String(LIBRARY_PX.asideW)}px`,
+  '--r-tpl-aside-pad': `${String(LIBRARY_PX.asidePad)}px`,
+  /**
+   * The aside's ground — the reference's `.template-detail{background:#111c28}`. Under the
+   * narrow stale-hex test it is ADOPTED: absent from the drawing's nineteen `:root` colours,
+   * but it is NOT a hex this app retired in Phase 2 (§7's "was" column), so it fails (b) and is
+   * a design decision rather than a leftover — the same verdict, and for the same reason, as
+   * row 38's `#101722`. It is a fourth near-black, one step under `--r-surface`, which is what
+   * makes a column read as a SIDE of the dialog rather than another panel in it.
+   */
+  '--r-tpl-aside-bg': '#111c28',
+  '--r-tpl-tools-pad': `${String(LIBRARY_PX.toolsPadY)}px ${String(LIBRARY_PX.toolsPadX)}px`,
+  '--r-tpl-filter-pad-x': `${String(LIBRARY_PX.filterPadX)}px`,
+  '--r-tpl-manage-btn-h': `${String(LIBRARY_PX.manageBtnH)}px`,
+  '--r-tpl-manage-btn-radius': `${String(LIBRARY_PX.manageBtnRadius)}px`,
+  '--r-tpl-manage-btn-pad': `${String(LIBRARY_PX.manageBtnPadY)}px ${String(LIBRARY_PX.manageBtnPadX)}px`,
+  '--r-tpl-manage-btn-text': `${String(LIBRARY_PX.manageBtnText)}px`,
+  '--r-tpl-manage-row-h': `${String(LIBRARY_PX.manageRowH)}px`,
+  '--r-tpl-manage-row-pad': `${String(LIBRARY_PX.manageRowPad)}px`,
+  '--r-tpl-manage-row-gap': `${String(LIBRARY_PX.manageRowGap)}px`,
+  '--r-tpl-manage-pad': `${String(LIBRARY_PX.managePadY)}px ${String(LIBRARY_PX.managePadX)}px`,
   '--r-tpl-tools-pad-bottom': `${String(LIBRARY_PX.toolsPadBottom)}px`,
   '--r-tpl-tools-gap': `${String(LIBRARY_PX.toolsGap)}px`,
   '--r-tpl-search-h': `${String(LIBRARY_PX.searchH)}px`,

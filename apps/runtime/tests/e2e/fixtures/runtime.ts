@@ -359,6 +359,15 @@ export class RuntimeApp {
 
   /** Dismiss the picker without loading anything (resolves the pick as `null`). */
   async closeTemplatePicker(): Promise<void> {
+    /*
+      `RUNTIME-REPAIR-04` — the picker has TWO modes now, and `Cancel` belongs to the selection
+      one: while the management view is up the footer's controls are `Import a .vcg…` and
+      `Back to selection`, as the reference's are. So a caller that has just deleted something
+      is one step deeper than this helper used to assume, and the helper walks back out rather
+      than every such test remembering to.
+    */
+    const back = this.templatePicker.getByRole('button', { name: 'Back to selection' });
+    if ((await back.count()) > 0) await back.click();
     await this.templatePicker.getByRole('button', { name: 'Cancel' }).click();
     await expect(this.templatePicker).toHaveCount(0);
   }

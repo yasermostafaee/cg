@@ -283,13 +283,20 @@ test('library: DELETE FROM STATION is a different verb from the row REMOVE, and 
   // ── THE REPORTED BUG: while a row still holds it, the deletion is REFUSED …
   await app.openTemplatePicker();
   const picker = app.templatePicker;
+  // `RUNTIME-REPAIR-04` §3.3 — a station-wide deletion lives behind `Manage` now.
+  await picker.getByRole('button', { name: 'Manage' }).click();
   await picker.getByRole('button', { name: /Delete two box from this station/ }).click();
   await page.getByRole('button', { name: 'Delete from station', exact: true }).click();
   // … and the reason is IN THE DIALOG. It used to go to the command toast, which
   // is rendered under the modal's backdrop — pressing the button did nothing and
   // said nothing.
   await expect(picker.locator('[data-modal-message]')).toContainText(/still use this template/);
-  await expect(app.templateRow(TWO_BOX)).toBeVisible();
+  /*
+    …and the entry is still listed, because it is still there. `RUNTIME-REPAIR-04` — the list
+    it is listed in here is the MANAGEMENT one, which is the surface the refusal was raised on;
+    the claim is the same one this line has always made.
+  */
+  await expect(picker.locator(`[data-manage-template="${TWO_BOX}"]`)).toBeVisible();
   /*
     `B-212` — and WHERE: the row by the name the Layers table gives it, with the way
     there beside it, and no nudge toward Remove All. Pressing "Show" closes the picker
@@ -309,6 +316,7 @@ test('library: DELETE FROM STATION is a different verb from the row REMOVE, and 
   await expect(app.templateRow(TWO_BOX)).toBeVisible();
 
   // ── Now the library deletion goes through, and its confirm names the fallout.
+  await picker.getByRole('button', { name: 'Manage' }).click();
   await picker.getByRole('button', { name: /Delete two box from this station/ }).click();
   const confirm = page.getByRole('dialog', { name: /Delete .* from this station\?/ });
   await expect(confirm).toContainText('every browser');

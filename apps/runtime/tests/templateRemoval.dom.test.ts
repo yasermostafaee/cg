@@ -21,6 +21,13 @@ import { clearPortals } from './support/dialog.js';
 /**
  * A9 — REMOVING A TEMPLATE FROM THE LIBRARY.
  *
+ * ⭐ `RUNTIME-REPAIR-04` §3.3 — THE CONTROL MOVED, AND NOTHING BELOW THIS LINE DID. Every
+ * case here now presses `Manage` first, because `Delete from station` came off the picker's
+ * ROW and into the management view the owner bound it to (`design.md` §18.4). That one added
+ * press is the whole of the diff in this file: not an assertion, not a wording, not an
+ * expectation about what a deletion decides. If a later change needs to weaken one of these,
+ * it is re-deciding the deletion rather than relocating it.
+ *
  * The reported bug: a template that declares live sources could not be removed —
  * pressing Remove did nothing and said nothing, while other entries in the same
  * list removed normally.
@@ -93,6 +100,9 @@ function installBridge(): void {
       onConfigChanged: () => () => undefined,
     },
     stack: {
+      // `RUNTIME-REPAIR-04` — the management view reads this for its `Used by N rows` line.
+      // It is INFORMATION: nothing here gates on it, which is why an empty stack is fine.
+      snapshot: () => Promise.resolve([]),
       remove: (req: { itemId: string }) => {
         stackRemoveCalls.push(req.itemId);
         return Promise.resolve({ accepted: true });
@@ -189,6 +199,8 @@ describe('a template that declares live sources removes exactly like one that do
     const dialog = await openPicker();
     expect(dialog.querySelector('[data-template-id="tpl-two-box"]')).not.toBeNull();
 
+    // `RUNTIME-REPAIR-04` §3.3 — the control moved into `Manage`; what it does did not.
+    await press('Manage');
     await press(/Delete two-box from this station/);
     await press(/^Delete from station$/);
 
@@ -198,6 +210,8 @@ describe('a template that declares live sources removes exactly like one that do
 
   it('deletes its ASSIGNMENTS with it — nothing may refer to an entry that is gone', async () => {
     await openPicker();
+    // `RUNTIME-REPAIR-04` §3.3 — the control moved into `Manage`; what it does did not.
+    await press('Manage');
     await press(/Delete two-box from this station/);
     await press(/^Delete from station$/);
 
@@ -220,6 +234,8 @@ describe('a template that declares live sources removes exactly like one that do
     await Promise.resolve();
 
     await openPicker();
+    // `RUNTIME-REPAIR-04` §3.3 — the control moved into `Manage`; what it does did not.
+    await press('Manage');
     await press(/Delete two-box from this station/);
     await press(/^Delete from station$/);
 
@@ -238,6 +254,8 @@ describe('a refusal the operator cannot see is its own defect', () => {
         '1 stack item(s) still use this template — on the row “Layer 1” (layer 99). Remove that item first.',
     };
     const dialog = await openPicker();
+    // `RUNTIME-REPAIR-04` §3.3 — the control moved into `Manage`; what it does did not.
+    await press('Manage');
     await press(/Delete two-box from this station/);
     await press(/^Delete from station$/);
 
@@ -246,8 +264,12 @@ describe('a refusal the operator cannot see is its own defect', () => {
     // a refusal the operator never reads.
     const message = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
     expect(message).toMatch(/still use this template/);
-    // …and the entry is still listed, because it is still there.
-    expect(dialog.querySelector('[data-template-id="tpl-two-box"]')).not.toBeNull();
+    /*
+      …and the entry is still listed, because it is still there. `RUNTIME-REPAIR-04` — the list
+      it is still listed IN is the management one now, which is the surface the refusal was
+      raised on. The claim is unchanged: a refused deletion leaves the template on screen.
+    */
+    expect(dialog.querySelector('[data-manage-template="tpl-two-box"]')).not.toBeNull();
   });
 
   it('says so when the call THROWS, rather than swallowing it', async () => {
@@ -257,6 +279,8 @@ describe('a refusal the operator cannot see is its own defect', () => {
     stub.templates.remove = () => Promise.reject(new Error('bridge is down'));
 
     const dialog = await openPicker();
+    // `RUNTIME-REPAIR-04` §3.3 — the control moved into `Manage`; what it does did not.
+    await press('Manage');
     await press(/Delete two-box from this station/);
     await press(/^Delete from station$/);
 
@@ -268,6 +292,8 @@ describe('a refusal the operator cannot see is its own defect', () => {
   it('does NOT delete the assignments when the removal was refused', async () => {
     removeResult = { ok: false, reason: 'in-use', message: 'still in use' };
     await openPicker();
+    // `RUNTIME-REPAIR-04` §3.3 — the control moved into `Manage`; what it does did not.
+    await press('Manage');
     await press(/Delete two-box from this station/);
     await press(/^Delete from station$/);
 
@@ -306,6 +332,8 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
         await Promise.resolve();
         await Promise.resolve();
       });
+      // `RUNTIME-REPAIR-04` §3.3 — the control moved into `Manage`; what it does did not.
+      await press('Manage');
       await press(/Delete two-box from this station/);
       await press(/^Delete from station$/);
 
@@ -342,6 +370,8 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
       await Promise.resolve();
       await Promise.resolve();
     });
+    // `RUNTIME-REPAIR-04` §3.3 — the control moved into `Manage`; what it does did not.
+    await press('Manage');
     await press(/Delete two-box from this station/);
     await press(/^Delete from station$/);
 
@@ -382,6 +412,8 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
       await Promise.resolve();
       await Promise.resolve();
     });
+    // `RUNTIME-REPAIR-04` §3.3 — the control moved into `Manage`; what it does did not.
+    await press('Manage');
     await press(/Delete two-box from this station/);
     await press(/^Delete from station$/);
     await press(/^Remove the item on CasparCG layer 60/);
@@ -393,6 +425,14 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
 describe('the two verbs no longer share one word', () => {
   it('names the LIBRARY one for what it does, and its confirm names the fallout', async () => {
     const dialog = await openPicker();
+    /*
+      `RUNTIME-REPAIR-04` §3.3 — and the FIRST thing this case now states is the move itself:
+      the selection list carries NEITHER verb. The station-wide deletion is not on a row any
+      more, which is the whole reason the two words could be confused in the first place.
+    */
+    expect(dialog.textContent).not.toContain('Delete from station');
+
+    await press('Manage');
     // The row's verb takes a template off THAT ROW; this one deletes it from the
     // station, for every row, undoable only by re-importing the file.
     expect(dialog.textContent).toContain('Delete from station');

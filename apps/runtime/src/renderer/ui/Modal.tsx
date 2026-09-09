@@ -529,8 +529,14 @@ interface ModalProps {
    * action, names over ids over a refused line, and an outcome. `RUNTIME-REDESIGN-01` Phase 8
    * took it from `03-audit-log.html` as rendered (`--r-modal-w-ledger`, 1222 at 1280). Its
    * height stays intrinsic and its table scrolls, which is exactly why it is not `fixed`.
+   *
+   * ⭐ `library` is the fifth, added by `RUNTIME-REPAIR-04`, and it is a width too — a
+   * dialog that reads a list DOWN one column while describing the destination ACROSS
+   * another. The template picker is the only case, and it is the reference's own BASE
+   * `.modal` width (`--r-modal-w-library`, 1120 at 1280) rather than a width invented for
+   * it. It is not `wide`: `wide` IS the audio dialog's 860 and two other dialogs wear it.
    */
-  size?: 'prose' | 'wide' | 'fixed' | 'ledger';
+  size?: 'prose' | 'wide' | 'fixed' | 'ledger' | 'library';
   /**
    * `STATION-CHROME-01` §6 — which LAYER this dialog is on.
    *
@@ -546,11 +552,12 @@ interface ModalProps {
 }
 
 /** `STATION-CHROME-02` §2 — the frames, resolved from the token home and never spelled here. */
-const WIDTHS: Record<'prose' | 'wide' | 'fixed' | 'ledger', string> = {
+const WIDTHS: Record<'prose' | 'wide' | 'fixed' | 'ledger' | 'library', string> = {
   prose: cssVars['--r-modal-w-prose'],
   wide: cssVars['--r-modal-w-wide'],
   fixed: cssVars['--r-modal-w-fixed'],
   ledger: cssVars['--r-modal-w-ledger'],
+  library: cssVars['--r-modal-w-library'],
 };
 
 export function Modal({
@@ -700,7 +707,22 @@ export function Modal({
         </div>
         {children !== undefined && (
           <div
-            style={fixed ? { ...styles.body, ...styles.bodyFixed } : styles.body}
+            style={
+              /*
+                `RUNTIME-REPAIR-04` — `library` is FLUSH like `fixed`, and for the same reason:
+                its body is a two-column layout whose divider must reach the head band and the
+                footer, as the reference's `.template-layout` does. The inset moves to the
+                columns, which is where the reference puts it (`.template-tools{padding:20px
+                24px 14px}`).
+
+                ⚠ This is decided HERE and not in `controls.css`, because the padding is an
+                INLINE style: a `[data-modal-size='library'] .cg-modal-body` rule loses to it
+                every time, silently, and the column just renders 44 px narrow.
+              */
+              size === 'fixed' || size === 'library'
+                ? { ...styles.body, ...styles.bodyFixed }
+                : styles.body
+            }
             className="cg-modal-body"
             data-modal-body=""
           >

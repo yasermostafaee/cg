@@ -525,7 +525,7 @@ red-first matrix (§15.5), guard item 27 discharged (§15.6), and what was not d
       existing import suites byte for byte unchanged and green (16 + 4 + 2 + 7 + 1 + 5 unit,
       2 + 8 + 1 e2e — `design.md` §15.0); a DROPPED non-package reaches the row's error channel as
       `“garbage.vcg” failed verification…`, the sentence only the chain's own `verify` produces.
-      The one-press load contract, `Delete from station` and `Import a .vcg…` unchanged (twenty
+      The one-press load contract and `Import a .vcg…` unchanged (twenty
       specs drive them). The reference's select-then-`Load into` flow, detail aside, `Into` select,
       `Manage` view and import wizard are ARGUED (§15.3); the picker's flow is filed as a question
       for the owner (§15.7), not decided.

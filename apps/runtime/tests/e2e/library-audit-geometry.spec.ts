@@ -44,19 +44,55 @@ test('§8 — the picker measures to `LIBRARY_PX` at 1280 × 800', async ({ app 
   });
 
   /*
-    THE FRAME — the primitive's `wide`, now **860** at this viewport.
+    THE FRAME — `library`, the reference's own BASE `.modal` width: min(1120, 1280 − 56) = 1120.
 
-    ⚠ `REPAIR-03` B moved `wide` from 720 to the reference's own `.audio-modal` width, which is
-    the size that family measures (audit row 70). The PICKER rides `wide`, so it moved too —
-    TOWARD its own reference width of 1120 rather than away from it. The picker's own width and
-    its 342 px detail aside are audit rows 97 and 104, which the owner placed outside that
-    session; §15.3's argument about the aside is untouched.
+    ⚠ The width has moved three times and each move is a different fact, so the history is kept
+    rather than overwritten: `prose` 460 before Phase 8, `wide` 720 after it, `wide`'s 860 after
+    `REPAIR-03` took the `.audio-modal`'s number for that family — and now the picker's OWN
+    width (audit row 97), which is a fifth size because `wide` IS the audio dialog's 860 and two
+    other dialogs wear it. Measured by opening `#template-dialog`, never read off the sheet:
+    `.modal` is restated inside a narrow `@media` that does not paint at this viewport.
   */
   const frame = await dialog.evaluate((el) => Math.round(el.getBoundingClientRect().width));
-  expect(frame).toBe(860);
-  // POSITIVE CONTROL: the picker was `prose` (460) before Phase 8, and `wide`'s old 720 before
-  // `REPAIR-03` — so this number moving is a real change and not a re-read of the same box.
-  expect(frame).toBeGreaterThan(720);
+  expect(frame).toBe(1120);
+  // POSITIVE CONTROL: every width this dialog has ever worn is below the one asserted above,
+  // so this number moving is a real change and not a re-read of the same box.
+  expect(frame).toBeGreaterThan(860);
+
+  /*
+    🔴 `RUNTIME-REPAIR-04` §3.1 — THE TWO COLUMNS. The reference's `.template-layout` is
+    `776px 342px`; the ASIDE is the fixed half and the list takes the rest, so the assertion is
+    on the aside's width and on the main column being the larger of the two at this viewport.
+
+    ⚠ PLAYWRIGHT, NOT JSDOM (golden rule 12c): these are boxes. A jsdom copy would read 0 for
+    both and pass against a dialog with no second column at all — which is exactly the state
+    this file exists to tell apart from the built one.
+  */
+  const aside = dialog.locator('[data-template-aside]');
+  await expect(aside).toBeVisible();
+  const asideBox = await aside.evaluate((el) => el.getBoundingClientRect().width);
+  expect(Math.round(asideBox), 'the reference’s 342 px detail column').toBe(342);
+  const layout = await dialog
+    .locator('[data-template-layout]')
+    .evaluate((el) => el.getBoundingClientRect().width);
+  expect(layout - asideBox, 'the list column takes the rest').toBeGreaterThan(asideBox);
+
+  /*
+    THE DESTINATION CARD — the one block of the reference's aside this product can fill without
+    a selection, and the reason the column is not furniture: it names the ROW the picker was
+    opened from, with the real coordinate in the sentence (`R-028`).
+  */
+  const dest = dialog.locator('[data-template-destination]');
+  await expect(dest).toBeVisible();
+  await expect(dest).toContainText(/Destination ·/);
+  await expect(dest).toContainText(/on \d+-\d+/);
+
+  /*
+    THE DROP ZONE IS IN THE ASIDE NOW. The audit's own reading of surface 01 was that it
+    “only becomes visible after scrolling past every template”; asserted by CONTAINMENT, which
+    is the property that was actually wrong before rather than a position in pixels.
+  */
+  await expect(aside.locator('[data-template-drop]')).toHaveCount(1);
 
   // THE SEARCH — 39 tall at 14 px, the glyph inside its start padding.
   const search = dialog.getByRole('searchbox', { name: 'Search templates' });

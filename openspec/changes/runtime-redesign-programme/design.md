@@ -2988,6 +2988,8 @@ surface looks like the first time somebody actually decides it. The owner should
   it goes is bound to the `Manage` view (audit row 101), which is a later item. **Nothing was built
   and nothing was moved.** Recorded here so the decision is not re-derived, and so the next session
   does not read the button's survival as approval.
+  ⭐ **BUILT, 2026-09-09 — `RUNTIME-REPAIR-04`, §21.** `Manage` exists and the control is behind
+  it; no picker row carries a deletion. What the deletion decides is unchanged (§21.4).
 - Not touched, by the owner's own scope: the 24 cheap token values, the 19 medium items, and the
   remaining structural ones — `--r-panel-bar-h`, the Inspector's spacing gradient, the picker's
   width and its detail aside, the modal width table and the button family.
@@ -3454,3 +3456,215 @@ emblem's edge **1.60:1** (pure decoration). Reported for the owner; not changed.
 - **Bucket D:** 139 and 140 are **closed** — both measured, both now on the outer family. The
   four Station-setup tab bodies (134–137), the status bar (133), `Station layers` (138), the
   Inspector's look/plate sections (141) and the PVW stage content (142) remain unmeasured.
+
+## §21 — `RUNTIME-REPAIR-04`: THE PICKER FAMILY, AND THE CONTROL THAT CAME OFF THE ROW
+
+**2026-09-09, after `REPAIR-03`.** The last coherent surface in the audit's list: the picker's
+width and its detail aside (rows 97 and 104), its `Manage` view (row 101), and with `Manage` the
+owner's decided-but-unbuilt item from §18.4 — the red `Delete from station` moves OFF THE ROW.
+
+### 21.0 THE MEASUREMENT, AND WHAT IT FALSIFIED
+
+Measured by opening `#template-dialog` in Chromium at 1280 × 800 (`01-template-picker.html`,
+`data-start="templates"`), driving the prototype's own `[data-action="manage-library"]`.
+
+- **The picker is the OUTER `.modal` family** — radius 14, `0 30px 100px rgba(0,0,0,.667)`, head
+  `22px 26px` on `#172230` with a 42 px emblem, foot 72 px `16px 26px`, button 39 / radius 7,
+  primary `#74cdf6`. Not `.settings`, not `.sub-dialog` (§20.2's three families).
+- **It wears that family's BASE width**, `min(1120px, 100vw − 56px)` = 1120 here. That is why
+  `wide` was never going to reach it: `wide` IS the `.audio-modal`'s 860, and two other dialogs
+  wear it. A fifth size (`library`) rather than a wider `wide`.
+- 🔴 **THE ASIDE IS NOT WHAT IT WAS EXPECTED TO BE, AND THE REASON IS THE FINDING.** It was
+  predicted to be a fixed column of categories or filters. It is neither: measured, it holds
+  **zero controls** (`querySelectorAll('button,select,input,a')` → `[]`) and is a READ-OUT OF THE
+  SELECTED TEMPLATE — a `Destination` card, a `Selected template` eyebrow, a rendered preview
+  with an `ILLUSTRATIVE LAYOUT` watermark, an `h2`, a hint, a `Type · Looks · Text fields ·
+Availability` list and a `Compatible with this row` notice. The kind chips the prediction was
+  reaching for are `.template-filter`, in the MAIN column, and the app already has them.
+- ⚠ **This is NOT the `§1.1 line 72` failure class.** That was a map row asserting a control the
+  app does not have; here the aside is real, 342 px, measured, and present. What is wrong is the
+  guess about its CONTENTS, and the correction changes what can be adopted rather than whether
+  anything can.
+
+### 21.1 🔴 WHY THE ASIDE CANNOT BE TAKEN WHOLE, AND WHAT IT CARRIES INSTEAD
+
+The aside exists to describe a SELECTION. This picker has none: one press on a row IS the load,
+and twenty specs drive that contract through `app.loadTemplate`. Adopting the column whole means
+adopting select-then-`Load into`, which is a CONTRACT change — the one §15.1 filed to the owner
+and did not answer, not a look this session may decide in passing.
+
+So the column is built at the reference's own geometry and carries what this product genuinely
+knows while the list is open:
+
+| block            | where it comes from                                                              |
+| ---------------- | -------------------------------------------------------------------------------- |
+| destination card | the reference's OWN first block, and the only one that does not need a selection |
+| the drop zone    | **moved here** — the audit found it below the fold at the foot of the list       |
+
+⭐ **The destination card pays for itself twice.** `Destination · <row>` over
+`Operator row · on 1-85` puts the row's operator-facing name and its REAL COORDINATE on the
+surface (golden rule 11, and `R-028` — the number is how a layer gets cleared by hand), where
+before they were only in the dialog's title. It is also, exactly, what the reference's `Into`
+destination select exists to tell the operator — so the select stays argued away (§15.3) while
+the fact it carried is now said.
+
+### 21.2 THE `Manage` GATE — COUNTED, AND OPEN
+
+The owner's gate: **≤ 6 new controls AND no data the console does not already hold.**
+
+| control in the reference's `Manage` body | equivalent in the app                                  |
+| ---------------------------------------- | ------------------------------------------------------ |
+| the `Manage` door                        | **none — NEW (1)**                                     |
+| per-row `Delete`                         | exists: `Delete from station`, on the picker row today |
+| footer `Back to selection`               | **none — NEW (2)**                                     |
+
+**2 new controls.** Everything else in the body is a thumbnail, a name, a usage line and a
+notice — none is a control.
+
+**And no new data.** The reference's `Used by N rows` is
+`allChannelRows().filter(r => r.template === t.id).length`. Here the equivalent is the stack
+snapshot the layer table already reads: `StackItemState` carries `templateId`, and
+`window.cg.stack.snapshot()` is the same call `useStack` makes. Nothing is fetched that the
+console did not already have, no schema moves, and nothing is persisted.
+
+⚠ The count is PULLED when the view opens, not subscribed. This hook is mounted by every
+`LayerRow`; a subscription here would be thirty of them for a number read while one short-lived
+list is on screen — the same reason the template list and the bank are pulled (§15.2).
+
+### 21.3 🔴 THE ONE PLACE THIS DELIBERATELY DOES NOT FOLLOW THE DRAWING
+
+**The reference DISABLES its `Delete` for a template in use.** Measured: all six it ships are
+`disabled`, each with `title="Unload this template from all rows before deleting"`, and its
+footer says _"Templates in use are protected in this demo."_
+
+**Not adopted, and it is a bucket-A refusal.** A count read from a stack snapshot may not gate a
+destructive control's AVAILABILITY: inside the `B-092` bootstrap window that snapshot can
+legitimately be `[]`, and a disabled-on-count `Delete` would then refuse a lawful deletion with
+nothing the operator could act on. The BRIDGE is the authority — it refuses `in-use`, names the
+places, and `B-212` turns each into a remedy with the way there beside it. The count is a line of
+information under a name; the refusal is a sentence the operator can do something about.
+
+### 21.4 WHAT THE MOVE CHANGED, AND WHAT IT MAY NOT
+
+`design.md` §18.4, built: a red station-wide deletion repeated down every row of a picker is one
+mis-aimed press from deleting a template while something is on air. The reference has no
+destructive control on a row at all.
+
+**The route changed. Nothing the deletion decides changed.** Proved by the ten cases of
+`templateRemoval.dom.test.ts`, whose diff in this session is ONE ADDED PRESS per case and two
+selectors re-pointed at the list that is now on screen — no assertion, no wording, no expectation
+about what a deletion does:
+
+| still true after the move                       | where                                                                |
+| ----------------------------------------------- | -------------------------------------------------------------------- |
+| CONFIRMS FIRST, before the bridge is asked      | `templatePicker.manage.dom` §3.3, `removeCalls` empty at the confirm |
+| the confirm names the SCOPE and the CASCADE     | `every browser`, `cannot be undone`, `N plate bindings`              |
+| the cascade runs only AFTER the bridge said yes | `forgetTemplateAssignments` after `res.ok`                           |
+| a refused deletion clears no bindings           | `does NOT delete the assignments when the removal was refused`       |
+| the refusal lands IN the dialog, not the toast  | `[data-modal-message]` (A9)                                          |
+| `B-212`'s places and their remedies             | `[data-in-use-references]`, moved into the view with the control     |
+
+⚠ `R-013`'s right-click row menu is the LAYER TABLE's, not the picker's, and its `REMOVE` takes a
+template off THAT ROW — a different verb, untouched here. The picker's rows never had a menu, so
+no menu route to a station-wide deletion was removed, and none is added: `Manage` is the one door.
+
+### 21.5 THE MEASURED COMPARISON
+
+| property             | reference (rendered) | app (after)               | verdict                                                    |
+| -------------------- | -------------------- | ------------------------- | ---------------------------------------------------------- |
+| frame width          | **1120**             | **1120**                  | **FIXED** (was 860; `prose` 460 → `wide` 720 → 860 → here) |
+| layout split         | `776px 342px`        | `776px 342px`             | **FIXED**                                                  |
+| aside width          | 342                  | **342**                   | **FIXED**                                                  |
+| aside ground         | `#111c28`            | `--r-tpl-aside-bg`        | **FIXED** — adopted under the narrow test (below)          |
+| aside inset / rule   | 22, 1 px `--line`    | **22, 1 px `--r-border`** | **FIXED**                                                  |
+| aside CONTENTS       | a selection read-out | destination + drop        | **ARGUED (A)** — §21.1, the contract                       |
+| `Manage` control     | 69.9 × 33, r7, 13 px | **68.9 × 33, r7, 13 px**  | **FIXED** (the 1 px is the label, not the box)             |
+| manage row           | 84, `17px`, gap 12   | **84, `17px`, gap 12**    | **FIXED**                                                  |
+| manage row rule      | 1 px `--line`        | **1 px `--r-border`**     | **FIXED**                                                  |
+| manage delete BOX    | 33, r7, 13 px        | **33, r7, 13 px**         | **FIXED**                                                  |
+| manage delete COLOUR | `quiet`, disabled    | `danger`, pressable       | **ARGUED (A)** — §21.3                                     |
+| manage foot primary  | `Back to selection`  | **`Back to selection`**   | **FIXED**                                                  |
+| manage foot quiet    | `Import .vcg`        | not offered               | **ARGUED (B)** — below                                     |
+| manage replaces list | yes, same frame      | **yes, same frame**       | **FIXED**                                                  |
+| `Delete` on a row    | none                 | **none**                  | **FIXED** (§18.4)                                          |
+
+**`Import .vcg` in the management footer — ARGUED, bucket B (the reference is wrong here).** In
+the drawing, importing adds to a library and loads nothing — its own footer says
+_"Importing does not load a row or take it on air."_, which §15.1 already recorded as FALSE of
+this product. Here `Import a .vcg…` RESOLVES THE PICK and loads the package onto the row that
+opened the picker. Offering it from a maintenance view would make that view perform a load.
+
+**The narrow stale-hex test, on the one colour this session took.** `#111c28`: **(a)** absent
+from the reference's nineteen declared `:root` colours — yes; **(b)** equal to a hex this app
+retired in Phase 2 (§7's "was" column) — **no**. It fails (b), so it is ADOPTED, on the same
+reading and for the same reason as row 38's `#101722`.
+
+### 21.6 RATIOS — PUBLISHED, AND THE THREE BELOW A FLOOR ARE REPORTED
+
+Measured in Chromium against a fresh build, at 1280 × 800.
+
+| ink / edge                         | on              | ratio     | floor         |
+| ---------------------------------- | --------------- | --------- | ------------- |
+| destination NAME                   | its card        | **15.52** | AA 4.5 ✅     |
+| destination META (row kind, coord) | its card        | **6.31**  | AA 4.5 ✅     |
+| drop-zone title                    | the zone        | **17.10** | AA 4.5 ✅     |
+| drop-zone sentence                 | the zone        | **6.96**  | AA 4.5 ✅     |
+| `Manage` label                     | its fill        | **13.87** | AA 4.5 ✅     |
+| the aside's GROUND                 | the dialog's    | 1.01      | — (below 3.0) |
+| the aside's RULE                   | the main column | 1.49      | — (below 3.0) |
+| the destination card's EDGE        | the aside       | 1.49      | — (below 3.0) |
+
+⚠ **The three low ones are reported, not tuned, and the reference measures the same.** Its
+`.template-detail` `#111c28` against `.modal` `#141b25` is 1.01 too — in BOTH trees the column is
+separated by its RULE and not by its ground. None of the three identifies a control (WCAG 1.4.11
+is about boundaries essential to identifying one); the controls inside the column carry their own
+edges. Raising the aside's ground to clear 3.0 against the dialog would make it a second panel
+rather than a side of this one, which is a look decision the owner has not asked for.
+
+### 21.7 THE BUDGET
+
+Deltas decided: **19. FIXED 15 · ARGUED 4 = 21 %**, under the quarter. The session does not stop.
+
+| ARGUED                                          | bucket | reason                                                                                                                                                              |
+| ----------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the aside's selection read-out                  | **A**  | it describes a selection the one-press contract does not have; adopting it re-points the contract (§15.1's open question), which is the owner's call and not a look |
+| the manage `Delete` stays `danger`, pressable   | **A**  | severity by token; and a count from a snapshot that can be empty (`B-092`) may not gate a destructive control — the bridge decides (§21.3)                          |
+| `Import .vcg` in the management footer          | **B**  | the reference's import loads nothing; this one resolves the pick and loads the row — §15.1 already recorded that sentence as false here                             |
+| the aside's ground stays 1.01 from the dialog's | **B**  | the reference measures 1.01 too — in both trees the rule separates the column, not the ground                                                                       |
+
+### 21.8 WHAT §0 AND §1 FALSIFIED ABOUT THE PROMPT
+
+Recorded because a prompt that cannot be disproved produces a session that cannot disagree with it.
+
+1. **The aside is not categories or filters** — §21.0. The prediction was wrong and the reason is
+   the whole shape of §21.1.
+2. **§4's "cheap ~24" is already closed.** The prompt offers it as the session's tail and notes
+   only that "the row rule and the header ground are already done". In fact the whole list —
+   rows 3, 4, 9, 10, 11, 12, 15, 19, 20, 21, 23, 30, 32, 33, 38, 54, 58, 71, 74, 77, 84, 85, 90,
+   92 — was disposed of by `MONITORS-01` §19.5 (13 FIXED, the rest argued, row 11 by
+   `AUDIT-CLOSE-01`), and rows 3/4/9/10/20/21/38 were re-decided under the narrow test by
+   `REPAIR-03` A1. Nothing of it remained to do, so the budget went to §3.
+3. **`git bash` is usable on this host today.** The prompt states it is not. Every command in this
+   session ran through it without an msys fault; the standing hazard is real but did not fire, and
+   the working rule that survives is the one that actually bit here — see 4.
+4. **A `python` patch script that writes with `open(P,'w')` truncates BEFORE it can fail.** One did:
+   an emoji written as a surrogate pair raised `UnicodeEncodeError` at encode time and left
+   `useTemplatePicker.tsx` at ZERO BYTES. Restored from `HEAD` and re-applied; every patch script
+   in this session now encodes first and writes through a temp file. Its sibling: **a quoted bash
+   heredoc strips backslashes**, so the two attempts to fix that escape from a heredoc silently
+   matched nothing and reported success.
+
+### 21.9 RECORDED, NOT BUILT
+
+- 🔴 **THE ROW HOVER HAS ONLY ONE CHANNEL.** `REPAIR-03` A2 landed it at `#283443`, **1.20:1**,
+  capped there by the AA floor on the row's own muted ink (4.61:1), and hover-vs-selected is
+  1.04:1 in fill with the 2 px frame (8.55:1) carrying selection. The owner accepts both. The gap
+  worth closing is that the hover moves ONE property: **lift the row's own ink one step on hover
+  (muted → secondary)**. That channel moves AWAY from the AA floor rather than into it, so the
+  constraint that capped the ground does not bind it; and it cannot be confused with the selection
+  because the mechanism differs — selection is a frame, this is ink. **Not built here.**
+- **The import wizard is not built in the app at all** (audit row 107). It is a FEATURE, not a
+  delta: a 748 px dialog with a three-step rail, whose `Review` step is simulated by its own
+  disclaimer and whose `Complete` step is false of this product (§15.3). Filed, nothing built.
+- Not touched, by the owner's own scope: the 53 px panel bar, the Inspector's spacing gradient,
+  the PVW zoom / guides / `ALL LAYERS`, the audit `Date` filter, and the Station-setup rail fills.

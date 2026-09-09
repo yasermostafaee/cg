@@ -471,7 +471,16 @@ export function LayerRow({
      * with two sources for the template, not two loads sharing a button.
      */
     load: async () => {
-      const chosen = await pickTemplate(`Load onto ${rowName}`, acceptsBank);
+      /*
+        `RUNTIME-REPAIR-04` — the picker's aside names the DESTINATION, so the row hands over
+        what it already knows about itself. The reference draws this as `Destination · Layer 5`
+        over `Graphic row · Empty`; nothing here is fetched or derived for it.
+      */
+      const chosen = await pickTemplate(`Load onto ${rowName}`, acceptsBank, {
+        rowName,
+        coord: layerName,
+        holding: templateLabel,
+      });
       // The operator's own dismissal: not a success, not a refusal to report.
       if (chosen === null) return { accepted: false, cancelled: true };
       /*

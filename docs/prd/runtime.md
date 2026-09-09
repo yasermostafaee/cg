@@ -2783,8 +2783,12 @@ existed"_. The same argument applies to the sources themselves.
   ⚠ Per CORRECTION 2 this includes **introducing a shared `Select`** and bringing the four raw
   `<select>`s onto it — which also closes the focus-trap gap.
 - **Red is a budget.** State the rule the panes follow. Today `danger` is worn by `Remove…`
-  (Candidate layers), `Delete from station` (picker), and two icon trashes; `caution` by the orphan
-  banner and Playout's clear. See [[R-055]] for the adjacent FAILOVER miscolour.
+  (Candidate layers), `Delete from station` (the picker's `Manage` view), and two icon trashes;
+  `caution` by the orphan banner and Playout's clear. See [[R-055]] for the adjacent FAILOVER
+  miscolour.
+  ⭐ **2026-09-09, `RUNTIME-REPAIR-04`** — the picker's red came OFF EVERY ROW and now appears
+  once, behind `Manage`. That is the budget rule applied rather than restated: a destructive
+  control repeated down a list spends red on every row of it.
   🔴 **That is the RESTING budget only, and the loudest red in the product is a HOVER.**
   `--r-verb-remove: #ff0000` (`ui/controls.css:54`) — pure, fully saturated red — is painted as a
   hover fill by `.cg-btn[data-verb-tone='remove']:hover:not(:disabled)` (`:571-574`), reachable on a
@@ -2794,14 +2798,14 @@ existed"_. The same argument applies to the sources themselves.
 - 🔴 **Destructive-verb vocabulary today — four spellings for one family, and the confirm rule is
   inconsistent:**
 
-  | spelling                          | where                              | confirms?                                                                |
-  | --------------------------------- | ---------------------------------- | ------------------------------------------------------------------------ |
-  | `Remove…` (danger)                | `FixedBankConfigModal.tsx:478-485` | ✅ three-branch                                                          |
-  | `Delete from station` (danger)    | `useTemplatePicker.tsx:343-349`    | ✅                                                                       |
-  | red trash icon, no text           | `SourcesModal.tsx:372-383`         | 🔴 **no** — and it cascades, reporting orphaned bindings only afterwards |
-  | red trash icon, no text           | `DelimitersModal.tsx:109-115`      | 🔴 **no**                                                                |
-  | `Reset to defaults` (destructive) | `DelimitersModal.tsx:90-95`        | 🔴 **no**                                                                |
-  | `Remove backup` (default variant) | `ServerSettingsPanel.tsx:344-346`  | n/a — draft-only until APPLY                                             |
+  | spelling                          | where                                 | confirms?                                                                |
+  | --------------------------------- | ------------------------------------- | ------------------------------------------------------------------------ |
+  | `Remove…` (danger)                | `FixedBankConfigModal.tsx:478-485`    | ✅ three-branch                                                          |
+  | `Delete from station` (danger)    | `useTemplatePicker.tsx` — in `Manage` | ✅                                                                       |
+  | red trash icon, no text           | `SourcesModal.tsx:372-383`            | 🔴 **no** — and it cascades, reporting orphaned bindings only afterwards |
+  | red trash icon, no text           | `DelimitersModal.tsx:109-115`         | 🔴 **no**                                                                |
+  | `Reset to defaults` (destructive) | `DelimitersModal.tsx:90-95`           | 🔴 **no**                                                                |
+  | `Remove backup` (default variant) | `ServerSettingsPanel.tsx:344-346`     | n/a — draft-only until APPLY                                             |
 
   ⇒ The vocabulary decision is not cosmetic: **two acts that destroy shared configuration do not
   confirm today**, and the Sources one cascades.
