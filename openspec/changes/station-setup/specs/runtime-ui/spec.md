@@ -15,9 +15,14 @@ A refusal or outcome raised by a section SHALL be shown in the dialog's pinned m
 > the two BUTTONS; the mechanism they used is untouched, which is why the two entry points
 > that are genuinely beside their subject still carry it.
 
-#### Scenario: One settings door on the status bar
+> ⚠ **`AUDIT-CLOSE-01` B1 (2026-09-09) — THE DOOR MOVED, THE COUNT DID NOT.** `SETTINGS` and
+> `LOG` now stand in the app header, which is where the approved reference draws them and which
+> the app did not have until that session. The requirement below is about there being exactly
+> ONE door, not about which bar it stands on, so only the surface it names is corrected.
 
-- **WHEN** the console renders **THEN** the status bar carries exactly one control that opens Station setup, and no `SOURCES` button beside it
+#### Scenario: One settings door, in the app header
+
+- **WHEN** the console renders **THEN** exactly one control in the whole console opens Station setup, it stands in the app header, and there is no `SOURCES` button beside it
 - **WHEN** the Layers panel renders with a declared bank **THEN** its bar carries no `Configure` control
 
 #### Scenario: The surviving deep links land on their own tab

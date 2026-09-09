@@ -134,14 +134,25 @@ test('🔴 the refusal stays with its own section, and the rail says which one i
  * assertion of both halves — the two buttons are GONE from the surfaces that carried them,
  * and the MECHANISM they used is untouched, so the two entry points that sit BESIDE the thing
  * they configure still land on their tab.
+ *
+ * ⚠ `AUDIT-CLOSE-01` B1 — THE DOOR MOVED TO THE APP HEADER, and the count is what this spec is
+ * about, not the bar. The assertions below were already page-wide (`page.getByRole`), so they
+ * held through the move without an edit; the TITLE and the comments said "status bar" and were
+ * the only thing that had gone false. Corrected rather than left, because a spec whose name
+ * describes a surface it does not look at is the next reader's wrong turn.
  */
-test('§1 — one settings door on the status bar, and no second one in the Layers bar', async ({
+test('§1 — one settings door in the whole console, and no second one in the Layers bar', async ({
   app,
 }) => {
   const page = app.page;
 
-  // The status bar carries SETTINGS and nothing else that opens this dialog.
-  await expect(page.getByRole('button', { name: 'Open Station setup', exact: true })).toBeVisible();
+  // Exactly one control opens this dialog, and it is in the app header.
+  await expect(page.getByRole('button', { name: 'Open Station setup', exact: true })).toHaveCount(
+    1,
+  );
+  await expect(
+    page.locator('[data-app-header]').getByRole('button', { name: 'Open Station setup' }),
+  ).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Open Station setup at Live sources' }),
     'the SOURCES button is gone',
@@ -154,8 +165,8 @@ test('§1 — one settings door on the status bar, and no second one in the Laye
     'the Layers bar is not a third door',
   ).toHaveCount(0);
 
-  // POSITIVE CONTROL: the neighbours that are NOT settings doors are untouched, so this is
-  // not passing because the status bar failed to render.
+  // POSITIVE CONTROL: the neighbours that are NOT settings doors are untouched, so this is not
+  // passing because a bar failed to render — one in the header, one still on the status bar.
   await expect(page.getByRole('button', { name: 'Open audit log' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Manual failover' })).toBeVisible();
 });

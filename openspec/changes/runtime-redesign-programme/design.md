@@ -1416,8 +1416,9 @@ by the owner's mapping rule.
 notch smaller and tighter (31 px boxes at 13 px, 12 px pad); X and Y stretch to fill the row and
 match; the section headings are a shade brighter and lighter; the foot carries `Discard · Update`
 at equal widths with a sentence under them and a faint shadow above; the monitor strip is 50 px
-taller with a visibly larger PVW stage; and the Layers bar has a monitor icon that folds the
-strip away and brings it back.
+taller with a visibly larger PVW stage; and there is a control that folds the monitor strip away
+and brings it back (it was a monitor icon in the Layers bar; `AUDIT-CLOSE-01` B1 moved it to the
+app header — see the strike below).
 
 🔴 **STRUCK BY `AUDIT-CLOSE-01` C1, 2026-09-09 — the toggle's PLACEMENT argument was invalid, and
 it is worth reading twice because it is not a wrong number, it is a wrong KIND of reason.**
