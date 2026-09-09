@@ -1,4 +1,5 @@
-import { test, expect, type Locator } from './fixtures/runtime.js';
+import type { Locator } from '@playwright/test';
+import { test, expect } from './fixtures/runtime.js';
 
 /**
  * 🔴 THE FIXED FRAME'S MESSAGE REGION IS CONTAINED BY THE PANE IT BELONGS TO.
