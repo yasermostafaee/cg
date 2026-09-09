@@ -720,3 +720,61 @@ position (§17.6)** and the runs (§17.7).
       `Docs check` green. ⭐ The `e2e` job running at all was predicted before the push rather than
       hoped for: `classifyChangedSet` over this commit's eleven paths returns
       `{ kind: 'code', needsE2e: true }` (`P-029`).
+
+## `MONITORS-01` — the monitors default, and the cheap bucket (2026-09-09)
+
+- [x] **A — the fact, traced in the code before the decision.** PGM (`MonitorPanel`) renders a
+      fixed empty box: no data input, no bridge call. PVW (`PreviewPanel` → `RehearsalStage`) is
+      a LOCAL browser render of the rehearsing rows in a `srcdoc` frame with
+      `@cg/template-runtime` inlined — `R-022`, _"nothing is ever sent to CasparCG"_ — and it
+      deliberately omits on-air rows. **Case (i): what the console BELIEVES.** `C-016` (the real
+      programme-channel grab) is `[ ]`; only its recon kit exists, and its own fourth acceptance
+      bullet says its panel would be **OFF by default**. Recorded in `design.md` §19.1.
+- [x] **B — the default flipped to HIDDEN** (`DEFAULT_MONITORS_SHOWN`, one home, three readers).
+      Chrome above the first data row **428.7 → 181.5 px**, rows **4 → 7**, folded figure
+      unchanged from `AUDIT-CLOSE-01`'s to the tenth of a pixel. `design.md` §19.4.
+- [x] **A13 handled explicitly, in all four places the rule lives** — `design.md` §19.2,
+      this file's A13 bullet, `R-060` in `docs/prd/runtime.md`, and the `runtime-ui` spec. The
+      non-persistence RULE stands and is still enforced; A13 answered `R-060`, which is about
+      PERSISTENCE, and never decided the boot state. What the flip touches is A13's own EXAMPLE
+      ("a known safe state" meant SHOWN); the load-bearing half — a KNOWN state over a REMEMBERED
+      one — survives intact. **Not to be read as A13 overturned, and not to be "reconciled" by
+      re-persisting the flag.**
+- [x] **The toggle is unconditional and proved on both sides of golden rule 12(c)** —
+      `shell-chrome.spec.ts` §B4 (Chromium: visible, contained in `[data-app-header]`, carries
+      the WORD, > 60 px wide, one press yields both panes) and `monitorsDefault.dom.test.ts`
+      (jsdom, whole `App`: exactly one such control page-wide, with a POSITIVE CONTROL).
+      **Red-first:** the old default planted back reddened **5 assertions across the two files**;
+      reverted by ORIGINAL BYTES, `SequenceEqual` true and `PLANTED` absent.
+- [x] **C — the cheap twenty-four.** FIXED 13 (rows 12, 19, 23, 30, 54, 58, 71, 74, 77, 84, 85,
+      90, 92), each measured in Chromium at 1280 × 800 before it was applied. ARGUED 7 (rows 3,
+      4, 9, 10, 20, 21 and row 38's ground) — ONE finding: every value in them is absent from the
+      reference's own nineteen declared `:root` colours, and the app measures equal or better on
+      every pair. Neither: rows 32/33 (owner request + the out-of-scope button family) and row 15
+      (stale — Phase 4 had already adopted it). `design.md` §19.5.
+- [x] 🔴 **THE BUDGET — 7 of 23 is 30 %, over the quarter, so the session STOPPED** rather than
+      arguing the rest, as `AUDIT-CLOSE-01` did at 29 %. Scored on the twenty rows this session
+      could decide it is 35 %; both are published.
+- [x] ⚠ **REPORTED, NOT RE-TUNED — two for the owner.** (1) The row HOVER is **1.02:1** here and
+      **1.04:1** in the reference; neither is a hover anyone can see, and adopting the drawing's
+      value would not fix it — a visible hover needs a value neither tree has. (2) The half-step
+      weights do not render as half steps in EITHER tree: this app ships Exo 2 as five static
+      faces (450→500, 550→600, 650→700, measured by rendered width) and the reference's own stack
+      loads no face at all. Row 92 is therefore a visual no-op and rows 54/84/85/90 land one step
+      heavier.
+- [x] **The runs.**
+      `pnpm gate` — **`93 successful, 93 total · 0 cached, 93 total`**, foreground, **261.6 s**,
+      footer `---- gate ended 2026-09-09T11:02:25.583Z (exit 0, 261.6s)` (`P-045`); OpenSpec
+      `78 passed, 0 failed`; `pnpm format:check` clean.
+      `pnpm exec playwright test` (runtime) — **151 passed (2.0 m)**, Windows, against a fresh
+      `vite build`. ⚠ **NON-AUTHORITATIVE** (golden rule 12a), and its FIRST run was **12 failed**
+      — eleven specs whose subject lives inside the strip, plus one real logic error of this
+      session's own (a reset control that had correctly just disappeared). The name-based sweep
+      had found only five of the eleven; the six it missed address the rehearsal iframes and
+      never say "monitor". Fixed once, on the fixture, as `app.showMonitors()`.
+      ✅ **DISCHARGED — Linux `e2e`, on the CODE head `7e9ebc55`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34344132162> — run `conclusion: success`.
+      The **`E2E (Playwright)` job RAN** (11:10:32Z → 11:21:33Z, **11 m 01 s**,
+      `conclusion: success`); it was **not skipped**, which is the half a green run alone does not
+      prove (golden rule 12b, `P-029`). `Lint • Typecheck • Test • Build` also ran green
+      (11:10:33Z → 11:14:42Z, 4 m 09 s), `Docs check` green, `required` green.
