@@ -130,7 +130,11 @@ Persian / RTL is a core requirement.
     (b) **A GREEN CI JOB CAN BE A SKIPPED ONE.** CI skips `e2e` when the diff is classified as
     unable to affect rendering (`P-029`). Check the job **RAN** — a run whose `e2e` was skipped
     proves nothing about the suite, and `conclusion: success` on the run does not distinguish
-    the two.
+    the two. ⚠ **And it reads the same way backwards: a RED job whose `e2e` step never reached
+    the suite is not evidence about the code either** — `P-046` is the measured instance, where
+    a third-party apt index sank the browser-deps step and the `E2E` step was SKIPPED, so the
+    job was red in 55 s having run no test at all; check that the job **RAN**, in both
+    directions.
     (c) **THE GATE DOES NOT RUN THE RENDERER AT ALL.** No amount of unit green covers layout:
     jsdom has no layout, so `getBoundingClientRect()` is all zeros there and a dom spec
     asserting a box, an edge or an overflow passes against a surface of ANY shape, including a

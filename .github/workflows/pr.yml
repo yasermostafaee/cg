@@ -458,9 +458,93 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @cg/designer exec playwright install --with-deps chromium
 
+      # 🔴 `P-046` — A THIRD-PARTY APT INDEX MUST NOT DECIDE WHETHER THIS SUITE CAN RUN.
+      #
+      # Measured 2026-09-09 on `acf3cf1a`: this step failed TWICE, eleven minutes apart, with
+      # `E: Failed to fetch https://dl.google.com/linux/chrome-stable/deb/.../Packages.gz
+      # Hash Sum mismatch`. `apt-get update` treats ANY index failure as fatal, so
+      # `install-deps` exited 100, `Build` and `E2E` were both SKIPPED, and the job was red in
+      # 55 s having never run a test. `ci` was green on the same commit.
+      #
+      # The repo it choked on is Google's chrome-stable list, which the runner image adds and
+      # which THIS JOB DOES NOT USE: the suite runs Playwright's own bundled Chromium out of
+      # `~/.cache/ms-playwright`, never an apt-installed browser.
+      #
+      # ⚠ A PLAIN RETRY IS NOT ENOUGH, WHICH IS WHY THE ESCALATION IS HERE. A hash-sum
+      # mismatch is a stale artifact on a CDN edge, not a dropped packet — attempt 2 failed
+      # identically to attempt 1. So the first failure escalates to the thing that actually
+      # addresses the cause: drop the third-party lists and consult Ubuntu's archives, which
+      # are the only ones Playwright needs.
       - name: Install system deps for cached browser
         if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: pnpm --filter @cg/designer exec playwright install-deps chromium
+        run: |
+          set -uo pipefail
+          ok=0
+          for attempt in 1 2 3; do
+            echo "P-046: install-deps attempt ${attempt} of 3"
+            if pnpm --filter @cg/designer exec playwright install-deps chromium; then
+              ok=1
+              echo "P-046: install-deps SUCCEEDED on attempt ${attempt}"
+              if [ "${attempt}" != "1" ]; then echo "P-046: RETRY PATH EXERCISED"; fi
+              break
+            fi
+            echo "P-046: install-deps attempt ${attempt} FAILED"
+            if [ "${attempt}" = "1" ]; then
+              echo "P-046: ESCALATION EXERCISED - dropping third-party apt lists"
+              sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+                         /etc/apt/sources.list.d/microsoft-prod.list
+              sudo apt-get update || echo "P-046: apt-get update still unhappy after the drop"
+            fi
+            sleep $(( attempt * 10 ))
+          done
+          if [ "${ok}" = "0" ]; then
+            echo "P-046: TOLERATED after 3 failures - the launch probe below decides"
+            echo "::warning title=P-046::playwright install-deps failed three times. Every Chromium shared library is already in the runner image (measured: this step adds only NINE FONT packages), so the job continues to the launch probe, which fails loudly if the browser cannot start."
+          fi
+
+      # 🔴 `P-046` — THE POSITIVE CONTROL, AND THE REASON THE STEP ABOVE MAY TOLERATE ANYTHING.
+      #
+      # The deps step can now finish having installed nothing. This one cannot: it launches the
+      # very browser the suite will use and fails the job LOUDLY if it will not start or will
+      # not paint. That is the whole licence for the tolerance above — a tolerated apt failure
+      # is only acceptable behind a probe that proves the instrument, and without this the step
+      # would have converted "cannot run the suite" into "silently did not", which is the
+      # `P-029` hole this repo already closed.
+      #
+      # ⚠ NOT `continue-on-error`, here or above. Deliberately. It would re-open that hole.
+      #
+      # It runs on BOTH browser paths, cache hit or miss, because it is a statement about the
+      # browser rather than about how the browser arrived.
+      #
+      # ⚠ NO CHANNEL FALLBACK, deliberately — it mirrors `playwright.config.ts`'s own CI branch
+      # (`if (process.env.CI) return undefined;`), which pins the bundled Chromium and never
+      # auto-switches to a system browser. A probe that fell back to `channel: 'chrome'` could
+      # go green on a browser the suite will not use, which is the one way a positive control
+      # can lie. Proved both ways before it shipped: with no bundled browser it exits 1 naming
+      # the missing executable, and with one it prints the version and exits 0.
+      - name: Probe - the browser actually launches
+        working-directory: apps/designer
+        run: |
+          node --input-type=module -e "
+          import { chromium } from '@playwright/test';
+          try {
+            const browser = await chromium.launch();
+            const page = await browser.newPage();
+            await page.setContent('<h1 id=probe>ok</h1>');
+            const text = await page.textContent('#probe');
+            const version = browser.version();
+            await browser.close();
+            if (text !== 'ok') {
+              console.error('P-046 probe: Chromium started but did not paint');
+              process.exit(1);
+            }
+            console.log('P-046 probe: Chromium ' + version + ' launched and painted OK');
+          } catch (err) {
+            console.error('P-046 probe FAILED - the suite cannot run on this browser:');
+            console.error(err && err.message ? err.message : err);
+            process.exit(1);
+          }
+          "
 
       - name: Build (workspace)
         run: pnpm build

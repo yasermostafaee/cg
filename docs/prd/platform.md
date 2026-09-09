@@ -2984,7 +2984,7 @@ matches an accessible name as a SUBSTRING, so a `region` named `Outputs` also fi
 - **Prefix class:** `P-`, platform — the dev loop's tooling.
 - **Number:** taken in the same sweep as `P-044` above; see its Number note for the derivation.
 
-## [ ] P-046 — CI's `Install system deps for cached browser` fails on an apt index download, and takes the whole `e2e` job with it ⟨priority: high — it leaves every commit UNDISCHARGED while `ci` stays green, and it poisons the `dev` → `main` backstop⟩ — FILED 2026-09-09 by `RUNTIME-REPAIR-05`
+## [~] P-046 — CI's `Install system deps for cached browser` fails on an apt index download, and takes the whole `e2e` job with it ⟨priority: high — it leaves every commit UNDISCHARGED while `ci` stays green, and it poisons the `dev` → `main` backstop⟩ — FILED 2026-09-09 by `RUNTIME-REPAIR-05`
 
 **What happens.** The `e2e` job's `Install system deps for cached browser` step runs
 `pnpm --filter @cg/designer exec playwright install-deps chromium`. Its `apt-get update` fails
@@ -3025,6 +3025,65 @@ before failing; or fall back to the bundled-browser path (`Install Playwright Ch
 which this run SKIPPED because the browser cache hit); or pin/refresh the mirror list.
 ⚠ Do **not** make the step `continue-on-error` — that converts a job that cannot run the suite
 into a job that silently does not, which is exactly the `P-029` hole this repo already closed.
+
+### ⟶ REMEDIED 2026-09-09 by `CI-BROWSER-DEPS-01`, and NOT YET EXERCISED — which is why this is `[~]`
+
+🔴 **THE CAUSE, MEASURED RATHER THAN ASSUMED.** The filing said "an apt index"; the log names it:
+
+```
+Err:29 https://dl.google.com/linux/chrome-stable/deb stable/main amd64 Packages
+  Hash Sum mismatch
+E: Failed to fetch .../chrome-stable/deb/dists/stable/main/binary-amd64/Packages.gz
+E: Some index files failed to download.
+```
+
+It is **Google's chrome-stable list**, which the runner image adds and **which this job does not
+use** — the suite runs Playwright's own bundled Chromium out of `~/.cache/ms-playwright`, never an
+apt-installed browser. `apt-get update` treats any index failure as fatal, so `install-deps` exits
+100 and takes `Build` and `E2E` down with it.
+
+⭐ **AND `install-deps` IS NOT A NO-OP HERE, WHICH IS WHY THE STEP WAS NOT SIMPLY DELETED.** On the
+last green run it reported `0 upgraded, 9 newly installed`. Every Chromium **shared library** was
+already `the newest version` in the image; all nine new packages are **FONTS** —
+`fonts-freefont-ttf`, `fonts-ipafont-gothic`, `fonts-tlwg-loma-otf`, `fonts-unifont`,
+`fonts-wqy-zenhei`, `xfonts-cyrillic`, `xfonts-encodings`, `xfonts-scalable`, `xfonts-utils`. So
+**Chromium launches on `ubuntu-latest` without this step**, and what the step buys is glyph
+coverage — which matters more in this repo than most, because it renders Persian (golden rule 4).
+That is the whole shape of the remedy: the browser is not at risk, the fonts are.
+
+**The remedy, in `P-046`'s own order of how little it hides:**
+
+1. **Retry — implemented, and NOT sufficient alone.** A hash-sum mismatch is a stale artifact on a
+   CDN edge, not a dropped packet: attempt 2 failed identically to attempt 1, eleven minutes later.
+   Kept anyway, because it costs nothing and covers the genuinely transient case.
+2. **Fall back to the bundled-browser path — REJECTED, and it could not have worked.** That path is
+   `playwright install --with-deps chromium`, which runs the SAME apt. The workflow's two browser
+   steps differ in whether they download a browser, not in whether they touch apt.
+3. **Refresh the sources — implemented as the ESCALATION on first failure**, because it is the only
+   one that addresses the measured cause: drop the third-party lists the image adds
+   (`google-chrome.list`, `microsoft-prod.list`) and consult Ubuntu's archives, which are the only
+   ones Playwright needs.
+
+**And the tolerance is licensed by a POSITIVE CONTROL, not by optimism.** After three failures the
+step warns and continues — but the next step launches the browser the suite will use, paints a
+page, and **fails the job loudly** if it cannot. Not `continue-on-error`, here or above: that would
+convert "cannot run the suite" into "silently did not", which is `P-029`'s hole read backwards.
+The probe mirrors `playwright.config.ts`'s CI branch exactly (bundled Chromium, **no** channel
+fallback), so it cannot go green on a browser the suite would not use. It was proved both ways
+before shipping: with no bundled browser it exits 1 naming the missing executable; with one it
+prints the version and exits 0.
+
+🔴 **WHY THIS IS `[~]` AND NOT `[x]`.** The outage ENDED before the fix shipped — a third re-run of
+job `102629045993` passed the same step cleanly, so Google's CDN had recovered. A green run now
+therefore exercises the **retry wrapper and the probe** (both run every time) but **NOT the
+escalation**, which only fires on a first failure. A green run that never met the failure is no
+evidence about the part of the fix that handles it.
+
+**What would exercise it** — proposed, NOT run against `dev`: a `workflow_dispatch` variant of the
+`e2e` job that writes a deliberately broken `sources.list.d` entry (an unreachable host, or a
+`Packages.gz` whose hash cannot match) before the deps step, and asserts the log contains
+`P-046: ESCALATION EXERCISED` followed by a green `E2E`. That is a test of CI by CI and belongs in
+its own change, on a branch, never on `dev`.
 
 - **Cross-refs:** [[P-029]] (a skipped `e2e` is not evidence — this is its inverse), [[P-030]]
   (the merge backstop this blocks), [[P-038]] (CI's own blindness class), [[P-027]].
