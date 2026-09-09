@@ -78,11 +78,20 @@ describe('§6 — LOAD opens the template picker', () => {
     await pressLoad();
 
     const dialog = openDialog();
-    expect(dialog?.textContent).toContain('No templates in this browser yet');
-    // The old copy said "The library is empty — import a .vcg first", naming a
-    // panel that no longer exists and giving no way to do the thing it advised.
+    /*
+      `RUNTIME-REPAIR-05` §3 — the sentence got shorter and kept its job. It was
+      "No templates in this browser yet — Import a .vcg… to bring one in, or drop a package
+      here": three clauses naming two gestures. The claim this case makes has never been about
+      the wording — it is that an empty list points at the CONTROL that ends the emptiness
+      rather than at the panel `R-028` deleted — and that is asserted below, harder than before:
+      the control is now IN the empty state, not merely mentioned by it.
+    */
+    expect(dialog?.textContent).toContain('Nothing on this station yet');
     expect(dialog?.textContent).not.toMatch(/library/i);
-    expect(dialog?.textContent).toContain('Import a .vcg');
+    const importFromEmpty = [...(dialog?.querySelectorAll('button') ?? [])].find((b) =>
+      /Import a \.vcg/.test(b.textContent ?? ''),
+    );
+    expect(importFromEmpty, 'the empty state offers the import itself').toBeDefined();
   });
 
   /**

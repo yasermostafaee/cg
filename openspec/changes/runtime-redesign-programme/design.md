@@ -2032,7 +2032,11 @@ opened from a row, reach the row's error channel as `“garbage.vcg” failed ve
   `getRootNode() === document`, and the page holds ZERO shadow hosts at those starts — the
   Station-setup prototype only attaches its root when its own dialog opens. So the console's one
   stylesheet (1067 rules) is what paints them, in the console's palette, unlike Phase 7's case.
-- **The reference's picker is SELECT-THEN-LOAD; the product's is ONE PRESS.** The reference's row
+- **The reference's picker is SELECT-THEN-LOAD; the product's is ONE PRESS.**
+  ⭐ **ANSWERED AND REVERSED, 2026-09-09 — see §22.** The owner adopted the reference's flow
+  after seeing the built picker. The question this bullet filed is closed; the count it rests
+  on ("twenty specs") was also wrong — it is nine spec files, all through one fixture method.
+  Everything below is left as written, because it is the record of what was believed then. The reference's row
   is `aria-pressed`, a detail aside describes the selection, and a footer `Load into Layer 5`
   commits. The product's row control IS the load (`Load <name> onto this layer`), and that contract
   is what `app.loadTemplate` drives through twenty specs. ARGUED, not adopted (15.3): every reason
@@ -3708,3 +3712,169 @@ every size but `fixed` and is untouched by this.
   `conclusion: success`, and the **`E2E (Playwright)` job RAN** 14:39:08Z → 14:50:14Z
   (**11 m 6 s**), beside `Lint · Typecheck · Test · Build` 14:39:07Z → 14:43:01Z. Not skipped
   (`P-029`), not cancelled — the two ways a green run proves nothing.
+
+## §22 — `RUNTIME-REPAIR-05`: THE PICKER SPLIT IN TWO, AND A DECISION REVERSED
+
+**2026-09-09, after `REPAIR-04`.** The owner saw the built picker and reversed one of the
+programme's own answers: the modals are to be two, the messages shorter, importing is not a
+load, and the library — if it must exist at all — should be like the reference's.
+
+### 22.0 🔴 IS THE LIBRARY LOAD-BEARING? Four falsifiable questions, four answers
+
+The owner authorised REMOVING the Templates library if it is genuinely free to remove. It is
+not, and no part of the answer is a matter of taste:
+
+| #   | question                                   | answer, from the tree                                                                                                                                                                                                                                                                             |
+| --- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | is one template used by more than one row? | **YES, by design.** `Used by N rows` counts stack items whose `templateId` matches — one template loaded onto several rows. The demo station itself ships one on two rows, and the e2e fixture's own note says it: _"Several rows can share a `templateId` (the same template loaded twice)"_     |
+| 2   | is re-import idempotent?                   | **YES.** `templateId` is `manifest.id` — the package's own — never minted locally (`templateDelivery.ts`). `LibraryStore.import` does `#index.set(template.templateId, entry)`, and the mock's twin says _"A re-imported id overwrites the prior entry."_ Same bytes, same entry, bindings intact |
+| 3   | what else reads the registry?              | the picker, `Manage`, the Inspector (field schema), `LayersPanel` (row names, owner labels), `PreviewPanel`, `SourcesSection`, `AuditPanel`, `useTemplateIndex`, and `fixedSlotLoad` — plus **plate→source assignments, which are keyed by `templateId` and are TEMPLATE-wide**                   |
+| 4   | does it survive a restart?                 | **YES, and it is the source of truth.** `LibraryStore` persists to OPFS through `@cg/storage`, and `WebSocketRuntime` **reconciles the browser-local library TO THE BRIDGE on every connect** — the bridge is served FROM it                                                                      |
+
+🔴 **All four say load-bearing, so it stays and is built like the reference.** Question 4 is the
+one that settles it beyond argument: this is not a convenience list in front of a server-side
+registry — the browser-local library IS the registry, and a library-less console would have the
+operator re-import every package by hand after every restart, losing every plate binding with it.
+
+⚠ **The prompt's recorded precedent — "a remove-and-re-add minted a new id and dropped a plate
+assignment" — does not apply to TEMPLATES.** A template's key is its manifest id, so it survives.
+The precedent is about a different surface, and the distinction is worth keeping: the name is
+indeed not the key here either — the MANIFEST ID is, and that is why re-import is safe.
+
+### 22.1 WHAT §0 AND §1 FALSIFIED
+
+1. 🔴 **"a selection model re-points `app.loadTemplate` across ~20 specs" — WRONG, and it was
+   this programme's own number.** `git grep -l` finds **10 files**, one of which is the fixture
+   itself: **9 spec files**, and all nine reach the load through ONE fixture method
+   (`RuntimeApp.loadTemplate`). The reversal cost that method four lines. **The refusal in
+   §15.1 was built on a count nobody had run**, which is the same failure mode the audit
+   catalogued one level up.
+2. **The reference ships two DIALOG ELEMENTS, not two documents.** `01-template-picker.html`
+   and `02-template-import.html` are the SAME page — byte-identical 82,256-byte stylesheet,
+   the same five `<dialog>`s — differing only in which `data-start` opens. So the owner's "two
+   separate modals" is right at the level that matters (`#template-dialog` 1120 wide and
+   `#import-dialog` 750 wide are distinct elements with distinct chrome), and it would have
+   been wrong to claim two separate documents.
+3. **The reference has NO double-click.** Its script contains `keydown` and `Enter` but never
+   `dblclick`. The double-click commit is OURS, added on the owner's instruction; it is not
+   reference authority and is not claimed as any.
+4. **`git bash` broke mid-session**, exactly as the standing hazard says — an msys fatal on a
+   `git grep`. Everything after ran through PowerShell.
+5. 🔴 **AND THE TOOLING LESSON FROM `REPAIR-04` REPEATED ITSELF IN A NEW TOOL.** A PowerShell
+   line wrote `[System.IO.File]::WriteAllText($path, $s)` where an earlier statement had failed
+   and left `$s` null — **PowerShell does not stop on a failed statement**, so the write ran and
+   truncated `useTemplatePicker.tsx` to zero bytes for the second time in two sessions. Restored
+   from `HEAD` and re-applied from the saved patch scripts, which is the whole reason each edit
+   is a re-runnable script. The rule generalises past Python: **encode/derive first, verify
+   non-empty, write through a temp file.**
+
+### 22.2 🔴 THE REVERSED DECISION, AND WHERE IT IS NOW WRITTEN
+
+**"One press on a row's load control loads that template" is REVERSED by the owner,
+2026-09-09,** after seeing it built. The reason is the owner's: the picker is two dialogs, a
+template is selected and then committed, and importing no longer loads.
+
+A published decision beats a re-derived one, so a reversed one is published in every place the
+old one was recorded — seven files, found by sweep rather than from memory:
+
+| where                      | what it said                                                                                       | now                                                                                                     |
+| -------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `specs/runtime-ui/spec.md` | _"The picker's CONTRACT SHALL NOT change: one press on a row's load control loads that template…"_ | amended in place, pointing at the two new requirements that replace it                                  |
+| `design.md` §15.1          | the question filed to the owner, unanswered                                                        | **ANSWERED**, with the wrong spec count corrected                                                       |
+| `design.md` §15.3          | two ARGUED rows resting on it                                                                      | annotated as superseded                                                                                 |
+| `tasks.md` ×2              | "8 filed for the owner"; "the one-press load contract … unchanged"                                 | answered / struck                                                                                       |
+| `useTemplatePicker.tsx`    | the module note's first refusal                                                                    | struck, with the count corrected                                                                        |
+| `theme.ts` `LIBRARY_PX`    | _"the row's one-click load is the contract twenty specs drive"_                                    | struck                                                                                                  |
+| `controls.css`             | _"THE LOAD CONTROL IS THE ROW'S WHOLE LEFT … in one press"_                                        | annotated: it is the SELECT control                                                                     |
+| `AppHeader.tsx`            | _"the one-press row contract"_                                                                     | re-worded — and its argument is untouched, because it was about WHICH ROW, never about how many presses |
+
+### 22.3 THE TWO DIALOGS, MEASURED
+
+Chromium at 1280 × 800, each dialog OPENED (never read off the sheet — `.modal` is restated
+inside a narrow `@media` that does not paint here).
+
+|                   | reference                                                                         | app (after)                                                            |
+| ----------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Templates frame   | `#template-dialog` **1120 × 744**, radius 14                                      | **1120**, `--r-modal-w-library`                                        |
+| its split         | `776px 342px`                                                                     | **`776px 342px`**                                                      |
+| Import frame      | `#import-dialog` **750 × 730**, radius 14, head `22px 26px` on `#172230`          | **750**, `--r-modal-w-import`, the same head band                      |
+| its drop zone     | **694 × 242**, dashed, radius 11, `32px 20px`                                     | the same tokens (`--r-tpl-drop-*`)                                     |
+| `Choose file`     | a **primary INSIDE the zone**, 126.8 × 39, radius 7                               | **built — audit row 111 closes here**                                  |
+| Import footer     | `Cancel` only                                                                     | `Cancel` + `Import "<file>"` when one is staged                        |
+| row control       | `<button aria-pressed>`, cursor pointer                                           | **`aria-pressed`, `Select <name>`**                                    |
+| selected row      | `#203649` fill, `#547d9a` border, a filled check circle                           | **`--r-tpl-row-sel-bg` / `-line`** (the check circle is ARGUED, below) |
+| incompatible row  | **NOT disabled** — dimmed ink + a chip                                            | **not disabled** — dimmed ink + the chip                               |
+| commit            | footer primary `Load into Layer 5`, **disabled while the selection is refused**   | **`Load onto <row>`, disabled by the same predicate**                  |
+| aside, compatible | `.notice` — _"Compatible with this row / Ready to load…"_                         | `[data-template-verdict=ok]`                                           |
+| aside, refused    | `.notice.warn` on `#352d1e`, ink `#f3cd88`, edge `#655334`, `13px 15px`, radius 8 | the app's caution family + **`--r-caution-line`**, the same box        |
+
+⭐ **The reference disables its own primary for a refused selection — measured, not assumed.**
+Selecting `3ghab` (a bed template) on `Layer 5` flips `Load into Layer 5` to `disabled: true`
+and swaps the aside's notice to its warn variant. That is the arrangement this console now has,
+and it is the reference's rather than an invention.
+
+### 22.4 🔴 THE ONE REFUSAL, ENUMERATED FROM THE TREE AND PRESERVED EXACTLY
+
+Enumerated by reading the picker, not from memory. **There is exactly one condition that stops
+a load, and it did not change:**
+
+| #   | condition                                                                                                     | before                         | after                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------- |
+| 1   | `requiredBankFor(template) !== accepts` — the bank predicate, the SAME one the bridge refuses `wrong-bank` on | disabled the row's load button | **disables the footer's commit**, and every gesture routes through it |
+
+And two things that are **cautions, not refusals** — they warn and have never blocked a load,
+and this session did not give them that power:
+
+|     | condition                              | shown as                                               |
+| --- | -------------------------------------- | ------------------------------------------------------ |
+| a   | `liveSourceCarrierState === 'unknown'` | chip `Re-import required`, its sentence on the `title` |
+| b   | unassigned live plates                 | chip `Needs a source: …`, its sentence on the `title`  |
+
+⚠ **THE ROW IS NO LONGER DISABLED FOR (1), AND THAT IS NOT A RELAXATION.** A disabled control
+cannot tell you why it is disabled — which is precisely why the old shape needed a two-line
+paragraph under every refused row. The row is now selectable, so the whole reason lands in the
+aside with the commit refused. `templatePicker.select.dom.test.ts` asserts the property that
+matters: **no gesture — footer, `Enter`, or double-click — commits a template the row cannot
+take**, proved red-first by deleting the guard (below).
+
+### 22.5 THE MESSAGES: STATE, NOT PROSE
+
+`git grep`-swept across both dialogs. **Nothing on a row now exceeds four words; the header
+sub-line is six.** Total user-facing text on these surfaces: **1054 → 754 characters, 28 %
+shorter** — and the two long strings that survive are in the aside, the one place with room.
+
+The two-line paragraph under every refused row is deleted. Its sentence is not: `REFUSAL` is now
+one source read by three surfaces at three depths — the CHIP on the row (four words), the
+TOOLTIP (the whole sentence, golden rule 11), and the ASIDE when the row is selected. One source,
+so a later edit cannot make the hover and the aside disagree about the same refusal.
+
+### 22.6 THE DELTAS
+
+**FIXED — 14.** the Templates frame and split (already `REPAIR-04`'s, re-asserted); the row's
+`aria-pressed` select; the selected row's fill and border; the footer's `Load onto <row>` primary
+and its disabled state; the aside's `Selected template` read-out; its `Type · Text fields · Looks
+· Live plates` list; the verdict card in both states; `Enter` to commit; the Import dialog as a
+separate 750 px dialog; its head band; its drop zone; **`Choose file` inside the zone (audit row 111)**; the import footer's sentence, now true here; import registering without loading.
+
+**🔴 ARGUED — 4, and each names its bucket.**
+
+| ARGUED                                                                     | bucket | reason                                                                                                                                                                                                                                                                            |
+| -------------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| no 24 px check circle in a third column                                    | **B**  | the reference needs it because its rows are otherwise identical when selected; this console paints the whole row (fill + border) and the aside names the selection by name. A third column would be a second signal for a fact already carried twice                              |
+| the reference's warn sentence is not adopted verbatim                      | **B**  | it ends _"Use the destination selector to choose an eligible bed row"_ — this picker has no destination selector (its door is the row, §15.3), so the drawing's remedy points at a control that does not exist. The app's own sentence, which names the remedy that does, is kept |
+| the import dialog's three-step rail (`Choose package · Review · Complete`) | **B**  | theatre by its own disclaimer — _"Files selected here are not uploaded or imported"_, and its Review step lists `Simulated checks`. Two of its three steps are states this product resolves in one call                                                                           |
+| the double-click commit is not the reference's                             | **A**  | the reference has no `dblclick` at all. It is added on the owner's instruction and routed through the same `commit`, so it cannot become a second path that decides differently — it is named here so no later reader cites the drawing for it                                    |
+
+**4 of 18 = 22 %**, under the quarter. The session does not stop.
+
+⚠ **Two of `REPAIR-04`'s four ARGUED deltas are now withdrawn by the owner** — the aside's
+selection read-out (bucket A, the contract) and `Import a .vcg…`'s absence from a second surface.
+Both were argued honestly on what was known; both are now built. That is what the budget rule is
+for: it recorded them where the owner could find and overrule them.
+
+### 22.7 RECORDED, NOT BUILT
+
+- **The row hover's second channel** (`§21.9`) — still filed, still not built.
+- **The import wizard's `Review` and `Complete` steps** — see the ARGUED row above.
+- **The check circle** — if the owner wants the reference's third column, it is one cell and one
+  token; it is refused here on the reason above, not on effort.

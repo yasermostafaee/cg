@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import type { FixedSlotState, TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
@@ -10,17 +10,13 @@ import { operatorRowName, type OperatorRowName } from '../../ui/operatorNaming.j
 import { buttonActions, toMenuItems, withConfirm } from '../../ui/rowAction.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { DraftChip } from '../../ui/DraftChip.js';
-import { pickFile } from '../../ui/pickFile.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { displayLabel } from '../library/templateName.js';
 import { isOnAir } from '../stack/onAir.js';
-import {
-  importAndLoadOntoFixedSlot,
-  loadTemplateOntoFixedSlot,
-} from '../fixedLayers/fixedSlotLoad.js';
+import { loadTemplateOntoFixedSlot } from '../fixedLayers/fixedSlotLoad.js';
 import { useTemplatePicker } from '../fixedLayers/useTemplatePicker.js';
 import { layerRowActions, MISSING_TEMPLATE_REASON } from './layerRowActions.js';
 import { LiveSourceSwapDialog } from './LiveSourceSwapDialog.js';
@@ -328,11 +324,6 @@ export function LayerRow({
   const { confirm, confirmDialog } = useConfirm();
   const { pickTemplate, pickerDialog } = useTemplatePicker();
   const { menu, open, openAt, close } = useContextMenu<number>();
-  // The row's own hidden `.vcg` input. `pickFile` turns it into a promise so the
-  // whole import+load chain is ONE action's `run` — the button and its menu twin
-  // then share it by construction, rather than the real work living in an
-  // undeclared `onChange`.
-  const fileRef = useRef<HTMLInputElement>(null);
   const spec = densitySpec(density);
 
   /**
@@ -457,7 +448,7 @@ export function LayerRow({
       return { accepted: res.ok, ...(res.reason !== undefined ? { errorCode: res.reason } : {}) };
     },
     /**
-     * §6 — LOAD OPENS THE PICKER, and importing is one option inside it.
+     * §6 — LOAD OPENS THE PICKER.
      *
      * It used to go straight to the file chooser, with "use one I already have"
      * exiled to a context-menu entry called LOAD FROM LIBRARY — a control naming a
@@ -465,10 +456,12 @@ export function LayerRow({
      * with it, and R-005's remove-a-template inside the picker, so the picker moved
      * here instead.
      *
-     * BOTH OUTCOMES END IN THE SAME BINDING. `importAndLoadOntoFixedSlot` and
-     * `loadTemplateOntoFixedSlot` were already the two halves of one flow (the
-     * first calls the second once the bytes are registered), so this is one verb
-     * with two sources for the template, not two loads sharing a button.
+     * ⭐ `RUNTIME-REPAIR-05` — AND NOW THERE IS EXACTLY ONE BINDING PATH. The picker
+     * used to answer with a template, a request to open the OS chooser, or a dropped
+     * file, and this function ran a different chain for each; importing has since
+     * become a STATION act in its own dialog, which registers a package and hands it
+     * back as a SELECTION. So the picker answers with a template or with nothing, and
+     * a row is bound in one place — there is no second path to keep in agreement.
      */
     load: async () => {
       /*
@@ -483,18 +476,7 @@ export function LayerRow({
       });
       // The operator's own dismissal: not a success, not a refusal to report.
       if (chosen === null) return { accepted: false, cancelled: true };
-      /*
-        `RUNTIME-REDESIGN-01` Phase 8 — a package DROPPED on the picker arrives with the
-        file in hand. It runs the SAME chain as the OS chooser, with a picker that already
-        has its answer: verify, register, bind — nothing about the import path differs.
-      */
-      if (typeof chosen === 'object' && 'importFile' in chosen) {
-        return importAndLoadOntoFixedSlot(coord, () => Promise.resolve(chosen.importFile));
-      }
-      if (chosen !== 'import') return loadTemplateOntoFixedSlot(coord, chosen);
-      const input = fileRef.current;
-      if (input === null) return { accepted: false };
-      return importAndLoadOntoFixedSlot(coord, () => pickFile(input));
+      return loadTemplateOntoFixedSlot(coord, chosen);
     },
     /**
      * The post-CLEAR re-ADD: put the row's OWN bound template back, no picking.
@@ -1065,13 +1047,6 @@ export function LayerRow({
           }}
         />
       )}
-      <input
-        ref={fileRef}
-        type="file"
-        accept=".vcg"
-        style={{ display: 'none' }}
-        aria-label={`Import .vcg for ${rowName}`}
-      />
       {menu !== null && (
         <ContextMenu
           items={toMenuItems(actions)}

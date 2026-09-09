@@ -100,7 +100,10 @@ async function openPicker(accepts: 'low' | 'high' = 'high'): Promise<{
   let open: (() => Promise<TemplateChoice>) | null = null;
   function Host(): JSX.Element {
     const { pickTemplate, pickerDialog } = useTemplatePicker();
-    open = () => pickTemplate('Load onto Layer 1', accepts);
+    // RUNTIME-REPAIR-05 — the destination is what the footer's primary names, so the
+    // helper supplies one: a picker opened from a row always knows which row.
+    open = () =>
+      pickTemplate('Load onto Bed 1', accepts, { rowName: 'Bed 1', coord: '1-9', holding: null });
     return createElement('div', null, pickerDialog);
   }
   const r = root;
@@ -197,32 +200,46 @@ describe('§8 — the picker follows `01`: search, kind chips, the meta line and
     expect(rowsOf(dialog)).toHaveLength(2);
   });
 
-  it('a row’s meta line counts fields, looks and plates from the CARRIER, and the load stays one press', async () => {
+  it('a row’s meta line counts fields, looks and plates from the CARRIER; the load is the FOOTER’s', async () => {
     const { dialog, choice } = await openPicker('low');
     const bed = dialog.querySelector('[data-template-id="tpl-bed"]');
     expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('Graphics bed');
     expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('0 fields');
     expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('2 looks');
     expect(bed?.querySelector('.cg-tpl-meta')?.textContent).toContain('1 plate');
-    // The plain one, on a BED row, is refused by the same predicate the bridge uses — and the
-    // reason is on the row, as a chip AND as the app's own sentence with the remedy.
+    /*
+      The plain one, on a BED row, is refused by the SAME predicate the bridge uses. The
+      refusal is unchanged; `RUNTIME-REPAIR-05` §3 moved where it is SAID. The chip stays on
+      the row (four words, the state); the sentence that used to sit under it as a two-line
+      paragraph is now on the row's `title` and in the aside when the row is selected — one
+      source, `REFUSAL`, read by all three.
+    */
     const plain = dialog.querySelector('[data-template-id="tpl-plain"]');
     expect(plain?.getAttribute('data-template-incompatible')).toBe('true');
+    expect(plain?.hasAttribute('data-wrong-bank')).toBe(true);
     expect(plain?.querySelector('.cg-tag--warn')?.textContent).toBe('Requires an operator row');
-    expect(plain?.querySelector('[data-wrong-bank]')?.textContent).toContain(
-      'Load this one onto an operator row',
-    );
-    expect(plain?.querySelector<HTMLButtonElement>('button[aria-label^="Load "]')?.disabled).toBe(
-      true,
-    );
-    // The name is the load control, the id on its title (golden rule 11), one press.
-    const load = bed?.querySelector<HTMLButtonElement>(
-      'button[aria-label="Load Two box onto this layer"]',
-    );
-    expect(load?.getAttribute('title')).toBe('tpl-bed');
-    expect(load?.querySelector('bdi')?.textContent).toBe('Two box');
+    // The whole sentence, with its remedy, one hover away.
+    expect(
+      plain?.querySelector<HTMLButtonElement>('.cg-tpl-row__load')?.getAttribute('title'),
+    ).toContain('Load this one onto an operator row');
+    // …and there is no PROSE left on the row saying it a second time.
+    expect(plain?.querySelector('.cg-tpl-reason')).toBeNull();
+
+    /*
+      The row SELECTS — the id on its title (golden rule 11) — and the FOOTER loads. The old
+      shape had the row's press resolve the pick; the owner reversed that on 2026-09-09.
+    */
+    const select = bed?.querySelector<HTMLButtonElement>('button[aria-label="Select Two box"]');
+    expect(select?.getAttribute('title')).toBe('tpl-bed');
+    expect(select?.querySelector('bdi')?.textContent).toBe('Two box');
     await act(async () => {
-      load?.click();
+      select?.click();
+      await Promise.resolve();
+    });
+    const commit = document.querySelector<HTMLButtonElement>('[data-template-commit]');
+    expect(commit?.disabled, 'a bed template on a bed row is loadable').toBe(false);
+    await act(async () => {
+      commit?.click();
       await Promise.resolve();
     });
     expect(await choice).toEqual(BED);
@@ -233,40 +250,66 @@ describe('§8 — the picker follows `01`: search, kind chips, the meta line and
     expect(dialog.querySelector('[data-template-foot-info]')?.textContent).toBe(
       'Loading prepares the row. Use Play when you’re ready to go on air.',
     );
-    // …and the two actions are what they were: Cancel, then the one primary.
+    /*
+      …and the action row is Cancel then ONE primary, which is what it has always been — but
+      the primary is the LOAD now, not the import. `RUNTIME-REPAIR-05`: the owner split the
+      picker in two, so `Import a .vcg…` moved to the tools row beside `Manage` (both are
+      station-level and neither is about the row this dialog was opened from), and the footer
+      carries the act this dialog exists to perform.
+    */
     const actions = [...dialog.querySelectorAll('[data-modal-role]')].map((b) => b.textContent);
-    expect(actions).toEqual(['Cancel', 'Import a .vcg…']);
+    expect(actions).toEqual(['Cancel', 'Load onto Bed 1']);
+    // It starts DISABLED: there is nothing selected to load.
+    expect(dialog.querySelector<HTMLButtonElement>('[data-template-commit]')?.disabled).toBe(true);
+    // And import is still one press away, off the footer.
+    expect(dialog.querySelector('[data-template-import-open]')).not.toBeNull();
   });
 });
 
-describe('§8 — `02`’s drop zone feeds the SAME import chain', () => {
+describe('§8 — a dropped package feeds the SAME import chain', () => {
   function dropFileOn(target: Element, file: File): void {
     const event = new Event('drop', { bubbles: true, cancelable: true });
     Object.defineProperty(event, 'dataTransfer', { value: { files: [file] } });
     target.dispatchEvent(event);
   }
 
-  it('a package dropped on the dialog resolves the pick with that file', async () => {
+  it('🔴 a dropped package OPENS IMPORT with it staged, and resolves no pick', async () => {
+    /*
+      `RUNTIME-REPAIR-05` — the gesture changed and the claim did not. A drop used to
+      resolve the pick with the file, so the ROW imported it and bound itself in one act.
+      Importing is a station act now: the drop stages the package in the Import dialog, the
+      operator confirms it, and the load stays a separate press. What is asserted here is
+      the same thing it always was — that the dropped file reaches the import path — plus
+      the new invariant that it does NOT reach a row on its own.
+    */
     const { dialog, choice } = await openPicker();
     const body = dialog.querySelector('[data-template-body]');
     expect(body).not.toBeNull();
-    expect(dialog.querySelector('[data-template-drop]')?.textContent).toContain(
-      'Drop a .vcg package here',
-    );
+
     const file = new File([new Uint8Array([1, 2, 3])], 'dropped.vcg');
     await act(async () => {
       dropFileOn(body as Element, file);
       await Promise.resolve();
     });
-    const chosen = await choice;
-    expect(chosen).not.toBeNull();
-    expect(typeof chosen === 'object' && chosen !== null && 'importFile' in chosen).toBe(true);
-    expect((chosen as { importFile: File }).importFile).toBe(file);
-    // The dialog closed on the drop, as it does on a load.
-    expect(openDialog()).toBeNull();
+
+    // The Import dialog is up, and it names the package it is holding.
+    const staged = document.querySelector('[data-import-drop]');
+    expect(staged, 'the drop opened the Import dialog').not.toBeNull();
+    expect(staged?.textContent).toContain('dropped.vcg');
+    // …and the picker has NOT resolved: no row has been asked to load anything.
+    let settled = false;
+    void choice.then(() => (settled = true));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(settled, 'a drop is not a load').toBe(false);
+    expect(openDialog(), 'the Templates dialog is still open behind it').not.toBeNull();
   });
 
   it('🔴 through the row, the dropped bytes meet the chain’s own verify — the refusal names the file', async () => {
+    // `RUNTIME-REPAIR-05` — one press further along (confirm the staged import), and the
+    // refusal lands in the IMPORT dialog rather than the command toast. Same bytes, same
+    // `verify`, same sentence: only where the operator reads it moved.
     const errors: string[] = [];
     const off = onCommandError((m) => errors.push(m));
     const rendered = await renderLayerRow({
@@ -294,15 +337,33 @@ describe('§8 — `02`’s drop zone feeds the SAME import chain', () => {
         dropFileOn(body as Element, file);
         await Promise.resolve();
       });
-      // The chain is asynchronous (read → verify → refuse → the row's error channel).
-      for (let i = 0; i < 20 && errors.length === 0; i++) {
+
+      // Confirm the staged import — the press that actually runs the chain.
+      const go = [...document.querySelectorAll('button')].find((b) =>
+        /^Import “garbage\.vcg”$/.test(b.textContent ?? ''),
+      );
+      expect(go, 'the Import dialog offers the staged package').not.toBeUndefined();
+      await act(async () => {
+        go?.click();
+        await Promise.resolve();
+      });
+
+      // The chain is asynchronous (read → verify → refuse → the dialog's message region).
+      const refusal = (): string =>
+        document.querySelector('[data-modal-message]')?.textContent ?? '';
+      for (let i = 0; i < 20 && refusal() === ''; i++) {
         await act(async () => {
           await new Promise((resolve) => setTimeout(resolve, 5));
         });
       }
-      expect(errors).toHaveLength(1);
-      // `importVcgFile`'s own sentence: the FILE the operator dropped, then `verify`'s verdict.
-      expect(errors[0]).toMatch(/^“garbage\.vcg” failed verification/);
+      /*
+        🔴 THE REFUSAL IS UNCHANGED, AND IT IS NOW WHERE IT CAN BE READ. `importVcgFile`'s
+        own sentence — the FILE the operator dropped, then `verify`'s verdict — in the Import
+        dialog's pinned region. It used to go to the command toast, which is `zIndex: 50`
+        under a modal backdrop at 1000: the A9 defect, one surface over.
+      */
+      expect(refusal()).toMatch(/“garbage\.vcg” failed verification/);
+      expect(errors, 'no refusal was routed under the backdrop').toEqual([]);
       // …and nothing was registered: the picker's registry is the row's stub, untouched.
       expect(rendered.stubs.list).not.toHaveBeenCalledWith(
         expect.objectContaining({ html: expect.anything() }),

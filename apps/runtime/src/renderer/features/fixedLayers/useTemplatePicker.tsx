@@ -1,5 +1,22 @@
-import { useCallback, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
-import { Layers, LayoutTemplate, Rows3, Search, Trash2, Upload } from 'lucide-react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type DragEvent,
+  type KeyboardEvent,
+} from 'react';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  FileUp,
+  Layers,
+  LayoutTemplate,
+  Rows3,
+  Search,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import {
   describeReferencePlace,
   liveSourceCarrierState,
@@ -15,6 +32,8 @@ import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { useConfirm } from '../../ui/useDialog.js';
+import { pickFile } from '../../ui/pickFile.js';
+import { importVcgToStation } from './fixedSlotLoad.js';
 import { requestRowFocus } from '../layers/rowFocus.js';
 import { reportCommandSuccess } from '../status/commandFeedback.js';
 import {
@@ -72,11 +91,12 @@ import { templateDisplayName } from '../library/templateName.js';
  * of rows — a thumbnail, the name over a meta line with its badges — and a footer sentence
  * beside the actions (`LIBRARY_PX`, `design.md` §15.3). What is NOT adopted, and why:
  *
- *   - its SELECT-THEN-`Load into` flow, and with it the half of the detail aside that flow
- *     exists to feed. The row's one press IS the load here (`Load <name> onto this layer`),
- *     and twenty specs drive that contract through `app.loadTemplate`; every reason a row can
- *     carry — the wrong bank, an unrecorded carrier, a plate with no source — is already SAID
- *     ON THE ROW rather than in a pane one selection away.
+ *   - ⭐ ~~its SELECT-THEN-`Load into` flow~~ — **REVERSED BY THE OWNER, 2026-09-09,
+ *     `RUNTIME-REPAIR-05`.** This note argued that the row's one press IS the load and that
+ *     the aside therefore had nothing to describe. The owner saw the built picker and decided
+ *     otherwise: the picker is TWO dialogs, a row is SELECTED, and the footer commits it. The
+ *     count that argument leaned on was wrong too — nine spec files reach `app.loadTemplate`,
+ *     not twenty, and all nine go through ONE fixture method (§22.1).
  *   - its `Into` destination select: this dialog's door is the row, so the destination is
  *     fixed. It is now NAMED in the aside as well as the title (below), which is what that
  *     select exists to tell the operator.
@@ -224,8 +244,52 @@ const FOOT_INFO = 'Loading prepares the row. Use Play when you’re ready to go 
  * (`B-212`), which is a refusal the operator can act on rather than a control they cannot press.
  */
 const MANAGE_FOOT_INFO =
-  'Deleting removes a template from this station for every browser. A row still holding one ' +
-  'must be cleared with the row’s own REMOVE first.';
+  'A row still holding a template must be cleared with its own REMOVE first.';
+
+/**
+ * 🔴 `RUNTIME-REPAIR-05` §3 — THE ROW'S ONE REFUSAL, IN ONE PLACE, SAID THREE WAYS.
+ *
+ * There is exactly ONE condition under which a template cannot go onto a row:
+ * `requiredBankFor(template) !== accepts` — the same predicate the bridge refuses on, so the
+ * surface and the wire cannot disagree about what is offerable. (`Re-import required` and
+ * `Needs a source: …` are CAUTIONS: they warn, they have never blocked a load, and they still
+ * do not.)
+ *
+ * It used to be said once, as a two-line paragraph under the row — which is the Designer's own
+ * root cause in miniature: prose explaining what could be expressed as state. Now the SAME
+ * strings are read by three surfaces at three depths:
+ *
+ *   the CHIP    on the row      — four words, the state
+ *   the TOOLTIP on the row      — the whole sentence, one hover away (golden rule 11)
+ *   the ASIDE   when selected   — the whole sentence, unmissable, beside a disabled primary
+ *
+ * One source, so a later edit cannot make the hover and the aside say different things about
+ * the same refusal.
+ */
+const REFUSAL = {
+  /** The row is a BED row and the template is not a bed. */
+  low: {
+    chip: 'Requires an operator row',
+    title: 'Bed rows sit below the live plates',
+    text:
+      'This row is a graphics bed — it sits below the live plates, so only a template that ' +
+      'declares plates belongs on it. Load this one onto an operator row.',
+  },
+  /** The row is an OPERATOR row and the template declares plates. */
+  high: {
+    chip: 'Requires a bed row',
+    title: 'This template belongs on a bed row',
+    text:
+      'This template declares live plates, so it is a graphics bed and must sit below them. ' +
+      'Load it onto one of the bed rows at the bottom of the list.',
+  },
+} as const;
+
+/** What the aside says when the selection CAN go onto this row — the reference's own pair. */
+const COMPATIBLE = {
+  title: 'Ready for this row',
+  text: 'Loading prepares the row. It stays off air until you press Play.',
+} as const;
 
 /** The reference's three kind chips, keyed by the bank a template belongs on. */
 type KindFilter = 'all' | 'graphic' | 'bed';
@@ -274,19 +338,17 @@ interface PickRequest {
 }
 
 /**
- * What the operator chose.
+ * What the operator chose: a template, or nothing.
  *
- * `'import'` is a real answer, not an error path: "none of these — I want to bring
- * in a new `.vcg`". It is returned rather than handled here because the import
- * chain needs the ROW's hidden file input and its exact slot, both of which belong
- * to the caller (see `LayerRow`).
- *
- * Phase 8 — `{ importFile }` is the same answer with the file already in hand: the
- * operator DROPPED a package on the dialog. The caller runs the identical chain
- * (`importAndLoadOntoFixedSlot`) with a picker that resolves to this file instead of
- * opening the OS chooser; nothing about what is verified, registered or bound differs.
+ * ⭐ `RUNTIME-REPAIR-05` — IT USED TO HAVE FOUR ANSWERS AND NOW HAS TWO. `'import'`
+ * and `{ importFile }` were the picker asking its CALLER to run an import chain,
+ * because the chain needed the row's hidden file input and its slot. Importing is
+ * now a station act in its own dialog, with no row in it: it registers a package
+ * and hands it back here to be SELECTED, and the load is the operator's next,
+ * separate press. So the caller has one thing to do with the answer — load it —
+ * and there is no second path through which a row can be bound.
  */
-export type TemplateChoice = TemplateInfo | 'import' | { importFile: File } | null;
+export type TemplateChoice = TemplateInfo | null;
 
 export function useTemplatePicker(): {
   pickTemplate: (
@@ -356,6 +418,29 @@ export function useTemplatePicker(): {
   */
   const [manage, setManage] = useState(false);
   const [usage, setUsage] = useState<ReadonlyMap<string, number>>(new Map());
+  /*
+    🔴 `RUNTIME-REPAIR-05` — THE SELECTION. The owner reversed the one-press contract
+    after seeing the built picker: a row is now SELECTED, the aside reads the selection out,
+    and the footer's primary commits it.
+
+    ⚠ The refusal did not move with the press, only its PLACE did. `requiredBankFor` is
+    still the one predicate, still the same one the bridge refuses on; a template the row
+    cannot take is still listed, still chipped, and is now also SELECTABLE — so the operator
+    can read the full reason in the aside instead of meeting a control that does nothing. What
+    stops the load is `loadable`, guarding the ONE commit path every gesture goes through.
+  */
+  const [selected, setSelected] = useState<TemplateInfo | null>(null);
+  /*
+    The station-level IMPORT dialog. It registers a package and loads nothing; on success the
+    operator lands back here with the new template selected, one press from the row.
+  */
+  const [importOpen, setImportOpen] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importMessage, setImportMessage] = useState<ModalMessage | null>(null);
+  /** A package DROPPED on either dialog, waiting for the operator to confirm the import. */
+  const [staged, setStaged] = useState<File | null>(null);
+  /** This dialog's OWN hidden `.vcg` input — the row's is no longer in the import path. */
+  const fileRef = useRef<HTMLInputElement | null>(null);
   // D-137 / C-015 — SUBSCRIBED, unlike the template list beside it, because the
   // assignments are bridge-owned and a second console can bind a plate while
   // this dialog is open. The list is browser-local, so a snapshot is right for
@@ -386,6 +471,11 @@ export function useTemplatePicker(): {
         // The management view is never what a LOAD opens on — the door is always the list.
         setManage(false);
         setUsage(new Map());
+        // A selection is per-opening: the row that asked last time is not this row.
+        setSelected(null);
+        setImportOpen(false);
+        setImportMessage(null);
+        setStaged(null);
         setRequest({ title, templates, accepts, destination: destination ?? null });
       });
     },
@@ -497,6 +587,10 @@ export function useTemplatePicker(): {
     setReferences([]);
     setDragging(false);
     setManage(false);
+    setSelected(null);
+    setImportOpen(false);
+    setImportMessage(null);
+    setStaged(null);
     const resolve = resolver.current;
     resolver.current = null;
     resolve?.(choice);
@@ -568,22 +662,118 @@ export function useTemplatePicker(): {
     if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
     setDragging(false);
   }, []);
-  const onDrop = useCallback(
-    (e: DragEvent<HTMLDivElement>): void => {
-      e.preventDefault();
-      setDragging(false);
-      const file = e.dataTransfer.files[0];
-      if (file === undefined) return;
-      settle({ importFile: file });
-    },
-    [settle],
+  /*
+    ⭐ `RUNTIME-REPAIR-05` — A DROP NO LONGER RESOLVES THE PICK. It used to hand the file back
+    to `LayerRow`, which imported it and bound it to the row in one gesture. Importing is a
+    STATION act now, so a dropped package opens the Import dialog with the file already staged:
+    the operator confirms the import, lands back on the list with the new template selected, and
+    the load is a separate press. The bytes take the identical path either way —
+    `importVcgToStation` → `importVcgFile` → `verify → unpack → B-196 → render` — so nothing
+    about what is refused changed with the gesture that starts it.
+  */
+  const onDrop = useCallback((e: DragEvent<HTMLDivElement>): void => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file === undefined) return;
+    setStaged(file);
+    setImportMessage(null);
+    setImportOpen(true);
+  }, []);
+
+  /**
+   * Can THIS template go onto THIS row? The one predicate, asked once.
+   *
+   * ⚠ Every gesture that could commit a load asks this same function — the footer's primary,
+   * `Enter`, and a double-click. `B-161`'s lesson one layer up: a decision gated at two places
+   * is a decision that will eventually be made twice, differently.
+   */
+  const loadable = useCallback(
+    (template: TemplateInfo | null): boolean =>
+      template !== null && request !== null && requiredBankFor(template) === request.accepts,
+    [request],
   );
+
+  /** Commit the selection. The ONE path out of this dialog with a template in it. */
+  const commit = useCallback(
+    (template: TemplateInfo | null): void => {
+      if (!loadable(template)) return;
+      settle(template);
+    },
+    [loadable, settle],
+  );
+
+  /**
+   * `Enter` commits the selection, exactly as the footer's primary does.
+   *
+   * On the LIST rather than on a row, so it works whether focus sits on the row the operator
+   * just clicked or on the search box they filtered with — and it routes through `commit`,
+   * so a refused template is refused here for the same reason and by the same call.
+   */
+  const onListKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLDivElement>): void => {
+      if (e.key !== 'Enter' || e.defaultPrevented) return;
+      if (selected === null || !loadable(selected)) return;
+      e.preventDefault();
+      commit(selected);
+    },
+    [commit, loadable, selected],
+  );
+
+  /**
+   * Import a package into the STATION. Registers; loads nothing.
+   *
+   * On success the operator is returned to the list with the new template SELECTED, so the
+   * next press is the load — which is the whole reason the two dialogs are worth splitting:
+   * the import is over, and what happens to a row is still the operator's separate decision.
+   */
+  const runImport = useCallback(async (pick: () => Promise<File | null>): Promise<void> => {
+    setImportBusy(true);
+    setImportMessage(null);
+    try {
+      const template = await importVcgToStation(pick);
+      // The operator dismissed the OS dialog: their own "no", not a failure.
+      if (template === null) return;
+      const templates = await window.cg.templates.list();
+      setRequest((current) => (current === null ? null : { ...current, templates }));
+      setSelected(template);
+      setStaged(null);
+      setImportOpen(false);
+      setManage(false);
+    } catch (err) {
+      /*
+          IN THE IMPORT DIALOG'S OWN MESSAGE REGION. `importVcgFile` throws the operator-facing
+          sentence naming the file (`“x.vcg” failed verification…`); reporting it to the command
+          toast would render it UNDER this dialog's backdrop, which is the A9 defect one surface
+          over. The package registered nothing, so the list behind is still true.
+        */
+      setImportMessage({
+        role: 'refusal',
+        text: err instanceof Error ? err.message : 'The package could not be imported.',
+      });
+    } finally {
+      setImportBusy(false);
+    }
+  }, []);
+
+  /** Open the Import dialog on an empty slate — the `Import a .vcg…` control's own press. */
+  const openImport = useCallback((): void => {
+    setStaged(null);
+    setImportMessage(null);
+    setImportOpen(true);
+  }, []);
 
   const pickerDialog =
     request === null ? null : (
       <Modal
         title={request.title}
-        subtitle="Choose a template already on this station, or import a .vcg package."
+        /*
+          `RUNTIME-REPAIR-05` §3 — eleven words to five. It read "Choose a template already on
+          this station, or import a .vcg package." — half of which advertised a control that
+          has since moved to its own dialog. A sub-line is not the place to enumerate the
+          doors on the surface below it.
+        */
+        subtitle="Choose a template for this row."
         /* `REPAIR-03` B, audit row 98 — the reference draws a 42 px emblem in this head. */
         emblem={LayoutTemplate}
         size="library"
@@ -623,6 +813,9 @@ export function useTemplatePicker(): {
               weight through its role rather than through being placed first. The
               reference paints it quiet beside a `Load into` primary; with the row's
               press being the load, this is the one primary left.
+
+              ⭐ SUPERSEDED, `RUNTIME-REPAIR-05`: import has its own dialog and its own door on
+              the tools row, so the footer's one primary is the LOAD — below.
             */}
             {manage ? (
               /*
@@ -641,8 +834,23 @@ export function useTemplatePicker(): {
                 Back to selection
               </ModalAction>
             ) : (
-              <ModalAction actionRole="primary" onClick={() => settle('import')}>
-                Import a .vcg…
+              /*
+                🔴 `RUNTIME-REPAIR-05` — THE PRIMARY IS THE LOAD, and it is the reference's own
+                footer (`Load into Layer 5`). It names the row in the OPERATOR'S word rather than
+                the drawing's layer number (golden rule 11): the row the picker was opened from
+                is `Bed 1` or an alias, and that is what the destination card beside it says too.
+
+                Disabled until a template is selected AND that template can go onto this row —
+                the same `loadable` the keyboard and the double-click ask. `Import a .vcg…` has
+                left this bar for the search row, where the reference puts its own `Manage`.
+              */
+              <ModalAction
+                actionRole="primary"
+                disabled={!loadable(selected)}
+                data-template-commit=""
+                onClick={() => commit(selected)}
+              >
+                Load onto {request.destination?.rowName ?? 'this row'}
               </ModalAction>
             )}
           </>
@@ -651,6 +859,13 @@ export function useTemplatePicker(): {
         <div
           className="cg-tpl-body"
           data-template-body=""
+          /*
+            A package dropped ANYWHERE on this dialog opens Import with it staged, which is
+            why the handlers are on the body and not on a zone. `data-template-dragging` is
+            what says so while the file is in the air — without it the whole dialog is a drop
+            target that gives no sign of being one.
+          */
+          data-template-dragging={dragging ? 'true' : 'false'}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
@@ -725,11 +940,12 @@ export function useTemplatePicker(): {
                     panel that no longer exists (§6).
                   */
                   <div className="cg-tpl-empty" data-template-empty="">
-                    <h3>Nothing to load yet</h3>
-                    <p>
-                      No templates in this browser yet — <strong>Import a .vcg…</strong> to bring
-                      one in, or drop a package here.
-                    </p>
+                    <h3>Nothing on this station yet</h3>
+                    <p>Import a .vcg package to begin.</p>
+                    <Button variant="primary" onClick={openImport}>
+                      <Icon icon={FileUp} size={14} />
+                      Import a .vcg…
+                    </Button>
                   </div>
                 ) : (
                   <PickerList
@@ -739,8 +955,12 @@ export function useTemplatePicker(): {
                     kind={kind}
                     onKind={setKind}
                     unassigned={unassigned}
-                    onPick={settle}
+                    selected={selected}
+                    onSelect={setSelected}
+                    onCommit={commit}
+                    onKeyDown={onListKeyDown}
                     onManage={() => void openManage()}
+                    onImport={openImport}
                   />
                 )}
               </div>
@@ -774,26 +994,210 @@ export function useTemplatePicker(): {
                     </span>
                   </div>
                 )}
-                <div
-                  className="cg-tpl-drop"
-                  data-template-drop=""
-                  data-template-drop-active={dragging ? 'true' : 'false'}
-                >
-                  <span className="cg-tpl-drop__icon">
-                    <Icon icon={Upload} size={22} />
-                  </span>
-                  <h3>Drop a .vcg package here</h3>
-                  <p>It is verified and registered exactly as one chosen with Import a .vcg…</p>
-                </div>
+                {/*
+                  🔴 `RUNTIME-REPAIR-05` — THE SELECTION, READ OUT. This is the half of the
+                  reference's aside `REPAIR-04` argued away for want of a selection to describe;
+                  the owner has since made the selection real, so it is built.
+
+                  The order is the reference's: what it IS, then whether it can go here. The
+                  VERDICT is last because it is the thing the operator acts on — and when it is
+                  a refusal it carries the whole sentence, not the chip, because this is the one
+                  place there is room for it.
+                */}
+                {selected === null ? (
+                  <p className="cg-tpl-aside__hint" data-template-aside-hint="">
+                    Choose a template to see its details.
+                  </p>
+                ) : (
+                  <div className="cg-tpl-pick" data-template-selected={selected.templateId}>
+                    <p className="cg-tpl-pick__eyebrow">Selected template</p>
+                    {/* Golden rule 11 — the operator's word in the sentence, the id on the title. */}
+                    <bdi className="cg-tpl-pick__name" title={selected.templateId}>
+                      {templateDisplayName(selected)}
+                    </bdi>
+                    <dl className="cg-tpl-kv">
+                      <dt>Type</dt>
+                      <dd>{kindOf(selected) === 'bed' ? 'Graphics bed' : selected.templateType}</dd>
+                      <dt>Text fields</dt>
+                      <dd>{String(selected.fields.length)}</dd>
+                      <dt>Looks</dt>
+                      <dd>{String(selected.liveSources?.looks?.length ?? 0)}</dd>
+                      <dt>Live plates</dt>
+                      <dd>{String(selected.liveSources?.sources.length ?? 0)}</dd>
+                    </dl>
+                    {(() => {
+                      const ok = loadable(selected);
+                      const refusal = REFUSAL[request.accepts];
+                      return (
+                        <div
+                          className={ok ? 'cg-tpl-verdict' : 'cg-tpl-verdict cg-tpl-verdict--warn'}
+                          data-template-verdict={ok ? 'ok' : 'refused'}
+                        >
+                          <span className="cg-tpl-verdict__icon" aria-hidden="true">
+                            <Icon icon={ok ? CheckCircle2 : AlertTriangle} size={16} />
+                          </span>
+                          <span>
+                            <strong>{ok ? COMPATIBLE.title : refusal.title}</strong>
+                            <span>{ok ? COMPATIBLE.text : refusal.text}</span>
+                          </span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </aside>
             </div>
           )}
         </div>
+        {/*
+          The dialog's OWN `.vcg` input. It used to be the ROW's, because the row owned the
+          import chain; import is a station act now, so the control and its input live together.
+        */}
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".vcg"
+          hidden
+          data-template-file-input=""
+          aria-hidden="true"
+        />
+        <ImportDialog
+          open={importOpen}
+          busy={importBusy}
+          staged={staged}
+          message={importMessage}
+          onChooseFile={() => {
+            const input = fileRef.current;
+            if (input !== null) void runImport(() => pickFile(input));
+          }}
+          onImportStaged={() => {
+            const file = staged;
+            if (file !== null) void runImport(() => Promise.resolve(file));
+          }}
+          onStage={(file) => {
+            setStaged(file);
+            setImportMessage(null);
+          }}
+          onClose={() => {
+            setImportOpen(false);
+            setStaged(null);
+            setImportMessage(null);
+          }}
+        />
         {confirmDialog}
       </Modal>
     );
 
   return { pickTemplate, pickerDialog };
+}
+
+/**
+ * 🔴 `RUNTIME-REPAIR-05` §2B — THE IMPORT DIALOG, WHICH REGISTERS AND LOADS NOTHING.
+ *
+ * The reference ships this as a `<dialog>` of its own — `#import-dialog`, 750 px wide, a head
+ * band, a drop zone with `Choose file` as a PRIMARY inside it, and a footer carrying only
+ * `Cancel`. Measured at 1280 × 800 by opening it (`02-template-import.html`,
+ * `data-start="import"`); it is a separate dialog ELEMENT, not a mode of the picker, which is
+ * what the owner asked for.
+ *
+ * ⚠ WHAT IS NOT TAKEN, and it is the same refusal `§15.3` recorded. The reference's three-step
+ * rail (`Choose package · Review · Complete`) is THEATRE by its own disclaimer — _"Files
+ * selected here are not uploaded or imported"_, and its Review step lists `Simulated checks`.
+ * This one runs the product's real chain, whose verdict is a refusal sentence naming the file.
+ * A rail with two steps this product resolves in one call would be furniture that lies.
+ *
+ * ⭐ AND ITS FOOTER SENTENCE IS NOW TRUE HERE. The reference writes _"Importing does not load a
+ * row or take it on air."_ — `§15.1` recorded that as FALSE of this product, because the
+ * picker's import WAS the row's load. It is false no longer: this dialog registers to the
+ * station and binds nothing, so the drawing's own sentence is adopted, verbatim, at last.
+ */
+function ImportDialog({
+  open,
+  busy,
+  staged,
+  message,
+  onChooseFile,
+  onImportStaged,
+  onStage,
+  onClose,
+}: {
+  open: boolean;
+  busy: boolean;
+  staged: File | null;
+  message: ModalMessage | null;
+  onChooseFile: () => void;
+  onImportStaged: () => void;
+  onStage: (file: File) => void;
+  onClose: () => void;
+}): JSX.Element | null {
+  const [over, setOver] = useState(false);
+  if (!open) return null;
+  return (
+    <Modal
+      title="Import a template"
+      subtitle="Add a .vcg package to this station."
+      emblem={FileUp}
+      size="import"
+      layer="sub"
+      onClose={onClose}
+      {...(message !== null ? { message } : {})}
+      footer={
+        <>
+          <span className="cg-tpl-foot-info" data-import-foot-info="">
+            Importing does not load a row or put anything on air.
+          </span>
+          <ModalAction actionRole="cancel" onClick={onClose}>
+            Cancel
+          </ModalAction>
+          {staged !== null && (
+            <ModalAction actionRole="primary" disabled={busy} onClick={onImportStaged}>
+              Import “{staged.name}”
+            </ModalAction>
+          )}
+        </>
+      }
+    >
+      <div
+        className="cg-tpl-drop"
+        data-import-drop=""
+        data-template-drop-active={over ? 'true' : 'false'}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={(e) => {
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+          setOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          const file = e.dataTransfer.files[0];
+          if (file !== undefined) onStage(file);
+        }}
+      >
+        <span className="cg-tpl-drop__icon">
+          <Icon icon={Upload} size={22} />
+        </span>
+        <h3>Choose a .vcg package</h3>
+        <p>
+          {staged === null
+            ? 'Drop it here, or browse your files.'
+            : `Ready to import “${staged.name}”.`}
+        </p>
+        {/*
+          `Choose file` INSIDE the zone — audit row 111, which `§15.3` argued away while
+          `Import a .vcg…` was the only import control and a second one would have been a second
+          door to one act. With import in its own dialog this IS that dialog's act, and the
+          reference paints it exactly here, as a primary.
+        */}
+        <Button variant="primary" disabled={busy} onClick={onChooseFile}>
+          <Icon icon={FileUp} size={14} />
+          Choose file
+        </Button>
+      </div>
+    </Modal>
+  );
 }
 
 /**
@@ -824,9 +1228,14 @@ function ManageView({
 }): JSX.Element {
   return (
     <div className="cg-tpl-manage" data-template-manage="">
+      {/*
+        §3 — thirty words to thirteen. What was cut is not information the operator loses:
+        the CONFIRM names the scope, the cascade and the re-import, at the moment of the act
+        and where it cannot be missed. A standing paragraph restating a confirm is prose
+        explaining what the confirm expresses.
+      */}
       <p className="cg-tpl-manage__note" data-template-manage-note="">
-        Deleting a template here removes it from this station for every browser, and cannot be
-        undone — the .vcg must be re-imported. Clearing a ROW never deletes anything from here.
+        Deleting removes a template from this station, for every browser. It cannot be undone.
       </p>
       {[...templates].reverse().map((t) => {
         const label = templateDisplayName(t);
@@ -883,8 +1292,12 @@ function PickerList({
   kind,
   onKind,
   unassigned,
-  onPick,
+  selected,
+  onSelect,
+  onCommit,
+  onKeyDown,
   onManage,
+  onImport,
 }: {
   request: PickRequest;
   query: string;
@@ -892,8 +1305,12 @@ function PickerList({
   kind: KindFilter;
   onKind: (k: KindFilter) => void;
   unassigned: (t: TemplateInfo) => string[];
-  onPick: (t: TemplateInfo) => void;
+  selected: TemplateInfo | null;
+  onSelect: (t: TemplateInfo) => void;
+  onCommit: (t: TemplateInfo) => void;
+  onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
   onManage: () => void;
+  onImport: () => void;
 }): JSX.Element {
   // Newest first: the template the operator most recently imported is the one they
   // are looking for. Then the search, then the kind chip.
@@ -917,10 +1334,19 @@ function PickerList({
           />
         </label>
         {/*
-          `RUNTIME-REPAIR-04` — the door to the management view, where the reference puts it:
-          at the end of the tools row, quiet, beside the search. It is the ONLY route to a
-          station-wide deletion now, which is why it is a plain word rather than a glyph.
+          `RUNTIME-REPAIR-05` — IMPORT MOVED HERE, out of the footer, because the footer's one
+          primary is now the LOAD. The two station-level doors sit together at the end of the
+          tools row, where the reference puts its own `Manage`: bring a package IN, and manage
+          what is already here. Neither is about the row this dialog was opened from.
         */}
+        <Button
+          variant="neutral"
+          className="cg-tpl-manage-btn"
+          data-template-import-open=""
+          onClick={onImport}
+        >
+          Import a .vcg…
+        </Button>
         <Button
           variant="neutral"
           className="cg-tpl-manage-btn"
@@ -944,12 +1370,17 @@ function PickerList({
           </Button>
         ))}
       </div>
-      <div className="cg-tpl-list" data-template-list="">
+      {/*
+        `Enter` commits from anywhere in this column — see `onListKeyDown`. It is on the LIST
+        rather than on a row so it still works when focus is in the search box the operator
+        just filtered with, which is where it usually is.
+      */}
+      <div className="cg-tpl-list" data-template-list="" onKeyDown={onKeyDown}>
         {shown.length === 0 ? (
           /* The reference's own words for a search that found nothing. */
           <div className="cg-tpl-empty" data-template-empty="search">
             <h3>No templates found</h3>
-            <p>Try a different search or kind, or import a template.</p>
+            <p>Try another search.</p>
           </div>
         ) : (
           shown.map((t) => (
@@ -958,7 +1389,9 @@ function PickerList({
               template={t}
               accepts={request.accepts}
               unassigned={unassigned(t)}
-              onPick={() => onPick(t)}
+              isSelected={selected?.templateId === t.templateId}
+              onSelect={() => onSelect(t)}
+              onCommit={() => onCommit(t)}
             />
           ))
         )}
@@ -971,12 +1404,16 @@ function PickerRow({
   template: t,
   accepts,
   unassigned: needsSource,
-  onPick,
+  isSelected,
+  onSelect,
+  onCommit,
 }: {
   template: TemplateInfo;
   accepts: 'low' | 'high';
   unassigned: string[];
-  onPick: () => void;
+  isSelected: boolean;
+  onSelect: () => void;
+  onCommit: () => void;
 }): JSX.Element {
   const label = templateDisplayName(t);
   const carrier = liveSourceCarrierState(t);
@@ -991,18 +1428,28 @@ function PickerRow({
       data-template-id={t.templateId}
       data-template-kind={templateKind}
       data-template-incompatible={wrongBank ? 'true' : 'false'}
+      data-template-selected={isSelected ? 'true' : 'false'}
+      {...(wrongBank ? { 'data-wrong-bank': '' } : {})}
     >
       {/*
-        THE LOAD, as one press on the whole row: thumbnail, name and meta. The id stays on
-        the `title` (golden rule 11), the accessible name is the verb.
+        🔴 `RUNTIME-REPAIR-05` — THE ROW SELECTS; THE FOOTER LOADS. A double-click commits,
+        for the operator who already knows which template they want; both routes go through the
+        SAME `commit`, so a template this row cannot take is refused identically by either.
+
+        ⚠ The row is NOT disabled when the bank is wrong, and that is deliberate rather than a
+        relaxation. It used to be, and a disabled control is a control that cannot tell you why:
+        the reason sat in a two-line paragraph beneath it. Selecting it now puts the whole
+        sentence in the aside, with the footer's primary disabled — which is the reference's own
+        arrangement, and it refuses on exactly the predicate it refused on before.
       */}
       <Button
         variant="ghost"
         className="cg-tpl-row__load"
-        aria-label={`Load ${label} onto this layer`}
-        title={t.templateId}
-        disabled={wrongBank}
-        onClick={onPick}
+        aria-label={`Select ${label}`}
+        aria-pressed={isSelected}
+        title={wrongBank ? REFUSAL[accepts].text : t.templateId}
+        onClick={onSelect}
+        onDoubleClick={onCommit}
       >
         <span className="cg-tpl-thumb" aria-hidden="true">
           <Icon icon={templateKind === 'bed' ? Rows3 : LayoutTemplate} size={22} />
@@ -1030,11 +1477,7 @@ function PickerRow({
               warn badge with its own short words; the app's sentence, which carries the
               remedy, stays beneath (`cg-tpl-reason`).
             */}
-            {wrongBank && (
-              <span className="cg-tag cg-tag--warn">
-                {accepts === 'low' ? 'Requires an operator row' : 'Requires a bed row'}
-              </span>
-            )}
+            {wrongBank && <span className="cg-tag cg-tag--warn">{REFUSAL[accepts].chip}</span>}
             {/*
               D-137 / C-015 — said on the row, not hidden behind a hover.
               `data-live-sources` carries the state machine-readably so the
@@ -1068,13 +1511,16 @@ function PickerRow({
           </span>
         </span>
       </Button>
-      {wrongBank && (
-        <span className="cg-tpl-reason" data-wrong-bank="">
-          {accepts === 'low'
-            ? 'This row is a graphics bed — it sits BELOW the live plates, so only a template that declares plates belongs here. Load this one onto an operator row.'
-            : 'This template declares live plates, so it is a graphics bed and must sit BELOW them. Load it onto one of the bed rows at the bottom of the list.'}
-        </span>
-      )}
+      {/*
+        🔴 THE TWO-LINE PARAGRAPH IS GONE. It said, under every refused row, what the chip
+        already says in four words — the Designer's own root cause: explaining in prose what
+        can be expressed as state. The sentence itself was not deleted; it moved to the two
+        places that have room for it, and `REFUSAL` is the one source all three read.
+
+        Rows were ~160 px tall when it applied, so two and a half fitted where the reference
+        fits five. `data-wrong-bank` stays on the row that carries the state, because that is
+        what the tests assert and what a later reader will grep for.
+      */}
     </div>
   );
 }

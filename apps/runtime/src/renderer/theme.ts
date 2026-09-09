@@ -871,9 +871,11 @@ export const STATION_SETUP_PX = {
  * ⚠ NOT here, deliberately: the reference's `Into` destination select (the picker's door is the
  * row, so the destination is fixed — and `RUNTIME-REPAIR-04`'s aside now NAMES it, which is the
  * fact that select carried), its aside's SELECTED-TEMPLATE half with the `Compatible with this
- * row` notice and its select-then-`Load into` footer (the row's one-click load is the contract
- * twenty specs drive), and the import wizard's `Review` step (simulated checks by its own
- * disclaimer — the product's verification is `verify → unpack → runtimeShortfall → render`,
+ * row` notice and its select-then-`Load into` footer (~~the row's one-click load is the
+ * contract twenty specs drive~~ — ⭐ REVERSED by the owner on 2026-09-09, `RUNTIME-REPAIR-05`:
+ * the picker is two dialogs and a row is selected then committed, so the aside, the notice and
+ * the `Load into` footer are all BUILT), and the import wizard's `Review` step (simulated
+ * checks by its own disclaimer — the product's verification is `verify → unpack → runtimeShortfall → render`,
  * unchanged). Each is argued in §15.3 and §21.1.
  *
  * ⭐ The `Manage` view and the aside's FRAME are no longer in that list — both are built, and
@@ -893,6 +895,17 @@ export const LIBRARY_PX = {
    */
   frameW: 1120,
   frameInset: 56,
+  /** The reference's SECOND dialog — `#import-dialog{width:min(750px,calc(100vw - 48px))}`. */
+  importW: 750,
+  importInset: 48,
+  /**
+   * `RUNTIME-REPAIR-05` — the VERDICT card in the aside, from the reference's `.notice`
+   * pair: `padding:13px 15px`, `border-radius:8px`. It says "ready for this row" or it says
+   * why not, in the same box, which is why one set of numbers covers both.
+   */
+  verdictPadY: 13,
+  verdictPadX: 15,
+  verdictRadius: 8,
   asideW: 342,
   asidePad: 22,
   /**
@@ -1407,6 +1420,20 @@ export const cssVars = {
    * had no home. Read by `.cg-tag--ok`.
    */
   '--r-ok-line': '#355d4d',
+  /**
+   * `RUNTIME-REPAIR-05` — the CAUTION edge, the amber twin of `--r-ok-line` above and the
+   * second reference edge that had no home. Measured on the reference's `.notice.warn` in
+   * Chromium at 1280 × 800: `rgb(101, 83, 52)` around its `--amberbg` ground under its
+   * `--amber` ink — the pair this app already carries as `--r-caution-bg` / `--r-caution-text`.
+   *
+   * ADOPTED under the narrow stale-hex test: absent from the drawing's nineteen declared
+   * `:root` colours, and not a hex this app retired in Phase 2, so it fails (b).
+   *
+   * ⚠ It is a boundary on a card that already carries an ICON and a headline, so it is not
+   * the only signal for anything — which is why it is allowed to sit under the 3.0 graphic
+   * floor, as the reference's own does.
+   */
+  '--r-caution-line': '#655334',
 
   /*
    * THE ADD BUTTONS — the owner's own acceptance test for this section:
@@ -1671,6 +1698,13 @@ export const cssVars = {
    * the live plate audio dialog and the live-source swap, neither of which wants 1120.
    */
   '--r-modal-w-library': `min(${String(LIBRARY_PX.frameW)}px, calc(100vw - ${String(LIBRARY_PX.frameInset)}px))`,
+  /**
+   * `RUNTIME-REPAIR-05` — the IMPORT frame. The reference's `#import-dialog`
+   * (`min(750px, 100vw - 48px)`, `LIBRARY_PX.importW`), measured by opening it at
+   * 1280 × 800 rather than read off the sheet. A dialog that registers one package
+   * and loads nothing: it needs a drop target, not a list.
+   */
+  '--r-modal-w-import': `min(${String(LIBRARY_PX.importW)}px, calc(100vw - ${String(LIBRARY_PX.importInset)}px))`,
   '--r-modal-w-fixed': `min(${String(STATION_SETUP_PX.frameW)}px, calc(100vw - ${String(STATION_SETUP_PX.frameInset)}px))`,
   '--r-modal-h-fixed': `min(${String(STATION_SETUP_PX.frameH)}px, calc(100vh - ${String(STATION_SETUP_PX.frameInset)}px))`,
   /**
@@ -2308,6 +2342,23 @@ export const cssVars = {
    * makes a column read as a SIDE of the dialog rather than another panel in it.
    */
   '--r-tpl-aside-bg': '#111c28',
+  /**
+   * `RUNTIME-REPAIR-05` — the SELECTED list row, from `.template-row.selected{background:
+   * #203649;border-color:#547d9a}`, measured by opening the dialog.
+   *
+   * Both ADOPTED under the narrow stale-hex test: absent from the reference's nineteen
+   * declared `:root` colours, and NEITHER is a hex this app retired in Phase 2 (§7's "was"
+   * column), so they fail (b) and are design decisions rather than leftovers.
+   *
+   * ⚠ They are NOT the layer table's selection, and must not be pointed at it. That one is a
+   * 2 px accent FRAME over a wash, tuned against a 67 px row carrying six verbs and a muted
+   * ink at its AA floor (§20.1); this is an 81 px list row whose only job is to be the one
+   * the footer will act on. Two surfaces, two problems.
+   */
+  '--r-tpl-row-sel-bg': '#203649',
+  '--r-tpl-row-sel-line': '#547d9a',
+  '--r-tpl-verdict-pad': `${String(LIBRARY_PX.verdictPadY)}px ${String(LIBRARY_PX.verdictPadX)}px`,
+  '--r-tpl-verdict-radius': `${String(LIBRARY_PX.verdictRadius)}px`,
   '--r-tpl-tools-pad': `${String(LIBRARY_PX.toolsPadY)}px ${String(LIBRARY_PX.toolsPadX)}px`,
   '--r-tpl-filter-pad-x': `${String(LIBRARY_PX.filterPadX)}px`,
   '--r-tpl-manage-btn-h': `${String(LIBRARY_PX.manageBtnH)}px`,

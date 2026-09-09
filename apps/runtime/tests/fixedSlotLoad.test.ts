@@ -1,14 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  importAndLoadOntoFixedSlot,
+  importVcgToStation,
   loadTemplateOntoFixedSlot,
 } from '../src/renderer/features/fixedLayers/fixedSlotLoad.js';
 import { buildValidVcg } from './e2e/fixtures/runtime.js';
 
 /**
- * R-021 stage 3 (task 5.3) — the one-action chain, tested as a chain: pick a
- * `.vcg` → the SHARED library import (it stays there for reuse) → an item bound
- * to the EXACT slot → load.
+ * R-021 stage 3 (task 5.3) — the load path, tested as the two steps it now is.
+ *
+ * 🔴 `RUNTIME-REPAIR-05` — THE CHAIN SPLIT, AND THE ASSERTIONS GOT STRONGER FOR IT.
+ * Importing used to end in a load (`importAndLoadOntoFixedSlot`); the owner has split the
+ * picker into two dialogs and importing is now a station act that binds no row. So the case
+ * that used to read "imports, THEN loads onto the exact slot" is two cases: import registers
+ * and LOADS NOTHING — in every outcome, which is a flat invariant rather than an ordering —
+ * and `loadTemplateOntoFixedSlot` carries the row's coordinate verbatim.
+ *
+ * ⚠ NOT ONE REFUSAL MOVED. `importVcgToStation` calls the same `importVcgFile`, so a bad
+ * package still throws the sentence naming the file and still registers nothing (R-001). The
+ * third case below is that claim, unchanged in substance and now stated against the function
+ * that actually owns it.
  *
  * The chain runs against a fake `window.cg` rather than the mock bridge because
  * what is under test is the ORDER and the COORDINATE: that the template really
@@ -18,8 +28,6 @@ import { buildValidVcg } from './e2e/fixtures/runtime.js';
  * `stack.load` would mean the item allocated dynamically, which is the exact
  * failure this task exists to prevent.
  */
-
-const SLOT = { channel: 1, layer: 72 };
 
 interface FakeBridge {
   imported: { templateId: string; templateType: string }[];
@@ -63,34 +71,32 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('the fixed row’s one-action import+load chain', () => {
-  it('imports into the shared library, then loads onto the EXACT slot', async () => {
+describe('importing is a STATION act, and it binds no row', () => {
+  it('🔴 registers into the shared library and LOADS NOTHING', async () => {
     const bridge = fakeBridge();
     const bytes = await buildValidVcg('tpl-fixed-chain');
     const file = new File([new Uint8Array(bytes)], 'clock.vcg');
 
-    const result = await importAndLoadOntoFixedSlot(SLOT, () => Promise.resolve(file));
+    const template = await importVcgToStation(() => Promise.resolve(file));
 
-    expect(result.accepted).toBe(true);
+    // It hands back the REGISTERED template — what the Templates dialog selects.
+    expect(template?.templateId).toBe('tpl-fixed-chain');
     // The template went into the SHARED library — and stays there for reuse.
     expect(bridge.imported.map((t) => t.templateId)).toEqual(['tpl-fixed-chain']);
     expect(await window.cg.templates.list()).toHaveLength(1);
-    // One load, on the exact-slot channel, carrying THIS row's coordinate.
-    expect(bridge.loads).toHaveLength(1);
-    expect(bridge.loads[0]).toMatchObject({
-      channel: 1,
-      layer: 72,
-      templateId: 'tpl-fixed-chain',
-    });
-    // …and NEVER the dynamic path, which would allocate some other layer.
+    /*
+      🔴 THE INVARIANT THIS SESSION EXISTS TO CREATE: no row was bound. Not on the fixed
+      channel, not on the dynamic one. Importing a package is not a decision about air.
+    */
+    expect(bridge.loads).toEqual([]);
     expect(bridge.stackLoads).toEqual([]);
   });
 
   it('a dismissed file picker is the operator’s own “no” — nothing imported, nothing loaded', async () => {
     const bridge = fakeBridge();
-    const result = await importAndLoadOntoFixedSlot(SLOT, () => Promise.resolve(null));
+    const template = await importVcgToStation(() => Promise.resolve(null));
     // Not a success (no flash) and not an error (no toast) — the cancelled path.
-    expect(result).toEqual({ accepted: false, cancelled: true });
+    expect(template).toBeNull();
     expect(bridge.imported).toEqual([]);
     expect(bridge.loads).toEqual([]);
   });
@@ -98,14 +104,12 @@ describe('the fixed row’s one-action import+load chain', () => {
   it('a bad package registers nothing and loads nothing — it throws the file’s name', async () => {
     const bridge = fakeBridge();
     const file = new File([new TextEncoder().encode('not a .vcg')], 'broken.vcg');
-    await expect(importAndLoadOntoFixedSlot(SLOT, () => Promise.resolve(file))).rejects.toThrow(
-      /broken\.vcg/,
-    );
+    await expect(importVcgToStation(() => Promise.resolve(file))).rejects.toThrow(/broken\.vcg/);
     expect(bridge.imported).toEqual([]);
     expect(bridge.loads).toEqual([]);
   });
 
-  it('Load-from-library uses the SAME binding, skipping only the import step', async () => {
+  it('the LOAD carries the row’s own coordinate, and never the dynamic path', async () => {
     const bridge = fakeBridge();
     await loadTemplateOntoFixedSlot(
       { channel: 2, layer: 75 },

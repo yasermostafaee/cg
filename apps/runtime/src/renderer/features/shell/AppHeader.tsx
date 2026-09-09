@@ -28,7 +28,11 @@ import type { ShellLayout } from '../../hooks/useShellLayout.js';
  *   - `Templates` and `Import` — **the picker's door is the ROW**, and that is a CONTRACT
  *     (`design.md` §15.3, the `Into` select argued the same way). A header button opening the
  *     picker would be a second door with its own refusals about which row it lands on, which
- *     is precisely what the one-press row contract exists to avoid.
+ *     is precisely what the row-scoped load contract exists to avoid.
+ *
+ * ⭐ `RUNTIME-REPAIR-05` — that contract is now SELECT-then-commit rather than one press, and
+ * this argument is untouched by the change: it is about WHICH ROW a load lands on, not about
+ * how many presses land it. A header button would still have to invent a destination.
  *   - `PROTOTYPE` — the drawing labelling itself. There is nothing here to adopt.
  *   - The lock and the manual failover stay on the status bar. The reference draws NEITHER,
  *     so there is no reference decision to follow; the failover control is guard item 17 and

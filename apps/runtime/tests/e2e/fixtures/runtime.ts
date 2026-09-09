@@ -298,16 +298,18 @@ export class RuntimeApp {
   // ── actions ───────────────────────────────────────────────────────────────
 
   /**
-   * R-028 — import a `.vcg` AND load it onto a row, in ONE operator flow.
+   * R-028 — import a `.vcg` and load it onto a row, as the operator now performs it.
    *
-   * §6 — `LOAD` now opens the TEMPLATE PICKER, and importing a new file is one
-   * option inside it rather than the whole of it. So this is LOAD → "Import a
-   * .vcg…" → the file chooser, which is the flow the operator actually performs;
-   * the row still ends bound to the exact slot in one gesture.
+   * 🔴 `RUNTIME-REPAIR-05` — THIS IS TWO STEPS NOW, BECAUSE THE PRODUCT IS. The owner
+   * split the picker into a Templates dialog and a station-level Import dialog: importing
+   * REGISTERS a package and binds no row, and the operator lands back on the list with the
+   * new template selected, one press from the load. So this drives
+   * LOAD → `Import a .vcg…` → the file chooser → `Load onto <row>`.
    *
-   * The extra click is the point of the change, not overhead: the other option in
-   * that dialog — re-using a template already imported — used to be reachable only
-   * through a context-menu entry named after a panel that no longer exists.
+   * ⚠ THE SECOND PRESS IS NOT CEREMONY, AND A HELPER THAT SKIPPED IT WOULD HIDE THE ONE
+   * THING THIS SESSION CHANGED. Nine specs call this to get a bound row; if it committed the
+   * load by calling the bridge directly they would all still pass with the commit control
+   * broken. It presses what the operator presses.
    *
    * With no `layer`, takes the next free one (see `#nextLayer`) and returns it.
    */
@@ -316,8 +318,10 @@ export class RuntimeApp {
     const before = await this.templateCount();
     await this.layerRow(target).getByRole('button', { name: 'LOAD' }).click();
     await expect(this.templatePicker).toBeVisible();
+    // The tools row's door, not the footer's: the footer's primary is the LOAD now.
+    await this.page.getByRole('button', { name: 'Import a .vcg…' }).click();
     const chooser = this.page.waitForEvent('filechooser');
-    await this.templatePicker.getByRole('button', { name: 'Import a .vcg…' }).click();
+    await this.page.getByRole('button', { name: 'Choose file' }).click();
     await (
       await chooser
     ).setFiles({
@@ -332,9 +336,35 @@ export class RuntimeApp {
     // (imported), or the command toast reported a refusal. Read from the
     // registry rather than a toast alone, because a toast left over from an
     // earlier action in the same spec would satisfy a naive wait instantly.
+    /*
+      🔴 `RUNTIME-REPAIR-05` — THE REFUSAL MOVED, SO THE WAIT HAD TO. It used to settle on
+      "the registry grew, or the command TOAST said something"; the Import dialog now pins its
+      own refusal (the A9 rule — a toast raised under a modal backdrop is a refusal nobody
+      reads), so the toast never fires for this path and the poll waited out its timeout on a
+      correctly-refused package. Same two real outcomes, read where they now appear.
+    */
     await expect
-      .poll(async () => (await this.templateCount()) > before || (await this.error.count()) > 0)
+      .poll(
+        async () =>
+          (await this.templateCount()) > before ||
+          (await this.page.locator('[data-modal-message]').count()) > 0 ||
+          (await this.error.count()) > 0,
+      )
       .toBe(true);
+
+    /*
+      The import is over and NOTHING is loaded — that is the new invariant. If the package
+      registered, the Import dialog has closed and the Templates list has it selected, so the
+      load is the commit control's press. If it was REFUSED the registry did not grow and the
+      caller is asserting the refusal, so there is nothing to commit and the dialog is left as
+      it is for them to read.
+    */
+    if ((await this.templateCount()) > before) {
+      const commit = this.page.locator('[data-template-commit]');
+      await expect(commit).toBeEnabled();
+      await commit.click();
+      await expect(this.templatePicker).toHaveCount(0);
+    }
     return target;
   }
 
@@ -414,16 +444,25 @@ export class RuntimeApp {
       layer ??
       ((await this.#bankFor(templateId)) === 'low' ? this.#takeBedLayer() : this.#takeLayer());
     await this.openTemplatePicker(target);
+    /*
+      🔴 `RUNTIME-REPAIR-05` — SELECT, THEN COMMIT. The row's press used to BE the load;
+      the owner reversed that on 2026-09-09. Every spec that loads a template comes through
+      here, so this is the one place the two-step flow is spelled — and it presses the real
+      controls rather than short-circuiting to the bridge, so a broken commit fails them all.
+    */
     await this.templateRow(templateId)
-      .getByRole('button', { name: /^Load / })
+      .getByRole('button', { name: /^Select / })
       .click();
+    const commit = this.page.locator('[data-template-commit]');
+    await expect(commit, 'the selected template can go onto this row').toBeEnabled();
+    await commit.click();
     await expect(this.templatePicker).toHaveCount(0);
     return target;
   }
 
-  /** How many templates the OPEN picker lists (one "Load …" button each). */
+  /** How many templates the OPEN picker lists (one "Select …" button each). */
   loadButtons(): Locator {
-    return this.templatePicker.getByRole('button', { name: /^Load / });
+    return this.templatePicker.getByRole('button', { name: /^Select / });
   }
 
   /**

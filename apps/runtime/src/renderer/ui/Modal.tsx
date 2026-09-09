@@ -535,8 +535,12 @@ interface ModalProps {
    * another. The template picker is the only case, and it is the reference's own BASE
    * `.modal` width (`--r-modal-w-library`, 1120 at 1280) rather than a width invented for
    * it. It is not `wide`: `wide` IS the audio dialog's 860 and two other dialogs wear it.
+   *
+   * ⭐ `import` is the sixth, added by `RUNTIME-REPAIR-05`: the reference's own
+   * `#import-dialog`, 750 px, a dialog that does ONE station-level thing and needs
+   * room for a drop target rather than for a list. Measured by opening it.
    */
-  size?: 'prose' | 'wide' | 'fixed' | 'ledger' | 'library';
+  size?: 'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'import';
   /**
    * `STATION-CHROME-01` §6 — which LAYER this dialog is on.
    *
@@ -552,12 +556,13 @@ interface ModalProps {
 }
 
 /** `STATION-CHROME-02` §2 — the frames, resolved from the token home and never spelled here. */
-const WIDTHS: Record<'prose' | 'wide' | 'fixed' | 'ledger' | 'library', string> = {
+const WIDTHS: Record<'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'import', string> = {
   prose: cssVars['--r-modal-w-prose'],
   wide: cssVars['--r-modal-w-wide'],
   fixed: cssVars['--r-modal-w-fixed'],
   ledger: cssVars['--r-modal-w-ledger'],
   library: cssVars['--r-modal-w-library'],
+  import: cssVars['--r-modal-w-import'],
 };
 
 export function Modal({

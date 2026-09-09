@@ -572,9 +572,14 @@ chips, a row's padding, thumbnail and ranks, the footer sentence — from `--r-t
 in the token home from `01-template-picker.html` as RENDERED at 1280 × 800, and the audit log SHALL
 take its frame (`--r-modal-w-ledger`), tools, head, cells, tags and console strip from
 `--r-audit-*` likewise from `03-audit-log.html`; every claim about a box SHALL be measured in
-Chromium, never in jsdom. The picker's CONTRACT SHALL NOT change: one press on a row's load control
-loads that template onto the row that opened the picker, the wrong-bank refusal is the bridge's own
-predicate and is said on the row, and `Import a .vcg…` opens the OS chooser. A search SHALL narrow by the name the operator sees; the
+Chromium, never in jsdom. The picker's wrong-bank refusal SHALL be the bridge's own predicate.
+
+⭐ **AMENDED 2026-09-09 (`RUNTIME-REPAIR-05`), by the owner.** This requirement used to read
+_"one press on a row's load control loads that template onto the row that opened the picker …
+and `Import a .vcg…` opens the OS chooser."_ Both halves are reversed: a row is SELECTED and the
+footer commits, and importing is a separate station-level dialog that registers a package and
+loads nothing. The requirement that replaces them is **"A template is selected, then committed"**
+below. A search SHALL narrow by the name the operator sees; the
 kind chips SHALL split beds from graphics by the same predicate the bridge refuses on; a search that
 finds nothing SHALL say so and never claim the browser holds no templates.
 
@@ -595,6 +600,70 @@ chain's `verify` is the one gate.
 - **WHEN** bytes that are not a package are dropped on the picker opened from a row **THEN** the
   row reports `“<file>” failed verification…` through its error channel, exactly as the OS chooser's
   path would, and nothing is registered
+
+### Requirement: A template is selected, then committed
+
+The Templates dialog SHALL express choosing and loading as two acts. Clicking a template row
+SHALL select it and SHALL NOT load anything; the dialog's footer SHALL carry one primary that
+commits the selection onto the row the dialog was opened from, named in the operator's word for
+that row. Pressing `Enter` and double-clicking a row SHALL commit through the same call as that
+primary, so no gesture can reach a load the primary would refuse.
+
+The aside SHALL read the selection out — what the template is, and whether it can go onto this
+row — and SHALL state the full reason when it cannot.
+
+The condition under which a template cannot be loaded SHALL remain exactly the bank predicate
+the bridge refuses on. A template that cannot go onto the row SHALL still be listed and SHALL
+still be selectable, so its reason can be read; the commit SHALL be refused instead.
+
+#### Scenario: Clicking selects and loads nothing
+
+- **WHEN** the operator clicks a template row **THEN** the row is marked as the selection, the
+  dialog stays open, and no load reaches the bridge
+
+#### Scenario: The footer commits, and names the row
+
+- **WHEN** a loadable template is selected **THEN** the footer's primary is enabled and names
+  the destination row in the operator's word for it, and pressing it loads that template onto
+  that row
+
+#### Scenario: Every commit gesture is the same call
+
+- **WHEN** the operator presses `Enter` or double-clicks the selected row **THEN** the same
+  template is committed onto the same row as the footer's primary would commit
+
+#### Scenario: A template the row cannot take is readable but not loadable
+
+- **WHEN** the operator selects a template whose bank does not match the row **THEN** the row
+  carries a short chip, the aside carries the whole reason, the footer's primary is disabled,
+  and no gesture commits it
+
+### Requirement: Importing registers a package to the station and loads nothing
+
+Importing SHALL be a dialog of its own, opened from the Templates dialog rather than from a
+row's footer, and SHALL be reachable both beside the template list and from the management
+view. It SHALL offer a drop target with a control to browse for a file inside it. On success it
+SHALL register the package to the station, SHALL NOT bind or load any row, and SHALL return the
+operator to the Templates dialog with the imported template selected.
+
+Every refusal of the import path SHALL be unchanged in its conditions, and SHALL be shown inside
+the import dialog rather than in a surface rendered beneath it.
+
+#### Scenario: A package is registered and no row is bound
+
+- **WHEN** a valid package is imported **THEN** it appears in the station's template list, no
+  row is loaded, and the operator is returned to the Templates dialog with it selected
+
+#### Scenario: A refused package registers nothing and says why, in the dialog
+
+- **WHEN** a package fails verification **THEN** the reason names the file, is shown in the
+  import dialog's own message region, nothing is registered, and no row is touched
+
+#### Scenario: A dropped package is staged for import, not loaded
+
+- **WHEN** the operator drops a `.vcg` on the Templates dialog **THEN** the import dialog opens
+  holding that package, and nothing is loaded until the import and then the load are each
+  pressed
 
 ### Requirement: A station-wide deletion is not offered on a row of the picker
 

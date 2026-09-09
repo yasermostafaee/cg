@@ -88,11 +88,19 @@ test('§8 — the picker measures to `LIBRARY_PX` at 1280 × 800', async ({ app 
   await expect(dest).toContainText(/on \d+-\d+/);
 
   /*
-    THE DROP ZONE IS IN THE ASIDE NOW. The audit's own reading of surface 01 was that it
-    “only becomes visible after scrolling past every template”; asserted by CONTAINMENT, which
-    is the property that was actually wrong before rather than a position in pixels.
+    🔴 `RUNTIME-REPAIR-05` — THE ASIDE READS THE SELECTION OUT, and the drop zone has left
+    it for the Import dialog. Before anything is chosen the column still says something, which
+    is the property worth holding: a 342 px column that is blank until you click is furniture.
   */
-  await expect(aside.locator('[data-template-drop]')).toHaveCount(1);
+  await expect(aside.locator('[data-template-drop]'), 'the drop zone left with import').toHaveCount(
+    0,
+  );
+  await expect(aside.locator('[data-template-aside-hint]')).toBeVisible();
+
+  // Select one, and the column becomes its read-out with a verdict at the foot.
+  await dialog.locator('[data-template-id] .cg-tpl-row__load').first().click();
+  await expect(aside.locator('[data-template-selected]')).toHaveCount(1);
+  await expect(aside.locator('[data-template-verdict]')).toBeVisible();
 
   // THE SEARCH — 39 tall at 14 px, the glyph inside its start padding.
   const search = dialog.getByRole('searchbox', { name: 'Search templates' });
@@ -142,8 +150,9 @@ test('§8 — the picker measures to `LIBRARY_PX` at 1280 × 800', async ({ app 
   expect(px(measured.metaText)).toBe(px(tokens.metaText));
   expect(px(measured.padTop)).toBe(rowPadY);
   expect(px(measured.padLeft)).toBe(rowPadX);
-  // The load is one press on the row, id on its title (golden rule 11).
-  await expect(row.getByRole('button', { name: /^Load / })).toHaveAttribute(
+  // `RUNTIME-REPAIR-05` — the row's control SELECTS; the footer loads. The id is still on
+  // its title, which is the claim this line has always made (golden rule 11).
+  await expect(row.getByRole('button', { name: /^Select / })).toHaveAttribute(
     'title',
     'tpl-e2e-measured',
   );
@@ -154,10 +163,17 @@ test('§8 — the picker measures to `LIBRARY_PX` at 1280 × 800', async ({ app 
     'Loading prepares the row. Use Play when you’re ready to go on air.',
   );
   expect(px(await foot.evaluate((el) => getComputedStyle(el).fontSize))).toBe(px(tokens.footText));
-  // `02`'s drop zone stands at the foot of the list, dashed.
-  const drop = dialog.locator('[data-template-drop]');
+  /*
+    `02`'s drop zone — in the IMPORT dialog since `RUNTIME-REPAIR-05`, which is its own
+    surface now. Its shape is the reference's either way: dashed, and its `Choose file`
+    primary INSIDE it (audit row 111).
+  */
+  await dialog.getByRole('button', { name: 'Import a .vcg…' }).click();
+  const drop = page.locator('[data-import-drop]');
   await expect(drop).toBeVisible();
   expect(await drop.evaluate((el) => getComputedStyle(el).borderTopStyle)).toBe('dashed');
+  await expect(drop.getByRole('button', { name: 'Choose file' })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancel' }).last().click();
   await app.closeTemplatePicker();
 });
 

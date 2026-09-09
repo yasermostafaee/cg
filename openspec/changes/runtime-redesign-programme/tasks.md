@@ -19,7 +19,8 @@ single-channel gaps as **`R-062`** — read §14.7 before touching a bulk verb o
 ⚠ Phase 8 applied **A1** (the picker stays; guard item 27 built back and discharged, `design.md`
 §15.6) and recorded **A16** on `R-062` (PANIC stays unscoped; its label names its scope). Phase 9
 takes guard items 1–26 — item 27 is DONE — and reads `design.md` §15.7 for the one question Phase
-8 filed for the owner (the picker's select-then-load flow).
+8 filed for the owner (the picker's select-then-load flow) — **ANSWERED 2026-09-09:
+the owner adopted it (`RUNTIME-REPAIR-05`, design.md §22).**
 ⚠ `PROMPT.md` §0 carries the rule Phase 3 learned — **the reference is judged as RENDERED, not as
 authored: measure it in a browser at 1280 × 800 and quote what you read** — Phase 5 counted the
 waves it hides (`.inspector` is restated 33 times; `design.md` §12.1) and Phase 6 counted the
@@ -525,7 +526,8 @@ red-first matrix (§15.5), guard item 27 discharged (§15.6), and what was not d
       existing import suites byte for byte unchanged and green (16 + 4 + 2 + 7 + 1 + 5 unit,
       2 + 8 + 1 e2e — `design.md` §15.0); a DROPPED non-package reaches the row's error channel as
       `“garbage.vcg” failed verification…`, the sentence only the chain's own `verify` produces.
-      The one-press load contract and `Import a .vcg…` unchanged (twenty
+      ~~The one-press load contract and `Import a .vcg…` unchanged~~ — REVERSED
+      2026-09-09, see §22 (twenty
       specs drive them). The reference's select-then-`Load into` flow, detail aside, `Into` select,
       `Manage` view and import wizard are ARGUED (§15.3); the picker's flow is filed as a question
       for the owner (§15.7), not decided.

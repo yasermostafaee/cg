@@ -49,14 +49,27 @@ test('a .vcg that fails verification shows a clear error and registers nothing',
 
   await app.importVcg('broken.vcg', buildInvalidVcg(), 74);
 
-  // A clear error is shown…
-  await expect(app.error).toBeVisible();
-  await expect(app.error).toContainText(/failed verification|could not be unpacked/i);
+  /*
+    🔴 A CLEAR ERROR IS SHOWN — IN THE IMPORT DIALOG, which is `RUNTIME-REPAIR-05`'s one
+    change to this case. The sentence is `importVcgFile`'s own and the CONDITION that produced
+    it is untouched (`verify → unpack → B-196 → render`); what moved is where the operator
+    reads it. It used to go to the command toast, which renders UNDER a modal backdrop — the
+    A9 defect this console has already fixed once, on the deletion path.
+  */
+  const refusal = app.page.locator('[data-modal-message]');
+  await expect(refusal).toBeVisible();
+  await expect(refusal).toContainText(/failed verification|could not be unpacked/i);
+  await expect(refusal).toContainText('broken.vcg');
 
   // …nothing new is registered…
   expect(await app.templateCount()).toBe(before);
 
-  // …and the row it was aimed at is untouched: a rejected package must never
-  // leave a half-bound layer behind.
+  /*
+    …and the row it was aimed at is untouched: a rejected package must never leave a
+    half-bound layer behind. Stronger than before, and cheaply so: importing no longer touches
+    a row in ANY outcome, so the dialogs are simply dismissed and the row is asked.
+  */
+  await app.page.getByRole('button', { name: 'Cancel' }).last().click();
+  await app.closeTemplatePicker();
   await expect(app.layerRow(74).getByRole('button', { name: 'LOAD' })).toBeEnabled();
 });
