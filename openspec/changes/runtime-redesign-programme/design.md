@@ -50,9 +50,32 @@ that feeds it. Bridge names are the `window.cg` namespaces declared in
 
 ### 1.1 Shell and chrome
 
+🔴 **TWO ROWS OF THIS TABLE WERE WRONG, AND `AUDIT-CLOSE-01` C1 CORRECTS THEM IN PLACE.** They are
+corrected rather than quietly updated because the ERROR is the finding, not the fix:
+
+- **`App header, brand block` — recorded as "no equivalent — the app has no top header", and then
+  never revisited by any property table in ten phases.** An absence was written down and became a
+  fact nobody re-opened; worse, §12.3 went on to USE it as an argument, placing the monitors toggle
+  in the Layers bar because _"the app has no app-head"_. An unmeasured absence justified a
+  placement, and the justification was the absence itself. The header is built (`AppHeader`), the
+  argument in §12.3 is struck at its own row, and the general rule is now `AUDIT-CLOSE-01` D: `the
+app has no X` where X was never measured is not a reason.
+- **`Search, Hide empty, counts, results hint` — recorded as ALREADY BUILT, citing a
+  `LayersPanel.tsx` sub-bar and `features/layers/layerTable.ts`. Neither existed.** `LayersPanel.tsx`
+  contained no text input at all and `layerTable.ts` is density arithmetic (`densitySpec`,
+  `gridTemplateColumns`, `resolveDensity`). Because the map said the app already had it, the
+  reference's sub-bar never entered §10.2's property table and was never argued either way — it was
+  not adopted and it was not refused; it was invisible. It is built (`layerFilter.ts` + the
+  sub-bar), with an override the reference has no equivalent for.
+
+⭐ **Both are the same failure and it is worth naming once: a MAP is not evidence.** This table was
+written by reading the tree, and two of its rows were wrong in the two directions that both hide a
+delta — one claimed an absence that was never tested against the drawing, the other claimed a
+presence that was not there. Every later phase read the map instead of the surface.
+
 | Reference surface                                  | Today                                                                  | Bridge channel                                              |
 | -------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------- |
-| App header, brand block                            | no equivalent — the app has no top header                              | —                                                           |
+| App header, brand block                            | 🔴 **BUILT** — `features/shell/AppHeader.tsx` (was: "no equivalent")   | — (it carries doors and the channel strip)                  |
 | Channel switcher `#channel-select`                 | `features/channels/ChannelScope.tsx` (a Tabs strip, one tab)           | `fixedLayers.config` → `FixedLayerBank.channel`             |
 | `Settings` button                                  | `features/status/StatusBar.tsx` → `stationSetup/stationSetupStore.ts`  | — (opens a dialog)                                          |
 | Monitor toggle / `#monitor-area`                   | `hooks/useShellLayout.ts` focus + `features/monitors/MonitorStrip.tsx` | — (browser-local, `cg.runtime.shell-layout.v1`)             |
@@ -69,7 +92,7 @@ that feeds it. Bridge names are the `window.cg` namespaces declared in
 | Tabs: Layers / Live plates / Station layers  | `features/layers/LayersPanel.tsx` `<Tabs>` (same three)            | —                                                                 |
 | `CH 1` target chip                           | `ChannelScope` tab label                                           | `fixedLayers.config`                                              |
 | `Stop all` / `Clear all` / `Remove all`      | `LayersPanel.tsx:781/817/844`                                      | `stack.stopAll` / `stack.clearAll` / `stack.removeAll`            |
-| Search, `Hide empty`, counts, results hint   | `LayersPanel.tsx` sub-bar + `features/layers/layerTable.ts`        | `stack.snapshot` / `stack.onStateChanged`                         |
+| Search, `Hide empty`, counts, results hint   | 🔴 **BUILT** — `LayersPanel.tsx` sub-bar + `layers/layerFilter.ts` | `stack.snapshot` / `stack.onStateChanged`                         |
 | The layer table and its rows                 | `features/layers/LayerRow.tsx` + `layers/LayerTableHeader.tsx`     | `fixedLayers.state`, `stack.onStateChanged`, `liveLayers.state`   |
 | Row state mark / status badge                | `features/layers/rowState.ts` + `ui/StatusBadge.tsx` + `theme.ts`  | derived from `StackItemState`                                     |
 | Row verbs `Item·Play·On PVW·Next·Stop·Clear` | `features/layers/layerRowActions.ts` + `ui/rowAction.ts`           | `stack.take` `stack.next` `stack.stop` `stack.out` `stack.remove` |
@@ -1378,7 +1401,7 @@ by the owner's mapping rule.
 | property               | reference (rendered)                                                                                          | app (after this phase)                                                                                                   | verdict                                                                                                                                                |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | the strip              | `#monitor-area`, **230 px**, two `1fr` monitors gapped 8, hidden unless `monitorsVisible`                     | **230 px** default (was 180), two `flex:1` panels gapped 12, resizable, hidden unless `monitorsShown`                    | **FIXED** (height, the toggle); ARGUED: the divider (item 19)                                                                                          |
-| the toggle             | top-bar `btn.quiet.monitor-toggle` 32 px, `Show monitors` / `Hide monitors`, `aria-expanded`, `aria-controls` | Layers-header `ghost` icon, **the same two names**, `aria-expanded`, `aria-controls="monitor-strip"`                     | **FIXED** (built); ARGUED: placement — the app has no app-head; this bar carries the shell's other layout control                                      |
+| the toggle             | top-bar `btn.quiet.monitor-toggle` 32 px, `Show monitors` / `Hide monitors`, `aria-expanded`, `aria-controls` | **App-header** control, the same two names, `aria-expanded`, `aria-controls="monitor-strip"`                             | **FIXED** (built in Phase 5, PLACED in the header by `AUDIT-CLOSE-01` B1 — the placement argument below is STRUCK)                                     |
 | monitor box            | radius 5, `#101722`, 1 px `--line`                                                                            | radius 4, `--r-surface`, 1 px `--r-border`                                                                               | ARGUED: palette + the panel primitive                                                                                                                  |
 | monitor head           | **32 px**, `3px 9px`, `#202b3a`; `PREVIEW` 11 px 650 purple / `PROGRAM` mint + `CH 1`                         | **53 px** `--r-panel-bar-h`; `PREVIEW (PVW)` / `PROGRAM (PGM)` 11 px 700 muted                                           | ARGUED: one bar height for all four panels (`--r-panel-bar-h`'s own rule); the purple/mint heads are A4's territory — a hue per monitor is not adopted |
 | PVW count              | head: `2 layers on PVW`                                                                                       | lifecycle bar: `Rehearsing 2 rows` (`rehearsalCaption`)                                                                  | ARGUED: the same count, one line lower, ONE place — not duplicated into the head                                                                       |
@@ -1395,6 +1418,27 @@ match; the section headings are a shade brighter and lighter; the foot carries `
 at equal widths with a sentence under them and a faint shadow above; the monitor strip is 50 px
 taller with a visibly larger PVW stage; and the Layers bar has a monitor icon that folds the
 strip away and brings it back.
+
+🔴 **STRUCK BY `AUDIT-CLOSE-01` C1, 2026-09-09 — the toggle's PLACEMENT argument was invalid, and
+it is worth reading twice because it is not a wrong number, it is a wrong KIND of reason.**
+
+The row above read _"ARGUED: placement — the app has no app-head; this bar carries the shell's
+other layout control"_. The first clause is the whole argument, and it cites §1.1's very first map
+row, which says the app has no top header. **That row recorded an ABSENCE and no property table in
+ten phases ever measured it against the reference, which draws a top bar carrying exactly this
+control.** So an unmeasured absence was used as its own justification: the reason the control could
+not go where the drawing puts it was that the place the drawing puts it did not exist, and the
+place did not exist because nobody had ever decided whether it should.
+
+That is a circle, and it is the shape the audit's rule now forbids: **"the app has no X" is not a
+reason when X was never measured** (`AUDIT-CLOSE-01` D). The toggle is in the header now, with the
+same flag, the same two names and the same `aria-expanded` / `aria-controls` — only the placement
+moved, and it moved to the place the reference draws it. §1.1's two wrong rows are corrected in
+place at the top of this document.
+
+⭐ The SECOND clause ("this bar carries the shell's other layout control") survives as a fact and
+was never sufficient on its own: the reset control is still in the Layers bar, because it is about
+the PANELS' geometry rather than about the shell's, and the reference draws no equivalent of it.
 
 ### 12.4 The waves, counted — how the reference was read
 
@@ -2839,3 +2883,104 @@ FILED WITH OWNERS, not unfinished phase work.
 - ⚠ **The `e2e` owed on `b9325b25` is DECLARED SUPERSEDED**, on the owner's instruction: it is many
   heads back and covered by seven later green runs whose `E2E (Playwright)` job was confirmed to
   have RUN, and those jobs are whole-tree (the reasoning `P-030` sets out). Not chased.
+
+## §18 — `AUDIT-CLOSE-01`: THE FIRST DELTAS CLOSED, AND THE RULE THAT CLOSES THE REST
+
+**2026-09-09, after the programme's ten phases were complete.** The owner set the finished console
+beside its approved reference, read the gap as large, and an audit totalled the ARGUED column for
+the first time: **142 not-adopted deltas, of which only 27 were the safety/contract case the phase
+sign-offs were implicitly about.** 64 were pure look and 12 were surfaces never compared at all.
+The audit itself is evidence-only; this section is the first session that CLOSES anything.
+
+### 18.0 🔴 THE RULE, which binds this session and every one after it
+
+_"Every delta FIXED or ARGUED"_ was an escape hatch with no budget, and the ARGUED column came out
+LARGER than the FIXED one. From here:
+
+- An ARGUED delta MUST name a **bucket-A** reason (safety / contract / refusal) or a **bucket-B**
+  one (operator naming, or the reference is factually wrong here).
+- **"Palette", "we liked ours better", and "the app has no X" where X was never measured are NOT
+  reasons.** Each of the three has a worked instance in this document now: §10.1's correction shows
+  what "palette" was hiding, and §1.1 + §12.3 show the third one being used as its own justification.
+- Every session reports its running **FIXED vs ARGUED** totals. If ARGUED exceeds a quarter of the
+  deltas touched, it stops and says so rather than justifying the rest.
+
+### 18.1 What this session closed
+
+| #   | delta                                                                                            | where                                                                                         |
+| --- | ------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| A   | Station setup's refusal band spanned the RAIL as well as its pane and met the footer flush       | `Modal.tsx` `messageFixed` + `--r-modal-message-*-fixed`; `modal-message-containment.spec.ts` |
+| C2  | the layer table's row rule, header ground and header ink, at the reference's own rendered values | `--r-row-rule` / `--r-layer-head-bg` / `--r-layer-head-ink`; §10.1's correction               |
+| B1  | the APP HEADER — brand, channel strip, monitors toggle, `PVW · N`, SETTINGS, LOG                 | `features/shell/AppHeader.tsx`, `ChannelStrip.tsx`                                            |
+| B2  | the LAYERS SUB-BAR — search, `Hide empty`, `N loaded · N on air · N of M rows`                   | `layers/layerFilter.ts` + `LayersPanel`; `layerFilter.test.ts`, `shell-chrome.spec.ts`        |
+| B3  | the layer tabs moved INTO the panel bar — one line, not two                                      | `Tabs.tsx` split into `TabStrip` + `TabPanel`; `Panel.tsx` gained `heading`                   |
+| B   | the awaiting live region folded into the sub-bar, reclaiming the line it reserved                | `LayersPanel` `awaitingInBar`                                                                 |
+| C1  | §1.1's two wrong map rows and §12.3's circular app-head argument, corrected in place             | §1.1's note, §12.3's struck row                                                               |
+
+### 18.2 🔴 THE ACCEPTANCE NUMBER, measured
+
+At 1280 × 800, chrome above the first data row, monitors folded away (the reference's own state).
+The app figures EXCLUDE the mock's TEST-MODE band, which `shell-chrome.spec.ts` measures and
+subtracts rather than assuming — it is the gap between the header's bottom edge and the top of the
+channel tabpanel, so a band that changed height cannot quietly shift the number.
+
+|                                                    | reference    | app BEFORE | app AFTER    |
+| -------------------------------------------------- | ------------ | ---------- | ------------ |
+| chrome above the first data row                    | **166.3 px** | 187.4 px   | **181.5 px** |
+| …with the monitors shown (the app's own default)   | —            | 434.6 px   | **428.7 px** |
+| rows visible above the status bar, monitors folded | **10**       | 7          | **7**        |
+
+**The chrome came down 5.9 px and the row count did not move, and both halves of that are worth
+saying plainly.** Adopting the reference's STRUCTURE costs height before it saves any: the app
+gained a 48 px header where the channel strip it absorbed was 30, and gained the 40 px sub-bar it
+never had — 58 px of new chrome — against the 40 px tab strip and the 26.4 px awaiting line it
+gave back. The console now has the drawing's shape; what it does not yet have is the drawing's
+row count, and 5.9 px is not a row.
+
+Every remaining pixel against the reference is itemised, and each is either outside this session's
+scope by the owner's own instruction or bucket-A:
+
+| px   | what                                                               | why it stands                                                                                            |
+| ---- | ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| +9.5 | the panel bar is `--r-panel-bar-h` 53 against the reference's 43.5 | a height that belongs to BEING a panel and is shared by four of them; explicitly NOT this session's item |
+| +2.5 | the column head is 28.3 against 25.8                               | **B** — `B-224`'s State tally wraps inside it; the reference has no tally                                |
+| +3.2 | the shell's own padding and the panel's border                     | the shell's geometry, not the card's                                                                     |
+
+That is 15.2, and 166.3 + 15.2 = 181.5. The arithmetic closes exactly, which is the point of
+itemising it: there is no unaccounted chrome left above that row.
+
+⭐ **THE ONE LEVER LEFT IS THE OWNER'S, and it is worth more than everything above put together:**
+the app DEFAULTS to monitors SHOWN and the reference defaults to hidden. That default is **247.2 px
+and three rows** — 428.7 against 181.5, four rows against seven. It is not changed here because the
+default visibility of two MONITORING surfaces on a playout console is a safety decision rather than
+a look (**A**), and `R-060` / owner answer A13 already settled the neighbouring question about
+whether it persists.
+
+### 18.3 The ARGUED column for this session
+
+Seven, each with its bucket, against seventeen fixed.
+
+| delta                                                        | bucket | reason                                                                                                                            |
+| ------------------------------------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `Templates` and `Import` buttons in the header               | **A**  | the picker's door is the ROW; a header button is a second door with its own refusals about which row it lands on                  |
+| the `PROTOTYPE` tag                                          | **B**  | the drawing labelling itself as a drawing                                                                                         |
+| the manual FAILOVER stays on the status bar                  | **A**  | deletion-guard item 17 — it is the remedy for the fault pill beside it                                                            |
+| the LOCK stays on the status bar                             | **B**  | the reference draws no lock at all, so there is no reference decision to follow; its PIN is ephemeral and belongs with the engage |
+| the column head is 28.3 px, not 25.8                         | **B**  | `B-224`'s tally; the reference has no tally                                                                                       |
+| the monitors are shown by default                            | **A**  | the default visibility of two monitoring surfaces is a safety decision                                                            |
+| the filter never hides a row the bridge reports something on | **A**  | the reference filters plainly; this console may not, for the reason `isLayerVisible` may not                                      |
+
+🔴 **7 of 24 is 29 %, which is OVER the quarter the rule sets, so this session STOPS here rather
+than arguing the rest.** The signal is worth reading: six of the seven cluster on the app header
+and the shell's two bars — the surfaces that had never been measured — which is what a bucket-D
+surface looks like the first time somebody actually decides it. The owner should look there first.
+
+### 18.4 Recorded, not built
+
+- 🔴 **The picker's red `Delete from station` MOVES OFF THE ROW.** The owner has decided it; WHERE
+  it goes is bound to the `Manage` view (audit row 101), which is a later item. **Nothing was built
+  and nothing was moved.** Recorded here so the decision is not re-derived, and so the next session
+  does not read the button's survival as approval.
+- Not touched, by the owner's own scope: the 24 cheap token values, the 19 medium items, and the
+  remaining structural ones — `--r-panel-bar-h`, the Inspector's spacing gradient, the picker's
+  width and its detail aside, the modal width table and the button family.

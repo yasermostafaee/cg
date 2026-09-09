@@ -58,6 +58,20 @@ interface Props {
   title: string;
   /** Override the region's accessible name when the visible title is decorative. */
   ariaLabel?: string;
+  /**
+   * 🔴 `AUDIT-CLOSE-01` B3 — SOMETHING OTHER THAN A LABEL AT THE HEAD OF THE BAR.
+   *
+   * The reference draws the layers card as ONE 40 px line carrying the TABS and the bulk
+   * verbs; the app spent a 53 px bar saying `LAYERS` and a second 40 px strip on the tabs
+   * below it, and the audit measured the pair. When a panel's tabs already name it, the word
+   * is a third statement of the same thing and the line it costs is taken from the row list.
+   *
+   * So a panel may put its own node where the title goes. `title` STILL COMES IN and is still
+   * the region's accessible name by default — the label is relocated, not deleted, which is
+   * the same distinction golden rule 11 draws about ids. A panel that passes nothing here is
+   * unchanged.
+   */
+  heading?: ReactNode;
   /** Panel-specific header controls, rendered BEFORE the shared fullscreen one. */
   actions?: ReactNode;
   children: ReactNode;
@@ -84,6 +98,7 @@ export function Panel({
   id,
   title,
   ariaLabel,
+  heading,
   actions,
   children,
   style,
@@ -96,7 +111,7 @@ export function Panel({
   return (
     <Root aria-label={ariaLabel ?? title} style={{ ...styles.panel, ...style }}>
       <header className="cg-panel-header">
-        <span className="cg-panel-title">{title}</span>
+        {heading ?? <span className="cg-panel-title">{title}</span>}
         <div className="cg-panel-actions">
           {actions}
           {/*

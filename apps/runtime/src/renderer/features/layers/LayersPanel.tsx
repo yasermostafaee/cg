@@ -8,10 +8,9 @@ import type { EmptiedAirRow, OrphanLayer, RestoreMigration, RestoreSkip } from '
 import {
   CircleArrowOutDownRight,
   LoaderCircle,
-  Monitor,
-  MonitorOff,
   PanelRight,
   RotateCcw,
+  Search,
   Trash2,
   TriangleAlert,
   X,
@@ -21,7 +20,14 @@ import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Panel } from '../../ui/Panel.js';
-import { Tabs, type TabSpec } from '../../ui/Tabs.js';
+import { TabPanel, TabStrip, type TabSpec } from '../../ui/Tabs.js';
+import {
+  NO_FILTER,
+  layerTally,
+  rowIsShown,
+  type FilterableRow,
+  type LayerFilter,
+} from './layerFilter.js';
 import { OperatorNames } from '../../ui/OperatorNames.js';
 import { operatorRowName, type OperatorRowName } from '../../ui/operatorNaming.js';
 import type { ShellLayout } from '../../hooks/useShellLayout.js';
@@ -195,6 +201,37 @@ const styles = {
     gap: '0.4rem',
     padding: '0 0.6rem',
     fontSize: '0.78rem',
+    color: colors.textMuted,
+    whiteSpace: 'nowrap' as const,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+  /**
+   * 🔴 `AUDIT-CLOSE-01` B — THE SAME LIVE REGION, ON A LINE THAT ALREADY EXISTS.
+   *
+   * The strip above used to be a line of its own, and it reserved **26.4 px of the layer list
+   * permanently** — for a message the operator sees for about a second at boot. Measured
+   * against the reference that is a sixth of the whole chrome gap the audit was about, and
+   * the reference has no equivalent line at all.
+   *
+   * ⚠ **THE RESERVATION IS NOT WEAKENED, IT IS RE-HOUSED, and the distinction is the whole
+   * point.** The property this strip exists for is that ROWS MUST NOT MOVE UNDER A REACHING
+   * HAND when the message goes — a real one, argued and tested before this change. Collapsing
+   * the strip to zero height would have broken it outright. So the region moved INTO the
+   * sub-bar, whose height is declared (`--r-subbar-h`) and does not depend on its contents:
+   * the message appears and goes inside a line that is there either way, so the shift is
+   * impossible for a stronger reason than before rather than a weaker one.
+   *
+   * It stays MOUNTED and it stays a `role="status"`: a screen reader only announces text that
+   * appears inside a live region already in the tree, so a conditional render would have
+   * traded a visible defect for a silent one.
+   */
+  awaitingInBar: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.4rem',
     color: colors.textMuted,
     whiteSpace: 'nowrap' as const,
     overflow: 'hidden',
@@ -496,6 +533,74 @@ export function LayersPanel({
   /** How many rows do not yet know what they carry. Zero hides the notice. */
   const awaitingRows = rowBindings.filter((r) => r.binding.kind === 'awaiting').length;
 
+  /*
+   * 🔴 `AUDIT-CLOSE-01` B2 — THE SUB-BAR'S FILTER.
+   *
+   * The reference's `Find row or template…` and `Hide empty`, which `design.md` §1.1 row 72
+   * recorded as already built and which did not exist. The PREDICATE lives in `layerFilter.ts`
+   * with its own argument and its own tests; what lives here is the state and the projection
+   * from a row onto the four facts the predicate needs.
+   *
+   * ⚠ Component state, deliberately: it is not a preference, it is a thing the operator is
+   * doing right now, and a search that survived a reload would leave a narrowed list in front
+   * of the next person to sit down. No persisted key (the change adds none).
+   */
+  const [filter, setFilter] = useState<LayerFilter>(NO_FILTER);
+
+  /**
+   * One row's four facts, read from the SAME binding the table renders.
+   *
+   * 🔴 Golden rule 11 — the two searchable strings come out of `operatorRowName`, the ONE
+   * composition, so what the operator TYPES is matched against what he READS in the NAME and
+   * TEMPLATE columns. Composing a name here would be a second spelling that could drift from
+   * the column beside it, which is the failure mode the rule is about.
+   */
+  const filterableOf = useCallback(
+    (entry: (typeof rowBindings)[number]): FilterableRow => {
+      const item = entry.binding.kind === 'bound' ? entry.binding.item : null;
+      const name = operatorRowName(
+        {
+          ...(item !== null ? { itemId: item.itemId, templateId: item.templateId } : {}),
+          ...(bank !== null ? { slot: { channel: bank.channel, layer: entry.slot.layer } } : {}),
+        },
+        bank,
+        templates,
+      );
+      return {
+        // `names` is [place, template] in reading order — exactly the two visible columns.
+        rowName: name.names[0] ?? '',
+        templateName: name.names[1] ?? null,
+        // The OBSERVATION, never a status — see `layerFilter.ts`'s override.
+        occupied: entry.slot.observed.kind === 'producer',
+        loaded: entry.binding.kind === 'bound',
+      };
+    },
+    [bank, templates],
+  );
+
+  const shownRowBindings = useMemo(
+    () => rowBindings.filter((entry) => rowIsShown(filterableOf(entry), filter)),
+    [rowBindings, filterableOf, filter],
+  );
+
+  /**
+   * `#` IS THE POSITION IN THE WHOLE LIST, NOT IN THE FILTERED ONE.
+   *
+   * A search that renumbers the rows under the operator would make the one column he uses to
+   * point at a row ("clear number 4") mean something different while he is typing. So the
+   * number is resolved from the unfiltered list and carried across.
+   */
+  const displayPositionByLayer = useMemo(() => {
+    const map = new Map<number, number>();
+    rowBindings.forEach((entry, index) => map.set(entry.slot.layer, index + 1));
+    return map;
+  }, [rowBindings]);
+
+  const filterTally = useMemo(
+    () => layerTally(rowBindings.map(filterableOf), filter),
+    [rowBindings, filterableOf, filter],
+  );
+
   // STOP ALL's count: the status IS the right question there — a row that never
   // played has no authored outro to run. See `isOnAir`.
   const onAirCount = items.filter(isOnAir).length;
@@ -779,6 +884,22 @@ export function LayersPanel({
       title="LAYERS"
       ariaLabel="Layers"
       style={{ flex: 1 }}
+      /*
+        🔴 `AUDIT-CLOSE-01` B3 — THE TABS ARE THE PANEL'S HEADING, so the card is ONE line.
+        The bar used to say `LAYERS` and a strip beneath it said `LAYERS | LIVE SOURCES |
+        STATION LAYERS`, which is the same word twice on two lines; the reference draws the
+        tabs and the bulk verbs on one. The region is still named `Layers` by `ariaLabel`, so
+        nothing that addresses this panel by name had to move.
+      */
+      heading={
+        <TabStrip
+          tabs={tabs}
+          activeId={activeTab}
+          onSelect={setActiveTab}
+          ariaLabel="Layer surfaces"
+          inPanelBar
+        />
+      }
       actions={
         <>
           {/*
@@ -908,35 +1029,17 @@ export function LayersPanel({
             </Button>
           )}
           {/*
-            🔴 `RUNTIME-REDESIGN-01` PHASE 5 — SHOW / HIDE THE MONITORS.
+            🔴 `RUNTIME-REDESIGN-01` PHASE 5 built the SHOW / HIDE MONITORS toggle here, and
+            `AUDIT-CLOSE-01` B1 MOVED IT to the app header — `features/shell/AppHeader.tsx`.
 
-            The reference's `Show monitors` / `Hide monitors` toggle (`aria-expanded`,
-            `aria-controls`), which the app did not have: its only way to fold the strip
-            away was this panel's FULLSCREEN, and that takes the Inspector column with it —
-            "monitors hidden" coupled to "editor hidden". This flips ONE flag on the shell
-            (`layout.monitorsShown`) and nothing else: not the selection, not the PVW set.
-
-            Placed HERE, not in a top bar — the app has no app-head; this bar already
-            carries the shell's other layout control (reset), and it is the bar the operator
-            reads the rows under. Hidden only while this panel is fullscreen, when the strip
-            is hidden by that axis anyway and the Layers bar is the whole screen.
+            The flag, the two names, the `aria-expanded` and the `aria-controls` are all
+            unchanged; only the placement moved, and it moved because the argument that put it
+            here has been withdrawn. Phase 5 wrote _"Placed HERE, not in a top bar — the app
+            has no app-head"_, and the app had no app-head because §1.1 recorded that absence
+            and no phase ever decided it. An unmeasured absence justifying a placement is the
+            shape the audit found; the header exists now, and the reference draws this control
+            in it.
           */}
-          <Button
-            variant="ghost"
-            aria-label={layout.monitorsShown ? 'Hide monitors' : 'Show monitors'}
-            aria-expanded={layout.monitorsShown}
-            aria-controls="monitor-strip"
-            title={
-              layout.monitorsShown
-                ? 'Fold PREVIEW and PROGRAM away — the layer list takes the height'
-                : 'Bring PREVIEW and PROGRAM back above the layer list'
-            }
-            onClick={() => {
-              layout.setMonitorsShown(!layout.monitorsShown);
-            }}
-          >
-            <Icon icon={layout.monitorsShown ? MonitorOff : Monitor} />
-          </Button>
           {/* THE WAY BACK. Always reachable once anything is customised, so an
               operator who drags a panel somewhere useless at 2 a.m. is never
               stuck with it. */}
@@ -965,7 +1068,7 @@ export function LayersPanel({
         share a strip — a single "Channel 1 | Channel 2 | STATION LAYERS" row could not
         say whose playout it meant — they are simply nested at the right levels.
       */}
-      <Tabs tabs={tabs} activeId={activeTab} onSelect={setActiveTab} ariaLabel="Layer surfaces">
+      <TabPanel activeId={activeTab}>
         {activeTab === 'layers' ? (
           !listReady ? (
             /*
@@ -1119,26 +1222,90 @@ export function LayersPanel({
                   </Button>
                 </div>
               )}
-              <div style={styles.awaitingStrip} role="status">
-                {awaitingRows > 0 && (
-                  <>
-                    {/* The same mark the waiting ROWS wear, and it MOVES — the one
-                        thing at rest on this table never does. Shape before colour,
-                        as everywhere else on this surface. */}
-                    <Icon
-                      icon={LoaderCircle}
-                      size={13}
-                      style={{ animation: 'cg-spin 1s linear infinite' }}
-                    />
-                    <span
-                      data-layers-awaiting=""
-                      title={AWAITING_PANEL_NOTICE}
-                      style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}
-                    >
-                      {AWAITING_PANEL_NOTICE}
-                    </span>
-                  </>
-                )}
+              {/*
+                🔴 `AUDIT-CLOSE-01` B2 — THE SUB-BAR the reference draws and §1.1 row 72 said
+                was already here. A search, `Hide empty`, and the tally at the right.
+
+                It sits BETWEEN the panel bar and the sticky column header, which is where the
+                reference puts it, and OUTSIDE the scroll area — a filter that scrolled away
+                from the list it is filtering would be a control you cannot see the effect of.
+              */}
+              <div className="cg-layers-subbar" data-layers-subbar="">
+                <span className="cg-layers-subbar__search">
+                  <Icon icon={Search} size={14} />
+                  <input
+                    type="search"
+                    className="cg-field"
+                    aria-label="Find row or template"
+                    placeholder="Find row or template…"
+                    value={filter.query}
+                    data-layers-search=""
+                    onChange={(e) => setFilter((f) => ({ ...f, query: e.target.value }))}
+                  />
+                </span>
+                <label className="cg-layers-subbar__toggle">
+                  <input
+                    type="checkbox"
+                    checked={filter.hideEmpty}
+                    data-layers-hide-empty=""
+                    onChange={(e) => setFilter((f) => ({ ...f, hideEmpty: e.target.checked }))}
+                  />
+                  Hide empty
+                </label>
+                {/*
+                  🔴 THE AWAITING LIVE REGION, on a line that exists either way.
+
+                  It was a strip of its own reserving 26.4 px of the LIST permanently, for a
+                  message the operator sees for about a second at boot. The property it exists
+                  for — rows must not move under a reaching hand when the message goes — is
+                  kept and made stronger: this bar's height is declared, so nothing can shift
+                  whether the message is here or not. See `styles.awaitingInBar`.
+
+                  `role="status"` sits on the ALWAYS-PRESENT wrapper and not on the message: a
+                  live region must be in the tree before its content changes or the change is
+                  never announced.
+                */}
+                <span style={styles.awaitingInBar} role="status">
+                  {awaitingRows > 0 && (
+                    <>
+                      {/* The same mark the waiting ROWS wear, and it MOVES — the one
+                          thing at rest on this table never does. Shape before colour,
+                          as everywhere else on this surface. */}
+                      <Icon
+                        icon={LoaderCircle}
+                        size={13}
+                        style={{ animation: 'cg-spin 1s linear infinite' }}
+                      />
+                      <span
+                        data-layers-awaiting=""
+                        title={AWAITING_PANEL_NOTICE}
+                        style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      >
+                        {AWAITING_PANEL_NOTICE}
+                      </span>
+                    </>
+                  )}
+                </span>
+                {/*
+                  THE TALLY — `loaded`, the air count, and how much of the list is showing.
+
+                  The air number is `tally.onAir`, the SAME one the column header wears in the
+                  air colour, passed rather than re-counted: two numbers about air on one
+                  surface that could disagree is what `B-213` is about.
+
+                  `N of M rows` is what keeps the override honest. A query can leave a row on
+                  screen that does not match it (see `layerFilter.ts`), and the operator can
+                  always see how many rows exist to compare against.
+                */}
+                <span className="cg-layers-subbar__tally" data-layers-tally="">
+                  <span>{filterTally.loaded} loaded</span>
+                  <span data-layers-tally-onair="" className="cg-layers-subbar__onair">
+                    {tally.onAir} on air
+                  </span>
+                  <span data-layers-tally-rows="">
+                    {filterTally.shown} of {filterTally.total} rows
+                  </span>
+                </span>
               </div>
               <div style={styles.list} ref={listRef}>
                 {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
@@ -1150,7 +1317,7 @@ export function LayersPanel({
                   // the operator to stop reading the grey.
                   unverifiable={linkDown || casparReach === 'unreachable'}
                 />
-                {rowBindings.map(({ slot, binding }, index) => {
+                {shownRowBindings.map(({ slot, binding }, index) => {
                   /*
                     THE `?? null` THAT USED TO BE HERE IS THE BUG, and it is worth
                     naming because it reads as harmless: a bound slot whose item had
@@ -1185,7 +1352,9 @@ export function LayersPanel({
                     than from a layer number, so it stays correct for a station whose bed
                     rows are not 1–9.
                   */
-                  const previous = rowBindings[index - 1];
+                  // Against the VISIBLE list — the break belongs above the first bed row the
+                  // operator can actually see, not above one a filter has removed.
+                  const previous = shownRowBindings[index - 1];
                   const startsBedGroup =
                     isLowBankLayer(bank, slot.layer) &&
                     (previous === undefined || !isLowBankLayer(bank, previous.slot.layer));
@@ -1195,8 +1364,9 @@ export function LayersPanel({
                       slot={slot}
                       binding={binding}
                       template={template}
-                      // `#` — plain display order, 1 at the top of THIS list.
-                      displayPosition={index + 1}
+                      // `#` — the row's place in the WHOLE list, resolved once above so a
+                      // search cannot renumber the rows under the operator's hand.
+                      displayPosition={displayPositionByLayer.get(slot.layer) ?? index + 1}
                       // The default alias's number — the layer's FIXED place in the
                       // bank, which ticking and unticking must never renumber. See
                       // `bankPosition` for why the two are deliberately separate.
@@ -1324,7 +1494,7 @@ export function LayersPanel({
         ) : (
           <StationLayersPanel layers={playout} orphans={orphans} />
         )}
-      </Tabs>
+      </TabPanel>
       {confirmDialog}
       {plateAudioFor !== null &&
         (() => {

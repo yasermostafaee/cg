@@ -24,10 +24,14 @@ import { connectionsStub } from './support/reachability.js';
  * is waiting, and absent exactly when none is. A notice on its own timer or its own
  * readiness flag would pass a presence test and fail every one of these.
  *
- * The layout-stability rule is asserted STRUCTURALLY (the strip is in the DOM at a
- * fixed height in both states) rather than by measurement, because jsdom computes
- * no layout. The structure is the mechanism: a strip that is always present and
- * always the same height cannot move the rows beneath it when its content changes.
+ * The layout-stability rule is asserted STRUCTURALLY rather than by measurement,
+ * because jsdom computes no layout. ⚠ `AUDIT-CLOSE-01` B2 changed WHAT the structure
+ * is: the notice used to sit on a strip of its own whose only job was to reserve a
+ * line, and it now shares the layers SUB-BAR, a line that is present either way
+ * because it carries the search, `Hide empty` and the tally. So the mechanism is no
+ * longer "a strip that is always the same height" but "a bar whose height does not
+ * depend on this message at all" — the same guarantee, reached by something that
+ * cannot be tuned away, and 26.4 px cheaper for the row list.
  */
 
 let container: HTMLDivElement | null = null;
@@ -275,23 +279,38 @@ describe('§0 — one panel-level notice while the row states are not yet known'
    *
    * The operator should not have rows move under his cursor at the moment he is
    * reaching for one — and that moment is precisely when the notice goes, a second
-   * or so in. Pinned structurally because jsdom computes no layout: the strip is
-   * ALWAYS in the DOM and always the same declared height, which is the mechanism
-   * that makes the shift impossible. A strip rendered only while waiting would fail
-   * here, and a `minHeight` that grew with content would too.
+   * or so in. Pinned structurally because jsdom computes no layout.
+   *
+   * ── ⚠ RE-POINTED BY `AUDIT-CLOSE-01` B2, AND THE MECHANISM IS STRONGER ───────────
+   *
+   * The notice used to live on a strip of its OWN whose only job was to reserve a line, and
+   * that line cost the layer list 26.4 px permanently — for a message shown for about a
+   * second at boot, on a surface whose whole complaint was chrome. It now lives inside the
+   * SUB-BAR, a line that is present either way because it carries the search, `Hide empty`
+   * and the tally.
+   *
+   * So the claim is no longer "this strip declares a fixed height" but "the region shares a
+   * bar that exists whether or not it has anything to say" — which is the same guarantee
+   * reached by something that cannot be tuned away, since the bar's height does not depend
+   * on this message at all. A conditional render of the region would still fail here, and so
+   * would moving it back out onto a line of its own.
    */
-  it('reserves its height permanently — the rows cannot move when it goes', async () => {
+  it('shares a line that exists either way — the rows cannot move when it goes', async () => {
     const bridge = stubBridge();
     const el = await renderPanel();
     await settle();
 
-    const strip = el.querySelector('[role="status"]');
+    const bar = el.querySelector('[data-layers-subbar]');
+    expect(bar, 'the sub-bar must exist').not.toBeNull();
+    const region = el.querySelector('[role="status"]');
     expect(
-      strip,
-      'the notice strip must exist as a container, not only as a message',
+      region,
+      'the live region must exist as a container, not only as a message',
     ).not.toBeNull();
-    const heightWhileWaiting = (strip as HTMLElement).style.height;
-    expect(heightWhileWaiting, 'the strip must declare a FIXED height').not.toBe('');
+    expect(
+      bar?.contains(region as Node),
+      'the region must sit INSIDE the always-present bar, not on a line of its own',
+    ).toBe(true);
 
     await act(async () => {
       bridge.stack.resolve([ITEM]);
@@ -299,10 +318,15 @@ describe('§0 — one panel-level notice while the row states are not yet known'
     });
     await settle();
 
-    // Same element, same height, no message — so nothing below it moved.
+    // Same bar, same region, no message — so nothing below it moved.
+    const barAfter = el.querySelector('[data-layers-subbar]');
     const after = el.querySelector('[role="status"]');
-    expect(after, 'the strip was removed with its message — that is the shift').not.toBeNull();
-    expect((after as HTMLElement).style.height).toBe(heightWhileWaiting);
+    expect(barAfter, 'the bar went with the message — that is the shift').not.toBeNull();
+    expect(
+      after,
+      'the region was removed with its message — that is the silent announcement',
+    ).not.toBeNull();
+    expect(barAfter?.contains(after as Node)).toBe(true);
     expect(notice(el)).toBeNull();
   });
 

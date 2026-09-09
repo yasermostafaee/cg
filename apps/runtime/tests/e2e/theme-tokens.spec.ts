@@ -59,10 +59,19 @@ test('the --r-* tokens resolve in the browser, and the LAYERS table keeps its gr
     rgb(16, 20, 30),
   );
 
-  // A control painted with NO background at all is what an unresolved var looks
-  // like — the whole failure mode this spec exists to catch.
+  /*
+    A control painted with NO background at all is what an unresolved var looks like — the
+    whole failure mode this spec exists to catch.
+
+    ⚠ RE-POINTED BY `AUDIT-CLOSE-01` B1, and the re-point makes it stronger. It read
+    `.cg-btn` FIRST, which was a filled bulk verb only because that happened to be the first
+    button in the DOM; the app header put a `ghost` control ahead of it, and `ghost` is
+    transparent BY DEFINITION (`controls.css` permits it "where surrounding chrome already
+    frames the control"). So the spec was asserting a fill against a variant chosen by
+    document order. It now names a variant whose fill is part of its contract.
+  */
   const painted = await page
-    .locator('.cg-btn')
+    .locator('.cg-btn--neutral')
     .first()
     .evaluate((el) => {
       return getComputedStyle(el).backgroundColor;

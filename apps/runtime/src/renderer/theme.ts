@@ -420,6 +420,53 @@ export const LAYER_ROW_PX = {
 } as const;
 
 /*
+ * ── 🔴 `AUDIT-CLOSE-01` B — THE SHELL CHROME, MEASURED FOR THE FIRST TIME ──────────────
+ *
+ * Every number here is read off `04-playout-layers.html` in Chromium at 1280 × 800. They are
+ * new because these two surfaces had never been measured at all: `design.md` §1.1 recorded the
+ * app header as "no equivalent" and the layers sub-bar as ALREADY BUILT (it was not), so
+ * neither ever reached a property table. The audit's bucket D is exactly this class.
+ *
+ * What they buy is the number the audit made the acceptance: 166 px of chrome above the first
+ * data row in the reference against 481 px in the app, ten rows against four.
+ */
+export const APP_HEAD_PX = {
+  /** `header.app-head{min-height:48px;padding:6px 12px;gap:10px}`, ruled below. */
+  h: 48,
+  padY: 6,
+  padX: 12,
+  gap: 10,
+  /** `.brand{gap:8px}`, 29 px tall. */
+  brandGap: 8,
+  /** A door in this bar — `.btn.quiet{min-height:32px;padding:5px 9px;gap:7px;font-size:12px}`. */
+  btnH: 32,
+  btnPadY: 5,
+  btnPadX: 9,
+  btnGap: 7,
+  btnText: 12,
+} as const;
+
+export const LAYER_SUBBAR_PX = {
+  /** `.layer-subbar{height:40px;padding:5px 10px;gap:12px}`, ruled below. */
+  h: 40,
+  padY: 5,
+  padX: 10,
+  gap: 12,
+  /** `.search{width:270px;height:29px}` with the glyph inset — `input{padding:4px 8px 4px 30px}`. */
+  searchW: 270,
+  searchH: 29,
+  searchPadTop: 4,
+  searchPadRight: 8,
+  searchPadLeft: 30,
+  /** The glyph itself, 14 px, 10 px in from the field's left edge. */
+  searchGlyph: 14,
+  searchGlyphInset: 10,
+  /** `.check{gap:8px;font-size:12px}` and the `.hint` tally at 12 px. */
+  checkGap: 8,
+  text: 12,
+} as const;
+
+/*
  * ── `RUNTIME-REDESIGN-01` PHASE 4 — THE LOOK STRIP'S GEOMETRY, AS THE REFERENCE RENDERS IT ──
  *
  * Measured in Chromium at 1280 × 800 on `04-playout-layers.html` (`design.md` §11.2), never
@@ -1736,6 +1783,36 @@ export const cssVars = {
   '--r-row-verb-glyph': `${String(LAYER_ROW_PX.verbGlyph)}px`,
   /** The Graphics-beds divider band — `.layer-table .bed-divider>td{height:25px}`. */
   '--r-bed-divider-h': `${String(LAYER_ROW_PX.bedDividerH)}px`,
+  /*
+   * ── 🔴 `AUDIT-CLOSE-01` B — THE APP HEADER AND THE LAYERS SUB-BAR ────────────────────
+   *
+   * `APP_HEAD_PX` / `LAYER_SUBBAR_PX` carry the measurements and why they are new.
+   *
+   * ⚠ `--r-app-head-bg` is a LITERAL and not a role, and that is deliberate rather than an
+   * oversight: the reference paints its `.app-head` and its `.bottom-bar` on `rgb(18, 27, 38)`,
+   * one unit off this palette's `--r-surface` `#141b25`. Taking the measured value gives this
+   * bar the drawing's own ground without repainting a fourth near-identical surface across the
+   * app. The STATUS bar's ground is a different question and an unmeasured one — the audit
+   * files it as bucket D — so it is not moved here to match.
+   */
+  '--r-app-head-h': `${String(APP_HEAD_PX.h)}px`,
+  '--r-app-head-pad': `${String(APP_HEAD_PX.padY)}px ${String(APP_HEAD_PX.padX)}px`,
+  '--r-app-head-gap': `${String(APP_HEAD_PX.gap)}px`,
+  '--r-app-head-bg': '#121b26',
+  '--r-app-brand-gap': `${String(APP_HEAD_PX.brandGap)}px`,
+  '--r-app-head-btn-h': `${String(APP_HEAD_PX.btnH)}px`,
+  '--r-app-head-btn-pad': `${String(APP_HEAD_PX.btnPadY)}px ${String(APP_HEAD_PX.btnPadX)}px`,
+  '--r-app-head-btn-gap': `${String(APP_HEAD_PX.btnGap)}px`,
+  '--r-app-head-btn-text': `${String(APP_HEAD_PX.btnText)}px`,
+  '--r-subbar-h': `${String(LAYER_SUBBAR_PX.h)}px`,
+  '--r-subbar-pad': `${String(LAYER_SUBBAR_PX.padY)}px ${String(LAYER_SUBBAR_PX.padX)}px`,
+  '--r-subbar-gap': `${String(LAYER_SUBBAR_PX.gap)}px`,
+  '--r-subbar-text': `${String(LAYER_SUBBAR_PX.text)}px`,
+  '--r-subbar-search-w': `${String(LAYER_SUBBAR_PX.searchW)}px`,
+  '--r-subbar-search-h': `${String(LAYER_SUBBAR_PX.searchH)}px`,
+  '--r-subbar-search-pad': `${String(LAYER_SUBBAR_PX.searchPadTop)}px ${String(LAYER_SUBBAR_PX.searchPadRight)}px ${String(LAYER_SUBBAR_PX.searchPadTop)}px ${String(LAYER_SUBBAR_PX.searchPadLeft)}px`,
+  '--r-subbar-search-glyph-inset': `${String(LAYER_SUBBAR_PX.searchGlyphInset)}px`,
+  '--r-subbar-check-gap': `${String(LAYER_SUBBAR_PX.checkGap)}px`,
   /*
    * ⚠ There is deliberately NO `--r-row-icon-btn-narrow-w` here any more. Phase 2 transcribed
    * a `30px` destructive-group width from a stylesheet rule the prototype renders for no

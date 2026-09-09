@@ -10,27 +10,29 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { LinkIndicator } from './LinkIndicator.js';
 
-interface Props {
-  onOpenAudit?: () => void;
-  /**
-   * 🔴 `STATION-CHROME-02` §1 — **THE ONE DOOR INTO SETTINGS.** Opens Station setup at
-   * its default tab.
-   *
-   * ── `onOpenSources` IS GONE, AND THE ARGUMENT FOR IT IS RECORDED, NOT DELETED ───
-   *
-   * There was a SOURCES button here, and its own note argued for keeping it: _"this is the
-   * section the operator opens most, and the surface without which a template declaring a
-   * live source cannot be taken at all"_. That is still true, and the owner overruled it:
-   * three doors into one room is confusion, not a shortcut. An operator who cannot find one
-   * button will not be helped by a second one beside it.
-   *
-   * ⚠ The DEEP-LINK MECHANISM is untouched — `openStationSetup(section)` still lands on a
-   * named tab, and the two entry points that are genuinely BESIDE the thing they configure
-   * keep it: the Inspector's delimiter gear, and the Layers panel's empty state. What went is
-   * the pair of buttons that duplicated a door already on this bar.
-   */
-  onOpenSettings?: () => void;
-}
+/**
+ * 🔴 `AUDIT-CLOSE-01` B1 — THIS BAR NO LONGER TAKES THE TWO DOORS, and the record of what they
+ * were is kept because deleting an argument is how it gets re-made.
+ *
+ * `onOpenAudit` and `onOpenSettings` were props here; both doors are in the app header now
+ * (`features/shell/AppHeader.tsx`), which is where the reference draws them.
+ *
+ * ── `onOpenSources` WAS ALREADY GONE, AND ITS ARGUMENT IS RECORDED, NOT DELETED ───
+ *
+ * There was a SOURCES button here, and its own note argued for keeping it: _"this is the
+ * section the operator opens most, and the surface without which a template declaring a live
+ * source cannot be taken at all"_. That is still true, and the owner overruled it
+ * (`STATION-CHROME-02` §1): three doors into one room is confusion, not a shortcut.
+ *
+ * ⚠ The DEEP-LINK MECHANISM is untouched — `openStationSetup(section)` still lands on a named
+ * tab, and the two entry points that are genuinely BESIDE the thing they configure keep it:
+ * the Inspector's delimiter gear, and the Layers panel's empty state.
+ *
+ * What this bar carries now is STATUS — plus the two controls the reference's own bar draws
+ * nowhere, so there was no reference decision to move them by: the manual FAILOVER (guard item
+ * 17, the remedy for the pill beside it) and the LOCK (whose PIN is ephemeral and belongs with
+ * the engage, `STATION-CHROME-01` §7).
+ */
 
 const styles = {
   bar: {
@@ -287,7 +289,7 @@ function staleTitle(state: string): string {
 }
 
 /** Bottom-of-window status bar (Phase 6 §2). Never hidden, never re-flows. */
-export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Element {
+export function StatusBar(): JSX.Element {
   const health = useConnections();
   const lock = useLock();
   /** §7 — is the engage form open? */
@@ -545,34 +547,26 @@ export function StatusBar({ onOpenAudit, onOpenSettings }: Props = {}): JSX.Elem
       >
         ⇄ FAILOVER
       </AsyncButton>
-      {onOpenSettings !== undefined && (
-        /*
-          `STATION-CHROME-01` §2 — RENAMED from SERVERS, and the rename is a correction
-          rather than a preference: this button opens the dialog at its DEFAULT tab, which
-          is now Channel, so a label reading "Servers" would name a section the press does
-          not land on. A control whose name and destination disagree is worse than an
-          unlabelled one.
+      {/*
+        🔴 `AUDIT-CLOSE-01` B1 — SETTINGS AND LOG MOVED TO THE APP HEADER.
 
-          🔴 `STATION-CHROME-02` §1 — and it is now the ONLY one. SOURCES stood beside it
-          and opened the same dialog one tab along; see the `Props` note for the argument
-          that was made for it and overruled.
-        */
-        <Button
-          onClick={onOpenSettings}
-          aria-label="Open Station setup"
-          title="Station setup — the station's settings, in one place"
-        >
-          SETTINGS
-        </Button>
-      )}
-      {/* LOG, not AUDIT (owner). "Audit" names the FILE FORMAT the bridge writes;
-          "log" is what the operator is going to look at. The accessible name keeps
-          the fuller phrase, so a screen reader still says WHICH log this is. */}
-      {onOpenAudit !== undefined && (
-        <Button onClick={onOpenAudit} aria-label="Open audit log">
-          LOG
-        </Button>
-      )}
+        Both doors are now in `features/shell/AppHeader.tsx`, which is where the reference
+        draws them, with their accessible names (`Open Station setup`, `Open audit log`) and
+        their titles unchanged — a relocation that renamed its controls would be a rewrite.
+        There is still exactly ONE of each in the app, which is what `station-setup.spec.ts`
+        §1 counts, page-wide.
+
+        ⚠ `STATION-CHROME-01` §2's rename (SERVERS → SETTINGS) and `STATION-CHROME-02` §1's
+        one-door decision are both intact and travelled with the button; nothing about which
+        tab it opens on changed.
+
+        ⚠ WHAT STAYED HERE, and why it is not an oversight: the manual FAILOVER control and
+        the LOCK. The reference's bar draws NEITHER, so there is no reference decision to
+        follow for either. Failover is deletion-guard item 17 and belongs beside the fault
+        states it answers — it is the remedy for the pill two elements to its left. The lock's
+        PIN is set fresh at every engage and is ephemeral (`#lockPin`, in memory), so the
+        button belongs where the engage is (`STATION-CHROME-01` §7).
+      */}
       {lock.engaged ? (
         <span style={styles.lock}>🔒 LOCKED</span>
       ) : (

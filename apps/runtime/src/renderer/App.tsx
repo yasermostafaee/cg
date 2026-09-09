@@ -16,6 +16,7 @@ import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
 import { EmptiedAirNotice } from './features/layers/EmptiedAirNotice.js';
 import { LayersPanel } from './features/layers/LayersPanel.js';
 import { ChannelScope } from './features/channels/ChannelScope.js';
+import { AppHeader } from './features/shell/AppHeader.js';
 import { MonitorStrip } from './features/monitors/MonitorStrip.js';
 import { ShellDivider } from './ui/ShellDivider.js';
 import { useShellLayout } from './hooks/useShellLayout.js';
@@ -209,6 +210,21 @@ export function App(): JSX.Element {
   return (
     <ShellLayoutProvider layout={layout}>
       <main style={styles.page}>
+        {/*
+          🔴 `AUDIT-CLOSE-01` B1 — THE APP HEADER, above every banner.
+
+          Above them deliberately: the header is the shell's own chrome and the banners are
+          about the STATE of the thing inside it, so a banner appearing must not push the
+          brand, the channel tabs and the two doors down the page. It carries the CHANNEL
+          strip, so the shell gained a header without gaining a line — see the component's
+          own note for the measurement, and for the three controls the reference draws here
+          that this one deliberately does not take.
+        */}
+        <AppHeader
+          layout={layout}
+          onOpenSettings={() => openStationSetup()}
+          onOpenAudit={() => setAuditOpen(true)}
+        />
         {/* R-006 — a not-live link means NOTHING can reach air. That is a full-width alert,
           not a pill: the pill lost to the green HEALTHY pill beside it, and the operator
           believed a graphic was on air. Renders nothing when the link is live. */}
@@ -442,12 +458,9 @@ export function App(): JSX.Element {
             </div>
           </>
         )}
-        {/* `STATION-CHROME-02` §1 — ONE settings door. `onOpenSources` is gone; the
-            deep-link mechanism it used is not (see `StatusBar`'s Props note). */}
-        <StatusBar
-          onOpenAudit={() => setAuditOpen(true)}
-          onOpenSettings={() => openStationSetup()}
-        />
+        {/* `AUDIT-CLOSE-01` B1 — the two doors are in the app header now; this bar is
+            STATUS, plus the two controls the reference draws nowhere (see its own note). */}
+        <StatusBar />
         <CommandToast />
         {/* THE tooltip, mounted ONCE. Every control carrying a `title` inherits it
           by delegation — nothing new has to be wired, which is the point (see

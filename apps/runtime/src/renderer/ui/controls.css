@@ -31,6 +31,156 @@
  * for what colour it is.
  */
 
+/* ── 🔴 AUDIT-CLOSE-01 B1 — THE APP HEADER ──────────────────────────────────
+ *
+ * The bar the reference draws across the top of the console and this app did not have.
+ * Every number is `--r-app-head-*` / `--r-app-brand-*`, measured on the rendered
+ * `header.app-head` (see `APP_HEAD_PX`). It is the shell's own chrome, so it sits above
+ * every banner and never scrolls.
+ */
+.cg-app-header {
+  display: flex;
+  align-items: center;
+  gap: var(--r-app-head-gap);
+  min-height: var(--r-app-head-h);
+  box-sizing: border-box;
+  padding: var(--r-app-head-pad);
+  background: var(--r-app-head-bg);
+  border-bottom: 1px solid var(--r-border);
+  flex-shrink: 0;
+}
+
+/* The mark and the name. Not a control: nothing here is pressable or focusable. */
+.cg-app-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-app-brand-gap);
+  color: var(--r-text);
+  flex-shrink: 0;
+}
+.cg-app-brand__name {
+  font-weight: var(--r-weight-bold);
+  letter-spacing: 0.04em;
+}
+.cg-app-brand__word {
+  color: var(--r-text-muted);
+  letter-spacing: 0.14em;
+  font-size: var(--r-app-head-btn-text);
+  text-transform: uppercase;
+}
+
+.cg-app-header__spacer {
+  flex: 1;
+  min-width: 0;
+}
+
+/*
+ * `PVW · N`. A chip, not a badge in the alarm family: rehearse is a browser render and
+ * reaches no channel, so it wears the rehearse ink and nothing that reads as air (A12).
+ */
+.cg-app-header__pvw {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--r-app-head-btn-pad);
+  border-radius: var(--r-radius-sm);
+  border: 1px solid var(--r-border);
+  background: var(--r-surface-raised);
+  color: var(--r-rehearsing);
+  font-size: var(--r-app-head-btn-text);
+  font-weight: var(--r-weight-semibold);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/*
+ * THE BAR DECIDES ITS CONTROLS' HEIGHT — the same argument `.cg-panel-header .cg-btn`
+ * makes one surface over, at this bar's own measured 32 px (`.btn.quiet` in the
+ * reference) rather than the panel bar's 28.
+ */
+.cg-app-header .cg-btn {
+  min-height: var(--r-app-head-btn-h);
+  height: var(--r-app-head-btn-h);
+  padding: var(--r-app-head-btn-pad);
+  gap: var(--r-app-head-btn-gap);
+  font-size: var(--r-app-head-btn-text);
+}
+
+/* ── 🔴 AUDIT-CLOSE-01 B2 — THE LAYERS SUB-BAR ──────────────────────────────
+ *
+ * The reference's `.layer-subbar`: a search, `Hide empty`, and the tally at the right.
+ * OUTSIDE the row list's scroll container — a filter that scrolls away from the list it
+ * narrows is a control whose effect you cannot see.
+ */
+.cg-layers-subbar {
+  display: flex;
+  align-items: center;
+  gap: var(--r-subbar-gap);
+  min-height: var(--r-subbar-h);
+  box-sizing: border-box;
+  padding: var(--r-subbar-pad);
+  border-bottom: 1px solid var(--r-border);
+  font-size: var(--r-subbar-text);
+  color: var(--r-text-secondary);
+  flex-shrink: 0;
+}
+
+.cg-layers-subbar__search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.cg-layers-subbar__search > svg {
+  position: absolute;
+  inset-inline-start: var(--r-subbar-search-glyph-inset);
+  color: var(--r-text-muted);
+  pointer-events: none;
+}
+/*
+ * The field is `.cg-field` — the shared primitive owns the ground, the edge, the radius,
+ * the hover and the ONE focus ring, exactly as every other input in the app does. Only the
+ * BOX is this bar's: the reference's 270 × 29 with the glyph's 30 px well cut into the
+ * leading pad. A second field look here would be the ad-hoc control styling the design
+ * system's own rule forbids.
+ */
+.cg-layers-subbar__search > .cg-field {
+  width: var(--r-subbar-search-w);
+  height: var(--r-subbar-search-h);
+  padding: var(--r-subbar-search-pad);
+  font-size: var(--r-subbar-text);
+}
+.cg-layers-subbar__search > .cg-field::placeholder {
+  color: var(--r-text-muted);
+}
+
+.cg-layers-subbar__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-subbar-check-gap);
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.cg-layers-subbar__tally {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-subbar-gap);
+  color: var(--r-text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/*
+ * The air number, in the sacred colour — and it is the SAME count the column header
+ * wears, passed rather than re-derived (`B-213`). Two numbers about air on one surface
+ * that could disagree is the defect that rule exists to prevent.
+ */
+.cg-layers-subbar__onair {
+  color: var(--r-onair);
+  font-weight: var(--r-weight-semibold);
+}
+
 /* ── Panel chrome — THE bar, shared by every panel ──────────────────────────
  *
  * Owner report: «هدر پنل Inspector باید با هدر بقیه پنل‌ها یکی باشه» — the

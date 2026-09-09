@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { StrictMode, createElement, type FunctionComponent } from 'react';
+import { StrictMode, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ConnectionHealth } from '@cg/shared-ipc';
-import { StatusBar } from '../src/renderer/features/status/StatusBar.js';
+import { AppHeader } from '../src/renderer/features/shell/AppHeader.js';
+import type { ShellLayout } from '../src/renderer/hooks/useShellLayout.js';
 import { StationSetupDialog } from '../src/renderer/features/stationSetup/StationSetupDialog.js';
 import { STATION_SETUP_SECTIONS } from '../src/renderer/features/stationSetup/sections.js';
 import {
@@ -17,10 +17,31 @@ import {
 } from '../src/renderer/features/stationSetup/stationSetupStore.js';
 import { clearPortals, openDialog } from './support/dialog.js';
 import {
+  SETUP_BANK,
   renderStationSetup,
   stationSetupStub,
   unmountStationSetup,
 } from './support/stationSetup.js';
+
+/**
+ * The shell geometry `AppHeader` reads for its monitors toggle. Only `monitorsShown` and
+ * `setMonitorsShown` are touched by this spec; the rest is the shape the hook returns.
+ */
+function headerLayoutStub(): ShellLayout {
+  return {
+    inspectorPx: 396,
+    monitorPx: 230,
+    narrow: false,
+    focus: 'none',
+    monitorsShown: true,
+    customized: false,
+    setInspectorPx: () => undefined,
+    setMonitorPx: () => undefined,
+    setFocus: () => undefined,
+    setMonitorsShown: () => undefined,
+    reset: () => undefined,
+  } as ShellLayout;
+}
 
 /**
  * `STATION-SETUP-02` §2 — **every old entry point is a DEEP LINK into one dialog, never a
@@ -143,29 +164,38 @@ describe('a deep link opens ONE dialog at the named section', () => {
    * decision is one entry point, so the assertion inverts: SETTINGS is there, SOURCES is
    * NOT, and the DEEP-LINK MECHANISM the removed button used is untouched (the next two
    * specs drive it from the store and from the two surfaces that still carry it).
+   *
+   * ── ⚠ RE-POINTED BY `AUDIT-CLOSE-01` B1 ─────────────────────────────────────────────
+   *
+   * The door moved from the STATUS BAR to the APP HEADER, where the reference draws it. The
+   * claim is unchanged — one door, named `Open Station setup`, reading `SETTINGS`, with no
+   * SOURCES beside it — and it is now made against the surface that carries it. The
+   * accessible name and the visible word are both asserted, as before, because either could
+   * have survived the move without the other.
    */
-  it('the status bar has ONE settings door — SETTINGS, and no SOURCES beside it', async () => {
+  it('the app header has ONE settings door — SETTINGS, and no SOURCES beside it', async () => {
     const onOpenSettings = vi.fn();
-    const health: ConnectionHealth = {
-      primary: { label: 'A', state: 'healthy', amcpAxisOk: true },
-      currentPrimary: 'A',
-      strategy: 'mirror-sync',
-    };
+    // `AppHeader` reads the rehearse set for its `PVW · N` chip and the channel list for its
+    // strip, so the stub carries both beside the status surfaces this spec already needed.
     const stub = {
-      connections: {
-        health: () => Promise.resolve(health),
-        onHealthChanged: () => () => undefined,
-        failover: () => Promise.resolve({ ok: false, newPrimary: 'A' as const }),
-      },
-      lock: {
-        state: () => Promise.resolve({ engaged: false }),
-        onStateChanged: () => () => undefined,
-      },
+      // `useBridgeSnapshot` re-pulls on a resync, so every snapshot hook reads the link.
       link: {
         status: () => 'live' as const,
         onStatusChanged: () => () => undefined,
         resyncing: () => false,
         onResyncingChanged: () => () => undefined,
+      },
+      rehearse: {
+        state: () => Promise.resolve([]),
+        onStateChanged: () => () => undefined,
+      },
+      fixedLayers: {
+        config: () => Promise.resolve(SETUP_BANK),
+        onConfigChanged: () => () => undefined,
+      },
+      channelSettings: {
+        get: () => Promise.resolve({ settings: [], observed: [] }),
+        onChanged: () => () => undefined,
       },
     };
     (window as unknown as { cg: typeof stub }).cg = stub;
@@ -173,13 +203,18 @@ describe('a deep link opens ONE dialog at the named section', () => {
     document.body.appendChild(container);
     root = createRoot(container);
     const r = root;
-    // `StatusBar` declares its props with a default (`Props = {}`), which makes React's
-    // `createElement` overloads resolve to the props-less form; name the props type here.
-    const Bar = StatusBar as FunctionComponent<{
-      onOpenSettings?: () => void;
-    }>;
     await act(async () => {
-      r.render(createElement(StrictMode, null, createElement(Bar, { onOpenSettings })));
+      r.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(AppHeader, {
+            layout: headerLayoutStub(),
+            onOpenSettings,
+            onOpenAudit: () => undefined,
+          }),
+        ),
+      );
     });
     await settle();
     const settings = container.querySelector<HTMLButtonElement>(

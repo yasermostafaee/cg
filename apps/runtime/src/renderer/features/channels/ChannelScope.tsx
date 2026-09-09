@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
-import { Tabs, type TabSpec } from '../../ui/Tabs.js';
-import { selectChannel } from './channelStore.js';
+import { TabPanel } from '../../ui/Tabs.js';
 import { useSelectedChannel } from './useSelectedChannel.js';
 
 /**
@@ -28,24 +27,28 @@ import { useSelectedChannel } from './useSelectedChannel.js';
  * publishes, and the selection is a channel ID in `channelStore`, readable by Station setup's
  * per-channel tab. With one declared channel it renders exactly what it did before.
  */
+/**
+ * 🔴 `AUDIT-CLOSE-01` B1 — THE STRIP MOVED TO THE APP HEADER; THE SCOPE DID NOT.
+ *
+ * This component used to render both halves of the channel tab set: the tablist and the panel
+ * it controls. The reference puts the channel chooser in its top bar, and the app had no top
+ * bar to put it in — an absence §1.1 recorded and no phase ever decided (see `AppHeader`). Now
+ * that the header exists, the tablist lives there and this keeps the PANEL.
+ *
+ * ⚠ Everything the header note above argues about SCOPE is unchanged and still the reason this
+ * component exists: the channel owns the layer list, PROGRAM, PREVIEW and the Inspector, so the
+ * tabpanel still wraps all four. What moved is which end of the room the tabs are on.
+ *
+ * The two halves are joined by `idPrefix="channel"` and by the SAME `useSelectedChannel()`
+ * reading — a module store, not a prop — so they cannot disagree about which channel is
+ * selected however far apart they are rendered.
+ */
 export function ChannelScope({ children }: { children: ReactNode }): JSX.Element {
-  const { channels, selected } = useSelectedChannel();
-
-  const tabs: TabSpec[] = channels.map((channel) => ({
-    id: String(channel),
-    label: `CHANNEL ${String(channel)}`,
-  }));
+  const { selected } = useSelectedChannel();
 
   return (
-    <Tabs
-      tabs={tabs}
-      activeId={String(selected)}
-      onSelect={(id) => selectChannel(Number(id))}
-      ariaLabel="Channels"
-      idPrefix="channel"
-      level="outer"
-    >
+    <TabPanel activeId={String(selected)} idPrefix="channel">
       {children}
-    </Tabs>
+    </TabPanel>
   );
 }

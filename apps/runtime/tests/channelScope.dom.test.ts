@@ -5,6 +5,7 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ChannelSettingsState } from '@cg/shared-ipc';
 import { ChannelScope } from '../src/renderer/features/channels/ChannelScope.js';
+import { ChannelStrip } from '../src/renderer/features/channels/ChannelStrip.js';
 import {
   __resetChannelChoiceForTest,
   readChannelChoice,
@@ -21,6 +22,19 @@ import { SETUP_BANK, stationSetupStub } from './support/stationSetup.js';
  *
  * ⚠ What this does NOT test, on purpose: any bridge call. Phase 7 invents no multi-channel
  * contract (owner answer A3); the strip reads channels the bridge already publishes.
+ *
+ * ── ⚠ RE-POINTED BY `AUDIT-CLOSE-01` B1, AND THE PROPERTY IS UNCHANGED ───────────────
+ *
+ * The strip moved into the app header, where the reference draws the channel chooser, and
+ * `ChannelScope` kept the tabpanel that wraps the workspace. So this mounts BOTH halves —
+ * `ChannelStrip` for the tablist, `ChannelScope` for the panel — instead of one component
+ * that rendered both. Every assertion below is the one it was: the tabs are a list whose
+ * length is data, they are keyed by channel id, the selection is readable outside the
+ * component, and the workspace is still inside the panel the strip controls.
+ *
+ * ⭐ Mounting the two together is also what proves the SPLIT did not break the join: the
+ * panel's `aria-labelledby` still names a tab this strip rendered, which is precisely the
+ * thing that can go wrong when two halves are placed far apart.
  */
 
 let container: HTMLDivElement | null = null;
@@ -57,7 +71,14 @@ async function render(children: ReactNode = null): Promise<HTMLElement> {
   root = createRoot(container);
   const r = root;
   await act(async () => {
-    r.render(createElement(StrictMode, null, createElement(ChannelScope, null, children)));
+    r.render(
+      createElement(
+        StrictMode,
+        null,
+        createElement(ChannelStrip, null),
+        createElement(ChannelScope, null, children),
+      ),
+    );
   });
   await settle();
   return container;

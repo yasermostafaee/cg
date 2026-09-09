@@ -45,12 +45,10 @@ export interface TabSpec {
   icon?: LucideIcon | undefined;
 }
 
-interface Props {
+interface StripProps {
   tabs: readonly TabSpec[];
   activeId: string;
   onSelect: (id: string) => void;
-  /** Rendered below the strip — the caller owns the panel body. */
-  children: ReactNode;
   /** Accessible name for the tab strip. */
   ariaLabel: string;
   /**
@@ -78,6 +76,24 @@ interface Props {
   orientation?: 'horizontal' | 'vertical';
   /** Fixed rail width, vertical only. */
   railWidth?: string;
+  /**
+   * 🔴 `AUDIT-CLOSE-01` B3 — THE STRIP IS SITTING IN A PANEL BAR, not above one.
+   *
+   * The reference draws the layers card's tabs and its bulk verbs on ONE 40 px line; the app
+   * spent a 53 px panel bar and a 40 px strip on the same job, and the audit measured what
+   * the two cost together. Hoisting the strip into the bar is what removes the second line,
+   * so the strip has to stop being a band: no rule under it (the BAR has one), no stretch,
+   * and it lays itself out as a flex item beside the actions.
+   *
+   * ⚠ It is a placement flag, NOT a second visual vocabulary. The tabs keep their own
+   * padding, weight and selected underline; what changes is only what the CONTAINER does.
+   */
+  inPanelBar?: boolean;
+}
+
+interface Props extends StripProps {
+  /** Rendered below the strip — the caller owns the panel body. */
+  children: ReactNode;
 }
 
 const styles = {
@@ -110,6 +126,19 @@ const styles = {
    * changes nothing structural.
    */
   outerStrip: { background: colors.background, padding: '0.25rem 0.25rem 0', gap: '0.25rem' },
+  /**
+   * `AUDIT-CLOSE-01` B3 — the strip AS A FLEX ITEM inside a panel bar.
+   *
+   * The bar already draws the rule and the ground, so the strip drops both; `alignSelf`
+   * stretches it so a tab's selected underline still lands on the bar's own bottom edge,
+   * which is what makes it read as a tab rather than as a button with a line under it.
+   */
+  stripInBar: {
+    borderBottom: 'none',
+    alignSelf: 'stretch',
+    marginBlock: `calc(-1 * ${cssVars['--r-space-3']})`,
+    minWidth: 0,
+  },
   outerTab: {
     fontSize: '0.72rem',
     padding: '0.35rem 0.85rem',
@@ -150,92 +179,136 @@ const styles = {
  * have expressed. `railWhiteBox.dom.test.ts` is the regression.
  */
 
-export function Tabs({
+/**
+ * `AUDIT-CLOSE-01` B — THE STRIP AND THE PANEL, SEPARABLE.
+ *
+ * They used to be one component that always rendered both, one above the other, and that
+ * shape is what made "the tabs must sit in the panel BAR" and "the channel tabs must sit in
+ * the APP HEADER" impossible to express without duplicating the tablist. Splitting them is a
+ * pure refactor — `Tabs` below still composes exactly what it composed before — and it is the
+ * seam the two B items are built on.
+ *
+ * ⚠ The two halves are joined by `idPrefix` + `activeId` and by nothing else, so a caller that
+ * places them apart MUST pass the same pair to both or `aria-controls` will point at nothing.
+ * That is the price of separating them and it is why they are not two unrelated components.
+ */
+export function TabStrip({
   tabs,
   activeId,
   onSelect,
-  children,
   ariaLabel,
   idPrefix = 'tab',
   level = 'inner',
   orientation = 'horizontal',
   railWidth = cssVars['--r-setup-rail-w'],
-}: Props): JSX.Element {
+  inPanelBar = false,
+}: StripProps): JSX.Element {
   const outer = level === 'outer';
   const vertical = orientation === 'vertical';
   let lastGroup: string | undefined;
   return (
-    <>
-      <div
-        {...(vertical
-          ? { className: 'cg-rail', style: { width: railWidth } }
-          : {
-              style: outer ? { ...styles.strip, ...styles.outerStrip } : styles.strip,
-            })}
-        role="tablist"
-        aria-label={ariaLabel}
-        {...(vertical ? { 'aria-orientation': 'vertical' as const } : {})}
-      >
-        {tabs.map((tab) => {
-          const active = tab.id === activeId;
-          const base = outer ? { ...styles.tab, ...styles.outerTab } : styles.tab;
-          const activeStyle = outer ? styles.outerActiveTab : styles.activeTab;
-          const heading = vertical && tab.group !== undefined && tab.group !== lastGroup;
-          if (vertical) lastGroup = tab.group;
-          return (
-            <Fragment key={tab.id}>
-              {heading && (
-                <span className="cg-rail-group" aria-hidden="true">
-                  {tab.group}
-                </span>
-              )}
-              <button
-                type="button"
-                role="tab"
-                id={`${idPrefix}-${tab.id}`}
-                aria-selected={active}
-                aria-controls={`${idPrefix}panel-${tab.id}`}
-                {...(vertical
-                  ? { className: 'cg-rail-tab' }
-                  : { style: active ? { ...base, ...activeStyle } : base })}
-                onClick={() => onSelect(tab.id)}
-              >
-                {/* A bare `<svg>`, not a wrapper: the tab's FIRST span stays its label, which is
+    <div
+      {...(vertical
+        ? { className: 'cg-rail', style: { width: railWidth } }
+        : {
+            style: {
+              ...styles.strip,
+              ...(outer ? styles.outerStrip : {}),
+              ...(inPanelBar ? styles.stripInBar : {}),
+            },
+          })}
+      role="tablist"
+      aria-label={ariaLabel}
+      {...(vertical ? { 'aria-orientation': 'vertical' as const } : {})}
+    >
+      {tabs.map((tab) => {
+        const active = tab.id === activeId;
+        const base = outer ? { ...styles.tab, ...styles.outerTab } : styles.tab;
+        const activeStyle = outer ? styles.outerActiveTab : styles.activeTab;
+        const heading = vertical && tab.group !== undefined && tab.group !== lastGroup;
+        if (vertical) lastGroup = tab.group;
+        return (
+          <Fragment key={tab.id}>
+            {heading && (
+              <span className="cg-rail-group" aria-hidden="true">
+                {tab.group}
+              </span>
+            )}
+            <button
+              type="button"
+              role="tab"
+              id={`${idPrefix}-${tab.id}`}
+              aria-selected={active}
+              aria-controls={`${idPrefix}panel-${tab.id}`}
+              {...(vertical
+                ? { className: 'cg-rail-tab' }
+                : { style: active ? { ...base, ...activeStyle } : base })}
+              onClick={() => onSelect(tab.id)}
+            >
+              {/* A bare `<svg>`, not a wrapper: the tab's FIRST span stays its label, which is
                     what `stationSetupTabs.dom.test.ts` reads off the rail. `.cg-rail-tab > svg`
                     styles it. */}
-                {vertical && tab.icon !== undefined && (
-                  <Icon icon={tab.icon} size={STATION_SETUP_PX.tabIcon} />
-                )}
-                {vertical ? <span className="cg-rail-tab__label">{tab.label}</span> : tab.label}
-                {tab.badge !== undefined && (
-                  // The dot is decorative; the LABEL beside it is what a screen
-                  // reader announces, so the signal never depends on colour.
-                  <>
-                    <span
-                      style={
-                        tab.badge.tone === 'edited'
-                          ? { ...styles.dot, ...styles.dotEdited }
-                          : styles.dot
-                      }
-                      aria-hidden="true"
-                      data-tab-badge={tab.badge.tone}
-                    />
-                    <span className="cg-visually-hidden">{tab.badge.label}</span>
-                  </>
-                )}
-              </button>
-            </Fragment>
-          );
-        })}
-      </div>
-      <div
-        role="tabpanel"
-        id={`${idPrefix}panel-${activeId}`}
-        aria-labelledby={`${idPrefix}-${activeId}`}
-        style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}
+              {vertical && tab.icon !== undefined && (
+                <Icon icon={tab.icon} size={STATION_SETUP_PX.tabIcon} />
+              )}
+              {vertical ? <span className="cg-rail-tab__label">{tab.label}</span> : tab.label}
+              {tab.badge !== undefined && (
+                // The dot is decorative; the LABEL beside it is what a screen
+                // reader announces, so the signal never depends on colour.
+                <>
+                  <span
+                    style={
+                      tab.badge.tone === 'edited'
+                        ? { ...styles.dot, ...styles.dotEdited }
+                        : styles.dot
+                    }
+                    aria-hidden="true"
+                    data-tab-badge={tab.badge.tone}
+                  />
+                  <span className="cg-visually-hidden">{tab.badge.label}</span>
+                </>
+              )}
+            </button>
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The panel half — addressed by the same `idPrefix` + `activeId` the strip was given. */
+export function TabPanel({
+  activeId,
+  idPrefix = 'tab',
+  children,
+}: {
+  activeId: string;
+  idPrefix?: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <div
+      role="tabpanel"
+      id={`${idPrefix}panel-${activeId}`}
+      aria-labelledby={`${idPrefix}-${activeId}`}
+      style={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** The two together, one above the other — what every caller had before the split. */
+export function Tabs({ children, ...strip }: Props): JSX.Element {
+  return (
+    <>
+      <TabStrip {...strip} />
+      <TabPanel
+        activeId={strip.activeId}
+        {...(strip.idPrefix !== undefined ? { idPrefix: strip.idPrefix } : {})}
       >
         {children}
-      </div>
+      </TabPanel>
     </>
   );
 }
