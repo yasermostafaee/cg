@@ -982,6 +982,41 @@ nothing, for the owner's decision. ⚠ **If the owner in fact wants the wave-1 i
 smaller verbs, the left-bar selection, the 16/17 cells — that is a token flip in one file and a
 decision the report asks for, not something to infer from a stylesheet's first draft.**
 
+🔴 **CORRECTED BY `AUDIT-CLOSE-01` C2, 2026-09-09 — "in the app's pre-Phase-2 hexes" WAS TRUE AND
+WAS NOT THE WHOLE FACT, and the missing half is what turned "palette" into an escape hatch.**
+
+Measured again in Chromium on `04-playout-layers.html`, this time reading the prototype's OWN
+variable block beside the elements it paints:
+
+| the prototype DECLARES | the prototype's layer table PAINTS                                  |
+| ---------------------- | ------------------------------------------------------------------- |
+| `--line: #2d3a49`      | `th` and `td` border-bottom `1px solid rgb(55, 65, 81)` = `#374151` |
+| `--soft: #24303d`      | `th` background `rgb(45, 55, 69)` = `#2d3745`                       |
+| `--muted: #8e9eaf`     | `th` color `rgb(156, 163, 175)` = `#9ca3af`                         |
+
+The three declared values are, exactly, what Phase 2 took for `--r-border`, `--r-border-soft` and
+`--r-text-muted`. **So the prototype declares this console's palette and then paints its table with
+literals that override it** — which means "ARGUED: palette" (the same ROLE at two values, one of
+them the app's old hex) was never a like-for-like mapping on this surface. There is no role to map:
+the reference is not using its own role here, and `PROMPT.md` §0 says the approved thing is what it
+RENDERS.
+
+Two of the six colours §10.2 disposed of with that one word are the ones an operator sees at a
+glance, and the `AUDIT-CLOSE-01` audit measured what they cost: the table read FLAT where the drawing
+has a lid over the rows. Both are now adopted at the reference's own rendered values, with the ink
+that comes with the ground (§10.2's three amended rows, and `--r-layer-head-bg` in the token home).
+The other four — the verb at rest, the ON PVW hover, the loaded-row hover and the selection — are
+NOT touched here and are a later item; this note is what stops them being read as settled.
+
+⚠ **A6 IS NOT REVERSED, and the distinction matters.** A6 forbade re-tuning `--r-text-muted`, and it
+has not moved: the layer table's header was given its own ink role at the reference's own literal, so
+the change is scoped to one surface. Phase 3's reasoning — take the ground, not the ink — was right
+about the tools it had; what it did not have was the reading that the reference clears AA here with a
+PAIR. Every ink on the new ground was re-measured (labels 4.74:1, on-air tally 9.00:1, refused number
+6.63:1, refused mark 3.12:1 against its 3.0 graphic floor), and the 6.63 and 3.12 are the same two
+numbers §8.2 recorded in its `head` column — that table was measured on THIS ground, before Phase 3
+moved it.
+
 ✅ **ANSWERED (2026-09-08, before Phase 4 — owner answers A8 and A9, §11.1).** Wave 1 is
 REJECTED: nobody ever saw it rendered, and `32×34` with a 30 px destructive group shrinks the STOP
 and CLEAR targets on an on-air console; `48 × 36` stays and no later phase reopens it. And the
@@ -1005,8 +1040,8 @@ the owner's mapping rule; the prototype's table keeps the app's OLD hex for that
 | verb disabled              | transparent, `#9CA3AF`, opacity .6                                                 | transparent, `--r-text-muted`, opacity .6                                                                                                       | identical up to palette                                                                                                                            |
 | verb hover, per tone       | `#ff0000 #22dd7a #2ebea1 #b38d18 #de5105`, ink `#10151f`                           | the same six `--r-verb-*`, ink `--r-ink-on-verb`                                                                                                | identical (pinned by `rehearse-layout.spec.ts`)                                                                                                    |
 | ON PVW hover               | `#2c3a4e`, ink `#f4ecff`                                                           | `--r-control-hover-bg` `#304258` / `#5e748b`                                                                                                    | ARGUED: both are the reference's; Phase 2 mapped the control-hover role to its `.btn:hover`                                                        |
-| header ground              | `#2d3745`                                                                          | **`--soft` `#24303d`** (was `rgb(45 55 69)` = `#2d3745`)                                                                                        | **FIXED — owner answer A6**, see 10.4                                                                                                              |
-| header ink                 | `#9CA3AF` (a literal, 4.74:1)                                                      | `--r-text-muted` `#8e9eaf`, **4.89:1** on the new ground                                                                                        | ARGUED: the ink is not re-tuned (A6)                                                                                                               |
+| header ground              | `#2d3745`                                                                          | `#2d3745` — `--r-layer-head-bg`. Phase 3 took `--soft` `#24303d`; see the supersession note                                                     | **FIXED** — A6 at Phase 3, the reference's own pair at `AUDIT-CLOSE-01` C2                                                                         |
+| header ink                 | `#9CA3AF` (a literal, 4.74:1)                                                      | `#9ca3af` — `--r-layer-head-ink`, **4.74:1**. Phase 3 kept `--r-text-muted` `#8e9eaf` at 4.89:1                                                 | **FIXED at `AUDIT-CLOSE-01` C2** — a NEW role, so `--r-text-muted` still does not move (A6)                                                        |
 | header type                | 9.92 px 700 .06em uppercase, `5.6px 12px 4.8px`                                    | 9.92 px 700 .06em uppercase, `5.6px 12px 4.8px`                                                                                                 | identical                                                                                                                                          |
 | header height              | 25.8 px                                                                            | 28.3 px                                                                                                                                         | ARGUED: `B-224`'s State tally wraps inside the head; the reference has no tally                                                                    |
 | verb labels                | `Item · Play · On PVW · Next · Stop · Clear`, 9.28 px 700 .02em, uppercased by CSS | the same six words, 9.28 px 700 .02em, uppercase                                                                                                | identical (the DOM text is upper-case; the paint is the same)                                                                                      |
@@ -1019,7 +1054,7 @@ the owner's mapping rule; the prototype's table keeps the app's OLD hex for that
 | empty row, and its hover   | `#10141E`, unchanged under the pointer                                             | `--r-row-empty-bg` `#10141E`, unchanged                                                                                                         | identical                                                                                                                                          |
 | empty row text             | `rgb(91 93 96)`; name 500; template italic                                         | `colors.emptyRow` `rgb(91 93 96)`; 500; italic                                                                                                  | identical                                                                                                                                          |
 | selected                   | `rgba(56,189,248,.1)` + 2 px `#38BDF8` frame                                       | `--r-row-selected-fill` + 2 px `--r-accent` frame                                                                                               | ARGUED: palette (same design; the accent moved in Phase 2)                                                                                         |
-| row rule                   | `1px #374151`                                                                      | `1px --r-border #2d3a49`                                                                                                                        | ARGUED: palette                                                                                                                                    |
+| row rule                   | `1px #374151`                                                                      | `1px --r-row-rule #374151` (was `--r-border` `#2d3a49`)                                                                                         | **FIXED at `AUDIT-CLOSE-01` C2** — 1.48:1 against a loaded row, from 1.31:1                                                                        |
 | Graphics-beds band         | 25 px, `4px 12px`, `#111827`, top rule `#4b5563`, 10 px 700 untracked              | **25 px, `4px 12px`, `--r-surface`, top rule `--r-border-strong`** (was 27.9 px, `8px 9.6px 4px`, transparent, `--r-border`); 9.92 px 700 .06em | **FIXED** (band); ARGUED (type keeps the sticky header's voice)                                                                                    |
 | band text                  | GRAPHICS BEDS — BELOW LIVE PLATES                                                  | GRAPHICS BEDS — BELOW THE LIVE PLATES                                                                                                           | ARGUED: wording is not this phase's (§0: nothing translated, nothing reworded)                                                                     |
 | Stop all / Clear all hover | `#b38d18` / `#de5105`, ink `#10151f`                                               | `--r-verb-stop` / `--r-verb-clear`, ink `--r-ink-on-verb`                                                                                       | identical (now pinned in Playwright)                                                                                                               |

@@ -105,6 +105,43 @@ const REF_AMBER_BG = '#352d1e';
 const REF_RED = '#ffaaa7';
 const REF_RED_BG = '#3a242a';
 
+/*
+ * ── 🔴 `AUDIT-CLOSE-01` C2 — THE REFERENCE'S LAYER TABLE IS DRAWN ON LITERALS ──────────
+ *
+ * The three constants below are NOT from the reference's variable block. They are what its
+ * layer table PAINTS, read off the rendered elements in Chromium at 1280 × 800:
+ *
+ *   `.layer-table thead th`  background rgb(45, 55, 69)   color rgb(156, 163, 175)
+ *   `.layer-table thead th`  border-bottom 1px solid rgb(55, 65, 81)
+ *   `.layer-table tbody td`  border-bottom 1px solid rgb(55, 65, 81)
+ *
+ * …while that same document declares `--line: #2d3a49`, `--soft: #24303d`, `--muted: #8e9eaf`
+ * — which are, exactly, the values Phase 2 took for `--r-border`, `--r-border-soft` and
+ * `--r-text-muted`. **The prototype declares this console's palette and then paints its table
+ * with different literals**, and `PROMPT.md` §0 says the approved thing is what it RENDERS.
+ *
+ * 🔴 THIS IS WHY "ARGUED: palette" WAS NOT A REASON. `design.md` §10.2 disposed of six colour
+ * deltas with that one word, on the understanding that the reference's literal and the app's
+ * token were the same ROLE at two values. On this surface they are not the same role at all:
+ * the reference deliberately does not use its own `--soft` / `--line` here. Two of the six —
+ * the row rule and the header ground — are the ones an operator sees at a glance, and they are
+ * the two the audit measured as making the table read FLAT where the drawing has a lid over
+ * the rows. They are adopted here; the other four are a later item and are not touched.
+ *
+ * ⚠ THE INK COMES WITH THE GROUND, and that is not a re-tune of `--r-text-muted`. Owner answer
+ * A6 forbade moving the muted ink, and this does not move it: the layer table's header gets its
+ * OWN ink role at the reference's own literal, so nothing else in the app changes. Taking the
+ * ground without the ink would have put the shared muted ink at 4.39:1 — the accepted fail A6
+ * closed — which is precisely the trap A6's note predicted. The measured ratios are in
+ * `layer-table-geometry.spec.ts` §3 and in this change's report.
+ */
+/** The rule the reference's layer table paints — under its header AND between its rows. */
+const REF_LAYER_RULE = '#374151';
+/** …the ground its sticky header sits on. */
+const REF_LAYER_HEAD_BG = '#2d3745';
+/** …and the ink it puts on that ground. 4.74:1, above the 4.5 AA text floor. */
+const REF_LAYER_HEAD_INK = '#9ca3af';
+
 export const colors = {
   // Page chrome — the reference's own, since Phase 2 (see the header).
   background: REF_BG,
@@ -1314,25 +1351,48 @@ export const cssVars = {
    */
   '--r-row-marked-edge': CAUTION_TEXT,
   /**
-   * The sticky column header's ground.
+   * A RECORD TABLE's sticky column header — the audit log's, today.
    *
-   * 🔴 **PHASE 3 — OWNER ANSWER A6, CLOSED.** It was the owner's `rgb(45 55 69)`, chosen
-   * to sit LIGHTER than both row grounds so the sticky band reads as a lid. Phase 2 moved
-   * `--r-text-muted` to the reference's `--muted`, and on that ground the column labels
-   * fell to **4.39:1** — below the 4.5 AA text floor. A6 accepted the fail and named the
-   * remedy: the reference's own `--soft`, on which the same ink reads **4.89:1**. The
-   * ground moves; the ink is NOT re-tuned.
+   * ⚠ **IT IS NO LONGER THE LAYER TABLE'S.** `AUDIT-CLOSE-01` C2 split the two: the layer
+   * table takes the reference's own rendered pair (`--r-layer-head-bg` / `--r-layer-head-ink`),
+   * and this role keeps `--soft` for the record tables, whose reference draws a DIFFERENT
+   * ground again (`03-audit-log.html`'s `th` sits on `#1d2b3b`). One name for two grounds the
+   * drawing does not agree on was the thing that made the layer table's ground look settled.
+   * Re-pointing the audit head is a later item; it is unchanged here, still reading
+   * `--r-text-muted` at 4.89:1.
    *
-   * ⚠ What the reference actually draws, so the next reader does not "correct" this back:
-   * its rendered header ground IS `rgb(45 55 69)` — the app's old value, pasted into the
-   * prototype — and its header ink is the app's OLD muted `#9CA3AF` as a literal, which is
-   * how the drawing clears AA (4.74:1) where this console no longer could. Taking that
-   * pair would mean re-tuning the ink, which A6 forbids; taking `--soft` closes the fail
-   * with a token that already exists. The lid relationship survives, narrowed: this is
-   * 1.13:1 over a loaded row and 1.29:1 over the panel, and the header keeps its rule
-   * beneath it.
+   * 🔴 **PHASE 3 — OWNER ANSWER A6** is why this value is `--soft` and not the owner's older
+   * `rgb(45 55 69)`: on that ground the Phase-2 muted ink fell to **4.39:1**, below the 4.5 AA
+   * text floor, and A6's remedy was the ground rather than a re-tuned ink. That reasoning is
+   * intact for THIS role. What C2 found is that it was never the whole answer for the LAYER
+   * table, because the reference clears AA there with a pair — see `REF_LAYER_HEAD_INK`.
    */
   '--r-table-head-bg': REF_SOFT,
+  /**
+   * 🔴 `AUDIT-CLOSE-01` C2 — THE LAYER TABLE'S OWN HEADER PAIR AND ROW RULE, AS RENDERED.
+   *
+   * The three values are read off `04-playout-layers.html` in Chromium; the constants carry
+   * the measurements and the argument. Taken together they are what restores the LID, and both
+   * halves are measured rather than asserted: the header is **1.26:1** over a loaded row (it
+   * was 1.13:1 on `--soft`) and the rule between rows is **1.48:1** against it (it was 1.31:1
+   * as `--r-border`) — a separator again rather than a shade of the row.
+   *
+   * Every ink the header puts on this ground was re-measured with it, because a ground change
+   * moves all of them at once: labels and the stale tally **4.74:1**, the on-air tally
+   * **9.00:1**, the refused NUMBER **6.63:1** (text floor 4.5), the refused MARK **3.12:1**
+   * (graphic floor 3.0, Phase 2A's split). The 6.63 and the 3.12 are the same two numbers
+   * §8.2 recorded in its `head` column — that table was measured on THIS ground, before
+   * Phase 3 moved it, which is the independent confirmation that the move is a return.
+   * `--r-text-muted` on this ground would be 4.39:1, and that is exactly why the ink came
+   * with the ground.
+   *
+   * ⚠ The header's rule and the row's rule are ONE value in the reference — `th` and `td` both
+   * paint `1px solid rgb(55, 65, 81)` — so they are one token here. Splitting them would be a
+   * second spelling of a number the drawing states once.
+   */
+  '--r-layer-head-bg': REF_LAYER_HEAD_BG,
+  '--r-layer-head-ink': REF_LAYER_HEAD_INK,
+  '--r-row-rule': REF_LAYER_RULE,
 
   /*
    * ── `STATION-CHROME-02` §3 — THE SETTINGS DIALOG'S OWN VOCABULARY ────────────

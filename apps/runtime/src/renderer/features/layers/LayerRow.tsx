@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { FixedSlotState, TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Icon } from '../../ui/Icon.js';
 import { ContextMenu } from '../../ui/ContextMenu.js';
@@ -161,7 +161,10 @@ const styles = {
     // geometry, so the row and the header cannot be padded from two spellings.
     padding: ROW_GEOMETRY.padding,
     minHeight: `${String(VERB_TARGET_PX + 10)}px`,
-    borderBottom: `1px solid ${colors.border}`,
+    // `AUDIT-CLOSE-01` C2 — the rule the reference's table PAINTS (`1px solid rgb(55, 65, 81)`),
+    // not `--r-border`. It was the border role, which Phase 2 moved to the reference's `--line`
+    // — and the reference does not use its own `--line` here. See `--r-row-rule`.
+    borderBottom: `1px solid ${cssVars['--r-row-rule']}`,
   },
   /** The bank position — LEFT-aligned, not centred (see the header comment). */
   rowNumber: {

@@ -115,17 +115,19 @@ const styles = {
     top: 0,
     zIndex: 2,
     // Opaque: rows scroll UNDER this, so any transparency shows them through it.
-    // `RUNTIME-REDESIGN-01` Phase 3 (owner answer A6): the reference's `--soft`, on
-    // which the muted column labels read 4.89:1 — the owner's earlier `rgb(45 55 69)`
-    // put them at 4.39:1 once Phase 2 moved the ink. It is still lighter than a loaded
-    // row, so the sticky band still reads as a lid on the list rather than as a row.
-    background: cssVars['--r-table-head-bg'],
-    borderBottom: `1px solid ${colors.border}`,
+    //
+    // `AUDIT-CLOSE-01` C2 — the reference's own rendered PAIR, ground and ink together.
+    // Phase 3 took `--soft` alone (owner answer A6) because taking the ground without the
+    // ink would have put the shared muted at 4.39:1; the pair clears AA at 4.74:1 without
+    // moving `--r-text-muted` anywhere else in the app. On this ground the band is a
+    // visible LID over the rows again — see `--r-layer-head-bg`.
+    background: cssVars['--r-layer-head-bg'],
+    borderBottom: `1px solid ${cssVars['--r-row-rule']}`,
     fontSize: '0.62rem',
     fontWeight: 700,
     letterSpacing: '0.06em',
     textTransform: 'uppercase' as const,
-    color: colors.textMuted,
+    color: cssVars['--r-layer-head-ink'],
     whiteSpace: 'nowrap' as const,
   },
   cell: { overflow: 'hidden', textOverflow: 'ellipsis' },
@@ -172,8 +174,13 @@ const styles = {
    * …and the same number with its confidence withdrawn (§4). Muted, keeping its
    * size — the count is unchanged, only the claim that a server is confirming it.
    * B-081's tone, reused rather than a new grey.
+   *
+   * ⚠ `AUDIT-CLOSE-01` C2 — it is the HEADER's quiet ink, not the app-wide `--r-text-muted`.
+   * Same tone, same meaning; the difference is that this one is measured against the ground it
+   * is actually painted on. Left as `--r-text-muted` it would read 4.39:1 here — the accepted
+   * fail A6 closed — while every label beside it read 4.74:1.
    */
-  onAirCountStale: { color: colors.textMuted },
+  onAirCountStale: { color: cssVars['--r-layer-head-ink'] },
   /**
    * `B-213` — the rows whose last command was REFUSED, as their own number in the
    * error colour, beside the air count and never added to it. Smaller than the air

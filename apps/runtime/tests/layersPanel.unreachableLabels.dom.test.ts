@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FixedLayerBank, FixedSlotState } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { LayersPanel } from '../src/renderer/features/layers/LayersPanel.js';
-import { colors } from '../src/renderer/theme.js';
+import { colors, cssVars } from '../src/renderer/theme.js';
 import { clearPortals } from './support/dialog.js';
 import { connectionsStub, linkFor, type Reachability } from './support/reachability.js';
 
@@ -210,7 +210,18 @@ describe('§4 — the four treatments, together, with CasparCG unreachable', () 
     expect(airCount(el)?.textContent?.trim()).toBe('1');
     expect(airCount(el)?.getAttribute('aria-label')).toBe('1 items on air');
     expect(airCount(el)?.hasAttribute('data-unverifiable')).toBe(true);
-    expect(airCount(el)?.style.color).toBe(asRendered(colors.textMuted));
+    /*
+      ⚠ RE-POINTED BY `AUDIT-CLOSE-01` C2, and the PROPERTY is unchanged: the count is the
+      header's own quiet ink, which is what "greyed — the claim withdrawn" means here. It
+      used to be the app-wide `--r-text-muted`; C2 gave the layer table's header the
+      reference's rendered PAIR (ground `rgb(45,55,69)` + ink `rgb(156,163,175)`), and a
+      count left on the shared muted would have read 4.39:1 on that ground — the accepted
+      fail owner answer A6 closed — while every label beside it read 4.74:1.
+
+      It is still a TOKEN read and not a hex, which is the rule this helper exists for; only
+      which token carries "the header's quiet ink" moved.
+    */
+    expect(airCount(el)?.style.color).toBe(asRendered(cssVars['--r-layer-head-ink']));
 
     // 4. EMPTY — a fact about OUR list. Normal styling, no confidence hook at all.
     const empty = stateCell(el, 70);

@@ -201,28 +201,76 @@ test('§3 — the header sits on its own ground, its labels clear AA, and the be
     const cs = getComputedStyle(el);
     return { bg: cs.backgroundColor, ink: cs.color, h: el.getBoundingClientRect().height };
   });
+  const rowBg = await app.layers
+    .locator('[data-layer][data-template-id]')
+    .first()
+    .evaluate((el) => getComputedStyle(el).backgroundColor);
+  const rowRulePainted = await app.layers
+    .locator('[data-layer][data-template-id]')
+    .first()
+    .evaluate((el) => getComputedStyle(el).borderBottomColor);
   const t = await page.evaluate(() => {
     const cs = getComputedStyle(document.documentElement);
     const read = (n: string): string => cs.getPropertyValue(n).trim();
     return {
-      headBg: read('--r-table-head-bg'),
-      muted: read('--r-text-muted'),
+      headBg: read('--r-layer-head-bg'),
+      headInk: read('--r-layer-head-ink'),
+      rowRule: read('--r-row-rule'),
+      onAir: read('--r-onair'),
+      errorText: read('--r-error-text'),
+      errorMark: read('--r-error-mark'),
       bedH: read('--r-bed-divider-h'),
     };
   });
   for (const [name, value] of Object.entries(t)) expect(value, `${name} is declared`).not.toBe('');
 
   expect(head.bg).toBe(await cssColour(page, t.headBg));
-  expect(head.ink).toBe(await cssColour(page, t.muted));
+  expect(head.ink).toBe(await cssColour(page, t.headInk));
   /*
-    🔴 OWNER ANSWER A6, MEASURED WHERE IT IS PAINTED. The muted column labels read 4.39:1
-    on the header's old ground and were an accepted fail; on the reference's `--soft` they
-    must clear the 4.5 AA text floor. Computed from the colours the browser resolved, not
-    from the token home's hexes, so a ground that rendered differently would be caught.
+    🔴 `AUDIT-CLOSE-01` C2 — THE REFERENCE'S OWN PAIR, AND EVERY INK ON IT.
+
+    Phase 3 answered A6 by moving the GROUND to `--soft` and leaving `--r-text-muted` alone,
+    which cleared the 4.5 floor at 4.89:1. C2 took the reference's rendered PAIR instead —
+    ground `rgb(45, 55, 69)` and its own ink `rgb(156, 163, 175)` — because the prototype
+    declares this console's `--soft` and `--muted` and then paints its table with neither.
+    A6's constraint is honoured the way A6 meant it: `--r-text-muted` did not move, the layer
+    header simply stopped borrowing it.
+
+    So the floor is re-asserted on the pair that is actually painted, and — this is the part
+    the old spec did not do — on EVERY OTHER INK the header puts on that ground. The tally's
+    two numbers and its warning glyph are painted here too, and a ground change moves all of
+    them at once. Their tokens are read from `:root` rather than from a rendered tally,
+    because whether a tally is showing is a property of the seeded bank and not of the palette.
   */
   expect(contrast(head.ink, head.bg), 'header labels on the header ground').toBeGreaterThanOrEqual(
     4.5,
   );
+  expect(
+    contrast(t.onAir, t.headBg),
+    'the on-air tally on the header ground',
+  ).toBeGreaterThanOrEqual(4.5);
+  expect(
+    contrast(t.errorText, t.headBg),
+    'the refused-count number on the header ground',
+  ).toBeGreaterThanOrEqual(4.5);
+  // The tally's triangle is a GRAPHIC and answers to the 3.0 floor (Phase 2A's split).
+  expect(
+    contrast(t.errorMark, t.headBg),
+    'the refused-count mark on the header ground',
+  ).toBeGreaterThanOrEqual(3);
+
+  /*
+    THE LID. The sticky band exists to read as a lid ON the list rather than as another row of
+    it, which is a claim about the header against the ROW — not against the page. It survived
+    Phase 3 "narrowed" at 1.13:1; on the reference's own ground it is back over 1.2. Measured
+    from what the two elements actually painted, so a row whose ground moved would be caught.
+  */
+  expect(contrast(head.bg, rowBg), 'the header reads as a lid over a loaded row').toBeGreaterThan(
+    1.2,
+  );
+
+  // …and the rule between rows is the token, not the panel border it used to borrow.
+  expect(rowRulePainted).toBe(await cssColour(page, t.rowRule));
   expect(head.h, 'the header laid out').toBeGreaterThan(10);
 
   // THE SIX WORDS, in the order the buttons emit — the channel that retires the
