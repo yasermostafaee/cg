@@ -47,7 +47,14 @@ const styles = {
    * with the 11px labels instead of with the boxes it acts on. Aligned on the
    * baseline of the controls, the three read as one row of controls.
    */
-  offsets: { display: 'flex', gap: 'var(--r-space-3)', alignItems: 'flex-end' },
+  /*
+   * 🔴 `MONITORS-01` — AUDIT ROW 30: the gap is `--r-space-2` (8), not `--r-space-3` (12).
+   * Measured in Chromium at 1280 × 800, the reference's `.position-controls` renders
+   * `gap: 8px`. Phase 5 argued "the scale's step", which is true of both — 8 and 12 are
+   * BOTH steps on this scale — so the argument never chose between them and the drawing
+   * did. It buys the two fields 4 px each.
+   */
+  offsets: { display: 'flex', gap: 'var(--r-space-2)', alignItems: 'flex-end' },
   /**
    * One nudge input with its own label ABOVE it, so the two never compete for a row.
    *

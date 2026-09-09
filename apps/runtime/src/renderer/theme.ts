@@ -417,6 +417,16 @@ export const LAYER_ROW_PX = {
   verbGlyph: 20,
   /** The Graphics-beds divider band — `.layer-table .bed-divider>td{height:25px}`. */
   bedDividerH: 25,
+  /**
+   * …and its TYPE — `10px`, `700`, `letter-spacing: normal` (`MONITORS-01`, audit row 12).
+   *
+   * The weight and the tracking are spelled at the use site because they are not numbers
+   * anything else reads; the SIZE is here because it is the one a reader will want to check
+   * against the drawing beside `bedDividerH`. Phase 3 had 9.92 px tracked `.06em`, borrowed
+   * from the sticky header — see `LayersPanel`'s `bedGroupHead` for why that argument did not
+   * survive being measured.
+   */
+  bedDividerText: 10,
 } as const;
 
 /*
@@ -647,6 +657,12 @@ export const PLATES_PX = {
   gainW: 140,
   gainH: 26,
   gainGap: 9,
+  /**
+   * …and its CORNER — order-radius: 7px (MONITORS-01, audit row 58). NOT a step on
+   * the radius scale and deliberately not folded into one: it is this control's own
+   * dimension, measured off the drawing, the same way gainW and gainH are.
+   */
+  gainRadius: 7,
   readoutW: 34,
   readoutText: 11,
   /** The verbs — `ON`/`OFF` 40 × 32, `SOLO` 46 × 32, 11 px, gapped 5. */
@@ -720,6 +736,20 @@ export const STATION_SETUP_PX = {
   frameW: 1140,
   frameH: 810,
   frameInset: 64,
+  /**
+   * 🔴 `MONITORS-01`, audit rows 71, 74 and 77 — the frame's CORNER, its TITLE and its
+   * CLOSE, as rendered (`border-radius: 16px`; `h2` 19 px / 650; the close a 38 × 38 box
+   * with an 8 px corner). Phase 7 took this frame's width, height, head, rail, pane and
+   * footer and left these four to the modal primitive; the primitive's are 6 px, a
+   * `0 4px 16px` shadow, `1rem / 700` and a 30 px square.
+   *
+   * ⚠ `titleTextFrame` is deliberately NOT `titleText`, which is the PANE's `h2` (24 px) and
+   * a different heading on the same surface. Two headings, two numbers, two names.
+   */
+  frameRadius: 16,
+  titleTextFrame: 19,
+  closeBox: 38,
+  closeRadius: 8,
   /** The head — `.settings-head{min-height:90px;padding:21px 28px;gap:14px}`, its subtitle 13 px, 3 px under the title. */
   headMinH: 90,
   headPadY: 21,
@@ -1567,6 +1597,17 @@ export const cssVars = {
    */
   '--r-modal-message-pad-fixed': `${String(STATION_SETUP_PX.cardGap)}px ${String(STATION_SETUP_PX.panePadX)}px`,
   '--r-modal-message-inset-fixed': `${String(STATION_SETUP_PX.railW + STATION_SETUP_PX.panePadX)}px`,
+  /*
+   * 🔴 `MONITORS-01` — audit rows 71, 74 and 77: the `fixed` frame's own corner, lift,
+   * title and close box, measured in Chromium at 1280 × 800 on `09-channel-settings.html`.
+   * Scoped `-fixed` because the reference gives its several dialogs several values for each
+   * of these — see `Modal.tsx`'s `dialogFixed` for the numbers and the argument.
+   */
+  '--r-modal-radius-fixed': `${String(STATION_SETUP_PX.frameRadius)}px`,
+  '--r-modal-shadow-fixed': '0 32px 100px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.2)',
+  '--r-modal-title-text-fixed': `${String(STATION_SETUP_PX.titleTextFrame)}px`,
+  '--r-modal-close-box-fixed': `${String(STATION_SETUP_PX.closeBox)}px`,
+  '--r-modal-close-radius-fixed': `${String(STATION_SETUP_PX.closeRadius)}px`,
   '--r-modal-subtitle-text': `${String(STATION_SETUP_PX.subtitleText)}px`,
   '--r-modal-subtitle-gap': `${String(STATION_SETUP_PX.subtitleGap)}px`,
   /**
@@ -1720,6 +1761,46 @@ export const cssVars = {
   '--r-weight-medium': '500',
   '--r-weight-semibold': '600',
   '--r-weight-bold': '700',
+  /*
+   * ── 🔴 `MONITORS-01` — THE REFERENCE'S HALF-STEPS, AND WHAT THIS APP'S FONT DOES WITH THEM ──
+   *
+   * The reference's type scale has 450, 550 and 650 as well as the whole hundreds, and six
+   * surfaces in the audit's cheap bucket are one of them (`.outputs th` 450, `.tag` /
+   * `.video-mode strong` / `.plate-table th` / `.btn.small` 550, `.panel-scroll h2` 650). This
+   * console had quantised every one onto the three steps above, which is the delta.
+   *
+   * 🔴 **THESE ARE NOT HALF STEPS ON SCREEN, AND THAT IS MEASURED, NOT ASSUMED.** This app
+   * ships Exo 2 as FIVE STATIC FACES (400/500/600/700/800, `fonts.css`) — there is no variable
+   * axis — so CSS font matching snaps a half step to a neighbour. Measured in Chromium with the
+   * real faces inlined, at 40 px, by rendered width:
+   *
+   *     400 → 466.17    450 → 469.61    500 → 469.61     ⇒ 450 renders AS 500
+   *     550 → 476.84    600 → 476.84                     ⇒ 550 renders AS 600
+   *     650 → 484.97    700 → 484.97                     ⇒ 650 renders AS 700
+   *
+   * ⚠ **The reference does not render them as half steps either.** Its own stack is
+   * `Inter, "Segoe UI", …` with NO face loaded (`document.fonts` is empty), so on the measuring
+   * host it falls to Segoe UI and groups {400, 450} / {500, 550, 600} / {650, 700}. The drawing
+   * declares a scale finer than anything that draws it.
+   *
+   * SO WHY DECLARE THEM AT ALL? Because the token then says what the REFERENCE says, and the
+   * app's rendered weight follows from the font rather than from a second decision nobody
+   * recorded. Two consequences the owner should know, both reported rather than tuned away:
+   *
+   *   • `--r-weight-450` is a VISUAL NO-OP here — it resolves to the same face as
+   *     `--r-weight-medium`. It is declared so `.outputs th` cites the drawing instead of
+   *     coinciding with it; nothing on screen moves.
+   *   • `--r-weight-550` and `--r-weight-650` each land ONE STEP HEAVIER than the value they
+   *     replace (500 → 600, 600 → 700). That is a real change and it is the reference's own
+   *     direction; if a shipped variable Exo 2 ever lands, these resolve to the true half step
+   *     with no edit here.
+   *
+   * ⚠ Do NOT "simplify" these to 500/600/700 — that deletes the citation and re-introduces the
+   * quantisation, and it would look like a tidy-up rather than a decision.
+   */
+  '--r-weight-450': '450',
+  '--r-weight-550': '550',
+  '--r-weight-650': '650',
   // Borders / elevation
   '--r-focus-ring': '2px',
   '--r-shadow-1': '0 1px 3px rgba(0, 0, 0, 0.35)',
@@ -1886,6 +1967,7 @@ export const cssVars = {
   '--r-plate-gain-w': `${String(PLATES_PX.gainW)}px`,
   '--r-plate-gain-h': `${String(PLATES_PX.gainH)}px`,
   '--r-plate-gain-gap': `${String(PLATES_PX.gainGap)}px`,
+  '--r-plate-gain-radius': `${String(PLATES_PX.gainRadius)}px`,
   '--r-plate-readout-w': `${String(PLATES_PX.readoutW)}px`,
   '--r-plate-readout-text': `${String(PLATES_PX.readoutText)}px`,
   '--r-plate-verb-w': `${String(PLATES_PX.verbW)}px`,

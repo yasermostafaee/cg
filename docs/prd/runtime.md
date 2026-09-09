@@ -3495,6 +3495,24 @@ reconnect. `shellLayout.monitorsShown.dom.test.ts`'s "is NOT persisted" case is 
 of that decision, and `useShellLayout`'s interface note points here. Nothing is implemented by
 this item; it closes as a recorded decision.
 
+⚠ **STILL CLOSED, AND STILL THIS ANSWER — but the neighbouring question it was NOT asked has
+since been answered the other way (2026-09-09, `MONITORS-01`; `design.md` §19.2).** This item is
+about PERSISTENCE, and its answer is unchanged: the flag is written by nothing and read from
+nothing. The console's shipped BOOT STATE is a different question, was never on this item's
+table, and is now **HIDDEN** (`DEFAULT_MONITORS_SHOWN = false`) — because neither monitor pane
+renders the channel. PGM is a fixed empty placeholder for the unbuilt [[C-016]] (whose own
+acceptance says its panel would be OFF by default), and PVW is a LOCAL browser render of the
+rehearsing rows through `@cg/template-runtime` ([[R-022]] — "nothing is ever sent to CasparCG"),
+so the strip was spending 247.2 px and three rows of the layer list on the least authoritative
+picture on screen.
+
+🔴 **DO NOT READ THAT FLIP AS THIS ITEM BEING REOPENED OR A13 OVERTURNED.** The one clause of
+A13 that the flip does touch is its EXAMPLE — "a known safe state after a restart" meant SHOWN
+when it was written, and the safe boot state is now "no monitors". The load-bearing half — a
+KNOWN state over a REMEMBERED one — is untouched and is if anything better served, since what
+boots is the shipped decision rather than the last shift's. **The remedy is NOT to re-persist
+the flag**, which would answer this item the way it was already answered no.
+
 **What:** `RUNTIME-REDESIGN-01` Phase 5 built the reference's `Show monitors` / `Hide monitors`
 toggle (`useShellLayout.monitorsShown`, the Layers header button, `App` gating the strip). It is
 SESSION state: a reload starts with the strip shown, whatever the last session did. Every other

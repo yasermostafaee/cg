@@ -2957,19 +2957,25 @@ default visibility of two MONITORING surfaces on a playout console is a safety d
 a look (**A**), and `R-060` / owner answer A13 already settled the neighbouring question about
 whether it persists.
 
+⭐ **PULLED, 2026-09-09 — `MONITORS-01`, §19.** The refusal above was right to wait and its
+premise turned out to be false: neither pane is a monitoring surface. PGM is a fixed empty
+placeholder for the unbuilt `C-016` and PVW is a local browser render of the rehearsing rows
+(`R-022`), so the default was hidden and the boot figure is now **181.5 px and seven rows**.
+A13's non-persistence rule is untouched — §19.2 separates the two questions.
+
 ### 18.3 The ARGUED column for this session
 
 Seven, each with its bucket, against seventeen fixed.
 
-| delta                                                        | bucket | reason                                                                                                                            |
-| ------------------------------------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `Templates` and `Import` buttons in the header               | **A**  | the picker's door is the ROW; a header button is a second door with its own refusals about which row it lands on                  |
-| the `PROTOTYPE` tag                                          | **B**  | the drawing labelling itself as a drawing                                                                                         |
-| the manual FAILOVER stays on the status bar                  | **A**  | deletion-guard item 17 — it is the remedy for the fault pill beside it                                                            |
-| the LOCK stays on the status bar                             | **B**  | the reference draws no lock at all, so there is no reference decision to follow; its PIN is ephemeral and belongs with the engage |
-| the column head is 28.3 px, not 25.8                         | **B**  | `B-224`'s tally; the reference has no tally                                                                                       |
-| the monitors are shown by default                            | **A**  | the default visibility of two monitoring surfaces is a safety decision                                                            |
-| the filter never hides a row the bridge reports something on | **A**  | the reference filters plainly; this console may not, for the reason `isLayerVisible` may not                                      |
+| delta                                                          | bucket | reason                                                                                                                                                                                                  |
+| -------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Templates` and `Import` buttons in the header                 | **A**  | the picker's door is the ROW; a header button is a second door with its own refusals about which row it lands on                                                                                        |
+| the `PROTOTYPE` tag                                            | **B**  | the drawing labelling itself as a drawing                                                                                                                                                               |
+| the manual FAILOVER stays on the status bar                    | **A**  | deletion-guard item 17 — it is the remedy for the fault pill beside it                                                                                                                                  |
+| the LOCK stays on the status bar                               | **B**  | the reference draws no lock at all, so there is no reference decision to follow; its PIN is ephemeral and belongs with the engage                                                                       |
+| the column head is 28.3 px, not 25.8                           | **B**  | `B-224`'s tally; the reference has no tally                                                                                                                                                             |
+| ~~the monitors are shown by default~~ **SUPERSEDED — see §19** | **A**  | ~~the default visibility of two monitoring surfaces is a safety decision~~ — the refusal was right and the premise was not: neither pane is a monitoring surface (§19.1), and the default is now HIDDEN |
+| the filter never hides a row the bridge reports something on   | **A**  | the reference filters plainly; this console may not, for the reason `isLayerVisible` may not                                                                                                            |
 
 🔴 **7 of 24 is 29 %, which is OVER the quarter the rule sets, so this session STOPS here rather
 than arguing the rest.** The signal is worth reading: six of the seven cluster on the app header
@@ -3007,3 +3013,263 @@ surface looks like the first time somebody actually decides it. The owner should
   `conclusion: success`, and the **`E2E (Playwright)` job RAN** 04:45:00Z → 04:55:47Z (10 m 47 s),
   beside `Lint · Typecheck · Test · Build` 04:45:00Z → 04:48:49Z. Not skipped (`P-029`), not
   cancelled — the two ways a green run proves nothing.
+
+## §19 — `MONITORS-01`: WHAT THE TWO PANES ACTUALLY RENDER, AND THE DEFAULT THAT FOLLOWS
+
+**2026-09-09, immediately after `AUDIT-CLOSE-01`.** §18.2 closed with one lever left — the app
+defaults to monitors SHOWN, the reference defaults to HIDDEN, and that is **247.2 px and three
+rows** of the operator's primary working surface. `AUDIT-CLOSE-01` correctly refused to move it,
+because the default visibility of two MONITORING surfaces on a playout console is a safety
+decision. This section answers the question that refusal was waiting on.
+
+### 19.1 🔴 THE FACT: NEITHER PANE IS A PICTURE OF THE CHANNEL
+
+Traced in the code, not inferred from the components' names.
+
+| pane    | what it renders                                                                                                                                                                                                                                                   | files                                                                                 |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| **PGM** | **Nothing. A fixed empty box.** `MonitorStrip` renders `<MonitorPanel id="pgm" …>` with a hard-coded `emptyLabel`/`detail`; the component has no data input of any kind and no bridge call. There is no program return anywhere in this app.                      | `features/monitors/MonitorStrip.tsx`, `MonitorPanel.tsx`                              |
+| **PVW** | **A LOCAL BROWSER RENDER of the rehearsing rows.** `PreviewPanel` reads the bridge's REHEARSE SET (`useRehearse`) plus the operator's _staged_ Inspector drafts, and `RehearsalStage` composites one `srcdoc` iframe per row with `@cg/template-runtime` inlined. | `PreviewPanel.tsx`, `RehearsalStage.tsx`, `RehearsalFrame.tsx`, `frameEnvironment.ts` |
+
+Both halves are stated in the modules themselves, and neither is ambiguous:
+
+- `RehearsalStage.tsx`, in its own header — _"rendered LOCALLY IN THIS BROWSER and COMPOSITED
+  in the channel's own stacking order. **Nothing is sent to CasparCG.**"_ That is `R-022`'s
+  wording, and the frame is `srcdoc` so it is not even fetching a page from the bridge.
+- `MonitorPanel.tsx`, on PGM — _"genuinely awaiting a FEED … the program-channel return from
+  the playout server, **which does not exist yet** — owned by `C-016`."_
+- `RehearsalStage.tsx` again, on what PVW deliberately does NOT show: _"On-air rows are
+  deliberately absent … PGM is the surface for what is on air."_ **So the pane that shows
+  something shows only what is NOT on air, and the pane that would show air shows nothing.**
+
+**The answer to the question as posed is (i): what the console BELIEVES.** And PVW is narrower
+even than that — it is what the console believes about rows the operator has put into REHEARSE,
+with edits that have not been applied.
+
+**What `C-016` would add, and it is NOT built.** `docs/prd/caspar.md` `C-016` is `[ ]`: the
+bridge would periodically capture the programme channel with a CasparCG grab command, serve the
+latest frame over its existing HTTP server, and the Runtime would show it refreshing at ~1 s
+with a visible age and a legible stale/error state. Nothing is implemented — what exists is the
+RECON KIT (`tools/caspar-amcp-probe/bin/confidence-probe.mjs`) and an empty measurement runbook;
+no mechanism is chosen and no `design.md` was written. That item is the first thing in this
+product that would make PGM a confidence surface.
+
+⭐ **`C-016`'s OWN fourth acceptance bullet answers this section's question independently:**
+_"WHEN the panel is hidden or off THEN its polling stops; **the panel is OFF by default** and
+toggleable."_ Even the real confidence view is specified to boot folded away. A placeholder for
+it cannot have earned a stronger default than the thing it stands in for.
+
+### 19.2 THE DECISION, AND THE `A13` DISTINCTION THAT MUST NOT BE READ AS AN OVERTURN
+
+🔴 **The default is now HIDDEN** — `DEFAULT_MONITORS_SHOWN = false` in `useShellLayout.ts`, one
+home read by the hook's initial state, its `reset()`, and `shellLayoutContext`'s stand-in.
+
+The argument the flag carried until today was: _"PVW is the operator's last look before air, and
+a console that booted with it folded away would have deleted a safety surface by default."_ That
+sentence assumed the strip is confidence monitoring. §19.1 shows it is not, so the trade it
+described was never the trade being made: what the strip actually costs is 247.2 px and three
+rows of the LAYER LIST — the only surface in this console that says what is genuinely on air —
+spent on a rehearsal preview and an empty box. The approved reference defaults it hidden, and
+`C-016` specifies the same for its successor.
+
+#### ⚠ A13 IS NOT OVERTURNED. THE RULE AND THE DEFAULT ARE DIFFERENT QUESTIONS.
+
+**Written at length because the two look like one question and are not, and because a later
+reader who finds a hidden-by-default monitor strip beside A13's sentence will otherwise conclude
+that one of them must go.**
+
+- **A13's RULE — _"a control that HIDES a safety surface does not persist its hidden state"_ —
+  STANDS, UNCHANGED, and is still enforced.** `monitorsShown` is written by nothing and read
+  from nothing: `write()` still carries exactly `{inspectorPx, monitorPx, focus}`, and
+  `shellLayout.monitorsShown.dom.test.ts` still asserts that a toggle writes nothing and that a
+  reload discards it. That test now asserts it in the direction the operator can actually take
+  from the boot state — he can only SHOW — which is the same rule read from the other end.
+- **A13 never answered the DEFAULT.** It closed `R-060`, whose whole subject is _"should
+  'monitors hidden' survive a reload?"_ — a question about PERSISTENCE. `R-060`'s own text
+  frames it as "join `{inspectorPx, monitorPx, focus}` under the same key, or not". The shipped
+  boot state was not on the table; it was Phase 5's, set in passing with the sentence quoted
+  above, and never argued against a measurement.
+- **⚠ WHAT DOES CHANGE IS A13'S REASON, AND THIS IS THE HONEST PART.** A13 justified
+  non-persistence with _"this product prefers a known safe state after a restart over a
+  remembered one"_, and it meant SHOWN by "safe". With the default hidden, the safe boot state
+  is "no monitors" — so that clause, read literally, now points the other way. **The rule
+  survives the reversal of its own example**, because the half of A13 that is load-bearing is
+  _"a KNOWN state over a REMEMBERED one"_: the console boots the way its designers decided, not
+  the way the last shift left it. That half is untouched and is arguably better served now,
+  since the shipped decision is the one being restored. The half that named which state is safe
+  was about a surface nobody had traced.
+
+**So: the rule is A13's and stays A13's; the default is `MONITORS-01`'s. Do not "reconcile" them
+by re-persisting the flag, and do not read a hidden default as licence to persist a hidden
+state.** Recorded on `R-060` in `docs/prd/runtime.md`, in `tasks.md`'s A13 bullet, and in the
+`runtime-ui` spec's requirement, so all four copies say the same thing.
+
+### 19.3 THE OPERATOR MUST ALWAYS BE ABLE TO TELL THE MONITORS EXIST
+
+A default that hides a surface is only defensible while the surface announces itself, and the
+failure to guard against is not "the strip is hidden" — that is the decision — but a console on
+which an operator who has never seen the strip has no way to learn it is there.
+
+The toggle is UNCONDITIONAL in the app header: no `rehearsals.length` gate like the `PVW · N`
+badge beside it, no narrow-mode drop, and it carries the WORD `SHOW MONITORS` as well as a
+glyph. In the boot state nothing else on the whole surface mentions PVW or PGM, so that string
+is the entire announcement.
+
+Proved on both sides of golden rule 12(c):
+
+- **`shell-chrome.spec.ts` §B4** (Playwright): at boot the strip is absent; the toggle is
+  VISIBLE, sits inside `[data-app-header]` by containment, contains `SHOW MONITORS`, has a real
+  box (> 60 px wide), and one press produces the strip with both `PREVIEW (PVW)` and
+  `PROGRAM (PGM)` regions in it.
+- **`monitorsDefault.dom.test.ts`** (jsdom, whole `App`): exactly ONE such control page-wide,
+  in the header by containment, with `aria-expanded` / `aria-controls` correct and the word
+  present; one press produces the strip and renames the control; a POSITIVE CONTROL states
+  separately that this harness does render a strip when the flag is on, so "no strip" can never
+  mean "this harness never draws one".
+
+**Red-first, measured:** with `DEFAULT_MONITORS_SHOWN` planted back to `true`, **5 assertions
+across the two files went red** (the boot flag, the strip's absence, the word, the press, and
+the positive control); reverted by writing the ORIGINAL BYTES back, confirmed byte-identical
+with `SequenceEqual` and `PLANTED` absent.
+
+### 19.4 🔴 THE ACCEPTANCE NUMBERS, MEASURED
+
+At 1280 × 800 in Chromium against a fresh `vite build`, chrome above the first data row, with
+the mock's `TEST MODE` band measured (46.2 px) and subtracted — so these are real-bridge figures
+directly comparable to the reference's 166.3.
+
+|                                              | reference    | app BEFORE `AUDIT-CLOSE-01` | app after it | **app now**  |
+| -------------------------------------------- | ------------ | --------------------------- | ------------ | ------------ |
+| chrome above the first data row, **at boot** | **166.3 px** | 434.6 px                    | 428.7 px     | **181.5 px** |
+| rows visible above the status bar, at boot   | **10**       | 4                           | 4            | **7**        |
+| chrome with the monitors brought up          | —            | 434.6 px                    | 428.7 px     | **428.6 px** |
+| rows with the monitors brought up            | —            | 4                           | 4            | **3**        |
+
+**The default is the whole of it: 428.7 → 181.5 px and 4 → 7 rows, at no cost in chrome.** The
+folded figure is unchanged from `AUDIT-CLOSE-01`'s to the tenth of a pixel, which is the point —
+nothing above the first row moved, the console simply now boots in the state that already
+measured well. §18.2's itemisation of the remaining 15.2 px over the reference stands untouched
+(+9.5 the panel bar, +2.5 the column head, +3.2 the shell's padding and border).
+
+⚠ **The "3 rows" with the strip up is not a regression and is not comparable to §18.2's "4".**
+Measured row by row: with a row SELECTED the first row is 117.4 px rather than 67, because it
+carries the look strip. §18.2 counted from an unselected first row. The chrome figure — the
+number that is actually about this session's work — is unchanged at 428.6.
+
+### 19.5 THE CHEAP TWENTY-FOUR: WHAT WAS ADOPTED, AND THE ONE ARGUMENT THAT COVERS THE REST
+
+`AUDIT.md`'s cheap bucket is rows 3, 4, 9, 10, 11, 12, 15, 19, 20, 21, 23, 30, 32, 33, 38, 54,
+58, 71, 74, 77, 84, 85, 90, 92. Row 11 (the layer table's row rule) was closed by
+`AUDIT-CLOSE-01`; the rest are disposed of here.
+
+#### FIXED — thirteen, each measured in Chromium at 1280 × 800 before it was applied
+
+| row    | what                                            | reference (rendered)  | was                     |
+| ------ | ----------------------------------------------- | --------------------- | ----------------------- |
+| **12** | the Graphics-beds band's type                   | 10 px / 700 / normal  | 9.92 px / 700 / `.06em` |
+| **19** | the look segment's weight, at rest AND selected | 400                   | 500 / **700**           |
+| **23** | the panel's corner (`Panel` primitive)          | 6 px (`.inspector`)   | 4 px                    |
+| **30** | the Inspector's position row gap                | 8 px                  | 12 px                   |
+| **54** | the live-plates table head's weight             | 550                   | 500                     |
+| **58** | the gain range's corner                         | 7 px                  | 4 px (`.cg-field`'s)    |
+| **71** | Station setup's frame corner and lift           | 16 px, `0 32px 100px` | 6 px, `0 4px 16px`      |
+| **74** | …its title                                      | 19 px / 650           | 16 px / 700             |
+| **77** | …its close box                                  | 38 × 38, radius 8     | 30 × 30                 |
+| **84** | the pane section head's weight                  | 650                   | 600                     |
+| **85** | the contract tag's weight                       | 550                   | 500                     |
+| **90** | the video mode word's weight                    | 550                   | 500                     |
+| **92** | the outputs `th` weight                         | 450                   | 500                     |
+
+Three carry a caveat that is reported rather than tuned away:
+
+1. 🔴 **THE HALF-STEPS DO NOT RENDER AS HALF STEPS, IN EITHER TREE, AND BOTH HALVES ARE
+   MEASURED.** This app ships Exo 2 as five STATIC faces (400/500/600/700/800) with no variable
+   axis, so CSS font matching snaps: measured at 40 px by rendered width with the real faces
+   inlined, **450 → 500, 550 → 600, 650 → 700**. And the reference does not render them either —
+   its stack is `Inter, "Segoe UI", …` with `document.fonts` EMPTY, grouping {400, 450} /
+   {500, 550, 600} / {650, 700}. **The drawing declares a scale finer than anything that draws
+   it.** The tokens are declared anyway (`--r-weight-450/550/650`) so the rules CITE the drawing
+   instead of coinciding with it; the consequence is that **row 92 is a visual no-op** (450
+   resolves to the same face as the 500 it replaced) and rows 54/84/85/90 each land ONE STEP
+   HEAVIER, which is the reference's own direction.
+2. **Rows 23 and 38 are ONE change, because this app has ONE panel primitive.** The reference
+   draws `.inspector` at 6 px and `.monitor` at 5 — one pixel apart and not a system. The
+   Inspector's is taken and the monitor's rides it; a second token would spend a name copying an
+   inconsistency, against this programme's own "one bar for four panels" rule (§12.3).
+3. **Rows 71, 74 and 77 land on the `fixed` scope, not on the primitive.** The reference gives
+   its dialogs radius 16 and 14 (rows 71, 70) and titles of 19, 20 and 22 px (rows 74, 62, 98).
+   A primitive-wide value would have to pick one of those and apply it to surfaces the drawing
+   gives different values for; `-fixed` is the scope this file already uses for every other
+   Station-setup measurement.
+
+#### 🔴 ARGUED — seven, and they are ONE argument, falsifiable in one line
+
+Rows **3, 4, 9, 10, 20, 21** and row **38's ground**.
+
+**Every value in these rows is absent from the reference's own declared palette.** Measured in
+Chromium, `04-playout-layers.html`'s `:root` declares nineteen colours — `--bg #0b1017`,
+`--surface #141b25`, `--raised #1b2532`, `--line #2d3a49`, `--soft #24303d`, `--text #eef3f9`,
+`--muted #8e9eaf`, `--blue #74cdf6`, and eleven more. Its own body text renders `#eef3f9` and
+its own primary button renders `#74cdf6`, so the drawing uses that palette. **But its layer
+table paints `#1F2937` / `#E5E7EB` / `#4B5563` / `rgba(56,189,248,.1)` / `#38BDF8`, and not one
+of those is among the nineteen.** They are this console's OWN PRE-PHASE-2 HEXES — §10.1 already
+records that wave 4 was written _"in the app's pre-Phase-2 hexes — `#111827`, `#1F2937`,
+`#38BDF8`, `#9CA3AF`"_ — transcribed back into the drawing by whoever drew it. Phase 2 adopted
+the reference's DECLARED palette role for role (§7's table), so **on these six values the app is
+already closer to the reference than the reference's own layer table is**, and adopting them
+would revert an owner-approved palette move one value at a time.
+
+⚠ **This is not "palette", which the §18.0 rule forbids, and the difference is the point.**
+"Palette" means _we liked ours better_. This is a checkable claim with a one-line test — _is the
+value among the reference's own `:root` declarations?_ — and a second, independent test the
+audit itself asked for. Every pair was re-measured, and **the app equals or beats the reference
+on all of them**:
+
+| pair                                   | reference   | app         |
+| -------------------------------------- | ----------- | ----------- |
+| row 3 — verb ink on its own ground     | 11.86:1     | **13.87:1** |
+| row 3 — verb border on its own ground  | 1.94:1      | **2.05:1**  |
+| row 4 — PVW hover ground vs the row    | 1.32:1      | **1.48:1**  |
+| row 4 — PVW hover ink on that ground   | **10.04:1** | 9.20:1      |
+| row 9 — row HOVER vs the row at rest   | 1.04:1      | 1.02:1      |
+| row 10 — selection FRAME vs the row    | 7.10:1      | **8.55:1**  |
+| row 10 — selection WASH vs the row     | 1.21:1      | **1.25:1**  |
+| row 20 — segment ink on its own ground | 13.05:1     | **15.52:1** |
+
+⚠ **REPORTED, NOT RE-TUNED — one of these is a real defect and it belongs to the OWNER.** The
+row HOVER is **1.02:1** in this app and **1.04:1** in the reference: neither is a hover anyone
+can see. Adopting the reference's value would move it from 1.02 to 1.04, which is not a fix, so
+nothing was changed. **A visible row hover needs a new value that neither tree has**, and
+choosing it is the owner's.
+
+The same one-line test disposes of row 38's `#101722` monitor ground: it is a fourth near-black,
+between `--bg` and `--surface`, declared nowhere. The radius half of that row WAS taken.
+
+#### Neither — three rows the session did not move, each with a reason from outside itself
+
+- **Rows 32 and 33** (`Apply position` and `Add item`: 12.8 px / 600 / accent against the
+  reference's 12 px / 550 / quiet). Two halves, two reasons, neither this session's:
+  **the VARIANT is a recorded owner request**, quoted verbatim in `controls.css`
+  («فقط از ایده تفاوت رنگ بین دکمه هاش استفاده کن. رنگ apply/update/add item متفاوته.») and
+  naming exactly these controls; **the TYPE is the button family's**, which the owner put out
+  of scope for this session. The audit filed them as bucket C without either fact.
+- **Row 15** (look buttons 38 → 36 px) is a **STALE AUDIT ROW**. Measured today, the app's look
+  button is `--r-look-btn-h: 38px` and renders 38 — Phase 4 had already adopted it. Recorded so
+  the next reader does not go looking for a delta that is closed.
+
+#### 🔴 THE BUDGET — 7 of 23, which is 30 %, so this session STOPS
+
+Deltas touched: 23. **FIXED 13 · ARGUED 7 · owner-decided or out of scope 2 · already closed 1.**
+
+**7 / 23 = 30 %, over the quarter the §18.0 rule sets, so this session stops here rather than
+arguing the rest** — as `AUDIT-CLOSE-01` did at 29 %. Scored against only the twenty rows this
+session could actually decide, it is 7 / 20 = 35 %; both numbers are given so the owner can read
+it either way and neither denominator flatters it.
+
+The signal is a different one from §18.3's, and worth reading. Six of the seven are a SINGLE
+finding — the prototype's layer-table wave is painted in this console's own retired palette —
+and it says something about the AUDIT rather than about the console: Part 3 of `AUDIT.md`
+identified that wave correctly and then its RECOMMENDATION section sorted the same six rows into
+"cheap, should have been adopted". **The two halves of that document disagree, and Part 3 is the
+one that measured.** The owner should decide whether the remaining bucket-C colour rows inherit
+this disposition before anyone spends a session on them one at a time.

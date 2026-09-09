@@ -94,6 +94,18 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
   prefers a known safe state after a restart over a remembered one, the same call as the
   unpersisted rehearsal flag and reset-to-idle on reconnect. Off the owed list; recorded on
   `R-060` and as a requirement in the `runtime-ui` spec delta.
+  - ⚠ **AMENDED 2026-09-09 (`MONITORS-01`) — THE RULE STANDS; THE DEFAULT WAS A DIFFERENT
+    QUESTION AND HAS MOVED TO HIDDEN.** A13 answered `R-060`, whose subject is PERSISTENCE
+    ("should 'monitors hidden' survive a reload?"). It never decided the shipped BOOT state,
+    which was Phase 5's and rested on the strip being confidence monitoring. It is not: PGM is
+    a fixed empty placeholder for the unbuilt `C-016` and PVW is a local browser render of the
+    rehearsing rows (`R-022` — nothing reaches CasparCG), so the strip was costing 247.2 px and
+    three rows of the layer list. `DEFAULT_MONITORS_SHOWN = false`. **A13's non-persistence rule
+    is UNCHANGED and still enforced** — the flag is written by nothing and read from nothing.
+    ⚠ What does change is A13's own EXAMPLE: with the default hidden, "a known safe state after
+    a restart" no longer means SHOWN. The load-bearing half — a KNOWN state over a REMEMBERED
+    one — survives that intact. **Do not read the flip as A13 being overturned, and do not
+    "reconcile" the two by re-persisting the flag.** Full argument: `design.md` §19.2.
 - **A14 · `R-061` IS SPLIT** (2026-09-08, before Phase 6). **(a) DONE in Phase 6:** the Inspector
   is headed by the ROW's operator name (`operatorRowName`, ids on the heading's `title`, the
   template on the line beneath) — golden rule 11, made urgent by per-row drafts that survive a

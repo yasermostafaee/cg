@@ -60,8 +60,29 @@ function strip(page: Page) {
   return page.locator('[data-monitor-strip]');
 }
 
+/**
+ * 🔴 `MONITORS-01` — THE STRIP IS FOLDED AWAY WHEN THE CONSOLE BOOTS, so every pair below
+ * opens it first.
+ *
+ * The default moved from SHOWN to HIDDEN (`DEFAULT_MONITORS_SHOWN`; `design.md` §19) because
+ * neither box is confidence monitoring. What this file proves is UNCHANGED by that — the
+ * three axes stay independent — so the fix is to establish the state each test was written
+ * against rather than to invert its assertions, which would quietly turn six coupling proofs
+ * into six different ones.
+ *
+ * It asserts the strip is actually up before returning: a helper that only clicks would let
+ * every test below start from an unknown state if the toggle's name ever changed.
+ */
+async function showMonitors(page: Page): Promise<void> {
+  const show = page.getByRole('button', { name: 'Show monitors' });
+  if (await show.count()) await show.first().click();
+  await expect(monitorsToggle(page)).toHaveAttribute('aria-expanded', 'true');
+  await expect(strip(page)).toHaveCount(1);
+}
+
 test.beforeEach(async ({ app }) => {
   await app.page.setViewportSize(WIDE);
+  await showMonitors(app.page);
 });
 
 /* ── PAIR 1: selected ↔ in PVW ─────────────────────────────────────────────── */
@@ -228,8 +249,22 @@ test('the toggle folds the strip away and hands its height to the layer list; a 
   expect(layersAfter).not.toBeNull();
   expect(layersAfter!.height).toBeGreaterThan(layersBefore!.height + stripBox!.height * 0.9);
 
-  // The reset control brings the strip back with everything else (the way out).
+  /*
+    🔴 THE WAY OUT — reset returns EVERY axis to the SHIPPED DEFAULT, this one included, and
+    since `MONITORS-01` that default is HIDDEN rather than shown.
+
+    ⚠ THE STRIP IS ALREADY FOLDED AT THIS POINT, which is the whole subtlety: the toggle press
+    above put this axis BACK on its default, so `customized` is false and the reset control is
+    not on the page at all. Asserting it here is not a smaller version of the old assertion —
+    it is the correct one, because "there is nothing to reset" is exactly what a shell sitting
+    at its defaults should say. (Written down because the first spelling of this test clicked
+    for a control that had correctly just disappeared, and timed out.)
+  */
+  await expect(page.getByRole('button', { name: 'Reset the panel layout' })).toHaveCount(0);
+
+  // …and from the direction that DOES move: bring the strip up, and reset folds it away.
+  await showMonitors(page);
   await page.getByRole('button', { name: 'Reset the panel layout' }).click();
-  await expect(strip(page)).toHaveCount(1);
-  await expect(monitorsToggle(page)).toHaveAttribute('aria-expanded', 'true');
+  await expect(strip(page)).toHaveCount(0);
+  await expect(monitorsToggle(page)).toHaveAttribute('aria-expanded', 'false');
 });

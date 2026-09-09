@@ -55,6 +55,22 @@ export const DEFAULT_INSPECTOR_PX = 396;
 export const DEFAULT_MONITOR_PX = 230;
 
 /**
+ * 🔴 `MONITORS-01` — WHETHER THE STRIP IS UP WHEN THE CONSOLE BOOTS. **Hidden.**
+ *
+ * ONE HOME, because there are three readers — the hook's initial state, its `reset()`, and
+ * `shellLayoutContext`'s no-provider stand-in — and two agreeing copies of a boot decision is
+ * how one of them comes to be wrong (this file already carries that lesson about 320 / 180).
+ * The full argument is on `ShellLayout.monitorsShown` and in `design.md` §19; the short form
+ * is that neither box is confidence monitoring, so neither earns 247.2 px of the layer list
+ * before the operator has asked for it.
+ *
+ * ⚠ This is the DEFAULT, not the persistence rule. A13 / `R-060` says the flag is never
+ * persisted, and that is still true here in both directions — see `design.md` §19.1 for why
+ * the two are separate questions and why this is not A13 being overturned.
+ */
+export const DEFAULT_MONITORS_SHOWN = false;
+
+/**
  * Hard floors, so a drag can never make either panel unusable. The Inspector's
  * floor is a readable field editor; the workspace's is a layer row that still
  * shows its verbs.
@@ -106,9 +122,30 @@ export interface ShellLayout {
    * ⚠ SESSION STATE, NOT PERSISTED — deliberately, and not for lack of a slot. Phase 5's
    * constraint is _no persisted key, file or schema change_; this hook's `write()` keeps its
    * `{inspectorPx, monitorPx, focus}` shape. Whether the flag should join it under
-   * `cg.runtime.shell-layout.v1` is filed for the owner (design.md §12.7). The default is
-   * SHOWN: PVW is the operator's last look before air, and a console that booted with it
-   * folded away would have deleted a safety surface by default.
+   * `cg.runtime.shell-layout.v1` is filed for the owner (design.md §12.7). That half is
+   * UNCHANGED and stays owner answer A13's: the flag does not persist, in either direction.
+   *
+   * 🔴 THE DEFAULT IS `DEFAULT_MONITORS_SHOWN` AND IT IS NOW **HIDDEN** (`MONITORS-01`,
+   * 2026-09-09; `design.md` §19). It read SHOWN here with the argument _"PVW is the
+   * operator's last look before air, and a console that booted with it folded away would
+   * have deleted a safety surface by default"_. That argument assumed these two boxes are
+   * CONFIDENCE MONITORING. They are not, and the code says so:
+   *
+   *   - PGM (`MonitorPanel`) renders a fixed empty box. There is no program return anywhere
+   *     in this app — the real one is `C-016`, still `[ ]`, and its own acceptance says the
+   *     panel would be **OFF by default and toggleable**.
+   *   - PVW (`PreviewPanel` → `RehearsalStage`) is a LOCAL BROWSER RENDER of the rehearsing
+   *     rows through `@cg/template-runtime` in a `srcdoc` frame — `R-022`, "nothing is ever
+   *     sent to CasparCG". It is the console's BELIEF, not the channel.
+   *
+   * So the strip is a rehearsal and preview surface, and spending 247.2 px and three rows of
+   * the layer list — the only surface that says what is actually on air — on the least
+   * authoritative picture on screen is the wrong trade. The approved reference defaults it
+   * hidden for the same reason.
+   *
+   * ⚠ WHAT DOES NOT CHANGE: the toggle is unconditionally present in the app header, in
+   * words as well as a glyph, so the console can never be in a state where the operator
+   * cannot tell the monitors exist (`AppHeader.tsx`; `shell-chrome.spec.ts` §B4).
    */
   monitorsShown: boolean;
   setInspectorPx: (px: number) => void;
@@ -172,7 +209,7 @@ export function useShellLayout(): ShellLayout {
   const [monitorPx, setMonitorPxRaw] = useState(persisted.monitorPx ?? DEFAULT_MONITOR_PX);
   const [focus, setFocusRaw] = useState<ShellFocus>(persisted.focus ?? 'none');
   // Session-only — see the interface note. NOT read from `persisted`, NOT written by `write()`.
-  const [monitorsShown, setMonitorsShown] = useState(true);
+  const [monitorsShown, setMonitorsShown] = useState(DEFAULT_MONITORS_SHOWN);
   const [viewportPx, setViewportPx] = useState(() => globalThis.innerWidth ?? 1280);
   const [viewportHeightPx, setViewportHeightPx] = useState(() => globalThis.innerHeight ?? 800);
 
@@ -215,9 +252,10 @@ export function useShellLayout(): ShellLayout {
     setInspectorPxRaw(DEFAULT_INSPECTOR_PX);
     setMonitorPxRaw(DEFAULT_MONITOR_PX);
     setFocusRaw('none');
-    // The way out covers the monitors too: a strip folded away at 2 a.m. comes back with
-    // everything else, and the persisted shape written here is unchanged.
-    setMonitorsShown(true);
+    // The way out covers the monitors too — it returns them to the SHIPPED DEFAULT rather
+    // than to "shown", which is the same thing `reset()` does for every other member of the
+    // shell's geometry. The persisted shape written here is unchanged.
+    setMonitorsShown(DEFAULT_MONITORS_SHOWN);
     write({ inspectorPx: DEFAULT_INSPECTOR_PX, monitorPx: DEFAULT_MONITOR_PX, focus: 'none' });
   }, []);
 
@@ -236,6 +274,8 @@ export function useShellLayout(): ShellLayout {
       inspectorPx !== DEFAULT_INSPECTOR_PX ||
       monitorPx !== DEFAULT_MONITOR_PX ||
       focus !== 'none' ||
-      !monitorsShown,
+      // Against the DEFAULT, not against `true`: with the strip folded away by default, a
+      // console the operator has OPENED it on is the customised one.
+      monitorsShown !== DEFAULT_MONITORS_SHOWN,
   };
 }

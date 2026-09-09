@@ -112,11 +112,73 @@ test('§B — one bar carries the tabs and the bulk verbs, and the sub-bar is un
   await expect(subbar.locator('[data-layers-tally]')).toBeVisible();
 });
 
+/**
+ * 🔴 `MONITORS-01` §B4 — THE CONSOLE BOOTS WITH THE MONITORS FOLDED AWAY, AND THE OPERATOR
+ * CAN ALWAYS TELL THEY ARE THERE.
+ *
+ * The default moved to HIDDEN because neither box is confidence monitoring: PGM renders a
+ * fixed empty placeholder for the unbuilt `C-016`, and PVW is a LOCAL browser render of the
+ * rehearsing rows (`R-022` — nothing is ever sent to CasparCG). `design.md` §19 carries the
+ * trace and §19.1 separates this from owner answer A13, which is about PERSISTENCE and is
+ * untouched.
+ *
+ * ── WHY THE SECOND HALF IS THE PART THAT MATTERS ─────────────────────────────────────
+ *
+ * A default that hides a surface is only defensible if the surface still announces itself.
+ * The failure this guards is not "the strip is hidden" — that is the decision — but a console
+ * on which an operator who has never seen the strip has no way to learn it exists. So the
+ * assertions are: the toggle is in the HEADER, it is VISIBLE, it carries the WORD `SHOW
+ * MONITORS` and not only a glyph, and pressing it produces the strip with both boxes in it.
+ *
+ * Every claim here is Playwright's (golden rule 12c): visibility, containment and a bounding
+ * box are all zero or vacuous in jsdom, so this whole file would pass against a header with
+ * no button in it at all. The WIRING half — the flag's default, its axis, its non-persistence
+ * — is proved without a browser in `shellLayout.monitorsShown.dom.test.ts`.
+ */
+test('§B4 — the console boots with the monitors folded, and says so in the header', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  // THE BOOT STATE, untouched: nothing in this test has pressed anything yet.
+  await expect(page.locator('[data-monitor-strip]')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Hide monitors' })).toHaveCount(0);
+
+  const show = page.getByRole('button', { name: 'Show monitors' });
+  await expect(show, 'the one control that says the monitors exist').toBeVisible();
+  await expect(show).toHaveAttribute('aria-expanded', 'false');
+  // IN THE HEADER — containment, not proximity, because a button that drifted onto another
+  // bar would still be "visible somewhere on the page".
+  expect(
+    await page
+      .locator('[data-app-header]')
+      .evaluate((h, btn) => h.contains(btn), await show.elementHandle()),
+    'the monitors toggle sits in the app header',
+  ).toBe(true);
+  // IN WORDS. A lone glyph on a bar the operator has never opened is not a statement that a
+  // surface is there — and this is the state in which nothing else on screen mentions PVW or
+  // PGM at all.
+  await expect(show).toContainText('SHOW MONITORS');
+  const box = await show.boundingBox();
+  expect(box, 'the toggle is laid out').not.toBeNull();
+  expect(box?.width ?? 0, 'the toggle is a real target, not a collapsed one').toBeGreaterThan(60);
+
+  // AND IT DELIVERS: one press brings both boxes back.
+  await show.click();
+  await expect(page.locator('[data-monitor-strip]')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Hide monitors' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'PREVIEW (PVW)' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'PROGRAM (PGM)' })).toBeVisible();
+});
+
 test('§B — the chrome above the first data row, and how many rows fit', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  // The reference's own state: the monitors folded away (its toggle reads `Show monitors`).
+  // The reference's own state, which is now the app's own boot state too (`MONITORS-01`):
+  // the monitors folded away, the toggle reading `Show monitors`. The click is kept as a
+  // no-op guard so this measurement cannot silently start reading the other state.
   const hide = page.getByRole('button', { name: 'Hide monitors' });
   if (await hide.count()) await hide.first().click();
   await expect(page.getByRole('button', { name: 'Show monitors' })).toBeVisible();

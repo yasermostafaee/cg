@@ -36,6 +36,22 @@ async function stubRetainedPage(page: Page): Promise<void> {
   });
 }
 
+/*
+ * 🔴 `MONITORS-01` — THE STRIP IS FOLDED AWAY WHEN THE CONSOLE BOOTS, and this file's
+ * subject lives inside it, so it is opened first.
+ *
+ * The default moved from SHOWN to HIDDEN because neither box is confidence monitoring:
+ * PGM is a fixed empty placeholder for the unbuilt `C-016`, and PVW is a LOCAL browser
+ * render of the rehearsing rows (`R-022` — nothing is ever sent to CasparCG). None of
+ * that changes what this file proves, so the state each test was written against is
+ * established rather than its assertions being rewritten.
+ *
+ * `app.showMonitors()` asserts the strip is actually up before returning — see the
+ * fixture. Boot state itself is proved in `shell-chrome.spec.ts` §B4.
+ */
+test.beforeEach(async ({ app }) => {
+  await app.showMonitors();
+});
 test('the rehearsal iframe never widens the shell — PROGRAM stays on screen', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1400, height: 900 });

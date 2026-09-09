@@ -1,5 +1,10 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import { DEFAULT_INSPECTOR_PX, DEFAULT_MONITOR_PX, type ShellLayout } from './useShellLayout.js';
+import {
+  DEFAULT_INSPECTOR_PX,
+  DEFAULT_MONITOR_PX,
+  DEFAULT_MONITORS_SHOWN,
+  type ShellLayout,
+} from './useShellLayout.js';
 
 /**
  * The workspace geometry, available to any panel WITHOUT being threaded through
@@ -58,7 +63,8 @@ const INERT: ShellLayout = {
   // `narrow` suppresses the fullscreen control, which is exactly right here: with
   // no provider there is no shell to give a panel.
   narrow: true,
-  monitorsShown: true,
+  // The hook's own default, imported for the same reason the two sizes above are.
+  monitorsShown: DEFAULT_MONITORS_SHOWN,
   setInspectorPx: () => undefined,
   setMonitorPx: () => undefined,
   setFocus: () => undefined,

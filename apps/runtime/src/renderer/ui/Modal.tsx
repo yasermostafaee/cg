@@ -114,11 +114,35 @@ const styles = {
    * content is expected to bring its own (Station setup's rail and pane each do). That
    * is deliberate: a padded body cannot host a rail that touches the frame.
    */
+  /*
+   * 🔴 `MONITORS-01` — AUDIT ROWS 71 AND 74, AND WHY THEY LAND ON `fixed` RATHER THAN ON
+   * THE PRIMITIVE.
+   *
+   * Row 71 is the reference's `.settings` frame: measured in Chromium at 1280 × 800 it
+   * renders `border-radius: 16px` and
+   * `box-shadow: 0 32px 100px rgba(0,0,0,.6), 0 0 0 1px rgba(0,0,0,.2)` — a soft 100 px
+   * lift plus a hairline ring — against this primitive's `--r-radius-md` (6) and
+   * `--r-shadow-2` (`0 4px 16px`). Row 74 is that frame's title: 19 px / 650 against the
+   * shared `1rem / 700`.
+   *
+   * ⚠ **THE REFERENCE HAS NO ONE NUMBER FOR THESE, so a primitive-wide change would be
+   * inventing one.** Its own dialogs render `.settings` at radius 16 and the audio dialog
+   * at 14 (audit row 70), and their titles at 19 px, 20 px and 22 px (rows 62, 74, 98). A
+   * single value here would have to pick one of those and apply it to three surfaces the
+   * drawing gives three values for. So these take the `-fixed` scope this file already
+   * uses for every other Station-setup measurement — the frame that was actually measured
+   * gets the numbers that were actually measured.
+   *
+   * ⚠ NOT taken, and out of this session by the owner's own scope: the modal WIDTH table
+   * and the button family (audit rows 70, 87, 106).
+   */
   dialogFixed: {
     padding: 0,
     gap: 0,
     height: cssVars['--r-modal-h-fixed'],
     maxHeight: cssVars['--r-modal-h-fixed'],
+    borderRadius: cssVars['--r-modal-radius-fixed'],
+    boxShadow: cssVars['--r-modal-shadow-fixed'],
   },
   /** The title row: heading on one side, the close affordance on the other. */
   titleRow: {
@@ -141,6 +165,11 @@ const styles = {
     boxSizing: 'border-box' as const,
   },
   title: { fontSize: '1rem', fontWeight: 700, margin: 0 },
+  /** `MONITORS-01` audit row 74 — the `fixed` frame's own title: 19 px / 650, as measured. */
+  titleFixed: {
+    fontSize: cssVars['--r-modal-title-text-fixed'],
+    fontWeight: Number(cssVars['--r-weight-650']),
+  },
   /** The title and its subtitle stack; the close affordance stays on the row's far end. */
   titleStack: { display: 'flex', flexDirection: 'column' as const, minWidth: 0 },
   /**
@@ -465,6 +494,12 @@ export function Modal({
   const ref = useRef<HTMLDivElement>(null);
   /** `STATION-CHROME-02` §2 — one read of the frame decision, four places apply it. */
   const fixed = size === 'fixed';
+  /*
+   * `MONITORS-01` audit row 74 — the `fixed` frame takes the drawing's own 19 px / 650 for
+   * its title; every other dialog keeps the one shared treatment. Composed here rather than
+   * at the two `<h2>` sites so the subtitle and no-subtitle branches cannot drift apart.
+   */
+  const titleStyle = fixed ? { ...styles.title, ...styles.titleFixed } : styles.title;
   // One shape downstream, so the region never has to ask which form it was given.
   const messages: readonly ModalMessage[] =
     message === undefined ? [] : Array.isArray(message) ? message : [message as ModalMessage];
@@ -544,10 +579,10 @@ export function Modal({
       >
         <div style={fixed ? { ...styles.titleRow, ...styles.titleRowFixed } : styles.titleRow}>
           {subtitle === undefined ? (
-            <h2 style={styles.title}>{title}</h2>
+            <h2 style={titleStyle}>{title}</h2>
           ) : (
             <div style={styles.titleStack}>
-              <h2 style={styles.title}>{title}</h2>
+              <h2 style={titleStyle}>{title}</h2>
               <p style={styles.subtitle} data-modal-subtitle="">
                 {subtitle}
               </p>

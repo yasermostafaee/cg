@@ -89,6 +89,15 @@ export function AppHeader({ layout, onOpenSettings, onOpenAudit }: Props): JSX.E
         the argument this component's header quotes. Same flag, same names, same
         `aria-expanded` / `aria-controls`: only the placement moved, and it moved to the
         place the reference draws it.
+
+        🔴 `MONITORS-01` — AND IT IS UNCONDITIONAL, WHICH IS NOW LOAD-BEARING. The strip is
+        folded away when the console boots (`DEFAULT_MONITORS_SHOWN`), so this button is the
+        ONLY thing on screen that says the monitors exist at all. It therefore renders in
+        every state — no `rehearsals.length` gate like `PVW · N` above it, no narrow-mode
+        drop — and it carries the WORD as well as the glyph, because a lone glyph on a bar
+        the operator has never opened is not a statement that a surface is there. Asserted
+        in `shell-chrome.spec.ts` §B4 and `monitorsDefault.dom.test.ts`; do not make it
+        conditional, and do not reduce it to an icon to save width.
       */}
       <Button
         variant="ghost"

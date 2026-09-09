@@ -163,7 +163,8 @@ export function App(): JSX.Element {
    *
    * Three things stay independent here: which row is SELECTED (`selectedId`, this file),
    * which rows are IN PVW (the bridge's rehearse set, `useRehearse`), and whether the
-   * monitors are SHOWN (`layout.monitorsShown`, the Layers header's toggle). Each is read and
+   * monitors are SHOWN (`layout.monitorsShown`, the APP HEADER's toggle — `AUDIT-CLOSE-01` B1
+   * moved it off the Layers bar, and `MONITORS-01` flipped its default). Each is read and
    * written by its own control and by nothing else in this tree — a selection never enters
    * or leaves PVW, a PVW change never selects or deselects, and folding the strip away
    * touches neither. `workspace-independence.spec.ts` drives all three pairs in both

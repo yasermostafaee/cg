@@ -16,7 +16,7 @@ import {
   X,
   XSquare,
 } from 'lucide-react';
-import { colors, cssVars } from '../../theme.js';
+import { colors, cssVars, LAYER_ROW_PX } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { Panel } from '../../ui/Panel.js';
@@ -173,11 +173,18 @@ const styles = {
    *
    * `RUNTIME-REDESIGN-01` PHASE 3 — the BAND is the reference's `.bed-divider`, measured
    * in Chromium: a 25 px row (`--r-bed-divider-h`) with `4px 12px` padding on the PANEL
-   * ground, ruled off above by the strong line. The type keeps the header's treatment
-   * rather than the reference's 10 px / untracked one, because this band and the sticky
-   * header are the two pieces of structure in the list and they must read as one voice;
-   * the reference draws its header the same way this console's is drawn and its divider
-   * a hair differently, and one voice wins over a hair.
+   * ground, ruled off above by the strong line.
+   *
+   * 🔴 `MONITORS-01` — AUDIT ROW 12: THE TYPE IS THE REFERENCE'S NOW.
+   *
+   * Phase 3 kept the sticky header's treatment here — `0.62rem` (9.92 px) tracked `.06em` —
+   * against the reference's own `10px / 700 / untracked`, arguing that the band and the
+   * header are the two pieces of structure in the list and must read as one voice. Measured
+   * in Chromium at 1280 × 800, `.bed-divider>td` renders `font-size: 10px`, `font-weight:
+   * 700`, `letter-spacing: normal`. The "one voice" argument was doing no work the WEIGHT
+   * was not already doing — both are 700 — and it cost the band the drawing's own size and
+   * tracking for a 0.08 px difference nobody can see and a tracking that is visible.
+   * Adopted as measured.
    */
   bedGroupHead: {
     boxSizing: 'border-box' as const,
@@ -185,9 +192,8 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     padding: `var(--r-space-1) ${ROW_GEOMETRY.headerPaddingX}`,
-    fontSize: '0.62rem',
+    fontSize: `${String(LAYER_ROW_PX.bedDividerText)}px`,
     fontWeight: 700,
-    letterSpacing: '0.06em',
     textTransform: 'uppercase' as const,
     color: colors.textMuted,
     background: colors.panel,

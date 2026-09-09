@@ -406,18 +406,41 @@ hover; a row with no place in the bank SHALL be headed by its template, stub inc
   `title` and absent from its text, and selecting a different row changes the heading to that
   row's name
 
-### Requirement: A control that hides a safety surface does not persist its hidden state
+### Requirement: A control that shows or hides a monitoring surface does not persist its state
 
-A hiding control SHALL NOT persist its hidden state across a reload — that is, a control whose
-effect is to HIDE a surface that shows the operator what is about to go to air or what is on it,
-the monitors' `Hide monitors` first among them. The console prefers a known safe state after a
-restart over a remembered one, the same call as the unpersisted rehearsal flag and reset-to-idle
-on reconnect (owner answer A13, `R-060`).
+A showing or hiding control SHALL NOT persist its state across a reload — that is, a control
+whose effect is to SHOW or HIDE a surface that shows the operator what is about to go to air or
+what is on it, the monitors' `Show monitors` / `Hide monitors` first among them. The console
+boots in a KNOWN state decided by its designers rather than a state remembered from the last
+session, the same call as the unpersisted rehearsal flag and reset-to-idle on reconnect (owner
+answer A13, `R-060`).
 
-#### Scenario: The monitors come back on reload
+⚠ A13 answered PERSISTENCE and did not decide which state the console boots in. That default is
+`MONITORS-01`'s and is HIDDEN, because neither monitor pane renders the channel: PGM is a fixed
+empty placeholder for the unbuilt `C-016` and PVW is a local browser render of the rehearsing
+rows (`R-022`). The rule above is unaffected by which way the default points, and the flip is
+not A13 being overturned (`design.md` §19.2).
 
-- **WHEN** the operator hides the monitors and reloads the console **THEN** the monitors are
-  shown, and the shell's other persisted geometry is unaffected
+#### Scenario: The monitor strip returns to the shipped default on reload
+
+- **WHEN** the operator brings the monitors up and reloads the console **THEN** the monitor
+  strip is back in its shipped boot state, nothing was written for it, and the shell's other
+  persisted geometry is unaffected
+
+### Requirement: The console boots with the monitor strip folded away and says that it exists
+
+The console SHALL boot with the monitor strip NOT rendered, and SHALL carry, in the app header
+and in every state, exactly one control that names the monitors in words as well as a glyph,
+reports whether they are shown, and brings the strip up in one press. In the boot state that
+control is the only thing on the surface that mentions PREVIEW or PROGRAM, so it may not be
+gated on any other condition nor reduced to an icon.
+
+#### Scenario: The boot state announces the surface it is hiding
+
+- **WHEN** the console is opened **THEN** no monitor strip is rendered, and the app header
+  carries one visible `Show monitors` control whose text names the monitors, which reports
+  itself collapsed and which on one press produces the strip with both the PREVIEW and PROGRAM
+  panes in it
 
 ### Requirement: The live plates pane and the audio dialog take their geometry from the token home, measured in a real engine
 

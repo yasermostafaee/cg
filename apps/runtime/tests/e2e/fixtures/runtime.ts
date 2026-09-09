@@ -457,6 +457,27 @@ export class RuntimeApp {
     await this.layerRow(layer).locator('[data-row-body]').click();
   }
 
+  /**
+   * 🔴 `MONITORS-01` — BRING THE MONITOR STRIP UP. The console boots with it FOLDED AWAY
+   * (`DEFAULT_MONITORS_SHOWN`; `design.md` §19), because neither box is confidence
+   * monitoring: PGM is a fixed empty placeholder for the unbuilt `C-016` and PVW is a local
+   * browser render of the rehearsing rows (`R-022` — nothing reaches CasparCG).
+   *
+   * Every spec whose subject is INSIDE the strip — the rehearsal frames, the PVW stage, the
+   * strip's own divider — calls this first. It lives on the fixture rather than in each
+   * spec so the boot state is stated in ONE place: when this default moves again, the specs
+   * that merely need the strip present do not each have to be found and edited.
+   *
+   * IDEMPOTENT, and it ASSERTS rather than assuming: a helper that only clicked would leave
+   * every caller starting from an unknown state if the toggle's name ever changed.
+   */
+  async showMonitors(): Promise<void> {
+    const show = this.page.getByRole('button', { name: 'Show monitors' });
+    if (await show.count()) await show.first().click();
+    await expect(this.page.getByRole('button', { name: 'Hide monitors' })).toBeVisible();
+    await expect(this.page.locator('[data-monitor-strip]')).toHaveCount(1);
+  }
+
   /** R-003 — apply the selected item's staged edits via the Inspector's Update. */
   async applyEdits(): Promise<void> {
     await this.inspector.getByRole('button', { name: 'Apply staged edits' }).click();

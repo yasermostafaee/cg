@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { Maximize2, Minimize2, X } from 'lucide-react';
-import { colors } from '../theme.js';
+import { colors, cssVars } from '../theme.js';
 import { Button } from './Button.js';
 import { Icon } from './Icon.js';
 import { useShellLayoutContext } from '../hooks/shellLayoutContext.js';
@@ -41,7 +41,21 @@ import type { PanelId } from '../hooks/useShellLayout.js';
 const styles = {
   panel: {
     background: colors.panel,
-    borderRadius: '0.25rem',
+    /*
+     * 🔴 `MONITORS-01` — audit rows 23 and 38, adopted as ONE value because this app has
+     * ONE panel primitive.
+     *
+     * It was `0.25rem` (4 px, the scale's `sm`). Measured in Chromium at 1280 × 800 the
+     * reference draws `.inspector` at **6 px** and `.monitor` at **5 px** — one pixel
+     * apart, and not a system: the drawing simply does not give a panel corner one value.
+     * `--r-radius-md` is 6, so the Inspector's is taken and the monitor's rides it. Giving
+     * the monitor its own 5 would spend a second token copying an inconsistency, against
+     * this programme's own "one bar for four panels" rule (`design.md` §12.3).
+     *
+     * ⚠ Row 38's OTHER half — the monitor's `#101722` ground — is NOT taken; see
+     * `design.md` §19.3 for why (it is not among the reference's own declared colours).
+     */
+    borderRadius: cssVars['--r-radius-md'],
     border: `1px solid ${colors.border}`,
     display: 'flex',
     flexDirection: 'column' as const,
