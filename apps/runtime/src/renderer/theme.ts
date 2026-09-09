@@ -1437,6 +1437,29 @@ export const cssVars = {
   '--r-modal-head-gap-fixed': `${String(STATION_SETUP_PX.headGap)}px`,
   '--r-modal-foot-pad-fixed': `${String(STATION_SETUP_PX.footPadY)}px ${String(STATION_SETUP_PX.footPadX)}px`,
   '--r-modal-foot-gap-fixed': `${String(STATION_SETUP_PX.footGap)}px`,
+  /**
+   * 🔴 THE FIXED FRAME'S MESSAGE REGION — DRAWN IN THE PANE'S COLUMN, NOT THE FRAME'S.
+   *
+   * The `fixed` frame is the one dialog whose BODY is two columns: a rail of section names and
+   * the pane of the section you are in. Its message region is a sibling of that body, so with
+   * the frame's own padding it spanned BOTH — measured at 1280 × 800, a refusal card running
+   * x = 87 → 1193 while the pane it belongs to starts at 297. Two hundred and twenty-six pixels
+   * of an amber sentence about Servers, drawn across the names of the four sections the same
+   * sentence says are still editable. Its bottom edge sat at 693.0 against a footer top of
+   * 693.0 — flush, no separation, which is what read as an overlap.
+   *
+   * ⭐ THIS IS THE ONE PLACE THE FIXED FRAME'S BODY SHAPE IS SPELLED, and it is spelled here
+   * rather than in `Modal.tsx` for the same reason every other frame number is: a value with no
+   * home has no reviewer. The inset is the RAIL plus the PANE's own horizontal padding, so the
+   * card starts exactly where the section's cards start; the block padding is the pane's own
+   * `cardGap`, because the band is the last item in that column and takes the column's rhythm.
+   *
+   * ⚠ Applied as `paddingInlineStart`, never as the fourth value of a physical shorthand: the
+   * rail is the body's FIRST column, so in an RTL document it is on the right and the inset must
+   * follow it. `modal-message-containment.spec.ts` measures both edges against the pane's.
+   */
+  '--r-modal-message-pad-fixed': `${String(STATION_SETUP_PX.cardGap)}px ${String(STATION_SETUP_PX.panePadX)}px`,
+  '--r-modal-message-inset-fixed': `${String(STATION_SETUP_PX.railW + STATION_SETUP_PX.panePadX)}px`,
   '--r-modal-subtitle-text': `${String(STATION_SETUP_PX.subtitleText)}px`,
   '--r-modal-subtitle-gap': `${String(STATION_SETUP_PX.subtitleGap)}px`,
   /**

@@ -235,8 +235,21 @@ const styles = {
   },
   /** The fixed frame's body fills the frame; only the scroll container inside it scrolls. */
   bodyFixed: { flex: 1, padding: 0, gap: 0 },
-  /** The pinned region keeps clear of the flush frame's edges. */
-  messageFixed: { padding: '0.6rem 1rem 0' },
+  /**
+   * 🔴 The pinned region, IN THE PANE'S COLUMN.
+   *
+   * This was `padding: '0.6rem 1rem 0'` — the flush frame's own inset, applied to a region
+   * whose sibling body is a RAIL plus a PANE. So the card spanned both columns and its bottom
+   * edge met the footer's top rule exactly. See `--r-modal-message-pad-fixed` for the
+   * measurement and for why the inset lives in the token home rather than here.
+   *
+   * `paddingInlineStart` overrides the shorthand's inline-start only, and is logical rather
+   * than physical so the inset follows the rail in an RTL document.
+   */
+  messageFixed: {
+    padding: cssVars['--r-modal-message-pad-fixed'],
+    paddingInlineStart: cssVars['--r-modal-message-inset-fixed'],
+  },
 } as const;
 
 /**
