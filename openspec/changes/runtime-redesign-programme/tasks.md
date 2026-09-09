@@ -905,5 +905,9 @@ delimiter` and `Add source` already pass `variant="add"`** and every dialog conf
 - [x] Linux `e2e` DISCHARGED on the code head `a28e0687`:
       <https://github.com/yasermostafaee/cg/actions/runs/34377894915> — `conclusion: success`,
       `E2E (Playwright)` **RAN** 16:37:49Z → 16:48:55Z (11 m 6 s). Not skipped (`P-029`).
+- [x] Linux `e2e` DISCHARGED on the docs head `6b4e29c4` as well — two commits, two
+      discharges, so neither inherits the other's:
+      <https://github.com/yasermostafaee/cg/actions/runs/34380878473> — `conclusion: success`,
+      `E2E (Playwright)` **RAN** 17:06:43Z → 17:18:31Z (11 m 48 s). Not skipped (`P-029`).
 - [ ] NOT BUILT, recorded in §22.7: the row hover's second channel; the import wizard's
       `Review`/`Complete` steps; the reference's 24 px check circle.
