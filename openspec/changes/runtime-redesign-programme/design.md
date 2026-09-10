@@ -3480,9 +3480,11 @@ emblem's edge **1.60:1** (pure decoration). Reported for the owner; not changed.
 - **Structural bucket:** 24 + 39 (panel head shape), 26 (Inspector spacing), 97 + 104 (picker
   width and aside), 112 (audit log height). The width table and button family (70, 87, 106) are
   **closed**; 131 + 132 + the toolbar split were closed by `AUDIT-CLOSE-01`.
-- **Bucket D:** 139 and 140 are **closed** — both measured, both now on the outer family. The
-  four Station-setup tab bodies (134–137), the status bar (133), `Station layers` (138), the
-  Inspector's look/plate sections (141) and the PVW stage content (142) remain unmeasured.
+- **Bucket D:** 139 and 140 are **closed** — both measured, both now on the outer family.
+  ⭐ **135 (Servers) is closed too, by `SETTINGS-DIALOG-01` (§23)** — the first of the four
+  Station-setup tab bodies to be measured at all. **133, 134, 136, 137, 138, 141 and 142 remain
+  unmeasured**; §23.6 records what the reference draws for 134, 136 and 137 so the next session
+  measures rather than re-discovers.
 
 ## §21 — `RUNTIME-REPAIR-04`: THE PICKER FAMILY, AND THE CONTROL THAT CAME OFF THE ROW
 
@@ -3936,3 +3938,164 @@ for: it recorded them where the owner could find and overrule them.
   `conclusion: success`, and the **`E2E (Playwright)` job RAN** 16:37:49Z → 16:48:55Z
   (**11 m 6 s**), beside `Lint · Typecheck · Test · Build` 16:37:50Z → 16:41:36Z. Not skipped
   (`P-029`), not cancelled.
+
+## §23 — `SETTINGS-DIALOG-01`: THE FIRST OF THE FOUR TAB BODIES, AND A RECORD THAT CONTRADICTED ITSELF
+
+**2026-09-10, after `REPAIR-05` and `CI-BROWSER-DEPS-01`.** The owner's report was that the
+settings modal is _"still very different from that HTML"_. It is — but not where the prompt for
+this session expected, and 23.0 is that correction.
+
+### 23.0 🔴 What contradicted the prompt
+
+- **The frame, the rail and the footer were ALREADY measured and rebuilt.** Phase 7 did exactly
+  that on `09-channel-settings.html` (14.3), with a discharged Linux `e2e` on `f9fd0d03`. This
+  session's §2 had nothing to build: the frame is the reference's `1140 × min(810, vh − 64)`,
+  re-measured at **1140 × 736** in a browser here; the rail is 226 px of 44 px icon tabs with
+  Channel first, carrying an amber dot for a blocked section and a sky one for an unapplied
+  draft, readable from any tab; the footer is the 74 px floor with `Revert` + `Apply …` or
+  nothing. ⚠ **The prompt also had the reference wrong:** it named the five-`<dialog>` page
+  `REPAIR-05` measured. The settings dialog is not in that page's outer document at all — it is
+  a shadow-root prototype on `#station-setup-channel-1` in `09-channel-settings.html`, which
+  `PROMPT.md` §7 has named since 2026-09-07.
+- **The dialog has FIVE tabs, and the audit counts FOUR bodies, and both records are right.**
+  Channel · Servers · Live sources · Text file delimiters · Layers (`sections.ts`, in rail
+  order, grouped `Playout` / `Content` / `Layers`). Rows 134–137 are the four STATION-WIDE
+  bodies; the fifth, Channel, was measured and rebuilt by Phase 7, which is why it is not among
+  them. Nothing was contradictory — one record counts tabs and the other counts unmeasured ones.
+- **The reference DOES draw all five panes**, `hidden` in the shadow DOM. ⚠ And a `hidden` pane
+  reports a **0 × 0** box with every computed length reading as though the surface were empty, so
+  each pane's own tab has to be CLICKED before it is measured. An unclicked reading is not a weak
+  reading; it is no reading at all, and it looks exactly like a finished measurement.
+
+### 23.1 🔴 THE FOOTER CONTRADICTION, RESOLVED BY DATE — and it was a stale copy, not a decision
+
+Two texts in the tree disagreed about a section footer with nothing to commit. Dated:
+
+| text                                                         | when                       | says                                   |
+| ------------------------------------------------------------ | -------------------------- | -------------------------------------- |
+| `B-240`, built in `95181658`                                 | **2026-09-07 12:53 +0330** | no `Close` anywhere; no buttons at all |
+| `PROMPT.md` §7's "everything already decided survives" list  | 2026-09-07 19:32 +0330     | "a section without one gets `Close`"   |
+| `station-setup/specs/runtime-ui/spec.md`'s per-tab scenarios | pre-`B-240`, never swept   | `Cancel`, and "a quiet `Close` alone"  |
+
+**`B-240`'s rule STANDS, and the later clock reading does not overturn it** — the precedent is
+`B-216`, where dating settled a self-contradicting record, and dating settles this one too once
+you read what each text CLAIMS TO BE. `PROMPT.md`'s clause sits in a list whose stated purpose is
+to RESTATE decisions already made, not to make one; a restatement that contradicts what it
+restates is a stale copy, which is golden rule 9's exact failure mode. It is also settled by
+conduct: Phase 7 executed that very list and implemented `B-240` (`tasks.md` 7.4, 14.3's footer
+row), so the BUILD was never in doubt — only the record was. Both stale copies are corrected.
+
+**And the whole rule is BUILT, not merely decided** — checked in the tree, not assumed:
+one dismissal routed through `dismiss` from the ✕, Escape and the backdrop; `Revert`
+section-scoped and shown only when dirty, from the SAME `isDirty` the rail's dot reads; `Apply
+servers` / `Apply layers` in sentence case; read-only and as-you-go sections carrying only their
+`footerRest`; and the ✕-with-unapplied-changes confirmation NAMING the sections
+(`Leave Station setup without applying …`). The one thing the reference actually draws here is
+a `Close` alone on its auto-save pane with `Changes save automatically` beside it — measured, and
+**ARGUED (bucket A)**: it is the control `B-240` retired for having three names for one job.
+
+### 23.2 What was built — the SERVERS body, audit row 135
+
+The reference's `.field` idiom, which is the one thing all four bodies share and the app spelled
+nowhere: a label ABOVE its control inside a grid, not beside it in a 92 px label column. Measured
+in Chromium at 1280 × 800 through the shadow root with `#tab-servers` clicked, and brought in as
+`STATION_SETUP_PX` → `--r-setup-field-*` / `--r-setup-empty-*` / `--r-setup-switch-row-*` /
+`--r-setup-notice-*`:
+
+| property        | reference (rendered)                                                 | app (after)                                         | verdict                                                                                                                                  |
+| --------------- | -------------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| field           | `flex-direction:column;gap:7px`, label 13 px / 500                   | **the same**, `.cg-setup-field`                     | **FIXED**                                                                                                                                |
+| control         | `min-height:36px;padding:7px 10px;border-radius:8px`, 15 px          | **the same**, scoped to `.cg-setup-field .cg-field` | **FIXED**; ⚠ app-wide `.cg-field` deliberately untouched — every dialog wears it                                                         |
+| hint            | `.hint` 12 px muted, under the control                               | **12 px muted**, `.cg-setup-field__hint`            | **FIXED**                                                                                                                                |
+| field grid      | `.fields{gap:19px 18px}`; `.fields.three` = `1.8fr 1fr 1fr`          | **the same**, declared as the ratio                 | **FIXED**                                                                                                                                |
+| A / B chip      | `.server-label` 25 × 25, radius 6, 12 px, MINT ground                | **25 × 25, radius 6, 12 px**, `--r-surface-raised`  | **FIXED** (box); **ARGUED (A)**: green means air or health by the owner's rule (§20.6)                                                   |
+| card head       | the chip beside an `h3` 16 px / 600 sentence-case name               | **`Primary server` / `Backup server` + the chip**   | **FIXED**; `Primary (A)` spent one title on two facts                                                                                    |
+| backup empty    | `.empty-backup{padding:19px 20px;gap:14px}`, a 42 × 42 radius-10 box | **the same**, `.cg-setup-empty`                     | **FIXED** (built)                                                                                                                        |
+| connection card | ONE card holding the template address, the strategy and the switch   | **folded in**; the `Redundancy` card is gone        | **FIXED** (structure)                                                                                                                    |
+| … its name      | `Station connection`                                                 | `How those servers reach this machine`              | **ARGUED (B)**: the app's own words, pinned by `server-settings.spec.ts`; nothing reworded                                               |
+| switch row      | `.switch-row{padding:17px 0 0;gap:20px}`, label + hint / control     | **the same**, `.cg-setup-switch-row`                | **FIXED**                                                                                                                                |
+| strategy select | two options (`Mirror sync` / `Primary only`)                         | the app's **three**                                 | **ARGUED (A)**: `ConnectionConfig['strategy']` has three; a select that cannot express a stored value is a defect                        |
+| on-air block    | a `.notice` band at the TOP of the pane                              | the modal's pinned message region                   | **ARGUED (A)**: `AUDIT-CLOSE-01` delta A put it there and `modal-message-containment` holds it; the geometry is adopted, the HOME is not |
+
+🔴 **NO refusal CONDITION changed.** `Apply servers` is still pre-disabled by the same
+`anyOnAirOrUnsettled` count, its sentence still names Servers and still says every other section
+stays editable, and the guard still covers Servers alone. The `.cg-setup-notice` geometry is
+adopted for a section's STANDING facts and is asserted ABSENT on the Servers pane, so it can
+never quietly become a second home for an event.
+
+### 23.3 🔴 The red-first proof — and the plant that found a vacuous assertion
+
+Three plants against `station-setup-geometry.spec.ts` §3, each with a green control first:
+
+| plant                                           | result                                        |
+| ----------------------------------------------- | --------------------------------------------- |
+| `.cg-setup-field` back to `flex-direction:row`  | **RED** on `expect(field.dir).toBe('column')` |
+| `.fields.three` to `repeat(3, minmax(0,1fr))`   | **RED** on the 1.8 ratio (received `0.9999`)  |
+| `.cg-setup-empty__text` renamed to a dead class | ⭐ **GREEN — the spec was VACUOUS there**     |
+
+The third is the finding worth keeping. The first version of this spec read the empty row's
+padding, its gap and the icon box — and a defect that deleted the block carrying both sentences
+passed, because nothing read it. That is golden rule 12c's vacuous-assertion shape, found the only
+way it can be, and the fix is the assertion the plant asked for (the text block's presence, its
+width, and both of its ranks) rather than a weaker one. Re-run: **all three RED**, on the
+assertion that names each.
+
+### 23.4 §4 — WHAT IT COST, honestly
+
+At 1280 × 800, the Servers tab, the fixture's backup configured (so both server cards draw
+fields; the reference's own figure is its empty state, which is not the same surface):
+
+|                             | app BEFORE | app AFTER  | reference  |
+| --------------------------- | ---------- | ---------- | ---------- |
+| frame                       | 1140 × 736 | 1140 × 736 | 1140 × 736 |
+| cards in the pane           | 4          | **3**      | 3          |
+| pane content (scrollHeight) | 932 px     | **930 px** | —          |
+| `Primary`                   | 179.4      | **167**    | 171.1      |
+
+⭐ **Two pixels. Repair-01's lesson again, and it should be said plainly rather than dressed up:**
+folding `Redundancy` into the connection card gave back a card head, a rule and a 20 px gap, and
+the reference's own controls spent all of it — a 36 px input floor where the app had ~28, and a
+label ABOVE each control instead of beside it. The pane is the reference's SHAPE now and its
+height is a wash. The frame did not move, which is what §2's fixed-frame requirement demands.
+
+⚠ **Chrome above the first data row did NOT move** — measured, not assumed: **227.69 px raw on
+both the before and the after build**, identical to the hundredth, and **181.49 px** once the
+mock's 46.2 px `TEST MODE` band is subtracted — which reconciles with §21/§22's recorded
+**181.45 px, 7 rows**. `shell-chrome.spec.ts` §B still passes its budget with its rows floor. Every rule this session added is `.cg-setup-*`-scoped and every markup
+change is inside the Servers pane, so the console's own chrome could not move; the measurement is
+what turns that from an argument into a fact.
+
+### 23.5 FIXED vs ARGUED
+
+**Nine FIXED, four ARGUED — 4 of 13 = 31 %.** 🔴 **That is OVER the quarter, so this session
+STOPS at Servers and reports rather than justifying more** (18.0's rule). The four are named in
+23.2 and every one is bucket A or B: the chip's mint (A — the owner's green rule), the connection
+card's name (B — the app's own words, pinned by an e2e), the third strategy option (A — a stored
+value the reference's select cannot express), and the refusal's home (A — `AUDIT-CLOSE-01`
+delta A). None is "palette" and none is "the app has no X".
+
+⚠ **The ratio is also honest about WHY it is high: this is a bucket-D surface, measured for the
+first time here, so there was no prior FIXED count to dilute it.** A body with twelve properties
+and four recorded constraints cannot come in under 25 %.
+
+### 23.6 What this session did NOT do — the remainder, by audit row
+
+- **Row 136 — Text file delimiters.** NOT built. Measured and recorded here so the next session
+  does not re-measure: a `.list-header` (an `h3` with a muted count and a `primary` `Add
+delimiter` at 40 px), a radius-12 `.table-wrap` card holding a `Name · Split character ·
+Actions` table (`thead` 43.1, rows 63), and a `.delimiter-bottom` row pairing a 13 px note with
+  a `Reset to defaults` link-button. Footer: `Close` alone — the `B-240` case argued in 23.1.
+- **Row 134 — Live sources.** NOT built. Measured: the same `.list-header` with `Add source`;
+  a `.resource-list` card whose rows are a `40px 662px 78px` grid (a radius-9 kind glyph, a title
+  line + description, two 38 × 38 icon buttons); then a `.band-card` with a
+  `First layer — Last layer · Apply band` field row, a `.band-summary` line and a `.card-help`
+  band.
+- **Row 137 — Layers.** NOT built. Measured: a section head carrying a `.layer-summary` tag row
+  (`Channel 1` · `Layers 70–99` · `Fixed bank`), a `.helper-details`, a `.filter-bar` (a 320 px
+  search, a `Hide empty` check, an `N of M rows` count) and TWO `.layer-table`s — the bank and
+  the graphics beds — with `Layer · Show · Row name · Template · Actions`.
+- **Row 138 — `Station layers`**, and rows 141–142, untouched; row 133 untouched.
+- No wire behaviour, no schema, no persisted key, no plant command, no refusal CONDITION. The
+  template picker untouched; `--r-panel-bar-h` untouched; the change NOT archived.
+
+### 23.7 The runs

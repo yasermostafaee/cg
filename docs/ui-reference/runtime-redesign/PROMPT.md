@@ -183,8 +183,10 @@ right-click and keyboard both reach the modal.
   today, **say so and file the gap — do not invent a multi-channel contract.**
 - **Everything already decided about this dialog survives:** one Settings entry point, the fixed frame
   measured on **two** edges, per-section footers and refusals, the footer rule (a section with a commit gets
-  `Revert` + `Apply …`; a section without one gets `Close`), the `B-237` confirmation that **names** the
-  templates and plates it would drop, and the `B-238` refusal that is shown.
+  `Revert` + `Apply …`; a section without one gets **no buttons at all**, only its contract — `B-240`
+  retired the per-section `Close` in `95181658`, and this line said `Close` until
+  `SETTINGS-DIALOG-01` swept it), the `B-237` confirmation that **names** the templates and plates it
+  would drop, and the `B-238` refusal that is shown.
 
 **Acceptance:** channel-keyed state proved by test; the persisted-key census unchanged; every Station setup
 decision still asserted; e2e run.

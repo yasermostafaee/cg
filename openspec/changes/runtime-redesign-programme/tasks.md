@@ -925,3 +925,36 @@ delimiter` and `Add source` already pass `variant="add"`** and every dialog conf
       and it takes the classifier's fail-safe branch, so it can only ever over-run.
 - [ ] NOT BUILT, recorded in §22.7: the row hover's second channel; the import wizard's
       `Review`/`Complete` steps; the reference's 24 px check circle.
+
+## `SETTINGS-DIALOG-01` — the settings dialog's tab bodies, one of four — IN PROGRESS
+
+The record is `design.md` §23: what contradicted the prompt (23.0), the footer contradiction
+resolved by date (23.1), the measured Servers body with every delta FIXED or ARGUED (23.2), the
+red-first proof and the plant that found a vacuous assertion (23.3), the before/after geometry
+(23.4), the FIXED/ARGUED total (23.5), and the remainder by audit row (23.6).
+
+- [x] S.0 🔴 **§0.3's contradiction resolved by DATE, and BOTH stale copies corrected.**
+      `B-240`'s footer rule stands (built 2026-09-07 12:53, `95181658`); `PROMPT.md` §7's later
+      restatement and `station-setup/specs/runtime-ui/spec.md`'s per-tab scenarios were stale
+      copies of the pre-`B-240` rule and now agree with it. ⚠ The reference itself draws a
+      `Close` on its auto-save pane — measured, and ARGUED (bucket A) rather than adopted.
+- [x] S.1 **§2 needed no build.** Phase 7 had already measured and rebuilt the frame, rail and
+      footer from `09-channel-settings.html`; re-measured here at 1140 × 736 in Chromium, with
+      Channel first and both rail marks readable from any tab (23.0).
+- [x] S.2 **§3 — the SERVERS body (audit row 135) rebuilt to the measured reference:** the
+      `.field` idiom (label above control, `gap:7px`, a 36 px control floor at radius 8), the
+      `1.8fr 1fr 1fr` endpoint grid, the A/B chip, the backup empty state, and `Redundancy`
+      folded into the connection card as the reference draws it. Tokens: `--r-setup-field-*`,
+      `--r-setup-empty-*`, `--r-setup-switch-row-*`, `--r-setup-notice-*` — geometry only, every
+      ink a role token. 🔴 **No refusal CONDITION changed**, and the pinned message region is
+      still the only home for an event (`.cg-setup-notice` asserted ABSENT on the pane).
+- [x] S.3 **Red-first, with a green control:** three plants against
+      `station-setup-geometry.spec.ts` §3, all three RED on the assertion that names each. ⭐ The
+      third plant initially came back GREEN and exposed a VACUOUS assertion — the empty state's
+      text block was unread; closed rather than weakened (23.3).
+- [x] S.4 🔴 **STOPPED AT SERVERS on the budget rule**, not because the list ended: 9 FIXED /
+      4 ARGUED = **31 %**, over 18.0's quarter. Rows 134, 136 and 137 are named as the
+      remainder with what the reference draws for each (23.6). Rows 138, 141, 142 untouched.
+- [x] S.5 `pnpm gate` — foreground, uncached; `pnpm --filter @cg/runtime test:e2e` **160 passed**
+      (Windows, against a fresh build). ⚠ **NON-AUTHORITATIVE** (golden rule 12a).
+      ✅ **DISCHARGED — Linux `e2e`:** see 23.7.

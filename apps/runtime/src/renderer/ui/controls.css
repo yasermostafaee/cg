@@ -3326,6 +3326,178 @@ input[type='checkbox']:disabled:checked {
   line-height: 1.7;
 }
 
+/* ── `SETTINGS-DIALOG-01` §3 — THE TAB BODIES' FIELD IDIOM —───────────────────
+ *
+ * Phase 7 measured this dialog's FRAME, rail, footer and Channel pane and stopped there
+ * (`design.md` 14.8 — audit rows 134–137 stayed unmeasured). The one structural difference
+ * those four bodies all share is the shape of a labelled control: the reference puts the
+ * label ABOVE its input inside a grid cell, the app spelled every one as an inline
+ * `label + input` row. That is what these rules bring in.
+ *
+ * ⚠ `.cg-field` — the INPUT's own skin — is app-wide and is deliberately NOT touched here:
+ * every dialog in the console wears it. The reference's taller, rounder control is scoped to
+ * this pane through `.cg-setup-field` instead, so nothing outside Station setup moves.
+ */
+.cg-setup-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--r-setup-fields-gap);
+}
+
+/* `.fields.three` — the endpoint row: a wide host beside two narrow ports. */
+.cg-setup-fields--three {
+  grid-template-columns: var(--r-setup-fields-three);
+}
+
+/* A cell that spans the grid — the reference's `.field.full` (its `Server strategy`). */
+.cg-setup-field--full {
+  grid-column: 1 / -1;
+}
+
+.cg-setup-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--r-setup-field-gap);
+}
+
+.cg-setup-field__label {
+  font-size: var(--r-setup-field-label-text);
+  font-weight: var(--r-weight-medium);
+  color: var(--r-text-secondary);
+}
+
+/*
+ * The control inside a setup field. Scoped to `.cg-setup-field` so the app-wide `.cg-field`
+ * skin keeps its own metrics everywhere else.
+ */
+.cg-setup-field .cg-field {
+  min-height: var(--r-setup-field-input-min-h);
+  padding: var(--r-setup-field-input-pad);
+  border-radius: var(--r-setup-field-input-radius);
+  font-size: var(--r-setup-field-input-text);
+}
+
+/* The reference's `.hint` — a 12 px muted line under the control, never beside it. */
+.cg-setup-field__hint {
+  margin: 0;
+  font-size: var(--r-setup-field-hint-text);
+  line-height: 1.6;
+  color: var(--r-text-muted);
+}
+
+/* The lede a card puts ABOVE its field grid — `.card-body p.secondary`. */
+.cg-setup-lede {
+  margin: 0 0 var(--r-setup-card-lede-gap);
+  font-size: var(--r-setup-card-lede-text);
+  line-height: 1.55;
+  color: var(--r-text-secondary);
+}
+
+/*
+ * The A / B chip on a server card's head — `.server-label`.
+ *
+ * ⚠ The reference paints it MINT. Not adopted: green means air or health by the owner's own
+ * rule (`design.md` §20.6), and a server's NAME is neither. It takes the raised surface the
+ * Phase 7 slot chip took, which is the app's chip treatment.
+ */
+.cg-setup-server-chip {
+  display: grid;
+  place-items: center;
+  width: var(--r-setup-server-chip-box);
+  height: var(--r-setup-server-chip-box);
+  flex: none;
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-setup-server-chip-radius);
+  background: var(--r-surface-raised);
+  font-size: var(--r-setup-server-chip-text);
+  color: var(--r-text-secondary);
+}
+
+/* ── An EMPTY STATE inside a card — `.empty-backup` ──────────────────────────── */
+.cg-setup-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--r-setup-empty-gap);
+  padding: var(--r-setup-empty-pad);
+}
+
+.cg-setup-empty__icon {
+  display: grid;
+  place-items: center;
+  width: var(--r-setup-empty-icon-box);
+  height: var(--r-setup-empty-icon-box);
+  flex: none;
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-setup-empty-icon-radius);
+  background: var(--r-surface-raised);
+  color: var(--r-text-muted);
+}
+
+.cg-setup-empty__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.cg-setup-empty__title {
+  font-size: var(--r-setup-empty-title-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-text);
+}
+
+.cg-setup-empty__body {
+  margin: var(--r-setup-empty-body-gap) 0 0;
+  font-size: var(--r-setup-empty-body-text);
+  line-height: 1.55;
+  color: var(--r-text-muted);
+}
+
+/* ── A SWITCH ROW under a field grid — `.switch-row` ─────────────────────── */
+.cg-setup-switch-row {
+  display: flex;
+  align-items: center;
+  gap: var(--r-setup-switch-row-gap);
+  padding-top: var(--r-setup-switch-row-pad-top);
+}
+
+.cg-setup-switch-row__text {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── A section's own standing NOTICE band — `.notice` ─────────────────────
+ *
+ * ⚠ NOT the home of a refusal. An EVENT — a refusal, an outcome — lands in the modal's
+ * pinned message region, where `AUDIT-CLOSE-01` delta A put it and
+ * `modal-message-containment.spec.ts` holds it. This band carries a standing fact a section
+ * states about ITSELF, which is a different lifetime and therefore a different element
+ * (the same `B-239` distinction the footer contract had to learn).
+ */
+.cg-setup-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--r-setup-notice-gap);
+  margin-bottom: var(--r-setup-notice-gap-below);
+  padding: var(--r-setup-notice-pad);
+  border: 1px solid var(--r-caution-line);
+  border-radius: var(--r-setup-notice-radius);
+  background: var(--r-caution-bg);
+}
+
+.cg-setup-notice__title {
+  display: block;
+  font-size: var(--r-setup-notice-title-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-caution-text);
+}
+
+.cg-setup-notice__body {
+  margin: var(--r-setup-empty-body-gap) 0 0;
+  font-size: var(--r-setup-notice-body-text);
+  line-height: 1.6;
+  color: var(--r-text-secondary);
+}
+
 /* ── THE VIDEO-FORMAT CARD — `.video-card` ─────────────────────────────────────── */
 .cg-video-head {
   display: flex;

@@ -857,6 +857,84 @@ export const STATION_SETUP_PX = {
   detailsGap: 17,
   detailsBodyGap: 9,
   detailsMaxCh: 70,
+  /*
+   * `SETTINGS-DIALOG-01` §3 — THE FOUR STATION-WIDE TAB BODIES, which Phase 7 deliberately left
+   * (`design.md` 14.8: _"It did not re-measure the bodies of the Servers, Live sources,
+   * Delimiters and Layers tabs"_ — audit rows 134–137). Measured the same way as the rest of this
+   * block: Chromium at 1280 × 800, `09-channel-settings.html`, through the shadow root, with each
+   * pane's own tab CLICKED first — a `hidden` pane reports a 0 × 0 box, so an unclicked reading is
+   * no reading at all.
+   */
+  /**
+   * The reference's `.field` — a label ABOVE its control, which is the single biggest structural
+   * difference on these tabs: the app spells every one as an inline `label + input` row.
+   * `.field{display:flex;flex-direction:column;gap:7px}`, its `label` 13 px / 500 secondary,
+   * its `.input`/`.select` `min-height:36px;padding:7px 10px;border-radius:8px` at 15 px, and
+   * its `.hint` 12 px muted.
+   */
+  fieldGap: 7,
+  fieldLabelText: 13,
+  fieldInputMinH: 36,
+  fieldInputPadY: 7,
+  fieldInputPadX: 10,
+  fieldInputRadius: 8,
+  fieldInputText: 15,
+  fieldHintText: 12,
+  /**
+   * The field GRID — `.fields{gap:19px 18px}`. Two columns at `394px 394px` in an 806 px body
+   * (an even split), and `.fields.three` at `364.734px 202.625px 202.625px`, which is the
+   * reference's own `1.8fr 1fr 1fr` resolved: 806 − 2 × 18 = 770, and 770 × 1.8/3.8 = 364.7.
+   * Declared as the ratio rather than the three pixel widths, so the grid survives a narrower
+   * frame — the reference's own declaration is the ratio too.
+   */
+  fieldsRowGap: 19,
+  fieldsColGap: 18,
+  fieldsThreeRatio: '1.8fr 1fr 1fr',
+  /** The lede above a field grid — `.card-body p.secondary{font-size:13px;margin-bottom:19px}`. */
+  cardLedeText: 13,
+  cardLedeGap: 19,
+  /**
+   * The A/B chip on a server card's head — `.server-label`, a 25 × 25 grid-centred 12 px box
+   * with a 6 px corner. ⚠ Its mint ground is NOT adopted: green means air or health by the
+   * owner's own rule (`design.md` §20.6), so it takes the raised surface the slot chip took.
+   */
+  serverChipBox: 25,
+  serverChipText: 12,
+  serverChipRadius: 6,
+  /**
+   * The empty state inside a card — `.empty-backup{padding:19px 20px;gap:14px}` with a 42 × 42
+   * radius-10 glyph box, a 14 px / 600 line and a 13 px muted one 3 px under it.
+   */
+  emptyPadY: 19,
+  emptyPadX: 20,
+  emptyGap: 14,
+  emptyIconBox: 42,
+  emptyIconRadius: 10,
+  emptyTitleText: 14,
+  emptyBodyText: 13,
+  emptyBodyGap: 3,
+  /**
+   * A switch row under a field grid — `.switch-row{padding:17px 0 0;gap:20px}`, its label and
+   * hint on the left and the control on the right.
+   */
+  switchRowPadTop: 17,
+  switchRowGap: 20,
+  /**
+   * The pane's own NOTICE band — `.notice{padding:15px 17px;gap:11px;border-radius:10px;
+   * margin-bottom:21px}`, a 14 px / 600 headline over a 13 px line.
+   *
+   * ⚠ ADOPTED AS GEOMETRY ONLY, and it does NOT become the home of the on-air refusal: that
+   * message stays in the modal's pinned region, where `AUDIT-CLOSE-01` delta A put it and
+   * `modal-message-containment.spec.ts` holds it. This band is for the standing, ambient facts
+   * a section states about itself — the remote-host note is the one that uses it.
+   */
+  noticePadY: 15,
+  noticePadX: 17,
+  noticeGap: 11,
+  noticeRadius: 10,
+  noticeGapBelow: 21,
+  noticeTitleText: 14,
+  noticeBodyText: 13,
 } as const;
 /**
  * `RUNTIME-REDESIGN-01` PHASE 8 — the template picker (`01-template-picker.html`) and the
@@ -2326,6 +2404,40 @@ export const cssVars = {
   '--r-setup-details-gap': `${String(STATION_SETUP_PX.detailsGap)}px`,
   '--r-setup-details-body-gap': `${String(STATION_SETUP_PX.detailsBodyGap)}px`,
   '--r-setup-details-max-w': `${String(STATION_SETUP_PX.detailsMaxCh)}ch`,
+  /*
+   * ── `SETTINGS-DIALOG-01` §3 — the tab BODIES' own idioms, read by `controls.css`'s
+   * `.cg-setup-field*`, `.cg-setup-empty*`, `.cg-setup-switch-row` and `.cg-setup-notice`.
+   * Geometry only: every ink here is a role token (`design.md` §20.6's green rule).
+   */
+  '--r-setup-field-gap': `${String(STATION_SETUP_PX.fieldGap)}px`,
+  '--r-setup-field-label-text': `${String(STATION_SETUP_PX.fieldLabelText)}px`,
+  '--r-setup-field-input-min-h': `${String(STATION_SETUP_PX.fieldInputMinH)}px`,
+  '--r-setup-field-input-pad': `${String(STATION_SETUP_PX.fieldInputPadY)}px ${String(STATION_SETUP_PX.fieldInputPadX)}px`,
+  '--r-setup-field-input-radius': `${String(STATION_SETUP_PX.fieldInputRadius)}px`,
+  '--r-setup-field-input-text': `${String(STATION_SETUP_PX.fieldInputText)}px`,
+  '--r-setup-field-hint-text': `${String(STATION_SETUP_PX.fieldHintText)}px`,
+  '--r-setup-fields-gap': `${String(STATION_SETUP_PX.fieldsRowGap)}px ${String(STATION_SETUP_PX.fieldsColGap)}px`,
+  '--r-setup-fields-three': STATION_SETUP_PX.fieldsThreeRatio,
+  '--r-setup-card-lede-text': `${String(STATION_SETUP_PX.cardLedeText)}px`,
+  '--r-setup-card-lede-gap': `${String(STATION_SETUP_PX.cardLedeGap)}px`,
+  '--r-setup-server-chip-box': `${String(STATION_SETUP_PX.serverChipBox)}px`,
+  '--r-setup-server-chip-text': `${String(STATION_SETUP_PX.serverChipText)}px`,
+  '--r-setup-server-chip-radius': `${String(STATION_SETUP_PX.serverChipRadius)}px`,
+  '--r-setup-empty-pad': `${String(STATION_SETUP_PX.emptyPadY)}px ${String(STATION_SETUP_PX.emptyPadX)}px`,
+  '--r-setup-empty-gap': `${String(STATION_SETUP_PX.emptyGap)}px`,
+  '--r-setup-empty-icon-box': `${String(STATION_SETUP_PX.emptyIconBox)}px`,
+  '--r-setup-empty-icon-radius': `${String(STATION_SETUP_PX.emptyIconRadius)}px`,
+  '--r-setup-empty-title-text': `${String(STATION_SETUP_PX.emptyTitleText)}px`,
+  '--r-setup-empty-body-text': `${String(STATION_SETUP_PX.emptyBodyText)}px`,
+  '--r-setup-empty-body-gap': `${String(STATION_SETUP_PX.emptyBodyGap)}px`,
+  '--r-setup-switch-row-pad-top': `${String(STATION_SETUP_PX.switchRowPadTop)}px`,
+  '--r-setup-switch-row-gap': `${String(STATION_SETUP_PX.switchRowGap)}px`,
+  '--r-setup-notice-pad': `${String(STATION_SETUP_PX.noticePadY)}px ${String(STATION_SETUP_PX.noticePadX)}px`,
+  '--r-setup-notice-gap': `${String(STATION_SETUP_PX.noticeGap)}px`,
+  '--r-setup-notice-radius': `${String(STATION_SETUP_PX.noticeRadius)}px`,
+  '--r-setup-notice-gap-below': `${String(STATION_SETUP_PX.noticeGapBelow)}px`,
+  '--r-setup-notice-title-text': `${String(STATION_SETUP_PX.noticeTitleText)}px`,
+  '--r-setup-notice-body-text': `${String(STATION_SETUP_PX.noticeBodyText)}px`,
   /*
    * ── `RUNTIME-REDESIGN-01` PHASE 8 — the template picker (`LIBRARY_PX`) and the audit log
    * (`AUDIT_LOG_PX`), cited to the RENDERED reference; see the constants' notes. Read by

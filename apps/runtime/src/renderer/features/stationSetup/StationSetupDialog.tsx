@@ -17,6 +17,7 @@ import { isOnAirStatus } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { Modal, ModalAction, modalActionVariant, type ModalMessage } from '../../ui/Modal.js';
 import { Notice } from '../../ui/Notice.js';
 import { NumericInput } from '../../ui/NumericInput.js';
@@ -151,10 +152,12 @@ const styles = {
     color: colors.textMuted,
     textAlign: 'start' as const,
   },
-  row: { display: 'flex', gap: '0.5rem', alignItems: 'center', fontSize: '0.85rem' },
-  label: { width: 92, color: colors.textMuted },
-  host: { flex: 1, minWidth: 120 },
-  port: { width: 88 },
+  /*
+   * `SETTINGS-DIALOG-01` §3 — `row`, `label`, `host` and `port` are GONE, not merely unused:
+   * they were the inline `label + input` idiom (a 92 px label column, a 88 px port) that the
+   * reference's `.field` replaces. Leaving them would leave a second way to spell a labelled
+   * control in the one file that just stopped having one.
+   */
   status: { fontSize: '0.8rem', color: colors.textMuted },
   /*
     `C-024` — THE MASKING TREATMENT, AND WHY IT IS NOT GREY.
@@ -171,7 +174,6 @@ const styles = {
     flexWrap: 'wrap' as const,
     gap: '0.35rem',
     alignItems: 'baseline',
-    paddingLeft: 92,
   },
   maskedStored: { textDecoration: 'line-through' },
   inForce: { color: colors.text, fontWeight: 700 },
@@ -180,7 +182,6 @@ const styles = {
     flexWrap: 'wrap' as const,
     gap: '0.3rem',
     alignItems: 'center',
-    paddingLeft: 92,
   },
 } as const;
 
@@ -559,43 +560,56 @@ export function StationSetupDialog({
     });
   };
 
-  const endpointRows = (
+  /**
+   * `SETTINGS-DIALOG-01` §3 — ONE ENDPOINT AS A FIELD GRID, label ABOVE control.
+   *
+   * The reference's `.fields.three` (`design.md` 14.3's bodies table): a wide host beside two
+   * narrow ports, each control under its own 13 px label, the row gapped `19px 18px`. This was
+   * two inline `label + input` rows with a hand-set 92 px label column and 88 px ports — the
+   * idiom the whole dialog is being brought off, because a label BESIDE a control is what makes
+   * a Persian label collide with its own input.
+   *
+   * ⚠ The `aria-label` on each control is the accessible NAME and is unchanged, deliberately:
+   * `Primary host`, `Primary AMCP port`, `Primary OSC port` and their Backup twins are what
+   * `stationSetupServers.dom.test.ts` and `server-settings.spec.ts` query by. The visible label
+   * moved; the name a test holds did not.
+   */
+  const endpointFields = (
     draft: EndpointDraft,
     set: (next: EndpointDraft) => void,
     prefix: string,
   ): JSX.Element => (
-    <>
-      <div style={styles.row}>
-        <span style={styles.label}>Host</span>
+    <div className="cg-setup-fields cg-setup-fields--three">
+      <div className="cg-setup-field">
+        <span className="cg-setup-field__label">Host</span>
         <input
           className="cg-field"
-          style={styles.host}
           aria-label={`${prefix} host`}
           value={draft.host}
           onChange={(e) => set({ ...draft, host: e.target.value })}
         />
       </div>
-      <div style={styles.row}>
-        <span style={styles.label}>AMCP port</span>
+      <div className="cg-setup-field">
+        <span className="cg-setup-field__label">AMCP port</span>
         {/* R-020 — ports are integer-only NumericInputs: Persian/Arabic-Indic
             digits normalize to Latin BEFORE parsePort's /^\d+$/ sees them. */}
         <NumericInput
           className="cg-field"
-          style={styles.port}
           aria-label={`${prefix} AMCP port`}
           value={draft.amcpPort}
           onValueChange={(v) => set({ ...draft, amcpPort: v })}
         />
-        <span style={styles.label}>OSC port</span>
+      </div>
+      <div className="cg-setup-field">
+        <span className="cg-setup-field__label">OSC port</span>
         <NumericInput
           className="cg-field"
-          style={styles.port}
           aria-label={`${prefix} OSC port`}
           value={draft.oscPort}
           onValueChange={(v) => set({ ...draft, oscPort: v })}
         />
       </div>
-    </>
+    </div>
   );
 
   return (
@@ -788,24 +802,58 @@ export function StationSetupDialog({
                 {/* `STATION-CHROME-02` §3 — the shared card rhythm, so this tab is built from
                     the same blocks as every other one. The heads used to SHOUT their titles
                     in hand-spelled uppercase; `.cg-card__title` is the one treatment. */}
+                {/*
+                  `SETTINGS-DIALOG-01` §3 — the reference's `.server-label`: the letter is a CHIP
+                  beside a sentence-case name, not a parenthesis inside it. `Primary (A)` spent
+                  the head's one title on two facts; the chip says which slot and the title says
+                  what it is.
+                */}
                 <section className="cg-card" aria-label="Primary server">
                   <div className="cg-card__head">
-                    <span className="cg-card__title">Primary (A)</span>
+                    <span className="cg-setup-server-chip" aria-hidden="true">
+                      A
+                    </span>
+                    <span className="cg-card__title">Primary server</span>
                   </div>
                   <div className="cg-card__body">
-                    {endpointRows(primary, setPrimary, 'Primary')}
+                    {endpointFields(primary, setPrimary, 'Primary')}
                   </div>
                 </section>
 
                 <section className="cg-card" aria-label="Backup server">
                   <div className="cg-card__head">
-                    <span className="cg-card__title">Backup (B)</span>
+                    <span className="cg-setup-server-chip" aria-hidden="true">
+                      B
+                    </span>
+                    <span className="cg-card__title">Backup server</span>
                     <span className="cg-card__spacer" />
-                    {backupEnabled ? (
+                    {backupEnabled && (
                       <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>
                         Remove backup
                       </Button>
-                    ) : (
+                    )}
+                  </div>
+                  {backupEnabled ? (
+                    <div className="cg-card__body">
+                      {endpointFields(backup, setBackup, 'Backup')}
+                    </div>
+                  ) : (
+                    /*
+                      The reference's `.empty-backup` — a glyph, the state, the consequence, and
+                      the one act that changes it, on the row that states the absence rather
+                      than in the card's head. `B-046`'s point survives verbatim: a single
+                      server is a CONFIGURATION, not a fault, so nothing here is a warning ink.
+                    */
+                    <div className="cg-setup-empty">
+                      <span className="cg-setup-empty__icon">
+                        <Icon icon={Server} size={20} />
+                      </span>
+                      <div className="cg-setup-empty__text">
+                        <span className="cg-setup-empty__title">No backup declared</span>
+                        <p className="cg-setup-empty__body">
+                          Single-server operation (B-046: quiet by design).
+                        </p>
+                      </div>
                       <Button
                         variant="add"
                         aria-label="Add backup"
@@ -813,14 +861,7 @@ export function StationSetupDialog({
                       >
                         Add backup
                       </Button>
-                    )}
-                  </div>
-                  {backupEnabled ? (
-                    <div className="cg-card__body">{endpointRows(backup, setBackup, 'Backup')}</div>
-                  ) : (
-                    <p className="cg-card__note">
-                      No backup declared — single-server operation (B-046: quiet by design).
-                    </p>
+                    </div>
                   )}
                 </section>
 
@@ -842,15 +883,29 @@ export function StationSetupDialog({
                       it wrong and those servers show live sources with no graphic over them, while
                       CG ADD still reports success.
                     </span>
-                    <div style={styles.row}>
-                      <span style={styles.label}>Serve host</span>
-                      <input
-                        className="cg-field"
-                        style={styles.host}
-                        aria-label="Template serve host"
-                        value={serveHost}
-                        onChange={(e) => setServeHost(e.target.value)}
-                      />
+                    <div className="cg-setup-fields">
+                      <div className="cg-setup-field">
+                        <span className="cg-setup-field__label">Serve host</span>
+                        <input
+                          className="cg-field"
+                          aria-label="Template serve host"
+                          value={serveHost}
+                          onChange={(e) => setServeHost(e.target.value)}
+                        />
+                      </div>
+                      <div className="cg-setup-field">
+                        <span className="cg-setup-field__label">Serve port</span>
+                        <NumericInput
+                          className="cg-field"
+                          aria-label="Template serve port"
+                          value={servePort}
+                          onValueChange={setServePort}
+                        />
+                        <p className="cg-setup-field__hint">
+                          Empty = ephemeral (today&apos;s default). Pin it to make a firewall rule
+                          possible.
+                        </p>
+                      </div>
                     </div>
                     {flagServeHost === undefined ? null : (
                       <div style={styles.maskedNote} data-testid="serve-host-masked">
@@ -884,20 +939,7 @@ export function StationSetupDialog({
                         ))}
                       </div>
                     )}
-                    <div style={styles.row}>
-                      <span style={styles.label}>Serve port</span>
-                      <NumericInput
-                        className="cg-field"
-                        style={styles.port}
-                        aria-label="Template serve port"
-                        value={servePort}
-                        onValueChange={setServePort}
-                      />
-                      <span style={styles.status}>
-                        Empty = ephemeral (today&apos;s default). Pin it to make a firewall rule
-                        possible.
-                      </span>
-                    </div>
+
                     {flagServePort === undefined ? null : (
                       <div style={styles.maskedNote} data-testid="serve-port-masked">
                         <span style={styles.inForce}>In force: {String(flagServePort)}</span>
@@ -908,40 +950,55 @@ export function StationSetupDialog({
                         <span>not in force — overridden by --template-serve-port.</span>
                       </div>
                     )}
-                  </div>
-                </section>
 
-                <section className="cg-card" aria-label="Redundancy options">
-                  <div className="cg-card__head">
-                    <span className="cg-card__title">Redundancy</span>
-                  </div>
-                  <div className="cg-card__body">
-                    <div style={styles.row}>
-                      <span style={styles.label}>Strategy</span>
-                      <select
-                        className="cg-field"
-                        style={{ width: 'auto' }}
-                        aria-label="Redundancy strategy"
-                        value={strategy}
-                        onChange={(e) =>
-                          setStrategy(e.target.value as ConnectionConfig['strategy'])
-                        }
-                      >
-                        <option value="mirror-sync">mirror-sync</option>
-                        <option value="mirror-async">mirror-async</option>
-                        <option value="journal-replay">journal-replay</option>
-                      </select>
-                      <label
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
-                      >
-                        <input
-                          type="checkbox"
-                          aria-label="Auto-failover enabled"
-                          checked={autoFailover}
-                          onChange={(e) => setAutoFailover(e.target.checked)}
-                        />
-                        auto-failover
-                      </label>
+                    {/*
+                      ⭐ `SETTINGS-DIALOG-01` §3 — REDUNDANCY FOLDED IN, because the reference
+                      draws one `Station connection` card holding the template address, the
+                      strategy and the failover switch, and the app had a second card
+                      (`Redundancy`) for the last two. They are facts about the SAME pair of
+                      servers, and the split cost a card head and a rule to say nothing.
+
+                      ⚠ The card keeps the app's own name and region label — `Template serve
+                      address` / `How those servers reach this machine` — which
+                      `server-settings.spec.ts` queries by and which say what the block is FOR.
+                      The reference's `Station connection` is not adopted; nothing is reworded.
+
+                      ⚠ And the strategy keeps all THREE of the app's options. The reference
+                      draws two (`Mirror sync` / `Primary only`); `ConnectionConfig['strategy']`
+                      has three, and a select that cannot express a stored value is a defect,
+                      not a simplification.
+                    */}
+                    <div className="cg-setup-fields">
+                      <div className="cg-setup-field cg-setup-field--full">
+                        <span className="cg-setup-field__label">Strategy</span>
+                        <select
+                          className="cg-field"
+                          aria-label="Redundancy strategy"
+                          value={strategy}
+                          onChange={(e) =>
+                            setStrategy(e.target.value as ConnectionConfig['strategy'])
+                          }
+                        >
+                          <option value="mirror-sync">mirror-sync</option>
+                          <option value="mirror-async">mirror-async</option>
+                          <option value="journal-replay">journal-replay</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="cg-setup-switch-row">
+                      <div className="cg-setup-switch-row__text">
+                        <span className="cg-setup-field__label">Automatic failover</span>
+                        <p className="cg-setup-field__hint">
+                          Switch to the backup if the primary becomes unavailable.
+                        </p>
+                      </div>
+                      <input
+                        type="checkbox"
+                        aria-label="Auto-failover enabled"
+                        checked={autoFailover}
+                        onChange={(e) => setAutoFailover(e.target.checked)}
+                      />
                     </div>
                   </div>
                 </section>

@@ -52,9 +52,9 @@ The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and n
 
 #### Scenario: Each tab's footer carries its own commit, in sentence case
 
-- **WHEN** the Servers tab is shown **THEN** its footer holds `Cancel` and a `primary`-role `Apply servers`, and no other tab's action
-- **WHEN** the Layers tab is shown **THEN** its footer holds `Revert`, `Apply layers` and a quiet `Close`
-- **WHEN** a read-only or save-as-you-go tab is shown **THEN** its footer holds a quiet `Close` alone
+- **WHEN** the Servers tab is shown **THEN** its footer holds a `primary`-role `Apply servers`, and no other tab's action
+- **WHEN** the Layers tab is shown **THEN** its footer holds `Apply layers`, and no other tab's action
+- **WHEN** a read-only or save-as-you-go tab is shown **THEN** its footer holds its commit contract and no buttons at all
 
 #### Scenario: The Live sources footer tells the truth about the layer band
 
@@ -69,6 +69,23 @@ The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and n
 > one tab along was already right. And the Live-sources footer's flat "saved as you go" was
 > UNTRUE: the layer band in that same tab is applied by a button, so the footer said what it
 > did not mean.
+>
+> 🔴 **AMENDED A THIRD TIME by `B-240` (2026-09-07), and the three scenarios above were
+> left contradicting it until `SETTINGS-DIALOG-01` swept them.** `Cancel` and the per-section
+> `Close` are GONE: dismissal is dialog-level (the close affordance, Escape, the backdrop),
+> discard is section-level and is called `Revert` on every section that has one, and a
+> read-only or save-as-you-go section carries NO footer buttons at all. That rule is stated
+> in full by **One job, one control, one name in the dialog's footer** below, which is the
+> text to read; the scenarios above are corrected to agree with it rather than deleted, so
+> the per-tab reading stays where a reader looks for it.
+>
+> ⚠ **Two other copies of the superseded rule were found in the same sweep and corrected:**
+> `docs/ui-reference/runtime-redesign/PROMPT.md` §7, whose “everything already decided
+> survives” list restated the pre-`B-240` footer rule 6½ hours AFTER the commit that
+> replaced it (`95181658`, 2026-09-07 12:53 → `6bb3446b`, 19:32) — a later clock reading, and
+> still a stale copy, because that list claims to RESTATE a decision rather than make one.
+> Phase 7 read it and implemented `B-240` anyway (`tasks.md` 7.4, `design.md` 14.3's footer
+> row), so the build was never in doubt; only the record was.
 
 ### Requirement: Station setup's frame does not move as the operator switches section
 

@@ -170,3 +170,231 @@ test('§7 — the Channel pane is the video-format card and the Outputs block, k
     'true',
   );
 });
+
+/**
+ * 🔴 `SETTINGS-DIALOG-01` §3 — **THE SERVERS BODY, measured — audit row 135.**
+ *
+ * Phase 7 measured this dialog's frame, rail, footer and Channel pane and said so plainly
+ * (`design.md` 14.8: _"It did not re-measure the bodies of the Servers, Live sources, Delimiters
+ * and Layers tabs"_). Those four are audit rows 134–137, bucket D — never measured, screenshots
+ * their only evidence. This is the first real measurement of one of them.
+ *
+ * The reference column is Chromium at 1280 × 800 on `09-channel-settings.html`, through the
+ * shadow root, with `#tab-servers` CLICKED first — ⚠ a `hidden` pane reports a 0 × 0 box and
+ * every computed length reads as though the surface were empty, so an unclicked reading is not a
+ * weak reading, it is no reading at all. Measured there: `.field{gap:7px}` with its label
+ * 13 px / 500 and its control `min-height:36px;padding:7px 10px;border-radius:8px` at 15 px, its
+ * `.hint` 12 px; `.fields{gap:19px 18px}` and `.fields.three` resolving `1.8fr 1fr 1fr`;
+ * `.server-label` 25 × 25 radius 6; `.empty-backup{padding:19px 20px;gap:14px}` with a 42 × 42
+ * radius-10 glyph box; `.switch-row{padding:17px 0 0;gap:20px}`.
+ *
+ * ⚠ Every expectation reads the TOKEN and compares it to what the page PAINTS, like the frame
+ * test above — so a token that stops being read fails here instead of passing on a coincidence.
+ */
+test('§3 — the Servers pane measures to the reference: a field grid, the A/B chip, the empty state and the switch row', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const dialog = page.getByRole('dialog', { name: 'Station setup' });
+  await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await dialog
+    .getByRole('tablist', { name: 'Station setup sections' })
+    .getByRole('tab', { name: /^Servers/ })
+    .click();
+
+  const tokens = await page.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    const read = (n: string): string => cs.getPropertyValue(n).trim();
+    return {
+      fieldGap: read('--r-setup-field-gap'),
+      labelText: read('--r-setup-field-label-text'),
+      inputMinH: read('--r-setup-field-input-min-h'),
+      inputPad: read('--r-setup-field-input-pad'),
+      inputRadius: read('--r-setup-field-input-radius'),
+      inputText: read('--r-setup-field-input-text'),
+      hintText: read('--r-setup-field-hint-text'),
+      fieldsGap: read('--r-setup-fields-gap'),
+      chipBox: read('--r-setup-server-chip-box'),
+      emptyPad: read('--r-setup-empty-pad'),
+      emptyGap: read('--r-setup-empty-gap'),
+      emptyIconBox: read('--r-setup-empty-icon-box'),
+      switchPadTop: read('--r-setup-switch-row-pad-top'),
+      switchGap: read('--r-setup-switch-row-gap'),
+      emptyTitleText: read('--r-setup-empty-title-text'),
+      emptyBodyText: read('--r-setup-empty-body-text'),
+      emptyBodyGap: read('--r-setup-empty-body-gap'),
+      weightSemibold: read('--r-weight-semibold'),
+    };
+  });
+  // The token home is READ, not assumed: an undeclared token resolves to '' and would make
+  // every comparison below vacuously compare '' to '' (golden rule 12c's shape).
+  expect(tokens.inputMinH).toBe('36px');
+  expect(tokens.fieldsGap).toBe('19px 18px');
+
+  // ── THE FIELD — a label ABOVE its control, which is the whole point of the row ──────
+  /*
+    ⚠ Scoped to the PRIMARY card. The fixture configures a backup, so BOTH server cards draw
+    a `Host` field — which is correct, and is why an unscoped read is a strict-mode violation
+    rather than a passing test that happened to pick one of the two.
+  */
+  const primaryCard = dialog.getByRole('region', { name: 'Primary server' });
+  const hostField = primaryCard.getByText('Host', { exact: true }).locator('..');
+  const field = await hostField.evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { gap: s.rowGap, dir: s.flexDirection, disp: s.display };
+  });
+  expect(field.disp).toBe('flex');
+  // 🔴 THE STRUCTURAL CLAIM: column, so the label sits over the input. `row` is what this
+  // pane painted before, and a Persian label beside its own input is what it cost.
+  expect(field.dir).toBe('column');
+  expect(field.gap).toBe(tokens.fieldGap);
+
+  const label = await primaryCard
+    .getByText('Host', { exact: true })
+    .evaluate((el) => getComputedStyle(el).fontSize);
+  expect(label).toBe(tokens.labelText);
+
+  // The control itself — the reference's taller, rounder box, scoped to this pane.
+  const input = await dialog.getByLabel('Primary host').evaluate((el) => {
+    const s = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    return {
+      minH: s.minHeight,
+      pad: s.padding,
+      radius: s.borderTopLeftRadius,
+      text: s.fontSize,
+      h: Math.round(r.height),
+    };
+  });
+  expect(input.minH).toBe(tokens.inputMinH);
+  expect(input.pad).toBe(tokens.inputPad);
+  expect(input.radius).toBe(tokens.inputRadius);
+  expect(input.text).toBe(tokens.inputText);
+  // PAINTED, not merely declared — the floor is a floor and the box clears it.
+  expect(input.h).toBeGreaterThanOrEqual(36);
+
+  // ── THE THREE-COLUMN ENDPOINT ROW — a wide host beside two narrow ports ────────────
+  const grid = await primaryCard.locator('.cg-setup-fields--three').evaluate((el) => {
+    const s = getComputedStyle(el);
+    const cols = s.gridTemplateColumns.split(' ').map((v) => Number.parseFloat(v));
+    return { disp: s.display, cols, rowGap: s.rowGap, colGap: s.columnGap };
+  });
+  expect(grid.disp).toBe('grid');
+  expect(grid.cols).toHaveLength(3);
+  expect(grid.rowGap).toBe('19px');
+  expect(grid.colGap).toBe('18px');
+  // The reference's own ratio: the host is 1.8× a port, and the two ports are equal.
+  expect(grid.cols[1]).toBeCloseTo(grid.cols[2] as number, 0);
+  expect((grid.cols[0] as number) / (grid.cols[1] as number)).toBeCloseTo(1.8, 1);
+
+  // ── THE A / B CHIP — the letter beside the name, not inside it ─────────────────────
+  const chip = await primaryCard.locator('.cg-setup-server-chip').evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { w: Math.round(r.width), h: Math.round(r.height) };
+  });
+  expect(chip).toEqual({ w: px(tokens.chipBox), h: px(tokens.chipBox) });
+  // And the head's title is the NAME now — `Primary (A)` spent one title on two facts.
+  await expect(primaryCard.getByText('Primary server')).toBeVisible();
+
+  // ── THE BACKUP EMPTY STATE — the reference's `.empty-backup` ───────────────────────
+  /*
+    ⚠ DRIVEN, not hoped for. The fixture configures a backup, so this block does not exist
+    until the operator removes it — the only state it is for. Reading it without the press
+    would have measured whatever the fixture happened to hold, and passed either way.
+  */
+  await expect(dialog.locator('.cg-setup-empty')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Remove backup' }).click();
+  await expect(dialog.locator('.cg-setup-empty')).toHaveCount(1);
+
+  const empty = await dialog.locator('.cg-setup-empty').evaluate((el) => {
+    const s = getComputedStyle(el);
+    const box = (sel: string): { w: number; h: number } | null => {
+      const n = el.querySelector(sel);
+      if (n === null) return null;
+      const r = n.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height) };
+    };
+    const font = (sel: string): { size: string; weight: string; mt: string } | null => {
+      const n = el.querySelector(sel);
+      if (n === null) return null;
+      const c = getComputedStyle(n);
+      return { size: c.fontSize, weight: c.fontWeight, mt: c.marginTop };
+    };
+    return {
+      pad: s.padding,
+      gap: s.columnGap,
+      icon: box('.cg-setup-empty__icon'),
+      text: box('.cg-setup-empty__text'),
+      title: font('.cg-setup-empty__title'),
+      body: font('.cg-setup-empty__body'),
+    };
+  });
+  expect(empty.pad).toBe(tokens.emptyPad);
+  expect(empty.gap).toBe(tokens.emptyGap);
+  expect(empty.icon).toEqual({ w: px(tokens.emptyIconBox), h: px(tokens.emptyIconBox) });
+
+  /*
+    🔴 THE INNER BLOCK, asserted because A PLANT PROVED IT WAS NOT.
+
+    This test first read only the row's padding, its gap and the icon box — and a planted
+    defect that RENAMED `.cg-setup-empty__text` to a class no rule matches came back GREEN.
+    The row still had the right padding, the icon still measured 42, and the block that
+    carries the two sentences had silently lost its `flex: 1`. That is the vacuous-assertion
+    shape golden rule 12c warns about, found the only way it can be — by planting it.
+
+    So the text block and both of its ranks are read now: the reference's `h3` at 14 px / 600
+    over a 13 px line 3 px under it, in a block that takes the row's remaining width.
+  */
+  expect(empty.text).not.toBeNull();
+  expect(empty.title).toEqual({
+    size: tokens.emptyTitleText,
+    weight: tokens.weightSemibold,
+    mt: '0px',
+  });
+  expect(empty.body).toEqual({
+    size: tokens.emptyBodyText,
+    weight: '400',
+    mt: tokens.emptyBodyGap,
+  });
+  // It fills the row rather than shrinking to its text — which is what the plant removed.
+  expect(empty.text?.w ?? 0).toBeGreaterThan(px(tokens.emptyIconBox) * 4);
+  // `B-046` survives the restructure: a single server is a CONFIGURATION, so the block still
+  // says so in the app's own words and still offers the one act that changes it.
+  await expect(dialog.getByText('No backup declared')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Add backup' })).toBeVisible();
+
+  // ── THE SWITCH ROW — failover folded into the connection card ─────────────────────
+  const sw = await dialog.locator('.cg-setup-switch-row').evaluate((el) => {
+    const s = getComputedStyle(el);
+    return { padTop: s.paddingTop, gap: s.columnGap, align: s.alignItems };
+  });
+  expect(sw.padTop).toBe(tokens.switchPadTop);
+  expect(sw.gap).toBe(tokens.switchGap);
+  expect(sw.align).toBe('center');
+
+  /*
+    🔴 REDUNDANCY IS FOLDED IN, and this is the assertion that says so: the strategy and
+    the failover switch are INSIDE the region that holds the template address, because the
+    reference draws one card for all three and they are facts about the same pair of servers.
+    The `Redundancy options` region is gone — pinned as an absence, since a second card is
+    exactly what a later reader would restore.
+  */
+  const serve = dialog.getByRole('region', { name: 'Template serve address' });
+  await expect(serve.getByLabel('Redundancy strategy')).toBeVisible();
+  await expect(serve.getByLabel('Auto-failover enabled')).toBeVisible();
+  await expect(dialog.getByRole('region', { name: 'Redundancy options' })).toHaveCount(0);
+  // ⚠ And the card keeps the app's OWN name, which `server-settings.spec.ts` queries by:
+  // the reference's `Station connection` is not adopted and nothing is reworded.
+  await expect(serve.getByText(/how those servers reach this machine/i)).toBeVisible();
+
+  /*
+    ⚠ THE REFUSAL DID NOT MOVE INTO THE PANE. The reference draws its on-air block as a
+    `.notice` band at the top of the Servers body; the app's refusal stays in the modal's
+    pinned message region, where `AUDIT-CLOSE-01` delta A put it and
+    `modal-message-containment.spec.ts` holds it. Asserted as an absence so the adopted
+    `.cg-setup-notice` geometry can never quietly become a second home for an event.
+  */
+  await expect(dialog.locator('.cg-setup-notice')).toHaveCount(0);
+});
