@@ -4105,3 +4105,25 @@ Actions` table (`thead` 43.1, rows 63), and a `.delimiter-bottom` row pairing a 
   template picker untouched; `--r-panel-bar-h` untouched; the change NOT archived.
 
 ### 23.7 The runs
+
+- `pnpm gate` × 2, foreground, uncached: **93 successful, 93 total · 0 cached, 93 total**, prettier
+  clean, OpenSpec **78 passed, 0 failed**. Both logs carry their `---- gate ended … (exit 0)`
+  footer (`P-045`), at 279.1 s and 260.5 s — so neither is a killed capture.
+- `pnpm --filter @cg/runtime test:e2e`, Windows, against a fresh `vite build`: **160 passed**
+  (1.7 m). ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
+- The full runtime unit suite: **153 files, 1395 tests, all passing** — including `tokenHome`,
+  which is what holds every new value to a role token.
+- 🔴 **DISCHARGED — Linux `e2e` on the code head `465735f3`:**
+  <https://github.com/yasermostafaee/cg/actions/runs/34478098885> — run `conclusion: success`,
+  and the **`E2E (Playwright)` job RAN** 12:41:14Z → 12:51:33Z (**619 s**,
+  `conclusion: success`), with its **`E2E` step itself `completed/success`** — checked at the
+  STEP level, not just the job, because `P-046`'s red was a green-looking job whose suite never
+  ran and `P-029`'s is its mirror. Not skipped, not cancelled. `Lint · Typecheck · Test · Build`
+  also ran green (248 s).
+  ⭐ **And `P-046`'s remedy is exercised further here:** `Install system deps for cached browser`
+  **succeeded**, and the launch **probe** passed — the always-on guarantee that item added. Its
+  RETRY and ESCALATION paths are still unexercised, exactly as `P-046` records; nothing here
+  changes that, and the item stays open.
+- 🔴 **The Linux `e2e` for the follow-up commit `0fda92cd`** (the card-head tag and the
+  card lede, both render changes, so it owes its own):
+  <https://github.com/yasermostafaee/cg/actions/runs/34480073813> — run `conclusion: success`, and the **`E2E (Playwright)` job RAN** 13:01:28Z → 13:12:39Z (**671 s**, `conclusion: success`), its **`E2E` step `completed/success`**. Not skipped, not cancelled. So BOTH of this session's commits are discharged on their own runs; neither inherits the other's.

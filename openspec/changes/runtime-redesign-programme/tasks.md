@@ -955,6 +955,15 @@ red-first proof and the plant that found a vacuous assertion (23.3), the before/
 - [x] S.4 🔴 **STOPPED AT SERVERS on the budget rule**, not because the list ended: 9 FIXED /
       4 ARGUED = **31 %**, over 18.0's quarter. Rows 134, 136 and 137 are named as the
       remainder with what the reference draws for each (23.6). Rows 138, 141, 142 untouched.
-- [x] S.5 `pnpm gate` — foreground, uncached; `pnpm --filter @cg/runtime test:e2e` **160 passed**
-      (Windows, against a fresh build). ⚠ **NON-AUTHORITATIVE** (golden rule 12a).
-      ✅ **DISCHARGED — Linux `e2e`:** see 23.7.
+- [x] S.5 `pnpm gate` × 2 — foreground, uncached, **93 successful · 0 cached** each, both logs
+      carrying their `---- gate ended … (exit 0)` footer (`P-045`);
+      `pnpm --filter @cg/runtime test:e2e` **160 passed** (Windows, against a fresh build).
+      ⚠ **NON-AUTHORITATIVE** (golden rule 12a), so it is not what discharges this.
+      ✅ **DISCHARGED — Linux `e2e`, on BOTH of this session's commits, each on its own run:** - `465735f3` — <https://github.com/yasermostafaee/cg/actions/runs/34478098885>
+      (`conclusion: success`; the **`E2E (Playwright)` job RAN** 619 s, its **`E2E` step**
+      `completed/success` — checked at the STEP level, not just the job) - `0fda92cd` — <https://github.com/yasermostafaee/cg/actions/runs/34480073813>
+      (`conclusion: success`; the **job RAN** 671 s, its **`E2E` step** `completed/success`)
+
+      Neither commit inherits the other's discharge, and both are render changes, so both owed
+      one. See 23.7 — including that `P-046`'s deps step and launch probe both passed, while its
+      retry and escalation paths remain unexercised and that item stays open.
