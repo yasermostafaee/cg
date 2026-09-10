@@ -3386,6 +3386,23 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-text-muted);
 }
 
+/*
+ * A tag on a CARD head — the reference's `.tag` at that level (its `Optional` on the backup
+ * card). Deliberately the SAME chip as the section's contract tag: one tag treatment, two
+ * levels, so a reader learns the shape once. It mints no token of its own.
+ */
+.cg-setup-card-tag {
+  padding: var(--r-setup-tag-pad);
+  border: 1px solid var(--r-border);
+  border-radius: var(--r-setup-tag-radius);
+  background: var(--r-surface-raised);
+  font-size: var(--r-setup-tag-text);
+  font-weight: var(--r-weight-semibold);
+  line-height: 1.3;
+  white-space: nowrap;
+  color: var(--r-text-secondary);
+}
+
 /* The lede a card puts ABOVE its field grid — `.card-body p.secondary`. */
 .cg-setup-lede {
   margin: 0 0 var(--r-setup-card-lede-gap);

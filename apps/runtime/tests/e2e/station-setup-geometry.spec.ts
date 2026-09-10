@@ -226,6 +226,10 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
       emptyBodyText: read('--r-setup-empty-body-text'),
       emptyBodyGap: read('--r-setup-empty-body-gap'),
       weightSemibold: read('--r-weight-semibold'),
+      tagText: read('--r-setup-tag-text'),
+      tagRadius: read('--r-setup-tag-radius'),
+      ledeText: read('--r-setup-card-lede-text'),
+      ledeGap: read('--r-setup-card-lede-gap'),
     };
   });
   // The token home is READ, not assumed: an undeclared token resolves to '' and would make
@@ -373,6 +377,31 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
   expect(sw.padTop).toBe(tokens.switchPadTop);
   expect(sw.gap).toBe(tokens.switchGap);
   expect(sw.align).toBe('center');
+
+  /*
+    ⭐ THE CARD-HEAD TAG and THE CARD LEDE — both found by rendering the app and the reference
+    at the same size and looking, which is the only thing that surfaces an element that is
+    ABSENT. No measurement of the app alone can report a tag the app does not draw.
+
+    The tag reuses the section contract tag's chip tokens: one tag treatment at two levels.
+  */
+  const tag = await dialog
+    .getByRole('region', { name: 'Backup server' })
+    .locator('.cg-setup-card-tag')
+    .evaluate((el) => {
+      const c = getComputedStyle(el);
+      return { text: el.textContent, size: c.fontSize, radius: c.borderTopLeftRadius };
+    });
+  expect(tag).toEqual({ text: 'Optional', size: tokens.tagText, radius: tokens.tagRadius });
+
+  const lede = await dialog
+    .getByRole('region', { name: 'Template serve address' })
+    .locator('.cg-setup-lede')
+    .evaluate((el) => {
+      const c = getComputedStyle(el);
+      return { size: c.fontSize, mb: c.marginBottom };
+    });
+  expect(lede).toEqual({ size: tokens.ledeText, mb: tokens.ledeGap });
 
   /*
     🔴 REDUNDANCY IS FOLDED IN, and this is the assertion that says so: the strategy and

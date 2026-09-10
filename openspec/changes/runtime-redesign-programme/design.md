@@ -4013,6 +4013,8 @@ in Chromium at 1280 × 800 through the shadow root with `#tab-servers` clicked, 
 | backup empty    | `.empty-backup{padding:19px 20px;gap:14px}`, a 42 × 42 radius-10 box | **the same**, `.cg-setup-empty`                     | **FIXED** (built)                                                                                                                        |
 | connection card | ONE card holding the template address, the strategy and the switch   | **folded in**; the `Redundancy` card is gone        | **FIXED** (structure)                                                                                                                    |
 | … its name      | `Station connection`                                                 | `How those servers reach this machine`              | **ARGUED (B)**: the app's own words, pinned by `server-settings.spec.ts`; nothing reworded                                               |
+| card-head tag   | `.tag` `Optional` on the backup head                                 | **the same chip as the section tag**                | **FIXED** (built) — found by the side-by-side, not by measuring the app                                                                  |
+| card lede       | `.card-body p.secondary` 13 px, 19 px above the grid                 | **13 px, 19 px above**, `.cg-setup-lede`            | **FIXED**                                                                                                                                |
 | switch row      | `.switch-row{padding:17px 0 0;gap:20px}`, label + hint / control     | **the same**, `.cg-setup-switch-row`                | **FIXED**                                                                                                                                |
 | strategy select | two options (`Mirror sync` / `Primary only`)                         | the app's **three**                                 | **ARGUED (A)**: `ConnectionConfig['strategy']` has three; a select that cannot express a stored value is a defect                        |
 | on-air block    | a `.notice` band at the TOP of the pane                              | the modal's pinned message region                   | **ARGUED (A)**: `AUDIT-CLOSE-01` delta A put it there and `modal-message-containment` holds it; the geometry is adopted, the HOME is not |
@@ -4067,8 +4069,12 @@ what turns that from an argument into a fact.
 
 ### 23.5 FIXED vs ARGUED
 
-**Nine FIXED, four ARGUED — 4 of 13 = 31 %.** 🔴 **That is OVER the quarter, so this session
-STOPS at Servers and reports rather than justifying more** (18.0's rule). The four are named in
+**Eleven FIXED, four ARGUED — 4 of 15 = 27 %.** 🔴 **STILL over the quarter, so this session
+STOPS at Servers and reports rather than justifying more** (18.0's rule). It began at 9 / 4 = 31 %
+and came down because the side-by-side found two elements the app did not draw at all (23.2's
+tag and lede rows) — ⚠ which is worth saying rather than quietly banking: **a measurement of the
+app can never report an element that is ABSENT from it.** Only rendering the two surfaces at the
+same size and looking does that, and it is why §7's visual check is not a formality. The four are named in
 23.2 and every one is bucket A or B: the chip's mint (A — the owner's green rule), the connection
 card's name (B — the app's own words, pinned by an e2e), the third strategy option (A — a stored
 value the reference's select cannot express), and the refusal's home (A — `AUDIT-CLOSE-01`

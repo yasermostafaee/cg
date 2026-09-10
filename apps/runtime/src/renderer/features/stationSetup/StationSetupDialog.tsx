@@ -826,6 +826,18 @@ export function StationSetupDialog({
                       B
                     </span>
                     <span className="cg-card__title">Backup server</span>
+                    {/*
+                      The reference's `.tag` on this head, and it says something TRUE that the
+                      card otherwise only implies: a station may run on one server, so the
+                      absence of a backup is a configuration and not an omission — `B-046`'s
+                      point, stated where the operator is deciding rather than only in the
+                      empty state below.
+
+                      ⚠ It is a CARD-head tag, a different level from the section's contract
+                      tag (`Read only` / `Apply together` / `Auto-save`) at the pane's head.
+                      The reference draws both, at those two levels, for that reason.
+                    */}
+                    <span className="cg-setup-card-tag">Optional</span>
                     <span className="cg-card__spacer" />
                     {backupEnabled && (
                       <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>
@@ -878,11 +890,14 @@ export function StationSetupDialog({
                   <div className="cg-card__body">
                     {/* ⚠ This copy deliberately does not say "NO TEMPLATE" — that phrase is the
                         ALARM, asserted ABSENT on a healthy apply, and ambient copy would drain it. */}
-                    <span style={styles.status}>
+                    {/* The reference's `.card-body p.secondary` — the card's LEDE, which sets up
+                        the fields under it rather than sitting in the body's flex rhythm as one
+                        more equal child. */}
+                    <p className="cg-setup-lede">
                       The address CasparCG fetches templates from. Leave it empty to derive it. Get
                       it wrong and those servers show live sources with no graphic over them, while
                       CG ADD still reports success.
-                    </span>
+                    </p>
                     <div className="cg-setup-fields">
                       <div className="cg-setup-field">
                         <span className="cg-setup-field__label">Serve host</span>
