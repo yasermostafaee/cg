@@ -1014,6 +1014,34 @@ red-first proof and the plant that found a vacuous assertion (23.3), the before/
       through the dialog's own unapplied-draft guard. Written in `sections.ts` (`commits`),
       `setupFooterVocabulary.dom.test.ts`, `station-setup/specs/runtime-ui/spec.md`,
       `PROMPT.md` §7 and `design.md` 23.1.
-- [ ] M.10 🔴 **Linux `gate:e2e` — OWED.** This session is nothing but render.
-      `pnpm --filter @cg/runtime test:e2e` is green on Windows (165 passed) and
-      **NON-AUTHORITATIVE** by golden rule 12a. The run URL goes here once CI completes.
+- [x] M.10 ✅ **Linux `gate:e2e` — DISCHARGED on `e6a128fb`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34624352527> — run
+      `conclusion: success`, the **`E2E (Playwright)` job RAN** 16:51:20Z → 17:02:34Z (**674 s**,
+      `conclusion: success`), and its **`E2E` step itself is `completed/success`** — checked at
+      the STEP level, not just the job, because `P-046`'s red was a green-looking job whose suite
+      never ran and `P-029`'s is its mirror. Not skipped, not cancelled.
+      `Lint · Typecheck · Test · Build` green beside it (203 s).
+
+      🔴 **THE FIRST RUN OF THIS WORK WAS RED, AND THE RED WAS IN MY OWN TEST — recorded rather
+      than hidden, because it is golden rule 12a with nothing left to interpret.** `9431e3cd` →
+      <https://github.com/yasermostafaee/cg/actions/runs/34622060974>, `e2e` **failure** with the
+      **`E2E` step itself `completed/failure`** (so it genuinely ran — not `P-046`'s dead step and
+      not `P-029`'s skip). One spec of 168:
+
+      · `station-setup-match.spec.ts` §10 —
+      `NotAllowedError: Failed to execute 'writeText' on 'Clipboard': Write permission denied`.
+      The §10.7 paste leg went through `navigator.clipboard.writeText` + `Ctrl+V`, which works on
+      Windows against system Chrome and is DENIED on CI's bundled headless Chromium. The system
+      clipboard is an OS permission surface rather than product behaviour, and routing through it
+      added a way for the spec to fail for a reason it is not about while removing nothing from
+      what it proves: `keyboard.insertText` delivers the whole string in ONE `input` event, which
+      is what a paste looks like to the handler. Fixed in `e6a128fb`, with the reading and the
+      reason in the spec.
+
+      ⚠ **The process point is the same one `11.9` made and it repeated exactly:** a green
+      Windows suite (168 passed) was a reason to push and never a claim that the change was
+      verified. Windows found none of this; the Linux run found it in eleven minutes.
+
+      ⭐ `P-046`'s remedy is exercised again on both runs: `Install system deps for cached
+      browser` **succeeded** and the launch **probe** passed on each. Its RETRY and ESCALATION
+      paths remain unexercised and that item stays open.

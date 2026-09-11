@@ -4037,6 +4037,59 @@ Two causes, both measured against the reference:
    the visible cost was the FILTER BAR: a 31 px search box beside a 20 px check, with its magnifier
    inset for a 42 px box and therefore hanging five pixels below the field's centre.
 
+### 24.45 The four panes, property by property — reference · before · after
+
+Every "after" below is read from the built page in Chromium at 1280 × 800; every "reference" is
+read the same way through the shadow root with that pane's own tab clicked first (a `hidden`
+pane reports 0 × 0, so an unclicked reading is no reading at all).
+
+**Shared, on every pane**
+
+| property            | reference                                    | ours before                     | ours after                            |
+| ------------------- | -------------------------------------------- | ------------------------------- | ------------------------------------- |
+| frame ground        | `#15191f`                                    | `#141b25`                       | **`#15191f`**                         |
+| rail ground         | `#11151b`                                    | `#0b1017`                       | **`#11151b`**                         |
+| card ground / edge  | `#191e25` / `#2b323c`                        | `#0b1017` / `#2d3a49`           | **`#191e25` / `#2b323c`**             |
+| card head rule      | `#232a33`                                    | `#24303d`                       | **`#232a33`**                         |
+| help strip          | `#161b22`, rule above                        | no ground                       | **`#161b22`, rule above**             |
+| table head band     | `#14191f`, 12 px / 450, sentence case        | no band, 11.5 px uppercase      | **`#14191f`, 12 px / 500, sentence**  |
+| table cell          | `15px 18px`, rule `#232a33`, hover `#1d242d` | `8px`, `#24303d`, `#141b25`     | **`15px 18px`, `#232a33`, `#1d242d`** |
+| field box           | `min-height:42; padding:10px 12px`           | `36` / `7px 10px`               | **42 / `10px 12px`**                  |
+| field ground / edge | `#10151c` / `#3b4552`                        | `#0e151e` / `#435367`           | **`#10151c` / `#3b4552`**             |
+| button box          | 40 px, radius 8, `9px 15px`, 14 px           | 39 px, radius 7, 14 px          | **40 / 8 / `9px 15px` / 14**          |
+| primary fill        | mint `#8ce6d1`, ink `#10251f`                | sky `#0EA5E9`                   | **mint** (A4 localises it here)       |
+| rail selected       | `#20322f` / `#314b45` / `#c8f9ed`            | sky wash `rgba(116,205,246,.1)` | **`#20322f` / `#314b45` / `#c8f9ed`** |
+| rail marks          | 18 px count chip · 13 px amber lock          | one 0.55 rem dot, two hues      | **chip + lock**                       |
+| rail foot           | station card (`A` · name · host)             | not built                       | **built, OUR primary and host**       |
+| `<details>` gap     | 17 px above                                  | 0 (declared, read once)         | **17 px, on the element**             |
+| footer message      | glyph + one clause, amber when blocked       | no glyph, a paragraph           | **glyph + clause + tone**             |
+
+**Channel** — video card gradient `linear-gradient(115deg,#1b2728,#1b2229 65%,#1b2229)` over
+`#35463f`: was a flat sunken card, now **the gradient**. Its eyebrow, `CH 01` token, mode word,
+scan word and three metrics were already measured by Phase 7 and are unchanged. `Close` in the
+footer (`B-240` amended). **NOT adopted:** the head's `2 on air` (a second claim about air) and
+the `Default sources · this channel` card (prototype template shape, ruled out by `PROMPT.md` §0).
+
+**Servers** — the A/B chip, the three-field endpoint grid, the empty backup state and the switch
+row were `SETTINGS-DIALOG-01`'s and are unchanged except for the corrected field box. NEW: the
+local-address CHIPS (`4px 7px`, radius 5, 12 px mono) replacing a sentence and a row of full-size
+buttons; a real SWITCH (36 × 21, radius 20) replacing a bare tick; `· optional` on both serve
+fields; the mono face on every address and port; the help strip. **ARGUED:** the on-air banner
+stays in the pinned region (`AUDIT-CLOSE-01` delta A) rather than becoming a pane band — the
+amber, the lock and the two weights are the reference's, the placement is the recorded decision.
+
+**Live sources** — was a TABLE, is a `.resource-list` now: a `40px 1fr auto` row with a radius-9
+kind tile, a 14 px name beside an 11 px kind word, and the labelled parts as one 12 px mono
+detail line. The list header (`Source catalogue` + count + mint `Add source`) moved ABOVE the
+card. The band card gained its `Apply separately` tag, the `First layer — Last layer` grid capped
+at 470, and the `Currently 10–59 · 50 layers` summary.
+
+**Text file delimiters** — list header with the count and a mint `Add delimiter`; the column is
+`Split character`; each value is a mono CHIP with its name in words beside it (`Line break`,
+`Persian comma`); the note and a `Reset to defaults` link share the row under the card. **The
+name column is capped at 38 %** and the value column takes the rest — measured, `Persian comma`
+wrapped and made that row 24 px taller than its neighbours at the old 9 rem cap.
+
 ### 24.5 The three deltas — sub-dialogs, message classes, input guards
 
 - **§8** — one frame for every add/edit/remove (`record`, the reference's 480 `.sub-dialog`), the
