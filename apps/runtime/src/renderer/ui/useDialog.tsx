@@ -250,7 +250,7 @@ export function usePrompt(): {
 
                   1. Enter closes this dialog (`settle`), so the `Modal` unmounts;
                   2. the focus trap's cleanup restores focus to whatever had it when the trap
-                     armed — the status bar's own `🔒 Lock…` BUTTON, which is what the operator
+                     armed — the status bar's own `Lock…` BUTTON, which is what the operator
                      pressed to get here;
                   3. the browser then runs the Enter keydown's DEFAULT ACTION, and the default
                      action of Enter on a focused button is to CLICK it — so the prompt
@@ -258,7 +258,7 @@ export function usePrompt(): {
                      screen behind it.
 
                 Against the mock, `engage` resolves fast enough that `lock.engaged` flips and
-                the status bar has already REPLACED that button with the `🔒 LOCKED` chip, so
+                the status bar has already REPLACED that button with the `LOCKED` chip, so
                 there is nothing left for the default action to click. With a real bridge the
                 round-trip is slower, the button is still mounted, and it fires. A race whose
                 outcome depends on socket latency is exactly the kind that reaches the plant

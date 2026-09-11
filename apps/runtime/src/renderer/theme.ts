@@ -456,6 +456,84 @@ export const APP_HEAD_PX = {
   btnText: 12,
 } as const;
 
+/*
+ * ── 🔴 `CONSOLE-MATCH-03` §2 — THE BULK GROUP'S SCOPE LABEL, ITS RULE, AND THE CARD'S FOOT ──
+ *
+ * Measured in Chromium at 1280 × 800 on `04-playout-layers.html`, never read off the
+ * stylesheet: that file appends its rules in FOUR waves restating the same selectors and a
+ * browser paints the LAST (`PROMPT.md` §0, added because Phase 2 transcribed a dead wave into
+ * tokens and Phase 3 had to correct every one).
+ *
+ *   `.channel-target`     35.72 × 18   12 px, `padding: 0 9px 0 0`, no ground
+ *   `.divider-vertical`        1 × 17   the line colour
+ *   `.layer-footer`         1262 × 24   `padding: 3px 10px`, `gap: 9px`, 10 px muted
+ */
+export const LAYER_BULK_PX = {
+  /** The `CH N` scope label ahead of the three bulk verbs. */
+  targetText: 12,
+  /** The well AFTER it — the reference pads the label rather than gapping the group. */
+  targetWell: 9,
+  /** The rule that splits the irreversible verb off from the two remedies. */
+  dividerH: 17,
+} as const;
+
+export const LAYER_FOOTHINT_PX = {
+  h: 24,
+  padY: 3,
+  padX: 10,
+  gap: 9,
+  text: 10,
+} as const;
+
+/*
+ * ── 🔴 `CONSOLE-MATCH-03` §1 — THE MONITOR HEADS AND THE PGM SIGNAL STRIP ──
+ *
+ * Measured in Chromium at 1280 × 800 on `04-playout-layers.html` with `data-start="monitors"`,
+ * never read off the stylesheet (`PROMPT.md` §0 — four waves, only the last one paints):
+ *
+ *   `.pvw-label` / `.pgm-label`   11 px / 650 / `letter-spacing: .825px`
+ *   `.pvw-count`                  11 px / 400
+ *   `.monitor-controls`           626 × 31   `padding: 3px 7px`, `gap: 7px`
+ *
+ * The label's WEIGHT is the one place this rounds: the reference paints 650, and Exo 2 ships
+ * five static faces so a half step renders as a whole one — 650 IS 700 on screen. Declaring
+ * 600 rather than 700 keeps the head from out-shouting the panel titles beside it, which the
+ * reference gets for free from a variable face we do not load.
+ */
+export const MONITOR_HEAD_PX = {
+  labelText: 11,
+  /** `.825px` at 11 px — kept in px, as measured, rather than converted to a guessed em. */
+  labelTrack: 0.825,
+  /** Between the output's word and its channel. */
+  labelGap: 7,
+  chText: 10,
+  factText: 11,
+  stripH: 31,
+  stripPadY: 3,
+  stripPadX: 7,
+  stripGap: 7,
+} as const;
+
+/*
+ * ── 🔴 `CONSOLE-MATCH-03` §1 — THE STAGE'S "THIS IS NOT AIR" STAMP ─────────
+ *
+ * `.pvw-illustration-note`, measured in Chromium at 1280 × 800: 157.11 × 17.5 at 6 px from
+ * the leading edge and 5 px from the bottom, `padding: 2px 4px`, radius 2, 9 px / 400 with
+ * `letter-spacing: .36px`, in `rgb(137 154 175)` on `rgba(7 12 19 / .62)`.
+ *
+ * The GROUND is the load-bearing part: the stamp sits over an arbitrary graphic, so a
+ * translucent plate under it is what keeps it readable against a white lower-third. The ink
+ * is our own muted text rather than the reference's near-identical grey — one token, not two
+ * greys three units apart.
+ */
+export const STAGE_NOTE_PX = {
+  inset: 6,
+  padY: 2,
+  padX: 4,
+  text: 9,
+  track: 0.36,
+} as const;
+
 export const LAYER_SUBBAR_PX = {
   /** `.layer-subbar{height:40px;padding:5px 10px;gap:12px}`, ruled below. */
   h: 40,
@@ -2459,6 +2537,27 @@ export const cssVars = {
   '--r-subbar-search-pad': `${String(LAYER_SUBBAR_PX.searchPadTop)}px ${String(LAYER_SUBBAR_PX.searchPadRight)}px ${String(LAYER_SUBBAR_PX.searchPadTop)}px ${String(LAYER_SUBBAR_PX.searchPadLeft)}px`,
   '--r-subbar-search-glyph-inset': `${String(LAYER_SUBBAR_PX.searchGlyphInset)}px`,
   '--r-subbar-check-gap': `${String(LAYER_SUBBAR_PX.checkGap)}px`,
+  '--r-monitor-label-text': `${String(MONITOR_HEAD_PX.labelText)}px`,
+  '--r-monitor-label-track': `${String(MONITOR_HEAD_PX.labelTrack)}px`,
+  '--r-monitor-label-gap': `${String(MONITOR_HEAD_PX.labelGap)}px`,
+  '--r-monitor-ch-text': `${String(MONITOR_HEAD_PX.chText)}px`,
+  '--r-monitor-fact-text': `${String(MONITOR_HEAD_PX.factText)}px`,
+  '--r-monitor-strip-h': `${String(MONITOR_HEAD_PX.stripH)}px`,
+  '--r-monitor-strip-pad': `${String(MONITOR_HEAD_PX.stripPadY)}px ${String(MONITOR_HEAD_PX.stripPadX)}px`,
+  '--r-monitor-strip-gap': `${String(MONITOR_HEAD_PX.stripGap)}px`,
+  '--r-stage-note-inset': `${String(STAGE_NOTE_PX.inset)}px`,
+  '--r-stage-note-pad': `${String(STAGE_NOTE_PX.padY)}px ${String(STAGE_NOTE_PX.padX)}px`,
+  '--r-stage-note-text': `${String(STAGE_NOTE_PX.text)}px`,
+  '--r-stage-note-track': `${String(STAGE_NOTE_PX.track)}px`,
+  /** The translucent plate that keeps the stamp readable over a white graphic. */
+  '--r-stage-note-bg': 'rgba(7 12 19 / 0.62)',
+  '--r-bulk-target-text': `${String(LAYER_BULK_PX.targetText)}px`,
+  '--r-bulk-target-well': `${String(LAYER_BULK_PX.targetWell)}px`,
+  '--r-bulk-divider-h': `${String(LAYER_BULK_PX.dividerH)}px`,
+  '--r-foothint-h': `${String(LAYER_FOOTHINT_PX.h)}px`,
+  '--r-foothint-pad': `${String(LAYER_FOOTHINT_PX.padY)}px ${String(LAYER_FOOTHINT_PX.padX)}px`,
+  '--r-foothint-gap': `${String(LAYER_FOOTHINT_PX.gap)}px`,
+  '--r-foothint-text': `${String(LAYER_FOOTHINT_PX.text)}px`,
   /*
    * ⚠ There is deliberately NO `--r-row-icon-btn-narrow-w` here any more. Phase 2 transcribed
    * a `30px` destructive-group width from a stylesheet rule the prototype renders for no

@@ -136,10 +136,12 @@ test('§7 — engaging the lock asks for the PIN twice and refuses a mismatch', 
   await lock.getByRole('button', { name: 'Lock', exact: true }).click();
   await expect(lock).toContainText('The two PINs are different');
   await expect(lock).toBeVisible();
-  await expect(page.getByText('🔒 LOCKED')).toHaveCount(0);
+  // `CONSOLE-MATCH-03` §5 — the chip is `Icon` + `LOCKED` now, not a text glyph, so it is
+  // addressed by its WORD. The glyph was never the assertion; it was just what was there.
+  await expect(page.getByText('LOCKED', { exact: true })).toHaveCount(0);
 
   // Matching PINs engage it.
   await lock.getByLabel('Lock PIN again').fill('1234');
   await lock.getByRole('button', { name: 'Lock', exact: true }).click();
-  await expect(page.getByText('🔒 LOCKED')).toBeVisible();
+  await expect(page.getByText('LOCKED', { exact: true })).toBeVisible();
 });

@@ -256,7 +256,9 @@ describe('PreviewPanel — one frame per rehearsing row', () => {
   it('shows the empty state only when NOTHING is rehearsing', async () => {
     const el = await render({ rehearsals: [] });
     expect(frames(el)).toHaveLength(0);
-    expect(el.textContent).toContain('Nothing to preview');
+    // `CONSOLE-MATCH-03` §1 — the reference's heading, which names the MECHANISM. The
+    // sentence beneath it still carries `R-022`'s "Nothing is sent to CasparCG".
+    expect(el.textContent).toContain('No layers on preview');
   });
 
   /**

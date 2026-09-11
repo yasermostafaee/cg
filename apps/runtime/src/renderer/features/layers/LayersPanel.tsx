@@ -1,12 +1,26 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 // B-228 — the ONE renderer-side REMOVE decision, shared with the row's own gate. It reads
-// `isOnAirStatus` for us, which is why this panel no longer imports that predicate directly:
-// the count must not be able to drift back to the bare predicate by an innocent edit.
+// `isOnAirStatus` for us, and `removeBlockedCount` below must read THIS and never the bare
+// predicate: the bridge's answer is `isOnAirStatus` MINUS two published exemptions, so a count
+// gated on the predicate disables a press the wire would have accepted.
 import { removeIsRefused } from './removeGate.js';
-import type { StackItemState } from '@cg/shared-schema';
+/*
+  ⚠ THIS COMMENT USED TO SAY «this panel no longer imports that predicate directly», and the
+  import below now makes that false — so it is corrected rather than left to mislead.
+
+  `CONSOLE-MATCH-03` needs the air fact PER ROW for the sub-bar's filter override, and the one
+  thing golden rule 6 forbids is a second local spelling of that status list, so the canonical
+  function comes back in. What B-228 was protecting is not the absence of an import — it is
+  `removeBlockedCount`, and that is protected where it is written: it calls `removeIsRefused`,
+  and its own comment there says at length why it may never become `items.filter(isOnAirStatus)`.
+  🔴 If you are reading this because you are about to use `isOnAirStatus` for a REMOVE or a CLEAR
+  count, stop and read that comment first — the answer is `removeIsRefused`.
+*/
+import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
 import type { EmptiedAirRow, OrphanLayer, RestoreMigration, RestoreSkip } from '@cg/shared-ipc';
 import {
   CircleArrowOutDownRight,
+  Info,
   LoaderCircle,
   PanelRight,
   RotateCcw,
@@ -578,6 +592,17 @@ export function LayersPanel({
         templateName: name.names[1] ?? null,
         // The OBSERVATION, never a status — see `layerFilter.ts`'s override.
         occupied: entry.slot.observed.kind === 'producer',
+        /*
+          🔴 `CONSOLE-MATCH-03` — the AIR half of the override, and the reason the search
+          works on the station now.
+
+          `isOnAirStatus` is imported, not re-spelled: it is the same function object the
+          bridge's own gates call, so the rows this filter refuses to hide and the rows the
+          bridge treats as on air are the same set by identity rather than by two lists that
+          happen to agree (golden rule 6). An unbound row is not on air by definition — there
+          is no item to ask — and `occupied && !loaded` is what covers it instead.
+        */
+        onAir: item !== null && isOnAirStatus(item),
         loaded: entry.binding.kind === 'bound',
       };
     },
@@ -930,6 +955,25 @@ export function LayersPanel({
             target under the operator's hand mid-reach. Their weight comes from
             their confirm gates, not from being hidden.
           */}
+          {/*
+            🔴 `CONSOLE-MATCH-03` §2 — WHICH CHANNEL THESE THREE VERBS REACH, said in front
+            of them rather than inferred.
+
+            The reference draws `CH 1` at the head of the bulk group and it is not decoration:
+            STOP ALL, CLEAR ALL and REMOVE ALL are the widest presses on this console, and the
+            operator is entitled to read their SCOPE in the same glance as their names. The
+            bank is one channel today (`design.md` §4's single-channel gap), so this is one
+            number — which is exactly why it is cheap to state and expensive to omit the day
+            it becomes two.
+
+            It is rendered only when the bank has actually answered: `CH undefined` over three
+            live verbs would be worse than saying nothing.
+          */}
+          {bank !== null && (
+            <span className="cg-bulk-target" data-bulk-target="">
+              CH {bank.channel}
+            </span>
+          )}
           <Button
             variant="neutral"
             disabled={needsCaspar || onAirCount === 0}
@@ -993,6 +1037,19 @@ export function LayersPanel({
             refusing a remedy strands graphics on air. This one is the opposite kind of act —
             irreversible, and never a remedy for anything — so it is the one that waits.
           */}
+          {/*
+            🔴 `CONSOLE-MATCH-03` §2 — THE RULE THAT SPLITS THE IRREVERSIBLE VERB OFF.
+
+            The reference puts a 1 × 17 rule between CLEAR ALL and REMOVE ALL, and the
+            comment on REMOVE ALL above already says why in words: the first two are remedies
+            and this one is never a remedy for anything. A rule costs one pixel and makes the
+            reach into a different group a deliberate act rather than a slip along a row of
+            three identical buttons.
+
+            `aria-hidden`: the grouping is already stated by every label and title beside it,
+            and a separator announced to a screen reader in the middle of three verbs is noise.
+          */}
+          <span className="cg-bulk-divider" aria-hidden="true" />
           <Button
             variant="neutral"
             disabled={linkDown || items.length === 0 || removeBlockedCount > 0}
@@ -1463,6 +1520,28 @@ export function LayersPanel({
                     </Fragment>
                   );
                 })}
+              </div>
+              {/*
+                🔴 `CONSOLE-MATCH-03` §2 — THE FOOTER HINT, which this card did not have.
+
+                The reference closes the layers card with one muted line naming the three
+                things a newcomer to this table cannot guess: that CLICKING a populated row is
+                what opens the Inspector, that ON PVW composites rather than airs, and that
+                PLAY is the take. Every one of those is a thing an operator currently learns by
+                pressing something and seeing what happens, on a console where pressing
+                something is the expensive way to find out.
+
+                OUTSIDE the scroll area, like the sub-bar above it and for the mirror reason:
+                a hint that scrolls away from the list it describes is only readable by
+                accident. `role="note"` and not `status` — it never changes, so there is
+                nothing to announce.
+              */}
+              <div className="cg-layers-foothint" role="note" data-layers-foothint="">
+                <Icon icon={Info} size={12} />
+                <span>
+                  Click a populated row to inspect · ON PVW adds to the composite · Play takes the
+                  row on air
+                </span>
               </div>
             </>
           )

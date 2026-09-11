@@ -128,7 +128,7 @@ const styles = {
  *
  * Air-safety contract: while engaged, all input is captured by the
  * overlay; the stack rows underneath can receive neither clicks NOR the
- * KEYBOARD. The 🔒 chip in the status bar mirrors this state for
+ * KEYBOARD. The LOCKED chip in the status bar mirrors this state for
  * situational awareness.
  *
  * 🔴 `B-229` — THE SECOND HALF OF THAT SENTENCE IS NEW, AND IT USED TO BE FALSE.

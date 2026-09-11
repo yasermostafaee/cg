@@ -2955,7 +2955,7 @@ fix should close the unscoped rule rather than only re-colour the one caller.
 
 **2 — FAILOVER wears the fault colour, in a bar whose doctrine forbids it.**
 
-`⇄ FAILOVER` is `variant="caution"` (`features/status/StatusBar.tsx:379-392`). `--r-caution` is
+`FAILOVER` is `variant="caution"` (`features/status/StatusBar.tsx:379-392`). `--r-caution` is
 `#f59e0b` (`controls.css:43`) — the SAME hex as the `⚠ NO OSC FROM …` alarm two elements to its
 left (`StatusBar.tsx:371`). The bar's own doctrine says those are **fault** tones: _"amber for a
 configuration problem, red for down. Those are role colours (`--r-caution`, `--r-danger`)"_

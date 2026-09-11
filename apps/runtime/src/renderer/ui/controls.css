@@ -181,6 +181,112 @@
   font-weight: var(--r-weight-semibold);
 }
 
+/* ── 🔴 CONSOLE-MATCH-03 §1 — THE MONITOR HEADS ─────────────────────────────
+ *
+ * Measured in Chromium at 1280 × 800 on the reference: `.pvw-label` / `.pgm-label` are
+ * 11 px / 650 with `letter-spacing: .825px`, the channel rides in a nested span, and the
+ * right-hand fact is 11 px / 400. The head box itself is `.cg-panel-header`'s, unchanged —
+ * these two panes do not get a bar of their own shape.
+ *
+ * 🔴 THE ACCENTS ARE NOT SYMMETRIC, AND THAT IS DELIBERATE. PVW takes the reference's purple
+ * because it IS the rehearsal colour on this console already (`--r-rehearsing`), so the head
+ * and the rows it is previewing agree. PGM does NOT take the reference's mint: the reference
+ * spends ONE green on air and on health, and this console deliberately does not
+ * (`design.md` §7.5) — a permanently green `PROGRAM` over a pane that renders nothing
+ * (`MONITORS-01`/`C-016`) would be the most misleading pixel on the surface. It keeps the
+ * bar's own ink.
+ */
+.cg-monitor-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--r-monitor-label-gap);
+  font-size: var(--r-monitor-label-text);
+  font-weight: var(--r-weight-semibold);
+  letter-spacing: var(--r-monitor-label-track);
+  white-space: nowrap;
+}
+.cg-monitor-label--pvw {
+  color: var(--r-rehearsing);
+}
+.cg-monitor-ch {
+  font-size: var(--r-monitor-ch-text);
+  font-weight: 400;
+  letter-spacing: normal;
+  color: var(--r-text-muted);
+}
+.cg-monitor-fact {
+  font-size: var(--r-monitor-fact-text);
+  color: var(--r-text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The PGM strip — the reference's 31 px `.monitor-controls` row, padded 3 × 7, gapped 7. */
+.cg-monitor-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--r-monitor-strip-gap);
+  min-height: var(--r-monitor-strip-h);
+  box-sizing: border-box;
+  padding: var(--r-monitor-strip-pad);
+  border-bottom: 1px solid var(--r-border);
+  background: var(--r-surface-sunken);
+  flex-shrink: 0;
+}
+.cg-monitor-strip__spacer {
+  flex: 1;
+}
+.cg-monitor-signal {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-monitor-strip-gap);
+  font-size: var(--r-monitor-fact-text);
+  /* MUTED, never the alarm red: nothing is broken — the return feed is unbuilt. */
+  color: var(--r-text-muted);
+  white-space: nowrap;
+}
+
+/* ── 🔴 CONSOLE-MATCH-03 §2 — THE BULK GROUP'S SCOPE AND ITS RULE ───────────
+ *
+ * Measured in Chromium at 1280 × 800 on the reference (never read off the stylesheet — that
+ * file restates its selectors in four waves and only the last one paints, PROMPT.md §0):
+ * `.channel-target` is 12 px, muted-bright, with a 9 px well after it and NO ground; the
+ * `.divider-vertical` is 1 × 17 in the line colour.
+ */
+.cg-bulk-target {
+  font-size: var(--r-bulk-target-text);
+  color: var(--r-text-secondary);
+  padding-inline-end: var(--r-bulk-target-well);
+  white-space: nowrap;
+}
+.cg-bulk-divider {
+  inline-size: 1px;
+  block-size: var(--r-bulk-divider-h);
+  background: var(--r-border);
+  flex: 0 0 auto;
+}
+
+/* ── 🔴 CONSOLE-MATCH-03 §2 — THE LAYERS CARD'S FOOTER HINT ─────────────────
+ *
+ * The reference's `.layer-footer`: 24 px tall, padded 3 × 10, gapped 9, 10 px muted text with
+ * a leading info glyph. It sits BELOW the scroll area, so it never moves.
+ */
+.cg-layers-foothint {
+  display: flex;
+  align-items: center;
+  gap: var(--r-foothint-gap);
+  min-height: var(--r-foothint-h);
+  box-sizing: border-box;
+  padding: var(--r-foothint-pad);
+  border-top: 1px solid var(--r-border);
+  font-size: var(--r-foothint-text);
+  color: var(--r-text-muted);
+  flex-shrink: 0;
+}
+.cg-layers-foothint > svg {
+  flex: 0 0 auto;
+}
+
 /* ── Panel chrome — THE bar, shared by every panel ──────────────────────────
  *
  * Owner report: «هدر پنل Inspector باید با هدر بقیه پنل‌ها یکی باشه» — the

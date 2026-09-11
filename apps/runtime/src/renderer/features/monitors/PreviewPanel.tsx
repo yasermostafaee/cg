@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { SquareDashed } from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
 import { Panel } from '../../ui/Panel.js';
+import { MonitorHead, MonitorHeadFact } from '../../ui/MonitorHead.js';
 import { Icon } from '../../ui/Icon.js';
 import { colors, cssVars } from '../../theme.js';
 import { useRehearse } from '../../hooks/useRehearse.js';
@@ -262,6 +263,26 @@ export function PreviewPanel(): JSX.Element {
     <Panel
       id="pvw"
       title="PREVIEW (PVW)"
+      heading={<MonitorHead word="PREVIEW" channel={bank?.channel ?? null} tone="pvw" />}
+      /*
+        🔴 `CONSOLE-MATCH-03` §1 — HOW MANY LAYERS ARE ON PVW, in the head.
+
+        The reference puts the count here and the ROW NAMES in its `title`, which is golden
+        rule 11's relocation exactly: the sentence read under pressure is the number, and the
+        names are the second question. It counts `subjects` — the rows the operator has put
+        into REHEARSE — and NOT `renderable`, deliberately: a row whose page this browser
+        does not hold is still ON PVW, and the shortfall is the stage's own caption to state
+        (`rehearsalCaption`'s "showing N of M"). Two surfaces, two questions, neither
+        borrowing the other's number.
+      */
+      actions={
+        <MonitorHeadFact
+          testId="data-pvw-count"
+          {...(subjects.length > 0 ? { title: subjects.map((s) => s.rowName).join(' · ') } : {})}
+        >
+          {subjects.length} {subjects.length === 1 ? 'layer' : 'layers'} on PVW
+        </MonitorHeadFact>
+      }
       /* `REPAIR-03` A1, audit row 38 — the monitor box's own ground; see `--r-monitor-bg`. */
       style={{ flex: 1, minWidth: 0, background: cssVars['--r-monitor-bg'] }}
     >
@@ -269,13 +290,21 @@ export function PreviewPanel(): JSX.Element {
         <div
           style={styles.screen}
           role="img"
-          aria-label="PREVIEW — Nothing to preview. Put a loaded row into REHEARSE to render it here."
+          aria-label="PREVIEW — No layers on preview. Use ON PVW on one or more loaded rows to render them here."
         >
           <Icon icon={SquareDashed} size={22} />
-          <span style={styles.label}>Nothing to preview</span>
+          {/*
+            🔴 `CONSOLE-MATCH-03` §1 — the reference's heading and its instruction, over our
+            own honesty sentence rather than instead of it. `No layers on preview` names the
+            MECHANISM (layers, PVW) where "Nothing to preview" named only the absence, and
+            "Use ON PVW on one or more loaded rows" says which control produces one. What is
+            kept is the last sentence: `R-022` is explicit that nothing here is sent to
+            CasparCG, and that is the fact an operator must not have to infer from a blank box.
+          */}
+          <span style={styles.label}>No layers on preview</span>
           <span style={styles.detail}>
-            Put a loaded row into REHEARSE and its graphic renders here, in this browser, with the
-            field values you have typed. Nothing is sent to CasparCG.
+            Use ON PVW on one or more loaded rows and their graphics render here, in this browser,
+            with the field values you have typed. Nothing is sent to CasparCG.
           </span>
         </div>
       ) : (

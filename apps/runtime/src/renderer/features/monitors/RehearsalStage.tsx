@@ -165,6 +165,35 @@ const styles = {
     position: 'relative' as const,
   },
   /**
+   * 🔴 `CONSOLE-MATCH-03` §1 — WHAT THIS PICTURE IS, said ON the picture.
+   *
+   * The reference stamps `ILLUSTRATIVE COMPOSITE · LOCAL` in the stage's bottom-left, and
+   * `PROMPT.md` §0 lists it among the few prototype strings that are TRUE FOR US and stay —
+   * because `R-022` is explicit that this render never reaches CasparCG. It is the same
+   * argument `MonitorPanel`'s header makes about a black box: a broadcast surface showing a
+   * frame that is not the frame on air must say so ON the frame, not in a panel title above
+   * it and not in a caveats drawer the operator has to open.
+   *
+   * ABOVE every layer and the plate overlay (`zIndex` past `frameZIndex`'s range), because a
+   * full-frame graphic would otherwise cover the one label that says this is not air. It is
+   * `aria-hidden`: the same fact is already in the panel's own accessible name and in the
+   * caveats, and a screen reader meeting it three times is noise.
+   */
+  illustrationNote: {
+    position: 'absolute' as const,
+    insetInlineStart: cssVars['--r-stage-note-inset'],
+    insetBlockEnd: cssVars['--r-stage-note-inset'],
+    zIndex: 60,
+    pointerEvents: 'none' as const,
+    fontSize: cssVars['--r-stage-note-text'],
+    letterSpacing: cssVars['--r-stage-note-track'],
+    color: colors.textMuted,
+    background: cssVars['--r-stage-note-bg'],
+    padding: cssVars['--r-stage-note-pad'],
+    borderRadius: cssVars['--r-radius-sm'],
+    whiteSpace: 'nowrap' as const,
+  },
+  /**
    * The CHECKER, behind the WHOLE STACK — the SAME one the Designer's authoring
    * surface and broadcast preview use (`#5b6075` on `#3d4253`, 24px), so a
    * graphic looks the same in the two places an operator judges it.
@@ -525,6 +554,9 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
             }}
           />
         ))}
+        <span aria-hidden style={styles.illustrationNote} data-stage-illustration="">
+          ILLUSTRATIVE COMPOSITE · LOCAL
+        </span>
         {/*
           R-049 — the live-plate markers, ABOVE every frame. See `LivePlateOverlay`
           for why they are drawn over rather than behind, and for the standing note

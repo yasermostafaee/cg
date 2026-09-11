@@ -1,5 +1,8 @@
 import { MonitorOff } from 'lucide-react';
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
+import { useFixedBankState } from '../../hooks/useFixedLayers.js';
+import { useStackSnapshot } from '../../hooks/useStack.js';
+import { airTally } from '../stack/onAir.js';
 import { MonitorPanel } from './MonitorPanel.js';
 import { PreviewPanel } from './PreviewPanel.js';
 
@@ -24,6 +27,17 @@ import { PreviewPanel } from './PreviewPanel.js';
  */
 export function MonitorStrip(): JSX.Element {
   const { focus } = useShellLayoutContext();
+  /*
+    🔴 `CONSOLE-MATCH-03` §1 — the two facts PGM's strip states, read HERE and passed down.
+
+    `airTally` is the ONE air count on this console (`B-213`), and the channel comes from the
+    declared bank the layer table reads. Both are lifted to the strip rather than looked up
+    inside `MonitorPanel` so that the panel stays a presentation component and so there is
+    exactly one place the two panes' channel can come from.
+  */
+  const { bank } = useFixedBankState();
+  const { items } = useStackSnapshot();
+  const onAirRows = airTally(items).onAir;
   const showPvw = focus !== 'pgm';
   const showPgm = focus !== 'pvw';
 
@@ -69,6 +83,9 @@ export function MonitorStrip(): JSX.Element {
         <MonitorPanel
           id="pgm"
           title="PROGRAM (PGM)"
+          word="PROGRAM"
+          channel={bank?.channel ?? null}
+          onAirRows={onAirRows}
           icon={MonitorOff}
           emptyLabel="No program return"
           detail="This will show what is on air, returned from the playout server. No return feed is arriving yet."

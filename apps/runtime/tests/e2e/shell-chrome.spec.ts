@@ -233,7 +233,7 @@ test('§B — the chrome above the first data row, and how many rows fit', async
   expect(shown.rows, 'the list still shows rows with the strip up').toBeGreaterThanOrEqual(3);
 });
 
-test('§B2 — the filter narrows the list, and never hides a row the bridge has something on', async ({
+test('§B2 — the filter narrows the list, and never hides a row that would lose its only surface', async ({
   app,
 }) => {
   const page = app.page;
@@ -251,13 +251,24 @@ test('§B2 — the filter narrows the list, and never hides a row the bridge has
     `of ${String(before)} rows`,
   );
 
-  // A query that matches nothing by NAME still leaves the occupied rows, which is the
-  // override: `layerFilter.test.ts` proves the predicate, this proves it reaches the list.
+  /*
+    A query that matches nothing by NAME still leaves the rows the override protects, and
+    `CONSOLE-MATCH-03` narrowed WHICH those are: on air, or a producer nothing of ours is
+    bound to. `layerFilter.test.ts` proves the predicate; this proves it reaches the list.
+  */
   await search.fill('zzz-no-such-row-zzz');
   const survivors = await app.layers.locator('[data-layer]').count();
-  expect(survivors, 'a row the bridge reports something on is never filtered away').toBeGreaterThan(
-    0,
-  );
+  expect(
+    survivors,
+    'a row that would lose its only surface is never filtered away',
+  ).toBeGreaterThan(0);
+  /*
+    🔴 THE OTHER HALF, and the one the owner reported. Layer 70 is bound, IDLE, and observed
+    carrying an `html` producer — the ordinary PRE-ROLLED row, which is what the station's
+    rows look like nearly all the time. It used to be unhideable, which made the search box
+    useless there. It must filter away like anything else.
+  */
+  await expect(app.layers.locator('[data-layer="70"]')).toHaveCount(0);
 
   await search.fill('');
   await expect.poll(rowsNow).toBe(before);
@@ -267,4 +278,143 @@ test('§B2 — the filter narrows the list, and never hides a row the bridge has
   await expect.poll(rowsNow).toBeLessThan(before);
   await app.layers.getByText('Hide empty').click();
   await expect.poll(rowsNow).toBe(before);
+});
+
+/**
+ * 🔴 `CONSOLE-MATCH-03` §2 — WHAT THE LAYERS CARD SAYS ABOUT ITSELF.
+ *
+ * Three additions, each measured against the rendered reference at 1280 × 800 (never against
+ * a rule read out of its stylesheet — four waves, only the last paints, `PROMPT.md` §0):
+ * the `CH N` scope at the head of the bulk group, the rule that splits the irreversible verb
+ * off from the two remedies, and the card's footer hint. Boxes belong in a real engine
+ * (golden rule 12c).
+ */
+test('§C1 — the bulk group states its scope, and the irreversible verb is fenced off', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  const target = page.locator('[data-bulk-target]');
+  await expect(target).toHaveText('CH 1');
+  const rule = page.locator('.cg-bulk-divider');
+  await expect(rule).toHaveCount(1);
+
+  const tBox = await target.boundingBox();
+  const rBox = await rule.boundingBox();
+  const clearAll = page.getByRole('button', { name: 'Clear all rows holding a layer' });
+  const removeAll = page.getByRole('button', { name: 'Remove all items' });
+  const cBox = await clearAll.boundingBox();
+  const mBox = await removeAll.boundingBox();
+  expect(tBox).not.toBeNull();
+  expect(rBox).not.toBeNull();
+  expect(cBox).not.toBeNull();
+  expect(mBox).not.toBeNull();
+
+  // The reference's rule is 1 × 17. The WIDTH is the assertion that matters: a "divider"
+  // that laid out at zero would pass a presence check and draw nothing.
+  expect(rBox!.width).toBeCloseTo(1, 1);
+  expect(rBox!.height).toBeCloseTo(17, 1);
+
+  // The scope is AHEAD of the verbs it scopes, and the rule is BETWEEN the remedies and the
+  // one that cannot be undone. Ordering, in the reading direction, measured rather than assumed.
+  expect(tBox!.x, 'the scope leads the group').toBeLessThan(cBox!.x);
+  expect(rBox!.x, 'the rule follows CLEAR ALL').toBeGreaterThan(cBox!.x);
+  expect(rBox!.x, 'and precedes REMOVE ALL').toBeLessThan(mBox!.x);
+});
+
+test('§C2 — the card closes with the hint, below the list and never scrolling with it', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+
+  const hint = page.locator('[data-layers-foothint]');
+  await expect(hint).toHaveText(
+    'Click a populated row to inspect · ON PVW adds to the composite · Play takes the row on air',
+  );
+  const hBox = await hint.boundingBox();
+  expect(hBox).not.toBeNull();
+  // The reference's 24 px foot.
+  expect(hBox!.height).toBeCloseTo(24, 0);
+
+  /*
+    IT DOES NOT SCROLL WITH THE LIST. Proved by scrolling the list to its end and reading the
+    hint's box again: a hint inside the scroll area would move. This is the same property the
+    sub-bar has and for the mirror reason — a line describing a list you cannot see while
+    reading it describes nothing.
+  */
+  const before = hBox!.y;
+  await page.evaluate(() => {
+    const rows = document.querySelectorAll('[data-layer]');
+    rows[rows.length - 1]?.scrollIntoView({ block: 'end' });
+  });
+  await page.waitForTimeout(200);
+  const after = (await hint.boundingBox())?.y;
+  expect(after).toBeCloseTo(before, 0);
+});
+
+/**
+ * 🔴 `CONSOLE-MATCH-03` §1 — THE MONITOR HEADS.
+ *
+ * Both panes name the output and the CHANNEL, PVW counts what is on it, and PGM states the
+ * return signal and the air count on one strip. The last of those is the one with a real
+ * safety argument behind it: "no return signal" is about the FEED (`MONITORS-01`/`C-016`),
+ * "N rows on air" is about AIR, and an operator must never read the first as the second.
+ */
+test('§C3 — both monitor heads name their output and their channel, and PGM separates feed from air', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByRole('button', { name: 'Show monitors' }).click();
+  await expect(page.getByRole('button', { name: 'Hide monitors' })).toBeVisible();
+
+  const pvwHead = page.locator('.cg-monitor-label--pvw');
+  const pgmHead = page.locator('.cg-monitor-label--pgm');
+  await expect(pvwHead).toContainText('PREVIEW');
+  await expect(pvwHead).toContainText('CH 1');
+  await expect(pgmHead).toContainText('PROGRAM');
+  await expect(pgmHead).toContainText('CH 1');
+
+  // Nothing is on PVW at boot, and the head says so rather than hiding the count.
+  await expect(page.locator('[data-pvw-count]')).toHaveText('0 layers on PVW');
+
+  const strip = page.locator('[data-monitor-pgm-strip]');
+  await expect(strip).toContainText('No return signal');
+  await expect(strip).toContainText('on air');
+  // The reference's 31 px strip.
+  const sBox = await strip.boundingBox();
+  expect(sBox).not.toBeNull();
+  expect(sBox!.height).toBeCloseTo(31, 0);
+
+  /*
+    🔴 PROTOTYPE FURNITURE NOT COPIED. The reference's own head reads `3 rows on air · demo`
+    and its status bar reads `Local prototype · no bridge connection`; both are the drawing
+    labelling itself. Asserted as an ABSENCE so a later paste of the reference's markup cannot
+    bring them in quietly.
+  */
+  await expect(strip).not.toContainText('demo');
+  await expect(page.locator('footer')).not.toContainText('Local prototype');
+  await expect(page.locator('[data-app-header]')).not.toContainText('PROTOTYPE');
+});
+
+/**
+ * 🔴 `CONSOLE-MATCH-03` §5 — NO UNICODE-GLYPH ICONS ANYWHERE ON THE SHELL.
+ *
+ * CLAUDE.md's design system is flat about this and the status bar had four (`⚠` × 3, `⇄`,
+ * `🔒`). It is asserted over the whole rendered shell rather than over one component, because
+ * the rule is about the SURFACE: the next one to appear will appear somewhere else.
+ */
+test('§C4 — the shell draws its marks with icons, never with text glyphs', async ({ app }) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const stray = await page.evaluate(() => {
+    const text = document.body.innerText;
+    // Emoji and the dingbat/miscellaneous-symbol blocks the four offenders came from. The
+    // bullet `·` and the `●`/`○` LEDs are deliberately NOT in this range: they are typographic
+    // marks in a sentence, not icons standing in for a control.
+    return [...new Set([...text].filter((c) => /[🌀-🫿☀-➿]/u.test(c)))];
+  });
+  expect(stray, `text glyphs still on the shell: ${stray.join(' ')}`).toEqual([]);
 });

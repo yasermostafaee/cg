@@ -1198,3 +1198,38 @@ renders answers "is this handled?" with a yes.
       render work, and re-run it after any edit that changes what a surface CONTAINS. Six reds
       were caught locally on this work before the push, five of them in tests I had just
       written or just invalidated.
+
+- [x] Q.1 🔴 **`CONSOLE-MATCH-03` — the owner's mid-session defect: the layers search did nothing
+      on the station.** «سرچ لایه‌ها هم کار نمیکنه». Not the input, not the matching — the
+      override. `rowIsShown` pinned every row with an observed producer, and a `CG ADD` puts a
+      producer on a layer, so every PRE-ROLLED row was unhideable and the plant keeps its rows
+      loaded. Narrowed to the two states the override was always for: ON AIR (`isOnAirStatus`,
+      the bridge's own function object) or a producer nothing of ours is bound to. Red-first on
+      the plant's shape; two assertions stating the old rule REPLACED, not deleted. See
+      `design.md` §25.1.
+- [x] Q.2 **§2 — the layers area**: the `CH N` scope at the head of the bulk group, the 1 × 17
+      rule fencing REMOVE ALL off from the two remedies, and the card's 24 px footer hint. Every
+      declared property measured identical to the reference in Chromium. Five deltas ARGUED
+      (`design.md` §25.2), one of them — the `Live plates` tab word — recommended and left to the
+      owner because it is a vocabulary decision across two surfaces, not a pixel.
+- [x] Q.3 **§1 — the monitors**: both heads name their output AND their channel; PVW carries the
+      `N layers on PVW` count with the row names relocated to its `title` (golden rule 11); PGM
+      carries `Server return` and the signal strip, whose two facts — the FEED and AIR — are
+      deliberately not merged; the stage now stamps `ILLUSTRATIVE COMPOSITE · LOCAL` above every
+      frame. PVW's empty state takes the reference's heading over `R-022`'s own honesty sentence.
+      Two controls measured and NOT built (`ALL LAYERS`, the safe-area guides), with the build
+      order recorded — `design.md` §25.3 / §25.6.
+      🔴 The PVW zoom combo is **not adopted**: the owner excluded it, and it never existed here.
+- [x] Q.4 **§5 — the shell**: `LOG` → `AUDIT LOG` (the door now carries the name of the room), and
+      the five Unicode-glyph icons on the status bar (`⚠` × 3, `⇄`, `🔒`) are `Icon` + lucide.
+      A page-wide e2e asserts the shell carries none, because the next one appears elsewhere.
+      The status-bar channel was BUILT AND REMOVED — it cost a leaf component a bridge
+      subscription and reddened 43 tests across 8 dom specs; the argument is at the site
+      (`design.md` §25.4 (h)).
+- [ ] Q.5 **§3 (Inspector) and §4 (audit log) — NOT BUILT.** Both measured in Chromium and written
+      into `design.md` §25.6 down to the box, so the next session measures nothing: the
+      Inspector's two-line 66 px head, its 66 × 64 anchor grid and its 98.84 px footer with the
+      "No Take is sent" sub-line; the audit dialog's 1224 × 744 frame, its 98 px filter bar and
+      the event-details drawer with its TECHNICAL block. 🔴 Ours keeps LOCAL time and its Actor
+      column; only the reference's SHAPE is adopted.
+- [x] Q.6 **Linux `gate:e2e` — DISCHARGED on `RUNURL`.**

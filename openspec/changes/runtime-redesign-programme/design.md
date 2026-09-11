@@ -2994,15 +2994,15 @@ A13's non-persistence rule is untouched — §19.2 separates the two questions.
 
 Seven, each with its bucket, against seventeen fixed.
 
-| delta                                                          | bucket | reason                                                                                                                                                                                                  |
-| -------------------------------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Templates` and `Import` buttons in the header                 | **A**  | the picker's door is the ROW; a header button is a second door with its own refusals about which row it lands on                                                                                        |
-| the `PROTOTYPE` tag                                            | **B**  | the drawing labelling itself as a drawing                                                                                                                                                               |
-| the manual FAILOVER stays on the status bar                    | **A**  | deletion-guard item 17 — it is the remedy for the fault pill beside it                                                                                                                                  |
-| the LOCK stays on the status bar                               | **B**  | the reference draws no lock at all, so there is no reference decision to follow; its PIN is ephemeral and belongs with the engage                                                                       |
-| the column head is 28.3 px, not 25.8                           | **B**  | `B-224`'s tally; the reference has no tally                                                                                                                                                             |
-| ~~the monitors are shown by default~~ **SUPERSEDED — see §19** | **A**  | ~~the default visibility of two monitoring surfaces is a safety decision~~ — the refusal was right and the premise was not: neither pane is a monitoring surface (§19.1), and the default is now HIDDEN |
-| the filter never hides a row the bridge reports something on   | **A**  | the reference filters plainly; this console may not, for the reason `isLayerVisible` may not                                                                                                            |
+| delta                                                          | bucket | reason                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Templates` and `Import` buttons in the header                 | **A**  | the picker's door is the ROW; a header button is a second door with its own refusals about which row it lands on                                                                                                                                     |
+| the `PROTOTYPE` tag                                            | **B**  | the drawing labelling itself as a drawing                                                                                                                                                                                                            |
+| the manual FAILOVER stays on the status bar                    | **A**  | deletion-guard item 17 — it is the remedy for the fault pill beside it                                                                                                                                                                               |
+| the LOCK stays on the status bar                               | **B**  | the reference draws no lock at all, so there is no reference decision to follow; its PIN is ephemeral and belongs with the engage                                                                                                                    |
+| the column head is 28.3 px, not 25.8                           | **B**  | `B-224`'s tally; the reference has no tally                                                                                                                                                                                                          |
+| ~~the monitors are shown by default~~ **SUPERSEDED — see §19** | **A**  | ~~the default visibility of two monitoring surfaces is a safety decision~~ — the refusal was right and the premise was not: neither pane is a monitoring surface (§19.1), and the default is now HIDDEN                                              |
+| the filter never hides a row the bridge reports something on   | **A**  | ⚠ **NARROWED by `CONSOLE-MATCH-03` §25.1, 2026-09-12 — the owner reported the search as dead and this row is why.** The PRINCIPLE stands; "a row the bridge reports something on" did not: a `CG ADD` makes every pre-rolled row match it. See §25.1 |
 
 🔴 **7 of 24 is 29 %, which is OVER the quarter the rule sets, so this session STOPS here rather
 than arguing the rest.** The signal is worth reading: six of the seven cluster on the app header
@@ -4294,3 +4294,241 @@ Actions` table (`thead` 43.1, rows 63), and a `.delimiter-bottom` row pairing a 
 - 🔴 **The Linux `e2e` for the follow-up commit `0fda92cd`** (the card-head tag and the
   card lede, both render changes, so it owes its own):
   <https://github.com/yasermostafaee/cg/actions/runs/34480073813> — run `conclusion: success`, and the **`E2E (Playwright)` job RAN** 13:01:28Z → 13:12:39Z (**671 s**, `conclusion: success`), its **`E2E` step `completed/success`**. Not skipped, not cancelled. So BOTH of this session's commits are discharged on their own runs; neither inherits the other's.
+
+## 25. `CONSOLE-MATCH-03` — THE CONSOLE SURFACES OUTSIDE STATION SETUP
+
+Prompt `CONSOLE-MATCH-03`, 2026-09-12. It owns the monitors, the layers area, the Inspector, the
+audit log and the shell; `SETTINGS-MATCH-02` owns the dialog and was not running. The owner's one
+exclusion — **the PVW `Fit` combo is not wanted** — is honoured and recorded in §25.5.
+
+### 25.1 🔴 THE OWNER'S DEFECT, MID-SESSION: «سرچ لایه‌ها هم کار نمیکنه»
+
+**The report:** the layers search does nothing on the station. **Asked which of four shapes it
+took, he answered "nothing filters at all".**
+
+**It was not the input and it was not the matching.** Both were measured before anything changed:
+the built app under the mock narrowed 29 rows to 4 on `DEBATE`, the field took focus, took the
+text, and the tally moved with it. What differed was the DATA.
+
+`rowIsShown`'s override read `occupied`, which is `observed.kind === 'producer'` — and **a
+`CG ADD` puts a producer on a layer.** So every merely PRE-ROLLED row — nothing on air, nothing
+visible anywhere — was unhideable. The plant's own record is what makes this concrete rather than
+theoretical: `~/.cg-runtime/bridge-fixed-layers.json` declares 30 high rows and 9 beds with all
+but **seven** hidden (layers 97/98/99 and beds 6–9), and the audit NDJSON's last entries are loads
+and takes on 97, 98, 99, 7 and 9. Nearly every row the operator wanted to FIND was a row the
+filter refused to move. What was left for a query to remove was the rows that were already empty —
+which is what `Hide empty` is for. **A search box that can only hide what you were not looking for
+does nothing, and he was right to call it broken.**
+
+⚠ **Why no test caught it, which is the part worth carrying forward.** The mock seeds producers on
+**3 of 29** rows; the plant carries them on nearly **7 of 7**. `shell-chrome.spec.ts` §B2 asserted
+"a query that matches nothing still leaves the occupied rows" and passed — the assertion was
+_true_, and the property it protected had quietly become the whole behaviour. A fixture whose
+ratio is nothing like the plant's can make a defect look like the specification.
+
+**The fix narrows the override to what it was always FOR.** _"A live graphic can never lose its
+only surface"_ is about a live graphic, and `CG ADD` without a `PLAY` renders nothing. Two states
+remain, each one where the row is the operator's only warning AND no query could match it:
+
+1. **ON AIR** — asked through `isOnAirStatus`, the same function object the bridge's own gates
+   call. Golden rule 6: never a second local spelling of that status list.
+2. **A PRODUCER NOBODY'S ITEM EXPLAINS** — `occupied && !loaded`. The console cannot name it, so
+   the operator cannot type its name, so a query must not hide it.
+
+A row of our own that we merely pre-rolled is neither, and the operator typed the query.
+
+🔴 **Red-first, and the red was on the plant's shape.** `layerFilter.test.ts` gained `the plant
+case: loaded, a producer on the layer, nothing on air` and a Persian-named tally case; both failed
+against the old predicate (`expected 2 to be 1`) and pass against the new. Two assertions stating
+the OLD rule were **replaced, not deleted** — the tally's `shown: 2` (_"DEBATE is occupied and
+overrides"_) is now `shown: 1` with the correction written beside it, and §B2's title and its
+occupied-row case now say UNBOUND, which is the load-bearing word. §B2 also gained the other half:
+**layer 70 — bound, idle, an `html` producer on it — must filter away**, which is the plant's
+ordinary row.
+
+⚠ **What is knowingly given up, stated rather than buried:** a row in `error` is no longer pinned
+by the override. It MAY be showing something, which is why STOP is offered to it — but it is bound
+and NAMED, so a query can reach it, and `B-213` is explicit that error is not air. The unnameable
+cases are the ones the override now keeps.
+
+**The predicate is one named function** (`neverHidden`) read once by both exits — the query and
+`Hide empty` — rather than a clause inside each. Two copies of "which rows are sacred" is how the
+two answers come to disagree, and this module has already had one spelling of it be wrong.
+
+⚠ **`LayersPanel` imports `isOnAirStatus` again, and the comment that said it does not is
+corrected in place.** `B-228`'s fence was never about the absence of an import — it is about
+`removeBlockedCount`, which must read `removeIsRefused` (the bridge's answer MINUS its two
+published exemptions) and never the bare predicate. That protection lives at the call site, where
+its own comment argues it at length, and a pointer to it now sits on the import.
+
+### 25.2 §2 — THE LAYERS AREA: property · reference · ours before · ours after
+
+Measured in Chromium at 1280 × 800, both sides, every number READ (`PROMPT.md` §0 — the main
+page's stylesheet is four waves deep and only the last one paints).
+
+| property               | reference                                                     | ours before                | ours after                                              |
+| ---------------------- | ------------------------------------------------------------- | -------------------------- | ------------------------------------------------------- |
+| bulk-group scope       | `CH 1`, 12 px, `padding: 0 9px 0 0`, no ground                | **absent**                 | `CH 1`, 34.72 × 18, same padding — FIXED                |
+| rule before REMOVE ALL | 1 × 17, `rgb(45 58 73)`                                       | **absent**                 | 1 × 17, `rgb(45 58 73)` — FIXED                         |
+| card footer hint       | 1262 × 24, `pad 3px 10px`, `gap 9`, 10 px, `rgb(142 158 175)` | **absent**                 | 1266.81 × 24, every declared property identical — FIXED |
+| sub-bar box            | 1262 × 40, `pad 5px 10px`, `gap 12`                           | 40, same                   | unchanged ✓                                             |
+| search field           | 270 × 29, `pad 4 8 4 30`, radius 5                            | 270 × 29, radius **4**     | radius unchanged — ARGUED (a)                           |
+| `N loaded` pill        | 10 px, `rgb(142 158 175)`                                     | 12 px, same ink            | unchanged — ARGUED (b)                                  |
+| `N on air`             | badge: 11 px/500 mint on `rgb(24 55 45)`, r5                  | bare text, 12 px/600 green | unchanged — ARGUED (c)                                  |
+| results hint           | `10/10 rows`                                                  | `29 of 29 rows`            | unchanged — ARGUED (d)                                  |
+| second tab             | `Live plates`                                                 | `LIVE SOURCES`             | unchanged — ARGUED (e)                                  |
+
+**ARGUED, each falsifiable in one line:**
+
+- **(a) the 1 px field radius.** The reference is not uniform — buttons 3–4, fields and badges 5,
+  cards 6 — so this is not "the reference uses 5"; it is one shared `.cg-field` radius against one
+  of the reference's several. Moving it moves every input in the app, which is a Phase-2 palette
+  move and not this prompt's. Falsified by: the owner wanting fields rounder.
+- **(b) the `N loaded` pill at 12 px.** It sits in a tally with two siblings at 12 px; the
+  reference drops it to 10 because it packs `10/10 rows` beside it in a 1262 px bar with ten rows.
+  At 29+ plant rows the tally is the wider element and a third type size in one line reads as a
+  mistake.
+- **(c) the on-air chip.** 🔴 `--r-onair rgb(44 255 122)` is the **owner's exact value** and §7.3
+  records it as HELD; the reference's mint is its ONE green for BOTH air and health, and §7.5
+  already refused that collapse. The chip GROUND exists in the reference precisely to disambiguate
+  a green that means two things. Ours does not have that ambiguity, so the ground buys nothing and
+  would require inventing a fill for the one colour we are told not to touch.
+- **(d) `29 of 29 rows` over `10/10 rows`.** The reference's fraction was chosen for a 10-row mock.
+  `29/29 rows` at plant scale reads as arithmetic; the words do not.
+- **(e) the tab word.** `Live plates` IS the domain's own word and §13 draws the distinction — a
+  plate is a seated layer, which is exactly what that tab lists. It is left alone here because it
+  is a VOCABULARY decision spanning two surfaces (the tab, and the row summary and audio dialog
+  that already say "plates"), with ~20 files of prose and a case-insensitive Playwright sweep
+  behind it — not a pixel. **Recommended, and the owner's call.**
+
+### 25.3 §1 — THE MONITORS
+
+| property         | reference                                                                                 | ours before                             | ours after                                                                            |
+| ---------------- | ----------------------------------------------------------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------- |
+| PVW head word    | `PREVIEW` + `CH 1` in a nested span                                                       | `PREVIEW (PVW)`, no channel             | `PREVIEW` + `CH 1` — FIXED                                                            |
+| PVW label ink    | 11 px/650, track .825, `rgb(195 172 255)`                                                 | 11 px/700 bar ink                       | 11 px/600, track .825, **same hex** — FIXED                                           |
+| PVW count        | `2 layers on PVW`, 78.75 × 16.5, 11 px/400                                                | **absent**                              | 78.75 × 16.5 — **exact** — FIXED                                                      |
+| …its `title`     | names the rehearsing rows                                                                 | —                                       | `TICKER · LOGO BUG` — FIXED                                                           |
+| PGM head         | `PROGRAM` + `CH 1` + `Server return`                                                      | `PROGRAM (PGM)`                         | all three — FIXED                                                                     |
+| PGM label ink    | mint `rgb(133 228 182)`                                                                   | bar ink                                 | bar ink — ARGUED (f)                                                                  |
+| PGM strip        | 626 × 31, `pad 3px 7px`, `gap 7`; dot + `No return signal` + `N rows on air`              | **absent**                              | 626.41 × 31, identical — FIXED                                                        |
+| stage stamp      | `ILLUSTRATIVE COMPOSITE · LOCAL`, 9 px/.36 track, on `rgba(7 12 19 / .62)`, r2, inset 6/5 | **absent**                              | same, at `zIndex 60` over every frame — FIXED                                         |
+| PVW empty state  | `No layers on preview` / `Use ON PVW on one or more loaded rows.`                         | `Nothing to preview` + our own sentence | the reference's heading and instruction, **over** `R-022`'s "Nothing is sent" — FIXED |
+| expand control   | an icon button per pane                                                                   | `Panel`'s fullscreen                    | already present ✓                                                                     |
+| transport        | `PLAY · NEXT · STOP`, always present, each disabled by its own condition                  | present, but only once a frame renders  | unchanged — ARGUED (g)                                                                |
+| `ALL LAYERS`     | 9 px, `rgb(146 163 184)`                                                                  | **absent**                              | NOT BUILT — §25.6                                                                     |
+| safe-area guides | icon toggle, `aria-pressed`                                                               | **absent**                              | NOT BUILT — §25.6                                                                     |
+| zoom select      | `Fit / 100% / 150% / 200%`                                                                | **absent**                              | 🔴 **NOT ADOPTED — owner excluded it.** §25.5                                         |
+
+- **(f) PGM's head is not mint.** The reference spends ONE green on air and on health; this console
+  deliberately does not (§7.5). A permanently green `PROGRAM` over a pane that renders nothing —
+  `MONITORS-01` settled that `C-016` is unbuilt — would be the most misleading pixel on the
+  surface. PVW _does_ take the reference's purple, because `--r-rehearsing` is already that hex and
+  PVW genuinely IS the rehearsal.
+- **(g) the transport appears with the stage.** The reference renders it always, disabled. Our own
+  rule (`LayersPanel`: _"controls that come and go move the target under the operator's hand
+  mid-reach"_) argues FOR the reference here, and this is the one place in §1 where we do not
+  follow it — because the transport lives inside `RehearsalStage`, which is also the component
+  that owns the frame handles it drives. Lifting it into `PreviewPanel` is the right change and it
+  is a refactor, not a match. **Filed, not fudged.**
+
+### 25.4 §5 — THE SHELL
+
+| property                             | reference                               | ours before                | ours after                                         |
+| ------------------------------------ | --------------------------------------- | -------------------------- | -------------------------------------------------- |
+| brand                                | `CG CONTROL`                            | same                       | unchanged ✓                                        |
+| header box                           | 1280 × 48, `pad 6px 12px`, gap 10       | identical                  | unchanged ✓                                        |
+| `PVW · N` badge                      | 11 px/500 purple on `rgb(48 38 69)`, r5 | present, 12 px/600, r4     | unchanged ✓                                        |
+| audit door                           | `Audit log`                             | `LOG`                      | `AUDIT LOG` — FIXED                                |
+| `Templates` / `Import` in the header | present                                 | absent                     | still absent — the row-scoped load CONTRACT, §15.3 |
+| status-bar glyphs                    | icons                                   | `⚠` × 3, `⇄`, `🔒` as TEXT | all five now `Icon` + lucide — FIXED               |
+| status-bar channel                   | `CH 1 · News`                           | absent                     | **still absent — ARGUED (h)**                      |
+| `Local prototype`                    | present                                 | —                          | 🔴 not copied; ours states the real bridge state   |
+
+- **(h) the channel is not on the status bar, and it was built and then taken out.** Two reasons;
+  the second settles it. (1) This console already names the channel twice — the header tablist, and
+  the new `CH N` at the head of the bulk verbs, where it actually qualifies a press. The reference
+  needs it down here because its channel is a `<select>` at the far end of a bar with no scope
+  label anywhere else. (2) **It cost this leaf a bridge subscription:** reading the bank in
+  `StatusBar` turned **43 tests across 8 dom specs** red on `onConfigChanged` of undefined. That is
+  not a test problem to paper over — it is the suite correctly reporting that a bar about SERVER
+  HEALTH had grown a dependency on the LAYER BANK. If it ever does belong there it comes down as a
+  prop from the shell, which already holds it. The argument is written into `StatusBar.tsx` at the
+  site, so the next reader meets a decision rather than an absence (the `AUDIT-CLOSE-01` rule).
+
+⭐ The glyph replacement is not a style note. A text `⚠` takes the FONT's shape, so it renders
+differently per machine, and `🔒` renders in **colour** — on a bar whose entire grammar is "colour
+means state", an icon that brings its own is the one thing it must not do. `Icon` inherits
+`currentColor`, so each mark now wears its element's state colour and changes with it. A page-wide
+e2e (§C4) asserts the shell carries none, because the next one will appear somewhere else.
+
+### 25.5 🔴 THE PROTOTYPE FURNITURE NOT COPIED, AND THE TWO PLACES OURS WINS
+
+**Not copied** — and §C3 asserts three of them as ABSENCES, so a later paste of the reference's
+markup cannot bring them back quietly: the `PROTOTYPE` badge · `· demo` on the air count ·
+`Sample records · UTC` and _"Identifiers and this event are sample data."_ · `Local prototype · no
+bridge connection`.
+
+**Kept, because they are true for us:** `ILLUSTRATIVE COMPOSITE · LOCAL` (`R-022` — now built) ·
+`No return signal` and `Playout may still be active.` (`MONITORS-01`).
+
+**Ours deliberately wins, twice:**
+
+1. **LOCAL time, not `Time · UTC`.** `RUNTIME-FIX-0904` settled it; only the column's SHAPE is the
+   reference's. Our audit table already reads `Time` and renders local — unchanged.
+2. **The real bridge state**, where the reference says `Local prototype`.
+
+**The PVW zoom select: it NEVER EXISTED in our app** — it was not present and has not been
+removed. The reference draws `Fit / 100% / 150% / 200%` inside its `.zoom` group beside the guides
+toggle; we adopt neither today (§25.6), and per the owner the combo is not to be built at all.
+`RehearsalStage` fits to the stage and says so in its caption.
+
+### 25.6 WHAT THIS SESSION DID NOT BUILD — measured, so the next one does not re-measure
+
+**§1's two remaining controls.** `.monitor-controls` is 626 × 31, `padding: 3px 7px`, `gap: 7px`,
+ground `rgb(16 24 39)`, holding `.pvw-transport` (three `.btn.quiet.small` at **57 × 25**,
+11 px/550, `padding: 2px 7px`, radius 3, ink `rgb(117 217 248)`, each with its own `title`), then
+`.pvw-scope` — the text **`ALL LAYERS`**, 49.73 × 13.5, **9 px**, `rgb(146 163 184)`,
+`letter-spacing: .36px` — then, at the trailing end, a `.zoom` group holding the excluded select
+and an `icon-btn` with `aria-pressed` and `title="Toggle safe-area guides"`. **Build order: lift
+the transport out of `RehearsalStage` into `PreviewPanel` first** (ARGUED (g)), then the scope
+label and the guides toggle land in the bar that move creates.
+
+**§3 — the Inspector.** NOT built; measured so it need not be again. `aside.card.inspector` is
+**396 × 706**, radius 6, ground `rgb(20 27 37)`. Its head is **394 × 66**, `padding: 7px 12px`,
+ground `rgb(23 35 50)`, and carries TWO lines: `.inspector-title` (a `span.eyebrow` reading
+`Inspector`, an `h2` whose row name is in a **`bdi`**, a spacer, an `icon-btn`) and
+`.inspector-meta` (a `badge` reading `Ready` / `On air`, a `.template-line` whose template name is
+in its own `bdi`, and a `.mini-pvw` chip). The body is `.inspector-section`s in this order:
+**Position** — a `.section-caption` (370 × 18, gap 8) with an `h3`, then a 3 × 3 `.anchor-grid`
+(**66 × 64**, `gap: 2px`, cells **20.66 × 20**, radius 3, ground `rgb(21 35 52)`, ink
+`rgb(141 163 185)`), an `X px` and a `Y px` `.field`, and `Apply position`; **Fields** — the text
+fields, and for a headline template a `.headline-field` with a `.field-meta` count pill, a grip per
+item and `Add headline`; then **Sources for each look** and **Live plates**. The footer is
+`footer.inspector-foot`, **394 × 98.84**, `padding: 9px 12px`, ground `rgb(30 41 56)`, holding an
+`.inspector-save-bar` (`Fields saved` · `Discard` · the commit) over a `p.target-hint` reading
+**"Saves this row's configuration. No Take is sent."** — `Update on air` and "Updates the on-air
+configuration. No Take is sent." on a live row. 🔴 That sub-line is golden rule 10 in one sentence
+and must stay exactly this honest.
+⚠ **`Reset` in the Position caption is `R-061(b)` / audit row 51 and the owner PARKED it.** Build
+the section without it.
+
+**§4 — the audit log.** NOT built; measured. The dialog is **1224 × 744**, radius 14; head
+**1222 × 98.19** (`padding: 22px 26px`, gap 14); `.audit-tools` **1222 × 98** (`padding: 18px 25px`,
+gap 12) holding a **626.7 × 39.59** search (radius 7, `padding: 9px 11px 9px 35px`) and three
+132 × 62 `.field` selects plus `Refresh`; `.audit-surface` **1222 × 473.81** splitting a table from
+a `.audit-detail` drawer (ground `rgb(17 29 42)`, `padding: 20px`); `th` **42.5** tall, 12 px/500,
+`rgb(142 158 175)`, `padding: 12px 16px`, ground `rgb(29 43 59)`; rows **98** tall; footer
+**1222 × 72**, `padding: 16px 26px`.
+
+**What OURS already has** and the reference does not: an **Actor** column and its `B-143` caveat.
+**What ours lacks:** the `Date` filter, `Follow new events`, `Reset filters`, the selected-row left
+accent, and the **event-details drawer** — result chip, `<Action> · <Item>`, the template, an info
+strip carrying the event's own sentence, `Time / Channel / Action`, and a `TECHNICAL DETAILS` block
+with **Event ID · Item ID · Template ID** in mono plus `⧉ Copy event details`. 🔴 Golden rule 11
+lands exactly here: those ids belong in the TECHNICAL block and on the copy button, never in the
+sentence, and each name gets its own `bdi`. Our column reads `Outcome` where the reference reads
+`Result`, and `Item / detail` where it reads `Item`.
+
+**Also untouched, deliberately:** no wire behaviour, no schema, no persisted key, no plant command,
+no refusal CONDITION. Station setup and the template picker untouched. The change is NOT archived.

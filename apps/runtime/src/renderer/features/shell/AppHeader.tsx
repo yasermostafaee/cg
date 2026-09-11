@@ -121,7 +121,7 @@ export function AppHeader({ layout, onOpenSettings, onOpenAudit }: Props): JSX.E
         {layout.monitorsShown ? 'HIDE MONITORS' : 'SHOW MONITORS'}
       </Button>
       {/*
-        SETTINGS and LOG — the two doors the reference puts up here. Both keep their
+        SETTINGS and AUDIT LOG — the two doors the reference puts up here. Both keep their
         accessible names exactly (`Open Station setup`, `Open audit log`), which is how every
         spec and the e2e fixture address them: this is a relocation, and a relocation that
         renamed its controls would be a rewrite wearing a relocation's clothes.
@@ -137,9 +137,16 @@ export function AppHeader({ layout, onOpenSettings, onOpenAudit }: Props): JSX.E
         <Icon icon={SlidersHorizontal} />
         SETTINGS
       </Button>
+      {/*
+        🔴 `CONSOLE-MATCH-03` §5 — the reference's own word, which is `Audit log` and not
+        `LOG`. It matters because the dialog this opens is TITLED "Audit log": a door labelled
+        with a shortening of the room behind it is one more thing the operator has to learn,
+        and the bar had the width. The accessible name was already `Open audit log` and is
+        untouched, so nothing that addresses this button had to move.
+      */}
       <Button onClick={onOpenAudit} aria-label="Open audit log">
         <Icon icon={ScrollText} />
-        LOG
+        AUDIT LOG
       </Button>
     </header>
   );

@@ -3,6 +3,7 @@ import type { LucideIcon } from 'lucide-react';
 import { colors, cssVars } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
 import { Panel } from '../../ui/Panel.js';
+import { MonitorHead, MonitorHeadFact, MonitorSignalStrip } from '../../ui/MonitorHead.js';
 import type { PanelId } from '../../hooks/useShellLayout.js';
 
 /**
@@ -78,6 +79,17 @@ interface Props {
   id: Extract<PanelId, 'pgm' | 'pvw'>;
   /** PROGRAM / PREVIEW — the header text and the accessible name. */
   title: string;
+  /** The output's word in the head — `PROGRAM`. `title` stays the accessible name. */
+  word: string;
+  /** The channel this pane shows, or `null` before the bank has answered. */
+  channel: number | null;
+  /**
+   * 🔴 `CONSOLE-MATCH-03` §1 — how many rows this console believes are on air.
+   *
+   * It is passed in and never counted here: `airTally` owns that number (`B-213`), and a
+   * second count on a second surface is precisely how two numbers about air come to disagree.
+   */
+  onAirRows: number;
   /** The mark for this box's empty state — see `emptyLabel`. */
   icon: LucideIcon;
   /**
@@ -90,15 +102,50 @@ interface Props {
   detail: string;
 }
 
-export function MonitorPanel({ id, title, icon, emptyLabel, detail }: Props): JSX.Element {
+export function MonitorPanel({
+  id,
+  title,
+  word,
+  channel,
+  onAirRows,
+  icon,
+  emptyLabel,
+  detail,
+}: Props): JSX.Element {
   return (
     <Panel
       id={id}
       title={title}
+      heading={<MonitorHead word={word} channel={channel} tone="pgm" />}
+      /*
+        `Server return` — the reference's standing label for what this pane is FOR. It is not
+        a state (the state is on the strip below); it names the source, so an operator reading
+        a black box knows what would have filled it.
+      */
+      actions={<MonitorHeadFact>Server return</MonitorHeadFact>}
       /* REPAIR-03 A1, audit row 38 — the monitor box's own ground (--r-monitor-bg), a
          shade below the panels around it so the screen reads as inset. */
       style={{ flex: 1, minWidth: 0, background: cssVars['--r-monitor-bg'] }}
     >
+      {/*
+        🔴 THE STRIP, and the reason its two facts sit side by side.
+
+        `No return signal` is about the FEED and `N rows on air` is about AIR, and the whole
+        point of showing them together is that an operator must never read the first as the
+        second. `MONITORS-01` settled that this pane renders nothing because `C-016` is
+        unbuilt — the playout server is very probably still transmitting.
+      */}
+      <MonitorSignalStrip
+        signal="No return signal"
+        fact={
+          <MonitorHeadFact
+            testId="data-monitor-air-count"
+            title="What this console believes is on air on this channel. It is the same count the layer table's header carries."
+          >
+            {onAirRows} {onAirRows === 1 ? 'row' : 'rows'} on air
+          </MonitorHeadFact>
+        }
+      />
       {/*
         `role="img"` with a name, NOT a bare decorative box: a screen reader user
         needs the same fact a sighted operator gets from the label — there is an

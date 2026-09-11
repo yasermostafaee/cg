@@ -21,13 +21,39 @@
  * because unticking a row is a deliberate configuration act while typing three letters is
  * not.
  *
- * So the same rule applies here: **a row the bridge reports something on is never hidden by
+ * So the same rule applies here: **a row that would lose its only surface is never hidden by
  * this filter**, whatever the query says and whatever `Hide empty` says. The tally is what
  * keeps that honest rather than mysterious — it says how many rows are shown out of how many
  * exist, so a query that appears to match nothing still shows its total.
  *
  * ⚠ This is a bucket-A reason and not a preference: the reference filters plainly, and this
  * console deliberately does not, for the same reason `isLayerVisible` does not.
+ *
+ * ── 🔴 `CONSOLE-MATCH-03` — AND THE FIRST SPELLING OF THAT OVERRIDE MADE THE BOX USELESS ──
+ *
+ * Owner report, 2026-09-11: «سرچ لایه‌ها هم کار نمیکنه» — the layers search does nothing on the
+ * station. The input was fine and the matching was fine. The override was firing on every row.
+ *
+ * It read `observed.kind === 'producer'`, and **a `CG ADD` puts a producer on a layer**, so a
+ * merely PRE-ROLLED row — nothing on air, nothing visible anywhere — was unhideable. The plant's
+ * workflow keeps its rows loaded (`~/.cg-runtime`'s bank shows seven visible rows and its audit
+ * record shows loads and takes on 97, 98, 99, 7 and 9), so almost every row the operator wanted
+ * to FIND was a row the filter refused to move. What was left for the query to remove was the
+ * already-empty rows, which is what `Hide empty` is for. A search box that can only hide what
+ * you were not looking for is a search box that does nothing, and he was right to call it broken.
+ *
+ * ⚠ **THE SAFETY PROPERTY IS KEPT, NOT TRADED AWAY** — this narrows the override to what it was
+ * always FOR. _"A live graphic can never lose its only surface"_ is about a live graphic, and a
+ * pre-rolled producer is not one: `CG ADD` without a `PLAY` renders nothing. Two states remain,
+ * and each is a case where the row is the operator's only warning and no query could match it:
+ *
+ *   1. **ON AIR** — the sacred one, asked through `isOnAirStatus`, the same function object the
+ *      bridge's own gates call. Golden rule 6: never a second local spelling of that list.
+ *   2. **A PRODUCER NOBODY'S ITEM EXPLAINS** — the bridge sees something on a layer no row is
+ *      bound to. The console cannot name it, so the operator cannot type its name, so a query
+ *      must not be able to hide it. (This is the `Hide empty` case that was already argued.)
+ *
+ * A row of our own that we merely pre-rolled is neither, and the operator typed the query.
  *
  * ── WHY IT IS A MODULE AND NOT A `useMemo` IN THE PANEL ──────────────────────────────
  *
@@ -44,11 +70,19 @@ export interface FilterableRow {
   /** The template's display name, or `null` where the row carries none. */
   readonly templateName: string | null;
   /**
-   * 🔴 The bridge reports a producer on this layer. The override reads THIS, never a status:
-   * a status can be stale or refused, and the question here is "is something on the layer",
-   * which is the observation's own question.
+   * 🔴 The bridge reports a producer on this layer — the OBSERVATION, never a status.
+   *
+   * ⚠ On its own this is NOT the override any more; see {@link neverHidden} and the
+   * `CONSOLE-MATCH-03` header note. A `CG ADD` puts a producer on a layer, so every
+   * merely PRE-ROLLED row reads `true` here while showing nothing at all.
    */
   readonly occupied: boolean;
+  /**
+   * 🔴 This console believes this row has a graphic ON AIR — `isOnAirStatus`, the same
+   * function object the bridge's own gates call, never a second spelling of the list
+   * (golden rule 6).
+   */
+  readonly onAir: boolean;
   /** The row is bound to an item — loaded, whatever its status says about air. */
   readonly loaded: boolean;
 }
@@ -85,9 +119,25 @@ function contains(haystack: string, needle: string): boolean {
  * The override comes first, on purpose: reading it as the last clause of a long boolean is how
  * it eventually gets refactored out (golden rule 6's shape, one surface over).
  */
+/**
+ * 🔴 THE OVERRIDE, as one named predicate rather than a clause inside `rowIsShown`.
+ *
+ * It gates BOTH ways a row can leave this list — the query and `Hide empty` — so it is read
+ * ONCE, in one place, by both. Two copies of "which rows are sacred" is how the two answers
+ * come to disagree, and this module has already had one spelling of it be wrong.
+ *
+ * See the header for why it is these two states and not `occupied`.
+ */
+function neverHidden(row: FilterableRow): boolean {
+  // 1. On air. The one case the whole override exists for.
+  if (row.onAir) return true;
+  // 2. A producer on a layer nothing of ours is bound to — unnameable, so unmatchable.
+  return row.occupied && !row.loaded;
+}
+
 export function rowIsShown(row: FilterableRow, filter: LayerFilter): boolean {
-  // 🔴 THE OVERRIDE. Something is on this layer; no query hides it.
-  if (row.occupied) return true;
+  // 🔴 THE OVERRIDE. This row is the operator's only warning; no query hides it.
+  if (neverHidden(row)) return true;
   if (filter.hideEmpty && !row.loaded) return false;
   const query = filter.query.trim();
   if (query.length === 0) return true;

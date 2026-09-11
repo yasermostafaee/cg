@@ -1716,7 +1716,9 @@ would send an operator hunting for a link that is not part of the design. Only P
 awaits a real feed (`C-016`, the program-channel return).
 
 Fixed: the empty state is now per-panel (`icon` + `emptyLabel` + `detail`) — PREVIEW
-reads "Nothing to preview", PROGRAM reads "No program return". Recorded because the two
+reads "No layers on preview" (it read "Nothing to preview" until `CONSOLE-MATCH-03`
+took the reference's heading, which names the MECHANISM rather than the absence),
+PROGRAM reads "No program return". Recorded because the two
 boxes look interchangeable and the next person to touch them will be tempted to share
 one placeholder again; the reasoning is in `MonitorPanel`'s header comment.
 

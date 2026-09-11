@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ArrowLeftRight, Lock, TriangleAlert } from 'lucide-react';
 import { stoppedChannelsOf } from '@cg/shared-ipc';
 import { useConnections } from '../../hooks/useConnections.js';
 import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
@@ -8,6 +9,7 @@ import { EngageLockDialog } from '../lock/EngageLockDialog.js';
 import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
+import { Icon } from '../../ui/Icon.js';
 import { LinkIndicator } from './LinkIndicator.js';
 
 /**
@@ -377,6 +379,18 @@ export function StatusBar(): JSX.Element {
           ? { ...sessionLabel(health.backup.state), style: styles.stale }
           : sessionLabel(health.backup.state);
 
+  /*
+   * 🔴 `CONSOLE-MATCH-03` §5 — THE FOUR UNICODE GLYPHS ARE GONE FROM THIS BAR.
+   *
+   * `⚠`, `⇄` and `🔒` were literal characters in the copy. CLAUDE.md's design-system rule is
+   * flat about it — _"ALL icons go through the shared `Icon` component … Do NOT introduce new
+   * Unicode-glyph icons"_ — and these predate the rule rather than argue with it. They are not
+   * a style complaint either: a text glyph takes the FONT's shape, so `⚠` renders as a
+   * different mark on a machine with a different emoji font and `🔒` renders in COLOUR,
+   * which on a bar whose whole grammar is "colour means state" is the one thing an icon here
+   * must not do. `Icon` inherits `currentColor`, so each mark now wears its own element's
+   * state colour and changes with it.
+   */
   return (
     <footer style={styles.bar} aria-label="Status bar">
       <LinkIndicator reach={casparReach} />
@@ -385,7 +399,9 @@ export function StatusBar(): JSX.Element {
         // read "PRIMARY A HEALTHY" in green here, straight from the mock's seed, which is
         // the claim that convinced the operator a graphic was on air. Say the true thing.
         <span className="cg-pill" aria-label="Server status">
-          <span style={styles.failedHard}>⚠ NO SERVER — SIMULATED</span>
+          <span style={styles.failedHard}>
+            <Icon icon={TriangleAlert} size={11} /> NO SERVER — SIMULATED
+          </span>
         </span>
       ) : (
         <>
@@ -463,7 +479,9 @@ export function StatusBar(): JSX.Element {
               title={noOscTitle(health.primary.label)}
               aria-label={`No OSC from server ${health.primary.label}`}
             >
-              <span style={styles.noOsc}>⚠ NO OSC FROM {health.primary.label}</span>
+              <span style={styles.noOsc}>
+                <Icon icon={TriangleAlert} size={11} /> NO OSC FROM {health.primary.label}
+              </span>
             </span>
           )}
           {backupDeaf && health.backup !== undefined && (
@@ -472,7 +490,9 @@ export function StatusBar(): JSX.Element {
               title={noOscTitle(health.backup.label)}
               aria-label={`No OSC from server ${health.backup.label}`}
             >
-              <span style={styles.noOsc}>⚠ NO OSC FROM {health.backup.label}</span>
+              <span style={styles.noOsc}>
+                <Icon icon={TriangleAlert} size={11} /> NO OSC FROM {health.backup.label}
+              </span>
             </span>
           )}
           {/*
@@ -520,6 +540,26 @@ export function StatusBar(): JSX.Element {
           <span className="cg-pill">{health.strategy}</span>
         </>
       )}
+      {/*
+        ⚠ `CONSOLE-MATCH-03` §5 — THE REFERENCE'S `CH 1 · News` IS DELIBERATELY NOT HERE, and
+        this note exists so the next reader meets the decision instead of the absence.
+
+        It was built and then taken out again. Two reasons, and the second is the one that
+        settles it:
+
+          1. **This console already names the channel twice** — the header's channel tablist,
+             and the `CH N` scope label `§2` put at the head of the bulk verbs, which is where
+             it actually qualifies a press. The reference needs it down here because its
+             channel is a `<select>` at the far end of a bar with no scope label anywhere
+             else. A third copy on a bar the operator reads for FAULTS earns nothing.
+          2. **It cost this leaf a bridge subscription.** Reading the declared bank here meant
+             `useFixedBankState` inside the status bar, and the status bar is mounted by eight
+             dom specs that stub `window.cg` with the connection channels only — 43 of them
+             went red on `onConfigChanged` of undefined. That is not a test problem to paper
+             over: it is the tests correctly reporting that a bar about SERVER HEALTH had
+             grown a dependency on the LAYER BANK. If the channel ever does belong here it
+             comes down as a prop from the shell, which already holds it.
+      */}
       <span style={styles.spacer} />
       <AsyncButton
         /*
@@ -545,7 +585,8 @@ export function StatusBar(): JSX.Element {
           window.cg.connections.failover({ reason: 'manual' }).then((r) => ({ accepted: r.ok }))
         }
       >
-        ⇄ FAILOVER
+        <Icon icon={ArrowLeftRight} />
+        FAILOVER
       </AsyncButton>
       {/*
         🔴 `AUDIT-CLOSE-01` B1 — SETTINGS AND LOG MOVED TO THE APP HEADER.
@@ -568,7 +609,9 @@ export function StatusBar(): JSX.Element {
         button belongs where the engage is (`STATION-CHROME-01` §7).
       */}
       {lock.engaged ? (
-        <span style={styles.lock}>🔒 LOCKED</span>
+        <span style={styles.lock}>
+          <Icon icon={Lock} size={11} /> LOCKED
+        </span>
       ) : (
         /*
           🔴 `STATION-CHROME-01` §7 — ENGAGING ASKS FOR THE PIN TWICE.
@@ -583,7 +626,13 @@ export function StatusBar(): JSX.Element {
           the engage is, and it is ephemeral (`#lockPin`, in memory, nulled on release), so
           there is no stored setting for a settings page to hold.
         */
-        <Button onClick={() => setEngaging(true)}>🔒 Lock…</Button>
+        <Button onClick={() => setEngaging(true)}>
+          {/* The WORD keeps its own casing: `Button` upper-cases it in CSS, so changing the
+              source case buys no pixel and only breaks the three specs that read
+              `textContent`. Only the glyph moved. */}
+          <Icon icon={Lock} />
+          Lock…
+        </Button>
       )}
       {engaging && (
         <EngageLockDialog

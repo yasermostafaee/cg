@@ -215,6 +215,60 @@ test('the checkerboard is NOT covered by a loaded frame', async ({ app }) => {
  * SELECTED row, and a composite that re-placed graphics nobody edited would be
  * its own defect.
  */
+/**
+ * 🔴 `CONSOLE-MATCH-03` §1 — THE STAMP THAT SAYS THIS PICTURE IS NOT AIR.
+ *
+ * `PROMPT.md` §0 lists `ILLUSTRATIVE COMPOSITE · LOCAL` among the handful of the reference's
+ * own strings that are TRUE FOR US and therefore stay: `R-022` is explicit that this render
+ * happens in the browser and reaches no channel. It is measured HERE and not in jsdom because
+ * every claim below is a box or a stacking order, and jsdom has no layout (golden rule 12c —
+ * a geometry assertion there passes against a surface of any shape at all).
+ */
+test('the stage stamps what it is, and no graphic can cover the stamp', async ({ app }) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1600, height: 900 });
+  const layer = await app.importVcg('a.vcg', await buildValidVcg('tpl-stamp'));
+  await stubRetainedPage(page);
+  await rehearseRow(page, layer);
+  await expect(frames(page)).toHaveCount(1);
+
+  const stamp = page.locator('[data-stage-illustration]');
+  await expect(stamp).toHaveCount(1);
+  await expect(stamp).toHaveText('ILLUSTRATIVE COMPOSITE · LOCAL');
+
+  /*
+    ABOVE the graphic, which is the whole point: a full-frame lower third would otherwise
+    paint over the one label saying this is not what is on air. Asserted as a real stacking
+    comparison against the frame's own z-index, not against a constant — `frameZIndex` may
+    grow its range and this must stay above whatever it becomes.
+  */
+  const stampZ = Number(await stamp.evaluate((el) => getComputedStyle(el).zIndex));
+  const frameZ = Number(
+    await frames(page)
+      .first()
+      .evaluate((el) => getComputedStyle(el).zIndex),
+  );
+  expect(stampZ).toBeGreaterThan(frameZ);
+
+  // …and it is IN the stage, at the bottom-left, rather than floating in the panel chrome.
+  const sBox = await stamp.boundingBox();
+  const fBox = await frames(page).first().boundingBox();
+  expect(sBox).not.toBeNull();
+  expect(fBox).not.toBeNull();
+  expect(sBox!.height, 'the stamp is laid out, not collapsed').toBeGreaterThan(0);
+  expect(sBox!.y + sBox!.height, 'it sits at the FOOT of the stage').toBeGreaterThan(
+    fBox!.y + fBox!.height / 2,
+  );
+
+  /*
+    🔴 AND THE HEAD COUNTS WHAT IS ON PVW, with the ROW NAMES relocated to the title — golden
+    rule 11's shape exactly: the sentence read under pressure is the count.
+  */
+  const count = page.locator('[data-pvw-count]');
+  await expect(count).toHaveText('1 layer on PVW');
+  expect(await count.getAttribute('title'), 'the rows are named in the title').not.toBeNull();
+});
+
 test('an applied position reaches the SELECTED row’s frame and no other', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1600, height: 900 });

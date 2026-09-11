@@ -122,7 +122,7 @@ The 🔒 LOCK button in the StatusBar engages a PIN-gated overlay. While locked,
 
 The StatusBar shows the current `PRIMARY` and `BACKUP` labels. Auto-failover kicks in when the primary becomes unhealthy under the configured budget (ping miss, OSC silence, command-timeout burst, or 5xx burst). A red banner pins itself at the top of the window naming the swap — dismiss it once you've acknowledged.
 
-Manual failover: click `⇄ FAILOVER` in the StatusBar. The journal is replayed to the new primary in `journal-replay` and `mirror-async` modes; `mirror-sync` swaps instantly.
+Manual failover: click `FAILOVER` in the StatusBar. The journal is replayed to the new primary in `journal-replay` and `mirror-async` modes; `mirror-sync` swaps instantly.
 
 ## Audit
 
