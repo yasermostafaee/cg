@@ -1232,4 +1232,22 @@ renders answers "is this handled?" with a yes.
       "No Take is sent" sub-line; the audit dialog's 1224 × 744 frame, its 98 px filter bar and
       the event-details drawer with its TECHNICAL block. 🔴 Ours keeps LOCAL time and its Actor
       column; only the reference's SHAPE is adopted.
-- [x] Q.6 **Linux `gate:e2e` — DISCHARGED on `RUNURL`.**
+- [x] Q.6 🔴 **Linux `gate:e2e` — DISCHARGED on `0a19dec6`, the commit that carries this work:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34655583610> — run `conclusion: success`, the **`E2E (Playwright)` job RAN** 22:48:48Z →
+      23:00:37Z (**709 s**, `conclusion: success`), and its **`E2E` step is step 13,
+      `completed/success`**. Checked at the STEP level and not merely the job: `P-046`'s red was
+      a green-looking job whose suite never ran, and `P-029`'s is its mirror. Not skipped, not
+      cancelled. `Lint · Typecheck · Test · Build` green beside it (232 s, every step
+      `success`), `required` green.
+      Local `pnpm gate`: **93 successful, 93 total · 0 cached**, exit 0 in **248.8 s**, with its
+      `---- gate ended` footer (`P-040`/`P-045`) — so not a killed capture. Runtime unit suite
+      **1422 passing**; local Windows Playwright **182 passed** — a reason to push and never a
+      claim that this was verified. The Linux run is what verified it.
+      ⭐ `P-046`'s remedy exercised again: step 9 `Install Playwright Chromium (+ deps)` SKIPPED
+      on the cache hit, step 10 `Install system deps for cached browser` **succeeded**, step 11
+      the launch **probe** passed. Its RETRY and ESCALATION paths remain unexercised; that item
+      stays open.
+      ⚠ **Green first time, and one red was caught locally before the push** — `add-dialog`'s
+      §7 pinned the literal `🔒 LOCKED`, which the glyph replacement removed. That is golden
+      rule 9 exactly: the sweep has to cover the GLYPH, not only the words around it, and my
+      first sweep did not. Found by running the full local suite, which is why it runs.

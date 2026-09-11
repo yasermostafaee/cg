@@ -4532,3 +4532,23 @@ sentence, and each name gets its own `bdi`. Our column reads `Outcome` where the
 
 **Also untouched, deliberately:** no wire behaviour, no schema, no persisted key, no plant command,
 no refusal CONDITION. Station setup and the template picker untouched. The change is NOT archived.
+
+### 25.7 The runs
+
+- `pnpm gate`, foreground, uncached: **93 successful, 93 total · 0 cached, 93 total**, exit 0 in
+  **248.8 s**, prettier clean, OpenSpec **78 passed, 0 failed**. The log carries its
+  `---- gate ended … (exit 0)` footer, so it is not a killed capture (`P-045`).
+- Runtime unit suite: **155 files, 1422 tests, all passing** — including `tokenHome`, which is
+  what holds every new value here to a role token.
+- `pnpm --filter @cg/runtime test:e2e`, Windows, against a fresh build: **182 passed** (2.2 m).
+  ⚠ **NON-AUTHORITATIVE** (golden rule 12a) — a reason to push, not a discharge.
+- 🔴 **DISCHARGED — Linux `e2e` on the code head `0a19dec6`:** <https://github.com/yasermostafaee/cg/actions/runs/34655583610> — run
+  `conclusion: success`, the **`E2E (Playwright)` job RAN** 22:48:48Z → 23:00:37Z (**709 s**,
+  `conclusion: success`), its **`E2E` step is step 13, `completed/success`**. Checked at the
+  STEP level, never merely the job (`P-046`/`P-029`). Not skipped, not cancelled.
+  `Lint · Typecheck · Test · Build` green beside it (232 s).
+- ⚠ **One red caught locally before the push, and it is golden rule 9's shape:** `add-dialog`'s
+  §7 asserted the literal `🔒 LOCKED`, which the glyph replacement removed. My first sweep swept
+  the WORDS and not the GLYPH. The full local suite is what found it — three prose sites
+  (`LockOverlay`, `useDialog`, the operator guide) and one PRD line were carrying the same
+  glyphs and were corrected in the same pass.
