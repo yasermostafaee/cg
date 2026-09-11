@@ -436,11 +436,25 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
   await expect(serve.getByText(/how those servers reach this machine/i)).toBeVisible();
 
   /*
-    ⚠ THE REFUSAL DID NOT MOVE INTO THE PANE. The reference draws its on-air block as a
-    `.notice` band at the top of the Servers body; the app's refusal stays in the modal's
-    pinned message region, where `AUDIT-CLOSE-01` delta A put it and
-    `modal-message-containment.spec.ts` holds it. Asserted as an absence so the adopted
-    `.cg-setup-notice` geometry can never quietly become a second home for an event.
+    🔴 `SETTINGS-POLISH-04` §4 — **THIS ASSERTION WAS INVERTED, AND THE PARAGRAPH THAT JUSTIFIED
+    IT CONFLATED TWO THINGS.**
+
+    It read "THE REFUSAL DID NOT MOVE INTO THE PANE" and asserted the class was never rendered.
+    But a REFUSAL (an act was attempted and did not happen) and a BLOCK (a condition in force
+    before anything is pressed) are two lifetimes, and only the first belongs in the pinned
+    region. The on-air block is the second: it is true at rest, unchanged by any press, and is
+    exactly the sentence the reference puts in its one `.notice`, between the section head and
+    the first card.
+
+    ⚠ What the old assertion was PROTECTING is still protected, and by a stronger pair: the
+    band is present, and the pinned region is ABSENT — so the two can never both carry it. The
+    region's own job is re-asserted against a real event in `modal-message-containment.spec.ts`.
   */
-  await expect(dialog.locator('.cg-setup-notice')).toHaveCount(0);
+  const band = dialog.locator('[data-setup-notice]');
+  await expect(band, 'the standing on-air block IS the pane’s notice now').toHaveCount(1);
+  await expect(band).toContainText('Server changes are paused while on air');
+  await expect(
+    dialog.locator('[data-modal-message]'),
+    'and the region events land in carries no copy of it',
+  ).toHaveCount(0);
 });

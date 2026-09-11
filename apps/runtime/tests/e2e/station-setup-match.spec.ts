@@ -110,18 +110,24 @@ test('§1 — the frame AND the rail are one size on every tab, and clamp to the
     that never rendered, or against five readings of one tab.
 
     ⚠ The second one is the important one: it proves the rail assertion above is not passing
-    because nothing ever puts a message on screen. Servers IS refused here — the e2e seed has
-    rows on air — so the region genuinely exists on that tab and genuinely does not exist on
-    the others, which is exactly the condition that used to move the rail.
+    because nothing ever puts a band on screen. Servers IS blocked here — the e2e seed has rows
+    on air — so the band genuinely exists on that tab and genuinely does not exist on the
+    others, which is exactly the condition that used to move the rail.
+
+    ⚠ `SETTINGS-POLISH-04` §4 — the CONTROL is `[data-setup-notice]` now, not
+    `[data-modal-message]`: the standing block renders in the pane's flow (see `SetupNotice.tsx`)
+    and the pinned region is empty on Servers at rest. The control still has to be something
+    that appears on ONE tab and not the others, and this is that thing — reading the region here
+    would now be a control that never fires, which passes while proving nothing.
   */
   const [, , w = 0, h = 0] = first.box.split(',').map(Number);
   expect(w, 'the frame has a real width').toBe(1140);
   expect(h, 'the frame has a real height').toBe(736);
   expect(first.railH, 'the rail is a real column').toBeGreaterThan(400);
   await rail.getByRole('tab', { name: /^Servers/ }).click();
-  await expect(dialog.locator('[data-modal-message]')).toHaveCount(1);
+  await expect(dialog.locator('[data-setup-notice]')).toHaveCount(1);
   await rail.getByRole('tab', { name: /^Channel/ }).click();
-  await expect(dialog.locator('[data-modal-message]')).toHaveCount(0);
+  await expect(dialog.locator('[data-setup-notice]')).toHaveCount(0);
 
   // …and at a SHORT viewport it clamps rather than overflowing.
   await page.setViewportSize({ width: 1280, height: 600 });
@@ -486,8 +492,11 @@ test('§8 — every add/edit/remove is the same 480 frame, with a verb that name
   expect(addSource.w, 'the reference’s `.sub-dialog` — min(480, 100vw − 32)').toBe(480);
   expect(addSource.bg, 'the family’s own ground').toBe('rgb(21, 25, 31)');
   expect(addSource.footBg, 'its footer band, a step under the body').toBe('rgb(18, 23, 30)');
-  /* A SUB layer lays the lighter scrim, so the dialog it was opened from stays visible. */
-  expect(addSource.scrim).toBe('rgba(0, 0, 0, 0.4)');
+  /* A SUB layer lays the lighter scrim, so the dialog it was opened from stays visible.
+     `SETTINGS-POLISH-04` §7 — the reference's `.sub-dialog::backdrop{background:#0306099e}`,
+     whose `9e` is 0.62: still lighter than the base scrim's 0.76, which is the role's whole
+     point. `settings-polish.spec.ts` §7 asserts that RELATION rather than the two literals. */
+  expect(addSource.scrim).toBe('rgba(3, 6, 9, 0.62)');
   /*
     🔴 §8e — FOCUS LANDS ON THE FIRST FIELD. It landed on the ✕ on all five, so an operator who
     pressed `Add source` had to Tab or click before he could type. `B-230` is why this is a
@@ -534,18 +543,33 @@ test('§8 — every add/edit/remove is the same 480 frame, with a verb that name
     1,
   );
   /*
-    ⚠ …and its confirm keeps the app's DESTRUCTIVE treatment. A scoped `[data-modal-size]
-    .cg-btn` rule out-specifies `.cg-btn--caution-strong`, and the first spelling of this
-    family's button rule did exactly that — the amber came out the same grey as `Cancel`
-    beside it. A dialog asking "Remove this?" with two identical buttons is worse than one
-    with no colour at all.
+    ⚠ …and its confirm keeps A DESTRUCTIVE TREATMENT. A scoped `[data-modal-size] .cg-btn` rule
+    out-specifies the variant's own, and the first spelling of this family's button rule did
+    exactly that — the destructive fill came out the same grey as `Cancel` beside it. A dialog
+    asking "Remove this?" with two identical buttons is worse than one with no colour at all.
+
+    🔴 `SETTINGS-POLISH-04` §2 — **THE COLOUR CHANGED AND THE CLAIM DID NOT.** This confirm is
+    raised from inside Station setup (`layer: 'sub'`), so it takes that family's red outline —
+    `.btn.danger{background:var(--red-bg);border-color:#684044;color:var(--red)}` — while the
+    CONSOLE's confirms keep their solid amber. Two families, two answers, both deliberate; see
+    the rule beside `[data-modal-layer='sub']` in `controls.css`.
+
+    ⚠ The "not the same as Cancel" half is asserted SEPARATELY and against the button actually
+    beside it, because that is the property the original literal was standing in for. A literal
+    alone would go on passing if Cancel were ever repainted to match it.
   */
   const go = sub().getByRole('button', { name: 'Remove delimiter' });
   await expect(go).toHaveAttribute('data-modal-role', 'destructive');
-  expect(
-    await go.evaluate((el) => getComputedStyle(el).backgroundColor),
-    'the destructive fill survives the family’s scoped button rule',
-  ).toBe('rgb(245, 158, 11)');
+  const pair = await sub().evaluate((el) => {
+    const btns = [...el.querySelectorAll('.cg-modal-footer button')];
+    const read = (b: Element): string => getComputedStyle(b).backgroundColor;
+    return {
+      commit: read(btns[btns.length - 1]!),
+      cancel: read(btns[0]!),
+    };
+  });
+  expect(pair.commit, 'this family’s destructive is the reference red').toBe('rgb(53, 34, 36)');
+  expect(pair.commit, 'and never the same fill as the Cancel beside it').not.toBe(pair.cancel);
   // Declining changes nothing — the list is as long as it was.
   const before = await page.locator('[data-delimiter-id]').count();
   await sub().getByRole('button', { name: 'Cancel' }).click();
@@ -577,7 +601,16 @@ test('§9 — the banner sits in the pane’s column, clear of the footer, and n
   await app.openStationSetupAt('Servers');
 
   // ── 9a — TWO WEIGHTS, AND THE SECOND ONE SAYS WHAT TO DO ──────────────────────────
-  const banner = dialog.locator('[data-modal-message]');
+  /*
+    🔴 `SETTINGS-POLISH-04` §4 — **IT IS `[data-setup-notice]` NOW, AND THE REGION IS ABSENT.**
+
+    The sentence and both its weights are unchanged. What moved is the element: a BLOCK is in
+    force before anything is pressed and no act produces it, so it is a standing `.notice` in
+    the pane's flow, which is where the reference emits its one `.notice` too. The pinned
+    region keeps `AUDIT-CLOSE-01` delta A's job — why the last ACTION did not happen — and is
+    re-asserted at the end of this test, against a real event.
+  */
+  const banner = dialog.locator('[data-setup-notice]');
   await expect(banner).toHaveCount(1);
   await expect(banner, 'the title states the condition').toContainText(
     'Server changes are paused while on air',
@@ -588,31 +621,32 @@ test('§9 — the banner sits in the pane’s column, clear of the footer, and n
   await expect(banner, '…and its scope, so the other tabs do not read as gated').toContainText(
     'Every other section stays editable',
   );
+  await expect(
+    dialog.locator('[data-modal-message]'),
+    'a standing block must not ALSO occupy the region events land in',
+  ).toHaveCount(0);
 
   /*
-    🔴 THE PLACEMENT, WHICH IS WHAT `AUDIT-CLOSE-01` WAS ABOUT. The band spans the PANE'S
-    CONTENT COLUMN — not under the rail, not across the footer, not edge-to-edge of the frame —
-    and it CLEARS the footer's top rule rather than meeting it.
+    🔴 THE PLACEMENT. The band spans the PANE'S CONTENT COLUMN — not under the rail, not
+    edge-to-edge of the frame — and it sits between the section head and the first card, 21 px
+    above it, which is where the drawing puts its `.notice`.
   */
   const geom = await dialog.evaluate((el) => {
-    /*
-      ⚠ THE PAINTED BAND, not its wrapper. `[data-modal-message]` is the pinned REGION — a
-      transparent box that carries the column's inset — and the amber surface the operator
-      sees is the `Notice` inside it. Measuring the region would have read the panel column's
-      own edge (297) and called it the content column (329): a number that looks like a
-      finding and is about the wrong element.
-    */
-    const b = el.querySelector('[data-modal-message] [data-notice]')?.getBoundingClientRect();
+    const notice = el.querySelector('[data-setup-notice]');
+    const b = notice?.getBoundingClientRect();
     const pane = el.querySelector('[data-station-pane]');
     const paneBox = pane?.getBoundingClientRect();
     const paneCS = pane === null || pane === undefined ? null : getComputedStyle(pane);
-    const foot = el.querySelector('.cg-modal-footer')?.getBoundingClientRect();
+    const head = el.querySelector('.cg-setup-head')?.getBoundingClientRect();
+    const card = el.querySelector('.cg-card')?.getBoundingClientRect();
     const rail = el.querySelector('[data-setup-rail]')?.getBoundingClientRect();
     if (
       b === undefined ||
+      notice === null ||
       paneBox === undefined ||
       paneCS === null ||
-      foot === undefined ||
+      head === undefined ||
+      card === undefined ||
       rail === undefined
     ) {
       throw new Error('the frame is missing a region');
@@ -624,32 +658,53 @@ test('§9 — the banner sits in the pane’s column, clear of the footer, and n
       contentLeft: Math.round(paneBox.left + Number.parseFloat(paneCS.paddingLeft)),
       contentRight: Math.round(paneBox.right - Number.parseFloat(paneCS.paddingRight)),
       railRight: Math.round(rail.right),
-      clearance: Math.round(foot.top - b.bottom),
+      cardLeft: Math.round(card.left),
+      cardRight: Math.round(card.right),
+      belowHead: Math.round(b.top - head.bottom),
+      aboveCard: Math.round(card.top - b.bottom),
     };
   });
   expect(geom.bannerLeft, 'the banner starts where the section’s cards start').toBe(
     geom.contentLeft,
   );
   expect(geom.bannerRight, '…and ends where they end').toBe(geom.contentRight);
+  /*
+    ⚠ AND THE SAME EDGES AS THE FIRST CARD, measured against the CARD rather than derived from
+    the pane's padding a second time. "Not inset differently from the cards" is the owner's
+    words for this, and computing both sides from the same padding would be asserting the
+    arithmetic rather than the render.
+  */
+  expect(geom.bannerLeft, 'the same left edge as the first card').toBe(geom.cardLeft);
+  expect(geom.bannerRight, '…and the same right edge').toBe(geom.cardRight);
   expect(
     geom.bannerLeft,
     'it must not be drawn across the names of the sections it says are editable',
   ).toBeGreaterThanOrEqual(geom.railRight);
-  /*
-    ⚠ **20 px, not "> 0".** The defect was `bottom 693.0` against `top 693.0`: touching, which
-    reads as one surface rather than as a message above a band. A threshold of zero would have
-    passed against exactly that.
-  */
-  expect(
-    geom.clearance,
-    'the banner must CLEAR the footer’s rule, not meet it',
-  ).toBeGreaterThanOrEqual(20);
+  // It is AFTER the head and BEFORE the first card, 21 px above it — `.notice{margin-bottom:21px}`.
+  expect(geom.belowHead, 'the banner follows the section head').toBeGreaterThanOrEqual(0);
+  expect(geom.aboveCard, 'and is 21 px above the first card').toBe(21);
 
   // ── 9c — THE FOOTER SAYS FOUR WORDS, and does not repeat the explanation ──────────
   const foot = dialog.locator('[data-section-footer="servers"]');
   await expect(foot).toHaveText('Unavailable while on air');
   await expect(foot).toHaveAttribute('data-footer-tone', 'blocked');
   await expect(foot, 'the footer must not restate the banner').not.toContainText('Clear All');
+  /*
+    🔴 `SETTINGS-POLISH-04` §3 — **AND IT IS THE FAMILY'S AMBER, which it was not.**
+
+    `data-footer-tone="blocked"` was on this element and the sentence rendered the resting muted
+    grey anyway: `styles.footNote` set `color` INLINE, so the stylesheet's tone rule matched and
+    lost. Measured before the fix, `rgb(142, 158, 175)`. The glyph takes the same ink through
+    `currentColor`, so both are read here — a colour that reached the word but not the mark
+    would be the same bug half-applied.
+  */
+  const tone = await foot.evaluate((el) => ({
+    word: getComputedStyle(el).color,
+    mark:
+      el.querySelector('svg') === null ? null : getComputedStyle(el.querySelector('svg')!).color,
+  }));
+  expect(tone.word, 'the blocked clause is this family’s amber').toBe('rgb(245, 200, 121)');
+  expect(tone.mark, 'and so is its padlock').toBe('rgb(245, 200, 121)');
 
   // ── 9b — THE CARD HELP STRIP: standing, inside its own card, and NOT amber ────────
   const note = dialog.locator('[data-remote-host-note]');

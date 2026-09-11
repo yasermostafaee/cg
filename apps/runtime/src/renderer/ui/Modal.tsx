@@ -55,18 +55,37 @@ import { Notice, type NoticeRole } from './Notice.js';
  */
 
 const styles = {
+  /*
+    🔴 `SETTINGS-POLISH-04` §7 — THE SCRIM IS A GROUND *AND* A BLUR, AND BOTH ARE SPELLED HERE.
+
+    The blur is not decoration. At the reference's 0.76 a scrim with no blur reads as FLAT
+    BLACK — the console stops being dimmed and becomes an absence — so the darker ground is
+    only correct WITH it. See the token home for the pair.
+
+    ⚠ Both are inline for the reason the ground already was: this object sets `background`
+    inline, so a `[data-modal-layer]` rule in `controls.css` would lose to it silently. Putting
+    the blur in the stylesheet while the ground stays here is exactly the split that produces a
+    "half the effect applied" bug nothing fails on.
+  */
   scrim: {
     position: 'fixed' as const,
     inset: 0,
     background: cssVars['--r-modal-scrim'],
+    backdropFilter: cssVars['--r-modal-scrim-blur'],
+    WebkitBackdropFilter: cssVars['--r-modal-scrim-blur'],
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,
     padding: '1rem',
   },
-  /** A dialog opened FROM a dialog: above it, and through a lighter scrim. */
-  scrimSub: { background: cssVars['--r-modal-scrim-sub'], zIndex: 1001 },
+  /** A dialog opened FROM a dialog: above it, and through a lighter scrim — and a shallower blur. */
+  scrimSub: {
+    background: cssVars['--r-modal-scrim-sub'],
+    backdropFilter: cssVars['--r-modal-scrim-sub-blur'],
+    WebkitBackdropFilter: cssVars['--r-modal-scrim-sub-blur'],
+    zIndex: 1001,
+  },
   dialog: {
     background: colors.panel,
     border: `1px solid ${colors.border}`,
@@ -380,7 +399,25 @@ const styles = {
    * here for one reason: the primitive already sets that property inline.
    */
   dialogRecord: { background: cssVars['--r-setup-surface'] },
-  footerRecord: { background: cssVars['--r-sub-foot-bg'] },
+  /*
+    🔴 `SETTINGS-POLISH-04` §1 — AND THE GAP AND THE PADDING, for the same reason and by the
+    same route.
+
+    `controls.css` had declared all three of this family's footer values since
+    `SETTINGS-MATCH-02` and all three were losing to `styles.footer`'s inline ones — the trap
+    two lines up, met a THIRD time in this one object. Measured: `gap: 12px` where the rule
+    said 9, and `padding: 16px 26px` where it said `16px 24px`.
+
+    The reference's `.sub-foot{gap:9px}` is the same NINE the pane footer's `.foot-actions`
+    takes — one family, one number, spelled once in `--r-sub-foot-gap`. The dead declarations
+    are gone from the stylesheet; see the note left in their place for why leaving them would
+    be worse than never having written them.
+  */
+  footerRecord: {
+    background: cssVars['--r-sub-foot-bg'],
+    gap: cssVars['--r-sub-foot-gap'],
+    padding: cssVars['--r-sub-foot-pad'],
+  },
   /**
    * 🔴 `SETTINGS-MATCH-02` §1 — **THE FIXED FRAME IS A RAIL BESIDE A PANEL, AND THE PANEL
    * OWNS THE MESSAGE AND THE FOOTER.**

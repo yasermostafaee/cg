@@ -211,20 +211,34 @@ describe('the census — every section of Station setup that can speak, speaks t
   });
 
   /**
-   * `Servers`: FOUR private treatments for one thing, once. The on-air block is a
-   * REFUSAL, and since `STATION-SETUP-02` it names its scope — the other sections are
-   * not gated and the message must not read as if they were.
+   * 🔴 `SETTINGS-POLISH-04` §4 — **`Servers`: THE ON-AIR BLOCK IS NOT ROUTED THROUGH THE REGION
+   * ANY MORE, AND THAT IS WHAT THIS TEST NOW ASSERTS.**
+   *
+   * This file's subject is that a section's message reaches the operator through ONE element,
+   * never a private band beside it. The on-air block does not falsify that: it stopped being a
+   * MESSAGE. It is in force before anything is pressed and no act produces it, so it is a
+   * standing `.notice` in the pane's flow (`SetupNotice.tsx`), while the region keeps the job
+   * `AUDIT-CLOSE-01` delta A gave it — why the last ACTION did not happen.
+   *
+   * ⚠ So the claim is inverted rather than deleted, and the inversion is the load-bearing part:
+   * the sentence must be in the notice, and the region must be ABSENT. A test that merely
+   * stopped looking would pass against a build that rendered it in BOTH.
    */
-  it('Servers routes its on-air block through the region as a refusal, scoped to Servers', async () => {
+  it('Servers states its on-air block as a standing notice, and raises no message at all', async () => {
     stationSetupStub({
       items: [{ itemId: 'i1', templateId: 't1', fields: {}, status: 'on-air', pending: false }],
     });
     const dialog = await renderStationSetup({ section: 'servers' });
 
-    expectMessageThroughTheRegion(dialog, 'refusal');
-    const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
+    const notice = dialog.querySelector('[data-setup-notice]');
+    expect(notice).not.toBeNull();
+    const text = notice?.textContent ?? '';
     expect(text).toContain('Server changes are paused while on air');
     expect(text).toContain('Every other section stays editable');
+
+    // The region is not merely quiet — it is not rendered, so there is nowhere for a second
+    // copy of this sentence to sit.
+    expect(dialog.querySelector('[data-modal-message]')).toBeNull();
   });
 
   /**

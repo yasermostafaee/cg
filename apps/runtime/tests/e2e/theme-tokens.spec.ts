@@ -90,9 +90,18 @@ test('STATION SETUP paints from the tokens — its scrim is not transparent', as
 
   // The modal scrim is `--r-modal-scrim` now. Unresolved, it would be transparent and
   // the console behind would stay fully legible — a real, silent visual regression.
-  const scrimBg = await dialog.evaluate((el) => {
-    const scrim = el.parentElement;
-    return scrim === null ? null : getComputedStyle(scrim).backgroundColor;
+  /*
+    ⚠ `SETTINGS-POLISH-04` §7 — the value moved to the reference's
+    `dialog::backdrop{background:rgba(4,7,11,.76)}`, and the BLUR is read here too. This test's
+    subject is that the token RESOLVED; a scrim with the right colour and no blur would be the
+    same defect half-applied, because at 0.76 the ground alone reads as flat black.
+  */
+  const scrim = await dialog.evaluate((el) => {
+    const s = el.parentElement;
+    return s === null
+      ? null
+      : { bg: getComputedStyle(s).backgroundColor, blur: getComputedStyle(s).backdropFilter };
   });
-  expect(scrimBg).toBe('rgba(0, 0, 0, 0.6)');
+  expect(scrim?.bg).toBe('rgba(4, 7, 11, 0.76)');
+  expect(scrim?.blur).toBe('blur(5px)');
 });

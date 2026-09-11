@@ -3381,6 +3381,23 @@ between its own two families either.
 SHADOW family is mint. The owner's green rule therefore bites on exactly four controls, and
 §20.5 records that all four already wore an app variant.
 
+> 🔴 **`SETTINGS-POLISH-04` §7 (2026-09-11) — THE LIFT AND THE SCRIM ARE NOW ONE VALUE FOR EVERY
+> DIALOG, WHICH IS A DEPARTURE FROM THIS TABLE'S FIRST COLUMN AND IS RECORDED HERE AS ONE.**
+> The two drawings differ on both, and the owner's instruction named the SHADOW family's numbers:
+>
+> |       | outer (`04`-family)       | shadow (`09`)                            | ours now                             |
+> | ----- | ------------------------- | ---------------------------------------- | ------------------------------------ |
+> | lift  | `0 30px 100px #000a`      | `0 32px 100px #0009` + `0 0 0 1px #0003` | the shadow family's, on every dialog |
+> | scrim | `#04080dcc` + `blur(4px)` | `rgba(4,7,11,.76)` + `blur(5px)`         | the shadow family's, on every dialog |
+>
+> ⚠ **The RADII are untouched and still split by family** (14 outer / 16 `fixed`), so the outer
+> dialogs now wear a 14 px corner under the shadow family's lift. That is the honest description
+> of what shipped, and it is deliberate rather than an oversight: the two lifts differ by 2 px of
+> offset and 0.067 of alpha, so the only visible difference is the HAIRLINE RING — which reads
+> as an edge on every dialog and is the half the owner was asking for. The scrims are nearer
+> still (`rgb(4,8,13)` against `rgb(4,7,11)`); only the alpha and one pixel of blur separate them.
+> A per-family scrim would mint a second value to express a difference nobody can see.
+
 ### 20.3 THE WIDTH TABLE, ADOPTED
 
 | app size | reference                            | was              | now             |

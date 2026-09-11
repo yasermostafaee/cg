@@ -70,17 +70,23 @@ describe('§2 — the rail: nothing is hidden, and no refusal stands in front of
     );
   });
 
+  /*
+    ⚠ `SETTINGS-POLISH-04` §4 — THE ELEMENT MOVED, THE CLAIM DID NOT. The standing on-air block
+    is `[data-setup-notice]` in the pane's flow now, not `[data-modal-message]` above the footer
+    (see `SetupNotice.tsx` for why a BLOCK is not an EVENT). What this test is about — the
+    sentence is on Servers and only on Servers — is unchanged, so only the selector moves.
+  */
   it('🔴 THE SCROLL’S DEFECT, GONE: the Servers block is not in front of the delimiters', async () => {
     stationSetupStub({ items: [onAir('a'), onAir('b')] });
     const dialog = await renderStationSetup({ section: 'servers' });
-    // On SERVERS the operator sees it, in full, above that section's own footer.
-    expect(dialog.querySelector('[data-modal-message]')?.textContent).toContain(
+    // On SERVERS the operator sees it, in full, in that section's own column.
+    expect(dialog.querySelector('[data-setup-notice]')?.textContent).toContain(
       'Server changes are paused while on air',
     );
 
     // …and on DELIMITERS he does not. This is the whole complaint, as an assertion.
     await selectSetupTab(dialog, 'delimiters');
-    expect(dialog.querySelector('[data-modal-message]')?.textContent ?? '').not.toContain(
+    expect(dialog.querySelector('[data-setup-notice]')?.textContent ?? '').not.toContain(
       'Server changes are paused while on air',
     );
 
@@ -91,7 +97,7 @@ describe('§2 — the rail: nothing is hidden, and no refusal stands in front of
 
     // …and one press lands on the sentence.
     await selectSetupTab(dialog, 'servers');
-    expect(dialog.querySelector('[data-modal-message]')?.textContent).toContain(
+    expect(dialog.querySelector('[data-setup-notice]')?.textContent).toContain(
       'Server changes are paused while on air',
     );
   });

@@ -1045,3 +1045,141 @@ red-first proof and the plant that found a vacuous assertion (23.3), the before/
       ⭐ `P-046`'s remedy is exercised again on both runs: `Install system deps for cached
       browser` **succeeded** and the launch **probe** passed on each. Its RETRY and ESCALATION
       paths remain unexercised and that item stays open.
+
+## `SETTINGS-POLISH-04` — seven visual defects the owner found on the built dialog (2026-09-11)
+
+He looked at `SETTINGS-MATCH-02`'s result on screen and named seven things, then an eighth
+mid-session. Every one is a property of what the browser PAINTS, so every one was measured in
+Chromium at 1280 × 800 before and after, and the reference values come from
+`09-channel-settings.html`'s **shadow** stylesheet — a different palette from the outer file the
+console takes (`--red-bg:#352224` against `#3a242a`, `--amber:#f5c879` against `#f3cd88`).
+
+⚠ **Three of the eight had the same mechanical cause and it is worth naming once:** a property
+the stylesheet needed to vary was set INLINE by `Modal`, so the rule matched and lost, silently.
+§1's sub-dialog gap (`12px` where `controls.css` said 9, since `SETTINGS-MATCH-02`), that
+footer's padding (`16px 26px` where it said `16px 24px`), and §3's whole defect. Both dead
+declarations are deleted rather than left, with a note in their place: a declared value nothing
+renders answers "is this handled?" with a yes.
+
+- [x] P.1 **§1 — the footer's two buttons were TOUCHING.** The frame's footer has carried
+      `gap: 9px` since `SETTINGS-MATCH-02` and on the one tab with TWO controls it did nothing: a
+      section's commit controls portal into a slot element, so the gap applied between the slot
+      and its neighbours. Measured: `Revert` ended at x = 1067, `Apply layers` began at x = 1067
+      — **0 px → 9 px**. The slot is an action row with its own gap now. The sub-dialog footer
+      took the outer `.modal` family's 12; it is 9.
+      ⚠ The assertion is on the MEASURED gap, never `getComputedStyle(...).gap` — the declared
+      value was already right and the render was wrong, so reading the declaration would have
+      confirmed the bug.
+- [x] P.2 **§2 — two destructive treatments, and each is right where it is.** Station setup's
+      sub-dialog family takes the drawing's `.btn.danger` — `#352224` ground, `#684044` edge,
+      `#ffaaa7` ink, filling to `#482a2e` under the pointer — and the trash emblem goes with it.
+      The console's `useConfirm` keeps its **solid amber** (`rgb(245, 158, 11)`, hover
+      `rgb(222, 81, 5)`), because the alternative makes `Clear all` QUIETER: an outline where a
+      fill is, on the one control that takes every graphic off air. **Not harmonised**, and the
+      family is decided ONCE by `ConfirmRequest.layer` — the flag that already decides the frame
+      and the scrim — never per call site. Both halves are asserted in one test, because a test
+      that checked the red alone would pass against a build that had harmonised the amber into it.
+      ⚠ One of the four sub-confirms (the candidate row's `Remove template`) CAN clear a live
+      layer. It takes the family's treatment too: the family is the predicate, and a per-call-site
+      exception is how a rule comes to have two spellings. Its warning is in its sentence, which
+      is where that dialog has always carried it.
+- [x] P.3 **§3 — `Unavailable while on air` read the wrong ink, and the cause was an inline
+      style.** `data-footer-tone="blocked"` was on the element and
+      `.cg-footer-contract[data-footer-tone='blocked']` matched — and `styles.footNote` set
+      `color` inline, so it lost every time. Measured **`rgb(142, 158, 175)` → `rgb(245, 200, 121)`**
+      (`#f5c879`), the padlock with it through `currentColor`. The RESTING ink moved into
+      `controls.css` too, so one place decides both.
+      ⚠ The reference draws three tones (muted · `.pending` accent · `.warning` amber); this
+      build has two. Nothing in this footer is ever PENDING — every commit is synchronous from the
+      operator's side and its progress is the button's own busy state — and a third tone with no
+      condition to raise it would be a signal that says nothing.
+- [x] P.4 **§4 — the banner is a `.notice` in the pane's flow, and A BLOCK IS NOT AN EVENT.**
+      `AUDIT-CLOSE-01` delta A gave the pinned region one job — _why did the last action not
+      happen?_ — and `Server changes are paused while on air` cannot answer it: true before
+      anything is pressed, unchanged within the tab, produced by no act. The `.cg-setup-notice`
+      class existed and NOTHING RENDERED IT. Measured after: box `x 329, w 848` against the first
+      card's `x 329, w 848` — same edges — after the section head (bottom 217) and **21 px** above
+      the card; ground `rgb(41, 36, 28)` (`#29241c`), edge `rgb(84, 69, 45)` (`#54452d`), title
+      `#f5c879`, body `rgb(205, 189, 158)` (`#cdbd9e`), radius 10, pad `15px 17px`, glyph 19 px at
+      `margin-top: 2px`. Before, in the pinned region: `rgb(53, 45, 30)` / `rgb(101, 83, 52)` —
+      the console's caution pair, a third palette.
+      🔴 **The refusal CONDITION is unchanged**, and `isBlocked` is where that is proved: it reads
+      the standing block AND the messages, so `Apply servers` is disabled, the footer goes amber
+      and the rail marks the tab on exactly the predicate they did before. Measured on the blocked
+      tab: notice present, pinned region absent, `Apply servers` disabled, rail reads
+      `Servers is blocked`.
+      ✅ **`AUDIT-CLOSE-01`'s two properties re-asserted against a REAL event** (rows cleared, then
+      `Apply servers`): the region's painted band at `x 329, w 848` — the pane's content column
+      exactly — and **20 px** clear of the footer's top rule.
+- [x] P.5 **§5 — the `Input type` labels overflowed their boxes, and the cause was not
+      `nowrap`.** `repeat(auto-fit, minmax(0, 1fr))` laid all five kinds on one row: five 74 px
+      cells in a 404 px group, `DeckLink` `scrollWidth 75` against `clientWidth 72`. **The
+      `.btn` `white-space:nowrap` hypothesis was WRONG** — these are `<label>`s and compute
+      `white-space: normal`; `minmax(0, …)` simply tells the browser a cell may be any width at
+      all. A fix aimed at `nowrap` would have changed nothing and looked plausible. Now
+      `minmax(min(112px, 100%), 1fr)`: **3 × 129 px then 2**, zero overflow, and at a 420 px
+      viewport 2 × 152 px over three rows, still zero. The legend keeps its position.
+      ⚠ **It is a GRID, and the flex row this was first spelled as is why.** `flex-wrap` with a
+      112 px basis also wrapped and also stopped the clipping — and flex distributes each LINE's
+      free space independently, so row one came out 3 × 129 and row two **2 × 198**. A segmented
+      control whose second row is half again as wide as its first is a different defect.
+- [x] P.6 **§6 — the tag sweep.** Every tag on every tab, with what each was built from: **all
+      seven were already `<span>`s** — `Read only` · `Apply together` · `Auto-save` (the section
+      contract tag, `SetupSection`), `Optional` · `Apply separately` (card-head tags),
+      `Channel 1` · `Layers 70–89` · `Fixed bank` (the Layers summary), and `2 of 3 running`
+      (the Outputs count, reachable only against a real bridge). None is a `<button>`, none
+      carries `role`, a `tabindex` or a focus ring. What the sweep DID find is the last inch:
+      `cursor` computed `auto` rather than `default`, and `transition-property` computed `all`,
+      inherited from the app-wide reset — so a chip beside a button was armed to ANIMATE if any
+      rule ever gave it a hover. Both stated now, so the inertness is a declaration rather than an
+      accident nobody wrote down. Measured beside a button on the same surface: 28 px against 40,
+      12 px against 14.
+- [x] P.7 **§7 — the scrim and the frame's shadow.** `rgba(0, 0, 0, 0.6)` →
+      **`rgba(4, 7, 11, 0.76)` + `blur(5px)`**; the sub-scrim `rgba(0, 0, 0, 0.4)` →
+      **`rgba(3, 6, 9, 0.62)` + `blur(3px)`**, still lighter than the base, which is the role's
+      whole point and is asserted as a RELATION rather than as two literals. `--r-modal-shadow`
+      `0 30px 100px rgba(0,0,0,0.667)` → `0 32px 100px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.2)`
+      — the drawing puts that on the ELEMENT, so `.settings` and `.sub-dialog` are lifted alike;
+      the sub-dialog had the softer edge and read as the flatter of the two.
+      ✅ **The app's scrim DOES support `backdrop-filter`.** It is a `<div>`, not a `::backdrop`,
+      and `CSS.supports('backdrop-filter','blur(5px)')` is `true` in the shipping engine; measured
+      after, both scrims report their blur. The blur is spelled INLINE beside the ground because
+      `styles.scrim` sets `background` inline — splitting them is how "half the effect applied"
+      ships with nothing failing.
+- [x] P.8 **§8 — the Outputs table, and the hover was worse than a false promise.** Row hover is
+      suppressed: a read-only table's highlight promises an interaction that does not exist
+      (`R-055`, §6 one surface along), and **the rule is written down** —
+      _row hover belongs to a table whose rows respond to a press_ — because there is no selector
+      left to point at. ⚠ **The measurement found the sharper fault:** the hover painted the CELLS
+      and so does the not-running row's amber wash, so hovering the one row that says an output is
+      DOWN replaced its alarm colour with the neutral grey — at rest `rgb(53, 45, 30)`, under the
+      pointer `rgb(29, 36, 45)`. The wash is `rgba(40, 36, 29, 0.25)` (`#28241d40`) on the cells
+      now; the alpha is the design, so nothing under it can be painted out again. Geometry was
+      already the reference's (first column 80 px, `th` `12px 18px`, `td` `15px 18px`) and our
+      _"Declared: … Running: …"_ sentences stay.
+      ⚠ Measured against a REAL bridge and a mock CasparCG scripted to the plant's 2026-09-04
+      fixture — the offline `MockRuntime` publishes no output check, so there is no table without
+      one. The test therefore lives in `pgm-output-missing.spec.ts`, which already boots that
+      harness, rather than in a second copy of it.
+      ⚠ **The reference's narrow-breakpoint table geometry is NOT adopted, and that is a
+      decision.** This app has no narrow breakpoint at all — three `@media` blocks in
+      `controls.css`, all `prefers-reduced-motion` — so adopting it would mean inventing a
+      breakpoint the console has never had, for a viewport it does not run at. §5's wrap was
+      verified at 420 px instead, where it degrades rather than clips.
+- [x] P.9 **The owner's EIGHTH, raised mid-session:** _«فاصله بین متن Visibility and layer safety
+      و سرچ باکس کمه»_. It was **ZERO** — the `<details>` bottom at y = 299 and the search field's
+      top at y = 299, while the same line had 17 px above it. **0 px → 21 px**, the reference's own
+      `.filter-bar{margin-top:21px}`.
+      ⭐ **Why the spacing vanished is the part worth keeping:** the pane's rhythm is
+      `.cg-setup-body`'s 20 px flex GAP, and a flex gap applies between the children of the box
+      that declares it. `SetupSection` renders the helper OUTSIDE that box (head → helper →
+      notice → body), so the helper sat in the one position the column's rhythm cannot reach.
+      Nothing was deleted and nothing was overridden. An adjacent-sibling rule, never a
+      `margin-bottom` on the `<details>` — the same element is the LAST thing in the Outputs
+      card, where a trailing margin would push that card's edge out.
+- [ ] P.10 **Linux `gate:e2e` — OWED.** Local Windows `pnpm --filter @cg/runtime test:e2e`:
+      **177 passed**, 2.0 min, on the built bundle. That is a reason to push and never a claim
+      that the change is verified (golden rule 12a, and `SETTINGS-MATCH-02` repeated that lesson
+      one commit ago). Awaiting the run URL for the commit that carries this work, checked at the
+      **STEP** level — `P-046`'s red was a green-looking job whose suite never ran, `P-029`'s is
+      its mirror.

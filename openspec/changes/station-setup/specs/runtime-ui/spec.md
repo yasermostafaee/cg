@@ -8,6 +8,17 @@ The deep-link mechanism SHALL remain: a surface that sits beside the thing it co
 
 A refusal or outcome raised by a section SHALL be shown in the dialog's pinned message region, above that section's own footer.
 
+A condition that is IN FORCE before anything is pressed SHALL NOT be shown there: it SHALL be stated as a standing notice in the section's own content column, between the section head and the first card, and the two SHALL NOT both carry it.
+
+> 🔴 **`SETTINGS-POLISH-04` §4 (2026-09-11) — A BLOCK IS NOT AN EVENT, AND THE PINNED REGION IS
+> FOR EVENTS.** `AUDIT-CLOSE-01` delta A gave that region one job — _why did the last action not
+> happen?_ — and `Server changes are paused while on air` cannot answer it: it is true before the
+> operator presses anything, it never changes within the tab, and no act produces it. It is now a
+> `.notice` in the pane's flow, which is where the approved reference emits its only one.
+> ⚠ **The refusal CONDITION is unchanged.** `Apply servers` is disabled, the footer's clause goes
+> amber and the rail marks the tab blocked on exactly the same predicate as before — what moved
+> is the element the sentence renders in, not what it stops.
+
 > ⭐ **`STATION-CHROME-02` §1 (2026-09-07) — ONE DOOR.** There were three: the status bar's
 > SETTINGS, the status bar's SOURCES, and the Layers panel's `Configure`. The argument for
 > keeping SOURCES was recorded and overruled by the owner — it is the section an operator
@@ -48,7 +59,8 @@ The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and n
 
 #### Scenario: The on-air block is scoped to Servers
 
-- **WHEN** anything is on air or unsettled **THEN** `Apply servers` is disabled and the pinned region reads that Apply is blocked for Servers and every other section stays editable
+- **WHEN** anything is on air or unsettled **THEN** `Apply servers` is disabled and the Servers section's standing notice reads that Apply is blocked for Servers and every other section stays editable, while the pinned message region carries no copy of it
+- **WHEN** anything is on air or unsettled **THEN** that notice sits between the section head and the first card, on the same left and right edges as the cards below it, and the footer's clause reads `Unavailable while on air` in the caution ink
 
 #### Scenario: Each tab's footer carries its own commit, in sentence case
 
@@ -109,6 +121,26 @@ The sections of Station setup SHALL be built from shared, tokenised primitives r
 
 A rail item SHALL carry no box at rest, and its selected and hover states SHALL come from the stylesheet rather than from an inline style object.
 
+A row hover SHALL belong to a table whose rows respond to a press: a read-only table SHALL carry none, and a chip that states a fact SHALL NOT be built on the button primitive, SHALL NOT be focusable and SHALL show no pointer cursor.
+
+A state wash on a row SHALL be applied to the cells at partial opacity, so that it composites with whatever ground the row already carries rather than replacing it.
+
+> 🔴 **`SETTINGS-POLISH-04` §6 / §8 (2026-09-11) — `R-055`: a signal must not say what it does not
+> mean.** A control shape that cannot be pressed is a lie, and the operator pays for it under
+> pressure. The Outputs table's row hover was the same lie one surface along — and worse than a
+> false promise, because the hover and the not-running row's alarm wash both painted the CELLS:
+> hovering the one row that said an output was DOWN replaced its amber with the neutral grey.
+> Measured at rest `rgb(53, 45, 30)`, under the pointer `rgb(29, 36, 45)`.
+
+#### Scenario: A read-only table promises nothing, and its alarm survives the pointer
+
+- **WHEN** the operator moves the pointer over any row of the Outputs table **THEN** no row changes in any way, and the not-running row keeps the wash that says so
+- **WHEN** the Outputs table renders **THEN** the not-running row's wash is on its cells at partial opacity, and the row rule beneath it still reads
+
+#### Scenario: Every chip in the dialog is inert
+
+- **WHEN** any section of Station setup renders **THEN** each of its chips is a non-interactive element with no role, no tab stop and no pointer cursor, and is shorter and smaller than the shortest button on the same surface
+
 #### Scenario: A destructive row action is quiet at rest
 
 - **WHEN** the delimiter list, the live-source catalogue or the candidate-layer rows render **THEN** each row's remove control is quiet at rest and reddens only under the pointer, and no row carries a permanently red control
@@ -130,11 +162,26 @@ An act that is refused because something is on air SHALL NOT be offered as a con
 
 Deleting a bound source SHALL NOT be refused — an installation must be able to retire a live — but SHALL be confirmed, and the confirmation SHALL name every template and plate that would be unassigned, with the count and, for a multi-box template, how many boxes bind it. Editing a bound source SHALL ask the same question, because it redefines what those plates show while removing nothing.
 
+A confirmation raised from INSIDE Station setup SHALL present its committing button in the danger treatment — a red outline at rest that fills only under the pointer — and a confirmation raised from the CONSOLE SHALL keep the solid caution fill. Neither SHALL be changed to match the other.
+
+> 🔴 **`SETTINGS-POLISH-04` §2 (2026-09-11) — TWO DESTRUCTIVE TREATMENTS, AND EACH IS RIGHT WHERE
+> IT IS.** The console's stays solid because the alternative makes `Clear all` QUIETER — an
+> outline where a fill is, on the one control that takes every graphic off air. Station setup's
+> takes the drawing's red because its destructive act is a catalogue deletion, not an air verb,
+> and because amber inside that dialog already means BLOCKED: spending it on a Remove as well
+> drains it where it is real. The family is decided ONCE, by the same flag that decides the
+> frame and the scrim — never per call site.
+
 #### Scenario: A row that is on air refuses its remove, and says why
 
 - **WHEN** a candidate-layer row's item is on air **THEN** its remove control is unavailable and carries the canonical on-air reason, and no confirmation is offered
 - **WHEN** the bridge refuses a remove that was nevertheless attempted **THEN** the dialog's pinned region shows that same reason in the refusal treatment, naming the row and the template, and never in a transient surface outside the dialog
 - **WHEN** an item's air state cannot be verified **THEN** the act is confirmed rather than refused, and the confirmation says the item may be on air
+
+#### Scenario: The two destructive treatments stay apart
+
+- **WHEN** a confirmation is raised from inside Station setup **THEN** its committing button and its emblem wear the danger ground, edge and ink, and the button's ground changes only under the pointer
+- **WHEN** a confirmation is raised from the console **THEN** its committing button keeps the solid caution fill it had
 
 #### Scenario: Deleting a source names what goes with it
 

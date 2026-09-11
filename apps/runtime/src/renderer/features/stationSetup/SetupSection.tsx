@@ -43,6 +43,7 @@ export function SetupSection({
   id,
   summary,
   helper,
+  notice,
   children,
 }: {
   id: StationSetupSection;
@@ -59,6 +60,16 @@ export function SetupSection({
    * part of the heading rather than as the first card.
    */
   helper?: ReactNode;
+  /**
+   * 🔴 `SETTINGS-POLISH-04` §4 — the section's STANDING NOTICE (`SetupNotice`), the one the
+   * reference draws between the head and the first card.
+   *
+   * It is a prop of the FRAME rather than something a pane renders as its first child for the
+   * same reason the head is: its position is a property of being a section, not a choice a
+   * section makes. A pane that rendered its own would be free to put it after a card, which is
+   * the "pinned somewhere else" defect one step smaller.
+   */
+  notice?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
   const spec = sectionSpec(id);
@@ -92,6 +103,7 @@ export function SetupSection({
         </span>
       </div>
       {helper}
+      {notice}
       <div className="cg-setup-body">{children}</div>
     </section>
   );

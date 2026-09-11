@@ -187,6 +187,83 @@ test.describe('C-029 — program output missing', () => {
     await expect(outputs).not.toContainText('restart CasparCG');
   });
 
+  /**
+   * 🔴 `SETTINGS-POLISH-04` §8 — **THE OUTPUTS TABLE IS READ-ONLY, SO IT HAS NO ROW HOVER —
+   * AND THE HOVER WAS NOT MERELY A FALSE PROMISE.**
+   *
+   * The rule, written down because it is the rule and not the exception: a row that lights
+   * under the pointer is promising an interaction. Outputs reports what the server declares
+   * against what it is running and there is nothing to click on any row of it (`R-055`, §6 one
+   * surface along).
+   *
+   * ⚠ **AND THE MEASUREMENT FOUND SOMETHING WORSE THAN THE FALSE PROMISE.** The hover painted
+   * the CELLS, and so does the not-running row's amber wash — so hovering the one row that says
+   * an output is DOWN replaced its alarm colour with the neutral grey. Measured here before the
+   * fix: at rest `rgb(53, 45, 30)`, under the pointer `rgb(29, 36, 45)`. The operator moved the
+   * mouse towards the row he was reading and the evidence went out from under it.
+   *
+   * ⚠ **THIS TEST LIVES HERE AND NOT IN `settings-polish.spec.ts` FOR A REASON THAT IS ABOUT
+   * THE FIXTURE, NOT CONVENIENCE.** The offline `MockRuntime` publishes no output check at all,
+   * so there is no table to measure without a real bridge and a mock CasparCG — which this file
+   * already boots, scripted to the plant's 2026-09-04 answers. A copy of that harness next door
+   * would be a second place for it to drift.
+   */
+  test('SETTINGS-POLISH-04 §8 — the Outputs table has no row hover, and the alarm wash survives the pointer', async ({
+    page,
+  }) => {
+    await boot(page, { running: [...MONITORS], config: PLANT_CONFIG });
+    await expect(page.getByLabel('Status bar')).toContainText('HEALTHY', { timeout: 15_000 });
+    await page.getByRole('button', { name: 'Open Station setup', exact: true }).click();
+    const outputs = page
+      .getByRole('dialog', { name: 'Station setup' })
+      .getByRole('region', { name: 'Program outputs' });
+    const rows = outputs.locator('[data-output-table] tbody tr');
+    await expect(rows).toHaveCount(3, { timeout: 30_000 });
+
+    /** Every row's state and its first cell's PAINTED ground, top to bottom. */
+    const snapshot = (): Promise<{ state: string | null; cell: string }[]> =>
+      outputs.evaluate((el) =>
+        [...el.querySelectorAll('[data-output-table] tbody tr')].map((tr) => ({
+          state: tr.getAttribute('data-output-row'),
+          cell: getComputedStyle(tr.querySelector('td')!).backgroundColor,
+        })),
+      );
+
+    const rest = await snapshot();
+    const missing = rest.find((r) => r.state === 'missing');
+    const running = rest.find((r) => r.state === 'running');
+    expect(missing, 'the plant fixture declares a DeckLink that is not running').toBeDefined();
+    expect(running, 'and two consumers that are — the positive control').toBeDefined();
+
+    /*
+      THE WASH — `.output-warning td{background:#28241d40}`. The ALPHA is the design: it
+      composites over whatever the cell already has instead of replacing it, which is what stops
+      anything under it being painted out again.
+    */
+    expect(missing?.cell, 'the not-running row wears the amber wash at 25 %').toBe(
+      'rgba(40, 36, 29, 0.25)',
+    );
+    expect(running?.cell, 'a running row wears nothing').toBe('rgba(0, 0, 0, 0)');
+
+    // Hovering EITHER row changes nothing about ANY row — and the alarm colour survives.
+    for (const state of ['missing', 'running'] as const) {
+      const row = outputs
+        .locator(`[data-output-table] tbody tr[data-output-row="${state}"]`)
+        .first();
+      await row.scrollIntoViewIfNeeded();
+      await row.hover();
+      await expect(row).toHaveCSS('cursor', 'auto');
+      expect(
+        await snapshot(),
+        `hovering the ${state} row must change nothing — the table is read-only`,
+      ).toEqual(rest);
+    }
+
+    // ⭐ AND OUR SENTENCES STAY. They are more honest than the reference's single line.
+    await expect(outputs).toContainText('Declared: decklink, screen, system-audio');
+    await expect(outputs).toContainText('Running: system-audio, screen');
+  });
+
   test('nothing lights when every declared consumer is running (the mock’s own defaults)', async ({
     page,
   }) => {

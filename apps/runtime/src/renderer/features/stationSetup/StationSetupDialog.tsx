@@ -50,6 +50,7 @@ import {
   sectionSpec,
   type StationSetupSection,
 } from './sections.js';
+import { SetupNotice, type SetupNoticeSpec } from './SetupNotice.js';
 import { SetupSection } from './SetupSection.js';
 
 /**
@@ -168,12 +169,25 @@ const styles = {
    * the full width of a very wide dialog; the frame is 1000px and the note shares the row
    * with one button, so flex already does that job.
    */
+  /*
+    🔴 `SETTINGS-POLISH-04` §3 — **THE COLOUR IS GONE FROM HERE, AND THAT IS THE FIX.**
+
+    `color: colors.textMuted` was set INLINE on this span, so
+    `.cg-footer-contract[data-footer-tone='blocked']` in `controls.css` could never win: the
+    attribute was on the element, the rule matched, and the sentence rendered muted grey anyway.
+    Measured on Servers with two items on air: `rgb(142, 158, 175)` — the resting ink — on a
+    span carrying `data-footer-tone="blocked"`.
+
+    That is the third time this file's family has met the same trap (`Modal`'s `library` body
+    padding, `dialogFixed`'s ground), and the remedy is always the same one: a property a
+    stylesheet needs to vary MUST NOT be set inline. Both tones live in `controls.css` now —
+    the resting muted one included, so there is exactly one place the ink is decided.
+  */
   footNote: {
     marginInlineEnd: 'auto',
     minWidth: 0,
     /* Phase 7 — the reference's `.foot-message` is 13 px; `.cg-footer-contract` keeps the weight. */
     fontSize: cssVars['--r-setup-foot-text'],
-    color: colors.textMuted,
     textAlign: 'start' as const,
   },
   /*
@@ -558,41 +572,37 @@ export function StationSetupDialog({
     loaded !== null && typeof validated !== 'string' && !sameServerConfig(validated, loaded);
 
   /**
+   * 🔴 `SETTINGS-POLISH-04` §4 — **THE STANDING BLOCK, WHICH IS NOT A MESSAGE.**
+   *
+   * It was the first entry in `serverMessages` below, so it rendered in the modal's PINNED
+   * region — the region `AUDIT-CLOSE-01` delta A gave one job: *why did the last action not
+   * happen?* This sentence answers a different question. It is true before anything is
+   * pressed, it never changes within the tab, and no act produces it; the drawing puts exactly
+   * this text in a `.notice` between the section head and the first card, in the pane's flow.
+   *
+   * ⚠ **`SETTINGS-MATCH-02` §9a's two weights survive the move intact** — a bold title over a
+   * quieter explanation that NAMES THE REMEDY (`take all items off air…`). What changed is the
+   * element it renders in, not a word of it. The `Notice`/`ModalMessage` pair that used to
+   * carry them is `SetupNotice`'s `title` + `body`, both still strings (§9d).
+   */
+  const serversOnAirBlock: SetupNoticeSpec | null =
+    onAirCount > 0
+      ? {
+          icon: Lock,
+          title: 'Server changes are paused while on air',
+          body:
+            `${String(onAirCount)} item(s) are on air or unsettled. You can prepare edits now — ` +
+            `take all items off air in the console before applying, which Clear All does while ` +
+            `keeping the rows. Every other section stays editable.`,
+        }
+      : null;
+
+  /**
    * The Servers section's own refusals, worst-first. They live here rather than in a shared
    * list because they belong to ONE tab: the whole point of §2 is that they are never in
    * front of another section's work.
    */
   const serverMessages: readonly ModalMessage[] = [
-    // WHY APPLY SERVERS WILL NOT HAPPEN is a REFUSAL — the attention case, never red — and
-    // it names its SCOPE: the other sections are not gated and must not read as if they were.
-    /*
-      🔴 `SETTINGS-MATCH-02` §9a — **TWO WEIGHTS, AND THE SECOND ONE NAMES THE REMEDY.**
-
-      This was one long sentence. The reference draws a blocking state as a BOLD TITLE over a
-      quieter explanation, and the split is not decoration: the title is what the operator
-      reads from across the room and the explanation is what he reads when he has decided to
-      act. Ours had both in one line, so the count, the remedy and the scope all competed at
-      one weight.
-
-      ⚠ The two weights are `Notice`'s existing `text` + `detail`, which are BOTH STRINGS —
-      §9d's rule holds (`ModalMessage` takes no markup, by the type system), and a banner that
-      needed a styled fragment would be the wrong shape rather than a reason to widen the type.
-
-      ⭐ **IT NAMES THE REMEDY**, which is §9a's other half: `Take all items off air…` tells
-      him what to DO. A banner that only says "blocked" is half a banner.
-    */
-    ...(onAirCount > 0
-      ? [
-          {
-            role: 'refusal' as const,
-            text: 'Server changes are paused while on air',
-            detail:
-              `${String(onAirCount)} item(s) are on air or unsettled. You can prepare edits now — ` +
-              `take all items off air in the console before applying, which Clear All does while ` +
-              `keeping the rows. Every other section stays editable.`,
-          },
-        ]
-      : []),
     /*
       🔴 `SETTINGS-MATCH-02` §10.6 — **A BAD FIELD IS NOT REPORTED HERE ANY MORE.**
 
@@ -616,7 +626,16 @@ export function StationSetupDialog({
     return m === undefined ? [] : [m];
   };
 
+  /**
+   * 🔴 `SETTINGS-POLISH-04` §4 — **THE REFUSAL CONDITION IS UNCHANGED, AND THIS LINE IS WHERE
+   * THAT IS PROVED.** Servers is blocked when something is on air OR a field is invalid, which
+   * is exactly what it was when both sentences lived in one list. Moving the on-air sentence
+   * to the pane would have silently un-blocked the tab if this predicate had kept reading only
+   * `messagesFor` — the rail's lock, the footer's amber and `Apply servers`' disabled state
+   * all hang off it. One predicate, both halves, read at every door.
+   */
   const isBlocked = (id: StationSetupSection): boolean =>
+    (id === 'servers' && serversOnAirBlock !== null) ||
     messagesFor(id).some((m) => m.role === 'refusal');
   const isDirty = (id: StationSetupSection): boolean =>
     id === 'servers' ? serversDirty : (sectionDirty[id] ?? false);
@@ -915,8 +934,17 @@ export function StationSetupDialog({
               ? activeSpec.footerBlocked
               : activeSpec.footerRest}
           </span>
-          {/* The slot a section's own commit controls portal into (the bank's). */}
-          <span ref={setFooterSlot} data-station-footer-slot="" />
+          {/*
+            The slot a section's own commit controls portal into (the bank's).
+
+            🔴 `SETTINGS-POLISH-04` §1 — **IT IS A ROW, AND IT HAS THE FAMILY'S GAP.** It was a
+            bare `<span>`, so the footer's `gap: 9px` applied between the slot and its
+            neighbours and NOT between the two buttons INSIDE it: measured on Layers, `Revert`
+            ended at x = 1067 and `Apply layers` began at x = 1067 — the two controls were
+            TOUCHING. A wrapper that holds buttons is an action row, and an action row's gap is
+            its own property rather than something it inherits by being a direct child.
+          */}
+          <span ref={setFooterSlot} className="cg-setup-foot-actions" data-station-footer-slot="" />
           {active === 'servers' ? (
             <>
               {/*
@@ -1058,7 +1086,12 @@ export function StationSetupDialog({
           )}
 
           {active === 'servers' && (
-            <SetupSection id="servers">
+            <SetupSection
+              id="servers"
+              {...(serversOnAirBlock !== null
+                ? { notice: <SetupNotice spec={serversOnAirBlock} /> }
+                : {})}
+            >
               {/* `STATION-CHROME-02` §3 — the shared card rhythm, so this tab is built from
                     the same blocks as every other one. The heads used to SHOUT their titles
                     in hand-spelled uppercase; `.cg-card__title` is the one treatment. */}

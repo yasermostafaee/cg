@@ -116,7 +116,13 @@ test('🔴 the refusal stays with its own section, and the rail says which one i
   await rail.getByRole('tab', { name: /^Servers/ }).click();
   await expect(dialog.getByText(/Server changes are paused while on air/)).toBeVisible();
   await expect(dialog.getByText(/Every other section stays editable/)).toBeVisible();
-  await expect(dialog.locator('[data-modal-message]')).toBeInViewport();
+  /*
+    ⚠ `SETTINGS-POLISH-04` §4 — `[data-setup-notice]`, not `[data-modal-message]`. The standing
+    block is a `.notice` in the pane's flow now (a BLOCK is not an EVENT — `SetupNotice.tsx`),
+    and the pinned region is not rendered on this tab at all. The property asserted is the same
+    one: the operator does not have to go looking for it.
+  */
+  await expect(dialog.locator('[data-setup-notice]')).toBeInViewport();
 
   // ⭐ THE DEFECT THE SCROLL HAD: on DELIMITERS, that sentence is not in front of him.
   await rail.getByRole('tab', { name: 'Text file delimiters' }).click();

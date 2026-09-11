@@ -3429,7 +3429,23 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-text-muted);
 }
 
-/* The contract tag — `.tag`: 12 px, medium, `5px 8px`, radius 6, a raised chip. */
+/*
+ * The contract tag — `.tag`: 12 px, medium, `5px 8px`, radius 6, a raised chip.
+ *
+ * 🔴 `SETTINGS-POLISH-04` §6 — **A CONTROL SHAPE THAT CANNOT BE PRESSED IS A LIE** (`R-055`).
+ *
+ * Every tag in this dialog is a `<span>` and always has been — the sweep found no tag built on
+ * the Button primitive, and none carries `role="button"`, a `tabindex` or a focus ring. What it
+ * DID find is the last inch of the same defect: `cursor` computed `auto` rather than `default`,
+ * and `transition-property` computed `all` — inherited from the app-wide reset, so a chip beside
+ * a button was armed to ANIMATE if any rule ever gave it a hover. Both are stated here now, so
+ * the absence of pressability is a declaration rather than an accident nobody wrote down.
+ *
+ * The measurements that say it reads as a chip and not a control, at 1280 × 800: 28 px tall
+ * against a button's 40, 12 px against 14, weight 600 on a `#1c222a` ground with a `#35404c`
+ * hairline — the reference's `.tag` exactly, where its `.btn` is `#242b34` with a hover, an
+ * `:active{transform:translateY(1px)}` and a transition. Shorter, quieter, flatter, and inert.
+ */
 .cg-setup-tag {
   display: inline-flex;
   align-items: center;
@@ -3446,6 +3462,8 @@ input[type='checkbox']:disabled:checked {
   line-height: 1.3;
   white-space: nowrap;
   color: var(--r-text-secondary);
+  cursor: default;
+  transition: none;
 }
 
 /* The section body: cards 20 px apart. */
@@ -3518,8 +3536,14 @@ input[type='checkbox']:disabled:checked {
   border-bottom-color: var(--r-setup-rule);
 }
 
-[data-modal-size='fixed'] .cg-table tbody tr:hover td,
-[data-modal-size='fixed'] .cg-output-table tbody tr:hover td {
+/*
+ * ⚠ `SETTINGS-POLISH-04` §8 — `.cg-output-table` IS NOT IN THIS SELECTOR ANY MORE, and that is
+ * the change rather than an omission. `.cg-table` is the app's record table WITH controls in its
+ * rows (the delimiters, the candidate layers) and a hover is right there; Outputs is read-only
+ * and a hover there promises a press that does not exist. See the rule written out beside
+ * `.cg-output-table` below.
+ */
+[data-modal-size='fixed'] .cg-table tbody tr:hover td {
   background: var(--r-setup-row-hover);
 }
 
@@ -3778,6 +3802,34 @@ input[type='checkbox']:disabled:checked {
   line-height: 1.7;
 }
 
+/*
+ * 🔴 `SETTINGS-POLISH-04`, owner on the plant: the gap between `Visibility and layer safety`
+ * and the search box under it. Measured on the Layers pane at 1280 × 800: the `<details>`
+ * ended at y = 299 and the search field began at y = 299 — **touching**, with 17 px of air
+ * above the same line.
+ *
+ * ⚠ **AN ADJACENT-SIBLING RULE, NOT A `margin-bottom` ON `.cg-setup-details`.** The same
+ * `<details>` is also used as the LAST thing inside the Outputs card, where a trailing margin
+ * would push the card's own bottom edge out. The gap belongs to the RELATION — a helper
+ * immediately above a section's body — so the selector says exactly that and reaches nothing
+ * else.
+ *
+ * ⚠ And the reason a margin is needed at all: the pane's rhythm is `.cg-setup-body`'s 20 px
+ * flex GAP, which applies between that box's CHILDREN. `SetupSection` renders the helper
+ * outside it (head, helper, body), so the helper sits in the one position the column's rhythm
+ * cannot reach. 21 px is the reference's own `.filter-bar{margin-top:21px}` — see the token.
+ */
+/*
+ * ⚠ BOTH THINGS A SECTION CAN PUT UNDER ITS HELPER. `SetupSection` renders head → helper →
+ * notice → body, so a pane with both a helper and a standing notice puts the notice in this
+ * position instead. No pane has both TODAY, and naming only the body would make that an
+ * accident the rule depends on rather than a case it covers.
+ */
+.cg-setup-details + .cg-setup-body,
+.cg-setup-details + .cg-setup-notice {
+  margin-top: var(--r-setup-details-gap-below);
+}
+
 /* ── `SETTINGS-DIALOG-01` §3 — THE TAB BODIES' FIELD IDIOM —───────────────────
  *
  * Phase 7 measured this dialog's FRAME, rail, footer and Channel pane and stopped there
@@ -3886,6 +3938,10 @@ input[type='checkbox']:disabled:checked {
   line-height: 1.3;
   white-space: nowrap;
   color: var(--r-text-secondary);
+  /* `SETTINGS-POLISH-04` §6 — the same two declarations as `.cg-setup-tag`, because this is
+     the same chip at a second level and "inert" must not be a property only one of them has. */
+  cursor: default;
+  transition: none;
 }
 
 /* The lede a card puts ABOVE its field grid — `.card-body p.secondary`. */
@@ -4000,10 +4056,17 @@ input[type='checkbox']:disabled:checked {
   gap: 0;
 }
 
+/*
+ * ⚠ `SETTINGS-POLISH-04` §1 — **`padding`, `gap` AND `background` ARE NOT DECLARED HERE, AND
+ * THEIR ABSENCE IS THE FIX.** All three were, and all three lost: `Modal`'s `styles.footer`
+ * sets them INLINE, and an inline style beats a `[data-modal-size='record']` selector every
+ * time — silently, with the footer simply rendering the outer `.modal` family's values.
+ * Measured before this session: `gap: 12px` against this family's 9, on a rule that had said 9
+ * since `SETTINGS-MATCH-02`. They live in `Modal`'s `styles.footerRecord` now, which is where
+ * `dialogRecord`'s ground already had to go for the same reason. Leaving the dead declarations
+ * here is how the next reader concludes the value is already applied.
+ */
 [data-modal-size='record'] .cg-modal-footer {
-  padding: var(--r-sub-foot-pad);
-  gap: var(--r-sub-foot-gap);
-  background: var(--r-sub-foot-bg);
   border-top-color: var(--r-setup-card-line);
 }
 
@@ -4075,15 +4138,45 @@ input[type='checkbox']:disabled:checked {
  * ⚠ Radios, not buttons: one choice from a named set is what a radio group IS, and it brings
  * arrow-key traversal and the group's name with it. The `<input>` stays and is only hidden.
  */
+/*
+ * 🔴 `SETTINGS-POLISH-04` §5 — **IT WRAPS. THE OVERFLOW WAS OURS, NOT THE DRAWING'S.**
+ *
+ * The reference draws THREE kinds in a `repeat(3,minmax(0,1fr))` grid inside a 480 px dialog.
+ * Ours draws FIVE (`SourceProducer` has five, and a picker that cannot express a stored value is
+ * a defect rather than a simplification), and `repeat(auto-fit,minmax(0,1fr))` answered that by
+ * laying all five on ONE row: measured at 1280 × 800, five 74 px cells in a 404 px group, with
+ * `DeckLink` reporting `scrollWidth 75` against `clientWidth 72`. Three pixels of the longest
+ * label, clipped, on the one control in the form that decides which fields appear below it.
+ *
+ * ⚠ **The `.btn` `white-space:nowrap` hypothesis was WRONG and the measurement is why it matters
+ * to say so** — these are `<label>`s, not the button primitive, and they compute `white-space:
+ * normal`. Nothing was forcing one line; the track was simply narrower than the content, because
+ * `minmax(0, …)` tells the browser a cell may be any width at all. A fix aimed at `nowrap` would
+ * have changed nothing and looked plausible.
+ *
+ * So: the grid WRAPS, on a track that is never narrower than the longest label. Five items give
+ * three then two, which is the shape §5 calls correct, and at a narrower viewport it degrades by
+ * dropping to two tracks and then one instead of clipping further.
+ *
+ * ⚠ **IT STAYS A GRID, and the flex row this was first spelled as is why.** `display:flex;
+ * flex-wrap:wrap` with a `112px` basis does wrap and does stop the clipping — measured, zero
+ * overflow on all five — but flex distributes each LINE's free space independently, so row one
+ * came out three items of 129 px and row two two items of **198 px**. A segmented control whose
+ * second row is half again as wide as its first is a different defect, not a fix. `auto-fit`
+ * with a real minimum keeps ONE track width across both rows (129 px × 5, measured), which is
+ * what the reference's own `repeat(3, …)` gives it for three. `min-width: 0` stays on the item:
+ * it is what lets a long label shrink its box rather than burst it.
+ */
 .cg-kind-options {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(var(--r-kind-option-basis), 100%), 1fr));
   gap: var(--r-kind-options-gap);
 }
 
 .cg-kind-option {
   position: relative;
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: center;
   gap: var(--r-kind-options-gap);
@@ -4139,6 +4232,58 @@ input[type='checkbox']:disabled:checked {
   border-radius: var(--r-confirm-icon-radius);
   background: var(--r-danger-bg);
   color: var(--r-danger-text);
+}
+
+/*
+ * ── 🔴 `SETTINGS-POLISH-04` §2 — **TWO DESTRUCTIVE TREATMENTS, AND EACH IS RIGHT WHERE IT
+ * IS.** ────────────────────────────────────────────────────────────────────────────────────
+ *
+ * `useConfirm` serves two families and this is the second place that split has had to be
+ * spelled (`ConfirmRequest.layer` is the first — it decides the frame and the scrim).
+ *
+ *   · `base` — a confirm raised from the CONSOLE: `Clear all`, a row's CLEAR. It keeps the
+ *     **solid amber**, and `Modal`'s own §2 note records why in one line: picking the red
+ *     OUTLINE would have made `Clear all` QUIETER, turning a filled button into an outline on
+ *     the one control that takes a graphic off air. That is a safety signal weakening, and it
+ *     stays exactly as it is.
+ *
+ *   · `sub` — a confirm raised from inside STATION SETUP. The drawing gives this family its own
+ *     destructive: `.btn.danger{background:var(--red-bg);border-color:#684044;color:var(--red)}`
+ *     with `:hover{background:#482a2e}` — a red OUTLINE that fills on intent. It is right here
+ *     for the reason it is wrong one surface over: the act is a CATALOGUE DELETION, and a
+ *     configuration surface's destructive button is not competing with an air verb for the
+ *     eye. Amber in this dialog already means BLOCKED (the rail's lock, the footer's clause,
+ *     the standing notice); spending it on a Remove as well would drain it where it is real.
+ *
+ * ⚠ **DO NOT HARMONISE THEM.** One treatment across both would have to pick a winner, and both
+ * losses are real: the console's `Clear all` gets quieter, or this dialog's amber stops meaning
+ * one thing. Two families, two answers, and `ConfirmRequest.layer` is the single predicate
+ * that decides which — read once, at the door, for the frame, the scrim AND the colour.
+ *
+ * ⚠ ONE OF THE FOUR sub-confirms can clear a LIVE layer (the candidate row's `Remove template`,
+ * whose own copy says so in capitals). It takes this treatment too, because the family is the
+ * predicate and a per-call-site exception is how a rule comes to have two spellings. Its
+ * warning is carried by its sentence, which is where that dialog has always carried it.
+ */
+[data-modal-layer='sub'] .cg-btn[data-modal-role='destructive'] {
+  background: var(--r-setup-danger-bg);
+  border-color: var(--r-setup-danger-line);
+  color: var(--r-setup-danger-ink);
+}
+
+[data-modal-layer='sub'] .cg-btn[data-modal-role='destructive']:hover:not(:disabled) {
+  background: var(--r-setup-danger-hover-bg);
+  border-color: var(--r-setup-danger-line);
+  color: var(--r-setup-danger-ink);
+}
+
+/* The emblem is the same family one element along — `.confirm-icon{border:1px solid #684044;
+   background:var(--red-bg);color:var(--red)}`. The console's keeps the value it was measured
+   at, for the same scoping reason the button does. */
+[data-modal-layer='sub'] .cg-confirm-emblem {
+  border-color: var(--r-setup-danger-line);
+  background: var(--r-setup-danger-bg);
+  color: var(--r-setup-danger-ink);
 }
 
 .cg-confirm-copy {
@@ -4749,11 +4894,36 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-setup-accent);
 }
 
+/*
+ * 🔴 `SETTINGS-POLISH-04` §1 — **THE FOOTER'S ACTION ROW — `.foot-actions{gap:9px}`.**
+ *
+ * The frame's footer is already `gap: 9px`, but a section's own commit controls PORTAL into a
+ * slot element, so that gap applied between the slot and its neighbours and not between the two
+ * buttons inside it. Measured on Layers before this rule: `Revert` ended at x = 1067 and
+ * `Apply layers` began at x = 1067 — zero. A wrapper that holds buttons is an action row and
+ * owns its own gap; inheriting one by being a direct child is what stopped working the moment a
+ * section put two controls in the slot instead of one.
+ */
+.cg-setup-foot-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--r-setup-foot-actions-gap);
+}
+
 /* ── THE FOOTER'S MESSAGE — `.foot-message`: a glyph, then the contract ─────────────── */
 .cg-footer-contract {
   display: flex;
   align-items: center;
   gap: var(--r-setup-foot-message-gap);
+  /*
+   * 🔴 `SETTINGS-POLISH-04` §3 — THE RESTING INK IS DECIDED HERE, not at the call site.
+   *
+   * It was `color: colors.textMuted` INLINE on the span, which meant the `[data-footer-tone]`
+   * rule below matched and lost every time: the blocked sentence rendered `rgb(142, 158, 175)`
+   * with `data-footer-tone="blocked"` sitting on the element. Both tones live in this file now,
+   * so there is one place the ink is decided and a stylesheet can actually vary it.
+   */
+  color: var(--r-text-muted);
 }
 
 .cg-footer-contract > svg {
@@ -4771,17 +4941,43 @@ input[type='checkbox']:disabled:checked {
  * within a tab, and the event lands in the region above. What the tone adds is that the
  * standing condition and its colour agree.
  */
+/*
+ * 🔴 `SETTINGS-POLISH-04` §3 — `.foot-message.warning{color:#f5c879}`, THIS FAMILY'S AMBER.
+ *
+ * `--r-setup-caution-ink`, not the console's `--r-caution-text`: the shadow stylesheet declares
+ * its own `--amber` and this dialog has been taking that family's values since
+ * `SETTINGS-MATCH-02` (see the token home). The glyph beside the sentence inherits it through
+ * `currentColor`, which is why there is no second rule for the icon.
+ *
+ * ⚠ The reference draws THREE tones here — muted at rest, `.pending` on the accent, `.warning`
+ * on the amber. This build has two, because nothing in this footer is ever PENDING: every
+ * commit is synchronous from the operator's side and its progress is the button's own busy
+ * state. A third tone with no condition to raise it would be a signal that says nothing.
+ */
 .cg-footer-contract[data-footer-tone='blocked'] {
-  color: var(--r-caution-text);
+  color: var(--r-setup-caution-ink);
 }
 
 /* ── A section's own standing NOTICE band — `.notice` ─────────────────────
  *
- * ⚠ NOT the home of a refusal. An EVENT — a refusal, an outcome — lands in the modal's
- * pinned message region, where `AUDIT-CLOSE-01` delta A put it and
+ * ⚠ NOT the home of a refusal. An EVENT — an act was attempted and did not happen — lands in
+ * the modal's pinned message region, where `AUDIT-CLOSE-01` delta A put it and
  * `modal-message-containment.spec.ts` holds it. This band carries a standing fact a section
- * states about ITSELF, which is a different lifetime and therefore a different element
- * (the same `B-239` distinction the footer contract had to learn).
+ * states about ITSELF — true at rest, unchanged by any press — which is a different lifetime
+ * and therefore a different element (the same `B-239` distinction the footer contract learnt).
+ *
+ * 🔴 `SETTINGS-POLISH-04` §4 — A BLOCK IS THE SECOND KIND, NOT THE FIRST, and until this
+ * session nothing rendered this class at all. `Server changes are paused while on air` was in
+ * the pinned region: it is in force before anything is pressed and cannot answer "why did the
+ * last action not happen", so it belongs here. It is a NORMAL BLOCK in the pane's flow, between
+ * the section head and the first card, and its edges are the cards' — the drawing emits exactly
+ * one `.notice`, in exactly that place, on exactly that pane.
+ *
+ * ⚠ **THE GROUND AND THE EDGE ARE THE NOTICE'S OWN, NOT `--amber-bg`.** The shadow sheet writes
+ * `.notice{border:1px solid #54452d;background:#29241c}` literally, while its `--amber-bg`
+ * (`#30281c`) is what `.tag.warn` takes. A band and a chip are two sizes of one signal and the
+ * drawing gives them two grounds. Ours had the console's `--r-caution-*` pair, which is a third
+ * palette again (`#352d1e` / `#655334`, measured).
  */
 .cg-setup-notice {
   display: flex;
@@ -4789,23 +4985,39 @@ input[type='checkbox']:disabled:checked {
   gap: var(--r-setup-notice-gap);
   margin-bottom: var(--r-setup-notice-gap-below);
   padding: var(--r-setup-notice-pad);
-  border: 1px solid var(--r-caution-line);
+  border: 1px solid var(--r-setup-notice-line);
   border-radius: var(--r-setup-notice-radius);
-  background: var(--r-caution-bg);
+  background: var(--r-setup-notice-bg);
+  font-size: var(--r-setup-notice-body-text);
+  line-height: 1.6;
+  color: var(--r-setup-caution-ink);
+}
+
+/* `.notice>svg{width:19px;height:19px;margin-top:2px}` — the 2 px is optical, not spacing: it
+   drops the glyph onto the title's baseline instead of its box's top edge. */
+.cg-setup-notice > svg {
+  flex-shrink: 0;
+  width: var(--r-setup-notice-icon);
+  height: var(--r-setup-notice-icon);
+  margin-top: var(--r-setup-notice-icon-offset);
 }
 
 .cg-setup-notice__title {
   display: block;
+  margin-bottom: var(--r-setup-notice-title-gap-below);
   font-size: var(--r-setup-notice-title-text);
   font-weight: var(--r-weight-semibold);
-  color: var(--r-caution-text);
+  color: var(--r-setup-caution-ink);
 }
 
+/* `.notice p{color:#cdbd9e}` — a desaturated amber, NOT the neutral secondary ink this had.
+   The explanation stays inside the signal's own hue family; dropping it to grey would split the
+   band in two and read as a caption under a warning rather than as part of it. */
 .cg-setup-notice__body {
-  margin: var(--r-setup-empty-body-gap) 0 0;
+  margin: 0;
   font-size: var(--r-setup-notice-body-text);
   line-height: 1.6;
-  color: var(--r-text-secondary);
+  color: var(--r-setup-notice-body-ink);
 }
 
 /* ── THE VIDEO-FORMAT CARD — `.video-card` ─────────────────────────────────────── */
@@ -4959,18 +5171,49 @@ input[type='checkbox']:disabled:checked {
   border-bottom: 0;
 }
 
-.cg-output-table tbody tr:hover td {
-  background: var(--r-table-row-hover);
-}
-
+/*
+ * ── 🔴 `SETTINGS-POLISH-04` §8 — **ROW HOVER BELONGS TO A TABLE WHOSE ROWS RESPOND TO A
+ * PRESS.** ───────────────────────────────────────────────────────────────────────────────
+ *
+ * Write it down, because it is the rule and not the exception: a row that lights under the
+ * pointer is promising an interaction. Outputs is READ-ONLY — it reports what the server
+ * declares against what it is running, and there is nothing to click on any row of it — so the
+ * highlight was promising something that does not exist. That is §6's lie one surface along,
+ * and `R-055` is the same rule: a signal must not say what it does not mean.
+ *
+ * ⚠ The reference's `.data-table tbody tr:hover{background:#1d242d}` is GENERIC — it is written
+ * for its delimiter and layer tables, whose rows carry controls — and its Outputs table simply
+ * inherits it. Inheriting a hover is not the drawing DECIDING one, and this is the one place
+ * this session declines to copy a rule the reference paints. It stays for `.cg-table`, which is
+ * the app's tables-with-controls class; it goes here.
+ *
+ * 🔴 **AND IT WAS WORSE THAN A FALSE PROMISE, WHICH ONLY THE MEASUREMENT SHOWED.** The hover
+ * painted the CELLS, and so did the not-running row's amber wash — so hovering the one row that
+ * says an output is DOWN replaced its alarm colour with the neutral grey. Measured at 1280 × 800
+ * against a real bridge and a mock CasparCG scripted to the plant's 2026-09-04 fixture: at rest
+ * `rgb(53, 45, 30)`, under the pointer `rgb(29, 36, 45)`. The operator moved the mouse towards
+ * the row he was reading and the evidence went out from under it.
+ *
+ * There is no `:hover` selector here to delete — the rule is the ABSENCE, and a later reader
+ * adding one back would be re-introducing both faults, so it is named rather than merely
+ * removed. (The alpha on the wash below is the second half of the same repair: it composites
+ * instead of replacing, so nothing under it can be painted out again.)
+ */
 .cg-output-table th:first-child,
 .cg-output-table td:first-child {
   width: var(--r-output-slot-col-w);
 }
 
-/* A missing row wears a caution wash; the alarm ink is on the status word (`--r-error-text`). */
+/*
+ * A NOT-RUNNING row wears an amber wash; the alarm ink is on the status word
+ * (`--r-error-text`). `.output-warning td{background:#28241d40}` — on the CELLS, at 25 % ALPHA,
+ * and both halves are load-bearing. The cells, so it composites with whatever ground the row
+ * already has rather than replacing it; the alpha, so the row RULE beneath still reads through.
+ * Ours was the opaque `--r-caution-bg`, which painted a solid amber band and took the rule with
+ * it — the row stopped looking like a row of the table and started looking like a banner in it.
+ */
 .cg-output-table tr[data-output-row='missing'] td {
-  background: var(--r-caution-bg);
+  background: var(--r-setup-output-warning-wash);
 }
 
 .cg-output-slot {

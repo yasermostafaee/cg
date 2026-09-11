@@ -118,19 +118,78 @@ async function assertContained(dialog: Locator, section: string): Promise<void> 
   );
 }
 
-test('a Servers refusal is drawn inside the section pane, clear of the footer', async ({ app }) => {
+/**
+ * 🔴 `SETTINGS-POLISH-04` §4 — **THE SERVERS CASE MOVED, IT DID NOT GO AWAY.**
+ *
+ * The on-air block was this file's Servers fixture because it was the cheapest message to
+ * raise on that tab. It is not a message any more: it is in force before anything is pressed
+ * and no act produces it, so it is a standing `.notice` in the pane's flow (`SetupNotice.tsx`),
+ * and there is no `[data-modal-message]` on Servers at rest to measure.
+ *
+ * ⚠ The CLAIM is unchanged and still needs Servers, because "one wrong band is rarely alone"
+ * is about the tree rather than about one section. So the tab raises a REAL event instead —
+ * `Apply servers` confirms in the region when the block is not in force — which needs the rows
+ * taken off air first. That is two extra steps for a fixture that now exercises the real
+ * lifetime split rather than borrowing a standing sentence to stand in for an event.
+ */
+test('a Servers message is drawn inside the section pane, clear of the footer', async ({ app }) => {
   const page = app.page;
   const dialog = page.getByRole('dialog', { name: 'Station setup' });
+
+  // The seeded bank has rows on air. Take them off, or Servers has nothing to commit and the
+  // region has nothing to carry.
+  await page.getByRole('button', { name: 'Clear all rows holding a layer' }).click();
+  await page
+    .getByRole('button', { name: /^Clear all$/ })
+    .last()
+    .click();
+  await expect(page.getByRole('dialog', { name: /^Clear all/ })).toBeHidden();
+
+  await app.openStationSetupAt('Servers');
+  await expect(dialog).toBeVisible();
+  await expect(
+    dialog.locator('[data-setup-notice]'),
+    'with nothing on air the standing block is gone — the POSITIVE CONTROL for the split',
+  ).toHaveCount(0);
+
+  await dialog.getByRole('button', { name: 'Apply server settings' }).click();
+
+  const message = dialog.locator('[data-modal-message]');
+  await expect(message).toBeVisible();
+
+  await assertContained(dialog, 'Servers');
+});
+
+/**
+ * …and the STANDING notice is contained by the same column, which is the other half of §4.
+ * It is a separate test because its fixture is the opposite one: rows ON air.
+ */
+test('the Servers standing notice is drawn inside the section pane', async ({ app }) => {
+  const dialog = app.page.getByRole('dialog', { name: 'Station setup' });
 
   await app.openStationSetupAt('Servers');
   await expect(dialog).toBeVisible();
 
-  // The seeded bank has rows on air, which is the Servers gate's own condition — no plant.
-  const message = dialog.locator('[data-modal-message]');
-  await expect(message).toBeVisible();
-  await expect(message).toContainText('Server changes are paused while on air');
+  const notice = dialog.locator('[data-setup-notice]');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('Server changes are paused while on air');
 
-  await assertContained(dialog, 'Servers');
+  const pane = await edges(dialog.locator('[data-station-pane]'), 'Servers pane');
+  const frame = await edges(dialog, 'Servers frame');
+  const box = await edges(notice, 'Servers notice');
+
+  // The same precondition the pinned region's assertions take: containment is only a claim
+  // while the pane is genuinely narrower than the frame.
+  expect(
+    pane.left - frame.left,
+    'the pane must be inset from the frame by the rail, or containment is vacuous',
+  ).toBeGreaterThan(200);
+  expect(box.width, 'the notice must have a real width').toBeGreaterThan(200);
+  expect(box.height, 'the notice must have a real height').toBeGreaterThan(20);
+  expect(box.left, 'inside the pane').toBeGreaterThanOrEqual(pane.left);
+  expect(box.right, '…on both sides').toBeLessThanOrEqual(pane.right);
+  expect(box.top, 'and inside the frame').toBeGreaterThan(frame.top);
+  expect(box.bottom).toBeLessThan(frame.bottom);
 });
 
 test('a Live sources refusal is drawn inside the section pane, clear of the footer', async ({

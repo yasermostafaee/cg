@@ -933,10 +933,18 @@ export const STATION_SETUP_PX = {
    * The pane's own NOTICE band — `.notice{padding:15px 17px;gap:11px;border-radius:10px;
    * margin-bottom:21px}`, a 14 px / 600 headline over a 13 px line.
    *
-   * ⚠ ADOPTED AS GEOMETRY ONLY, and it does NOT become the home of the on-air refusal: that
-   * message stays in the modal's pinned region, where `AUDIT-CLOSE-01` delta A put it and
-   * `modal-message-containment.spec.ts` holds it. This band is for the standing, ambient facts
-   * a section states about itself — the remote-host note is the one that uses it.
+   * ⚠ ADOPTED AS GEOMETRY ONLY. This band is for the standing, ambient facts a section states
+   * about itself, never for an EVENT — the pinned region keeps that job (`AUDIT-CLOSE-01`
+   * delta A, `modal-message-containment.spec.ts`).
+   *
+   * 🔴 `SETTINGS-POLISH-04` §4 — **THE ON-AIR BLOCK IS ONE OF THOSE STANDING FACTS, and the
+   * sentence above used to say the opposite.** It read "it does NOT become the home of the
+   * on-air refusal", which conflated two things the rest of that paragraph keeps apart: a
+   * REFUSAL (an act was attempted and did not happen — pinned) and a BLOCK (a condition that is
+   * in force before anything is pressed — this band). `Server changes are paused while on air`
+   * is the second, is true at rest, never changes within a tab, and is exactly what the
+   * reference puts in its one `.notice`. It renders here now. Nothing about WHEN a commit is
+   * refused moved with it — see `SetupNotice.tsx` and `isBlocked`.
    */
   noticePadY: 15,
   noticePadX: 17,
@@ -945,6 +953,11 @@ export const STATION_SETUP_PX = {
   noticeGapBelow: 21,
   noticeTitleText: 14,
   noticeBodyText: 13,
+  /** `.notice>svg{width:19px;height:19px;margin-top:2px}` — aligned to the title's first line. */
+  noticeIcon: 19,
+  noticeIconOffset: 2,
+  /** `.notice strong{display:block;margin-bottom:3px}`. */
+  noticeTitleGapBelow: 3,
   /*
    * ── `SETTINGS-MATCH-02` — THE REST OF THE DIALOG, measured the same way (Chromium, 1280 × 800,
    * through the shadow root, every pane's tab CLICKED first). The frame's emblem, the rail's two
@@ -1128,6 +1141,22 @@ export const STATION_SETUP_PX = {
   kindOptionRadius: 8,
   kindOptionText: 13,
   kindOptionIcon: 16,
+  /**
+   * 🔴 `SETTINGS-POLISH-04` §5 — **THE ONE NUMBER THE DRAWING CANNOT GIVE**, and it is derived
+   * rather than invented.
+   *
+   * Every other value in this block is the reference's. This one cannot be: the reference lays
+   * out THREE kinds at `1fr` each and never has to say how wide one wants to be. Ours has five,
+   * so they wrap, and a wrapping row needs a basis.
+   *
+   * 112 px is the widest option's CONTENT measured at 1280 × 800 — a 16 px glyph, the 8 px gap,
+   * and `DeckLink` at 13 px — plus the borders, rounded up to leave a little air. At the
+   * sub-dialog's 404 px content width that is three tracks (3 × 112 + 2 × 8 = 352), which is the
+   * shape §5 calls correct, and it is what stops the browser choosing a track narrower than the
+   * label inside it — the exact fault the old `minmax(0, 1fr)` allowed. It is the MINIMUM, not
+   * the width: the tracks then share the row and render 129 px.
+   */
+  kindOptionBasis: 112,
   /** The destructive emblem — `.confirm-icon` 44 × 44, radius 11, 16 px under it. */
   confirmIconBox: 44,
   confirmIconRadius: 11,
@@ -1917,7 +1946,25 @@ export const cssVars = {
   '--r-menu-hover-fill': 'rgba(116, 205, 246, 0.16)',
   '--r-divider-drag-fill': 'rgba(116, 205, 246, 0.22)',
   '--r-scrim': 'rgba(0, 0, 0, 0.45)',
-  '--r-modal-scrim': 'rgba(0, 0, 0, 0.6)',
+  /**
+   * 🔴 `SETTINGS-POLISH-04` §7 — **THE SCRIM IS A COLOUR *AND* A BLUR, AND THE BLUR IS NOT
+   * DECORATION.**
+   *
+   * The reference's `dialog::backdrop{background:rgba(4,7,11,.76);backdrop-filter:blur(5px)}`.
+   * Two changes from the `rgba(0,0,0,0.6)` this was: it is DARKER (0.76), and it is not pure
+   * black — a blue-black that belongs to this palette rather than a hole punched in it.
+   *
+   * ⚠ **The blur is half the effect.** At 0.76 with no blur the scrim reads as FLAT BLACK: the
+   * console behind it stops being a dimmed console and becomes an absence, which is worse than
+   * the light scrim it replaces. The blur is what keeps the shapes behind legible as shapes.
+   * So the two tokens travel together and neither is adopted alone.
+   *
+   * ⚠ These are read INLINE by `Modal`'s `styles.scrim` — it sets `background` inline, so a
+   * `[data-modal-layer]` rule in `controls.css` would lose to it silently (the trap this file
+   * already records twice). The blur is spelled inline beside the ground for that reason.
+   */
+  '--r-modal-scrim': 'rgba(4, 7, 11, 0.76)',
+  '--r-modal-scrim-blur': 'blur(5px)',
   /**
    * `STATION-CHROME-01` §6 — the scrim a SECOND dialog lays over the first.
    *
@@ -1925,8 +1972,14 @@ export const cssVars = {
    * operator has to keep seeing the dialog he came from, or a small Add form reads as
    * having replaced his settings rather than as sitting on top of them. Stacking the base
    * scrim twice would double its opacity and black the parent out.
+   *
+   * `SETTINGS-POLISH-04` §7 — the reference's `.sub-dialog::backdrop{background:#0306099e;
+   * backdrop-filter:blur(3px)}`. `#9e` is 0.62, so it stays LIGHTER than the base scrim's 0.76
+   * exactly as the role requires, and its blur is SHALLOWER (3 px against 5) for the same
+   * reason: the dialog underneath has to stay readable, not merely present.
    */
-  '--r-modal-scrim-sub': 'rgba(0, 0, 0, 0.4)',
+  '--r-modal-scrim-sub': 'rgba(3, 6, 9, 0.62)',
+  '--r-modal-scrim-sub-blur': 'blur(3px)',
   /*
    * ── `STATION-CHROME-02` §2 — A DIALOG'S FRAME IS A SIZE, AND SIZES LIVE HERE TOO ──
    *
@@ -2051,7 +2104,18 @@ export const cssVars = {
    * which is one treatment instead of two rather than a second one.
    */
   '--r-modal-radius': '14px',
-  '--r-modal-shadow': '0 30px 100px rgba(0, 0, 0, 0.667)',
+  /**
+   * 🔴 `SETTINGS-POLISH-04` §7 — **ONE LIFT FOR EVERY DIALOG**, which is what the reference
+   * draws: its `dialog{box-shadow:0 32px 100px #0009,0 0 0 1px #0003}` is on the ELEMENT, not
+   * on one of its sizes, so `.settings` and `.sub-dialog` are lifted the same way.
+   *
+   * This was `0 30px 100px rgba(0,0,0,0.667)` — a single soft drop with no ring, so a sub-dialog
+   * floating over Station setup had a softer edge than the frame beneath it and read as the
+   * flatter of the two. The value below is byte-for-byte `--r-modal-shadow-fixed`, which
+   * `MONITORS-01` measured off that same rule; the two are now one number stated twice because
+   * the drawing states it once. ⚠ If one moves, move both.
+   */
+  '--r-modal-shadow': '0 32px 100px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(0, 0, 0, 0.2)',
   /** The frame's edge — `#3a4c60`, a step brighter than `--r-border`, so a dialog reads as lifted. */
   '--r-modal-line': '#3a4c60',
   /** `.modal-head{padding:22px 26px;gap:14px;background:#172230}`. */
@@ -2646,6 +2710,9 @@ export const cssVars = {
   '--r-setup-notice-gap-below': `${String(STATION_SETUP_PX.noticeGapBelow)}px`,
   '--r-setup-notice-title-text': `${String(STATION_SETUP_PX.noticeTitleText)}px`,
   '--r-setup-notice-body-text': `${String(STATION_SETUP_PX.noticeBodyText)}px`,
+  '--r-setup-notice-icon': `${String(STATION_SETUP_PX.noticeIcon)}px`,
+  '--r-setup-notice-icon-offset': `${String(STATION_SETUP_PX.noticeIconOffset)}px`,
+  '--r-setup-notice-title-gap-below': `${String(STATION_SETUP_PX.noticeTitleGapBelow)}px`,
   /*
    * ══ `SETTINGS-MATCH-02` — THE STATION-SETUP SURFACE FAMILY ══════════════════════════════
    *
@@ -2719,6 +2786,52 @@ export const cssVars = {
   /** An EMPTY tile — `.empty-icon{background:#232b35;border:1px dashed #485465}`. */
   '--r-setup-empty-icon-bg': '#232b35',
   '--r-setup-empty-icon-line': '#485465',
+  /**
+   * ── 🔴 `SETTINGS-POLISH-04` §2 / §3 / §4 — **THIS FAMILY'S CAUTION AND DANGER PAIRS** ────
+   *
+   * The block above takes this dialog's SURFACES from the reference's shadow stylesheet. These
+   * are the same decision one role along: the shadow sheet declares its own `--amber:#f5c879`
+   * / `--amber-bg:#30281c` and `--red:#ffaaa7` / `--red-bg:#352224`, and the console's
+   * `REF_AMBER` (`#f3cd88`) / `REF_RED_BG` (`#3a242a`) come from the OTHER reference file —
+   * `04-playout-layers.html`'s variable block. **Two drawings, two palettes**, and this dialog
+   * has been taking the shadow sheet's since `SETTINGS-MATCH-02`.
+   *
+   * ⚠ **SCOPED, exactly like the surfaces.** Nothing outside this dialog reads them, so the
+   * audit log's `failed` tag and the console's own confirm keep the values they were measured
+   * at. The alternative — moving `REF_RED_BG` for everyone — would re-point two surfaces that
+   * were measured against a different drawing in order to fix one that was not.
+   *
+   * The deltas are small (the reds differ by 5/18/6 of 255) and that is the point: the fault
+   * §2 names is not the hue, it is that this dialog's destructive button was wearing the
+   * console's SOLID AMBER. Having decided to give it the reference's red outline, it takes the
+   * reference's red.
+   */
+  /** `.btn.danger{background:var(--red-bg);border-color:#684044;color:var(--red)}`. */
+  '--r-setup-danger-ink': '#ffaaa7',
+  '--r-setup-danger-bg': '#352224',
+  '--r-setup-danger-line': '#684044',
+  /** `.btn.danger:hover{background:#482a2e}` — the outline FILLS on intent, never at rest. */
+  '--r-setup-danger-hover-bg': '#482a2e',
+  /** `--amber`: the ink `.foot-message.warning`, `.notice` and `.tag.warn` all take. */
+  '--r-setup-caution-ink': '#f5c879',
+  /**
+   * THE STANDING NOTICE's own pair — and it is NOT `--amber-bg`.
+   *
+   * `.notice{border:1px solid #54452d;background:#29241c}` states both literally; the
+   * `--amber-bg` token (`#30281c`) is what `.tag.warn` takes. A band and a chip are two sizes
+   * of the same signal and the drawing gives them two grounds, so the band gets its own.
+   */
+  '--r-setup-notice-bg': '#29241c',
+  '--r-setup-notice-line': '#54452d',
+  /** `.notice p{color:#cdbd9e}` — the explanation under the title, a rank quieter than it. */
+  '--r-setup-notice-body-ink': '#cdbd9e',
+  /**
+   * `SETTINGS-POLISH-04` §8 — the NOT-RUNNING row's wash: `.output-warning td{background:
+   * #28241d40}`. **25 % alpha, and the alpha is the design** — it composites over whatever the
+   * cell already has rather than replacing it, so the row rule under it still reads. Ours was
+   * the opaque `--r-caution-bg`, which painted the rule out.
+   */
+  '--r-setup-output-warning-wash': 'rgba(40, 36, 29, 0.25)',
   /**
    * 🔴 THE MINT, AND WHERE OWNER ANSWER A4 PUTS IT.
    *
@@ -2835,7 +2948,29 @@ export const cssVars = {
   '--r-setup-summary-gap': `${String(STATION_SETUP_PX.summaryGap)}px`,
   '--r-setup-summary-gap-above': `${String(STATION_SETUP_PX.summaryGapAbove)}px`,
   '--r-setup-filter-gap': `${String(STATION_SETUP_PX.filterGap)}px`,
-  '--r-setup-filter-margin': `${String(STATION_SETUP_PX.filterGapAbove)}px 0 ${String(STATION_SETUP_PX.filterGapBelow)}px`,
+  /**
+   * 🔴 `SETTINGS-POLISH-04`, owner on the plant: _«فاصله بین متن Visibility and layer safety و
+   * سرچ باکس کمه»_ — the gap between that line and the search box is too small. **It was
+   * ZERO.** Measured on the Layers pane at 1280 × 800: the `<details>` bottom at y = 299 and
+   * the search field's top at y = 299, touching, while the same line had 17 px of air ABOVE it.
+   *
+   * ── WHY THE SPACING VANISHED, WHICH IS THE PART WORTH KEEPING ──────────────────────────
+   *
+   * The pane's rhythm comes from `.cg-setup-body`'s 20 px flex GAP, and a flex gap applies
+   * BETWEEN THE CHILDREN OF THE BOX THAT DECLARES IT. `SetupSection` renders the helper
+   * `<details>` OUTSIDE that box — head, helper, body — so the first card's spacing came from
+   * the gap and the helper's did not come from anywhere. Nothing was deleted and nothing was
+   * overridden; the element simply sat in the one position the column's rhythm does not reach.
+   *
+   * ⚠ **`--r-setup-filter-margin` USED TO LIVE ON THIS LINE AND WAS READ BY NOBODY.** It was
+   * the reference's `.filter-bar{margin:21px 0 15px}` as a shorthand, unused because those
+   * margins would ADD to the body's gap rather than replace it (`.cg-setup-filter` says so).
+   * A declared value nothing renders is worse than an absent one — it answers "is this spacing
+   * handled?" with a yes. Its `21px` half is what the drawing actually spends between the
+   * helper and the first thing under it, so that is what this token is, named for the RELATION
+   * it spaces rather than for the one element that happens to be below it today.
+   */
+  '--r-setup-details-gap-below': `${String(STATION_SETUP_PX.filterGapAbove)}px`,
   '--r-setup-search-max-w': `${String(STATION_SETUP_PX.searchMaxW)}px`,
   '--r-setup-search-icon': `${String(STATION_SETUP_PX.searchIcon)}px`,
   '--r-setup-search-icon-inset': `${String(STATION_SETUP_PX.searchIconInset)}px`,
@@ -2910,6 +3045,7 @@ export const cssVars = {
   '--r-kind-option-radius': `${String(STATION_SETUP_PX.kindOptionRadius)}px`,
   '--r-kind-option-text': `${String(STATION_SETUP_PX.kindOptionText)}px`,
   '--r-kind-option-icon': `${String(STATION_SETUP_PX.kindOptionIcon)}px`,
+  '--r-kind-option-basis': `${String(STATION_SETUP_PX.kindOptionBasis)}px`,
   /** A kind option — `#11171e` on a `#394451` edge; SELECTED `#1d342e` / `#629b89` / `#c6f4e7`. */
   '--r-kind-option-bg': '#11171e',
   '--r-kind-option-line': '#394451',
