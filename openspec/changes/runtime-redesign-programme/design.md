@@ -3967,6 +3967,92 @@ this session expected, and 23.0 is that correction.
   each pane's own tab has to be CLICKED before it is measured. An unclicked reading is not a weak
   reading; it is no reading at all, and it looks exactly like a finished measurement.
 
+## 24. `SETTINGS-MATCH-02` — THE DIALOG MATCHED PANE BY PANE, AND THE FOUR DEFECTS
+
+The owner looked at the built dialog twice, named four defects and supplied screenshots of the
+reference. All four are fixed; the three that turned out not to be what they looked like are the
+part worth reading.
+
+### 24.1 The four, and what each one actually was
+
+| he said                                         | what it was, measured                                                                                                                                                                                                                                                     |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **the box/card colours are wrong**              | **THE DEPTH WAS INVERTED.** A card was `#0b1017` (`--r-surface-sunken`, the palette's darkest value) on a `#141b25` frame, where the drawing puts a `#191e25` card on a `#15191f` one. Every box read as a HOLE. Root cause quoted in 24.2.                               |
+| **the Servers rail item's background is short** | **NOT A CLIPPED BOX.** Measured in every state: `197 × 44` on all five items, `scrollHeight === clientHeight` throughout. What was half-painted was the MARK — a 0.55 rem dot where the reference draws an 18 px count chip and a 13 px amber lock.                       |
+| **the Layers pane is untouched**                | **TRUE, and already recorded** — 23.6 called it row 137, NOT built. Of the drawing's structure exactly two pieces existed: the words `Graphics beds` and a remove action.                                                                                                 |
+| **the frame's height must be FIXED**            | **THE OUTER BOX ALREADY WAS** (1140 × 736, five times, before anything changed). What moved was the RAIL: a Servers refusal took its 109 px out of the body, so the rail and the pane went 565 → 456 on that one tab. The frame stood still while its two columns jumped. |
+
+### 24.2 🔴 Defect 1's root cause was a sentence in our own token home
+
+It read: _"its OWN palette … is NOT the console's approved palette. Only the GEOMETRY is
+transcribed here; every colour is a role token."_ **Right about the mint, wrong about the
+neutrals** — and the neutrals were swept out with it. That is the audit's bucket C exactly
+("palette" is not a reason, 64 of 142 deltas).
+
+The surfaces are role tokens now, scoped to `[data-modal-size='fixed']` so nothing outside this
+dialog can read them: `--r-setup-surface` `#15191f` · `--r-setup-card-bg` `#191e25` ·
+`--r-setup-card-line` `#2b323c` · `--r-setup-rule` `#232a33` · `--r-setup-help-bg` `#161b22` ·
+`--r-setup-table-head-bg` `#14191f` · `--r-setup-row-hover` `#1d242d` · `--r-setup-rail-bg`
+`#11151b` · `--r-setup-field-bg` `#10151c` · `--r-setup-inline-input-bg` `#121820`.
+
+⚠ **THE INK IS NOT TAKEN, and that is a measurement rather than a preference.** The reference's
+three ranks are `#f1f4f7` / `#b8c0cc` / `#8e99a9`; ours are `#eef3f9` / `#bbc8d7` / `#8e9eaf`. The
+largest per-channel delta across all three is **eleven of 255** and the smallest is zero —
+invisible, and adopting them would split the console's type ramp in two for nothing.
+
+⚠ **And THREE surfaces are set INLINE by `Modal.tsx`, not here**: the frame's ground, the footer
+band's and the head band's rule. `styles.dialog` sets `background` inline, and an inline style
+beats a `[data-modal-size='fixed']` selector **silently** — the first spelling put the frame's
+ground in `controls.css` and the e2e read `rgb(20, 27, 37)` against the drawing's
+`rgb(21, 25, 31)`. The rule that came out of it: a surface belongs in the stylesheet UNLESS the
+primitive sets that property inline.
+
+### 24.3 Defect 4 — the frame is a rail beside a panel now
+
+The reference's own shape, and it is visible in its numbers: its `.panel-foot` starts at x = 297
+against a frame at x = 70 with a 226 px rail, so **the footer does not span the rail**. The `fixed`
+frame is `head / [rail | panel(scroll, message, foot)]`, the rail is a named region of the frame
+(`Modal`'s `rail` prop), and the rail's height is the body's height on every tab whatever a
+section has to say. Measured after: **639 px on all five**, against 565/565/565/565/**456** before.
+
+`--r-modal-message-inset-fixed` went with it — the region no longer spans a column it does not
+belong to, so the 258 px inline-start inset that used to correct for that is gone rather than
+left to lie.
+
+### 24.4 What the owner reported from the PLANT, mid-session
+
+> «این قسمت نامرتبه» — _this part is untidy_, circling the Layers head on 192.168.21.114.
+
+Two causes, both measured against the reference:
+
+1. **`--r-setup-details-gap` was declared and read by ONE call site.** The 17 px above a
+   `<details>` was an inline style on the Outputs block, so every other `<details>` in the dialog
+   sat FLUSH against what was above it. On Layers the summary tags ended at y = 263 and
+   `▶ Visibility and layer safety` began at y = 263 — zero gap, which is what makes a line read as
+   debris. The gap belongs to the element.
+2. **🔴 `SETTINGS-DIALOG-01` MIS-TRANSCRIBED THE FIELD BOX.** It recorded
+   `min-height:36px;padding:7px 10px`; the reference renders **`42px` / `10px 12px`**, checked
+   twice — the painted box through the shadow root, and the drawing's own stylesheet text
+   (`.input,.select,.textarea{min-height:42px;padding:10px 12px}`). Six pixels on every field, and
+   the visible cost was the FILTER BAR: a 31 px search box beside a 20 px check, with its magnifier
+   inset for a 42 px box and therefore hanging five pixels below the field's centre.
+
+### 24.5 The three deltas — sub-dialogs, message classes, input guards
+
+- **§8** — one frame for every add/edit/remove (`record`, the reference's 480 `.sub-dialog`), the
+  kind picker as a segmented RADIO GROUP, the delimiter PREVIEW, and the destructive shape. The
+  delimiter's remove had **no confirmation at all** and now has one.
+- **§9** — three message classes, three places: the pane BANNER (two weights, names the remedy,
+  the pane's content column, ≥ 20 px clear of the footer), the CARD HELP STRIP (standing, inside
+  its one card), the FOOTER CLAUSE (one short clause; `Unavailable while on air` on Servers). The
+  remote-host note was an amber `refusal` `Notice` for a fact that refuses nothing — `R-055`, and
+  it is a help strip now.
+- **§10** — normalise, then constrain. `digitsOnly` / `hostValue` / `portError` / `indexError` /
+  `hostError`, with the contract table read from the schema: **three of the eight fields are
+  ADDRESSES and letters are legal in them** (`host: z.string().min(1)`, and `isLoopbackHost`
+  accepts `localhost` and `::1`). Two **silent clamps** were removed — the DeckLink device index
+  and the route channel both rewrote `0` to `1` without saying so.
+
 ### 23.1 🔴 THE FOOTER CONTRADICTION, RESOLVED BY DATE — and it was a stale copy, not a decision
 
 Two texts in the tree disagreed about a section footer with nothing to commit. Dated:
@@ -3977,7 +4063,18 @@ Two texts in the tree disagreed about a section footer with nothing to commit. D
 | `PROMPT.md` §7's "everything already decided survives" list  | 2026-09-07 19:32 +0330     | "a section without one gets `Close`"   |
 | `station-setup/specs/runtime-ui/spec.md`'s per-tab scenarios | pre-`B-240`, never swept   | `Cancel`, and "a quiet `Close` alone"  |
 
-**`B-240`'s rule STANDS, and the later clock reading does not overturn it** — the precedent is
+🔴 **AMENDED 2026-09-11 by `SETTINGS-MATCH-02`, and by the owner rather than by a dating
+argument: the `Close` is BACK on the panes with nothing to commit.** He looked at the reference —
+which draws it on Channel, Live sources and Text delimiters — and asked for it. That does not
+reopen what follows: 23.1's subject is which of two TEXTS was stale, and its answer (the later
+clock reading was a restatement, not a decision) is still correct about the period it covers.
+What changed is the decision itself, at the one place entitled to change it. `B-240`'s substance
+survives intact — one name for discard, one for commit, never a `Close` beside an `Apply`, and
+the `Close` routes through the dialog's own dismissal guard — which is why the amendment is not
+the defect returning. See §24.5 and `sections.ts`'s `commits` column.
+
+**`B-240`'s rule STANDS as of this section's date, and the later clock reading does not overturn
+it** — the precedent is
 `B-216`, where dating settled a self-contradicting record, and dating settles this one too once
 you read what each text CLAIMS TO BE. `PROMPT.md`'s clause sits in a list whose stated purpose is
 to RESTATE decisions already made, not to make one; a restatement that contradicts what it

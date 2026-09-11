@@ -24,6 +24,13 @@ import {
  *   · **Close is a third, DIALOG-level thing** that only some sections carried, which makes
  *     leaving the dialog look like a property of whichever tab you happen to be standing on.
  *
+ * ⭐ **AMENDED 2026-09-11 (`SETTINGS-MATCH-02`): the `Close` came back, on the panes with
+ * nothing to commit, because the reference draws it there and the owner asked for it.** What
+ * did NOT come back is any of the above: it is the dialog's own dismissal on the dialog's own
+ * path (it asks before dropping a draft), it is never beside an `Apply`, and discard is still
+ * called `Revert` and nothing else. `sections.ts`'s `commits` column is where the amended rule
+ * is written down. The specs below assert the amended rule, not the superseded one.
+ *
  * The rule applied is the dismiss-button rule (`AuditPanel`) and `R-055` one surface further:
  * ONE JOB, ONE CONTROL, ONE NAME.
  *
@@ -61,12 +68,11 @@ function footerButtons(dialog: HTMLElement): string[] {
 const boundSlots = [setupSlot(70), setupSlot(71)];
 
 describe('B-240 — one job, one control, one name', () => {
-  it('🔴 no section footer carries a dismissal: leaving is a property of the DIALOG', async () => {
+  it('🔴 DISCARD is never called Cancel, on any tab — the two-names half, unchanged', async () => {
     stationSetupStub({ slots: boundSlots, bank: SETUP_BANK });
     const dialog = await renderStationSetup({ section: 'channel' });
     for (const id of ['channel', 'servers', 'sources', 'delimiters', 'candidate-layers'] as const) {
       await selectSetupTab(dialog, id);
-      expect(footerButtons(dialog), `${id}'s footer offers a dismissal`).not.toContain('Close');
       expect(footerButtons(dialog), `${id}'s footer calls discard "Cancel"`).not.toContain(
         'Cancel',
       );
@@ -75,18 +81,71 @@ describe('B-240 — one job, one control, one name', () => {
     expect(dialog.querySelector('button[aria-label="Close"]')).not.toBeNull();
   });
 
-  it('🔴 a read-only or save-as-you-go tab carries NO buttons — only its message', async () => {
+  /**
+   * 🔴 **`B-240` AMENDED, 2026-09-11 — `SETTINGS-MATCH-02`.**
+   *
+   * This spec asserted `toEqual([])`: a section with nothing to commit carried NO footer
+   * button at all. The owner has now looked at the reference — which draws `Close` on exactly
+   * these three panes — and asked for it, so the rule is amended and the assertion with it.
+   *
+   * ⚠ **What the amendment does NOT touch is what `B-240` was actually about**, and the two
+   * specs around this one are where that is held: discard is `Revert` and never `Cancel`, a
+   * commit is `Apply <section>`, and no footer ever offers a `Close` BESIDE an `Apply` — which
+   * is the configuration that made "which of these am I pressing?" a real question. The three
+   * assertions below are the whole amended rule, stated positively.
+   */
+  it('🔴 a section with nothing to commit carries `Close`, and one with a commit does not', async () => {
     stationSetupStub({ slots: boundSlots, bank: SETUP_BANK });
     const dialog = await renderStationSetup({ section: 'channel' });
-    expect(footerButtons(dialog)).toEqual([]);
+    expect(footerButtons(dialog), 'a read-only tab offers the dialog’s own way out').toEqual([
+      'Close',
+    ]);
     for (const id of ['sources', 'delimiters'] as const) {
       await selectSetupTab(dialog, id);
-      expect(footerButtons(dialog), `${id} carries a button that does nothing`).toEqual([]);
+      expect(footerButtons(dialog), `${id} is save-as-you-go: Close alone`).toEqual(['Close']);
     }
-    // The contract sentence is still there — that is what the footer is FOR now.
+    // 🔴 …and NEVER beside a commit. This is the half `B-240` was protecting.
+    for (const id of ['servers', 'candidate-layers'] as const) {
+      await selectSetupTab(dialog, id);
+      expect(footerButtons(dialog), `${id} offers both a Close and an Apply`).not.toContain(
+        'Close',
+      );
+      expect(footerButtons(dialog).join(' '), `${id} lost its commit`).toContain('Apply');
+    }
+    // The contract sentence is still there — that is what the footer is FOR.
     expect(
       dialog.querySelector('[data-section-footer]')?.textContent?.trim().length ?? 0,
     ).toBeGreaterThan(0);
+  });
+
+  it('🔴 that `Close` is the DIALOG’s dismissal — it asks before dropping another tab’s draft', async () => {
+    /*
+      The amendment's load-bearing claim. A per-section `Close` that dismissed without the
+      guard would be a second dismissal path, which is exactly the defect `B-240` closed; this
+      one routes through the SAME `dismiss` the ✕ calls, so the question is asked once, in one
+      place, whichever affordance is pressed.
+    */
+    const onClose = vi.fn();
+    stationSetupStub({ slots: boundSlots, bank: SETUP_BANK });
+    const dialog = await renderStationSetup({ section: 'servers', onClose });
+    await setSetupInput(dialog, 'Primary host', '192.168.21.114');
+
+    // Stand on a tab with nothing to commit, while Servers holds the draft.
+    await selectSetupTab(dialog, 'delimiters');
+    const close = [
+      ...(dialog.querySelector('.cg-modal-footer')?.querySelectorAll('button') ?? []),
+    ].find((b) => b.textContent?.trim() === 'Close');
+    expect(close, 'the save-as-you-go tab has its Close').not.toBeUndefined();
+    await act(async () => {
+      close?.click();
+      await Promise.resolve();
+    });
+    expect(onClose, 'it dropped a draft without a word').not.toHaveBeenCalled();
+    const confirm = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
+    expect(
+      confirm?.textContent,
+      'the question names the section that would lose its edits',
+    ).toContain('Servers');
   });
 
   it('🔴 discard is called REVERT on every tab that has one, and only when there is something to revert', async () => {

@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
+import { Trash2 } from 'lucide-react';
 import type { VerbTone } from './rowAction.js';
+import { Icon } from './Icon.js';
 import { Modal, ModalAction } from './Modal.js';
 
 /**
@@ -36,6 +38,42 @@ interface ConfirmRequest {
    * that actually commits.
    */
   tone?: VerbTone;
+  /**
+   * 🔴 `SETTINGS-MATCH-02` §8d — **THE DESTRUCTIVE EMBLEM.**
+   *
+   * A red-tinted tile above the sentence, which the reference draws on every remove. It is not
+   * decoration: this hook's whole job is to gate an act that removes something or takes it off
+   * air, and the mark is what says so in the quarter-second before the sentence is read.
+   *
+   * ⚠ OPTIONAL, and the omission is a decision the drawing makes too — its `#confirm-dialog`
+   * has none. The rule `Modal`'s `emblem` already states applies here one layer in: a dialog
+   * that is a PLACE gets a mark, and a dialog that asks a question in words does not. What
+   * earns one HERE is the act being destructive, so the flag is named for that rather than
+   * for the picture.
+   */
+  destructive?: boolean;
+  /**
+   * 🔴 `SETTINGS-MATCH-02` §8 — **WHICH DIALOG FAMILY THIS CONFIRM BELONGS TO**, and an e2e
+   * caught the first spelling getting it wrong.
+   *
+   * `useConfirm` serves TWO surfaces, and the reference draws two frames for them:
+   *
+   *   · `base` (the default) — a confirm raised from the CONSOLE, over nothing. `Clear all`,
+   *     a row's CLEAR. The reference's outer `#confirm-dialog`, `.modal.small`, **500** wide.
+   *   · `sub` — a confirm raised from inside STATION SETUP, over that dialog. The reference's
+   *     `.sub-dialog`, **480** wide, with the lighter scrim that keeps the surface underneath
+   *     visible so the operator can see he is one step deeper.
+   *
+   * The first spelling made every confirm `record`, and `modal-geometry.spec.ts` — which
+   * measures the console's `Clear all` against the drawing's 500 — went red at 480. That spec
+   * was right: widening a decision from one family to both is how a measured value quietly
+   * becomes an average of two.
+   *
+   * ⚠ It also fixes the SCRIM, which was wrong before this session and nothing had noticed:
+   * a confirm over Station setup laid the full `base` scrim, so the dialog it was launched
+   * from went as dark as the console behind it.
+   */
+  layer?: 'base' | 'sub';
 }
 
 export function useConfirm(): {
@@ -65,6 +103,13 @@ export function useConfirm(): {
     request === null ? null : (
       <Modal
         title={request.title}
+        /*
+          `SETTINGS-MATCH-02` §8d — a confirm raised INSIDE Station setup is part of that
+          dialog's sub-family (480, its own bands, the lighter scrim); one raised from the
+          console keeps the outer family's 500. See `ConfirmRequest.layer`.
+        */
+        size={request.layer === 'sub' ? 'record' : 'prose'}
+        layer={request.layer ?? 'base'}
         onClose={() => settle(false)}
         footer={
           <>
@@ -98,6 +143,12 @@ export function useConfirm(): {
           </>
         }
       >
+        {/* §8d — the mark, then the sentence. See `ConfirmRequest.destructive`. */}
+        {request.destructive === true && (
+          <span className="cg-confirm-emblem" data-confirm-emblem="">
+            <Icon icon={Trash2} size={20} />
+          </span>
+        )}
         {request.body}
       </Modal>
     );

@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { expect, test } from './fixtures/runtime.js';
+import { chooseSourceKind, expect, test } from './fixtures/runtime.js';
 
 /**
  * D-137 / C-015 phase 4 — the CG Control surfaces that make a live plate resolve.
@@ -104,13 +104,13 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
     second operator reading the config can tell from a clip.
   */
   await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
-  await edit.getByLabel('Source kind').selectOption('stream');
+  await chooseSourceKind(edit, 'stream');
   await expect(edit.getByLabel('Stream URL')).toBeVisible();
   await edit.getByLabel('Stream URL').fill('ftp://server/feed.ts');
   await edit.getByRole('button', { name: 'Save' }).click();
   await expect(dialog.getByText(/accepted scheme/)).toBeVisible();
   await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
-  await edit.getByLabel('Source kind').selectOption('stream');
+  await chooseSourceKind(edit, 'stream');
   await edit.getByLabel('Stream URL').fill('srt://10.0.0.20:9000');
   await edit.getByRole('button', { name: 'Save' }).click();
   await expect(dialog.locator('[data-source-kind="stream"]')).toHaveCount(1);
@@ -125,7 +125,7 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
     trade a line that overclaims for one that hides.
   */
   await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
-  await edit.getByLabel('Source kind').selectOption('decklink');
+  await chooseSourceKind(edit, 'decklink');
   await edit.getByLabel('DeckLink key device index').fill('2');
   await edit.getByRole('button', { name: 'Save' }).click();
   await expect(dialog.locator('[data-source-parts]').first()).toContainText('Device');
@@ -241,11 +241,11 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
     than reporting it after. That is strictly more than this spec used to assert: the same
     template and plate are named, and they are named while the operator can still say no.
   */
-  const confirm = page.getByRole('dialog', { name: /^Delete the source/ });
+  const confirm = page.getByRole('dialog', { name: /^Remove / });
   await expect(confirm).toBeVisible();
   await expect(confirm.getByText(/two box/)).toBeVisible();
   await expect(confirm.getByText(/already on air stays up/)).toBeVisible();
-  await confirm.getByRole('button', { name: 'Delete source' }).click();
+  await confirm.getByRole('button', { name: 'Remove source' }).click();
 
   // …and the cascade still reports what it freed, naming the template the way the operator
   // knows it (the imported file name, cleaned), never by its id.

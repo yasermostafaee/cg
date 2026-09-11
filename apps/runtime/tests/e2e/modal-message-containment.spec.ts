@@ -128,7 +128,7 @@ test('a Servers refusal is drawn inside the section pane, clear of the footer', 
   // The seeded bank has rows on air, which is the Servers gate's own condition — no plant.
   const message = dialog.locator('[data-modal-message]');
   await expect(message).toBeVisible();
-  await expect(message).toContainText('Apply is blocked for Servers');
+  await expect(message).toContainText('Server changes are paused while on air');
 
   await assertContained(dialog, 'Servers');
 });

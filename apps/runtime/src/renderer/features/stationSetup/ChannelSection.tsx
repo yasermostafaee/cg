@@ -142,7 +142,17 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
         metrics. `data-raster-channel` names the ONE channel this pane reports, so a test can
         assert which channel is shown and, as important, which is NOT.
       */}
-      <section className="cg-card" aria-label="Video format" data-raster-channel={String(channel)}>
+      {/*
+        `SETTINGS-MATCH-02` — `--video` is the one card the reference TINTS, and `design.md`
+        14.3 argued the tint away as "the prototype's palette". It is a green-GREY gradient
+        rather than a hue, it claims nothing about air, and the owner asked for the panes as
+        drawn: it says "this card is the channel itself" among three plain cards.
+      */}
+      <section
+        className="cg-card cg-card--video"
+        aria-label="Video format"
+        data-raster-channel={String(channel)}
+      >
         <div className="cg-video-head">
           <span className="cg-video-eyebrow">Video format</span>
           <span className="cg-video-token">{channelToken(channel)}</span>

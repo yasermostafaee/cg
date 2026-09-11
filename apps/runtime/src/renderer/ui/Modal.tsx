@@ -153,6 +153,23 @@ const styles = {
     maxHeight: cssVars['--r-modal-h-fixed'],
     borderRadius: cssVars['--r-modal-radius-fixed'],
     boxShadow: cssVars['--r-modal-shadow-fixed'],
+    /*
+     * 🔴 `SETTINGS-MATCH-02` — THE FRAME'S OWN GROUND, AND WHY IT IS SPELLED HERE.
+     *
+     * This dialog's surfaces are the reference's measured family (see the token home's
+     * `SETTINGS-MATCH-02` block) and every other one of them is a `controls.css` rule. This
+     * one cannot be: `styles.dialog` sets `background` INLINE, and an inline style beats a
+     * `[data-modal-size='fixed']` selector every time — silently, with the frame simply
+     * rendering the old ground. The same trap `Modal`'s `library` body padding already
+     * carries a warning about, and the first spelling of this change walked into it: the
+     * e2e read `rgb(20, 27, 37)` where the drawing paints `rgb(21, 25, 31)`.
+     *
+     * ⚠ So: a surface this dialog overrides is a CSS rule UNLESS the primitive sets that
+     * property inline, in which case it belongs here. The frame, the footer band and the head
+     * band's rule are the three.
+     */
+    background: cssVars['--r-setup-surface'],
+    borderColor: cssVars['--r-modal-line'],
   },
   /** The title row: heading on one side, the close affordance on the other. */
   titleRow: {
@@ -201,7 +218,8 @@ const styles = {
     gap: cssVars['--r-modal-head-gap-fixed'],
     minHeight: cssVars['--r-modal-head-min-h-fixed'],
     padding: cssVars['--r-modal-head-pad-fixed'],
-    borderBottom: `1px solid ${colors.border}`,
+    /* `SETTINGS-MATCH-02` — this frame's own line, inline for the reason `dialogFixed` gives. */
+    borderBottom: `1px solid ${cssVars['--r-setup-card-line']}`,
     boxSizing: 'border-box' as const,
   },
   title: {
@@ -217,6 +235,24 @@ const styles = {
     // The reference's `.settings-head h2` renders 650; on this app's static Exo 2 that
     // resolves to the 700 face (`REPAIR-03` A3), so the weight that renders is the one named.
     fontWeight: Number(cssVars['--r-weight-bold']),
+    /*
+      `SETTINGS-MATCH-02` — and its TRACKING, which the side-by-side found and no measurement
+      of the app alone could: the reference's `h1` renders `letter-spacing:-0.02em` here
+      against the primitive's default of none. A 19 px title set loose reads as a wider word
+      than the drawing's at the same size.
+    */
+    letterSpacing: cssVars['--r-setup-title-tracking-frame'],
+  },
+  /**
+   * `SETTINGS-MATCH-02` — the `fixed` frame's EMBLEM, which the reference draws one size
+   * larger than the outer family's: `.settings-emblem` is 44 × 44 with a 12 px corner and a
+   * 23 px glyph, against `.modal-icon`'s 42 / 10 / 20. Scoped for the same reason the frame's
+   * radius, title and close box are — two families, two measured numbers.
+   */
+  emblemFixed: {
+    width: cssVars['--r-setup-emblem-box'],
+    height: cssVars['--r-setup-emblem-box'],
+    borderRadius: cssVars['--r-setup-emblem-radius'],
   },
   /** The title and its subtitle stack; the close affordance stays on the row's far end. */
   titleStack: { display: 'flex', flexDirection: 'column' as const, minWidth: 0 },
@@ -307,14 +343,18 @@ const styles = {
    */
   footerFixed: {
     padding: cssVars['--r-modal-foot-pad-fixed'],
-    gap: cssVars['--r-modal-foot-gap-fixed'],
-    borderTop: `1px solid ${colors.border}`,
+    /* `SETTINGS-MATCH-02` — the reference's `.foot-actions{gap:9px}`, not the frame head's 14. */
+    gap: cssVars['--r-setup-foot-actions-gap'],
+    borderTop: `1px solid ${cssVars['--r-setup-card-line']}`,
     /*
       Phase 7 — the DIALOG's own surface, as the reference paints its `.panel-foot`
       (`background:var(--surface)`), not the raised one: the rule above it is what separates
       it from the pane, and a raised band under a sunken pane read as a third surface.
+
+      `SETTINGS-MATCH-02` — and that surface is this frame's own, inline for the reason
+      `dialogFixed` gives: the base `styles.footer` sets `background` here too.
     */
-    background: colors.panel,
+    background: cssVars['--r-setup-surface'],
     /*
       🔴 A FLOOR, so the bar's height does not depend on whether this section has buttons.
       Without it a tab carrying none collapses the footer and its TOP EDGE moves — see
@@ -327,20 +367,41 @@ const styles = {
   /** The fixed frame's body fills the frame; only the scroll container inside it scrolls. */
   bodyFixed: { flex: 1, padding: 0, gap: 0 },
   /**
-   * 🔴 The pinned region, IN THE PANE'S COLUMN.
+   * 🔴 `SETTINGS-MATCH-02` §1 — **THE FIXED FRAME IS A RAIL BESIDE A PANEL, AND THE PANEL
+   * OWNS THE MESSAGE AND THE FOOTER.**
    *
-   * This was `padding: '0.6rem 1rem 0'` — the flush frame's own inset, applied to a region
-   * whose sibling body is a RAIL plus a PANE. So the card spanned both columns and its bottom
-   * edge met the footer's top rule exactly. See `--r-modal-message-pad-fixed` for the
-   * measurement and for why the inset lives in the token home rather than here.
+   * ── THE DEFECT THIS SHAPE FIXES, MEASURED ───────────────────────────────
    *
-   * `paddingInlineStart` overrides the shorthand's inline-start only, and is logical rather
-   * than physical so the inset follows the rail in an RTL document.
+   * The outer box was already identical on all five tabs — measured 1140 × 736 at 1280 × 800,
+   * five times, before anything here changed. What was NOT identical is what the operator
+   * actually looks at: with the message region a SIBLING of the body, a Servers refusal took
+   * its 109 px out of the body, so the RAIL and the PANE shrank from 565 px to 456 px the
+   * moment he pressed Servers, and grew back when he left. The frame stood still while
+   * everything inside it moved, which is the same complaint one layer in.
+   *
+   * The reference has no such region: its `.panel` is a column holding the scroll and the
+   * `.panel-foot`, and its `.sidebar` runs the FULL height of the body — measured, its footer
+   * starts at x = 297 against a frame at x = 70 with a 226 px rail, so the footer does not
+   * span the rail at all.
+   *
+   * So the frame is now that: `head / [rail | panel(scroll, message, foot)]`. The rail's
+   * height is the body's height and nothing a section does can change it, the message is
+   * still OUTSIDE the scroll and still directly above the actions (which is the whole of
+   * `AUDIT-CLOSE-01` delta A — the refusal is not something to scroll for), and the inset it
+   * used to need is gone because it is no longer spanning a column it does not belong to.
    */
-  messageFixed: {
-    padding: cssVars['--r-modal-message-pad-fixed'],
-    paddingInlineStart: cssVars['--r-modal-message-inset-fixed'],
+  panelFixed: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
   },
+  /**
+   * The pinned region inside that column — it takes the PANE's own inset, because it is the
+   * last item in the pane's column and takes the column's rhythm.
+   */
+  messageFixed: { padding: cssVars['--r-modal-message-pad-fixed'] },
 } as const;
 
 /**
@@ -540,7 +601,27 @@ interface ModalProps {
    * `#import-dialog`, 750 px, a dialog that does ONE station-level thing and needs
    * room for a drop target rather than for a list. Measured by opening it.
    */
-  size?: 'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'import';
+  /**
+   * ⭐ `record` is the seventh, added by `SETTINGS-MATCH-02` §8: the SUB-DIALOG every add,
+   * edit and remove inside Station setup opens. The reference's own
+   * `.sub-dialog{width:min(480px,calc(100vw - 32px))}` — narrower than `prose`'s 500, and its
+   * own frame rather than a near-miss of one, because that family also has its own head, body
+   * and footer paddings and its own footer ground.
+   */
+  size?: 'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'import' | 'record';
+  /**
+   * 🔴 `SETTINGS-MATCH-02` §1 — the `fixed` frame's RAIL, beside the panel rather than above
+   * it, and running the frame's full height.
+   *
+   * It is a named REGION rather than part of `children` because of what that buys: the
+   * message region and the footer band then live in the PANEL's column, so a refusal cannot
+   * take height out of the rail (see `styles.panelFixed` for the measurement). A caller that
+   * put the rail inside `children` could only get that by laying out the footer itself, which
+   * is the primitive's job.
+   *
+   * Meaningless for every other size, and ignored there: only Station setup has a rail.
+   */
+  rail?: ReactNode;
   /**
    * `STATION-CHROME-01` §6 — which LAYER this dialog is on.
    *
@@ -556,13 +637,17 @@ interface ModalProps {
 }
 
 /** `STATION-CHROME-02` §2 — the frames, resolved from the token home and never spelled here. */
-const WIDTHS: Record<'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'import', string> = {
+const WIDTHS: Record<
+  'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'import' | 'record',
+  string
+> = {
   prose: cssVars['--r-modal-w-prose'],
   wide: cssVars['--r-modal-w-wide'],
   fixed: cssVars['--r-modal-w-fixed'],
   ledger: cssVars['--r-modal-w-ledger'],
   library: cssVars['--r-modal-w-library'],
   import: cssVars['--r-modal-w-import'],
+  record: cssVars['--r-modal-w-record'],
 };
 
 export function Modal({
@@ -575,6 +660,7 @@ export function Modal({
   children,
   ariaLabel,
   size = 'prose',
+  rail,
   layer: layerLevel = 'base',
 }: ModalProps): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
@@ -673,8 +759,16 @@ export function Modal({
             dialog open with a decorative word before its own.
           */}
           {emblem !== undefined && (
-            <span style={styles.emblem} data-modal-emblem="">
-              <Icon icon={emblem} size={Number.parseFloat(cssVars['--r-modal-emblem-glyph'])} />
+            <span
+              style={fixed ? { ...styles.emblem, ...styles.emblemFixed } : styles.emblem}
+              data-modal-emblem=""
+            >
+              <Icon
+                icon={emblem}
+                size={Number.parseFloat(
+                  fixed ? cssVars['--r-setup-emblem-glyph'] : cssVars['--r-modal-emblem-glyph'],
+                )}
+              />
             </span>
           )}
           {subtitle === undefined ? (
@@ -710,30 +804,6 @@ export function Modal({
             <Icon icon={X} size={16} />
           </Button>
         </div>
-        {children !== undefined && (
-          <div
-            style={
-              /*
-                `RUNTIME-REPAIR-04` — `library` is FLUSH like `fixed`, and for the same reason:
-                its body is a two-column layout whose divider must reach the head band and the
-                footer, as the reference's `.template-layout` does. The inset moves to the
-                columns, which is where the reference puts it (`.template-tools{padding:20px
-                24px 14px}`).
-
-                ⚠ This is decided HERE and not in `controls.css`, because the padding is an
-                INLINE style: a `[data-modal-size='library'] .cg-modal-body` rule loses to it
-                every time, silently, and the column just renders 44 px narrow.
-              */
-              size === 'fixed' || size === 'library'
-                ? { ...styles.body, ...styles.bodyFixed }
-                : styles.body
-            }
-            className="cg-modal-body"
-            data-modal-body=""
-          >
-            {children}
-          </div>
-        )}
         {/*
           §3 — OUTSIDE `body`, ABOVE `footer`. The order of these two elements IS
           the fix: a message rendered into `children` above would scroll away with
@@ -743,28 +813,82 @@ export function Modal({
           `alert` and a neutral outcome is a `status`, and a wrapper that announced
           both as one would re-flatten the distinction the roles exist to keep.
         */}
-        {messages.length > 0 && (
-          <div
-            style={fixed ? { ...styles.message, ...styles.messageFixed } : styles.message}
-            className="cg-modal-message"
-            data-modal-message=""
-          >
-            {messages.map((m, i) => (
-              <Notice
-                key={`${m.role}:${String(i)}`}
-                noticeRole={m.role}
-                text={m.text}
-                {...(m.detail !== undefined ? { detail: m.detail } : {})}
-              />
-            ))}
-          </div>
-        )}
-        <div
-          style={fixed ? { ...styles.footer, ...styles.footerFixed } : styles.footer}
-          className="cg-modal-footer"
-        >
-          {footer}
-        </div>
+        {(() => {
+          const bodyNode =
+            children === undefined ? null : (
+              <div
+                style={
+                  /*
+                    `RUNTIME-REPAIR-04` — `library` is FLUSH like `fixed`, and for the same
+                    reason: its body is a two-column layout whose divider must reach the head
+                    band and the footer, as the reference's `.template-layout` does. The inset
+                    moves to the columns, which is where the reference puts it
+                    (`.template-tools{padding:20px 24px 14px}`).
+
+                    ⚠ This is decided HERE and not in `controls.css`, because the padding is an
+                    INLINE style: a `[data-modal-size='library'] .cg-modal-body` rule loses to
+                    it every time, silently, and the column just renders 44 px narrow.
+                  */
+                  size === 'fixed' || size === 'library'
+                    ? { ...styles.body, ...styles.bodyFixed }
+                    : styles.body
+                }
+                className="cg-modal-body"
+                data-modal-body=""
+              >
+                {children}
+              </div>
+            );
+          const messageNode =
+            messages.length === 0 ? null : (
+              <div
+                style={fixed ? { ...styles.message, ...styles.messageFixed } : styles.message}
+                className="cg-modal-message"
+                data-modal-message=""
+              >
+                {messages.map((m, i) => (
+                  <Notice
+                    key={`${m.role}:${String(i)}`}
+                    noticeRole={m.role}
+                    text={m.text}
+                    {...(m.detail !== undefined ? { detail: m.detail } : {})}
+                  />
+                ))}
+              </div>
+            );
+          const footerNode = (
+            <div
+              style={fixed ? { ...styles.footer, ...styles.footerFixed } : styles.footer}
+              className="cg-modal-footer"
+            >
+              {footer}
+            </div>
+          );
+          /*
+            🔴 `SETTINGS-MATCH-02` §1 — THE RAIL IS THE BODY'S FIRST COLUMN and the other three
+            are the second one's. See `styles.panelFixed`: this is what stops a refusal taking
+            109 px out of the rail, and it is the reference's own shape.
+          */
+          if (!fixed || rail === undefined) {
+            return (
+              <>
+                {bodyNode}
+                {messageNode}
+                {footerNode}
+              </>
+            );
+          }
+          return (
+            <div className="cg-modal-frame" data-modal-frame="">
+              {rail}
+              <div style={styles.panelFixed} className="cg-modal-panel" data-modal-panel="">
+                {bodyNode}
+                {messageNode}
+                {footerNode}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>,
     document.body,

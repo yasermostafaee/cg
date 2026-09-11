@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/runtime.js';
+import { chooseSourceKind, test, expect } from './fixtures/runtime.js';
 
 /**
  * `STATION-CHROME-01` §5, §6 and §7 — **one way to add anything, kind-aware fields, and a
@@ -87,17 +87,17 @@ test('§5 — the live-source fields change with the kind, and the row labels wh
   await expect(sub.getByLabel('Stream URL')).toHaveCount(0);
 
   // NDI — the name the network announces, and nothing about devices.
-  await sub.getByLabel('Source kind').selectOption('ndi');
+  await chooseSourceKind(sub, 'ndi');
   await expect(sub.getByLabel('NDI source name')).toBeVisible();
   await expect(sub.getByLabel('DeckLink device index')).toHaveCount(0);
 
   // STREAM — a URL.
-  await sub.getByLabel('Source kind').selectOption('stream');
+  await chooseSourceKind(sub, 'stream');
   await expect(sub.getByLabel('Stream URL')).toBeVisible();
   await expect(sub.getByLabel('NDI source name')).toHaveCount(0);
 
   // Commit an NDI source and read the ROW: the value carries its own LABEL.
-  await sub.getByLabel('Source kind').selectOption('ndi');
+  await chooseSourceKind(sub, 'ndi');
   await sub.getByLabel('Source name', { exact: true }).fill('Ingest');
   await sub.getByLabel('NDI source name').fill('CG-INGEST (Studio 2)');
   await sub.getByRole('button', { name: 'Add source' }).click();

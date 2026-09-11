@@ -1,5 +1,21 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { contractTag, sectionSpec, type StationSetupSection } from './sections.js';
+import { Check, Lock, Layers3, type LucideIcon } from 'lucide-react';
+import { STATION_SETUP_PX } from '../../theme.js';
+import { Icon } from '../../ui/Icon.js';
+import { contractTag, sectionSpec, type SectionCommit } from './sections.js';
+import type { StationSetupSection } from './sections.js';
+
+/**
+ * `SETTINGS-MATCH-02` — the contract tag's glyph, which the reference draws on every one of
+ * them (`Read only` a padlock, `Auto-save` a tick). Keyed on the CONTRACT, from the same
+ * `sectionSpec` the word comes from, so a mark and its word cannot say different things.
+ */
+const CONTRACT_ICON: Record<SectionCommit, LucideIcon> = {
+  'read-only': Lock,
+  immediate: Check,
+  'apply-servers': Layers3,
+  section: Layers3,
+};
 
 /**
  * ONE frame for every Station setup section: the heading, the commit legend beside it, and
@@ -25,9 +41,24 @@ import { contractTag, sectionSpec, type StationSetupSection } from './sections.j
  */
 export function SetupSection({
   id,
+  summary,
+  helper,
   children,
 }: {
   id: StationSetupSection;
+  /**
+   * `SETTINGS-MATCH-02` — the reference's `.layer-summary`: a row of read-only tags UNDER the
+   * description, stating the facts this section cannot change. Optional, and only Layers has
+   * them today (`Channel 1` · `Layers 70–99` · 🔒 `Fixed bank`). They are a different level
+   * from the contract TAG at the row's end, which says how edits reach the bridge.
+   */
+  summary?: ReactNode;
+  /**
+   * The reference's `.helper-details` under the head — the rules an operator needs BEFORE
+   * touching a control, folded away. Rendered between the head and the body so it reads as
+   * part of the heading rather than as the first card.
+   */
+  helper?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
   const spec = sectionSpec(id);
@@ -46,15 +77,21 @@ export function SetupSection({
 
   return (
     <section ref={ref} aria-label={spec.title} id={`station-setup-${id}`} data-station-section={id}>
-      <div className="cg-setup-head">
+      <div
+        className="cg-setup-head"
+        {...(summary !== undefined ? { style: { marginBottom: 0 } } : {})}
+      >
         <div>
           <h2 className="cg-setup-title">{spec.title}</h2>
           <p className="cg-setup-description">{spec.legend}</p>
+          {summary}
         </div>
         <span className="cg-setup-tag" data-section-commit={spec.commit}>
+          <Icon icon={CONTRACT_ICON[spec.commit]} size={STATION_SETUP_PX.tagIcon} />
           {contractTag(spec.commit)}
         </span>
       </div>
+      {helper}
       <div className="cg-setup-body">{children}</div>
     </section>
   );

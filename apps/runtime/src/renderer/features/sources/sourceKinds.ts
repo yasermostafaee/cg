@@ -1,3 +1,4 @@
+import { Clapperboard, CreditCard, Link2, Radio, Shuffle, type LucideIcon } from 'lucide-react';
 import type { SourceProducer } from '@cg/shared-ipc';
 
 /**
@@ -45,6 +46,23 @@ export const KIND_BADGE: Record<SourceProducer['kind'], string> = {
   ndi: 'NDI',
   stream: 'Stream',
   media: 'Media',
+};
+
+/**
+ * `SETTINGS-MATCH-02` — the glyph on a catalogue row's kind TILE (the reference's
+ * `.resource-icon`).
+ *
+ * ⚠ DECORATIVE, and it has to be: the badge WORD beside it is what names the kind, and this
+ * list has five kinds against a vocabulary of icons that could not distinguish them reliably
+ * on their own. It lives beside `KIND_BADGE` so a kind cannot gain a word without a mark or
+ * the other way round — the same reason the labels and the empty producers are in this file.
+ */
+export const KIND_ICON: Record<SourceProducer['kind'], LucideIcon> = {
+  route: Shuffle,
+  decklink: CreditCard,
+  ndi: Radio,
+  stream: Link2,
+  media: Clapperboard,
 };
 
 /**

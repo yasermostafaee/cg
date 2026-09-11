@@ -274,9 +274,21 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
       'the refusal was appended to content the operator may have scrolled away from',
     ).toBe(false);
 
-    // …and it sits immediately beside the action row, which is where the operator
-    // is looking, because that is where he just clicked.
-    const kids = [...dialog.children];
+    /*
+      …and it sits IMMEDIATELY BESIDE the action row, which is where the operator is looking,
+      because that is where he just clicked.
+
+      ⚠ `SETTINGS-MATCH-02` §1 — READ FROM THE MESSAGE'S OWN PARENT, not from the dialog's
+      children. The claim is unchanged and is still the whole point of this spec; what moved is
+      how deep the pair sits. The `fixed` frame's body is a RAIL beside a PANEL now, and the
+      message and the footer both belong to the PANEL's column — which is what stopped a
+      refusal taking 109 px out of the rail every time the operator pressed Servers. Indexing
+      `dialog.children` was reading a level that no longer holds either element, so it was
+      measuring the wrong container rather than a moved message.
+    */
+    const column = message?.parentElement;
+    expect(column, 'the message has a parent to be measured in').not.toBeNull();
+    const kids = [...(column?.children ?? [])];
     expect(kids.indexOf(message as Element)).toBe(
       kids.findIndex((k) => k.matches('.cg-modal-footer')) - 1,
     );
@@ -315,11 +327,22 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
     // the operator's edits intact, exactly as before.
     const dialog = await openAndRefuse();
     expect(openDialog()).not.toBeNull();
-    // Thirty operator rows plus the nine declared bed rows (`single-clock-look-switch`) —
-    // the section lists every candidate layer of BOTH halves. Scoped to the section: the
-    // Servers section above it carries a checkbox of its own (auto-failover).
-    expect(
-      sectionOf(dialog, 'candidate-layers').querySelectorAll('input[type="checkbox"]').length,
-    ).toBe(39);
+    /*
+      Thirty operator rows plus the nine declared bed rows (`single-clock-look-switch`) — the
+      section lists every candidate layer of BOTH halves — PLUS the filter bar's one
+      `Shown only` check, which `SETTINGS-MATCH-02` added above them. 39 + 1.
+
+      ⚠ Counted as two named halves rather than as `40`, because the number is the POINT: the
+      claim is that a refusal leaves every row in place, and a bare literal would go on passing
+      if the rows were replaced by forty checkboxes of some other kind.
+    */
+    const boxes = sectionOf(dialog, 'candidate-layers').querySelectorAll(
+      'input[type="checkbox"]',
+    ).length;
+    const rowSwitches = sectionOf(dialog, 'candidate-layers').querySelectorAll(
+      'input[aria-label^="Show layer "]',
+    ).length;
+    expect(rowSwitches, 'every candidate layer of both halves is still listed').toBe(39);
+    expect(boxes, 'the rows, plus the filter bar’s own check').toBe(rowSwitches + 1);
   });
 });

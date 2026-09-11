@@ -233,12 +233,20 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
     */
     await selectSetupTab(dialog, 'candidate-layers');
     expect(footerActions(dialog).map((b) => b.textContent)).toEqual(['Revert', 'Apply layers']);
+    /*
+      ⭐ `SETTINGS-MATCH-02` — these three read `['Close']` and not `[]`. `B-240` removed that
+      button and the owner has asked for it back on exactly the panes with nothing to commit;
+      `setupFooterVocabulary.dom.test.ts` carries the amended rule and its dating. The claim
+      THIS spec exists for is untouched and is what the two lines above still hold: a tab's
+      footer carries that section's actions and no other tab's — Servers' `Apply servers` and
+      the bank's `Apply layers` are each on one tab only.
+    */
     for (const section of ['channel', 'sources', 'delimiters'] as const) {
       await selectSetupTab(dialog, section);
       expect(
         footerActions(dialog).map((b) => b.textContent),
         `${section} carries a button it should not have`,
-      ).toEqual([]);
+      ).toEqual(['Close']);
     }
   });
 
@@ -257,13 +265,13 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
     await selectSetupTab(dialog, 'sources');
     const sourcesFoot = dialog.querySelector('[data-section-footer="sources"]')?.textContent ?? '';
     expect(sourcesFoot).toContain('The catalogue saves as you go');
-    expect(sourcesFoot).toContain('The layer band is applied by the button in its own section');
+    expect(sourcesFoot).toContain('the layer band is applied separately');
     expect(sourcesFoot, 'the sentence that was untrue must not come back').not.toContain(
       'there is nothing waiting to be applied',
     );
     // …and the section's own legend agrees with its footer rather than repeating the lie.
     expect(sectionOf(dialog, 'sources').textContent).toContain(
-      'The catalogue saves as you go; the layer band is applied',
+      'The catalogue saves as you go; the layer band is applied.',
     );
     // The band's own control is right there, which is what makes the footer's claim checkable.
     expect(

@@ -223,7 +223,7 @@ describe('the census — every section of Station setup that can speak, speaks t
 
     expectMessageThroughTheRegion(dialog, 'refusal');
     const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
-    expect(text).toContain('Apply is blocked for Servers');
+    expect(text).toContain('Server changes are paused while on air');
     expect(text).toContain('Every other section stays editable');
   });
 

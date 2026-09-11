@@ -3161,10 +3161,52 @@ input[type='checkbox']:disabled:checked {
  * sentence-case head and a 20 px body, and a 74 px footer. Every number is a `--r-setup-*`,
  * `--r-video-*` or `--r-output-*` token from `STATION_SETUP_PX`; every colour is a role token.
  *
- * ⚠ The reference's Station setup carries its OWN palette (a mint accent, its own surfaces) that
- * is not the console's approved one; nothing of it is transcribed. The rail's rest ink stays FULL
- * (owner, 2026-09-07 — the group must be the muted one), and the selected wash is the console's.
+ * 🔴 **AMENDED BY `SETTINGS-MATCH-02` — THE PARAGRAPH THAT USED TO SIT HERE WAS THE DEFECT.**
+ *
+ * It read: _"The reference's Station setup carries its OWN palette (a mint accent, its own
+ * surfaces) that is not the console's approved one; nothing of it is transcribed."_ Right about
+ * the mint, WRONG about the neutrals — and the neutrals went out with it. What the app painted
+ * was a card at `#0b1017` (the palette's darkest value) on a `#141b25` ground, where the drawing
+ * puts a `#191e25` card on a `#15191f` one: the depth was INVERTED, so every box read as a hole.
+ * The surfaces are role tokens now (`--r-setup-surface`, `--r-setup-card-bg`, … — see the token
+ * home's `SETTINGS-MATCH-02` block for the table and for why the INK is still the console's), and
+ * they are scoped to `[data-modal-size='fixed']` so nothing outside this dialog can read them.
+ *
+ * ⚠ The rail's rest ink stays FULL (owner, 2026-09-07 — the group must be the muted one).
  */
+
+/*
+ * 🔴 `SETTINGS-MATCH-02` §1 — THE FRAME'S BODY: a rail beside a panel, both full height.
+ * `Modal.tsx`'s `styles.panelFixed` carries the measurement and the argument.
+ */
+.cg-modal-frame {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+/*
+ * ── THE SURFACE FAMILY, scoped to this frame ────────────────────────────────
+ *
+ * ⚠ EVERY rule below is inside `[data-modal-size='fixed']`. That is not defensive scoping: the
+ * same class names (`.cg-card`, `.cg-table`, `.cg-rail`) are worn by surfaces all over the
+ * console, and this dialog is the one place the reference gives its own measured ground.
+ */
+/*
+ * ⚠ THREE OF THIS FAMILY'S SURFACES ARE NOT HERE, AND THAT IS DELIBERATE: the FRAME's ground,
+ * the FOOTER band's and the HEAD band's rule are set as INLINE styles by `Modal.tsx`, which
+ * beats any selector at this end — silently, leaving the old ground painted. They live in
+ * `Modal`'s `dialogFixed` / `footerFixed` / `titleRowFixed`, each with a note saying why.
+ * The rule for this file: a surface belongs here UNLESS the primitive sets that property
+ * inline. (Measured, not assumed — the first spelling put the frame's ground here and the e2e
+ * read `rgb(20, 27, 37)` against the drawing's `rgb(21, 25, 31)`.)
+ */
+[data-modal-size='fixed'] .cg-rail {
+  background: var(--r-setup-rail-bg);
+  border-right-color: var(--r-setup-card-line);
+}
+
 .cg-rail {
   gap: var(--r-setup-rail-gap);
   padding: var(--r-setup-rail-pad);
@@ -3201,6 +3243,152 @@ input[type='checkbox']:disabled:checked {
 
 .cg-rail-tab[aria-selected='true'] > svg {
   color: var(--r-accent);
+}
+
+/*
+ * ── 🔴 `SETTINGS-MATCH-02` — THE RAIL, AND DEFECT 2: THE CLIPPED SERVERS ITEM ──────────
+ *
+ * ⚠ **THE PROMPT'S HYPOTHESIS WAS THAT THE ITEM CLIPPED BECAUSE IT CARRIES TWO MARKS. IT DOES
+ * NOT, AND THE MEASUREMENT IS WHY THIS COMMENT EXISTS RATHER THAN A `min-height` FIX.**
+ *
+ * Measured in Chrome at 1280 × 800, every item in every state: the painted box is `197 × 44`
+ * on ALL FIVE, marks or none, and `scrollHeight` equals `clientHeight` on every one — the
+ * background covers the whole item and always did. What DID differ is the CONTENT box: with a
+ * dot plus its screen-reader sentence the children spanned x = 97 where an unmarked item's
+ * span x = 98, i.e. ONE pixel, which is the `<span class="cg-visually-hidden">` sitting at
+ * `margin:-1px`. Nothing was clipped.
+ *
+ * 🔴 **What the owner saw is real and is a different thing: the mark itself was HALF-PAINTED.**
+ * The rail's signal was a 0.55 rem DOT — `--r-accent` sky for edited, `--r-caution-text` amber
+ * for blocked — and the reference draws neither. It draws a filled 18 × 18 COUNT CHIP (how
+ * many unapplied changes) and an amber LOCK GLYPH (this section is blocked), so on Servers the
+ * app painted a 9 px dot where the drawing paints a chip with a number in it and a padlock.
+ * Against the screenshot beside it, the item reads as a thing whose right-hand half never
+ * rendered.
+ *
+ * So the marks are the reference's, and they carry MORE than the dots did: the chip SAYS how
+ * many rows are waiting rather than only that something is, and the lock is the same glyph the
+ * refusal's own sentence uses. The screen-reader text stays exactly as it was — it was never
+ * the weak half.
+ */
+.cg-rail-count {
+  display: grid;
+  place-items: center;
+  flex: none;
+  min-width: var(--r-setup-nav-count-box);
+  height: var(--r-setup-nav-count-box);
+  padding: 0 var(--r-space-1);
+  border-radius: var(--r-setup-nav-count-radius);
+  background: var(--r-setup-accent);
+  color: var(--r-setup-count-ink);
+  font-size: var(--r-setup-nav-count-text);
+  font-weight: var(--r-weight-bold);
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+/* BLOCKED — the amber lock, the same glyph the refusal's own sentence is about. */
+.cg-rail-lock {
+  display: flex;
+  flex: none;
+  align-items: center;
+  color: var(--r-caution-text);
+}
+
+.cg-rail-lock > svg {
+  width: var(--r-setup-nav-symbol-icon);
+  height: var(--r-setup-nav-symbol-icon);
+}
+
+/*
+ * ── THE RAIL IS A SHELL NOW — a tablist over a station card ────────────────────────
+ *
+ * The reference's `.sidebar` holds `.tabs[role=tablist]` and a `.sidebar-foot`, and a tablist
+ * may not carry a non-tab child, so the ground, the edge and the inset belong to the SHELL and
+ * the tablist inside it carries only the items. `station-setup-geometry.spec.ts` measures the
+ * shell for the 226 — the rail is the column, not the list inside it.
+ */
+.cg-rail-tabs {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--r-setup-rail-gap);
+}
+
+/*
+ * 🔴 THE STATION CARD — and it is OUR primary server, never the prototype's sample host.
+ *
+ * ⚠ `design.md` 14.3 ARGUED this away once, on the ground that _"the primary and its host are
+ * on the status bar"_ and that the rail must stay short enough not to scroll. The owner has now
+ * looked at the reference and asked for the rail as drawn, so it is built — and the scroll
+ * worry is answered by construction rather than by omission: it is `margin-top:auto` inside a
+ * column, so it takes the slack that already exists and adds height only when there is none.
+ *
+ * ⚠ The reference's `.preview-note` beside it — _"Interactive preview · Changes last until
+ * reload."_ — is NOT built. It is prototype furniture and it would be a lie on a console that
+ * talks to a real bridge (`SETTINGS-MATCH-02` §0).
+ */
+.cg-rail-foot {
+  margin-top: auto;
+  padding: var(--r-setup-rail-foot-pad);
+}
+
+.cg-rail-station {
+  display: flex;
+  align-items: center;
+  gap: var(--r-setup-station-card-gap);
+  padding-top: var(--r-setup-station-card-pad-top);
+  border-top: 1px solid var(--r-setup-card-line);
+}
+
+.cg-rail-station__avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--r-setup-station-avatar-box);
+  height: var(--r-setup-station-avatar-box);
+  border: 1px solid var(--r-setup-token-line);
+  border-radius: var(--r-setup-station-avatar-radius);
+  background: var(--r-setup-token-bg);
+  font-family: var(--r-font-mono);
+  font-size: var(--r-setup-station-avatar-text);
+  font-weight: var(--r-weight-medium);
+  color: var(--r-text-secondary);
+}
+
+.cg-rail-station__text {
+  min-width: 0;
+}
+
+.cg-rail-station__name {
+  display: block;
+  font-size: var(--r-setup-station-name-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-text);
+}
+
+.cg-rail-station__host {
+  display: block;
+  margin-top: var(--r-setup-station-host-gap);
+  font-family: var(--r-font-mono);
+  font-size: var(--r-setup-station-host-text);
+  color: var(--r-text-muted);
+  overflow-wrap: anywhere;
+}
+
+/* The rail's two washes, in this frame's own family (the mint — see the token home's A4 note). */
+[data-modal-size='fixed'] .cg-rail-tab:hover {
+  background: var(--r-setup-tab-hover-bg);
+}
+
+[data-modal-size='fixed'] .cg-rail-tab[aria-selected='true'] {
+  background: var(--r-setup-selected-bg);
+  border-color: var(--r-setup-selected-line);
+  color: var(--r-setup-selected-ink);
+}
+
+[data-modal-size='fixed'] .cg-rail-tab[aria-selected='true'] > svg {
+  color: var(--r-setup-accent);
 }
 
 /* The pane's inset — `.panel-scroll{padding:29px 32px 32px}`. */
@@ -3272,6 +3460,234 @@ input[type='checkbox']:disabled:checked {
   border-radius: var(--r-setup-card-radius);
 }
 
+/*
+ * 🔴 DEFECT 1 — THE CARD IS RAISED OFF THE GROUND, NOT SUNK INTO IT.
+ *
+ * `#191e25` on a `#15191f` frame, which is the reference as rendered. It was
+ * `--r-surface-sunken` (`#0b1017`) on a `#141b25` frame — the darkest value in the palette,
+ * one full step BELOW the dialog rather than one above it. `overflow:hidden` is what makes the
+ * radius cut the head band's ground and the help strip's, so a card is one shape rather than a
+ * rounded box with square bands inside it.
+ */
+[data-modal-size='fixed'] .cg-card {
+  background: var(--r-setup-card-bg);
+  border-color: var(--r-setup-card-line);
+  overflow: hidden;
+}
+
+[data-modal-size='fixed'] .cg-card__head {
+  border-bottom-color: var(--r-setup-rule);
+}
+
+/*
+ * ── §9b — THE CARD HELP STRIP: a standing explanation, at the bottom of ITS card ───────
+ *
+ * `.card-help` — its own sunken ground under a soft rule. It belongs to ONE card and lives
+ * inside it, below the body. **It is always true; it is not a state** — which is the whole of
+ * what separates it from the pane BANNER above (a blocking condition) and from the FOOTER
+ * clause (whether the commit is available). Same dialog, three classes, three jobs.
+ */
+[data-modal-size='fixed'] .cg-card__note {
+  background: var(--r-setup-help-bg);
+  border-top-color: var(--r-setup-rule);
+}
+
+/* Its icon variant — `.card-help.inline`, a 15 px glyph 3 px down beside the sentence. */
+.cg-card__note--inline {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--r-setup-help-gap);
+}
+
+.cg-card__note--inline > svg {
+  flex-shrink: 0;
+  margin-top: var(--r-setup-help-icon-offset);
+  width: var(--r-setup-help-icon);
+  height: var(--r-setup-help-icon);
+}
+
+/* A record table inside a card: the head band, the row rules and the hover, all measured. */
+[data-modal-size='fixed'] .cg-table th,
+[data-modal-size='fixed'] .cg-output-table th {
+  background: var(--r-setup-table-head-bg);
+  border-bottom-color: var(--r-setup-card-line);
+}
+
+[data-modal-size='fixed'] .cg-table td,
+[data-modal-size='fixed'] .cg-output-table td {
+  border-bottom-color: var(--r-setup-rule);
+}
+
+[data-modal-size='fixed'] .cg-table tbody tr:hover td,
+[data-modal-size='fixed'] .cg-output-table tbody tr:hover td {
+  background: var(--r-setup-row-hover);
+}
+
+[data-modal-size='fixed'] .cg-table__group td {
+  border-bottom-color: var(--r-setup-rule);
+}
+
+/*
+ * 🔴 A TABLE IN A CARD KEEPS THE REFERENCE'S CELL RHYTHM, and the app's own two-word uppercase
+ * column heads go with it: the reference's `th` is 12 px / 450 sentence case on its own band,
+ * `12px 18px`. The app's shared `.cg-table th` is a tracked-out uppercase run with no ground,
+ * which is right for a panel and wrong inside a card that already has a head above it — two
+ * uppercase runs, two rows apart, and the operator cannot tell which one names the block.
+ */
+[data-modal-size='fixed'] .cg-table th {
+  padding: var(--r-output-th-pad);
+  font-size: var(--r-output-th-text);
+  font-weight: var(--r-weight-medium);
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+[data-modal-size='fixed'] .cg-table td {
+  padding: var(--r-output-td-pad);
+  font-size: var(--r-output-td-text);
+}
+
+/* A field in this dialog — its own ground and edge (`.input`), with a hover that lifts. */
+[data-modal-size='fixed'] .cg-field {
+  background: var(--r-setup-field-bg);
+  border-color: var(--r-setup-field-line);
+}
+
+[data-modal-size='fixed'] .cg-field:hover:not(:disabled):not(:focus) {
+  border-color: var(--r-setup-field-hover-line);
+}
+
+/* A MONO field — the reference sets its host and port inputs in the mono face at 14 px. */
+[data-modal-size='fixed'] .cg-field--mono {
+  font-family: var(--r-font-mono);
+  font-size: var(--r-setup-field-mono-text);
+}
+
+/*
+ * THE DIALOG'S OWN BUTTON FAMILY — `.btn{min-height:40px;padding:9px 15px;border-radius:8px}`
+ * at 14 px / 550, against the outer modal family's 39 / 7 / 14. Two families, two measured
+ * numbers, the same argument `--r-modal-btn-*` already makes one dialog over.
+ *
+ * ⚠ The footer's own `.cg-modal-footer .cg-btn` rule is MORE specific than this, so the
+ * footer's buttons are matched here explicitly rather than left to lose silently.
+ */
+[data-modal-size='fixed'] .cg-btn,
+[data-modal-size='fixed'] .cg-modal-footer .cg-btn {
+  min-height: var(--r-setup-btn-min-h);
+  padding: var(--r-setup-btn-pad);
+  border-radius: var(--r-setup-btn-radius);
+  border-color: var(--r-setup-card-line);
+  background: var(--r-setup-btn-bg);
+  font-size: var(--r-setup-btn-text);
+  gap: var(--r-setup-btn-gap);
+  line-height: 1.35;
+}
+
+[data-modal-size='fixed'] .cg-btn:hover:not(:disabled),
+[data-modal-size='fixed'] .cg-modal-footer .cg-btn:hover:not(:disabled) {
+  background: var(--r-setup-btn-hover-bg);
+  border-color: var(--r-setup-btn-hover-line);
+  filter: none;
+}
+
+[data-modal-size='fixed'] .cg-btn > svg {
+  width: var(--r-setup-btn-icon);
+  height: var(--r-setup-btn-icon);
+}
+
+/*
+ * 🔴 THE MINT, WHERE OWNER ANSWER A4 LOCALISES IT — the dialog's PRIMARY.
+ *
+ * `Add source`, `Add delimiter`, `Apply servers`, `Apply layers`: one role, one colour, which
+ * is what the reference draws (`.btn.primary`) and what keeps one footer from carrying two
+ * different "this is the action" colours. `--add` and `--primary` are matched together for
+ * exactly that reason — splitting them would put a mint Add beside a sky Apply.
+ *
+ * ⚠ It states nothing about AIR, which is the rule this obeys rather than breaks: no control
+ * in this dialog reports air, and the A/B server chip stays OFF the mint (see the token home).
+ */
+[data-modal-size='fixed'] .cg-btn--primary,
+[data-modal-size='fixed'] .cg-btn--add,
+[data-modal-size='fixed'] .cg-modal-footer .cg-btn--primary {
+  background: var(--r-setup-accent);
+  border-color: var(--r-setup-accent);
+  color: var(--r-setup-accent-ink);
+  font-weight: var(--r-weight-bold);
+}
+
+[data-modal-size='fixed'] .cg-btn--primary:hover:not(:disabled),
+[data-modal-size='fixed'] .cg-btn--add:hover:not(:disabled),
+[data-modal-size='fixed'] .cg-modal-footer .cg-btn--primary:hover:not(:disabled) {
+  background: var(--r-setup-accent-hover);
+  border-color: var(--r-setup-accent-hover);
+}
+
+/* A QUIET icon action keeps its shape but takes this frame's box and hover. */
+[data-modal-size='fixed'] .cg-btn--quiet {
+  width: var(--r-setup-icon-btn-box);
+  min-width: var(--r-setup-icon-btn-box);
+  height: var(--r-setup-icon-btn-box);
+  min-height: var(--r-setup-icon-btn-box);
+  padding: 0;
+  border-radius: var(--r-setup-icon-btn-radius);
+  border-color: transparent;
+  background: transparent;
+}
+
+[data-modal-size='fixed'] .cg-btn--quiet:hover:not(:disabled) {
+  background: var(--r-setup-icon-btn-hover-bg);
+  border-color: var(--r-setup-card-line);
+}
+
+[data-modal-size='fixed'] .cg-btn.cg-list-remove:hover:not(:disabled) {
+  background: var(--r-danger-soft);
+  border-color: var(--r-danger);
+  color: var(--r-danger-text);
+}
+
+/* The section and card TAGS take this frame's chip ground. */
+[data-modal-size='fixed'] .cg-setup-tag,
+[data-modal-size='fixed'] .cg-setup-card-tag {
+  background: var(--r-setup-chip-bg);
+  border-color: var(--r-setup-chip-line);
+  gap: var(--r-setup-tag-gap);
+}
+
+[data-modal-size='fixed'] .cg-setup-tag > svg {
+  width: var(--r-setup-tag-icon);
+  height: var(--r-setup-tag-icon);
+}
+
+/* The mono token chips — `CH 01`, an output slot, the A/B server letter. */
+[data-modal-size='fixed'] .cg-video-token,
+[data-modal-size='fixed'] .cg-output-slot,
+[data-modal-size='fixed'] .cg-setup-server-chip {
+  background: var(--r-setup-token-bg);
+  border-color: var(--r-setup-token-line);
+}
+
+/* The empty tile's dashed edge — `.empty-icon`. */
+[data-modal-size='fixed'] .cg-setup-empty__icon {
+  background: var(--r-setup-empty-icon-bg);
+  border: 1px dashed var(--r-setup-empty-icon-line);
+}
+
+/*
+ * THE VIDEO-FORMAT CARD — the one card the reference tints, and the only place in this dialog
+ * a card is not the plain raised ground. `design.md` 14.3 ARGUED the tint away as "the
+ * prototype's palette"; it is a green-GREY gradient rather than a hue, it claims nothing about
+ * air, and the owner asked for the panes as drawn.
+ */
+[data-modal-size='fixed'] .cg-card--video {
+  background: var(--r-setup-video-bg);
+  border-color: var(--r-setup-video-line);
+}
+
+[data-modal-size='fixed'] .cg-card--video .cg-video-metrics,
+[data-modal-size='fixed'] .cg-card--video .cg-video-metric {
+  border-color: var(--r-setup-video-line);
+}
+
 .cg-card__head {
   gap: var(--r-setup-card-head-gap);
   padding: var(--r-setup-card-head-pad);
@@ -3308,8 +3724,20 @@ input[type='checkbox']:disabled:checked {
   line-height: 1.6;
 }
 
-/* A `<details>` beneath a card — `.helper-details`: 13 px, muted, its paragraph 9 px under. */
+/*
+ * A `<details>` beneath a card — `.helper-details`: 13 px, muted, its paragraph 9 px under.
+ *
+ * 🔴 **`SETTINGS-MATCH-02`, owner on the plant: «این قسمت نامرتبه» — this part is untidy.** He
+ * circled the Layers head, and this rule is half of why. `--r-setup-details-gap` (the
+ * reference's `.helper-details{margin-top:17px}`) was declared in the token home and read by
+ * exactly ONE call site, as an inline style on the Outputs block — so everywhere else the
+ * `<details>` sat FLUSH against whatever was above it. Measured on the Layers pane: the summary
+ * tags ended at y = 263 and `▶ Visibility and layer safety` began at y = 263, zero gap, which
+ * is what makes a line read as debris rather than as its own row. The gap belongs to the
+ * element, not to one of its users.
+ */
 .cg-setup-details {
+  margin-top: var(--r-setup-details-gap);
   font-size: var(--r-setup-details-text);
   color: var(--r-text-muted);
 }
@@ -3376,6 +3804,39 @@ input[type='checkbox']:disabled:checked {
   padding: var(--r-setup-field-input-pad);
   border-radius: var(--r-setup-field-input-radius);
   font-size: var(--r-setup-field-input-text);
+}
+
+/*
+ * `SETTINGS-MATCH-02` — the reference's `.optional`: a field's label says whether the field
+ * has to be filled, in the label rather than in a hint the operator reads after typing.
+ * Quieter than the label it sits in, and never a different colour from a hint.
+ */
+.cg-setup-field__optional {
+  font-weight: 400;
+  color: var(--r-text-muted);
+}
+
+/*
+ * 🔴 `SETTINGS-MATCH-02` §10.6 — **WHAT IS WRONG WITH THIS FIELD, UNDER THIS FIELD.**
+ *
+ * The reference's `.input-error`. It is the same rank as the hint and a different INK, which
+ * is the whole distinction: a hint is always true and this is true right now.
+ *
+ * ⚠ It takes the DANGER ink, not the caution amber. `R-055` — a signal must not say what it
+ * does not mean, and in this dialog amber means BLOCKED (the section cannot be applied, and
+ * the rail and the footer both say so in amber). A field the operator can fix by typing is a
+ * different thing from a section he cannot apply at all.
+ */
+.cg-setup-field__error {
+  margin: 0;
+  font-size: var(--r-setup-field-hint-text);
+  line-height: 1.6;
+  color: var(--r-danger-text);
+}
+
+/* An invalid control wears its state on its own edge, where the operator's focus already is. */
+[data-modal-size='fixed'] .cg-field[aria-invalid='true'] {
+  border-color: var(--r-danger-text);
 }
 
 /* The reference's `.hint` — a 12 px muted line under the control, never beside it. */
@@ -3480,6 +3941,827 @@ input[type='checkbox']:disabled:checked {
 .cg-setup-switch-row__text {
   flex: 1;
   min-width: 0;
+}
+
+/* ══ `SETTINGS-MATCH-02` §8 — THE SUB-DIALOG FAMILY ═════════════════════════════════════
+ *
+ * 🔴 **ONE FRAME FOR EVERY ADD, EDIT AND REMOVE IN STATION SETUP.** That was already the
+ * rule (`STATION-CHROME-01` §6 built `RecordDialog` for it, and `B-240`-era drift is what it
+ * ended); what this adds is the reference's own measurements for that frame, so the small
+ * dialog stops being a narrower copy of the console's generic one.
+ *
+ * Head = title + ✕. Body = the `.field` idiom, gapped 17. Foot = `Cancel` + ONE primary,
+ * right-aligned, on its own darker band. **The primary's verb names the ACT** — `Add to
+ * draft`, `Add source`, `Save delimiter`, `Remove source` — never a generic `OK` or `Save`.
+ */
+[data-modal-size='record'] {
+  background: var(--r-setup-surface);
+}
+
+[data-modal-size='record'] > div:first-child {
+  padding: var(--r-sub-head-pad);
+  gap: var(--r-sub-head-gap);
+  min-height: auto;
+  background: transparent;
+  border-bottom-color: var(--r-setup-card-line);
+}
+
+[data-modal-size='record'] > div:first-child h2 {
+  font-size: var(--r-sub-title-text);
+  letter-spacing: var(--r-setup-title-tracking-frame);
+}
+
+[data-modal-size='record'] .cg-modal-body {
+  padding: var(--r-sub-body-pad);
+  gap: 0;
+}
+
+[data-modal-size='record'] .cg-modal-footer {
+  padding: var(--r-sub-foot-pad);
+  gap: var(--r-sub-foot-gap);
+  background: var(--r-sub-foot-bg);
+  border-top-color: var(--r-setup-card-line);
+}
+
+/* The fields, and the LEDE that sets them up. */
+.cg-sub-fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--r-sub-fields-gap);
+}
+
+.cg-sub-lede {
+  margin: 0 0 var(--r-sub-lede-gap);
+  font-size: var(--r-sub-lede-text);
+  line-height: 1.65;
+  color: var(--r-text-muted);
+}
+
+/* A sub-dialog's field takes the SAME idiom as the pane's — label above, one control. */
+[data-modal-size='record'] .cg-field {
+  background: var(--r-setup-field-bg);
+  border-color: var(--r-setup-field-line);
+  min-height: var(--r-setup-field-input-min-h);
+  padding: var(--r-setup-field-input-pad);
+  border-radius: var(--r-setup-field-input-radius);
+  font-size: var(--r-setup-field-input-text);
+}
+
+[data-modal-size='record'] .cg-field:hover:not(:disabled):not(:focus) {
+  border-color: var(--r-setup-field-hover-line);
+}
+
+[data-modal-size='record'] .cg-field[aria-invalid='true'] {
+  border-color: var(--r-danger-text);
+}
+
+[data-modal-size='record'] .cg-field--mono {
+  font-family: var(--r-font-mono);
+  font-size: var(--r-setup-field-mono-text);
+}
+
+[data-modal-size='record'] .cg-btn,
+[data-modal-size='record'] .cg-modal-footer .cg-btn {
+  min-height: var(--r-setup-btn-min-h);
+  padding: var(--r-setup-btn-pad);
+  border-radius: var(--r-setup-btn-radius);
+  border-color: var(--r-setup-card-line);
+  background: var(--r-setup-btn-bg);
+  font-size: var(--r-setup-btn-text);
+  gap: var(--r-setup-btn-gap);
+  line-height: 1.35;
+}
+
+[data-modal-size='record'] .cg-btn:hover:not(:disabled) {
+  background: var(--r-setup-btn-hover-bg);
+  border-color: var(--r-setup-btn-hover-line);
+  filter: none;
+}
+
+/* The one primary, in the family's mint (§0 collision 2 — this IS the shadow family). */
+[data-modal-size='record'] .cg-btn--primary,
+[data-modal-size='record'] .cg-modal-footer .cg-btn--primary {
+  background: var(--r-setup-accent);
+  border-color: var(--r-setup-accent);
+  color: var(--r-setup-accent-ink);
+  font-weight: var(--r-weight-bold);
+}
+
+[data-modal-size='record'] .cg-btn--primary:hover:not(:disabled) {
+  background: var(--r-setup-accent-hover);
+  border-color: var(--r-setup-accent-hover);
+}
+
+/*
+ * ── §8b — THE KIND PICKER, a three-way segmented control ────────────────────────────
+ *
+ * It was a `<select>`. The reference draws the kinds as OPTIONS the operator can see at once,
+ * and that is the better shape for the same reason §5 gave the row its labelled parts: the
+ * kind decides WHICH FIELDS APPEAR below it, so it is the one control in the form whose value
+ * changes the form. A select hides four of five answers behind a press and gives no hint that
+ * choosing differently would ask for different things.
+ *
+ * ⚠ Radios, not buttons: one choice from a named set is what a radio group IS, and it brings
+ * arrow-key traversal and the group's name with it. The `<input>` stays and is only hidden.
+ */
+.cg-kind-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: var(--r-kind-options-gap);
+}
+
+.cg-kind-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--r-kind-options-gap);
+  min-height: var(--r-kind-option-min-h);
+  border: 1px solid var(--r-kind-option-line);
+  border-radius: var(--r-kind-option-radius);
+  background: var(--r-kind-option-bg);
+  color: var(--r-text-secondary);
+  font-size: var(--r-kind-option-text);
+  cursor: pointer;
+}
+
+.cg-kind-option > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.cg-kind-option > svg {
+  width: var(--r-kind-option-icon);
+  height: var(--r-kind-option-icon);
+  flex-shrink: 0;
+}
+
+.cg-kind-option:has(input:checked) {
+  background: var(--r-kind-option-sel-bg);
+  border-color: var(--r-kind-option-sel-line);
+  color: var(--r-kind-option-sel-ink);
+}
+
+.cg-kind-option:has(input:focus-visible) {
+  outline: none;
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-setup-accent);
+}
+
+/*
+ * ── §8d — THE DESTRUCTIVE SHAPE: an emblem, a sentence, a consequence ───────────────
+ *
+ * ⚠ The confirm dialog is the ONE place a destructive control reads destructive AT REST
+ * (`useDialog`'s own note), and this is the mark that says so before the sentence is read.
+ */
+.cg-confirm-emblem {
+  display: grid;
+  place-items: center;
+  width: var(--r-confirm-icon-box);
+  height: var(--r-confirm-icon-box);
+  margin-bottom: var(--r-confirm-icon-gap);
+  border: 1px solid var(--r-confirm-icon-line);
+  border-radius: var(--r-confirm-icon-radius);
+  background: var(--r-danger-bg);
+  color: var(--r-danger-text);
+}
+
+.cg-confirm-copy {
+  margin: 0;
+  font-size: var(--r-confirm-copy-text);
+  line-height: 1.7;
+  color: var(--r-text-secondary);
+}
+
+.cg-confirm-copy strong {
+  color: var(--r-text);
+  font-weight: var(--r-weight-semibold);
+}
+
+.cg-confirm-copy + .cg-confirm-copy {
+  margin-top: var(--r-space-3);
+  color: var(--r-text-muted);
+}
+
+/*
+ * ── §8c — THE DELIMITER PREVIEW, and it is LIVE ─────────────────────────────────────
+ *
+ * 🔴 **This is the answer to `B-242`**, which is filed as "a removed delimiter's attached
+ * field falls back to showing its raw characters instead of the name it had". The defect
+ * underneath both is the same: a split CHARACTER is not something an operator can read. The
+ * preview shows the sample text and the chips it splits into with the value as typed — so the
+ * question "what does `\n` actually do here?" is answered before the record is saved, rather
+ * than after a field has fallen back to raw characters.
+ */
+.cg-preview {
+  margin-top: var(--r-preview-gap-above);
+  padding: var(--r-preview-pad);
+  border: 1px solid var(--r-setup-card-line);
+  border-radius: var(--r-preview-radius);
+  background: var(--r-setup-inline-input-bg);
+}
+
+.cg-preview__eyebrow {
+  display: block;
+  margin-bottom: var(--r-preview-eyebrow-gap);
+  font-size: var(--r-video-eyebrow-text);
+  font-weight: var(--r-weight-semibold);
+  letter-spacing: var(--r-setup-group-tracking);
+  text-transform: uppercase;
+  color: var(--r-text-muted);
+}
+
+.cg-preview__sample {
+  margin: 0 0 var(--r-preview-eyebrow-gap);
+  font-size: var(--r-setup-field-hint-text);
+  line-height: 1.6;
+  color: var(--r-text-muted);
+  white-space: pre-wrap;
+}
+
+.cg-preview__items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--r-preview-chip-gap);
+}
+
+.cg-preview__item {
+  padding: var(--r-preview-chip-pad);
+  border: 1px solid var(--r-preview-chip-line);
+  border-radius: var(--r-preview-chip-radius);
+  background: var(--r-preview-chip-bg);
+  color: var(--r-preview-chip-ink);
+  font-size: var(--r-setup-list-bottom-text);
+}
+
+/* An escape shown inline in a hint — `\n` and `\t` as the objects they are. */
+.cg-code-chip {
+  padding: 1px 5px;
+  border: 1px solid var(--r-setup-symbol-line);
+  border-radius: var(--r-radius-sm);
+  background: var(--r-setup-symbol-bg);
+  font-family: var(--r-font-mono);
+  color: var(--r-text-secondary);
+  white-space: nowrap;
+}
+
+/* ══ `SETTINGS-MATCH-02` — THE FOUR BODIES, AS DRAWN ════════════════════════════════════ */
+
+/*
+ * ── A SWITCH — `.switch`, and why this dialog gets one at all ─────────────────────────
+ *
+ * A bare `<input type=checkbox>` is what the app painted for `Automatic failover` and for
+ * every `Show` tick. The reference draws a track-and-knob, and the difference is not
+ * decoration on the Layers table: a checkbox that is DISABLED because its row is occupied
+ * reads as a tick nobody has set, while a switch reads as a switch that will not move. The
+ * native input stays — it is the control, it keeps the label and the keyboard — and the track
+ * is drawn over it.
+ */
+.cg-switch {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+}
+
+.cg-switch > input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.cg-switch > input:disabled {
+  cursor: not-allowed;
+}
+
+.cg-switch__track {
+  width: var(--r-setup-switch-w);
+  height: var(--r-setup-switch-h);
+  border: 1px solid var(--r-setup-switch-line);
+  border-radius: var(--r-setup-switch-radius);
+  background: var(--r-setup-switch-bg);
+  pointer-events: none;
+  transition: background var(--r-dur-fast) ease;
+}
+
+.cg-switch__track::after {
+  content: '';
+  display: block;
+  position: relative;
+  top: var(--r-setup-switch-knob-inset);
+  left: var(--r-setup-switch-knob-inset);
+  width: var(--r-setup-switch-knob-box);
+  height: var(--r-setup-switch-knob-box);
+  border-radius: 50%;
+  background: var(--r-setup-switch-knob);
+  transition: transform var(--r-dur-fast) ease;
+}
+
+.cg-switch > input:checked + .cg-switch__track {
+  background: var(--r-setup-accent);
+  border-color: var(--r-setup-accent);
+}
+
+.cg-switch > input:checked + .cg-switch__track::after {
+  transform: translateX(var(--r-setup-switch-travel));
+  background: var(--r-setup-switch-knob-on);
+}
+
+.cg-switch > input:focus-visible + .cg-switch__track {
+  outline: none;
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-setup-accent);
+}
+
+.cg-switch > input:disabled + .cg-switch__track {
+  opacity: 0.4;
+}
+
+/* ── A LIST HEADER — `.list-header`: an `h3` with its muted count, and the block's Add ── */
+.cg-setup-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--r-setup-list-head-gap);
+  margin-bottom: var(--r-setup-list-head-gap-below);
+}
+
+.cg-setup-list-head > h3 {
+  margin: 0;
+  font-size: var(--r-setup-card-title-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-text);
+}
+
+.cg-setup-count {
+  margin-inline-start: var(--r-setup-list-count-gap);
+  font-weight: 400;
+  color: var(--r-text-muted);
+}
+
+/* ── A RESOURCE ROW — `.resource`: a kind tile, a title line over a mono detail, two verbs ── */
+.cg-resource-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.cg-resource {
+  display: grid;
+  grid-template-columns: var(--r-setup-resource-icon-box) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--r-setup-resource-gap);
+  padding: var(--r-setup-resource-pad);
+  border-bottom: 1px solid var(--r-setup-rule);
+}
+
+.cg-resource:last-child {
+  border-bottom: 0;
+}
+
+.cg-resource:hover {
+  background: var(--r-setup-row-hover);
+}
+
+.cg-resource__icon {
+  display: grid;
+  place-items: center;
+  width: var(--r-setup-resource-icon-box);
+  height: var(--r-setup-resource-icon-box);
+  border: 1px solid var(--r-setup-token-line);
+  border-radius: var(--r-setup-resource-icon-radius);
+  background: var(--r-setup-token-bg);
+  color: var(--r-text-secondary);
+}
+
+.cg-resource__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--r-setup-resource-title-gap);
+  min-width: 0;
+}
+
+.cg-resource__name {
+  font-size: var(--r-setup-resource-title-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-text);
+  min-width: 0;
+}
+
+.cg-resource__type {
+  font-size: var(--r-setup-resource-type-text);
+  font-weight: var(--r-weight-medium);
+  letter-spacing: var(--r-setup-resource-type-tracking);
+  color: var(--r-text-muted);
+  white-space: nowrap;
+}
+
+.cg-resource__detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--r-setup-resource-title-gap);
+  margin-top: var(--r-setup-resource-desc-gap);
+  font-size: var(--r-setup-resource-desc-text);
+  line-height: 1.8;
+  color: var(--r-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.cg-resource__value {
+  font-family: var(--r-font-mono);
+  color: var(--r-text-secondary);
+}
+
+.cg-resource__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--r-setup-resource-actions-gap);
+}
+
+/* ── THE LIVE-SOURCE BAND — `.band-fields`: first — last · Apply, capped at 470 ───────── */
+.cg-setup-band-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--r-setup-band-dash-w) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--r-setup-band-fields-gap);
+  max-width: var(--r-setup-band-fields-max-w);
+}
+
+.cg-setup-band-dash {
+  padding-bottom: var(--r-setup-band-dash-pad-bottom);
+  text-align: center;
+  color: var(--r-text-muted);
+}
+
+.cg-setup-band-summary {
+  margin: var(--r-setup-band-summary-gap) 0 0;
+  font-size: var(--r-setup-band-summary-text);
+  color: var(--r-text-muted);
+}
+
+/* ── THE DELIMITER TABLE — a mono chip and its plain-English name in one cell ────────── */
+.cg-delimiter-table td {
+  padding-block: var(--r-setup-delimiter-td-pad-y);
+}
+
+.cg-delimiter-table .cg-table__actions {
+  width: var(--r-setup-delimiter-actions-w);
+}
+
+.cg-delimiter-symbol {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--r-setup-symbol-min-w);
+  min-height: var(--r-setup-symbol-min-h);
+  padding: var(--r-setup-symbol-pad);
+  border: 1px solid var(--r-setup-symbol-line);
+  border-radius: var(--r-setup-symbol-radius);
+  background: var(--r-setup-symbol-bg);
+  font-family: var(--r-font-mono);
+  font-size: var(--r-setup-symbol-text);
+  color: var(--r-text-secondary);
+  white-space: pre;
+}
+
+/*
+ * 🔴 WHAT THE CHARACTER IS, IN WORDS, BESIDE IT.
+ *
+ * The app printed `،` into a column called `Splits on` and stopped. A Persian comma, a comma
+ * and a semicolon are three glyphs an operator has to tell apart at a glance in a list, and at
+ * 12 px two of them are nearly the same mark. The reference names each one; so does this.
+ */
+.cg-delimiter-meaning {
+  margin-inline-start: var(--r-setup-meaning-gap);
+  font-size: var(--r-setup-meaning-text);
+  color: var(--r-text-muted);
+}
+
+/* The row under a list — a note on one side, a quiet reset on the other. */
+.cg-setup-list-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--r-setup-list-bottom-gap);
+  margin-top: var(--r-setup-list-bottom-gap-above);
+}
+
+.cg-setup-list-bottom > p {
+  margin: 0;
+  font-size: var(--r-setup-list-bottom-text);
+  color: var(--r-text-muted);
+}
+
+/*
+ * A RESET as a link-button — `.reset-link`. It is the one control in the dialog that is neither
+ * a commit nor a row action: it restores the SHIPPED set, loses no file and takes nothing off
+ * air (the argument `STATION-CHROME-02` §3 already made for it not being red). A link is the
+ * quietest shape that is still unmistakably pressable.
+ */
+[data-modal-size='fixed'] .cg-btn.cg-setup-reset {
+  min-height: auto;
+  border-color: transparent;
+  background: none;
+  padding: var(--r-setup-reset-link-pad);
+  font-size: var(--r-setup-list-bottom-text);
+  font-weight: 400;
+  color: var(--r-text-muted);
+  text-decoration: underline;
+  text-underline-offset: var(--r-setup-reset-link-underline);
+  white-space: nowrap;
+}
+
+[data-modal-size='fixed'] .cg-btn.cg-setup-reset:hover:not(:disabled) {
+  background: none;
+  border-color: transparent;
+  color: var(--r-text);
+}
+
+/* ── THE SECTION HEAD'S SUMMARY TAGS — `.layer-summary` ──────────────────────────────── */
+.cg-setup-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--r-setup-summary-gap);
+  margin-top: var(--r-setup-summary-gap-above);
+}
+
+/* ── THE FILTER BAR — a search field, a check, and the read-out at the row's end ─────── */
+/*
+ * ⚠ NO MARGIN OF ITS OWN. The reference's `.filter-bar{margin:21px 0 15px}` sits in a BLOCK
+ * scroll where nothing else supplies spacing; ours is a child of `.cg-setup-body`, a flex
+ * column with a 20 px gap — so its own margins would ADD to that gap rather than replace it,
+ * and measured they did: 21 px extra between the bar and the table. One rhythm, from one
+ * place, is also tidier than 21 above and 15 below in a column spaced 20 everywhere else.
+ */
+.cg-setup-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--r-setup-filter-gap);
+}
+
+.cg-setup-search {
+  position: relative;
+  flex: 1;
+  max-width: var(--r-setup-search-max-w);
+}
+
+.cg-setup-search > svg {
+  position: absolute;
+  inset-inline-start: var(--r-setup-search-icon-inset);
+  top: var(--r-setup-search-icon-inset);
+  width: var(--r-setup-search-icon);
+  height: var(--r-setup-search-icon);
+  color: var(--r-text-muted);
+  pointer-events: none;
+}
+
+/*
+ * ⚠ The search box takes the DIALOG's field box explicitly. It is not inside a
+ * `.cg-setup-field`, so without this it fell back to the app-wide `.cg-field` height and
+ * rendered 31 px against the drawing's 42 — beside a 20 px check, with its own glyph inset for
+ * the taller box and therefore hanging below the field's centre. Part of the owner's
+ * «این قسمت نامرتبه».
+ */
+.cg-setup-search > .cg-field {
+  width: 100%;
+  min-height: var(--r-setup-field-input-min-h);
+  padding: var(--r-setup-field-input-pad);
+  padding-inline-start: var(--r-setup-search-pad-start);
+  border-radius: var(--r-setup-field-input-radius);
+  font-size: var(--r-setup-search-text);
+}
+
+.cg-setup-check {
+  display: flex;
+  align-items: center;
+  gap: var(--r-setup-check-gap);
+  font-size: var(--r-setup-check-text);
+  color: var(--r-text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cg-setup-check > input {
+  width: var(--r-setup-check-box);
+  height: var(--r-setup-check-box);
+  margin: 0;
+  accent-color: var(--r-setup-accent);
+}
+
+.cg-setup-results {
+  margin-inline-start: auto;
+  font-size: var(--r-setup-results-text);
+  color: var(--r-text-muted);
+  white-space: nowrap;
+}
+
+/* ── THE LAYER TABLE — five columns, and the row is the reference's ─────────────────── */
+.cg-layer-table {
+  min-width: var(--r-layer-table-min-w);
+}
+
+.cg-layer-table th,
+[data-modal-size='fixed'] .cg-layer-table th,
+.cg-layer-table td,
+[data-modal-size='fixed'] .cg-layer-table td {
+  padding: var(--r-layer-cell-pad);
+}
+
+.cg-layer-table th:first-child {
+  width: var(--r-layer-col-layer-w);
+}
+
+.cg-layer-table th:nth-child(2) {
+  width: var(--r-layer-col-show-w);
+}
+
+.cg-layer-table th:nth-child(3) {
+  width: var(--r-layer-col-name-w);
+}
+
+/* The coordinate, and the operator's row number quietly under it. */
+.cg-layer-id {
+  font-family: var(--r-font-mono);
+  font-size: var(--r-layer-id-text);
+  font-weight: var(--r-weight-medium);
+  color: var(--r-text-secondary);
+}
+
+.cg-layer-row-number {
+  display: block;
+  margin-top: var(--r-layer-row-number-gap);
+  font-size: var(--r-layer-row-number-text);
+  color: var(--r-text-muted);
+}
+
+.cg-layer-template {
+  display: block;
+  font-size: var(--r-layer-template-text);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+/* WHY THIS ROW'S SWITCH IS DEAD, said in words with the lock beside them. */
+.cg-layer-locked {
+  display: flex;
+  align-items: center;
+  gap: var(--r-layer-occupied-gap);
+  margin-top: var(--r-layer-occupied-icon);
+  font-size: var(--r-layer-occupied-text);
+  color: var(--r-text-muted);
+}
+
+.cg-layer-locked > svg {
+  width: var(--r-layer-occupied-icon);
+  height: var(--r-layer-occupied-icon);
+  flex-shrink: 0;
+}
+
+.cg-layer-none {
+  font-size: var(--r-layer-template-text);
+  color: var(--r-text-muted);
+}
+
+/* The inline NAME field — transparent at rest, so thirty of them are not thirty boxes. */
+.cg-layer-table .cg-field,
+[data-modal-size='fixed'] .cg-layer-table .cg-field {
+  min-height: var(--r-layer-input-min-h);
+  padding: var(--r-layer-input-pad);
+  font-size: var(--r-layer-input-text);
+  background: var(--r-setup-inline-input-bg);
+  border-color: transparent;
+}
+
+[data-modal-size='fixed'] .cg-layer-table .cg-field:hover:not(:disabled):not(:focus) {
+  border-color: var(--r-setup-inline-input-hover-line);
+}
+
+/* A row with an unapplied edit: a mint rule down its edge, and a lit border on the field. */
+.cg-layer-table tr[data-row-dirty] td:first-child {
+  box-shadow: inset var(--r-layer-dirty-inset) 0 0 var(--r-setup-accent);
+}
+
+[data-modal-size='fixed'] .cg-layer-table tr[data-row-dirty] .cg-field {
+  border-color: var(--r-setup-dirty-line);
+}
+
+.cg-layer-footnote {
+  display: flex;
+  align-items: center;
+  gap: var(--r-layer-footnote-gap);
+  margin: var(--r-layer-footnote-gap-above) 0 0;
+  font-size: var(--r-layer-footnote-text);
+  color: var(--r-text-muted);
+}
+
+.cg-layer-footnote > svg {
+  width: var(--r-layer-footnote-icon);
+  height: var(--r-layer-footnote-icon);
+  flex-shrink: 0;
+}
+
+.cg-setup-beds-head {
+  margin: var(--r-setup-beds-head-margin);
+}
+
+.cg-setup-beds-head > h3 {
+  margin: 0;
+  font-size: var(--r-setup-beds-head-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-text);
+}
+
+.cg-setup-beds-head > p {
+  margin: var(--r-setup-beds-line-gap) 0 0;
+  font-size: var(--r-setup-beds-line-text);
+  color: var(--r-text-muted);
+}
+
+/* Nothing matched the filter — the one state a list must not render as an empty card. */
+.cg-setup-empty-state {
+  padding: var(--r-setup-empty-state-pad);
+  text-align: center;
+}
+
+.cg-setup-empty-state > svg {
+  width: var(--r-setup-empty-state-icon);
+  height: var(--r-setup-empty-state-icon);
+  margin-bottom: var(--r-setup-empty-state-icon-gap);
+  color: var(--r-text-muted);
+}
+
+.cg-setup-empty-state > h3 {
+  margin: 0;
+  font-size: var(--r-setup-card-title-text);
+  font-weight: var(--r-weight-semibold);
+  color: var(--r-text);
+}
+
+.cg-setup-empty-state > p {
+  margin: var(--r-setup-empty-state-gap) 0 0;
+  font-size: var(--r-setup-empty-state-text);
+  color: var(--r-text-muted);
+}
+
+/* ── THE LOCAL-ADDRESS CHIPS — `.address-chip`, a press that fills the field ─────────── */
+.cg-setup-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--r-setup-chips-gap);
+  margin-top: var(--r-setup-chips-gap-above);
+}
+
+.cg-setup-chip.cg-btn {
+  min-height: auto;
+  padding: var(--r-setup-address-chip-pad);
+  border-radius: var(--r-setup-address-chip-radius);
+  background: var(--r-setup-token-bg);
+  border-color: var(--r-setup-card-line);
+  font-family: var(--r-font-mono);
+  font-size: var(--r-setup-address-chip-text);
+  font-weight: 400;
+  color: var(--r-text-secondary);
+}
+
+.cg-setup-chip.cg-btn:hover:not(:disabled) {
+  background: var(--r-setup-token-bg);
+  border-color: var(--r-setup-selected-line);
+  color: var(--r-setup-accent);
+}
+
+/* ── THE FOOTER'S MESSAGE — `.foot-message`: a glyph, then the contract ─────────────── */
+.cg-footer-contract {
+  display: flex;
+  align-items: center;
+  gap: var(--r-setup-foot-message-gap);
+}
+
+.cg-footer-contract > svg {
+  width: var(--r-setup-foot-message-icon);
+  height: var(--r-setup-foot-message-icon);
+  flex-shrink: 0;
+}
+
+/*
+ * The contract's TONE. `.foot-message.pending` is the accent and `.warning` the amber in the
+ * reference; here the amber is the one that earns its keep — a section whose commit is refused
+ * says so in the corner the operator presses. Neutral is the default and the common case.
+ *
+ * ⚠ This is still the `B-239` LABEL, not an event: it is unconditional, it never changes
+ * within a tab, and the event lands in the region above. What the tone adds is that the
+ * standing condition and its colour agree.
+ */
+.cg-footer-contract[data-footer-tone='blocked'] {
+  color: var(--r-caution-text);
 }
 
 /* ── A section's own standing NOTICE band — `.notice` ─────────────────────

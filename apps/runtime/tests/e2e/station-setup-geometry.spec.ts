@@ -71,8 +71,16 @@ test('§7 — the frame, the rail, the pane and the footer measure to the token 
   expect(head.subtitle).toContain('Primary A');
   expect(px(head.subtitleText)).toBe(px(tokens.subtitleText));
 
-  // THE RAIL — its width, and a tab's height, from the tokens; each tab wears its glyph.
-  const rail = dialog.getByRole('tablist', { name: 'Station setup sections' });
+  /*
+    THE RAIL — its width, and a tab's height, from the tokens; each tab wears its glyph.
+
+    ⚠ `SETTINGS-MATCH-02` — the 226 is measured on the rail's SHELL (`[data-setup-rail]`), not
+    on the tablist inside it. The reference's `.sidebar` is a shell holding `.tabs[role=tablist]`
+    and a `.sidebar-foot`, and it has to be: a tablist may not carry a non-tab child, so the
+    station card at the rail's foot could not live inside the list. The shell is what carries
+    the width, the ground, the edge and the inset; the list inside it is 226 − 2 × 14.
+  */
+  const rail = dialog.locator('[data-setup-rail]');
   expect(Math.round(await rail.evaluate((el) => el.getBoundingClientRect().width))).toBe(
     px(tokens.railW),
   );
@@ -232,9 +240,18 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
       ledeGap: read('--r-setup-card-lede-gap'),
     };
   });
-  // The token home is READ, not assumed: an undeclared token resolves to '' and would make
-  // every comparison below vacuously compare '' to '' (golden rule 12c's shape).
-  expect(tokens.inputMinH).toBe('36px');
+  /*
+    The token home is READ, not assumed: an undeclared token resolves to '' and would make
+    every comparison below vacuously compare '' to '' (golden rule 12c's shape).
+
+    🔴 `SETTINGS-MATCH-02` — **42, NOT 36, AND THE CHANGE IS A CORRECTION.** This spec pinned
+    `SETTINGS-DIALOG-01`'s transcription; the reference renders `min-height:42px;padding:10px
+    12px` and says so in its own stylesheet text as well as in the painted box. Six pixels on
+    every field in the dialog, and the owner saw it before the record did. The token's note
+    carries both readings.
+  */
+  expect(tokens.inputMinH).toBe('42px');
+  expect(tokens.inputPad).toBe('10px 12px');
   expect(tokens.fieldsGap).toBe('19px 18px');
 
   // ── THE FIELD — a label ABOVE its control, which is the whole point of the row ──────
@@ -277,7 +294,7 @@ test('§3 — the Servers pane measures to the reference: a field grid, the A/B 
   expect(input.radius).toBe(tokens.inputRadius);
   expect(input.text).toBe(tokens.inputText);
   // PAINTED, not merely declared — the floor is a floor and the box clears it.
-  expect(input.h).toBeGreaterThanOrEqual(36);
+  expect(input.h).toBeGreaterThanOrEqual(42);
 
   // ── THE THREE-COLUMN ENDPOINT ROW — a wide host beside two narrow ports ────────────
   const grid = await primaryCard.locator('.cg-setup-fields--three').evaluate((el) => {

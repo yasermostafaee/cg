@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Trash2 } from 'lucide-react';
+import { ArrowDown, Lock, Search, Trash2 } from 'lucide-react';
 import {
   bankPosition,
   defaultLayerAlias,
@@ -11,7 +11,8 @@ import {
   type FixedLayerBank,
   type FixedSlotState,
 } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
+import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
+import { STATION_SETUP_PX, colors } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import type { ModalMessage } from '../../ui/Modal.js';
@@ -37,6 +38,44 @@ import { useLink } from '../../hooks/useLink.js';
  * `STATION-CHROME-02` §1 removed it. That panel's EMPTY STATE still deep-links here, because
  * a list with no declared bank cannot explain itself.
  *
+ * ── 🔴 `SETTINGS-MATCH-02` DEFECT 3 — THIS PANE HAD NEVER MET THE REFERENCE ──────────────
+ *
+ * Every other pane had been measured against `09-channel-settings.html` at least once. This
+ * one had not: of the drawing's structure, exactly two pieces existed here — the words
+ * `Graphics beds` and a remove action — and the rest of it (a filter bar, `Shown only`, a
+ * `Row name` column, `Unassigned`, the `visibility locked` labels, the footnote) had no
+ * counterpart at all. `design.md` 23.6 recorded it honestly as **row 137, NOT built**, and the
+ * owner's third defect is that sentence read back to him on screen.
+ *
+ * What is built here now, in the reference's order: the head's `.layer-summary` tags and its
+ * `<details>` (both supplied to `SetupSection`, which owns the head), a FILTER BAR, the
+ * five-column table, the footnote, the `Graphics beds` head over the same table again, and an
+ * empty state for a filter that matches nothing.
+ *
+ * ── 🔴 THREE THINGS THE DRAWING SAYS THAT THE BRIDGE DOES NOT, AND WHAT WAS DONE ─────────
+ *
+ * The prompt's own rule is that no refusal CONDITION may change, only where one is shown. So:
+ *
+ *  1. **`Show` is dead on an OCCUPIED row, and on nothing else.** The reference disables it on
+ *     "occupied or unverified". Occupied is ours to know — a bound item IS `isFixedSlotBusy`,
+ *     which is the first thing `#fixedSlotOccupancy` answers `occupied` on — so that switch is
+ *     pre-disabled with the reason on its `title`. **UNVERIFIED IS NOT**, and that is
+ *     deliberate: with no OSC every row reads `unknown`, so locking on it would kill all
+ *     thirty switches on exactly the installs that have no OSC — the `B-087` shape, and the
+ *     same mistake as the LOAD gate that "dimmed exactly when the rundown is built". The
+ *     bridge still refuses `untick-unknown`, and that refusal still renders where it always
+ *     did.
+ *  2. …and it is dead only in the direction the bridge refuses. Hiding an occupied row is
+ *     refused; SHOWING one never was. A row that is hidden AND occupied keeps a live switch.
+ *  3. **The drawing's inline `role="alert"` region is NOT built.** A refusal belongs in the
+ *     modal's pinned region (`AUDIT-CLOSE-01` delta A), which is where `report` puts it and
+ *     where `modal-message-containment.spec.ts` holds it; a second home for an event is the
+ *     defect that decision closed.
+ *
+ * ⚠ **`B-235` STAYS FILED.** A layer another system is using is still missing from this
+ * panel — this pane lists the DECLARED bank and nothing else, exactly as it did. Nothing here
+ * absorbs that, quietly or otherwise.
+ *
  * ── THE TWO DIALOGS THIS USED TO BE (`FixedBankConfigModal`) ─────────────────
  *
  * It rendered TWO distinct dialogs: an EDITOR when a bank exists, and an EXPLAINER
@@ -44,8 +83,6 @@ import { useLink } from '../../hooks/useLink.js';
  * bridge reads and the restart it needs, with nothing to apply. A section hosts both
  * without strain, and the explainer turns out to be the section's EMPTY STATE: same
  * words, same code block, no Close button because there is no dialog of its own to close.
- * (`STATION-SETUP-02` predicted the explainer would be the awkward one. It was not; what
- * was awkward is below.)
  *
  * ── THE APPLY, AND WHERE IT ENDED UP ────────────────────────────────────────
  *
@@ -69,11 +106,6 @@ import { useLink } from '../../hooks/useLink.js';
  */
 
 const styles = {
-  fixedFacts: { fontSize: '0.85rem', color: colors.textMuted },
-  /** The real CasparCG layer, quieter than the position — same ranking as the row. */
-  aliasLayerHint: { fontSize: '0.72rem', color: colors.textMuted, whiteSpace: 'nowrap' as const },
-  showCol: { width: '4.5rem' },
-  templateCol: { width: '30%' },
   needsConfig: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -92,23 +124,23 @@ const styles = {
     whiteSpace: 'pre' as const,
     overflowX: 'auto' as const,
   },
-  tick: { display: 'flex', alignItems: 'center', gap: '0.5rem' },
-  bound: {
-    color: colors.textMuted,
-    whiteSpace: 'nowrap' as const,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    display: 'block',
-    minWidth: 0,
-  },
   actions: { display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' },
   waiting: { fontSize: '0.82rem', color: colors.textMuted },
 } as const;
+
+/** The name a row displays, and the maximum an operator may type into it. */
+const ROW_NAME_MAX = 80;
 
 export interface CandidateLayersSectionProps {
   report: (message: ModalMessage | null) => void;
   /** `STATION-CHROME-01` §2 — does this section hold an unapplied draft? Feeds the rail dot. */
   onDirtyChange?: ((dirty: boolean) => void) | undefined;
+  /**
+   * `SETTINGS-MATCH-02` — how MANY rows hold one, for the rail's count chip. A count rather
+   * than a flag because the chip says a number; it is derived from the same two maps
+   * `onDirtyChange` is, so the two cannot disagree.
+   */
+  onDirtyCountChange?: ((count: number) => void) | undefined;
   /** The dialog footer this section's Apply / Revert render into. `null` = render in the body. */
   footerSlot?: HTMLElement | null | undefined;
 }
@@ -116,6 +148,7 @@ export interface CandidateLayersSectionProps {
 export function CandidateLayersSection({
   report,
   onDirtyChange,
+  onDirtyCountChange,
   footerSlot = null,
 }: CandidateLayersSectionProps): JSX.Element {
   const { bank, ready } = useFixedBankState();
@@ -137,6 +170,7 @@ export function CandidateLayersSection({
       slots={slots}
       report={report}
       onDirtyChange={onDirtyChange}
+      onDirtyCountChange={onDirtyCountChange}
       footerSlot={footerSlot}
     />
   );
@@ -185,17 +219,92 @@ function NoBank(): JSX.Element {
   );
 }
 
+/**
+ * `SETTINGS-MATCH-02` — the head's read-only SUMMARY, as the reference draws it: the three
+ * facts this section cannot change, as tags under the description.
+ *
+ * Exported so `StationSetupDialog` can hand it to `SetupSection`, which owns the head. It
+ * reads the SAME `useFixedBankState` the editor does rather than being passed a copy — one
+ * read, so the tags and the table cannot name different ranges.
+ */
+export function CandidateLayersSummary(): JSX.Element | null {
+  const { bank } = useFixedBankState();
+  if (bank === null) return null;
+  return (
+    <div className="cg-setup-summary" data-layer-summary="">
+      <span className="cg-setup-tag">Channel {String(bank.channel)}</span>
+      <span className="cg-setup-tag">
+        Layers {String(bank.start)}–{String(fixedBankEnd(bank))}
+      </span>
+      <span className="cg-setup-tag">
+        <Icon icon={Lock} size={STATION_SETUP_PX.tagIcon} />
+        Fixed bank
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The rules an operator needs BEFORE touching a switch, folded away — the reference's
+ * `.helper-details`.
+ *
+ * ⚠ These are the SAME facts the section used to state as a paragraph of running text above
+ * the table (`Channel 1 · layers 70–71 (2 candidate layers) — channel, start and count are
+ * fixed at install…`). Nothing is dropped: the coordinates moved to the summary tags, where
+ * they are read at a glance, and the rules moved here, where they are read once.
+ */
+export function CandidateLayersHelper(): JSX.Element {
+  return (
+    <details className="cg-setup-details" data-layers-helper="">
+      <summary>Visibility and layer safety</summary>
+      <p>
+        Hiding a row removes it from the Layers panel only — the layer stays fenced from automatic
+        allocation, and nothing on it is touched. An occupied row cannot be hidden: remove its
+        template first, which clears the layer. A row whose occupancy cannot be verified is refused
+        too, by the bridge, because unknown is never treated as empty. The channel, the first layer
+        and the count are fixed at install; edit the bridge&rsquo;s fixed-layers config and restart
+        it to change them.
+      </p>
+    </details>
+  );
+}
+
+/** Does this row match what the operator typed? Name, template and layer number all count. */
+function matches(query: string, parts: readonly (string | null | undefined)[]): boolean {
+  const q = query.trim().toLowerCase();
+  if (q === '') return true;
+  return parts.some((p) => (p ?? '').toLowerCase().includes(q));
+}
+
+interface LayerRow {
+  readonly layer: number;
+  readonly position: number;
+  readonly slot: FixedSlotState | undefined;
+  readonly name: string;
+  readonly placeholder: string;
+  readonly template: string | null;
+  /** Our OWN record says a template is bound here — the `occupied` the bridge refuses on. */
+  readonly occupied: boolean;
+  readonly onAir: boolean;
+  readonly visible: boolean;
+  readonly dirty: boolean;
+  readonly removeRefused: boolean;
+  readonly boundItem: StackItemState | undefined;
+}
+
 function BankEditor({
   bank,
   slots,
   report,
   onDirtyChange,
+  onDirtyCountChange,
   footerSlot,
 }: {
   bank: FixedLayerBank;
   slots: FixedSlotState[];
   report: (message: ModalMessage | null) => void;
   onDirtyChange: ((dirty: boolean) => void) | undefined;
+  onDirtyCountChange: ((count: number) => void) | undefined;
   footerSlot: HTMLElement | null;
 }): JSX.Element {
   // ONE edit model across BOTH halves, keyed by layer. The split back into the two
@@ -218,19 +327,47 @@ function BankEditor({
   const [aliases, setAliases] = useState<Record<string, string>>(initialAliases);
   const [visible, setVisible] = useState<Record<string, boolean>>(initialVisible);
   const [busy, setBusy] = useState(false);
+  /** `SETTINGS-MATCH-02` — the filter bar's two controls. Draft-local; nothing is persisted. */
+  const [query, setQuery] = useState('');
+  const [shownOnly, setShownOnly] = useState(false);
 
   /*
     `STATION-CHROME-01` §2 — WHETHER THIS SECTION HOLDS AN UNAPPLIED DRAFT, reported up so the
-    rail can carry its sky dot. Computed from the SAME two maps `revert()` restores and
-    `apply()` sends, so the dot cannot claim a change the buttons do not have; a separate
-    `touched` flag would go stale the moment an edit was typed back to its original value.
+    rail can carry its mark. Computed from the SAME two maps `revert()` restores and `apply()`
+    sends, so the mark cannot claim a change the buttons do not have; a separate `touched` flag
+    would go stale the moment an edit was typed back to its original value.
+
+    ⭐ `SETTINGS-MATCH-02` — and HOW MANY rows hold one, from the same comparison, because the
+    rail's mark is a count chip now rather than a dot. One derivation, two readings of it.
   */
-  const dirty =
-    JSON.stringify(aliases) !== JSON.stringify(initialAliases()) ||
-    JSON.stringify(visible) !== JSON.stringify(initialVisible());
+  const dirtyLayers = ((): ReadonlySet<string> => {
+    const beforeAliases = initialAliases();
+    const beforeVisible = initialVisible();
+    const keys = new Set([
+      ...Object.keys(beforeAliases),
+      ...Object.keys(aliases),
+      ...Object.keys(beforeVisible),
+      ...Object.keys(visible),
+    ]);
+    const changed = new Set<string>();
+    for (const key of keys) {
+      if ((beforeAliases[key] ?? '') !== (aliases[key] ?? '')) changed.add(key);
+      if ((beforeVisible[key] ?? true) !== (visible[key] ?? true)) changed.add(key);
+    }
+    return changed;
+  })();
+  /*
+    ⚠ The COUNT, not the set, is what the effects depend on. A fresh `Set` every render would
+    re-fire on every keystroke whether or not anything changed; a number cannot.
+  */
+  const dirtyCount = dirtyLayers.size;
+  const dirty = dirtyCount > 0;
   useEffect(() => {
     onDirtyChange?.(dirty);
   }, [dirty, onDirtyChange]);
+  useEffect(() => {
+    onDirtyCountChange?.(dirtyCount);
+  }, [dirtyCount, onDirtyCountChange]);
   const { confirm, confirmDialog } = useConfirm();
   const stack = useStack();
   const linkDown = useLink() === 'disconnected';
@@ -312,11 +449,6 @@ function BankEditor({
       );
   }
 
-  /**
-   * R-028 (2.4) — remove the template from a row, from inside the config surface, behind
-   * the row's own confirm gate. Removal implies clear (the bridge's `stack.remove` sends
-   * the CLEAR), so the dialog states ON AIR explicitly when the stack says the item is.
-   */
   /** This section's own commit controls — rendered into the dialog's footer, see below. */
   const actions = (
     <>
@@ -387,6 +519,10 @@ function BankEditor({
     const rowName = slot.alias ?? defaultLayerAlias(bank, slot.layer);
     const confirmed = await confirm({
       title: `Remove “${name}” from ${rowName}?`,
+      // `SETTINGS-MATCH-02` §8 — raised from inside Station setup: that family's frame, and
+      // its lighter scrim, so the row this is about stays visible behind the question.
+      layer: 'sub',
+      destructive: true,
       body: offAir
         ? `The item is removed from the row and layer ${String(slot.layer)} is cleared.`
         : `This item MAY BE ON AIR (its state cannot be verified right now). Removing it ` +
@@ -420,187 +556,251 @@ function BankEditor({
   const slotFor = (layer: number): FixedSlotState | undefined =>
     slots.find((s) => s.layer === layer);
 
+  /** One row's whole state, worked out once — the table renders it and the filter reads it. */
+  const rowFor = (layer: number): LayerRow => {
+    const slot = slotFor(layer);
+    const bound = slot?.binding ?? null;
+    // B-087 mask, same as the row: with the link down the frozen binding is a claim the wire
+    // cannot back, and remove could not reach the bridge anyway.
+    const showBinding = !linkDown && bound !== null;
+    const boundItem = bound === null ? undefined : stack.find((i) => i.itemId === bound.itemId);
+    return {
+      layer,
+      position: bankPosition(bank, layer),
+      slot,
+      name: aliases[String(layer)] ?? '',
+      placeholder: defaultLayerAlias(bank, layer),
+      template:
+        showBinding && bound !== null
+          ? (displayLabel({ name: bound.templateName, sourceFileName: bound.sourceFileName }) ??
+            bound.templateId ??
+            bound.templateType)
+          : null,
+      /*
+        🔴 OCCUPIED IS OUR OWN RECORD, never an inference from the wire. A bound item is the
+        FIRST thing the bridge's `#fixedSlotOccupancy` answers `occupied` on (`isFixedSlotBusy`),
+        so a row in this state is one the bridge will certainly refuse to hide — which is what
+        licenses disabling the switch rather than letting the press bounce.
+      */
+      occupied: bound !== null,
+      onAir: boundItem !== undefined && isOnAirStatus(boundItem),
+      visible: visible[String(layer)] ?? true,
+      dirty: dirtyLayers.has(String(layer)),
+      removeRefused: boundItem !== undefined && removeIsRefused(boundItem),
+      boundItem,
+    };
+  };
+
+  const operatorRows = layers.map(rowFor);
+  const bedRows = bedLayers.map(rowFor);
+  const keep = (row: LayerRow): boolean =>
+    (!shownOnly || row.visible) &&
+    matches(query, [row.name, row.placeholder, row.template, String(row.layer)]);
+  const shownOperator = operatorRows.filter(keep);
+  const shownBeds = bedRows.filter(keep);
+  const total = operatorRows.length + bedRows.length;
+  const shown = shownOperator.length + shownBeds.length;
+
+  const table = (rows: readonly LayerRow[], label: string): JSX.Element => (
+    <section className="cg-card" aria-label={label}>
+      <div className="cg-table-scroll">
+        <table className="cg-table cg-layer-table">
+          <thead>
+            <tr>
+              <th scope="col">Layer</th>
+              <th scope="col">Show</th>
+              <th scope="col">Row name</th>
+              <th scope="col">Template</th>
+              <th scope="col" className="cg-table__actions">
+                <span className="cg-visually-hidden">Actions</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={row.layer}
+                data-candidate-layer={String(row.layer)}
+                {...(row.dirty ? { 'data-row-dirty': '' } : {})}
+              >
+                {/* ⭐ `R-028` — THE REAL LAYER NUMBER IS THE CELL, not a hover: an operator may
+                    need it to clear that layer by hand at the moment this console is NOT
+                    helping (golden rule 11). The operator's own row number sits under it. */}
+                <td>
+                  <span className="cg-layer-id">{String(row.layer)}</span>
+                  <span className="cg-layer-row-number">
+                    {isLowBankLayer(bank, row.layer) ? 'Bed' : 'Row'} {String(row.position)}
+                  </span>
+                </td>
+                <td>
+                  {/*
+                    🔴 A SWITCH, AND IT IS DEAD ONLY WHERE THE BRIDGE CERTAINLY REFUSES.
+                    See the module note: OCCUPIED is ours to know and is pre-disabled with the
+                    reason on the control; UNVERIFIED is the bridge's and stays live, because
+                    an install with no OSC reads every row unknown.
+
+                    ⚠ And only in the direction that is refused. Hiding an occupied row is
+                    refused; showing one never was, so a hidden occupied row keeps a live
+                    switch.
+                  */}
+                  <span className="cg-switch">
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      aria-label={`Show layer ${String(row.layer)}`}
+                      checked={row.visible}
+                      disabled={row.occupied && row.visible}
+                      title={
+                        row.occupied && row.visible
+                          ? 'Remove the template before hiding this row'
+                          : 'Show in the Layers panel'
+                      }
+                      onChange={(e) => {
+                        setVisible({ ...visible, [String(row.layer)]: e.target.checked });
+                      }}
+                    />
+                    <span className="cg-switch__track" aria-hidden="true" />
+                  </span>
+                </td>
+                <td>
+                  <input
+                    className="cg-field"
+                    type="text"
+                    dir="auto"
+                    maxLength={ROW_NAME_MAX}
+                    aria-label={`Name for layer ${String(row.layer)} (row ${String(row.position)})`}
+                    placeholder={row.placeholder}
+                    value={row.name}
+                    onChange={(e) => {
+                      setAliases({ ...aliases, [String(row.layer)]: e.target.value });
+                    }}
+                  />
+                </td>
+                <td>
+                  {row.template === null ? (
+                    <span className="cg-layer-none">{row.occupied ? '' : 'Unassigned'}</span>
+                  ) : (
+                    <>
+                      <bdi
+                        className="cg-layer-template"
+                        title={row.slot?.binding?.templateId ?? row.slot?.binding?.templateType}
+                        dir="auto"
+                      >
+                        {row.template}
+                      </bdi>
+                      {/*
+                        WHY THE SWITCH ON THIS ROW IS DEAD, said where the operator is looking
+                        when he wonders. It is a statement about VISIBILITY and says so — it is
+                        not a second claim about air, and the word `On air` here is the stack's
+                        own status rather than a reading of the wire.
+                      */}
+                      <span className="cg-layer-locked" data-layer-locked="">
+                        <Icon icon={Lock} size={STATION_SETUP_PX.occupiedIcon} />
+                        {row.onAir ? 'On air' : 'Occupied'} · visibility locked
+                      </span>
+                    </>
+                  )}
+                </td>
+                <td className="cg-table__actions">
+                  {row.template !== null && (
+                    /*
+                      🔴 `B-238` / `R-017` — ON AIR IS A REFUSAL, NOT A QUESTION.
+
+                      `removeIsRefused` is `B-228`'s ONE renderer-side spelling of this
+                      decision, and it reads the bridge's PUBLISHED `removeExempt` rather
+                      than recomputing the rule — which the renderer could not do anyway,
+                      since the second exemption is bridge knowledge.
+                    */
+                    <Button
+                      variant="quiet"
+                      className="cg-list-remove"
+                      aria-label={`Remove the template on ${row.name === '' ? row.placeholder : row.name}`}
+                      disabled={row.removeRefused}
+                      title={
+                        row.removeRefused
+                          ? REMOVE_ON_AIR_REASON
+                          : 'Remove the template from this row — asks first, then clears the layer'
+                      }
+                      onClick={() => {
+                        if (row.slot !== undefined) void removeTemplate(row.slot);
+                      }}
+                    >
+                      <Icon icon={Trash2} size={15} />
+                    </Button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+
+  const emptyState = (
+    <section className="cg-card" aria-label="No matching rows">
+      <div className="cg-setup-empty-state" data-layers-empty="">
+        <Icon icon={Search} size={STATION_SETUP_PX.emptyStateIcon} />
+        <h3>No matching rows</h3>
+        <p>Try another name, or turn off “Shown only”.</p>
+      </div>
+    </section>
+  );
+
   return (
     <>
-      {/* Read-only facts first: the validator refuses changing any of them mid-session. */}
-      <div style={styles.fixedFacts}>
-        Channel {String(bank.channel)} · layers {String(bank.start)}–{String(fixedBankEnd(bank))} (
-        {String(bank.count)} candidate layers) — channel, start and count are fixed at install; edit
-        the bridge&rsquo;s fixed-layers config and restart it to change them. Unticking hides a row
-        from the panel only — the layer stays fenced from automatic allocation, and an occupied (or
-        unverifiable) row cannot be unticked until its template is removed.
-      </div>
       {/*
-        `STATION-CHROME-02` §3 — A REAL TABLE, with the same column headers, row height,
-        cell padding and hover as the delimiter and catalogue lists. It was a CSS grid whose
-        header row was five styled `<span>`s: it looked like a table and announced nothing,
-        so a screen reader read thirty-four unlabelled cells and the graphics-bed heading was
-        a `grid-column: 1 / -1` span rather than a group.
+        `SETTINGS-MATCH-02` — THE FILTER BAR. Thirty rows across two banks is a list an
+        operator searches rather than scans, and the read-out at its end is what makes the
+        filter honest: `4 of 29 rows` says plainly that twenty-five are hidden by what was
+        typed, so an absent row is never mistaken for a row the station does not have.
       */}
-      <section className="cg-card" aria-label="Candidate rows">
-        <div className="cg-card__head">
-          <span className="cg-card__title">Rows</span>
+      <div className="cg-setup-filter" data-layers-filter="">
+        <div className="cg-setup-search">
+          <Icon icon={Search} size={STATION_SETUP_PX.searchIcon} />
+          <input
+            className="cg-field"
+            type="search"
+            autoComplete="off"
+            aria-label="Filter by name, template or layer"
+            placeholder="Filter by name, template or layer…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
         </div>
-        <div className="cg-card__body cg-card__body--table">
-          <div className="cg-table-scroll">
-            <table className="cg-table">
-              <thead>
-                <tr>
-                  <th scope="col" className="cg-table__num">
-                    Row
-                  </th>
-                  <th scope="col" style={styles.showCol}>
-                    Show
-                  </th>
-                  <th scope="col">Name</th>
-                  <th scope="col" style={styles.templateCol}>
-                    Template
-                  </th>
-                  <th scope="col" className="cg-table__actions">
-                    <span className="cg-visually-hidden">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {[
-                  ...layers.map((layer) => ({ head: null, layer })),
-                  { head: 'Graphics beds — composited BELOW the live plates', layer: -1 },
-                  ...bedLayers.map((layer) => ({ head: null, layer })),
-                ].map(({ head, layer }) => {
-                  if (head !== null) {
-                    return (
-                      <tr key="bed-head" className="cg-table__group">
-                        <td colSpan={5}>{head}</td>
-                      </tr>
-                    );
-                  }
-                  const slot = slotFor(layer);
-                  const bound = slot?.binding ?? null;
-                  const position = bankPosition(bank, layer);
-                  // B-087 mask, same as the row: with the link down the frozen binding is a
-                  // claim the wire cannot back, and remove could not reach the bridge anyway.
-                  const showBinding = !linkDown && bound !== null;
-                  const rowName = slot?.alias ?? defaultLayerAlias(bank, layer);
-                  /*
-                    🔴 `B-238` — the PUBLISHED answer, read once per row (see the control).
-                    An item the stack cannot show us is NOT refused here: "we cannot see it"
-                    is not "it is on air", and that case keeps the confirm that says so
-                    (`removeTemplate`), plus the bridge's own refusal — which now renders.
-                  */
-                  const boundItem =
-                    bound === null ? undefined : stack.find((i) => i.itemId === bound.itemId);
-                  const removeRefused = boundItem !== undefined && removeIsRefused(boundItem);
-                  return (
-                    <tr key={layer} data-candidate-layer={String(layer)}>
-                      {/* ⭐ `R-028` — THE REAL LAYER NUMBER STAYS VISIBLE beside the row's
-                          position, because an operator may need it to clear that layer by
-                          hand, at the moment this console is NOT helping (golden rule 11). */}
-                      <td className="cg-table__num">
-                        <strong>{String(position)}</strong>
-                        <span style={styles.aliasLayerHint}> · {String(layer)}</span>
-                      </td>
-                      <td>
-                        <label style={styles.tick}>
-                          <input
-                            type="checkbox"
-                            aria-label={`Show layer ${String(layer)}`}
-                            checked={visible[String(layer)] ?? true}
-                            onChange={(e) => {
-                              setVisible({ ...visible, [String(layer)]: e.target.checked });
-                            }}
-                          />
-                          Show
-                        </label>
-                      </td>
-                      <td>
-                        <input
-                          className="cg-field"
-                          type="text"
-                          dir="auto"
-                          aria-label={`Name for layer ${String(layer)} (row ${String(position)})`}
-                          placeholder={defaultLayerAlias(bank, layer)}
-                          value={aliases[String(layer)] ?? ''}
-                          onChange={(e) => {
-                            setAliases({ ...aliases, [String(layer)]: e.target.value });
-                          }}
-                        />
-                      </td>
-                      <td>
-                        {showBinding && bound !== null ? (
-                          <bdi
-                            style={styles.bound}
-                            title={bound.templateId ?? bound.templateType}
-                            dir="auto"
-                          >
-                            {displayLabel({
-                              name: bound.templateName,
-                              sourceFileName: bound.sourceFileName,
-                            }) ??
-                              bound.templateId ??
-                              bound.templateType}
-                          </bdi>
-                        ) : null}
-                      </td>
-                      <td className="cg-table__actions">
-                        {showBinding && (
-                          /*
-                            🔴 `B-238` / `R-017` — ON AIR IS A REFUSAL, NOT A QUESTION.
+        <label className="cg-setup-check">
+          <input
+            type="checkbox"
+            checked={shownOnly}
+            onChange={(e) => setShownOnly(e.target.checked)}
+          />
+          Shown only
+        </label>
+        <span className="cg-setup-results" data-layers-results="" role="status">
+          {String(shown)} of {String(total)} rows
+        </span>
+      </div>
 
-                            `removeIsRefused` is `B-228`'s ONE renderer-side spelling of this
-                            decision, and it reads the bridge's PUBLISHED `removeExempt` rather
-                            than recomputing the rule — which the renderer could not do anyway,
-                            since the second exemption is bridge knowledge.
-
-                            This section used to derive its own answer for the confirm's
-                            wording: `item?.status === 'on-air' || item?.status === 'playing'`.
-                            That is `isOnAirStatus` minus `updating`, `unconfirmed` and
-                            `exiting`, and minus both exemptions — so it told the operator a
-                            row was safe to destroy on three statuses where it was not, and
-                            would have sat asking on rows the bridge would have accepted. The
-                            B-228 shape, a third time, in the function that already held the
-                            item it needed.
-                          */
-                          /*
-                            🔴 `STATION-CHROME-02` §3 — WAS A RED `Remove…` BOX ON EVERY BOUND
-                            ROW, and the mockup still draws one. §3 names it as part of the
-                            defect, and a written decision beats the reference (the mockup's
-                            own header says so).
-
-                            The ellipsis said "this asks first" and the icon cannot, so the
-                            `title` says it instead — and the CONFIRM GATE is the protection
-                            either way, which is the same argument `controls.css` already
-                            makes for the layer table's neutral row verbs.
-                          */
-                          <Button
-                            variant="quiet"
-                            className="cg-list-remove"
-                            aria-label={`Remove the template on ${rowName}`}
-                            disabled={removeRefused}
-                            title={
-                              removeRefused
-                                ? REMOVE_ON_AIR_REASON
-                                : 'Remove the template from this row — asks first, then clears the layer'
-                            }
-                            onClick={() => {
-                              if (slot !== undefined) void removeTemplate(slot);
-                            }}
-                          >
-                            <Icon icon={Trash2} size={15} />
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <p className="cg-card__note">
-          Highest first — the same order as the Layers list. Tick = row shown; the name is what the
-          row displays.
-        </p>
-      </section>
+      {shown === 0 ? (
+        emptyState
+      ) : (
+        <>
+          {shownOperator.length > 0 && table(shownOperator, 'Candidate rows')}
+          {shownOperator.length > 0 && (
+            <p className="cg-layer-footnote">
+              <Icon icon={ArrowDown} size={STATION_SETUP_PX.footnoteIcon} />
+              Highest layer first · rows from the active channel.
+            </p>
+          )}
+          {shownBeds.length > 0 && (
+            <div className="cg-setup-beds-head">
+              <h3>Graphics beds</h3>
+              <p>Composited below the live source layers.</p>
+            </div>
+          )}
+          {shownBeds.length > 0 && table(shownBeds, 'Graphics bed rows')}
+        </>
+      )}
       {/*
         `STATION-CHROME-01` §2 — THE ACTIONS GO IN THE DIALOG'S FOOTER when there is one to go
         in. This section's own note recorded that they sat in the body only because "the

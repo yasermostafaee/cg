@@ -197,9 +197,15 @@ export class RuntimeApp {
    * `setupFooterVocabulary.dom.test.ts` is where that is driven.
    */
   async closeStationSetup(): Promise<void> {
+    /*
+      ⚠ `SETTINGS-MATCH-02` — `exact: true`. `B-240`'s amendment put a `Close` back in the
+      footer of the panes with nothing to commit (named `Close Station setup`, so the two can
+      be told apart); this helper means the PRIMITIVE's ✕, which every tab has. Without the
+      flag the locator matches both and fails strict mode on three of five tabs.
+    */
     await this.page
       .getByRole('dialog', { name: 'Station setup' })
-      .getByRole('button', { name: 'Close' })
+      .getByRole('button', { name: 'Close', exact: true })
       .click();
   }
 
@@ -223,7 +229,7 @@ export class RuntimeApp {
     const sub = this.page.getByRole('dialog', { name: 'Add live source' });
     await expect(sub).toBeVisible();
     await sub.getByLabel('Source name', { exact: true }).fill(name);
-    if (options.kind !== undefined) await sub.getByLabel('Source kind').selectOption(options.kind);
+    if (options.kind !== undefined) await chooseSourceKind(sub, options.kind);
     for (const [label, value] of Object.entries(options.fields ?? {})) {
       await sub.getByLabel(label, { exact: true }).fill(value);
     }
@@ -877,6 +883,24 @@ export function buildInvalidVcg(): Uint8Array {
  *  - defaulted HERE, in the harness, not in product code — so the product's default is
  *    "show the splash" and the splash's own specs opt back in simply by not using this.
  */
+/**
+ * 🔴 `SETTINGS-MATCH-02` §8b — **CHOOSE A PRODUCER KIND in the Add/Edit source dialog.**
+ *
+ * It was `getByLabel('Source kind').selectOption(kind)`, and the control is a RADIO GROUP now:
+ * the kind is the one field whose value changes the FORM (pick NDI and the fields below become
+ * a source name), and a `<select>` hid four of five answers behind a press.
+ *
+ * It lives here rather than in each spec because six specs press it — which is also what made
+ * the change cheap to carry: one helper, one edit. The group keeps its accessible name, so
+ * what changed is the press and not what the press means.
+ */
+export async function chooseSourceKind(scope: Locator, kind: string): Promise<void> {
+  await scope
+    .getByRole('radiogroup', { name: 'Source kind' })
+    .locator(`input[type="radio"][value="${kind}"]`)
+    .check();
+}
+
 export async function disableSplash(page: Page): Promise<void> {
   await page.addInitScript(() => {
     (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;

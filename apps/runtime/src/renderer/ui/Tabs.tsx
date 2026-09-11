@@ -1,5 +1,5 @@
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
-import type { LucideIcon } from 'lucide-react';
+import { Lock, type LucideIcon } from 'lucide-react';
 import { STATION_SETUP_PX, colors, cssVars } from '../theme.js';
 import { Icon } from './Icon.js';
 
@@ -22,16 +22,23 @@ export interface TabSpec {
   /**
    * Optional attention marker, rendered after the label.
    *
-   * `warn` (amber) — this tab is BLOCKED: something in it was refused.
-   * `edited` (sky) — this tab has UNAPPLIED changes.
+   * `warn` — this tab is BLOCKED: something in it was refused.
+   * `edited` — this tab has UNAPPLIED changes.
    *
    * `STATION-CHROME-01` §2 — these two are what let a tabbed dialog keep the promise the
    * scroll was protecting. The old argument against tabs was that a tab HIDES the section a
-   * refusal came from; a dot in the rail means every blocked section announces itself from
+   * refusal came from; a mark in the rail means every blocked section announces itself from
    * every tab, and one press lands on the sentence that says why. That is strictly more than
    * the scroll gave, which only ever showed the refusal you happened to be standing beside.
+   *
+   * 🔴 `SETTINGS-MATCH-02` — **THE TWO MARKS ARE NO LONGER TWO DOTS, and that is defect 2.**
+   * Both were a 0.55 rem circle that differed only in hue, against a reference that draws a
+   * filled COUNT CHIP and an amber LOCK — so the rail item the owner reported as "half
+   * painted" was one whose mark rendered at a fifth of the drawn size. The `count` is what the
+   * chip says; a `warn` tab draws the lock. The screen-reader `label` is unchanged: it was
+   * never the weak half, and colour was never the only channel.
    */
-  badge?: { tone: 'warn' | 'edited'; label: string } | undefined;
+  badge?: { tone: 'warn' | 'edited'; label: string; count?: number } | undefined;
   /**
    * Rail heading this tab sits under (vertical orientation only). Consecutive tabs sharing a
    * group render one heading; a tab with no group renders none.
@@ -89,6 +96,15 @@ interface StripProps {
    * padding, weight and selected underline; what changes is only what the CONTAINER does.
    */
   inPanelBar?: boolean;
+  /**
+   * `SETTINGS-MATCH-02` — what sits at the BOTTOM of a vertical rail, under the items.
+   *
+   * The reference's `.sidebar` is a shell holding `.tabs[role=tablist]` and a `.sidebar-foot`,
+   * and it has to be: a `tablist` may not carry a non-tab child, so a station card inside the
+   * list would be an ARIA defect as well as a layout one. The shell is `.cg-rail` (ground,
+   * edge, inset, full height) and the list inside it is `.cg-rail-tabs`.
+   */
+  foot?: ReactNode;
 }
 
 interface Props extends StripProps {
@@ -152,15 +168,6 @@ const styles = {
     border: `1px solid ${colors.border}`,
     borderBottom: 'none',
   },
-  dot: {
-    width: '0.55rem',
-    height: '0.55rem',
-    borderRadius: '50%',
-    background: cssVars['--r-caution-text'],
-    flexShrink: 0,
-  },
-  /** UNAPPLIED CHANGES. The sky, never the amber — amber is "you are blocked". */
-  dotEdited: { background: cssVars['--r-accent'] },
 } as const satisfies Record<string, CSSProperties>;
 
 /*
@@ -202,14 +209,15 @@ export function TabStrip({
   orientation = 'horizontal',
   railWidth = cssVars['--r-setup-rail-w'],
   inPanelBar = false,
+  foot,
 }: StripProps): JSX.Element {
   const outer = level === 'outer';
   const vertical = orientation === 'vertical';
   let lastGroup: string | undefined;
-  return (
+  const list = (
     <div
       {...(vertical
-        ? { className: 'cg-rail', style: { width: railWidth } }
+        ? { className: 'cg-rail-tabs' }
         : {
             style: {
               ...styles.strip,
@@ -253,18 +261,25 @@ export function TabStrip({
               )}
               {vertical ? <span className="cg-rail-tab__label">{tab.label}</span> : tab.label}
               {tab.badge !== undefined && (
-                // The dot is decorative; the LABEL beside it is what a screen
-                // reader announces, so the signal never depends on colour.
+                /*
+                  The mark is decorative; the sentence beside it is what a screen reader
+                  announces, so the signal never depends on colour.
+
+                  `SETTINGS-MATCH-02` — EDITED is a filled count chip (the reference's
+                  `.nav-count`) and BLOCKED is the amber lock (its `.nav-symbol`). `data-tab-badge`
+                  is unchanged and still carries the tone, so every spec that reads the rail's
+                  state reads it exactly as before.
+                */
                 <>
-                  <span
-                    style={
-                      tab.badge.tone === 'edited'
-                        ? { ...styles.dot, ...styles.dotEdited }
-                        : styles.dot
-                    }
-                    aria-hidden="true"
-                    data-tab-badge={tab.badge.tone}
-                  />
+                  {tab.badge.tone === 'warn' ? (
+                    <span className="cg-rail-lock" aria-hidden="true" data-tab-badge="warn">
+                      <Icon icon={Lock} size={STATION_SETUP_PX.navSymbolIcon} />
+                    </span>
+                  ) : (
+                    <span className="cg-rail-count" aria-hidden="true" data-tab-badge="edited">
+                      {String(tab.badge.count ?? 1)}
+                    </span>
+                  )}
                   <span className="cg-visually-hidden">{tab.badge.label}</span>
                 </>
               )}
@@ -272,6 +287,18 @@ export function TabStrip({
           </Fragment>
         );
       })}
+    </div>
+  );
+  if (!vertical) return list;
+  /*
+    The RAIL is the shell — see the `foot` prop. It carries the ground, the edge, the inset and
+    the full height; the tablist inside it carries only the items, and the foot sits under them
+    at `margin-top:auto`.
+  */
+  return (
+    <div className="cg-rail" style={{ width: railWidth }} data-setup-rail="">
+      {list}
+      {foot}
     </div>
   );
 }
@@ -310,5 +337,41 @@ export function Tabs({ children, ...strip }: Props): JSX.Element {
         {children}
       </TabPanel>
     </>
+  );
+}
+
+/**
+ * `SETTINGS-MATCH-02` — the rail's own foot: the station this console is pointed at.
+ *
+ * ⚠ OUR primary and OUR host, read from the bridge's health — never the prototype's
+ * `192.168.21.114` (§0). With no health reading yet it renders NOTHING rather than a
+ * placeholder: an address is a fact, and a dash where one should be is a worse answer than
+ * the space it would have filled.
+ */
+export function RailStationCard({
+  label,
+  name,
+  host,
+}: {
+  label: string;
+  name: string;
+  host: string | null;
+}): JSX.Element {
+  return (
+    <div className="cg-rail-foot">
+      <div className="cg-rail-station" data-rail-station="">
+        <span className="cg-rail-station__avatar" aria-hidden="true">
+          {label}
+        </span>
+        <span className="cg-rail-station__text">
+          <span className="cg-rail-station__name">{name}</span>
+          {host !== null && (
+            <bdi className="cg-rail-station__host" dir="ltr">
+              {host}
+            </bdi>
+          )}
+        </span>
+      </div>
+    </div>
   );
 }

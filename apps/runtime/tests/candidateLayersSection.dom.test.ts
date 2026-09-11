@@ -52,15 +52,29 @@ describe('Station setup — Candidate layers', () => {
     stationSetupStub();
     const dialog = await renderStationSetup({ section: 'candidate-layers' });
     const section = sectionOf(dialog, 'candidate-layers');
+    /*
+      ⭐ `SETTINGS-MATCH-02` — the three read-only facts are the head's SUMMARY TAGS now
+      (`Channel 1` · `Layers 70–71` · `Fixed bank`) and the rules are in the `<details>` under
+      them, where they were one paragraph of running text above the table. Same facts, same
+      section, read at a glance instead of in a sentence.
+
+      ⚠ The range is asserted case-insensitively. It is a TAG now, so its first letter is
+      capital where the old sentence's was not, and a case-sensitive match on a string whose
+      case is a styling decision is a test that reddens on a decision it does not care about.
+    */
     expect(section.textContent).toContain('Channel 1');
-    expect(section.textContent).toContain('layers 70–71');
+    expect(section.textContent?.toLowerCase()).toContain('layers 70–71');
     expect(section.textContent).toContain('fixed at install');
-    // No count spinner — the ceiling never changes mid-session. Per layer: one visibility
-    // checkbox and one alias field, for BOTH halves of the bank — the two operator rows
-    // here plus the nine declared bed rows.
+    /*
+      No count spinner — the ceiling never changes mid-session. Per layer: one visibility
+      switch and one name field, for BOTH halves of the bank — the two operator rows here plus
+      the nine declared bed rows. The twelfth checkbox is the filter bar's `Shown only`, so the
+      rows are counted by their own accessible name rather than by a bare total.
+    */
     const inputs = [...section.querySelectorAll('input')];
     expect(inputs.filter((i) => i.type === 'number')).toHaveLength(0);
-    expect(inputs.filter((i) => i.type === 'checkbox')).toHaveLength(11);
+    expect(section.querySelectorAll('input[aria-label^="Show layer "]')).toHaveLength(11);
+    expect(inputs.filter((i) => i.type === 'checkbox')).toHaveLength(12);
     expect(inputs.filter((i) => i.type === 'text')).toHaveLength(11);
     // …and the bed group announces itself, or the operator has no way to see which
     // rows the load refusal is talking about.

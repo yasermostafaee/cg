@@ -121,18 +121,58 @@ test('§2 — the BODY scrolls, and its scrollbar is inside the pane', async ({ 
   expect(railScrolled, 'the rail is short enough to stand still').toBe(false);
 
   /*
-    ⚠ §2 — A SHORT SECTION MUST NOT STRETCH TO FILL THE FRAME. Delimiters holds five rows in
-    a fixed box, and the correct answer is empty space below the card, not a card grown to
-    swallow it. Measured as: the card's bottom sits well above the pane's bottom.
+    ⚠ §2 — A SHORT SECTION MUST NOT STRETCH TO FILL THE FRAME. The correct answer for a section
+    that does not fill the frame is EMPTY SPACE below it, never a card grown to swallow it.
+
+    🔴 `SETTINGS-MATCH-02` — **THE PROBE CHANGED, AND THE REASON IS MEASURED.** This used to
+    read the slack under the Delimiters card at 1280 × 800. That tab is not short any more — the
+    pane now carries the reference's `.list-header` above the card and its `.delimiter-bottom`
+    row under it — and neither is any other: measured at 800, 1000 and 1200 px tall, every one
+    of the five panes needs more than the frame's 810-capped height gives it (Delimiters 675
+    against 639, Channel 644, Live sources 729, Servers 966), so the pane always scrolls and
+    there is no slack anywhere to read. The REFERENCE is the same: its `.delimiter-bottom` ends
+    at y = 699 against a `.panel-foot` at 693.
+
+    An assertion left pointing at a pane that genuinely overflows would go red for a reason it
+    is not about, and the obvious repair — lowering the threshold until it passes — would leave
+    it measuring nothing. So the property is asserted two ways that DO have answers:
+
+      1. STRUCTURALLY, on the pane itself: it lays out from the top and no child may grow.
+         That is the mechanism `styles.pane`'s own note describes, read back off the page.
+      2. GEOMETRICALLY, on a section DRIVEN to be short — the Layers pane filtered to nothing,
+         which renders one small empty-state card. A real reading, with a real short section.
   */
   await dialog
     .getByRole('tablist', { name: 'Station setup sections' })
     .getByRole('tab', { name: 'Text file delimiters' })
     .click();
+  const layout = await pane.evaluate((el) => ({
+    justify: getComputedStyle(el).justifyContent,
+    grows: [...el.children].flatMap((section) => [
+      getComputedStyle(section).flexGrow,
+      ...[...section.children].map((k) => getComputedStyle(k).flexGrow),
+    ]),
+  }));
+  expect(layout.justify, 'the pane packs its content at the top').toBe('normal');
+  expect([...new Set(layout.grows)], 'nothing inside the pane may grow to fill it').toEqual(['0']);
+
+  // …and the same claim as a real measurement, on a section driven short.
+  await dialog
+    .getByRole('tablist', { name: 'Station setup sections' })
+    .getByRole('tab', { name: /^Layers/ })
+    .click();
+  await dialog.getByLabel('Filter by name, template or layer').fill('zzzz-no-such-row');
+  await expect(dialog.locator('[data-layers-empty]')).toBeVisible();
   const slack = await pane.evaluate((el) => {
     const card = el.querySelector('.cg-card');
-    if (card === null) throw new Error('the delimiters section has no card');
-    return el.getBoundingClientRect().bottom - card.getBoundingClientRect().bottom;
+    if (card === null) throw new Error('the empty state has no card');
+    return {
+      below: el.getBoundingClientRect().bottom - card.getBoundingClientRect().bottom,
+      fits: el.scrollHeight <= el.clientHeight,
+    };
   });
-  expect(slack, 'the short section sits at the top, with space below it').toBeGreaterThan(50);
+  // POSITIVE CONTROL: this section genuinely fits, so "space below" is about stretch rather
+  // than about overflow — the exact thing that stopped being true of the old probe.
+  expect(slack.fits, 'the driven-short section fits the pane').toBe(true);
+  expect(slack.below, 'the short section sits at the top, with space below it').toBeGreaterThan(50);
 });

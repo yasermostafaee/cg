@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import {
   aspectForFormat,
   nextSourceId,
@@ -13,9 +13,9 @@ import {
   type TemplateInfo,
   type TemplateSourceAssignment,
 } from '@cg/shared-ipc';
-import { colors } from '../../theme.js';
+import { STATION_SETUP_PX, colors } from '../../theme.js';
 import { LiveSourceDialog } from './LiveSourceDialog.js';
-import { KIND_BADGE, producerParts } from './sourceKinds.js';
+import { KIND_BADGE, KIND_ICON, producerParts } from './sourceKinds.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import type { ModalMessage } from '../../ui/Modal.js';
@@ -79,38 +79,19 @@ import {
 
 const styles = {
   empty: { fontSize: '0.82rem', color: colors.textMuted },
-  name: { fontWeight: 600, minWidth: 0 },
-  kindCol: { width: '7rem' },
-  /** The kind CHIP — a word, never a colour alone. */
-  kind: {
-    fontSize: '0.68rem',
-    letterSpacing: '0.05em',
-    textTransform: 'uppercase' as const,
-    color: colors.textMuted,
-    border: `1px solid ${colors.border}`,
-    borderRadius: '0.25rem',
-    padding: '0.1rem 0.4rem',
-    whiteSpace: 'nowrap' as const,
-  },
-  /** §5 — the LABELLED parts of "where it comes from". */
-  parts: {
-    display: 'flex',
-    flexWrap: 'wrap' as const,
-    gap: '0.15rem 0.9rem',
-    alignItems: 'baseline',
-  },
+  /*
+   * ⚠ `SETTINGS-MATCH-02` — `name`, `kindCol`, `kind`, `parts`, `partLabel`, `partValue`,
+   * `derived`, `bandRow`, `field` and `fieldLabel` are GONE rather than unused. Every one of
+   * them was a hand-set rank or a hand-set gap for the TABLE this section no longer draws, and
+   * each now has a measured `.cg-resource-*` / `.cg-setup-band-*` rule behind it. Leaving them
+   * would leave a second spelling of a row that has one.
+   */
+  /** The row's middle column — it takes the remaining width and may shrink to nothing. */
+  rowText: { minWidth: 0 },
+  /** One labelled part of "where it comes from", inline with its value. */
   part: { display: 'inline-flex', gap: '0.35rem', alignItems: 'baseline', minWidth: 0 },
-  partLabel: { fontSize: '0.7rem', color: colors.textMuted },
-  partValue: {
-    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-    fontSize: '0.78rem',
-    overflowWrap: 'anywhere' as const,
-  },
-  derived: { fontSize: '0.72rem', color: colors.textMuted },
-  /** The band: two numbers and the button that puts them in force, on one line. */
-  bandRow: { display: 'flex', gap: '0.6rem', alignItems: 'flex-end', flexWrap: 'wrap' as const },
-  field: { display: 'flex', flexDirection: 'column' as const, gap: '0.2rem' },
-  fieldLabel: { fontSize: '0.72rem', color: colors.textMuted },
+  /** The band sits its own distance below the catalogue — the reference's `.band-card`. */
+  bandCard: { marginTop: 'var(--r-setup-band-gap-above)' },
 } as const;
 
 /** `1.7778` is not an answer an operator can check; `16:9` is. */
@@ -280,19 +261,45 @@ export function SourcesSection({
     const bound = bindingsFor(source.id);
     const boxes = bound.length;
     const templateCount = new Set(bound.map((a) => a.templateId)).size;
+    /*
+      🔴🔴 `SETTINGS-MATCH-02` §8d — **THE ONE PLACE OURS MUST BEAT THE REFERENCE, AND IT IS A
+      SAFETY DECISION RATHER THAN A LOOK.**
+
+      The reference's remove says _"Check any template bindings that refer to this source."_ —
+      it sends the operator away to look, at the moment he is deciding, and tells him nothing
+      about what will actually happen. `B-237` settled the opposite for this product: deleting
+      a bound source CASCADES, so the confirmation NAMES what it would drop — the plates, the
+      templates, the count — computed with the bridge's own `pruneAssignmentsForCatalog` on the
+      bridge's own published assignments.
+
+      So the FRAME is the reference's (the emblem tile, the bold name, the calm consequence
+      line) and the SENTENCE is ours. Nothing about the refusal CONDITION changes: the delete
+      is allowed and always was, and the bridge cascades either way.
+    */
     const confirmed = await confirm({
-      title: `Delete the source “${source.name}”?`,
-      body:
-        boxes === 0
-          ? `Nothing is bound to it, so no template changes. The source is removed from the ` +
-            `station's catalogue and cannot be picked again until it is re-defined.`
-          : `${String(boxes)} ${boxes === 1 ? 'plate' : 'plates'} on ` +
-            `${String(templateCount)} ${templateCount === 1 ? 'template' : 'templates'} ` +
-            `${boxes === 1 ? 'is' : 'are'} bound to it — ${describeBindings(bound)}. Deleting it ` +
-            `unassigns ${boxes === 1 ? 'that plate' : 'those plates'}: anything already on air ` +
-            `stays up, and the next take of ${templateCount === 1 ? 'that template' : 'those templates'} ` +
-            `is refused until a new source is assigned in the Inspector.`,
-      confirmLabel: 'Delete source',
+      title: `Remove “${source.name}”?`,
+      destructive: true,
+      // §8 — raised from INSIDE Station setup, so it takes that family's 480 frame and the
+      // lighter scrim that keeps the dialog underneath visible.
+      layer: 'sub',
+      body: (
+        <>
+          <p className="cg-confirm-copy">
+            Remove <strong>{source.name}</strong> from the source catalogue?
+          </p>
+          <p className="cg-confirm-copy">
+            {boxes === 0
+              ? `Nothing is bound to it, so no template changes. It cannot be picked again until it is re-defined.`
+              : `${String(boxes)} ${boxes === 1 ? 'plate' : 'plates'} on ` +
+                `${String(templateCount)} ${templateCount === 1 ? 'template' : 'templates'} ` +
+                `${boxes === 1 ? 'is' : 'are'} bound to it — ${describeBindings(bound)}. Removing it ` +
+                `unassigns ${boxes === 1 ? 'that plate' : 'those plates'}: anything already on air ` +
+                `stays up, and the next take of ${templateCount === 1 ? 'that template' : 'those templates'} ` +
+                `is refused until a new source is assigned in the Inspector.`}
+          </p>
+        </>
+      ),
+      confirmLabel: 'Remove source',
       tone: 'remove',
     });
     if (!confirmed) return;
@@ -301,20 +308,32 @@ export function SourcesSection({
 
   return (
     <>
-      {/* `STATION-CHROME-02` §3 — the catalogue is a TABLE in a card, and its Add lives in
-          the card's head where the block it adds to can be seen. */}
-      <section className="cg-card" aria-label="Catalogue">
-        <div className="cg-card__head">
-          <span className="cg-card__title">Catalogue</span>
-          <span className="cg-card__spacer" />
-          <Button
-            variant="add"
-            aria-label="Add live source"
-            onClick={() => setEditing({ source: null })}
-          >
-            Add source
-          </Button>
-        </div>
+      {/*
+        `SETTINGS-MATCH-02` — THE REFERENCE'S `.list-header` over a `.resource-list`.
+
+        ⚠ **This replaces a TABLE, and the swap is the point rather than a preference.** A
+        table is read DOWN A COLUMN — which of these is the pipe, which is the DeckLink — and
+        that is the right shape for the delimiters, which have two short values per row. A
+        source has a NAME, a KIND and a variable-length address whose fields differ per kind
+        (a device index, an NDI name, a URL), so its "Where it comes from" column held a
+        different shape on every row and the column below it could not be scanned. The
+        reference draws a RECORD ROW for exactly that: a kind tile, a title line, and the
+        address as one mono detail line under it.
+      */}
+      <div className="cg-setup-list-head">
+        <h3>
+          Source catalogue <span className="cg-setup-count">{String(catalog.sources.length)}</span>
+        </h3>
+        <Button
+          variant="add"
+          aria-label="Add live source"
+          onClick={() => setEditing({ source: null })}
+        >
+          <Icon icon={Plus} size={STATION_SETUP_PX.btnIcon} />
+          Add source
+        </Button>
+      </div>
+      <section className="cg-card cg-resource-list" aria-label="Catalogue">
         {catalog.sources.length === 0 ? (
           <div className="cg-card__body">
             <span style={styles.empty} role="status">
@@ -323,90 +342,67 @@ export function SourcesSection({
             </span>
           </div>
         ) : (
-          <div className="cg-card__body cg-card__body--table">
-            <div className="cg-table-scroll">
-              <table className="cg-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Name</th>
-                    <th scope="col" style={styles.kindCol}>
-                      Kind
-                    </th>
-                    <th scope="col">Where it comes from</th>
-                    <th scope="col" className="cg-table__actions">
-                      <span className="cg-visually-hidden">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {/*
-                    🔴 §5 — THE COLUMNS DEPEND ON THE KIND.
+          /*
+            🔴 §5 — THE DETAIL LINE'S FIELDS STILL DEPEND ON THE KIND, and that is the part of
+            the old table worth keeping. The row used to print one derived string —
+            `DECKLINK DEVICE 1`, `NDI CG-INGEST` — naming none of its parts, so an operator
+            reading `1` could not tell a device from a channel from a layer. `producerParts`
+            gives each kind the fields it actually has, each with its own LABEL; what changed
+            is only that they are one line under the name rather than a column of their own.
 
-                    The old row printed one derived string — `DECKLINK DEVICE 1`,
-                    `NDI CG-INGEST`, `stream srt://…` — into an unlabelled column, forcing
-                    three addressing schemes into one shape and naming none of them: an
-                    operator reading `1` could not tell a device from a channel from a layer.
-                    `producerParts` gives each kind the fields it actually has, each with its
-                    own LABEL, and the row renders them.
-
-                    ⚠ Every operator-visible string is isolated in its own `<bdi>`: a source
-                    name may be Persian, a URL is Latin, and the labels between them are
-                    neutrals whose placement bidi would otherwise decide (golden rule 11).
-                  */}
-                  {catalog.sources.map((source, index) => (
-                    <tr key={source.id} data-source-id={source.id}>
-                      <td>
-                        <bdi style={styles.name}>{source.name}</bdi>
-                      </td>
-                      <td>
-                        <span style={styles.kind} data-source-kind={source.producer.kind}>
-                          {KIND_BADGE[source.producer.kind]}
-                        </span>
-                      </td>
-                      <td>
-                        <div style={styles.parts} data-source-parts="">
-                          {producerParts(source.producer).map((part) => (
-                            <span key={part.label} style={styles.part}>
-                              <span style={styles.partLabel}>{part.label}</span>
-                              <bdi style={styles.partValue}>{part.value}</bdi>
-                            </span>
-                          ))}
-                          <span style={styles.part}>
-                            <span style={styles.partLabel}>Format</span>
-                            <bdi style={styles.partValue}>{source.format ?? '— not stated —'}</bdi>
-                          </span>
-                          <span style={styles.derived}>{describeAspect(source)}</span>
-                        </div>
-                      </td>
-                      <td className="cg-table__actions">
-                        <span className="cg-table__actions-group">
-                          {/* §3 — the two row actions are QUIET icons in a fixed column;
-                              only the destructive one reddens, and only on intent. */}
-                          <Button
-                            variant="quiet"
-                            aria-label={`Edit ${source.name}`}
-                            title="Edit this source"
-                            onClick={() => setEditing({ source })}
-                          >
-                            <Icon icon={Pencil} size={15} />
-                          </Button>
-                          <Button
-                            variant="quiet"
-                            className="cg-list-remove"
-                            aria-label={`Remove ${source.name}`}
-                            title="Remove this source"
-                            onClick={() => void removeSource(source, index)}
-                          >
-                            <Icon icon={Trash2} size={15} />
-                          </Button>
-                        </span>
-                      </td>
-                    </tr>
+            ⚠ Every operator-visible string is isolated in its own `<bdi>`: a source name may
+            be Persian, a URL is Latin, and the labels between them are neutrals whose
+            placement bidi would otherwise decide (golden rule 11).
+          */
+          catalog.sources.map((source, index) => (
+            <div className="cg-resource" key={source.id} data-source-id={source.id}>
+              <span className="cg-resource__icon" aria-hidden="true">
+                <Icon icon={KIND_ICON[source.producer.kind]} size={20} />
+              </span>
+              <div style={styles.rowText}>
+                <div className="cg-resource__title">
+                  <bdi className="cg-resource__name">{source.name}</bdi>
+                  <span className="cg-resource__type" data-source-kind={source.producer.kind}>
+                    {KIND_BADGE[source.producer.kind]}
+                  </span>
+                </div>
+                <div className="cg-resource__detail" data-source-parts="">
+                  {producerParts(source.producer).map((part) => (
+                    <span key={part.label} style={styles.part}>
+                      <span>{part.label}</span>
+                      <bdi className="cg-resource__value">{part.value}</bdi>
+                    </span>
                   ))}
-                </tbody>
-              </table>
+                  <span style={styles.part}>
+                    <span>Format</span>
+                    <bdi className="cg-resource__value">{source.format ?? '— not stated —'}</bdi>
+                  </span>
+                  <span>{describeAspect(source)}</span>
+                </div>
+              </div>
+              <span className="cg-resource__actions">
+                {/* §3 — the two row actions are QUIET icons in a fixed column;
+                    only the destructive one reddens, and only on intent. */}
+                <Button
+                  variant="quiet"
+                  aria-label={`Edit ${source.name}`}
+                  title="Edit this source"
+                  onClick={() => setEditing({ source })}
+                >
+                  <Icon icon={Pencil} size={15} />
+                </Button>
+                <Button
+                  variant="quiet"
+                  className="cg-list-remove"
+                  aria-label={`Remove ${source.name}`}
+                  title="Remove this source"
+                  onClick={() => void removeSource(source, index)}
+                >
+                  <Icon icon={Trash2} size={15} />
+                </Button>
+              </span>
             </div>
-          </div>
+          ))
         )}
         {/*
           §5's other half, and it is a decision rather than a caption: the CATALOGUE is
@@ -430,48 +426,81 @@ export function SourcesSection({
         (`STATION-CHROME-02` §5: the footer used to claim there was nothing waiting to be
         applied, with this button six inches above it).
       */}
-      <section className="cg-card" aria-label="Layer band">
+      <section className="cg-card" aria-label="Layer band" style={styles.bandCard}>
         <div className="cg-card__head">
-          <span className="cg-card__title">Layer band</span>
+          <span className="cg-card__title">Live source layer band</span>
+          <span className="cg-card__spacer" />
+          {/*
+            ⭐ The reference's `Apply separately` tag, at the CARD level, and it is the one
+            thing that makes this tab's two contracts legible at a glance: the catalogue above
+            saves as you go and this does not. The footer already says so in words; the tag
+            says it where the control is.
+          */}
+          <span className="cg-setup-card-tag">Apply separately</span>
         </div>
         <div className="cg-card__body">
-          <div style={styles.bandRow}>
-            <label style={styles.field}>
-              <span style={styles.fieldLabel}>From</span>
+          <p className="cg-setup-lede">
+            Reserve the layer range live inputs use, below the graphic templates.
+          </p>
+          {/*
+            `SETTINGS-MATCH-02` — the reference's `.band-fields`: two labelled fields with a
+            range dash between them and the Apply at the row's end, capped so the pair reads
+            as ONE range rather than as two unrelated numbers across an 806 px card.
+          */}
+          <div className="cg-setup-band-fields">
+            {/*
+              🔴 `SETTINGS-MATCH-02` §10.3/§10.5 — both are whole numbers, both are `ltr`, and
+              Persian digits normalise before anything asks whether the character is a digit.
+              ⚠ The band's OVERLAP refusal is untouched: the beds, the candidate bank and the
+              playout system's reserved range are the bridge's to judge and it still does, on
+              apply, naming both ranges. This only stops nonsense reaching that check.
+            */}
+            <div className="cg-setup-field">
+              <span className="cg-setup-field__label">First layer</span>
               <NumericInput
-                className="cg-field"
-                style={{ width: '6rem' }}
+                className="cg-field cg-field--mono"
+                dir="ltr"
+                allow="digits"
                 aria-label="Live source band start layer"
                 placeholder={String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}
                 value={bandStart === '' && band !== undefined ? String(band.start) : bandStart}
                 onValueChange={setBandStart}
               />
-            </label>
-            <label style={styles.field}>
-              <span style={styles.fieldLabel}>To</span>
+            </div>
+            <span className="cg-setup-band-dash" aria-hidden="true">
+              —
+            </span>
+            <div className="cg-setup-field">
+              <span className="cg-setup-field__label">Last layer</span>
               <NumericInput
-                className="cg-field"
-                style={{ width: '6rem' }}
+                className="cg-field cg-field--mono"
+                dir="ltr"
+                allow="digits"
                 aria-label="Live source band end layer"
                 placeholder={String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)}
                 value={bandEnd === '' && band !== undefined ? String(band.end) : bandEnd}
                 onValueChange={setBandEnd}
               />
-            </label>
+            </div>
             <Button variant="primary" onClick={applyBand}>
               Apply band
             </Button>
           </div>
+          {/* What is IN FORCE right now, under the two draft fields — the reference's
+              `.band-summary`. Without it the fields show a draft that looks like a fact. */}
+          <p className="cg-setup-band-summary">
+            {band === undefined
+              ? `Nothing is declared yet; ${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}–${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)} is the usual choice.`
+              : `Currently ${String(band.start)}–${String(band.end)} · ${String(band.end - band.start + 1)} layers.`}
+          </p>
         </div>
         {/* The rule an operator needs BEFORE typing two numbers — that the band must
             clear the candidate bank and the playout range — stays. The bridge names both
             ranges on a clash, and that refusal is legible in the pinned region. */}
         <p className="cg-card__note">
           Placed below the template&rsquo;s own layer; must not overlap the candidate layer bank or
-          the playout system&rsquo;s range.{' '}
-          {band === undefined
-            ? `Nothing is declared yet; ${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}–${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)} is the usual choice.`
-            : `Currently ${String(band.start)}–${String(band.end)}.`}
+          the playout system&rsquo;s range. The bridge validates it and names both ranges on a
+          clash.
         </p>
       </section>
 

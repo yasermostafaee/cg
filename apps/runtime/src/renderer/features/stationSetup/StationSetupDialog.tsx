@@ -1,6 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
 import {
+  cloneElement,
+  isValidElement,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
+import {
+  CircleCheck,
+  Info,
   Layers,
+  Lock,
   Monitor,
   Radio,
   Server,
@@ -14,17 +25,21 @@ import { isLoopbackHost } from '../../../shared/loopback.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useStack } from '../../hooks/useStack.js';
 import { isOnAirStatus } from '@cg/shared-schema';
-import { colors, cssVars } from '../../theme.js';
+import { STATION_SETUP_PX, colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { hostError, hostValue, portError } from '../../ui/fieldValue.js';
 import { Modal, ModalAction, modalActionVariant, type ModalMessage } from '../../ui/Modal.js';
-import { Notice } from '../../ui/Notice.js';
 import { NumericInput } from '../../ui/NumericInput.js';
-import { Tabs, type TabSpec } from '../../ui/Tabs.js';
+import { RailStationCard, TabPanel, TabStrip, type TabSpec } from '../../ui/Tabs.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
-import { CandidateLayersSection } from '../fixedLayers/CandidateLayersSection.js';
+import {
+  CandidateLayersHelper,
+  CandidateLayersSection,
+  CandidateLayersSummary,
+} from '../fixedLayers/CandidateLayersSection.js';
 import { DelimitersSection } from '../inspector/DelimitersSection.js';
 import { SourcesSection } from '../sources/SourcesSection.js';
 import { BackupServerDialog } from './BackupServerDialog.js';
@@ -114,7 +129,16 @@ const SECTION_ICONS: Record<StationSetupSection, LucideIcon> = {
 };
 
 const styles = {
-  shell: { display: 'flex', flex: 1, minHeight: 0, gap: 0 },
+  /*
+   * ⚠ `SETTINGS-MATCH-02` — `shell` IS GONE, not merely unused. It was the row flex that held
+   * the rail beside the pane INSIDE the modal's body, and the rail is a named region of the
+   * FRAME now (`Modal`'s `rail` prop), so the layout that used to live here belongs to the
+   * primitive. Leaving it would leave a second, silent way to lay this dialog out.
+   *
+   * `status` and `candidates` went with the serve-host candidate list, which is a row of
+   * `.cg-setup-chip` buttons under its own field now rather than a sentence and a row of
+   * full-size buttons in the card's flex rhythm.
+   */
   /**
    * `STATION-CHROME-02` §2 — THE ONE SCROLL CONTAINER. The frame is fixed, the rail and
    * the footer never move, and this is the only thing that scrolls; its scrollbar is
@@ -158,7 +182,6 @@ const styles = {
    * reference's `.field` replaces. Leaving them would leave a second way to spell a labelled
    * control in the one file that just stopped having one.
    */
-  status: { fontSize: '0.8rem', color: colors.textMuted },
   /*
     `C-024` — THE MASKING TREATMENT, AND WHY IT IS NOT GREY.
 
@@ -177,12 +200,6 @@ const styles = {
   },
   maskedStored: { textDecoration: 'line-through' },
   inForce: { color: colors.text, fontWeight: 700 },
-  candidates: {
-    display: 'flex',
-    flexWrap: 'wrap' as const,
-    gap: '0.3rem',
-    alignItems: 'center',
-  },
 } as const;
 
 interface EndpointDraft {
@@ -231,6 +248,78 @@ function sameServerConfig(a: ConnectionConfig, b: ConnectionConfig): boolean {
 
 function toDraft(ep: { host: string; amcpPort: number; oscPort: number }): EndpointDraft {
   return { host: ep.host, amcpPort: String(ep.amcpPort), oscPort: String(ep.oscPort) };
+}
+
+/**
+ * 🔴 `SETTINGS-MATCH-02` §10.6 — **ONE LABELLED FIELD, WITH ITS OWN REFUSAL UNDER IT.**
+ *
+ * ── WHERE AN INVALID FIELD IS REPORTED, AND WHY IT MOVED ────────────────────
+ *
+ * `AMCP port must be an integer between 1 and 65535.` used to go to the dialog's PINNED
+ * REGION, beside `Apply is blocked for Servers…`. Those are two different kinds of thing and
+ * the region is the wrong home for one of them:
+ *
+ *   · the pinned region answers **"why did the last action not happen?"** — it is an EVENT,
+ *     and `AUDIT-CLOSE-01` delta A put it there because a refusal the operator has to scroll
+ *     for is a silent one;
+ *   · a bad port answers **"what is wrong with THIS field?"** — it is a standing fact about a
+ *     control that is on screen, and the one place it is useful is beside that control. In the
+ *     region it sat four cards away from the box it was about, and with two endpoints on the
+ *     tab it could not even say WHICH port.
+ *
+ * So the field says it, `aria-describedby` binds the two so a screen reader reads them
+ * together, and the footer keeps its own job: whether the commit is available (§9c).
+ *
+ * ⚠ **NOT a `role="alert"`.** §9d's rule stands — a body alert is the thing the pinned region
+ * exists to replace, and this is a description of a control rather than an announcement. The
+ * input carries `aria-invalid` so the state is reported where the operator's focus already is.
+ */
+function SetupField({
+  label,
+  optional = false,
+  hint,
+  after,
+  error,
+  id,
+  children,
+}: {
+  label: string;
+  optional?: boolean;
+  hint?: string | undefined;
+  /** Anything that belongs to this field but is not its control — the serve-host chips. */
+  after?: ReactNode;
+  /** The one sentence this field is currently wrong by, or `null`. */
+  error: string | null;
+  /** Stable id root, so the control and its error can be bound together. */
+  id: string;
+  children: ReactNode;
+}): JSX.Element {
+  const errorId = `${id}-error`;
+  return (
+    <div className="cg-setup-field" data-setup-field={id}>
+      <span className="cg-setup-field__label">
+        {label}
+        {optional && <span className="cg-setup-field__optional"> · optional</span>}
+      </span>
+      {/*
+        The control is cloned rather than wrapped so the caller keeps owning it: this decides
+        only that an invalid field is MARKED invalid and POINTS at its sentence, which are the
+        two things a caller would otherwise have to remember per field.
+      */}
+      {isValidElement(children)
+        ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+            ...(error !== null ? { 'aria-invalid': true, 'aria-describedby': errorId } : {}),
+          })
+        : children}
+      {after}
+      {hint !== undefined && <p className="cg-setup-field__hint">{hint}</p>}
+      {error !== null && (
+        <p className="cg-setup-field__error" id={errorId} data-field-error="">
+          {error}
+        </p>
+      )}
+    </div>
+  );
 }
 
 function parsePort(raw: string, min: number): number | null {
@@ -307,6 +396,14 @@ export function StationSetupDialog({
     {},
   );
   /**
+   * `SETTINGS-MATCH-02` — HOW MANY unapplied changes a section holds, for the rail's count
+   * chip. A section that reports only a flag counts as one; the bank reports a real number,
+   * from the same comparison its flag comes from.
+   */
+  const [sectionDirtyCount, setSectionDirtyCount] = useState<
+    Partial<Record<StationSetupSection, number>>
+  >({});
+  /**
    * The FOOTER SLOT. A section whose commit is its own — the bank — renders its Apply and
    * Revert into this element, so the buttons are physically in the footer rather than
    * duplicated there. Held in state rather than a ref because the portal target has to
@@ -342,6 +439,15 @@ export function StationSetupDialog({
       (id: StationSetupSection) =>
       (dirty: boolean): void => {
         setSectionDirty((prev) => (prev[id] === dirty ? prev : { ...prev, [id]: dirty }));
+      },
+    [],
+  );
+
+  const markDirtyCount = useMemo(
+    () =>
+      (id: StationSetupSection) =>
+      (count: number): void => {
+        setSectionDirtyCount((prev) => (prev[id] === count ? prev : { ...prev, [id]: count }));
       },
     [],
   );
@@ -459,15 +565,47 @@ export function StationSetupDialog({
   const serverMessages: readonly ModalMessage[] = [
     // WHY APPLY SERVERS WILL NOT HAPPEN is a REFUSAL — the attention case, never red — and
     // it names its SCOPE: the other sections are not gated and must not read as if they were.
+    /*
+      🔴 `SETTINGS-MATCH-02` §9a — **TWO WEIGHTS, AND THE SECOND ONE NAMES THE REMEDY.**
+
+      This was one long sentence. The reference draws a blocking state as a BOLD TITLE over a
+      quieter explanation, and the split is not decoration: the title is what the operator
+      reads from across the room and the explanation is what he reads when he has decided to
+      act. Ours had both in one line, so the count, the remedy and the scope all competed at
+      one weight.
+
+      ⚠ The two weights are `Notice`'s existing `text` + `detail`, which are BOTH STRINGS —
+      §9d's rule holds (`ModalMessage` takes no markup, by the type system), and a banner that
+      needed a styled fragment would be the wrong shape rather than a reason to widen the type.
+
+      ⭐ **IT NAMES THE REMEDY**, which is §9a's other half: `Take all items off air…` tells
+      him what to DO. A banner that only says "blocked" is half a banner.
+    */
     ...(onAirCount > 0
       ? [
           {
             role: 'refusal' as const,
-            text: `Apply is blocked for Servers: ${String(onAirCount)} item(s) are on air or unsettled. Use Clear All — it takes them off air and keeps the rows. Every other section stays editable.`,
+            text: 'Server changes are paused while on air',
+            detail:
+              `${String(onAirCount)} item(s) are on air or unsettled. You can prepare edits now — ` +
+              `take all items off air in the console before applying, which Clear All does while ` +
+              `keeping the rows. Every other section stays editable.`,
           },
         ]
       : []),
-    ...(validationError !== null ? [{ role: 'refusal' as const, text: validationError }] : []),
+    /*
+      🔴 `SETTINGS-MATCH-02` §10.6 — **A BAD FIELD IS NOT REPORTED HERE ANY MORE.**
+
+      `validationError` used to be pushed into this region, which put `AMCP port must be an
+      integer between 1 and 65535.` four cards away from the box it was about — and, with two
+      endpoints on the tab, unable to say WHICH port. It is an inline error beside its own
+      field now (`SetupField`), and this region keeps the job `AUDIT-CLOSE-01` delta A gave it:
+      why the last ACTION did not happen.
+
+      ⚠ It still GATES the commit — `Apply servers` stays disabled while any field is invalid,
+      and the footer's clause says the commit is unavailable. What moved is where the sentence
+      is read, not what it stops.
+    */
     ...(refusal !== null ? [{ role: 'refusal' as const, text: refusal }] : []),
     ...(status !== null ? [{ role: 'notice' as const, text: status }] : []),
   ];
@@ -489,16 +627,27 @@ export function StationSetupDialog({
     group: s.group,
     icon: SECTION_ICONS[s.id],
     // BLOCKED beats EDITED: a section you cannot apply is the more urgent fact, and two
-    // dots on one row would be a puzzle rather than a signal.
+    // marks on one row would be a puzzle rather than a signal.
     ...(isBlocked(s.id)
       ? { badge: { tone: 'warn' as const, label: `${s.title} is blocked` } }
       : isDirty(s.id)
-        ? { badge: { tone: 'edited' as const, label: `${s.title} has unapplied changes` } }
+        ? {
+            badge: {
+              tone: 'edited' as const,
+              label: `${s.title} has unapplied changes`,
+              // `SETTINGS-MATCH-02` — the chip says HOW MANY. Servers is one draft however
+              // many fields were typed into it: the section applies atomically, so `1` is the
+              // honest number rather than a count of keystrokes.
+              count: sectionDirtyCount[s.id] ?? 1,
+            },
+          }
         : {}),
   }));
 
   const activeSpec = sectionSpec(active);
   const activeMessages = messagesFor(active);
+  /** The footer's standing sentence goes amber when THIS section's commit is refused. */
+  const footerBlocked = isBlocked(active);
 
   /**
    * 🔴 `B-240` — **DISMISSING WITH UNAPPLIED EDITS ASKS, AND NAMES WHAT WOULD BE LOST.**
@@ -550,6 +699,13 @@ export function StationSetupDialog({
     const names = dirtySections.map((s) => s.title).join(', ');
     void confirmDismiss({
       title: `Leave Station setup without applying ${names}?`,
+      /*
+        `SETTINGS-MATCH-02` §8 — this question is raised OVER Station setup, so it belongs to
+        that dialog's sub-family: its 480 frame, and the lighter scrim that keeps the draft it
+        is about visible behind it. It is NOT `destructive`: the reference draws no emblem on
+        a question asked in words, and this one asks rather than removes.
+      */
+      layer: 'sub',
       body:
         `${names} ${dirtySections.length === 1 ? 'holds' : 'hold'} changes that have not been ` +
         `applied, and leaving drops them. Nothing that saves as you go is affected — the ` +
@@ -579,36 +735,71 @@ export function StationSetupDialog({
     set: (next: EndpointDraft) => void,
     prefix: string,
   ): JSX.Element => (
+    /*
+      ⭐ `SETTINGS-MATCH-02` — THE MONO FACE ON AN ADDRESS, which the reference sets on every
+      one of these three and the app set on none. It is not decoration on a host field: `1` and
+      `l`, `0` and `O` are the characters an operator mistypes into an IP address, and the
+      proportional face is where they look alike.
+    */
+    /*
+      ⭐ `SETTINGS-MATCH-02` — THE MONO FACE ON AN ADDRESS, which the reference sets on every
+      one of these three and the app set on none. It is not decoration on a host field: `1` and
+      `l`, `0` and `O` are the characters an operator mistypes into an IP address, and the
+      proportional face is where they look alike.
+
+      🔴 §10.5 — AND ALL THREE ARE `dir="ltr"`, EXPLICITLY. This console renders Persian, so a
+      field left to the document's direction can reorder its own segments the moment anything
+      ambiguous enters it — an address whose octets are drawn in the wrong order is a value the
+      operator cannot check by eye. `dir="auto"` stays where it belongs: row names, source
+      names, delimiter names — the operator's own words.
+    */
     <div className="cg-setup-fields cg-setup-fields--three">
-      <div className="cg-setup-field">
-        <span className="cg-setup-field__label">Host</span>
+      <SetupField
+        label="Host"
+        error={hostError(draft.host, { label: 'Host' })}
+        id={`${prefix}-host`}
+      >
+        {/* §10.4 — a host is `z.string().min(1)`: a NAME or an address, so letters are legal
+            and only the whitespace a paste carries is removed. What cannot be a host is said
+            beside the field, not silently deleted (`fieldValue.ts`). */}
         <input
-          className="cg-field"
+          className="cg-field cg-field--mono"
+          dir="ltr"
           aria-label={`${prefix} host`}
           value={draft.host}
-          onChange={(e) => set({ ...draft, host: e.target.value })}
+          onChange={(e) => set({ ...draft, host: hostValue(e.target.value) })}
         />
-      </div>
-      <div className="cg-setup-field">
-        <span className="cg-setup-field__label">AMCP port</span>
-        {/* R-020 — ports are integer-only NumericInputs: Persian/Arabic-Indic
-            digits normalize to Latin BEFORE parsePort's /^\d+$/ sees them. */}
+      </SetupField>
+      <SetupField
+        label="AMCP port"
+        error={portError(draft.amcpPort, { min: 1, label: 'AMCP port' })}
+        id={`${prefix}-amcp`}
+      >
+        {/* R-020 + §10.2 — Persian/Arabic-Indic digits normalize to Latin BEFORE anything
+            asks whether the character is a digit; `allow="digits"` then drops the rest. */}
         <NumericInput
-          className="cg-field"
+          className="cg-field cg-field--mono"
+          dir="ltr"
+          allow="digits"
           aria-label={`${prefix} AMCP port`}
           value={draft.amcpPort}
           onValueChange={(v) => set({ ...draft, amcpPort: v })}
         />
-      </div>
-      <div className="cg-setup-field">
-        <span className="cg-setup-field__label">OSC port</span>
+      </SetupField>
+      <SetupField
+        label="OSC port"
+        error={portError(draft.oscPort, { min: 0, label: 'OSC port' })}
+        id={`${prefix}-osc`}
+      >
         <NumericInput
-          className="cg-field"
+          className="cg-field cg-field--mono"
+          dir="ltr"
+          allow="digits"
           aria-label={`${prefix} OSC port`}
           value={draft.oscPort}
           onValueChange={(v) => set({ ...draft, oscPort: v })}
         />
-      </div>
+      </SetupField>
     </div>
   );
 
@@ -642,6 +833,40 @@ export function StationSetupDialog({
       */
       onClose={dismiss}
       {...(activeMessages.length > 0 ? { message: activeMessages } : {})}
+      /*
+        🔴 `SETTINGS-MATCH-02` §1 — THE RAIL IS A NAMED REGION OF THE FRAME NOW, not the first
+        thing inside the body. That is what puts the message region and the footer in the
+        PANEL's column, so a Servers refusal stops taking 109 px out of the rail and the pane
+        every time the operator presses that tab — see `Modal`'s `styles.panelFixed`.
+      */
+      rail={
+        <TabStrip
+          tabs={tabs}
+          activeId={active}
+          onSelect={(id) => setActive(id as StationSetupSection)}
+          ariaLabel="Station setup sections"
+          idPrefix="station"
+          orientation="vertical"
+          /*
+            The rail's foot — OUR primary server and OUR host, from what the bridge says is
+            stored and which server is currently primary. Never the prototype's sample address
+            (§0), and nothing at all until the bridge has answered.
+          */
+          foot={
+            <RailStationCard
+              label={health?.currentPrimary ?? 'A'}
+              name={health?.currentPrimary === 'B' ? 'Backup server' : 'Primary server'}
+              host={
+                loaded === null
+                  ? null
+                  : health?.currentPrimary === 'B' && loaded.servers.B !== undefined
+                    ? loaded.servers.B.host
+                    : loaded.servers.A.host
+              }
+            />
+          }
+        />
+      }
       footer={
         <>
           {/*
@@ -663,13 +888,32 @@ export function StationSetupDialog({
             amber `Notice`. `data-modal-message` is conditional and absent at rest; this is
             unconditional and never changes. Two elements, two treatments, two lifetimes.
           */}
+          {/*
+            ⭐ `SETTINGS-MATCH-02` — IT KEEPS A GLYPH AND A TONE NOW, which is the reference's
+            `.foot-message`, and neither turns it into an event. It is still unconditional,
+            still unchanging within a tab, and still the only thing in the footer that never
+            reacts to anything — `removeRowRefusal.dom.test.ts` measures exactly that, by
+            reading the sentence before and after a refusal arrives beside it.
+
+            The amber + lock on a BLOCKED section is where the reference's on-air banner lands
+            in this build: the refusal itself stays in the pinned region (`AUDIT-CLOSE-01`
+            delta A), and the footer says in the corner he is about to press that the press is
+            unavailable.
+          */}
           <span
             style={styles.footNote}
             className="cg-footer-contract"
             data-section-footer={active}
             data-footer-role="contract"
+            {...(footerBlocked ? { 'data-footer-tone': 'blocked' } : {})}
           >
-            {activeSpec.footerRest}
+            <Icon
+              icon={footerBlocked ? Lock : activeSpec.footerIcon === 'saved' ? CircleCheck : Info}
+              size={STATION_SETUP_PX.footMessageIcon}
+            />
+            {footerBlocked && activeSpec.footerBlocked !== undefined
+              ? activeSpec.footerBlocked
+              : activeSpec.footerRest}
           </span>
           {/* The slot a section's own commit controls portal into (the bank's). */}
           <span ref={setFooterSlot} data-station-footer-slot="" />
@@ -758,75 +1002,91 @@ export function StationSetupDialog({
             </>
           ) : null}
           {/*
-            🔴 `B-240` — AND EVERY OTHER TAB CARRIES NOTHING AT ALL.
+            🔴 `B-240`, AMENDED 2026-09-11 — A SECTION WITH NOTHING TO COMMIT CARRIES `Close`.
 
-            They used to carry a quiet `Close`. It was the THIRD answer to one job: the ✕,
-            Escape and the backdrop already dismiss, on every tab, from the primitive — so a
-            per-section `Close` made leaving the dialog look like a property of whichever tab
-            the operator happened to be standing on, and only some tabs had it.
+            `B-240` removed it, and its reason was sound as far as it went: the ✕, Escape and
+            the backdrop already dismiss, so a per-section `Close` was a THIRD answer to one
+            job and made leaving look like a property of whichever tab you stood on. The
+            reference draws `Close` on exactly these three panes, **the owner has now looked at
+            it and asked for it**, and the amendment costs `B-240` nothing it was actually
+            protecting:
 
-            ⭐ A footer holding only its message is not unfinished. A footer holding a button
-            that does nothing its neighbours do not already do is.
+              · it is the DIALOG's dismissal, not a fourth act — it routes through `dismiss`,
+                the same function the ✕ calls, so it asks the same question before dropping an
+                unapplied draft in another tab;
+              · it appears only where there is no commit, so no footer ever offers a `Close`
+                beside an `Apply` — which is the configuration that made "which of these two
+                am I pressing?" a real question;
+              · discard is still `Revert` and only `Revert`, and commit is still
+                `Apply <section>`. The three-names-for-one-act defect stays fixed.
 
-            The bank's own `Revert` / `Apply layers` still portal into `footerSlot` above —
-            those are that SECTION's actions, which is what a section footer is for.
+            `sections.ts`'s `commits` is where that rule is written down, with the dating.
           */}
+          {!activeSpec.commits && (
+            /*
+              ⚠ Its accessible NAME is the longer one, and that is a decision rather than a
+              flourish: the primitive's ✕ is already named `Close`, so two controls in one
+              dialog would answer to that word — which is ambiguous for a screen reader and a
+              strict-mode violation for every spec that presses one of them. The visible label
+              is still `Close` and the name still opens with it, so WCAG 2.5.3 holds.
+            */
+            <ModalAction
+              actionRole="cancel"
+              aria-label="Close Station setup"
+              onClick={dismiss}
+              title="Closes Station setup. Nothing in this section is waiting to be applied."
+            >
+              Close
+            </ModalAction>
+          )}
         </>
       }
     >
-      <div style={styles.shell}>
-        <Tabs
-          tabs={tabs}
-          activeId={active}
-          onSelect={(id) => setActive(id as StationSetupSection)}
-          ariaLabel="Station setup sections"
-          idPrefix="station"
-          orientation="vertical"
-        >
-          {/*
-            THE PANE IS THE SCROLL CONTAINER now, not the modal's body: the body holds the
-            rail and the pane side by side and must not scroll them together, or the rail
-            would slide away from the section it is naming. The message region is still
-            OUTSIDE both, pinned above the footer — which is what `modal-message-in-viewport`
-            measures, and why that spec now takes its overflow reading here.
-          */}
-          <div style={styles.pane} className="cg-setup-pane" data-station-pane="">
-            {active === 'channel' && (
-              <SetupSection id="channel">
-                <ChannelSection health={health} />
-              </SetupSection>
-            )}
+      <TabPanel activeId={active} idPrefix="station">
+        {/*
+          THE PANE IS THE SCROLL CONTAINER, not the modal's body: the frame holds the rail and
+          the panel side by side and must not scroll them together, or the rail would slide
+          away from the section it is naming. The message region is still OUTSIDE this, pinned
+          above the footer — which is what `modal-message-in-viewport` measures, and why that
+          spec takes its overflow reading here.
+        */}
+        <div style={styles.pane} className="cg-setup-pane" data-station-pane="">
+          {active === 'channel' && (
+            <SetupSection id="channel">
+              <ChannelSection health={health} />
+            </SetupSection>
+          )}
 
-            {active === 'servers' && (
-              <SetupSection id="servers">
-                {/* `STATION-CHROME-02` §3 — the shared card rhythm, so this tab is built from
+          {active === 'servers' && (
+            <SetupSection id="servers">
+              {/* `STATION-CHROME-02` §3 — the shared card rhythm, so this tab is built from
                     the same blocks as every other one. The heads used to SHOUT their titles
                     in hand-spelled uppercase; `.cg-card__title` is the one treatment. */}
-                {/*
+              {/*
                   `SETTINGS-DIALOG-01` §3 — the reference's `.server-label`: the letter is a CHIP
                   beside a sentence-case name, not a parenthesis inside it. `Primary (A)` spent
                   the head's one title on two facts; the chip says which slot and the title says
                   what it is.
                 */}
-                <section className="cg-card" aria-label="Primary server">
-                  <div className="cg-card__head">
-                    <span className="cg-setup-server-chip" aria-hidden="true">
-                      A
-                    </span>
-                    <span className="cg-card__title">Primary server</span>
-                  </div>
-                  <div className="cg-card__body">
-                    {endpointFields(primary, setPrimary, 'Primary')}
-                  </div>
-                </section>
+              <section className="cg-card" aria-label="Primary server">
+                <div className="cg-card__head">
+                  <span className="cg-setup-server-chip" aria-hidden="true">
+                    A
+                  </span>
+                  <span className="cg-card__title">Primary server</span>
+                </div>
+                <div className="cg-card__body">
+                  {endpointFields(primary, setPrimary, 'Primary')}
+                </div>
+              </section>
 
-                <section className="cg-card" aria-label="Backup server">
-                  <div className="cg-card__head">
-                    <span className="cg-setup-server-chip" aria-hidden="true">
-                      B
-                    </span>
-                    <span className="cg-card__title">Backup server</span>
-                    {/*
+              <section className="cg-card" aria-label="Backup server">
+                <div className="cg-card__head">
+                  <span className="cg-setup-server-chip" aria-hidden="true">
+                    B
+                  </span>
+                  <span className="cg-card__title">Backup server</span>
+                  {/*
                       The reference's `.tag` on this head, and it says something TRUE that the
                       card otherwise only implies: a station may run on one server, so the
                       absence of a backup is a configuration and not an omission — `B-046`'s
@@ -837,136 +1097,157 @@ export function StationSetupDialog({
                       tag (`Read only` / `Apply together` / `Auto-save`) at the pane's head.
                       The reference draws both, at those two levels, for that reason.
                     */}
-                    <span className="cg-setup-card-tag">Optional</span>
-                    <span className="cg-card__spacer" />
-                    {backupEnabled && (
-                      <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>
-                        Remove backup
-                      </Button>
-                    )}
-                  </div>
-                  {backupEnabled ? (
-                    <div className="cg-card__body">
-                      {endpointFields(backup, setBackup, 'Backup')}
-                    </div>
-                  ) : (
-                    /*
+                  <span className="cg-setup-card-tag">Optional</span>
+                  <span className="cg-card__spacer" />
+                  {backupEnabled && (
+                    <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>
+                      Remove backup
+                    </Button>
+                  )}
+                </div>
+                {backupEnabled ? (
+                  <div className="cg-card__body">{endpointFields(backup, setBackup, 'Backup')}</div>
+                ) : (
+                  /*
                       The reference's `.empty-backup` — a glyph, the state, the consequence, and
                       the one act that changes it, on the row that states the absence rather
                       than in the card's head. `B-046`'s point survives verbatim: a single
                       server is a CONFIGURATION, not a fault, so nothing here is a warning ink.
                     */
-                    <div className="cg-setup-empty">
-                      <span className="cg-setup-empty__icon">
-                        <Icon icon={Server} size={20} />
-                      </span>
-                      <div className="cg-setup-empty__text">
-                        <span className="cg-setup-empty__title">No backup declared</span>
-                        <p className="cg-setup-empty__body">
-                          Single-server operation (B-046: quiet by design).
-                        </p>
-                      </div>
-                      <Button
-                        variant="add"
-                        aria-label="Add backup"
-                        onClick={() => setAddingBackup(true)}
-                      >
-                        Add backup
-                      </Button>
+                  <div className="cg-setup-empty">
+                    <span className="cg-setup-empty__icon">
+                      <Icon icon={Server} size={20} />
+                    </span>
+                    <div className="cg-setup-empty__text">
+                      <span className="cg-setup-empty__title">No backup declared</span>
+                      <p className="cg-setup-empty__body">
+                        Single-server operation (B-046: quiet by design).
+                      </p>
                     </div>
-                  )}
-                </section>
+                    <Button
+                      variant="add"
+                      aria-label="Add backup"
+                      onClick={() => setAddingBackup(true)}
+                    >
+                      Add backup
+                    </Button>
+                  </div>
+                )}
+              </section>
 
-                {/*
+              {/*
                   `C-024` — BESIDE THE SERVER HOSTS: a fact ABOUT the two servers above — the
                   address they fetch templates from. 🔴 The bridge is NOT restarted, and nothing
                   here offers to: `connections.set-config` rebuilds template serving on the
                   running process.
                 */}
-                <section className="cg-card" aria-label="Template serve address">
-                  <div className="cg-card__head">
-                    <span className="cg-card__title">How those servers reach this machine</span>
-                  </div>
-                  <div className="cg-card__body">
-                    {/* ⚠ This copy deliberately does not say "NO TEMPLATE" — that phrase is the
+              <section className="cg-card" aria-label="Template serve address">
+                <div className="cg-card__head">
+                  <span className="cg-card__title">How those servers reach this machine</span>
+                </div>
+                <div className="cg-card__body">
+                  {/* ⚠ This copy deliberately does not say "NO TEMPLATE" — that phrase is the
                         ALARM, asserted ABSENT on a healthy apply, and ambient copy would drain it. */}
-                    {/* The reference's `.card-body p.secondary` — the card's LEDE, which sets up
+                  {/* The reference's `.card-body p.secondary` — the card's LEDE, which sets up
                         the fields under it rather than sitting in the body's flex rhythm as one
                         more equal child. */}
-                    <p className="cg-setup-lede">
-                      The address CasparCG fetches templates from. Leave it empty to derive it. Get
-                      it wrong and those servers show live sources with no graphic over them, while
-                      CG ADD still reports success.
-                    </p>
-                    <div className="cg-setup-fields">
-                      <div className="cg-setup-field">
-                        <span className="cg-setup-field__label">Serve host</span>
-                        <input
-                          className="cg-field"
-                          aria-label="Template serve host"
-                          value={serveHost}
-                          onChange={(e) => setServeHost(e.target.value)}
-                        />
-                      </div>
-                      <div className="cg-setup-field">
-                        <span className="cg-setup-field__label">Serve port</span>
-                        <NumericInput
-                          className="cg-field"
-                          aria-label="Template serve port"
-                          value={servePort}
-                          onValueChange={setServePort}
-                        />
-                        <p className="cg-setup-field__hint">
-                          Empty = ephemeral (today&apos;s default). Pin it to make a firewall rule
-                          possible.
-                        </p>
-                      </div>
+                  <p className="cg-setup-lede">
+                    The address CasparCG fetches templates from. Leave it empty to derive it. Get it
+                    wrong and those servers show live sources with no graphic over them, while CG
+                    ADD still reports success.
+                  </p>
+                  <div className="cg-setup-fields">
+                    {/* The reference's `.optional` — a fact about the FIELD, said where the
+                          operator decides whether to fill it. Both of these genuinely derive
+                          when left empty, which is why blank is legal on both (§10.3). */}
+                    <SetupField
+                      label="Serve host"
+                      optional
+                      id="serve-host"
+                      error={hostError(serveHost, {
+                        label: 'Serve host',
+                        blankAllowed: true,
+                      })}
+                      {...(serveCandidates.length > 0
+                        ? {
+                            hint: `This machine's addresses — not a verdict about which one those servers can reach. Leave the field empty to derive it.`,
+                            after: (
+                              <div className="cg-setup-chips" data-serve-candidates="">
+                                {/* ⚠ CANDIDATES, NEVER A VERDICT: the bridge enumerates this
+                                      machine's interfaces; it cannot know which one the plant
+                                      routes to. The hint under them says exactly that. */}
+                                {serveCandidates.map((candidate) => (
+                                  <Button
+                                    key={candidate}
+                                    className="cg-setup-chip"
+                                    aria-label={`Use serve host ${candidate}`}
+                                    title={`Use ${candidate}`}
+                                    onClick={() => setServeHost(candidate)}
+                                  >
+                                    {candidate}
+                                  </Button>
+                                ))}
+                              </div>
+                            ),
+                          }
+                        : {})}
+                    >
+                      <input
+                        className="cg-field cg-field--mono"
+                        dir="ltr"
+                        aria-label="Template serve host"
+                        placeholder="Detect automatically"
+                        value={serveHost}
+                        onChange={(e) => setServeHost(hostValue(e.target.value))}
+                      />
+                    </SetupField>
+                    <SetupField
+                      label="Serve port"
+                      optional
+                      id="serve-port"
+                      error={portError(servePort, {
+                        min: 0,
+                        label: 'Serve port',
+                        blankAllowed: true,
+                      })}
+                      hint="Empty = ephemeral (today's default). Pin it to make a firewall rule possible."
+                    >
+                      <NumericInput
+                        className="cg-field cg-field--mono"
+                        dir="ltr"
+                        allow="digits"
+                        aria-label="Template serve port"
+                        placeholder="Assign automatically"
+                        value={servePort}
+                        onValueChange={setServePort}
+                      />
+                    </SetupField>
+                  </div>
+                  {flagServeHost === undefined ? null : (
+                    <div style={styles.maskedNote} data-testid="serve-host-masked">
+                      <span style={styles.inForce}>In force: {flagServeHost}</span>
+                      <span>(set by --template-serve-host)</span>
+                      <span style={styles.maskedStored}>
+                        {serveHost.trim().length === 0 ? 'empty (would derive)' : serveHost}
+                      </span>
+                      <span>
+                        not in force — overridden by --template-serve-host. It takes over at the
+                        next start without the flag, so it stays editable.
+                      </span>
                     </div>
-                    {flagServeHost === undefined ? null : (
-                      <div style={styles.maskedNote} data-testid="serve-host-masked">
-                        <span style={styles.inForce}>In force: {flagServeHost}</span>
-                        <span>(set by --template-serve-host)</span>
-                        <span style={styles.maskedStored}>
-                          {serveHost.trim().length === 0 ? 'empty (would derive)' : serveHost}
-                        </span>
-                        <span>
-                          not in force — overridden by --template-serve-host. It takes over at the
-                          next start without the flag, so it stays editable.
-                        </span>
-                      </div>
-                    )}
-                    {serveCandidates.length === 0 ? null : (
-                      <div style={styles.candidates}>
-                        {/* ⚠ CANDIDATES, NEVER A VERDICT: the bridge enumerates this machine's
-                          interfaces; it cannot know which one the plant routes to. */}
-                        <span style={styles.status}>
-                          Candidates — this machine&apos;s addresses, not a verdict about which one
-                          those servers can reach:
-                        </span>
-                        {serveCandidates.map((candidate) => (
-                          <Button
-                            key={candidate}
-                            aria-label={`Use serve host ${candidate}`}
-                            onClick={() => setServeHost(candidate)}
-                          >
-                            {candidate}
-                          </Button>
-                        ))}
-                      </div>
-                    )}
+                  )}
+                  {flagServePort === undefined ? null : (
+                    <div style={styles.maskedNote} data-testid="serve-port-masked">
+                      <span style={styles.inForce}>In force: {String(flagServePort)}</span>
+                      <span>(set by --template-serve-port)</span>
+                      <span style={styles.maskedStored}>
+                        {servePort.trim().length === 0 ? 'empty (ephemeral)' : servePort}
+                      </span>
+                      <span>not in force — overridden by --template-serve-port.</span>
+                    </div>
+                  )}
 
-                    {flagServePort === undefined ? null : (
-                      <div style={styles.maskedNote} data-testid="serve-port-masked">
-                        <span style={styles.inForce}>In force: {String(flagServePort)}</span>
-                        <span>(set by --template-serve-port)</span>
-                        <span style={styles.maskedStored}>
-                          {servePort.trim().length === 0 ? 'empty (ephemeral)' : servePort}
-                        </span>
-                        <span>not in force — overridden by --template-serve-port.</span>
-                      </div>
-                    )}
-
-                    {/*
+                  {/*
                       ⭐ `SETTINGS-DIALOG-01` §3 — REDUNDANCY FOLDED IN, because the reference
                       draws one `Station connection` card holding the template address, the
                       strategy and the failover switch, and the app had a second card
@@ -983,78 +1264,119 @@ export function StationSetupDialog({
                       has three, and a select that cannot express a stored value is a defect,
                       not a simplification.
                     */}
-                    <div className="cg-setup-fields">
-                      <div className="cg-setup-field cg-setup-field--full">
-                        <span className="cg-setup-field__label">Strategy</span>
-                        <select
-                          className="cg-field"
-                          aria-label="Redundancy strategy"
-                          value={strategy}
-                          onChange={(e) =>
-                            setStrategy(e.target.value as ConnectionConfig['strategy'])
-                          }
-                        >
-                          <option value="mirror-sync">mirror-sync</option>
-                          <option value="mirror-async">mirror-async</option>
-                          <option value="journal-replay">journal-replay</option>
-                        </select>
-                      </div>
+                  <div className="cg-setup-fields">
+                    <div className="cg-setup-field cg-setup-field--full">
+                      <span className="cg-setup-field__label">Strategy</span>
+                      <select
+                        className="cg-field"
+                        aria-label="Redundancy strategy"
+                        value={strategy}
+                        onChange={(e) =>
+                          setStrategy(e.target.value as ConnectionConfig['strategy'])
+                        }
+                      >
+                        <option value="mirror-sync">mirror-sync</option>
+                        <option value="mirror-async">mirror-async</option>
+                        <option value="journal-replay">journal-replay</option>
+                      </select>
+                      <p className="cg-setup-field__hint">
+                        How the backup is kept in step while both servers are configured.
+                      </p>
                     </div>
+                  </div>
 
-                    <div className="cg-setup-switch-row">
-                      <div className="cg-setup-switch-row__text">
-                        <span className="cg-setup-field__label">Automatic failover</span>
-                        <p className="cg-setup-field__hint">
-                          Switch to the backup if the primary becomes unavailable.
-                        </p>
-                      </div>
+                  <div className="cg-setup-switch-row">
+                    <div className="cg-setup-switch-row__text">
+                      <span className="cg-setup-field__label">Automatic failover</span>
+                      <p className="cg-setup-field__hint">
+                        Switch to the backup if the primary becomes unavailable.
+                      </p>
+                    </div>
+                    {/*
+                        `SETTINGS-MATCH-02` — a SWITCH, not a bare tick. The control is still
+                        the native checkbox (it keeps the accessible name every spec queries by,
+                        and the keyboard); the track is drawn over it. A setting that is either
+                        on or off reads as a switch; a tick reads as an item in a list.
+                      */}
+                    <span className="cg-switch">
                       <input
                         type="checkbox"
+                        role="switch"
                         aria-label="Auto-failover enabled"
                         checked={autoFailover}
                         onChange={(e) => setAutoFailover(e.target.checked)}
                       />
-                    </div>
+                      <span className="cg-switch__track" aria-hidden="true" />
+                    </span>
                   </div>
-                </section>
+                </div>
 
-                {/* The remote-host note stays in the BODY: it describes the configuration being
-                    edited, not the outcome of pressing Apply. `role="note"` keeps it out of the
-                    alert channel. */}
+                {/*
+                    🔴 `SETTINGS-MATCH-02` §9b — THE REMOTE-HOST NOTE IS A CARD HELP STRIP NOW,
+                    and the reclassification is the fix rather than a restyle.
+
+                    It was a `Notice` with `noticeRole="refusal"` — the AMBER treatment — for a
+                    fact that refuses nothing: a remote CasparCG is a configuration, and the
+                    sentence merely says which address the template server will use. `R-055`:
+                    a signal must not say what it does not mean, and amber in this dialog means
+                    BLOCKED (the rail's lock, the footer's clause, the banner). Spending it on
+                    an always-true explanation drains it where it is real.
+
+                    So it takes the class the reference gives exactly this kind of sentence —
+                    a help strip at the bottom of the card it is about — and the amber goes
+                    back to being about the on-air block alone.
+
+                    ⚠ It stays INSIDE this card, which is §9b's rule: a help strip belongs to
+                    one card and is not a pane-level band.
+                  */}
                 {remoteHosts.length > 0 && (
-                  <Notice
-                    noticeRole="refusal"
-                    aria="note"
-                    text={`Remote server (${remoteHosts.join(', ')}): the template server and OSC listener will use a LAN address so CasparCG can reach this machine. The control connection stays on 127.0.0.1.`}
-                  />
+                  <p className="cg-card__note cg-card__note--inline" data-remote-host-note="">
+                    <Icon icon={Info} size={STATION_SETUP_PX.helpIcon} />
+                    <span>
+                      Remote server ({remoteHosts.join(', ')}): the template server and OSC listener
+                      will use a LAN address so CasparCG can reach this machine. The control
+                      connection stays on 127.0.0.1.
+                    </span>
+                  </p>
                 )}
-              </SetupSection>
-            )}
+              </section>
+            </SetupSection>
+          )}
 
-            {active === 'sources' && (
-              <SetupSection id="sources">
-                <SourcesSection report={reporters.sources} />
-              </SetupSection>
-            )}
+          {active === 'sources' && (
+            <SetupSection id="sources">
+              <SourcesSection report={reporters.sources} />
+            </SetupSection>
+          )}
 
-            {active === 'delimiters' && (
-              <SetupSection id="delimiters">
-                <DelimitersSection report={reporters.delimiters} />
-              </SetupSection>
-            )}
+          {active === 'delimiters' && (
+            <SetupSection id="delimiters">
+              <DelimitersSection report={reporters.delimiters} />
+            </SetupSection>
+          )}
 
-            {active === 'candidate-layers' && (
-              <SetupSection id="candidate-layers">
-                <CandidateLayersSection
-                  report={reporters.candidateLayers}
-                  onDirtyChange={markDirty('candidate-layers')}
-                  footerSlot={footerSlot}
-                />
-              </SetupSection>
-            )}
-          </div>
-        </Tabs>
-      </div>
+          {active === 'candidate-layers' && (
+            /*
+                `SETTINGS-MATCH-02` DEFECT 3 — the head's SUMMARY TAGS and its `<details>` are
+                the section's, not the dialog's: `SetupSection` owns the head, so the pane
+                hands them in rather than drawing a second head of its own. Both read the same
+                `useFixedBankState` the table does.
+              */
+            <SetupSection
+              id="candidate-layers"
+              summary={<CandidateLayersSummary />}
+              helper={<CandidateLayersHelper />}
+            >
+              <CandidateLayersSection
+                report={reporters.candidateLayers}
+                onDirtyChange={markDirty('candidate-layers')}
+                onDirtyCountChange={markDirtyCount('candidate-layers')}
+                footerSlot={footerSlot}
+              />
+            </SetupSection>
+          )}
+        </div>
+      </TabPanel>
 
       {/*
         §6 — THE SAME SMALL SECOND DIALOG. It adds the record to the Servers DRAFT; APPLY

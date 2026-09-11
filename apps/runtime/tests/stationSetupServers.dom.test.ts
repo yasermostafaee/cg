@@ -95,7 +95,7 @@ describe('Station setup — Servers (R-010)', () => {
     expect(applyButton(el).disabled).toBe(true);
     expect(el.textContent).toContain('2 item(s) are on air or unsettled');
     // `STATION-SETUP-02` §1 — the guard did NOT widen with the dialog, and the message says so.
-    expect(el.textContent).toContain('Apply is blocked for Servers');
+    expect(el.textContent).toContain('Server changes are paused while on air');
     expect(el.textContent).toContain('Every other section stays editable');
   });
 
@@ -172,12 +172,52 @@ describe('Station setup — Servers (R-010)', () => {
     expect(el.textContent).not.toContain('NO TEMPLATE');
   });
 
-  it('validates ports and disables APPLY SERVERS on garbage', async () => {
+  /**
+   * 🔴 **REWRITTEN by `SETTINGS-MATCH-02` §10, and the rewrite is the subject rather than
+   * bookkeeping.** This typed `abc` into a port and asserted the refusal appeared SOMEWHERE in
+   * the dialog. Two things changed under it and both are the point:
+   *
+   *   · §10.3 — the field no longer ACCEPTS `abc`. Digits are normalised (a Persian `۵` is a
+   *     digit) and everything else is dropped from the VALUE, so the letters never land. What
+   *     is asserted now is that the field is empty, not that a sentence about it appeared.
+   *   · §10.6 — and the sentence that does appear is beside its own field, not in the pinned
+   *     region four cards away. With two endpoints on the tab the old placement could not even
+   *     say WHICH port.
+   *
+   * The CLAIM is unchanged and is still what the last line drives: a section with an invalid
+   * field cannot be applied.
+   */
+  it('§10 — a port will not hold letters, and an out-of-range one is refused BESIDE the field', async () => {
     stub();
     const el = await renderStationSetup({ section: 'servers' });
+    const amcp = (): HTMLInputElement | null =>
+      el.querySelector<HTMLInputElement>('input[aria-label="Primary AMCP port"]');
+
+    // 1. LETTERS NEVER LAND. Pasting a whole phrase leaves the digits that were in it.
     await setSetupInput(el, 'Primary AMCP port', 'abc');
-    expect(el.textContent).toContain('AMCP port must be an integer');
+    expect(amcp()?.value, 'letters are not a port').toBe('');
+    await setSetupInput(el, 'Primary AMCP port', 'port 5250 (AMCP)');
+    expect(amcp()?.value, 'a pasted phrase keeps its digits').toBe('5250');
+
+    // 2. A PERSIAN-TYPED PORT IS A PORT — §10.2's whole reason for normalising first.
+    await setSetupInput(el, 'Primary AMCP port', '۵۲۵۰');
+    expect(amcp()?.value, 'the operator’s own keyboard must work').toBe('5250');
+    expect(el.querySelector('[data-setup-field="Primary-amcp"] [data-field-error]')).toBeNull();
+
+    // 3. OUT OF RANGE IS A REFUSAL, NOT A CLAMP — and it is shown beside its own field.
+    await setSetupInput(el, 'Primary AMCP port', '70000');
+    expect(amcp()?.value, 'the number is NOT quietly rewritten to 65535').toBe('70000');
+    const inline = el.querySelector('[data-setup-field="Primary-amcp"] [data-field-error]');
+    expect(inline?.textContent).toContain('65535');
+    expect(amcp()?.getAttribute('aria-invalid')).toBe('true');
+    // …and the commit is dead while it stands. That claim is unchanged.
     expect(applyButton(el).disabled).toBe(true);
+
+    // 4. …and the REGION stays for events. A bad field is not something that "happened".
+    expect(
+      el.querySelector('[data-modal-message]'),
+      'a field error is not an event and does not belong in the pinned region',
+    ).toBeNull();
   });
 
   /**
@@ -250,7 +290,15 @@ describe('Station setup — Servers (R-010)', () => {
     await setSetupInput(sub, 'New backup host', '192.168.1.51');
     await setSetupInput(sub, 'New backup AMCP port', '5251');
     await setSetupInput(sub, 'New backup OSC port', '6251');
-    const confirm = [...sub.querySelectorAll('button')].find((b) => b.textContent === 'Add backup');
+    /*
+      ⭐ `SETTINGS-MATCH-02` §8a — THE VERB IS `Add to draft`, not `Add backup`. It writes into
+      the Servers DRAFT and `Apply servers` is what reaches the bridge — which is precisely
+      what the rest of this case asserts, and a button called `Add backup` beside a section
+      that refuses to apply while anything is on air read as a way round that guard.
+    */
+    const confirm = [...sub.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Add to draft',
+    );
     await act(async () => {
       confirm?.click();
       await Promise.resolve();
@@ -363,11 +411,31 @@ describe('Station setup — Servers (R-010)', () => {
     expect(input?.value).toBe('172.17.0.1');
   });
 
-  it('C-024: a non-integer serve port blocks APPLY SERVERS with a stated reason', async () => {
+  it('C-024 + §10: the serve port takes no letters, and blank stays LEGAL', async () => {
     stub();
     const el = await renderStationSetup({ section: 'servers' });
+    const port = (): HTMLInputElement | null =>
+      el.querySelector<HTMLInputElement>('input[aria-label="Template serve port"]');
+
+    // `79x11` cannot be typed into it at all now — the `x` never lands (§10.3).
     await setSetupInput(el, 'Template serve port', '79x11');
+    expect(port()?.value).toBe('7911');
+    expect(applyButton(el).disabled, 'a valid port does not block the commit').toBe(false);
+
+    /*
+      🔴 BLANK IS A VALUE, NOT AN ERROR. `templateServePort` is `.optional()` and empty means
+      "assign one automatically" — the one state this field has that the endpoint ports do not,
+      and the one a `required` rule would have quietly broken.
+    */
+    await setSetupInput(el, 'Template serve port', '');
+    expect(el.querySelector('[data-setup-field="serve-port"] [data-field-error]')).toBeNull();
+    expect(applyButton(el).disabled).toBe(false);
+
+    // …and out of range is refused beside the field, with the commit dead.
+    await setSetupInput(el, 'Template serve port', '99999');
+    expect(
+      el.querySelector('[data-setup-field="serve-port"] [data-field-error]')?.textContent,
+    ).toContain('65535');
     expect(applyButton(el).disabled).toBe(true);
-    expect(el.textContent).toContain('Template serve port must be an integer');
   });
 });

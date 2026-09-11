@@ -75,13 +75,13 @@ describe('§2 — the rail: nothing is hidden, and no refusal stands in front of
     const dialog = await renderStationSetup({ section: 'servers' });
     // On SERVERS the operator sees it, in full, above that section's own footer.
     expect(dialog.querySelector('[data-modal-message]')?.textContent).toContain(
-      'Apply is blocked for Servers',
+      'Server changes are paused while on air',
     );
 
     // …and on DELIMITERS he does not. This is the whole complaint, as an assertion.
     await selectSetupTab(dialog, 'delimiters');
     expect(dialog.querySelector('[data-modal-message]')?.textContent ?? '').not.toContain(
-      'Apply is blocked for Servers',
+      'Server changes are paused while on air',
     );
 
     // But nothing is HIDDEN: the rail still says Servers is blocked, from here.
@@ -92,7 +92,7 @@ describe('§2 — the rail: nothing is hidden, and no refusal stands in front of
     // …and one press lands on the sentence.
     await selectSetupTab(dialog, 'servers');
     expect(dialog.querySelector('[data-modal-message]')?.textContent).toContain(
-      'Apply is blocked for Servers',
+      'Server changes are paused while on air',
     );
   });
 

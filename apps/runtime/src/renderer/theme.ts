@@ -869,14 +869,24 @@ export const STATION_SETUP_PX = {
    * The reference's `.field` — a label ABOVE its control, which is the single biggest structural
    * difference on these tabs: the app spells every one as an inline `label + input` row.
    * `.field{display:flex;flex-direction:column;gap:7px}`, its `label` 13 px / 500 secondary,
-   * its `.input`/`.select` `min-height:36px;padding:7px 10px;border-radius:8px` at 15 px, and
+   * its `.input`/`.select` `min-height:42px;padding:10px 12px;border-radius:8px` at 15 px, and
    * its `.hint` 12 px muted.
+   *
+   * 🔴 **`SETTINGS-MATCH-02` — THE CONTROL'S BOX WAS MIS-TRANSCRIBED, and the owner saw it
+   * before the record did («این قسمت نامرتبه», on the plant).** `SETTINGS-DIALOG-01` recorded
+   * `36 / 7px 10px` and the reference renders `42 / 10px 12px` — checked twice over, once by
+   * measuring the painted box through the shadow root (`.input` rect height **42**, computed
+   * `min-height: 42px`, `padding: 10px 12px`) and once in the drawing's own text
+   * (`.input,.select,.textarea{min-height:42px;padding:10px 12px}`). Six pixels of height on
+   * every field in the dialog, and the visible cost is not the field itself: the FILTER BAR's
+   * search box sat 31 px tall beside a 20 px check, with its own magnifier glyph inset for a
+   * 42 px box and therefore hanging five pixels below the field's centre.
    */
   fieldGap: 7,
   fieldLabelText: 13,
-  fieldInputMinH: 36,
-  fieldInputPadY: 7,
-  fieldInputPadX: 10,
+  fieldInputMinH: 42,
+  fieldInputPadY: 10,
+  fieldInputPadX: 12,
   fieldInputRadius: 8,
   fieldInputText: 15,
   fieldHintText: 12,
@@ -935,6 +945,204 @@ export const STATION_SETUP_PX = {
   noticeGapBelow: 21,
   noticeTitleText: 14,
   noticeBodyText: 13,
+  /*
+   * ── `SETTINGS-MATCH-02` — THE REST OF THE DIALOG, measured the same way (Chromium, 1280 × 800,
+   * through the shadow root, every pane's tab CLICKED first). The frame's emblem, the rail's two
+   * marks and its foot, the footer message, the dialog's own button family, the list header, a
+   * resource row, the band card, the delimiter table, the whole Layers pane, a switch, the
+   * address chips and the help strip's glyph.
+   */
+  /** `.settings-emblem` — 44 × 44, radius 12, a 23 px glyph; `h1` tracked −.02em. */
+  emblemBox: 44,
+  emblemRadius: 12,
+  emblemGlyph: 23,
+  titleTrackingFrame: '-0.02em',
+  /** The rail's marks — `.nav-count` 18 × 18 radius 4 at 11 px / 700; `.nav-symbol svg` 13 px. */
+  navCountBox: 18,
+  navCountRadius: 4,
+  navCountText: 11,
+  navSymbolIcon: 13,
+  /** The sidebar foot — `.sidebar-foot{padding:28px 11px 0}`; `.station-card{padding-top:18px;gap:10px}` over a rule; the avatar 32 × 32 radius 8 at 12 px mono; the name 13 px / 550; the host 11 px mono, 2 px under. */
+  railFootPadTop: 28,
+  railFootPadX: 11,
+  stationCardPadTop: 18,
+  stationCardGap: 10,
+  stationAvatarBox: 32,
+  stationAvatarRadius: 8,
+  stationAvatarText: 12,
+  stationNameText: 13,
+  stationHostText: 11,
+  stationHostGap: 2,
+  /** The footer's message — `.foot-message{gap:8px}` with a 16 px glyph; `.foot-actions{gap:9px}`. */
+  footMessageGap: 8,
+  footMessageIcon: 16,
+  footActionsGap: 9,
+  /** The dialog's own button — `.btn{min-height:40px;padding:9px 15px;border-radius:8px;font-size:14px;gap:8px}` with a 17 px glyph; `.icon-btn` 38 × 38, radius 8. */
+  btnMinH: 40,
+  btnPadY: 9,
+  btnPadX: 15,
+  btnRadius: 8,
+  btnText: 14,
+  btnGap: 8,
+  btnIcon: 17,
+  iconBtnBox: 38,
+  iconBtnRadius: 8,
+  /** The section tag's glyph — `.tag svg` 13 px, gap 6. */
+  tagIcon: 13,
+  tagGap: 6,
+  /** A list header — `.list-header{margin-bottom:14px;gap:14px}`; its `h3` 16 px / 600 with the muted count 4 px after. */
+  listHeadGapBelow: 14,
+  listHeadGap: 14,
+  listCountGap: 4,
+  /** A resource row — `.resource{grid-template-columns:40px minmax(0,1fr) auto;gap:13px;padding:18px 20px}`; its tile 40 × 40 radius 9 (a 20 px glyph); the title row gapped 10 with a 14 px / 600 name and an 11 px / 500 / .035em kind; the description 12 px, 5 under; its two icon buttons 2 apart. */
+  resourceIconBox: 40,
+  resourceIconRadius: 9,
+  resourceGap: 13,
+  resourcePadY: 18,
+  resourcePadX: 20,
+  resourceTitleGap: 10,
+  resourceTitleText: 14,
+  resourceTypeText: 11,
+  resourceTypeTracking: '0.035em',
+  resourceDescText: 12,
+  resourceDescGap: 5,
+  resourceActionsGap: 2,
+  /** The band card — `.band-card{margin-top:24px}`; `.band-fields{grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr) auto;gap:12px;max-width:470px}` with the dash padded 10 under; `.band-summary` 12 px, 13 under. */
+  bandGapAbove: 24,
+  bandFieldsGap: 12,
+  bandFieldsMaxW: 470,
+  bandDashW: 20,
+  bandDashPadBottom: 10,
+  bandSummaryText: 12,
+  bandSummaryGap: 13,
+  /** The delimiter table — `td{padding:12px 18px}`, the actions column 104; `.delimiter-symbol` min 40 × 29, `3px 9px`, radius 6, 14 px mono; `.delimiter-meaning` 12 px, 9 after; `.delimiter-bottom{margin-top:14px;gap:18px}` at 13 px; `.reset-link{padding:7px 0}` underlined 4 under. */
+  delimiterTdPadY: 12,
+  delimiterActionsW: 104,
+  delimiterSymbolMinW: 40,
+  delimiterSymbolMinH: 29,
+  delimiterSymbolPadY: 3,
+  delimiterSymbolPadX: 9,
+  delimiterSymbolRadius: 6,
+  delimiterSymbolText: 14,
+  delimiterMeaningText: 12,
+  delimiterMeaningGap: 9,
+  delimiterBottomGapAbove: 14,
+  delimiterBottomGap: 18,
+  delimiterBottomText: 13,
+  resetLinkPadY: 7,
+  resetLinkUnderline: 4,
+  /** The Layers pane — `.layer-summary{gap:8px;margin-top:14px}`; `.filter-bar{gap:16px;margin:21px 0 15px}`; `.search-field{max-width:320px}` with a 17 px glyph inset 12 and the input padded 37 at 13 px; `.check{gap:8px}` 13 px with a 16 px box; `.layer-results` 12 px; `.layer-table{min-width:605px}` with th/td `11px 13px` and columns 73 / 65 / 40 %; `.layer-id` 13 px / 500 mono; `.row-number` 11 px, 2 under; `.template-name` 13 px; `.occupied-label` 11 px, 4 under, gap 4, an 11 px glyph; the table's input `min-height:37px;padding:8px 10px` at 13 px; a dirty row's 3 px inset; `.layer-footnote` 12 px, 10 above, gap 6, a 14 px glyph; `.beds-head{margin:25px 0 13px}` with `h3` 16 / 600 over a 13 px line 4 under; `.empty-state{padding:32px 20px}` with a 28 px glyph 8 over the `h3` and a 13 px line 5 under. */
+  summaryGap: 8,
+  summaryGapAbove: 14,
+  filterGap: 16,
+  filterGapAbove: 21,
+  filterGapBelow: 15,
+  searchMaxW: 320,
+  searchIcon: 17,
+  searchIconInset: 12,
+  searchPadStart: 37,
+  searchText: 13,
+  checkGap: 8,
+  checkText: 13,
+  checkBox: 16,
+  resultsText: 12,
+  layerTableMinW: 605,
+  layerThPadY: 11,
+  layerThPadX: 13,
+  layerColLayerW: 73,
+  layerColShowW: 65,
+  layerColNamePct: 40,
+  layerIdText: 13,
+  rowNumberText: 11,
+  rowNumberGap: 2,
+  templateNameText: 13,
+  occupiedText: 11,
+  occupiedGap: 4,
+  occupiedIcon: 11,
+  layerInputMinH: 37,
+  layerInputPadY: 8,
+  layerInputPadX: 10,
+  layerInputText: 13,
+  dirtyInset: 3,
+  footnoteText: 12,
+  footnoteGapAbove: 10,
+  footnoteGap: 6,
+  footnoteIcon: 14,
+  bedsHeadGapAbove: 25,
+  bedsHeadGapBelow: 13,
+  bedsHeadText: 16,
+  bedsLineText: 13,
+  bedsLineGap: 4,
+  emptyStatePadY: 32,
+  emptyStatePadX: 20,
+  emptyStateIcon: 28,
+  emptyStateIconGap: 8,
+  emptyStateText: 13,
+  emptyStateGap: 5,
+  /** A switch — `.switch-track` 36 × 21 radius 20; its knob 13, inset 3, travelling 15. */
+  switchW: 36,
+  switchH: 21,
+  switchRadius: 20,
+  switchKnob: 13,
+  switchKnobInset: 3,
+  switchTravel: 15,
+  /** The local-address chips — `.address-chips{gap:7px;margin-top:2px}`; a chip `4px 7px`, radius 5, 12 px mono. */
+  chipsGap: 7,
+  chipsGapAbove: 2,
+  addressChipPadY: 4,
+  addressChipPadX: 7,
+  addressChipRadius: 5,
+  addressChipText: 12,
+  /** The help strip's glyph — `.card-help svg` 15 px, 3 px down; `.card-help.inline{gap:8px}`. */
+  helpIcon: 15,
+  helpIconOffset: 3,
+  helpGap: 8,
+  /** The mono input — `.input.mono` renders 14 px (the `.select` keeps 15). */
+  fieldMonoText: 14,
+  /**
+   * ── `SETTINGS-MATCH-02` §8 — THE SUB-DIALOG, the one frame every add / edit / remove in
+   * Station setup opens. `.sub-dialog{width:min(480px,calc(100vw - 32px))}`,
+   * `.sub-head{padding:21px 24px 17px;gap:12px}` with an 18 px / −.02em title,
+   * `.sub-body{padding:23px 24px}` whose `.fields` gap is 17, and
+   * `.sub-foot{padding:16px 24px;gap:9px;background:#12171e}`.
+   */
+  subW: 480,
+  subInset: 32,
+  subHeadPadTop: 21,
+  subHeadPadX: 24,
+  subHeadPadBottom: 17,
+  subHeadGap: 12,
+  subTitleText: 18,
+  subBodyPadY: 23,
+  subBodyPadX: 24,
+  subFieldsGap: 17,
+  subFootPadY: 16,
+  subFootPadX: 24,
+  subFootGap: 9,
+  /** Its lede — `.sub-description{font-size:14px;line-height:1.65;margin-bottom:20px}`. */
+  subLedeText: 14,
+  subLedeGap: 20,
+  /** The kind picker — `.kind-options{grid 3 × 1fr;gap:8px}`, an option `min-height:46px` radius 8 at 13 px with a 16 px glyph. */
+  kindOptionsGap: 8,
+  kindOptionMinH: 46,
+  kindOptionRadius: 8,
+  kindOptionText: 13,
+  kindOptionIcon: 16,
+  /** The destructive emblem — `.confirm-icon` 44 × 44, radius 11, 16 px under it. */
+  confirmIconBox: 44,
+  confirmIconRadius: 11,
+  confirmIconGap: 16,
+  /** Its copy — `.confirm-copy{font-size:14px;line-height:1.7}`. */
+  confirmCopyText: 14,
+  /** The delimiter PREVIEW — `.split-preview{padding:15px;border-radius:9px;margin-top:18px}` on `#121820`, its eyebrow 10 under, its chips `5px 10px` radius 5 gapped 6. */
+  previewPad: 15,
+  previewRadius: 9,
+  previewGapAbove: 18,
+  previewEyebrowGap: 10,
+  previewChipPadY: 5,
+  previewChipPadX: 10,
+  previewChipRadius: 5,
+  previewChipGap: 6,
 } as const;
 /**
  * `RUNTIME-REDESIGN-01` PHASE 8 — the template picker (`01-template-picker.html`) and the
@@ -2438,6 +2646,293 @@ export const cssVars = {
   '--r-setup-notice-gap-below': `${String(STATION_SETUP_PX.noticeGapBelow)}px`,
   '--r-setup-notice-title-text': `${String(STATION_SETUP_PX.noticeTitleText)}px`,
   '--r-setup-notice-body-text': `${String(STATION_SETUP_PX.noticeBodyText)}px`,
+  /*
+   * ══ `SETTINGS-MATCH-02` — THE STATION-SETUP SURFACE FAMILY ══════════════════════════════
+   *
+   * 🔴 **DEFECT 1, AND ITS ROOT CAUSE IS THE SENTENCE THAT USED TO SIT ABOVE `STATION_SETUP_PX`.**
+   * It read: _"its OWN palette … is NOT the console's approved palette. Only the GEOMETRY is
+   * transcribed here; every colour is a role token."_ That is RIGHT about the mint and WRONG
+   * about the NEUTRALS, and the neutrals were swept out with it. Measured, that swap inverted
+   * the dialog's depth:
+   *
+   *   | surface        | reference | what we painted                |
+   *   | dialog ground  | `#15191f` | `#141b25` (`--r-surface`)      |
+   *   | a CARD on it   | `#191e25` | `#0b1017` (`--r-surface-sunken`)|
+   *
+   * The reference's card is one step LIGHTER than the ground it sits on; ours was the darkest
+   * value in the whole palette, so every box in the dialog read as a HOLE rather than as a
+   * card. Owner, on the built dialog, twice: _"the box/card colours inside the modal are
+   * wrong."_ That is this.
+   *
+   * ⚠ **SCOPED TO THIS FRAME, and that is the whole design of this block.** These are not a
+   * second console palette: nothing outside `[data-modal-size='fixed']` reads them, so the
+   * layer table, the Inspector and every panel keep `--r-surface*` exactly as they are. The
+   * reference's Station setup IS a separate shadow family with its own surfaces (`design.md`
+   * §14.3), and this is that family, named by ROLE so a later retune is one edit per role.
+   *
+   * ⚠ **THE INK IS NOT TAKEN, and the reason is a measurement rather than a preference.** The
+   * reference's three ranks are `#f1f4f7` / `#b8c0cc` / `#8e99a9`; ours are `#eef3f9` /
+   * `#bbc8d7` / `#8e9eaf`. The largest per-channel delta across all three is ELEVEN of 255 and
+   * the smallest is zero — invisible on screen, and adopting them would mint three more ink
+   * tokens for a difference no operator can see while splitting the console's type ramp in
+   * two. The ink stays the console's.
+   */
+  /** The frame's own ground — `.settings{background:var(--surface)}`. */
+  '--r-setup-surface': '#15191f',
+  /** The rail's ground — `.sidebar{background:#11151b}`, one step under the frame. */
+  '--r-setup-rail-bg': '#11151b',
+  /** A CARD — `.card{background:#191e25;border:1px solid var(--line)}`. RAISED off the frame. */
+  '--r-setup-card-bg': '#191e25',
+  '--r-setup-card-line': '#2b323c',
+  /** The quieter rule INSIDE a card — `--line-soft`: under a card head, between two rows. */
+  '--r-setup-rule': '#232a33',
+  /** A card's HELP band — `.card-help{background:#161b22}`, under a rule. */
+  '--r-setup-help-bg': '#161b22',
+  /** A table's head band — `.data-table th{background:#14191f}`. */
+  '--r-setup-table-head-bg': '#14191f',
+  /** A record row under the pointer — `.data-table tbody tr:hover{background:#1d242d}`. */
+  '--r-setup-row-hover': '#1d242d',
+  /** A FIELD in this dialog — `.input{background:#10151c;border-color:#3b4552}`, hover `#596575`. */
+  '--r-setup-field-bg': '#10151c',
+  '--r-setup-field-line': '#3b4552',
+  '--r-setup-field-hover-line': '#596575',
+  /** The INLINE table input — `.layer-table .input{background:#121820;border-color:transparent}`, hover `#414f5f`. */
+  '--r-setup-inline-input-bg': '#121820',
+  '--r-setup-inline-input-hover-line': '#414f5f',
+  /** A chip — `.tag{background:#1c222a;border-color:#35404c}`; the mono chips take the raised one. */
+  '--r-setup-chip-bg': '#1c222a',
+  '--r-setup-chip-line': '#35404c',
+  /** A mono token chip — `.slot` / `.address-chip` / `.station-avatar` grounds. */
+  '--r-setup-token-bg': '#202732',
+  '--r-setup-token-line': '#38414d',
+  /** A delimiter's own characters — `.delimiter-symbol{background:#11171e;border-color:#39434f}`. */
+  '--r-setup-symbol-bg': '#11171e',
+  '--r-setup-symbol-line': '#39434f',
+  /**
+   * THE DIALOG'S BUTTON — `.btn{background:#242b34;border-color:var(--line)}`, hover
+   * `#303945` / `#465363`; `.icon-btn:hover{background:#2a323d}`.
+   */
+  '--r-setup-btn-bg': '#242b34',
+  '--r-setup-btn-hover-bg': '#303945',
+  '--r-setup-btn-hover-line': '#465363',
+  '--r-setup-icon-btn-hover-bg': '#2a323d',
+  /** An EMPTY tile — `.empty-icon{background:#232b35;border:1px dashed #485465}`. */
+  '--r-setup-empty-icon-bg': '#232b35',
+  '--r-setup-empty-icon-line': '#485465',
+  /**
+   * 🔴 THE MINT, AND WHERE OWNER ANSWER A4 PUTS IT.
+   *
+   * A4 reads _"the outer primary is `--r-accent`; the reference's MINT belongs only to its
+   * shadow family."_ **This dialog IS that shadow family**, so A4 LOCALISES the mint here
+   * rather than forbidding it — it is not a licence anywhere else, and nothing outside
+   * `[data-modal-size='fixed']` may read these.
+   *
+   * ⚠ **IT IS KEPT OFF EVERYTHING THAT STATES AIR**, which is the standing rule (`design.md`
+   * §20.6) and is why this list is short: the SELECTED rail item, the rail's unapplied COUNT
+   * chip, the dialog's own `primary` (`Add …` / `Apply …`), and a dirty row's marks. No
+   * surface in this dialog reports air, so none of those can be mistaken for one — and the
+   * A/B server chip stays OFF the mint deliberately, because a green mark beside a SERVER'S
+   * NAME is exactly the health claim the rule forbids.
+   */
+  '--r-setup-accent': '#8ce6d1',
+  /** The dark ink a filled mint control owes — `.btn.primary{color:#10251f}`. */
+  '--r-setup-accent-ink': '#10251f',
+  /** …and the count chip's, which the reference draws one notch different (`#152720`). */
+  '--r-setup-count-ink': '#152720',
+  /** `.btn.primary:hover{background:#acf3e2}`. */
+  '--r-setup-accent-hover': '#acf3e2',
+  /** The SELECTED rail item — `.tab[aria-selected=true]{background:#20322f;border-color:#314b45;color:#c8f9ed}`. */
+  '--r-setup-selected-bg': '#20322f',
+  '--r-setup-selected-line': '#314b45',
+  '--r-setup-selected-ink': '#c8f9ed',
+  /** …and a rail item under the pointer — `.tab:hover{background:#1c222b}`. */
+  '--r-setup-tab-hover-bg': '#1c222b',
+  /** A DIRTY row's input edge — `.layer-table tr.edited .input{border-color:#48786b}`. */
+  '--r-setup-dirty-line': '#48786b',
+  /**
+   * THE VIDEO-FORMAT CARD — `.video-card`, the one card the reference tints:
+   * `linear-gradient(115deg,#1b2728 0%,#1b2229 65%,#1b2229 100%)` over a `#35463f` edge.
+   * A GRADIENT and not a hue: it is the faintest green-grey wash, which is why it reads as
+   * "this card is the channel itself" without claiming anything about air.
+   */
+  '--r-setup-video-bg': 'linear-gradient(115deg, #1b2728 0%, #1b2229 65%, #1b2229 100%)',
+  '--r-setup-video-line': '#35463f',
+  /** A SWITCH — `.switch-track{background:#39424f;border-color:#515d6c}` with a `#d8dee6` knob. */
+  '--r-setup-switch-bg': '#39424f',
+  '--r-setup-switch-line': '#515d6c',
+  '--r-setup-switch-knob': '#d8dee6',
+  /** …and the knob's ink once the track is mint — `.switch input:checked+.switch-track:after`. */
+  '--r-setup-switch-knob-on': '#17332b',
+  /*
+   * ── `SETTINGS-MATCH-02` — the GEOMETRY for the four bodies and the frame's remaining chrome.
+   * Read by `controls.css`'s `.cg-setup-*`, `.cg-rail-*`, `.cg-layer-*` and `.cg-resource-*`.
+   */
+  '--r-setup-emblem-box': `${String(STATION_SETUP_PX.emblemBox)}px`,
+  '--r-setup-emblem-radius': `${String(STATION_SETUP_PX.emblemRadius)}px`,
+  '--r-setup-emblem-glyph': `${String(STATION_SETUP_PX.emblemGlyph)}px`,
+  '--r-setup-title-tracking-frame': STATION_SETUP_PX.titleTrackingFrame,
+  '--r-setup-nav-count-box': `${String(STATION_SETUP_PX.navCountBox)}px`,
+  '--r-setup-nav-count-radius': `${String(STATION_SETUP_PX.navCountRadius)}px`,
+  '--r-setup-nav-count-text': `${String(STATION_SETUP_PX.navCountText)}px`,
+  '--r-setup-nav-symbol-icon': `${String(STATION_SETUP_PX.navSymbolIcon)}px`,
+  '--r-setup-rail-foot-pad': `${String(STATION_SETUP_PX.railFootPadTop)}px ${String(STATION_SETUP_PX.railFootPadX)}px 0`,
+  '--r-setup-station-card-pad-top': `${String(STATION_SETUP_PX.stationCardPadTop)}px`,
+  '--r-setup-station-card-gap': `${String(STATION_SETUP_PX.stationCardGap)}px`,
+  '--r-setup-station-avatar-box': `${String(STATION_SETUP_PX.stationAvatarBox)}px`,
+  '--r-setup-station-avatar-radius': `${String(STATION_SETUP_PX.stationAvatarRadius)}px`,
+  '--r-setup-station-avatar-text': `${String(STATION_SETUP_PX.stationAvatarText)}px`,
+  '--r-setup-station-name-text': `${String(STATION_SETUP_PX.stationNameText)}px`,
+  '--r-setup-station-host-text': `${String(STATION_SETUP_PX.stationHostText)}px`,
+  '--r-setup-station-host-gap': `${String(STATION_SETUP_PX.stationHostGap)}px`,
+  '--r-setup-foot-message-gap': `${String(STATION_SETUP_PX.footMessageGap)}px`,
+  '--r-setup-foot-message-icon': `${String(STATION_SETUP_PX.footMessageIcon)}px`,
+  '--r-setup-foot-actions-gap': `${String(STATION_SETUP_PX.footActionsGap)}px`,
+  '--r-setup-btn-min-h': `${String(STATION_SETUP_PX.btnMinH)}px`,
+  '--r-setup-btn-pad': `${String(STATION_SETUP_PX.btnPadY)}px ${String(STATION_SETUP_PX.btnPadX)}px`,
+  '--r-setup-btn-radius': `${String(STATION_SETUP_PX.btnRadius)}px`,
+  '--r-setup-btn-text': `${String(STATION_SETUP_PX.btnText)}px`,
+  '--r-setup-btn-gap': `${String(STATION_SETUP_PX.btnGap)}px`,
+  '--r-setup-btn-icon': `${String(STATION_SETUP_PX.btnIcon)}px`,
+  '--r-setup-icon-btn-box': `${String(STATION_SETUP_PX.iconBtnBox)}px`,
+  '--r-setup-icon-btn-radius': `${String(STATION_SETUP_PX.iconBtnRadius)}px`,
+  '--r-setup-tag-icon': `${String(STATION_SETUP_PX.tagIcon)}px`,
+  '--r-setup-tag-gap': `${String(STATION_SETUP_PX.tagGap)}px`,
+  '--r-setup-list-head-gap-below': `${String(STATION_SETUP_PX.listHeadGapBelow)}px`,
+  '--r-setup-list-head-gap': `${String(STATION_SETUP_PX.listHeadGap)}px`,
+  '--r-setup-list-count-gap': `${String(STATION_SETUP_PX.listCountGap)}px`,
+  '--r-setup-resource-icon-box': `${String(STATION_SETUP_PX.resourceIconBox)}px`,
+  '--r-setup-resource-icon-radius': `${String(STATION_SETUP_PX.resourceIconRadius)}px`,
+  '--r-setup-resource-gap': `${String(STATION_SETUP_PX.resourceGap)}px`,
+  '--r-setup-resource-pad': `${String(STATION_SETUP_PX.resourcePadY)}px ${String(STATION_SETUP_PX.resourcePadX)}px`,
+  '--r-setup-resource-title-gap': `${String(STATION_SETUP_PX.resourceTitleGap)}px`,
+  '--r-setup-resource-title-text': `${String(STATION_SETUP_PX.resourceTitleText)}px`,
+  '--r-setup-resource-type-text': `${String(STATION_SETUP_PX.resourceTypeText)}px`,
+  '--r-setup-resource-type-tracking': STATION_SETUP_PX.resourceTypeTracking,
+  '--r-setup-resource-desc-text': `${String(STATION_SETUP_PX.resourceDescText)}px`,
+  '--r-setup-resource-desc-gap': `${String(STATION_SETUP_PX.resourceDescGap)}px`,
+  '--r-setup-resource-actions-gap': `${String(STATION_SETUP_PX.resourceActionsGap)}px`,
+  '--r-setup-band-gap-above': `${String(STATION_SETUP_PX.bandGapAbove)}px`,
+  '--r-setup-band-fields-gap': `${String(STATION_SETUP_PX.bandFieldsGap)}px`,
+  '--r-setup-band-fields-max-w': `${String(STATION_SETUP_PX.bandFieldsMaxW)}px`,
+  '--r-setup-band-dash-w': `${String(STATION_SETUP_PX.bandDashW)}px`,
+  '--r-setup-band-dash-pad-bottom': `${String(STATION_SETUP_PX.bandDashPadBottom)}px`,
+  '--r-setup-band-summary-text': `${String(STATION_SETUP_PX.bandSummaryText)}px`,
+  '--r-setup-band-summary-gap': `${String(STATION_SETUP_PX.bandSummaryGap)}px`,
+  '--r-setup-delimiter-td-pad-y': `${String(STATION_SETUP_PX.delimiterTdPadY)}px`,
+  '--r-setup-delimiter-actions-w': `${String(STATION_SETUP_PX.delimiterActionsW)}px`,
+  '--r-setup-symbol-min-w': `${String(STATION_SETUP_PX.delimiterSymbolMinW)}px`,
+  '--r-setup-symbol-min-h': `${String(STATION_SETUP_PX.delimiterSymbolMinH)}px`,
+  '--r-setup-symbol-pad': `${String(STATION_SETUP_PX.delimiterSymbolPadY)}px ${String(STATION_SETUP_PX.delimiterSymbolPadX)}px`,
+  '--r-setup-symbol-radius': `${String(STATION_SETUP_PX.delimiterSymbolRadius)}px`,
+  '--r-setup-symbol-text': `${String(STATION_SETUP_PX.delimiterSymbolText)}px`,
+  '--r-setup-meaning-text': `${String(STATION_SETUP_PX.delimiterMeaningText)}px`,
+  '--r-setup-meaning-gap': `${String(STATION_SETUP_PX.delimiterMeaningGap)}px`,
+  '--r-setup-list-bottom-gap-above': `${String(STATION_SETUP_PX.delimiterBottomGapAbove)}px`,
+  '--r-setup-list-bottom-gap': `${String(STATION_SETUP_PX.delimiterBottomGap)}px`,
+  '--r-setup-list-bottom-text': `${String(STATION_SETUP_PX.delimiterBottomText)}px`,
+  '--r-setup-reset-link-pad': `${String(STATION_SETUP_PX.resetLinkPadY)}px 0`,
+  '--r-setup-reset-link-underline': `${String(STATION_SETUP_PX.resetLinkUnderline)}px`,
+  '--r-setup-summary-gap': `${String(STATION_SETUP_PX.summaryGap)}px`,
+  '--r-setup-summary-gap-above': `${String(STATION_SETUP_PX.summaryGapAbove)}px`,
+  '--r-setup-filter-gap': `${String(STATION_SETUP_PX.filterGap)}px`,
+  '--r-setup-filter-margin': `${String(STATION_SETUP_PX.filterGapAbove)}px 0 ${String(STATION_SETUP_PX.filterGapBelow)}px`,
+  '--r-setup-search-max-w': `${String(STATION_SETUP_PX.searchMaxW)}px`,
+  '--r-setup-search-icon': `${String(STATION_SETUP_PX.searchIcon)}px`,
+  '--r-setup-search-icon-inset': `${String(STATION_SETUP_PX.searchIconInset)}px`,
+  '--r-setup-search-pad-start': `${String(STATION_SETUP_PX.searchPadStart)}px`,
+  '--r-setup-search-text': `${String(STATION_SETUP_PX.searchText)}px`,
+  '--r-setup-check-gap': `${String(STATION_SETUP_PX.checkGap)}px`,
+  '--r-setup-check-text': `${String(STATION_SETUP_PX.checkText)}px`,
+  '--r-setup-check-box': `${String(STATION_SETUP_PX.checkBox)}px`,
+  '--r-setup-results-text': `${String(STATION_SETUP_PX.resultsText)}px`,
+  '--r-layer-table-min-w': `${String(STATION_SETUP_PX.layerTableMinW)}px`,
+  '--r-layer-cell-pad': `${String(STATION_SETUP_PX.layerThPadY)}px ${String(STATION_SETUP_PX.layerThPadX)}px`,
+  '--r-layer-col-layer-w': `${String(STATION_SETUP_PX.layerColLayerW)}px`,
+  '--r-layer-col-show-w': `${String(STATION_SETUP_PX.layerColShowW)}px`,
+  '--r-layer-col-name-w': `${String(STATION_SETUP_PX.layerColNamePct)}%`,
+  '--r-layer-id-text': `${String(STATION_SETUP_PX.layerIdText)}px`,
+  '--r-layer-row-number-text': `${String(STATION_SETUP_PX.rowNumberText)}px`,
+  '--r-layer-row-number-gap': `${String(STATION_SETUP_PX.rowNumberGap)}px`,
+  '--r-layer-template-text': `${String(STATION_SETUP_PX.templateNameText)}px`,
+  '--r-layer-occupied-text': `${String(STATION_SETUP_PX.occupiedText)}px`,
+  '--r-layer-occupied-gap': `${String(STATION_SETUP_PX.occupiedGap)}px`,
+  '--r-layer-occupied-icon': `${String(STATION_SETUP_PX.occupiedIcon)}px`,
+  '--r-layer-input-min-h': `${String(STATION_SETUP_PX.layerInputMinH)}px`,
+  '--r-layer-input-pad': `${String(STATION_SETUP_PX.layerInputPadY)}px ${String(STATION_SETUP_PX.layerInputPadX)}px`,
+  '--r-layer-input-text': `${String(STATION_SETUP_PX.layerInputText)}px`,
+  '--r-layer-dirty-inset': `${String(STATION_SETUP_PX.dirtyInset)}px`,
+  '--r-layer-footnote-text': `${String(STATION_SETUP_PX.footnoteText)}px`,
+  '--r-layer-footnote-gap-above': `${String(STATION_SETUP_PX.footnoteGapAbove)}px`,
+  '--r-layer-footnote-gap': `${String(STATION_SETUP_PX.footnoteGap)}px`,
+  '--r-layer-footnote-icon': `${String(STATION_SETUP_PX.footnoteIcon)}px`,
+  '--r-setup-beds-head-margin': `${String(STATION_SETUP_PX.bedsHeadGapAbove)}px 0 ${String(STATION_SETUP_PX.bedsHeadGapBelow)}px`,
+  '--r-setup-beds-head-text': `${String(STATION_SETUP_PX.bedsHeadText)}px`,
+  '--r-setup-beds-line-text': `${String(STATION_SETUP_PX.bedsLineText)}px`,
+  '--r-setup-beds-line-gap': `${String(STATION_SETUP_PX.bedsLineGap)}px`,
+  '--r-setup-empty-state-pad': `${String(STATION_SETUP_PX.emptyStatePadY)}px ${String(STATION_SETUP_PX.emptyStatePadX)}px`,
+  '--r-setup-empty-state-icon': `${String(STATION_SETUP_PX.emptyStateIcon)}px`,
+  '--r-setup-empty-state-icon-gap': `${String(STATION_SETUP_PX.emptyStateIconGap)}px`,
+  '--r-setup-empty-state-text': `${String(STATION_SETUP_PX.emptyStateText)}px`,
+  '--r-setup-empty-state-gap': `${String(STATION_SETUP_PX.emptyStateGap)}px`,
+  '--r-setup-switch-w': `${String(STATION_SETUP_PX.switchW)}px`,
+  '--r-setup-switch-h': `${String(STATION_SETUP_PX.switchH)}px`,
+  '--r-setup-switch-radius': `${String(STATION_SETUP_PX.switchRadius)}px`,
+  '--r-setup-switch-knob-box': `${String(STATION_SETUP_PX.switchKnob)}px`,
+  '--r-setup-switch-knob-inset': `${String(STATION_SETUP_PX.switchKnobInset)}px`,
+  '--r-setup-switch-travel': `${String(STATION_SETUP_PX.switchTravel)}px`,
+  '--r-setup-chips-gap': `${String(STATION_SETUP_PX.chipsGap)}px`,
+  '--r-setup-chips-gap-above': `${String(STATION_SETUP_PX.chipsGapAbove)}px`,
+  '--r-setup-address-chip-pad': `${String(STATION_SETUP_PX.addressChipPadY)}px ${String(STATION_SETUP_PX.addressChipPadX)}px`,
+  '--r-setup-address-chip-radius': `${String(STATION_SETUP_PX.addressChipRadius)}px`,
+  '--r-setup-address-chip-text': `${String(STATION_SETUP_PX.addressChipText)}px`,
+  '--r-setup-help-icon': `${String(STATION_SETUP_PX.helpIcon)}px`,
+  '--r-setup-help-icon-offset': `${String(STATION_SETUP_PX.helpIconOffset)}px`,
+  '--r-setup-help-gap': `${String(STATION_SETUP_PX.helpGap)}px`,
+  '--r-setup-field-mono-text': `${String(STATION_SETUP_PX.fieldMonoText)}px`,
+  /*
+   * ── `SETTINGS-MATCH-02` §8 — THE SUB-DIALOG FAMILY. Read by `controls.css`'s `.cg-sub-*`
+   * and `.cg-kind-*` rules and by `Modal`'s `record` size.
+   */
+  '--r-modal-w-record': `min(${String(STATION_SETUP_PX.subW)}px, calc(100vw - ${String(STATION_SETUP_PX.subInset)}px))`,
+  '--r-sub-head-pad': `${String(STATION_SETUP_PX.subHeadPadTop)}px ${String(STATION_SETUP_PX.subHeadPadX)}px ${String(STATION_SETUP_PX.subHeadPadBottom)}px`,
+  '--r-sub-head-gap': `${String(STATION_SETUP_PX.subHeadGap)}px`,
+  '--r-sub-title-text': `${String(STATION_SETUP_PX.subTitleText)}px`,
+  '--r-sub-body-pad': `${String(STATION_SETUP_PX.subBodyPadY)}px ${String(STATION_SETUP_PX.subBodyPadX)}px`,
+  '--r-sub-fields-gap': `${String(STATION_SETUP_PX.subFieldsGap)}px`,
+  '--r-sub-foot-pad': `${String(STATION_SETUP_PX.subFootPadY)}px ${String(STATION_SETUP_PX.subFootPadX)}px`,
+  '--r-sub-foot-gap': `${String(STATION_SETUP_PX.subFootGap)}px`,
+  /** The sub-dialog's footer band — `.sub-foot{background:#12171e}`, a step under its body. */
+  '--r-sub-foot-bg': '#12171e',
+  '--r-sub-lede-text': `${String(STATION_SETUP_PX.subLedeText)}px`,
+  '--r-sub-lede-gap': `${String(STATION_SETUP_PX.subLedeGap)}px`,
+  '--r-kind-options-gap': `${String(STATION_SETUP_PX.kindOptionsGap)}px`,
+  '--r-kind-option-min-h': `${String(STATION_SETUP_PX.kindOptionMinH)}px`,
+  '--r-kind-option-radius': `${String(STATION_SETUP_PX.kindOptionRadius)}px`,
+  '--r-kind-option-text': `${String(STATION_SETUP_PX.kindOptionText)}px`,
+  '--r-kind-option-icon': `${String(STATION_SETUP_PX.kindOptionIcon)}px`,
+  /** A kind option — `#11171e` on a `#394451` edge; SELECTED `#1d342e` / `#629b89` / `#c6f4e7`. */
+  '--r-kind-option-bg': '#11171e',
+  '--r-kind-option-line': '#394451',
+  '--r-kind-option-sel-bg': '#1d342e',
+  '--r-kind-option-sel-line': '#629b89',
+  '--r-kind-option-sel-ink': '#c6f4e7',
+  '--r-confirm-icon-box': `${String(STATION_SETUP_PX.confirmIconBox)}px`,
+  '--r-confirm-icon-radius': `${String(STATION_SETUP_PX.confirmIconRadius)}px`,
+  '--r-confirm-icon-gap': `${String(STATION_SETUP_PX.confirmIconGap)}px`,
+  '--r-confirm-copy-text': `${String(STATION_SETUP_PX.confirmCopyText)}px`,
+  /** The destructive emblem — `.confirm-icon` on `--red-bg` behind a `#684044` edge. */
+  '--r-confirm-icon-line': '#684044',
+  '--r-preview-pad': `${String(STATION_SETUP_PX.previewPad)}px`,
+  '--r-preview-radius': `${String(STATION_SETUP_PX.previewRadius)}px`,
+  '--r-preview-gap-above': `${String(STATION_SETUP_PX.previewGapAbove)}px`,
+  '--r-preview-eyebrow-gap': `${String(STATION_SETUP_PX.previewEyebrowGap)}px`,
+  '--r-preview-chip-pad': `${String(STATION_SETUP_PX.previewChipPadY)}px ${String(STATION_SETUP_PX.previewChipPadX)}px`,
+  '--r-preview-chip-radius': `${String(STATION_SETUP_PX.previewChipRadius)}px`,
+  '--r-preview-chip-gap': `${String(STATION_SETUP_PX.previewChipGap)}px`,
+  /** A preview chip — `.split-item{background:#20332f;border-color:#355149;color:#b5e3d5}`. */
+  '--r-preview-chip-bg': '#20332f',
+  '--r-preview-chip-line': '#355149',
+  '--r-preview-chip-ink': '#b5e3d5',
   /*
    * ── `RUNTIME-REDESIGN-01` PHASE 8 — the template picker (`LIBRARY_PX`) and the audit log
    * (`AUDIT_LOG_PX`), cited to the RENDERED reference; see the constants' notes. Read by

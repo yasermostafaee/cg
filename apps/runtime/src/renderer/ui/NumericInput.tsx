@@ -50,6 +50,26 @@ interface NumericInputProps extends Omit<
    * control is worse than meaningless. A caller says when the value is a magnitude.
    */
   scrub?: { step?: number | undefined; min?: number | undefined; max?: number | undefined };
+  /**
+   * 🔴 `SETTINGS-MATCH-02` §10.3 — **DIGITS ONLY: keep `0-9`, drop everything else.**
+   *
+   * ── WHY IT IS OPT-IN RATHER THAN THIS PRIMITIVE'S DEFAULT ───────────────────
+   *
+   * Normalising Persian digits is right for every numeric field and always has been, which is
+   * why it is unconditional above. FILTERING is not: this component also serves values that
+   * legitimately hold a character that is not a digit — a position offset can be negative
+   * (`-`), a `decimal` field carries a `.`, and both are mid-typing states (`-`, `1.`) that a
+   * filter would eat as the operator typed them.
+   *
+   * So the fields whose contract is a WHOLE NUMBER say so — the ports, a device index, a route
+   * channel, a layer — and nothing else changes. `fieldValue.ts` carries the contract table
+   * that decides which ones those are.
+   *
+   * ⚠ Applied to the VALUE, in `onChange`, never to the keystroke: `preventDefault` on keydown
+   * would break paste, Ctrl+A/C/V, the arrows, Home/End and undo — and paste is the path that
+   * actually carries `port 5250 (AMCP)` into a field.
+   */
+  allow?: 'digits';
 }
 
 export function NumericInput({
@@ -57,6 +77,7 @@ export function NumericInput({
   onValueChange,
   decimal = false,
   scrub,
+  allow,
   ...rest
 }: NumericInputProps): JSX.Element {
   // The gestures operate on a NUMBER while the input is controlled by a STRING (so
@@ -109,15 +130,36 @@ export function NumericInput({
         const el = e.currentTarget;
         const raw = el.value;
         const normalized = normalizeDigits(raw, { decimal });
-        if (normalized !== raw) {
-          // The mapping is 1:1 per character, so the caret index survives the
-          // swap — write the DOM now and restore it, or React's controlled
-          // re-render would throw the caret to the end on a mid-string edit.
+        /*
+          §10.3 — normalise FIRST, then filter. The order is the whole of §10.2: a Persian
+          `۵` has to become `5` before anything asks whether it is a digit, or the operator's
+          own keyboard produces a field he cannot type into.
+        */
+        const next = allow === 'digits' ? normalized.replace(/[^0-9]/g, '') : normalized;
+        if (next !== raw) {
+          /*
+            Normalising is 1:1 per character, so the caret index survives it — write the DOM
+            now and restore it, or React's controlled re-render would throw the caret to the
+            end on a mid-string edit.
+
+            ⚠ FILTERING is not 1:1: dropping a character means everything after it moves left
+            by one, so the caret is walked back by however many characters were removed BEFORE
+            it. Without that, typing a letter in the middle of `5250` left the caret one place
+            to the right of where the operator was working.
+          */
           const caret = el.selectionStart;
-          el.value = normalized;
-          if (caret !== null) el.setSelectionRange(caret, caret);
+          el.value = next;
+          if (caret !== null) {
+            const removedBefore = raw.slice(0, caret).length - next.slice(0, caret).length;
+            const dropped =
+              allow === 'digits'
+                ? normalizeDigits(raw.slice(0, caret), { decimal }).replace(/[^0-9]/g, '').length
+                : caret - removedBefore;
+            const at = Math.max(0, Math.min(next.length, allow === 'digits' ? dropped : caret));
+            el.setSelectionRange(at, at);
+          }
         }
-        onValueChange(normalized);
+        onValueChange(next);
       }}
     />
   );

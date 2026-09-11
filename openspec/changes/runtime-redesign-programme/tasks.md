@@ -967,3 +967,53 @@ red-first proof and the plant that found a vacuous assertion (23.3), the before/
       Neither commit inherits the other's discharge, and both are render changes, so both owed
       one. See 23.7 — including that `P-046`'s deps step and launch probe both passed, while its
       retry and escalation paths remain unexercised and that item stays open.
+
+## `SETTINGS-MATCH-02` — the dialog matched pane by pane (2026-09-11)
+
+- [x] M.1 🔴 **Defect 1 — the card colours.** Root cause was our own token-home sentence
+      ("only the GEOMETRY is transcribed"), right about the mint and wrong about the neutrals.
+      The depth was INVERTED: a `#0b1017` card on a `#141b25` frame against the drawing's
+      `#191e25` on `#15191f`. Ten role tokens, scoped to `[data-modal-size='fixed']`. The INK is
+      argued, not adopted — the largest per-channel delta is 11 of 255 (design.md 24.2).
+- [x] M.2 🔴 **Defect 2 — the Servers rail item.** Measured: it was NOT clipped, in any state
+      (197 × 44 on all five, `scrollHeight === clientHeight`). What was half-painted was the
+      MARK — a 0.55 rem dot where the reference draws an 18 px count chip and a 13 px amber
+      lock. Both built; the chip says HOW MANY rows are waiting.
+- [x] M.3 🔴 **Defect 3 — the Layers pane, built from the reference** (23.6's row 137): the
+      head's summary tags and `<details>`, a filter bar with `Shown only` and an `N of M rows`
+      read-out, the five-column table (`Layer · Show · Row name · Template · actions`) with the
+      coordinate and its row number, a switch, `Unassigned`, the `visibility locked` labels, the
+      dirty-row marks, the footnote, the `Graphics beds` head over the same table, an empty
+      state. ⚠ `B-235` stays FILED — a layer another system uses is still absent from this pane.
+- [x] M.4 🔴 **Defect 4 — the frame.** The outer box was ALREADY fixed (1140 × 736, five times,
+      before any change). What moved was the RAIL: a Servers refusal took 109 px out of the body.
+      The frame is a rail beside a panel now, as the reference's is; the rail measures **639 on
+      all five tabs** (was 565/565/565/565/456).
+- [x] M.5 🔴 **The owner's plant report, mid-session** («این قسمت نامرتبه»): two causes, both
+      measured — a `<details>` gap declared once and read at one call site, and
+      `SETTINGS-DIALOG-01`'s field box mis-transcribed as `36 / 7px 10px` where the reference
+      renders **`42 / 10px 12px`** (checked against the painted box AND the drawing's own text).
+- [x] M.6 **§8 — the sub-dialog family.** One frame (`record`, the reference's 480), the kind
+      picker as a segmented radio group, the live delimiter PREVIEW, the destructive shape with
+      its emblem. ⭐ The delimiter's remove had NO confirmation at all and now has one. 🔴 Our
+      remove-confirm keeps OUR sentence (`B-237`'s cascade, named) over the reference's "check
+      any template bindings" — the frame is adopted, the safety decision is not.
+- [x] M.7 **§9 — three message classes.** The pane BANNER is two weights and names the remedy;
+      measured at the pane's content column exactly, 20 px clear of the footer. The CARD HELP
+      STRIP is standing and lives in its one card — the remote-host note was an amber `refusal`
+      `Notice` for a fact that refuses nothing (`R-055`). The FOOTER is one short clause.
+- [x] M.8 **§10 — normalise, then constrain.** The contract table is read from the schema, and
+      **three of the eight fields are ADDRESSES** where letters are legal (`z.string().min(1)`;
+      `isLoopbackHost` accepts `localhost` and `::1`). Two SILENT CLAMPS removed (the DeckLink
+      device index and the route channel both rewrote `0` to `1`). Persian and Arabic-Indic
+      digits normalise before anything asks whether a character is a digit — driven in a browser
+      through a real clipboard paste, because paste is the path a keystroke filter would break.
+- [x] M.9 🔴 **`B-240` AMENDED, 2026-09-11, and written down in five places** — the owner asked
+      for the reference's `Close` on the panes with nothing to commit. Its substance is intact:
+      one name for discard, one for commit, never a `Close` beside an `Apply`, and it routes
+      through the dialog's own unapplied-draft guard. Written in `sections.ts` (`commits`),
+      `setupFooterVocabulary.dom.test.ts`, `station-setup/specs/runtime-ui/spec.md`,
+      `PROMPT.md` §7 and `design.md` 23.1.
+- [ ] M.10 🔴 **Linux `gate:e2e` — OWED.** This session is nothing but render.
+      `pnpm --filter @cg/runtime test:e2e` is green on Windows (165 passed) and
+      **NON-AUTHORITATIVE** by golden rule 12a. The run URL goes here once CI completes.

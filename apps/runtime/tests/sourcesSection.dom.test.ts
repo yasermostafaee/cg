@@ -93,13 +93,20 @@ function subDialog(): HTMLElement {
   return last;
 }
 
+/**
+ * Choose a producer kind.
+ *
+ * ⭐ `SETTINGS-MATCH-02` §8b — the control is a RADIO GROUP now, not a `<select>`: the kind is
+ * the one field whose value changes the FORM, and a select hid four of five answers behind a
+ * press. The group keeps the accessible name `Source kind`, which is what this finds it by, so
+ * only the press changed.
+ */
 async function selectKind(scope: HTMLElement, kind: string): Promise<void> {
-  const select = scope.querySelector<HTMLSelectElement>('select[aria-label="Source kind"]');
-  if (select === null) throw new Error('no kind picker');
-  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+  const group = scope.querySelector<HTMLElement>('[role="radiogroup"][aria-label="Source kind"]');
+  const option = group?.querySelector<HTMLInputElement>(`input[type="radio"][value="${kind}"]`);
+  if (option === undefined || option === null) throw new Error('no kind picker');
   await act(async () => {
-    setter?.call(select, kind);
-    select.dispatchEvent(new Event('change', { bubbles: true }));
+    option.click();
   });
   await settleSetup();
 }
@@ -110,9 +117,22 @@ describe('C-025 — the fifth producer kind, in the Add dialog', () => {
     const { section } = await renderSources();
     await click(section, 'Add source');
 
-    const select = subDialog().querySelector<HTMLSelectElement>('select[aria-label="Source kind"]');
-    expect(select).not.toBeNull();
-    const labels = [...(select?.options ?? [])].map((o) => o.textContent);
+    /*
+      ⭐ `SETTINGS-MATCH-02` §8b — A RADIO GROUP, not a `<select>`. The kind is the one field
+      whose value changes the FORM, and a select hid four of five answers behind a press. The
+      group keeps the name `Source kind`; the options keep their full labels as the accessible
+      NAME of each radio, and show the short badge word.
+
+      ⚠ **The reference draws THREE (DeckLink · NDI · Stream) and this asserts FIVE.**
+      `SourceProducer` has five kinds and a picker that cannot express a stored value is a
+      defect rather than a simplification — the same argument that kept the strategy select's
+      third option.
+    */
+    const group = subDialog().querySelector<HTMLElement>(
+      '[role="radiogroup"][aria-label="Source kind"]',
+    );
+    expect(group).not.toBeNull();
+    const options = [...(group?.querySelectorAll('input[type="radio"]') ?? [])];
     /*
       The order groups the signal-bearing producers ahead of the one clip, and `media` stays
       LAST as the odd one out ("the one producer that needs no signal").
@@ -120,13 +140,15 @@ describe('C-025 — the fifth producer kind, in the Add dialog', () => {
       ⭐ DECKLINK IS FIRST NOW, where `route` used to be: §5's subject is that a station's
       sources are mostly SDI inputs, and the first option is the one an operator reaches for.
     */
-    expect(labels).toEqual([
+    expect(options.map((o) => o.getAttribute('aria-label'))).toEqual([
       'DeckLink (SDI input)',
       'NDI',
       'Stream (URL)',
       'Route (another channel)',
       'Media clip',
     ]);
+    // …and exactly one is chosen at a time, which is what a radio GROUP buys over buttons.
+    expect(options.filter((o) => (o as HTMLInputElement).checked)).toHaveLength(1);
   });
 
   it('choosing stream renders the URL field, prefilled with an accepted-scheme example', async () => {

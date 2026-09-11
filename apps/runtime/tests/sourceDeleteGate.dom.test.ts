@@ -142,7 +142,9 @@ describe('B-237 — deleting a source ASKS, and names what goes with it', () => 
     const { dialog, stub } = await open();
     await press(sectionOf(dialog, 'sources'), 'Remove Studio A');
     const go = [...(gate()?.querySelectorAll('button') ?? [])].find(
-      (b) => b.textContent === 'Delete source',
+      // SETTINGS-MATCH-02 §8d — the verb NAMES THE ACT and matches the row's own button:
+      // Remove source, not Delete source. One word for one act across the family.
+      (b) => b.textContent === 'Remove source',
     );
     await act(async () => {
       go?.click();
@@ -187,7 +189,9 @@ describe('B-237 — deleting a source ASKS, and names what goes with it', () => 
     await press(sectionOf(dialog, 'sources'), 'Edit Studio A');
     const sub = gate();
     expect(sub?.textContent).toContain('Edit live source');
-    const save = [...(sub?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Save');
+    const save = [...(sub?.querySelectorAll('button') ?? [])].find(
+      (b) => b.textContent === 'Save source',
+    );
     await act(async () => {
       save?.click();
       await Promise.resolve();
@@ -211,7 +215,8 @@ describe('B-237 — deleting a source ASKS, and names what goes with it', () => 
     const { dialog, stub } = await open({ assignments: { assignments: [] } });
     await press(sectionOf(dialog, 'sources'), 'Edit Studio A');
     const save = [...(gate()?.querySelectorAll('button') ?? [])].find(
-      (b) => b.textContent === 'Save',
+      // §8b — Save source, never a bare Save: the primary's verb names the act.
+      (b) => b.textContent === 'Save source',
     );
     await act(async () => {
       save?.click();

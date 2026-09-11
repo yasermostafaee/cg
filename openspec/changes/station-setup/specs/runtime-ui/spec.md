@@ -54,7 +54,7 @@ The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and n
 
 - **WHEN** the Servers tab is shown **THEN** its footer holds a `primary`-role `Apply servers`, and no other tab's action
 - **WHEN** the Layers tab is shown **THEN** its footer holds `Apply layers`, and no other tab's action
-- **WHEN** a read-only or save-as-you-go tab is shown **THEN** its footer holds its commit contract and no buttons at all
+- **WHEN** a read-only or save-as-you-go tab is shown **THEN** its footer holds its commit contract and a single `Close` (amended by `SETTINGS-MATCH-02`, 2026-09-11 — see **One job, one control, one name in the dialog's footer** below)
 
 #### Scenario: The Live sources footer tells the truth about the layer band
 
@@ -72,12 +72,18 @@ The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and n
 >
 > 🔴 **AMENDED A THIRD TIME by `B-240` (2026-09-07), and the three scenarios above were
 > left contradicting it until `SETTINGS-DIALOG-01` swept them.** `Cancel` and the per-section
-> `Close` are GONE: dismissal is dialog-level (the close affordance, Escape, the backdrop),
+> `Close` were GONE: dismissal was dialog-level (the close affordance, Escape, the backdrop),
 > discard is section-level and is called `Revert` on every section that has one, and a
-> read-only or save-as-you-go section carries NO footer buttons at all. That rule is stated
-> in full by **One job, one control, one name in the dialog's footer** below, which is the
-> text to read; the scenarios above are corrected to agree with it rather than deleted, so
-> the per-tab reading stays where a reader looks for it.
+> read-only or save-as-you-go section carried NO footer buttons at all.
+>
+> 🔴 **AND A FOURTH TIME by `SETTINGS-MATCH-02` (2026-09-11): the `Close` is back, on the
+> panes with nothing to commit.** The owner looked at the reference, which draws it on exactly
+> those three, and asked for it. `B-240`'s substance is untouched — one name for discard
+> (`Revert`), one for commit (`Apply <section>`), never a `Close` beside an `Apply`, and the
+> `Close` is the dialog's own dismissal on the dialog's own path. The full rule is stated by
+> **One job, one control, one name in the dialog's footer** below, which is the text to read;
+> the scenarios above are corrected to agree with it rather than deleted, so the per-tab
+> reading stays where a reader looks for it.
 >
 > ⚠ **Two other copies of the superseded rule were found in the same sweep and corrected:**
 > `docs/ui-reference/runtime-redesign/PROMPT.md` §7, whose “everything already decided
@@ -147,7 +153,19 @@ Deleting a bound source SHALL NOT be refused — an installation must be able to
 
 ### Requirement: One job, one control, one name in the dialog's footer
 
-A section's footer SHALL carry that section's own actions and no others. Dismissal SHALL be dialog-level — the close affordance, Escape and the backdrop — and SHALL NOT appear in any section's footer. Discard SHALL be section-level, SHALL be called `Revert` on every section that has one, and SHALL be offered only when that section holds unapplied changes, read from the same condition the rail's marker reads. Commit SHALL be `Apply <section>` in sentence case. A read-only or save-as-you-go section SHALL carry no footer buttons at all.
+A section's footer SHALL carry that section's own actions and no others. Discard SHALL be section-level, SHALL be called `Revert` on every section that has one, and SHALL be offered only when that section holds unapplied changes, read from the same condition the rail's marker reads. Commit SHALL be `Apply <section>` in sentence case. A section with nothing to commit SHALL carry a single `Close`, which dismisses the dialog and commits nothing; a section WITH a commit SHALL NOT carry one.
+
+> 🔴 **AMENDED by `SETTINGS-MATCH-02` (2026-09-11).** This requirement read _"Dismissal SHALL be
+> dialog-level … and SHALL NOT appear in any section's footer. A read-only or save-as-you-go
+> section SHALL carry no footer buttons at all."_ The owner has looked at the reference — which
+> draws `Close` on Channel, Live sources and Text delimiters — and asked for it back.
+>
+> **What `B-240` was protecting is unchanged, and that is why the amendment is safe rather than a
+> reversal.** Its defect was THREE answers for one job and TWO names for one act. The `Close` that
+> returns is neither: it routes through the dialog's own dismissal, so it asks the same question
+> before dropping a draft in another tab; it never sits beside an `Apply`, which was the
+> configuration that made "which of these am I pressing?" a real question; and discard is still
+> `Revert` and only `Revert`. `sections.ts`'s `commits` column is where the rule is written down.
 
 Dismissing the dialog while any section holds unapplied changes SHALL ask first, naming those sections.
 
@@ -155,8 +173,10 @@ The footer's standing sentence SHALL state that section's commit contract and SH
 
 #### Scenario: The footer offers one name per job
 
-- **WHEN** any tab is shown **THEN** its footer carries no dismissal and no control named `Cancel`
-- **WHEN** a read-only or save-as-you-go tab is shown **THEN** its footer carries no buttons, only its contract
+- **WHEN** any tab is shown **THEN** its footer carries no control named `Cancel`
+- **WHEN** a read-only or save-as-you-go tab is shown **THEN** its footer carries a single `Close` beside its contract, and no commit
+- **WHEN** a tab WITH a commit is shown **THEN** its footer carries no `Close`
+- **WHEN** the operator presses that `Close` while another section holds unapplied changes **THEN** the same question is asked as for the close affordance
 - **WHEN** a section holds unapplied changes **THEN** its footer offers `Revert`, and the rail marks the same section
 
 #### Scenario: Leaving with unapplied changes asks

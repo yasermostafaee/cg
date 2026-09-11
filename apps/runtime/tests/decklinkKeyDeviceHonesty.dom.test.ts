@@ -139,13 +139,13 @@ async function clickIn(scope: HTMLElement, label: string): Promise<void> {
   await settle();
 }
 
+/** `SETTINGS-MATCH-02` §8b — a RADIO GROUP now; the group keeps the name `Source kind`. */
 async function selectKind(scope: HTMLElement, kind: string): Promise<void> {
-  const select = scope.querySelector<HTMLSelectElement>('select[aria-label="Source kind"]');
-  if (select === null) throw new Error('no kind picker');
-  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+  const group = scope.querySelector<HTMLElement>('[role="radiogroup"][aria-label="Source kind"]');
+  const option = group?.querySelector<HTMLInputElement>(`input[type="radio"][value="${kind}"]`);
+  if (option === undefined || option === null) throw new Error('no kind picker');
   await act(async () => {
-    setter?.call(select, kind);
-    select.dispatchEvent(new Event('change', { bubbles: true }));
+    option.click();
   });
   await settle();
 }

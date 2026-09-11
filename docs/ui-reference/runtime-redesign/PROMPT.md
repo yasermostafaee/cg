@@ -183,10 +183,21 @@ right-click and keyboard both reach the modal.
   today, **say so and file the gap — do not invent a multi-channel contract.**
 - **Everything already decided about this dialog survives:** one Settings entry point, the fixed frame
   measured on **two** edges, per-section footers and refusals, the footer rule (a section with a commit gets
-  `Revert` + `Apply …`; a section without one gets **no buttons at all**, only its contract — `B-240`
-  retired the per-section `Close` in `95181658`, and this line said `Close` until
-  `SETTINGS-DIALOG-01` swept it), the `B-237` confirmation that **names** the templates and plates it
+  `Revert` + `Apply …`; a section without one gets a single **`Close`**, which dismisses the dialog and
+  commits nothing), the `B-237` confirmation that **names** the templates and plates it
   would drop, and the `B-238` refusal that is shown.
+
+  🔴 **That footer rule has now been settled TWICE, in opposite directions, and this line has been
+  wrong in both — so read the dating rather than the sentence.** `B-240` retired the per-section
+  `Close` in `95181658` (2026-09-07) because it was a THIRD answer to one job; this line still said
+  `Close` six hours later and `SETTINGS-DIALOG-01` corrected it to "no buttons at all". **The owner
+  then looked at the reference — which draws `Close` on exactly those three panes — and asked for it
+  back (`SETTINGS-MATCH-02`, 2026-09-11), so `Close` is correct again and this line is correct again
+  for the first time.** What `B-240` was actually protecting never moved and is what makes the
+  amendment safe: the `Close` is the DIALOG's own dismissal on the dialog's own path (it asks before
+  dropping a draft), it is never beside an `Apply`, and discard is still `Revert` and nothing else.
+  `sections.ts`'s `commits` column is where the rule lives; `setupFooterVocabulary.dom.test.ts`
+  asserts it.
 
 **Acceptance:** channel-keyed state proved by test; the persisted-key census unchanged; every Station setup
 decision still asserted; e2e run.

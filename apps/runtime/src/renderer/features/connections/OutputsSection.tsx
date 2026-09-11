@@ -340,7 +340,10 @@ export function OutputsSection({
           {health.backup !== undefined && <ServerBlock server={health.backup} channel={channel} />}
         </>
       )}
-      <details className="cg-setup-details" style={{ marginTop: 'var(--r-setup-details-gap)' }}>
+      {/* ⚠ The 17 px gap above is `.cg-setup-details`'s own now, not an inline style here:
+          it was declared once and read only at this one call site, so every OTHER `<details>`
+          in the dialog sat flush against what was above it (owner, on the plant). */}
+      <details className="cg-setup-details">
         <summary>How are outputs identified?</summary>
         <p>
           What <code>casparcg.config</code> declares versus what is running, read over AMCP: INFO

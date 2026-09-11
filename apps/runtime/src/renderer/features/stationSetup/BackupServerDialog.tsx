@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { hostError, hostValue, portError } from '../../ui/fieldValue.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { DialogField, RecordDialog } from '../../ui/RecordDialog.js';
 
@@ -29,48 +30,71 @@ export function BackupServerDialog({
   const [amcpPort, setAmcpPort] = useState('5250');
   const [oscPort, setOscPort] = useState('6250');
 
+  const hostBad = hostError(host, { label: 'Host address' });
+  const amcpBad = portError(amcpPort, { min: 1, label: 'AMCP port' });
+  const oscBad = portError(oscPort, { min: 0, label: 'OSC port' });
+  const invalid = hostBad !== null || amcpBad !== null || oscBad !== null;
+
   return (
     <RecordDialog
-      title="Add backup server (B)"
-      confirmLabel="Add backup"
-      lede="Applied with the rest of Servers — this adds it to the draft; Apply servers sends it."
+      title="Add backup server"
+      /*
+        🔴 `SETTINGS-MATCH-02` §8a — **THE VERB IS THE CONTRACT.** `Add to draft`, not `Add
+        backup`: this dialog writes into the Servers DRAFT and the pane's `Apply servers` is
+        what reaches the bridge. A button called `Add backup` beside a section that refuses to
+        apply while anything is on air invites exactly the reading the on-air guard exists to
+        prevent — that this small dialog is a way round it. It is not, and now it does not
+        look like one either.
+      */
+      confirmLabel="Add to draft"
+      lede="Changes will be applied with the rest of your server settings."
+      confirmDisabled={invalid}
       onCancel={onCancel}
       onSubmit={() => {
-        if (host.trim() === '') {
-          return 'Give the backup server a host — the address this console reaches it on.';
-        }
-        // The PORTS are validated by the Servers form's own `parseEndpoint`, which is the
-        // one place that rule lives; a second copy here is how the two come to disagree.
+        /*
+          ⚠ The field-level rules are the SHARED ones (`fieldValue.ts`), so this form and the
+          Servers pane cannot disagree about what a host or a port is. The commit is already
+          disabled while any of them is wrong; this is the belt for the Enter key.
+        */
+        if (invalid) return hostBad ?? amcpBad ?? oscBad;
         onAdd({ host: host.trim(), amcpPort, oscPort });
         return null;
       }}
     >
-      <DialogField label="Host">
+      {/* §8a — the host takes the row on its own, and the two ports share the next one. */}
+      <DialogField label="Host address" id="backup-host" error={hostBad}>
         <input
-          className="cg-field"
+          className="cg-field cg-field--mono"
           type="text"
+          dir="ltr"
           value={host}
           aria-label="New backup host"
           placeholder="192.168.21.115"
-          onChange={(e) => setHost(e.target.value)}
+          onChange={(e) => setHost(hostValue(e.target.value))}
         />
       </DialogField>
-      <DialogField label="AMCP port">
-        <NumericInput
-          className="cg-field"
-          aria-label="New backup AMCP port"
-          value={amcpPort}
-          onValueChange={setAmcpPort}
-        />
-      </DialogField>
-      <DialogField label="OSC port">
-        <NumericInput
-          className="cg-field"
-          aria-label="New backup OSC port"
-          value={oscPort}
-          onValueChange={setOscPort}
-        />
-      </DialogField>
+      <div className="cg-setup-fields">
+        <DialogField label="AMCP port" id="backup-amcp" error={amcpBad}>
+          <NumericInput
+            className="cg-field cg-field--mono"
+            dir="ltr"
+            allow="digits"
+            aria-label="New backup AMCP port"
+            value={amcpPort}
+            onValueChange={setAmcpPort}
+          />
+        </DialogField>
+        <DialogField label="OSC port" id="backup-osc" error={oscBad}>
+          <NumericInput
+            className="cg-field cg-field--mono"
+            dir="ltr"
+            allow="digits"
+            aria-label="New backup OSC port"
+            value={oscPort}
+            onValueChange={setOscPort}
+          />
+        </DialogField>
+      </div>
     </RecordDialog>
   );
 }

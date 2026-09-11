@@ -275,7 +275,15 @@ describe('the Live sources section of Station setup defines sources and binds no
       here would have pinned the old hand-spelled uppercase and re-created the drift the
       shared class removes.
     */
-    expect(section?.textContent).toContain('Catalogue');
+    /*
+      ⭐ `SETTINGS-MATCH-02` — the heading is `Source catalogue` now, the reference's own
+      `.list-header` wording, and it sits ABOVE the card with the list's COUNT beside it rather
+      than inside the card's head. The word this case actually cares about is `catalogue` — the
+      one that distinguishes the installation's list from the per-template bindings — so that
+      is what is matched, case-insensitively, rather than a capitalisation that belongs to
+      whichever element happens to carry it.
+    */
+    expect(section?.textContent?.toLowerCase()).toContain('catalogue');
     expect(
       [...(section?.querySelectorAll<HTMLElement>('[data-source-id] bdi') ?? [])]
         .map((el) => el.textContent)

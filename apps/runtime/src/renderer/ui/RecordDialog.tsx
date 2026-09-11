@@ -1,6 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useState, type ReactElement, type ReactNode } from 'react';
 import { Modal, ModalAction, type ModalMessage } from './Modal.js';
-import { colors } from '../theme.js';
 
 /**
  * `STATION-CHROME-01` §6 — **ONE WAY TO ADD ANYTHING.**
@@ -27,16 +26,19 @@ import { colors } from '../theme.js';
  * that also knew about records would have to know about all three.
  */
 
-const styles = {
-  fields: { display: 'flex', flexDirection: 'column' as const, gap: '0.75rem' },
-  lede: { fontSize: '0.8rem', color: colors.textMuted, margin: 0 },
-} as const;
+/*
+ * ⚠ `SETTINGS-MATCH-02` §8 — `styles` IS GONE, not merely unused. Its two entries were a
+ * hand-set field gap and a hand-set lede rank; both are measured rules now (`.cg-sub-fields`,
+ * `.cg-sub-lede`), because this frame has the reference's own head, body and footer and its
+ * fields have to sit on the same rhythm as the ones in the pane behind it.
+ */
 
 export function RecordDialog({
   title,
   confirmLabel,
   lede,
   layer = 'sub',
+  confirmDisabled = false,
   children,
   onCancel,
   onSubmit,
@@ -53,6 +55,11 @@ export function RecordDialog({
    * console itself, where there is nothing underneath: the lock's engage form.
    */
   layer?: 'base' | 'sub';
+  /**
+   * `SETTINGS-MATCH-02` §10.6 — the commit is dead while a field in this form is invalid.
+   * The field says WHY, beside itself; this only stops the press.
+   */
+  confirmDisabled?: boolean;
   children: ReactNode;
   onCancel: () => void;
   /**
@@ -78,6 +85,12 @@ export function RecordDialog({
       title={title}
       ariaLabel={title}
       layer={layer}
+      /*
+        `SETTINGS-MATCH-02` §8 — the reference's own `.sub-dialog` frame (480 wide, its own
+        head, body and footer paddings, its own footer band). It was `prose`, which is the
+        confirm dialog's 500-wide column and a near-miss of this one.
+      */
+      size="record"
       onClose={onCancel}
       {...(message.length > 0 ? { message } : {})}
       footer={
@@ -85,13 +98,16 @@ export function RecordDialog({
           <ModalAction actionRole="cancel" onClick={onCancel}>
             Cancel
           </ModalAction>
-          <ModalAction actionRole="primary" onClick={submit}>
+          {/* ⭐ §8 — ONE primary, and its label NAMES THE ACT: `Add to draft`, `Add source`,
+              `Save delimiter`. Never `OK`, never a bare `Save` — the caller supplies the verb
+              because only the caller knows what pressing it does. */}
+          <ModalAction actionRole="primary" disabled={confirmDisabled} onClick={submit}>
             {confirmLabel}
           </ModalAction>
         </>
       }
     >
-      {lede !== undefined && <p style={styles.lede}>{lede}</p>}
+      {lede !== undefined && <p className="cg-sub-lede">{lede}</p>}
       {/*
         🔴 ENTER SUBMITS, AND `preventDefault` COMES FIRST — inherited deliberately from
         `usePrompt`, where it is a plant-reported regression rather than defensiveness.
@@ -108,7 +124,7 @@ export function RecordDialog({
         one place rather than each input remembering to.
       */}
       <div
-        style={styles.fields}
+        className="cg-sub-fields"
         onKeyDown={(e) => {
           if (e.key !== 'Enter') return;
           // A multi-line field is not a form to submit; nothing here uses one today, and
@@ -124,23 +140,52 @@ export function RecordDialog({
   );
 }
 
-/** One labelled field inside a `RecordDialog`. The label is always rendered — §5's point. */
+/**
+ * One labelled field inside a `RecordDialog`. The label is always rendered — §5's point.
+ *
+ * ⭐ `SETTINGS-MATCH-02` §8 — it wears the SAME `.cg-setup-field` idiom as a field in the pane
+ * behind it: a 13 px / 500 label over its control, its hint under. It was a 12 px muted label
+ * with a 4 px gap, which made the small dialog read as a lighter-weight surface than the one
+ * it is standing on rather than as the same product one step in.
+ *
+ * ⚠ `SETTINGS-MATCH-02` §10.6 — and it carries its own INLINE ERROR, for the same reason the
+ * pane's field does: what is wrong with a control belongs beside that control, not in the
+ * dialog's pinned region four fields away. The region keeps the refusal that answers "why did
+ * the last action not happen?" — which, in this frame, is what `onSubmit` returns.
+ */
 export function DialogField({
   label,
   hint,
+  error = null,
+  id,
   children,
 }: {
   label: string;
-  hint?: string | undefined;
+  hint?: ReactNode;
+  /** The one sentence this field is currently wrong by, or `null`. */
+  error?: string | null;
+  /** Stable id root, so the control and its error can be bound together. */
+  id?: string;
   children: ReactNode;
 }): JSX.Element {
+  const errorId = id === undefined ? undefined : `${id}-error`;
   return (
-    <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-      <span style={{ fontSize: '0.75rem', color: colors.textMuted }}>{label}</span>
-      {children}
-      {hint !== undefined && (
-        <span style={{ fontSize: '0.72rem', color: colors.textMuted, lineHeight: 1.45 }}>
-          {hint}
+    <label className="cg-setup-field" {...(id !== undefined ? { 'data-sub-field': id } : {})}>
+      <span className="cg-setup-field__label">{label}</span>
+      {isValidElement(children) && error !== null
+        ? cloneElement(children as ReactElement<Record<string, unknown>>, {
+            'aria-invalid': true,
+            ...(errorId !== undefined ? { 'aria-describedby': errorId } : {}),
+          })
+        : children}
+      {hint !== undefined && <span className="cg-setup-field__hint">{hint}</span>}
+      {error !== null && (
+        <span
+          className="cg-setup-field__error"
+          data-field-error=""
+          {...(errorId !== undefined ? { id: errorId } : {})}
+        >
+          {error}
         </span>
       )}
     </label>

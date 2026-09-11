@@ -30,7 +30,15 @@ import { test, expect } from './fixtures/runtime.js';
  * putting it in a section's footer made leaving look like a property of the tab you happened
  * to be standing on. There is one now.
  */
-const dismiss = (dialog: Locator): Locator => dialog.getByRole('button', { name: 'Close' });
+/*
+  ⚠ `SETTINGS-MATCH-02` — `exact: true`, and it is load-bearing again for a DIFFERENT reason
+  than the one above. `B-240`'s amendment put a `Close` back in the footer of the three panes
+  with nothing to commit; it is named `Close Station setup` precisely so the two are
+  distinguishable, and an inexact match here would hit both and fail strict mode. This helper
+  means the PRIMITIVE's ✕, which is the one every tab has.
+*/
+const dismiss = (dialog: Locator): Locator =>
+  dialog.getByRole('button', { name: 'Close', exact: true });
 
 /** The rail, in the owner's order. */
 const TABS = ['Channel', 'Servers', 'Live sources', 'Text file delimiters', 'Layers'];
@@ -81,7 +89,7 @@ test('the rail: Settings opens on Channel, and every section is one press away',
     was lying, and it was the footer.
   */
   await expect(dialog.locator('[data-section-footer="sources"]')).toContainText(
-    'The catalogue saves as you go. The layer band is applied by the button in its own section.',
+    'The catalogue saves as you go; the layer band is applied separately.',
   );
   await expect(dialog.getByRole('button', { name: 'Apply band' })).toBeVisible();
 
@@ -103,16 +111,16 @@ test('🔴 the refusal stays with its own section, and the rail says which one i
     says NOTHING about the Servers block, because the operator is not in Servers. Under the
     scroll that sentence was the first thing on screen whatever he had come to do.
   */
-  await expect(dialog.getByText(/Apply is blocked for Servers/)).toHaveCount(0);
+  await expect(dialog.getByText(/Server changes are paused while on air/)).toHaveCount(0);
 
   await rail.getByRole('tab', { name: /^Servers/ }).click();
-  await expect(dialog.getByText(/Apply is blocked for Servers/)).toBeVisible();
+  await expect(dialog.getByText(/Server changes are paused while on air/)).toBeVisible();
   await expect(dialog.getByText(/Every other section stays editable/)).toBeVisible();
   await expect(dialog.locator('[data-modal-message]')).toBeInViewport();
 
   // ⭐ THE DEFECT THE SCROLL HAD: on DELIMITERS, that sentence is not in front of him.
   await rail.getByRole('tab', { name: 'Text file delimiters' }).click();
-  await expect(dialog.getByText(/Apply is blocked for Servers/)).toHaveCount(0);
+  await expect(dialog.getByText(/Server changes are paused while on air/)).toHaveCount(0);
 
   // …and nothing is HIDDEN: the rail still marks Servers, from here, in words as well as
   // colour — one press lands back on the sentence.
@@ -120,7 +128,7 @@ test('🔴 the refusal stays with its own section, and the rail says which one i
   await expect(serversTab.locator('[data-tab-badge="warn"]')).toHaveCount(1);
   await expect(serversTab).toContainText('Servers is blocked');
   await serversTab.click();
-  await expect(dialog.getByText(/Apply is blocked for Servers/)).toBeVisible();
+  await expect(dialog.getByText(/Server changes are paused while on air/)).toBeVisible();
 
   // `B-240` — the way out is the dialog's ✕, not a per-section footer button.
   await dismiss(dialog).click();

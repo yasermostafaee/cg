@@ -5,9 +5,12 @@ import {
   type SourceDefinition,
   type SourceProducer,
 } from '@cg/shared-ipc';
+import { STATION_SETUP_PX } from '../../theme.js';
+import { Icon } from '../../ui/Icon.js';
+import { indexError } from '../../ui/fieldValue.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { DialogField, RecordDialog } from '../../ui/RecordDialog.js';
-import { KIND_LABEL, PRODUCER_KINDS, emptyProducer } from './sourceKinds.js';
+import { KIND_BADGE, KIND_ICON, KIND_LABEL, PRODUCER_KINDS, emptyProducer } from './sourceKinds.js';
 
 /**
  * `STATION-CHROME-01` §5 + §6 — **Add / Edit one live source, with the fields that KIND
@@ -75,37 +78,76 @@ export function LiveSourceDialog({
   return (
     <RecordDialog
       title={source === null ? 'Add live source' : 'Edit live source'}
-      confirmLabel={source === null ? 'Add source' : 'Save'}
+      /* §8b — `Save source`, not a bare `Save`: the primary's verb names the act, and this
+         frame's other four say `Add to draft`, `Add source`, `Add delimiter`, `Remove source`. */
+      confirmLabel={source === null ? 'Add source' : 'Save source'}
       onCancel={onCancel}
       onSubmit={submit}
     >
-      <DialogField label="Name" hint="What the operator sees on the row.">
+      <DialogField label="Source name" hint="The name operators see in the source list.">
         <input
           className="cg-field"
           type="text"
+          dir="auto"
           value={name}
           aria-label="Source name"
-          placeholder="Studio A"
+          placeholder="e.g. Studio B"
           onChange={(e) => setName(e.target.value)}
         />
       </DialogField>
 
-      <DialogField label="Kind">
-        <select
-          className="cg-field"
-          aria-label="Source kind"
-          value={producer.kind}
-          onChange={(e) => setProducer(emptyProducer(e.target.value as SourceProducer['kind']))}
-        >
-          {PRODUCER_KINDS.map((kind) => (
-            <option key={kind} value={kind}>
-              {KIND_LABEL[kind]}
-            </option>
-          ))}
-        </select>
-      </DialogField>
+      {/*
+        🔴 `SETTINGS-MATCH-02` §8b — **A SEGMENTED CONTROL, NOT A SELECT.**
 
-      <KindFields producer={producer} onChange={setProducer} />
+        The kind is the one control in this form whose VALUE CHANGES THE FORM — pick NDI and
+        the fields below become a source name; pick Stream and they become a URL. A `<select>`
+        hides four of five answers behind a press and gives no hint that choosing differently
+        would ask for something different, which is the same argument §5 made for giving the
+        catalogue ROW its labelled parts rather than one derived string.
+
+        ⚠ **A RADIO GROUP, not a row of buttons.** One choice from a named set is what a radio
+        group IS; it brings the group's accessible name and arrow-key traversal with it, and a
+        row of buttons would have to re-implement both badly. `Source kind` is kept as the
+        group's name because five specs query the control by it.
+
+        ⚠ The reference draws THREE (DeckLink · NDI · Stream). Ours draws FIVE, because
+        `SourceProducer` has five and a picker that cannot express a stored value is a defect
+        rather than a simplification — the same reason the strategy select kept its third
+        option.
+      */}
+      <fieldset className="cg-setup-field" data-sub-field="kind">
+        <legend className="cg-setup-field__label">Input type</legend>
+        <div className="cg-kind-options" role="radiogroup" aria-label="Source kind">
+          {PRODUCER_KINDS.map((kind) => (
+            <label className="cg-kind-option" key={kind} title={KIND_LABEL[kind]}>
+              <input
+                type="radio"
+                name="cg-source-kind"
+                value={kind}
+                checked={producer.kind === kind}
+                aria-label={KIND_LABEL[kind]}
+                onChange={() => setProducer(emptyProducer(kind))}
+              />
+              <Icon icon={KIND_ICON[kind]} size={STATION_SETUP_PX.kindOptionIcon} />
+              {KIND_BADGE[kind]}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      {/*
+        🔴 `key={producer.kind}` IS LOAD-BEARING, and a test caught its absence.
+
+        `KindFields` holds the numeric fields' own TEXT (see its note — that is what replaced
+        the silent clamps §10.3 forbids). Without the key React keeps the same instance across
+        a kind switch, so that text SURVIVES: `route` with channel 5 → `stream` → `route` came
+        back showing 5 against a fresh producer whose channel is 1. The form would have been
+        displaying a number the record did not hold.
+
+        `emptyProducer`'s documented rule is that switching arms discards the previous one's
+        fields; the key is what makes the local text obey it too.
+      */}
+      <KindFields key={producer.kind} producer={producer} onChange={setProducer} />
 
       {/*
         FORMAT is offered for every kind, because the crop-to-fill ASPECT derives from it
@@ -174,30 +216,76 @@ function KindFields({
   producer: SourceProducer;
   onChange: (next: SourceProducer) => void;
 }): JSX.Element {
+  /*
+    🔴 §10.3 — THE NUMERIC FIELDS KEEP THEIR OWN TEXT.
+
+    A number field controlled by a NUMBER cannot hold the states an operator types through:
+    empty, and any value the parse rejects. That is what forced the old clamps — `? n : 1` was
+    the only way to keep a number in scope — and the clamp is what silently rewrote his input.
+    Holding the TEXT here and pushing a number up only when it parses gives the field both
+    halves: it shows what he typed, and the record never receives something it cannot mean.
+
+    ⚠ Keyed on the KIND, so switching kind resets these to the new producer's own defaults
+    rather than carrying a stale string across.
+  */
+  const [deviceText, setDeviceText] = useState(
+    producer.kind === 'decklink' ? String(producer.device) : '',
+  );
+  const [keyText, setKeyText] = useState(
+    producer.kind === 'decklink' && producer.keyDevice !== undefined
+      ? String(producer.keyDevice)
+      : '',
+  );
+  const [channelText, setChannelText] = useState(
+    producer.kind === 'route' ? String(producer.channel) : '',
+  );
+  const [layerText, setLayerText] = useState(
+    producer.kind === 'route' && producer.layer !== undefined ? String(producer.layer) : '',
+  );
   switch (producer.kind) {
     case 'decklink':
       return (
         <>
-          <DialogField label="Device index" hint="The FILL input's device number on the server.">
+          {/*
+            🔴 `SETTINGS-MATCH-02` §10.3 — **THE SILENT CLAMP IS GONE.** This read
+            `device: Number.isInteger(n) && n > 0 ? n : 1` — so typing `0` put a `1` in the
+            field, and clearing it put a `1` in the field, and the operator was never told. A
+            number the console changed without saying so is the one thing §10.3 forbids by
+            name: the value is kept as typed, and the field says what is wrong with it.
+          */}
+          <DialogField
+            label="Device index"
+            id="decklink-device"
+            hint="The FILL input's device number on the server."
+            error={indexError(deviceText, { label: 'Device index' })}
+          >
             <NumericInput
-              className="cg-field"
+              className="cg-field cg-field--mono"
+              dir="ltr"
+              allow="digits"
               aria-label="DeckLink device index"
-              value={String(producer.device)}
+              value={deviceText}
               onValueChange={(v) => {
+                setDeviceText(v);
                 const n = Number(v);
-                onChange({ ...producer, device: Number.isInteger(n) && n > 0 ? n : 1 });
+                if (v !== '' && Number.isInteger(n) && n > 0) onChange({ ...producer, device: n });
               }}
             />
           </DialogField>
           <DialogField
-            label="Key device (optional)"
+            label="Key device"
+            id="decklink-key"
             hint="A fill/key pair's second input. It is stored, and it is not sent to CasparCG — seating the pair is C-027."
+            error={indexError(keyText, { label: 'Key device', blankAllowed: true })}
           >
             <NumericInput
-              className="cg-field"
+              className="cg-field cg-field--mono"
+              dir="ltr"
+              allow="digits"
               aria-label="DeckLink key device index"
-              value={producer.keyDevice === undefined ? '' : String(producer.keyDevice)}
+              value={keyText}
               onValueChange={(v) => {
+                setKeyText(v);
                 const n = Number(v);
                 const { keyDevice: _drop, ...rest } = producer;
                 onChange(
@@ -218,10 +306,15 @@ function KindFields({
         there is no such neighbour, so it stays short there.
       */
       return (
-        <DialogField label="NDI source name" hint="Exactly as NDI announces it.">
+        <DialogField
+          label="NDI source name"
+          id="ndi-source"
+          hint="Use the exact name announced by the NDI source."
+        >
           <input
-            className="cg-field"
+            className="cg-field cg-field--mono"
             type="text"
+            dir="ltr"
             value={producer.source}
             aria-label="NDI source name"
             placeholder="CG-INGEST (Studio 2)"
@@ -231,12 +324,20 @@ function KindFields({
       );
     case 'stream':
       return (
-        <DialogField label="URL" hint="srt://, rtmp://, rtsp://, udp:// or http(s)://.">
+        <DialogField
+          label="Stream URL"
+          id="stream-url"
+          hint="Include the protocol, such as srt://, rtmp:// or https://."
+        >
           <input
-            className="cg-field"
+            className="cg-field cg-field--mono"
             type="text"
+            dir="ltr"
             value={producer.url}
             aria-label="Stream URL"
+            /* ⚠ OURS, not the reference's `srt://10.4.0.9:9000` — §0's rule (its sample data
+               is prototype furniture) and the `cg/no-hardcoded-origin` lint rule agree: a
+               literal address in the product is one that works on exactly one box. */
             placeholder="srt://ingest.example:9000"
             onChange={(e) => onChange({ ...producer, url: e.target.value })}
           />
@@ -258,23 +359,39 @@ function KindFields({
     case 'route':
       return (
         <>
-          <DialogField label="From channel">
+          {/* §10.3 — the same correction as the DeckLink arm: no silent clamp to 1. */}
+          <DialogField
+            label="From channel"
+            id="route-channel"
+            error={indexError(channelText, { label: 'From channel' })}
+          >
             <NumericInput
-              className="cg-field"
+              className="cg-field cg-field--mono"
+              dir="ltr"
+              allow="digits"
               aria-label="Route source channel"
-              value={String(producer.channel)}
+              value={channelText}
               onValueChange={(v) => {
+                setChannelText(v);
                 const n = Number(v);
-                onChange({ ...producer, channel: Number.isInteger(n) && n > 0 ? n : 1 });
+                if (v !== '' && Number.isInteger(n) && n > 0) onChange({ ...producer, channel: n });
               }}
             />
           </DialogField>
-          <DialogField label="From layer (optional)" hint="Empty routes the whole channel output.">
+          <DialogField
+            label="From layer"
+            id="route-layer"
+            hint="Empty routes the whole channel output."
+            error={indexError(layerText, { label: 'From layer', min: 0, blankAllowed: true })}
+          >
             <NumericInput
-              className="cg-field"
+              className="cg-field cg-field--mono"
+              dir="ltr"
+              allow="digits"
               aria-label="Route source layer"
-              value={producer.layer === undefined ? '' : String(producer.layer)}
+              value={layerText}
               onValueChange={(v) => {
+                setLayerText(v);
                 const n = Number(v);
                 const { layer: _drop, ...rest } = producer;
                 onChange(
