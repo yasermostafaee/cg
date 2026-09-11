@@ -62,7 +62,7 @@ export function BackupServerDialog({
       }}
     >
       {/* §8a — the host takes the row on its own, and the two ports share the next one. */}
-      <DialogField label="Host address" id="backup-host" error={hostBad}>
+      <DialogField label="Host address" id="backup-host" error={hostBad} focusFirst>
         <input
           className="cg-field cg-field--mono"
           type="text"

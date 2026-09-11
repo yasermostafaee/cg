@@ -158,6 +158,7 @@ export function DialogField({
   hint,
   error = null,
   id,
+  focusFirst = false,
   children,
 }: {
   label: string;
@@ -166,17 +167,35 @@ export function DialogField({
   error?: string | null;
   /** Stable id root, so the control and its error can be bound together. */
   id?: string;
+  /**
+   * 🔴 `SETTINGS-MATCH-02` §8e — **THIS IS THE FIELD FOCUS LANDS ON when the dialog opens.**
+   *
+   * Measured before it existed: focus went to the ✕ on every one of the five sub-dialogs, so
+   * an operator who pressed `Add source` had to Tab or click before he could type. `B-230`
+   * explains why it was not simply an `autoFocus`: React applies that during the commit and
+   * the primitive's focus-on-open runs in an effect AFTER it, so the effect always won — and
+   * two things moving focus is the defect, not the ordering. So the FIELD is nominated with
+   * `data-modal-autofocus` and the TRAP is still the only thing that moves focus.
+   *
+   * ⚠ Marked per form, on the first field, rather than inferred: the CONFIRM dialogs must NOT
+   * take it. Focus on the ✕ is right where the other button is destructive, and a dialog that
+   * put focus near `Remove source` on open would be handing the operator a loaded press.
+   */
+  focusFirst?: boolean;
   children: ReactNode;
 }): JSX.Element {
   const errorId = id === undefined ? undefined : `${id}-error`;
+  const extra: Record<string, unknown> = {
+    ...(error !== null
+      ? { 'aria-invalid': true, ...(errorId !== undefined ? { 'aria-describedby': errorId } : {}) }
+      : {}),
+    ...(focusFirst ? { 'data-modal-autofocus': '' } : {}),
+  };
   return (
     <label className="cg-setup-field" {...(id !== undefined ? { 'data-sub-field': id } : {})}>
       <span className="cg-setup-field__label">{label}</span>
-      {isValidElement(children) && error !== null
-        ? cloneElement(children as ReactElement<Record<string, unknown>>, {
-            'aria-invalid': true,
-            ...(errorId !== undefined ? { 'aria-describedby': errorId } : {}),
-          })
+      {isValidElement(children) && Object.keys(extra).length > 0
+        ? cloneElement(children as ReactElement<Record<string, unknown>>, extra)
         : children}
       {hint !== undefined && <span className="cg-setup-field__hint">{hint}</span>}
       {error !== null && (

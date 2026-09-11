@@ -367,6 +367,21 @@ const styles = {
   /** The fixed frame's body fills the frame; only the scroll container inside it scrolls. */
   bodyFixed: { flex: 1, padding: 0, gap: 0 },
   /**
+   * 🔴 `SETTINGS-MATCH-02` §8 — THE SUB-DIALOG'S GROUND AND ITS FOOTER BAND, INLINE.
+   *
+   * The same trap `dialogFixed` carries a warning about, met a second time and caught the same
+   * way — by opening the dialog and reading what it PAINTS. `styles.dialog` sets `background`
+   * and `styles.footer` sets `background` inline, so the `[data-modal-size='record']` rules in
+   * `controls.css` lost silently: measured, the frame came back `rgb(20, 27, 37)` (the
+   * console's `--r-surface`) against the drawing's `#15191f`, and the footer `rgb(20, 32, 45)`
+   * (the outer family's band) against its `#12171e`.
+   *
+   * ⚠ Every OTHER surface of this family is a stylesheet rule and belongs there. These two are
+   * here for one reason: the primitive already sets that property inline.
+   */
+  dialogRecord: { background: cssVars['--r-setup-surface'] },
+  footerRecord: { background: cssVars['--r-sub-foot-bg'] },
+  /**
    * 🔴 `SETTINGS-MATCH-02` §1 — **THE FIXED FRAME IS A RAIL BESIDE A PANEL, AND THE PANEL
    * OWNS THE MESSAGE AND THE FOOTER.**
    *
@@ -745,6 +760,7 @@ export function Modal({
         style={{
           ...styles.dialog,
           ...(fixed ? styles.dialogFixed : {}),
+          ...(size === 'record' ? styles.dialogRecord : {}),
           width: WIDTHS[size],
         }}
         onClick={(e) => e.stopPropagation()}
@@ -858,7 +874,11 @@ export function Modal({
             );
           const footerNode = (
             <div
-              style={fixed ? { ...styles.footer, ...styles.footerFixed } : styles.footer}
+              style={{
+                ...styles.footer,
+                ...(fixed ? styles.footerFixed : {}),
+                ...(size === 'record' ? styles.footerRecord : {}),
+              }}
               className="cg-modal-footer"
             >
               {footer}

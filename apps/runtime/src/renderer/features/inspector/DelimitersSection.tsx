@@ -299,7 +299,7 @@ function AddDelimiterDialog({
         return null;
       }}
     >
-      <DialogField label="Name" id="delimiter-name">
+      <DialogField label="Name" id="delimiter-name" focusFirst>
         <input
           className="cg-field"
           type="text"

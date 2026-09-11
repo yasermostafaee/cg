@@ -3571,20 +3571,44 @@ input[type='checkbox']:disabled:checked {
  * ⚠ The footer's own `.cg-modal-footer .cg-btn` rule is MORE specific than this, so the
  * footer's buttons are matched here explicitly rather than left to lose silently.
  */
+/*
+ * 🔴 **GEOMETRY FOR EVERY BUTTON; COLOUR FOR THE NEUTRAL ONES ONLY — and a screenshot caught
+ * the first spelling getting that wrong.**
+ *
+ * This rule originally set `background` and `border-color` too. `[data-modal-size='…'] .cg-btn`
+ * is specificity 0,2,0 and `.cg-btn--caution-strong` is 0,1,0, so the scoped rule WON: the
+ * destructive confirm's solid amber — the app's one safety signal on a button that removes
+ * something — came out the same grey as `Cancel` beside it. A dialog asking "Remove this?" with
+ * two identical buttons is worse than one with no colour at all.
+ *
+ * So the box is shared and the FILL is not: the coloured variants (`--primary`, `--add`,
+ * `--caution-strong`, `--danger`) keep their own rules, and only the neutral ground is stated
+ * here.
+ */
 [data-modal-size='fixed'] .cg-btn,
-[data-modal-size='fixed'] .cg-modal-footer .cg-btn {
+[data-modal-size='fixed'] .cg-modal-footer .cg-btn,
+[data-modal-size='record'] .cg-btn,
+[data-modal-size='record'] .cg-modal-footer .cg-btn {
   min-height: var(--r-setup-btn-min-h);
   padding: var(--r-setup-btn-pad);
   border-radius: var(--r-setup-btn-radius);
-  border-color: var(--r-setup-card-line);
-  background: var(--r-setup-btn-bg);
   font-size: var(--r-setup-btn-text);
   gap: var(--r-setup-btn-gap);
   line-height: 1.35;
 }
 
-[data-modal-size='fixed'] .cg-btn:hover:not(:disabled),
-[data-modal-size='fixed'] .cg-modal-footer .cg-btn:hover:not(:disabled) {
+[data-modal-size='fixed'] .cg-btn--neutral,
+[data-modal-size='fixed'] .cg-modal-footer .cg-btn--neutral,
+[data-modal-size='record'] .cg-btn--neutral,
+[data-modal-size='record'] .cg-modal-footer .cg-btn--neutral {
+  border-color: var(--r-setup-card-line);
+  background: var(--r-setup-btn-bg);
+}
+
+[data-modal-size='fixed'] .cg-btn--neutral:hover:not(:disabled),
+[data-modal-size='fixed'] .cg-modal-footer .cg-btn--neutral:hover:not(:disabled),
+[data-modal-size='record'] .cg-btn--neutral:hover:not(:disabled),
+[data-modal-size='record'] .cg-modal-footer .cg-btn--neutral:hover:not(:disabled) {
   background: var(--r-setup-btn-hover-bg);
   border-color: var(--r-setup-btn-hover-line);
   filter: none;
@@ -4020,23 +4044,10 @@ input[type='checkbox']:disabled:checked {
   font-size: var(--r-setup-field-mono-text);
 }
 
-[data-modal-size='record'] .cg-btn,
-[data-modal-size='record'] .cg-modal-footer .cg-btn {
-  min-height: var(--r-setup-btn-min-h);
-  padding: var(--r-setup-btn-pad);
-  border-radius: var(--r-setup-btn-radius);
-  border-color: var(--r-setup-card-line);
-  background: var(--r-setup-btn-bg);
-  font-size: var(--r-setup-btn-text);
-  gap: var(--r-setup-btn-gap);
-  line-height: 1.35;
-}
-
-[data-modal-size='record'] .cg-btn:hover:not(:disabled) {
-  background: var(--r-setup-btn-hover-bg);
-  border-color: var(--r-setup-btn-hover-line);
-  filter: none;
-}
+/*
+ * ⚠ The record family's BOX and its neutral ground are stated once, with the `fixed` family's,
+ * beside the note that explains why the fill is not in the same rule as the geometry.
+ */
 
 /* The one primary, in the family's mint (§0 collision 2 — this IS the shadow family). */
 [data-modal-size='record'] .cg-btn--primary,

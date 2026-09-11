@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures/runtime.js';
+import { chooseSourceKind, test, expect } from './fixtures/runtime.js';
 
 /**
  * 🔴 `SETTINGS-MATCH-02` — **THE OWNER'S FOUR DEFECTS, MEASURED IN A REAL ENGINE.**
@@ -436,6 +436,123 @@ test('§4 — the Layers pane is the reference’s: a summary, a filter, five co
 });
 
 /**
+ * 🔴 §8 — **ONE SUB-DIALOG FRAME FOR EVERY ADD, EDIT AND REMOVE.**
+ *
+ * The rule was already there (`STATION-CHROME-01` §6 built `RecordDialog` to end three shapes);
+ * what this asserts is the reference's own measurements for it, and the two things a screenshot
+ * caught that no earlier test would have.
+ */
+test('§8 — every add/edit/remove is the same 480 frame, with a verb that names the act', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const setup = page.getByRole('dialog', { name: 'Station setup' });
+  await app.openStationSetupAt('Live sources');
+
+  /** The topmost dialog — the sub-dialog, when one is open. */
+  const sub = (): ReturnType<typeof page.locator> => page.locator('[role="dialog"]').last();
+  const frame = async (): Promise<{
+    w: number;
+    size: string | null;
+    bg: string;
+    footBg: string;
+    scrim: string;
+    focus: string;
+  }> =>
+    sub().evaluate((el) => {
+      const foot = el.querySelector('.cg-modal-footer');
+      return {
+        w: Math.round(el.getBoundingClientRect().width),
+        size: el.getAttribute('data-modal-size'),
+        bg: getComputedStyle(el).backgroundColor,
+        footBg: foot === null ? '' : getComputedStyle(foot).backgroundColor,
+        scrim: el.parentElement === null ? '' : getComputedStyle(el.parentElement).backgroundColor,
+        focus: document.activeElement?.getAttribute('aria-label') ?? '',
+      };
+    });
+
+  await setup.getByRole('button', { name: 'Add live source' }).click();
+  await expect(page.getByRole('dialog', { name: 'Add live source' })).toBeVisible();
+  const addSource = await frame();
+  /*
+    🔴 THE GROUND AND THE FOOTER BAND, MEASURED — and this is the assertion that would have
+    caught them. Both were set INLINE by the primitive, so the `[data-modal-size='record']`
+    rules lost silently: the frame came back `rgb(20, 27, 37)` (the console's surface) against
+    the drawing's `#15191f`, and the footer `rgb(20, 32, 45)` against its `#12171e`. The same
+    trap the `fixed` frame's ground had already met once.
+  */
+  expect(addSource.size).toBe('record');
+  expect(addSource.w, 'the reference’s `.sub-dialog` — min(480, 100vw − 32)').toBe(480);
+  expect(addSource.bg, 'the family’s own ground').toBe('rgb(21, 25, 31)');
+  expect(addSource.footBg, 'its footer band, a step under the body').toBe('rgb(18, 23, 30)');
+  /* A SUB layer lays the lighter scrim, so the dialog it was opened from stays visible. */
+  expect(addSource.scrim).toBe('rgba(0, 0, 0, 0.4)');
+  /*
+    🔴 §8e — FOCUS LANDS ON THE FIRST FIELD. It landed on the ✕ on all five, so an operator who
+    pressed `Add source` had to Tab or click before he could type. `B-230` is why this is a
+    `data-modal-autofocus` mark rather than an `autoFocus`: one thing moves focus.
+  */
+  expect(addSource.focus, 'the operator can type immediately').toBe('Source name');
+
+  // …and the kind picker is a segmented control whose choice changes the FORM under it.
+  await expect(sub().getByLabel('DeckLink device index')).toBeVisible();
+  await chooseSourceKind(sub(), 'ndi');
+  await expect(sub().getByLabel('NDI source name')).toBeVisible();
+  await expect(sub().getByLabel('DeckLink device index')).toHaveCount(0);
+  await expect(sub().getByRole('button', { name: 'Add source' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  /*
+    The three form dialogs, each with a verb that names its act — never `OK`, never bare `Save`.
+
+    ⚠ Driven by the RAIL, not by `openStationSetupAt`: Station setup is still open (only the
+    SUB-dialog was dismissed), so a second press of the console's door lands on the scrim and
+    times out after thirty seconds — which reads as a hang rather than as "already open".
+  */
+  await setup
+    .getByRole('tablist', { name: 'Station setup sections' })
+    .getByRole('tab', { name: /^Text file delimiters/ })
+    .click();
+  await setup.getByRole('button', { name: 'Add delimiter' }).click();
+  expect((await frame()).focus).toBe('New delimiter name');
+  await expect(sub().getByRole('button', { name: 'Add delimiter' })).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  /*
+    🔴 §8d — THE DESTRUCTIVE SHAPE, and the delimiter's remove had NO QUESTION AT ALL before
+    this: one press of a bin dropped the record. Every other destructive act in this dialog was
+    already gated, which is what made it the odd one out rather than a deliberate exception.
+  */
+  await page
+    .locator('[data-delimiter-id]')
+    .first()
+    .getByRole('button', { name: /^Remove delimiter/ })
+    .click();
+  await expect(sub()).toContainText('from the available delimiters?');
+  await expect(sub().locator('[data-confirm-emblem]'), 'the mark before the sentence').toHaveCount(
+    1,
+  );
+  /*
+    ⚠ …and its confirm keeps the app's DESTRUCTIVE treatment. A scoped `[data-modal-size]
+    .cg-btn` rule out-specifies `.cg-btn--caution-strong`, and the first spelling of this
+    family's button rule did exactly that — the amber came out the same grey as `Cancel`
+    beside it. A dialog asking "Remove this?" with two identical buttons is worse than one
+    with no colour at all.
+  */
+  const go = sub().getByRole('button', { name: 'Remove delimiter' });
+  await expect(go).toHaveAttribute('data-modal-role', 'destructive');
+  expect(
+    await go.evaluate((el) => getComputedStyle(el).backgroundColor),
+    'the destructive fill survives the family’s scoped button rule',
+  ).toBe('rgb(245, 158, 11)');
+  // Declining changes nothing — the list is as long as it was.
+  const before = await page.locator('[data-delimiter-id]').count();
+  await sub().getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('[data-delimiter-id]')).toHaveCount(before);
+});
+
+/**
  * 🔴 §9 — **THREE MESSAGE CLASSES, THREE PLACES, THREE JOBS.**
  *
  * They are not interchangeable, and the same sentence must never appear in two of them:
@@ -600,24 +717,35 @@ test('§10 — a port takes Persian digits and refuses letters, through typing A
   await expect(amcp).toHaveValue('6250');
 
   /*
-    🔴 §10.3 — A PASTE OF MIXED TEXT. Written to the clipboard and pasted with the keyboard,
-    which is the real path: `fill()` would set the value directly and prove nothing about it.
+    🔴 §10.3 — A WHOLE CHUNK OF TEXT ARRIVING AT ONCE, which is the path a keystroke filter
+    would drop. `insertText` delivers the entire string in ONE `input` event — exactly what a
+    paste looks like to the handler — and that is the property under test.
+
+    ⚠ **IT WAS `navigator.clipboard.writeText` + `Ctrl+V`, AND LINUX CI KILLED IT:**
+    `NotAllowedError: Failed to execute 'writeText' on 'Clipboard': Write permission denied`.
+    It passed on Windows against system Chrome and failed on the bundled headless Chromium —
+    golden rule 12a, exactly: a green Windows run is a signal and never a discharge, and the
+    thing it hid here was in the TEST rather than in the product.
+
+    The system clipboard is an OS permission surface, not product behaviour. Routing through
+    it added a way for this spec to fail for a reason it is not about, and removed nothing
+    from what it proves: the handler cannot tell the two apart.
   */
   await amcp.fill('');
   await amcp.focus();
-  await page.evaluate(async () => {
-    await navigator.clipboard.writeText('AMCP port 5250 (primary)');
-  });
-  await page.keyboard.press('ControlOrMeta+V');
+  await page.keyboard.insertText('AMCP port 5250 (primary)');
   await expect(amcp, 'a pasted phrase keeps its digits and drops the rest').toHaveValue('5250');
 
-  // …and the keyboard still works, which a `preventDefault` guard would have broken.
+  // …and SELECT-ALL then replace still works, which a `preventDefault` guard would have broken.
   await page.keyboard.press('ControlOrMeta+A');
-  await page.keyboard.press('ControlOrMeta+C');
-  await amcp.fill('1');
-  await page.keyboard.press('ControlOrMeta+A');
-  await page.keyboard.press('ControlOrMeta+V');
-  await expect(amcp, 'select-all, copy and paste all still work').toHaveValue('5250');
+  await page.keyboard.insertText('6250');
+  await expect(amcp, 'select-all and replace still work').toHaveValue('6250');
+  // …as do the caret keys, on a field whose value the handler rewrites under them.
+  await page.keyboard.press('Home');
+  await page.keyboard.insertText('1');
+  await expect(amcp, 'Home put the caret at the start and typing landed there').toHaveValue(
+    '16250',
+  );
 
   // §10.3 — OUT OF RANGE IS A REFUSAL, NOT A CLAMP, and it is shown beside the field.
   await amcp.fill('70000');

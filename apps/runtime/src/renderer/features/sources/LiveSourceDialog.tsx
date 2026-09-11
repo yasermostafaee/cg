@@ -84,7 +84,7 @@ export function LiveSourceDialog({
       onCancel={onCancel}
       onSubmit={submit}
     >
-      <DialogField label="Source name" hint="The name operators see in the source list.">
+      <DialogField label="Source name" hint="The name operators see in the source list." focusFirst>
         <input
           className="cg-field"
           type="text"
