@@ -1177,9 +1177,24 @@ renders answers "is this handled?" with a yes.
       Nothing was deleted and nothing was overridden. An adjacent-sibling rule, never a
       `margin-bottom` on the `<details>` — the same element is the LAST thing in the Outputs
       card, where a trailing margin would push that card's edge out.
-- [ ] P.10 **Linux `gate:e2e` — OWED.** Local Windows `pnpm --filter @cg/runtime test:e2e`:
-      **177 passed**, 2.0 min, on the built bundle. That is a reason to push and never a claim
-      that the change is verified (golden rule 12a, and `SETTINGS-MATCH-02` repeated that lesson
-      one commit ago). Awaiting the run URL for the commit that carries this work, checked at the
-      **STEP** level — `P-046`'s red was a green-looking job whose suite never ran, `P-029`'s is
-      its mirror.
+- [x] P.10 ✅ **Linux `gate:e2e` — DISCHARGED on `3d3a74fe`, the commit that carries this work:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34638487417> — run
+      `conclusion: success`, the **`E2E (Playwright)` job RAN** 19:22:44Z → 19:35:13Z
+      (**749 s**, `conclusion: success`), and its **`E2E` step itself is step 13,
+      `completed/success`**, 19:23:58Z → 19:34:55Z (**657 s**). Checked at the STEP level, not
+      just the job: `P-046`'s red was a green-looking job whose suite never ran and `P-029`'s is
+      its mirror. Not skipped, not cancelled. `Lint · Typecheck · Test · Build` green beside it
+      (192 s), `required` green.
+      Local `pnpm gate`: `0 cached, 93 total`, exit 0 in 245 s with its `---- gate ended` footer
+      (`P-040`/`P-045`); local Windows runtime e2e **177 passed** in 1.9 min — a reason to push
+      and never a claim that this was verified. The Linux run is what verified it.
+      ⭐ `P-046`'s remedy exercised again: `Install system deps for cached browser` **succeeded**
+      and the launch **probe** passed (step 11). Its RETRY and ESCALATION paths remain
+      unexercised and that item stays open.
+      ⚠ **This one was green FIRST TIME**, which the two runs before it were not — and the
+      difference is not luck: `SETTINGS-MATCH-02`'s red was a spec of mine that used
+      `navigator.clipboard`, and `11.9`'s three were specs never re-run after `B-240` changed
+      the footer's contents. Both are now standing practice — run the local suite before pushing
+      render work, and re-run it after any edit that changes what a surface CONTAINS. Six reds
+      were caught locally on this work before the push, five of them in tests I had just
+      written or just invalidated.
