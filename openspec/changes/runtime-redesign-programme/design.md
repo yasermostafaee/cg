@@ -5469,3 +5469,33 @@ geometry changes an approved Station setup surface (pad 15→13, radius 10→8, 
 **For the owner:** merge the component and keep two measured skins, or let the console drawing
 govern Station setup too. The second is a design change to a signed-off surface, so it is not
 one to make in passing.
+
+## 30. `CONSOLE-LOOK-06` DELTA 9 — PENDING IS DOCTRINE, AND §2 ANSWERED FROM THE CODE
+
+The doctrine and the full evidence live in `docs/prd/runtime.md` **R-063** — a PRD rather than
+a spec because it is a RULE ABOUT RENDERING that every surface owes, not a capability one
+change delivers, and because golden rule 10 (which it is the on-row half of) lives in guidance
+too. Summarised here so the programme's own record is not a pointer alone:
+
+- 🔴 **There is no `PENDING` label in the product.** The amber-clock words are `TAKING` and
+  `UNCONFIRMED` (`airStateVisual`). The reported "PENDING" is `TAKING`.
+- **The look press applies immediately** — `B-168`, owner's decision 2026-08-25 (option b);
+  `setActiveLook` reconciles at once when `#ownsLiveSeats`, and only records on a row that
+  owns no seats (`B-151`).
+- **So the amber clock is a CONFIRMATION gap, not a staging gap**:
+  `pending = !isTerminalStatus(rec.intentStatus) && !isConfirmed(rec)`.
+- **§2's verdict is (c)** — applied on our side, awaiting the server. Neither string is wrong,
+  so nothing is reworded; the missing thing was the paragraph.
+- ⚠ **The predicate is named for less than it decides** — `pending` reads as "waiting" and
+  decides "unconfirmed by the wire". Reported, not renamed (§1 forbids renaming here).
+
+⚠ **§2's quoted hint does not exist in our build.** The delta quotes a footer hint reading
+_"Look buttons apply immediately"_; a `git grep` for `immediately` across
+`apps/runtime/src/renderer` finds no such footer. Our foot hint reads _"Click a populated row
+to inspect · ON PVW adds to the composite · Play takes the row on air"_, and the immediacy
+claim lives on the LOOK label's tooltip and its `· NOW` qualifier. So the contradiction was
+between a TOOLTIP and a state, not between a footer and a state — which does not change the
+answer, and is recorded because the next reader will otherwise go looking for the footer.
+
+⚠ **§3's boundary needed nothing withdrawn**: DELTA 8 is not built yet, and DELTA R already
+separated the transient surface from the persistent one, so (a)–(d) hold by construction.

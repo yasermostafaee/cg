@@ -3699,3 +3699,65 @@ is done.
   ledger, and status is not asked); [[R-030]] (the channel-keyed settings list this would extend).
 - **Number verification:** `git grep -n "R-062"` over the tree returned nothing before this entry
   was written. **Nothing is implemented by this item.**
+
+## [x] R-063 — DOCTRINE: a row shows whether a change is DECLARED, APPLIED, or merely UNCONFIRMED ⟨priority: high — two surfaces were reported as contradicting each other and neither was lying⟩ — RECORDED 2026-09-13
+
+**What.** The on-row rendering of golden rule 10 (_a configuration verb is never a playout
+verb_), written down so the two are findable from each other:
+
+> **Any action that records an intent which is not yet on air leaves its row in a WAITING
+> state until the change is actually applied. The row's state distinguishes DECLARED from
+> APPLIED.**
+
+⚠ **And a THIRD meaning exists, which is the one most likely to be re-broken.** A row can be
+APPLIED ON OUR SIDE and not yet CONFIRMED BY THE SERVER. That is neither "declared" nor
+"done", and the console already renders it — see the answer below.
+
+**Why.** `CONSOLE-LOOK-06` DELTA 9 reported a contradiction: the console says a look press
+applies immediately while the row shows an amber clock. Both statements are true, they answer
+different questions, and nothing on screen said so.
+
+### The answer, read from the code — it is (c), and the premise needed correcting first
+
+1. 🔴 **THERE IS NO `PENDING` LABEL IN THE PRODUCT.** `git grep` over `apps/runtime/src` and
+   `packages/shared-schema/src` finds the word nowhere operator-facing. The amber-clock words
+   are **`TAKING`** (`playing` + pending, `colors.pending`, `⟳`) and **`UNCONFIRMED`**, from
+   `airStateVisual` in `theme.ts`. So the reported "PENDING" is `TAKING`.
+2. **The look press really does apply immediately.** `B-168`, the owner's own decision of
+   2026-08-25 (option b): the pick is not staged and `UPDATE` is not involved. `LookPicker`
+   renders `· NOW` beside the label and its tooltip says so outright. On the bridge,
+   `setActiveLook` reconciles at once when `#ownsLiveSeats(itemId)`; only on a row that owns
+   NO seats does it `#recordActiveLook` and stay silent (`B-151`), where the next take seats
+   it.
+3. **So the amber clock is not "declared, not applied".** `pending` is computed in
+   `packages/caspar-client/src/reconciler/reconciler.ts` as
+   `!isTerminalStatus(rec.intentStatus) && !this.isConfirmed(rec)` — **an intent was SENT and
+   the wire has not answered yet.** A confirmation gap, not a staging gap.
+
+**Verdict: (c).** Applied on our side, pending confirmation from the server. **The hint is not
+lying and the state is not lying.** Nothing is reworded, because neither string is wrong;
+what was missing was this paragraph.
+
+⚠ **THE PREDICATE IS NAMED FOR LESS THAN IT DECIDES, and it is reported rather than renamed**
+(DELTA 9 §1 says not to rename it here). `pending` reads as "waiting"; what it actually
+decides is **"the wire has not confirmed this yet"**. A row is `pending` because an intent is
+outstanding, never because a change is staged. Anyone reaching for it to mean "declared but
+not applied" will be wrong.
+
+**The boundary with the other two surfaces**, so a later change cannot collapse them:
+
+| kind                                   | lifetime                             | what it means                |
+| -------------------------------------- | ------------------------------------ | ---------------------------- |
+| a TOAST                                | transient, may auto-hide             | this action COMPLETED        |
+| a REFUSAL                              | persists until dismissed or resolved | this did NOT happen, and why |
+| a row STATE (`TAKING` / `UNCONFIRMED`) | as long as the condition holds       | sent, not yet confirmed      |
+
+**Acceptance.**
+
+- WHEN an action records an intent that is not yet on air THEN its row SHALL show a waiting
+  state until the change is applied, and the row's state SHALL distinguish declared from
+  applied.
+- WHEN a look is pressed on a row that owns live seats THEN the change SHALL be applied
+  immediately and the row SHALL show the confirmation-gap state until the wire answers.
+- The console SHALL NOT render a state whose meaning is "declared, not yet applied" while the
+  action that produced it applied immediately.
