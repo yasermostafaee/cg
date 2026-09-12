@@ -1533,7 +1533,7 @@ pressure — "just this one" and "silence everything" — did not exist at all.
   and the surface says so in words
 - WHEN PANIC is pressed THEN every plate of every ON-AIR row is set to 0 and the console reports
   how many plates it silenced; an empty scope reports that nothing was on air rather than success
-- WHEN the LIVE PLATES tab is open THEN every seated plate shows a state pill, a fader, ON/OFF,
+- WHEN the Live plates tab is open THEN every seated plate shows a state pill, a fader, ON/OFF,
   SOLO and a % readout without any dialog being opened, and the layer row carries a compact
   READ-ONLY summary outside its six-column verb block
 - WHEN any of this is rendered THEN no indicator is a bar, a needle or a meter — an INTENT pill

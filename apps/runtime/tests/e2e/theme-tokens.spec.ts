@@ -69,14 +69,37 @@ test('the --r-* tokens resolve in the browser, and the LAYERS table keeps its gr
     transparent BY DEFINITION (`controls.css` permits it "where surrounding chrome already
     frames the control"). So the spec was asserting a fill against a variant chosen by
     document order. It now names a variant whose fill is part of its contract.
+
+    🔴 AND THE SAME TRAP CAUGHT IT A SECOND TIME — `CONSOLE-LOOK-06` DELTA D4 made the layers
+    bar's bulk verbs QUIET (the reference's `.layer-toolbar .btn` is transparent with a line
+    border), and they are `neutral`, and they are first in the DOM. `.first()` picked one and
+    the sentinel reddened over a change that was correct.
+
+    ⚠ The lesson is the one B1 already wrote and did not go far enough with: a sentinel must
+    name its subject by the PROPERTY it is testing, never by position. So it now asks for a
+    neutral button whose fill is unconditional — one OUTSIDE a panel bar — and says so if it
+    cannot find one, rather than silently testing whatever was first.
   */
-  const painted = await page
-    .locator('.cg-btn--neutral')
-    .first()
-    .evaluate((el) => {
-      return getComputedStyle(el).backgroundColor;
-    });
+  const painted = await page.evaluate(() => {
+    const filled = [...document.querySelectorAll<HTMLElement>('.cg-btn--neutral')].find(
+      (el) => el.closest('.cg-panel-header') === null,
+    );
+    return filled === undefined ? null : getComputedStyle(filled).backgroundColor;
+  });
+  expect(painted, 'no neutral button outside a bar — the sentinel has no subject').not.toBeNull();
   expect(painted, 'a control with no background = the tokens never arrived').not.toBe(
+    'rgba(0, 0, 0, 0)',
+  );
+
+  /*
+    …and the QUIET ones are quiet ON PURPOSE, which is the other half of the same reading: a
+    transparent bulk verb must be transparent because a rule says so, not because a var failed
+    to resolve. Its BORDER is the tell — an unresolved `--r-border` would leave no edge either.
+  */
+  const bulk = page.locator('.cg-panel-header [data-verb-tone]').first();
+  await expect(bulk).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  const edge = await bulk.evaluate((el) => getComputedStyle(el).borderTopColor);
+  expect(edge, 'a quiet control with no edge = the tokens never arrived').not.toBe(
     'rgba(0, 0, 0, 0)',
   );
 });

@@ -1,7 +1,5 @@
 import type { CSSProperties } from 'react';
-import { CircleDot, TriangleAlert } from 'lucide-react';
-import { colors, cssVars } from '../../theme.js';
-import { Icon } from '../../ui/Icon.js';
+import { cssVars } from '../../theme.js';
 import {
   ROW_GEOMETRY,
   VERBS_GRID,
@@ -131,79 +129,17 @@ const styles = {
     whiteSpace: 'nowrap' as const,
   },
   cell: { overflow: 'hidden', textOverflow: 'ellipsis' },
-  /**
-   * `B-224` — the STATE head is a WRAPPING flex row: the word, then one count per
-   * non-zero state. At the full and compact densities everything sits on one line
-   * inside the widened column; at the tightest density (an icon-only, 34 px column)
-   * the counts wrap UNDER the word instead of being clipped — the header grows a line
-   * there, and every number stays whole. `overflow: hidden` is deliberately NOT on
-   * this cell: a hidden overflow is exactly how the second count went missing.
-   */
-  stateHead: {
-    display: 'flex',
-    flexWrap: 'wrap' as const,
-    alignItems: 'baseline',
-    columnGap: '0.35rem',
-    rowGap: '0.1rem',
-    minWidth: 0,
-  },
-  /** One count: the state's own mark beside its number, both in the state's colour. */
-  count: {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: '0.2rem',
-    fontWeight: 700,
-    lineHeight: 1,
-    // Numbers never move when they change from 9 to 10.
-    fontVariantNumeric: 'tabular-nums' as const,
-  },
-  /**
-   * The on-air tally beside `State`. The sacred air colour, and one of only two
-   * places allowed to use it (the row's state mark is the other) — it is a genuine
-   * air claim about the channel, not decoration.
-   */
-  onAirCount: {
-    color: colors.onAir,
-    // 14px, per the owner — larger than the ~10px header type around it without
-    // dominating the row. This is the one number a control room wants from the whole
-    // list ("how much of my output is live?"), so it is sized to be read at a glance
-    // rather than hunted for.
-    fontSize: '14px',
-  },
-  /**
-   * …and the same number with its confidence withdrawn (§4). Muted, keeping its
-   * size — the count is unchanged, only the claim that a server is confirming it.
-   * B-081's tone, reused rather than a new grey.
+  /*
+   * 🔴 THE FIVE TALLY STYLES THAT WERE HERE ARE GONE WITH THE TALLY (DELTA D5) — `count`,
+   * `onAirCount`, `onAirCountStale`, `errorCount` and `errorTallyMark`. Deleted rather than left
+   * for "when it comes back": an unreachable style object is the shape this repo has filed
+   * four times, and it reads as a live decision to whoever finds it next.
    *
-   * ⚠ `AUDIT-CLOSE-01` C2 — it is the HEADER's quiet ink, not the app-wide `--r-text-muted`.
-   * Same tone, same meaning; the difference is that this one is measured against the ground it
-   * is actually painted on. Left as `--r-text-muted` it would read 4.39:1 here — the accepted
-   * fail A6 closed — while every label beside it read 4.74:1.
+   * What was WORTH keeping travelled with them into `controls.css` — the contrast split in
+   * particular. The number is TEXT and takes the error TEXT role; the mark beside it is a
+   * GRAPHIC and takes the mark role, judged against 3.0 rather than 4.5. Two reds side by
+   * side is the intended result: the loud one marks, the legible one reads.
    */
-  onAirCountStale: { color: cssVars['--r-layer-head-ink'] },
-  /**
-   * `B-213` — the rows whose last command was REFUSED, as their own number in the
-   * error colour, beside the air count and never added to it. Smaller than the air
-   * count: it is a fact about this console's reach, not about air.
-   */
-  errorCount: {
-    // PHASE 2A — the NUMBER is text and takes the error TEXT role (6.63:1 on this
-    // header; the mark red would read 3.12:1, below the 4.5 floor). Never the
-    // background red (2.08:1 here). The warning triangle beside it is a graphic and
-    // takes the MARK role instead — see `errorTally` below.
-    color: colors.errorText,
-    fontSize: '12px',
-  },
-  /**
-   * PHASE 2A — the tally's warning triangle, which is a MARK and not a word.
-   *
-   * It sits inside `errorCount`'s span and would otherwise inherit the text red.
-   * An 11 px glyph is a graphic: it is judged against the 3.0 floor, where the
-   * owner's `rgb(255 28 28)` clears on every ground (3.12 here, its worst), and it
-   * is the value `RUNTIME-FIX-0904` fixed. Two reds side by side is the intended
-   * result — the loud one marks, the legible one reads.
-   */
-  errorTallyMark: { color: colors.errorMark },
   verbHead: {
     textAlign: 'center' as const,
     overflow: 'hidden',
@@ -213,35 +149,7 @@ const styles = {
   },
 } as const satisfies Record<string, CSSProperties>;
 
-export function LayerTableHeader({
-  density,
-  tally,
-  unverifiable = false,
-}: {
-  density: Density;
-  /**
-   * `B-213` — what the list adds up to, as TWO numbers that mean two things: rows this
-   * console believes are on air (or unsettled), shown in the air colour; and rows whose
-   * last command was refused, shown in the error colour. They are never one number.
-   *
-   * It was `onAirCount`, and it was `items.filter(isOnAir).length` — STOP ALL's
-   * predicate, which counts `error` because an errored row must still be offered
-   * STOP. So `State (2)` sat in green over two rows whose takes had just been REFUSED.
-   * The count read as "2 on air"; the truth was "0 on air, 2 refused".
-   */
-  tally: { onAir: number; inError: number };
-  /**
-   * §4 — neither hop can back that count right now, so it stops wearing the air
-   * colour.
-   *
-   * IT IS NOT RENAMED and it is not hidden. It remains a count of what our list
-   * says is on air, which is still the most useful number on the screen and still
-   * true of our model; what it can no longer do is assert that a server confirmed
-   * it. This is the sacred air colour's own rule — B-081's "the look of health we
-   * cannot currently verify" — applied to the one other place entitled to wear it.
-   */
-  unverifiable?: boolean;
-}): JSX.Element {
+export function LayerTableHeader({ density }: { density: Density }): JSX.Element {
   const spec = densitySpec(density);
   return (
     <div style={{ ...styles.header, gridTemplateColumns: gridTemplateColumns(density) }} role="row">
@@ -252,78 +160,30 @@ export function LayerTableHeader({
         #
       </span>
       {/*
-        STATE, with a running count of how many rows are ON AIR — in the air colour,
-        because it IS an air claim and this is one of the two places entitled to wear
-        that green (the row's own state mark being the other).
+        🔴 `CONSOLE-LOOK-06` DELTA D5 — THE TALLY IS NOT IN THIS HEAD ANY MORE.
 
-        It answers the question a control room asks of the whole list rather than of
-        one row: "how much of my graphics output is live right now?" Previously that
-        needed counting green marks down a thirty-row list.
+        It was: `State 1 2`, the on-air count in the air colour and the in-error count in the
+        error colour, both inside the STATE column head. The reference's header is
+        `# / State / Name / Template / …` and nothing else, and its counts live in the SUB-BAR
+        — measured, and it is the better place for a reason this console proved the hard way.
 
-        Rendered ONLY when the count is non-zero. A permanent `0` would be noise on
-        the resting state, and — worse — it would put the air colour on screen at all
-        times, which is exactly how a colour reserved for one meaning stops being
-        noticed.
+        ⚠ THE MOVE IS WHAT MAKES IT HONEST, not a deletion. `CONSOLE-LOOK-06` had already put
+        an `N on air` chip in the sub-bar, so the same number was being stated twice, three
+        inches apart, in two different type sizes — and the day they disagree the operator has
+        no way to tell which one is lying. One fact, one place.
 
-        `B-213` — and it counts TWO things apart: on air in the air colour, in error in
-        the error colour, never folded into one number.
-
-        `B-224` — THE WORDS LEFT THE HEAD; THE COLOUR AND THE MARK CARRY THE STATE.
-        `(1 on air) (2 in error)` needed 160 px of a 132 px cell, so the second count was
-        cut off for lack of room and the operator could not see how many rows were in
-        error. The owner's decision: "showing only the numbers is enough; the colour says
-        whether it is an error or on air." So each state is now ITS NUMBER in ITS COLOUR,
-        with the row's own state mark beside it (the same lucide `CircleDot` an ON AIR row
-        draws, the same `TriangleAlert` an ERROR row draws) so colour is not the only
-        carrier — and where the mark does not fit (the icon-only density) the mark is
-        dropped and the number is kept. The words survive in two places that cost no
-        width: the `title` tooltip and the accessible name.
+        ⭐ AND IT PAYS `B-224` BACK. That bug was width: `(1 on air) (2 in error)` needed 160 px
+        of a 132 px cell, so the error count was CUT OFF and the owner's ruling was to drop the
+        words and keep the numbers. The sub-bar is a full-width line with room for both, so the
+        words come back with them — `2 on air` · `1 in error` — and the tooltip is no longer
+        the only place the meaning is written. `B-213`'s rule is untouched and travels with
+        them: two numbers that mean two things, never folded into one.
       */}
       <span
-        style={styles.stateHead}
+        style={styles.cell}
         title="What is on this layer right now: on air, ready, empty, occupied by another system, or unknown."
       >
         State
-        {/* Explicit separator TEXT between the word and each count. A flex row lays them
-            out with `columnGap`, which leaves the DOM text reading `State12` for one on
-            air and two in error — the exact ambiguity this head exists to remove. A
-            whitespace-only text node is dropped by flex layout, so the rendering is
-            unchanged; the text, the clipboard and any test read `State 1 2`. */}
-        {tally.onAir > 0 && ' '}
-        {tally.onAir > 0 && (
-          <span
-            style={{
-              ...styles.count,
-              ...styles.onAirCount,
-              ...(unverifiable ? styles.onAirCountStale : {}),
-            }}
-            aria-label={`${String(tally.onAir)} items on air`}
-            data-air-tally={String(tally.onAir)}
-            {...(unverifiable ? { 'data-unverifiable': '' } : {})}
-            title={
-              unverifiable
-                ? `${String(tally.onAir)} on air — what this console believes is on air. CasparCG cannot be reached, so nothing is confirming it right now.`
-                : `${String(tally.onAir)} on air — rows this console believes are on air or unsettled: a play CasparCG accepted, or one still waiting for its answer. A refused row is counted separately.`
-            }
-          >
-            {spec.showStateLabel && <Icon icon={CircleDot} size={12} />}
-            {tally.onAir}
-          </span>
-        )}
-        {tally.inError > 0 && ' '}
-        {tally.inError > 0 && (
-          <span
-            style={{ ...styles.count, ...styles.errorCount }}
-            aria-label={`${String(tally.inError)} items in error`}
-            data-error-tally={String(tally.inError)}
-            title={`${String(tally.inError)} in error — rows whose last command CasparCG refused. Nothing is claimed about what those layers show; open the row or the audit log for the code.`}
-          >
-            {spec.showStateLabel && (
-              <Icon icon={TriangleAlert} size={11} style={styles.errorTallyMark} />
-            )}
-            {tally.inError}
-          </span>
-        )}
       </span>
       <span
         style={styles.cell}

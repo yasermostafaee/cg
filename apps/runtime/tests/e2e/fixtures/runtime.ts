@@ -142,9 +142,20 @@ export class RuntimeApp {
   get layers(): Locator {
     return this.page.getByRole('region', { name: 'Layers' });
   }
+  /**
+   * The console's own tab strip.
+   *
+   * 🔴 SCOPED, and that is the point rather than tidiness. The owner sentence-cased the three
+   * tabs (2026-09-12) and Station setup's rail has a tab called `Layers` too — the CASING was
+   * what kept the two apart for a page-wide `getByRole('tab')`, and it is gone. Addressing the
+   * strip by its own accessible name is a match that cannot go ambiguous when a dialog opens.
+   */
+  get layerTabs(): Locator {
+    return this.page.getByRole('tablist', { name: 'Layer surfaces' });
+  }
   /** The playout tab's panel (the reserved layers another system owns). */
   get playoutTab(): Locator {
-    return this.page.getByRole('tab', { name: /^STATION LAYERS/ });
+    return this.layerTabs.getByRole('tab', { name: /^station layers/i });
   }
   /**
    * B-145 (2.8) — the LIVE PLATES tab: the layers the BRIDGE seated for a
@@ -152,7 +163,7 @@ export class RuntimeApp {
    * and the station’s.
    */
   get liveSourcesTab(): Locator {
-    return this.page.getByRole('tab', { name: /^LIVE PLATES/ });
+    return this.layerTabs.getByRole('tab', { name: /^live plates/i });
   }
   /** One seated live-source row, anchored on its stable coordinate attribute. */
   liveSourceRow(coordinate: string): Locator {

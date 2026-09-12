@@ -222,6 +222,64 @@ interface Props {
   zIndex: number;
 }
 
+/** The visible caveat, and the width it needs. Measured in Chromium: 156.8 px at 9 px / 700 / .14em. */
+export const REGION_CAVEAT = 'LIVE SOURCE · PLACEHOLDER';
+
+/**
+ * 🔴 `CONSOLE-LOOK-06` DELTA D6 — THE DEGRADATION, AND WHY IT IS A PREDICATE AND NOT AN
+ * `overflow` SETTING.
+ *
+ * The label is a fixed 156.8 px on screen: it is anchored at the region's centre and then
+ * UN-SCALED by `1/fit`, deliberately, so it reads at console size wherever the panel is
+ * dragged to. A region is whatever the template says it is — measured on the two-box seed at
+ * 1600 × 900, its two plates are **97.2 px** and **72.9 px** wide, so the words were being cut
+ * to `VE SOURCE · PLACEH` by the region's own `overflow: hidden`.
+ *
+ * ⚠ A CLIPPED CAVEAT IS WORSE THAN NO CAVEAT ON THE REGION: the fragment still looks like a
+ * label, so it reads as "something is written here" rather than as "this is not video". The
+ * owner's ruling names the fallback and it is the only one allowed — the words move to the
+ * STAMP's line, which is permanent and still on canvas. **It never degrades to a `title`.**
+ *
+ * ONE predicate, exported, called by BOTH the overlay (which drops the label) and the stage
+ * (which lengthens the stamp). Two copies of this threshold is how the label disappears from
+ * a region while the stamp goes on saying nothing about it.
+ */
+export const REGION_CAVEAT_MIN_PX = 170;
+
+/** Does this region, as it will actually paint, have room for the caveat? */
+export function regionFitsCaveat(renderedWidthPx: number): boolean {
+  return renderedWidthPx >= REGION_CAVEAT_MIN_PX;
+}
+
+/** True when ANY region must fall back to the stamp — the stage's half of the same decision. */
+export function anyRegionTooSmallForCaveat(
+  placements: readonly { width: number }[],
+  fit: number,
+): boolean {
+  return placements.some((p) => !regionFitsCaveat(p.width * fit));
+}
+
+/**
+ * 🔴 `R-022` CAVEAT 2, IN FULL — "a Live Source region is a placeholder, not video".
+ *
+ * `CONSOLE-LOOK-06` DELTA D6: the owner's ruling is that each caveat is stated PERMANENTLY at
+ * the thing it describes, never on a hover. The VISIBLE half is the region's own
+ * `LIVE SOURCE · PLACEHOLDER` chip, which has been on canvas all along; this is the other
+ * half the ruling asks for — the long form, in the accessible name, so the two are BOTH
+ * rather than either. A sighted operator reads three words on the box; a screen reader gets
+ * the sentence, including the one thing the box cannot show, which is that nothing here is
+ * a picture of the source.
+ *
+ * ⚠ Chrome, not operator data, so it stays LTR and does NOT go in a `<bdi>` (golden rule 11):
+ * an isolate around this would imply it is a NAME. The source's own name inside it is the
+ * part that is data — and it is already isolated by the chip that renders it.
+ */
+function regionCaveat(plateId: string, sourceName: string | null): string {
+  const source =
+    sourceName === null ? 'No source is assigned to it.' : `Its source is ${sourceName}.`;
+  return `Live source ${plateId} — a placeholder, not video. This region is not rendered in preview; the picture appears only on the server's own output. ${source}`;
+}
+
 export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JSX.Element | null {
   if (placements.length === 0) return null;
   // `fit` is positive by construction (the stage only sets it from a positive
@@ -243,6 +301,14 @@ export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JS
             key={p.elementId}
             data-live-plate={p.plateId}
             data-live-plate-state={assigned ? 'assigned' : 'unassigned'}
+            /*
+              `role="img"` because that is what this rect IS — a stand-in for a picture — and
+              because it makes the region ATOMIC: the caveat is announced as one statement
+              rather than as four loose fragments read off the chip in whatever order they
+              were laid out.
+            */
+            role="img"
+            aria-label={regionCaveat(p.plateId, p.sourceName)}
             style={{
               position: 'absolute',
               left: `${String(p.x)}px`,
@@ -273,7 +339,14 @@ export function LivePlateOverlay({ placements, raster, fit, zIndex }: Props): JS
                 transformOrigin: 'center center',
               }}
             >
-              <span style={styles.kind}>LIVE SOURCE · PLACEHOLDER</span>
+              {/* Dropped, not clipped, when the region cannot hold it — the stamp says it
+                  instead (see `regionFitsCaveat`). The ACCESSIBLE name below is unaffected:
+                  it carries the full sentence at every size. */}
+              {regionFitsCaveat(p.width * fit) && (
+                <span style={styles.kind} data-live-plate-caveat="">
+                  {REGION_CAVEAT}
+                </span>
+              )}
               <span style={styles.plate}>{p.plateId}</span>
               {assigned ? (
                 <span style={styles.source}>{p.sourceName}</span>

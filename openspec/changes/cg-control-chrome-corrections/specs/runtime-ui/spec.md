@@ -51,7 +51,7 @@ churns the protocol for no user-visible gain.
 #### Scenario: The tab names whose layers it lists
 
 - **WHEN** the operator looks at the layer surfaces
-- **THEN** the reserved-layer tab reads `STATION LAYERS`, and nothing in the product still calls it
+- **THEN** the reserved-layer tab reads `Station layers`, and nothing in the product still calls it
   the console's playout
 
 #### Scenario: The wire is untouched by the rename

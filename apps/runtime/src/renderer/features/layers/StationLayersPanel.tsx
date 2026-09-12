@@ -273,7 +273,7 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
           `Check the rows for the reason.`,
       );
     } else if (cleared > 0) {
-      reportCommandSuccess(`Cleared ${String(cleared)} playout layer${cleared === 1 ? '' : 's'}.`);
+      reportCommandSuccess(`Cleared · ${String(cleared)} playout layer${cleared === 1 ? '' : 's'}`);
     }
     // `cancelled` so AsyncButton stays silent: this function has already said
     // precisely what happened, and a generic follow-up would overwrite it.

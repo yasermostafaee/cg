@@ -2122,7 +2122,7 @@ never jsdom. "Palette" means the same ROLE, whose value Phase 2 moved.
 | a dialog of its own | 748 wide (`min(750px, 100vw − 48px)`), three steps `Choose package · Review · Complete`                                                   | none — the OS chooser opens from the picker's `Import a .vcg…`, exactly as before                                                                       | ARGUED: `import-vcg-template.spec.ts` and the fixture drive `Import a .vcg…` → `filechooser`; a dialog between them re-points the driver of every importing spec, and its steps are the prototype's |
 | drop zone           | `32px 20px`, dashed 1 px, radius 11, sunken ground; a 51 px glyph box radius 13; `h2` 18 px / 600; `p` 13 px muted; `Choose file` primary | **`32px 20px`, dashed, radius 11, `--r-surface-sunken`; 51 box radius 13; 18 px / 600; 13 px muted** at the foot of the picker's list; lit on drag-over | **FIXED** (built — the one honest interaction `02` has); ARGUED: no `Choose file` inside it — `Import a .vcg…` is that button, one control                                                          |
 | `Review` step       | a `selected-file` card, a `Simulated checks` list, `Import blocked` / `Import sample`, _"These are example outcomes…"_                    | not built                                                                                                                                               | ARGUED: theatre by its own disclaimer; the product's checks are `verify → unpack → B-196 → render`, and their verdict is the toast the operator already gets (15.0)                                 |
-| `Complete` step     | a mint check, `Added to the demo library`, `Nothing has been loaded or taken on air.`, `Choose a destination row`                         | not built                                                                                                                                               | ARGUED: FALSE here — the package IS bound to the row that opened the picker (list-only); the success toast says `Imported “X”.` and the row reads READY                                             |
+| `Complete` step     | a mint check, `Added to the demo library`, `Nothing has been loaded or taken on air.`, `Choose a destination row`                         | not built                                                                                                                                               | ARGUED: FALSE here — the package IS bound to the row that opened the picker (list-only); the success toast says `Imported · X` and the row reads READY                                              |
 | footer sentence     | `Importing does not load a row or take it on air.`                                                                                        | not adopted                                                                                                                                             | ARGUED: false of this product (above); the picker's own sentence is the true one                                                                                                                    |
 
 **The audit log (`03`)**
@@ -4376,7 +4376,7 @@ page's stylesheet is four waves deep and only the last one paints).
 | `N loaded` pill        | 10 px, `rgb(142 158 175)`                                     | 12 px, same ink            | unchanged — ARGUED (b)                                  |
 | `N on air`             | badge: 11 px/500 mint on `rgb(24 55 45)`, r5                  | bare text, 12 px/600 green | unchanged — ARGUED (c)                                  |
 | results hint           | `10/10 rows`                                                  | `29 of 29 rows`            | unchanged — ARGUED (d)                                  |
-| second tab             | `Live plates`                                                 | `LIVE SOURCES`             | `LIVE PLATES` — **FIXED**, owner's call, see §25.8      |
+| second tab             | `Live plates`                                                 | `LIVE SOURCES`             | `Live plates` — **FIXED**, owner's call, see §25.8      |
 
 **ARGUED, each falsifiable in one line:**
 
@@ -4533,7 +4533,7 @@ sentence, and each name gets its own `bdi`. Our column reads `Outcome` where the
 **Also untouched, deliberately:** no wire behaviour, no schema, no persisted key, no plant command,
 no refusal CONDITION. Station setup and the template picker untouched. The change is NOT archived.
 
-### 25.8 🔴 THE TAB IS `LIVE PLATES` — the owner's call on §25.2's ARGUED (e), 2026-09-12
+### 25.8 🔴 THE TAB IS `Live plates` — the owner's call on §25.2's ARGUED (e), 2026-09-12
 
 §25.2 recommended it and left it to him; he took it, with the boundary drawn explicitly: **the
 console tab becomes `Live plates`; Station setup's pane keeps `Live sources`. Two concepts, two
@@ -4549,9 +4549,12 @@ FACT the operator cannot read off the table — who owns the verbs, that the aud
 requested gain and not a measured signal, and what ON and SOLO do. ⭐ **A hint whose job is to
 contradict its own heading is a heading that needs fixing, not a hint that needs keeping.**
 
-**Rendered casing is the strip's, not the reference's.** The three tabs read `LAYERS`,
-`LIVE PLATES`, `STATION LAYERS`; sentence-casing this one alone to match the reference's
-`Live plates` would make the strip look broken rather than matched.
+🔴 **SUPERSEDED 2026-09-12 by DELTA D2 and by the owner's own hand.** This paragraph read
+"rendered casing is the strip's, not the reference's" and argued that sentence-casing ONE tab
+would make the strip look broken. The premise — the three must match — was right; the direction
+was wrong. The reference has no `text-transform` on `.layer-tabs button` at all and renders
+`Layers` · `Live plates` · `Station layers`, measured. The owner sentence-cased all three (and
+the Inspector's own `Live plates` heading with them). See §27.2.
 
 #### What did NOT move, and was checked rather than assumed
 
@@ -4851,3 +4854,283 @@ comparison is unchanged.
 (<https://github.com/yasermostafaee/cg/actions/runs/34691143693>) passed the same spec first try,
 and its body is untouched by `CONSOLE-LOOK-06`. The race was always there; a slower runner is what
 made it visible, and being visible is the only reason it is closed.
+
+## 27. `CONSOLE-LOOK-06` — DELTA 1 (D1–D5) AND DELTA 2 (D6)
+
+Two deltas on the running prompt, 2026-09-12, plus one edit the owner made by hand in the
+working tree while the first was being measured. Nothing in `CONSOLE-LOOK-06` was withdrawn.
+Every value below was read in Chromium at 1280 × 800 before it was used; where a measurement
+disagreed with the delta's candidate the measurement won, which the delta itself asked for and
+which happened three times.
+
+### 27.1 D1 — the transport draws ICONS, and they are the ROW's
+
+The premise needed correcting first: ours did **not** render text glyphs. `git grep` over the
+renderer finds no `▷`, `▷|` or `⊘` anywhere — the three buttons rendered the WORDS `PLAY` /
+`NEXT` / `STOP` and no picture at all. The reference renders `${I('play')}PLAY` — an icon
+**and** the word — at `width:12px;height:12px`.
+
+| verb   | lucide icon               | why that one                                                            |
+| ------ | ------------------------- | ----------------------------------------------------------------------- |
+| `PLAY` | `Play`                    | the row verb's own icon (`layerRowActions`)                             |
+| `NEXT` | `ArrowRightFromLine`      | the row verb's own icon; the reference draws a skip-forward bar instead |
+| `STOP` | `CircleArrowOutDownRight` | the row verb's own — and it IS the reference's `#i-stop` shape, exactly |
+
+⭐ The three are the ROW's, not the reference's, and the one place they differ (`NEXT`) the row
+wins: PLAY here and PLAY on a row are the same verb at two scopes, and an operator should not
+have to learn two pictures for one verb. All three go through `Icon` + lucide at 12 px,
+`currentColor`, `aria-hidden` — no Unicode glyph, no inline `<svg>`, per the design system.
+
+✅ **§0's technique confirmed a third time:** the `svg{display:none}` restatement sits inside
+`@media(max-width:720px)` (line 137 of `04-playout-layers.html`), so at 1280 the icons paint.
+
+### 27.2 D2 — the stale underline was the `STATION-CHROME-02` bug on the tab next door
+
+🔴 **THE CAUSE, NAMED AND MEASURED.** `Tabs.tsx` styled the horizontal tab with INLINE objects:
+the base carried `borderBottom: '2px solid transparent'` — a **shorthand** — and the selected
+state merged `borderBottomColor` — a **longhand** — over it. React removes the longhand on
+deselect, and removing it drops the `border-*-color` the shorthand contributed too, leaving a
+width and a style with no colour.
+
+| tab              | before any click   | after being clicked and left |
+| ---------------- | ------------------ | ---------------------------- |
+| `Layers`         | selected, blue     | selected, blue               |
+| `Live plates`    | `rgba(0, 0, 0, 0)` | **`rgb(255, 255, 255)`**     |
+| `Station layers` | `rgba(0, 0, 0, 0)` | **`rgb(255, 255, 255)`**     |
+
+That is the owner's "light underline after they have been clicked", and it is **the same bug**
+`STATION-CHROME-02` found on the RAIL — documented in `Tabs.tsx` itself, twelve lines above the
+code that was still doing it. The rail was fixed by moving to a SELECTOR; the strip was not.
+
+**The fix is the rail's fix.** `.cg-tab` / `.cg-tab-strip` in `controls.css`, with
+`[aria-selected='true']` carrying the colour, so the border is a function of the ARIA state and
+there is no style diff for React to get wrong. Re-measured after: `rgba(0, 0, 0, 0)` on every
+deselected tab, having visited all three. The e2e asserts the INVARIANT — exactly one coloured
+bottom border, whatever has been clicked — rather than one tab's colour.
+
+#### 27.2.1 The casing — the owner's hand, and last session's argument reversed
+
+Mid-delta the owner edited four labels in the working tree himself: the three tabs and the
+Inspector's `LIVE PLATES` heading, all to sentence case. Measured on the reference: there is
+**no `text-transform` on `.layer-tabs button`** and its three tabs read `Layers` · `Live plates`
+· `Station layers` at 13 px / 550 / `letter-spacing: normal`.
+
+⚠ `CONSOLE-MATCH-03` §25.8 had kept `0.04em` of tracking with the reason written down — "upper
+case at `normal` sets too tight". That reason is gone with the casing, so the tracking goes to
+`normal` too. §25.8's casing paragraph is marked SUPERSEDED in place rather than deleted.
+
+⭐ And the contrast is the design: uppercase in the reference belongs to the **table header**
+(9.92 px / 700 / `.0595em`, `rgb(156 163 175)` on `rgb(45 55 69)`, sticky, 25.77 px) and the bed
+divider — not to the tabs above them. Ours already matches that header byte for byte.
+
+#### 27.2.2 The golden-rule-9 sweep, and the two ways it nearly went blind
+
+Six live BREAKERS, all case-sensitive regexes over a label that changed case:
+
+| file                                        | what it pinned                        | now               |
+| ------------------------------------------- | ------------------------------------- | ----------------- |
+| `tests/e2e/fixtures/runtime.ts` (×2)        | `/^STATION LAYERS/`, `/^LIVE PLATES/` | scoped + `/i`     |
+| `tests/e2e/live-source-layers.spec.ts` (×3) | `/^LAYERS/`                           | `/^layers/i`      |
+| `tests/e2e/panel-scroll.spec.ts`            | `/^LAYERS/`                           | `/^layers/i`      |
+| `tests/plateAudioAccess.dom.test.ts`        | `/^LIVE PLATES/`                      | `/^live plates/i` |
+
+…and eight documentation sites corrected: `LayersPanel.tsx`, `LiveSourcesPanel.tsx`,
+`shell-chrome.spec.ts`, this file (§25.8 and the §24 table), `tasks.md` Q.7,
+`runtime-redesign-programme/specs/runtime-ui/spec.md` (×3 requirements),
+`add-multibox-audio/specs/runtime-ui/spec.md`,
+`cg-control-chrome-corrections/specs/runtime-ui/spec.md` and `docs/prd/caspar.md`. Historical
+records of the earlier names (`operator-surface`, `multibox-layout-switch`,
+`docs/prd/runtime.md`'s naming discussion, session handoffs) are left alone: they describe what
+was true when written, which is what a record is for.
+
+🔴 **THE FIRST SWEEP WAS BLIND TWICE, and both blindings are worth keeping.**
+
+1. **A `git grep` pathspec of `apps/*/tests` matched NOTHING and said so silently** — the trap
+   already in memory as "a git wildcard pathspec is a full-path match". The sweep printed a
+   clean, empty result over a directory holding all six breakers. Caught only because a clean
+   result on that phrase was implausible; the fix is to pass real directories.
+2. **Filtering the sweep by USAGE reintroduced the same hole.** The second pass grepped the
+   phrase and then filtered for `getByRole|getByText|name:|…` — Playwright's vocabulary — which
+   hid `plateAudioAccess.dom.test.ts`, a jsdom test matching the label with a bare
+   `RegExp.test`. It reddened in the unit suite. **Sweep the bare phrase and classify the hits
+   by hand; a filter on how the string is USED is a guess about who pinned it.**
+
+### 27.3 D3 — the toasts
+
+**Two findings before the copy.**
+
+🔴 **1. ONE FAMILY, AND IT WAS INVISIBLE OVER A DIALOG.** We have no `.modal-toast`:
+`CommandToast` is `position: fixed` for every case. Measured: it sat at `z-index: 50` while
+`Modal`'s scrim is 1000 and its dialog 1001 — so every toast raised from inside a dialog, and
+`Deleted · …` from the template picker is a live one, **painted behind the scrim**. Not hidden,
+which is exactly why it survived: the element was in the DOM and `toBeVisible()` was true.
+Raised to 1100. ⚠ **That is the cheap half of the right fix and is recorded as such** — the
+reference's answer is a second family, absolute inside the dialog above its footer, precisely
+so a dialog's confirmation does not fly to the window's bottom edge. Ours is now visible over a
+dialog and still lands at the foot of the SCREEN. Remaining D3 gap.
+
+**2. The shape.** Adopted: the mint check icon at 17 px with `display:flex; gap:9px` (the
+reference's `.global-toast svg` and gap), and the dismiss at **3200 ms** rather than 4000. The
+refusal half draws `TriangleAlert` instead — the reference has no refusal toast to copy, and a
+check beside a failure would be the icon contradicting the sentence.
+
+#### 27.3.1 Every toast string we emit, before and after
+
+| case                  | before (chars) | after (chars) | Δ      |
+| --------------------- | -------------- | ------------- | ------ |
+| import, clean         | 23             | 22            | −1     |
+| import, 2 warnings    | 64             | 35            | −29    |
+| import, dropped plate | 109            | 84            | −25    |
+| delete                | 22             | 21            | −1     |
+| clear all             | 17             | 16            | −1     |
+| clear all, refusals   | 93             | 81            | −12    |
+| silence all           | 36             | 33            | −3     |
+| silence all, held     | 96             | 94            | −2     |
+| release               | 20             | 21            | **+1** |
+| clear playout layers  | 25             | 26            | **+1** |
+
+⚠ **Two got LONGER by one character and that is reported rather than rounded away.** The
+separator costs two and the trailing full stop returns one; on those two cases there was no
+verb phrase to cut. The change there is FORM — `Cleared · 2 playout layers` is subject and
+value — not length, and claiming a saving would be claiming the wrong thing.
+
+#### 27.3.2 🔴 The one ARGUED: four disclosure clauses stay
+
+The budget says "no second clause". Four of these have one, and each exists because a green
+toast without it OVERSTATES what happened:
+
+- **`· N live source layer(s) left alone…`** — CLEAR ALL did not clear them. Without it the
+  toast reports a completed sweep that was partial. This is `B-122`'s defect exactly: "an
+  operator told the escape hatch worked while the thing is still on air is worse off than one
+  told nothing happened."
+- **`· binding for guest-1 dropped…`** — the operator did not ask for it and would otherwise
+  find the plate unassigned with nothing to say why.
+- **`· N already silent in the current look, now armed silent too`** — the WIRE count and the
+  RECORDED count are different numbers, and `PATCH-BX-01` exists because folding them told the
+  operator four plates reached air when two did.
+- **`· N warnings`** — the count only. The warning TEXTS were dropped: a semicolon-joined list
+  inside a 3.2-second toast was never readable, and the count is what says to go and look.
+
+⭐ The delta's own rule points at where they belong instead — "a toast confirms something that
+already happened", so a PARTIAL result is not toast material. The right home is each panel's
+message region, and that is a survey of five panels rather than a copy edit, so it is named
+here and not smuggled in.
+
+### 27.4 D4 — measured against the candidates
+
+| selector                             | candidate                         | MEASURED (reference)                                       | ours, before                                                | verdict                                                                  |
+| ------------------------------------ | --------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `.app-head .btn`                     | 32 / `6px 10px` / 12 / r5         | 32 / **`5px 9px`** / 12 / r5                               | identical                                                   | ✅ already matched; the candidate's padding is wrong                     |
+| `.app-head .badge`                   | 11 / `3px 7px`                    | 11 / 500 / `3px 7px` / r5                                  | identical                                                   | ✅                                                                       |
+| `.layer-subbar`                      | 40 / `5px 10px` / gap 12          | 40 / `5px 10px` / gap 12                                   | identical                                                   | ✅                                                                       |
+| `.layer-subbar input`                | 29 / 12 / `4px 8px 4px 30px` / r5 | as candidate                                               | identical                                                   | ✅                                                                       |
+| `.layer-subbar .search svg`          | 14, top 7, left 9                 | 14, top 7, left 9                                          | 14, top **7.5**, left **10**                                | ARGUED: 0.5 / 1 px, inside the field's own centring; not worth a one-off |
+| `.layer-subbar .check`               | 12                                | 12                                                         | 12                                                          | ✅                                                                       |
+| `.layer-subbar .hint`                | 12                                | 12 (`#layer-results`)                                      | 12 (`__tally`)                                              | ✅ — and it is the SUB-BAR tally, not the foot hint                      |
+| `.layer-subbar .badge`               | 10                                | **11 / 500**, `2px 6px`, r5                                | 11 / 500                                                    | ✅ measurement wins                                                      |
+| `.layer-subbar .pill-count`          | 10, no border, no padding         | 10, 38.52 × 15                                             | 10, 38.52 × 15                                              | ✅ exact                                                                 |
+| `#onair-count`                       | 11                                | 11 / 500, `#85e4b6` on `rgb(24 55 45)`                     | 11 / 500, our green                                         | ✅ shape adopted, hue ours (§26.3)                                       |
+| **`.layer-toolbar .btn`**            | 32 / `5px 8px` / **11** / r4      | 32 / `5px 8px` / **12** / 550 / r4, transparent, `#2d3a49` | **28 / `0 12px` / 12.8 / 600, filled `#1b2532`, `#4b5563`** | 🔴 **ADOPTED**                                                           |
+| `.layer-toolbar .btn:disabled:hover` | keeps the disabled look           | restated in the sheet                                      | already true                                                | ✅ every hover rule here is `:hover:not(:disabled)`                      |
+| `.layer-footer`                      | (not listed)                      | 24 / 10 / icon 12 / gap 9                                  | identical                                                   | ✅                                                                       |
+
+⭐ **One row moved and it is the bulk verbs.** Scoped to `.cg-panel-header [data-verb-tone]`,
+deliberately NOT folded into `.cg-panel-header .cg-btn`: that rule is shared with the
+INSPECTOR's bar and the monitors', which belong to `INSPECTOR-AUDIT-05`. The QUIET ground is
+§1's decision reused — fill means STATE, and STOP ALL / CLEAR ALL / REMOVE ALL are doors.
+
+⚠ **The disabled-hover honesty needed no rule and got none.** A redundant declaration would
+have looked like the fix and hidden the real reason; it is a NEGATIVE assertion in the e2e
+instead — the paint does not move under the pointer.
+
+### 27.5 D5 — the answer: yes, and the reference has a `#` column too
+
+**Measured.** The green thing in the header is real and it is not a sort indicator: it is
+`[data-air-tally]`, `B-213`'s on-air count, living inside the STATE column head beside a
+second count in the error colour. The reference's header carries no count at all.
+
+🔴 **And it was being stated TWICE.** `CONSOLE-LOOK-06` had already put an `N on air` chip in
+the sub-bar, so the same number sat in two places three inches apart in two type sizes. The day
+they disagree the operator cannot tell which is lying. Moved: `State` is the word alone, and
+BOTH counts are in the sub-bar.
+
+⭐ **It pays `B-224` back.** That bug was WIDTH — `(1 on air) (2 in error)` needed 160 px of a
+132 px cell, the error count was cut off, and the owner ruled that the words go and the numbers
+stay. The sub-bar is a full-width line: **the words come back** (`2 on air` · `1 in error`) and
+the tooltip stops being the only place the meaning is written. `B-213`'s rule travels intact —
+two numbers, two colours, never folded into one — and §4's stale treatment travels with the air
+count as `[data-unverifiable]`.
+
+⚠ **ANSWERING THE OTHER HALF: the reference DOES have a `#` column.** Measured, its head reads
+`# / State / Name / Template / Item…`. The delta read a crop and asked before removing;
+nothing is removed. Ours carries the row's position — the layer number golden rule 11 asks to
+keep reachable — and it stays.
+
+⚠ **What the move COST, stated plainly:** the air count was 14 px bare in the head and is 11 px
+in a bordered chip now. It is smaller. What makes it findable is the chip's ground rather than
+its size, which is the reference's own answer, and the two counts now sit together instead of
+competing with a column heading. The head is also 2.5 px shorter for it (`shell-chrome`
+itemised that 2.5 as "`B-224`'s State tally wraps inside it and the reference has no tally").
+
+**Five dead style objects went with it** — `count`, `onAirCount`, `onAirCountStale`,
+`errorCount`, `errorTallyMark`, plus `stateHead`. Deleted, not parked: an unreachable style
+object reads as a live decision to whoever finds it next. The contrast reasoning they carried
+(text role at 4.5, mark role at 3.0) moved into the CSS with the chips.
+
+### 27.6 D6 — `R-022` is MET, and caveat 2 was already on canvas
+
+**Caveat 1 — _faithful, not pixel-identical_ — MET BY THE STAMP.**
+`ILLUSTRATIVE COMPOSITE · LOCAL` says it in three words: ILLUSTRATIVE is not-pixel-identical,
+LOCAL is rendered-here-and-not-the-server's-output. Permanent, on canvas, no paragraph needed
+and none missing. Recorded so the next reader sees why rather than assuming one was lost.
+
+**Caveat 2 — _a Live Source region is a placeholder, not video_ — MET BY THE REGION'S OWN CHIP,**
+which has been on canvas since `add-multibox-audio`: **`LIVE SOURCE · PLACEHOLDER`**, 9 px / 700
+/ `.14em`, muted, unmistakably chrome. The delta's recommended string was
+`LIVE SOURCE · NOT RENDERED`; ours is one character shorter and uses `R-022`'s own word, so it
+is kept.
+
+**What D6 ADDED, and what it found.**
+
+- ✅ **The full sentence is the region's accessible name** — `role="img"` plus
+  _"Live source guest-1 — a placeholder, not video. This region is not rendered in preview; the
+  picture appears only on the server's own output. No source is assigned to it."_ Visible label
+  short, accessible name long: **both, not either**. LTR chrome, no `<bdi>` — an isolate would
+  imply it is a name.
+- ✅ **Ordering was already right:** the guides are `z-index: 55`, the plate overlay is
+  `overlayZIndex(n)` below it, so the ruler lies on top of the placeholders and never reads as
+  part of one. Asserted rather than assumed.
+- 🔴 **THE DEGRADATION FIRED, and only measuring found it.** The label is a fixed **156.77 px**
+  on screen — it is anchored at the region's centre and then un-scaled by `1/fit` so it reads at
+  console size at any panel width. Measured on the two-box seed at 1600 × 900, its regions
+  render **97.19 px** and **72.89 px** wide. The words were being cut by the region's own
+  `overflow: hidden` to something like `VE SOURCE · PLACEH` — **and a clipped caveat is worse
+  than none, because the fragment still looks like a label.** So the owner's named fallback is
+  implemented: below `REGION_CAVEAT_MIN_PX` (170) the region drops the visible label and the
+  stamp lengthens to `ILLUSTRATIVE COMPOSITE · LOCAL · LIVE SOURCES NOT RENDERED`. Permanent,
+  on canvas. **It never degrades to a `title`.**
+- ⚠ **ONE predicate, exported, called by both** — `regionFitsCaveat` in `LivePlateOverlay`,
+  which the overlay uses to drop the label and `RehearsalStage` uses (via
+  `anyRegionTooSmallForCaveat`) to lengthen the stamp. Two spellings of one threshold is how a
+  label vanishes from a region while the stamp goes on saying nothing about it.
+
+**`R-022`'s acceptance now reads MET (2026-09-12)** — the caveats moved from a paragraph to two
+permanent on-canvas marks: one word in the stamp, one label on the region (or the stamp's own
+line where the region is too small). **Why the `title` route was rejected:** `R-028`'s reason.
+A hover serves the moment the console IS helping, and deciding whether to trust the PVW picture
+is exactly the moment it is not.
+
+### 27.7 One superseded assertion, replaced rather than deleted
+
+`pvw-live-plate-placeholder.spec.ts` asserted `toContainText('PLACEHOLDER')` on a marker whose
+region is 97 px wide. Under the degradation that claim now holds on the STAMP, so it is
+asserted there, and the marker keeps the half that always fits — its accessible name.
+
+⚠ **And a SENTINEL was re-pointed for the second time by the same trap.** `theme-tokens.spec.ts`
+reads a `.cg-btn--neutral` to prove the tokens resolved; D4 made the bulk verbs quiet, and they
+are neutral, and they are first in the DOM — so `.first()` picked a deliberately transparent one
+and the sentinel reddened over a correct change. `AUDIT-CLOSE-01` B1 had re-pointed it once for
+exactly this and had not gone far enough. **A sentinel must name its subject by the PROPERTY it
+tests, never by position:** it now asks for a neutral button OUTSIDE a panel bar and fails
+loudly if there is none, and a second reading proves the quiet ones are quiet BY RULE (their
+edge resolves) rather than by an unresolved var.

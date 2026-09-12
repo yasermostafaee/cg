@@ -139,7 +139,7 @@ function audioItem(): HTMLElement | null {
 
 async function openLiveSourcesTab(): Promise<void> {
   const tab = [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find((t) =>
-    /^LIVE PLATES/.test(t.textContent ?? ''),
+    /^live plates/i.test(t.textContent ?? ''),
   );
   await click(tab ?? null);
 }

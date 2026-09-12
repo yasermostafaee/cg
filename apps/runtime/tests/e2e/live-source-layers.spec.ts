@@ -69,7 +69,7 @@ test('the bridge-seated live layers appear on their own tab, distinguishable fro
   // item selected, so the verbs are in front of the operator rather than one more click
   // away on a tab they have to remember to change.
   await expect(app.liveSourcesTab).toHaveAttribute('aria-selected', 'false');
-  await expect(app.page.getByRole('tab', { name: /^LAYERS/ })).toHaveAttribute(
+  await expect(app.page.getByRole('tab', { name: /^layers/i })).toHaveAttribute(
     'aria-selected',
     'true',
   );
@@ -171,7 +171,7 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
   // silenced by the SOLO above, so it is held-and-NOT-armed and contributes no `· N armed`
   // clause either — the armed-and-waiting case is covered in the unit suite, where a held
   // plate can be left raised.
-  await app.page.getByRole('tab', { name: /^LAYERS/ }).click();
+  await app.page.getByRole('tab', { name: /^layers/i }).click();
   const newsRow = app.layers.locator('[data-item-id="item-irib-news"]');
   await expect(newsRow.locator('[data-audio-summary]')).toHaveText('audio 1/1');
   await expect(newsRow.locator('[data-verb-block] button')).toHaveCount(6);
@@ -198,13 +198,13 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
   const panic = app.layers.getByRole('button', { name: /^Silence all boxes/ });
   await expect(panic).toBeEnabled();
   await panic.click();
-  await expect(app.success).toContainText('Silenced 2 plate(s)');
+  await expect(app.success).toContainText('Silenced · 2 plate(s)');
   await expect(stripOf(onScreen, 'guest-1')).toContainText('0%');
   await expect(stripOf(held, 'guest-2')).toContainText('0%');
 
   // …and the row's own summary follows the plates it counts. `B-164` — the denominator stays
   // the SHOWN plate; PANIC silences, it does not change which look is up.
-  await app.page.getByRole('tab', { name: /^LAYERS/ }).click();
+  await app.page.getByRole('tab', { name: /^layers/i }).click();
   await expect(newsRow.locator('[data-audio-summary]')).toHaveText('audio 0/1');
 
   // ── ON AIR, the same one press still works. Not a duplicate of the above: it is the case
@@ -216,7 +216,7 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
     .click();
   await expect(stripOf(onScreen, 'guest-1')).toContainText('100%');
   await app.layers.getByRole('button', { name: /^Silence all boxes/ }).click();
-  await expect(app.success).toContainText('Silenced 2 plate(s)');
+  await expect(app.success).toContainText('Silenced · 2 plate(s)');
   await expect(stripOf(onScreen, 'guest-1')).toContainText('0%');
   await expect(stripOf(held, 'guest-2')).toContainText('0%');
 });

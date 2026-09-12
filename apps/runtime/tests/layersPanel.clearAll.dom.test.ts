@@ -299,7 +299,7 @@ describe('StackPanel Clear-All', () => {
         refused: [{ itemId: 'guest', reason: 'live-source' }],
       });
       expect(errors).toEqual([]);
-      expect(successes.at(-1)).toContain('Cleared 2 row(s)');
+      expect(successes.at(-1)).toContain('Cleared · 2 rows');
       // A refusal is NOT a failure — a Live Source layer is not this console's to
       // clear, and calling it one would send the operator hunting a fault.
       expect(successes.at(-1)).toContain('live source layer(s)');

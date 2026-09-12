@@ -328,7 +328,7 @@ monitor caption are not adopted (owner answer A12).
 
 ### Requirement: Live plates are the seated layers, never the source catalogue
 
-The LIVE PLATES tab SHALL list the layers the bridge itself has seated for rows' live plates —
+The Live plates tab SHALL list the layers the bridge itself has seated for rows' live plates —
 read from the bridge's live-layer ledger and nothing else — and SHALL NOT read, list or edit the
 installation's source catalogue, which is Station setup's. A plate is a seated layer; the
 catalogue is the set of inputs a plate may be pointed at. The tab SHALL say so in its own words,
@@ -345,7 +345,7 @@ and SHALL keep every disposition's sentence visible where that sentence is an al
 
 The console SHALL open a row's context menu — which carries AUDIO — on a right-click on the row
 and, equally, on the `ContextMenu` key or `Shift+F10` while the row (or a control inside it) has
-focus. On the LIVE PLATES tab the console SHALL open the audio dialog of a seated plate's OWNING
+focus. On the Live plates tab the console SHALL open the audio dialog of a seated plate's OWNING
 ROW, with that plate's fader focused, on a right-click on the plate's row and, equally, on the
 same two keys while the plate's row has focus. Keyboard parity is not optional: every pointer
 door SHALL have a keyboard twin that reaches the same dialog. The app-wide suppression of the
@@ -731,7 +731,7 @@ is decided then, never in passing. No behaviour and no wire changes.
 
 #### Scenario: The label says every channel
 
-- **WHEN** the LIVE PLATES tab is shown with a seated plate **THEN** the panic control reads
+- **WHEN** the Live plates tab is shown with a seated plate **THEN** the panic control reads
   `SILENCE ALL BOXES · EVERY CHANNEL`, its accessible name begins `Silence all boxes on every
 channel`, its tooltip names every channel this bridge drives and not only the selected one, and
   one press still makes exactly one unscoped call to the bridge

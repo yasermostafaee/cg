@@ -1251,7 +1251,7 @@ renders answers "is this handled?" with a yes.
       §7 pinned the literal `🔒 LOCKED`, which the glyph replacement removed. That is golden
       rule 9 exactly: the sweep has to cover the GLYPH, not only the words around it, and my
       first sweep did not. Found by running the full local suite, which is why it runs.
-- [x] Q.7 🔴 **The console tab `LIVE SOURCES` is `LIVE PLATES` — the owner took §25.2 ARGUED (e),
+- [x] Q.7 🔴 **The console tab `LIVE SOURCES` is `Live plates` — the owner took §25.2 ARGUED (e),
       2026-09-12.** Station setup keeps `Live sources`: two concepts, two names. The panel hint
       lost its opening clause, which existed only to disown the tab own old name. The tab ID,
       `aria-controls`, `data-layer-tab`, the warning-dot logic and every refusal are untouched —
@@ -1294,3 +1294,55 @@ renders answers "is this handled?" with a yes.
       soon as the `<iframe>` ELEMENT existed, so `stageBefore` came back `undefined` on a slower
       runner. It could not go vacuous — the `expect.poll` between the two reads already waits on
       that element — so it failed asymmetrically instead. The before-read is polled now. §26.10.1.
+
+- [x] S.1 🔴 **`CONSOLE-LOOK-06` DELTA D1 — the PVW transport draws ICONS.** `Play` /
+      `ArrowRightFromLine` / `CircleArrowOutDownRight` at 12 px through `Icon`, beside the words,
+      not instead of them. They are the ROW verbs' own three, so one verb has one picture at both
+      scopes; two of the three are the reference's shape anyway. Its `svg{display:none}` is
+      `@media`-only — confirmed, §0's technique a third time. §27.1.
+- [x] S.2 🔴 **D2 — the stale underline was the `STATION-CHROME-02` bug, on the tab next door.**
+      A `borderBottomColor` LONGHAND merged over a `borderBottom` SHORTHAND inline; React drops
+      the longhand on deselect and the shorthand's colour with it. Measured: a visited tab read
+      `rgb(255, 255, 255)`. Fixed the rail's way — `.cg-tab[aria-selected='true']`, a SELECTOR,
+      so there is no diff to get wrong. E2E asserts the invariant: exactly one coloured bottom
+      border, whatever has been clicked. §27.2.
+- [x] S.3 **D2 casing — the owner sentence-cased all three tabs (and the Inspector heading) by
+      hand; last session's argument is reversed and marked superseded in place.** Tracking goes
+      to `normal` with it, because "upper at normal sets too tight" was the only reason it was
+      kept. §25.8 (superseded), §27.2.1.
+- [x] S.4 🔴 **Golden rule 9 sweep — SIX live breakers, and the sweep went blind twice.**
+      `fixtures/runtime.ts` ×2, `live-source-layers.spec.ts` ×3, `panel-scroll.spec.ts`,
+      `plateAudioAccess.dom.test.ts`; plus ten documentation sites. ⚠ A `apps/*/tests` pathspec
+      matched NOTHING silently, and filtering the second sweep by Playwright's locator vocabulary
+      hid the jsdom one. **Sweep the bare phrase; classify by hand.** §27.2.2.
+- [x] S.5 🔴 **D3 — the toast, and the defect its ⚠ found.** `z-index: 50` under a 1000 scrim:
+      every toast raised from inside a dialog painted BEHIND it, visible to `toBeVisible()` and
+      to nobody else. Raised to 1100. Icon + `gap:9px` + 3200 ms adopted. Ten strings shortened
+      to `subject · value`, with lengths. §27.3.
+- [ ] S.6 ⚠ **STILL OPEN from D3, both halves named rather than smuggled.** (a) We have ONE toast
+      family, fixed to the window; the reference has a second, absolute inside the dialog above
+      its footer, so ours still lands at the foot of the SCREEN over a dialog. (b) Four
+      disclosure clauses stay on the toast against the "no second clause" budget, because a green
+      toast without them overstates what happened (`B-122`). Their real home is each panel's
+      message region — a five-panel survey, not a copy edit. §27.3.2.
+- [x] S.7 **D4 — measured against the candidates: thirteen rows, ONE moved.** The bulk verbs take
+      the reference's `.layer-toolbar .btn` (32 / `5px 8px` / 12 / 550 / r4, quiet). Its
+      candidate said 11 px; the rendered value is 12 — the measurement wins, three times over in
+      this delta. The disabled-hover honesty was ALREADY true and got a negative assertion rather
+      than a redundant rule. §27.4.
+- [x] S.8 🔴 **D5 — yes, the count was in the head, and it was being said TWICE.** Moved to the
+      sub-bar with its error twin; `State` is the word alone. `B-224` is paid back — the words
+      come back with the numbers on a full-width line. ⚠ **The reference DOES have a `#` column**
+      (measured), so nothing is removed. Six dead style objects deleted. §27.5.
+- [x] S.9 🔴 **D6 — `R-022` is MET, dated 2026-09-12.** Caveat 1 rides the stamp's three words;
+      caveat 2 was already on canvas as the region's `LIVE SOURCE · PLACEHOLDER` chip. Added: the
+      full sentence as the region's accessible name (`role="img"`), both and not either. **The
+      degradation FIRED** — the label is 156.77 px against regions of 97.19 and 72.89, so it was
+      being clipped; below 170 px the region drops it and the stamp reads
+      `ILLUSTRATIVE COMPOSITE · LOCAL · LIVE SOURCES NOT RENDERED`. Never a `title` — `R-028`'s
+      reason, quoted in the record. ONE predicate serves both sides. §27.6.
+- [x] S.10 **Two tests corrected rather than deleted:** the superseded `PLACEHOLDER` assertion
+      moved to where it now holds, and `theme-tokens`' sentinel was re-pointed BY PROPERTY after
+      D4 made the button it happened to pick deliberately transparent — the second time that
+      sentinel has been caught choosing its subject by document order. §27.7.
+- [ ] S.11 **Linux `gate:e2e` for the delta — `RUNURL2`.**

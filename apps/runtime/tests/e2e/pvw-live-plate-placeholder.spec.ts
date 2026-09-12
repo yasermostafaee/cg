@@ -220,9 +220,21 @@ test('the two plate states are told apart WITHOUT reading the label', async ({ a
   // With nothing bound, BOTH plates are the unassigned state — and they say so.
   await expect(page.locator('[data-live-plate-state="unassigned"]')).toHaveCount(2);
   await expect(marker(page, 'guest-1')).toContainText('no source assigned');
-  // Every marker declares itself, in both states: an operator must never be able
-  // to believe PVW is showing the real picture.
-  await expect(marker(page, 'guest-1')).toContainText('PLACEHOLDER');
+  /*
+    Every marker declares itself, in both states: an operator must never be able to believe
+    PVW is showing the real picture.
+
+    🔴 SUPERSEDED IN FORM BY `CONSOLE-LOOK-06` DELTA D6, not in substance. This used to read
+    `toContainText('PLACEHOLDER')` on the marker itself. These two plates render 97 px and
+    73 px wide against a label that is a fixed 156.8 px, so the words were being CLIPPED to a
+    fragment — and the owner's ruling names the fallback: they move to the stamp's own line,
+    permanent and still on canvas. So the claim is asserted where it now holds, and the
+    marker keeps the half that always fits: its accessible name.
+  */
+  await expect(page.locator('[data-stage-illustration]')).toHaveText(
+    'ILLUSTRATIVE COMPOSITE · LOCAL · LIVE SOURCES NOT RENDERED',
+  );
+  await expect(marker(page, 'guest-1')).toHaveAttribute('aria-label', /placeholder, not video/i);
 
   // Define a source, then BIND it to one plate through the Inspector.
   await app.openStationSetupAt('Live sources');
@@ -337,4 +349,117 @@ test('the marker is visible BEFORE Play and unchanged through Play and Stop', as
   // The stage element itself is never removed by any of this — the frame is the
   // page's, and nothing here reaches into it.
   await expect(stage).toHaveCount(1);
+});
+
+/**
+ * 🔴 `CONSOLE-LOOK-06` DELTA D6 — `R-022`'s TWO CAVEATS ARE TWO PERMANENT MARKS ON CANVAS.
+ *
+ * The owner's ruling after `CONSOLE-LOOK-06`'s report, which had recorded `R-022` as PARTLY
+ * MET with both caveats riding a `title`: "a hover is not where they live. Put each caveat at
+ * the thing it describes, permanently."
+ *
+ *   1. *faithful, not pixel-identical* — MET BY THE STAMP. `ILLUSTRATIVE COMPOSITE · LOCAL`
+ *      says it in three words: ILLUSTRATIVE is not-pixel-identical, LOCAL is
+ *      rendered-here-and-not-the-server's-output. No paragraph is needed and none is missing.
+ *   2. *a Live Source region is a placeholder, not video* — MET BY THE REGION'S OWN CHIP,
+ *      which has been on canvas since `add-multibox-audio`: `LIVE SOURCE · PLACEHOLDER`,
+ *      uppercase, tracked, muted, unmistakably chrome. The stamp cannot say this one, because
+ *      the stamp describes the whole picture and this is about one region inside it.
+ *
+ * What D6 ADDED is the accessible half: the long sentence on the region, so the visible label
+ * is the short form and the accessible name is the long one — both, not either.
+ *
+ * ⭐ The reason a hover was refused is `R-028`'s: a hover serves the moment the console IS
+ * helping, and deciding whether to trust the PVW picture is exactly the moment it is not.
+ */
+test('D6 — each live-source region states the caveat permanently, on canvas AND in its accessible name', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await registerTwoBox(page);
+  await stubRetainedPage(page);
+  const layer = await app.loadTemplate(TWO_BOX);
+  await rehearseRow(page, layer);
+
+  const regions = page.locator('[data-live-plate]');
+  await expect(regions.first()).toBeVisible();
+  const count = await regions.count();
+  expect(count).toBeGreaterThan(0);
+
+  /*
+    🔴 THE ACCESSIBLE HALF IS UNCONDITIONAL — every region, at every size, carries the full
+    sentence. This is the half D6 added, and it is the half that must never degrade.
+  */
+  for (let i = 0; i < count; i += 1) {
+    const label = (await regions.nth(i).getAttribute('aria-label')) ?? '';
+    expect(label, 'the region says it is a placeholder').toMatch(/placeholder, not video/i);
+    expect(label, 'the region says it is not rendered here').toMatch(/not rendered in preview/i);
+  }
+
+  /*
+    🔴 AND THE VISIBLE HALF IS ALWAYS SOMEWHERE ON CANVAS — on the region when it fits, on the
+    stamp when it does not, and NEVER on a hover. That is the whole invariant, so it is what
+    is asserted, per region, rather than "the label is present" (which the two-box seed would
+    fail honestly) or "the label is absent" (which would pass on a broken large region).
+
+    Measured on this seed at 1600 × 900: its two plates render 97.2 px and 72.9 px wide
+    against a label that is a fixed 156.8 px, so BOTH degrade here and the stamp says so.
+  */
+  const stamp = page.locator('[data-stage-illustration]');
+  let degraded = 0;
+  for (let i = 0; i < count; i += 1) {
+    const region = regions.nth(i);
+    const box = await region.boundingBox();
+    expect(box).not.toBeNull();
+    const caveat = region.locator('[data-live-plate-caveat]');
+    if ((await caveat.count()) === 1) {
+      // It fits: the words are on the region, inside its own box, so a reader can tell WHICH
+      // rect is a placeholder when there are several.
+      await expect(caveat).toContainText('LIVE SOURCE · PLACEHOLDER');
+      const c = await caveat.boundingBox();
+      expect(c).not.toBeNull();
+      expect(
+        c!.width,
+        'a rendered caveat that does not fit is a clipped caveat',
+      ).toBeLessThanOrEqual(box!.width + 1);
+    } else {
+      degraded += 1;
+    }
+  }
+
+  if (degraded > 0) {
+    // The ONE allowed fallback: the stamp's own line. Permanent, on canvas, never a title.
+    await expect(stamp).toHaveText('ILLUSTRATIVE COMPOSITE · LOCAL · LIVE SOURCES NOT RENDERED');
+  }
+  // …and it is never a hover in either branch: there is no disclosure control to press.
+  await expect(page.getByRole('button', { name: /rehearsal does not prove/i })).toHaveCount(0);
+
+  /*
+    …and the region's mark sits BELOW the safe-area guides, so a guide line never reads as
+    part of a placeholder. Asserted on the stacking the browser actually resolves.
+  */
+  await page.getByRole('button', { name: 'Toggle safe-area guides' }).click();
+  await expect(page.locator('[data-pvw-guides]')).toHaveCount(1);
+  const order = await page.evaluate(() => {
+    const g = document.querySelector('[data-pvw-guides]');
+    const o = document.querySelector('[data-live-plate-overlay]');
+    if (!g || !o) return null;
+    return {
+      guides: Number(getComputedStyle(g).zIndex),
+      overlay: Number(getComputedStyle(o).zIndex),
+    };
+  });
+  expect(order).not.toBeNull();
+  expect(order!.guides, 'the ruler must lie ON TOP of the placeholders').toBeGreaterThan(
+    order!.overlay,
+  );
+
+  /*
+    🔴 AND CAVEAT 1 IS ON THE STAMP, on canvas, in its first three words: ILLUSTRATIVE is
+    not-pixel-identical and LOCAL is rendered-here-not-the-server's-output. Asserted as a
+    PREFIX because the line may have taken caveat 2's words as well (above) — what must hold
+    either way is that caveat 1 is stated, permanently and visibly.
+  */
+  await expect(stamp).toContainText('ILLUSTRATIVE COMPOSITE · LOCAL');
 });

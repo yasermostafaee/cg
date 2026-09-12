@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FixedLayerBank, FixedSlotState } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { LayersPanel } from '../src/renderer/features/layers/LayersPanel.js';
-import { colors, cssVars } from '../src/renderer/theme.js';
+import { colors } from '../src/renderer/theme.js';
 import { clearPortals } from './support/dialog.js';
 import { connectionsStub, linkFor, type Reachability } from './support/reachability.js';
 
@@ -204,10 +204,18 @@ describe('§4 — the four treatments, together, with CasparCG unreachable', () 
     expect(air?.hasAttribute('data-unverifiable')).toBe(true);
     expect(air?.getAttribute('data-row-state'), 'never the air tone').not.toBe('onair');
 
-    // 3. The header count — still a count, greyed, not renamed and not hidden.
-    // (`B-213` made it say what it counts in its accessible name; `B-224` took the words
-    // off the visible head — the number is the whole text — and the grey is unchanged.)
-    expect(airCount(el)?.textContent?.trim()).toBe('1');
+    /*
+      3. The count — still a count, greyed, not renamed and not hidden.
+
+      🔴 IT IS IN THE SUB-BAR NOW (`CONSOLE-LOOK-06` DELTA D5), not the STATE head: the
+      reference keeps its header to columns and puts the counts below, and ours was stating
+      the same number in both places. The helper finds it either way — it matches on the
+      accessible name, which is unchanged — and the §4 CONTRACT is unchanged with it.
+
+      ⭐ `B-224` had cut the words for want of 28 px in a 132 px cell; the sub-bar is a
+      full-width line, so they are back on the visible chip.
+    */
+    expect(airCount(el)?.textContent?.trim()).toBe('1 on air');
     expect(airCount(el)?.getAttribute('aria-label')).toBe('1 items on air');
     expect(airCount(el)?.hasAttribute('data-unverifiable')).toBe(true);
     /*
@@ -218,10 +226,19 @@ describe('§4 — the four treatments, together, with CasparCG unreachable', () 
       count left on the shared muted would have read 4.39:1 on that ground — the accepted
       fail owner answer A6 closed — while every label beside it read 4.74:1.
 
-      It is still a TOKEN read and not a hex, which is the rule this helper exists for; only
-      which token carries "the header's quiet ink" moved.
+      It is still a TOKEN read and not a hex, which is the rule this helper exists for.
+
+      🔴 BUT THE READ IS NO LONGER AN INLINE STYLE, and that is D5's other consequence: the
+      count is painted by `.cg-layers-subbar__onair[data-unverifiable]` — a SELECTOR, so
+      `element.style.color` is empty here and asserting it would be asserting nothing.
+      jsdom's cascade could answer a `getComputedStyle` for a declared value, but this
+      sheet is not loaded in this harness, so the honest split is: the ATTRIBUTE contract
+      here (it is what the selector keys on), and the PAINT in a real engine —
+      `shell-chrome.spec.ts` §D5b reads the two colours apart in Chromium. Golden rule 12(c),
+      applied rather than worked around.
     */
-    expect(airCount(el)?.style.color).toBe(asRendered(cssVars['--r-layer-head-ink']));
+    expect(airCount(el)?.hasAttribute('data-unverifiable')).toBe(true);
+    expect(airCount(el)?.style.color, 'the colour is a selector now, not an inline').toBe('');
 
     // 4. EMPTY — a fact about OUR list. Normal styling, no confidence hook at all.
     const empty = stateCell(el, 70);
@@ -238,8 +255,8 @@ describe('§4 — the four treatments, together, with CasparCG unreachable', () 
     expect(stateCell(el, 72)?.getAttribute('data-row-state')).toBe('onair');
     expect(stateCell(el, 71)?.hasAttribute('data-unverifiable')).toBe(false);
     expect(stateCell(el, 71)?.style.color).toBe(asRendered(colors.ready));
+    // …and with both hops up the withdrawal hook is absent, which is what the selector reads.
     expect(airCount(el)?.hasAttribute('data-unverifiable')).toBe(false);
-    expect(airCount(el)?.style.color).toBe(asRendered(colors.onAir));
   });
 
   /**

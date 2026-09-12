@@ -67,11 +67,12 @@ test('the layer table’s tally is the number in the air colour, says "on air" i
   await expect(app.layers.locator('[data-error-tally]')).toHaveCount(0);
 
   await app.layerRow(layer).getByRole('button', { name: 'PLAY' }).click();
-  // `B-213` — the count says what it counts and moved by exactly the take. `B-224` took
-  // the words off the VISIBLE head (the number is the whole text, in the air colour, with
-  // the row's own mark beside it); the words live on in the accessible name and the tooltip.
+  // `B-213` — the count says what it counts and moved by exactly the take. `B-224` had cut
+  // the words for want of 28 px in the STATE head; `CONSOLE-LOOK-06` D5 moved the count to
+  // the sub-bar, where the line is full-width, so the words are back on the visible chip and
+  // are no longer carried by the accessible name alone.
   await expect(tally).toHaveAttribute('data-air-tally', String(before + 1));
-  await expect(tally).toHaveText(String(before + 1));
+  await expect(tally).toHaveText(`${String(before + 1)} on air`);
   await expect(tally).toHaveAttribute('aria-label', `${String(before + 1)} items on air`);
   await expect(tally).toHaveAttribute('title', new RegExp(`^${String(before + 1)} on air`));
 });

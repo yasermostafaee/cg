@@ -45,12 +45,12 @@ describe('CommandToast', () => {
   it('shows a SUCCESS message as a green "Command success" alert', async () => {
     const el = await mount();
     await act(async () => {
-      reportCommandSuccess('Imported “Breaking News”.');
+      reportCommandSuccess('Imported · Breaking News');
       await Promise.resolve();
     });
     const node = alert(el);
     expect(node?.getAttribute('aria-label')).toBe('Command success');
-    expect(node?.textContent).toBe('Imported “Breaking News”.');
+    expect(node?.textContent).toBe('Imported · Breaking News');
   });
 
   it('shows an ERROR message as a red "Command error" alert', async () => {
@@ -67,7 +67,7 @@ describe('CommandToast', () => {
   it('last-write wins: a later error replaces an earlier success', async () => {
     const el = await mount();
     await act(async () => {
-      reportCommandSuccess('Imported “X”.');
+      reportCommandSuccess('Imported · X');
       reportCommandError('Removal refused.');
       await Promise.resolve();
     });

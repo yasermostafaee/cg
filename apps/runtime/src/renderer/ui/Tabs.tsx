@@ -114,12 +114,24 @@ interface Props extends StripProps {
 
 const styles = {
   /*
-   * 🔴 `CONSOLE-LOOK-06` §3 — THE TABS SPACE THEMSELVES BY GAP, NOT BY PADDING.
+   * 🔴 `CONSOLE-LOOK-06` DELTA D2 — THE HORIZONTAL TAB'S OWN STYLES LEFT THIS FILE, AND THAT
+   * IS A BUG FIX. It is the SAME bug `STATION-CHROME-02` found on the rail, in the same file,
+   * on the surface next door — see the block below `styles`, which had already written the
+   * mechanism down.
    *
-   * Measured in Chromium: `.layer-tabs{gap:22px}` with `.layer-tabs button{padding:12px 0 9px}`
-   * — the buttons have NO horizontal padding at all and the strip's gap does the separating.
-   * The difference is visible: a padded tab's underline runs wider than its word, so the
-   * selected mark reads as a block; an unpadded one underlines exactly the label.
+   * The base carried `borderBottom: '2px solid transparent'` (a SHORTHAND) and the selected
+   * state merged `borderBottomColor` (a LONGHAND) over it. React removes the longhand on
+   * deselect, and removing it also drops the border-*-color the shorthand contributed, so the
+   * tab is left holding a WIDTH and a STYLE with no colour. Measured in Chromium: a tab that
+   * had been clicked once read `border-bottom-color: rgb(255, 255, 255)` for the rest of the
+   * session — the owner's "light underline after they have been clicked", on `Live plates`
+   * and `Station layers` both, while an untouched strip read `rgba(0, 0, 0, 0)`.
+   *
+   * `.cg-tab` in `controls.css` is the fix and it is the rail's fix exactly: the selected
+   * state is a SELECTOR (`[aria-selected='true']`), so there is no style diff for React to get
+   * wrong and the border is a pure function of the ARIA state — which is also what the
+   * reference does. Only the OUTER (channel) level still uses the objects below; its selected
+   * state merges shorthand over shorthand, which has no such hole.
    */
   strip: {
     display: 'flex',
@@ -135,13 +147,6 @@ const styles = {
     padding: '12px 0 9px',
     fontSize: '13px',
     fontWeight: 550,
-    /*
-     * The reference tracks `normal` — and its labels are sentence case (`Layers`) where ours
-     * are upper (`LAYERS`). Upper-case at `normal` tracking sets tight enough to read as one
-     * word, so a small track is KEPT here rather than adopted-to-zero. The deviation is the
-     * casing, not the spacing, and it is the casing that keeps the three tabs looking like a
-     * set beside the rest of this console's chrome.
-     */
     letterSpacing: '0.04em',
     background: 'transparent',
     border: 'none',
@@ -149,14 +154,6 @@ const styles = {
     color: colors.textMuted,
     cursor: 'pointer',
   },
-  /*
-   * 🔴 THE SELECTED TAB IS BLUE, not white-with-a-blue-line.
-   *
-   * Ours coloured the label `--r-text` and only the underline `--r-ready`; the reference
-   * colours BOTH the same blue, which is what makes the selected tab read as selected in one
-   * glance rather than as "the bright one". The underline was already this exact hue
-   * (`rgb(116 205 246)`), so this is one property moving to join it, not a new colour.
-   */
   activeTab: { color: colors.ready, borderBottomColor: colors.ready },
   /**
    * The CHANNEL level. Distinguished by SHAPE (a raised, boxed tab that sits on a
@@ -241,13 +238,9 @@ export function TabStrip({
     <div
       {...(vertical
         ? { className: 'cg-rail-tabs' }
-        : {
-            style: {
-              ...styles.strip,
-              ...(outer ? styles.outerStrip : {}),
-              ...(inPanelBar ? styles.stripInBar : {}),
-            },
-          })}
+        : outer
+          ? { style: { ...styles.strip, ...styles.outerStrip } }
+          : { className: `cg-tab-strip${inPanelBar ? ' cg-tab-strip--in-bar' : ''}` })}
       role="tablist"
       aria-label={ariaLabel}
       {...(vertical ? { 'aria-orientation': 'vertical' as const } : {})}
@@ -273,7 +266,9 @@ export function TabStrip({
               aria-controls={`${idPrefix}panel-${tab.id}`}
               {...(vertical
                 ? { className: 'cg-rail-tab' }
-                : { style: active ? { ...base, ...activeStyle } : base })}
+                : outer
+                  ? { style: active ? { ...base, ...activeStyle } : base }
+                  : { className: 'cg-tab' })}
               onClick={() => onSelect(tab.id)}
             >
               {/* A bare `<svg>`, not a wrapper: the tab's FIRST span stays its label, which is

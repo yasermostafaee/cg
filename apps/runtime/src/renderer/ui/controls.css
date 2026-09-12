@@ -264,6 +264,37 @@
   font-weight: var(--r-weight-medium);
 }
 
+/*
+ * 🔴 `CONSOLE-LOOK-06` DELTA D5 — §4's STALE TREATMENT, which arrived with the count.
+ *
+ * With neither hop up, nothing is confirming the number, so it stops wearing the air colour
+ * — `B-081`'s "the look of health we cannot currently verify", applied to the one other
+ * surface entitled to that green. It is NOT renamed and NOT hidden: it is still a true count
+ * of what our list says, and it still reads `N on air`. Only the claim of confirmation goes.
+ */
+.cg-layers-subbar__onair[data-unverifiable] {
+  border-color: var(--r-border);
+  background: var(--r-surface-sunken);
+  color: var(--r-text-muted);
+}
+
+/*
+ * THE IN-ERROR COUNT — `B-213`'s second number, in the second colour, never folded into the
+ * first. Same chip geometry as its sibling so the pair reads as a pair; the SEVERITY comes
+ * from the error token, never from a hex (§4).
+ */
+.cg-layers-subbar__error {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--r-subbar-badge-pad);
+  border: 1px solid color-mix(in srgb, var(--r-error-text) 34%, transparent);
+  border-radius: var(--r-radius-field);
+  background: color-mix(in srgb, var(--r-error-text) 13%, var(--r-surface-sunken));
+  color: var(--r-error-text);
+  font-size: var(--r-subbar-badge-text);
+  font-weight: var(--r-weight-medium);
+}
+
 /* ── 🔴 CONSOLE-LOOK-06 §2 — THE COMPACT MONITOR HEAD ───────────────────────
  *
  * A MODIFIER on the shared panel bar, not a second bar and not a lowered floor: LAYERS
@@ -610,6 +641,44 @@
   height: 28px;
   padding-block: 0;
 }
+
+/* ── THE LAYERS BAR'S BULK VERBS — the reference's `.layer-toolbar .btn` ──────────────
+ *
+ * 🔴 `CONSOLE-LOOK-06` DELTA D4. Measured in Chromium at 1280 × 800: `min-height:32px`,
+ * `padding:5px 8px`, `font-size:12px`, `font-weight:550`, `border-radius:4px`, transparent ground,
+ * `border-color:#2d3a49` — against ours at 28 px / `0 12px` / 12.8 px / 600 on a raised fill.
+ *
+ * ⚠ The delta's candidate said `font-size:11px`; the rendered value is 12 — a later wave
+ * (`.layer-toolbar .btn{font-size:12px}`) overrides the one the candidate list quotes. The
+ * measurement wins, which is the rule §0 set and the third time it has paid here.
+ *
+ * ⚠ SCOPED TO `[data-verb-tone]` INSIDE A PANEL BAR, deliberately, and not folded into
+ * `.cg-panel-header .cg-btn` above: that rule is shared with the INSPECTOR's bar and the
+ * monitors', which belong to `INSPECTOR-AUDIT-05` and are not in this diff. The row table's
+ * own `[data-verb-tone]` buttons are not in a panel header, so they are untouched too.
+ *
+ * ⭐ The QUIET ground is the same decision §1 made for the app header, for the same reason:
+ * fill means STATE in this console, and STOP ALL / CLEAR ALL / REMOVE ALL are doors. The
+ * hover still fills — the affordance moved to hover, it did not go away.
+ */
+.cg-panel-header [data-verb-tone].cg-btn {
+  min-height: 32px;
+  height: 32px;
+  padding: 5px var(--r-space-2);
+  font-size: 12px;
+  font-weight: 550;
+  border-radius: var(--r-radius-sm);
+  background: transparent;
+  border-color: var(--r-border);
+}
+
+/*
+ * ⭐ "A disabled one keeps the disabled look on hover" — the reference states this outright
+ * (`.layer-toolbar .btn:disabled:hover` restates the disabled paint) and OURS ALREADY DID:
+ * every hover rule in this sheet is written `:hover:not(:disabled)`, so there is no hover
+ * paint for a disabled button to pick up. Kept as a NEGATIVE assertion in the e2e rather than
+ * a rule here — a redundant declaration would look like the fix and hide the real reason.
+ */
 
 /* ── Button ─────────────────────────────────────────────────────────────── */
 
@@ -2970,6 +3039,73 @@ input[type='checkbox']:disabled:checked {
 .cg-rail-tab__label {
   flex: 1;
   min-width: 0;
+}
+
+/* ── THE HORIZONTAL TAB STRIP — the console's Layers / Live plates / Station layers ──
+ *
+ * 🔴 `CONSOLE-LOOK-06` DELTA D2. These were four inline style objects in `Tabs.tsx` and the
+ * selected one merged a `border-bottom-color` LONGHAND over a `border-bottom` SHORTHAND — the
+ * exact shape `STATION-CHROME-02` found on the rail. React removes the longhand on deselect and
+ * takes the shorthand's colour with it, so every tab the operator had visited kept a WHITE 2 px
+ * underline (measured: `rgb(255, 255, 255)` against `rgba(0, 0, 0, 0)` on an untouched strip).
+ *
+ * As a SELECTOR there is no diff to get wrong: the border is a function of `aria-selected` and
+ * of nothing else, which is what the reference's own rule says
+ * (`.layer-tabs button{border-bottom:2px solid transparent}` +
+ * `[aria-selected=true]{border-bottom-color:var(--blue)}`).
+ */
+.cg-tab-strip {
+  display: flex;
+  align-items: stretch;
+  gap: 22px;
+  border-bottom: 1px solid var(--r-border);
+  flex-shrink: 0;
+}
+
+/* `AUDIT-CLOSE-01` B3 — the strip AS A FLEX ITEM inside a panel bar: the bar draws the rule
+   and the ground, so the strip drops both and stretches, which is what keeps a selected
+   underline landing on the bar's own bottom edge. */
+.cg-tab-strip--in-bar {
+  border-bottom: none;
+  align-self: stretch;
+  margin-block: calc(-1 * var(--r-space-3));
+  min-width: 0;
+}
+
+.cg-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: var(--r-space-3) 0 9px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  /* `normal`, measured off the reference — and this is the half of last session's argument
+     that the owner's sentence-case ruling settled. The tracking was kept at `0.04em` because
+     OUR labels were uppercase and upper-case at `normal` sets too tight; they are sentence
+     case now (`Layers` / `Live plates` / `Station layers`), so the reason is gone with them. */
+  letter-spacing: normal;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--r-text-muted);
+  cursor: pointer;
+}
+
+.cg-tab:hover:not([aria-selected='true']) {
+  color: var(--r-text);
+}
+
+.cg-tab:focus-visible {
+  outline: 2px solid var(--r-accent);
+  outline-offset: 2px;
+}
+
+/* 🔴 THE SELECTED TAB IS BLUE — label AND underline the same hue, which is what makes it read
+   as selected in one glance rather than as "the bright one". */
+.cg-tab[aria-selected='true'] {
+  color: var(--r-ready);
+  border-bottom-color: var(--r-ready);
 }
 
 /* ── RECORD TABLES — the delimiter list, the catalogue, the candidate rows ───

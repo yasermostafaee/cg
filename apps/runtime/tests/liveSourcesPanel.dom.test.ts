@@ -1245,7 +1245,7 @@ describe('PATCH-BX-01 — PANIC asks the bridge, and reads its answer out loud',
     });
     fb.stop();
 
-    expect(fb.successes.join(' ')).toContain('Silenced 3 plate(s)');
+    expect(fb.successes.join(' ')).toContain('Silenced · 3 plate(s)');
     expect(fb.successes.join(' ')).toContain('2 row(s)');
     expect(fb.errors, 'a completed panic is not also an error').toEqual([]);
   });
@@ -1276,7 +1276,7 @@ describe('PATCH-BX-01 — PANIC asks the bridge, and reads its answer out loud',
     fb.stop();
 
     const said = fb.successes.join(' ');
-    expect(said, 'it must not claim 4 reached air').toContain('Silenced 2 plate(s)');
+    expect(said, 'it must not claim 4 reached air').toContain('Silenced · 2 plate(s)');
     expect(said).toMatch(/2 already silent in the current look/i);
   });
 

@@ -168,7 +168,7 @@ export function LivePlatesSection({
 
   return (
     <div className="cg-inspector-section" aria-label="Live plates">
-      <h2>LIVE PLATES</h2>
+      <h2>Live plates</h2>
       {/*
         🔴 **BM-2 §3.4 — THE SCOPE, NARROWED TO THE LEVEL THIS SECTION IS ACTUALLY ON.**
 

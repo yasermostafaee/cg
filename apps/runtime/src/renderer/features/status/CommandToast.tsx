@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { Check, TriangleAlert } from 'lucide-react';
 import { colors, cssVars } from '../../theme.js';
+import { Icon } from '../../ui/Icon.js';
 import { onCommandError, onCommandSuccess } from './commandFeedback.js';
 
 /*
@@ -20,7 +22,25 @@ const styles = {
     borderRadius: cssVars['--r-toast-radius'],
     fontSize: cssVars['--r-toast-fs'],
     fontWeight: 700,
-    zIndex: 50,
+    /*
+      🔴 `CONSOLE-LOOK-06` DELTA D3 — 50 PUT IT UNDER THE MODAL SCRIM, WHICH IS 1000.
+
+      Measured, not reasoned: `Modal`'s scrim is `z-index: 1000` and its dialog 1001, so every
+      toast raised from inside a dialog — `Deleted “…”` from the template picker is the live
+      one — painted BEHIND the scrim. Not hidden, which is what made it survive: the element
+      was in the DOM, visible to `toBeVisible()`, and dimmed to nothing on screen.
+
+      ⚠ THIS IS THE CHEAP HALF OF THE RIGHT FIX AND IS MARKED AS SUCH. The reference answers
+      this with a SECOND family — `.modal-toast`, absolutely positioned inside the dialog just
+      above its footer — precisely so a dialog's confirmation does not fly to the window's
+      bottom edge. Ours is one family, fixed to the window, so the toast is now visible over a
+      dialog but still lands at the foot of the SCREEN rather than of the dialog. Reported as
+      the remaining D3 gap rather than left looking finished.
+    */
+    zIndex: 1100,
+    display: 'flex' as const,
+    alignItems: 'center' as const,
+    gap: cssVars['--r-toast-gap'],
     boxShadow: cssVars['--r-toast-shadow'],
   },
   error: {
@@ -35,7 +55,15 @@ const styles = {
   },
 } as const;
 
-const DISMISS_MS = 4000;
+/*
+  The reference dismisses at 3200 ms. Adopted: a toast that carries the subject and its value
+  and no second clause is read in a glance, and 800 ms of a four-second dwell was paying for
+  sentences that are no longer there.
+*/
+/** `.global-toast svg{width:17px;height:17px}`, measured. */
+const TOAST_ICON_PX = 17;
+
+const DISMISS_MS = 3200;
 
 interface Feedback {
   message: string;
@@ -79,7 +107,15 @@ export function CommandToast(): JSX.Element | null {
       role="alert"
       aria-label={isError ? 'Command error' : 'Command success'}
     >
-      {feedback.message}
+      {/*
+        The reference draws a mint check beside the line (`.global-toast svg{width:17px}`).
+        Ours draws the check on the OK half and a warning triangle on the refusal half — the
+        reference has no refusal toast to copy, and a check beside a failure would be the
+        icon contradicting the sentence. Both are decorative: the `aria-label` on the region
+        already says which kind this is, and the message says what happened.
+      */}
+      <Icon icon={isError ? TriangleAlert : Check} size={TOAST_ICON_PX} />
+      <span>{feedback.message}</span>
     </div>
   );
 }

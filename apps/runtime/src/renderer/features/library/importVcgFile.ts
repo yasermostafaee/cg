@@ -99,11 +99,22 @@ export function importSuccessMessage(imported: ImportedVcg): string {
   // with nothing to say why.
   const dropped =
     imported.droppedPlateIds.length > 0
-      ? ` Its previous binding for ${imported.droppedPlateIds.join(', ')} was dropped — this version no longer has that plate.`
+      ? ` · binding for ${imported.droppedPlateIds.join(', ')} dropped, this version has no such plate`
       : '';
-  return (
-    (imported.warnings.length > 0
-      ? `Imported “${imported.displayName}” (${String(imported.warnings.length)} warning(s): ${imported.warnings.join('; ')}).`
-      : `Imported “${imported.displayName}”.`) + dropped
-  );
+  /*
+    🔴 `CONSOLE-LOOK-06` DELTA D3 — THE SUBJECT AND ITS VALUE, and the reference's own
+    separator. Its example toast is three words (`Channel 2 · Sports`) and this one used to
+    open with a verb phrase, quote the name, parenthesise a count and then inline every
+    warning text — 34 characters before the name on a surface that lives 3.2 seconds.
+
+    ⚠ THE WARNING COUNT SURVIVES AND THE WARNING TEXTS DO NOT — that is the one thing here
+    that is a judgement rather than typography. A semicolon-joined list of warnings inside a
+    toast was never readable at this dwell; the count is what tells the operator to go and
+    look, and the warnings themselves are on the template's own record.
+  */
+  const warned =
+    imported.warnings.length > 0
+      ? ` · ${String(imported.warnings.length)} warning${imported.warnings.length === 1 ? '' : 's'}`
+      : '';
+  return `Imported · ${imported.displayName}${warned}${dropped}`;
 }

@@ -4,7 +4,7 @@
 
 ### Requirement: Every seated live plate shows its audio state without opening anything
 
-The LIVE PLATES tab SHALL show, for every seated live plate, an **audio strip** carrying: a
+The Live plates tab SHALL show, for every seated live plate, an **audio strip** carrying: a
 **state pill**, a **fader**, an **ON/OFF** control, a **SOLO** control and a **percentage
 readout**.
 

@@ -86,7 +86,7 @@ test('§B — one bar carries the tabs and the bulk verbs, and the sub-bar is un
   /*
     🔴 ONE BAR, NOT TWO. The layers card's tablist is INSIDE the panel's header bar, which is
     the whole of B3: the bar used to say `LAYERS` and a strip beneath it said
-    `LAYERS | LIVE SOURCES | STATION LAYERS`. Asserted as containment rather than by counting
+    `Layers | Live plates | Station layers`. Asserted as containment rather than by counting
     lines, because containment is the mechanism and a line count is a symptom.
   */
   const panelBar = app.layers.locator('.cg-panel-header').first();
@@ -425,4 +425,199 @@ test('§C4 — the shell draws its marks with icons, never with text glyphs', as
     return [...new Set([...text].filter((c) => /[🌀-🫿☀-➿]/u.test(c)))];
   });
   expect(stray, `text glyphs still on the shell: ${stray.join(' ')}`).toEqual([]);
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   §D — `CONSOLE-LOOK-06` DELTA 1. Four claims, all of them paint or geometry, so all of
+   them belong in a real engine: jsdom has no layout and its cascade is not Chrome's, so
+   every one of these would pass against a broken surface (golden rule 12c).
+   ───────────────────────────────────────────────────────────────────────────── */
+
+test('§D1 — the PVW transport draws ICONS, at the reference’s 12 px, beside the words', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  // At this width the monitors start hidden — the shell's own choice, not this test's.
+  const show = page.getByRole('button', { name: 'Show monitors' });
+  if ((await show.count()) > 0) await show.click();
+  const pvw = page.getByRole('region', { name: 'PREVIEW' });
+  await expect(pvw).toBeVisible();
+
+  for (const verb of ['PLAY', 'NEXT', 'STOP'] as const) {
+    const button = pvw.getByRole('button', { name: new RegExp(`^${verb}`) }).first();
+    const svg = button.locator('svg');
+    await expect(svg, `${verb} has no icon`).toHaveCount(1);
+    const box = await svg.boundingBox();
+    expect(box, `${verb} icon has no box`).not.toBeNull();
+    expect(Math.round(box!.width), `${verb} icon width`).toBe(12);
+    expect(Math.round(box!.height), `${verb} icon height`).toBe(12);
+    // …and the WORD is still there. The reference draws `${I('play')}PLAY`, not a bare glyph:
+    // an icon-only transport would make three cyan squares of three different verbs.
+    await expect(button).toContainText(verb);
+  }
+
+  // 🔴 NO UNICODE GLYPH stood in for an icon (the design system forbids them, and this
+  // transport is exactly where one would be tempting).
+  const text = (await pvw.locator('[data-pvw-controls]').textContent()) ?? '';
+  expect(text).not.toMatch(/[▷▶■⊘⏭⏹]/);
+});
+
+test('§D2 — a tab that was clicked keeps NO underline: exactly one coloured bottom border, always', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const strip = page.getByRole('tablist', { name: 'Layer surfaces' });
+  const tabs = strip.getByRole('tab');
+  const n = await tabs.count();
+  expect(n).toBeGreaterThan(1);
+
+  /*
+    🔴 THE DEFECT THIS PINS, measured on 2026-09-12 before the fix: the tab's base carried
+    `border-bottom: 2px solid transparent` (a SHORTHAND) and the selected state merged
+    `borderBottomColor` (a LONGHAND) over it as an inline style. React removes the longhand on
+    deselect and the shorthand's colour goes with it, so a visited tab was left holding a
+    width and a style with no colour — Chrome painted `rgb(255, 255, 255)`. The owner saw a
+    light underline under `Live plates` and `Station layers` after clicking them.
+
+    It is the same bug `STATION-CHROME-02` found on the RAIL, one surface over, and it has
+    the same fix: the selected state is a SELECTOR now, so there is no style diff to get
+    wrong. Which is why the assertion is not "the border is transparent" but the invariant —
+    EXACTLY ONE coloured border, no matter what has been clicked.
+  */
+  const coloured = async (): Promise<number> =>
+    strip.evaluate((list) => {
+      const opaque = (c: string): boolean => !/^rgba\(.*,\s*0\)$/.test(c) && c !== 'transparent';
+      return [...list.querySelectorAll('[role=tab]')].filter((b) => {
+        const cs = getComputedStyle(b);
+        return parseFloat(cs.borderBottomWidth) > 0 && opaque(cs.borderBottomColor);
+      }).length;
+    });
+
+  expect(await coloured(), 'at rest').toBe(1);
+  for (let i = 0; i < n; i += 1) {
+    await tabs.nth(i).click();
+    await page.mouse.move(5, 780); // off every control: a :hover reading is a different rule
+    await expect(tabs.nth(i)).toHaveAttribute('aria-selected', 'true');
+    expect(await coloured(), `after visiting tab ${String(i)}`).toBe(1);
+  }
+  // …and back to the first, with every tab now visited — the state the owner reported from.
+  await tabs.nth(0).click();
+  await page.mouse.move(5, 780);
+  expect(await coloured(), 'after visiting every tab and returning').toBe(1);
+});
+
+test('§D2b — the tabs are SENTENCE CASE and the column heads are UPPER: that contrast is the design', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const strip = page.getByRole('tablist', { name: 'Layer surfaces' });
+
+  // The reference renders `Layers` · `Live plates` · `Station layers` with NO `text-transform`
+  // on `.layer-tabs button` at all — measured, and the owner set our three to match.
+  const tab = strip.getByRole('tab').first();
+  await expect(tab).toHaveText('Layers');
+  await expect(tab).toHaveCSS('text-transform', 'none');
+  await expect(tab).toHaveCSS('font-size', '13px');
+  // Tracking goes to `normal` WITH the casing: 0.04em was kept only because the labels were
+  // upper, and upper at `normal` sets too tight.
+  await expect(tab).toHaveCSS('letter-spacing', 'normal');
+
+  // …and the head below it is the opposite, which is the point.
+  const head = app.layers.getByRole('row').first().locator('span').first();
+  await expect(head).toHaveCSS('text-transform', 'uppercase');
+});
+
+test('§D4 — the bulk verbs are the reference’s toolbar button, and a disabled one stays disabled under the pointer', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const stop = app.layers.locator('[data-verb-tone="stop"]').first();
+  await expect(stop).toBeVisible();
+
+  // Measured off the reference at 1280 × 800. ⚠ `font-size` is 12, not the candidate list's
+  // 11: a later wave overrides the rule the list quotes, and the measurement wins.
+  await expect(stop).toHaveCSS('font-size', '12px');
+  await expect(stop).toHaveCSS('padding', '5px 8px');
+  const box = await stop.boundingBox();
+  expect(box).not.toBeNull();
+  expect(Math.round(box!.height), 'the reference toolbar button is 32 px').toBe(32);
+
+  /*
+    ⭐ "A disabled one keeps the disabled look on hover." The reference states it as a rule
+    (`.layer-toolbar .btn:disabled:hover` restates the disabled paint); ours gets it for free
+    because every hover rule in the sheet is written `:hover:not(:disabled)`. Asserted as a
+    NEGATIVE — the paint does not move — rather than by adding a declaration that would look
+    like the fix and hide the real reason.
+  */
+  const remove = app.layers.locator('[data-verb-tone="remove"]').first();
+  await expect(remove).toBeDisabled();
+  const paint = async (): Promise<string> =>
+    remove.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return `${cs.backgroundColor}|${cs.borderColor}|${cs.color}`;
+    });
+  await page.mouse.move(5, 780);
+  const off = await paint();
+  await remove.hover({ force: true });
+  await page.waitForTimeout(120);
+  expect(await paint(), 'a disabled bulk verb lit up under the pointer').toBe(off);
+});
+
+test('§D5 — the on-air count is in the SUB-BAR and not in the table head, and it is stated once', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const head = app.layers.getByRole('row').first();
+  const subbar = app.layers.locator('[data-layers-subbar]');
+
+  // The reference's header is `# / State / Name / Template / …` and nothing else.
+  await expect(head.locator('[data-air-tally]')).toHaveCount(0);
+  await expect(head.locator('[data-error-tally]')).toHaveCount(0);
+  await expect(head).not.toContainText('on air');
+
+  // …and the count is in the sub-bar, exactly once on the whole surface. Stating one number
+  // in two places is a pair that can disagree, which is what this move removed.
+  await expect(subbar.locator('[data-air-tally]')).toHaveCount(1);
+  await expect(app.layers.locator('[data-air-tally]')).toHaveCount(1);
+
+  // The `#` column STAYS. The reference has one too (measured), and it carries the row's
+  // position — the layer number golden rule 11 asks to keep reachable.
+  await expect(head.locator('span').first()).toHaveText('#');
+});
+
+test('§D5b — the air count wears the air colour, and drops it when nothing can confirm it', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const air = app.layers.locator('[data-air-tally]');
+  await expect(air).toHaveCount(1);
+
+  /*
+    🔴 THE PAINT, in a real engine. `layersPanel.unreachableLabels.dom.test.ts` asserts §4's
+    ATTRIBUTE contract — `data-unverifiable` present or absent — because the colour moved out
+    of an inline style and into a selector when the count moved to the sub-bar, and jsdom is
+    not running this sheet. This is the other half: the two states really do paint apart.
+
+    Asserted as a DIFFERENCE, not against a hex — `--r-onair` is the owner's held value and
+    a test that re-spells it is a second home for it (§4's "by TOKEN, never by hex").
+  */
+  const unverifiable = await air.getAttribute('data-unverifiable');
+  const colour = await air.evaluate((el) => getComputedStyle(el).color);
+  const muted = await app.layers
+    .locator('[data-layers-tally-rows]')
+    .evaluate((el) => getComputedStyle(el).color);
+
+  if (unverifiable === null) {
+    // Confirmed: the count wears the sacred green, distinct from the muted text beside it.
+    expect(colour, 'a confirmed air count must not read as ordinary text').not.toBe(muted);
+  } else {
+    // Withdrawn: it keeps the number and gives up the claim, which is exactly the grey.
+    expect(colour, 'an unconfirmed air count must not wear the air colour').toBe(muted);
+  }
 });

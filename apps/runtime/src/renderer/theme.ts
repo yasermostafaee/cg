@@ -2413,6 +2413,8 @@ export const cssVars = {
   '--r-toast-radius': `${String(TOAST_PX.radius)}px`,
   '--r-toast-fs': `${String(TOAST_PX.text)}px`,
   '--r-toast-shadow': '0 8px 40px rgba(0, 0, 0, 0.53)',
+  /** `.global-toast{gap:9px}` — between the icon and the line. */
+  '--r-toast-gap': '9px',
 
   /*
    * THE LOCK SCREEN — the reference's `unlock-dialog` LOOK (`design.md` §16.3), over the

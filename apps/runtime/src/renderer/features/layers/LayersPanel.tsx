@@ -642,6 +642,12 @@ export function LayersPanel({
     both spelled once in `stack/onAir.ts`.
   */
   const tally = airTally(items);
+  /*
+    §4 — `unreachable` ONLY, never the boot window: a count that greyed itself for the first
+    second of every reload would teach the operator to stop reading the grey. Derived once,
+    beside the tally it qualifies, so the two can never be read from different moments.
+  */
+  const tallyUnverifiable = linkDown || casparReach === 'unreachable';
   // B-122 — CLEAR ALL's count, and deliberately a different one. It counts rows
   // that HOLD A LAYER, an ownership fact, because the believed status is exactly
   // what may be wrong when the operator reaches for this button.
@@ -730,7 +736,7 @@ export function LayersPanel({
       const stuck = res.attempted - res.cleared;
       const refusedNote =
         res.refused.length > 0
-          ? ` ${String(res.refused.length)} live source layer(s) are not this console's to clear and were left alone.`
+          ? ` · ${String(res.refused.length)} live source layer(s) left alone, not this console's to clear`
           : '';
       if (stuck > 0) {
         reportCommandError(
@@ -738,7 +744,9 @@ export function LayersPanel({
             `and may still be on air. Try CLEAR on those rows.${refusedNote}`,
         );
       } else if (res.cleared > 0) {
-        reportCommandSuccess(`Cleared ${String(res.cleared)} row(s).${refusedNote}`);
+        reportCommandSuccess(
+          `Cleared · ${String(res.cleared)} ${res.cleared === 1 ? 'row' : 'rows'}${refusedNote}`,
+        );
       } else {
         // Never a green "done": nothing was sent, and saying so is the whole point.
         reportCommandError(`No row holds a layer to clear — nothing was sent.${refusedNote}`);
@@ -875,10 +883,10 @@ export function LayersPanel({
    */
   const panic = useCallback(() => window.cg.stack.silenceAllLivePlates(), []);
   const tabs: TabSpec[] = [
-    { id: 'layers', label: 'LAYERS' },
+    { id: 'layers', label: 'Layers' },
     {
       /*
-        🔴 THE ID IS `live-sources` AND THE LABEL IS `LIVE PLATES`, AND THAT IS DELIBERATE.
+        🔴 THE ID IS `live-sources` AND THE LABEL IS `Live plates`, AND THAT IS DELIBERATE.
 
         The owner renamed the tab (2026-09-12) because the reference calls it `Live plates` and
         so does this codebase everywhere else: a plate is a SEATED LAYER, which is exactly what
@@ -892,12 +900,19 @@ export function LayersPanel({
         word nobody sees. Golden rule 11's distinction, one level down: the LABEL is what the
         operator reads, the ID is the handle.
 
-        ⚠ And the CASING is the strip's, not the reference's. Its three tabs read `LAYERS`,
-        `LIVE PLATES`, `STATION LAYERS`; sentence-casing this one alone to match the
-        reference's `Live plates` would make the strip look broken rather than matched.
+        🔴 AND THE CASING WAS DECIDED THE OTHER WAY, BY THE OWNER, ON 2026-09-12. This comment
+        used to argue that the strip's own uppercase should win — "sentence-casing this one
+        alone would make the strip look broken rather than matched". The PREMISE was right and
+        the CONCLUSION was the wrong direction: the three must match, and the reference matches
+        them at SENTENCE case (`Layers` · `Live plates` · `Station layers`, measured — there is
+        no `text-transform` on `.layer-tabs button` at all). So all three moved, not one.
+
+        ⭐ Uppercase in the reference belongs to the TABLE HEADER and the bed divider — 10 px,
+        tracked, on the header's own ground — and the CONTRAST with the sentence-case tabs
+        above them is the design, not an inconsistency in it.
       */
       id: 'live-sources',
-      label: 'LIVE PLATES',
+      label: 'Live plates',
       /*
         The dot means a live producer is lit with NO ROW THAT CAN REACH IT — the
         emergency this whole item exists for. It is deliberately NOT raised for an
@@ -916,7 +931,7 @@ export function LayersPanel({
     },
     {
       id: 'station-layers',
-      label: 'STATION LAYERS',
+      label: 'Station layers',
       // The dot means "something IS on a playout layer" — never raised for an
       // unknown, which is the absence of a claim rather than a claim. It is
       // scoped to the channel whose tab is open, which is why the channel axis
@@ -1390,9 +1405,42 @@ export function LayersPanel({
                     type says so before a word is read.
                   */}
                   <span className="cg-layers-subbar__loaded">{filterTally.loaded} loaded</span>
-                  <span data-layers-tally-onair="" className="cg-layers-subbar__onair">
+                  {/*
+                    🔴 DELTA D5 — THE TWO STATE COUNTS LIVE HERE NOW, and they are the ones that
+                    used to sit inside the table's STATE head (`LayerTableHeader` says why they
+                    left). `B-213`'s rule travels with them unchanged: on air and in error are
+                    TWO numbers meaning two things, in two colours, never added together.
+
+                    ⚠ The air count keeps §4's stale treatment. `unverifiable` does not rename
+                    it and does not hide it — it remains a true count of what OUR list says is
+                    on air; what it stops doing is wearing the air colour, because with neither
+                    hop up nothing is confirming it (`B-081`).
+                  */}
+                  <span
+                    data-layers-tally-onair=""
+                    data-air-tally={String(tally.onAir)}
+                    className="cg-layers-subbar__onair"
+                    {...(tallyUnverifiable ? { 'data-unverifiable': '' } : {})}
+                    aria-label={`${String(tally.onAir)} items on air`}
+                    title={
+                      tallyUnverifiable
+                        ? `${String(tally.onAir)} on air — what this console believes is on air. CasparCG cannot be reached, so nothing is confirming it right now.`
+                        : `${String(tally.onAir)} on air — rows this console believes are on air or unsettled: a play CasparCG accepted, or one still waiting for its answer. A refused row is counted separately.`
+                    }
+                  >
                     {tally.onAir} on air
                   </span>
+                  {tally.inError > 0 && (
+                    <span
+                      data-layers-tally-error=""
+                      data-error-tally={String(tally.inError)}
+                      className="cg-layers-subbar__error"
+                      aria-label={`${String(tally.inError)} items in error`}
+                      title={`${String(tally.inError)} in error — rows whose last command CasparCG refused. Nothing is claimed about what those layers show; open the row or the audit log for the code.`}
+                    >
+                      {tally.inError} in error
+                    </span>
+                  )}
                   {/*
                     🔴 `N/M rows`, reversing `CONSOLE-MATCH-03`'s ARGUED (d).
 
@@ -1410,14 +1458,7 @@ export function LayersPanel({
               </div>
               <div style={styles.list} ref={listRef}>
                 {/* STICKY, and inside the scroll area — see `LayerTableHeader`. */}
-                <LayerTableHeader
-                  density={density}
-                  tally={tally}
-                  // §4 — `unreachable` only, never the boot window: a count that
-                  // greyed itself for the first second of every reload would teach
-                  // the operator to stop reading the grey.
-                  unverifiable={linkDown || casparReach === 'unreachable'}
-                />
+                <LayerTableHeader density={density} />
                 {shownRowBindings.map(({ slot, binding }, index) => {
                   /*
                     THE `?? null` THAT USED TO BE HERE IS THE BUG, and it is worth

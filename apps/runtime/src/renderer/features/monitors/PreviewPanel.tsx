@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Frame, SquareDashed } from 'lucide-react';
+import {
+  ArrowRightFromLine,
+  CircleArrowOutDownRight,
+  Frame,
+  Play,
+  SquareDashed,
+} from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
 import { Panel } from '../../ui/Panel.js';
 import { Button } from '../../ui/Button.js';
@@ -76,6 +82,26 @@ const styles = {
  * wording already draws that line ("Stop every preview graphic; keep all layers on PVW"), so
  * it is taken verbatim rather than paraphrased.
  */
+/*
+  🔴 `CONSOLE-LOOK-06` DELTA D1 — THE TRANSPORT'S GLYPHS, AND THEY ARE THE ROW'S OWN.
+
+  The reference draws a 12 px SVG inside each of these three buttons
+  (`.pvw-transport .btn svg{width:12px;height:12px}`, measured — and its `svg{display:none}`
+  restatement is inside `@media(max-width:720px)`, so at 1280 the icons are drawn).
+
+  ⚠ NOT the reference's own three shapes: the same three THIS console already puts on the row
+  verbs. Two of the three are the same drawing anyway (its `#i-stop` is an arc with an arrow
+  leaving it — lucide's `CircleArrowOutDownRight`, which is what `layerRowActions` uses), and
+  where they differ the row wins, because PLAY here and PLAY on a row are the same verb at two
+  scopes and an operator should not have to learn two pictures for it. Golden rule 6's spirit
+  one level out: one meaning, one drawing.
+*/
+const PVW_TRANSPORT_ICON = {
+  play: Play,
+  next: ArrowRightFromLine,
+  stop: CircleArrowOutDownRight,
+} as const;
+
 const PVW_TRANSPORT_TITLE = {
   play: 'Play all preview layers locally — nothing is sent to CasparCG',
   next: 'Send Next to all preview layers with a next step',
@@ -367,6 +393,7 @@ export function PreviewPanel(): JSX.Element {
                 transport?.drive(verb);
               }}
             >
+              <Icon icon={PVW_TRANSPORT_ICON[verb]} size={12} />
               {verb.toUpperCase()}
             </Button>
           ))}

@@ -561,7 +561,7 @@ export function useTemplatePicker(): {
         // The bindings go ONLY after the owner confirmed the removal. A refused
         // deletion must leave them exactly where they were.
         const refusal = await forgetTemplateAssignments(template.templateId);
-        reportCommandSuccess(`Deleted “${label}”.`);
+        reportCommandSuccess(`Deleted · ${label}`);
         if (refusal !== null) {
           setMessage({
             role: 'notice',

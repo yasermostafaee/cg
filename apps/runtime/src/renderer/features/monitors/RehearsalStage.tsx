@@ -14,7 +14,7 @@ import type { CSSProperties } from 'react';
 // from them and both imports go through subpaths rather than the entry index.
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
-import { LivePlateOverlay } from './LivePlateOverlay.js';
+import { LivePlateOverlay, anyRegionTooSmallForCaveat } from './LivePlateOverlay.js';
 import { platePlacements, type PlatePlacement } from './livePlateGeometry.js';
 import { RehearsalFrame, type RehearsalFrameHandle } from './RehearsalFrame.js';
 import { frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
@@ -410,6 +410,23 @@ export function RehearsalStage({
       }),
     [renderable, raster],
   );
+  /*
+    🔴 `CONSOLE-LOOK-06` DELTA D6 — THE STAMP TAKES THE WORDS WHEN A REGION CANNOT HOLD THEM.
+
+    The owner's ruling names exactly one fallback for caveat 2 and this is it: when a
+    live-source region is too narrow for its own `LIVE SOURCE · PLACEHOLDER` label, the words
+    move to this line — `ILLUSTRATIVE COMPOSITE · LOCAL · LIVE SOURCES NOT RENDERED` — which
+    is permanent and still on canvas. It never degrades to a hover.
+
+    ⚠ Derived from `anyRegionTooSmallForCaveat`, the SAME predicate `LivePlateOverlay` uses to
+    drop the label, called with the same `placements` and the same `fit`. Two spellings of
+    one threshold is how a label vanishes from a region while the stamp goes on saying nothing
+    about it — golden rule 6's shape, one level down from a predicate's name.
+  */
+  const stampText =
+    placements.length > 0 && anyRegionTooSmallForCaveat(placements, fit)
+      ? 'ILLUSTRATIVE COMPOSITE · LOCAL · LIVE SOURCES NOT RENDERED'
+      : 'ILLUSTRATIVE COMPOSITE · LOCAL';
 
   // The FIT scale — preview only. Measured rather than assumed, so the rehearsal
   // stays whole at any panel width, including mid divider-drag.
@@ -582,7 +599,7 @@ export function RehearsalStage({
           title={REHEARSAL_CAVEATS}
           aria-label={`Illustrative composite, local. ${REHEARSAL_CAVEATS}`}
         >
-          ILLUSTRATIVE COMPOSITE · LOCAL
+          {stampText}
         </span>
         {/*
           R-049 — the live-plate markers, ABOVE every frame. See `LivePlateOverlay`

@@ -109,7 +109,7 @@ const styles = {
  * It used to read _"— not the installation's source catalogue, which lives in Station setup"_,
  * and that clause existed for exactly one reason: the tab was called `LIVE SOURCES` and the
  * catalogue is called `Live sources`, so the help text had to spend a sentence undoing the
- * name above it. The tab reads `LIVE PLATES` now, so the disclaimer has nothing left to
+ * name above it. The tab reads `Live plates` now, so the disclaimer has nothing left to
  * disown — a hint whose job is to contradict its own heading is a heading that needs fixing,
  * not a hint that needs keeping.
  *
@@ -278,10 +278,10 @@ export function LiveSourcesPanel({
     }
     const held = res.recorded - res.silenced;
     reportCommandSuccess(
-      `Silenced ${String(res.silenced)} plate(s) across ${String(res.rows.length)} row(s)` +
+      `Silenced · ${String(res.silenced)} plate(s) on ${String(res.rows.length)} row(s)` +
         (held > 0
-          ? `; ${String(held)} already silent in the current look, now armed silent too.`
-          : '.'),
+          ? ` · ${String(held)} already silent in the current look, now armed silent too`
+          : ''),
     );
     return { accepted: true };
   };
@@ -386,7 +386,7 @@ export function LiveSourcesPanel({
       );
       return { accepted: false, cancelled: true };
     }
-    reportCommandSuccess(`Released ${names}.`);
+    reportCommandSuccess(`Released · ${names}`);
     return { accepted: true, cancelled: true };
   };
 
