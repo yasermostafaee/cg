@@ -1346,3 +1346,18 @@ renders answers "is this handled?" with a yes.
       D4 made the button it happened to pick deliberately transparent — the second time that
       sentinel has been caught choosing its subject by document order. §27.7.
 - [ ] S.11 **Linux `gate:e2e` for the delta — `RUNURL2`.**
+
+- [x] S.12 🔴 **A Linux RED on `6d9a398b`, its `E2E` STEP `completed/failure`, after a green
+      Windows 192.** Golden rule 12(a) twice in one run. (1) D8a had put the audio button
+      inside `[data-row-body]`, which was the whole alias cell — a click aimed at the row's
+      NAME landed on a control and the row did not select. Which host sees it depends on text
+      width, so it is structured away, not nudged. (2) D11's ring had a second painter.
+      §27.8.
+- [x] S.13 🔴 **The fader's ring was `@cg/ui`'s GLOBAL `input:focus` halo, not the rule I
+      fixed.** Measured: a pressed range input reports `:focus` true and `:focus-visible`
+      FALSE, so `:focus-visible` was already right and the plain-`:focus` rules were
+      overriding it. ⚠ SHARED with the Designer — a selector change only, no palette edit;
+      both suites re-run (runtime 192, designer 279). §27.8.2.
+- [ ] S.14 ⚠ **REPORTED, NOT TAKEN: the focus ring is the LEGACY sky.** `--cg-accent`
+      `#38bdf8` rings every input in both apps while the Runtime's accent moved to `#74cdf6`.
+      Fixing it is a `@cg/ui` PALETTE edit, which is not something to do in passing. §27.8.2.

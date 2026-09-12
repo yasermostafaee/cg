@@ -214,12 +214,27 @@ test('D10/D11 — the fader never regresses mid-gesture, and rings for the keybo
   await page.getByRole('menu').getByRole('menuitem', { name: 'AUDIO' }).click();
   const dialog = audioDialog(page);
   await expect(dialog).toBeVisible();
-  const fader = dialog.locator('input[type="range"]').first();
+  /*
+    🔴 THE SECOND FADER, DELIBERATELY, and the first version of this spec got it wrong in a
+    way worth keeping: it took `.first()`, which is the one the dialog AUTOFOCUSES
+    (`data-modal-autofocus`). A programmatically focused control legitimately matches
+    `:focus-visible`, so that fader wears a ring from the moment the dialog opens — and the
+    "resting" baseline was then a ring mid-TRANSITION. Linux read it at 1.877 px and the
+    press at 2 px, which is the same ring at two points of one animation, and the spec called
+    a settling transition a defect. Windows read both after it settled and passed.
+
+    An unfocused fader has no ring to begin with, so "the mouse must not ring it" is a claim
+    about the mouse rather than about when the sample was taken.
+  */
+  const fader = dialog.locator('input[type="range"]').nth(1);
   await expect(fader).toBeVisible();
 
   // ── D11, part 1: NO RING UNDER THE MOUSE ──────────────────────────────────────────
   const ring = async (): Promise<string> => fader.evaluate((el) => getComputedStyle(el).boxShadow);
   await page.mouse.move(5, 880);
+  await expect
+    .poll(async () => ring(), { message: 'the unfocused fader settles with no ring' })
+    .toBe('none');
   const resting = await ring();
 
   const box = await fader.boundingBox();
@@ -235,7 +250,7 @@ test('D10/D11 — the fader never regresses mid-gesture, and rings for the keybo
     whatever caused it — asserted on the SEQUENCE rather than on one frame, because the old
     bug lasted exactly one.
   */
-  const readout = dialog.locator('output').first();
+  const readout = dialog.locator('output').nth(1);
   const value = async (): Promise<number> =>
     Number(((await readout.textContent()) ?? '0').replace(/[^0-9]/g, ''));
   const seen: number[] = [];
@@ -274,6 +289,10 @@ test('D10/D11 — the fader never regresses mid-gesture, and rings for the keybo
   */
   await fader.focus();
   await page.keyboard.press('ArrowRight');
-  expect(await ring(), 'a keyboard user must see where focus is').not.toBe(resting);
+  // Polled, not sampled: the ring fades in, and reading it mid-transition is what made the
+  // first version of this spec compare one animation against itself.
+  await expect
+    .poll(async () => ring(), { message: 'a keyboard user must see where focus is' })
+    .not.toBe(resting);
   expect(await value(), 'arrow keys must still move the value').not.toBe(settled);
 });

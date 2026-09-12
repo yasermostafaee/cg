@@ -19,8 +19,8 @@
   --cg-radius-md: 6px;
   --cg-radius-lg: 10px;
 
-  --cg-font: Vazirmatn, Inter, system-ui, -apple-system, 'Segoe UI', 'Noto Sans Arabic', Tahoma,
-    sans-serif;
+  --cg-font:
+    Vazirmatn, Inter, system-ui, -apple-system, 'Segoe UI', 'Noto Sans Arabic', Tahoma, sans-serif;
 
   color-scheme: dark;
 }
@@ -73,11 +73,29 @@ select {
  * the element-properties inputs, and the timeline TrackRow value
  * fields visually consistent.
  */
-input:focus,
+/*
+ * 🔴 `CONSOLE-LOOK-06` DELTA D11 — `:focus-visible` ONLY. The plain `:focus` halves of this
+ * selector list are gone, and they are the reason the Runtime's audio fader grew a ring the
+ * moment an operator took hold of it with the mouse.
+ *
+ * MEASURED in Chromium rather than reasoned about, because the obvious explanation was wrong
+ * twice over. On a pressed range input Chrome reports `:focus` TRUE and `:focus-visible`
+ * FALSE — so `:focus-visible` was already doing the right thing and this rule was overriding
+ * it. (The Runtime's own `.cg-field:focus` was a second copy of the same mistake and went in
+ * the same pass; this one is the copy that actually painted the fader, in `--cg-accent`.)
+ *
+ * ⚠ THE RING IS NOT DELETED. A range input is adjustable with the arrow keys and that user
+ * has nothing else telling them where focus is — measured: after `ArrowRight` the same
+ * element reports `:focus-visible` TRUE and the ring returns. Chrome also grants
+ * `:focus-visible` on click to controls that expect typed input, so text fields and
+ * textareas keep the ring they have always had. What loses it is exactly what should: a
+ * range, a checkbox or a select taken hold of with a pointer.
+ *
+ * ⚠ SHARED — this file is `@cg/ui` and the DESIGNER renders through it too. That is why the
+ * change is a SELECTOR and not a palette edit: no colour, no token and no component moved.
+ */
 input:focus-visible,
-textarea:focus,
 textarea:focus-visible,
-select:focus,
 select:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--cg-accent);

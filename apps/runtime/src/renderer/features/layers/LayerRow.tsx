@@ -885,13 +885,25 @@ export function LayerRow({
       </span>
       {/* THE ALIAS — primary. Dimmed on a row with nothing on it, so occupied rows
           own the attention. */}
-      <span
-        style={item === null ? { ...styles.alias, ...styles.aliasEmpty } : styles.alias}
-        data-row-body=""
-        title={rowName}
-      >
-        {rowName}
-        {dirty && <DraftChip label={`${rowName} has unapplied edits`} />}
+      <span style={item === null ? { ...styles.alias, ...styles.aliasEmpty } : styles.alias}>
+        {/*
+          🔴 `data-row-body` WRAPS THE NAME AND NOTHING ELSE, and that is a bug fix rather
+          than tidying — see the audio button below.
+
+          It used to be the whole alias CELL. Once a control moved into that cell, the cell's
+          centre could land ON the control: a click aimed at "the row's name" hit a button
+          instead, so the row did not select. Linux CI caught it and Windows did not, which is
+          exactly what makes it worth structuring away rather than nudging — the overlap
+          depends on TEXT METRICS, so which host sees it is a lottery and the next name long
+          enough to move the centre brings it back.
+
+          The cell is still ONE grid child, so `VERB_COUNT` and `gridTemplateColumns` are
+          untouched; what changed is where the name's own box ends.
+        */}
+        <span data-row-body="" title={rowName}>
+          {rowName}
+          {dirty && <DraftChip label={`${rowName} has unapplied edits`} />}
+        </span>
         {/*
           🔴 `add-multibox-audio` — THE ROW'S AUDIO SUMMARY, READ-ONLY, AND **OUTSIDE THE VERB
           BLOCK**.

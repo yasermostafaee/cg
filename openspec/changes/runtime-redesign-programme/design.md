@@ -5134,3 +5134,67 @@ exactly this and had not gone far enough. **A sentinel must name its subject by 
 tests, never by position:** it now asks for a neutral button OUTSIDE a panel bar and fails
 loudly if there is none, and a second reading proves the quiet ones are quiet BY RULE (their
 edge resolves) rather than by an unresolved var.
+
+### 27.8 The Linux red that Windows could not have caught, and what was under it
+
+🔴 `6d9a398b` pushed GREEN on Windows (192 passed) and came back RED on Linux —
+<https://github.com/yasermostafaee/cg/actions/runs/34706053728>, the `E2E` STEP itself
+`completed/failure`, so it is evidence about the code and not `P-046`'s empty red. Three
+failures, two causes, and golden rule 12(a) earning its place twice in one run.
+
+#### 27.8.1 D8a put a control inside the row's own click target
+
+`layer-row-hover` §A2 and the Inspector-follows-selection spec both failed on
+`aria-pressed` staying `false` after clicking `[data-row-body]`. The cause: `data-row-body`
+was the whole ALIAS CELL, and D8a had just put the audio button inside it. Playwright clicks
+an element's CENTRE, and on Linux the text metrics put that centre on the button — whose
+`stopPropagation` is exactly right for a button and exactly wrong for the row underneath it.
+
+⭐ **It is not a test-positioning artefact and it must not be fixed as one.** A click aimed at
+the row's name landing on a control is a real defect; which HOST sees it is a lottery,
+because the overlap depends on how wide the name renders. `data-row-body` now wraps the name
+and its draft chip only, so the cell is still one grid child (`VERB_COUNT` untouched) and the
+name's own box is what the operator aims at.
+
+#### 27.8.2 🔴 D11's ring had TWO painters, and the fix had removed the quieter one
+
+The pressed fader was still ringed. Measured on the element rather than reasoned about — and
+the measurement contradicted the assumption the delta and I had both made:
+
+| moment             | `:focus` | `:focus-visible` | box-shadow                     |
+| ------------------ | -------- | ---------------- | ------------------------------ |
+| resting            | false    | false            | `none`                         |
+| mouse **pressed**  | **true** | **false**        | `rgb(56, 189, 248) 0 0 0 2px`  |
+| after release      | true     | false            | `rgb(56, 189, 248) 0 0 0 2px`  |
+| after `ArrowRight` | true     | **true**         | `rgb(116, 205, 246) 0 0 0 2px` |
+
+**So `:focus-visible` was already correct** — Chrome does not grant it to a pointer-pressed
+range input. The ring came from plain-`:focus` rules, of which there were TWO, and the one I
+had fixed (`.cg-field:focus`) was the quiet one. The painter was **`@cg/ui`'s global**
+`input:focus, input:focus-visible, textarea:focus, …, select:focus, select:focus-visible`
+halo in `packages/ui/src/theme.css` — which is also why the ring was `#38bdf8`, the LEGACY
+sky, and not the console's own `#74cdf6`. A second copy of a rule is how the first one comes
+back, so both went in one pass.
+
+⚠ **SHARED CONFIG — `@cg/ui` is rendered by the DESIGNER too.** The change is a SELECTOR and
+nothing else: no colour, no token, no component moved, so the tokens-only rule is intact.
+Text fields and textareas keep the ring they always had, because Chrome grants
+`:focus-visible` on click to controls that expect typed input; what loses it is exactly what
+should — a range, a checkbox or a select taken hold of with a pointer. Both suites re-run:
+runtime **192 passed**, designer **279 passed**.
+
+⭐ **The legacy sky is a live finding and is NOT fixed here.** Every focused input in both
+apps rings in `--cg-accent` `#38bdf8` while the Runtime's own accent has been `#74cdf6`
+since the palette moved (`theme.ts` records the move). Changing it is a `@cg/ui` PALETTE
+edit, which this repo forbids doing in passing — reported, not taken.
+
+#### 27.8.3 And the spec that reddened was measuring a transition
+
+My own D10/D11 spec failed too, on `rgba(56,189,248,0.937) 1.877px` against
+`rgba(56,189,248,1) 2px` — the SAME ring at two points of one fade. It had taken
+`.first()`, which is the fader the dialog AUTOFOCUSES, and a programmatically focused
+control legitimately wears a ring. The baseline was therefore a ring, and the assertion
+compared an animation with itself; Windows read both after it settled and passed. It uses an
+unfocused fader now and polls the ring rather than sampling it. ⚠ **A "before" value is only
+a baseline once it has stopped moving** — the same lesson as reading a toggle's paint with
+the pointer still on it, one session earlier.
