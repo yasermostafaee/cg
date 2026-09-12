@@ -234,6 +234,17 @@ interface Props {
   /** For the accessible name — the operator's word for this row. */
   rowName: string;
   /**
+   * 🔴 `CONSOLE-LOOK-06` DELTA 11 — **IS THE ROW ON AIR RIGHT NOW, as the STATE CELL says it?**
+   *
+   * Not `item.status` and not `isOnAir`: the row's own rendered TONE, passed down, so the
+   * selected segment's green and the state cell's green are ONE fact rather than two readings
+   * that agree today. §4's masking travels with it for free — a row whose air claim cannot be
+   * confirmed renders `attention`, not `onair`, so the segment stops wearing the air colour at
+   * exactly the moment the state cell does. Two derivations of "on air" on one row is the
+   * defect `B-213` is about, one surface over.
+   */
+  onAir: boolean;
+  /**
    * 🔴 **WHAT THIS PRESS CHANGES — the PREVIEW, or AIR.** (`B-151`, owner patch 2026-08-21.)
    *
    * There is ONE control and one call: `stack.set-active-look`, whose effect follows the
@@ -262,6 +273,7 @@ export function LookPicker({
   onPick,
   rowName,
   target,
+  onAir,
 }: Props): JSX.Element {
   const preview = target === 'preview';
   return (
@@ -325,6 +337,27 @@ export function LookPicker({
               className="cg-look-cell"
               // The CSS keys on this, so the paint and the announcement are one fact.
               aria-pressed={live}
+              /*
+                🔴 DELTA 11 — THE SELECTED LOOK ON AN ON-AIR ROW IS GREEN.
+
+                In this console green means ON AIR and nothing else (`design.md` §29). Until now
+                the selected segment was the same blue on an on-air row as on a ready one, so
+                the console had no way to tell "this look is on air right now" from "this look
+                is merely chosen".
+
+                ⚠ IT DOES NOT REOPEN "the segments do not wear green", which this file argues
+                twice — read it again and it is about an UNBACKED claim: *"an off-air row's
+                picker announcing on air would be a second, unbacked air claim on the same
+                row"*. On an ON-AIR row the claim is backed by the state cell beside it, and it
+                is the same `--r-onair` the state cell uses. The rule stands and this is the
+                case it does not cover; an off-air row's selected segment is blue, exactly as
+                before.
+
+                ⚠ And colour is never the sole signal: the segment is already the selected one
+                by its FILL and its inset frame, and `aria-pressed` announces it. Green is
+                reinforcement laid over a marker that already worked without it.
+              */
+              {...(live && onAir ? { 'data-look-onair': '' } : {})}
               disabled={refusal !== undefined}
               /*
                 The tooltip: this look's OWN frame count (the reference's `· N frames`) and the

@@ -64,6 +64,8 @@ async function render(
     activeId?: string | undefined;
     refusal?: string | undefined;
     target?: 'air' | 'preview';
+    /** DELTA 11 — the row's rendered tone, so a case can put the row on air. */
+    onAir?: boolean;
   } = {},
 ): Promise<{ el: HTMLDivElement; onPick: ReturnType<typeof vi.fn> }> {
   const onPick = vi.fn();
@@ -83,6 +85,9 @@ async function render(
           onPick,
           rowName: 'Layer 1',
           target: over.target ?? 'air',
+          // DELTA 11 — the row's rendered tone. Off air unless a case says so, which keeps
+          // every existing case asserting exactly what it asserted before.
+          onAir: over.onAir ?? false,
         }),
       ),
     );
@@ -374,6 +379,7 @@ describe('🔴 §4 — frame count, look count and look id are three different t
           onPick: vi.fn(),
           rowName: 'Bed 1',
           target: 'air',
+          onAir: false,
         }),
       );
     });
@@ -571,5 +577,63 @@ describe('B-151 — the picker names its TARGET, because one control serves two'
     expect(label).toBeDefined();
     expect(label).toMatch(/does not wait for UPDATE/i);
     expect(label).toMatch(/cut/i);
+  });
+});
+
+/**
+ * 🔴 `CONSOLE-LOOK-06` DELTA 11 — THE SELECTED LOOK ON AN ON-AIR ROW IS GREEN.
+ *
+ * Green means ON AIR in this console and nothing else (`design.md` §29). Until now the selected
+ * segment was the same blue on an on-air row as on a ready one, so nothing said "this look is on
+ * air right now" as against "this look is merely chosen".
+ *
+ * ⚠ This does NOT reopen "the segments do not wear green", which this file argues twice. That
+ * rule is about an UNBACKED claim — an off-air row's picker announcing air. On an ON-AIR row the
+ * claim is backed by the state cell beside it, and the marker is `data-look-onair`, which the
+ * CSS keys on. The paint itself is asserted in a browser (`layer-row-hover.spec.ts` measures
+ * this family); jsdom would report zeros for anything geometric and its cascade is not Chrome's.
+ */
+describe('DELTA 11 — green marks the look that is ON AIR, and only that', () => {
+  const marked = (el: HTMLElement): HTMLElement[] => [
+    ...el.querySelectorAll<HTMLElement>('[data-look-onair]'),
+  ];
+
+  it('(b) a row that goes ON AIR marks its SELECTED look, and only the selected one', async () => {
+    const { el } = await render({ activeId: 'left', onAir: true });
+    const hits = marked(el);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('(a) a row that is NOT on air marks nothing — the selected look stays blue', async () => {
+    const { el } = await render({ activeId: 'left', onAir: false });
+    expect(marked(el)).toHaveLength(0);
+    // …and it is still visibly the selected one, by the marker that was always there.
+    expect(el.querySelectorAll('[aria-pressed="true"]')).toHaveLength(1);
+  });
+
+  it('🔴 (d) an ON-AIR row with NO look selected turns nothing green', async () => {
+    // It can happen: `activeId` is `string | undefined`, and a row on air before any look was
+    // recorded has none. Green must never appear for a look that is not on air.
+    const { el } = await render({ activeId: undefined, onAir: true });
+    expect(marked(el)).toHaveLength(0);
+  });
+
+  it('🔴 (c) the mark FOLLOWS the selection, because the press applies immediately', async () => {
+    /*
+      `B-168`, owner's decision 2026-08-25 (option b): the look pick is IMMEDIATE — not staged,
+      `UPDATE` is not involved, and the label says `· NOW`. So on an on-air row the newly
+      selected look is on air at once and the mark moves with it; there is no window in which
+      green sits on a look that is not on air.
+    */
+    const { el } = await render({ activeId: 'right', onAir: true });
+    const hits = marked(el);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.textContent).toContain('Right');
+  });
+
+  it('a REHEARSING (preview) row marks nothing — PVW is not air', async () => {
+    const { el } = await render({ activeId: 'left', onAir: false, target: 'preview' });
+    expect(marked(el)).toHaveLength(0);
   });
 });

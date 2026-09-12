@@ -1112,6 +1112,13 @@ export function LayerRow({
             air — and rehearsing with the plant unreachable is precisely when a preview is
             most useful.
           */
+          /*
+            🔴 DELTA 11 — the ROW's own rendered tone, not a second derivation of "on air".
+            `state.tone` is what `data-row-state` carries three lines up, so the segment's green
+            and the state cell's green cannot come apart — including when §4 masks an
+            unconfirmable claim down to `attention`.
+          */
+          onAir={state.tone === 'onair'}
           refusal={rehearsing ? undefined : lookRefusal}
           rowName={rowName}
           // The row's own state decides what the press changes, and says so on the control.

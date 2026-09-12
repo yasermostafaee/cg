@@ -5387,6 +5387,13 @@ It is a decision, and it is recorded here as one:
 `useConfirm` keeps its recorded solid amber and the sub-dialogs keep their own destructive
 red; that pair stays as recorded and is not harmonised.
 
+🔴 **AND RED WAS DECLINED, NOT RULED OUT — record it here so nobody re-opens it believing
+there was no option.** The reference carries a legible red message pair: `.notice.error` renders
+`rgb(255 170 167)` on `rgb(58 36 42)`, measured in Chromium at 1280 × 800. So _"red is not
+free"_ is true of THIS palette's `alarmFill` used as an ink (2.08:1) and **not** of red in
+general. Red lost on the SHAPE-AND-PLACE argument in §29.1, which is a design decision, not on
+an impossibility.
+
 ⚠ **AND THE OPTION WAS AVAILABLE — it was declined, not missing.** The reference DOES carry a
 legible red message treatment: `.notice.error` renders `rgb(255 170 167)` on `rgb(58 36 42)`,
 measured in Chromium at 1280 × 800, which is a proper ink-on-ground pair and nothing like the

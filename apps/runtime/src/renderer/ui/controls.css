@@ -6575,3 +6575,24 @@ input[type='checkbox']:disabled:checked {
   padding: 0 var(--r-space-3);
   flex: none;
 }
+
+/* ── 🔴 `CONSOLE-LOOK-06` DELTA 11 — THE SELECTED LOOK ON AN ON-AIR ROW ────────
+ *
+ * Green means ON AIR in this console and nothing else (`design.md` §29). A selected segment
+ * on an on-air row IS on air, so it wears the air colour; on any other row it stays blue.
+ *
+ * ⚠ `--r-onair` is the owner's HELD value and is used through the token, never re-spelled —
+ * the ground and the edge are `color-mix`ed from it exactly as the sub-bar's on-air chip is,
+ * so a future change to the sacred colour carries both surfaces with it.
+ *
+ * ⚠ THE INK IS THE ONE THING THAT IS NOT DERIVED. `--r-onair` on its own 18% wash reads far
+ * below AA for a 12 px word, so the label takes `--r-text` — which is DELTA 11's own
+ * instruction: "if the label loses contrast on that ground, adjust the LABEL's token, not the
+ * green". The green does the saying; the word stays legible.
+ */
+.cg-btn.cg-look-cell[aria-pressed='true'][data-look-onair] {
+  background: color-mix(in srgb, var(--r-onair) 18%, var(--r-surface-sunken));
+  border-color: color-mix(in srgb, var(--r-onair) 55%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--r-onair) 55%, transparent);
+  color: var(--r-text);
+}

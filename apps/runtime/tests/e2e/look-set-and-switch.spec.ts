@@ -296,3 +296,105 @@ test('🔴 §4 — RED-FIRST: switch away and back, and the same source is on th
   // including the one whose source is the row's own per-look binding.
   await expect.poll(async () => placeholders(page)).toEqual(before);
 });
+
+/**
+ * 🔴 `CONSOLE-LOOK-06` DELTA 11 — THE SELECTED LOOK ON AN ON-AIR ROW.
+ *
+ * WHICH segment carries the mark is pinned without a browser in `lookPicker.dom.test.ts`. Two
+ * things only a real engine can answer are here, and the first is the more interesting:
+ *
+ *   1. 🔴 THE MARK IS ABSENT IN TEST MODE, EVEN ON A ROW CLAIMING AIR — because it keys on the
+ *      row's own rendered TONE, and `rowState` maps a simulated air claim to `attention`, never
+ *      `onair` (`R-006`: "the mock may simulate, but it may not claim air that does not
+ *      exist"). Passing `isOnAir(item)` instead would have painted the sacred green over a
+ *      claim the console is forbidden to make, and no unit test would have noticed.
+ *   2. The rule PAINTS when the marker is present, and paints green — `color-mix` is a function
+ *      jsdom does not resolve the way Chrome does.
+ */
+test('DELTA 11 — no green for a SIMULATED air claim, and the air colour when the mark is real', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1400, height: 900 });
+  const row = app.fixedRow(89);
+  const selected = row.locator('[data-look-strip] [aria-pressed="true"]');
+  await expect(selected).toHaveCount(1);
+
+  /*
+    The seeded row 89 CLAIMS AIR — its accessible name reads `SIM ON AIR` — and that is exactly
+    the case that must NOT go green. This is the assertion that would have caught the wrong
+    predicate.
+  */
+  await expect(row).toHaveAttribute('aria-label', /SIM ON AIR/);
+  await expect(
+    row.locator('[data-look-onair]'),
+    'a simulated air claim must not wear the air colour',
+  ).toHaveCount(0);
+
+  await page.mouse.move(5, 880); // off every control: a hover reading is a different rule
+  const blue = await selected.evaluate((el) => getComputedStyle(el).backgroundColor);
+
+  /*
+    …and the rule itself PAINTS. The marker is put on the real segment in the real document and
+    the browser is asked what it resolves — a measurement of the rendered rule rather than a
+    reading of the stylesheet, and the only way to see a `color-mix` ground without a plant.
+
+    🔴 POLLED, NOT SAMPLED, and this is the third time in this programme that mattered. The
+    segment TRANSITIONS its background, and a transition interpolates in OKLAB — so reading in
+    the same tick as the attribute returns the START colour, serialised as
+    `oklab(0.42402 -0.0312399 -0.0653808)`, which is the blue wearing an unfamiliar notation.
+    The first cut of this assertion read exactly that and concluded the rule had not applied.
+    Same family as the guides toggle read under the pointer and the fader ring read mid-fade:
+    **a computed colour is only a value once it has stopped moving.**
+  */
+  const green = await selected.evaluate(async (el) => {
+    el.setAttribute('data-look-onair', '');
+    await new Promise((r) => {
+      setTimeout(r, 400);
+    });
+    const bg = getComputedStyle(el).backgroundColor;
+    el.removeAttribute('data-look-onair');
+    return bg;
+  });
+  expect(green, 'the on-air rule did not repaint the segment').not.toBe(blue);
+
+  /*
+    ⚠ AND THE NOTATION IS NOT FIXED EITHER — a settled `color-mix` serialises as
+    `color(srgb …)`, a moving one as `oklab(…)`. So the colour is painted onto a 1 × 1 canvas
+    and the PIXEL is read: whatever the notation, that is the sRGB the operator's screen gets.
+  */
+  const px = async (colour: string): Promise<[number, number, number]> =>
+    page.evaluate((c) => {
+      const cv = document.createElement('canvas');
+      cv.width = 1;
+      cv.height = 1;
+      const ctx = cv.getContext('2d');
+      if (ctx === null) throw new Error('no 2d context');
+      ctx.fillStyle = c;
+      ctx.fillRect(0, 0, 1, 1);
+      const d = ctx.getImageData(0, 0, 1, 1).data;
+      return [d[0] ?? 0, d[1] ?? 0, d[2] ?? 0];
+    }, colour);
+
+  const [gr, gg, gb] = await px(green);
+  const [br, bg2, bb] = await px(blue);
+  /*
+    By CHANNEL against the colour it REPLACES, never by hex: the ground is `color-mix`ed from
+    `--r-onair`, the owner's held value, and re-spelling it here would be a second home for it
+    (§4 — identity by TOKEN, never by hex).
+  */
+  // The new ground is GREEN-dominant…
+  expect(gg, `the on-air ground is not green-dominant: ${green}`).toBeGreaterThan(gr);
+  expect(gg, `the on-air ground is not green-dominant: ${green}`).toBeGreaterThan(gb);
+  /*
+    …and the one it replaces is BLUE-dominant, which is the distinction that matters and the
+    one a cruder metric missed: the first cut compared `g - r` on both and they tied at 42
+    exactly, so a real change read as no change. Two grounds, two different dominant channels
+    is the claim — "the selected look stops being blue and becomes green".
+  */
+  expect(bb, `the ground it replaces is not blue-dominant: ${blue}`).toBeGreaterThan(bg2);
+  expect(bb, `the ground it replaces is not blue-dominant: ${blue}`).toBeGreaterThan(br);
+
+  // …and the probe left nothing behind.
+  await expect(row.locator('[data-look-onair]')).toHaveCount(0);
+});
