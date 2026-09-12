@@ -1380,12 +1380,31 @@ export function LayersPanel({
                   always see how many rows exist to compare against.
                 */}
                 <span className="cg-layers-subbar__tally" data-layers-tally="">
-                  <span>{filterTally.loaded} loaded</span>
+                  {/*
+                    🔴 `CONSOLE-LOOK-06` §3 — THREE FACTS, THREE WEIGHTS, and the sizes are the
+                    hierarchy rather than decoration.
+
+                    Measured in the reference: the loaded count is 10 px, borderless and
+                    unpadded; the air count is an 11 px CHIP; the results hint is 12 px. How
+                    many rows are loaded is background, how many are on air is not, and the
+                    type says so before a word is read.
+                  */}
+                  <span className="cg-layers-subbar__loaded">{filterTally.loaded} loaded</span>
                   <span data-layers-tally-onair="" className="cg-layers-subbar__onair">
                     {tally.onAir} on air
                   </span>
+                  {/*
+                    🔴 `N/M rows`, reversing `CONSOLE-MATCH-03`'s ARGUED (d).
+
+                    That argument was that "29/29 rows at plant scale reads as arithmetic" while
+                    the words do not. Standing in front of it: this sits in a tally of three
+                    facts that the operator SCANS rather than reads, the other two are already
+                    `N loaded` and `N on air`, and a fraction is the one form that says
+                    "shown out of existing" without a preposition. The plant's 29 was also the
+                    mock's number, not the station's — the real bank shows seven.
+                  */}
                   <span data-layers-tally-rows="">
-                    {filterTally.shown} of {filterTally.total} rows
+                    {filterTally.shown}/{filterTally.total} rows
                   </span>
                 </span>
               </div>

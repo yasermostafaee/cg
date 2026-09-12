@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { Info } from 'lucide-react';
 // The raster type comes from `@cg/shared-ipc` (`ChannelRaster`), not from
 // `@cg/template-runtime`'s structurally-identical `Raster` — a `{width, height}`
 // type belongs to the package this app already speaks to the bridge with.
@@ -15,18 +14,10 @@ import { Info } from 'lucide-react';
 // from them and both imports go through subpaths rather than the entry index.
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
-import { Button } from '../../ui/Button.js';
-import { Icon } from '../../ui/Icon.js';
 import { LivePlateOverlay } from './LivePlateOverlay.js';
 import { platePlacements, type PlatePlacement } from './livePlateGeometry.js';
 import { RehearsalFrame, type RehearsalFrameHandle } from './RehearsalFrame.js';
-import {
-  caveatsZIndex,
-  frameZIndex,
-  overlayZIndex,
-  rehearsalCaption,
-  type RehearsalSubject,
-} from './rehearsalFrames.js';
+import { frameZIndex, overlayZIndex, type RehearsalSubject } from './rehearsalFrames.js';
 
 /**
  * R-022 — the rehearsal render: EVERY rehearsing row's graphic, with the
@@ -179,6 +170,45 @@ const styles = {
    * `aria-hidden`: the same fact is already in the panel's own accessible name and in the
    * caveats, and a screen reader meeting it three times is noise.
    */
+  /**
+   * 🔴 THE SAFE-AREA GUIDES LAND ON THE CANVAS, and the owner had to say so once.
+   *
+   * The first cut used `inset: 0` on the FIT BOX, which is the panel's whole picture area —
+   * raster plus the black letterbox left over from fitting 16:9 into a panel of another
+   * aspect. So the guides were drawn around the surround and title-safe was reported wider
+   * than the frame: a ruler measuring the wrong thing, which is worse than no ruler.
+   *
+   * They are now positioned exactly like the CHECKER — centred and sized by the caller to
+   * `raster × fit` — for the same reason its own comment gives about the surround: what
+   * belongs to the frame is drawn on the frame and nowhere else. Both now derive from one
+   * pair of numbers, so they cannot drift apart at a new panel width.
+   */
+  guides: {
+    position: 'absolute' as const,
+    left: '50%',
+    top: '50%',
+    transform: 'translate(-50%, -50%)',
+    zIndex: 55,
+    pointerEvents: 'none' as const,
+    display: 'grid',
+    placeItems: 'center',
+  },
+  /** ACTION-safe: 93 % of the raster, the wider of the two broadcast boxes. */
+  guideAction: {
+    position: 'absolute' as const,
+    inlineSize: '93%',
+    blockSize: '93%',
+    border: `1px dashed ${colors.textMuted}`,
+    opacity: 0.55,
+  },
+  /** TITLE-safe: 90 %, the one a lower third's text must sit inside. */
+  guideTitle: {
+    position: 'absolute' as const,
+    inlineSize: '90%',
+    blockSize: '90%',
+    border: `1px dashed ${colors.textMuted}`,
+    opacity: 0.8,
+  },
   illustrationNote: {
     position: 'absolute' as const,
     insetInlineStart: cssVars['--r-stage-note-inset'],
@@ -235,52 +265,20 @@ const styles = {
     backgroundSize: '48px 48px',
     backgroundPosition: '0 0, 0 24px, 24px -24px, -24px 0',
   },
-  /**
-   * The caveats, ON DEMAND. They used to be a permanent strip under the frame.
+  /*
+   * ⚠ `caveats`, `lifecycleSpacer` and `caption` USED TO BE HERE.
    *
-   * R-022's acceptance requires these caveats to be stated IN the panel, so they
-   * are DISCLOSED, not deleted — the operator still reaches them without leaving
-   * the surface, and assistive tech reaches them through the toggle's
-   * `aria-expanded` pairing. What changed is that they no longer bill the monitor
-   * for permanent height: PVW is the smallest surface on this console and a fixed
-   * four-line footnote was taking that space from the thing being judged.
+   * The caveats paragraph and its info toggle are GONE at the owner's word (2026-09-12: the
+   * info icon and the on-canvas description are not wanted). The spacer and the caption went
+   * with the lifecycle bar itself, which `CONSOLE-LOOK-06` §2 replaced with `PreviewPanel`'s
+   * persistent controls row — the caption is rendered there now, from the same two numbers.
    *
-   * OVERLAID rather than in flow, for the same reason — an in-flow panel would
-   * shrink the frame on open, so reading the note would change the geometry the
-   * note is ABOUT.
+   * 🔴 WHAT THE PANEL STILL SAYS ABOUT ITSELF, because the removal must not take the honesty
+   * with it: the `ILLUSTRATIVE COMPOSITE · LOCAL` stamp on the canvas (above every frame, so
+   * no graphic can cover it), the panel's own accessible name, and the empty state's
+   * "Nothing is sent to CasparCG". See the report — `R-022`'s acceptance asked for the
+   * caveats to be stated IN the panel, and that clause is now only partly met.
    */
-  caveats: {
-    position: 'absolute' as const,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    padding: '0.45rem 0.6rem',
-    fontSize: '0.65rem',
-    lineHeight: 1.4,
-    color: colors.textMuted,
-    borderTop: `1px solid ${colors.border}`,
-    background: colors.panelMuted,
-    // `zIndex` is supplied by the caller from `caveatsZIndex(frameCount)` — the
-    // bare `3` that used to live here already tied with the third frame.
-  },
-  /** Pushes the info toggle to the trailing end of the lifecycle bar. */
-  lifecycleSpacer: { flex: 1 },
-  /**
-   * What the transport acts on, said on the surface. With several rows
-   * rehearsing, a bar reading only PLAY / NEXT / STOP would leave the operator
-   * guessing WHICH graphic it drives — the same silently-partial reading the
-   * single-frame panel invited.
-   */
-  caption: {
-    fontSize: '0.62rem',
-    fontWeight: 700,
-    letterSpacing: '0.06em',
-    textTransform: 'uppercase' as const,
-    color: colors.textMuted,
-    whiteSpace: 'nowrap' as const,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
   missing: {
     flex: 1,
     minHeight: 0,
@@ -298,7 +296,6 @@ const styles = {
 } as const satisfies Record<string, CSSProperties>;
 
 /** Ties the caveats disclosure to its toggle for assistive tech. */
-const CAVEATS_ID = 'rehearsal-caveats';
 
 interface Props {
   /**
@@ -316,15 +313,53 @@ interface Props {
   htmlByItem: ReadonlyMap<string, string | null>;
   /** The channel's real raster (R-030). Every iframe is sized to it. */
   raster: ChannelRaster;
+  /**
+   * 🔴 `CONSOLE-LOOK-06` §2 — the SAFE-AREA GUIDES, drawn over every frame.
+   *
+   * The reference's `.pvw-guides`, and it is the one control in its `.zoom` group we adopt
+   * (the zoom select itself is excluded by the owner). It is a JUDGEMENT aid: title-safe and
+   * action-safe are the two boxes an operator checks a lower third against, and checking them
+   * by eye against a 626 px preview is exactly the guess this removes.
+   */
+  showGuides?: boolean;
+  /**
+   * Publishes the local transport upward so a persistent controls row can drive it, and
+   * `null` on unmount so that row can disable itself rather than hold a stale handle.
+   */
+  onTransport?:
+    | ((
+        t: { drive: (v: 'play' | 'next' | 'stop') => void; ready: boolean; count: number } | null,
+      ) => void)
+    | undefined;
 }
 
-export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Element {
+/**
+ * 🔴 `R-022`'s TWO HONEST CAVEATS, kept as one string after the paragraph was removed.
+ *
+ * Its acceptance reads: _"WHEN the preview is shown THEN two honest caveats are stated IN the
+ * item: browser-vs-CEF-71 rendering may differ in detail (`B-066` class — 'faithful, not
+ * pixel-identical'), and after `C-015` a Live Source region renders as a labeled placeholder,
+ * not video."_ The owner removed the on-canvas paragraph and its info icon on 2026-09-12; that
+ * is a decision about the SURFACE, and it does not repeal the clause, so the two facts moved
+ * to where they cost no picture — the stamp that already names what this render is.
+ *
+ * ⚠ Reported to the owner as PARTLY MET rather than met: a hover is weaker than a paragraph,
+ * and whether that is enough for `R-022` is his call, not this file's.
+ */
+const REHEARSAL_CAVEATS =
+  'Rendered in this browser, not on air — faithful but not pixel-identical to the on-air ' +
+  'render. A Live Source region paints nothing in the page; the marked box over it is a ' +
+  'placeholder this app draws, naming the plate and its source — it is not the live picture.';
+
+export function RehearsalStage({
+  subjects,
+  htmlByItem,
+  raster,
+  showGuides = false,
+  onTransport,
+}: Props): JSX.Element {
   const fitRef = useRef<HTMLDivElement | null>(null);
   const [fit, setFit] = useState(1);
-  // Collapsed by default: the caveats are a thing to CONSULT, not a thing to read
-  // every time. Deliberately not persisted — it costs one click and a remembered
-  // "open" would quietly re-introduce the permanent strip this replaced.
-  const [showCaveats, setShowCaveats] = useState(false);
 
   const handles = useRef(new Map<string, RehearsalFrameHandle>());
   const [readyIds, setReadyIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -346,7 +381,6 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
         .filter((r): r is { subject: RehearsalSubject; html: string } => r.html !== null),
     [subjects, htmlByItem],
   );
-  const unavailable = subjects.length - renderable.length;
 
   /**
    * R-049 — every live plate of every RENDERABLE row, in raster pixels.
@@ -426,6 +460,21 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
     for (const handle of handles.current.values()) handle[verb]();
   }, []);
 
+  /*
+    🔴 PUBLISHED UPWARD, so the bar that drives this stage can outlive it.
+
+    `onTransport` is called with the drive function and the readiness whenever either changes,
+    and with `null` on unmount — so a controls row rendered above an ABSENT stage knows to sit
+    disabled rather than holding a stale handle. The handles themselves never leave: this hands
+    out a closure over the ref, not the ref.
+  */
+  useEffect(() => {
+    onTransport?.({ drive: driveAll, ready: allReady, count: renderable.length });
+    return () => {
+      onTransport?.(null);
+    };
+  }, [onTransport, driveAll, allReady, renderable.length]);
+
   if (renderable.length === 0) {
     return (
       <div style={styles.missing} role="img" aria-label="Rehearsal unavailable in this browser">
@@ -445,79 +494,19 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
   return (
     <>
       {/*
-        THE TRANSPORT, driven locally. "See it before air" is only half of
-        rehearse; the other half is assessing MOTION, which needs the intro, the
-        steps and the outro to actually run.
+        🔴 THE TRANSPORT AND THE CAVEATS TOGGLE LEFT THIS COMPONENT (`CONSOLE-LOOK-06` §2).
 
-        NAMED PLAY / NEXT / STOP — the same three words, in the same order, as the
-        row's own verbs. The buttons used to read PLAY INTRO / PLAY OUTRO, which
-        described the ANIMATION rather than the action and left the operator
-        translating between two vocabularies for one lifecycle. They drive the
-        very entry points `CG PLAY`, `CG NEXT` and `CG STOP` reach on air, so the
-        row's words are the accurate ones — and NEXT, which the template's
-        lifecycle has always had, had no control here at all.
+        They are in `PreviewPanel`'s controls row now — the reference's `.monitor-controls`,
+        a 31 px strip between the head and the stage — because the reference renders them
+        ALWAYS, each disabled by its own condition, and this component only exists once there
+        is something to render. Nothing about what they DO changed: the same three words in the
+        same order as the row's own verbs, driving the same `CG PLAY` / `CG NEXT` / `CG STOP`
+        entry points, through the same `driveAll` over the same frame handles.
+
+        ⚠ It is not two bars. The controls row REPLACED the lifecycle bar that used to sit
+        here, so the pane did not grow a strip — the caption and the caveats toggle moved into
+        it beside the transport.
       */}
-      <div style={styles.lifecycle}>
-        <Button
-          variant="secondary"
-          disabled={!allReady}
-          aria-label={
-            renderable.length === 1 ? 'PLAY' : `PLAY all ${String(renderable.length)} rehearsing`
-          }
-          onClick={() => {
-            driveAll('play');
-          }}
-        >
-          PLAY
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={!allReady}
-          aria-label={
-            renderable.length === 1 ? 'NEXT' : `NEXT on all ${String(renderable.length)} rehearsing`
-          }
-          onClick={() => {
-            driveAll('next');
-          }}
-        >
-          NEXT
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={!allReady}
-          aria-label={
-            renderable.length === 1 ? 'STOP' : `STOP all ${String(renderable.length)} rehearsing`
-          }
-          onClick={() => {
-            driveAll('stop');
-          }}
-        >
-          STOP
-        </Button>
-        <span style={styles.caption} data-rehearsal-caption>
-          {rehearsalCaption(renderable.length, subjects.length)}
-        </span>
-        <span style={styles.lifecycleSpacer} />
-        {/*
-          The caveats toggle. Trailing end of the lifecycle bar, away from the
-          transport buttons — this is a disclosure, and it must not sit where a
-          thumb reaching for STOP can land on it.
-        */}
-        <Button
-          variant="ghost"
-          aria-expanded={showCaveats}
-          aria-controls={CAVEATS_ID}
-          aria-label={
-            showCaveats ? 'Hide what rehearsal does not prove' : 'What rehearsal does not prove'
-          }
-          title="What rehearsal does not prove"
-          onClick={() => {
-            setShowCaveats((open) => !open);
-          }}
-        >
-          <Icon icon={Info} />
-        </Button>
-      </div>
       <div ref={fitRef} style={styles.fitBox}>
         {/*
           Sized to the frame AS DISPLAYED (raster × fit) rather than scaled with
@@ -554,7 +543,45 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
             }}
           />
         ))}
-        <span aria-hidden style={styles.illustrationNote} data-stage-illustration="">
+        {showGuides && (
+          /*
+            Sized to the SCALED RASTER by this caller, exactly as the checker above is — see
+            `styles.guides`. `aria-hidden` and `pointer-events: none`: it is a ruler laid on the
+            picture, not a thing to reach for, and a screen reader has no use for a rectangle.
+          */
+          <span
+            aria-hidden
+            data-pvw-guides=""
+            style={{
+              ...styles.guides,
+              width: `${String(raster.width * fit)}px`,
+              height: `${String(raster.height * fit)}px`,
+            }}
+          >
+            <span style={styles.guideAction} />
+            <span style={styles.guideTitle} />
+          </span>
+        )}
+        {/*
+          🔴 THE STAMP CARRIES THE TWO CAVEATS NOW, in its `title`.
+
+          The owner removed the info icon and the on-canvas description (2026-09-12), and
+          `R-022`'s acceptance still asks for two honest caveats to be stated IN the item:
+          that the browser render is faithful but NOT pixel-identical to CEF's, and that a
+          Live Source region is a drawn placeholder rather than video. Those are facts about
+          exactly what this stamp already names, so they ride it — a hover and an accessible
+          name cost no canvas at all, which is what the owner objected to.
+
+          It therefore stops being `aria-hidden`: a `title` nothing can reach is not a
+          statement. `pointerEvents: auto` for the same reason, and it is a 157 × 17 strip in
+          a corner, so nothing on the picture becomes harder to reach.
+        */}
+        <span
+          style={{ ...styles.illustrationNote, pointerEvents: 'auto' }}
+          data-stage-illustration=""
+          title={REHEARSAL_CAVEATS}
+          aria-label={`Illustrative composite, local. ${REHEARSAL_CAVEATS}`}
+        >
           ILLUSTRATIVE COMPOSITE · LOCAL
         </span>
         {/*
@@ -569,35 +596,6 @@ export function RehearsalStage({ subjects, htmlByItem, raster }: Props): JSX.Ele
           fit={fit}
           zIndex={overlayZIndex(renderable.length)}
         />
-        {showCaveats && (
-          <p
-            id={CAVEATS_ID}
-            style={{ ...styles.caveats, zIndex: caveatsZIndex(renderable.length) }}
-          >
-            Rehearsal — rendered in this browser at {raster.width}×{raster.height}, not on air.
-            Faithful but <strong>not pixel-identical</strong> to the on-air render. A Live Source
-            region paints <strong>nothing</strong> in the rendered page; the marked box you see over
-            it is a <strong>placeholder this app draws</strong>, naming the plate and the source
-            bound to it — it is <strong>not the live picture</strong>. What fills that region on air
-            is a CasparCG layer composited behind the template, which no browser preview can show.
-            Only <strong>rehearsing</strong> rows are shown, composited in channel layer order —
-            nothing that is on air is composited here. CasparCG composites each template over a{' '}
-            <strong>transparent base</strong>; a browser instead forces an opaque canvas on an
-            embedded page whose colour scheme differs from the page embedding it, so this panel
-            matches the two — without that, every graphic would sit on flat white and hide the ones
-            below it. Use it to check values, layout and motion — it is not an air check.
-            {unavailable > 0 && (
-              <>
-                {' '}
-                <strong>
-                  {unavailable} rehearsing {unavailable === 1 ? 'row is' : 'rows are'} not shown
-                </strong>
-                : this browser holds no local copy of{' '}
-                {unavailable === 1 ? 'that page' : 'those pages'}.
-              </>
-            )}
-          </p>
-        )}
       </div>
     </>
   );

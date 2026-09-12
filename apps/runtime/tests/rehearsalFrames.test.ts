@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import type { FixedLayerBank, Rehearsal } from '@cg/shared-ipc';
 import { bankPosition, defaultLayerAlias } from '@cg/shared-ipc';
 import {
-  caveatsZIndex,
   frameBox,
   frameZIndex,
   overlayZIndex,
@@ -205,7 +204,7 @@ describe('frameBox — the raster-sized box and the single FIT transform', () =>
   });
 });
 
-describe('overlayZIndex / caveatsZIndex — the marker is above every frame', () => {
+describe('overlayZIndex — the marker is above every frame', () => {
   it('sits above the TOP frame, whatever the frame count', () => {
     // There is no cap on rehearsing rows, so a constant would be overtaken. A
     // placeholder that ends up under a graphic is worse than none: it would show
@@ -215,11 +214,9 @@ describe('overlayZIndex / caveatsZIndex — the marker is above every frame', ()
     }
   });
 
-  it('the caveats sit above the overlay — a note about the surface is never covered', () => {
-    for (const count of [1, 3, 12]) {
-      expect(caveatsZIndex(count)).toBeGreaterThan(overlayZIndex(count));
-    }
-    // The bare `3` this replaced already tied with the third frame.
-    expect(caveatsZIndex(3)).toBeGreaterThan(3);
-  });
+  /*
+    ⚠ The sibling assertion about the CAVEATS z-index went with the caveats themselves (owner,
+    2026-09-12). It is not weakened coverage: the thing it protected no longer renders, and a
+    test for a deleted surface is a test that passes forever while proving nothing.
+  */
 });

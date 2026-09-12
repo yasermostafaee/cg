@@ -454,6 +454,8 @@ export const APP_HEAD_PX = {
   btnPadX: 9,
   btnGap: 7,
   btnText: 12,
+  /** `.app-head .btn{border-radius:5px}`, confirmed in Chromium — a step above the toolbar's 4. */
+  btnRadius: 5,
 } as const;
 
 /*
@@ -534,6 +536,67 @@ export const STAGE_NOTE_PX = {
   track: 0.36,
 } as const;
 
+/*
+ * ── 🔴 `CONSOLE-LOOK-06` §2 — THE COMPACT MONITOR HEAD, AND WHY IT IS ITS OWN BAR ──
+ *
+ * `CONSOLE-MATCH-03` matched the head's CONTENTS and left it in `--r-panel-bar-h`'s 52 px
+ * box, so the two monitor panes each spent **53 px** of chrome on a bar the reference draws
+ * in **32**. Measured in Chromium at 1280 × 800 on `04-playout-layers.html`
+ * (`data-start="monitors"`), reading what PAINTS — the prompt's own candidate list is a list
+ * of declarations to look FOR, not of values that win, and three of these were restated in a
+ * later wave:
+ *
+ *   `.monitor`                      radius **5**, not the listed 10
+ *   `.pvw-transport .btn`           **25 px / 11 px / 550**, not the listed 24 px / 9 px
+ *   `.pvw-count`                    **11 px**, not the listed 10 — the COLOUR listed is right
+ *
+ * ⚠ AND THE TWO `display:none` RULES ARE `@media`-ONLY, exactly as the prompt warned.
+ * `.pgm-air-count` and `.pgm-return-label` both paint `display: block` at 1280 — 99.17 × 16.5
+ * and 62.86 × 16.5. Nothing the owner can see today was hidden.
+ *
+ * 🔴 WHY A MODIFIER AND NOT A NEW `--r-panel-bar-h`. That token is a FLOOR, and its own
+ * comment says why: _"a height that belongs to being a footer cannot be a function of what a
+ * section puts in it."_ The same holds here in reverse — the LAYERS bar carries bulk verbs
+ * with a 36 px floor and must stay 52; the monitor heads carry an 11 px label and a count.
+ * One bar, two jobs, so the compact head is a MODIFIER on the shared primitive rather than a
+ * second primitive or a lowered floor.
+ */
+export const MONITOR_COMPACT_PX = {
+  /** `.pvw-compact .monitor-head{padding:3px 9px;gap:8px;min-height:0}` → 32 px as painted. */
+  headH: 32,
+  headPadY: 3,
+  headPadX: 9,
+  headGap: 8,
+  /** `.pvw-compact .monitor-head .icon-btn{width:25px;height:25px;padding:4px;border-radius:3px}` */
+  headBtn: 25,
+  headBtnPad: 4,
+  headBtnRadius: 3,
+  /** The panel's own corner — 5, not the 10 the candidate list carried. */
+  cardRadius: 5,
+  /** `h2 span`: `margin-left:5px; font-weight:500; opacity:.7`, inheriting the label's hue. */
+  chIndent: 5,
+  chOpacity: 0.7,
+  /** `.pgm-signal > span{width:6px;height:6px;border-radius:50%}` — a FILLED dot, not a glyph. */
+  signalDot: 6,
+  /** `.pgm-signal{gap:6px}` — its own, one below the strip's 7. */
+  signalGap: 6,
+  /*
+   * 🔴 THE TRANSPORT, as CONFIRMED rather than as listed. The candidate list carried
+   * `min-height:24px; font-size:9px`, and a later wave restates both — what the browser paints
+   * at 1280 is **25 px tall, 11 px, weight 550**, `padding: 2px 7px`, radius 3, gap 4, with a
+   * 12 px glyph. The listed 9 px would have been unreadable and is not what the owner approved.
+   */
+  transportH: 25,
+  transportPadY: 2,
+  transportPadX: 7,
+  transportGap: 4,
+  transportRadius: 3,
+  transportText: 11,
+  /** `.pvw-scope` — 9 px, tracked .36px, the quietest thing on the row. */
+  scopeText: 9,
+  scopeTrack: 0.36,
+} as const;
+
 export const LAYER_SUBBAR_PX = {
   /** `.layer-subbar{height:40px;padding:5px 10px;gap:12px}`, ruled below. */
   h: 40,
@@ -552,6 +615,18 @@ export const LAYER_SUBBAR_PX = {
   /** `.check{gap:8px;font-size:12px}` and the `.hint` tally at 12 px. */
   checkGap: 8,
   text: 12,
+  /*
+   * 🔴 `CONSOLE-LOOK-06` §3 — the sub-bar has TWO type sizes, not one.
+   *
+   * `.pill-count` is 10 px, borderless and unpadded; `.badge` is 11 px at `2px 6px`. Both
+   * confirmed in Chromium. `CONSOLE-MATCH-03` argued the pill up to 12 on the reasoning that
+   * three sizes in one line read as a mistake — there are two, and the smaller one IS the
+   * hierarchy.
+   */
+  pillText: 10,
+  badgeText: 11,
+  badgePadY: 2,
+  badgePadX: 6,
 } as const;
 
 /*
@@ -2407,6 +2482,27 @@ export const cssVars = {
   '--r-space-8': '32px',
   // Radii
   '--r-radius-sm': '4px',
+  /*
+   * 🔴 `CONSOLE-LOOK-06` §5 — THE FIELD/BADGE CORNER, reversing `CONSOLE-MATCH-03`'s ARGUED (a).
+   *
+   * That argument was "the reference is not uniform, so this is one shared token against one of
+   * its several" — and the FACT is right while the conclusion was wrong. Measured in Chromium,
+   * the reference splits its corners by KIND and does it consistently: the transport buttons are
+   * 3, the toolbar's are 4, the header's are 5, the base button is 7 — and every FIELD and every
+   * BADGE is **5**. That is not several answers; it is one answer for fields and badges and a
+   * different one for buttons.
+   *
+   * So this is a NEW token rather than a change to `--r-radius-sm`, which is what `.cg-btn` and
+   * eleven other chips read. Moving that one would have taken the buttons with it, which the
+   * reference does not do.
+   *
+   * ⭐ WHAT IT MOVES, in full: the shared `.cg-field` (every text input, search and select in
+   * the app), the sub-bar's on-air chip, and the header's `PVW · N` badge — 4 px → 5 px. What it
+   * deliberately does NOT move: `.cg-btn`, `.cg-file-chip`, `.cg-list-item`, the drag handle,
+   * checkboxes, `.cg-tooltip`, `.cg-plate-spacer`, `.cg-plate-help`, `.cg-audio-index`,
+   * `.cg-code-chip`, `.cg-audit-caveat` and `.cg-audit-table`, all still `--r-radius-sm`.
+   */
+  '--r-radius-field': '5px',
   '--r-radius-md': '6px',
   '--r-radius-lg': '10px',
   '--r-radius-full': '9999px',
@@ -2528,6 +2624,7 @@ export const cssVars = {
   '--r-app-head-btn-pad': `${String(APP_HEAD_PX.btnPadY)}px ${String(APP_HEAD_PX.btnPadX)}px`,
   '--r-app-head-btn-gap': `${String(APP_HEAD_PX.btnGap)}px`,
   '--r-app-head-btn-text': `${String(APP_HEAD_PX.btnText)}px`,
+  '--r-app-head-btn-radius': `${String(APP_HEAD_PX.btnRadius)}px`,
   '--r-subbar-h': `${String(LAYER_SUBBAR_PX.h)}px`,
   '--r-subbar-pad': `${String(LAYER_SUBBAR_PX.padY)}px ${String(LAYER_SUBBAR_PX.padX)}px`,
   '--r-subbar-gap': `${String(LAYER_SUBBAR_PX.gap)}px`,
@@ -2537,6 +2634,9 @@ export const cssVars = {
   '--r-subbar-search-pad': `${String(LAYER_SUBBAR_PX.searchPadTop)}px ${String(LAYER_SUBBAR_PX.searchPadRight)}px ${String(LAYER_SUBBAR_PX.searchPadTop)}px ${String(LAYER_SUBBAR_PX.searchPadLeft)}px`,
   '--r-subbar-search-glyph-inset': `${String(LAYER_SUBBAR_PX.searchGlyphInset)}px`,
   '--r-subbar-check-gap': `${String(LAYER_SUBBAR_PX.checkGap)}px`,
+  '--r-subbar-pill-text': `${String(LAYER_SUBBAR_PX.pillText)}px`,
+  '--r-subbar-badge-text': `${String(LAYER_SUBBAR_PX.badgeText)}px`,
+  '--r-subbar-badge-pad': `${String(LAYER_SUBBAR_PX.badgePadY)}px ${String(LAYER_SUBBAR_PX.badgePadX)}px`,
   '--r-monitor-label-text': `${String(MONITOR_HEAD_PX.labelText)}px`,
   '--r-monitor-label-track': `${String(MONITOR_HEAD_PX.labelTrack)}px`,
   '--r-monitor-label-gap': `${String(MONITOR_HEAD_PX.labelGap)}px`,
@@ -2545,6 +2645,39 @@ export const cssVars = {
   '--r-monitor-strip-h': `${String(MONITOR_HEAD_PX.stripH)}px`,
   '--r-monitor-strip-pad': `${String(MONITOR_HEAD_PX.stripPadY)}px ${String(MONITOR_HEAD_PX.stripPadX)}px`,
   '--r-monitor-strip-gap': `${String(MONITOR_HEAD_PX.stripGap)}px`,
+  '--r-monitor-head-h': `${String(MONITOR_COMPACT_PX.headH)}px`,
+  '--r-monitor-head-pad': `${String(MONITOR_COMPACT_PX.headPadY)}px ${String(MONITOR_COMPACT_PX.headPadX)}px`,
+  '--r-monitor-head-gap': `${String(MONITOR_COMPACT_PX.headGap)}px`,
+  '--r-monitor-head-btn': `${String(MONITOR_COMPACT_PX.headBtn)}px`,
+  '--r-monitor-head-btn-pad': `${String(MONITOR_COMPACT_PX.headBtnPad)}px`,
+  '--r-monitor-head-btn-radius': `${String(MONITOR_COMPACT_PX.headBtnRadius)}px`,
+  '--r-monitor-card-radius': `${String(MONITOR_COMPACT_PX.cardRadius)}px`,
+  '--r-monitor-ch-indent': `${String(MONITOR_COMPACT_PX.chIndent)}px`,
+  '--r-monitor-ch-opacity': `${String(MONITOR_COMPACT_PX.chOpacity)}`,
+  '--r-pvw-transport-h': `${String(MONITOR_COMPACT_PX.transportH)}px`,
+  '--r-pvw-transport-pad': `${String(MONITOR_COMPACT_PX.transportPadY)}px ${String(MONITOR_COMPACT_PX.transportPadX)}px`,
+  '--r-pvw-transport-gap': `${String(MONITOR_COMPACT_PX.transportGap)}px`,
+  '--r-pvw-transport-radius': `${String(MONITOR_COMPACT_PX.transportRadius)}px`,
+  '--r-pvw-transport-text': `${String(MONITOR_COMPACT_PX.transportText)}px`,
+  '--r-pvw-scope-text': `${String(MONITOR_COMPACT_PX.scopeText)}px`,
+  '--r-pvw-scope-track': `${String(MONITOR_COMPACT_PX.scopeTrack)}px`,
+  /** The compact head's ground — a step above the panel's, as the reference draws it. */
+  '--r-monitor-head-bg': '#202b3a',
+  '--r-monitor-signal-gap': `${String(MONITOR_COMPACT_PX.signalGap)}px`,
+  '--r-monitor-signal-dot': `${String(MONITOR_COMPACT_PX.signalDot)}px`,
+  /*
+   * The PGM signal dot's fill. A muted GOLD, and the reference's own choice: "no return
+   * signal" is not a fault (`MONITORS-01` — `C-016` is unbuilt, the playout server is very
+   * probably transmitting), so it may not wear the alarm red; but it is not nothing either,
+   * so it may not be the text grey. This is the one hue in §2 with no existing role token.
+   */
+  '--r-monitor-signal-dot-fill': '#a78c58',
+  /** The PVW count rides its pane's own accent, as the reference does (`#c4b5fd`). */
+  '--r-monitor-count-ink': '#c4b5fd',
+  /** The PGM strip's readouts — a step below the body text, as measured. */
+  '--r-monitor-strip-ink': '#93a5bc',
+  /** `#monitor-area .pvw-compact .monitor-controls{background:#101827}` */
+  '--r-monitor-strip-bg': '#101827',
   '--r-stage-note-inset': `${String(STAGE_NOTE_PX.inset)}px`,
   '--r-stage-note-pad': `${String(STAGE_NOTE_PX.padY)}px ${String(STAGE_NOTE_PX.padX)}px`,
   '--r-stage-note-text': `${String(STAGE_NOTE_PX.text)}px`,

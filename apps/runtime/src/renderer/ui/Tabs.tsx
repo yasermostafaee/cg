@@ -113,10 +113,18 @@ interface Props extends StripProps {
 }
 
 const styles = {
+  /*
+   * 🔴 `CONSOLE-LOOK-06` §3 — THE TABS SPACE THEMSELVES BY GAP, NOT BY PADDING.
+   *
+   * Measured in Chromium: `.layer-tabs{gap:22px}` with `.layer-tabs button{padding:12px 0 9px}`
+   * — the buttons have NO horizontal padding at all and the strip's gap does the separating.
+   * The difference is visible: a padded tab's underline runs wider than its word, so the
+   * selected mark reads as a block; an unpadded one underlines exactly the label.
+   */
   strip: {
     display: 'flex',
     alignItems: 'stretch',
-    gap: '0.25rem',
+    gap: '22px',
     borderBottom: `1px solid ${colors.border}`,
     flexShrink: 0,
   },
@@ -124,17 +132,32 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '0.4rem',
-    padding: '0.45rem 0.9rem',
-    fontSize: '0.85rem',
-    fontWeight: 700,
-    letterSpacing: '0.05em',
+    padding: '12px 0 9px',
+    fontSize: '13px',
+    fontWeight: 550,
+    /*
+     * The reference tracks `normal` — and its labels are sentence case (`Layers`) where ours
+     * are upper (`LAYERS`). Upper-case at `normal` tracking sets tight enough to read as one
+     * word, so a small track is KEPT here rather than adopted-to-zero. The deviation is the
+     * casing, not the spacing, and it is the casing that keeps the three tabs looking like a
+     * set beside the rest of this console's chrome.
+     */
+    letterSpacing: '0.04em',
     background: 'transparent',
     border: 'none',
     borderBottom: '2px solid transparent',
     color: colors.textMuted,
     cursor: 'pointer',
   },
-  activeTab: { color: colors.text, borderBottomColor: colors.ready },
+  /*
+   * 🔴 THE SELECTED TAB IS BLUE, not white-with-a-blue-line.
+   *
+   * Ours coloured the label `--r-text` and only the underline `--r-ready`; the reference
+   * colours BOTH the same blue, which is what makes the selected tab read as selected in one
+   * glance rather than as "the bright one". The underline was already this exact hue
+   * (`rgb(116 205 246)`), so this is one property moving to join it, not a new colour.
+   */
+  activeTab: { color: colors.ready, borderBottomColor: colors.ready },
   /**
    * The CHANNEL level. Distinguished by SHAPE (a raised, boxed tab that sits on a
    * sunken strip) rather than by colour alone, so the outer axis is obvious even

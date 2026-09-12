@@ -116,6 +116,7 @@ export function MonitorPanel({
     <Panel
       id={id}
       title={title}
+      compactHead
       heading={<MonitorHead word={word} channel={channel} tone="pgm" />}
       /*
         `Server return` — the reference's standing label for what this pane is FOR. It is not
@@ -125,7 +126,12 @@ export function MonitorPanel({
       actions={<MonitorHeadFact>Server return</MonitorHeadFact>}
       /* REPAIR-03 A1, audit row 38 — the monitor box's own ground (--r-monitor-bg), a
          shade below the panels around it so the screen reads as inset. */
-      style={{ flex: 1, minWidth: 0, background: cssVars['--r-monitor-bg'] }}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        background: cssVars['--r-monitor-bg'],
+        borderRadius: cssVars['--r-monitor-card-radius'],
+      }}
     >
       {/*
         🔴 THE STRIP, and the reason its two facts sit side by side.

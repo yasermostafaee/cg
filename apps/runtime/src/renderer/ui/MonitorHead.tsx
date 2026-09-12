@@ -1,7 +1,4 @@
 import type { ReactNode } from 'react';
-import { Icon } from './Icon.js';
-import { Circle } from 'lucide-react';
-
 /**
  * 🔴 `CONSOLE-MATCH-03` §1 — THE MONITOR HEAD, AND WHY IT IS ONE COMPOSITION.
  *
@@ -54,14 +51,17 @@ export function MonitorHeadFact({
   children,
   title,
   testId,
+  tone,
 }: {
   children: ReactNode;
   title?: string | undefined;
   testId?: string | undefined;
+  /** `pvw` wears the pane's own accent; omitted stays neutral. See `controls.css`. */
+  tone?: 'pvw' | undefined;
 }): JSX.Element {
   return (
     <span
-      className="cg-monitor-fact"
+      className={`cg-monitor-fact${tone === undefined ? '' : ` cg-monitor-fact--${tone}`}`}
       {...(title !== undefined ? { title } : {})}
       {...(testId !== undefined ? { [testId]: '' } : {})}
     >
@@ -91,7 +91,13 @@ export function MonitorSignalStrip({
   return (
     <div className="cg-monitor-strip" data-monitor-pgm-strip="">
       <span className="cg-monitor-signal">
-        <Icon icon={Circle} size={7} />
+        {/*
+          🔴 A LAMP, NOT AN ICON — see `.cg-monitor-signal__lamp`. A 7 px lucide `Circle` is an
+          outline, which at that size is a ring of hairlines rather than a light. The reference
+          draws a filled 6 px disc, and a filled disc is a SHAPE with no glyph behind it, so
+          there is nothing here for `Icon` to route.
+        */}
+        <span className="cg-monitor-signal__lamp" aria-hidden="true" />
         {signal}
       </span>
       <span className="cg-monitor-strip__spacer" />

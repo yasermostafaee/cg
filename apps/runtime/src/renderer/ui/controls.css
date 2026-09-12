@@ -78,6 +78,7 @@
  * `PVW · N`. A chip, not a badge in the alarm family: rehearse is a browser render and
  * reaches no channel, so it wears the rehearse ink and nothing that reads as air (A12).
  */
+/* §5 — a BADGE's corner, the same 5 px the reference gives every badge. */
 .cg-app-header__pvw {
   display: inline-flex;
   align-items: center;
@@ -104,6 +105,52 @@
   padding: var(--r-app-head-btn-pad);
   gap: var(--r-app-head-btn-gap);
   font-size: var(--r-app-head-btn-text);
+  /*
+   * 🔴 `CONSOLE-LOOK-06` §1 — THE HEADER'S BUTTONS ARE QUIET, and that is the visible half.
+   *
+   * Measured: `.app-head .btn` paints `background: transparent`, `border-color: rgb(45 58 73)`
+   * (the line colour), `color: rgb(187 200 215)` (secondary), `font-weight: 550`, radius 5.
+   * Ours were filled `--r-surface-raised` at weight 600 on a 4 px corner — four filled boxes
+   * across the top of a console whose whole grammar is that FILL means state. On this bar
+   * nothing is stateful: they are doors. Quiet is what makes the `PVW · N` badge beside them
+   * the only filled thing in the header, which is the one thing up there that IS a state.
+   *
+   * The hover still fills (below), so the affordance is unchanged — it moved from resting to
+   * hover, which is where an affordance belongs.
+   */
+  border-radius: var(--r-app-head-btn-radius);
+  background: transparent;
+  border-color: var(--r-border);
+  color: var(--r-text-secondary);
+  font-weight: var(--r-weight-medium);
+}
+
+/*
+ * ── 🔴 `CONSOLE-LOOK-06` §4 — THE DOOR HOVER, and what the reference's action set really is ──
+ *
+ * §4 describes one `--action-hover` shared by a named set of verbs. Measured at 1280 × 800 by
+ * hovering each of them, that is NOT what paints: `--action-hover` resolves PER BUTTON, and
+ * the values are three different identities —
+ *
+ *   `stop-all`     `rgb(179 141 24)`  gold   ← ours ALREADY paints exactly this
+ *   `clear-all`    `rgb(222 81 5)`    orange ← ours ALREADY paints exactly this
+ *   `open-audit` / `toggle-monitors` / `open-templates` / `settings-trigger`
+ *                  `rgb(52 87 115)`   blue, ink `rgb(238 247 255)`  ← we had NOTHING
+ *
+ * So the verbs were already right, by a different route (`data-verb-tone`), and the gap was
+ * the DOORS: SETTINGS, AUDIT LOG and the monitors toggle all hovered to the same anonymous
+ * raised grey as any other button. They now share one identity, which is the part of §4's
+ * claim that is true — a door is a door, and there are exactly three of them.
+ *
+ * ⚠ `--r-accent-fill-hover` is reused rather than a new hex: it is already this console's
+ * "a blue thing is being pressed" fill (`#1A4A6B` — measurably the same family), so the doors
+ * join an existing role instead of founding one. Identity by TOKEN, never by hex.
+ */
+.cg-app-header .cg-btn:hover:not(:disabled),
+.cg-app-header .cg-btn:focus-visible {
+  background: var(--r-accent-fill-hover);
+  border-color: var(--r-accent-line-hover);
+  color: var(--r-accent-ink);
 }
 
 /* ── 🔴 AUDIT-CLOSE-01 B2 — THE LAYERS SUB-BAR ──────────────────────────────
@@ -172,13 +219,81 @@
   font-variant-numeric: tabular-nums;
 }
 /*
+ * 🔴 `CONSOLE-LOOK-06` §3 — `N loaded` IS 10 px, reversing `CONSOLE-MATCH-03`'s ARGUED (b).
+ *
+ * That argument was "it sits in a tally with two siblings at 12 px, and a third type size in
+ * one line reads as a mistake". Measured, the reference does not have three sizes — it has
+ * TWO, and this is the quiet one: `.pill-count` is 10 px with no border and no padding beside
+ * a 12 px results hint and an 11 px badge. The size IS the hierarchy: how many rows are loaded
+ * is background, how many are on air is not.
+ */
+.cg-layers-subbar__loaded {
+  font-size: var(--r-subbar-pill-text);
+}
+/*
  * The air number, in the sacred colour — and it is the SAME count the column header
  * wears, passed rather than re-derived (`B-213`). Two numbers about air on one surface
  * that could disagree is the defect that rule exists to prevent.
  */
+/*
+ * 🔴 `CONSOLE-LOOK-06` §3 — THE ON-AIR COUNT IS A CHIP, reversing `CONSOLE-MATCH-03`'s
+ * ARGUED (c) — but only half of it, and the half that was actually about shape.
+ *
+ * That argument had two parts. The first was right and STANDS: `--r-onair` `rgb(44 255 122)`
+ * is the owner's exact held value (`design.md` §7.3) and the reference's mint is its ONE
+ * green for both air and health, so the HUE is not adopted. The second part — that the chip
+ * ground "buys nothing" — was reasoning about colour when the reference's chip is about
+ * SHAPE: `.badge.live` is `2px 6px` at radius 5 with a ground and a border, which is what
+ * makes a count read as a count rather than as two words that happen to be green.
+ *
+ * So: the SHAPE, SIZE and WEIGHT come from `.badge.live` (11 px / 500, `2px 6px`, radius 5)
+ * and the HUE stays ours. The ground and the edge are derived from the air token by
+ * `color-mix`, not typed as new hexes — one source of truth for the sacred colour, so a
+ * future change to it carries its own chip with it. **Severity and identity by TOKEN, never
+ * by hex**, exactly as §4 asks.
+ */
 .cg-layers-subbar__onair {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--r-subbar-badge-pad);
+  border: 1px solid color-mix(in srgb, var(--r-onair) 34%, transparent);
+  border-radius: var(--r-radius-field);
+  background: color-mix(in srgb, var(--r-onair) 13%, var(--r-surface-sunken));
   color: var(--r-onair);
-  font-weight: var(--r-weight-semibold);
+  font-size: var(--r-subbar-badge-text);
+  font-weight: var(--r-weight-medium);
+}
+
+/* ── 🔴 CONSOLE-LOOK-06 §2 — THE COMPACT MONITOR HEAD ───────────────────────
+ *
+ * A MODIFIER on the shared panel bar, not a second bar and not a lowered floor: LAYERS
+ * carries bulk verbs with a 36 px floor and must stay 52, these two carry an 11 px label and
+ * one read-out and the reference draws them in 32. Confirmed in Chromium — 626 × 32,
+ * `padding: 3px 9px`, `gap: 8px`, and its icon button 25 × 25 at radius 3.
+ *
+ * ⭐ The 21 px this frees per pane goes to the PVW STAGE, not to the layer list: the strip's
+ * height is the operator's own (`layout.monitorPx`, dragged), so a shorter head makes the
+ * PICTURE bigger rather than the table longer. Both numbers are in the report.
+ */
+/*
+ * ⚠ DOUBLE-CLASS, deliberately. `.cg-panel-header` further down this file sets the 52 px floor
+ * and the 12/16 padding at the SAME specificity, so a single-class modifier here ties and loses
+ * on source order — which is precisely what happened: the head measured 53 px with this rule
+ * already in the sheet. Raising the selector makes the rule independent of where it sits.
+ */
+.cg-panel-header.cg-panel-header--monitor {
+  min-height: var(--r-monitor-head-h);
+  padding: var(--r-monitor-head-pad);
+  gap: var(--r-monitor-head-gap);
+  background: var(--r-monitor-head-bg);
+}
+.cg-panel-header.cg-panel-header--monitor .cg-btn {
+  min-height: var(--r-monitor-head-btn);
+  height: var(--r-monitor-head-btn);
+  width: var(--r-monitor-head-btn);
+  min-width: var(--r-monitor-head-btn);
+  padding: var(--r-monitor-head-btn-pad);
+  border-radius: var(--r-monitor-head-btn-radius);
 }
 
 /* ── 🔴 CONSOLE-MATCH-03 §1 — THE MONITOR HEADS ─────────────────────────────
@@ -199,7 +314,6 @@
 .cg-monitor-label {
   display: inline-flex;
   align-items: baseline;
-  gap: var(--r-monitor-label-gap);
   font-size: var(--r-monitor-label-text);
   font-weight: var(--r-weight-semibold);
   letter-spacing: var(--r-monitor-label-track);
@@ -208,17 +322,54 @@
 .cg-monitor-label--pvw {
   color: var(--r-rehearsing);
 }
+/*
+ * 🔴 `CONSOLE-LOOK-06` — PGM'S HEAD IS MINT, reversing `CONSOLE-MATCH-03`'s ARGUED (f).
+ *
+ * That argument was: this console splits air-green from health-green, so a permanently green
+ * `PROGRAM` over a pane rendering nothing would be the most misleading pixel on the surface.
+ * The split is real and is NOT weakened here — what the argument got wrong is which green.
+ * `--r-success` is `#85e4b6`, the reference's mint, and it is not the air colour: the air
+ * colour is `--r-onair` `rgb(44 255 122)`, an entirely different, far more saturated green
+ * that this surface spends on ONE thing. The two do not read as the same claim, and the
+ * on-air claim on this pane is carried in words a few pixels away (`N rows on air`).
+ *
+ * ⚠ So the rule "green means air, never health" is intact; it was applied to a token that is
+ * not the air token. A LABEL naming an output is not a claim about that output's state.
+ */
+.cg-monitor-label--pgm {
+  color: var(--r-success);
+}
+/*
+ * 🔴 `CONSOLE-LOOK-06` §2 — THE CHANNEL RIDES THE LABEL'S OWN HUE.
+ *
+ * It was a second colour (`--r-text-muted`) at a second size beside a spacer. The reference
+ * makes it the SAME ink at `opacity: .7`, indented 5 px, at weight 500 — so `PREVIEW CH 1`
+ * reads as one phrase with a quiet tail rather than as two labels that happen to be adjacent.
+ * That is also why the gap goes: `margin-inline-start` belongs to the span, so the head's own
+ * `gap` is left to separate the label from the controls after it.
+ */
 .cg-monitor-ch {
-  font-size: var(--r-monitor-ch-text);
-  font-weight: 400;
-  letter-spacing: normal;
-  color: var(--r-text-muted);
+  margin-inline-start: var(--r-monitor-ch-indent);
+  font-size: inherit;
+  font-weight: var(--r-weight-medium);
+  letter-spacing: inherit;
+  color: inherit;
+  opacity: var(--r-monitor-ch-opacity);
 }
 .cg-monitor-fact {
   font-size: var(--r-monitor-fact-text);
-  color: var(--r-text-secondary);
+  color: var(--r-monitor-strip-ink);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+}
+/*
+ * The PVW count wears its pane's own accent (`#c4b5fd`, the reference's), so the head reads
+ * as one purple phrase; the PGM strip's two read-outs stay neutral, because one of them is
+ * about a feed that does not exist and the other is a count that must not compete with the
+ * air colour in the table below.
+ */
+.cg-monitor-fact--pvw {
+  color: var(--r-monitor-count-ink);
 }
 
 /* The PGM strip — the reference's 31 px `.monitor-controls` row, padded 3 × 7, gapped 7. */
@@ -230,20 +381,113 @@
   box-sizing: border-box;
   padding: var(--r-monitor-strip-pad);
   border-bottom: 1px solid var(--r-border);
-  background: var(--r-surface-sunken);
+  background: var(--r-monitor-strip-bg);
   flex-shrink: 0;
 }
 .cg-monitor-strip__spacer {
   flex: 1;
 }
+
+/*
+ * ── 🔴 CONSOLE-LOOK-06 §2 — THE PVW TRANSPORT ──────────────────────────────
+ *
+ * Cyan and tiny, and both halves are deliberate. TINY because this row is 31 px and shares it
+ * with a scope, a caption and two toggles. CYAN because these three presses reach nothing but
+ * this browser (R-022) — they are the one set of PLAY/STOP controls on the console that are
+ * NOT the row verbs, and they must not be mistaken for them: the row's PLAY is green and its
+ * STOP wears the stop tone, and these are neither.
+ *
+ * Confirmed in Chromium at 1280 x 800: 57 x 25, padding 2px 7px, gap 4px, radius 3,
+ * 11px / 550, border rgb(59 116 137), ink rgb(117 217 248), glyph 12px. The prompt's candidate
+ * list said 24px / 9px; a later wave restates both, and 9px is not what the owner approved.
+ *
+ * ⚠ The accent TOKENS, not those two hexes: they are already this console's own sky family,
+ * so the transport joins a role rather than founding one.
+ */
+.cg-pvw-transport {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-pvw-transport-gap);
+  flex: 0 0 auto;
+}
+.cg-monitor-strip .cg-pvw-transport .cg-btn {
+  min-height: var(--r-pvw-transport-h);
+  height: var(--r-pvw-transport-h);
+  padding: var(--r-pvw-transport-pad);
+  gap: var(--r-pvw-transport-gap);
+  border-radius: var(--r-pvw-transport-radius);
+  font-size: var(--r-pvw-transport-text);
+  font-weight: var(--r-weight-medium);
+  background: transparent;
+  border-color: var(--r-accent-line);
+  color: var(--r-accent);
+}
+.cg-monitor-strip .cg-pvw-transport .cg-btn:hover:not(:disabled) {
+  background: var(--r-accent-fill);
+  border-color: var(--r-accent-line-hover);
+}
+/* The two toggles at the trailing end sit in the same 25 px box as the transport. */
+.cg-monitor-strip > .cg-btn {
+  min-height: var(--r-pvw-transport-h);
+  height: var(--r-pvw-transport-h);
+  width: var(--r-pvw-transport-h);
+  min-width: var(--r-pvw-transport-h);
+  padding: 0;
+  border-radius: var(--r-pvw-transport-radius);
+}
+
+/*
+ * 🔴 A PRESSED TOGGLE LOOKS PRESSED (owner, 2026-09-12).
+ *
+ * `aria-pressed` alone is a fact only a screen reader can read. A toggle whose ON state is
+ * invisible is a control the operator has to test by watching the picture — which on this
+ * pane means looking away from the thing being judged. The ON state takes the accent fill and
+ * ink the rest of this console already uses for "engaged", so it joins a role rather than
+ * founding one.
+ */
+.cg-monitor-strip > .cg-btn[data-toggle-on] {
+  background: var(--r-accent-fill);
+  border-color: var(--r-accent-line);
+  color: var(--r-accent);
+}
+
+/*
+ * THE SCOPE. The quietest thing on the row and the most load-bearing sentence on it: the three
+ * buttons to its left drive EVERY rehearsing frame, never the selected one.
+ */
+.cg-pvw-scope {
+  font-size: var(--r-pvw-scope-text);
+  letter-spacing: var(--r-pvw-scope-track);
+  color: var(--r-text-muted);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
 .cg-monitor-signal {
   display: inline-flex;
   align-items: center;
-  gap: var(--r-monitor-strip-gap);
+  gap: var(--r-monitor-signal-gap);
   font-size: var(--r-monitor-fact-text);
   /* MUTED, never the alarm red: nothing is broken — the return feed is unbuilt. */
-  color: var(--r-text-muted);
+  color: var(--r-monitor-strip-ink);
   white-space: nowrap;
+}
+/*
+ * 🔴 A FILLED DISC, and the one hue in this section with no existing role token.
+ *
+ * It was a lucide `Circle` — an OUTLINE, which on a 7 px box is a ring of hairlines that
+ * reads as a rendering artefact rather than as a lamp. The reference draws a 6 px filled disc
+ * in a muted gold, and the colour is the argument: "no return signal" is not a fault
+ * (`MONITORS-01` — `C-016` is unbuilt and the playout server is very probably transmitting),
+ * so it may not wear the alarm red; and it is not nothing, so it may not be the text grey.
+ * A LAMP is a shape, not a glyph, so it is drawn rather than iconised — which is also why
+ * this is not a `cg/no-unicode-icon` case: there is no icon here to route through `Icon`.
+ */
+.cg-monitor-signal__lamp {
+  inline-size: var(--r-monitor-signal-dot);
+  block-size: var(--r-monitor-signal-dot);
+  border-radius: 50%;
+  background: var(--r-monitor-signal-dot-fill);
+  flex: 0 0 auto;
 }
 
 /* ── 🔴 CONSOLE-MATCH-03 §2 — THE BULK GROUP'S SCOPE AND ITS RULE ───────────
@@ -1152,7 +1396,8 @@
   background: var(--r-field-bg);
   color: var(--r-text);
   border: 1px solid var(--r-field-line);
-  border-radius: var(--r-radius-sm);
+  /* §5 — a FIELD's corner, which the reference draws a step rounder than a button's. */
+  border-radius: var(--r-radius-field);
   padding: 0.3rem 0.5rem;
   font: inherit;
   font-size: var(--r-text-md);

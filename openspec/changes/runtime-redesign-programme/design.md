@@ -4624,3 +4624,179 @@ correct it.
   the WORDS and not the GLYPH. The full local suite is what found it — three prose sites
   (`LockOverlay`, `useDialog`, the operator guide) and one PRD line were carrying the same
   glyphs and were corrected in the same pass.
+
+## 26. `CONSOLE-LOOK-06` — THE LOOK, WITH VALUES, AND THE EIGHT ARGUED REOPENED
+
+Prompt `CONSOLE-LOOK-06`, 2026-09-12. `CONSOLE-MATCH-03` was given structure and behaviour and no
+measured values, so it argued eight look deltas away. The values arrived; the default was ADOPT.
+**Seven of the eight are adopted. One is still argued, and the prompt itself named it arguable.**
+
+### 26.1 🔴 §0's WARNING WAS RIGHT — three candidates lost to a later wave, two `display:none` were `@media`
+
+Every value below was read in Chromium at 1280 × 800 before it was used. The prompt's list told me
+exactly which declarations to look for and was wrong about which ones win — which is what it said
+it would be.
+
+| candidate (as listed)                                        | what actually PAINTS                              |
+| ------------------------------------------------------------ | ------------------------------------------------- |
+| `.monitor{border-radius:10px}`                               | **5px**                                           |
+| `.pvw-transport .btn{min-height:24px; font-size:9px}`        | **25px / 11px / 550** (the later restatement)     |
+| `.pvw-count{font-size:10px}`                                 | **11px** — the COLOUR listed (`#c4b5fd`) is right |
+| `.app-head .btn{padding:6px 10px}`                           | **5px 9px**                                       |
+| `.pgm-air-count{display:none}`                               | 🔴 **`block`, 99.17 × 16.5** — `@media` only      |
+| `.pgm-return-label{display:none}`                            | 🔴 **`block`, 62.86 × 16.5** — `@media` only      |
+| `.row-state .badge{…uppercase, 650, no chip}`                | 🔴 **matches nothing.** See 26.5                  |
+| §4's "a named set of ACTION verbs shares one hover identity" | 🔴 **false as rendered.** See 26.4                |
+
+**Nothing the owner can see today was hidden.** Both `display:none` rules were checked before
+anything was touched, exactly as §0 asked.
+
+### 26.2 §2 — THE MONITORS. The biggest gap, and it was the head.
+
+| property           | reference (confirmed)                                             | ours before                                        | ours after                                                                      |
+| ------------------ | ----------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------- |
+| head box           | 626 × **32**, `pad 3px 9px`, `gap 8`                              | 626 × **53**, `pad 12px 16px`                      | 626 × **32**, identical — FIXED                                                 |
+| head ground        | `rgb(32 43 58)`                                                   | `rgb(27 37 50)`                                    | `rgb(32 43 58)` — FIXED                                                         |
+| head icon button   | **25 × 25**, `pad 4`, radius 3                                    | 28 × 28, radius 4                                  | 25 × 25, `pad 4`, radius 3 — FIXED                                              |
+| panel corner       | **5**                                                             | 6                                                  | 5 — FIXED                                                                       |
+| `CH n`             | 11px/500, `opacity .7`, `margin-left 5`, INHERITS the label's hue | 10px muted, separate gap                           | inherits, `.7`, indent 5 — FIXED                                                |
+| PVW count ink      | `rgb(196 181 253)`                                                | `rgb(187 200 215)`                                 | `rgb(196 181 253)` — FIXED                                                      |
+| PGM label          | **mint**                                                          | bar ink                                            | `--r-success` — **FIXED, reversing ARGUED (f)**                                 |
+| PGM strip ground   | `rgb(16 24 39)`                                                   | `rgb(11 16 23)`                                    | `rgb(16 24 39)` — FIXED                                                         |
+| PGM strip inks     | `rgb(147 165 188)`                                                | `rgb(187 200 215)`                                 | `rgb(147 165 188)` — FIXED                                                      |
+| signal lamp        | **filled 6 px disc**, `rgb(167 140 88)`                           | a 7 px lucide `Circle` OUTLINE                     | filled 6 px disc — FIXED                                                        |
+| transport          | 57 × 25, `2px 7px`, r3, 11px/550, cyan, ALWAYS present            | inside the stage, so absent until a frame rendered | always present, disabled by its own condition — **FIXED, reversing ARGUED (g)** |
+| `ALL LAYERS` scope | 49.73 × 13.5, 9px, track `.36px`                                  | **absent**                                         | 49.73 × 13.5 — exact — FIXED                                                    |
+| safe-area guides   | a toggle                                                          | **absent**                                         | built, on the canvas — FIXED                                                    |
+| zoom select        | `Fit / 100% / 150% / 200%`                                        | absent                                             | 🔴 **not adopted — owner excluded it**                                          |
+
+**PGM's mint (ARGUED (f) reversed).** The old argument said a green `PROGRAM` would read as an air
+claim. The split it defends is real and is untouched — what the argument got wrong is WHICH green:
+`--r-success` is `#85e4b6` and the air colour is `--r-onair` `rgb(44 255 122)`, a far more saturated
+green this surface spends on one thing. They do not read as the same claim, and the air claim on
+that pane is three words away in `N rows on air`.
+
+**The transport (ARGUED (g) reversed).** It was a lift, not a rewrite: same three buttons, same
+`aria-label`s, same `driveAll` over the same frame handles. `RehearsalStage` now publishes
+`{drive, ready, count}` upward and `null` on unmount, so the row can sit disabled rather than hold
+a stale handle. ⭐ **It replaced the lifecycle bar rather than joining it** — the caption came up
+with it — so PVW has the same number of strips it had before.
+
+### 26.3 §3 — THE TABS AND THE SUB-BAR
+
+| property      | reference (confirmed)                     | ours before                  | ours after                                                      |
+| ------------- | ----------------------------------------- | ---------------------------- | --------------------------------------------------------------- |
+| tab type      | 13px / **550**                            | 13.6px / **700**             | 13px / 550 — FIXED                                              |
+| tab spacing   | `gap 22`, `padding 12px 0 9px` (NO h-pad) | `gap 4`, `pad 7.2 × 14.4`    | gap 22, `12px 0 9px` — FIXED                                    |
+| selected tab  | **blue label** + blue underline           | white label + blue underline | blue + blue — FIXED                                             |
+| search corner | **5**                                     | 4                            | 5 — **FIXED, reversing ARGUED (a)**                             |
+| `N loaded`    | **10px**, no border, no padding           | 12px                         | 10px, box 38.5 × 15 — exact — **FIXED, reversing ARGUED (b)**   |
+| `N on air`    | a CHIP: 11px/500, `2px 6px`, r5, ground   | bare text 12px/600           | the chip's shape, **our hue** — **FIXED, reversing ARGUED (c)** |
+| results hint  | `N/M rows`                                | `N of N rows`                | `N/M rows` — **FIXED, reversing ARGUED (d)**                    |
+
+**The on-air chip keeps the owner's colour and takes the reference's shape**, which is what §4
+asked for. The ground and the edge are `color-mix` over `--r-onair` rather than two new hexes — one
+source of truth for the sacred colour, so a future change to it carries its own chip along.
+**Severity and identity by TOKEN, never by hex.**
+
+### 26.4 §4 — THE ACTION SET IS NOT ONE IDENTITY, AND WE ALREADY HAD TWO THIRDS OF IT
+
+§4 reads `--action-hover` as one hover shared by a named set. Measured by hovering each member,
+it resolves **per button**, to three identities:
+
+| control                                             | reference hover                               | ours                            |
+| --------------------------------------------------- | --------------------------------------------- | ------------------------------- |
+| `stop-all`                                          | `rgb(179 141 24)` gold, ink `rgb(16 21 31)`   | 🔴 **already byte-identical**   |
+| `clear-all`                                         | `rgb(222 81 5)` orange, same ink              | 🔴 **already byte-identical**   |
+| `open-audit` · `toggle-monitors` · `open-templates` | `rgb(52 87 115)` blue, ink `rgb(238 247 255)` | **nothing** — plain raised grey |
+| `settings-trigger`                                  | the same blue, lighter border                 | **nothing**                     |
+
+So the verbs were already right by another route (`data-verb-tone`), and the gap was the **doors**.
+SETTINGS, AUDIT LOG and the monitors toggle now share one hover identity — which is the part of
+§4's claim that is true, since a door is a door and there are exactly three. Reused
+`--r-accent-fill-hover` / `--r-accent-line-hover` / `--r-accent-ink` rather than typing the hexes.
+
+**§1's other half:** the header's buttons are now QUIET at rest (transparent, line border,
+secondary ink, weight 550, radius 5) where they were filled at 600 on a 4 px corner. Four filled
+boxes across the top of a console whose grammar is that FILL means state; nothing up there is
+stateful. It also leaves `PVW · N` as the only filled thing in the header, which is the one thing
+that IS a state.
+
+### 26.5 §3's `.row-state .badge` RULE IS DEAD, and ours was already right
+
+The prompt flags it: _"if ours draws a filled chip there, that is a control shape on a thing that
+is not a control."_ Measured, `.row-state .badge` **matches no element the reference emits** — the
+state cell emits `.layer-state`, a span with an icon and a word, **no ground and no border**, 13px
+/ 400, and in `rgb(44 255 122)` — which is the owner's own air value. Ours is already a chipless
+icon-plus-word at 11.52px / 700. Nothing to fix; the size and weight differ and the layer TABLE is
+`CONSOLE-MATCH-03`'s §10.2 settlement, not this prompt's surface.
+
+### 26.6 🔴 THE ONE STILL ARGUED — the status-bar channel
+
+The prompt: _"Re-attempt it only if the subscription can live at the level that already has one; if
+it cannot, keep it out and say so in one line."_ **It cannot.** `App.tsx` — the only level above
+`StatusBar` — does not read the fixed bank at all (no `useFixedBankState`, no slots hook); the
+channel would have to be subscribed somewhere new and threaded down. That is the same cost that
+reddened 43 tests across 8 dom specs, moved one level up. **Kept out.** The channel is stated in
+the header tablist and, since `CONSOLE-MATCH-03`, at the head of the bulk verbs where it qualifies
+a press.
+
+### 26.7 THE OWNER'S MID-SESSION CORRECTION
+
+«safe-aria باید روی canvas بیافته و ظاهر دکمه اش هم بصورت توگل باشه. همچنین آیکون اینفو و نمایش
+توضیحات روی canvas نیاز نیست»
+
+1. **The guides land ON THE CANVAS.** The first cut used `inset: 0` on the FIT BOX — raster plus
+   the black letterbox — so title-safe was drawn wider than the frame. **A ruler measuring the
+   wrong thing is worse than no ruler.** They are now positioned exactly like the CHECKER, centred
+   and sized by the caller to `raster × fit`, so both derive from one pair of numbers. Asserted in
+   Playwright against the checker's own box, within 1.5 px on all four edges.
+2. **The toggle looks pressed.** It was `ghost` + `aria-pressed` — correct for a screen reader,
+   invisible to everyone else, so the only way to learn the state was to look at the picture.
+   Measured off-hover: OFF `rgba(0,0,0,0)` / muted → ON `rgb(23 50 67)` / `rgb(116 205 246)`.
+3. **The info icon and the on-canvas description are gone**, and everything that existed only for
+   them went with them: the paragraph, its `styles.caveats`, the lifted `showCaveats` state, the
+   shared id, and `caveatsZIndex` — an exported helper with no production caller is the
+   written-but-unreachable shape this repo has filed four times.
+
+🔴 **ONE THING FOR THE OWNER, and it is a spec clause, not a preference.** `R-022`'s acceptance
+reads: _"WHEN the preview is shown THEN two honest caveats are stated IN the item: browser-vs-CEF-71
+rendering may differ in detail … and after `C-015` a Live Source region renders as a labeled
+placeholder, not video."_ Removing the paragraph removes where those were stated. They now ride the
+`ILLUSTRATIVE COMPOSITE · LOCAL` stamp's `title` and `aria-label` — no canvas cost, which is what
+was objected to — and the stamp stopped being `aria-hidden` so the statement is reachable at all.
+**Reported as PARTLY MET: a hover is weaker than a paragraph, and whether that satisfies `R-022` is
+his call.** Asserted on the CONTENT in Playwright, so it cannot quietly become an empty title.
+
+### 26.8 §6 — THE CHROME NUMBER DID NOT MOVE, and the reason is the interesting part
+
+**181.45 px / 7 rows before, 181.45 px / 7 rows after** — measured with the monitors folded, the
+banner region subtracted, exactly as `shell-chrome.spec.ts` §B does it.
+
+§6 expected the smaller heads to move it. They cannot: **the monitor strip's height is the
+OPERATOR'S** — `layout.monitorPx`, a dragged divider — so shrinking the head inside a fixed-height
+strip gives the pixels to the PICTURE, not to the table. Measured: the PVW stage went **175 → 196
+px**, +21 px per pane, and PGM the same. The tabs did not move it either: their height is the panel
+bar's 52 px floor, which exists because the bulk verbs carry a 36 px minimum, and the tabs are
+centred in it.
+
+⭐ **So the head shrink bought 21 px of picture, not one row.** Buying a row means lowering
+`--r-panel-bar-h`, which is shared with the Inspector's bar and therefore belongs to
+`INSPECTOR-AUDIT-05`, not here.
+
+### 26.9 FIXED / ARGUED
+
+**FIXED: 24.** Seven of the eight reopened ARGUED are adopted — field radius, `N loaded`, the
+on-air chip's shape, `N/M rows`, PGM's mint, the always-present transport, and (already landed
+last session) the `Live plates` word.
+
+**ARGUED: 1** — the status-bar channel, on the ground the prompt itself supplied (26.6).
+
+**Two of §0's own claims were falsified rather than adopted** — the `.row-state .badge` rule is
+dead (26.5) and `--action-hover` is per-button rather than shared (26.4); in the second case we
+already painted two of its three identities exactly.
+
+**Untouched, deliberately:** no wire behaviour, no schema, no persisted key, no plant command, no
+refusal CONDITION. Station setup, the Inspector and the audit log are not in this diff; Station
+setup's own `29 of 29 rows` (`CandidateLayersSection`, `[data-layers-results]`) is a different pane
+and keeps its wording.

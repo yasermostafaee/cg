@@ -1262,3 +1262,27 @@ renders answers "is this handled?" with a yes.
       and are the tab own account of itself; four dom assertions pinned them. A rename sweep runs
       case-INSENSITIVELY and then classifies. Two case-SENSITIVE test regexes
       (`/^LIVE SOURCES/`, in the e2e page object and a dom spec) were caught by the same sweep.
+- [x] R.1 🔴 **`CONSOLE-LOOK-06` — the LOOK, with the reference measured, and seven of eight
+      reopened ARGUED adopted.** §2 the monitor heads 53 px → 32 (the biggest gap), the compact
+      icon button, the CH span riding the label hue, the purple count, the filled signal lamp,
+      the PGM strip inks and ground, PGM mint; §3 the tabs at 13/550 with a blue selected label
+      and gap-22 spacing, the 10 px loaded pill, the on-air CHIP keeping the owner hue, `N/M rows`;
+      §1 quiet header buttons at radius 5; §4 the blue door hover; §5 a `--r-radius-field` of 5.
+      Every value confirmed in Chromium BEFORE adoption — three candidates lost to a later wave
+      and both `display:none` rules were `@media` only. `design.md` §26.
+- [x] R.2 **§2 — the always-present transport, the `ALL LAYERS` scope, and the safe-area guides.**
+      A lift, not a rewrite: `RehearsalStage` publishes `{drive, ready, count}` and the controls
+      row REPLACED the lifecycle bar, so PVW gained no strip.
+- [x] R.3 🔴 **The owner mid-session: the guides land ON THE CANVAS, the toggle looks pressed, and
+      the info icon and on-canvas description are gone.** The first cut drew the guides on the FIT
+      BOX — raster plus letterbox — so title-safe read wider than the frame; they are now sized
+      like the checker and asserted against its box within 1.5 px. Everything that existed only
+      for the caveats went with them, `caveatsZIndex` included.
+      ⚠ **`R-022` acceptance is PARTLY MET and is the owner call**: its two honest caveats now
+      ride the `ILLUSTRATIVE COMPOSITE · LOCAL` stamp title rather than a paragraph. §26.7.
+- [ ] R.4 **Still ARGUED: the status-bar channel.** `App.tsx` does not read the bank either, so the
+      subscription cannot live at a level that already has one — the prompt own condition. §26.6.
+- [x] R.5 **Chrome above the first data row: 181.45 px / 7 rows, UNCHANGED.** The strip height is
+      the operator own dragged value, so the 21 px the head freed went to the PICTURE (PVW stage
+      175 → 196), not to the table. §26.8.
+- [x] R.6 **Linux `gate:e2e` — DISCHARGED on `RUNURL`.**

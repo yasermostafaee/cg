@@ -160,16 +160,13 @@ export function overlayZIndex(frameCount: number): number {
   return frameZIndex(frameCount) + 1;
 }
 
-/**
- * The caveats disclosure, above the overlay and therefore above everything.
- *
- * It used to be a bare `3`, which was already a tie with the third frame and
- * would have lost to the placeholders outright. A note explaining the surface
- * must never be covered by the surface.
+/*
+ * ⚠ `caveatsZIndex` USED TO BE HERE and is deleted, not orphaned (owner, 2026-09-12: the info
+ * icon and the on-canvas description are not wanted). It had exactly one caller, and an
+ * exported helper with none is the written-but-unreachable shape this repo has filed four
+ * times — the next reader finds it, infers a surface, and writes against one that is not there.
+ * `overlayZIndex` above it is still live: the live-plate markers remain.
  */
-export function caveatsZIndex(frameCount: number): number {
-  return overlayZIndex(frameCount) + 1;
-}
 
 /** The row's display name: its configured alias, else the bank's default. */
 export function rowNameFor(

@@ -88,6 +88,16 @@ interface Props {
   heading?: ReactNode;
   /** Panel-specific header controls, rendered BEFORE the shared fullscreen one. */
   actions?: ReactNode;
+  /**
+   * 🔴 `CONSOLE-LOOK-06` §2 — a COMPACT head: the reference's 32 px monitor bar.
+   *
+   * Opted into by the panel, never sniffed from `id`: `--r-panel-bar-h`'s 52 px is a FLOOR
+   * that exists because the LAYERS bar carries bulk verbs with a 36 px minimum, and lowering
+   * it for everyone would take that argument away. The two monitor panes carry an 11 px label
+   * and one read-out, so they ask for the smaller box explicitly and every other panel is
+   * untouched.
+   */
+  compactHead?: boolean;
   children: ReactNode;
   /** Extra style on the panel root (how it sizes inside its parent's layout). */
   style?: CSSProperties;
@@ -118,13 +128,14 @@ export function Panel({
   style,
   as: Root = 'section',
   onClose,
+  compactHead = false,
 }: Props): JSX.Element {
   const layout = useShellLayoutContext();
   const focused = layout.focus === id;
 
   return (
     <Root aria-label={ariaLabel ?? title} style={{ ...styles.panel, ...style }}>
-      <header className="cg-panel-header">
+      <header className={`cg-panel-header${compactHead ? ' cg-panel-header--monitor' : ''}`}>
         {heading ?? <span className="cg-panel-title">{title}</span>}
         <div className="cg-panel-actions">
           {actions}

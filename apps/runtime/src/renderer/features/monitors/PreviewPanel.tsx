@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { SquareDashed } from 'lucide-react';
+import { Frame, SquareDashed } from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
 import { Panel } from '../../ui/Panel.js';
+import { Button } from '../../ui/Button.js';
+import { rehearsalCaption } from './rehearsalFrames.js';
 import { MonitorHead, MonitorHeadFact } from '../../ui/MonitorHead.js';
 import { Icon } from '../../ui/Icon.js';
 import { colors, cssVars } from '../../theme.js';
@@ -65,6 +67,19 @@ const styles = {
     textTransform: 'uppercase' as const,
   },
   detail: { fontSize: '0.68rem', color: colors.textMuted, maxWidth: '18rem', lineHeight: 1.35 },
+} as const;
+
+/**
+ * 🔴 The reference's own `title` on each transport button, and each one says what the press
+ * REACHES — which is the whole safety point of this row: every one of them is local to this
+ * browser (`R-022`), and STOP in particular must not read as a stop on air. The reference's
+ * wording already draws that line ("Stop every preview graphic; keep all layers on PVW"), so
+ * it is taken verbatim rather than paraphrased.
+ */
+const PVW_TRANSPORT_TITLE = {
+  play: 'Play all preview layers locally — nothing is sent to CasparCG',
+  next: 'Send Next to all preview layers with a next step',
+  stop: 'Stop every preview graphic; keep all layers on PVW',
 } as const;
 
 export function PreviewPanel(): JSX.Element {
@@ -259,10 +274,37 @@ export function PreviewPanel(): JSX.Element {
   const raster =
     channelSettings.settings.find((s) => s.channel === channel)?.raster ?? REFERENCE_RASTER;
 
+  /*
+    🔴 THE CONTROLS ROW'S STATE, held here because the row outlives the stage.
+
+    `transport` is `null` whenever no stage is mounted — nothing rehearsing, or no local page
+    for what is — and the three buttons read that as "disabled" rather than as an error. The
+    guides and the caveats are per-session and deliberately NOT persisted: both are things the
+    operator is doing right now, and a remembered "on" would put a ruler over the picture for
+    whoever sits down next.
+  */
+  const [transport, setTransport] = useState<{
+    drive: (v: 'play' | 'next' | 'stop') => void;
+    ready: boolean;
+    count: number;
+  } | null>(null);
+  const [showGuides, setShowGuides] = useState(false);
+
+  /*
+    How many rehearsing rows this browser can actually DRAW. The same arithmetic the stage
+    does, from the same two inputs this component already owns — never a second number handed
+    up from the stage, which would be a fact about the caption that only exists while the
+    caption's own component is mounted.
+  */
+  const renderableCount = subjects.filter(
+    (s) => (htmlByItem.get(s.itemId) ?? null) !== null,
+  ).length;
+
   return (
     <Panel
       id="pvw"
       title="PREVIEW (PVW)"
+      compactHead
       heading={<MonitorHead word="PREVIEW" channel={bank?.channel ?? null} tone="pvw" />}
       /*
         🔴 `CONSOLE-MATCH-03` §1 — HOW MANY LAYERS ARE ON PVW, in the head.
@@ -277,6 +319,7 @@ export function PreviewPanel(): JSX.Element {
       */
       actions={
         <MonitorHeadFact
+          tone="pvw"
           testId="data-pvw-count"
           {...(subjects.length > 0 ? { title: subjects.map((s) => s.rowName).join(' · ') } : {})}
         >
@@ -284,8 +327,81 @@ export function PreviewPanel(): JSX.Element {
         </MonitorHeadFact>
       }
       /* `REPAIR-03` A1, audit row 38 — the monitor box's own ground; see `--r-monitor-bg`. */
-      style={{ flex: 1, minWidth: 0, background: cssVars['--r-monitor-bg'] }}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        background: cssVars['--r-monitor-bg'],
+        borderRadius: cssVars['--r-monitor-card-radius'],
+      }}
     >
+      {/*
+        🔴 `CONSOLE-LOOK-06` §2 — THE CONTROLS ROW, and it is here rather than inside the stage.
+
+        The reference draws `.monitor-controls` as a 31 px strip between the head and the
+        picture, holding the transport, the scope it acts on, and the guides toggle — each
+        control PRESENT in every state and disabled by its own condition.
+        `CONSOLE-MATCH-03` argued this one away because our transport lived inside
+        `RehearsalStage`, which only exists once there is something to render; that argument
+        conceded at the time that our own rule points the other way, and it does:
+        `LayersPanel` — _"controls that come and go move the target under the operator's hand
+        mid-reach"_. So the bar moved up and the stage publishes its transport to it.
+
+        ⚠ IT REPLACED THE LIFECYCLE BAR rather than joining it. The caption and the caveats
+        toggle came up with the transport, so PVW has the same number of strips it had before
+        and 21 px more picture from the head (§2).
+      */}
+      <div className="cg-monitor-strip" data-pvw-controls="">
+        <span className="cg-pvw-transport">
+          {(['play', 'next', 'stop'] as const).map((verb) => (
+            <Button
+              key={verb}
+              variant="secondary"
+              disabled={transport === null || !transport.ready}
+              aria-label={
+                transport === null || transport.count === 1
+                  ? verb.toUpperCase()
+                  : `${verb.toUpperCase()} ${verb === 'next' ? 'on all' : 'all'} ${String(transport.count)} rehearsing`
+              }
+              title={PVW_TRANSPORT_TITLE[verb]}
+              onClick={() => {
+                transport?.drive(verb);
+              }}
+            >
+              {verb.toUpperCase()}
+            </Button>
+          ))}
+        </span>
+        {/*
+          THE SCOPE, in the reference's own words. It is not decoration: the three buttons
+          above drive EVERY rehearsing frame, never the selected one, and an operator who
+          assumes otherwise presses PLAY expecting one graphic to move.
+        */}
+        <span className="cg-pvw-scope">ALL LAYERS</span>
+        <span className="cg-monitor-fact" data-rehearsal-caption="">
+          {rehearsalCaption(renderableCount, subjects.length)}
+        </span>
+        <span className="cg-monitor-strip__spacer" />
+        {/*
+          🔴 A TOGGLE, AND IT LOOKS LIKE ONE (owner, 2026-09-12).
+
+          It was a `ghost` button carrying `aria-pressed` — correct for a screen reader and
+          invisible to everyone else, so the only way to learn whether the guides were on was
+          to look at the picture. `data-toggle-on` drives a pressed appearance in
+          `controls.css`; the state is still `aria-pressed`, so the two cannot disagree.
+        */}
+        <Button
+          variant="ghost"
+          aria-pressed={showGuides}
+          data-toggle-on={showGuides ? '' : undefined}
+          aria-label="Toggle safe-area guides"
+          title="Toggle safe-area guides — title-safe and action-safe, drawn on the canvas"
+          onClick={() => {
+            setShowGuides((on) => !on);
+          }}
+        >
+          <Icon icon={Frame} size={13} />
+        </Button>
+      </div>
       {subjects.length === 0 ? (
         <div
           style={styles.screen}
@@ -308,7 +424,13 @@ export function PreviewPanel(): JSX.Element {
           </span>
         </div>
       ) : (
-        <RehearsalStage subjects={subjects} htmlByItem={htmlByItem} raster={raster} />
+        <RehearsalStage
+          subjects={subjects}
+          htmlByItem={htmlByItem}
+          raster={raster}
+          showGuides={showGuides}
+          onTransport={setTransport}
+        />
       )}
     </Panel>
   );

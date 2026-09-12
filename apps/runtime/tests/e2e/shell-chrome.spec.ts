@@ -246,9 +246,17 @@ test('§B2 — the filter narrows the list, and never hides a row that would los
   const search = app.layers.getByLabel('Find row or template');
   await search.fill('DEBATE');
   await expect.poll(rowsNow).toBeLessThan(before);
-  // The tally says how much of the list is showing, so a narrowed list is never mysterious.
+  /*
+    The tally says how much of the list is showing, so a narrowed list is never mysterious.
+    `CONSOLE-LOOK-06` §3 took the reference's `N/M rows` form; the TOTAL is what this asserts
+    and it must not move when the shown count does.
+
+    ⚠ Not to be confused with Station setup's own `29 of 29 rows` (`CandidateLayersSection`,
+    `[data-layers-results]`), which is a different pane on a different surface and keeps its
+    own wording — `station-setup-match.spec.ts` pins that one.
+  */
   await expect(app.layers.locator('[data-layers-tally-rows]')).toContainText(
-    `of ${String(before)} rows`,
+    `/${String(before)} rows`,
   );
 
   /*
