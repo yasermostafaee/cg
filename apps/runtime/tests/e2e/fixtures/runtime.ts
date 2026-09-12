@@ -304,12 +304,24 @@ export class RuntimeApp {
    * confused with the connection banner (also an alert, differently named).
    */
   get error(): Locator {
-    return this.page.getByRole('alert', { name: 'Command error' });
+    /*
+      🔴 `CONSOLE-LOOK-06` DELTA R — REPOINTED, and the repoint is load-bearing. Refusals left
+      the transient toast for the persistent `RefusalBanner`, so the accessible name this used
+      to match ("Command error") no longer exists. Both callers assert `toHaveCount(0)` — a
+      locator that matches nothing passes those FOREVER, which is the vacuous-green shape this
+      repo has filed before. It addresses the real surface now.
+    */
+    return this.page.locator('[data-refusal]');
   }
 
   /** A command / import SUCCESS toast (page-level, `role="alert"` named "Command success"). */
   get success(): Locator {
-    return this.page.getByRole('alert', { name: 'Command success' });
+    /*
+      CONSOLE-LOOK-06 DELTA R — role STATUS, not ALERT. The two feedback surfaces split:
+      a confirmation is announced POLITELY (status) and a refusal ASSERTIVELY (alert, on the
+      persistent banner). This accessor followed the toast.
+    */
+    return this.page.getByRole('status', { name: 'Command success' });
   }
 
   // ── actions ───────────────────────────────────────────────────────────────

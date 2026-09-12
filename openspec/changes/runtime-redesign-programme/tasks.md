@@ -1361,3 +1361,25 @@ renders answers "is this handled?" with a yes.
 - [ ] S.14 ⚠ **REPORTED, NOT TAKEN: the focus ring is the LEGACY sky.** `--cg-accent`
       `#38bdf8` rings every input in both apps while the Runtime's accent moved to `#74cdf6`.
       Fixing it is a `@cg/ui` PALETTE edit, which is not something to do in passing. §27.8.2.
+
+- [x] T.1 🔴 **DELTA R — a refusal is a STATE, not an announcement.** Refusals left the
+      transient toast for `refusalStore` + `RefusalBanner`: persists, coalesces, dismissible,
+      assertive, IN FLOW so it can never cover the row it is about. §28.1.
+- [x] T.2 🔴 **The copy fix was a preference inversion, and it is PER-CODE.** The good
+      operator sentence already existed and `asyncResultMessage` was overriding it. Blanket
+      inversion cost `guest-3` its name, so `prefersOwnMessage` lists the UUID-bearing codes.
+      §28.2.
+- [x] T.3 **§7 sweep: 49 already-operator / 10 id-bearing / all transient.** Per-pathspec
+      counts recorded so a zero cannot hide. ⚠ The one-line pass found 4 of 10 and missed the
+      photographed message itself. §28.3.
+- [x] T.4 **§5 needs nothing: refusals already reach the audit log** with ids, code and the
+      AMCP line. No second log. §28.4.
+- [x] T.5 **§A2 — the dismiss belongs to the message.** Fixed on `Notice` via `onDismiss`, so
+      every caller inherits it. §28.7.
+- [x] T.6 🔴 **§A3 — the palette enumerated and MEASURED; the asserted grammar is corrected.**
+      Red appears on no operator message class at all; amber carries refusal AND pending, and
+      the recorded 2.08:1-vs-10.39:1 measurement is why. §28.6.
+- [ ] T.7 ⚠ **FOR THE OWNER: does amber split?** The evidence says the current division is
+      defensible and red is not free. Also open: the console banner and `cg-setup-notice` are
+      two nearly-identical ambers for one idea. §28.6.
+- [ ] T.8 **Linux `gate:e2e` for DELTA R — `RUNURL3`.**

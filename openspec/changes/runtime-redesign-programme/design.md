@@ -5198,3 +5198,148 @@ compared an animation with itself; Windows read both after it settled and passed
 unfocused fader now and polls the ring rather than sampling it. ⚠ **A "before" value is only
 a baseline once it has stopped moving** — the same lesson as reading a toggle's paint with
 the pointer still on it, one session earlier.
+
+## 28. `CONSOLE-LOOK-06` DELTA R — REFUSALS ARE NOT TOASTS
+
+🔴 **THE RULE, and it is the one to carry forward: THE OPERATOR READS A SENTENCE; THE LOG
+KEEPS THE IDS.** Beside DELTA 9's PENDING doctrine, and completing the boundary between the
+three message kinds — **a toast announces a completed action and may auto-hide; a refusal
+persists until dismissed or resolved; PENDING is a state on a row and is neither.**
+
+### 28.1 Why there were two refusal surfaces, and what decided it
+
+**Answered plainly: I made the second one, in this session, and the first is gone.** Before
+DELTA R every refusal AND every confirmation rendered from one component, `CommandToast`,
+and the deciding code was a single field — `feedback.kind`, `'error'` painting red and
+`'success'` green, both on one auto-dismiss timer. Nothing about the call site chose it.
+
+⚠ **And `CONSOLE-LOOK-06` D3 had just made the owner's defect (b) worse**: adopting the
+reference's 3200 ms dwell shortened the reading window on a surface that should never have
+had one. The shared timer was the whole defect — auto-dismiss is right for a confirmation
+and wrong for a refusal — so the two split: refusals to `refusalStore` + `RefusalBanner`
+(persistent, coalescing, dismissible), confirmations stay on the toast.
+
+### 28.2 The copy: the good sentence already existed and was being overridden
+
+`errorCodeMessage` has carried operator copy for `multibox-already-on-air` all along —
+_"Another multi-box graphic is already on air on this channel, and only one may be. Take
+that row off air first — this is a crosstalk guard, not a layer shortage."_ — and
+`asyncResultMessage` preferred the BRIDGE's sentence over it, which is the UUID-bearing text
+the owner photographed. One line at one canonical site.
+
+🔴 **BUT THE INVERSION IS PER-CODE, NOT BLANKET, and a test caught why.** The first cut
+reversed it for everything; `asyncButton.test.ts` failed on `live-source-unassigned`, whose
+bridge sentence names the PLATE (`guest-3`) — the operator's own word for it, and the only
+part of that refusal they can act on. Our generic sentence cannot say it. So
+`prefersOwnMessage` lists the codes whose bridge text identifies things by **UUID**
+(`multibox-already-on-air`, `looks-none-authored`) and everything else keeps the old order.
+A LIST rather than a test on the text, because deciding from prose is string-matching a
+contract nobody wrote down (§6) — it breaks the first time a message is edited, silently.
+
+### 28.3 The §7 sweep, with per-pathspec counts so a zero cannot hide
+
+| pathspec                    | files matching |
+| --------------------------- | -------------- |
+| `apps/runtime/src/renderer` | 127            |
+| `apps/runtime/tests`        | 178            |
+| `tools/caspar-bridge/src`   | 22             |
+| `packages/shared-ipc/src`   | 18             |
+
+**59 operator-facing `message:` sites**, scanned multi-line-aware — ⚠ the first pass was
+one-line and found 4 of the 10, missing the photographed message itself because it spans
+lines. The three classes:
+
+- **Already operator copy — 49.**
+- **An id in the sentence — 10**, of which **2 are UUID-bearing and reach the operator**
+  (the multi-box pair) — both fixed by 28.2. **7 interpolate author-given names**
+  (`guest-1`, `look-3`, a source id) which ARE the operator's words, so they stay.
+  **1** (`Template "<uuid>" is not registered.`) is UUID-bearing with **no errorCode** —
+  §3(a) says stop rather than invent a lookup, so it is reported and left.
+- **Rendered on a transient surface — all of them**, fixed wholesale by 28.1.
+
+⚠ **Five emitted codes have no sentence of ours** — `internal-error`, `not-engaged`,
+`not-live`, `pin-mismatch`, `wrong-bank`. They fall through to the bridge's message, which
+is the right fallback; naming them is the finding.
+
+### 28.4 §5 — refusals already reach the audit log, so nothing was built
+
+`AuditEntrySchema` carries `itemId`, `templateId`, `slot`, `errorCode`, `outcome` and — since
+`B-209` — the AMCP line itself, and the bridge writes `outcome: 'failed'` with the code on
+its refusal paths. **A dismissed banner has lost nothing.** No second log, as §5 required.
+
+### 28.5 §4(f) and §0 — the reference has NO error toast, and the painter was global
+
+Searched all nine reference pages: `.global-toast` and `.modal-toast` are the **mint success
+family only**; there is no error or danger variant of either. What the reference does have is
+a `.notice` family with `.error` / `.warn` / `.neutral` modifiers — **an in-flow block, not a
+floating one** — which is the shape adopted here.
+
+⭐ **§0's guard paid immediately, on the previous item:** the fader's ring came from `@cg/ui`'s
+global `input:focus` halo, not from the component rule that looked responsible, and it painted
+the LEGACY sky. That finding is why §0 exists and it is filed as `S.14`.
+
+### 28.6 🔴 §A3 — THE PALETTE, MEASURED. The grammar was a guess and the evidence corrects it.
+
+Read in Chromium at 1400 × 900, live where the class renders and mounted where it only
+appears with a message (the class on a real element, the browser asked what it paints):
+
+| class                                     | what it is FOR               | ink                                        | ground          |
+| ----------------------------------------- | ---------------------------- | ------------------------------------------ | --------------- |
+| console refusal banner (`Notice` refusal) | refusal                      | `rgb(243 205 136)` amber                   | `rgb(53 45 30)` |
+| its dismiss control                       | —                            | `rgb(243 205 136)` — the message's own ink | transparent     |
+| success toast                             | confirmation                 | `rgb(214 243 227)` mint                    | `rgb(29 59 48)` |
+| `cg-setup-notice`                         | setup refusal                | `rgb(245 200 121)` amber                   | `rgb(41 36 28)` |
+| `cg-modal-message`                        | modal message                | `rgb(229 231 235)` default                 | —               |
+| `cg-plate-help` · `cg-card-help`          | info                         | muted / default                            | —               |
+| row `attention`                           | pending · occupied · unknown | `rgb(245 158 11)` amber                    | —               |
+| row `ready`                               | declared, not on air         | `rgb(116 205 246)` blue                    | —               |
+| row `idle`                                | empty                        | `rgb(91 93 96)` grey                       | —               |
+
+🔴 **RED APPEARS ON NO OPERATOR MESSAGE CLASS AT ALL** now that the red toast is gone. The
+grammar the evidence supports is therefore NOT the four lines asserted in DELTA 11 §2:
+
+```
+green  = ON AIR, now — and nothing else
+blue   = declared / ready, not on air
+amber  = "you cannot do this right now, or this needs attention" — refusals AND pending
+red    = destructive INTENT (a delete button) and error TEXT in the log — never a message
+```
+
+⚠ **Amber genuinely does two jobs**, exactly as §A3 suspected — but the split it proposed
+(amber pending / red refusal) is contradicted by a RECORDED and MEASURED decision: `Notice`'s
+own header states that `colors.error` is a BACKGROUND in this palette and reads **2.08:1**
+used as a foreground, that three components had independently made that mistake, and that
+"red means error or destructive intent, and a refusal is neither — it is the palette's
+ATTENTION case, which is amber". The refusal treatment measures **10.39:1**. §4(f) says not
+to invent a new red, so this reuses the recorded decision. **Whether amber should split is
+the owner's call; the evidence says the current division is defensible and red is not free.**
+
+⚠ **§A5.9 — the console's banner is NOT quite the dialog's settled vocabulary.** They are two
+nearly-identical ambers: `rgb(243 205 136)` on `rgb(53 45 30)` against `cg-setup-notice`'s
+`rgb(245 200 121)` on `rgb(41 36 28)`. One idea, two spellings — a finding, not something
+this delta changed.
+
+### 28.7 §A2 — the dismiss control belonged to the page, and now belongs to the message
+
+Both halves the owner found were one cause: the first cut put a `Button` NEXT TO the
+`Notice`, so it sat outside the banner's box on the page ground and wore the shared button
+ink. Fixed on `Notice` itself — an optional `onDismiss` CALLBACK (not a node, which would
+let a caller carry a style in, the defect that file exists to close), rendering the control
+inside the box at its inline end with `color: inherit`. **Every caller of `Notice` inherits
+it.** Measured after: the control's ink is `rgb(243 205 136)`, the message's own.
+
+### 28.8 What was proved, and where
+
+`refusalStore.test.ts` (6) holds what needs no browser — persistence, coalescing, dismissal,
+that the ids stay in `detail` and never in the sentence, and that subscribing does not
+replay. `refusal-surface.spec.ts` (2) holds what jsdom cannot answer: it survives 4200 ms
+(past the toast's 3200), it does not intersect the footer hint or a table row, five presses
+are one banner reading `(5 times)`, it does not take focus, it dismisses, and the success
+toast still auto-hides politely beside it.
+
+⚠ **Three superseded assertions were replaced, not deleted** — two in `commandToast` (which
+pinned refusals to the toast) and one in `asyncButton` (which pinned the old preference).
+And **two fixture accessors were repointed**: `app.error` addressed the toast's removed
+`Command error` name, so both callers' `toHaveCount(0)` would have passed forever against a
+locator matching nothing — the vacuous-green shape this repo has filed before — and
+`app.success` followed the toast from `alert` to `status`.

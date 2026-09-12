@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Check, TriangleAlert } from 'lucide-react';
-import { colors, cssVars } from '../../theme.js';
+import { Check } from 'lucide-react';
+import { cssVars } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
-import { onCommandError, onCommandSuccess } from './commandFeedback.js';
+import { onCommandSuccess } from './commandFeedback.js';
 
 /*
   `RUNTIME-REDESIGN-01` Phase 9 — the reference's `.global-toast` as rendered (`TOAST_PX` in the
@@ -43,11 +43,6 @@ const styles = {
     gap: cssVars['--r-toast-gap'],
     boxShadow: cssVars['--r-toast-shadow'],
   },
-  error: {
-    background: colors.error,
-    color: cssVars['--r-ink-on-fill'],
-    border: `1px solid ${cssVars['--r-danger-strong']}`,
-  },
   success: {
     background: cssVars['--r-toast-ok-bg'],
     color: cssVars['--r-toast-ok-ink'],
@@ -67,7 +62,6 @@ const DISMISS_MS = 3200;
 
 interface Feedback {
   message: string;
-  kind: 'error' | 'success';
 }
 
 /**
@@ -82,30 +76,27 @@ export function CommandToast(): JSX.Element | null {
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
-    const show = (message: string, kind: Feedback['kind']): void => {
-      setFeedback({ message, kind });
+    const unsubscribeSuccess = onCommandSuccess((message) => {
+      setFeedback({ message });
       if (timer !== null) clearTimeout(timer);
       timer = setTimeout(() => setFeedback(null), DISMISS_MS);
-    };
-    const unsubscribeError = onCommandError((msg) => show(msg, 'error'));
-    const unsubscribeSuccess = onCommandSuccess((msg) => show(msg, 'success'));
+    });
     return () => {
       if (timer !== null) clearTimeout(timer);
-      unsubscribeError();
       unsubscribeSuccess();
     };
   }, []);
 
   if (feedback === null) return null;
-  const isError = feedback.kind === 'error';
   return (
     // R-006 — named, because `role="alert"` is no longer unique: the connection banner is
     // deliberately an alert too ("nothing can reach air" IS an alert). Callers that mean
     // THIS toast must be able to say so — and error vs success are separately addressable.
     <div
-      style={{ ...styles.base, ...(isError ? styles.error : styles.success) }}
-      role="alert"
-      aria-label={isError ? 'Command error' : 'Command success'}
+      style={{ ...styles.base, ...styles.success }}
+      role="status"
+      aria-live="polite"
+      aria-label="Command success"
     >
       {/*
         The reference draws a mint check beside the line (`.global-toast svg{width:17px}`).
@@ -114,7 +105,7 @@ export function CommandToast(): JSX.Element | null {
         icon contradicting the sentence. Both are decorative: the `aria-label` on the region
         already says which kind this is, and the message says what happened.
       */}
-      <Icon icon={isError ? TriangleAlert : Check} size={TOAST_ICON_PX} />
+      <Icon icon={Check} size={TOAST_ICON_PX} />
       <span>{feedback.message}</span>
     </div>
   );

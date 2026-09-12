@@ -8,10 +8,16 @@ import {
   reportCommandError,
   reportCommandSuccess,
 } from '../src/renderer/features/status/commandFeedback.js';
+import { clearRefusal, getRefusal } from '../src/renderer/features/status/refusalStore.js';
 
 /**
- * The command toast renders BOTH an error (red) and a success (green) from the same
- * `commandFeedback` mechanism — the surface every inline message now routes to.
+ * 🔴 `CONSOLE-LOOK-06` DELTA R — THE TOAST IS THE CONFIRMATION SURFACE, AND ONLY THAT.
+ *
+ * It used to render both halves of `commandFeedback` from one box: a success in green and a
+ * refusal in red, sharing an auto-dismiss. The shared timer was the owner's defect — a
+ * confirmation SHOULD go on its own, and a refusal must not. Refusals now live on
+ * `RefusalBanner` (persistent, dismissible, coalescing); what these tests hold is the
+ * BOUNDARY between the two, from this side of it.
  */
 
 let container: HTMLDivElement | null = null;
@@ -19,6 +25,9 @@ let container: HTMLDivElement | null = null;
 afterEach(() => {
   container?.remove();
   container = null;
+  // The refusal store is module state and outlives a test — see the adapter in
+  // `commandFeedback`, which had to stop replaying it for exactly this reason.
+  clearRefusal();
 });
 
 async function mount(): Promise<HTMLDivElement> {
@@ -32,8 +41,9 @@ async function mount(): Promise<HTMLDivElement> {
   return container;
 }
 
+/** The toast's box. `status`, not `alert`: a confirmation is announced politely. */
 function alert(el: HTMLElement): HTMLElement | null {
-  return el.querySelector<HTMLElement>('[role="alert"]');
+  return el.querySelector<HTMLElement>('[role="status"]');
 }
 
 describe('CommandToast', () => {
@@ -53,18 +63,31 @@ describe('CommandToast', () => {
     expect(node?.textContent).toBe('Imported · Breaking News');
   });
 
-  it('shows an ERROR message as a red "Command error" alert', async () => {
+  /*
+    🔴 SUPERSEDED BY `CONSOLE-LOOK-06` DELTA R, and REPLACED rather than deleted so the change
+    is visible here. These two used to assert that this toast rendered a refusal in red, and
+    that a later refusal replaced an earlier success on it.
+
+    That shared surface WAS the owner's defect: "it hides itself so quickly the operator has no
+    chance to read it." A toast's auto-dismiss is right for a confirmation and wrong for a
+    refusal, so refusals moved to `RefusalBanner`, which persists until dismissed. What is
+    asserted now is the BOUNDARY — because a test that only pinned the banner would be
+    satisfied by a build that had quietly put refusals back on a timer here.
+  */
+  it('🔴 DELTA R — a REFUSAL does not appear on this surface at all', async () => {
     const el = await mount();
     await act(async () => {
       reportCommandError('Bridge disconnected — command rejected. Not sent to CasparCG.');
       await Promise.resolve();
     });
-    const node = alert(el);
-    expect(node?.getAttribute('aria-label')).toBe('Command error');
-    expect(node?.textContent).toBe('Bridge disconnected — command rejected. Not sent to CasparCG.');
+    expect(alert(el), 'a refusal must not ride the transient toast').toBeNull();
+    // …and it went somewhere: the persistent surface is holding it.
+    expect(getRefusal()?.message).toBe(
+      'Bridge disconnected — command rejected. Not sent to CasparCG.',
+    );
   });
 
-  it('last-write wins: a later error replaces an earlier success', async () => {
+  it('🔴 DELTA R — a refusal cannot displace a success, because they no longer share a box', async () => {
     const el = await mount();
     await act(async () => {
       reportCommandSuccess('Imported · X');
@@ -72,7 +95,8 @@ describe('CommandToast', () => {
       await Promise.resolve();
     });
     const node = alert(el);
-    expect(node?.getAttribute('aria-label')).toBe('Command error');
-    expect(node?.textContent).toBe('Removal refused.');
+    expect(node?.getAttribute('aria-label')).toBe('Command success');
+    expect(node?.textContent, 'the confirmation survived the refusal').toBe('Imported · X');
+    expect(getRefusal()?.message).toBe('Removal refused.');
   });
 });

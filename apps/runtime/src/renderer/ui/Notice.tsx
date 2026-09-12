@@ -1,5 +1,7 @@
 import type { CSSProperties } from 'react';
+import { X } from 'lucide-react';
 import { colors, cssVars } from '../theme.js';
+import { Icon } from './Icon.js';
 
 /**
  * THE ONE SPELLING OF A MESSAGE TREATMENT IN THE RUNTIME.
@@ -126,23 +128,113 @@ export function Notice({
   text,
   detail,
   aria,
+  onDismiss,
+  dismissLabel,
 }: {
   noticeRole: NoticeRole;
   text: string;
   detail?: string;
   aria?: 'alert' | 'status' | 'note';
+  /**
+   * 🔴 `CONSOLE-LOOK-06` DELTA R ADDENDUM A §A2 — **A MESSAGE'S DISMISS CONTROL IS PART OF
+   * THE MESSAGE.**
+   *
+   * The owner found both halves of that on the refusal banner's first cut: the control sat
+   * OUTSIDE the box, on the page ground beside it, and it took the page's default foreground
+   * instead of the message's own — so it read as unrelated furniture rather than as this
+   * message's control. It had been a sibling of this component, which is precisely how both
+   * happen at once.
+   *
+   * So it lives HERE, and every caller that passes `onDismiss` inherits the fix rather than
+   * re-solving it. It is a CALLBACK and not a node, which keeps the constraint this file's
+   * header sets out: the component owns the markup and the treatment, the caller owns only
+   * the behaviour. A node prop could carry a `style`, and a message that arrives carrying its
+   * own style is the whole defect this file exists to close.
+   */
+  onDismiss?: () => void;
+  /** The dismiss control's accessible name. Required with `onDismiss` — an icon is not a label. */
+  dismissLabel?: string;
 }): JSX.Element {
+  const dismissable = onDismiss !== undefined;
   return (
     <div
-      style={{ ...base, ...ROLE_STYLE[noticeRole] }}
+      style={{
+        ...base,
+        ...ROLE_STYLE[noticeRole],
+        /*
+          The box becomes a ROW once it carries a control: the lines stack in their own column
+          and the control sits at the inline END. `start` alignment, so a two-line message does
+          not drag the control to the middle of the box where it reads as belonging to the
+          detail line.
+        */
+        ...(dismissable
+          ? { flexDirection: 'row' as const, alignItems: 'start' as const, gap: '0.6rem' }
+          : {}),
+      }}
       data-notice={noticeRole}
       role={aria ?? (noticeRole === 'refusal' ? 'alert' : 'status')}
     >
-      <span dir="auto">{text}</span>
-      {detail !== undefined && detail !== '' && (
-        <span dir="auto" style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}>
-          {detail}
+      {/*
+        ⚠ THE LINES ARE WRAPPED ONLY WHEN THERE IS A CONTROL TO SIT BESIDE THEM.
+
+        The first cut wrapped them always, which changed the DOM of every notice in the app to
+        solve a problem only the dismissable ones have — `modalMessageRegion.dom.test.ts` caught
+        it by counting the box's direct children, and it was right to: a notice's two lines
+        being its two children is the shape every other caller was written against. With no
+        dismiss the markup is byte-for-byte what it always was.
+      */}
+      {dismissable ? (
+        <span
+          style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1, minWidth: 0 }}
+        >
+          <span dir="auto">{text}</span>
+          {detail !== undefined && detail !== '' && (
+            <span dir="auto" style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}>
+              {detail}
+            </span>
+          )}
         </span>
+      ) : (
+        <>
+          <span dir="auto">{text}</span>
+          {detail !== undefined && detail !== '' && (
+            <span dir="auto" style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}>
+              {detail}
+            </span>
+          )}
+        </>
+      )}
+      {dismissable && (
+        /*
+          ⚠ `color: inherit` is the second half of §A2 and it is not cosmetic: the control
+          takes the MESSAGE's ink, so an amber refusal's dismiss is amber and a neutral
+          notice's is neutral. Without it the shared button ink wins and the control belongs
+          to the page instead of to the box it sits in.
+        */
+        <button
+          type="button"
+          onClick={onDismiss}
+          data-notice-dismiss=""
+          aria-label={dismissLabel ?? 'Dismiss this message'}
+          title={dismissLabel ?? 'Dismiss this message'}
+          style={{
+            flex: 'none',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '22px',
+            height: '22px',
+            padding: 0,
+            border: '1px solid transparent',
+            borderRadius: cssVars['--r-radius-sm'],
+            background: 'transparent',
+            color: 'inherit',
+            cursor: 'pointer',
+            opacity: 0.75,
+          }}
+        >
+          <Icon icon={X} size={14} />
+        </button>
       )}
     </div>
   );

@@ -103,11 +103,12 @@ const MESSAGES: Readonly<Record<string, string>> = {
   /*
     C-015 phase 6 — THE FOUR WAYS A LIVE PLATE REFUSES A TAKE.
 
-    These are FALLBACKS. The bridge sends its own sentence with each of them
-    (`StackTakeChannel.message`), which names the plate, the source and the
-    numbers that disagree — and `asyncResultMessage` prefers that. What is here
-    is what an operator sees if the message is ever absent, so each still has to
-    name the remedy rather than restate the rule.
+    🔴 THESE ARE WHAT THE OPERATOR READS — not fallbacks. They used to be: the bridge sends
+    its own sentence with each of them (`StackTakeChannel.message`) and `asyncResultMessage`
+    PREFERRED that, so these sat unused behind text written for a developer.
+    `CONSOLE-LOOK-06` DELTA R reversed the order. The bridge's sentence still names the plate,
+    the source and the numbers that disagree, and it still travels — as the refusal banner's
+    detail line and into the audit log, where an id belongs.
 
     Four codes rather than one, because the four remedies are in four different
     places: assign a source, correct a format, declare a band, free a layer.
@@ -117,10 +118,11 @@ const MESSAGES: Readonly<Record<string, string>> = {
     the operator as `Not accepted (multibox-already-on-air).` — a quotable code, which is the
     B-070 floor, but not an explanation.
 
-    Both are FALLBACKS: the bridge sends its own sentence with each, naming which template is
-    already on air and with how many boxes, and `asyncResultMessage` prefers that. These are
-    what an operator sees if the message is ever absent, so each names the remedy rather than
-    restating the rule.
+    🔴 AND THIS IS THE PAIR THE OWNER PHOTOGRAPHED. The bridge's own sentence names the
+    incumbent by TEMPLATE UUID and ITEM UUID; `asyncResultMessage` preferred it, so a
+    perfectly good operator sentence sat here unread while a developer's did the talking.
+    DELTA R reversed that order. The ids are not lost — they ride the banner's detail line and
+    the audit log.
   */
   'multibox-already-on-air':
     'Another multi-box graphic is already on air on this channel, and only one may be. Take that row off air first — this is a crosstalk guard, not a layer shortage.',
@@ -135,6 +137,43 @@ const MESSAGES: Readonly<Record<string, string>> = {
   'live-source-no-layer':
     'The Live Source layer band has no room left for this template’s plates. Clear a graphic that is holding live layers, or widen the band in CG Control’s source settings.',
 };
+
+/**
+ * 🔴 `CONSOLE-LOOK-06` DELTA R — **THE CODES WHOSE BRIDGE SENTENCE IS WRITTEN FOR A DEVELOPER.**
+ *
+ * `asyncResultMessage` normally prefers the bridge's own message, and that is usually RIGHT:
+ * it names the plate (`guest-3`), the source, or the two formats that disagree, and those are
+ * the operator's own words. Preferring our generic sentence everywhere would throw away the
+ * only part of most refusals an operator can act on.
+ *
+ * These are the exceptions, and they are listed one by one rather than guessed at, because
+ * the difference cannot be seen from the text without string-matching prose — which is a
+ * contract nobody wrote down and breaks the first time the prose is edited (§6).
+ *
+ * What makes a code belong here: its bridge sentence identifies things by UUID. The one the
+ * owner photographed is the whole reason this set exists —
+ *
+ *     exactly one multi-box template may be on air per channel:
+ *     "e506e319-6e68-4603-a5f4-290b21616250" (3 boxes, item
+ *     "item-0d9a8b6c-427c-4001-ad89-8e4eb2849dd2") is already on air on channel 1
+ *
+ * — a template UUID and an item UUID, when the row is called Bed 1 three inches away. Golden
+ * rule 11. The ids are not lost: they ride the refusal banner's detail line and the audit log
+ * records them with the entry (`AuditEntrySchema` carries `itemId`, `templateId`, `errorCode`
+ * and the AMCP line).
+ *
+ * ⚠ ADDING A CODE HERE IS A CLAIM that our sentence says everything the bridge's does. Check
+ * that before adding one — for most codes it is false.
+ */
+const PREFER_OURS: ReadonlySet<string> = new Set([
+  'multibox-already-on-air',
+  'looks-none-authored',
+]);
+
+/** Does the console's own sentence win over the bridge's for this code? */
+export function prefersOwnMessage(errorCode: string | undefined): boolean {
+  return errorCode !== undefined && PREFER_OURS.has(errorCode);
+}
 
 /** A human message for a refusal, or `null` when there is no code to explain. */
 export function errorCodeMessage(errorCode: string | undefined): string | null {

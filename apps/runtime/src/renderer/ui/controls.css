@@ -6563,3 +6563,15 @@ input[type='checkbox']:disabled:checked {
   border-color: var(--r-control-hover-line);
   color: var(--r-text);
 }
+
+/* ── THE REFUSAL BANNER — `CONSOLE-LOOK-06` DELTA R §4 ─────────────────────────────
+ *
+ * A wrapper and nothing else: the treatment is `Notice`'s `refusal` role, which is where this
+ * palette's refusal decision is recorded and measured, and §4(f) says not to invent a new red.
+ * ⚠ ADDENDUM A §A2 — the dismiss control is INSIDE the notice (its `onDismiss`), so this rule
+ * has no button in it. A sibling control is what put the dismiss on the page ground.
+ */
+.cg-refusal {
+  padding: 0 var(--r-space-3);
+  flex: none;
+}

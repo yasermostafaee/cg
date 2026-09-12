@@ -26,6 +26,7 @@ import { applyDraft } from './features/inspector/applyDraft.js';
 import { clearDraft } from './features/inspector/draftStore.js';
 import { LockOverlay } from './features/lock/LockOverlay.js';
 import { CommandToast } from './features/status/CommandToast.js';
+import { RefusalBanner } from './features/status/RefusalBanner.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { Tooltip } from './ui/Tooltip.js';
 import { useConnections } from './hooks/useConnections.js';
@@ -248,6 +249,18 @@ export function App(): JSX.Element {
           answers, OSC ticks, every pill reads HEALTHY. Renders nothing unless a declared
           consumer is genuinely missing — or was, the last time the bridge could look. */}
         <OutputMissingBanner />
+        {/*
+          🔴 `CONSOLE-LOOK-06` DELTA R — THE REFUSAL SURFACE, and it is IN FLOW on purpose.
+
+          It sits with the other banners rather than floating, because §4(c) is a hard
+          requirement and not a preference: a refusal about a row must never hide that row nor
+          the control that resolves it, and the toast it replaced did exactly that — it lay
+          over the footer hint and a whole table row. An in-flow banner pushes the workspace
+          down instead, so nothing it says can cost the operator the thing it is talking about.
+
+          It renders NOTHING when no refusal stands, like every banner around it.
+        */}
+        <RefusalBanner />
         {/*
         R-028 part B — a RESIZABLE shell. The Inspector is a real column whose
         width the operator owns (dragged or nudged, clamped so neither side can
