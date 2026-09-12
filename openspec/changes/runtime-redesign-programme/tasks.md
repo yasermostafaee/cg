@@ -1382,4 +1382,8 @@ renders answers "is this handled?" with a yes.
 - [ ] T.7 ⚠ **FOR THE OWNER: does amber split?** The evidence says the current division is
       defensible and red is not free. Also open: the console banner and `cg-setup-notice` are
       two nearly-identical ambers for one idea. §28.6.
-- [ ] T.8 **Linux `gate:e2e` for DELTA R — `RUNURL3`.**
+- [x] T.8 **Linux `gate:e2e` — DISCHARGED on `388482e9`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34720099417>. Run `conclusion: success`;
+      the `E2E (Playwright)` job RAN and its **`E2E` step is step 13, `completed/success`** (647 s)
+      — read at the STEP level, never merely the job (`P-046`/`P-029`). Runtime 194 passed,
+      designer 279 passed, no flakes in either.
