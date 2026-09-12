@@ -3,6 +3,8 @@ import type { FixedSlotState, TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
+import { Button } from '../../ui/Button.js';
+import { Volume2 } from 'lucide-react';
 import { Icon } from '../../ui/Icon.js';
 import { ContextMenu } from '../../ui/ContextMenu.js';
 import { isContextMenuKey, useContextMenu } from '../../ui/useContextMenu.js';
@@ -426,6 +428,31 @@ export function LayerRow({
   const [audioOpen, setAudioOpen] = useState(false);
 
   const coord = { channel: slot.channel, layer: slot.layer };
+  /*
+    🔴 `CONSOLE-LOOK-06` DELTA D8a — **ONE DOOR, THREE HANDLES.**
+
+    The audio dialog is reachable from the row's own button, from the context MENU, and from
+    the menu's two keyboard twins (`ContextMenu`, `Shift+F10`). They must be one code path or
+    they will come to disagree about when the dialog may open at all — so the handler is named
+    once here and both the button and `layerRowActions`' `plateAudio` dep call THIS.
+
+    It is not a convenience: the menu item is gated (`empty || blocked || needsCaspar`) and a
+    button wired to its own `setAudioOpen` would be a second, ungated door to the same
+    dialog. The gate lives with the CONTROL; the opening lives here.
+  */
+  /*
+    The reference's own condition for drawing the audio control:
+    `templatePlateIds(template(row)).length`. Spelled ONCE and read by both the button and the
+    menu item's gate, so the two can never offer different answers to "does this row have
+    sound at all".
+  */
+  const hasPlates = (template?.liveSources?.sources.length ?? 0) > 0;
+
+  const openPlateAudio = (): Promise<{ accepted: true }> => {
+    setAudioOpen(true);
+    return Promise.resolve({ accepted: true });
+  };
+
   const actions = layerRowActions({
     // THE UNION, not `item`. See the `binding` prop's note: this is the whole of
     // the fix, and passing `item` here again is exactly how it would come undone.
@@ -517,15 +544,12 @@ export function LayerRow({
     // R-048 (6.9 / 6.9e) — the per-plate source swap, offered only where the bound
     // template actually declares plates. The verb OPENS the picker; the swap itself
     // is committed from inside it, which is what keeps the whole act to two actions.
-    hasLivePlates: (template?.liveSources?.sources.length ?? 0) > 0,
+    hasLivePlates: hasPlates,
     swapSource: () => {
       setSwapOpen(true);
       return Promise.resolve({ accepted: true });
     },
-    plateAudio: () => {
-      setAudioOpen(true);
-      return Promise.resolve({ accepted: true });
-    },
+    plateAudio: openPlateAudio,
     onError: reportCommandError,
   }).map((action) => {
     // Confirm gates attached at DECLARATION time, so button and menu share them.
@@ -894,6 +918,44 @@ export function LayerRow({
           rows learns which ones have sound at all, and the strip in LIVE PLATES — or this
           row's own audio dialog — is where a value is changed.
         */}
+        {/*
+          🔴 `CONSOLE-LOOK-06` DELTA D8a — THE ROW'S AUDIO BUTTON, and it rides the ALIAS CELL
+          for the reason the summary beside it already gives at length.
+
+          The reference draws a `.row-audio-button` in the row. Ours could not put one in the
+          VERB BLOCK: `layerTable.ts` fixes `VERB_COUNT` at SIX and the sticky header prints a
+          word directly above each glyph, so a seventh — or worse, a CONDITIONAL seventh, which
+          is what a plate-bearing row needs — slides every header word onto the wrong glyph.
+          This product's STOP (graceful) and CLEAR (hard kill) are the inverse of the reference
+          product's, which is exactly the misread the header word retires.
+
+          So it goes where the audio SUMMARY already goes: the alias cell. No new column,
+          `VERB_COUNT` stays 6, `gridTemplateColumns(density)` untouched.
+
+          ⚠ THE CONDITION IS THE REFERENCE'S, and it already was: the reference renders it on
+          `templatePlateIds(template(row)).length`, and ours is `hasLivePlates` —
+          `(template?.liveSources?.sources.length ?? 0) > 0`, the BOUND TEMPLATE's declaration.
+          Same question, same answer; nothing about the gate changed here.
+
+          ⚠ Its `title` names BOTH doors, as the reference's does, because the right-click
+          route is the one an operator will not discover on their own.
+        */}
+        {hasPlates && (
+          <Button
+            variant="icon"
+            className="cg-row-audio-btn"
+            data-row-audio=""
+            title="Live audio · right-click this row"
+            aria-label={`Audio controls for ${rowName}`}
+            onClick={(e) => {
+              // The row itself selects on click; this button is a different act.
+              e.stopPropagation();
+              void openPlateAudio();
+            }}
+          >
+            <Icon icon={Volume2} size={16} />
+          </Button>
+        )}
         {item !== null &&
           (() => {
             const summary = audioSummary(seatedPlates);

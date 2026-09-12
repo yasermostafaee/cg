@@ -1479,7 +1479,19 @@
 .cg-field:hover:not(:disabled):not(:focus) {
   border-color: var(--r-border-strong);
 }
-.cg-field:focus,
+/*
+ * 🔴 `CONSOLE-LOOK-06` DELTA D11 — `:focus-visible` ONLY, and the plain `:focus` that was here
+ * beside it is the whole defect.
+ *
+ * A mouse drag on a range input MATCHES `:focus`, so the audio fader grew a ring the moment
+ * the operator took hold of it — an extra border appearing under the pointer, which is what
+ * the owner saw. The reference rings inputs on `:focus-visible` alone.
+ *
+ * ⚠ THE RING IS NOT DELETED, AND THAT IS THE POINT: the fader is adjustable with the arrow
+ * keys and a keyboard user must see where focus is. Chrome grants `:focus-visible` on click
+ * to controls that expect typed input, so text fields and selects keep the ring they had; a
+ * range, a checkbox or a button clicked with a mouse does not. The fix is the SELECTOR.
+ */
 .cg-field:focus-visible {
   outline: none;
   border-color: var(--r-accent);
@@ -6513,4 +6525,38 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-accent);
   text-decoration: underline;
   text-underline-offset: 4px;
+}
+
+/* ── THE ROW'S AUDIO BUTTON — the reference's `.row-audio-button` ──────────────
+ *
+ * 🔴 `CONSOLE-LOOK-06` DELTA D8a. Measured off the reference: `min-width:32px; height:28px;
+ * padding:3px 6px; border:1px solid #465974; border-radius:4px; background:#172435;
+ * color:#bacfe5`, with a 16 px glyph and a lift on hover.
+ *
+ * ⚠ It rides the ALIAS CELL, not the verb block — `layerTable.ts` fixes `VERB_COUNT` at six
+ * and the sticky header prints a word above each glyph, so a seventh (or a CONDITIONAL
+ * seventh, which is what a plate-bearing row needs) slides every header word onto the wrong
+ * glyph. `LayerRow` carries the long form of that argument beside the summary chip.
+ *
+ * Severity and identity by TOKEN, never by hex: the edge is the strong border role, the
+ * ground the sunken surface, the ink the secondary text, and the hover is the shared
+ * control-hover pair every other control on this surface uses.
+ */
+.cg-row-audio-btn.cg-btn {
+  min-width: 32px;
+  width: auto;
+  height: 28px;
+  min-height: 28px;
+  padding: 3px 6px;
+  border: 1px solid var(--r-border-strong);
+  border-radius: var(--r-radius-sm);
+  background: var(--r-surface-sunken);
+  color: var(--r-text-secondary);
+  flex: none;
+}
+
+.cg-row-audio-btn.cg-btn:hover:not(:disabled) {
+  background: var(--r-control-hover-bg);
+  border-color: var(--r-control-hover-line);
+  color: var(--r-text);
 }

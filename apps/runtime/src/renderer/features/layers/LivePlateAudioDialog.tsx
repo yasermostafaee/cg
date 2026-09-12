@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Volume2 } from 'lucide-react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
@@ -131,10 +131,38 @@ export function LivePlateAudioDialog({
    * answer, and showing a slider position the bridge has not accepted would be the
    * optimistic-UI lie this project refuses everywhere else. On a refusal this is dropped and
    * the published value stands.
+   *
+   * 🔴 `CONSOLE-LOOK-06` DELTA D10 — AND IT IS NOT DROPPED ON ACCEPTANCE. It is retired when
+   * the published state CATCHES UP with it (the effect beside `intents`), because dropping it
+   * the instant the promise resolves put the previous value back on screen for the frame
+   * before the snapshot arrived. While the pointer is down this is also the SINGLE OWNER of
+   * the value: `shown()` prefers it, so an echo landing mid-gesture cannot move the control
+   * the operator is holding.
    */
   const [dragging, setDragging] = useState<Record<string, number>>({});
 
   const intents = item.plateVolumes ?? {};
+  /*
+    🔴 DELTA D10 — the optimistic entry retires when the PUBLISHED state agrees with it, and
+    not a moment before. That is what keeps the accepted value on screen across the gap
+    between "the bridge said yes" and "the snapshot carrying it arrived", which is the gap the
+    thumb used to fall into.
+
+    ⚠ An entry that never matches is an entry the bridge never published — it stays, and it
+    stays showing what was ACCEPTED. That is the honest reading of that state, not a lie: the
+    lie would be showing a value before acceptance, which `dragging` has never done.
+  */
+  useEffect(() => {
+    setDragging((d) => {
+      const next: Record<string, number> = {};
+      let changed = false;
+      for (const [plateId, v] of Object.entries(d)) {
+        if (intents[plateId] === v) changed = true;
+        else next[plateId] = v;
+      }
+      return changed ? next : d;
+    });
+  }, [item.plateVolumes]);
   // `?? `, never `||`: a recorded intent of 0 is a REAL authored value ("muted by the
   // operator") and must not fall through to the default that happens to equal it.
   const shown = (plateId: string): number => dragging[plateId] ?? intents[plateId] ?? 0;
@@ -168,12 +196,30 @@ export function LivePlateAudioDialog({
   const commit = (volumes: Record<string, number>): void => {
     setRefusal(null);
     void onApplyVolumes(volumes).then((res) => {
-      setDragging((d) => {
-        const next = { ...d };
-        for (const plateId of Object.keys(volumes)) delete next[plateId];
-        return next;
-      });
+      /*
+        🔴 `CONSOLE-LOOK-06` DELTA D10 — **THE FRAME WHERE THE THUMB JUMPED BACK.**
+
+        This used to drop the optimistic value for every named plate HERE, on the promise's
+        resolution, whether the bridge accepted or refused. On a refusal that is right and it
+        is what the `dragging` doc comment describes. On ACCEPTANCE it was the defect the
+        owner saw: the moment the entry is deleted, `shown()` falls through to
+        `item.plateVolumes` — the PUBLISHED state — and the published state does not carry
+        the new value yet, because its snapshot has not arrived. So the thumb painted the
+        PREVIOUS value for a frame and then returned when the echo landed.
+
+        ⭐ The rule, and it is the transferable half: **an accepted value is not an optimistic
+        value.** Dropping it before the echo does not make the surface more honest, it makes
+        it briefly WRONG — it shows a number the operator has already changed and the bridge
+        has already taken. So the optimistic entry is kept until the published state actually
+        agrees with it (the effect beside `intents`), and dropped immediately on a refusal, which
+        is the case it was written for.
+      */
       if (!res.ok) {
+        setDragging((d) => {
+          const next = { ...d };
+          for (const plateId of Object.keys(volumes)) delete next[plateId];
+          return next;
+        });
         setRefusal(
           res.refused.length > 0
             ? `The change was refused for ${res.refused.join(', ')} — those plates are unchanged.`

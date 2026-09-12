@@ -181,3 +181,99 @@ test('the Inspector is headed by the selected ROW’s name, from the bank the mo
   await expect(heading).toHaveText(nameOf(newsLayer));
   expect(nameOf(newsLayer)).not.toBe(nameOf(PLATE_ROW));
 });
+
+/**
+ * 🔴 `CONSOLE-LOOK-06` DELTA D10 + D11 — **THE FADER UNDER THE POINTER.**
+ *
+ * Two defects the owner reported on one control, both of them pointer-visible only: a value
+ * that jumped back to the previous one for a frame, and a ring that appeared while dragging
+ * with the mouse. A green gate proves nothing about either (golden rule 12).
+ *
+ * ── D10, and what it actually was ────────────────────────────────────────────────────
+ *
+ * The slider IS locally owned during the gesture (`dragging` beats the published state in
+ * `shown()`), and it DOES commit once, on release — so `Changes apply on release` was already
+ * true, which is the half of the suspicion that did not hold. The jump came from the other
+ * end: `commit` dropped the optimistic entry the instant the promise resolved, whether
+ * accepted or refused, and on ACCEPTANCE the published snapshot carrying the new value had
+ * not arrived yet. So the thumb fell back to the old published number for a frame.
+ *
+ * ── D11 ──────────────────────────────────────────────────────────────────────────────
+ *
+ * `.cg-field:focus` sat beside `.cg-field:focus-visible` and painted the same ring. A mouse
+ * drag matches `:focus`; the reference rings on `:focus-visible` only. The ring is NOT
+ * deleted — a keyboard user adjusting the fader with arrows must see where focus is.
+ */
+test('D10/D11 — the fader never regresses mid-gesture, and rings for the keyboard only', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1400, height: 900 });
+  const row = page.locator('[data-layer="' + String(PLATE_ROW) + '"]');
+  await row.click({ button: 'right' });
+  await page.getByRole('menu').getByRole('menuitem', { name: 'AUDIO' }).click();
+  const dialog = audioDialog(page);
+  await expect(dialog).toBeVisible();
+  const fader = dialog.locator('input[type="range"]').first();
+  await expect(fader).toBeVisible();
+
+  // ── D11, part 1: NO RING UNDER THE MOUSE ──────────────────────────────────────────
+  const ring = async (): Promise<string> => fader.evaluate((el) => getComputedStyle(el).boxShadow);
+  await page.mouse.move(5, 880);
+  const resting = await ring();
+
+  const box = await fader.boundingBox();
+  expect(box).not.toBeNull();
+  const y = box!.y + box!.height / 2;
+  await page.mouse.move(box!.x + 4, y);
+  await page.mouse.down();
+  expect(await ring(), 'a mouse press must not ring the fader (D11)').toBe(resting);
+
+  /*
+    ── D10: the displayed value never REGRESSES during the gesture ────────────────────
+    Several moves, reading the readout after each. A drop between two samples is the defect,
+    whatever caused it — asserted on the SEQUENCE rather than on one frame, because the old
+    bug lasted exactly one.
+  */
+  const readout = dialog.locator('output').first();
+  const value = async (): Promise<number> =>
+    Number(((await readout.textContent()) ?? '0').replace(/[^0-9]/g, ''));
+  const seen: number[] = [];
+  for (const dx of [0.2, 0.45, 0.7, 0.9]) {
+    await page.mouse.move(box!.x + box!.width * dx, y);
+    await page.waitForTimeout(60);
+    seen.push(await value());
+    expect(await ring(), 'the ring must not appear part-way through a drag either').toBe(resting);
+  }
+  for (let i = 1; i < seen.length; i += 1) {
+    expect(seen[i], 'the value regressed mid-gesture: ' + seen.join(' -> ')).toBeGreaterThanOrEqual(
+      seen[i - 1] ?? 0,
+    );
+  }
+
+  await page.mouse.up();
+  await page.mouse.move(5, 880);
+
+  /*
+    …and it does NOT fall back after release either. This is the frame the owner saw: the
+    commit resolves, the optimistic value used to be dropped, and the published snapshot had
+    not landed. Polled over a window generous compared with the single frame the old defect
+    lasted, so a regression cannot hide inside it.
+  */
+  const settled = await value();
+  expect(settled).toBe(seen.at(-1));
+  for (let i = 0; i < 8; i += 1) {
+    await page.waitForTimeout(60);
+    expect(await value(), 'the value fell back after release — D10').toBe(settled);
+  }
+
+  /*
+    ── D11, part 2: THE KEYBOARD STILL GETS ITS RING ─────────────────────────────────
+    Which is why this is a selector fix and not a deletion: the fader is adjustable with the
+    arrow keys, and that user has nothing else telling them where focus is.
+  */
+  await fader.focus();
+  await page.keyboard.press('ArrowRight');
+  expect(await ring(), 'a keyboard user must see where focus is').not.toBe(resting);
+  expect(await value(), 'arrow keys must still move the value').not.toBe(settled);
+});
