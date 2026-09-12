@@ -373,6 +373,12 @@ export function liveLayerRows(
 /**
  * 🔴 **WHAT AN EMPTY LIST MEANS — and why it may not just say "nothing is seated".**
  *
+ * ⚠ All three headlines below say LIVE PLATE, not "live source", since the owner's rename of
+ * 2026-09-12. They are this tab's own account of itself and they sit under its heading; the
+ * CATALOGUE keeps the other name, in Station setup. The uppercase sweep for `LIVE SOURCES`
+ * walked straight past them because they are sentence case — golden rule 9's own warning about
+ * a case-sensitive sweep, met on the next surface along.
+ *
  * The per-row masking above rides on ROWS, and an empty ledger produces no rows to
  * carry it. So the ONE branch that speaks for the WHOLE list was the one branch that
  * guessed: a first cut printed *"The bridge has no live sources seated"* — a confident
@@ -403,21 +409,21 @@ export function liveLayerEmptyView(
     return {
       headline: 'Not connected to the bridge.',
       detail:
-        'Whether any live source is seated cannot be checked from here. This is not a report ' +
+        'Whether any live plate is seated cannot be checked from here. This is not a report ' +
         'that nothing is on air.',
       known: false,
     };
   }
   if (!ledgerReady) {
     return {
-      headline: 'The live-source list has not arrived yet.',
+      headline: 'The live-plate list has not arrived yet.',
       detail: 'It fills in as soon as the bridge answers. This is not an empty list.',
       known: false,
     };
   }
   return {
-    headline: 'The bridge has no live sources seated.',
-    detail: 'Layers appear here when a row whose template declares Live Source plates goes on air.',
+    headline: 'The bridge has no live plates seated.',
+    detail: 'Layers appear here when a row whose template declares live plates goes on air.',
     known: true,
   };
 }

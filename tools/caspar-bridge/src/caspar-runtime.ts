@@ -7960,7 +7960,7 @@ export class CasparRuntime {
    *
    * ⚠ Written through {@link registerLiveLayers} — the ONE write path — so the drop persists
    * (`bridge.ts` writes `bridge-live-layers.json` on every `liveLayersChanged`) and reaches
-   * the operator's LIVE SOURCES list, instead of leaving the file to describe a plant that no
+   * the operator's LIVE PLATES list, instead of leaving the file to describe a plant that no
    * longer matches it. It also clears each touched item's `unverified` marks, which is right
    * for the same reason the drop is: a record we have just OBSERVED occupied is no longer an
    * unconfirmed file claim.
@@ -8196,7 +8196,7 @@ export class CasparRuntime {
    * written-but-unreachable class this repo has now filed four times.
    *
    * It has a production caller: {@link liveLayersState}, which projects it onto
-   * `liveLayers.state` for the operator's LIVE SOURCES list. Keep one.
+   * `liveLayers.state` for the operator's LIVE PLATES list. Keep one.
    */
   liveLayers(): ReadonlyMap<string, readonly LiveLayerRecord[]> {
     return new Map([...this.#liveLayers].map(([id, rs]) => [id, [...rs]]));
@@ -8204,7 +8204,7 @@ export class CasparRuntime {
 
   /**
    * `B-145` acceptance 1, display half (`tasks.md` 2.8) — **the ledger as the
-   * operator's LIVE SOURCES list.**
+   * operator's LIVE PLATES list.**
    *
    * Reads through the public {@link liveLayers} rather than walking `#liveLayers`,
    * and projects through the ONE `projectLiveLayers`, which is also what the push

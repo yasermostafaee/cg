@@ -199,7 +199,7 @@ const styles = {
  * ── COLOUR FOLLOWS THIS FILE'S EXISTING RULE, NOT A NEW ONE ────────────────
  *
  * Nothing here is coloured unless it needs ATTENTION. `held` is a normal, chosen disposition
- * and wears a WORD — the same rule `liveLayerRows` states for the LIVE SOURCES tab, so the two
+ * and wears a WORD — the same rule `liveLayerRows` states for the LIVE PLATES tab, so the two
  * surfaces cannot come to disagree about whether a held plate is a problem. GREEN is not used
  * at all: it is the sacred ON AIR mark of the layer table.
  */

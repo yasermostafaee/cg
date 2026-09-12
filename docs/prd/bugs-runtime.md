@@ -3954,7 +3954,9 @@ commands) is unaffected and is now what the comment says.
 Acceptance 1 reads _"those layers **appear in the layer list** and are controllable"_. The control
 half had held since persistence landed; the display half did not exist, and that is what closed.
 
-**The surface.** A third tab — **`LIVE SOURCES`**, beside `LAYERS` and `STATION LAYERS`
+**The surface.** A third tab — **`LIVE PLATES`** (it shipped as `LIVE SOURCES`; renamed by the
+owner 2026-09-12, since a plate is a seated layer and `Live sources` is Station setup's
+installation-wide catalogue), beside `LAYERS` and `STATION LAYERS`
 (`apps/runtime/src/renderer/features/layers/LiveSourcesPanel.tsx`) — listing every seated layer with
 its coordinate, its symbolic plate, the producer actually sent, and **the row that owns it**.
 
@@ -5685,7 +5687,7 @@ to the shown part of it.
   `StackItemState` plus bare ids. The old shape could not express audibility at all, because
   `held` lives on the LEDGER and not on the item.
 - **`rowPlateAudioOf(rows, itemId)`** (`liveLayerRows.ts`) builds that list off the SAME
-  `LiveLayerRowView`s the LIVE SOURCES tab renders. `seatedPlatesOf` is untouched and still
+  `LiveLayerRowView`s the LIVE PLATES tab renders. `seatedPlatesOf` is untouched and still
   correct for SOLO and PANIC, which address a SET. A row whose `audio` is `null` — BLIND or
   STRANDED — is DROPPED: those are the branches that must not make a claim, and a chip counting
   them would state a number the surface beside it has just declined to state.
@@ -5702,7 +5704,7 @@ to the shown part of it.
 non-zero. It is **outside** the fraction because folding it in would claim sound the hold is
 preventing, and dropping it would silently lose the one thing the pre-arm affordance exists to
 make visible. The word is `armed` rather than a synonym on §3's own instruction — one word means
-one thing here and in LIVE SOURCES, where the pill reads `ARMED · HIDDEN BY THIS LOOK` — and the
+one thing here and in LIVE PLATES, where the pill reads `ARMED · HIDDEN BY THIS LOOK` — and the
 `·` separator mirrors that pill's own construction. The full sentence lives in the tooltip and the
 accessible name, which is where the ambiguity a two-word chip cannot avoid is resolved.
 

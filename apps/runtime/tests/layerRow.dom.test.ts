@@ -1166,7 +1166,7 @@ describe('LayerRow — the live-plate audio summary', () => {
   /*
     §3 — LEGIBILITY. The chip was small muted text in every state and did not read at a
     glance. It now takes the state colour the pills already use, so one word plus one colour
-    mean the same thing here as in LIVE SOURCES.
+    mean the same thing here as in LIVE PLATES.
   */
   it('carries the AUDIBLE state class when a shown plate is asking for sound', async () => {
     rendered = await renderLayerRow({

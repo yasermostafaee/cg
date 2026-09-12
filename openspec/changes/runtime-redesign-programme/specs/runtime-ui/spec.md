@@ -328,7 +328,7 @@ monitor caption are not adopted (owner answer A12).
 
 ### Requirement: Live plates are the seated layers, never the source catalogue
 
-The LIVE SOURCES tab SHALL list the layers the bridge itself has seated for rows' live plates —
+The LIVE PLATES tab SHALL list the layers the bridge itself has seated for rows' live plates —
 read from the bridge's live-layer ledger and nothing else — and SHALL NOT read, list or edit the
 installation's source catalogue, which is Station setup's. A plate is a seated layer; the
 catalogue is the set of inputs a plate may be pointed at. The tab SHALL say so in its own words,
@@ -345,7 +345,7 @@ and SHALL keep every disposition's sentence visible where that sentence is an al
 
 The console SHALL open a row's context menu — which carries AUDIO — on a right-click on the row
 and, equally, on the `ContextMenu` key or `Shift+F10` while the row (or a control inside it) has
-focus. On the LIVE SOURCES tab the console SHALL open the audio dialog of a seated plate's OWNING
+focus. On the LIVE PLATES tab the console SHALL open the audio dialog of a seated plate's OWNING
 ROW, with that plate's fader focused, on a right-click on the plate's row and, equally, on the
 same two keys while the plate's row has focus. Keyboard parity is not optional: every pointer
 door SHALL have a keyboard twin that reaches the same dialog. The app-wide suppression of the
@@ -360,7 +360,7 @@ that has no owner to open (stranded, blind) SHALL open nothing and SHALL NOT can
 
 #### Scenario: A seated plate opens its owner's audio on that plate
 
-- **WHEN** the operator right-clicks a seated plate on LIVE SOURCES, or focuses its row and
+- **WHEN** the operator right-clicks a seated plate on LIVE PLATES, or focuses its row and
   presses `Shift+F10` or the `ContextMenu` key **THEN** the owning row's audio dialog opens,
   named in the operator's words with the row's ids on hover, listing every plate of that row —
   its hidden frames included, each reading `on <coordinate>` — and focus is on the fader of the
@@ -444,7 +444,7 @@ gated on any other condition nor reduced to an icon.
 
 ### Requirement: The live plates pane and the audio dialog take their geometry from the token home, measured in a real engine
 
-The LIVE SOURCES pane and the audio dialog SHALL take their rendered geometry — the toolbar, the
+The LIVE PLATES pane and the audio dialog SHALL take their rendered geometry — the toolbar, the
 table head and rows, the fader and its readout, the verb boxes, the dialog's rows and verbs —
 from `--r-plate-*` and `--r-audio-*` tokens declared in the token home from the reference as
 RENDERED (`07-live-plates.html`, `08-live-audio.html` at 1280 × 800), never from a stylesheet
@@ -722,7 +722,7 @@ The `.vcg` validation and import path SHALL be preserved exactly: `importVcgFile
 
 ### Requirement: The plates toolbar's panic names its scope in the operator's words
 
-The LIVE SOURCES toolbar's panic control SHALL name its scope on its label, its accessible name and
+The LIVE PLATES toolbar's panic control SHALL name its scope on its label, its accessible name and
 its tooltip — every live plate the bridge has seated, on EVERY channel this bridge drives, not the
 channel selected above — so that when a multi-channel plant arrives the label is the thing that
 must change and cannot be forgotten. `stack.silenceAllLivePlates` SHALL stay unscoped (owner
@@ -731,7 +731,7 @@ is decided then, never in passing. No behaviour and no wire changes.
 
 #### Scenario: The label says every channel
 
-- **WHEN** the LIVE SOURCES tab is shown with a seated plate **THEN** the panic control reads
+- **WHEN** the LIVE PLATES tab is shown with a seated plate **THEN** the panic control reads
   `SILENCE ALL BOXES · EVERY CHANNEL`, its accessible name begins `Silence all boxes on every
 channel`, its tooltip names every channel this bridge drives and not only the selected one, and
   one press still makes exactly one unscoped call to the bridge

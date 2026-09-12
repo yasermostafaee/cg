@@ -456,7 +456,7 @@ function StationLayerDeclarations(): JSX.Element {
           <span style={styles.code}>~/.cg-runtime</span> (or where{' '}
           <span style={styles.code}>--live-layers-path</span> points) unless the bridge was started
           with <span style={styles.code}>--no-live-layers</span> — the console cannot see which.
-          Which row owns each layer is on the LIVE SOURCES tab.
+          Which row owns each layer is on the LIVE PLATES tab.
         </p>
       </div>
     </>

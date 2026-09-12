@@ -38,7 +38,7 @@ first two and **specifies** the third against a measurement runbook, rather than
   not own live seats it records intent and **sends nothing** — no `PLAY`, no un-mute, no fill,
   no un-hold — and that is tested for each of the four verbs rather than inherited by assumption
   from `setLivePlateVolume`'s current shape.
-- **Audio becomes visible without opening anything**: a per-plate strip in LIVE SOURCES (state
+- **Audio becomes visible without opening anything**: a per-plate strip in LIVE PLATES (state
   pill, fader, ON/OFF, SOLO, % readout) with PANIC at the panel head, an audio glyph per box on
   the PVW overlay, and a compact read-only summary on the layer row — **outside** the row's
   six-column verb grid, which nothing here is allowed to touch.

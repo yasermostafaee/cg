@@ -181,7 +181,7 @@ export function PreviewPanel(): JSX.Element {
               reason: it needs the stack (the recorded intent) AND the bridge's ledger (the
               hold), and the geometry module owns neither.
 
-              🔴 `plateAudioState` is IMPORTED, never re-derived. The LIVE SOURCES strip, the
+              🔴 `plateAudioState` is IMPORTED, never re-derived. The LIVE PLATES strip, the
               row summary and this glyph must not be able to disagree about whether a guest can
               be heard — audio is the one property of a graphic nobody can check by looking, so
               a divergence between two surfaces would survive until air.

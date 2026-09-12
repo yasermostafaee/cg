@@ -4,7 +4,7 @@
 
 ### Requirement: Every seated live plate shows its audio state without opening anything
 
-The LIVE SOURCES tab SHALL show, for every seated live plate, an **audio strip** carrying: a
+The LIVE PLATES tab SHALL show, for every seated live plate, an **audio strip** carrying: a
 **state pill**, a **fader**, an **ON/OFF** control, a **SOLO** control and a **percentage
 readout**.
 
@@ -19,7 +19,7 @@ An intent of `0` SHALL read as a chosen silence and SHALL NOT be rendered as "no
 #### Scenario: A raised plate is legible from the panel alone
 
 - **WHEN** a plate's published intent is `1`
-- **THEN** its row in LIVE SOURCES shows an audible state pill and a readout of `100%`, with no
+- **THEN** its row in LIVE PLATES shows an audible state pill and a readout of `100%`, with no
   dialog opened
 
 #### Scenario: A muted plate is distinguishable from one nobody has set
@@ -59,7 +59,7 @@ this in words, so an operator is not left to discover it under pressure.
 
 **SOLO** SHALL raise the chosen plate and silence every sibling plate of the same item in ONE
 action. **PANIC** SHALL silence every live plate the BRIDGE holds a seat for, from the head of
-the LIVE SOURCES panel.
+the LIVE PLATES panel.
 
 Neither SHALL present an undo, an "un-solo", or any wording that implies the previous levels
 are remembered.

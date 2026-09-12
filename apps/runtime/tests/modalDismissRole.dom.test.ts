@@ -257,7 +257,7 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
       'Nothing to apply',
     );
     /*
-      🔴 `STATION-CHROME-02` §5 — LIVE SOURCES DOES NOT SAY "there is nothing waiting to be
+      🔴 `STATION-CHROME-02` §5 — LIVE PLATES DOES NOT SAY "there is nothing waiting to be
       applied", because that was UNTRUE: the LAYER BAND in the same tab carries an
       `Apply band`, and the band is genuinely applied. The footer now states both contracts
       and says where the second one's control is. A signal must not say what it does not mean.

@@ -877,8 +877,27 @@ export function LayersPanel({
   const tabs: TabSpec[] = [
     { id: 'layers', label: 'LAYERS' },
     {
+      /*
+        🔴 THE ID IS `live-sources` AND THE LABEL IS `LIVE PLATES`, AND THAT IS DELIBERATE.
+
+        The owner renamed the tab (2026-09-12) because the reference calls it `Live plates` and
+        so does this codebase everywhere else: a plate is a SEATED LAYER, which is exactly what
+        this tab lists, while `Live sources` is the installation-wide CATALOGUE that lives in
+        Station setup and keeps its own name. Two concepts, two names — and until now the
+        console spent one name on both, which is the confusion the panel's own scope note used
+        to have to spend a clause disowning.
+
+        ⚠ The ID DID NOT MOVE. `live-sources` is the tab id, the `aria-controls` target and the
+        `data-layer-tab` value; renaming it would change what every selector addresses for a
+        word nobody sees. Golden rule 11's distinction, one level down: the LABEL is what the
+        operator reads, the ID is the handle.
+
+        ⚠ And the CASING is the strip's, not the reference's. Its three tabs read `LAYERS`,
+        `LIVE PLATES`, `STATION LAYERS`; sentence-casing this one alone to match the
+        reference's `Live plates` would make the strip look broken rather than matched.
+      */
       id: 'live-sources',
-      label: 'LIVE SOURCES',
+      label: 'LIVE PLATES',
       /*
         The dot means a live producer is lit with NO ROW THAT CAN REACH IT — the
         emergency this whole item exists for. It is deliberately NOT raised for an
@@ -1479,7 +1498,7 @@ export function LayersPanel({
                         `add-multibox-audio` — the plates this row's item actually OWNS, for
                         the read-only audio summary.
 
-                        Supplied from the SAME `liveRows` the LIVE SOURCES tab renders rather
+                        Supplied from the SAME `liveRows` the LIVE PLATES tab renders rather
                         than re-derived from the template's declaration. The two are not the
                         same set — a declared plate that is not seated cannot be audible — and
                         a summary reading `audio 2/4` while the strip below listed three

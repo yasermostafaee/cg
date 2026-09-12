@@ -112,7 +112,7 @@ interface Props {
   /**
    * `add-multibox-audio` — the LIVE PLATES this row's item actually owns, resolved by the
    * PANEL from the bridge's ledger for `rehearsing`'s reason: one snapshot for the whole
-   * table, and the SAME array the LIVE SOURCES tab renders.
+   * table, and the SAME array the LIVE PLATES tab renders.
    *
    * ⚠ SEATED, not DECLARED. A declared plate with no producer cannot be audible, so a
    * summary counting declarations would name a denominator the audio strips do not have.
@@ -891,7 +891,7 @@ export function LayerRow({
 
           A row carries a VARIABLE number of plates; a control here would have to be one
           control for several values. The number is the whole job: an operator scanning thirty
-          rows learns which ones have sound at all, and the strip in LIVE SOURCES — or this
+          rows learns which ones have sound at all, and the strip in LIVE PLATES — or this
           row's own audio dialog — is where a value is changed.
         */}
         {item !== null &&
@@ -905,7 +905,7 @@ export function LayerRow({
                   second coloured mark would compete with the row's STATE cell. SKY is not a
                   state hue on this surface — that is the same reason `plateAudio.ts` chose it
                   for AUDIBLE over green, which is the sacred ON AIR mark — so it competes with
-                  nothing and the vocabulary matches LIVE SOURCES word for word.
+                  nothing and the vocabulary matches LIVE PLATES word for word.
 
                   🔴 STILL A PILL. Colour is the only thing that changed: no track, no fill, no
                   bar, no ramp. There is no per-input level to draw, and a shape that implied

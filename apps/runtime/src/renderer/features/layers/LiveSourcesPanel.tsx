@@ -101,15 +101,29 @@ const styles = {
   emptyHeadline: { fontWeight: 700, color: colors.text },
 } as const;
 
-/** The sentence the reference keeps behind its help icon — the tab's own statement of scope. */
+/**
+ * The sentence the reference keeps behind its help icon — the tab's own statement of scope.
+ *
+ * 🔴 IT LOST ITS FIRST CLAUSE ON 2026-09-12, AND THAT IS THE POINT OF THE RENAME.
+ *
+ * It used to read _"— not the installation's source catalogue, which lives in Station setup"_,
+ * and that clause existed for exactly one reason: the tab was called `LIVE SOURCES` and the
+ * catalogue is called `Live sources`, so the help text had to spend a sentence undoing the
+ * name above it. The tab reads `LIVE PLATES` now, so the disclaimer has nothing left to
+ * disown — a hint whose job is to contradict its own heading is a heading that needs fixing,
+ * not a hint that needs keeping.
+ *
+ * What survives is everything that is still a FACT the operator cannot read off the table: who
+ * owns the verbs, that the audio figure is requested gain rather than a measured signal, and
+ * what ON and SOLO actually do.
+ */
 const SCOPE_NOTE =
-  'These are occupied layers created by this console for a row’s live plates — not the ' +
-  'installation’s source catalogue, which lives in Station setup. Repoint and off-air are the ' +
-  'owning row’s verbs. Audio is requested gain, not a measured signal. ON sets 100%; SOLO ' +
+  'These are the layers this console seated for a row’s live plates. Repoint and off-air are ' +
+  'the owning row’s verbs. Audio is requested gain, not a measured signal. ON sets 100%; SOLO ' +
   'affects one row’s plates, hidden frames included, with no restore.';
 
 /**
- * `B-145` acceptance 1, display half (`tasks.md` 2.8) — **the LIVE SOURCES tab: the
+ * `B-145` acceptance 1, display half (`tasks.md` 2.8) — **the LIVE PLATES tab: the
  * layers this bridge itself seated behind a template's holes.**
  *
  * ── WHY THIS TAB EXISTS ─────────────────────────────────────────────────────

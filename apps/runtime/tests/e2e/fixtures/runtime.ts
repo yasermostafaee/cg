@@ -147,12 +147,12 @@ export class RuntimeApp {
     return this.page.getByRole('tab', { name: /^STATION LAYERS/ });
   }
   /**
-   * B-145 (2.8) — the LIVE SOURCES tab: the layers the BRIDGE seated for a
+   * B-145 (2.8) — the LIVE PLATES tab: the layers the BRIDGE seated for a
    * template’s Live Source plates. A THIRD ownership class, beside our own rows
    * and the station’s.
    */
   get liveSourcesTab(): Locator {
-    return this.page.getByRole('tab', { name: /^LIVE SOURCES/ });
+    return this.page.getByRole('tab', { name: /^LIVE PLATES/ });
   }
   /** One seated live-source row, anchored on its stable coordinate attribute. */
   liveSourceRow(coordinate: string): Locator {

@@ -1251,3 +1251,14 @@ renders answers "is this handled?" with a yes.
       §7 pinned the literal `🔒 LOCKED`, which the glyph replacement removed. That is golden
       rule 9 exactly: the sweep has to cover the GLYPH, not only the words around it, and my
       first sweep did not. Found by running the full local suite, which is why it runs.
+- [x] Q.7 🔴 **The console tab `LIVE SOURCES` is `LIVE PLATES` — the owner took §25.2 ARGUED (e),
+      2026-09-12.** Station setup keeps `Live sources`: two concepts, two names. The panel hint
+      lost its opening clause, which existed only to disown the tab own old name. The tab ID,
+      `aria-controls`, `data-layer-tab`, the warning-dot logic and every refusal are untouched —
+      the LABEL is what the operator reads, the ID is the handle.
+      🔴 Golden-rule-9 sweep, every file listed in `design.md` §25.8: **48 replacements across 23
+      files, then 8 more across 2** — and the second pass is the lesson. The first sweep searched
+      the UPPERCASE label and walked past the tab three empty states, which are sentence case
+      and are the tab own account of itself; four dom assertions pinned them. A rename sweep runs
+      case-INSENSITIVELY and then classifies. Two case-SENSITIVE test regexes
+      (`/^LIVE SOURCES/`, in the e2e page object and a dom spec) were caught by the same sweep.

@@ -193,7 +193,7 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
   it('shows one control per plate, and says which are audible — from the LEDGER, in the one vocabulary', () => {
     // `guest-1` is seated and shown; `guest-2` is seated and HELD. Audio is the one property
     // of a graphic an operator cannot SEE, so the row has to say it in words — the SAME words
-    // the LIVE SOURCES strip uses (`plateAudioPill`), never a local "value > 0".
+    // the LIVE PLATES strip uses (`plateAudioPill`), never a local "value > 0".
     renderDialog(
       () => Promise.resolve({ ok: true, refused: [] }),
       { plateVolumes: { 'guest-1': 1 } },

@@ -1594,7 +1594,7 @@ the built SPA on the e2e harness. "Palette" means the same ROLE, whose value Pha
 | toolbar            | 40 px, `4px 12px`, 12 px, gap 10, rule below                                                 | **40 px, `4px 12px`, 12 px, gap 10**, rule below (`--r-plate-toolbar-*`)                           | **FIXED**                                                                                                                                                                                    |
 | toolbar words      | `3 occupied layers` 600 · `2 shown · 1 held` muted                                           | **the same two, the same ranks**                                                                   | **FIXED**                                                                                                                                                                                    |
 | owner filter       | a 112 × 28 select, `All rows` / per owner                                                    | not built                                                                                          | ARGUED: a filter over a list of two to six rows; OPEN ROW and the Inspector already scope by owner; filed as nothing — it is a convenience the app's list does not need at this size         |
-| help glyph         | 27 × 28 info icon carrying the scope sentence                                                | 28 × 28 `Info` icon carrying the app's scope sentence (`title`, delegated Tooltip)                 | **FIXED**; the sentence is the app's own ("not the installation's source catalogue, which lives in Station setup")                                                                           |
+| help glyph         | 27 × 28 info icon carrying the scope sentence                                                | 28 × 28 `Info` icon carrying the app's scope sentence (`title`, delegated Tooltip)                 | **FIXED**; the sentence is the app's own — and it LOST that clause on 2026-09-12 (§25.8), because the clause only existed to disown the tab's own old name                                   |
 | panic              | `Silence all plates` 30 px, amber, 12 px 650                                                 | `SILENCE ALL BOXES`, `caution-strong`, 30 px floor                                                 | ARGUED: the app's verb name (pinned by its tests) and the button family's treatment; the floor height is the reference's                                                                     |
 | head               | 30 px, 11 px 550, muted ink on `#1c2735`, rule `--line`                                      | **30 px, 11 px** 500, muted on `--r-surface-raised`, rule `--r-border`; sticky                     | **FIXED** (height, size, ground, rule); ARGUED: 550 → 500 (the weight scale is 500 / 600 / 700)                                                                                              |
 | head words         | `Layer · Plate / source · Owner · Picture · Audio · Gain · ON = 100% · Audio controls`       | **the same seven**                                                                                 | **FIXED**                                                                                                                                                                                    |
@@ -4376,7 +4376,7 @@ page's stylesheet is four waves deep and only the last one paints).
 | `N loaded` pill        | 10 px, `rgb(142 158 175)`                                     | 12 px, same ink            | unchanged — ARGUED (b)                                  |
 | `N on air`             | badge: 11 px/500 mint on `rgb(24 55 45)`, r5                  | bare text, 12 px/600 green | unchanged — ARGUED (c)                                  |
 | results hint           | `10/10 rows`                                                  | `29 of 29 rows`            | unchanged — ARGUED (d)                                  |
-| second tab             | `Live plates`                                                 | `LIVE SOURCES`             | unchanged — ARGUED (e)                                  |
+| second tab             | `Live plates`                                                 | `LIVE SOURCES`             | `LIVE PLATES` — **FIXED**, owner's call, see §25.8      |
 
 **ARGUED, each falsifiable in one line:**
 
@@ -4532,6 +4532,78 @@ sentence, and each name gets its own `bdi`. Our column reads `Outcome` where the
 
 **Also untouched, deliberately:** no wire behaviour, no schema, no persisted key, no plant command,
 no refusal CONDITION. Station setup and the template picker untouched. The change is NOT archived.
+
+### 25.8 🔴 THE TAB IS `LIVE PLATES` — the owner's call on §25.2's ARGUED (e), 2026-09-12
+
+§25.2 recommended it and left it to him; he took it, with the boundary drawn explicitly: **the
+console tab becomes `Live plates`; Station setup's pane keeps `Live sources`. Two concepts, two
+names.** A plate is a SEATED LAYER, which is exactly what the tab lists; the catalogue is
+installation-wide and lives in the dialog.
+
+**And the hint lost its first clause, which is the part worth keeping in mind.** `SCOPE_NOTE`
+opened with _"— not the installation's source catalogue, which lives in Station setup"_, and that
+clause existed for exactly one reason: the tab was called `LIVE SOURCES` and the catalogue is
+called `Live sources`, so the help text had to spend a sentence undoing the heading above it. Once
+the name is right the disclaimer has nothing left to disown. What survives is only what is still a
+FACT the operator cannot read off the table — who owns the verbs, that the audio figure is
+requested gain and not a measured signal, and what ON and SOLO do. ⭐ **A hint whose job is to
+contradict its own heading is a heading that needs fixing, not a hint that needs keeping.**
+
+**Rendered casing is the strip's, not the reference's.** The three tabs read `LAYERS`,
+`LIVE PLATES`, `STATION LAYERS`; sentence-casing this one alone to match the reference's
+`Live plates` would make the strip look broken rather than matched.
+
+#### What did NOT move, and was checked rather than assumed
+
+The tab **id** stays `live-sources`, and with it `aria-controls="tabpanel-live-sources"` and the
+`data-layer-tab` value; `LiveSourcesPanel.tsx`, `liveLayerRows.ts` and `useLiveLayers` keep their
+names; the warning-dot logic, every refusal and every gate are untouched. Golden rule 11's
+distinction one level down: **the LABEL is what the operator reads, the ID is the handle.** Read
+back from the built app — `{"id":"tab-live-sources","controls":"tabpanel-live-sources","text":"LIVE
+PLATES"}`, and Station setup's rail still `Channel · Servers · Live sources · Text file delimiters
+· Layers`.
+
+#### 🔴 THE GOLDEN-RULE-9 SWEEP — every file it found
+
+`git grep`, not `grep -r` and not ripgrep. **48 replacements across 23 files in the first pass, 8
+more across 2 in the second**, and the second pass is the one worth reading.
+
+| where                              | files                                                                                                                                                                                                                  | what                                                         |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| **the label**                      | `LayersPanel.tsx`                                                                                                                                                                                                      | `label: 'LIVE SOURCES'` → `'LIVE PLATES'`                    |
+| **other visible copy**             | `StationLayersPanel.tsx` ("Which row owns each layer is on the … tab"), `plateAudio.ts` ("Open …, or this row's audio dialog"), `LiveSourcesPanel.tsx` (`SCOPE_NOTE`), `liveLayerRows.ts` (**all three empty states**) | the operator reads every one of these                        |
+| **source prose naming the tab**    | `LayerRow.tsx` ×3, `LayersPanel.tsx`, `LivePlateAudioDialog.tsx` ×3, `LiveSourcesPanel.tsx`, `plateAudio.ts` ×4, `LivePlateOverlay.tsx`, `PreviewPanel.tsx`, `livePlateGeometry.ts`, `controls.css`                    | comments that would have named a tab that no longer exists   |
+| **🔴 live test selectors**         | `tests/e2e/fixtures/runtime.ts` (`getByRole('tab', { name: /^LIVE SOURCES/ })`), `tests/plateAudioAccess.dom.test.ts` (`/^LIVE SOURCES/.test(...)`)                                                                    | **both case-SENSITIVE regexes — these would have gone red**  |
+| **assertions on the empty states** | `tests/liveSourcesPanel.dom.test.ts` ×4                                                                                                                                                                                | `'no live sources seated'` → `'no live plates seated'`       |
+| **test prose**                     | `layerRow.dom.test.ts`, `livePlateAudio.dom.test.ts`, `liveSourcesPanel.dom.test.ts`, `modalDismissRole.dom.test.ts`, `plateAudioAccess.dom.test.ts` ×2                                                                | titles and comments                                          |
+| **bridge prose**                   | `tools/caspar-bridge/src/caspar-runtime.ts` ×3                                                                                                                                                                         | "the operator's … list" — it names this surface              |
+| **specs**                          | `runtime-redesign-programme/specs/runtime-ui/spec.md` ×6, `add-multibox-audio/specs/runtime-ui/spec.md` ×3, `add-multibox-audio/proposal.md`                                                                           | requirement text describing the surface                      |
+| **PRD**                            | `docs/prd/caspar.md` (a `WHEN … THEN` acceptance), `docs/prd/bugs-runtime.md` ×3                                                                                                                                       | the surface's own definition                                 |
+| **this document**                  | §25.2's ARGUED (e) row, and §13's help-glyph row, which quoted the clause that is now gone                                                                                                                             | a record that contradicted the code would be worse than none |
+
+⭐ **THE SECOND PASS IS THE LESSON, AND IT IS GOLDEN RULE 9'S OWN WARNING MET IMMEDIATELY.** The
+first sweep searched `LIVE SOURCES` in **uppercase**, because that is how the label renders — and
+walked straight past the tab's own three empty states, which are written in sentence case:
+`'The bridge has no live sources seated.'`, `'The live-source list has not arrived yet.'`, and
+`'Whether any live source is seated cannot be checked from here.'` Those are the tab's account of
+ITSELF; they would have sat under a heading reading LIVE PLATES, contradicting it, and **four dom
+assertions pinned them**, so the miss would have surfaced as a red suite rather than as a bad
+sentence — which is luck, not process. **A rename sweep runs case-INSENSITIVELY and then
+classifies, every time.**
+
+#### Deliberately NOT renamed — the other side of "two concepts, two names"
+
+Station setup's `Live sources` pane (`sections.ts`), the source CATALOGUE everywhere
+(`sourceStore.ts`, `shared-ipc`'s `channels/sources.ts`, `runtime-bridge.ts`, `SourcesSection`),
+the picker's _"Define the sources in Station setup ▸ Live sources"_, the Inspector's pointer at
+that section, and the pane's own **`Plate / source`** column header — the column really does show
+a plate and the SOURCE on it, which is the two-concept distinction working rather than a leftover.
+Also left alone: **deliberate historical quotes** — `LayersPanel.tsx`'s "the bar used to say …",
+`shell-chrome.spec.ts`'s copy of it, `liveLayerRows.ts` and `useLiveLayers.ts` on the first cut's
+confident negative, `docs/handoff/2026-08-20-session-bg.md`, `docs/prd/runtime.md`'s landing note,
+`multibox-layout-switch/tasks.md` and `operator-surface/design.md`. Each is framed in the past
+tense and describes what a surface said THEN; rewriting them would falsify the record rather than
+correct it.
 
 ### 25.7 The runs
 

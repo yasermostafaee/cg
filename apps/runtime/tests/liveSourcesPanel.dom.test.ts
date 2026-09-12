@@ -23,7 +23,7 @@ import { connectionsStub, type Reachability } from './support/reachability.js';
 
 /**
  * 🔴 **`B-145` acceptance 1, DISPLAY half (`multibox-layout-switch` `tasks.md` 2.8) —
- * the LIVE SOURCES tab.**
+ * the LIVE PLATES tab.**
  *
  * `B-145`'s persistence half worked and its display half did not exist: a live plate
  * was CONTROLLABLE but INVISIBLE, so a guest's face could be composited on air with
@@ -313,7 +313,7 @@ describe('4.1 — seated live layers appear in the list', () => {
     const { el } = await render([]);
 
     expect(el.querySelector('[data-live-layer]')).toBeNull();
-    expect(el.textContent).toContain('no live sources seated');
+    expect(el.textContent).toContain('no live plates seated');
   });
 
   it('a HELD plate reads as held rather than as on screen', async () => {
@@ -691,7 +691,7 @@ describe('🔴 THE EMPTY LIST — "I have not looked" is not "nothing is there" 
     const { el } = await render([], STRANDED, 'disconnected');
 
     expect(el.textContent).toContain('Not connected');
-    expect(el.textContent).not.toContain('has no live sources seated');
+    expect(el.textContent).not.toContain('has no live plates seated');
     expect(el.querySelector('[data-live-layers-known="false"]')).not.toBeNull();
   });
 
@@ -708,7 +708,7 @@ describe('🔴 THE EMPTY LIST — "I have not looked" is not "nothing is there" 
     );
 
     expect(el.textContent).toContain('has not arrived');
-    expect(el.textContent).not.toContain('has no live sources seated');
+    expect(el.textContent).not.toContain('has no live plates seated');
     expect(el.querySelector('[data-live-layers-known="false"]')).not.toBeNull();
   });
 
@@ -717,7 +717,7 @@ describe('🔴 THE EMPTY LIST — "I have not looked" is not "nothing is there" 
     // the true and useful thing.
     const { el } = await render([]);
 
-    expect(el.textContent).toContain('no live sources seated');
+    expect(el.textContent).toContain('no live plates seated');
     expect(el.querySelector('[data-live-layers-known="true"]')).not.toBeNull();
   });
 

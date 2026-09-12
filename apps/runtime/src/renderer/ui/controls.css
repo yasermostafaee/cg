@@ -2032,7 +2032,7 @@ input[type='checkbox']:disabled:checked {
  * specific hue involved: the row's STATE cell owns GREEN (the sacred ON AIR mark), and this
  * takes SKY — which is exactly the colour `plateAudio.ts` chose for AUDIBLE, for exactly this
  * reason, and which is not a state hue anywhere on this surface. So it competes with nothing,
- * and one word plus one colour now mean the same thing here as in LIVE SOURCES.
+ * and one word plus one colour now mean the same thing here as in LIVE PLATES.
  *
  * SILENT stays muted grey, unchanged and deliberately: silence is the DEFAULT — every producer
  * the bridge creates is created muted — so the common case should still recede.

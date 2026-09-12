@@ -12,7 +12,7 @@ import { outputLetterbox, outputScale, outputTranslate } from '@cg/template-runt
 import { lookPlateRects, resolvePlateSourcesForLook } from '@cg/shared-ipc';
 import type { ChannelRaster, SourceAssignments, TemplateLiveSources } from '@cg/shared-ipc';
 import type { Position } from '@cg/shared-schema';
-// The ONE audio vocabulary, shared with the LIVE SOURCES strip and the layer row's summary.
+// The ONE audio vocabulary, shared with the LIVE PLATES strip and the layer row's summary.
 import type { PlateAudioState } from '../layers/plateAudio.js';
 
 /**

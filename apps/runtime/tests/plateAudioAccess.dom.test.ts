@@ -17,7 +17,7 @@ import { installMemoryStorage } from './support/localStorage.js';
  *
  *   - the LAYER ROW's door — right-click (or `Shift+F10` / `ContextMenu`) opens the row's own
  *     menu, whose AUDIO item opens the dialog on that row;
- *   - the PLATE's door — on the LIVE SOURCES tab, right-click (or the same two keys) on a seated
+ *   - the PLATE's door — on the LIVE PLATES tab, right-click (or the same two keys) on a seated
  *     plate opens the dialog on the plate's OWNING ROW with that plate's fader focused.
  *
  * Keyboard parity is not optional (`PROMPT.md` §6): every pointer path here has a keyboard
@@ -139,7 +139,7 @@ function audioItem(): HTMLElement | null {
 
 async function openLiveSourcesTab(): Promise<void> {
   const tab = [...document.querySelectorAll<HTMLElement>('[role="tab"]')].find((t) =>
-    /^LIVE SOURCES/.test(t.textContent ?? ''),
+    /^LIVE PLATES/.test(t.textContent ?? ''),
   );
   await click(tab ?? null);
 }
@@ -200,7 +200,7 @@ describe('the LAYER ROW door — right-click and its keyboard twins reach the au
   });
 });
 
-describe('the PLATE door — on LIVE SOURCES, a seated plate opens its OWNING ROW’s audio', () => {
+describe('the PLATE door — on LIVE PLATES, a seated plate opens its OWNING ROW’s audio', () => {
   it('right-click on a plate opens the dialog on the owner with THAT plate’s fader focused', async () => {
     await openLiveSourcesTab();
     const held = plateRow('1-11');

@@ -5,7 +5,7 @@ import { colors } from '../../theme.js';
  * the four operator gestures expressed as maps.**
  *
  * React-free and in its own module for `liveLayerRows`' reason: FOUR surfaces answer this
- * question now — the LIVE SOURCES strip, the PVW overlay glyph, the layer row's summary and
+ * question now — the LIVE PLATES strip, the PVW overlay glyph, the layer row's summary and
  * the per-row dialog — and four surfaces deriving the same fact independently is precisely
  * how one of them comes to disagree with the others about whether a guest can be heard. Audio
  * is the one property of a graphic an operator CANNOT see, so a disagreement here is
@@ -144,7 +144,7 @@ export interface PlateAudioPill {
  *     says so in as many words: *"`held` is a normal, chosen disposition and wears a WORD,
  *     not a hue."* Following that rule is what keeps the two surfaces agreeing.
  *   - **SKY for `audible`.** It is unused on this surface, it is not a state hue anywhere in
- *     the LIVE SOURCES tab, and "this plate can be heard" is a positive statement rather than
+ *     the LIVE PLATES tab, and "this plate can be heard" is a positive statement rather than
  *     something to go and look at.
  *   - **MUTED GREY for `silent`**, because silence is the DEFAULT: every producer the bridge
  *     creates is created muted, so the common case should recede.
@@ -190,7 +190,7 @@ export const UNSEATED_PILL: PlateAudioPill = {
  *
  * NEUTRAL, and that is the neighbouring module's rule rather than a choice made here: *"`held`
  * is a normal, chosen disposition and wears a WORD, not a hue."* Amber would make a held plate
- * read as something to go and look at, and the LIVE SOURCES tab already refuses to say that
+ * read as something to go and look at, and the LIVE PLATES tab already refuses to say that
  * about the same state one row up.
  */
 const HELD_TONE = colors.text;
@@ -272,7 +272,7 @@ export function soloMap(
 /**
  * One plate this row owns, with the two facts audibility needs.
  *
- * Built by the panel from the SAME `LiveLayerRowView`s the LIVE SOURCES tab renders
+ * Built by the panel from the SAME `LiveLayerRowView`s the LIVE PLATES tab renders
  * (`rowPlateAudioOf`), so the chip and the strips below it cannot describe different plates.
  * `volume` is the recorded intent — `undefined` is a REAL third state ("nobody has said") and
  * is never collapsed to `0` on the way here.
@@ -390,6 +390,6 @@ function summaryDetail(audible: number, shown: number, armedHidden: number): str
         `to a look that shows ${armedHidden === 1 ? 'it' : 'them'}.`;
   return (
     `${head}${waiting} Nothing here measures the output — this is what the console asked for. ` +
-    `Open LIVE SOURCES, or this row's audio dialog, to change it.`
+    `Open LIVE PLATES, or this row's audio dialog, to change it.`
   );
 }

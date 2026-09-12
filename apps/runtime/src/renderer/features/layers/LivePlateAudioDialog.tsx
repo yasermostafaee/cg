@@ -7,7 +7,7 @@ import { Button } from '../../ui/Button.js';
 import { OperatorNames } from '../../ui/OperatorNames.js';
 import type { OperatorRowName } from '../../ui/operatorNaming.js';
 import { lookOptionsOf } from './LookPicker.js';
-// The ONE vocabulary, shared with the LIVE SOURCES strip and the row's summary — so the
+// The ONE vocabulary, shared with the LIVE PLATES strip and the row's summary — so the
 // dialog's SOLO and the panel's SOLO cannot address different sets, and the dialog's state
 // words cannot disagree with the strip's about whether a guest can be heard.
 import {
@@ -35,7 +35,7 @@ import {
  * **ON THE ROW, beside the source swap** (owner, 2026-08-14): under pressure, on air, "which
  * source" and "how loud" are one decision made in one place. `RUNTIME-REDESIGN-01` Phase 6
  * added the second door the reference wires — a RIGHT-CLICK (or `ContextMenu` / `Shift+F10`)
- * on a seated plate in LIVE SOURCES opens this same dialog on the plate's OWNING ROW with that
+ * on a seated plate in LIVE PLATES opens this same dialog on the plate's OWNING ROW with that
  * plate's fader focused. Two doors, one dialog, one map.
  *
  * ── WHAT IT COMMITS ───────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ export interface LivePlateAudioDialogProps {
   name: OperatorRowName;
   /**
    * The plates the bridge's ledger holds a seat for on this row, with the two facts audibility
-   * needs and the coordinate each seat is on. Read off the SAME rows the LIVE SOURCES tab
+   * needs and the coordinate each seat is on. Read off the SAME rows the LIVE PLATES tab
    * renders (`rowPlateAudioOf`), so the words here and the words there are one evaluation.
    * Empty for a row that owns nothing — every declared plate then reads NOT SEATED.
    */
