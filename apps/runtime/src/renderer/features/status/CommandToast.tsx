@@ -8,7 +8,7 @@ import { onCommandSuccess } from './commandFeedback.js';
   `RUNTIME-REDESIGN-01` Phase 9 — the reference's `.global-toast` as rendered (`TOAST_PX` in the
   token home): 42 px off the foot, `12px 17px`, radius 9, 14 px, its own shadow. The OK pair is
   the reference's; the reference draws NO error toast (its toast has no command-refusal path),
-  so that half keeps `colors.error` with the fill ink. Weight stays 700 on both: a refusal at
+  so that half keeps `colors.alarmFill` with the fill ink. Weight stays 700 on both: a refusal at
   400 reads as a caption, and the two must weigh the same (`design.md` §16.3).
 */
 const styles = {

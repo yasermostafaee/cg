@@ -27,7 +27,7 @@ import {
  * That file proves the PRIMITIVE pins its message outside the scroll container.
  * It proved nothing about whether the dialogs use it, and three of them did not:
  * `Live sources` and `Server connection` adopted the region and handed it a node
- * carrying their own `color: colors.error` (2.08:1 on the dialog surface — the
+ * carrying their own `color: colors.alarmFill` (2.08:1 on the dialog surface — the
  * owner's report), and `Text file delimiters` skipped the region entirely and
  * rendered `<p role="alert">` as the last child of its scrolling body, which is
  * the exact defect the region was built to end.

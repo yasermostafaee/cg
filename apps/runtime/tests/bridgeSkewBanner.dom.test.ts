@@ -132,7 +132,7 @@ describe('guard item 5 — the bridge-skew banner renders under its condition an
     expect(fill).not.toBe('');
     expect(cssVars['--r-caution-bg']).toBeTruthy();
     expect(fill).toBe(asRendered(cssVars['--r-caution-bg']));
-    for (const alarm of [colors.error, cssVars['--r-danger-bg'], cssVars['--r-danger']]) {
+    for (const alarm of [colors.alarmFill, cssVars['--r-danger-bg'], cssVars['--r-danger']]) {
       expect(alarm).toBeTruthy();
       expect(fill).not.toBe(asRendered(alarm));
     }

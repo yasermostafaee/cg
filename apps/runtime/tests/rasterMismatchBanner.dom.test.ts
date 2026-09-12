@@ -160,8 +160,8 @@ describe('guard item 7 — the raster-mismatch banner renders on mismatch and on
     };
     const fill = (banner(el) as HTMLElement).style.backgroundColor;
     expect(fill).not.toBe('');
-    expect(colors.error).toBeTruthy();
-    expect(fill).toBe(asRendered(colors.error));
+    expect(colors.alarmFill).toBeTruthy();
+    expect(fill).toBe(asRendered(colors.alarmFill));
     expect(cssVars['--r-caution-bg']).toBeTruthy();
     expect(fill).not.toBe(asRendered(cssVars['--r-caution-bg']));
   });

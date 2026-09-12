@@ -43,7 +43,7 @@ import { missingWords } from '../connections/outputWords.js';
  *
  * The same in-flow, full-width, `role="alert"` strip `ConnectionBanner` and
  * `RasterMismatchBanner` use, in the same banner region of the shell and the same
- * `colors.error`: one alarm language, not a second one. NOT `FailoverBanner`'s fixed slab
+ * `colors.alarmFill`: one alarm language, not a second one. NOT `FailoverBanner`'s fixed slab
  * with its hard-coded hex — `B-172` records that slab as the thing to move away from, and
  * the owner's stated constraint there is "a strip rather than a slab".
  *
@@ -80,7 +80,7 @@ const styles = {
     fontWeight: 700,
     letterSpacing: '0.04em',
     color: cssVars['--r-ink-on-fill'],
-    background: colors.error,
+    background: colors.alarmFill,
     flexShrink: 0,
   },
   text: { flex: 1, minWidth: 0, lineHeight: 1.35 },

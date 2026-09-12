@@ -1387,3 +1387,26 @@ renders answers "is this handled?" with a yes.
       the `E2E (Playwright)` job RAN and its **`E2E` step is step 13, `completed/success`** (647 s)
       — read at the STEP level, never merely the job (`P-046`/`P-029`). Runtime 194 passed,
       designer 279 passed, no flakes in either.
+
+- [x] U.1 🔴 **ADDENDUM B §B1/§B2 — the palette grammar is SETTLED and recorded**, with amber
+      not splitting (refusal and pending are told apart by SHAPE and PLACE, never by hue) and
+      red recorded as destructive-controls-only. ⚠ The reference DOES have a legible
+      `.notice.error` pair — the option was declined, not missing. §29, §29.1, §29.2.
+- [x] U.2 **§B3(a) — `colors.error` → `colors.alarmFill`.** App-local (`theme.ts`), not
+      `@cg/ui`; one identifier, no value moved, `--cg-accent` untouched. The compiler found
+      every site including six test files. §29.3.
+- [x] U.3 🔴 **§B3(b) — the contrast guard, with its PLANTED RED.**
+      `messageContrast.test.ts`, six message classes at AA 4.5:1. Planted the 2.08:1 pairing on
+      `Notice refusal` → `reads 1.64:1, below AA 4.5:1`; reverted; 7 passing. §29.4.
+- [x] U.4 **§B5 — the sweep is a PROCEDURE now**, written into `CLAUDE.md` beside golden rule 9:
+      two passes on different axes, prove every pathspec, never narrow by one runner's
+      vocabulary, scan multi-line. ⚠ Shared config — the next session pulls it.
+- [x] U.5 **§B6 — the per-code list carries its reason at the list.** The wire's sentence
+      sometimes carries the only operator-actionable word (`guest-3`).
+- [ ] U.6 🔴 **§B4 IS NOT DONE, and the measurement changed the question.** `.notice.warn` is
+      our `Notice` refusal byte for byte, so the console banner is the drawing; the outlier is
+      `SetupNotice`, whose geometry traces to the Station setup drawing. The component merge is
+      uncontroversial; which DRAWING governs is a design call on a signed-off surface. §29.5.
+- [ ] U.7 ⚠ **Still parked: the one UUID message with no errorCode** —
+      `Template "<uuid>" is not registered.` §B3's work changed nothing about it; it has no code
+      to key an operator sentence on, and §3(a) says stop rather than invent a lookup. §28.3.

@@ -165,6 +165,19 @@ const MESSAGES: Readonly<Record<string, string>> = {
  * ⚠ ADDING A CODE HERE IS A CLAIM that our sentence says everything the bridge's does. Check
  * that before adding one — for most codes it is false.
  */
+/*
+ * 🔴 DO NOT GENERALISE THIS LIST — ADDENDUM B §B6, and the reason is a measured one.
+ *
+ * The first cut of DELTA R inverted the preference for EVERY code, and `asyncButton.test.ts`
+ * caught what that costs: for `live-source-unassigned` the bridge's own sentence names the
+ * PLATE — `plate "guest-3" has no live source assigned` — and `guest-3` is the operator's own
+ * word for it, the one thing on that message they can act on. Our generic sentence cannot say
+ * it, and no lookup in the renderer can recover it from the code alone.
+ *
+ * **The wire's sentence sometimes carries the only operator-actionable word.** So this stays a
+ * per-code LIST of the messages that identify things by UUID, and every other code keeps the
+ * bridge's text.
+ */
 const PREFER_OURS: ReadonlySet<string> = new Set([
   'multibox-already-on-air',
   'looks-none-authored',

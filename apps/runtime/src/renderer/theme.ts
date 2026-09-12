@@ -223,7 +223,25 @@ export const colors = {
    * rather than a different value for this one. Re-dressing the alarm surfaces is
    * Phase 9's, where each of them is brought into the new design as a whole.
    */
-  error: '#991B1B',
+  /*
+   * 🔴 RENAMED FROM `error` BY `CONSOLE-LOOK-06` DELTA R ADDENDUM B §B3, AND THE RENAME IS THE FIX.
+   *
+   * THREE components independently set `color: colors.error` — `SourcesModal`,
+   * `DelimitersModal` and `ServerSettingsPanel` — and all three measured **2.08:1** on the modal
+   * surface, below even the 3:1 large-text floor. Three independent misuses of one token is not
+   * three careless authors: it is a token whose NAME does not say what it is for. A severity
+   * value called plainly "error" reads like an ink, and three people used it as one.
+   *
+   * `alarmFill` says the job: it is the GROUND under the air alarms — the connection banner, the
+   * raster banner, the output-missing banner, the failover slab — each of which puts
+   * `--r-ink-on-fill` on top of it. The FOREGROUND counterparts already exist and are named for
+   * their floors: `errorText` against 4.5 and `errorMark` against 3.0.
+   *
+   * ⚠ NO NEW RED, and no value moved: this is one identifier. Red's home in this console is
+   * recorded beside the palette grammar — CONTROLS THAT DESTROY, and nothing else. A message is
+   * never red, because a red message competes with the only red the operator must never misread.
+   */
+  alarmFill: '#991B1B',
   /*
    * ── PHASE 2A — ONE ERROR RED BECAME TWO, BECAUSE IT WAS DOING TWO JOBS ──────
    *
@@ -2376,7 +2394,7 @@ export const cssVars = {
    * reference declares one for that role, §7.1). The PLAIN pair is new: it dresses the
    * neutral strips that used to borrow the panel's own surface (the video-layer strip, a
    * completed manual failover, `Notice`'s `notice` role). The ERROR pair is NOT taken for
-   * the air alarms — those keep `colors.error` with light ink (A4 / 2A: alarm severity by
+   * the air alarms — those keep `colors.alarmFill` with light ink (A4 / 2A: alarm severity by
    * air-criticality), and the reference spends its pastel error card on an import failure,
    * which is not an alarm about air.
    */
@@ -2395,7 +2413,7 @@ export const cssVars = {
   /*
    * THE FAILOVER ALARM's own `--r-alarm-*` family (a deep red slab, `B-172`) was DELETED in
    * Phase 9: the banner is a strip whose tone is the situation's, and it reads the notice
-   * pairs above and `colors.error` like every other alarm. A token read by nothing is a
+   * pairs above and `colors.alarmFill` like every other alarm. A token read by nothing is a
    * trap (A9), so the family is gone rather than documented dead.
    */
 
@@ -2403,7 +2421,7 @@ export const cssVars = {
    * THE COMMAND TOAST — the reference's `.global-toast` as rendered (`design.md` §16.3):
    * `#d6f3e3` on `#1d3b30`, ruled `#4b7f68`, radius 9, `12px 17px`, 14 px, 42 px off the
    * foot, under `0 8px 40px` of shadow. The reference has no ERROR toast (its toast has no
-   * command-refusal path), so that half keeps `colors.error` with the fill ink.
+   * command-refusal path), so that half keeps `colors.alarmFill` with the fill ink.
    */
   '--r-toast-ok-bg': '#1d3b30',
   '--r-toast-ok-ink': '#d6f3e3',

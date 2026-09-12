@@ -125,7 +125,7 @@ describe('guard item 9 — the failover banner renders under its conditions, and
     const fill = fillOf(s);
     expect(cssVars['--r-notice-neutral-bg']).toBeTruthy();
     expect(fill).toBe(asRendered(cssVars['--r-notice-neutral-bg']));
-    expect(fill).not.toBe(asRendered(colors.error));
+    expect(fill).not.toBe(asRendered(colors.alarmFill));
   });
 
   it('an AUTOMATIC failover is worth noticing: caution-toned, and announced', async () => {
@@ -153,8 +153,8 @@ describe('guard item 9 — the failover banner renders under its conditions, and
     expect(s?.dataset['tone']).toBe('alarm');
     expect(s?.textContent).toContain('PRIMARY A unhealthy');
     expect(s?.textContent).toContain('degraded');
-    expect(colors.error).toBeTruthy();
-    expect(fillOf(s)).toBe(asRendered(colors.error));
+    expect(colors.alarmFill).toBeTruthy();
+    expect(fillOf(s)).toBe(asRendered(colors.alarmFill));
     // Broken state is never silently hidden — there is no Dismiss for it.
     expect(el.querySelector('button[aria-label="Dismiss failover banner"]')).toBeNull();
   });

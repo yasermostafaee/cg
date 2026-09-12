@@ -400,7 +400,7 @@ describe('the BACKUP LED agrees with its own label too', () => {
    * clears 4.5 on this bar where the mark red does not. They are two weights of one
    * fault, not two claims — the assertion below checks BOTH halves for that reason,
    * because a split whose word half is unasserted is a split that can silently
-   * collapse back onto the mark. The background red (`colors.error`, 2.08:1 as text)
+   * collapse back onto the mark. The background red (`colors.alarmFill`, 2.08:1 as text)
    * is for the banners and appears in neither.
    */
   const FAULT_MARK = asRendered(colors.errorMark);

@@ -5343,3 +5343,122 @@ And **two fixture accessors were repointed**: `app.error` addressed the toast's 
 `Command error` name, so both callers' `toHaveCount(0)` would have passed forever against a
 locator matching nothing — the vacuous-green shape this repo has filed before — and
 `app.success` followed the toast from `alert` to `status`.
+
+## 29. THE PALETTE GRAMMAR — SETTLED (`CONSOLE-LOOK-06` DELTA R ADDENDUM B)
+
+🔴 **This is the console's colour grammar. It was asserted as a guess in DELTA 11 §2,
+falsified by measurement in §28.6, and settled by the owner on that evidence in ADDENDUM B.
+Do not re-open it from the reference alone.**
+
+```
+green  = ON AIR, now
+mint   = confirmation
+blue   = declared / selected, not on air
+amber  = ATTENTION — refused, or declared and not yet applied;
+         told apart by SHAPE and PLACE, never by hue
+red    = DESTRUCTIVE ACTION CONTROLS ONLY — never a message class
+```
+
+### 29.1 Why amber does NOT split, though it carries two jobs
+
+Amber is both the refusal banner and the row's PENDING mark, and "one token doing two jobs"
+is normally a defect here. It is not one in this case, for two reasons — the second being the
+real one:
+
+- **Red is not free.** Measured: `colors.error` (now `colors.alarmFill`) reads **2.08:1** used
+  as a foreground on the modal surface, against the refusal treatment's **10.39:1**. A grammar
+  that costs the operator legibility is a preference, not a grammar.
+- 🔴 **They are never confusable, because they are told apart by SHAPE and PLACE, not by hue.**
+  One is a paragraph across the top of the console with a sentence and a dismiss; the other is
+  a small mark inside a row's state cell. They never appear in the same place, at the same
+  size, or at the same scale. **One token doing two jobs is a defect when the two are
+  confusable AT THE POINT OF READING** — these are not. And they share one meaning: NOT DONE,
+  OR NOT YET.
+
+### 29.2 🔴 RED'S HOME — a decision, not an omission
+
+§28.6 reported that red appears on no operator message class at all. That reads like a gap.
+It is a decision, and it is recorded here as one:
+
+> **In this console red belongs to CONTROLS THAT DESTROY — the sub-dialogs' destructive
+> buttons and their confirmations — and to nothing else. A message is never red. A red message
+> would compete with the only red the operator must never misread.**
+
+`useConfirm` keeps its recorded solid amber and the sub-dialogs keep their own destructive
+red; that pair stays as recorded and is not harmonised.
+
+⚠ **AND THE OPTION WAS AVAILABLE — it was declined, not missing.** The reference DOES carry a
+legible red message treatment: `.notice.error` renders `rgb(255 170 167)` on `rgb(58 36 42)`,
+measured in Chromium at 1280 × 800, which is a proper ink-on-ground pair and nothing like the
+2.08:1 misuse. So "red is not free" is about THIS palette's `alarmFill`, not about red in
+general — the next reader should know a legible red exists in the drawing and that the owner
+chose not to spend it on messages.
+
+### 29.3 §B3(a) — the 2.08:1 was a MIS-NAMED TOKEN, and the rename is the fix
+
+Three components independently set `color: colors.error` on a dark panel. Three independent
+misuses of one token is not three careless authors: it is a token whose NAME does not say what
+it is for. A severity value called plainly `error` reads like an ink, and three people used it
+as one — while `Notice`'s own header had already written down that it was a ground.
+
+`colors.error` → **`colors.alarmFill`**, which says the job: the GROUND under the air alarms
+(connection, raster, output-missing, failover), each putting `--r-ink-on-fill` on top. The
+foreground counterparts already existed and are named for their floors — `errorText` against
+4.5, `errorMark` against 3.0.
+
+⭐ **It is app-local: `theme.ts`, not `@cg/ui`.** No shared config, no palette edit, no value
+moved — one identifier, and `--cg-accent` is untouched (`S.14` stays filed). ⭐ And because it
+is an IDENTIFIER rather than a string, **the compiler found every site**, including six test
+files — the exact case golden rule 9 exists because it cannot help with.
+
+### 29.4 §B3(b) — the guard, and the planted red that proves it
+
+`messageContrast.test.ts` asserts every operator message class clears **WCAG AA for body text,
+4.5:1** — the sentence floor, not the 3.0 graphics floor, which is for MARKS (an 11 px warning
+triangle correctly uses 3.0). Six classes: `Notice` refusal and its detail, `Notice` neutral
+and its detail, the success toast, and the air-alarm banners.
+
+🔴 **THE INSTRUMENT IS PROVED, NOT ASSUMED.** The 2.08:1 pairing was planted back onto a real
+class (`Notice refusal`'s ink := `colors.alarmFill`) and the guard went red:
+
+```
+× Notice refusal is legible on its own ground
+  → Notice refusal: #991B1B on #352d1e reads 1.64:1, below AA 4.5:1
+```
+
+…then reverted, and the file is back to 7 passing. **1.64:1 on the notice's amber ground**,
+worse than the 2.08:1 the same ink measures on the modal surface — a ratio is a property of
+TWO values, and the ground matters. A negative observation needs a positive control.
+
+⚠ The contrast helper moved to `tests/support/contrast.ts` rather than being copied: two
+guards that can disagree about what "clears AA" means are worse than one guard.
+
+### 29.5 §B4 — ONE COMPONENT, and the geometry question the measurement re-opened
+
+**NOT DONE, and the reason is new evidence rather than reluctance.** Reading the stylesheet
+suggested the reference had two `.notice` rules and that `SetupNotice` had measured the later,
+winning one. **Rendered in Chromium at 1280 × 800, that is false** — the four-waves hazard cut
+the other way:
+
+| class           | pad         | radius | ground          | ink                |
+| --------------- | ----------- | ------ | --------------- | ------------------ |
+| `.notice`       | `13px 15px` | 8      | `rgb(23 39 54)` | `rgb(190 214 229)` |
+| `.notice.warn`  | `13px 15px` | 8      | `rgb(53 45 30)` | `rgb(243 205 136)` |
+| `.notice.error` | `13px 15px` | 8      | `rgb(58 36 42)` | `rgb(255 170 167)` |
+
+⭐ **`.notice.warn` IS our `Notice` refusal, byte for byte** — `#352d1e` ground, `#655334`
+edge, `rgb(243 205 136)` ink. The console's banner is not a fourth spelling of anything; it is
+the drawing. The `15px 17px` / radius 10 / `#29241c` rule that appears later in the file does
+NOT paint at this width.
+
+🔴 **So the outlier is `SetupNotice` (`rgb(245 200 121)` on `rgb(41 36 28)`), and its geometry
+traces to the STATION SETUP drawing rather than the console's** — a different approved design,
+settled by `SETTINGS-MATCH-02` with its own sign-off. The behaviours it has that `Notice` lacks
+(an icon, a bold title over a body) SHOULD move onto `Notice` per §B4, and that part is
+uncontroversial. What cannot be taken silently is WHICH DRAWING GOVERNS: adopting the console's
+geometry changes an approved Station setup surface (pad 15→13, radius 10→8, ground
+`#29241c`→`#352d1e`) across nine files that pin it.
+
+**For the owner:** merge the component and keep two measured skins, or let the console drawing
+govern Station setup too. The second is a design change to a signed-off surface, so it is not
+one to make in passing.

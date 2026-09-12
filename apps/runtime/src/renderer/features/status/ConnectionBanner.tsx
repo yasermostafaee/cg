@@ -94,7 +94,7 @@ export function ConnectionBanner(): JSX.Element | null {
     <div
       role="alert"
       aria-label="Bridge disconnected"
-      style={{ ...styles.banner, background: colors.error, color: cssVars['--r-ink-on-fill'] }}
+      style={{ ...styles.banner, background: colors.alarmFill, color: cssVars['--r-ink-on-fill'] }}
     >
       <span style={styles.text}>
         NOT CONNECTED — NOTHING CAN REACH AIR.

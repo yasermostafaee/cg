@@ -21,7 +21,7 @@ import { Icon } from './Icon.js';
  * | `ServerSettingsPanel` `styles.blocked`  | `#ffaaa7`  | `--r-surface`  |  9.53:1   |
  * | `FixedBankConfigModal` `styles.refusal` | `#f3cd88`  | the amber fill | 10.39:1   |
  *
- * `#991B1B` is `colors.error`, and it is a BACKGROUND colour in this palette — the
+ * `#991B1B` is `colors.alarmFill`, and it is a BACKGROUND colour in this palette — the
  * command toast, the connection banner and the raster banner all fill with it and
  * put white on top. Used as a FOREGROUND on a dark panel it measures 2.08:1, which
  * is below even the 3:1 large-text floor: that is the owner's report, and it was

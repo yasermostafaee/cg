@@ -64,6 +64,28 @@ Persian / RTL is a core requirement.
    written a file that talks about NUL bytes, scan it — `node -e "…readFileSync(p).indexOf(0)"` is
    the whole check, and BP wrote one into its own handoff that way.
 
+   ⚠ **THE SWEEP IS A PROCEDURE, NOT A GREP — and it is written down because the instrument has
+   now under-reported THREE times in one session** (`CONSOLE-LOOK-06` DELTA R §B5). Each miss
+   looked like a clean result:
+   1. an `apps/*/tests` pathspec matched **nothing, silently** — a git wildcard pathspec is a
+      full-path match, so it addressed no file and printed an empty, reassuring answer;
+   2. filtering the hits by Playwright's own vocabulary (`getByRole`, `name:`, …) **hid a jsdom
+      test** that pinned the same copy with a bare `RegExp.test`;
+   3. a **one-line** scan of `message:` sites found 4 of 10, missing the very message the owner
+      had photographed, because that one is built across several lines.
+
+   Three failures of one instrument is an instrument defect, so every sweep from here:
+   - **(a) TWO independent passes on DIFFERENT axes** — by STRING, and by COMPONENT or CLASS —
+     and the report says which pass found what. **A single pass is not a sweep.**
+   - **(b) PROVE EVERY PATHSPEC MATCHES SOMETHING before trusting its result, and report the
+     match count per pathspec** (e.g. `127 / 178 / 22 / 18`). **A zero is an error, not an
+     answer.**
+   - **(c) NEVER NARROW BY ONE RUNNER'S VOCABULARY.** jsdom specs pin copy too, and so do docs,
+     task lists and spec files.
+
+   ⭐ And scan MULTI-LINE where the deliverable can be built across lines: a template literal
+   concatenated over three lines is invisible to a per-line regex, which is how (3) happened.
+
 10. 🔴 **A CONFIGURATION VERB IS NEVER A PLAYOUT VERB.** `UPDATE` puts values **IN
     FORCE**; only a **take** puts content **ON AIR**. A row that does not already own live
     layers must produce **no `PLAY`, no un-mute and no fill** — the change lands in STATE, and

@@ -47,7 +47,7 @@ const styles = {
     fontWeight: 700,
     letterSpacing: '0.04em',
     color: cssVars['--r-ink-on-fill'],
-    background: colors.error,
+    background: colors.alarmFill,
     flexShrink: 0,
   },
   text: { flex: 1, minWidth: 0, lineHeight: 1.35 },

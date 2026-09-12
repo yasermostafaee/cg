@@ -27,7 +27,7 @@ import { clearRefusal, getRefusal, onRefusal, raiseRefusal } from './refusalStor
  * ── THE COLOUR, AND A CONFLICT THAT IS REPORTED RATHER THAN SETTLED HERE ────
  *
  * It uses the canonical `Notice` `refusal` role, which is AMBER. `Notice`'s own header
- * records why, with measurements: `colors.error` is a BACKGROUND in this palette and reads
+ * records why, with measurements: `colors.alarmFill` is a BACKGROUND in this palette and reads
  * 2.08:1 used as a foreground, and the file states outright that "red means error or
  * destructive intent, and a refusal is neither — it is the palette's ATTENTION case, which is
  * amber". DELTA 11 §2's grammar says `red = a refusal`. Those disagree, one of them is

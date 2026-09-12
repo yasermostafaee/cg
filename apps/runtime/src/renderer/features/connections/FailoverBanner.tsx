@@ -64,7 +64,7 @@ const TONE_STYLE: Record<Tone, CSSProperties> = {
     borderBottom: `1px solid ${cssVars['--r-notice-line']}`,
   },
   alarm: {
-    background: colors.error,
+    background: colors.alarmFill,
     color: cssVars['--r-ink-on-fill'],
     borderBottom: `1px solid ${cssVars['--r-danger-strong']}`,
   },
