@@ -476,11 +476,26 @@ test('the scene is byte-identical after a position rehearsal', async ({ app }) =
       window as unknown as { cg: { templates: { html: (id: string) => Promise<string> } } }
     ).cg.templates.html('tpl-bytes'),
   );
-  const stageBefore = await frames(page)
-    .first()
-    .evaluate((el) =>
-      (el as HTMLIFrameElement).contentDocument?.querySelector('.cg-stage')?.getAttribute('style'),
-    );
+  /*
+    🔴 POLLED, not read once. `frames(page)` having count 1 is a fact about the OUTER document —
+    the `<iframe>` element exists; its content document need not have parsed anything yet. Read once,
+    this came back `undefined` on a Linux runner and reddened the suite (run 34695547361).
+
+    It could not go VACUOUS — the `expect.poll` below waits on `.cg-stage`'s own attribute, so the
+    AFTER read is already guarded and `undefined === undefined` is unreachable. It is the left
+    operand that was unguarded. Establish the precondition, then assert (golden rule 12) — the
+    comparison itself is unchanged.
+  */
+  const readStage = async (): Promise<string | null | undefined> =>
+    frames(page)
+      .first()
+      .evaluate((el) =>
+        (el as HTMLIFrameElement).contentDocument
+          ?.querySelector('.cg-stage')
+          ?.getAttribute('style'),
+      );
+  await expect.poll(readStage).toEqual(expect.stringContaining('width'));
+  const stageBefore = await readStage();
 
   await app.selectStackRow('tpl-bytes');
   const picker = app.inspector;
@@ -514,10 +529,6 @@ test('the scene is byte-identical after a position rehearsal', async ({ app }) =
 
   // And the scene's own authored footprint — the stage's inline resolution — is
   // untouched. Only the placement moved.
-  const stageAfter = await frames(page)
-    .first()
-    .evaluate((el) =>
-      (el as HTMLIFrameElement).contentDocument?.querySelector('.cg-stage')?.getAttribute('style'),
-    );
+  const stageAfter = await readStage();
   expect(stageAfter).toBe(stageBefore);
 });

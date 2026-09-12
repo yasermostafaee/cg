@@ -4800,3 +4800,54 @@ already painted two of its three identities exactly.
 refusal CONDITION. Station setup, the Inspector and the audit log are not in this diff; Station
 setup's own `29 of 29 rows` (`CandidateLayersSection`, `[data-layers-results]`) is a different pane
 and keeps its wording.
+
+### 26.10 The runs
+
+- `pnpm gate`, foreground, uncached: **93 successful, 93 total · 0 cached, 93 total**, exit 0 in
+  **284.7 s**, prettier clean, OpenSpec strict green. The log ends on its `---- gate ended` footer
+  (exit 0), so it is a finished gate and not a killed capture (`P-045`).
+- Runtime unit suite: **1421 passing**, `tokenHome` among them — which is what holds every value
+  added here to a role token rather than to a hex.
+- `pnpm --filter @cg/runtime test:e2e`, Windows, against a fresh build: **184 passed**.
+  ⚠ **NON-AUTHORITATIVE** (golden rule 12a) — a reason to push, never a discharge.
+- 🔴 **DISCHARGED — Linux `e2e` on the code head `e685185b`:** <https://github.com/yasermostafaee/cg/actions/runs/34695547361> — run
+  `conclusion: success`; the **`E2E (Playwright)` job RAN** 13:07:43Z → 13:19:31Z (**708 s**,
+  `completed/success`), and its **`E2E` step is step 13, `completed/success`**, 13:08:32Z →
+  13:19:20Z (**648 s**). Read at the STEP level, never merely at the job (`P-046`/`P-029`): the
+  suite really ran — `@cg/designer` **278 passed**, `@cg/runtime` **183 passed**. Not skipped,
+  not cancelled. `Lint · Typecheck · Test · Build` green beside it (216 s).
+
+#### 26.10.1 ⚠ The one flake in that run, and what it actually was
+
+`rehearse-composite.spec.ts` → _the scene is byte-identical after a position rehearsal_ failed its
+first attempt and passed on retry, so the job is honestly green (Playwright reports it as `1
+flaky`, and the designer suite carried one of its own). The failure text is worth more than the
+retry:
+
+```
+Expected: undefined
+Received: "width:1920px;height:1080px"
+```
+
+**`stageBefore` was `undefined`.** The spec reads `.cg-stage` out of the rehearsal iframe as soon
+as `frames(page)` has count 1 — and that count is a fact about the OUTER document: the `<iframe>`
+element exists, its content document need not have parsed anything yet. On a slower Linux runner
+the read lands first and returns nothing.
+
+🔴 **The first thing to suspect is that the spec passes VACUOUSLY when the race is lost on both
+reads — `undefined` compared to `undefined` — and that is NOT reachable here; the reason is worth
+writing down.** Between the two reads sits an `expect.poll` on `.cg-stage`'s `data-applied`
+attribute, which cannot succeed until that element exists. So the after-read is guarded by
+something already waiting on the same element, and the race can only ever surface as this
+ASYMMETRIC failure — never as a green that measured nothing. The assertion was always real; it
+was its left operand that was unguarded.
+
+Fixed the way golden rule 12 says to fix it — **establish the precondition, then assert**, never
+weaken the assertion to something the harness can always answer: the before-read is now polled to
+a real inline style before the edit, through the one `readStage` helper both reads share. The
+comparison is unchanged.
+
+⚠ Not a regression from this change: the prior run
+(<https://github.com/yasermostafaee/cg/actions/runs/34691143693>) passed the same spec first try,
+and its body is untouched by `CONSOLE-LOOK-06`. The race was always there; a slower runner is what
+made it visible, and being visible is the only reason it is closed.

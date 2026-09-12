@@ -1285,4 +1285,12 @@ renders answers "is this handled?" with a yes.
 - [x] R.5 **Chrome above the first data row: 181.45 px / 7 rows, UNCHANGED.** The strip height is
       the operator own dragged value, so the 21 px the head freed went to the PICTURE (PVW stage
       175 → 196), not to the table. §26.8.
-- [x] R.6 **Linux `gate:e2e` — DISCHARGED on `RUNURL`.**
+- [x] R.6 **Linux `gate:e2e` — DISCHARGED on `e685185b`:** <https://github.com/yasermostafaee/cg/actions/runs/34695547361>.
+      Run `conclusion: success`; the `E2E (Playwright)` job **RAN** (708 s) and its **`E2E` step is
+      step 13, `completed/success`** — checked at the STEP level, never merely the job
+      (`P-046`/`P-029`). Designer 278 passed, Runtime 183 passed. §26.10.
+- [x] R.7 ⚠ **The one flake in that run is closed, and it was an UNGUARDED READ.**
+      `rehearse-composite`'s byte-identical spec read `.cg-stage` out of the rehearsal iframe as
+      soon as the `<iframe>` ELEMENT existed, so `stageBefore` came back `undefined` on a slower
+      runner. It could not go vacuous — the `expect.poll` between the two reads already waits on
+      that element — so it failed asymmetrically instead. The before-read is polled now. §26.10.1.
