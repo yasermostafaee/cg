@@ -2398,6 +2398,37 @@ export const cssVars = {
    * air-criticality), and the reference spends its pastel error card on an import failure,
    * which is not an alarm about air.
    */
+  /*
+   * 🔴 `CONSOLE-LOOK-06` DELTA 7 §1 — **THE AUDIO VERB FAMILY, ONE SET FOR BOTH SURFACES.**
+   *
+   * ON / OFF / SOLO appear in the Live plates ROW and in the Live audio MODAL. The reference
+   * styles them differently in the two places; we do not copy that split — one colour family,
+   * consumed by both, with only GEOMETRY per surface (a 42 px table row and a modal grid cell
+   * are not the same box).
+   *
+   * ⚠ THE REFERENCE'S MODAL-ONLY HOVERS ARE RETIRED, and the reason must outlive this comment:
+   * its modal paints ON green (`#22dd7a`). **In this console green means ON AIR** (`design.md`
+   * §29). A green hover on an audio verb teaches that green also means "audible", and the same
+   * button family then means two things. Amber already carries SOLO; blue already carries the
+   * audible/attention role.
+   *
+   * ⭐ SOLO IS AMBER AT REST BECAUSE IT IS THE ONE VERB THAT CHANGES OTHER FRAMES. That is why
+   * it must not look like ON/OFF — it is not a louder version of them, it is a different kind
+   * of act.
+   *
+   * Measured off the reference's TABLE treatment at 1280 × 800: ON/OFF `rgb(25 39 55)` on
+   * `rgb(61 83 104)` with `rgb(116 205 246)` ink; SOLO `rgb(42 38 29)` on `rgb(118 92 46)`
+   * with `rgb(243 205 136)` ink. The two INKS already existed as roles (`--r-accent` and
+   * `--r-caution-text`) and are reused rather than re-spelled; only the grounds are new.
+   */
+  '--r-verb-audio-bg': '#192737',
+  '--r-verb-audio-line': '#3d5368',
+  '--r-verb-solo-bg': '#2a261d',
+  '--r-verb-solo-line': '#765c2e',
+  /** `.plate-panic{background:#3c3019;border:1px solid #a6792d;color:#f5cd81}`, measured. */
+  '--r-panic-bg': '#3c3019',
+  '--r-panic-line': '#a6792d',
+  '--r-panic-ink': '#f5cd81',
   '--r-notice-line': '#655334',
   '--r-notice-fill': REF_AMBER_BG,
   '--r-notice-neutral-bg': '#172736',

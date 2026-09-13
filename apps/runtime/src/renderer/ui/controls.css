@@ -6596,3 +6596,85 @@ input[type='checkbox']:disabled:checked {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--r-onair) 55%, transparent);
   color: var(--r-text);
 }
+
+/* ── 🔴 `CONSOLE-LOOK-06` DELTA 7 §1 — THE AUDIO VERBS, ONE FAMILY, BOTH SURFACES ────────
+ *
+ * The Live plates ROW (`.cg-plate-verbs`) and the Live audio MODAL (`.cg-audio-verbs`) consume
+ * the SAME tokens. Geometry stays per-surface; only the colour treatment is shared, which is
+ * the whole of §1's decision.
+ *
+ * ⚠ Ours already used `secondary` for ON/OFF and `caution` for SOLO on BOTH surfaces, so the
+ * SHAPE of the decision was already right and the reference's modal-only green was never
+ * adopted. What moves here is the paint: the shared variants gave SOLO a transparent ground
+ * and gave ON/OFF the accent as their BORDER, where the drawing gives each a quiet ground and
+ * a dimmer edge.
+ */
+.cg-plate-verbs .cg-btn,
+.cg-audio-verbs .cg-btn {
+  background: var(--r-verb-audio-bg);
+  border-color: var(--r-verb-audio-line);
+  color: var(--r-accent);
+}
+
+/* SOLO — the one verb that changes OTHER frames, so it does not look like its neighbours. */
+.cg-plate-verbs .cg-btn--caution,
+.cg-audio-verbs .cg-btn--caution {
+  background: var(--r-verb-solo-bg);
+  border-color: var(--r-verb-solo-line);
+  color: var(--r-caution-text);
+}
+
+/*
+ * ── THE PANIC BUTTON — the reference's `.plate-panic` ──────────────────────────────────
+ *
+ * Measured: `min-height:30px`, `padding:4px 10px`, 12 px / 650, radius 4, ink
+ * `rgb(245 205 129)` on `rgb(60 48 25)` with a `rgb(166 121 45)` edge — a QUIET amber chip
+ * that fills on hover. Ours was a solid amber slab 259 px wide with near-black ink.
+ *
+ * ⚠ Prominent WITHOUT being a filled alarm: on this surface a solid amber block competes with
+ * the row states, and the thing it must not be mistaken for is a state.
+ */
+.cg-plate-panic.cg-btn {
+  min-height: 30px;
+  height: 30px;
+  padding: var(--r-space-1) 10px;
+  border-radius: var(--r-radius-sm);
+  font-size: 12px;
+  font-weight: var(--r-weight-bold);
+  background: var(--r-panic-bg);
+  border-color: var(--r-panic-line);
+  color: var(--r-panic-ink);
+  white-space: nowrap;
+}
+
+.cg-plate-panic.cg-btn:hover:not(:disabled) {
+  background: var(--r-caution-fill);
+  border-color: var(--r-caution-fill);
+  color: var(--r-ink-on-caution);
+}
+
+/* The reference's fader takes the blue; ours was letting the UA pick. */
+.cg-plate-gain input[type='range'],
+.cg-audio-slider input[type='range'] {
+  accent-color: var(--r-accent);
+}
+
+/* The owner link — the reference's `.plate-owner-link`: borderless, 30 px, blue, 12 px,
+   underlined on hover at a 3 px offset. Measured 47 × 30 with `gap: 4px`. */
+.cg-plate-owner-link.cg-btn {
+  min-height: 30px;
+  height: auto;
+  padding: 0;
+  gap: var(--r-space-1);
+  border: 0;
+  background: none;
+  color: var(--r-accent);
+  font-size: 12px;
+  font-weight: 400;
+}
+.cg-plate-owner-link.cg-btn:hover:not(:disabled) {
+  background: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  color: var(--r-accent);
+}

@@ -279,6 +279,14 @@ describe('RUNTIME-REDESIGN-01 Phase 6 — right-click and its keyboard twins ope
   });
 });
 
+/*
+  🔴 `CONSOLE-LOOK-06` DELTA 8 §0 — THE OWNER LINK IS THE ROW'S NAME NOW, not the words
+  `OPEN ROW`, because that is what the drawing renders (`.plate-owner-link` → `Bed 1`). It is
+  found by the two things that did not change: the class it carries and the act it performs.
+*/
+const ownerLinkIn = (row: Element | null | undefined): HTMLButtonElement | undefined =>
+  row?.querySelector<HTMLButtonElement>('.cg-plate-owner-link') ?? undefined;
+
 const buttonIn = (row: Element | null, label: string): HTMLButtonElement | undefined =>
   [...(row?.querySelectorAll('button') ?? [])].find((b) => b.textContent === label);
 
@@ -346,7 +354,7 @@ describe('🔴 the gate — a row that HAS an owner is shown, never cleared from
     const { el, onSelectOwner } = await render([layer()]);
 
     expect(rowFor(el, '1-10')?.textContent).toContain('IRIB News');
-    const open = buttonIn(rowFor(el, '1-10'), 'OPEN ROW');
+    const open = ownerLinkIn(rowFor(el, '1-10'));
     expect(open, 'the operator can reach the verbs from here').toBeDefined();
     await act(async () => {
       open?.click();
@@ -370,7 +378,7 @@ describe('🔴 the gate — a STRANDED layer is the one that gets a control', ()
     expect(row?.textContent).toContain('Stranded');
     expect(row?.getAttribute('data-live-layer-stranded')).toBe('true');
     expect(buttonIn(row, 'RELEASE')).toBeDefined();
-    expect(buttonIn(row, 'OPEN ROW'), 'there is no row to open').toBeUndefined();
+    expect(ownerLinkIn(row), 'there is no row to open').toBeUndefined();
   });
 
   it('CONFIRMS before releasing, and names what is on the layer', async () => {
@@ -462,7 +470,7 @@ describe('🔴 UNVERIFIED — the surface must not state a file claim in the pre
     const { el } = await render([layer({ unverified: true })]);
 
     expect(rowFor(el, '1-10')?.textContent).toContain('IRIB News');
-    expect(buttonIn(rowFor(el, '1-10'), 'OPEN ROW')).toBeDefined();
+    expect(ownerLinkIn(rowFor(el, '1-10'))).toBeDefined();
   });
 
   it('it is NOT coloured and does NOT raise the tab dot', () => {
@@ -793,7 +801,7 @@ describe('the link is down — a frozen ledger is not evidence', () => {
     expect(row?.textContent).toContain('Unknown');
     expect(row?.textContent).not.toContain('Stranded');
     expect(buttonIn(row, 'RELEASE')).toBeUndefined();
-    expect(buttonIn(row, 'OPEN ROW')).toBeUndefined();
+    expect(ownerLinkIn(row)).toBeUndefined();
   });
 });
 
@@ -1112,7 +1120,7 @@ describe('PATCH-BX-01 — PANIC asks the bridge, and reads its answer out loud',
   */
   const panicButton = (el: HTMLElement): HTMLButtonElement | undefined =>
     [...el.querySelectorAll('button')].find((b) =>
-      (b.textContent ?? '').startsWith('SILENCE ALL BOXES'),
+      /^Silence all boxes on every channel/.test(b.getAttribute('aria-label') ?? ''),
     );
 
   /**
@@ -1121,11 +1129,24 @@ describe('PATCH-BX-01 — PANIC asks the bridge, and reads its answer out loud',
    * choose. The label says so in the operator's words, so that when multi-channel arrives
    * the label is the thing that has to change and cannot be forgotten. Golden rule 11.
    */
-  it('A16 — the panic label names its scope: every channel, not the one selected', async () => {
+  /*
+    🔴 SUPERSEDED IN FORM BY `CONSOLE-LOOK-06` DELTA 8 §0, and replaced rather than deleted.
+    This used to require the VISIBLE label to carry the scope
+    (`SILENCE ALL BOXES · EVERY CHANNEL`). §0 withdrew that string as unverified and told me to
+    read the drawing: measured on `07-live-plates.html`, the reference's `.plate-panic` reads
+    `Silence all plates`.
+
+    ⚠ A16's SUBSTANCE is unchanged and is still asserted here: the scope statement moved to the
+    accessible name and the tooltip, both of which are unchanged and both of which are checked
+    below. `silenceAllLivePlates` still takes no arguments and is still unscoped — what moved
+    is which of the three carriers says so on its face, and that trade is recorded in the
+    component and in the report.
+  */
+  it('A16 — the panic states its scope: every channel, not the one selected', async () => {
     const { el } = await render([layer({ layer: 10, sourceId: 'guest-1' })], OWNED, 'live');
     const button = panicButton(el);
     expect(button).toBeDefined();
-    expect(button?.textContent).toBe('SILENCE ALL BOXES · EVERY CHANNEL');
+    expect(button?.textContent).toBe('Silence all plates');
     expect(button?.getAttribute('aria-label')).toMatch(/^Silence all boxes on every channel/);
     expect(button?.getAttribute('title')).toMatch(/every channel this bridge drives/i);
     expect(button?.getAttribute('title')).toMatch(/not only the channel selected above/i);

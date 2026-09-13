@@ -470,9 +470,26 @@ export function LiveSourcesPanel({
               'console does not show as on air. The pictures stay on air. There is no ' +
               'un-panic — raise what you need again on its own fader.'
           }
+          className="cg-plate-panic"
+          data-plate-panic=""
           aria-label="Silence all boxes on every channel — set every live plate the bridge has seated to zero, whichever channel it is on"
         >
-          SILENCE ALL BOXES · EVERY CHANNEL
+          {/*
+            🔴 `CONSOLE-LOOK-06` DELTA 8 §0 — READ FROM THE REFERENCE, WHICH SAYS
+            `Silence all plates`. Measured in Chromium at 1280 × 800 on `07-live-plates.html`:
+            `.plate-panic` renders exactly that.
+
+            DELTA 7 §2(c) had asked for wording of `SILENCE ALL BOXES · EVERY CHANNEL` force and
+            that string shipped; §0 then withdrew it as UNVERIFIED and told me to read the
+            drawing. The drawing is quieter than the guess.
+
+            ⚠ AND THE SCOPE IS STILL UNSCOPED, which is the thing this label no longer says on
+            its face. `silenceAllLivePlates` reaches EVERY channel this bridge drives, and the
+            `title` and the accessible name below still say so in full — they are unchanged.
+            The trade is deliberate and it is reported: the reference's word on the button, our
+            sentence behind it.
+          */}
+          Silence all plates
         </AsyncButton>
       </div>
       <div className="cg-plate-table" role="table" aria-label="Occupied live-plate layers">
@@ -543,18 +560,39 @@ export function LiveSourcesPanel({
                   </AsyncButton>
                 ) : row.ownerLabel !== null ? (
                   <>
-                    {/* The owner NAMED, in its own bidi isolate, then the way to it. */}
+                    {/*
+                      🔴 `CONSOLE-LOOK-06` DELTA 8 §0 — THE LINK IS THE ROW'S NAME.
+
+                      Measured on `07-live-plates.html`: the reference's `.plate-owner-link`
+                      reads `Bed 1` — the owner's NAME is the control. Ours printed the name as
+                      static text and then a separate `OPEN ROW` button beside it, which is two
+                      things where the drawing has one, and it spends a column's width on a
+                      label that says what every link says.
+
+                      DELTA 7 §4(b) had asked for a link labelled `OPEN ROW`; §0 withdrew that
+                      as unverified and told me to read the drawing.
+
+                      ⚠ The NAME stays in its own `<bdi>` (golden rule 11): row names are
+                      Persian, the lead-in is English, and a name joined into one text node has
+                      its placement decided by the bidi algorithm rather than by us. The
+                      isolate moves INSIDE the control rather than being dropped.
+                      ⚠ THE ACCESSIBLE NAME AND THE TOOLTIP ARE UNTOUCHED, deliberately: §0
+                      asked for the reference's VISIBLE string and nothing else. A first cut
+                      also folded the owner's name into the accessible name — a gratuitous
+                      change that broke a pin and that no delta had asked for. The coordinate
+                      stays there, which is where `R-028`'s layer number belongs on a table.
+                    */}
                     <span className="cg-plate-owner-lead">Seated for</span>
-                    <bdi className="cg-plate-owner-name">{row.ownerLabel}</bdi>
                     <Button
                       variant="ghost"
+                      className="cg-plate-owner-link"
                       onClick={() => {
                         onSelectOwner(row.itemId);
                       }}
                       title={`Open the row that owns live layer ${row.coordinate} and its Inspector`}
                       aria-label={`Open the row that owns live layer ${row.coordinate}`}
                     >
-                      OPEN ROW
+                      <bdi className="cg-plate-owner-name">{row.ownerLabel}</bdi>
                     </Button>
                   </>
                 ) : (
