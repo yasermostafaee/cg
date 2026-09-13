@@ -320,6 +320,9 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     swapSource: () => Promise.resolve({ accepted: true }),
     plateAudio: () => Promise.resolve({ accepted: true }),
     onError: () => undefined,
+    // DELTA 8 — the words each verb toasts with.
+    rowName: 'Row 1',
+    layerName: '1-89',
   });
 
   it('R-022 — REHEARSE interlocks PLAY, stays a toggle, and never disables CLEAR', () => {

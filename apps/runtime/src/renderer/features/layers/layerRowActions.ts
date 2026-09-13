@@ -19,6 +19,7 @@ import {
   casparRefusalReason,
   type CasparReach,
 } from '../../ui/reachWording.js';
+import { reportCommandSuccess } from '../status/commandFeedback.js';
 import { isOnAir } from '../stack/onAir.js';
 import { removeIsRefused } from './removeGate.js';
 import type { RowBinding } from './rowState.js';
@@ -154,6 +155,14 @@ export interface LayerRowActionDeps {
    * availability CAN be derived from one.
    */
   binding: RowBinding;
+  /**
+   * DELTA 8 — the row in the OPERATOR words, for the toast each verb raises when it lands.
+   * Passed rather than composed here: operatorRowName is the one canonical composition
+   * (golden rule 11) and this file must not grow a second one.
+   */
+  rowName: string;
+  /** The real CasparCG layer, for the one sentence that needs it. */
+  layerName: string;
   /**
    * What the WIRE observes on this row's layer, independent of whether we have
    * an item bound to it. Load reads this, not just `item`: an unbound row can
@@ -449,6 +458,74 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
    * output". Declaring it once keeps button and menu in agreement by construction,
    * which is the whole reason this list exists.
    */
+  /**
+   * 🔴 `CONSOLE-LOOK-06` DELTA 8, second half — **WHAT EACH ROW VERB SAYS WHEN IT LANDS.**
+   *
+   * ONE catalogue at the ONE chokepoint. Every row verb is built by `act()` below, so a
+   * sentence written per call site would be eight strings that drift; this is one table that
+   * cannot.
+   *
+   * The rules are DELTA 8 §2's, unchanged from the audio half: the row named in the operator's
+   * words, the RESULTING STATE rather than the verb pressed, one line, and one clause where
+   * there is a consequence the operator cannot see or cannot undo.
+   *
+   * 🔴🔴 GOLDEN RULE 10 IS THE ONE THAT WILL GO WRONG HERE, so it is spelled out per verb:
+   * a CONFIGURATION verb is never a playout verb, and its sentence must not sound like one.
+   *
+   *   PLAYOUT        `play` · `stop` · `next` · `rehearse` (ON PVW) · `clear`
+   *   CONFIGURATION  `update` · `load-remove`
+   *
+   * ⚠ `rehearse` is the verb most likely to be misread under pressure, so its sentence says
+   * outright that nothing was sent. ⚠ `stop` and `clear` are different acts and their words
+   * are not interchangeable: one runs an outro and stays loaded, the other cuts and destroys
+   * the producer. ⚠ `update` has TWO truths and the recorded decision behind them is the
+   * owner's: the button reads UPDATE ON AIR only while the row is on air, so off air it saved a
+   * configuration and on air it saved one AND changed what is on the output.
+   */
+  const landed = (key: string): string | null => {
+    const who = deps.rowName;
+    const layer = deps.layerName;
+    switch (key) {
+      case 'play':
+        return `${who} is on air.`;
+      case 'stop':
+        return `${who} stopped. It stays loaded, so it can be taken again.`;
+      case 'next':
+        return `${who} advanced to its next step.`;
+      case 'rehearse':
+        return deps.rehearsing
+          ? `${who} left PVW.`
+          : `${who} is on PVW — a local preview. Nothing was sent to air.`;
+      case 'update':
+        return onAir
+          ? `${who} updated. The change is on air now.`
+          : `${who} saved. Nothing was sent to air — the next take seats it.`;
+      case 'load-remove':
+        /*
+          🔴 THE LOAD HALF ANNOUNCES NOTHING, AND THAT IS A CORRECTION I HAD TO BE SHOWN.
+
+          I reasoned that importing and loading are two acts in two dialogs — which the code
+          says outright (`fixedSlotLoad`'s header) — and concluded two toasts were right. They
+          are not, because the two acts CHAIN through one press-sequence and share ONE
+          transient surface: `importVcgToStation` raises `Imported · X`, the load then raised
+          its own, and last-write-wins erased the first. `import-vcg-template.spec` caught it.
+
+          So the load stays silent here and the import's sentence stands — it is the more
+          informative of the two, naming the template rather than the row. §4(a): ONE toast per
+          completed action, and this is one action however many dialogs it crossed.
+
+          ⚠ The REMOVE half is a different act with no announcement of its own, so it keeps one.
+        */
+        return empty
+          ? null
+          : `${who} emptied. The template is off the row; layer ${layer} is untouched.`;
+      default:
+        // `swap-source`, `plate-audio` and `menu` open something rather than completing an
+        // act; the thing they open announces its own result. Silence here is correct.
+        return null;
+    }
+  };
+
   const act = (
     key: string,
     label: string,
@@ -480,7 +557,20 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
       : rowRefusalReason !== undefined
         ? { title: rowRefusalReason }
         : {}),
-    run,
+    /*
+      🔴 THE ANNOUNCEMENT IS WRAPPED AROUND THE VERB'S OWN RUN, so it fires on the CONFIRMED
+      result and only there (§4e). A cancelled confirm gate is the operator's own "no" and is
+      not an outcome; a refusal keeps its persistent surface (DELTA R) and never becomes a
+      toast (§4d).
+    */
+    run: async () => {
+      const res = await run();
+      if (res.accepted && res.cancelled !== true) {
+        const said = landed(key);
+        if (said !== null) reportCommandSuccess(said);
+      }
+      return res;
+    },
     onError,
     ...(icon !== undefined ? { icon } : {}),
     ...(surface !== undefined ? { surface } : {}),

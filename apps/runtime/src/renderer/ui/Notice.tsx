@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { X } from 'lucide-react';
+import { X, type LucideIcon } from 'lucide-react';
 import { colors, cssVars } from '../theme.js';
 import { Icon } from './Icon.js';
 
@@ -91,6 +91,9 @@ const DETAIL_COLOR: Record<NoticeRole, string> = {
   radius 8, 13 px on a 1.6 line (`NOTICE_PX` in the token home). The two lines stack, so the
   reference's icon-to-text gap is not what `gap` means here; the inter-line gap stays small.
 */
+/** `.notice svg{width:18px}` — the reference's mark beside a message. */
+const NOTICE_MARK_PX = 18;
+
 const base: CSSProperties = {
   borderRadius: cssVars['--r-notice-radius'],
   padding: cssVars['--r-notice-pad'],
@@ -130,6 +133,8 @@ export function Notice({
   aria,
   onDismiss,
   dismissLabel,
+  icon,
+  title,
 }: {
   noticeRole: NoticeRole;
   text: string;
@@ -154,8 +159,31 @@ export function Notice({
   onDismiss?: () => void;
   /** The dismiss control's accessible name. Required with `onDismiss` — an icon is not a label. */
   dismissLabel?: string;
+  /**
+   * 🔴 `CONSOLE-LOOK-06` §B4 — **THE CAPABILITY MOVES; THE APPEARANCE DOES NOT.**
+   *
+   * `SetupNotice` has two things this component lacked: a MARK beside the message (a padlock
+   * for a block, an info glyph for a standing fact) and a bold TITLE over a quieter body. The
+   * owner's ruling settles the geometry question the other way — each surface keeps its own
+   * approved drawing, and `SETTINGS-MATCH-02`'s nine pinned files are untouched — but the
+   * COMPONENT is one, so the capability lives here.
+   *
+   * ⚠ BOTH ARE OPTIONAL AND BOTH DEFAULT TO ABSENT, which is the whole of "defaults unchanged":
+   * every existing caller renders byte-for-byte what it rendered before, and the DOM shape is
+   * only altered for a caller that asks (see the wrapper note below, which had to learn this
+   * once already).
+   */
+  icon?: LucideIcon;
+  /** A bold line above `text`. With it, `text` becomes the quieter explanation under it. */
+  title?: string;
 }): JSX.Element {
   const dismissable = onDismiss !== undefined;
+  /*
+    A mark or a title makes the box a ROW with a column inside it, exactly as a dismiss does —
+    so the three share one wrapper decision rather than three. Without any of them the markup
+    is what it always was.
+  */
+  const stacked = dismissable || icon !== undefined || title !== undefined;
   return (
     <div
       style={{
@@ -167,15 +195,16 @@ export function Notice({
           not drag the control to the middle of the box where it reads as belonging to the
           detail line.
         */
-        ...(dismissable
+        ...(stacked
           ? { flexDirection: 'row' as const, alignItems: 'start' as const, gap: '0.6rem' }
           : {}),
       }}
       data-notice={noticeRole}
       role={aria ?? (noticeRole === 'refusal' ? 'alert' : 'status')}
     >
+      {icon !== undefined && <Icon icon={icon} size={NOTICE_MARK_PX} />}
       {/*
-        ⚠ THE LINES ARE WRAPPED ONLY WHEN THERE IS A CONTROL TO SIT BESIDE THEM.
+        ⚠ THE LINES ARE WRAPPED ONLY WHEN THERE IS SOMETHING TO SIT BESIDE THEM.
 
         The first cut wrapped them always, which changed the DOM of every notice in the app to
         solve a problem only the dismissable ones have — `modalMessageRegion.dom.test.ts` caught
@@ -183,10 +212,15 @@ export function Notice({
         being its two children is the shape every other caller was written against. With no
         dismiss the markup is byte-for-byte what it always was.
       */}
-      {dismissable ? (
+      {stacked ? (
         <span
           style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', flex: 1, minWidth: 0 }}
         >
+          {title !== undefined && (
+            <strong dir="auto" style={{ fontWeight: 600 }}>
+              {title}
+            </strong>
+          )}
           <span dir="auto">{text}</span>
           {detail !== undefined && detail !== '' && (
             <span dir="auto" style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}>

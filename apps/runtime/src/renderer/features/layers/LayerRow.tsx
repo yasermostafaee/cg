@@ -551,6 +551,10 @@ export function LayerRow({
     },
     plateAudio: openPlateAudio,
     onError: reportCommandError,
+    // DELTA 8 — the operator words each verb toasts with, and the real layer for the one
+    // sentence that needs it. Composed once here, never a second time inside the actions.
+    rowName,
+    layerName,
   }).map((action) => {
     // Confirm gates attached at DECLARATION time, so button and menu share them.
     // CLEAR destroys a live producer; REMOVE additionally takes the item off the

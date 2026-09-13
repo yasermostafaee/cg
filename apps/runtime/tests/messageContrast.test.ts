@@ -46,6 +46,17 @@ const MESSAGE_CLASSES: readonly { name: string; ink: string; ground: string }[] 
     ground: cssVars['--r-notice-fill'],
   },
   {
+    /*
+      🔴 THE SETUP NOTICE, on its OWN ground — added 2026-09-13 with the ink unification.
+      A ratio is a property of TWO values, so unifying the ink across two surfaces means
+      measuring it on BOTH grounds, not once. Station setup keeps its own ground
+      (); only the ink moved.
+    */
+    name: 'Station setup notice',
+    ink: cssVars['--r-caution-text'],
+    ground: cssVars['--r-setup-notice-bg'],
+  },
+  {
     name: 'Notice neutral',
     ink: cssVars['--r-notice-neutral-text'],
     ground: cssVars['--r-notice-neutral-bg'],

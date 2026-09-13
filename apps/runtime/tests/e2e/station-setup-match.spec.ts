@@ -703,8 +703,15 @@ test('§9 — the banner sits in the pane’s column, clear of the footer, and n
     mark:
       el.querySelector('svg') === null ? null : getComputedStyle(el.querySelector('svg')!).color,
   }));
-  expect(tone.word, 'the blocked clause is this family’s amber').toBe('rgb(245, 200, 121)');
-  expect(tone.mark, 'and so is its padlock').toBe('rgb(245, 200, 121)');
+  /*
+    🔴 UNIFIED 2026-09-13. This was rgb(245 200 121) — the settings drawing own --amber,
+    adopted by SETTINGS-MATCH-02 and a real decision, not drift. The owner retired the second
+    amber: two values nobody can tell apart cost a second token. The survivor is the CONSOLE
+    drawing ink and the more legible of the pair on BOTH grounds (8.99:1 and 10.19:1 against
+    8.68 and 9.84). Geometry did not move — this dialog keeps its own pad, radius and ground.
+  */
+  expect(tone.word, 'the blocked clause is the one caution ink').toBe('rgb(243, 205, 136)');
+  expect(tone.mark, 'and so is its padlock').toBe('rgb(243, 205, 136)');
 
   // ── 9b — THE CARD HELP STRIP: standing, inside its own card, and NOT amber ────────
   const note = dialog.locator('[data-remote-host-note]');

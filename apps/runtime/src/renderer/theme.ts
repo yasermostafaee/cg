@@ -2421,6 +2421,24 @@ export const cssVars = {
    * with `rgb(243 205 136)` ink. The two INKS already existed as roles (`--r-accent` and
    * `--r-caution-text`) and are reused rather than re-spelled; only the grounds are new.
    */
+  /*
+   * 🔴 THE ON-AIR LOOK CELL (DELTA 11, owner's values 2026-09-13). The first cut washed the air
+   * token over the SUNKEN surface, which read as a dark green-grey; the owner asked for a
+   * saturated green that is unmistakably the air colour at a glance.
+   *
+   * Three values, named by the part they paint, because a component may not carry a raw hex.
+   *
+   * ⚠ AND THE LABEL MOVED WITH THEM, which is DELTA 11's own instruction — *"if the label
+   * loses contrast on that ground, adjust the LABEL's token, not the green"*. Measured on the
+   * resulting ground `rgb(23 145 81)`:
+   *     `--r-text`          3.62:1  ✗ below AA
+   *     `--r-ink-on-fill`   4.73:1  ✓
+   * So the cell takes the dark ink every other saturated fill in this palette takes. The green
+   * is the owner's, untouched; the word is legible on it.
+   */
+  '--r-onair-cell-bg': '#127948',
+  '--r-onair-cell-line': 'rgb(30 140 89)',
+  '--r-onair-cell-ring': 'rgb(97 255 181)',
   '--r-verb-audio-bg': '#192737',
   '--r-verb-audio-line': '#3d5368',
   '--r-verb-solo-bg': '#2a261d',
@@ -2762,6 +2780,11 @@ export const cssVars = {
    * it is (a) absent from the reference's own nineteen declared `:root` colours AND (b) equal
    * to a hex this app RETIRED in Phase 2. Everything else is adopted.
    *
+   * ⚠ 2026-09-13 — THE SELECTED CELL NO LONGER TAKES THE DRAWING'S `#285273`. The owner chose
+   * `#2e4e67` with a separated ring (`#58addd`) and a `#4b748b` border, which is a deliberate
+   * DIVERGENCE from the reference and not drift. Do not "correct" it back by reading the
+   * drawing; the drawing's value is recorded below because it is still what the drawing says.
+   *
    * Run per value, none of these six is retired — `#151e2c`, `#56667d`, `#dbe4f0`, `#285273`,
    * `#91d7ff`, `#ffffff` appear nowhere in §7's "was" column. They fail (b), so they are the
    * drawing's own decisions and they are taken.
@@ -2773,8 +2796,19 @@ export const cssVars = {
   '--r-look-btn-bg': '#151e2c',
   '--r-look-btn-line': '#56667d',
   '--r-look-btn-ink': '#dbe4f0',
-  '--r-look-btn-sel-bg': '#285273',
-  '--r-look-btn-sel-line': '#91d7ff',
+  /*
+   * 🔴 THE SELECTED LOOK CELL, off air — the owner's values, 2026-09-13. The ground lifts and
+   * the RING separates from the border, which is the change worth naming: the edge and the
+   * inset used to be one token, so the cell had one line at two opacities; now the ring is a
+   * brighter blue than the border and the segment reads as pressed rather than merely tinted.
+   *
+   * ⚠ Measured before adopting: `--r-look-btn-sel-ink` (white) on `#2e4e67` clears AA
+   * comfortably, and the ground stays BLUE-DOMINANT (`rgb(46 78 103)`) — which is what
+   * DELTA 11's e2e asserts to tell "selected" from "selected AND on air" apart.
+   */
+  '--r-look-btn-sel-bg': '#2e4e67',
+  '--r-look-btn-sel-ring': '#58addd',
+  '--r-look-btn-sel-line': '#4b748b',
   '--r-look-btn-sel-ink': '#ffffff',
   '--r-look-btn-h': `${String(LOOK_STRIP_PX.btnH)}px`,
   '--r-look-btn-min-w': `${String(LOOK_STRIP_PX.btnMinW)}px`,
@@ -3096,7 +3130,30 @@ export const cssVars = {
   /** `.btn.danger:hover{background:#482a2e}` — the outline FILLS on intent, never at rest. */
   '--r-setup-danger-hover-bg': '#482a2e',
   /** `--amber`: the ink `.foot-message.warning`, `.notice` and `.tag.warn` all take. */
-  '--r-setup-caution-ink': '#f5c879',
+  /*
+   * 🔴 RETIRED 2026-09-13 — `--r-setup-caution-ink` `#f5c879` WAS a decision, and the owner
+   * overruled it knowingly. Recorded here because the next reader will otherwise think it was
+   * an accident.
+   *
+   * It came from `SETTINGS-POLISH-04` §3: the settings drawing's shadow stylesheet declares its
+   * own `--amber: #f5c879`, and this dialog has taken that family's values since
+   * `SETTINGS-MATCH-02`. So there were two ambers because there were two drawings.
+   *
+   * The owner's ruling: `rgb(243 205 136)` against `rgb(245 200 121)` is a difference nobody
+   * can see and it costs a second token. ONE value, named by role — and `--r-caution-text`
+   * already is that role, is the CONSOLE drawing's own ink (measured: `.notice.warn` paints
+   * exactly it), and reads higher on both grounds.
+   *
+   * ⚠ MEASURED ON BOTH GROUNDS BEFORE THE SWAP, because a ratio is a property of two values:
+   *   `rgb(243 205 136)` on `#352d1e` (the console notice) → **8.99:1**
+   *   `rgb(243 205 136)` on `#29241c` (the setup notice)  → **10.19:1**
+   * Both clear AA 4.5. The retired value read 8.68 and 9.84 on the same pair, so the survivor
+   * is the more legible of the two as well as the drawing's.
+   *
+   * ⚠ GEOMETRY DID NOT MOVE. Station setup keeps its own pad, radius and ground —
+   * `SETTINGS-MATCH-02`'s sign-off stands and its nine pinned files are untouched. Only the ink
+   * unified.
+   */
   /**
    * THE STANDING NOTICE's own pair — and it is NOT `--amber-bg`.
    *

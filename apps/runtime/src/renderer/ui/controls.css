@@ -2865,6 +2865,9 @@ input[type='checkbox']:disabled:checked {
  * padding, radius 5, 13 px text, a frame THUMBNAIL gapped 8 from the word. Every number is a
  * `--r-look-*` token from `LOOK_STRIP_PX`; the strip used to be a 2.4ch chip sized for an
  * ordinal, which the authored-name label had already outgrown. The COLOURS stay the app's
+ * ⚠ 2026-09-13 — the SELECTED cell diverges from the drawing on the owner's instruction:
+ * `#2e4e67` ground, `#4b748b` border, `#58addd` ring. Deliberate, not drift.
+ *
  * tokens (ARGUED: palette — the reference's `#151e2c` / `#56667d` / `#285273` / `#91d7ff`
  * are literals of the pre-Phase-2 console, and selection here is the accent-fill rule).
  * ⚠ 38 × 100 is a LARGER target than the row verbs' 48 × 36 — `PROMPT.md` §3's "the Look
@@ -2904,7 +2907,9 @@ input[type='checkbox']:disabled:checked {
      look is the one". */
   background: var(--r-look-btn-sel-bg);
   border-color: var(--r-look-btn-sel-line);
-  box-shadow: inset 0 0 0 1px var(--r-look-btn-sel-line);
+  /* The RING is its own token now — a brighter blue than the border, so the segment reads as
+     pressed rather than merely tinted (owner's values, 2026-09-13). */
+  box-shadow: inset 0 0 0 1px var(--r-look-btn-sel-ring);
   color: var(--r-look-btn-sel-ink);
   /* MONITORS-01 audit row 19 — the selected segment is the same weight as the others in the
      drawing; the FILL and the frame are what say it is selected. Inherited from the rule
@@ -5446,10 +5451,12 @@ input[type='checkbox']:disabled:checked {
 /*
  * 🔴 `SETTINGS-POLISH-04` §3 — `.foot-message.warning{color:#f5c879}`, THIS FAMILY'S AMBER.
  *
- * `--r-setup-caution-ink`, not the console's `--r-caution-text`: the shadow stylesheet declares
- * its own `--amber` and this dialog has been taking that family's values since
- * `SETTINGS-MATCH-02` (see the token home). The glyph beside the sentence inherits it through
- * `currentColor`, which is why there is no second rule for the icon.
+ * 🔴 `--r-caution-text` SINCE 2026-09-13. This used to read `--r-setup-caution-ink`, the
+ * settings drawing's own `--amber: #f5c879` — a real decision from `SETTINGS-MATCH-02`, not an
+ * accident. The owner retired it: two ambers nobody can tell apart cost a second token. The
+ * survivor is the console drawing's ink and the more legible of the two on BOTH grounds
+ * (8.99:1 and 10.19:1, against 8.68 and 9.84). The glyph beside the sentence inherits it
+ * through `currentColor`, which is why there is no second rule for the icon.
  *
  * ⚠ The reference draws THREE tones here — muted at rest, `.pending` on the accent, `.warning`
  * on the amber. This build has two, because nothing in this footer is ever PENDING: every
@@ -5457,7 +5464,7 @@ input[type='checkbox']:disabled:checked {
  * state. A third tone with no condition to raise it would be a signal that says nothing.
  */
 .cg-footer-contract[data-footer-tone='blocked'] {
-  color: var(--r-setup-caution-ink);
+  color: var(--r-caution-text);
 }
 
 /* ── A section's own standing NOTICE band — `.notice` ─────────────────────
@@ -5492,7 +5499,7 @@ input[type='checkbox']:disabled:checked {
   background: var(--r-setup-notice-bg);
   font-size: var(--r-setup-notice-body-text);
   line-height: 1.6;
-  color: var(--r-setup-caution-ink);
+  color: var(--r-caution-text);
 }
 
 /* `.notice>svg{width:19px;height:19px;margin-top:2px}` — the 2 px is optical, not spacing: it
@@ -5509,7 +5516,7 @@ input[type='checkbox']:disabled:checked {
   margin-bottom: var(--r-setup-notice-title-gap-below);
   font-size: var(--r-setup-notice-title-text);
   font-weight: var(--r-weight-semibold);
-  color: var(--r-setup-caution-ink);
+  color: var(--r-caution-text);
 }
 
 /* `.notice p{color:#cdbd9e}` — a desaturated amber, NOT the neutral secondary ink this had.
@@ -6585,16 +6592,18 @@ input[type='checkbox']:disabled:checked {
  * the ground and the edge are `color-mix`ed from it exactly as the sub-bar's on-air chip is,
  * so a future change to the sacred colour carries both surfaces with it.
  *
- * ⚠ THE INK IS THE ONE THING THAT IS NOT DERIVED. `--r-onair` on its own 18% wash reads far
- * below AA for a 12 px word, so the label takes `--r-text` — which is DELTA 11's own
- * instruction: "if the label loses contrast on that ground, adjust the LABEL's token, not the
- * green". The green does the saying; the word stays legible.
+ * ⚠ THE INK IS THE ONE THING THAT IS NOT DERIVED, and it moved when the owner's green did.
+ * On the saturated ground `rgb(23 145 81)` the light ink reads **3.62:1** — below AA — and
+ * `--r-ink-on-fill` reads **4.73:1**. DELTA 11's own instruction settles which one gives:
+ * *"if the label loses contrast on that ground, adjust the LABEL's token, not the green."*
+ * The green does the saying; the word stays legible.
  */
 .cg-btn.cg-look-cell[aria-pressed='true'][data-look-onair] {
-  background: color-mix(in srgb, var(--r-onair) 18%, var(--r-surface-sunken));
-  border-color: color-mix(in srgb, var(--r-onair) 55%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--r-onair) 55%, transparent);
-  color: var(--r-text);
+  background: color-mix(in srgb, var(--r-onair) 18%, var(--r-onair-cell-bg));
+  border-color: color-mix(in srgb, var(--r-onair-cell-line) 55%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--r-onair-cell-ring) 55%, transparent);
+  /* 4.73:1 on the resulting ground; `--r-text` reads 3.62 there. See the token home. */
+  color: var(--r-ink-on-fill);
 }
 
 /* ── 🔴 `CONSOLE-LOOK-06` DELTA 7 §1 — THE AUDIO VERBS, ONE FAMILY, BOTH SURFACES ────────

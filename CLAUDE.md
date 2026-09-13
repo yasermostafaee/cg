@@ -86,6 +86,15 @@ Persian / RTL is a core requirement.
    ⭐ And scan MULTI-LINE where the deliverable can be built across lines: a template literal
    concatenated over three lines is invisible to a per-line regex, which is how (3) happened.
 
+   ⭐ **AND A VALUE HAS NOTATIONS — sweep every one it can be written in.** A COLOUR is the
+   common case: `#f5c879`, `rgb(245 200 121)` and `rgb(245, 200, 121)` are one value in three
+   spellings, and a sweep by token NAME plus hex finds neither of the last two. That is exactly
+   how a fourth miss happened on 2026-09-13 — two passes agreed the ink unification was
+   complete, and `station-setup-match.spec.ts` was still pinning the retired amber as
+   `rgb(245, 200, 121)`. The same applies to a number with units (`4px` / `0.25rem`) and to a
+   name with casing (`LIVE PLATES` / `Live plates`). **Two passes on different AXES is the
+   rule; within an axis, cover every SPELLING of the thing.**
+
 10. 🔴 **A CONFIGURATION VERB IS NEVER A PLAYOUT VERB.** `UPDATE` puts values **IN
     FORCE**; only a **take** puts content **ON AIR**. A row that does not already own live
     layers must produce **no `PLAY`, no un-mute and no fill** — the change lands in STATE, and

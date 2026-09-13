@@ -84,6 +84,9 @@ export function rowDeps(over: Partial<LayerRowActionDeps> = {}): LayerRowActionD
   const binding = over.binding ?? bindingFor(itemWith('loaded'));
   return {
     binding,
+    // DELTA 8 — the operator words each verb toasts with.
+    rowName: 'Row 1',
+    layerName: '1-89',
     observed: binding.kind === 'bound' ? { kind: 'producer', producer: 'html' } : { kind: 'empty' },
     hasNext: false,
     linkDown: false,

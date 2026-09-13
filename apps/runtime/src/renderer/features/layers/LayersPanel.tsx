@@ -777,6 +777,19 @@ export function LayersPanel({
     if (!ok) return;
     try {
       await window.cg.stack.stopAll();
+      /*
+        🔴 DELTA 8 §4(b) — ONE toast that states its SCOPE, never one per row. And §4(c): with
+        nothing on air there was nothing to stop, so the confirm is the whole interaction and
+        the surface stays quiet.
+
+        ⚠ It says STOPPED and not CLEARED. They are different acts and their words are not
+        interchangeable — these graphics ran their outros and are still loaded.
+      */
+      if (onAirCount > 0) {
+        reportCommandSuccess(
+          `Stopped · ${String(onAirCount)} ${onAirCount === 1 ? 'row' : 'rows'}. They stay loaded.`,
+        );
+      }
     } catch (err) {
       reportCommandError(err instanceof Error ? err.message : 'Stop all failed.');
     }
@@ -796,8 +809,19 @@ export function LayersPanel({
       tone: 'remove',
     });
     if (!ok) return;
+    const emptied = items.length;
     try {
       await window.cg.stack.removeAll();
+      /*
+        🔴 DELTA 8 §4(b) + §2's consequence rule. REMOVE ALL is the one bulk verb that is never
+        a remedy and cannot be undone, so its line carries that clause — and it must not be
+        vaguer than the confirm that preceded it, which named the count.
+      */
+      if (emptied > 0) {
+        reportCommandSuccess(
+          `Emptied · ${String(emptied)} ${emptied === 1 ? 'row' : 'rows'}. The templates are off the rows; this cannot be undone.`,
+        );
+      }
     } catch (err) {
       reportCommandError(err instanceof Error ? err.message : 'Remove all failed.');
     }

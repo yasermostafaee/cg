@@ -23,7 +23,14 @@ import { test, expect } from './fixtures/runtime.js';
  * since `SETTINGS-MATCH-02`; these are the same decision for three more roles.
  */
 
-const AMBER = 'rgb(245, 200, 121)'; // --amber  #f5c879
+/*
+  🔴 UNIFIED 2026-09-13 — was rgb(245 200 121) (the settings drawing's own --amber #f5c879,
+  adopted by SETTINGS-MATCH-02). The owner retired the second amber: two values nobody can tell
+  apart cost a second token. The survivor is the CONSOLE drawing's ink, and the more legible of
+  the pair on both grounds (8.99:1 and 10.19:1, against 8.68 and 9.84).
+  Geometry did not move — this dialog keeps its own pad, radius and ground.
+*/
+const AMBER = 'rgb(243, 205, 136)'; // --r-caution-text
 const RED_INK = 'rgb(255, 170, 167)'; // --red     #ffaaa7
 const RED_BG = 'rgb(53, 34, 36)'; // --red-bg  #352224
 const RED_LINE = 'rgb(104, 64, 68)'; //           #684044
