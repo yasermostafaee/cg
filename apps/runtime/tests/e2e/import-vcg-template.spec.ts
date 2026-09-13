@@ -24,8 +24,28 @@ test('a verified .vcg is registered, loads onto a layer, and shows its fields', 
   // Import AND load, in one action, onto the row the operator chose (layer 74).
   await app.importVcg('valid.vcg', await buildValidVcg(templateId), 74);
 
-  // The "Imported X" confirmation is a command SUCCESS toast now, not an inline panel message.
-  await expect(app.success).toContainText('Imported');
+  /*
+    🔴 REPLACED, NOT DELETED — and the reason is the rule, not this test.
+
+    `importVcg` is ONE gesture that completes TWO actions: the package is imported, and it is
+    loaded onto the row the operator aimed at. Each completed action makes exactly one toast
+    call (`CommandToast`'s corollary), and a second confirmation REPLACES the first. So
+    `Imported · valid` is on screen for the instant between them and the LOAD's sentence is
+    what the operator actually reads.
+
+    This spec asserted the one that loses. It now asserts the one that survives, and the
+    assertion is stronger than the old one was: the surviving sentence has to name BOTH halves
+    on its own — WHAT arrived (the template, by the file the operator chose) and WHERE it
+    landed (the row, by the operator's name for it) — which is exactly the property that makes
+    replacement safe. If the load's toast ever goes back to `Row N loaded.`, this fails.
+  */
+  // The row's OWN name, read off the row rather than hardcoded. Its `title` is exactly the
+  // name, where `innerText` would also pick up the draft chip that sits beside it.
+  const landedOn = await app.layerRow(74).locator('[data-row-body]').getAttribute('title');
+  expect(landedOn, 'the row does not name itself').not.toBeNull();
+  await expect(app.success).toContainText('loaded');
+  await expect(app.success).toContainText(landedOn ?? '');
+  await expect(app.success).toContainText('valid');
   await expect(app.error).toHaveCount(0);
 
   // It is on the row, headed by the FILE the operator imported — `valid.vcg` → "valid" —

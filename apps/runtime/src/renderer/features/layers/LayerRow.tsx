@@ -503,7 +503,23 @@ export function LayerRow({
       });
       // The operator's own dismissal: not a success, not a refusal to report.
       if (chosen === null) return { accepted: false, cancelled: true };
-      return loadTemplateOntoFixedSlot(coord, chosen);
+      const res = await loadTemplateOntoFixedSlot(coord, chosen);
+      /*
+        🔴 DELTA 8 — THE LOAD ANNOUNCES ITSELF, AND ITS SENTENCE NAMES WHAT LANDED.
+
+        It is said HERE and not in `layerRowActions`' catalogue because only this scope holds
+        `chosen`: the actions were built while the row was still empty.
+
+        ⚠ AND THE NAME IS WHAT MAKES IT SAFE TO REPLACE THE IMPORT'S MESSAGE. Importing and
+        loading are two presses in one picker session, and the toast REPLACES rather than
+        stacks — so the load's line must stand alone, saying both what arrived and where it
+        landed. The earlier cut silenced the load instead, which left a load that followed no
+        import saying nothing at all.
+      */
+      if (res.accepted) {
+        reportCommandSuccess(`${rowName} loaded · ${displayLabel(chosen) ?? chosen.templateId}`);
+      }
+      return res;
     },
     /**
      * The post-CLEAR re-ADD: put the row's OWN bound template back, no picking.

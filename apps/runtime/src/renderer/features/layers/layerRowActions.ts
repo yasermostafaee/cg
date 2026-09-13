@@ -502,19 +502,18 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
           : `${who} saved. Nothing was sent to air — the next take seats it.`;
       case 'load-remove':
         /*
-          🔴 THE LOAD HALF ANNOUNCES NOTHING, AND THAT IS A CORRECTION I HAD TO BE SHOWN.
+          🔴 THE LOAD HALF IS ANNOUNCED BY ITS OWN HANDLER, NOT HERE, and the reason is that
+          this catalogue cannot name what landed.
 
-          I reasoned that importing and loading are two acts in two dialogs — which the code
-          says outright (`fixedSlotLoad`'s header) — and concluded two toasts were right. They
-          are not, because the two acts CHAIN through one press-sequence and share ONE
-          transient surface: `importVcgToStation` raises `Imported · X`, the load then raised
-          its own, and last-write-wins erased the first. `import-vcg-template.spec` caught it.
+          These actions are built from the render BEFORE the press, so at this point the row is
+          still empty and `deps` knows nothing about the template the operator is about to
+          choose. A sentence written here could only say "loaded" — and a load's sentence has to
+          NAME what arrived, because it may follow an import whose own confirmation it replaces.
+          `LayerRow`'s `load` holds the chosen template, so it announces there.
 
-          So the load stays silent here and the import's sentence stands — it is the more
-          informative of the two, naming the template rather than the row. §4(a): ONE toast per
-          completed action, and this is one action however many dialogs it crossed.
-
-          ⚠ The REMOVE half is a different act with no announcement of its own, so it keeps one.
+          ⚠ An earlier cut made the load silent outright, on the reasoning that the import's
+          toast already spoke. That was wrong twice: it left a load that followed NO import
+          saying nothing at all, and it made one message depend on another still being visible.
         */
         return empty
           ? null

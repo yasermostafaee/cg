@@ -60,6 +60,31 @@ const TOAST_ICON_PX = 17;
 
 const DISMISS_MS = 3200;
 
+/*
+  🔴 **WHAT HAPPENS WHEN A SECOND CONFIRMATION ARRIVES WHILE THE FIRST IS STILL UP — the rule,
+  written here because leaving it to whichever call site fires last is how a message gets
+  erased.**
+
+  **IT REPLACES, and the timer restarts.** Not queue, not merge:
+
+  - QUEUEING would show the operator a stale confirmation of something they have moved on from,
+    and the second action's result — the one they are waiting for — would arrive late.
+  - MERGING would concatenate two unrelated sentences into one line whenever two acts happened
+    to fall within 3.2 s, and the line would grow without a natural end.
+
+  Replacement is right because the NEWER result is the one the operator just caused. But it is
+  only safe under a corollary, and the corollary is the actual rule:
+
+  🔴 **EVERY CONFIRMATION MUST STAND ALONE. One completed action makes exactly ONE call, and its
+  sentence may never depend on an earlier toast still being visible.**
+
+  That is the rule DELTA 8's first cut broke and the defect is worth keeping: importing a
+  package and loading it are two presses in one picker session, so `Imported · X` was replaced
+  by `Row 1 loaded.` moments later — a sentence that had quietly delegated "what arrived" to a
+  message that was already gone. The load's line names the template now, so whichever survives
+  says both halves. See `LayerRow`'s `load`.
+*/
+
 interface Feedback {
   message: string;
 }
