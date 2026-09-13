@@ -1459,6 +1459,11 @@ renders answers "is this handled?" with a yes.
       and with none; **536** tall at 1280 × 600. The defect it replaces, measured by ablation:
       687.6 → 497.6, the frame's top moving 95 px. The row's name moved to the head band and
       `.cg-audio-head` is sticky, both consequences of the body now scrolling. §34.5.
-- [ ] PA.6 🔴 **Linux `gate:e2e` OWED.** This item alters what renders on two surfaces. The
-      Windows Playwright run is green (210 tests) and is NOT a discharge. Write the CI run URL
-      here beside this box.
+- [x] PA.6 🔴 **Linux `gate:e2e` DISCHARGED.** This item alters what renders on two surfaces,
+      so the Windows Playwright run (210 passed) was a reason to push and never a discharge.
+      The authoritative run is
+      **https://github.com/yasermostafaee/cg/actions/runs/34772644236** for `3533b5ee` —
+      `conclusion: success`, and the `E2E (Playwright)` job **RAN** (its `E2E` step is
+      `success`, not skipped; the one skipped step is the browser INSTALL, a cache hit).
+      Checked both directions per `P-029` / `P-046`: a green run whose `e2e` was skipped would
+      not discharge this, and neither would a red job that never reached the suite.
