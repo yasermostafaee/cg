@@ -150,7 +150,9 @@ describe('§3 — the six that did not move', () => {
     (window as unknown as { cg: typeof stub }).cg = stub;
     const bar = await render(createElement(StatusBar));
     const lock = [...bar.querySelectorAll('button')].find((b) =>
-      (b.textContent ?? '').includes('Lock…'),
+      // The bar's control lost its ellipsis (MODAL-CHROME-10 A §A2); scoped to the bar, so
+      // the dialog's own 'Lock' confirm cannot be picked up instead.
+      (b.textContent ?? '').includes('Lock'),
     );
     expect(lock, 'the lock is a status-bar press').toBeDefined();
     await act(async () => {

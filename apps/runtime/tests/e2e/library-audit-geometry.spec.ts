@@ -165,14 +165,14 @@ test('§8 — the picker measures to `LIBRARY_PX` at 1280 × 800', async ({ app 
   expect(px(await foot.evaluate((el) => getComputedStyle(el).fontSize))).toBe(px(tokens.footText));
   /*
     `02`'s drop zone — in the IMPORT dialog since `RUNTIME-REPAIR-05`, which is its own
-    surface now. Its shape is the reference's either way: dashed, and its `Choose file`
+    surface now. Its shape is the reference's either way: dashed, and its `Choose file…`
     primary INSIDE it (audit row 111).
   */
-  await dialog.getByRole('button', { name: 'Import a .vcg…' }).click();
+  await dialog.getByRole('button', { name: 'Import a .vcg' }).click();
   const drop = page.locator('[data-import-drop]');
   await expect(drop).toBeVisible();
   expect(await drop.evaluate((el) => getComputedStyle(el).borderTopStyle)).toBe('dashed');
-  await expect(drop.getByRole('button', { name: 'Choose file' })).toBeVisible();
+  await expect(drop.getByRole('button', { name: 'Choose file…' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel' }).last().click();
   await app.closeTemplatePicker();
 });

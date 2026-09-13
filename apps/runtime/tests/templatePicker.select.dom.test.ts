@@ -313,7 +313,7 @@ describe('§2B — importing is reachable, and it is not the load', () => {
     await click(importOpen);
     const zone = document.querySelector('[data-import-drop]');
     expect(zone, 'a dialog of its own, with the drop zone in it').not.toBeNull();
-    // Audit row 111: `Choose file` is INSIDE the zone, as the reference paints it.
+    // Audit row 111: `Choose file…` is INSIDE the zone, as the reference paints it.
     expect(zone?.querySelector('button')?.textContent).toContain('Choose file');
     // And it says what it does not do.
     expect(document.querySelector('[data-import-foot-info]')?.textContent).toContain(

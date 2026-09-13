@@ -121,7 +121,7 @@ describe('guard item 16 — the engage-lock dialog is present, asks twice, and r
     expect(onEngage).toHaveBeenCalledWith('2468');
   });
 
-  it('🔴 THE DOOR — the status bar’s Lock… opens this dialog (the plant that wired it shut reddened only the digit suite)', async () => {
+  it('🔴 THE DOOR — the status bar’s Lock opens this dialog (the plant that wired it shut reddened only the digit suite)', async () => {
     const health: ConnectionHealth = {
       primary: { label: 'A', state: 'healthy', amcpAxisOk: true },
       currentPrimary: 'A',
@@ -155,14 +155,17 @@ describe('guard item 16 — the engage-lock dialog is present, asks twice, and r
     });
     expect(document.querySelector('[role="dialog"]'), 'no dialog before the press').toBeNull();
     const lockButton = [...container.querySelectorAll('button')].find((b) =>
-      (b.textContent ?? '').includes('Lock…'),
+      // ⚠ The bar's control lost its ellipsis (`MODAL-CHROME-10` A §A2), so this matches the
+      // WORD. It is scoped to the bar's own container, which is what keeps it off the
+      // dialog's confirm — also called Lock.
+      (b.textContent ?? '').includes('Lock'),
     );
-    expect(lockButton, 'the bar has no Lock… control').not.toBeUndefined();
+    expect(lockButton, 'the bar has no Lock control').not.toBeUndefined();
     await act(async () => {
       lockButton?.click();
     });
     const dialog = document.querySelector('[role="dialog"]');
-    expect(dialog, 'Lock… did not open the engage dialog').not.toBeNull();
+    expect(dialog, 'Lock did not open the engage dialog').not.toBeNull();
     expect(dialog?.textContent).toContain('Engage lock');
     expect(fields()).toHaveLength(2);
   });

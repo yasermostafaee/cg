@@ -756,7 +756,7 @@ export function useTemplatePicker(): {
     }
   }, []);
 
-  /** Open the Import dialog on an empty slate — the `Import a .vcg…` control's own press. */
+  /** Open the Import dialog on an empty slate — the `Import a .vcg` control's own press. */
   const openImport = useCallback((): void => {
     setStaged(null);
     setImportMessage(null);
@@ -841,7 +841,7 @@ export function useTemplatePicker(): {
                 is `Bed 1` or an alias, and that is what the destination card beside it says too.
 
                 Disabled until a template is selected AND that template can go onto this row —
-                the same `loadable` the keyboard and the double-click ask. `Import a .vcg…` has
+                the same `loadable` the keyboard and the double-click ask. `Import a .vcg` has
                 left this bar for the search row, where the reference puts its own `Manage`.
               */
               <ModalAction
@@ -944,7 +944,7 @@ export function useTemplatePicker(): {
                     <p>Import a .vcg package to begin.</p>
                     <Button variant="primary" onClick={openImport}>
                       <Icon icon={FileUp} size={14} />
-                      Import a .vcg…
+                      Import a .vcg
                     </Button>
                   </div>
                 ) : (
@@ -1095,7 +1095,7 @@ export function useTemplatePicker(): {
  * 🔴 `RUNTIME-REPAIR-05` §2B — THE IMPORT DIALOG, WHICH REGISTERS AND LOADS NOTHING.
  *
  * The reference ships this as a `<dialog>` of its own — `#import-dialog`, 750 px wide, a head
- * band, a drop zone with `Choose file` as a PRIMARY inside it, and a footer carrying only
+ * band, a drop zone with `Choose file…` as a PRIMARY inside it, and a footer carrying only
  * `Cancel`. Measured at 1280 × 800 by opening it (`02-template-import.html`,
  * `data-start="import"`); it is a separate dialog ELEMENT, not a mode of the picker, which is
  * what the owner asked for.
@@ -1186,14 +1186,17 @@ function ImportDialog({
             : `Ready to import “${staged.name}”.`}
         </p>
         {/*
-          `Choose file` INSIDE the zone — audit row 111, which `§15.3` argued away while
-          `Import a .vcg…` was the only import control and a second one would have been a second
+          `Choose file…` INSIDE the zone — audit row 111, which `§15.3` argued away while
+          `Import a .vcg` was the only import control and a second one would have been a second
           door to one act. With import in its own dialog this IS that dialog's act, and the
           reference paints it exactly here, as a primary.
         */}
         <Button variant="primary" disabled={busy} onClick={onChooseFile}>
           <Icon icon={FileUp} size={14} />
-          Choose file
+          {/* 🔴 THE DOTS BELONG HERE — `MODAL-CHROME-10` A §A2. This is the one control in the
+              chain that opens a real BROWSE WINDOW (`pickFile` → the file input). The button
+              that opens THIS dialog lost its dots for the mirror reason: it opens a dialog. */}
+          Choose file…
         </Button>
       </div>
     </Modal>
@@ -1345,7 +1348,7 @@ function PickerList({
           data-template-import-open=""
           onClick={onImport}
         >
-          Import a .vcg…
+          Import a .vcg
         </Button>
         <Button
           variant="neutral"

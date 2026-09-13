@@ -631,7 +631,10 @@ export function StatusBar(): JSX.Element {
               source case buys no pixel and only breaks the three specs that read
               `textContent`. Only the glyph moved. */}
           <Icon icon={Lock} />
-          Lock…
+          {/* 🔴 NO ELLIPSIS. `MODAL-CHROME-10` A §A2: the dots belong ONLY to a control that
+              opens a BROWSE WINDOW. This opens the in-app PIN dialog. Label only — the lock
+              still refuses everything and still asks for the PIN twice. */}
+          Lock
         </Button>
       )}
       {engaging && (

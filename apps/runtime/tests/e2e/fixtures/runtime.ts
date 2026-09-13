@@ -333,7 +333,7 @@ export class RuntimeApp {
    * split the picker into a Templates dialog and a station-level Import dialog: importing
    * REGISTERS a package and binds no row, and the operator lands back on the list with the
    * new template selected, one press from the load. So this drives
-   * LOAD → `Import a .vcg…` → the file chooser → `Load onto <row>`.
+   * LOAD → `Import a .vcg` → `Choose file…` → the file chooser → `Load onto <row>`.
    *
    * ⚠ THE SECOND PRESS IS NOT CEREMONY, AND A HELPER THAT SKIPPED IT WOULD HIDE THE ONE
    * THING THIS SESSION CHANGED. Nine specs call this to get a bound row; if it committed the
@@ -348,9 +348,9 @@ export class RuntimeApp {
     await this.layerRow(target).getByRole('button', { name: 'LOAD' }).click();
     await expect(this.templatePicker).toBeVisible();
     // The tools row's door, not the footer's: the footer's primary is the LOAD now.
-    await this.page.getByRole('button', { name: 'Import a .vcg…' }).click();
+    await this.page.getByRole('button', { name: 'Import a .vcg' }).click();
     const chooser = this.page.waitForEvent('filechooser');
-    await this.page.getByRole('button', { name: 'Choose file' }).click();
+    await this.page.getByRole('button', { name: 'Choose file…' }).click();
     await (
       await chooser
     ).setFiles({
@@ -420,7 +420,7 @@ export class RuntimeApp {
   async closeTemplatePicker(): Promise<void> {
     /*
       `RUNTIME-REPAIR-04` — the picker has TWO modes now, and `Cancel` belongs to the selection
-      one: while the management view is up the footer's controls are `Import a .vcg…` and
+      one: while the management view is up the footer's controls are `Import a .vcg` and
       `Back to selection`, as the reference's are. So a caller that has just deleted something
       is one step deeper than this helper used to assume, and the helper walks back out rather
       than every such test remembering to.

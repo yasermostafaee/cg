@@ -19,7 +19,7 @@ import { expect, test } from './fixtures/runtime.js';
  *
  *   1. Enter closes the prompt, so `Modal` unmounts;
  *   2. the focus trap's cleanup restores focus to the control that had it when the trap
- *      armed — the status bar's own `🔒 Lock…` button;
+ *      armed — the status bar's own `Lock` button;
  *   3. the browser then runs the Enter keydown's DEFAULT ACTION, and Enter on a focused
  *      button is a CLICK — re-opening the prompt while the engage already in flight raises
  *      the lock screen behind it.

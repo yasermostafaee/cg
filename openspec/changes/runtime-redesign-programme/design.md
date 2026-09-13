@@ -5581,3 +5581,94 @@ under-reported four times on this tree (§27.2.2, and the notation miss recorded
 
 ⚠ So the two differ ON PURPOSE. If a later session finds our CAPS against the drawing’s
 sentence case, this is the decision it is looking at, not a defect.
+
+---
+
+## 32. `MODAL-CHROME-10` ADDENDUM A — THE ELLIPSIS RULE, AND THE ONE WAY THE BAR SEATS AN ICON
+
+Two copy/chrome decisions, filed here beside §29's palette grammar and §31.4's casing ruling
+because that is where the console's other copy decisions live, and because both of these were
+found by the owner reading the built console rather than by a test.
+
+### 32.1 §A2 — THE DOTS MEAN A BROWSE WINDOW. NOTHING ELSE.
+
+🔴 **A trailing ellipsis on a control means: pressing this opens a window that takes over from
+the console — the OS file chooser. It does NOT mean "opens a dialog", it does not mean "this
+needs more input", and it is not decoration.**
+
+The console had it backwards on two controls at once, which is what made the rule worth writing
+rather than just fixing:
+
+| control                      | was              | is                  | why                                                                    |
+| ---------------------------- | ---------------- | ------------------- | ---------------------------------------------------------------------- |
+| the status bar's lock        | `Lock…`          | **`Lock`**          | it opens the in-app PIN dialog, not a browse window                    |
+| the picker's import          | `Import a .vcg…` | **`Import a .vcg`** | same — it opens the in-app Import dialog                               |
+| the drop zone's button       | `Choose file`    | **`Choose file…`**  | the ONE control in that chain that reaches `pickFile` → a real chooser |
+| the Inspector's `From file…` | `From file…`     | unchanged           | `showOpenFilePicker` — already correct                                 |
+
+Note the shape of it: `Import a .vcg` and `Choose file…` are two presses in the SAME chain and
+they swapped dots. The dots did not belong to "the import" as a concept; they belong to the one
+press that hands the operator to the OS.
+
+⚠ **What the rule does NOT cover, deliberately.** A trailing ellipsis in PROGRESS or PLACEHOLDER
+text — `Loading…`, `Connecting…`, `Reading the audit record…`, `Search templates…` — is a
+different device (something is continuing / something goes here) and is untouched. The rule is
+about CONTROLS.
+
+⚠ **Spelling: `…` (U+2026), never three periods.** Swept: the runtime renderer contains no
+three-period spelling in any label.
+
+⚠ **The sweep this cost, and the trap in it (golden rule 9).** Removing the dots from `Lock…`
+made the status bar's control and the engage dialog's confirm BOTH read exactly `Lock`, so a
+page-wide `{ name: 'Lock', exact: true }` became ambiguous where it had been unique. Every
+finder was re-anchored or re-scoped rather than re-typed — `add-dialog.spec.ts` to
+`/^Lock$/` + `.first()`, `engageLockDialog.dom.test.ts` and `numericInput.dom.test.ts`
+to the bar's own container. **A copy change that makes two labels IDENTICAL is a stronger
+obligation than one that merely changes a string**: the compiler cannot help, and the finders
+that break are the ones that used to be precise.
+
+### 32.2 §A1 — `AsyncButton` HAD A SECOND WAY TO SEAT AN ICON, AND IT WAS THE WRONG ONE
+
+The owner saw FAILOVER's icon jammed against its word and off its optical line, while `Lock` —
+two controls along in the same bar — was right. **The cause was not that button.**
+
+`AsyncButton` wraps ALL its children in one `.cg-btn__label` span, so the spinner can take the
+label's slot without the control's width jumping. That wrapper was a plain inline box, so
+`.cg-btn`'s own `align-items: center` and `gap` applied to the WRAPPER and reached nothing
+inside it. `Button` puts its icon and word as direct flex children and got both for free. Two
+compositions, one of them accidental.
+
+The fix is three lines and belongs to the wrapper, not to any button:
+
+```css
+.cg-btn__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-space-2);
+}
+```
+
+Measured in Chromium at 1400 × 900 (Windows — golden rule 12a: a Linux `e2e` is what
+discharges it), before → after:
+
+| control  | composed by   | gap icon→word                                        | icon centre − word centre |
+| -------- | ------------- | ---------------------------------------------------- | ------------------------- |
+| FAILOVER | `AsyncButton` | **none** (−15 px measured to the wrapper) → **8 px** | −1.03 px → **0.53 px**    |
+| Lock     | `Button`      | 8 px → 8 px                                          | 0.53 px → 0.53 px         |
+
+⚠ **The −15 px is a reading artefact worth keeping.** The first measurement took the WRAPPER's
+box as the word's box, so it reported the icon overlapping the label by 15 px. The number was
+meaningless; the direction was not. `bar-icon-composition.spec.ts` walks to the TEXT NODE and
+measures a `Range`, which is the same either side of the wrapper.
+
+⚠ **The regression spec COMPARES THE TWO FAMILIES rather than pinning 8 px**, deliberately: a
+margin on one icon would satisfy a pinned number and leave the next `AsyncButton` wrong. What
+must hold is that there is ONE way to seat an icon beside a word. jsdom returns zeros for every
+box here, so none of it could be asserted without a browser (golden rule 12c).
+
+### 32.3 REPORTED, NOT CHANGED — `FAILOVER` is CAPS and `Lock` is sentence case, in the same bar
+
+Noticed while measuring §A1 and left alone. The status bar carries both casings side by side:
+`FAILOVER` shouts, `Lock` does not. §31.4 settled that the console's own vocabulary is not
+recased for cosmetic parity, and this is a wider decision than an addendum about icon geometry
+should take — it is a bar-wide copy question. **Filed for the owner, unchanged.**

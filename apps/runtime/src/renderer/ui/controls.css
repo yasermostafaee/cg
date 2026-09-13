@@ -6687,3 +6687,28 @@ input[type='checkbox']:disabled:checked {
   text-underline-offset: 3px;
   color: var(--r-accent);
 }
+
+/* ── 🔴 `MODAL-CHROME-10` A §A1 — ONE WAY TO SEAT AN ICON BESIDE A WORD ────────
+ *
+ * `.cg-btn` is an `inline-flex` with `align-items: center` and `gap: var(--r-space-2)`, and
+ * that is the family's icon+label composition — every `Button` gets it because its icon and
+ * its word are DIRECT flex children.
+ *
+ * `AsyncButton` is not: it wraps ALL its children in one `.cg-btn__label` span so the spinner
+ * can take the label's slot without the control's width jumping. That wrapper is a plain
+ * inline box, so inside it the button's `gap` and `align-items` reach nothing — the icon and
+ * the word sit flush and off each other's optical centre.
+ *
+ * Measured in Chromium at 1400 × 900 before this rule: the status bar's FAILOVER (an
+ * `AsyncButton`) had a **−15 px** icon-to-word gap and its icon centre **1.03 px** off the
+ * word's, while Lock (a `Button`) two controls away had **+8 px** and **0.53 px**.
+ *
+ * ⚠ THE FIX IS THE PATTERN, NOT THE BUTTON. A margin on that one icon would have made
+ * FAILOVER right and left the next `AsyncButton` that seats an icon wrong. Giving the wrapper
+ * the same composition puts every one of them on the family's single way of doing it.
+ */
+.cg-btn__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--r-space-2);
+}

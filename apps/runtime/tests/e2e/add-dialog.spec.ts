@@ -118,7 +118,12 @@ test('§5 — the live-source fields change with the kind, and the row labels wh
 test('§7 — engaging the lock asks for the PIN twice and refuses a mismatch', async ({ app }) => {
   const page = app.page;
 
-  await page.getByRole('button', { name: /Lock…/ }).click();
+  // ⚠ ANCHORED, not /Lock/: the dialog's own confirm is also called Lock now that the bar's
+  // control has lost its ellipsis (`MODAL-CHROME-10` A §A2). This is the BAR's.
+  await page
+    .getByRole('button', { name: /^Lock$/ })
+    .first()
+    .click();
   const lock = page.getByRole('dialog', { name: 'Engage lock' });
   await expect(lock).toBeVisible();
 

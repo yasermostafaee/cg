@@ -14,7 +14,7 @@ import { clearPortals, openDialog } from './support/dialog.js';
  *
  * The chain: Enter closes the prompt → the `Modal` unmounts → the focus trap's cleanup
  * restores focus to the control that had it when the trap armed (the status bar's own
- * `🔒 Lock…` button) → the browser then runs the keydown's DEFAULT ACTION, and Enter on a
+ * `Lock` button) → the browser then runs the keydown's DEFAULT ACTION, and Enter on a
  * focused button is a CLICK. The prompt re-opens while the engage already in flight raises
  * the lock screen behind it.
  *

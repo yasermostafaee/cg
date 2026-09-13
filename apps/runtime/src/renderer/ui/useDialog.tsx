@@ -250,7 +250,7 @@ export function usePrompt(): {
 
                   1. Enter closes this dialog (`settle`), so the `Modal` unmounts;
                   2. the focus trap's cleanup restores focus to whatever had it when the trap
-                     armed — the status bar's own `Lock…` BUTTON, which is what the operator
+                     armed — the status bar's own `Lock` BUTTON, which is what the operator
                      pressed to get here;
                   3. the browser then runs the Enter keydown's DEFAULT ACTION, and the default
                      action of Enter on a focused button is to CLICK it — so the prompt

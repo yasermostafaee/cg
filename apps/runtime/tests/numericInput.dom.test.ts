@@ -356,7 +356,7 @@ describe('Lock PIN — R-020 (both ends of the comparison normalize)', () => {
     // Open the lock prompt, type a Persian PIN, submit. The prompt dialog is
     // PORTALLED to document.body, so it is queried on the document, not `el`.
     const lockButton = [...el.querySelectorAll('button')].find((b) =>
-      (b.textContent ?? '').includes('Lock…'),
+      (b.textContent ?? '').includes('Lock'),
     );
     await act(async () => {
       lockButton?.click();
@@ -374,7 +374,15 @@ describe('Lock PIN — R-020 (both ends of the comparison normalize)', () => {
     expect(fields, 'the engage form asks for the PIN twice').toHaveLength(2);
     await setInput(fields[0] as HTMLInputElement, '۱۲۳۴');
     await setInput(fields[1] as HTMLInputElement, '1234');
-    const submit = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Lock');
+    /*
+      ⚠ SCOPED TO THE DIALOG. This searched the whole DOCUMENT for a button reading exactly
+      `Lock` — which was unambiguous only while the status bar's own control said `Lock…`.
+      `MODAL-CHROME-10` A §A2 took its ellipsis away, so document order would hand this the
+      BAR's button instead of the dialog's submit.
+    */
+    const submit = [
+      ...(document.querySelector('[role="dialog"]')?.querySelectorAll('button') ?? []),
+    ].find((b) => b.textContent === 'Lock');
     await act(async () => {
       submit?.click();
       await Promise.resolve();
@@ -410,7 +418,7 @@ describe('Lock PIN — R-020 (both ends of the comparison normalize)', () => {
     (window as unknown as { cg: typeof stub }).cg = stub;
     const el = await render(createElement(StatusBar));
     const lockButton = [...el.querySelectorAll('button')].find((b) =>
-      (b.textContent ?? '').includes('Lock…'),
+      (b.textContent ?? '').includes('Lock'),
     );
     await act(async () => {
       lockButton?.click();
@@ -419,7 +427,15 @@ describe('Lock PIN — R-020 (both ends of the comparison normalize)', () => {
     const fields = [...document.querySelectorAll<HTMLInputElement>('input[type="password"]')];
     await setInput(fields[0] as HTMLInputElement, '1234');
     await setInput(fields[1] as HTMLInputElement, '1235');
-    const submit = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Lock');
+    /*
+      ⚠ SCOPED TO THE DIALOG. This searched the whole DOCUMENT for a button reading exactly
+      `Lock` — which was unambiguous only while the status bar's own control said `Lock…`.
+      `MODAL-CHROME-10` A §A2 took its ellipsis away, so document order would hand this the
+      BAR's button instead of the dialog's submit.
+    */
+    const submit = [
+      ...(document.querySelector('[role="dialog"]')?.querySelectorAll('button') ?? []),
+    ].find((b) => b.textContent === 'Lock');
     await act(async () => {
       submit?.click();
       await Promise.resolve();
@@ -466,7 +482,7 @@ describe('Lock PIN — R-020 (both ends of the comparison normalize)', () => {
     (window as unknown as { cg: typeof stub }).cg = stub;
     const el = await render(createElement(StatusBar));
     const lockButton = [...el.querySelectorAll('button')].find((b) =>
-      (b.textContent ?? '').includes('Lock…'),
+      (b.textContent ?? '').includes('Lock'),
     );
     await act(async () => {
       lockButton?.click();
@@ -474,7 +490,15 @@ describe('Lock PIN — R-020 (both ends of the comparison normalize)', () => {
     const fields = [...document.querySelectorAll<HTMLInputElement>('input[type="password"]')];
     await setInput(fields[0] as HTMLInputElement, '12');
     await setInput(fields[1] as HTMLInputElement, '12');
-    const submit = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Lock');
+    /*
+      ⚠ SCOPED TO THE DIALOG. This searched the whole DOCUMENT for a button reading exactly
+      `Lock` — which was unambiguous only while the status bar's own control said `Lock…`.
+      `MODAL-CHROME-10` A §A2 took its ellipsis away, so document order would hand this the
+      BAR's button instead of the dialog's submit.
+    */
+    const submit = [
+      ...(document.querySelector('[role="dialog"]')?.querySelectorAll('button') ?? []),
+    ].find((b) => b.textContent === 'Lock');
     await act(async () => {
       submit?.click();
       await Promise.resolve();
