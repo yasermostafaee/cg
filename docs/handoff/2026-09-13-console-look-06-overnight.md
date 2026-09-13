@@ -17,10 +17,10 @@ how it was seen, and a green gate is never the evidence (golden rule 12).
 | 1   | DELTA 11 — green selected look  | **landed**               | `a0c4abf1` |
 | 2   | DELTA 9 — PENDING doctrine + §2 | **landed**               | `cdb3529f` |
 | 3   | this handover                   | **landed**               | —          |
-| 4   | DELTA 7 — Live plates tab       | _in progress_            | —          |
-| 5   | DELTA 8 — per-action toasts     | _not started_            | —          |
-| 6   | D8b / D9.1–9.9 — audio modal    | _not started_            | —          |
-| 7   | D7 — channel combobox           | _not started_            | —          |
+| 4   | DELTA 7 — Live plates tab       | **landed**               | `d202afd6` |
+| 5   | DELTA 8 — per-action toasts     | **landed (audio half)**  | `c06b9d4b` |
+| 6   | D8b / D9.1–9.9 — audio modal    | **7 of 9 already done**  | docs only  |
+| 7   | D7 — channel combobox           | **NOT STARTED** — §5     | —          |
 
 ---
 
@@ -163,6 +163,40 @@ rendered value; never trust document order in that file.**
 
 ---
 
-## 7. Reverted commits
+## 7. What items 4–6 found, in one paragraph each
 
-_None so far._
+- **DELTA 7** — the Live plates tab already matched the drawing on all seven columns (text AND
+  width), the toolbar, the 42 px rows and the three-part count. What moved: the verb family as
+  role tokens on both surfaces, the panic treatment, and DELTA 8 §0's two verified strings.
+- **DELTA 8** — the audio half landed behind ONE announcer both call paths share; SOLO is
+  detected from the map's own shape, so `add-multibox-audio`'s one-call door is untouched. The
+  LAYER-LEVEL verbs (bed/template, apply/revert) do NOT toast yet.
+- **D9** — seven of nine were already delivered before tonight. D9.2 is not reproducible (the
+  two numbers come from two sources; a look literally named "3 frames" explains it) and D9.9's
+  width claim is false (measured 860 × 790, body 614 = its own scrollHeight). `design.md` §31.
+
+⭐ **D9.4's persistence clause was PROVED rather than left standing:** the intent rides the item
+(`StackItemStateSchema.plateVolumes`) and the bridge's restore re-applies it, with a comment
+naming that exact failure — _"a dropped volume shows the right picture in silence"_.
+
+## 8. 🔴 NOT STARTED — D7, the channel combobox
+
+The establish answers are banked in §5 above, so the next session measures nothing twice. What
+stopped it was the hour rather than a question: the swap is not only a control change —
+`ChannelScope` renders a `TabPanel` whose `aria-labelledby` points at a TAB that a combobox
+would delete, so the panel's labelling has to move with it or the surface gains an a11y defect.
+That is a structural change I was not willing to land unattended at the end of a long run.
+
+⭐ It stays a UI SHAPE when it lands: `R-062` still records the three real gaps (five
+`z.void()` bulk verbs, no discovery call, the bank as the only channel authority) and none of
+them is touched by giving the picker a different shape.
+
+## 9. Reverted commits
+
+_None._ Every item that landed did so on its own green gate.
+
+⚠ One in-flight revert worth naming: while adopting DELTA 8 §0's owner-link string I also folded
+the owner's name into the button's ACCESSIBLE NAME, which no delta asked for and which
+`live-source-layers.spec` pins. The suite caught it and it was reverted to the original string
+verbatim before the commit. The lesson is in that commit's message: the sweep covered the two
+strings I set out to change and not the third I changed in passing.

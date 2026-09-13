@@ -5499,3 +5499,67 @@ answer, and is recorded because the next reader will otherwise go looking for th
 
 ⚠ **§3's boundary needed nothing withdrawn**: DELTA 8 is not built yet, and DELTA R already
 separated the transient surface from the persistent one, so (a)–(d) hold by construction.
+
+## 31. `CONSOLE-LOOK-06` D8b / D9.1–9.9 — THE AUDIO MODAL WAS ALREADY MOSTLY THERE
+
+🔴 **Seven of the nine D9 items were already delivered before this session touched the file.**
+The delta describes a dialog that earlier programme work (`REPAIR-03` B and the
+`add-multibox-audio` phases) had already brought to the drawing. Verified by reading the
+component, not by assuming:
+
+| item | asked for                             | state                                                                                    |
+| ---- | ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| D9.1 | title `Live plate audio`              | **already** — `title="Live plate audio"`                                                 |
+| D9.2 | `3 frames · 3 frames` is a bug        | **NOT REPRODUCIBLE** — see below                                                         |
+| D9.3 | drop the `Ready` badge                | **already** — there is none; the reference's `On air` badge was deliberately not adopted |
+| D9.4 | the missing paragraph                 | **already** — `.cg-audio-intro` carries it in full                                       |
+| D9.5 | the fader sub-line reads `NOT SEATED` | **already** — `plateAudio.ts` `UNSEATED_PILL`                                            |
+| D9.6 | the verbs' resting colours            | **DONE TONIGHT** by DELTA 7 §1                                                           |
+| D9.7 | restore the two footer clauses        | **already** — both sentences present verbatim                                            |
+| D9.8 | `Done` → `Close`                      | **already** — `ModalAction` reads `Close`                                                |
+| D9.9 | the frame hugs its content            | **measured; the width claim is false** — see below                                       |
+
+### 31.1 D9.2 — not a bug in the console, and the two numbers come from two sources
+
+The context line renders `{plates.length} frames` and then `{activeLook.label}`, and
+`lookOptionsOf` sets `label: l.name` — **the AUTHORED look name**, which
+`TemplateLookSchema.name` requires (`z.string().min(1)`). The mock's seeded looks are named
+`Left pair` and `Solo`, so the doubling does not reproduce here.
+
+**So `3 frames · 3 frames` is the frame count followed by a look whose author named it
+"3 frames".** Correct rendering of unfortunate data, not a duplicated read. Nothing is
+changed: the alternative — printing the LOOK's frame count instead of the ROW's plate count —
+would contradict this dialog's whole purpose, which is that every frame including the hidden
+ones is reachable here.
+
+⚠ If the owner still sees it on the plant, the fix is in the TEMPLATE's look name, not here.
+
+### 31.2 D9.4's clauses, verified one by one before being left standing
+
+The paragraph was already on screen; the delta asks that every clause be proved. Four are
+plainly true of the code. The fifth is a persistence claim and was the one worth checking:
+
+- _plates start silent_ — ✅ the audio rule creates every producer muted; `layerRowActions`
+  states it as the reason the AUDIO verb exists at all.
+- _nothing the bridge seats is audible until raised here_ — ✅ same rule.
+- _per-plate, scoped to THIS ROW_ — ✅ `#plateVolumes` is keyed by `itemId`.
+- _can be set before the take_ — ✅ the verb is not gated on `onAir`, deliberately.
+- 🔴 _survives a source swap and a bridge restart_ — **PROVED, not assumed.** The intent
+  rides the ITEM (`StackItemStateSchema.plateVolumes`), and the bridge's restore path
+  re-applies it explicitly: _"the audio intent, for the same reason and with a failure that
+  is HARDER to notice: a dropped source override shows the wrong picture, which somebody
+  sees; a dropped volume shows the right picture in silence"_ (`caspar-runtime.ts` ~2520).
+  The clause stands as written.
+
+### 31.3 D9.9 — measured: the width claim is false, and the body has no dead space
+
+Measured in Chromium at 1400 × 900 with four plates: the dialog is **860 × 790**,
+`max-height: 792`, `min-height: 0`, and the body is **614 px tall with a 614 px scrollHeight**
+— exactly its content, no padding below the rows.
+
+`--r-modal-w-wide` is `min(860px, 94vw)` against the reference's
+`min(860px, calc(100vw - 32px))`: **identical at any viewport wider than about 915 px**, and
+860 at the widths this console is used at. The report that ours "looks wider than 860" does
+not hold. The dialog is at its height CAP rather than padded, so the "dead space below three
+rows" is not reproducible here either — reported rather than changed, because changing a
+frame on an unreproducible reading is how a correct surface gets broken.
