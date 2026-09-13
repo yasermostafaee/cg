@@ -1533,8 +1533,9 @@ filed.
   a local copy of the one audibility predicate (golden rule 6), blind to `held`, and on a row
   that owned no seat a claim about air that nothing on the channel backed. A12's rule, met on
   the very surface A12 said to read it before. Closed: the dialog now takes the LEDGER's word
-  through `plateAudioPill` — AUDIBLE, SILENT, HIDDEN BY THIS LOOK, ARMED · HIDDEN BY THIS
-  LOOK — and a plate with no seat reads NOT SEATED (`UNSEATED_PILL`, `plateAudio.ts`). The
+  through `plateAudioPill` — `Audible`, `Silent`, `Hidden by this look`, `Armed · hidden by
+this look` — and a plate with no seat reads `Not seated` (`UNSEATED_PILL`, `plateAudio.ts`).
+  ⚠ RECASED by §34 (`PLATES-AUDIO-11` §3); the words and the predicate are unchanged. The
   reference's own `On air` badge in its context line is NOT adopted for the same reason.
 - **The row's AUDIO verb was reachable only by pointer.** `useContextMenu.open` took a
   `MouseEvent`; the row's `onKeyDown` handled Enter and Space. The reference wires the
@@ -1604,7 +1605,7 @@ the built SPA on the e2e harness. "Palette" means the same ROLE, whose value Pha
 | plate / source     | handle 11 px muted + producer in a `<bdi>`, 13 px, gap 8                                     | **the same**                                                                                       | **FIXED**                                                                                                                                                                                    |
 | owner              | a 30 px link `Bed 1 ›`, 12 px accent                                                         | `Seated for <bdi>owner</bdi>` + `OPEN ROW` (ghost, 30 px, 12 px)                                   | ARGUED: the verb word stays — five tests pin it and `B-145` chose it; the owner is named beside it in its own isolate                                                                        |
 | picture            | `On screen` 12 px secondary / `Held` muted                                                   | the app's headline, 12 px, in the row's tone                                                       | **FIXED** (size, column); ARGUED: the words (`Held — not in the current look`, `Adopted — not confirmed`, `Stranded — no row owns this`) are `B-145` / `B-086` claims, nothing reworded (§0) |
-| audio word         | 5 px dot + 12 px `Audible` (sky) / `Silent` (muted), gap 6                                   | **5 px dot + 12 px** AUDIBLE / SILENT / HIDDEN BY THIS LOOK, gap 6                                 | **FIXED** (dot, size, gap); ARGUED: the upper-case vocabulary is the app's one (`plateAudio.ts`), shared with the row chip                                                                   |
+| audio word         | 5 px dot + 12 px `Audible` (sky) / `Silent` (muted), gap 6                                   | **5 px dot + 12 px** `Audible` / `Silent` / `Hidden by this look`, gap 6                           | **FIXED** (dot, size, gap, and — since §34 — the CASE; the ARGUED note that kept ours upper-case is superseded)                                                                              |
 | gain               | range 140 × 26, radius 7; output 34 px, 11 px, right, secondary; gap 9                       | **range 140 × 26; output 34 px, 11 px, right, secondary; gap 9**                                   | **FIXED**; ARGUED: the range's radius is `.cg-field`'s                                                                                                                                       |
 | verbs              | `ON` / `OFF` 40 × 32, `SOLO` 46 × 32, 11 px 650, gap 5; hover ON sky, OFF purple, SOLO amber | **40 × 32 / 46 × 32, 11 px, gap 5**; `secondary` × 2, `caution`, the primitive's hovers            | **FIXED** (boxes); ARGUED: per-verb hover hues — the Button primitive owns its variants' states; SOLO wears the app's caution amber as the reference's does                                  |
 | row hover / focus  | `#182838`; focus `2px solid --blue`, offset 3                                                | `--r-table-row-hover`; `2px solid --r-accent`, offset −2 (inside)                                  | **FIXED** (hover, ring); ARGUED: an outside offset clips in a scrolling list                                                                                                                 |
@@ -1612,21 +1613,21 @@ the built SPA on the e2e harness. "Palette" means the same ROLE, whose value Pha
 
 **The audio dialog (`08`)**
 
-| property         | reference (rendered)                                                                                          | app (after this phase)                                                                                                                         | verdict                                                                                                                                                                                                                                                                            |
-| ---------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| title            | `Live audio` 20 px 650 + a 42 px volume glyph                                                                 | `Live plate audio`, the modal primitive's title                                                                                                | ARGUED: the primitive's one treatment; the name is pinned by the row's tests                                                                                                                                                                                                       |
-| subtitle         | `Channel 1 · Bed 1 · 3ghab` 13 px muted, margin-top 3                                                         | **`<row> · <template> · 1-70` 13 px muted**, ids on `title`, each name in its own `<bdi>`                                                      | **FIXED** (built — golden rule 11; `R-028` keeps the coordinate in the sentence); ARGUED: `Channel 1` — the coordinate carries the channel                                                                                                                                         |
-| context line     | `On air` badge · `3 frames · 2 frames` · `Changes apply on release`; `11px 20px`, 13 px / 12 px               | **`N frames · <look label>` · `Changes apply on release`**, `11px 0`, 13 px / 12 px                                                            | **FIXED** (the line, the counts, the hint); the `On air` badge NOT adopted (A12); ARGUED: the look's LABEL rather than its frame count — the strip already counts frames                                                                                                           |
-| head             | `Frame / source · Requested gain · Audio controls`, 12 px, `1fr 269 190` gap 18, `10px 0`, rule               | **the same three, 12 px, `minmax(0,1fr) 269px 190px` gap 18, `10px 0`**, rule `--r-border-strong`                                              | **FIXED**                                                                                                                                                                                                                                                                          |
-| mixer row        | 85 px (`12px 0`, min 83), rule below                                                                          | **`12px 0`, min 83**, rule `--r-border-soft`                                                                                                   | **FIXED**                                                                                                                                                                                                                                                                          |
-| index chip       | 29 × 29, radius 4, 13 px, raised ground                                                                       | **29 × 29, radius 4, 13 px**, `--r-surface-raised`                                                                                             | **FIXED**                                                                                                                                                                                                                                                                          |
-| name / seat line | the PRODUCER's name 14 px 600; `Frame 1 · Layer 1-10` 12 px                                                   | the PLATE id 14 px 600 in a `<bdi>`; **`Frame 1 · on 1-10`** 12 px (or `· not seated`)                                                         | **FIXED** (ranks, seat line); ARGUED: the plate id, not the producer — it is the handle the strip, the row chip and the bridge all use, and the producer is one column over on the plates tab; `Layer N` is a ROW's name (`cg/bank-shape`), so the coordinate is said as `on 1-10` |
-| fader            | 28 px; output 43 px 13 px right; state word 12 px (`Audible · requested` mint / `Muted` / `… hidden by look`) | **28 px; 43 px 13 px right; 12 px state word** from the ledger — AUDIBLE / SILENT / HIDDEN BY THIS LOOK / ARMED · HIDDEN … / NOT SEATED        | **FIXED** (boxes, a per-plate word); ARGUED: the vocabulary is the app's one; `Audible · requested` in MINT is refused — mint is the reference's healthy hue and A4 keeps it off anything that reads like air                                                                      |
-| verbs            | 58 × 36, gap 8, 12 px, quiet; hover ON mint, OFF amber, SOLO sky                                              | **58 × 36, gap 8, 12 px**; `secondary` × 2, `caution`                                                                                          | **FIXED** (boxes); ARGUED: hover hues — ON's mint hover is the reference's live hue (A4)                                                                                                                                                                                           |
-| MUTE             | none                                                                                                          | **removed** — OFF was its twin, two names for one write                                                                                        | **FIXED**; its tests re-pointed to OFF, which stays pressable on a silent plate (idempotent, never a toggle to read first)                                                                                                                                                         |
-| footer           | `ON = 100% · OFF = 0%` / `SOLO silences all other frames of this row, including hidden frames.` 12 px; `Done` | **the same two sentences**, 12 px muted, plus the no-un-solo clause and "ON is full volume, not a return to the previous fader level"; `Close` | **FIXED** (sentences, on the surface); ARGUED: `Done` → `Close`, the primitive's cancel word                                                                                                                                                                                       |
-| box              | 860 wide, radius 14, `#141b25`, a 30 px shadow                                                                | the modal primitive's `wide`                                                                                                                   | ARGUED: the primitive                                                                                                                                                                                                                                                              |
-| focus            | the fader of the plate pointed at                                                                             | **the same** (`data-modal-autofocus`), else the first fader                                                                                    | **FIXED**                                                                                                                                                                                                                                                                          |
+| property         | reference (rendered)                                                                                          | app (after this phase)                                                                                                                            | verdict                                                                                                                                                                                                                                                                            |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| title            | `Live audio` 20 px 650 + a 42 px volume glyph                                                                 | `Live plate audio`, the modal primitive's title                                                                                                   | ARGUED: the primitive's one treatment; the name is pinned by the row's tests                                                                                                                                                                                                       |
+| subtitle         | `Channel 1 · Bed 1 · 3ghab` 13 px muted, margin-top 3                                                         | **`<row> · <template> · 1-70` 13 px muted**, ids on `title`, each name in its own `<bdi>`                                                         | **FIXED** (built — golden rule 11; `R-028` keeps the coordinate in the sentence); ARGUED: `Channel 1` — the coordinate carries the channel                                                                                                                                         |
+| context line     | `On air` badge · `3 frames · 2 frames` · `Changes apply on release`; `11px 20px`, 13 px / 12 px               | **`N frames · <look label>` · `Changes apply on release`**, `11px 0`, 13 px / 12 px                                                               | **FIXED** (the line, the counts, the hint); the `On air` badge NOT adopted (A12); ARGUED: the look's LABEL rather than its frame count — the strip already counts frames                                                                                                           |
+| head             | `Frame / source · Requested gain · Audio controls`, 12 px, `1fr 269 190` gap 18, `10px 0`, rule               | **the same three, 12 px, `minmax(0,1fr) 269px 190px` gap 18, `10px 0`**, rule `--r-border-strong`                                                 | **FIXED**                                                                                                                                                                                                                                                                          |
+| mixer row        | 85 px (`12px 0`, min 83), rule below                                                                          | **`12px 0`, min 83**, rule `--r-border-soft`                                                                                                      | **FIXED**                                                                                                                                                                                                                                                                          |
+| index chip       | 29 × 29, radius 4, 13 px, raised ground                                                                       | **29 × 29, radius 4, 13 px**, `--r-surface-raised`                                                                                                | **FIXED**                                                                                                                                                                                                                                                                          |
+| name / seat line | the PRODUCER's name 14 px 600; `Frame 1 · Layer 1-10` 12 px                                                   | the PLATE id 14 px 600 in a `<bdi>`; **`Frame 1 · on 1-10`** 12 px (or `· not seated`)                                                            | **FIXED** (ranks, seat line); ARGUED: the plate id, not the producer — it is the handle the strip, the row chip and the bridge all use, and the producer is one column over on the plates tab; `Layer N` is a ROW's name (`cg/bank-shape`), so the coordinate is said as `on 1-10` |
+| fader            | 28 px; output 43 px 13 px right; state word 12 px (`Audible · requested` mint / `Muted` / `… hidden by look`) | **28 px; 43 px 13 px right; 12 px state word** from the ledger — `Audible` / `Silent` / `Hidden by this look` / `Armed · hidden …` / `Not seated` | **FIXED** (boxes, a per-plate word, and the CASE since §34); ARGUED: the vocabulary is the app's own WORDS; the reference's green on `Audible · requested` is refused — §34 measures it painted on a row that is NOT on air                                                        |
+| verbs            | 58 × 36, gap 8, 12 px, quiet; hover ON mint, OFF amber, SOLO sky                                              | **58 × 36, gap 8, 12 px**; `secondary` × 2, `caution`                                                                                             | **FIXED** (boxes); ARGUED: hover hues — ON's mint hover is the reference's live hue (A4)                                                                                                                                                                                           |
+| MUTE             | none                                                                                                          | **removed** — OFF was its twin, two names for one write                                                                                           | **FIXED**; its tests re-pointed to OFF, which stays pressable on a silent plate (idempotent, never a toggle to read first)                                                                                                                                                         |
+| footer           | `ON = 100% · OFF = 0%` / `SOLO silences all other frames of this row, including hidden frames.` 12 px; `Done` | **the same two sentences**, 12 px muted, plus the no-un-solo clause and "ON is full volume, not a return to the previous fader level"; `Close`    | **FIXED** (sentences, on the surface); ARGUED: `Done` → `Close`, the primitive's cancel word                                                                                                                                                                                       |
+| box              | 860 wide, radius 14, `#141b25`, a 30 px shadow                                                                | the modal primitive's `wide`                                                                                                                      | ARGUED: the primitive                                                                                                                                                                                                                                                              |
+| focus            | the fader of the plate pointed at                                                                             | **the same** (`data-modal-autofocus`), else the first fader                                                                                       | **FIXED**                                                                                                                                                                                                                                                                          |
 
 **What the owner will see change on screen:** the LIVE SOURCES tab is a table now — a
 counting toolbar with the panic button at its right, seven headed columns, one 42 px line per
@@ -5523,7 +5524,7 @@ component, not by assuming:
 | D9.2 | `3 frames · 3 frames` is a bug        | **NOT REPRODUCIBLE** — see below                                                         |
 | D9.3 | drop the `Ready` badge                | **already** — there is none; the reference's `On air` badge was deliberately not adopted |
 | D9.4 | the missing paragraph                 | **already** — `.cg-audio-intro` carries it in full                                       |
-| D9.5 | the fader sub-line reads `NOT SEATED` | **already** — `plateAudio.ts` `UNSEATED_PILL`                                            |
+| D9.5 | the fader sub-line reads `Not seated` | **already** — `plateAudio.ts` `UNSEATED_PILL` (recased by §34)                           |
 | D9.6 | the verbs' resting colours            | **DONE TONIGHT** by DELTA 7 §1                                                           |
 | D9.7 | restore the two footer clauses        | **already** — both sentences present verbatim                                            |
 | D9.8 | `Done` → `Close`                      | **already** — `ModalAction` reads `Close`                                                |
@@ -5591,6 +5592,28 @@ under-reported four times on this tree (§27.2.2, and the notation miss recorded
 
 ⚠ So the two differ ON PURPOSE. If a later session finds our CAPS against the drawing’s
 sentence case, this is the decision it is looking at, not a defect.
+
+🔴 **REVERSED BY THE OWNER, 2026-09-13 (`PLATES-AUDIO-11` §3). ANNOTATED, NOT REWRITTEN.**
+
+The MEASUREMENT above stands and was never in doubt: the reference is sentence case. What the
+owner reversed is the second half — _"ours is not changed"_. The state words are sentence case
+now (`Audible`, `Silent`, `Hidden by this look`, `Armed · hidden by this look`, `Not seated`).
+
+Two things the ruling above got right are worth keeping in view, because the reversal did not
+make either of them wrong:
+
+- the vocabulary IS shared, and that is exactly why the recasing cost one object rather than
+  four surfaces — `plateAudioPill` and `UNSEATED_PILL` are the only places the words exist.
+  ⚠ The ruling's "four surfaces" is one too many: the PVW overlay has its OWN words
+  (`♪ AUDIO ON` / `✕ SILENT` / `✕ NOT IN THIS LOOK`, `LivePlateOverlay.tsx`) and shares only the
+  PREDICATE. It is deliberately untouched.
+- the string sweep WAS the risk, and it under-reported again. Two passes on different axes
+  agreed the tree was clean, and the Playwright suite then found `ARMED` — asserted bare, in a
+  file the axis-by-string pass had visited — because the sweep had drilled into
+  `ARMED ·` (the composed label) and read the case-insensitive `ARMED` count as prose noise.
+  **The lesson is not "sweep harder": it is that a sweep's own OUTPUT has to be read as a
+  measurement, and a count too large to enumerate is a pathspec that has not been narrowed
+  yet, never a result.** See §34.
 
 ---
 
@@ -6002,3 +6025,161 @@ argued down later.
 
 ⚠ No token VALUE was invented for any of this: `#684044` and `#ffaaa7` are the family's own,
 and the hover `#7b484e` is the family's own declared lift applied to its own fill.
+
+---
+
+## 34. `PLATES-AUDIO-11` — THE LIVE PLATES TAB AND THE LIVE AUDIO MODAL, AGAINST THE REFERENCE
+
+Four owner items, and the measurement that changed the answer to one of them. Every colour and
+box below was read in Chromium at 1280 × 800; nothing here is quoted off a stylesheet, because
+the reference's main sheet has the four-waves hazard and CSSOM is blocked over `file://`.
+
+### 34.1 §1 — the Owner column named the wrong thing
+
+The cell read `Seated for comp1`: `ownerLabelFor` answered with the TEMPLATE's name, falling
+back to the RAW `itemId`. `comp1` is a composition; the row is «سه قاب» — the bank's alias for
+layer 1-9, which is what the operator reads one tab over and what the reference renders
+(`.plate-owner-link` → `Bed 1`, measured).
+
+**Where the row name comes from.** `ownerLabelFor` now takes a `rowName(itemId)` resolver, which
+`LayersPanel` builds from the BANK'S BINDING — the slot whose `binding.itemId` matches — through
+`placeName`, the app's one naming rule (`ui/operatorNaming.ts`). ⚠ Not `StackItemState.slot`,
+which is OPTIONAL and which `MockRuntime.load()` never writes: a name resolved off it would read
+green nowhere the dom tests run.
+
+**The fallback, and why it is an id.** Row name → composition name → `shortId(itemId)`. A
+friendly placeholder (`Unknown row`) was rejected twice over: two different unnamed rows would
+share it, and it would be indistinguishable from the STRANDED verdict `ownerLabelFor`'s `null`
+carries. The composition is RELOCATED to the link's `title`, never deleted (golden rule 11), and
+suppressed there when it IS the visible name, so the tooltip never says one word twice.
+
+### 34.2 §2 — the establish answer: two questions, and which one is right
+
+| surface         | predicate                                      |
+| --------------- | ---------------------------------------------- |
+| LIVE PLATES tab | the bridge's LEDGER — one row per SEATED layer |
+| the audio modal | the template's DECLARED plates ∪ the seated    |
+
+They are two different questions, and **the reference splits them exactly the same way** —
+`renderPlateRows` iterates `livePlateSeats`, `audioPlates` iterates `templatePlateIds` and joins
+the seat. So the predicate is not itself the defect and neither surface is simply wrong.
+
+🔴 **It is still a defect, because the recorded constraint is EVERY FRAME STAYS REACHABLE and
+the ledger does not always make that true.** Three measurements, not one:
+
+1. `B-164`'s own table — one row, one template declaring three plates, three looks — reads
+   `audio 1/2` on look 1 and `audio 1/3` on look 2, and its denominator counted SEATS. Two
+   seats, then three: **the ledger GROWS as looks are entered.**
+2. The reference's fixture seats all three of its frames, which is why its tab lists three
+   (`3 occupied layers · 2 shown · 1 held`, measured) — its world, not a different rule.
+3. **The plant's own ledger, read twice while this was being written**
+   (`~/.cg-runtime/bridge-live-layers.json`): three seats for `item-0d9a8b6c…` at 17:28, and
+   **one** seat for the same item an hour later. A three-frame row with one seat — the owner's
+   screenshot.
+
+So the tab now lists, for every row that owns at least one seat, the frames its template
+declares that nothing is seated on. They read `Not seated` in place of a coordinate and carry
+live controls, which the bridge already supports: setting a volume on a row that owns no seat is
+a CONFIGURATION verb, recorded and not sent (golden rule 10). ⚠ **Only for a row that already
+owns a seat** — a row that has never been taken puts nothing here, or the tab becomes a second
+copy of the stack; and a BLIND or STRANDED row contributes nothing, because both have already
+declined to state that row's audio at all.
+
+**The counts partition the rows.** `occupied layers` still counts SEATS — DELTA 8 §0 verified
+that string against the drawing and this does not withdraw it — and `· N not seated` appears
+exactly when there are extra rows to explain. `· N unknown` likewise, which closes a gap that
+predates this item: a blind or stranded row was in neither `shown` nor `held`.
+
+**`Not seated` vs `Silent · hidden by look` — different states of the world, measured.** Ours
+fires when the ledger holds no record for the plate; the reference's fires when the plate is
+seated-but-held with zero gain. The reference's word for OUR state is `Off air · saved for next
+Take` — confirmed by emptying `livePlateSeats` in the browser and re-rendering, at which point
+all three of its rows read exactly that. Our word for ITS state is `Hidden by this look`. Both
+vocabularies are complete; they do not disagree, they name different things.
+
+### 34.3 §3 — the green is REFUSED, with the falsification that refuses it
+
+The owner asked for the reference's green on what is on air and its amber on what is held, and
+named one check: if the reference paints that green on a row which is NOT on air, say so rather
+than copying it.
+
+**It does.** In `08-live-audio.html` the modal's `Audible · requested` renders
+`rgb(128, 228, 176)`. Setting `row(6).air = false` and re-rendering flips the dialog's own badge
+from `On air` to `Ready` — and the word stays `rgb(128, 228, 176)`. The class is
+`p.held ? 'held' : gain && p.seated ? 'audible' : ''`: it never consults air. Under §29 green
+means ON AIR and nothing else, so **the green is not adopted.**
+
+⭐ **And the two surfaces unify anyway, on the reference's own value.** Its LIVE PLATES tab
+paints `.plate-audio.audible` with `--blue` `#74cdf6` — which IS `colors.ready`, what we already
+use. The reference's modal green is not even in its own `:root` (its mint is `#85e4b6`); its tab
+ink is. So `Audible` reading blue on both of our surfaces is the reference's measured ink for
+that word, not a divergence from it.
+
+**The amber half is adopted**, on `Hidden by this look` / `Armed · hidden by this look` and on
+the tab's `Held — not in the current look`, from one token (`HELD_TONE`) so the Picture cell and
+the Audio cell of one row cannot disagree. ⚠ `--r-caution-text` `#f3cd88`, **not** the
+reference's measured `rgb(216, 190, 132)` = `#d8be84`, which is off its own palette too;
+`#f3cd88` IS the reference's declared `--amber` and is the console's already-unified caution
+ink. Guarded on both grounds by `messageContrast.test.ts`.
+
+⚠ This reverses `liveLayerRows`' and `plateAudio.ts`' recorded argument that `held` wears a word
+and not a hue. Both are ANNOTATED rather than rewritten: the argument was right that held is not
+a fault, and the owner's reason is the thing it left out — held is the state most often MISREAD
+as a fault, so it is the one that must catch the eye.
+
+### 34.4 §4 — the paragraph came out; two sentences did not
+
+`.cg-audio-intro` is gone and the footer is the reference's two lines verbatim. The two facts
+§4 named as SAFETY rather than decoration:
+
+| fact                                            | where it went                                                                                             |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| a plate carries a guest's LIVE MICROPHONE       | leads the LIVE PLATES tab's ⓘ note (`SCOPE_NOTE`), and has always been on the `Silent` pill's own tooltip |
+| there is NO UN-SOLO — raise the others yourself | every SOLO button's tooltip, on both surfaces (`SOLO_TITLE`)                                              |
+
+`ON_TITLE`, `OFF_TITLE`, `SOLO_TITLE` and `SOLO_ALONE_TITLE` moved into `plateAudio.ts`. That is
+the point rather than a tidy-up: the dialog had its OWN shorter spelling of the SOLO sentence
+("There is no un-solo.") while the strip said what to do about it, and §4(b) asked for the
+missing clause. Adding it to the second copy would have made the two agree once; the vocabulary
+module is what makes them unable to disagree again.
+
+### 34.5 §5 — the frame is fixed, measured
+
+| state       | box (Chromium, 1280 × 800) |
+| ----------- | -------------------------- |
+| four frames | **860 × 736** at (210, 32) |
+| two frames  | **860 × 736** at (210, 32) |
+| no frames   | **860 × 736** at (210, 32) |
+| 1280 × 600  | **536** tall — the clamp   |
+
+**The defect, measured the same way** by setting `frame` back to `auto`: **687.6 tall with four
+frames, 497.6 with two** — a 190 px jump, with the frame's own top moving 95 px (y 56.2 → 151.2)
+under the operator's hand.
+
+No second mechanism: `Modal` gained a `frame` prop that resolves to the SAME `dialogFramed`
+style and the same `--r-modal-h-frame` expression the picker, the audit log and Station setup
+take. ⚠ A door rather than widening the SIZE test, because `wide` is worn by the live-source
+SWAP dialog too, and framing that would have put a few select rows in a 736 px box.
+
+⚠ The row's name moved into the head band as a consequence — with a scrolling body it would have
+scrolled away, which is where the reference puts it anyway (`#audio-subtitle` inside
+`.modal-head`). `.cg-audio-head` is sticky for the same reason `.cg-plate-head` already is.
+
+⚠ Ours is 736 where the reference is 752: its audio modal declares `calc(100vh - 48px)` and our
+one framed-height expression is `min(810px, 100vh - 64px)`. Keeping the one expression is the
+deliberate trade — four dialogs with four numbers agree only until somebody retunes one.
+
+### 34.6 What the sweep missed, recorded because the instrument failed again
+
+Two passes on different axes (by STRING, by COMPONENT/CLASS) with per-pathspec counts —
+`apps 887 / packages 435 / tools 400 / docs 115 / openspec 1015` — reported the tree clean. The
+Playwright suite then found a bare `ARMED` in `live-source-layers.spec.ts`, a file the string
+pass had visited. **The miss was in how the output was READ**: the case-insensitive `ARMED`
+count came back at 49 files, too large to enumerate, so it was treated as prose noise and the
+pass drilled into `ARMED ·` — the composed label — instead. A count too large to enumerate is a
+pathspec that has not been narrowed yet, not a result.
+
+⭐ The suite also caught the SECOND half of the same string, which no sweep would have flagged
+at all: sentence case makes a clause LOWERCASE when it is not first, so the word is
+`Hidden by this look` alone and `Armed · hidden by this look` when armed. A recasing has two
+spellings per phrase, not one.

@@ -1,4 +1,4 @@
-import { colors } from '../../theme.js';
+import { colors, cssVars } from '../../theme.js';
 
 /**
  * `add-multibox-audio` — **THE ONE VOCABULARY FOR "WHAT IS THIS PLATE'S AUDIO DOING", and
@@ -148,15 +148,38 @@ export interface PlateAudioPill {
  *     something to go and look at.
  *   - **MUTED GREY for `silent`**, because silence is the DEFAULT: every producer the bridge
  *     creates is created muted, so the common case should recede.
+ *
+ * ── 🔴 `PLATES-AUDIO-11` §3 — THE GREEN WAS ASKED FOR AND IT IS REFUSED, WITH EVIDENCE ──
+ *
+ * The owner asked for the reference's green on `Audible`. Measured on `08-live-audio.html`
+ * in Chromium at 1280 × 800, the reference paints that word `rgb(128, 228, 176)` — and the
+ * falsification is what settles it: setting `row(6).air = false` flips the dialog's own badge
+ * from `On air` to `Ready` and the word stays `rgb(128, 228, 176)`. The class is
+ * `p.held ? 'held' : gain && p.seated ? 'audible' : ''`; it never consults air. Under
+ * `design.md` §29 green means ON AIR and nothing else, so adopting it would have the console
+ * promising air on a row that is merely loaded — the case §3 of that prompt told us to report
+ * rather than copy.
+ *
+ * ⭐ And the two surfaces DO unify, on the reference's own value: its LIVE PLATES tab paints
+ * `.plate-audio.audible` with `--blue` `#74cdf6`, which IS `colors.ready` here. The reference's
+ * modal green is not even in its own `:root` (its mint is `#85e4b6`); its tab ink is. So the
+ * blue below is the reference's measured ink for this word, not a divergence from it.
+ *
+ * ── 🔴 `PLATES-AUDIO-11` §3 — SENTENCE CASE, WHICH SUPERSEDES `design.md` §31.4's SECOND HALF ──
+ *
+ * §31.4 measured the reference as sentence case (true, and unchanged) and ruled that OURS would
+ * stay CAPS. The owner reversed that half on 2026-09-13: the state words are sentence case now.
+ * The vocabulary is still shared, and it is still shared from HERE — the recasing moved one
+ * object, not four surfaces' worth of local copies, which is the whole point of the module.
  */
 const PILL: Record<'audible' | 'silent', PlateAudioPill> = {
   audible: {
-    label: 'AUDIBLE',
+    label: 'Audible',
     tone: colors.ready,
     detail: 'This plate is raised, so its source can be heard on air.',
   },
   silent: {
-    label: 'SILENT',
+    label: 'Silent',
     tone: colors.textMuted,
     detail:
       'This plate is not raised. Every live plate starts silent — a plate carries its ' +
@@ -177,7 +200,7 @@ const PILL: Record<'audible' | 'silent', PlateAudioPill> = {
  * Muted, like SILENT: nothing is wrong, and nothing is on air.
  */
 export const UNSEATED_PILL: PlateAudioPill = {
-  label: 'NOT SEATED',
+  label: 'Not seated',
   tone: colors.textMuted,
   detail:
     'Nothing is on a layer for this plate yet. The volume is recorded now and applied when ' +
@@ -188,12 +211,22 @@ export const UNSEATED_PILL: PlateAudioPill = {
  * `held`'s hue, kept beside the other two rather than in {@link plateAudioPill}'s body — the
  * three states' colours belong in one place even though this one's WORDING is computed.
  *
- * NEUTRAL, and that is the neighbouring module's rule rather than a choice made here: *"`held`
- * is a normal, chosen disposition and wears a WORD, not a hue."* Amber would make a held plate
- * read as something to go and look at, and the LIVE PLATES tab already refuses to say that
- * about the same state one row up.
+ * 🔴 **AMBER SINCE `PLATES-AUDIO-11` §3 — AN OWNER REVERSAL, ANNOTATED RATHER THAN ERASED.**
+ *
+ * This was NEUTRAL, and the argument for that is preserved because it was a real one: *"`held`
+ * is a normal, chosen disposition and wears a WORD, not a hue"* — amber means ATTENTION in this
+ * palette, and a held plate is not a fault. The owner overruled it on 2026-09-13 and the reason
+ * is the one thing that argument left out: a held plate is the state an operator most often
+ * MISREADS as a broken input, so it is the one that must catch the eye. The reference agrees in
+ * its own modal (measured `rgb(216, 190, 132)` on `Silent · hidden by look`).
+ *
+ * ⚠ **`--r-caution-text`, NOT the reference's value.** `rgb(216, 190, 132)` is `#d8be84`, which
+ * is not in the reference's own `:root` (its `--amber` is `#f3cd88`). `--r-caution-text` IS
+ * `#f3cd88` — the reference's declared amber, already unified across this console on
+ * 2026-09-13 — so the amber family stays one value rather than gaining a near-miss of itself.
+ * Measured on both grounds by `messageContrast.test.ts`.
  */
-const HELD_TONE = colors.text;
+const HELD_TONE = cssVars['--r-caution-text'];
 
 /**
  * The pill for one plate.
@@ -217,7 +250,7 @@ export function plateAudioPill(volume: number | undefined, held: boolean): Plate
   const { state, armed } = plateAudioVerdict(volume, held);
   if (state !== 'held') return PILL[state];
   return {
-    label: armed ? 'ARMED · HIDDEN BY THIS LOOK' : 'HIDDEN BY THIS LOOK',
+    label: armed ? 'Armed · hidden by this look' : 'Hidden by this look',
     tone: HELD_TONE,
     detail: armed
       ? 'Armed, not audible — the current look does not show this box. It becomes audible ' +
@@ -226,6 +259,41 @@ export function plateAudioPill(volume: number | undefined, held: boolean): Plate
         'when you switch to a look that shows it.',
   };
 }
+
+/**
+ * 🔴 **THE VERB SENTENCES — the promises the three buttons make, spelled ONCE.**
+ *
+ * `PLATES-AUDIO-11` §4 moved these here from `PlateAudioStrip`, where they lived while the
+ * DIALOG carried its own shorter spelling of the SOLO one. That is the shape this module
+ * exists to end: §4(b) asked for the no-un-solo clause on the SOLO control, and adding it to
+ * the second copy would have made the two agree once rather than making them unable to
+ * disagree. Both surfaces now render these.
+ *
+ * ── ON, AND WHY THE SENTENCE IS ON THE CONTROL AT ALL ──────────────────────
+ *
+ * OFF writes `0` and ON writes `1`. ON does NOT return the plate to whatever the fader said
+ * before OFF, and an operator who assumes it does will put a guest back at full when they
+ * meant forty percent. Restoring the previous level needs a SECOND store of intent beside the
+ * bridge's `#plateVolumes` answering the same question a second way — the `B-100` / `P-012`
+ * class — and only one of the two would be retained, so after a blip the plate would return at
+ * a volume nobody chose. The trade is deliberate; saying so on the button is its price.
+ */
+export const ON_TITLE = 'ON = full volume (100%). It does not return to the previous fader level.';
+
+export const OFF_TITLE = 'OFF = 0%. Silence this plate.';
+
+/**
+ * 🔴 `PLATES-AUDIO-11` §4(b) — **THE NO-UN-SOLO WARNING, WHICH CAME OUT OF THE DIALOG'S BODY
+ * AND HAD TO LAND SOMEWHERE.** §4 removed the explanatory paragraph; this clause is one of the
+ * two facts it ruled were SAFETY and not decoration, and this is where it went. It qualifies an
+ * irreversible cross-plate write, so it belongs on the control that performs it.
+ */
+export const SOLO_TITLE =
+  'Set this plate to 100% and every other plate on this row to 0%, including the frames the ' +
+  'current look hides. There is no un-solo — raise the others again on their own faders.';
+
+/** What SOLO says when there is nothing to solo against, so the disabled state is explained. */
+export const SOLO_ALONE_TITLE = 'This row has only one plate — there is nothing to solo against.';
 
 /**
  * 🔴 **SOLO — one map, built HERE so that every surface offering SOLO addresses the same set.**

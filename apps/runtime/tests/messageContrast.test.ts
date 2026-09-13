@@ -133,6 +133,30 @@ const MESSAGE_CLASSES: readonly { name: string; ink: string; ground: string }[] 
     ink: cssVars['--r-look-btn-sel-ink'],
     ground: cssVars['--r-look-btn-sel-bg'],
   },
+  {
+    /*
+      🔴 `PLATES-AUDIO-11` §3 — THE HELD PLATE'S STATE WORD, which stopped being neutral.
+
+      `Hidden by this look` and the LIVE PLATES tab's `Held — not in the current look` both
+      moved from `colors.text` to the amber caution ink. A state word is a SENTENCE by this
+      guard's standard — it is the operator's only account of why a guest he can see is
+      silent — and moving an ink is precisely the edit that lands it on an unmeasured ground.
+    */
+    name: 'held plate state word (audio dialog body)',
+    ink: cssVars['--r-caution-text'],
+    ground: cssVars['--r-surface'],
+  },
+  {
+    /*
+      …and on the LIVE PLATES row under the pointer, which is a DIFFERENT ground and therefore
+      a different ratio. A ratio is a property of two values (§4.1), so the hover state is
+      measured rather than assumed to follow from the one above — even where the two tokens
+      happen to resolve alike today, which is exactly the coincidence a later retune breaks.
+    */
+    name: 'held plate state word (plate row, hovered)',
+    ink: cssVars['--r-caution-text'],
+    ground: cssVars['--r-table-row-hover'],
+  },
 ];
 
 describe('§B3(b) — every operator message clears AA for body text', () => {

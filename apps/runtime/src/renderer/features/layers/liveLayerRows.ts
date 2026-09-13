@@ -1,7 +1,13 @@
 import type { LiveLayerState } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
-import { colors } from '../../theme.js';
-import { plateAudioPill, type PlateAudioPill, type RowPlateAudio } from './plateAudio.js';
+import { colors, cssVars } from '../../theme.js';
+import { shortId } from '../../ui/operatorNaming.js';
+import {
+  UNSEATED_PILL,
+  plateAudioPill,
+  type PlateAudioPill,
+  type RowPlateAudio,
+} from './plateAudio.js';
 
 /**
  * `B-145` acceptance 1, display half (`tasks.md` 2.8) — **how one seated Live
@@ -54,8 +60,16 @@ import { plateAudioPill, type PlateAudioPill, type RowPlateAudio } from './plate
  * stranded producer is.
  */
 export interface LiveLayerRowView {
-  /** The coordinate as an operator reads it on a CasparCG channel: `1-10`. */
-  coordinate: string;
+  /**
+   * The coordinate as an operator reads it on a CasparCG channel: `1-10` — or `null` for a
+   * DECLARED FRAME the bridge has not seated (see {@link declaredFrameRows}).
+   *
+   * 🔴 **NULLABLE SINCE `PLATES-AUDIO-11` §2, AND THE NULL IS LOAD-BEARING.** Every verb whose
+   * scope is a set of LAYERS — the release confirm, its accessible name, the chip's
+   * denominator — must exclude these rows, because there is no layer behind them. The
+   * compiler finds those sites; a sentinel string like `—` would not have.
+   */
+  coordinate: string | null;
   /**
    * The SYMBOLIC plate id and the producer actually sent, carried on the VIEW rather
    * than read off the payload beside it.
@@ -75,12 +89,23 @@ export interface LiveLayerRowView {
   /** Why it is that, and what to do about it. */
   detail: string;
   /**
-   * How the operator names the owning row, or `null` when the owner is not known —
+   * How the operator names the owning ROW, or `null` when the owner is not known —
    * whether because the stack cannot bear witness (see {@link LiveLayerBlindness}) or
    * because it genuinely does not carry that item. Only the SECOND is stranding, and
    * {@link releasable} is what distinguishes them.
+   *
+   * 🔴 **THE ROW, NOT THE COMPOSITION — `PLATES-AUDIO-11` §1.** This carried the TEMPLATE's
+   * name and the cell read `Seated for comp1`. Nobody on a gallery floor knows `comp1`; the
+   * row is «سه قاب» / `Bed 1`, which is what the reference's own `.plate-owner-link` renders
+   * (measured on `07-live-plates.html`: `Bed 1`). Golden rule 11 — the operator's words in the
+   * sentence, the internal name behind a `title`, which is {@link ownerDetail}.
    */
   ownerLabel: string | null;
+  /**
+   * The composition (template) name and any id the surface should keep on a `title` —
+   * RELOCATED, never deleted (golden rule 11's own note). `null` when nothing is known.
+   */
+  ownerDetail: string | null;
   /** May a RELEASE control be offered? Provably stranded, and nothing else. */
   releasable: boolean;
   /**
@@ -225,6 +250,21 @@ export function liveLayerCoordinate(layer: LiveLayerState): string {
 }
 
 /**
+ * `PLATES-AUDIO-11` §1 — **WHO OWNS THIS LAYER, IN TWO PARTS, because golden rule 11 needs
+ * both and puts them in different places.**
+ *
+ * The ROW's name goes in the sentence the operator reads; the composition and the ids go on a
+ * `title`. They travel together so a surface cannot render one without having the other to
+ * hand — which is how the id ends up in the sentence.
+ */
+export interface LiveLayerOwner {
+  /** The ROW, in the operator's words — `Bed 1`, «سه قاب». Never empty. */
+  row: string;
+  /** The composition name and any id, for a `title`. `null` when nothing else is known. */
+  detail: string | null;
+}
+
+/**
  * How one seated live layer reads.
  *
  * `blind` masks everything and is checked FIRST, for the reason above: a stranded
@@ -235,7 +275,7 @@ export function liveLayerCoordinate(layer: LiveLayerState): string {
  */
 export function liveLayerRow(
   layer: LiveLayerState,
-  ownerLabel: string | null,
+  owner: LiveLayerOwner | null,
   blind: LiveLayerBlindness | null,
   /**
    * `add-multibox-audio` — the plate's recorded intent, INJECTED for `labelFor`'s reason: the
@@ -256,6 +296,7 @@ export function liveLayerRow(
       headline: 'Unknown',
       detail: BLIND_DETAIL[blind],
       ownerLabel: null,
+      ownerDetail: null,
       releasable: false,
       needsAttention: false,
       tone: colors.textMuted,
@@ -267,7 +308,7 @@ export function liveLayerRow(
   }
   const volume = volumeOf(layer.itemId, layer.sourceId);
   const audio = { volume, held: layer.held, pill: plateAudioPill(volume, layer.held) };
-  if (ownerLabel === null) {
+  if (owner === null) {
     return {
       ...base,
       // No item owns this layer, so no item-scoped verb can reach its audio and there is no
@@ -283,6 +324,7 @@ export function liveLayerRow(
             `been confirmed, so the layer may already be empty.`
           : ''),
       ownerLabel: null,
+      ownerDetail: null,
       releasable: true,
       needsAttention: true,
       tone: colors.pending,
@@ -310,11 +352,12 @@ export function liveLayerRow(
       audio,
       headline: 'Adopted — not confirmed',
       detail:
-        `Seated for ${ownerLabel} according to the bridge’s saved ledger, read back after a ` +
+        `Seated for ${owner.row} according to the bridge’s saved ledger, read back after a ` +
         `restart. Nothing has confirmed the layer is still lit${
           layer.held ? ', and the current look does not show it' : ''
         }. Taking the row again re-seats it and confirms it.`,
-      ownerLabel,
+      ownerLabel: owner.row,
+      ownerDetail: owner.detail,
       releasable: false,
       needsAttention: false,
       tone: colors.textMuted,
@@ -327,12 +370,20 @@ export function liveLayerRow(
       audio,
       headline: 'Held — not in the current look',
       detail:
-        `Seated for ${ownerLabel}, muted and with no hole in front of it. It is kept rather ` +
+        `Seated for ${owner.row}, muted and with no hole in front of it. It is kept rather ` +
         `than torn down so returning to a look that shows it needs no fresh producer.`,
-      ownerLabel,
+      ownerLabel: owner.row,
+      ownerDetail: owner.detail,
       releasable: false,
       needsAttention: false,
-      tone: colors.text,
+      /*
+        🔴 `PLATES-AUDIO-11` §3 — AMBER, and the COLOUR block at the head of this file is
+        annotated for it rather than rewritten. `held` still is not a fault; the owner's
+        reversal is that it is the state most often MISREAD as one, so it is the state that
+        must catch the eye. One token with the audio pill's `HELD_TONE`, so the Picture cell
+        and the Audio cell of the same row cannot disagree about how loud `held` reads.
+      */
+      tone: cssVars['--r-caution-text'],
       plain: false,
     };
   }
@@ -341,9 +392,10 @@ export function liveLayerRow(
     audio,
     headline: 'On screen',
     detail:
-      `Seated for ${ownerLabel}. Repoint and off-air are that row's verbs; audio is on ` +
+      `Seated for ${owner.row}. Repoint and off-air are that row's verbs; audio is on ` +
       `this row.`,
-    ownerLabel,
+    ownerLabel: owner.row,
+    ownerDetail: owner.detail,
     releasable: false,
     needsAttention: false,
     tone: colors.text,
@@ -363,11 +415,97 @@ export function liveLayerRow(
  */
 export function liveLayerRows(
   layers: readonly LiveLayerState[],
-  labelFor: (itemId: string) => string | null,
+  ownerOf: (itemId: string) => LiveLayerOwner | null,
   blind: LiveLayerBlindness | null,
   volumeOf: (itemId: string, plateId: string) => number | undefined = () => undefined,
 ): LiveLayerRowView[] {
-  return layers.map((l) => liveLayerRow(l, labelFor(l.itemId), blind, volumeOf));
+  return layers.map((l) => liveLayerRow(l, ownerOf(l.itemId), blind, volumeOf));
+}
+
+/**
+ * 🔴 `PLATES-AUDIO-11` §2 — **THE FRAMES A ROW DECLARES THAT THE LEDGER HAS NOT SEATED.**
+ *
+ * ── THE ESTABLISH ANSWER, WHICH IS WHY THIS FUNCTION EXISTS ─────────────────
+ *
+ * The TAB and the audio MODAL ask two different questions, and until now only the modal asked
+ * the one the operator needs:
+ *
+ *   - the TAB lists the bridge's LEDGER — one row per layer it has SEATED;
+ *   - the MODAL lists the template's DECLARED plates ∪ the seated ones, so a frame with no
+ *     producer still gets a fader (the arm-before-the-take affordance).
+ *
+ * Both are defensible for their own surface, and the reference splits them exactly the same
+ * way (measured: `renderPlateRows` iterates `livePlateSeats`, `audioPlates` iterates
+ * `templatePlateIds` and joins the seat). **It is still the defect**, because the recorded
+ * constraint is that EVERY FRAME STAYS REACHABLE, HIDDEN ONES INCLUDED — and the union
+ * pre-seat does not always make that true.
+ *
+ * ⚠ **THE EVIDENCE THAT IT DOES NOT, from this repo's own measurement.** `B-164`'s table —
+ * one row, one template declaring three plates, three looks — reads `audio 1/2` on look 1 and
+ * `audio 1/3` on look 2, and its denominator counted SEATS. Two seats on look 1, three on
+ * look 2: the ledger GROWS as looks are entered. So on look 1 the tab could show two rows for
+ * a three-frame row, and the third frame's audio was reachable only by opening the dialog.
+ * That is the owner's screenshot, and it is a frame whose guest cannot be pulled down from the
+ * surface that carries the faders.
+ *
+ * ── WHAT IS ADDED, AND WHAT DELIBERATELY IS NOT ────────────────────────────
+ *
+ * Only frames of an item that ALREADY OWNS A SEAT. The tab stays a view of rows that own
+ * layers: a row that has never been taken puts nothing here, because its every frame is
+ * unseated and the tab would become a second copy of the stack. A row that owns one seat is
+ * already ON this surface, and its other frames are what the operator came here for.
+ *
+ * ⚠ A blind or stranded row contributes NOTHING. Blind means the console cannot say what is
+ * seated, so it certainly cannot say what is missing; stranded means no item owns the layer,
+ * so there is no declaration to read. Both already refuse to state audio, and inventing a
+ * declared-frame row for them would be the claim they just declined to make.
+ *
+ * `declaredPlatesOf` is injected for {@link plateVolumeFor}'s reason: the template registry
+ * lives with the caller.
+ */
+export function declaredFrameRows(
+  rows: readonly LiveLayerRowView[],
+  declaredPlatesOf: (itemId: string) => readonly string[],
+  volumeOf: (itemId: string, plateId: string) => number | undefined = () => undefined,
+): LiveLayerRowView[] {
+  const extra: LiveLayerRowView[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    // Only a row the console can speak for, and only once per item.
+    if (row.audio === null || row.ownerLabel === null || seen.has(row.itemId)) continue;
+    seen.add(row.itemId);
+    const seated = new Set(rows.filter((r) => r.itemId === row.itemId).map((r) => r.plate));
+    for (const plateId of declaredPlatesOf(row.itemId)) {
+      if (seated.has(plateId)) continue;
+      seated.add(plateId);
+      const volume = volumeOf(row.itemId, plateId);
+      extra.push({
+        coordinate: null,
+        plate: plateId,
+        // No producer: that IS the state. An empty string, never a word that looks like one.
+        producer: '',
+        itemId: row.itemId,
+        headline: 'Not seated',
+        detail:
+          `This row's template declares this frame and the bridge holds no layer for it, so ` +
+          `nothing is on air for it and nothing is sent by a change here. The volume is ` +
+          `recorded now and applied when a look that uses this frame seats it.`,
+        ownerLabel: row.ownerLabel,
+        ownerDetail: row.ownerDetail,
+        releasable: false,
+        // Nothing is wrong: an unentered look's frame is the ordinary state of a live row.
+        needsAttention: false,
+        tone: colors.textMuted,
+        // Its sentence says what no other cell on the row does, so it stays visible.
+        plain: false,
+        // `held: false` — a frame with no seat is not HELD; §12.4's hold is a property of a
+        // producer that exists. `UNSEATED_PILL` is the word, through `plateAudioPill`'s
+        // sibling rather than a fourth state (see `plateAudio.ts`).
+        audio: { volume, held: false, pill: UNSEATED_PILL },
+      });
+    }
+  }
+  return extra;
 }
 
 /**
@@ -457,8 +595,16 @@ export function hasStrandedLiveLayer(rows: readonly LiveLayerRowView[]): boolean
 export function releaseScopeOf(
   rows: readonly LiveLayerRowView[],
   itemId: string,
-): LiveLayerRowView[] {
-  return rows.filter((r) => r.itemId === itemId);
+): (LiveLayerRowView & { coordinate: string })[] {
+  /*
+    ⚠ `coordinate !== null` since `PLATES-AUDIO-11` §2 — a DECLARED FRAME is not a layer, so
+    it is not in a release's scope and must not be named in the confirm. Without this the
+    dialog would count a frame nothing is on and promise to clear it.
+  */
+  return rows.filter(
+    (r): r is LiveLayerRowView & { coordinate: string } =>
+      r.itemId === itemId && r.coordinate !== null,
+  );
 }
 
 /**
@@ -470,18 +616,32 @@ export function releaseScopeOf(
  * cannot see and leave one they can. Deduplicated because a fill+key pair puts the same
  * `sourceId` on two ledger records.
  *
- * ⚠ It answers with the SEATED plates, not the template's declared ones. A plate with no
- * producer cannot be audible, and the bridge's pre-seat is the UNION of every look — so a
- * HELD plate is here and correctly receives a recorded-only `0`.
+ * 🔴 **RENAMED FROM `seatedPlatesOf` BY `PLATES-AUDIO-11` §2, AND THE RENAME IS THE POINT.**
+ *
+ * It answered with the SEATED plates because the rows it reads were all seats. §2 added the
+ * DECLARED frames the ledger has not seated ({@link declaredFrameRows}), so this same filter
+ * now returns those too — silently, under a name that said otherwise. That is golden rule 6's
+ * exact failure: a predicate whose NAME stopped describing what it tests.
+ *
+ * ⚠ **AND WIDENING IT IS CORRECT, not merely unavoidable.** This set is what SOLO addresses,
+ * and SOLO's promise is *"this plate and NONE of its siblings, including the frames the
+ * current look hides"*. A declared frame carrying a recorded gain is a sibling that can
+ * become audible the moment a look seats it, so leaving it out would make the tab's SOLO
+ * narrower than the dialog's — which already addresses declared ∪ seated. One set, two
+ * surfaces. The bridge records an intent for an unseated plate and sends nothing, which is
+ * the same configuration-verb door the dialog uses (golden rule 10).
+ *
+ * ⚠ Still NOT the fraction: audibility's denominator is {@link rowPlateAudioOf}, which stays
+ * seated-only. `B-164` is about that number and nothing here changes it.
  */
-export function seatedPlatesOf(rows: readonly LiveLayerRowView[], itemId: string): string[] {
+export function rowPlatesOf(rows: readonly LiveLayerRowView[], itemId: string): string[] {
   return [...new Set(rows.filter((r) => r.itemId === itemId).map((r) => r.plate))];
 }
 
 /**
  * `B-164` — **the same plates, WITH the two facts audibility needs.**
  *
- * {@link seatedPlatesOf} answers "which plates does this item own" and is exactly right for
+ * {@link rowPlatesOf} answers "which plates does this item own" and is exactly right for
  * SOLO and PANIC, which address a SET. The layer row's audio chip needs more than the set: it
  * has to separate the plates the active look SHOWS from the ones §12.4 is HOLDING, and it has
  * to know each plate's recorded intent. Read off the SAME `LiveLayerRowView`s for the reason
@@ -502,14 +662,23 @@ export function rowPlateAudioOf(
   rows: readonly LiveLayerRowView[],
   itemId: string,
 ): RowPlateAudio[] {
-  return rows
-    .filter((r) => r.itemId === itemId && r.audio !== null)
-    .map((r) => ({
-      plateId: r.plate,
-      volume: r.audio?.volume,
-      held: r.audio?.held ?? false,
-      coordinate: r.coordinate,
-    }));
+  return (
+    rows
+      /*
+        ⚠ `coordinate !== null` since `PLATES-AUDIO-11` §2 — `RowPlateAudio` means A SEAT, and
+        both its consumers depend on that. `B-164` is entirely about the row chip's
+        denominator, and the audio dialog's `seatedPlates` prop is named for what it carries:
+        letting a declared-but-unseated frame in here would put a plate with no producer into
+        the fraction `B-164` had just finished narrowing.
+      */
+      .filter((r) => r.itemId === itemId && r.audio !== null && r.coordinate !== null)
+      .map((r) => ({
+        plateId: r.plate,
+        volume: r.audio?.volume,
+        held: r.audio?.held ?? false,
+        ...(r.coordinate !== null && { coordinate: r.coordinate }),
+      }))
+  );
 }
 
 /**
@@ -531,20 +700,42 @@ export function plateVolumeFor(
  * How the operator names the row that owns an item — or `null` if the stack has no
  * such item, which is exactly the stranded test.
  *
- * The label is the TEMPLATE's name where one is known, because that is the text the
- * operator reads in the layer table's own template column. It falls back to the raw
- * `itemId` rather than to a friendly placeholder: an id is ugly but it is the handle,
- * and a row labelled "Unknown template" would be indistinguishable from the stranded
- * state this function exists to detect.
+ * 🔴 **`PLATES-AUDIO-11` §1 — THE ROW, NOT THE COMPOSITION. THIS IS WHERE IT WAS WRONG.**
+ *
+ * The label used to be the TEMPLATE's name, so the Owner cell read `Seated for comp1` — a
+ * COMPOSITION nobody on a gallery floor knows, in the sentence the operator reads under
+ * pressure. That is golden rule 11's defect in its plainest form, and the reference does not
+ * do it: its `.plate-owner-link` renders `Bed 1`, the ROW.
+ *
+ * ── WHERE THE ROW NAME COMES FROM, AND THE FALLBACK ORDER ──────────────────
+ *
+ * `rowName(itemId)` is injected, for {@link plateVolumeFor}'s reason — the bank and the
+ * registry live with the caller. Its resolution is the app's ONE composition
+ * (`ui/operatorNaming.ts`): the bank's configured ALIAS for the layer this item sits on, else
+ * the bank's default (`Layer N` / `Bed N`), and `null` when there is no slot to name at all.
+ *
+ * ⚠ **AND WHEN THERE IS NO ROW NAME, THE ANSWER IS AN ID — NOT A WORD THAT READS LIKE A
+ * NAME.** The order is: the row's name, else the composition's name, else {@link shortId} of
+ * the item. `Unknown row` was considered and rejected twice over: it is indistinguishable
+ * across two different unnamed rows, and it is indistinguishable from the STRANDED verdict
+ * this function's `null` exists to carry. An id is ugly and it is a handle; a friendly
+ * placeholder is neither.
+ *
+ * The composition goes to {@link LiveLayerRowView.ownerDetail}, which the surface puts on a
+ * `title` — relocated, not deleted.
  */
 export function ownerLabelFor(
   items: readonly StackItemState[],
   templateName: (templateId: string) => string | undefined,
-): (itemId: string) => string | null {
+  rowName: (itemId: string) => string | null = () => null,
+): (itemId: string) => LiveLayerOwner | null {
   const byId = new Map(items.map((i) => [i.itemId, i]));
   return (itemId) => {
     const item = byId.get(itemId);
     if (item === undefined) return null;
-    return templateName(item.templateId) ?? itemId;
+    const composition = templateName(item.templateId) ?? null;
+    const row = rowName(itemId) ?? composition ?? shortId(itemId);
+    // The composition is a SECOND statement when it is already the visible name — say it once.
+    return { row, detail: composition === null || composition === row ? null : composition };
   };
 }

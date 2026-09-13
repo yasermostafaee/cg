@@ -64,7 +64,8 @@ test('the PLATE door — right-click on a seated plate opens the owner’s audio
   await expect(dialog.locator('[data-audio-subtitle]')).toContainText('News Composite');
   // Focus lands on the plate the operator pointed at — the HIDDEN frame, `guest-2`.
   await expect(page.locator(':focus')).toHaveAttribute('aria-label', 'Volume for guest-2');
-  await expect(dialog.locator('[data-audio-plate="guest-2"]')).toContainText('HIDDEN BY THIS LOOK');
+  // 🔴 `PLATES-AUDIO-11` §3 — sentence case, superseding `design.md` §31.4's second half.
+  await expect(dialog.locator('[data-audio-plate="guest-2"]')).toContainText('Hidden by this look');
   await dialog.locator('button', { hasText: /^Close$/ }).click();
   await expect(dialog).toHaveCount(0);
 
@@ -97,7 +98,7 @@ test('the ROW door — right-click → menu → AUDIO, and Shift+F10 → menu �
   const dialog = audioDialog(page);
   await expect(dialog).toBeVisible();
   await expect(dialog.locator('[data-audio-plate]')).toHaveCount(4);
-  await expect(dialog.locator('[data-audio-plate="live-1"]')).toContainText('NOT SEATED');
+  await expect(dialog.locator('[data-audio-plate="live-1"]')).toContainText('Not seated');
   await dialog.locator('button', { hasText: /^Close$/ }).click();
   await expect(dialog).toHaveCount(0);
 
@@ -295,4 +296,95 @@ test('D10/D11 — the fader never regresses mid-gesture, and rings for the keybo
     .poll(async () => ring(), { message: 'a keyboard user must see where focus is' })
     .not.toBe(resting);
   expect(await value(), 'arrow keys must still move the value').not.toBe(settled);
+});
+
+/**
+ * 🔴 `PLATES-AUDIO-11` §5 — **THE AUDIO DIALOG'S FRAME IS FIXED, AND ONLY A REAL ENGINE CAN
+ * SAY SO (golden rule 12c).**
+ *
+ * jsdom has no layout: `getBoundingClientRect()` is all zeros there, so a spec asserting this
+ * box would pass against a dialog of any shape including a broken one. Every number below is
+ * Chromium's.
+ *
+ * The defect this closes is the one `MODAL-CHROME-10` §4 measured on the picker, one surface
+ * along: the body is a list of FRAMES, a row switched from a four-frame look to a one-frame
+ * one redraws it shorter, and the footer the operator is aiming at moves under his hand.
+ */
+async function dialogBox(page: Page): Promise<{ x: number; y: number; w: number; h: number }> {
+  return page.evaluate(() => {
+    const all = [...document.querySelectorAll('[role="dialog"]')] as HTMLElement[];
+    const d = all[all.length - 1];
+    if (d === undefined) throw new Error('no dialog is open');
+    const r = d.getBoundingClientRect();
+    return {
+      x: +r.x.toFixed(1),
+      y: +r.y.toFixed(1),
+      w: +r.width.toFixed(1),
+      h: +r.height.toFixed(1),
+    };
+  });
+}
+
+test('§5 — the audio dialog keeps ONE box whatever the frame count, and clamps on a short screen', async ({
+  app,
+}) => {
+  const page = app.page;
+  const dialog = audioDialog(page);
+
+  // FOUR frames — the `Debate — 4 box` row.
+  const row = page.locator(`[data-layer="${String(PLATE_ROW)}"]`);
+  await row.click({ button: 'right' });
+  await page.getByRole('menu').getByRole('menuitem', { name: 'AUDIO' }).click();
+  await expect(dialog.locator('[data-audio-plate]')).toHaveCount(4);
+  const four = await dialogBox(page);
+  await dialog.locator('button', { hasText: /^Close$/ }).click();
+  await expect(dialog).toHaveCount(0);
+
+  // TWO frames — the seeded news row, reached from its own seated plate.
+  await app.liveSourcesTab.click();
+  await app.liveSourceRow('1-10').click({ button: 'right' });
+  await expect(dialog).toBeVisible();
+  const fewer = await dialog.locator('[data-audio-plate]').count();
+  expect(fewer, 'the two rows must differ, or this measures nothing').toBeLessThan(4);
+  const two = await dialogBox(page);
+  expect(two, `${String(fewer)} frames must draw the same box as 4`).toEqual(four);
+
+  /*
+    NONE. The product does not offer this dialog for a row that declares no frames, so the
+    empty case is reached by emptying the BODY in the browser rather than by a gesture — a
+    pure layout probe, with no presence-keyed guard between it and the frame's height.
+  */
+  const emptied = await page.evaluate(() => {
+    for (const el of document.querySelectorAll('[data-audio-plate]')) el.remove();
+    const all = [...document.querySelectorAll('[role="dialog"]')] as HTMLElement[];
+    const d = all[all.length - 1];
+    if (d === undefined) throw new Error('no dialog is open');
+    const r = d.getBoundingClientRect();
+    return {
+      x: +r.x.toFixed(1),
+      y: +r.y.toFixed(1),
+      w: +r.width.toFixed(1),
+      h: +r.height.toFixed(1),
+    };
+  });
+  /*
+    MEASURED, Chromium 1280 x 800: 860 x 736 at (210, 32) for four frames, for two, and for
+    none. The defect this replaced was measured the same way, by setting `frame` back to
+    `auto`: 687.6 tall with four frames and 497.6 with two — a 190 px jump, with the frame's
+    own top moving 95 px (y 56.2 -> 151.2) under the operator's hand.
+  */
+  expect(emptied, 'an empty body must not collapse the frame').toEqual(four);
+  // THE POSITIVE CONTROL — without it a probe that always answered the same box would pass.
+  expect(await dialog.locator('[data-audio-plate]').count()).toBe(0);
+  await dialog.locator('button', { hasText: /^Close$/ }).click();
+
+  /*
+    🔴 THE CLAMP, which is the half a declared height gets wrong. At 1280 × 600 the declared
+    810 would run off the bottom and `min(810px, 100vh - 64px)` takes over — 536, the same
+    number Station setup, the picker and the audit log land on, because it is one expression.
+  */
+  await page.setViewportSize({ width: 1280, height: 600 });
+  await app.liveSourceRow('1-10').click({ button: 'right' });
+  await expect(dialog).toBeVisible();
+  expect((await dialogBox(page)).h, 'the audio dialog is not clamped on a short screen').toBe(536);
 });

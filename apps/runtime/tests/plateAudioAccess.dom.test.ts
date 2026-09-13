@@ -214,7 +214,7 @@ describe('the PLATE door — on LIVE PLATES, a seated plate opens its OWNING ROW
     expect(document.activeElement?.getAttribute('aria-label')).toBe('Volume for guest-2');
     // …and the hidden frame reads as hidden, never as audible (A12).
     const hidden = dialog()?.querySelector('[data-audio-plate="guest-2"]');
-    expect(hidden?.textContent).toContain('HIDDEN BY THIS LOOK');
+    expect(hidden?.textContent).toContain('Hidden by this look');
     expect(hidden?.textContent).toContain('on 1-11');
   });
 

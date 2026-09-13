@@ -14,7 +14,7 @@ import { reportCommandError, reportCommandSuccess } from '../status/commandFeedb
 import {
   liveLayerEmptyView,
   releaseScopeOf,
-  seatedPlatesOf,
+  rowPlatesOf,
   type LiveLayerBlindness,
   type LiveLayerRowView,
 } from './liveLayerRows.js';
@@ -117,11 +117,25 @@ const styles = {
  * What survives is everything that is still a FACT the operator cannot read off the table: who
  * owns the verbs, that the audio figure is requested gain rather than a measured signal, and
  * what ON and SOLO actually do.
+ *
+ * 🔴 `PLATES-AUDIO-11` §4(a) — **THE LIVE-MICROPHONE WARNING, RELOCATED RATHER THAN DELETED.**
+ *
+ * §4 took the audio dialog's explanatory paragraph out of its body and named TWO of its
+ * sentences as SAFETY facts that had to survive somewhere. This is the first: a plate carries
+ * a guest's LIVE MICROPHONE, which is why every one of them starts silent. It leads this note
+ * rather than being appended to it — the ⓘ is read once, by someone who has not used the tab
+ * before, and the fact that the boxes are people is the thing to learn first.
+ *
+ * (The second — that there is no un-solo — is on the SOLO control itself, `SOLO_TITLE` in
+ * `plateAudio.ts`, because it qualifies an irreversible write.)
  */
 const SCOPE_NOTE =
-  'These are the layers this console seated for a row’s live plates. Repoint and off-air are ' +
-  'the owning row’s verbs. Audio is requested gain, not a measured signal. ON sets 100%; SOLO ' +
-  'affects one row’s plates, hidden frames included, with no restore.';
+  'Every live plate starts silent — a plate carries its guest’s live microphone, so nothing ' +
+  'the bridge puts on a layer is audible until it is raised here. ' +
+  'These are the layers this console seated for a row’s live plates, and the frames those ' +
+  'rows declare that nothing is seated on yet. Repoint and off-air are the owning row’s ' +
+  'verbs. Audio is requested gain, not a measured signal. ON sets 100%; SOLO affects one ' +
+  'row’s plates, hidden frames included, with no restore.';
 
 /**
  * `B-145` acceptance 1, display half (`tasks.md` 2.8) — **the LIVE PLATES tab: the
@@ -407,10 +421,24 @@ export function LiveSourcesPanel({
     );
   }
 
-  // The toolbar's counts, off the SAME rows the table renders. A row whose audio the console
-  // cannot state (blind, stranded) is in neither count — "shown" and "held" are claims.
-  const shownCount = rows.filter((r) => r.audio !== null && !r.audio.held).length;
-  const heldCount = rows.filter((r) => r.audio?.held === true).length;
+  /*
+    The toolbar's counts, off the SAME rows the table renders.
+
+    🔴 `PLATES-AUDIO-11` §2 — **THE COUNTS MUST AGREE WITH THE ROWS ON SCREEN**, which means
+    every row belongs to exactly one of them. `shown` and `held` are CLAIMS about a seat, so a
+    row whose audio the console cannot state (blind, stranded) was in neither — and with §2's
+    declared frames added there is now a fourth disposition as well. Each term is rendered only
+    when it is non-zero, so the ordinary case still reads exactly as the reference does
+    (`3 occupied layers · 2 shown · 1 held`, measured) and an extra term appears exactly when
+    there is an extra kind of row to explain.
+  */
+  const seated = rows.filter((r) => r.coordinate !== null);
+  const shownCount = seated.filter((r) => r.audio !== null && !r.audio.held).length;
+  const heldCount = seated.filter((r) => r.audio?.held === true).length;
+  /** Rows the console declined to state audio for — see `LiveLayerRowView.audio`. */
+  const unknownCount = seated.length - shownCount - heldCount;
+  /** `PLATES-AUDIO-11` §2 — frames this row's template declares that nothing is seated on. */
+  const unseatedCount = rows.length - seated.length;
 
   /**
    * The reference's gesture: a right-click (or its keyboard twins) on a seated plate opens the
@@ -428,10 +456,18 @@ export function LiveSourcesPanel({
     <>
       <div className="cg-plate-toolbar" data-plate-toolbar="">
         <strong>
-          {String(rows.length)} occupied {rows.length === 1 ? 'layer' : 'layers'}
+          {/*
+            🔴 THE NOUN IS `layer`, AND IT COUNTS SEATS — `CONSOLE-LOOK-06` DELTA 8 §0 verified
+            this string against the drawing and `PLATES-AUDIO-11` §2 does not withdraw it. A
+            declared frame is NOT an occupied layer; it is counted by its own term below, so
+            this word stays true as the rows beneath it grow.
+          */}
+          {String(seated.length)} occupied {seated.length === 1 ? 'layer' : 'layers'}
         </strong>
         <span className="cg-plate-count">
           {String(shownCount)} shown · {String(heldCount)} held
+          {unknownCount > 0 && ` · ${String(unknownCount)} unknown`}
+          {unseatedCount > 0 && ` · ${String(unseatedCount)} not seated`}
         </span>
         <span className="cg-plate-spacer" />
         {/*
@@ -510,17 +546,25 @@ export function LiveSourcesPanel({
           const attention = !row.plain;
           return (
             <div
-              key={row.coordinate}
+              /*
+                🔴 `PLATES-AUDIO-11` §2 — KEYED BY ITEM AND PLATE, NOT BY COORDINATE. A declared
+                frame has no coordinate, and two of them on one row would collide on `null`.
+                Item + plate is unique on both kinds of row: the ledger's own dedup is by
+                `sourceId`, which is what `rowPlatesOf` relies on one call away.
+              */
+              key={`${row.itemId}:${row.plate}`}
               role="row"
               className={`cg-plate-row${attention ? ' cg-plate-row--attention' : ''}`}
-              data-live-layer={row.coordinate}
+              {...(row.coordinate !== null && { 'data-live-layer': row.coordinate })}
+              data-live-layer-plate={row.plate}
+              data-live-layer-seated={row.coordinate !== null ? 'true' : 'false'}
               data-live-layer-stranded={row.releasable ? 'true' : 'false'}
               // The row is the keyboard's target for the audio dialog (`Shift+F10` /
               // `ContextMenu`), exactly as the reference's `<tr tabindex="0">` is.
               tabIndex={0}
-              aria-label={`${row.plate} on ${row.coordinate} · ${row.headline}${
-                row.audio !== null ? ' · right-click for audio' : ''
-              }`}
+              aria-label={`${row.plate} ${
+                row.coordinate !== null ? `on ${row.coordinate}` : 'not seated'
+              } · ${row.headline}${row.audio !== null ? ' · right-click for audio' : ''}`}
               title={row.detail}
               onContextMenu={(e) => {
                 if (openAudioFor(row)) {
@@ -537,15 +581,21 @@ export function LiveSourcesPanel({
               }}
             >
               <span role="cell" className="cg-plate-coord">
-                {row.coordinate}
+                {/*
+                  `R-028` — the real layer number stays visible. A declared frame has none, and
+                  the cell says WHY rather than printing a dash the operator has to interpret.
+                */}
+                {row.coordinate ?? <span className="cg-plate-unseated">Not seated</span>}
               </span>
               <span role="cell" className="cg-plate-source">
                 <span className="cg-plate-slot" title="Template plate handle">
                   {row.plate}
                 </span>
-                <bdi className="cg-plate-producer" title={row.producer}>
-                  {row.producer}
-                </bdi>
+                {row.producer !== '' && (
+                  <bdi className="cg-plate-producer" title={row.producer}>
+                    {row.producer}
+                  </bdi>
+                )}
               </span>
               <span role="cell" className="cg-plate-owner">
                 {row.releasable ? (
@@ -590,8 +640,23 @@ export function LiveSourcesPanel({
                       onClick={() => {
                         onSelectOwner(row.itemId);
                       }}
-                      title={`Open the row that owns live layer ${row.coordinate} and its Inspector`}
-                      aria-label={`Open the row that owns live layer ${row.coordinate}`}
+                      /*
+                        🔴 `PLATES-AUDIO-11` §1 — THE COMPOSITION IS RELOCATED HERE, not deleted.
+                        The cell says the ROW; the template the row is carrying rides the
+                        `title`, which is exactly golden rule 11's split. `ownerDetail` is null
+                        when the composition IS the visible name, so the tooltip never says the
+                        same word twice.
+                      */
+                      title={`${
+                        row.ownerDetail !== null ? `Carrying ${row.ownerDetail}. ` : ''
+                      }Open ${row.ownerLabel} and its Inspector${
+                        row.coordinate !== null ? ` — it owns live layer ${row.coordinate}` : ''
+                      }`}
+                      aria-label={
+                        row.coordinate !== null
+                          ? `Open the row that owns live layer ${row.coordinate}`
+                          : `Open the row that declares ${row.plate}`
+                      }
                     >
                       {/* ADDENDUM B — the box is the button's own LTR chrome; only the
                           characters are isolated. As a blockified `<bdi>` this cell resolved
@@ -617,7 +682,7 @@ export function LiveSourcesPanel({
               */}
               <PlateAudioStrip
                 row={row}
-                siblings={seatedPlatesOf(rows, row.itemId)}
+                siblings={rowPlatesOf(rows, row.itemId)}
                 refusal={audioRefusal}
                 onApply={(volumes) => applyAndReport(row.itemId, volumes)}
               />

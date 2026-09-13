@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { reportCommandError } from '../status/commandFeedback.js';
-import { pct, plateAudioState, soloMap } from './plateAudio.js';
+import {
+  OFF_TITLE,
+  ON_TITLE,
+  SOLO_ALONE_TITLE,
+  SOLO_TITLE,
+  pct,
+  plateAudioState,
+  soloMap,
+} from './plateAudio.js';
 import type { LiveLayerRowView } from './liveLayerRows.js';
 
 /**
@@ -85,7 +93,12 @@ export function PlateAudioStrip({
   // `??` twice, never `||`: a recorded intent of 0 is a REAL authored value ("muted by the
   // operator") and must not fall through to the default that happens to equal it.
   const shown = dragging ?? audio.volume ?? 0;
-  const inputId = `plate-vol-${row.coordinate}`;
+  /*
+    ⚠ `PLATES-AUDIO-11` §2 — KEYED BY ITEM AND PLATE, NOT BY COORDINATE. A declared frame
+    has no coordinate, so two of them on one row would have produced the same `id` and the
+    `<label>`/`<output>` association would have pointed at whichever rendered first.
+  */
+  const inputId = `plate-vol-${row.itemId}-${row.plate}`;
 
   const apply = async (volumes: Record<string, number>): Promise<{ accepted: boolean }> => {
     const res = await onApply(volumes);
@@ -132,7 +145,9 @@ export function PlateAudioStrip({
           value={Math.round(shown * 100)}
           disabled={refusal !== undefined}
           {...(refusal !== undefined ? { title: refusal } : {})}
-          aria-label={`Volume for ${row.plate} on ${row.coordinate}`}
+          aria-label={`Volume for ${row.plate} ${
+            row.coordinate !== null ? `on ${row.coordinate}` : '(not seated)'
+          }`}
           aria-valuetext={pct(shown)}
           onChange={(e) => {
             setDragging(Number(e.target.value) / 100);
@@ -186,12 +201,7 @@ export function PlateAudioStrip({
           run={() => apply(soloMap(siblings, row.plate))}
           onError={reportCommandError}
           disabled={refusal !== undefined || siblings.length < 2}
-          title={
-            refusal ??
-            (siblings.length < 2
-              ? 'This row has only one plate — there is nothing to solo against.'
-              : SOLO_TITLE)
-          }
+          title={refusal ?? (siblings.length < 2 ? SOLO_ALONE_TITLE : SOLO_TITLE)}
           aria-label={`Solo ${row.plate} — silences the other ${String(siblings.length - 1)} plate(s) on this row, with no restore`}
         >
           SOLO
@@ -201,23 +211,14 @@ export function PlateAudioStrip({
   );
 }
 
-/**
- * 🔴 **THE ONE SENTENCE THAT HAS TO BE ON THE CONTROL ITSELF.**
- *
- * OFF writes `0` and ON writes `1`. ON does NOT return the plate to whatever the fader said
- * before OFF, and an operator who assumes it does will put a guest back at full when they
- * meant to put them back at forty percent.
- *
- * Restoring the previous level needs a SECOND store of intent living beside the bridge's
- * `#plateVolumes` and answering the same question a second way — the `B-100` / `P-012` class
- * this repo has now paid for five times, and here its specific failure is that only one of the
- * two stores is retained, so after a bridge blip the plate returns at a volume nobody chose.
- * The trade is deliberate; saying so on the button is the price of making it.
- */
-const ON_TITLE = 'ON = full volume (100%). It does not return to the previous fader level.';
+/*
+  🔴 `PLATES-AUDIO-11` §4 — THE THREE VERB SENTENCES MOVED TO `plateAudio.ts`, AND THE MOVE IS
+  THE POINT RATHER THAN A TIDY-UP.
 
-const OFF_TITLE = 'OFF = 0%. Silence this plate.';
-
-const SOLO_TITLE =
-  'Set this plate to 100% and every other plate on this row to 0%, including the frames the ' +
-  'current look hides. There is no un-solo — raise the others again on their own faders.';
+  They lived here and a second, SHORTER spelling of the SOLO one lived in the dialog — which
+  §4(b) then asked to carry the no-un-solo clause the strip already had. Adding it there would
+  have made two copies agree ONCE; the vocabulary module is what makes them unable to disagree
+  again. Same argument `plateAudioPill` is built on, one axis over: a verb's promise is operator
+  copy about an irreversible write, and two spellings of it is how one surface comes to promise
+  something the other does not.
+*/

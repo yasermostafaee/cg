@@ -436,7 +436,10 @@ item 23's discharge, A13/A14, and the numbers filed.
       record, leaves `item-2`'s three intents at 1 and its ledger empty) and on the surface
       (`plateAudioAccess` §3 — SOLO on `item-irib-news`'s `guest-1` zeroes its HIDDEN `guest-2`
       and leaves `item-looks`'s intents untouched). A12: the per-plate word is the LEDGER's
-      (`plateAudioPill` / `NOT SEATED`), never a local `value > 0`.
+      (`plateAudioPill` / `Not seated`), never a local `value > 0`.
+      ⚠ AMENDED by `PLATES-AUDIO-11` §3/§4: the words are sentence case now, and the two clauses
+      that qualify an irreversible write (ON is not a restore; there is no un-solo) are on the
+      CONTROLS rather than in the footer. The footer is the reference's two lines. See `PA.1`.
 - [x] 6.4 🔴 RED-FIRST: changing audio must not put a ready row on air —
       `tools/caspar-bridge/tests/audio-does-not-take.integration.test.ts`, at the wire: a
       never-taken row under ON; the same under a SOLO map; TAKE → OUT → settled → ON, then the
@@ -1420,3 +1423,42 @@ renders answers "is this handled?" with a yes.
 - [ ] U.7 ⚠ **Still parked: the one UUID message with no errorCode** —
       `Template "<uuid>" is not registered.` §B3's work changed nothing about it; it has no code
       to key an operator sentence on, and §3(a) says stop rather than invent a lookup. §28.3.
+
+## PA — `PLATES-AUDIO-11`: the LIVE PLATES tab and the LIVE AUDIO modal (design.md §34)
+
+- [x] PA.1 **§1 — the Owner column names the ROW.** `ownerLabelFor` answers a
+      `{ row, detail }`: the row's name from the BANK'S BINDING through `placeName` (never
+      `StackItemState.slot`, which the mock does not write), falling back to the composition and
+      then to `shortId` — an id, never a placeholder that two unnamed rows would share. The
+      composition is RELOCATED to the link's `title`. Pinned in `liveSourcesPanel.dom.test.ts`
+      (both halves, plus the `<bdi>` isolate) and in `live-source-layers.spec.ts`, which now
+      asserts the composition is NOT in the sentence. §34.1.
+- [x] PA.2 **§2 — the tab lists the frames the ledger has not seated.** ESTABLISHED first and
+      recorded: the tab reads the LEDGER, the modal reads DECLARED ∪ SEATED, and the reference
+      splits them the same way — so the predicate is not the defect; the ledger's incompleteness
+      is. `declaredFrameRows` adds one row per declared-but-unseated frame, for rows that already
+      own a seat only, with live controls (a configuration verb records and sends nothing). The
+      toolbar's counts partition the rows. `seatedPlatesOf` → `rowPlatesOf`, because the widened
+      set is what SOLO addresses and a name that stopped describing its filter is golden rule 6's
+      own failure; `rowPlateAudioOf` stays SEATED-only, because `B-164` is about that fraction.
+      §34.2.
+- [x] PA.3 **§3 — the amber is adopted; the GREEN IS REFUSED, with a falsification.** Taking the
+      reference's row off air leaves its `Audible · requested` at `rgb(128, 228, 176)`: the class
+      never consults air, so adopting it would promise air that is not happening (§29). The tab
+      inks already ARE the reference's (`--blue` on `Audible`, measured). Held takes
+      `--r-caution-text` `#f3cd88` — the reference's declared amber, not its off-palette
+      `#d8be84` — on both surfaces from one token, guarded on both grounds. Sentence case
+      throughout, superseding §31.4's second half. §34.3, §31.4.
+- [x] PA.4 **§4 — the body copy is out and both safety sentences survived.** The live-microphone
+      warning LEADS the tab's ⓘ note; the no-un-solo warning is on every SOLO control. The three
+      verb sentences moved into `plateAudio.ts` so the dialog and the strip cannot promise
+      different things. The footer is the reference's two lines, measured. §34.4.
+- [x] PA.5 **§5 — the audio dialog's frame is fixed.** `Modal` gained a `frame` opt-in resolving
+      to the SAME `dialogFramed` / `--r-modal-h-frame` the other three framed dialogs take.
+      MEASURED in Chromium at 1280 × 800: **860 × 736 at (210, 32)** with four frames, with two
+      and with none; **536** tall at 1280 × 600. The defect it replaces, measured by ablation:
+      687.6 → 497.6, the frame's top moving 95 px. The row's name moved to the head band and
+      `.cg-audio-head` is sticky, both consequences of the body now scrolling. §34.5.
+- [ ] PA.6 🔴 **Linux `gate:e2e` OWED.** This item alters what renders on two surfaces. The
+      Windows Playwright run is green (210 tests) and is NOT a discharge. Write the CI run URL
+      here beside this box.

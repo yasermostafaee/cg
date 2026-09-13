@@ -374,21 +374,73 @@ that has no owner to open (stranded, blind) SHALL open nothing and SHALL NOT can
 ### Requirement: The audio dialog says what the ledger says, and ON is full volume
 
 The audio dialog SHALL state each plate's audio in the console's one vocabulary, read from the
-ledger — AUDIBLE, SILENT, HIDDEN BY THIS LOOK, ARMED · HIDDEN BY THIS LOOK — and SHALL read a
-plate with no seat as NOT SEATED, never as audible: a raised plate on a row that owns nothing is
-a recorded intent, not sound on air. The dialog SHALL carry `ON = 100 % · OFF = 0 %` and SOLO's
-scope (the row's other frames, hidden frames included, with no un-solo) on its own surface, not
-behind a hover, and SHALL offer ON, OFF and SOLO per plate with no second name for OFF.
+ledger — `Audible`, `Silent`, `Hidden by this look`, `Armed · hidden by this look` — and SHALL
+read a plate with no seat as `Not seated`, never as audible: a raised plate on a row that owns
+nothing is a recorded intent, not sound on air. The dialog's footer SHALL carry
+`ON = 100% · OFF = 0%` and the fact that SOLO silences every other frame of the row, hidden
+frames included; the two facts that qualify an irreversible write — that ON does not restore the
+previous fader level, and that there is no un-solo — SHALL be on the controls that perform them.
+The dialog SHALL offer ON, OFF and SOLO per plate with no second name for OFF.
 
 #### Scenario: A ready row's raised plate does not read as audible
 
 - **WHEN** a plate is raised on a row that owns no seats and the dialog is opened **THEN** that
-  plate reads NOT SEATED at the raised percentage, and no plate in the dialog reads AUDIBLE
+  plate reads `Not seated` at the raised percentage, and no plate in the dialog reads `Audible`
 
 #### Scenario: A held plate reads as hidden
 
 - **WHEN** the dialog is opened on a row whose ledger holds a held seat **THEN** that plate
-  reads HIDDEN BY THIS LOOK with its coordinate beside it, and its ON, OFF and SOLO stay live
+  reads `Hidden by this look` with its coordinate beside it, and its ON, OFF and SOLO stay live
+
+#### Scenario: The no-un-solo warning is on the SOLO control
+
+- **WHEN** the dialog is open **THEN** every SOLO button's tooltip states that there is no
+  un-solo and that the others must be raised again on their own faders, and the footer does not
+  repeat it
+
+### Requirement: The LIVE PLATES tab names the owning ROW and lists every frame
+
+The LIVE PLATES tab SHALL name each layer's owner by the ROW the operator knows — the bank's
+alias for the layer that row sits on, else the bank's default name — with the composition name
+on a `title` and never in the visible sentence. It SHALL list, for every row that owns at least
+one seat, the frames that row's template declares which the ledger has not seated, each reading
+`Not seated` in place of a coordinate and carrying live audio controls, so that no frame of a
+live row is unreachable from the surface that carries the faders. The toolbar's counts SHALL
+partition the rows on screen.
+
+#### Scenario: The owner cell names the row, not the composition
+
+- **WHEN** a seated live layer's owning row is bound to a named bank layer **THEN** the Owner
+  cell reads that row's name, the composition name is on the link's `title`, and the row name is
+  rendered in its own bidi isolate
+
+#### Scenario: An unseated declared frame is listed and controllable
+
+- **WHEN** a row owns one seat and its template declares three frames **THEN** the tab lists
+  three rows for it, the two with no layer read `Not seated`, their faders and ON/OFF/SOLO are
+  live, and the toolbar reads one occupied layer plus two not seated
+
+#### Scenario: A row the console cannot speak for contributes no frames
+
+- **WHEN** the link is down, or a layer is stranded **THEN** no declared-frame row is added for
+  it, because the console has declined to state that row's audio at all
+
+### Requirement: The audio dialog's frame does not move with its content
+
+The audio dialog SHALL draw one box whatever the number of frames it lists, taking the same
+declared height and inner scroll region as the console's other framed dialogs, and SHALL clamp
+that height on a short viewport rather than running off the screen. The row it is about SHALL
+stay visible when the frame list scrolls.
+
+#### Scenario: The box is identical across frame counts
+
+- **WHEN** the dialog is opened on a four-frame row, then on a two-frame row **THEN** the
+  dialog's box is identical, and an empty frame list does not collapse it
+
+#### Scenario: A short viewport clamps the frame
+
+- **WHEN** the viewport is 1280 × 600 **THEN** the dialog is 536 px tall, the same height the
+  console's other framed dialogs clamp to
 
 ### Requirement: The Inspector is headed by the selected row's operator name
 

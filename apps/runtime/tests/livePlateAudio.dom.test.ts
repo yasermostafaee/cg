@@ -180,14 +180,28 @@ describe('6.5f — the AUDIO verb is on the ROW, beside SOURCE', () => {
 });
 
 describe('6.5f — the dialog states the rule and commits one decision at a time', () => {
-  it('says every plate starts SILENT, and why', () => {
-    renderDialog(() => Promise.resolve({ ok: true, refused: [] }));
+  /*
+    🔴 REWRITTEN BY `PLATES-AUDIO-11` §4, NOT DELETED — and the rewrite is the record of the
+    decision. It used to assert the explanatory paragraph in the BODY. §4 removed that
+    paragraph and ruled that one clause in it was a SAFETY fact rather than an explanation, so
+    what is pinned now is that the paragraph is gone AND that the fact survived: on the SILENT
+    pill's own tooltip here, and leading the LIVE PLATES tab's ⓘ note
+    (`liveSourcesPanel.dom.test.ts`). Deleting this test would have left the second half
+    unguarded, which is exactly how a warning disappears in a copy edit.
+  */
+  it('🔴 §4 — the standing paragraph is gone, and the live-microphone fact is not', () => {
+    renderDialog(() => Promise.resolve({ ok: true, refused: [] }), {}, [
+      { plateId: 'guest-1', volume: undefined, held: false, coordinate: '1-10' },
+    ]);
     const text = openDialog()?.textContent ?? '';
-    expect(text).toContain('silent');
-    // The REASON, not just the state: a plate carries a guest's live microphone.
-    expect(text).toMatch(/microphone/i);
-    // …and that it is per-row and durable, so the operator knows what they changed.
-    expect(text).toMatch(/this row/i);
+    // The body no longer carries standing prose about what the setting is.
+    expect(text).not.toMatch(/survives a source swap/i);
+    expect(text).not.toMatch(/per-plate setting/i);
+    // …and the warning is one hover away, on the state word itself.
+    const state = openDialog()?.querySelector('.cg-audio-state');
+    expect(state?.textContent).toBe('Silent');
+    expect(state?.getAttribute('title')).toMatch(/microphone/i);
+    expect(state?.getAttribute('title')).toMatch(/starts silent/i);
   });
 
   it('shows one control per plate, and says which are audible — from the LEDGER, in the one vocabulary', () => {
@@ -206,14 +220,15 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
     const text = openDialog()?.textContent ?? '';
     expect(text).toContain('guest-1');
     expect(text).toContain('guest-2');
-    expect(text).toContain('AUDIBLE');
-    expect(text).toContain('HIDDEN BY THIS LOOK');
+    // 🔴 `PLATES-AUDIO-11` §3 — SENTENCE CASE, superseding `design.md` §31.4's second half.
+    expect(text).toContain('Audible');
+    expect(text).toContain('Hidden by this look');
     expect(text).toContain('100%');
     // `R-028` — the real coordinate is in the sentence, not behind a hover.
     expect(text).toContain('on 1-10');
   });
 
-  it('🔴 A12 — a raised plate on a row that owns NO seat reads NOT SEATED, never AUDIBLE', () => {
+  it('🔴 A12 — a raised plate on a row that owns NO seat reads Not seated, never Audible', () => {
     // The old dialog printed "audible on air" under any plate whose value was > 0 — on a READY
     // row a claim about air that nothing on the channel backed. The word now comes from the
     // ledger, and with no seat there is no audibility to claim.
@@ -223,8 +238,8 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
     const states = [...(openDialog()?.querySelectorAll('[data-plate-audio-state]') ?? [])].map(
       (el) => el.getAttribute('data-plate-audio-state'),
     );
-    expect(states).toEqual(['NOT SEATED', 'NOT SEATED']);
-    expect(states).not.toContain('AUDIBLE');
+    expect(states).toEqual(['Not seated', 'Not seated']);
+    expect(states).not.toContain('Audible');
     expect(openDialog()?.textContent).toContain('100%');
   });
 
@@ -352,8 +367,18 @@ describe('add-multibox-audio — ON / OFF and SOLO in the dialog', () => {
 
     // NOT 0.4 — full volume, which is what the copy promises.
     expect(onApply).toHaveBeenLastCalledWith({ 'guest-1': 1 });
-    expect(openDialog()?.textContent).toMatch(/ON is full volume/i);
-    expect(openDialog()?.textContent).toMatch(/not a return to the previous fader level/i);
+    /*
+      🔴 `PLATES-AUDIO-11` §4 — THE SENTENCE MOVED FROM THE FOOTER TO THE BUTTON. §4 cut the
+      footer back to the reference's two lines and put this clause on the control it qualifies,
+      where it is read by the operator who is about to press it rather than by one scanning a
+      block of standing text. Pinned on the ON buttons, all of them.
+    */
+    const onTitles = buttonsLabelled('ON').map((b) => b.getAttribute('title') ?? '');
+    expect(onTitles.length).toBeGreaterThan(0);
+    for (const t of onTitles) {
+      expect(t).toMatch(/full volume/i);
+      expect(t).toMatch(/does not return to the previous fader level/i);
+    }
   });
 
   it('🔴 SOLO is ONE call — 1 for the plate and 0 for every sibling', () => {
@@ -373,7 +398,23 @@ describe('add-multibox-audio — ON / OFF and SOLO in the dialog', () => {
 
   it('SOLO says there is no restore, and does not offer one', () => {
     renderDialog(() => Promise.resolve({ ok: true, refused: [] }));
-    expect(openDialog()?.textContent).toMatch(/no un-solo/i);
+    /*
+      🔴 `PLATES-AUDIO-11` §4(b) — ON THE CONTROL, and it is the SHARED sentence. The dialog
+      used to carry its own shorter spelling ("There is no un-solo.") while the LIVE PLATES
+      strip said what to do about it; both read `SOLO_TITLE` now, so the two surfaces cannot
+      promise different things about an irreversible cross-plate write.
+    */
+    const soloTitles = buttonsLabelled('SOLO').map((b) => b.getAttribute('title') ?? '');
+    expect(soloTitles.length).toBeGreaterThan(0);
+    for (const t of soloTitles) {
+      expect(t).toMatch(/no un-solo/i);
+      expect(t).toMatch(/raise the others again on their own faders/i);
+    }
+    // The footer keeps only what the reference keeps.
+    expect(openDialog()?.textContent).toMatch(
+      /SOLO silences all other frames of this row, including hidden frames\./,
+    );
+    expect(openDialog()?.textContent).not.toMatch(/no un-solo/i);
     // Nothing anywhere offers to put the previous levels back.
     const labels = [...(openDialog()?.querySelectorAll('button') ?? [])].map((b) => b.textContent);
     expect(labels.some((l) => /un-?solo|restore|undo/i.test(l ?? ''))).toBe(false);

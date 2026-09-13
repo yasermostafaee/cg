@@ -56,13 +56,27 @@ test('the bridge-seated live layers appear on their own tab, distinguishable fro
   await expect(held.getByRole('button', { name: /^Release/ })).toHaveCount(0);
   await expect(onScreen).toHaveAttribute('data-live-layer-stranded', 'false');
 
-  // ── …and instead it NAMES the owner and takes the operator to it. That is the display
-  //    half's real job: make the control that already existed reachable.
-  // The owner is named with the TEMPLATE label the operator already reads in the row’s
-  // own template column — the starter pack’s Persian-first label, joined through the same
-  // index the table uses, rather than a raw id.
+  /*
+    ── …and instead it NAMES the owner and takes the operator to it. That is the display
+       half's real job: make the control that already existed reachable.
+
+    🔴 AMENDED BY `PLATES-AUDIO-11` §1 — **THE ROW, NOT THE COMPOSITION.** This asserted the
+    TEMPLATE label, which is what the cell used to print: on the plant it read
+    `Seated for comp1`, a composition nobody on a gallery floor knows, in the sentence the
+    operator reads under pressure (golden rule 11). The cell names the ROW now — `CLOCK` here,
+    the bank's own alias for the layer the news item sits on, which is the same string the
+    layer table shows one tab over. The composition is RELOCATED, not deleted: it rides the
+    link's `title`, and both halves are asserted so neither can quietly go.
+  */
   await expect(onScreen).toContainText('Seated for');
-  await expect(onScreen).toContainText('News Composite');
+  await expect(onScreen).toContainText('CLOCK');
+  await expect(onScreen, 'a composition name must not be in the sentence').not.toContainText(
+    'News Composite',
+  );
+  await expect(onScreen.getByRole('button', { name: /^Open the row that owns/ })).toHaveAttribute(
+    'title',
+    /News Composite/,
+  );
   await onScreen.getByRole('button', { name: /^Open the row that owns/ }).click();
 
   // OPEN ROW means open the row: the list the row lives on is what comes back, with the
@@ -103,7 +117,8 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
   await expect(stripOf(held, 'guest-2')).toBeVisible();
 
   // Every plate starts SILENT — the rule, visible rather than implied.
-  await expect(stripOf(onScreen, 'guest-1')).toContainText('SILENT');
+  // 🔴 `PLATES-AUDIO-11` §3 — sentence case, superseding `design.md` §31.4's second half.
+  await expect(stripOf(onScreen, 'guest-1')).toContainText('Silent');
   await expect(stripOf(onScreen, 'guest-1')).toContainText('0%');
 
   // ── 🔴 NOTHING HERE IS A METER. There is no per-input level to draw until the plant walk
@@ -119,7 +134,7 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
     .getByRole('button', { name: /^Full volume for guest-1/ })
     .click();
   await expect(stripOf(onScreen, 'guest-1')).toContainText('100%');
-  await expect(stripOf(onScreen, 'guest-1')).toContainText('AUDIBLE');
+  await expect(stripOf(onScreen, 'guest-1')).toContainText('Audible');
 
   // …and the control says so on itself, so an operator does not discover it under pressure.
   await expect(
@@ -132,10 +147,14 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
   const heldOn = stripOf(held, 'guest-2').getByRole('button', { name: /^Full volume for guest-2/ });
   await expect(heldOn).toBeEnabled();
   await heldOn.click();
-  await expect(stripOf(held, 'guest-2')).toContainText('ARMED');
-  await expect(stripOf(held, 'guest-2')).toContainText('HIDDEN BY THIS LOOK');
+  /*
+    ⚠ `PLATES-AUDIO-11` §3 — sentence case means the CLAUSE lowercases when it is not first.
+    The word is `Hidden by this look` on its own and `Armed · hidden by this look` when the
+    plate is armed, and asserting the capital in both is how one of the two goes unnoticed.
+  */
+  await expect(stripOf(held, 'guest-2')).toContainText('Armed · hidden by this look');
   // …and it is NOT claimed to be audible, because the look is what decides that.
-  await expect(stripOf(held, 'guest-2')).not.toContainText('AUDIBLE');
+  await expect(stripOf(held, 'guest-2')).not.toContainText('Audible');
 
   // ── SOLO raises one and silences its siblings, in one press and with no restore offered.
   await stripOf(onScreen, 'guest-1')

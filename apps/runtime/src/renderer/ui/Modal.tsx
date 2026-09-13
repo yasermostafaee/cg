@@ -736,6 +736,28 @@ interface ModalProps {
    */
   size?: 'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'import' | 'record';
   /**
+   * 🔴 `PLATES-AUDIO-11` §5 — **TAKE THE FRAMED HEIGHT, on a size that does not imply it.**
+   *
+   * `MODAL-CHROME-10` §4 gave the picker and the audit log a declared height and an inner
+   * scroll region, derived from their SIZE (`library`, `ledger`). The live-plate audio dialog
+   * needs the same discipline for the same reason — its body is a list of FRAMES whose length
+   * changes under the operator, and a row switched from a three-frame look to a one-frame one
+   * moved the footer he was aiming at — but its size is `wide`, which is worn by the
+   * live-source SWAP dialog too. Widening the size test would have framed a dialog nobody
+   * measured and nobody asked for: a few select rows in a 736 px box.
+   *
+   * ⚠ **So this is a DOOR, not a second mechanism.** It resolves to the same `dialogFramed`
+   * style and the same `--r-modal-h-frame` expression as the other three. There is one height
+   * rule in this file and there must go on being one — the alternative is four dialogs with
+   * four numbers that agree until somebody retunes one.
+   *
+   * The reference frames its own audio modal the same way: measured on `08-live-audio.html`,
+   * `#audio-dialog` renders `height: calc(100vh - 48px)` with `overflow: hidden` and its body
+   * on `flex: 1 / overflow-y: auto`, and the box is 860 × 752 at 1280 × 800 with three frames,
+   * with one, and with none.
+   */
+  frame?: 'auto' | 'fixed';
+  /**
    * 🔴 `SETTINGS-MATCH-02` §1 — the `fixed` frame's RAIL, beside the panel rather than above
    * it, and running the frame's full height.
    *
@@ -786,6 +808,7 @@ export function Modal({
   children,
   ariaLabel,
   size = 'prose',
+  frame = 'auto',
   rail,
   layer: layerLevel = 'base',
 }: ModalProps): JSX.Element {
@@ -796,8 +819,12 @@ export function Modal({
     `MODAL-CHROME-10` §4 — the two LIST dialogs take the fixed frame's height discipline. Read
     once, here, so the style and any future consumer cannot come to disagree about which
     sizes are framed.
+
+    ⭐ `PLATES-AUDIO-11` §5 adds the third route into the SAME decision: an explicit `frame`
+    opt-in, for a dialog whose size is shared with one that must not be framed. Still one
+    read, still one style, still one height expression.
   */
-  const framed = size === 'library' || size === 'ledger';
+  const framed = size === 'library' || size === 'ledger' || frame === 'fixed';
   /*
    * `MONITORS-01` audit row 74 — the `fixed` frame takes the drawing's own 19 px / 650 for
    * its title; every other dialog keeps the one shared treatment. Composed here rather than

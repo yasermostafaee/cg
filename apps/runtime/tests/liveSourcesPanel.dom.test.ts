@@ -13,6 +13,8 @@ import {
   liveLayerRows,
   ownerLabelFor,
   releaseScopeOf,
+  declaredFrameRows,
+  type LiveLayerOwner,
 } from '../src/renderer/features/layers/liveLayerRows.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 import {
@@ -113,7 +115,7 @@ function stubBridge(
 
 async function render(
   layers: LiveLayerState[],
-  labelFor: (itemId: string) => string | null = OWNED,
+  labelFor: (itemId: string) => LiveLayerOwner | null = OWNED,
   link: 'live' | 'disconnected' = 'live',
   removeResult: unknown = { accepted: true },
   reach: Reachability = 'both-up',
@@ -851,8 +853,33 @@ describe('liveLayerRows — the gate as pure functions', () => {
 
   it('ownerLabelFor answers null for an item the stack has dropped — the only stranded test', () => {
     const labelFor = ownerLabelFor([item('item-a')], () => 'IRIB News');
-    expect(labelFor('item-a')).toBe('IRIB News');
+    expect(labelFor('item-a')).toEqual({ row: 'IRIB News', detail: null });
     expect(labelFor('item-gone')).toBeNull();
+  });
+
+  /**
+   * 🔴 `PLATES-AUDIO-11` §1 — **THE ROW, NOT THE COMPOSITION, AND THE COMPOSITION IS NOT LOST.**
+   *
+   * The Owner cell read `Seated for comp1` on the plant — a TEMPLATE name in the sentence an
+   * operator reads under pressure, which is golden rule 11's defect exactly. The row the owner
+   * knows is «سه قاب» (the bank's alias for layer 1-9). Both halves are pinned: the name that
+   * goes in the sentence, and the composition that goes on the `title` rather than being
+   * deleted.
+   */
+  it('🔴 §1 — the owner is the ROW name; the composition rides its detail', () => {
+    const named = ownerLabelFor(
+      [item('item-a')],
+      () => 'comp1',
+      () => 'سه قاب',
+    );
+    expect(named('item-a')).toEqual({ row: 'سه قاب', detail: 'comp1' });
+  });
+
+  it('🔴 §1 — with no row name it falls back to the composition, and says it ONCE', () => {
+    // Not `{ row: 'comp1', detail: 'comp1' }`: a tooltip that repeats the visible word is
+    // noise on a surface whose whole complaint was too many names.
+    const unnamed = ownerLabelFor([item('item-a')], () => 'comp1');
+    expect(unnamed('item-a')).toEqual({ row: 'comp1', detail: null });
   });
 
   it('an item whose template is unknown falls back to its ID, never to "unknown template"', () => {
@@ -862,7 +889,13 @@ describe('liveLayerRows — the gate as pure functions', () => {
       surface that means an emergency.
     */
     const labelFor = ownerLabelFor([item('item-a')], () => undefined);
-    expect(labelFor('item-a')).toBe('item-a');
+    /*
+      🔴 `PLATES-AUDIO-11` §1 — the answer is an OWNER now, two fields: the name that goes in
+      the sentence and the composition that goes on a `title`. With no row name and no template
+      name there is nothing to say but the id, and `shortId` is what says it — an ugly HANDLE,
+      never a friendly placeholder that two different unnamed rows would share.
+    */
+    expect(labelFor('item-a')).toEqual({ row: 'item-a', detail: null });
   });
 });
 
@@ -944,7 +977,7 @@ describe('add-multibox-audio — audio is visible without opening anything', () 
     );
 
     const strip = stripIn(el, 'guest-1');
-    expect(strip?.textContent).toMatch(/HIDDEN BY THIS LOOK/i);
+    expect(strip?.textContent).toMatch(/hidden by this look/i);
     expect(strip?.textContent).toMatch(/ARMED/i);
     expect(strip?.querySelector('input[type="range"]')?.hasAttribute('disabled')).toBe(false);
     expect(buttonIn(strip, 'ON')?.disabled).toBe(false);
@@ -1000,7 +1033,7 @@ describe('add-multibox-audio — audio is visible without opening anything', () 
     // …and the STATE has not, because nothing has been committed. The pill and the attribute
     // say the same thing, which is the property that broke.
     expect(stateOf(el, 'guest-1')).toBe('silent');
-    expect(stripIn(el, 'guest-1')?.textContent).toContain('SILENT');
+    expect(stripIn(el, 'guest-1')?.textContent).toContain('Silent');
   });
 
   it('🔴 SOLO sends ONE map — 1 for the plate, 0 for every sibling of the same item', async () => {
@@ -1388,5 +1421,132 @@ describe('PATCH-BX-01 — PANIC asks the bridge, and reads its answer out loud',
     expect(title, 'an operator must not be surprised by the wider reach').toMatch(
       /rows this console does not show as on air/i,
     );
+  });
+});
+
+/**
+ * 🔴 `PLATES-AUDIO-11` §1–§4 — **THE OWNER CELL, THE FRAMES NOTHING IS SEATED ON, AND THE TWO
+ * SENTENCES THAT HAD TO SURVIVE A COPY EDIT.**
+ */
+describe('PLATES-AUDIO-11 — the LIVE PLATES tab', () => {
+  /** The bank's alias for the layer this item is bound to — the ROW, as the operator knows it. */
+  const NAMED = ownerLabelFor(
+    [item('item-a')],
+    () => 'comp1',
+    () => 'سه قاب',
+  );
+
+  it('🔴 §1 — the Owner cell names the ROW, and the composition is on its title', async () => {
+    const { el } = await render([layer()], NAMED);
+    const owner = el.querySelector('.cg-plate-owner');
+    // The sentence the operator reads carries the row's name and NOT the composition.
+    expect(owner?.textContent).toContain('سه قاب');
+    expect(owner?.textContent).not.toContain('comp1');
+    // …and the composition is not lost — golden rule 11 RELOCATES the internal name.
+    const link = el.querySelector('.cg-plate-owner-link');
+    expect(link?.getAttribute('title')).toContain('comp1');
+    expect(link?.getAttribute('title')).toContain('سه قاب');
+  });
+
+  it('🔴 §1 — the row name is ISOLATED, because these names are Persian', async () => {
+    const { el } = await render([layer()], NAMED);
+    /*
+      Golden rule 11's last clause, and the reason `IsolatedName` exists: the lead-in is
+      English, the name is RTL, and joined into one text node the bidi algorithm decides where
+      the name lands rather than we do.
+    */
+    const isolate = el.querySelector('.cg-plate-owner-link bdi');
+    expect(isolate?.textContent).toBe('سه قاب');
+  });
+
+  /**
+   * 🔴 §2 — the establish answer, as a test.
+   *
+   * The tab listed the LEDGER and the audio modal listed DECLARED ∪ SEATED, so a frame the
+   * bridge had not seated was controllable in the dialog and invisible on the tab. `B-164`'s
+   * own measurement proves that state is reachable on the plant — its chip read `audio 1/2`
+   * on a row whose template declares THREE plates, because the ledger held two seats — and
+   * the plant's ledger was observed holding ONE seat for a three-plate row while this was
+   * being written.
+   */
+  it('🔴 §2 — a declared frame with no seat is LISTED, and its fader is live', async () => {
+    const seated = liveLayerRows([layer({ sourceId: 'guest-1' })], NAMED, null, () => 1);
+    const frames = declaredFrameRows(
+      seated,
+      () => ['guest-1', 'guest-2', 'guest-3'],
+      () => undefined,
+    );
+    expect(frames.map((f) => f.plate)).toEqual(['guest-2', 'guest-3']);
+    for (const f of frames) {
+      expect(f.coordinate, 'a declared frame has no layer').toBeNull();
+      expect(f.audio?.pill.label).toBe('Not seated');
+      expect(f.releasable, 'nothing to release — there is no producer').toBe(false);
+      expect(f.needsAttention, 'an unentered look’s frame is not an alarm').toBe(false);
+      expect(f.ownerLabel, 'it belongs to the same row').toBe('سه قاب');
+    }
+  });
+
+  it('🔴 §2 — a BLIND or STRANDED row contributes no declared frames', async () => {
+    // Blind: the console cannot say what IS seated, so it certainly cannot say what is not.
+    const blind = liveLayerRows([layer()], NAMED, 'link-down');
+    expect(declaredFrameRows(blind, () => ['guest-1', 'guest-2'])).toEqual([]);
+    // Stranded: no item owns the layer, so there is no declaration to read.
+    const stranded = liveLayerRows([layer()], STRANDED, null);
+    expect(declaredFrameRows(stranded, () => ['guest-1', 'guest-2'])).toEqual([]);
+  });
+
+  it('🔴 §2 — the toolbar counts PARTITION the rows on screen', async () => {
+    const seated = liveLayerRows(
+      [
+        layer({ layer: 10, sourceId: 'guest-1' }),
+        layer({ layer: 11, sourceId: 'guest-2', held: true }),
+      ],
+      NAMED,
+      null,
+      () => 1,
+    );
+    const all = [...seated, ...declaredFrameRows(seated, () => ['guest-1', 'guest-2', 'guest-3'])];
+    const { el } = await render([], NAMED);
+    // Render the widened set directly — the panel is handed rows, it derives none.
+    const r = root;
+    await act(async () => {
+      r?.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(LiveSourcesPanel, {
+            rows: all,
+            ledgerReady: true,
+            blind: null,
+            onSelectOwner: () => undefined,
+            onPanic: () =>
+              Promise.resolve({ ok: true, silenced: 0, recorded: 0, rows: [], failed: [] }),
+            onApplyVolumes: () => Promise.resolve({ ok: true, refused: [] }),
+            onOpenAudio: () => undefined,
+          }),
+        ),
+      );
+    });
+    const toolbar = el.querySelector('[data-plate-toolbar]');
+    // `occupied` counts SEATS — the reference's verified string does not change meaning.
+    expect(toolbar?.textContent).toContain('2 occupied layers');
+    expect(toolbar?.textContent).toContain('1 shown · 1 held · 1 not seated');
+    // …and the count of rows on screen is the sum of every term.
+    expect(el.querySelectorAll('.cg-plate-row')).toHaveLength(3);
+  });
+
+  it('🔴 §4(a) — the ⓘ note leads with the live-microphone warning', async () => {
+    const { el } = await render([layer()], NAMED);
+    const help = el.querySelector('.cg-plate-help');
+    const note = help?.getAttribute('title') ?? '';
+    /*
+      §4 removed the audio dialog's explanatory paragraph and ruled this clause a SAFETY fact.
+      This is where it landed. It must not merely be PRESENT — it leads, because the ⓘ is read
+      once by someone who has not used the tab before.
+    */
+    expect(note.startsWith('Every live plate starts silent')).toBe(true);
+    expect(note).toMatch(/live microphone/i);
+    // …and the note now also accounts for the rows §2 added.
+    expect(note).toMatch(/frames those rows declare/i);
   });
 });

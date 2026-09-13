@@ -43,7 +43,7 @@ import {
   type LayerFilter,
 } from './layerFilter.js';
 import { OperatorNames } from '../../ui/OperatorNames.js';
-import { operatorRowName, type OperatorRowName } from '../../ui/operatorNaming.js';
+import { operatorRowName, placeName, type OperatorRowName } from '../../ui/operatorNaming.js';
 import type { ShellLayout } from '../../hooks/useShellLayout.js';
 import { useElementWidth } from '../../hooks/useElementWidth.js';
 import { useConfirm } from '../../ui/useDialog.js';
@@ -77,6 +77,7 @@ import { LiveSourcesPanel } from './LiveSourcesPanel.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
 import { announcePlateAudio } from './plateAudio.js';
 import {
+  declaredFrameRows,
   hasStrandedLiveLayer,
   liveLayerBlindness,
   liveLayerRows,
@@ -833,13 +834,33 @@ export function LayersPanel({
 
     The tab dot and the list must never be able to disagree about whether anything is
     stranded, so they are not two passes over the payload: this array IS both. The
-    owner label is the TEMPLATE name the operator already reads in the row’s own
-    template column, joined through the index this panel has anyway.
+    owner label is the ROW's name, resolved through the ONE composition every operator
+    surface uses; the COMPOSITION rides its `title`. See `ownerLabelFor`.
   */
   const liveBlind = liveLayerBlindness(linkDown, stackReady, items.length > 0, deliveryPending);
+  /*
+    🔴 `PLATES-AUDIO-11` §1 — **HOW A LIVE LAYER'S OWNING ROW IS NAMED, and why it is the
+    BANK'S BINDING rather than the item's `slot`.**
+
+    `placeName` needs a `{channel, layer}`, and `StackItemState.slot` is OPTIONAL: the real
+    bridge publishes it, `MockRuntime.load()` never writes one, and the panel is already
+    rendering this list from the bank's own slots. So the join goes through the binding — the
+    same one the layer table itself renders from — and the name is therefore the SAME string
+    the operator reads one tab over, by construction rather than by two lookups agreeing.
+
+    ⚠ `placeName` and not `layerAlias` directly: the bank's configured alias, else its default
+    (`Layer N` / `Bed N`), is ONE rule and `ui/operatorNaming.ts` owns it. A second spelling
+    here is how the tab comes to call a row something the layer table does not.
+  */
+  const liveRowName = (itemId: string): string | null => {
+    const slot = slots.find((sl) => sl.binding?.itemId === itemId);
+    return slot === undefined
+      ? null
+      : placeName({ channel: slot.channel, layer: slot.layer }, bank);
+  };
   const liveRows = liveLayerRows(
     live,
-    ownerLabelFor(items, (id) => templates.get(id)?.name),
+    ownerLabelFor(items, (id) => templates.get(id)?.name, liveRowName),
     /*
       🔴 BOTH facts, through the ONE precedence helper. `stackReady` is not optional
       here and not belt-and-braces: STRANDED is decided by an item being ABSENT from
@@ -856,6 +877,25 @@ export function LayersPanel({
     */
     plateVolumeFor(items),
   );
+  /*
+    🔴 `PLATES-AUDIO-11` §2 — **THE FRAMES THE LEDGER HAS NOT SEATED, APPENDED TO THE SAME
+    ARRAY.** They are not a second list and not a second pass: the tab, the tab's dot and the
+    toolbar's counts all read this one evaluation, which is the property the panel's own note
+    above is about. `declaredFrameRows` decides which rows deserve one; this supplies the
+    template's declaration, which only this panel can see.
+  */
+  const liveRowsWithFrames = [
+    ...liveRows,
+    ...declaredFrameRows(
+      liveRows,
+      (itemId) => {
+        const templateId = items.find((i) => i.itemId === itemId)?.templateId;
+        if (templateId === undefined) return [];
+        return templates.get(templateId)?.liveSources?.sources.map((p) => p.sourceId) ?? [];
+      },
+      plateVolumeFor(items),
+    ),
+  ];
   const liveStranded = hasStrandedLiveLayer(liveRows);
   /**
    * `RUNTIME-REDESIGN-01` Phase 6 — the audio dialog opened FROM THE PLATES TAB, on one plate
@@ -893,7 +933,15 @@ export function LayersPanel({
         volumes,
         before,
         refused,
-        (plateId) => liveRows.find((r) => r.plate === plateId)?.coordinate ?? null,
+        /*
+          🔴 `PLATES-AUDIO-11` §2 — SCOPED TO THIS ITEM AND TO A ROW THAT HAS A SEAT. The
+          lookup was `r.plate === plateId` alone, which could already answer with another
+          row's coordinate for a plate id two templates share; with declared frames on the
+          tab it could also answer with a row that has no layer at all. `null` is the honest
+          answer for an unseated frame, and `announcePlateAudio` already handles it.
+        */
+        (plateId) =>
+          liveRows.find((r) => r.itemId === itemId && r.plate === plateId)?.coordinate ?? null,
         liveRows.find((r) => r.itemId === itemId)?.ownerLabel ?? 'this row',
       );
       if (said !== null) reportCommandSuccess(said);
@@ -1665,7 +1713,10 @@ export function LayersPanel({
           )
         ) : activeTab === 'live-sources' ? (
           <LiveSourcesPanel
-            rows={liveRows}
+            // §2 — the LEDGER's rows PLUS the frames it has not seated. Every other consumer
+            // keeps `liveRows`: `rowPlateAudioOf`'s fraction is seated-only (`B-164`), and so
+            // is PANIC's scope.
+            rows={liveRowsWithFrames}
             ledgerReady={ledgerReady}
             blind={liveBlind}
             /*

@@ -11,6 +11,10 @@ import { lookOptionsOf } from './LookPicker.js';
 // dialog's SOLO and the panel's SOLO cannot address different sets, and the dialog's state
 // words cannot disagree with the strip's about whether a guest can be heard.
 import {
+  OFF_TITLE,
+  ON_TITLE,
+  SOLO_ALONE_TITLE,
+  SOLO_TITLE,
   pct,
   plateAudioPill,
   soloMap,
@@ -242,22 +246,53 @@ export function LivePlateAudioDialog({
   return (
     <Modal
       title="Live plate audio"
+      /*
+        🔴 `PLATES-AUDIO-11` §5 — **THE ROW'S NAME MOVED INTO THE HEAD BAND, and it moved
+        BECAUSE the frame is now fixed.** It was the first line of the body, so with a scrolling
+        body a row with more frames than fit would scroll away the one thing that says WHICH ROW
+        the faders belong to — a regression the fixed frame would have introduced. The head band
+        does not scroll, and this is where the reference puts it too (`#audio-subtitle` lives
+        inside `.modal-head`, measured).
+
+        Golden rule 11 — the operator's words, ids on hover; `R-028` — the real layer number
+        stays visible IN the sentence rather than only on the hover.
+      */
+      subtitle={
+        <span data-audio-subtitle="" title={name.title}>
+          <OperatorNames name={name} />
+          {name.layer !== null && <span> · {name.layer}</span>}
+        </span>
+      }
       /* `REPAIR-03` B, audit row 62 — the reference draws a 42 px volume emblem in this head. */
       emblem={Volume2}
       onClose={onClose}
       size="wide"
+      /*
+        🔴 `PLATES-AUDIO-11` §5 — A FIXED FRAME, THE CONTENT SCROLLS. The list of FRAMES is
+        what changes under the operator here: a row switched to a one-frame look redraws
+        this dialog with one row where there were three, and the footer he is aiming at
+        used to move with it. `MODAL-CHROME-10` §4's discipline, through the door it left
+        for a dialog whose SIZE is shared with one that must not be framed (the live-source
+        swap). One height expression, `--r-modal-h-frame`, clamped for a short viewport.
+      */
+      frame="fixed"
       {...(refusal !== null && { message: { role: 'refusal' as const, text: refusal } })}
       footer={
         <>
           {/*
-            🔴 THE TWO SENTENCES AN OPERATOR MUST NOT HAVE TO DISCOVER UNDER PRESSURE — the
-            reference's own footer words, kept beside the action they qualify.
+            🔴 `PLATES-AUDIO-11` §4 — **THE REFERENCE'S FOOTER, VERBATIM AND NOTHING ELSE.**
+
+            Measured on `08-live-audio.html` in Chromium at 1280 × 800, `.foot-info` renders
+            exactly these two lines. Ours carried two extra clauses, and §4 did not delete them:
+            *"not a return to the previous fader level"* is on the ON button (`ON_TITLE`) and
+            *"there is no un-solo — raise the others again on their own faders"* is on the SOLO
+            button (`SOLO_TITLE`), each beside the write it qualifies rather than in a block of
+            standing text under three rows of controls.
           */}
           <span className="cg-audio-foot-info" data-audio-foot-info="">
-            ON = 100% · OFF = 0% — ON is full volume, not a return to the previous fader level.
+            ON = 100% · OFF = 0%
             <br />
-            SOLO silences all other frames of this row, including hidden frames. There is no un-solo
-            — raise the others again on their own faders.
+            SOLO silences all other frames of this row, including hidden frames.
           </span>
           <ModalAction actionRole="cancel" onClick={onClose}>
             Close
@@ -265,12 +300,6 @@ export function LivePlateAudioDialog({
         </>
       }
     >
-      {/* Golden rule 11 — WHICH ROW this dialog is about, in the operator's words, ids on hover.
-          `R-028`: the real layer number stays visible in the sentence. */}
-      <p className="cg-audio-subtitle" data-audio-subtitle="" title={name.title}>
-        <OperatorNames name={name} />
-        {name.layer !== null && <span> · {name.layer}</span>}
-      </p>
       <div className="cg-audio-context" data-audio-context="">
         <span>
           {String(plates.length)} {plates.length === 1 ? 'frame' : 'frames'}
@@ -283,12 +312,21 @@ export function LivePlateAudioDialog({
         </span>
         <span className="cg-audio-hint">Changes apply on release</span>
       </div>
-      <p className="cg-audio-intro">
-        Every live plate starts <strong>silent</strong> — a plate carries its guest’s live
-        microphone, so nothing the bridge puts on a layer is audible until it is raised here. This
-        is a per-plate setting for <strong>this row</strong>; it survives a source swap and a bridge
-        restart, and it can be set before the take.
-      </p>
+      {/*
+        🔴 `PLATES-AUDIO-11` §4 — **THE EXPLANATORY PARAGRAPH IS GONE, AND ITS SAFETY FACT IS
+        NOT.** The reference draws no body copy here, and standing prose above a mixer is read
+        once and then never again. But one clause in it was a WARNING rather than an
+        explanation — *a plate carries its guest's LIVE MICROPHONE, which is why every plate
+        starts silent* — and deleting a live-microphone warning as a side effect of a copy edit
+        is not a copy edit. It leads the LIVE PLATES tab's ⓘ note now (`SCOPE_NOTE`,
+        `LiveSourcesPanel.tsx`), and the SILENT pill's own tooltip has carried it all along
+        (`plateAudio.ts`), so it is one hover away on both surfaces.
+
+        ⚠ What is genuinely gone is the rest: that the setting is per-plate and per-row, that it
+        survives a swap and a restart, and that it can be set before the take. Those are
+        DESCRIBED BY THE SURFACE — one fader per frame under the row's own name, a `Not seated`
+        frame whose fader still moves — which is why they were the half that could go.
+      */}
       <div className="cg-audio-head" aria-hidden="true">
         <span>Frame / source</span>
         <span>Requested gain</span>
@@ -369,7 +407,7 @@ export function LivePlateAudioDialog({
                 onClick={() => {
                   commit({ [plate.plateId]: 1 });
                 }}
-                title="ON = full volume (100%). It does not return to the previous fader level."
+                title={ON_TITLE}
                 aria-label={`Full volume for ${plate.plateId} (100%, not the previous level)`}
               >
                 ON
@@ -379,7 +417,7 @@ export function LivePlateAudioDialog({
                 onClick={() => {
                   commit({ [plate.plateId]: 0 });
                 }}
-                title="OFF = 0%. Silence this plate."
+                title={OFF_TITLE}
                 aria-label={`Silence ${plate.plateId}`}
               >
                 OFF
@@ -390,12 +428,13 @@ export function LivePlateAudioDialog({
                 onClick={() => {
                   commit(soloMap(plateIds, plate.plateId));
                 }}
-                title={
-                  plateIds.length < 2
-                    ? 'This row has only one plate — there is nothing to solo against.'
-                    : 'Set this plate to 100% and every other plate on this row to 0%, including ' +
-                      'the frames the current look hides. There is no un-solo.'
-                }
+                /*
+                  🔴 `PLATES-AUDIO-11` §4(b) — THE SHARED SENTENCE, not this dialog's own shorter
+                  spelling of it. That copy said "There is no un-solo." and stopped; the strip's
+                  said what to do about it. Two spellings of one promise is how a surface comes
+                  to promise less than its twin — `plateAudio.ts` now owns both.
+                */
+                title={plateIds.length < 2 ? SOLO_ALONE_TITLE : SOLO_TITLE}
                 aria-label={`Solo ${plate.plateId} — silences the other ${String(plateIds.length - 1)} plate(s) on this row, with no restore`}
               >
                 SOLO

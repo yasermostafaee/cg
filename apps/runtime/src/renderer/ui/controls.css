@@ -3430,6 +3430,14 @@ input[type='checkbox']:disabled:checked {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/*
+ * `PLATES-AUDIO-11` §2 — a DECLARED FRAME has no coordinate, and the cell says so in words
+ * rather than printing a dash. Muted, like the SILENT pill: nothing is wrong and nothing is on
+ * air (`plateAudio.ts`'s own reason for that hue).
+ */
+.cg-plate-unseated {
+  color: var(--r-text-muted);
+}
 .cg-plate-source {
   display: flex;
   align-items: center;
@@ -3546,11 +3554,13 @@ input[type='checkbox']:disabled:checked {
  * readout and state word · `ON OFF SOLO`; the footer sentence beside the action. Numbers are
  * `--r-audio-*` (`AUDIO_DIALOG_PX`); colours are role tokens.
  */
-.cg-audio-subtitle {
-  margin: 0 0 var(--r-space-2);
-  font-size: var(--r-audio-subtitle-text);
-  color: var(--r-text-muted);
-}
+/*
+ * 🔴 `PLATES-AUDIO-11` §5 — `.cg-audio-subtitle` IS GONE, not left as a dead rule. The row's
+ * name moved into the head band (`Modal`'s `subtitle` slot), which is where the reference puts
+ * it and which is what stops it scrolling away now that the frame is fixed. Its measured size
+ * (`--r-audio-subtitle-text`, `AUDIO_DIALOG_PX.subtitleText`) is unchanged and is still what
+ * `--r-modal-subtitle-text` resolves to for this family — see the token home.
+ */
 .cg-audio-context {
   display: flex;
   align-items: center;
@@ -3579,7 +3589,16 @@ input[type='checkbox']:disabled:checked {
   align-items: center;
 }
 .cg-audio-head {
+  /*
+   * `PLATES-AUDIO-11` §5 — STICKY, for the reason the LIVE PLATES table's own head already is
+   * (`.cg-plate-head`): the frame is fixed and the frames scroll, so a column head that left
+   * the top would take `Requested gain` and `Audio controls` with it.
+   */
+  position: sticky;
+  top: 0;
+  z-index: 1;
   padding: var(--r-audio-head-pad-y) 0;
+  background: var(--r-surface);
   border-bottom: 1px solid var(--r-border-strong);
   font-size: var(--r-audio-head-text);
   color: var(--r-text-secondary);
