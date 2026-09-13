@@ -75,6 +75,7 @@ import { ROW_GEOMETRY, resolveDensity } from './layerTable.js';
 import { StationLayersPanel } from './StationLayersPanel.js';
 import { LiveSourcesPanel } from './LiveSourcesPanel.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
+import { announcePlateAudio } from './plateAudio.js';
 import {
   hasStrandedLiveLayer,
   liveLayerBlindness,
@@ -857,12 +858,26 @@ export function LayersPanel({
       itemId: string,
       volumes: Record<string, number>,
     ): Promise<{ ok: boolean; refused: string[] }> => {
+      const before = items.find((i) => i.itemId === itemId)?.plateVolumes;
       const res = await window.cg.stack.setPlateVolumes({ itemId, volumes });
+      const refused = res.results.filter((r) => !r.ok).map((r) => r.plateId);
+      /*
+        🔴 DELTA 8 — the change announces itself, once, on the CONFIRMED result. The sentence
+        is built by `announcePlateAudio`, which both call paths into this verb share.
+      */
+      const said = announcePlateAudio(
+        volumes,
+        before,
+        refused,
+        (plateId) => liveRows.find((r) => r.plate === plateId)?.coordinate ?? null,
+        liveRows.find((r) => r.itemId === itemId)?.ownerLabel ?? 'this row',
+      );
+      if (said !== null) reportCommandSuccess(said);
       return {
         ok: res.ok,
         // The PER-PLATE verdicts, kept per-plate. Collapsing them to a count would take away
         // the one thing an operator needs from a partial failure: WHICH guest did not move.
-        refused: res.results.filter((r) => !r.ok).map((r) => r.plateId),
+        refused,
       };
     },
     [],

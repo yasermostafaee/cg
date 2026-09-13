@@ -393,3 +393,115 @@ function summaryDetail(audible: number, shown: number, armedHidden: number): str
     `Open LIVE PLATES, or this row's audio dialog, to change it.`
   );
 }
+
+/**
+ * 🔴 `CONSOLE-LOOK-06` DELTA 8 — **WHAT AN AUDIO CHANGE SAYS WHEN IT LANDS.**
+ *
+ * The reference's three examples set the pattern, and the pattern is not "what was pressed":
+ *
+ *     l2 · 100% requested gain.
+ *     l2 · 0% silent.
+ *     l2 at 100%; other plates on Bed 1 set to zero. No automatic restore.
+ *
+ * - it names the LAYER by its coordinate, first;
+ * - it states the RESULTING STATE, not the verb — the operator knows what they pressed, they
+ *   need to know where it landed;
+ * - when the act has a consequence they cannot see, it says so in ONE clause. SOLO's example
+ *   is the whole reason this rule exists: other plates zeroed, and no automatic restore. **An
+ *   irreversible side effect is never left unsaid.**
+ * - one line, sentence case, no id in the sentence (golden rule 11).
+ *
+ * 🔴 The prototype's trailing `Demo only.` is the PROTOTYPE's marker, not part of the pattern,
+ * and is not carried anywhere.
+ *
+ * ⚠ **`requested gain`, never `level`.** A fader on this surface is REQUESTED GAIN and not a
+ * measurement — the same rule `LivePlateOverlay` states for the on-canvas pill, and the reason
+ * this console draws no meter anywhere: CasparCG reports one peak pair for the whole channel,
+ * so a per-plate level does not exist to be announced.
+ */
+export function plateAudioAnnouncement(
+  changed: readonly { coordinate: string; volume: number }[],
+  solo: { coordinate: string; ownerLabel: string } | null,
+): string | null {
+  // §4(c) — nothing changed, nothing announced. A no-op that speaks is noise.
+  if (changed.length === 0) return null;
+
+  /*
+    SOLO is a CROSS-PLATE statement, so it gets the cross-plate sentence: one toast for the
+    whole map (§4b), naming the frame that stays up, what happened to the others, and the fact
+    the operator cannot see — that nothing will put them back.
+  */
+  if (solo !== null) {
+    return `${solo.coordinate} at 100%; other plates on ${solo.ownerLabel} set to zero. No automatic restore.`;
+  }
+
+  // One plate: the coordinate, then the state it landed in.
+  if (changed.length === 1) {
+    const only = changed[0];
+    if (only === undefined) return null;
+    return only.volume === 0
+      ? `${only.coordinate} · 0% silent.`
+      : `${only.coordinate} · ${pct(only.volume)} requested gain.`;
+  }
+
+  // A map that is not a solo — say how many moved rather than listing them, which is §4(b)'s
+  // rule for a bulk act: one toast that states its scope, never one per plate.
+  return `${String(changed.length)} plates set.`;
+}
+
+/**
+ * 🔴 DELTA 8 §4 — **THE ONE PLACE AN AUDIO MAP ANNOUNCES ITSELF.**
+ *
+ * There are TWO call paths into `stack.setPlateVolumes` — `LayersPanel`'s (the plates tab and the
+ * dialog it opens) and `LayerRow`'s (the row's own dialog) — and a toast written at each is two
+ * spellings of one sentence, which is how they come to disagree (golden rule 6). Both call
+ * this.
+ *
+ * §4(e): it announces the CONFIRMED result, so a plate the bridge refused is not counted, and
+ * a wholly refused map says nothing at all — the refusal has its own persistent surface
+ * (DELTA R) and §4(d) forbids a refusal living only in a toast.
+ * §4(c): a plate whose volume did not actually move is not "changed", so pressing OFF on an
+ * already-silent plate announces nothing.
+ */
+/**
+ * Is this map a SOLO — one plate up, every other one zeroed?
+ *
+ * 🔴 READ FROM THE MAP'S OWN SHAPE, not from a flag threaded through the call. `soloMap` builds
+ * exactly this and nothing else does, so the shape IS the contract — and detecting it here
+ * keeps `add-multibox-audio`'s ONE-CALL door exactly as it was. Widening `onApplyVolumes` to
+ * carry an intent would have been a second channel for something the payload already says.
+ *
+ * ⚠ Two or more plates up is not a solo, and neither is a map of one plate: a lone plate set
+ * to 100% silences nothing, so it has no cross-plate consequence to announce.
+ */
+function soloTarget(requested: Record<string, number>): string | null {
+  const entries = Object.entries(requested);
+  if (entries.length < 2) return null;
+  const up = entries.filter(([, v]) => v > 0);
+  const only = up[0];
+  if (up.length !== 1 || only === undefined) return null;
+  return only[1] === 1 ? only[0] : null;
+}
+
+export function announcePlateAudio(
+  requested: Record<string, number>,
+  before: Record<string, number> | undefined,
+  refused: readonly string[],
+  coordinateOf: (plateId: string) => string | null,
+  ownerLabel: string,
+): string | null {
+  const landed = Object.entries(requested).filter(([plateId]) => !refused.includes(plateId));
+  const moved = landed.filter(([plateId, v]) => (before?.[plateId] ?? 0) !== v);
+  const changed = moved.flatMap(([plateId, volume]) => {
+    const coordinate = coordinateOf(plateId);
+    return coordinate === null ? [] : [{ coordinate, volume }];
+  });
+  const solo = soloTarget(requested);
+  if (solo !== null) {
+    const coordinate = coordinateOf(solo);
+    // A solo that changed nothing — the frame was already the only one up — is still a no-op.
+    if (coordinate === null || changed.length === 0) return null;
+    return plateAudioAnnouncement(changed, { coordinate, ownerLabel });
+  }
+  return plateAudioAnnouncement(changed, null);
+}

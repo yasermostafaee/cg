@@ -15,7 +15,7 @@ import { DraftChip } from '../../ui/DraftChip.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
-import { reportCommandError } from '../status/commandFeedback.js';
+import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 import { displayLabel } from '../library/templateName.js';
 import { isOnAir } from '../stack/onAir.js';
 import { loadTemplateOntoFixedSlot } from '../fixedLayers/fixedSlotLoad.js';
@@ -25,7 +25,7 @@ import { LiveSourceSwapDialog } from './LiveSourceSwapDialog.js';
 import { LookPicker, lookOptionsOf } from './LookPicker.js';
 import { lookSwitchRefusal } from './lookSwitch.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
-import { audioSummary, type RowPlateAudio } from './plateAudio.js';
+import { announcePlateAudio, audioSummary, type RowPlateAudio } from './plateAudio.js';
 import { rowState, type RowBinding } from './rowState.js';
 import {
   ROW_GEOMETRY,
@@ -1165,8 +1165,24 @@ export function LayerRow({
             operator needs from a partial failure.
           */
           onApplyVolumes={async (volumes) => {
+            const before = item.plateVolumes;
             const res = await window.cg.stack.setPlateVolumes({ itemId: item.itemId, volumes });
-            return { ok: res.ok, refused: res.results.filter((r) => !r.ok).map((r) => r.plateId) };
+            const refused = res.results.filter((r) => !r.ok).map((r) => r.plateId);
+            /*
+              🔴 `CONSOLE-LOOK-06` DELTA 8 — the change announces itself, through the SAME
+              `announcePlateAudio` `LayersPanel`'s path uses. Two call paths into one verb, one
+              sentence: a toast written at each site is two spellings of one thing, which is
+              how they come to disagree (golden rule 6).
+            */
+            const said = announcePlateAudio(
+              volumes,
+              before,
+              refused,
+              (plateId) => seatedPlates.find((pl) => pl.plateId === plateId)?.coordinate ?? null,
+              rowName,
+            );
+            if (said !== null) reportCommandSuccess(said);
+            return { ok: res.ok, refused };
           }}
           onClose={() => {
             setAudioOpen(false);
