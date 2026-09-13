@@ -1070,7 +1070,8 @@ renders answers "is this handled?" with a yes.
       ⚠ The assertion is on the MEASURED gap, never `getComputedStyle(...).gap` — the declared
       value was already right and the render was wrong, so reading the declaration would have
       confirmed the bug.
-- [x] P.2 **§2 — two destructive treatments, and each is right where it is.** Station setup's
+- [x] P.2 **§2 — two destructive treatments, and each is right where it is.** 🔴🔴 **REVERSED
+      2026-09-13 by the owner (`MODAL-CHROME-10` §3) — see the annotation under this item.** Station setup's
       sub-dialog family takes the drawing's `.btn.danger` — `#352224` ground, `#684044` edge,
       `#ffaaa7` ink, filling to `#482a2e` under the pointer — and the trash emblem goes with it.
       The console's `useConfirm` keeps its **solid amber** (`rgb(245, 158, 11)`, hover
@@ -1083,6 +1084,15 @@ renders answers "is this handled?" with a yes.
       layer. It takes the family's treatment too: the family is the predicate, and a per-call-site
       exception is how a rule comes to have two spellings. Its warning is in its sentence, which
       is where that dialog has always carried it.
+      🔴🔴 **REVERSAL, 2026-09-13, BY THE OWNER — `MODAL-CHROME-10` §3.** "Not harmonised" is
+      superseded: the console confirm's destructive button takes the RED FAMILY too. Everything
+      above stays true of the SUB-dialog half and of the reasoning; what changed is the console
+      half's hue. The argument that `Clear all` must not get QUIETER survived and decided the
+      WEIGHT — the console's takes `#684044` as a FILL with white ink (8.73:1), never the row
+      buttons' outline. `ConfirmRequest.layer` is still the one predicate; it now chooses
+      between two weights of one family rather than between two families. The e2e that pinned
+      the old pair (`settings-polish.spec.ts` §2) was REPLACED, not deleted, and still asserts
+      both halves in one test for the original reason.
 - [x] P.3 **§3 — `Unavailable while on air` read the wrong ink, and the cause was an inline
       style.** `data-footer-tone="blocked"` was on the element and
       `.cg-footer-contract[data-footer-tone='blocked']` matched — and `styles.footNote` set

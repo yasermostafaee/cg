@@ -50,6 +50,24 @@ interface ConfirmRequest {
    * that is a PLACE gets a mark, and a dialog that asks a question in words does not. What
    * earns one HERE is the act being destructive, so the flag is named for that rather than
    * for the picture.
+   *
+   * 🔴🔴 **`MODAL-CHROME-10` ADDENDUM D §D3(a) — THE DEFAULT IS NOW `true`, AND THAT IS THE
+   * "FIX IT ONCE" THE OWNER ASKED FOR.**
+   *
+   * It was an opt-in, and exactly THREE call sites opted in — all three inside Station setup.
+   * Every destructive confirm the CONSOLE raises went without: `Clear all`, `Stop all`,
+   * `Remove all`, `Clear layer` ×3, `Release stranded`, `Remove that item` and the
+   * template deletion the owner photographed. Nine dialogs, one missing mark each, and nothing
+   * in the tree said they should have had it — which is how an opt-in flag on a hook whose
+   * whole job is destructive acts always ends.
+   *
+   * So the ROLE decides it, like `ModalActionRole` decides the button. This hook exists to gate
+   * acts that remove something or take it off air; a confirm raised through it is destructive
+   * by default and the EXCEPTION is written down at the one call site that is not.
+   *
+   * ⚠ The exception is real and must stay possible: `EmptiedAirNotice`'s _"Put N rows back on
+   * air?"_ is a CONSTRUCTIVE act asked through the same hook, and a trash glyph over it would
+   * be a lie about what the button does. It passes `destructive: false`, with its reason.
    */
   destructive?: boolean;
   /**
@@ -143,8 +161,10 @@ export function useConfirm(): {
           </>
         }
       >
-        {/* §8d — the mark, then the sentence. See `ConfirmRequest.destructive`. */}
-        {request.destructive === true && (
+        {/* §8d — the mark, then the sentence. See `ConfirmRequest.destructive` for why the
+            DEFAULT is the mark: this hook gates destructive acts, so the exception is the one
+            that gets written at its call site. */}
+        {request.destructive !== false && (
           <span className="cg-confirm-emblem" data-confirm-emblem="">
             <Icon icon={Trash2} size={20} />
           </span>

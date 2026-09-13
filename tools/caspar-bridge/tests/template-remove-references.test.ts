@@ -57,7 +57,7 @@ describe('templateRemove — in-use names the places', () => {
     expect(res).toMatchObject({ ok: false, reason: 'in-use' });
     expect(res.references).toEqual([{ itemId: 'i1', slot: { channel: 1, layer: 72 } }]);
     expect(res.message).toBe(
-      '1 stack item(s) still use this template — on the row “زیرنویس” (layer 72). Remove that item first.',
+      "1 row still holds this template — on the row “زیرنویس” (layer 72). Clear it with the row's own REMOVE first.",
     );
   });
 
@@ -84,7 +84,7 @@ describe('templateRemove — in-use names the places', () => {
     expect(layer).toBeLessThan(70);
     // …and the sentence says so, as CasparCG names it.
     expect(res.message).toBe(
-      `1 stack item(s) still use this template — on CasparCG layer ${String(layer)}, which is not one of this station's rows. Remove that item first.`,
+      `1 layer still holds this template — on CasparCG layer ${String(layer)}, which is not one of this station's rows. Remove it first.`,
     );
     expect(res.message).not.toMatch(/remove all/i);
   });
@@ -97,7 +97,13 @@ describe('templateRemove — in-use names the places', () => {
     expect(await r.load('i2', 'tpl', {})).toEqual({ accepted: true });
     const res = r.templateRemove('tpl');
     expect(res.references).toHaveLength(2);
-    expect(res.message).toContain('2 stack item(s) still use this template');
+    /*
+      `layer`s and not `row`s: one of these two references IS a row (`زیرنویس`, layer 72) and
+      the other is a bare CasparCG layer. The noun follows the weaker of the two, because
+      "2 rows" printed directly above a place reading _"which is not one of this station’s
+      rows"_ would be a sentence contradicting itself (`MODAL-CHROME-10` ADDENDUM C §C4(c)).
+    */
+    expect(res.message).toContain('2 layers still hold this template');
     expect(res.message).toContain('“زیرنویس” (layer 72)');
     const dynamic = res.references?.find((ref) => ref.itemId === 'i2')?.slot?.layer;
     expect(res.message).toContain(`CasparCG layer ${String(dynamic)}`);

@@ -4762,16 +4762,71 @@ input[type='checkbox']:disabled:checked {
  *     eye. Amber in this dialog already means BLOCKED (the rail's lock, the footer's clause,
  *     the standing notice); spending it on a Remove as well would drain it where it is real.
  *
- * ⚠ **DO NOT HARMONISE THEM.** One treatment across both would have to pick a winner, and both
- * losses are real: the console's `Clear all` gets quieter, or this dialog's amber stops meaning
- * one thing. Two families, two answers, and `ConfirmRequest.layer` is the single predicate
- * that decides which — read once, at the door, for the frame, the scrim AND the colour.
+ * ⚠ ~~**DO NOT HARMONISE THEM.** One treatment across both would have to pick a winner, and
+ * both losses are real: the console's `Clear all` gets quieter, or this dialog's amber stops
+ * meaning one thing. Two families, two answers, and `ConfirmRequest.layer` is the single
+ * predicate that decides which — read once, at the door, for the frame, the scrim AND the
+ * colour.~~
+ *
+ * 🔴🔴 **SUPERSEDED 2026-09-13 BY THE OWNER (`MODAL-CHROME-10` §3). THE TWO ARE HARMONISED.**
+ * The console confirm's destructive button takes the RED family, like the deletes in Station
+ * setup. The paragraph above is struck rather than deleted because a reversed decision has to
+ * be as loud as the original was — otherwise someone restores the amber next year citing it.
+ *
+ * ⚠ **WHAT SURVIVES IT, AND IT IS THE HALF THAT WAS ACTUALLY RIGHT:** the objection was that
+ * adopting the sub-dialog's treatment WHOLESALE would make `Clear all` quieter, because that
+ * treatment is a red OUTLINE. That is still true, and it is why the reversal takes the red
+ * **family** at a PRIMARY's weight rather than the row button's treatment — same hues, filled.
+ * The console's committing control does not get quieter; it changes hue. See
+ * `--r-danger-confirm-bg` for the weights and the measured ratios.
+ *
+ * ⚠ `ConfirmRequest.layer` is STILL the single predicate, and still decides the frame, the
+ * scrim and the colour — it now chooses between two WEIGHTS of one family rather than between
+ * two families.
  *
  * ⚠ ONE OF THE FOUR sub-confirms can clear a LIVE layer (the candidate row's `Remove template`,
  * whose own copy says so in capitals). It takes this treatment too, because the family is the
  * predicate and a per-call-site exception is how a rule comes to have two spellings. Its
  * warning is carried by its sentence, which is where that dialog has always carried it.
  */
+/*
+ * 🔴 `MODAL-CHROME-10` §3 — THE CONSOLE CONFIRM'S DESTRUCTIVE BUTTON, RED AND FILLED.
+ *
+ * It was `caution-strong` — the solid amber — through `ROLE_VARIANT`. The role table is
+ * untouched, because the amber is still what `destructive` means anywhere a confirm is not
+ * the surface; this overrides the ONE place the owner reversed, at the same
+ * `[data-modal-layer]` door the sub-dialog's rule already uses.
+ *
+ * ⚠ FILLED, not outlined. The struck paragraph above is right that a red outline would make
+ * the committing control the faintest thing in the dialog; this keeps a primary's weight and
+ * changes only the hue. White on `#684044` is 8.73:1, and 7.29:1 on the hover — measured on
+ * THIS button's ground, not on the one the token was born on.
+ */
+[data-modal-layer='base'] .cg-btn[data-modal-role='destructive'] {
+  background: var(--r-danger-confirm-bg);
+  /*
+   * 🔴 ADDENDUM D §D3(c) — **THE EDGE IS THE FAMILY'S OWN RED**, so this button and Station
+   * setup's confirms are visibly the same red rather than merely the same hue family. Measured
+   * side by side: ours read `#684044` filled with white, theirs `#352224` with `#ffaaa7`
+   * ink — same family, and ours the duller of the two because the BRIGHT half of that pair was
+   * missing from it entirely. The ring puts it back.
+   *
+   * ⚠ **THE INK STAYS WHITE, and that is a measurement, not a preference.** Filling with
+   * `#684044` and inking with the family's `#ffaaa7` — the obvious way to make the two
+   * identical — is **4.81:1** at rest and **4.02:1** on the hover ground, which is BELOW the 4.5
+   * AA floor on a button the operator presses under pressure. White is 8.73:1 and 7.29:1.
+   */
+  border-color: var(--r-setup-danger-ink);
+  color: var(--r-ink-on-fill);
+  font-weight: var(--r-weight-bold);
+}
+
+[data-modal-layer='base'] .cg-btn[data-modal-role='destructive']:hover:not(:disabled) {
+  background: var(--r-danger-confirm-hover-bg);
+  border-color: var(--r-setup-danger-ink);
+  color: var(--r-ink-on-fill);
+}
+
 [data-modal-layer='sub'] .cg-btn[data-modal-role='destructive'] {
   background: var(--r-setup-danger-bg);
   border-color: var(--r-setup-danger-line);
@@ -6069,6 +6124,42 @@ input[type='checkbox']:disabled:checked {
   font-size: var(--r-tpl-chip-text);
   font-weight: var(--r-weight-medium);
 }
+/*
+ * 🔴 `MODAL-CHROME-10` §2(a) — **A SELECTED FILTER CHIP IS BLUE. IT WAS PURPLE, AND PURPLE
+ * IS SPENT.**
+ *
+ * The chips are `Button`s with `active`, and `.cg-btn--neutral.is-on` fills with
+ * `--r-rehearsing-strong` — `R-022`'s violet, which on this console means ON PVW /
+ * REHEARSING. A selected filter is neither, and a violet chip in the picker is that claim
+ * made in a place it cannot be true. It is the same one-hue-one-meaning argument the
+ * `.cg-panel-actions` block makes ten rules up, met a second time on a different surface.
+ *
+ * The treatment is the console's OWN selected-not-on-air one, taken whole from the look
+ * segment (`.cg-look-cell[aria-pressed="true"]`, the owner's values of 2026-09-13): the
+ * `--r-look-btn-sel-*` family. Reused rather than re-picked, so "a chosen thing that is not
+ * on air" has one appearance in this app and not two blues.
+ *
+ * ⚠ Scoped to `.cg-tpl-filter` and keyed off `aria-pressed` — the attribute the chip
+ * already emits — so it cannot reach the rehearse toggle, and a chip that stops reporting its
+ * pressed state loses its paint rather than keeping it silently.
+ *
+ * ⚠ Ink is `--r-look-btn-sel-ink` (white on `#2e4e67`, measured 9.42:1 when that pair was
+ * adopted). The WEIGHT lifts to semibold, because a chip carries no other mark of selection.
+ */
+.cg-tpl-filter .cg-btn[aria-pressed='true'] {
+  background: var(--r-look-btn-sel-bg);
+  border-color: var(--r-look-btn-sel-line);
+  box-shadow: inset 0 0 0 1px var(--r-look-btn-sel-ring);
+  color: var(--r-look-btn-sel-ink);
+  font-weight: var(--r-weight-semibold);
+}
+.cg-tpl-filter .cg-btn[aria-pressed='true']:hover:not(:disabled) {
+  /* LIFT, never swap to the neutral hover — an engaged chip must not read as switched off
+     under the pointer. Same direction the `.is-on` family uses. */
+  background: var(--r-look-btn-sel-line);
+  border-color: var(--r-look-btn-sel-ring);
+  color: var(--r-look-btn-sel-ink);
+}
 .cg-tpl-list {
   display: flex;
   flex-direction: column;
@@ -6095,8 +6186,51 @@ input[type='checkbox']:disabled:checked {
     background var(--r-dur-fast) ease,
     border-color var(--r-dur-fast) ease;
 }
+/*
+ * 🔴 `MODAL-CHROME-10` ADDENDUM C §C1 — **A HAIRLINE BETWEEN THE SELECTION LIST'S ROWS.**
+ *
+ * The rows were separated by a GAP and nothing else. The divider is the modal family's own —
+ * `1px solid var(--r-border)`, the same one `.cg-tpl-manage-row` already draws — rather than a
+ * second hairline minted for this list.
+ *
+ * ⚠ **IT COSTS NO LAYOUT.** `.cg-tpl-row` already carries `border: 1px solid transparent` (so a
+ * selection can colour it without the row moving), so this only fills in a colour on an edge
+ * that is already reserved. Every number `library-audit-geometry.spec.ts` pins is untouched.
+ *
+ * ⚠ Specificity 0,2,0 — the same as `:hover` and `[data-template-selected]` below, and
+ * BEFORE both in source order, so a selected or hovered row's own edge still wins.
+ */
+.cg-tpl-row + .cg-tpl-row {
+  border-top-color: var(--r-border);
+}
+/*
+ * …and the HOVER belongs to this list and not to Manage. `R-055`, generalised by golden rule
+ * 11: a control shape that cannot be pressed is a lie. THESE rows are pressable — a press
+ * chooses the template — so they respond. Manage's rows are not: the only act there is the
+ * Delete inside the row, so `.cg-tpl-manage-row` has the divider and no hover, exactly as
+ * Station setup's Outputs table had its hover removed for the same reason. **Do not add one
+ * back for symmetry.**
+ */
+/*
+ * 🔴 `MODAL-CHROME-10` ADDENDUM D §D2 — **THE HOVER PAINTS THE ROW, AND IT WAS INVISIBLE.**
+ *
+ * The rule was here all along and did nothing: `--r-table-row-hover` IS `colors.panel`, and
+ * measured in Chromium the picker's own dialog ground is that same `rgb(20, 27, 37)`. A row
+ * painted the colour of the thing behind it is not a hover. The token is not wrong — the LAYERS
+ * table sits on a darker ground where it reads — it is wrong HERE, which is the sort of thing
+ * only a measurement finds.
+ *
+ * `--r-surface-raised` is the existing step above this ground (the one every neutral control
+ * already stands on), so this is the family's own treatment rather than a second hover minted
+ * for one list.
+ *
+ * ⚠ **THE TARGET IS THE ROW.** `.cg-tpl-row` is the full-bleed box; the press control inside it
+ * is inset 14 px horizontally and 32 px vertically (measured: row 752 × 81, control 724 × 49),
+ * so hovering the control would leave a frame of un-lit row around the pointer. What the owner
+ * actually saw responding was the NAME's colour, one rule down — the words, not the row.
+ */
 .cg-tpl-row:hover {
-  background: var(--r-table-row-hover);
+  background: var(--r-surface-raised);
 }
 /*
  * THE SELECTION — the reference's `.template-row.selected{background:#203649;border-color:#547d9a}`.
@@ -6280,6 +6414,20 @@ input[type='checkbox']:disabled:checked {
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
+}
+/*
+ * §D1 — IN THE SHARED TOOLS ROW, the LEADING item takes the spare width, whichever it is: the
+ * search box in the selection view, this sentence in Manage. That is what puts the trailing
+ * import door at the row's right edge in BOTH — the doors are the same elements in the same
+ * row, so all that was left to match was what sits in front of them.
+ *
+ * ⚠ `min-width: 0` so the sentence WRAPS ITS OWN TEXT at a narrow width instead of pushing the
+ * control off the row. The control does not move; the sentence gets taller.
+ */
+.cg-tpl-tools .cg-tpl-manage__note {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
 }
 .cg-tpl-manage__note {
   padding: var(--r-tpl-manage-pad);

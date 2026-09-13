@@ -5384,8 +5384,18 @@ It is a decision, and it is recorded here as one:
 > buttons and their confirmations — and to nothing else. A message is never red. A red message
 > would compete with the only red the operator must never misread.**
 
-`useConfirm` keeps its recorded solid amber and the sub-dialogs keep their own destructive
-red; that pair stays as recorded and is not harmonised.
+~~`useConfirm` keeps its recorded solid amber and the sub-dialogs keep their own destructive
+red; that pair stays as recorded and is not harmonised.~~
+
+🔴🔴 **SUPERSEDED 2026-09-13 BY THE OWNER (`MODAL-CHROME-10` §3): THE TWO ARE HARMONISED.** The
+console confirm's destructive button takes the RED family, at a PRIMARY's fill weight rather
+than the sub-dialog rows' outline (`--r-danger-confirm-bg` `#684044`, hover `#7b484e`, white
+ink — 8.73:1 and 7.29:1 on their own grounds). Struck rather than rewritten, per rule 14.
+
+⚠ **THE REQUIREMENT ABOVE IT IS UNTOUCHED AND IS NOW MORE TRUE, NOT LESS:** _"red belongs to
+CONTROLS THAT DESTROY … and to nothing else. A message is never red."_ The reversal moves one
+more destroying CONTROL into red; it moves nothing into a MESSAGE. §29.1's grammar is
+unchanged, and `alarmFill`-as-an-ink is still the 2.08:1 defect it was.
 
 🔴 **AND RED WAS DECLINED, NOT RULED OUT — record it here so nobody re-opens it believing
 there was no option.** The reference carries a legible red message pair: `.notice.error` renders
@@ -5672,3 +5682,323 @@ Noticed while measuring §A1 and left alone. The status bar carries both casings
 `FAILOVER` shouts, `Lock` does not. §31.4 settled that the console's own vocabulary is not
 recased for cosmetic parity, and this is a wider decision than an addendum about icon geometry
 should take — it is a bar-wide copy question. **Filed for the owner, unchanged.**
+
+---
+
+## 33. `MODAL-CHROME-10` — THE PICKER AND LOG MODALS, AND TWO ADDENDA
+
+Seven items the owner found on OUR product, plus two addenda. None is a reference-parity item and
+none was argued from the drawing.
+
+### 33.1 §1 — THE SHELL BAR
+
+`AUDIT LOG` → **`LOG`**. The casing is the bar's own, which is CAPS on every label it carries:
+`CG CONTROL`, `PVW · N`, `SHOW MONITORS` / `HIDE MONITORS`, `SETTINGS`.
+
+⚠ **The ACCESSIBLE name is unchanged** (`Open audit log`), and that is what made this a
+one-line change: every spec and the e2e fixture address this button by it, a screen reader still
+hears the full name, and WCAG 2.5.3 holds because the visible `LOG` is contained in it. The
+modal's own title is still `Audit log`, so the room still announces itself.
+
+⚠ `CONSOLE-MATCH-03` §5's argument — _"a door labelled with a shortening of the room behind it
+is one more thing the operator has to learn"_ — is struck in place at the call site, not deleted.
+
+The Settings glyph was `SlidersHorizontal`: lucide's MIXER, three tracks with knobs. On a
+playout console levels are a real thing one door along (the plate audio dialog IS a bank of
+faders), so the glyph named the wrong room. It is `Settings` — lucide's gear — on the bar AND on
+the dialog's head emblem. `Cog` was the other candidate and was declined: fourteen nodes turn to
+mush at 14 px.
+
+### 33.2 §2(a) — A SELECTED FILTER CHIP IS BLUE, BECAUSE PURPLE IS SPENT
+
+The chips were `Button`s with `active`, and `.cg-btn--neutral.is-on` fills with
+`--r-rehearsing-strong` — `R-022`'s violet, which on this console means ON PVW. A violet chip
+in the picker is that claim in a place it cannot be true: the same one-hue-one-meaning argument
+`controls.css`'s `.cg-panel-actions` block already makes, met on a second surface.
+
+The treatment is the console's OWN selected-not-on-air one, reused whole from the look segment
+(the `--r-look-btn-sel-*` family, the owner's values of 2026-09-13): `#2e4e67` fill,
+`#4b748b` edge, `#58addd` inset ring, white ink, semibold.
+
+⚠ `active` was REMOVED rather than overridden, so the violet is not merely outranked in the
+cascade — it is not in it. `aria-pressed` is both the state and the hook.
+
+⚠ **THE PURPLE SWEEP, both axes.** Component axis: three `active=` toggles exist — the chips
+(wrong), `LayerRow`'s REHEARSE (right: it IS rehearsal), `Panel`'s maximise (right: scoped to
+`.cg-panel-actions`, sky). Value axis: `--r-rehearsing*` has five consumers — the PVW badge,
+the PREVIEW monitor label, the Inspector's rehearsing badge, `rowState`'s ON PVW mark, and the
+`.is-on` family — every one of them genuinely PVW. Raw spellings (`#7C3AED`, `#8B5CF6`,
+`#6D28D9`, `rgb(…)`) appear nowhere but comments. **The chips were the only borrower.**
+
+### 33.3 §2(b) — THE ROUNDED FRAME NOW CLIPS ITS CHILDREN
+
+A rounded box does not clip by default, so every band with a ground of its own painted a SQUARE
+corner over the frame's arc. Measured in Chromium at 1400 × 900 by hit-testing 2 px in from each
+corner — inside the frame's box, outside its 14/16 px radius:
+
+| modal                       | before                                                  | after    |
+| --------------------------- | ------------------------------------------------------- | -------- |
+| Station setup (`fixed`)     | `.cg-rail` bottom-left, `.cg-modal-footer` bottom-right | scrim ×4 |
+| template picker (`library`) | head band ×2 top, `.cg-modal-footer` ×2 bottom          | scrim ×4 |
+| import (`import`)           | same four                                               | scrim ×4 |
+| audit log (`ledger`)        | same four                                               | scrim ×4 |
+| confirm (`record`)          | same four                                               | scrim ×4 |
+
+**ONE declaration** — `overflow: hidden` on `styles.dialog`. Rounding the bands instead would
+need a different radius per corner per band, would have to be redone for every new band, and
+would still be wrong for a child that is full-bleed on one edge only.
+
+⚠ The probe carries TWO positive controls (a point inside the head band must NOT read as scrim; a
+point outside the dialog must). Without them a probe that always answered "scrim" would pass.
+
+### 33.4 §2(c) — `Delete from station` → `Delete`, ON THE ROW ONLY
+
+The short label is safe because the long consequence is stated twice around it: the row's
+`aria-label` still reads `Delete <name> from this station` — which is also what every finder
+addresses it by, so nothing had to move — and the confirm still names the `.vcg` re-import and
+the plate bindings, with its own commit button still reading `Delete from station`.
+
+⚠ The ripple the sweep caught: a notice quoted the label by name. `Press Delete from station again`
+became `Press Delete again`.
+
+### 33.5 §3 — THE DESTRUCTIVE CONFIRM IS RED. A PUBLISHED REVERSAL
+
+Recorded in three places, all annotated rather than rewritten (rule 14): `controls.css` beside
+the rule, `Modal.tsx`'s `ROLE_VARIANT` note, and §29.2 + `tasks.md` P.2 above.
+
+**THE FAMILY, NOT THE ROW BUTTONS' TREATMENT.** Station setup's deletes are quiet OUTLINED
+controls; a confirm's commit button is not. The struck argument's real content — _no safety
+signal may weaken; adopting the outline would make `Clear all` QUIETER_ — survived and decided
+the WEIGHT:
+
+- ground `--r-danger-confirm-bg` `#684044`, the family's own EDGE colour promoted to a fill;
+- hover `--r-danger-confirm-hover-bg` `#7b484e` — the family's OWN declared lift
+  (`#352224`→`#482a2e` is +19/+8/+10) applied to it, so the step is derived, not picked;
+- ink `--r-ink-on-fill`, weight `--r-weight-bold`, like every other filled control here.
+
+**Measured on ITS OWN ground: 8.73:1 at rest, 7.29:1 on hover.** (The family's ink `#ffaaa7` on
+that fill would be 4.81:1 — it passes; white is the safer half of a pair read under pressure.)
+Both are in `messageContrast.test.ts` now, beside the sub-dialog's half, so one weight cannot
+move without the other.
+
+⚠ `ROLE_VARIANT` is UNCHANGED — `destructive` still resolves to `caution-strong`. The
+reversal is one `[data-modal-layer="base"]` rule, at the same door the sub-dialog's red already
+uses, so both weights of the family sit together.
+
+### 33.6 §4 — THE PICKER AND THE LOG TAKE A FIXED FRAME
+
+Measured in Chromium at 1400 × 900. The picker's three list states, before → after:
+
+| state                       | before           | after          |
+| --------------------------- | ---------------- | -------------- |
+| every template              | 1120 × **792**   | 1120 × **810** |
+| `Graphics beds`             | 1120 × **484.1** | 1120 × **810** |
+| a search matching nothing   | 1120 × **457.3** | 1120 × **810** |
+| audit log, with entries     | 1250 × 460.6     | 1250 × **810** |
+| audit log, filtered to none | 1250 × 460.6     | 1250 × **810** |
+
+A **335 px** jump under the operator's hand, on the surface whose whole job is filtering.
+
+At **1280 × 600** the clamp takes over: picker 1120 × **536**, audit 1224 × **536** — the same
+number Station setup clamps to, because it is the same expression.
+
+⚠ **ONE TOKEN, NOT TWO WITH THE SAME VALUE.** `--r-modal-h-frame` is the declaration;
+`--r-modal-h-fixed` is now `var(--r-modal-h-frame)`, keeping its name because nine files pin
+Station setup by it. Two spellings of one rule is how three frames come to disagree.
+
+⚠ Station setup is unchanged at 1140 × 810, verified after the alias.
+
+### 33.7 ADDENDUM B — A NAME'S CHARACTERS ARE ISOLATED; ITS BOX IS NOT
+
+**The mechanism:** `<bdi>`'s UA default is `unicode-bidi: isolate` **plus `dir=auto`**, so a
+`<bdi>` holding a Persian name resolves its OWN `direction` to `rtl`. Inline that is correct
+and invisible. Made a BLOCK — declared, or **blockified by a flex or grid parent, which is the
+half that catches people** — its direction reaches its own ALIGNMENT and `text-align: start`
+resolves to RIGHT. Nothing was translated and no layout was RTL.
+
+Measured before: `.cg-tpl-name` computed `display: block`, `direction: rtl`,
+`text-align: start`, box left offset **0** of a **654 px** parent — so the BOX was never wrong;
+the text inside it was flushed.
+
+**The family, swept on two axes.** Attribute axis (`dir=` / `bdi` / `unicode-bidi`) and
+surface axis (every element whose computed `direction` resolved to `rtl` on a block-level box,
+walked across the console, the layers table, the picker, Manage, Live plates and the audit log):
+
+| surface                                              | state         | why                                                                           |
+| ---------------------------------------------------- | ------------- | ----------------------------------------------------------------------------- |
+| picker list `.cg-tpl-name`                           | **AFFECTED**  | `<bdi>` + `display:block` + flex item                                         |
+| Manage list `.cg-tpl-manage-row__name`               | **AFFECTED**  | `<bdi>` blockified by its grid parent                                         |
+| picker's selected-template card `.cg-tpl-pick__name` | **AFFECTED**  | same shape                                                                    |
+| Live plates Owner cell `.cg-plate-owner-name`        | **AFFECTED**  | RTL block; `text-align:center` hid the flush, the ellipsis side still flipped |
+| layers table TEMPLATE cell                           | **AFFECTED**  | `dir="auto"` on the LINE — and the line also carries English chrome           |
+| `OperatorNames`                                      | already right | inline `<bdi>` in a plain span — **this is the pattern**                      |
+| Inspector header, audit actor                        | already right | inline `<bdi>`                                                                |
+| `.cg-rail-station__host`, `.cg-delimiter-symbol`     | already right | `dir="ltr")` explicit                                                         |
+
+🔴 **THE ISOLATION WAS NOT REMOVED.** Deleting `<bdi>` or forcing `direction: ltr` would trade
+a visible misalignment for a SILENT mis-rendering, which is worse because nobody photographs it.
+The box moved to an LTR wrapper — `IsolatedName`, the `OperatorNames` pattern given a name so
+four surfaces take one fix rather than inventing four.
+
+⚠ The layers table's TEMPLATE cell had the mistake `OperatorNames`'s own header warns against:
+`dir="auto"` on a LINE that carries operator data AND English chrome, so a Persian name flipped
+the cell and took `(not in this browser)` with it.
+
+**Evidence, Windows/Chromium at 1400 × 900.** All seven picker titles — Latin and Persian —
+now report `direction: ltr` on the box, box left **237**, glyph left **237**, one value each.
+And the ORDER claim, which a box cannot make: in `زیرنویس معرفی — Guest Title` the Latin run
+still renders LEFT of the Persian run, which is what an RTL-based isolate must do and what a
+name forced to LTR would not. A tidier-looking name that had lost its isolation fails that and
+passes the alignment check — which is why both are asserted.
+
+### 33.8 ADDENDUM C — THE MANAGE LIST, AND A REFUSAL THAT RENDERED TWICE
+
+**§C1.** The selection list gains the modal family's own hairline (`1px solid var(--r-border)`,
+what `.cg-tpl-manage-row` already draws) painted on the 1 px border the row already reserves —
+**no layout moved**, so every number `library-audit-geometry.spec.ts` pins is untouched. It
+keeps its hover, because pressing a row chooses that template. Manage keeps the divider and has
+**no hover**, and never had one: `R-055` generalised by golden rule 11 — a control shape that
+cannot be pressed is a lie. Same reason Station setup's Outputs table lost its. Do not add one
+back for symmetry.
+
+**§C2.** Import is reachable from Manage. **ONE definition** (`ImportDoor`), mounted by both
+views because the two views have different tool rows. Two copies of the markup would drift, and
+the first thing to drift would be the ellipsis rule — one copy would keep `Import a .vcg` and
+the other would grow its dots back (§32.1). **After importing from Manage the operator STAYS in
+Manage**, deliberately: the import dialog is a sub-dialog over the picker, so closing it returns
+to the view underneath, and that view is the list he came to maintain — with the new template now
+in it. Bouncing him to selection would hide the outcome of the act he just performed.
+
+**§C3.** `Back to selection` is `actionRole="cancel"` → `neutral`, not `primary`. Manage
+COMMITS NOTHING: every act on it has already happened by the time that button is reachable, and a
+footer whose loudest control applies nothing teaches the operator that loud does not mean
+committing — on a console where it must. `neutral` and not `ghost`: neutral must not mean
+invisible.
+
+**§C4 — the five defects were two causes.**
+
+(a) **IT RENDERED TWICE.** The pinned message region carried the sentence; a SECOND block under
+the list repeated every place as a bare fragment beside a floating `Show <name>` button. **The
+BANNER survived** — it is the one that is PINNED, outside the scrolling body, which is the whole
+reason the region exists (a refusal the operator must scroll to find is a silent one: the A9
+defect). `B-212`'s remedies were what the block was RIGHT about, so they moved INTO the message
+rather than being deleted: `Notice` gained a `remedies` slot.
+
+⚠ That slot does **not** reopen `ModalMessage`'s §3 decision. §3 made the SENTENCE data because
+four callers passing nodes gave four TREATMENTS, three of them the 2.08:1 ink. This slot takes
+CONTROLS, whose treatment comes from `Button`. The sentence is still a string.
+
+(b) The clipped fragment was that second block; it went with it. The refusal's box is now
+asserted to sit inside the dialog's own box.
+
+(c) `1 stack item(s)` was two defects in four words, and the plural hack had been kept
+**because tests matched on it** — a test pinning a defect in place. Final strings:
+
+| case                      | sentence                                                                                                              |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| one row                   | `1 row still holds this template — on the row “X” (layer 99). Clear it with the row's own REMOVE first.`              |
+| many rows                 | `2 rows still hold this template — …, …. Clear each with its own REMOVE first.`                                       |
+| a layer that is not a row | `1 layer still holds this template — on CasparCG layer 60, which is not one of this station's rows. Remove it first.` |
+| nothing bound at all      | `1 place still holds this template — on this station, not yet on a layer. Remove it first.`                           |
+
+**The vocabulary is the FOOTER'S: ROW.** The noun is chosen, not fixed — `row` when every
+reference is one, `layer` when one is not (because "2 rows" above a place reading _"not one of
+this station's rows"_ contradicts itself), `place` for a reference with no layer at all. Three
+words, each true for its case, none of them ours. `on the stack with no layer bound` went the
+same way.
+
+(d) The Persian name is no longer inside an English sentence at all: the sentence names the
+places, and each place is also a CONTROL whose label isolates the name — `Go to <bdi>لوگوی اصلی</bdi> (layer 99)`. The label's own direction stays LTR; measured in Chromium, `Go to` sits
+left of the name and `(layer` right of it, with the name's own `direction` still `rtl`.
+
+(e) `Show <name>` → **`Go to <name> (layer N)`**, seated inside the message, with a `title`
+saying _"Close this dialog and go to the row holding it"_. On a playout console the operator
+cannot afford to wonder whether a press moves something on SCREEN or on AIR.
+
+🔴 **THE REFUSAL CONDITION IS UNTOUCHED.** A row still holding a template is still refused, on
+exactly the references it was refused on before.
+
+### 33.9 FOUND IN PASSING, AND FIXED
+
+The Inspector's empty state read _"Select a stack item to inspect its fields."_ — the same
+developer vocabulary §C4(c) names, on a different surface. It reads **_"Select a row"_** now.
+
+⚠ **It was found by the SECOND sweep axis and not the first**, which is the rule earning its
+keep: the string pass on `still use this template` reported `tools/caspar-bridge` clean, and
+the pass on `stack item` found two assertions there matching `/1 stack item/i` — plus this.
+One axis would have shipped three stale pins.
+
+### 33.10 THE `Delete` COLLISION CHECK — CLEAN
+
+§32.1's own rule says a copy change that makes two labels identical is the stronger obligation.
+`Delete` now appears on every Manage row, so every finder that matched it uniquely was swept:
+the runtime's all address the row button by its ACCESSIBLE name (`Delete <name> from this station`,
+unchanged) and the confirm by `Delete from station` (also unchanged). The one bare
+`{ name: 'Delete' }` in the tree is a Designer context-menu item in a different app.
+
+### 33.11 ADDENDUM D — IMPORT'S SLOT, THE ROW HOVER, AND THE DELETE CONFIRM
+
+**§D1 — one slot, and trailing alignment was not enough.** Measured in Chromium at 1400 × 900:
+Import sat at **x 710.8** in the selection view and **x 1160.5** in Manage — a **450 px jump** on
+a view switch. Making it the trailing control in both rows still left them 359 px apart, because
+the two rows are not the same width: the selection view's tools row lives INSIDE `.cg-tpl-main`,
+which stops 367 px short of the frame to leave room for the 342 px aside, while Manage has no
+aside and runs the full body.
+
+So the row stopped being a property of either view. It is rendered ONCE, in the dialog's chrome
+above the view switch, with the search box or Manage's sentence leading it and the two
+station-level doors trailing. **After: x 1134.69, right 1235.00, 100.31 × 33 in BOTH** — not two
+positions that agree, one element.
+
+⚠ The KIND CHIPS stayed inside `PickerList`: they filter that list and mean nothing in Manage.
+⚠ `Manage` is hidden while the operator is in Manage — the way back is the footer's own control
+(§C3), and two ways out of one view is how a footer stops meaning anything.
+⚠ The leading item is `flex: 1 1 auto; min-width: 0` in both, so at a narrow width Manage's
+sentence wraps its own TEXT and the control does not move.
+
+**§D2 — the hover was there all along and painted nothing.** `--r-table-row-hover` IS
+`colors.panel`, and the picker's own dialog ground measures that same `rgb(20, 27, 37)`. A row
+painted the colour of the thing behind it is not a hover. The token is not wrong — the LAYERS
+table sits on a darker ground where it reads — it was wrong HERE, which is the sort of thing only
+a measurement finds. It is `--r-surface-raised` now (`rgb(27, 37, 50)`), the existing step
+above this ground, not a second hover minted for one list.
+
+⚠ **The target is the ROW.** Measured, the row is 752 × 81 and the press control inside it is
+724 × 49 — inset 14 px horizontally and 32 px vertically — so lighting the control would leave a
+frame of un-lit row around the pointer. What the owner actually saw responding was the NAME's
+colour: the words, not the row.
+
+⚠ Manage still has **no** hover, asserted with a 400 ms settle so the case cannot pass by reading
+before a transition started.
+
+**§D3 — the delete confirm now matches its siblings in structure, not only colour.**
+
+(a) **The mark is the DEFAULT, which is the "fix it once" half.** `destructive` was opt-in and
+exactly THREE call sites opted in — all three inside Station setup (`SourcesSection`,
+`DelimitersSection`, `CandidateLayersSection`). Every destructive confirm the CONSOLE raises
+went without a mark: `Clear all`, `Stop all`, `Remove all`, `Clear layer` ×3,
+`Release stranded layer`, `Remove that item`, and the template deletion the owner
+photographed. **Nine dialogs.** The flag now defaults to `true` — this hook exists to gate acts
+that remove something or take it off air — and the ONE constructive caller,
+`EmptiedAirNotice`'s _"Put N rows back on air?"_, opts out where its reason is visible.
+
+(b) The two-part shape the sub-family already had: a short question naming the thing in a
+`<strong>`, then the consequence. **Restructured, not rewritten** — the `.vcg` re-import, the
+plate bindings and the row's own REMOVE all survive verbatim, and the e2e fails if a later edit
+"tidies" them. The name is in a `<bdi>` inside the `<strong>` (ADDENDUM B).
+
+(c) The reds, measured side by side: **ours `#684044` filled with white; the settings family
+`#352224` with `#ffaaa7` ink.** Same family — and ours the duller of the two, because the
+BRIGHT half of that pair was missing from it entirely. **Shipped: `#684044` fill, white ink,
+ringed in `--r-setup-danger-ink` (`#ffaaa7`)**, so the two are visibly the same red at a
+primary's weight.
+
+🔴 **THE INK STAYED WHITE, AND THAT IS A MEASUREMENT.** The obvious way to make the two identical
+— fill `#684044`, ink `#ffaaa7` — is **4.81:1** at rest and **4.02:1** on the hover ground,
+BELOW the 4.5 AA floor, on a button pressed under pressure. White is **8.73:1** and **7.29:1**.
+The emblem is **7.89:1** (`#ffaaa7` on `#3a242a`) and is guarded at the TEXT floor rather than
+the 3:1 graphics floor, because it clears the stricter one and a mark that clears it cannot be
+argued down later.
+
+⚠ No token VALUE was invented for any of this: `#684044` and `#ffaaa7` are the family's own,
+and the hover `#7b484e` is the family's own declared lift applied to its own fill.

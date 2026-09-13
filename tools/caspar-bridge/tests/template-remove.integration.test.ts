@@ -90,7 +90,17 @@ describe('templates.remove — R-005', () => {
 
     expect(result.ok).toBe(false);
     expect(result.reason).toBe('in-use');
-    expect(result.message).toMatch(/1 stack item/i);
+    // `MODAL-CHROME-10` ADDENDUM C §C4(c) — the operator's noun. This assertion is why the
+    // sweep needed a second axis: it matched on `stack item`, never on `still use this
+    // template`, so the first pass reported this file clean.
+    /*
+      ⚠ The noun is `layer`, not `row`, and the gate is what said so. `rt.load` allocates a
+      DYNAMIC layer, which is not one of the station’s declared rows, so
+      `describeTemplateReferences` refuses to call it one. The first cut of this fix asserted
+      `row` here on the assumption that a held template is always held by a row; the composer
+      was right and the assumption was not.
+    */
+    expect(result.message).toMatch(/1 layer still holds this template/i);
     // Refused means NOTHING was removed — the template is still fully loadable.
     expect(rt.templateGet('lower-third')).not.toBeNull();
     expect(rt.templateHtml('lower-third')).toBe(HTML);
@@ -118,7 +128,8 @@ describe('templates.remove — R-005', () => {
     await rt.load('item1', 'lower-third', {});
     await rt.load('item2', 'lower-third', {});
 
-    expect(rt.templateRemove('lower-third').message).toMatch(/2 stack item/i);
+    // `layer`s, not `row`s — see the note above: these are dynamically allocated layers.
+    expect(rt.templateRemove('lower-third').message).toMatch(/2 layers still hold this template/i);
   });
 
   it('allows the removal once the referencing item is gone', async () => {

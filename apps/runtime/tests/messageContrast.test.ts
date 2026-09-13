@@ -83,6 +83,56 @@ const MESSAGE_CLASSES: readonly { name: string; ink: string; ground: string }[] 
     ink: cssVars['--r-ink-on-fill'],
     ground: colors.alarmFill,
   },
+  {
+    /*
+      🔴 `MODAL-CHROME-10` §3 — THE CONSOLE CONFIRM'S DESTRUCTIVE BUTTON, now RED, measured
+      on ITS OWN GROUND. A word on a button the operator presses under pressure is a sentence
+      by this guard's standard, and the reversal that made it red is exactly the kind of edit
+      that moves an ink onto a ground it was never measured against.
+    */
+    name: 'confirm destructive (console) at rest',
+    ink: cssVars['--r-ink-on-fill'],
+    ground: cssVars['--r-danger-confirm-bg'],
+  },
+  {
+    // …and on HOVER, which is a different ground and therefore a different ratio.
+    name: 'confirm destructive (console) on hover',
+    ink: cssVars['--r-ink-on-fill'],
+    ground: cssVars['--r-danger-confirm-hover-bg'],
+  },
+  {
+    /*
+      ⚠ THE SUB-DIALOG'S HALF OF THE SAME FAMILY, added with it. The reversal harmonised the
+      two, so the two weights are measured together — one of them moving without the other is
+      the drift the harmonisation exists to prevent.
+    */
+    name: 'confirm destructive (Station setup) at rest',
+    ink: cssVars['--r-setup-danger-ink'],
+    ground: cssVars['--r-setup-danger-bg'],
+  },
+  {
+    /*
+      🔴 `MODAL-CHROME-10` ADDENDUM D §D3 — THE DESTRUCTIVE CONFIRM'S EMBLEM, which is now on
+      EVERY destructive confirm rather than the three that opted in. A glyph is a MARK and the
+      3:1 graphics floor would be the defensible one for it — this guard holds it to the 4.5
+      TEXT floor anyway, because it clears it and a mark that clears the stricter floor cannot
+      be argued down later.
+    */
+    name: 'destructive confirm emblem',
+    ink: cssVars['--r-danger-text'],
+    ground: cssVars['--r-danger-bg'],
+  },
+  {
+    /*
+      🔴 `MODAL-CHROME-10` §2(a) — THE SELECTED FILTER CHIP, which stopped being violet.
+      A chip is a WORD on a fill, and the blue it moved to is a pair this guard had never
+      measured: the look segment adopted it for a segment's ink, and a filter chip is a
+      second surface wearing it.
+    */
+    name: 'selected filter chip',
+    ink: cssVars['--r-look-btn-sel-ink'],
+    ground: cssVars['--r-look-btn-sel-bg'],
+  },
 ];
 
 describe('§B3(b) — every operator message clears AA for body text', () => {

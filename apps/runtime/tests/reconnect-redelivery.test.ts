@@ -331,7 +331,7 @@ it('a REFUSED removal keeps the retention — the template is still re-delivered
     ok: false,
     reason: 'in-use',
     message:
-      '1 stack item(s) still use this template — on the row “Layer 1” (layer 99). Remove that item first.',
+      "1 row still holds this template — on the row “Layer 1” (layer 99). Clear it with the row's own REMOVE first.",
   });
 
   expect(result).toMatchObject({ ok: false, reason: 'in-use' });

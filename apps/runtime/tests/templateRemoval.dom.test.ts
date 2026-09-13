@@ -251,7 +251,7 @@ describe('a refusal the operator cannot see is its own defect', () => {
       ok: false,
       reason: 'in-use',
       message:
-        '1 stack item(s) still use this template — on the row “Layer 1” (layer 99). Remove that item first.',
+        "1 row still holds this template — on the row “Layer 1” (layer 99). Clear it with the row's own REMOVE first.",
     };
     const dialog = await openPicker();
     // `RUNTIME-REPAIR-04` §3.3 — the control moved into `Manage`; what it does did not.
@@ -263,7 +263,7 @@ describe('a refusal the operator cannot see is its own defect', () => {
     // this dialog is on top of everything, so a refusal routed anywhere else is
     // a refusal the operator never reads.
     const message = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
-    expect(message).toMatch(/still use this template/);
+    expect(message).toMatch(/still holds this template/);
     /*
       …and the entry is still listed, because it is still there. `RUNTIME-REPAIR-04` — the list
       it is still listed IN is the management one now, which is the surface the refusal was
@@ -313,6 +313,12 @@ describe('a refusal the operator cannot see is its own defect', () => {
  * remedy was the sweeping one, and he reached for it. These pin the two remedies the
  * dialog now offers instead — the way to a row, and the removal of one hidden item —
  * and that the sweeping one is not mentioned.
+ *
+ * ⭐ **`MODAL-CHROME-10` ADDENDUM C §C4 — THE REMEDIES MOVED, AND THE CLAIM DID NOT.** They
+ * were a block under the list (`[data-in-use-reference]`); the refusal therefore rendered on
+ * TWO surfaces, the sentence pinned above and the remedies scrolled away below. They are now
+ * inside the message that names them (`[data-notice-remedies]`), which is what these cases
+ * read. What each remedy DOES is unchanged, and so is the refusal condition.
  */
 describe('B-212 — the in-use refusal names where, and offers the way there', () => {
   it('a row-bound item gets "Show <row>", which closes the picker and asks the table to go there', async () => {
@@ -320,7 +326,7 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
       ok: false,
       reason: 'in-use',
       message:
-        '1 stack item(s) still use this template — on the row “لوگوی اصلی” (layer 99). Remove that item first.',
+        "1 row still holds this template — on the row “لوگوی اصلی” (layer 99). Clear it with the row's own REMOVE first.",
       references: [{ itemId: 'i-row', slot: { channel: 1, layer: 99 } }],
     };
     const focused: number[] = [];
@@ -337,10 +343,26 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
       await press(/Delete two-box from this station/);
       await press(/^Delete from station$/);
 
-      const line = dialog.querySelector('[data-in-use-reference="i-row"]');
-      expect(line?.textContent).toContain('on the row “لوگوی اصلی” (layer 99)');
-      const show = line?.querySelector('button');
-      expect(show?.textContent).toBe('Show لوگوی اصلی');
+      /*
+        ONE surface: the pinned message region, carrying the sentence AND the way out. There
+        is no second block — the assertion below is what would fail if one came back.
+      */
+      const region = dialog.querySelector('[data-modal-message]');
+      expect(region?.textContent).toContain('on the row “لوگوی اصلی” (layer 99)');
+      expect(dialog.querySelectorAll('[data-in-use-reference]')).toHaveLength(0);
+
+      const remedies = region?.querySelector('[data-notice-remedies]');
+      expect(remedies, 'the way out is not inside the message that names it').not.toBeNull();
+      const show = remedies?.querySelector('button');
+      /*
+        §C4(e) — the label says what the press DOES. `Show` alone left an operator guessing
+        whether something was about to move on screen or on air. §C4(d) — the NAME is in its own
+        `<bdi>`, so the parentheses and the layer number around it cannot be dragged into the
+        Persian run; `textContent` is unaffected by that, which is exactly why the ISOLATION is
+        asserted in the browser (`bidi-names.spec.ts`) and the WORDS are asserted here.
+      */
+      expect(show?.textContent).toBe('Go to لوگوی اصلی (layer 99)');
+      expect(show?.querySelector('bdi')?.textContent).toBe('لوگوی اصلی');
       expect(dialog.textContent).not.toMatch(/remove all/i);
 
       await act(async () => {
@@ -362,7 +384,7 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
       ok: false,
       reason: 'in-use',
       message:
-        "1 stack item(s) still use this template — on CasparCG layer 60, which is not one of this station's rows. Remove that item first.",
+        "1 layer still holds this template — on CasparCG layer 60, which is not one of this station's rows. Remove it first.",
       references: [{ itemId: 'i-hidden', slot: { channel: 1, layer: 60 } }],
     };
     const dialog = await openPicker();
@@ -375,11 +397,13 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
     await press(/Delete two-box from this station/);
     await press(/^Delete from station$/);
 
-    const line = dialog.querySelector('[data-in-use-reference="i-hidden"]');
-    expect(line?.textContent).toContain(
+    const region = dialog.querySelector('[data-modal-message]');
+    expect(region?.textContent).toContain(
       "CasparCG layer 60, which is not one of this station's rows",
     );
-    expect(line?.querySelector('button')?.textContent).toBe('Remove item');
+    expect(dialog.querySelectorAll('[data-in-use-reference]')).toHaveLength(0);
+    const remedies = region?.querySelector('[data-notice-remedies]');
+    expect(remedies?.querySelector('button')?.textContent).toBe('Remove that item');
     expect(dialog.textContent).not.toMatch(/remove all/i);
 
     // The remedy is gated: a confirm that names the layer and what removal does.
@@ -393,10 +417,12 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
     await press(/^Remove item$/);
     // ONE item, by id — never the stack.
     expect(stackRemoveCalls).toEqual(['i-hidden']);
-    // The line is gone and the operator is told the next step.
-    expect(dialog.querySelector('[data-in-use-reference="i-hidden"]')).toBeNull();
+    // The remedy is gone with the item it removed, and the operator is told the next step.
+    expect(dialog.querySelector('[data-notice-remedies]')).toBeNull();
     expect(dialog.querySelector('[data-modal-message]')?.textContent).toContain(
-      'Press Delete from station again',
+      // `MODAL-CHROME-10` §2(c) — the row button is called `Delete` now, and this
+      // sentence quotes it by name.
+      'Press Delete again',
     );
   });
 
@@ -404,7 +430,7 @@ describe('B-212 — the in-use refusal names where, and offers the way there', (
     removeResult = {
       ok: false,
       reason: 'in-use',
-      message: 'x still use this template',
+      message: 'x still holds this template',
       references: [{ itemId: 'i-hidden', slot: { channel: 1, layer: 60 } }],
     };
     await openPicker();
@@ -433,9 +459,21 @@ describe('the two verbs no longer share one word', () => {
     expect(dialog.textContent).not.toContain('Delete from station');
 
     await press('Manage');
-    // The row's verb takes a template off THAT ROW; this one deletes it from the
-    // station, for every row, undoable only by re-importing the file.
-    expect(dialog.textContent).toContain('Delete from station');
+    /*
+      The row's verb takes a template off THAT ROW; this one deletes it from the station, for
+      every row, undoable only by re-importing the file.
+
+      ⚠ `MODAL-CHROME-10` §2(c) shortened the LABEL to `Delete`, so the assertion moved to
+      where the long form still lives — the ACCESSIBLE NAME, which is what a screen reader
+      announces and what every finder addresses this button by. Asserting the visible text
+      would now be asserting the short word, which is the weaker of the two claims: the point
+      of this case is that the two verbs do not share one word, and it is the accessible name
+      that has to keep them apart.
+    */
+    const wide = [...dialog.querySelectorAll('button')].map(
+      (b) => b.getAttribute('aria-label') ?? '',
+    );
+    expect(wide.some((n) => /^Delete .* from this station$/.test(n))).toBe(true);
     expect(dialog.textContent).not.toContain('Remove');
 
     await press(/Delete two-box from this station/);

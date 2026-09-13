@@ -735,7 +735,7 @@ export function LayerRow({
    * claiming about itself.
    *
    * Deselecting is a real operator need, not just symmetry: with nothing selected the
-   * Inspector returns to "Select a stack item", which is how you stop an accidental
+   * Inspector returns to "Select a row", which is how you stop an accidental
    * edit from being staged against a live graphic you did not mean to touch. On a
    * narrow screen it is also how you dismiss the Inspector overlay from the row.
    *
@@ -1032,9 +1032,16 @@ export function LayerRow({
             title={
               templateMissing ? `${templateLabel} — ${MISSING_TEMPLATE_REASON}` : templateLabel
             }
-            dir="auto"
+            /*
+              🔴 `MODAL-CHROME-10` ADDENDUM B — **NO `dir="auto"` ON THE LINE.** It was here, and
+              it is the exact mistake `OperatorNames`'s header warns against: this cell is a LINE
+              carrying operator data AND English chrome (`(not in this browser)` below), so a
+              Persian template name flipped the whole cell to RTL and took the English clause
+              with it — measured in Chromium as `direction: rtl` on a blockified cell. The line
+              is chrome and stays LTR; the NAME alone is isolated.
+            */
           >
-            {templateLabel}
+            <bdi>{templateLabel}</bdi>
             {templateMissing && (
               <span
                 style={

@@ -33,6 +33,7 @@ import { Modal, ModalAction, type ModalMessage } from '../../ui/Modal.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { pickFile } from '../../ui/pickFile.js';
+import { IsolatedName } from '../../ui/OperatorNames.js';
 import { importVcgToStation } from './fixedSlotLoad.js';
 import { requestRowFocus } from '../layers/rowFocus.js';
 import { reportCommandSuccess } from '../status/commandFeedback.js';
@@ -163,28 +164,20 @@ import { templateDisplayName } from '../library/templateName.js';
  * once the pair reads differently.
  */
 
-const styles = {
-  /*
-    `B-212` — the places a refused deletion named, one line each with its remedy
-    beside it. Rendered in the BODY, under the list, because the pinned message region
-    is strings by contract (see `ModalMessage`) and a remedy is a control.
-  */
-  references: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 'var(--r-space-1)',
-    marginTop: 'var(--r-space-3)',
-    paddingTop: 'var(--r-space-2)',
-    borderTop: '1px solid var(--r-border)',
-    fontSize: 'var(--r-text-sm)',
-  },
-  reference: {
-    display: 'flex',
-    gap: 'var(--r-space-2)',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-} as const;
+/*
+  🔴 `MODAL-CHROME-10` ADDENDUM C §C4 — **THE LOCAL `styles` OBJECT IS GONE, and its
+  premise was the defect.**
+
+  It held two boxes for `B-212`'s remedies, with this note: _"Rendered in the BODY, under the
+  list, because the pinned message region is strings by contract and a remedy is a CONTROL."_
+  The reasoning was sound and the conclusion was wrong — the right answer was to give the
+  region a slot for controls, not to render the remedy somewhere else. Leaving it in the body
+  is what produced the two-surface refusal the owner photographed: the sentence pinned above,
+  the remedies scrolled away below, and neither saying it belonged to the other.
+
+  `Notice`'s `remedies` is that slot, and the contract it protects is intact: the SENTENCE
+  is still a string, and a control's treatment still comes from `Button`.
+*/
 
 /**
  * D-137 / C-015 — what the operator is told when a template's Live Source carrier
@@ -369,7 +362,9 @@ export function useTemplatePicker(): {
   const [message, setMessage] = useState<ModalMessage | null>(null);
   /*
     `B-212` — WHERE the items that refused a deletion are, so the dialog can offer the
-    way there. _"2 stack item(s) still use this template — remove them (or Remove All)
+    way there. _"2 stack item(s) still use this template — remove them (or Remove All)"_ was
+    the sentence he read; ADDENDUM C §C4(c) then took the developer vocabulary and the plural
+    hack out of the replacement too. _"2 stack item(s) still use this template — remove them (or Remove All)
     first."_ was read on 2026-09-04 by an operator whose rows all said EMPTY (the two
     items sat on layers 60 and 61, which no row shows); the sentence's only concrete
     remedy was the sweeping one, and it was taken. A refusal that withholds the precise
@@ -523,6 +518,11 @@ export function useTemplatePicker(): {
       ).length;
       const ok = await confirm({
         title: `Delete “${label}” from this station?`,
+        /*
+          🔴 `MODAL-CHROME-10` ADDENDUM D §D3(a) — THE DESTRUCTIVE MARK. It is the default now
+          (see `ConfirmRequest.destructive`); this line is not needed and is not written. What
+          IS written is why the shape below changed.
+        */
         // §6 — the word "library" named a panel that no longer exists. What is
         // true, and what the operator needs to know, is the SCOPE: this is not a
         // local tidy-up, it deletes the template everywhere.
@@ -530,13 +530,40 @@ export function useTemplatePicker(): {
         // A9 — …and the FALLOUT, named rather than discovered: the plate bindings
         // go with it, because an assignment to an entry that no longer exists is
         // state with nothing left that refers to it.
-        body:
-          `“${label}” is deleted for every browser. This cannot be undone — the .vcg must be ` +
-          `re-imported.` +
-          (bound > 0
-            ? ` Its ${String(bound)} plate binding${bound === 1 ? '' : 's'} ${bound === 1 ? 'is' : 'are'} deleted with it.`
-            : '') +
-          ` A row still holding it must be cleared with the row's own REMOVE first.`,
+        /*
+          🔴 ADDENDUM D §D3(b) — **THE TWO-PART SHAPE, WHICH THE SUB-FAMILY ALREADY HAD.** Station
+          setup's destructive confirms state the ACT as a short question naming the thing, and
+          only then give the consequence. This went straight to the consequence paragraph — one
+          block of prose under a title, with no line the eye lands on first.
+
+          🔴 **RESTRUCTURED, NOT REWRITTEN.** Every clause of the consequence survives verbatim:
+          the `.vcg` re-import, the plate bindings, and the rule that a row still holding it must
+          be cleared with the row's own REMOVE first. It was better than the shape it sat in.
+
+          ⚠ The name is in a `<bdi>` inside the `<strong>` (ADDENDUM B, golden rule 11): a
+          Persian template name between an English verb and an English preposition is exactly
+          the case where the neutrals around it get placed by the bidi algorithm rather than by
+          us.
+        */
+        body: (
+          <>
+            <p className="cg-confirm-copy">
+              Delete{' '}
+              <strong>
+                <bdi>{label}</bdi>
+              </strong>{' '}
+              from this station?
+            </p>
+            <p className="cg-confirm-copy">
+              “{label}” is deleted for every browser. This cannot be undone — the .vcg must be
+              re-imported.
+              {bound > 0
+                ? ` Its ${String(bound)} plate binding${bound === 1 ? '' : 's'} ${bound === 1 ? 'is' : 'are'} deleted with it.`
+                : ''}{' '}
+              A row still holding it must be cleared with the row&apos;s own REMOVE first.
+            </p>
+          </>
+        ),
         confirmLabel: 'Delete from station',
         tone: 'remove',
       });
@@ -636,7 +663,9 @@ export function useTemplatePicker(): {
         setReferences((current) => current.filter((r) => r.itemId !== reference.itemId));
         setMessage({
           role: 'notice',
-          text: `Removed the item ${place}. Press Delete from station again to delete the template.`,
+          // The label this sentence quotes is now just `Delete` (§2(c)); a message that names
+          // a control has to name the control that is actually there.
+          text: `Removed the item ${place}. Press Delete again to delete the template.`,
         });
       } catch (err) {
         setMessage({
@@ -763,6 +792,72 @@ export function useTemplatePicker(): {
     setImportOpen(true);
   }, []);
 
+  /*
+    🔴 `MODAL-CHROME-10` ADDENDUM C §C4 — **ONE REFUSAL, ONE SURFACE.**
+
+    The in-use refusal used to render TWICE, and the owner photographed both halves without
+    either being recognisable as the other: the pinned amber banner carried the sentence, and a
+    SECOND block under the list repeated every place as a bare fragment beside a floating blue
+    `Show <name>` button. Two elements, one refusal, and the fragment read as debris because
+    nothing around it said what it belonged to.
+
+    🔴 **THE BANNER SURVIVES; the loose block is gone.** The banner is the one that is PINNED —
+    `Modal`'s message region sits outside the scrolling body, which is the whole reason it
+    exists (a refusal the operator has to scroll to find is a silent one, and the A9 defect).
+    The block under the list could be scrolled away from the sentence that explained it.
+
+    ⚠ **WHAT THE BLOCK WAS RIGHT ABOUT IS KEPT** — `B-212`'s remedies. A refusal that names
+    only the sweeping way out steers toward the sweeping way out, on a live station. Each place
+    still gets its own control; the controls now sit INSIDE the message that names them
+    (`Notice`'s `remedies`), so there is nothing floating beside anything.
+
+    ⚠ **EVERY NAME IS ISOLATED (ADDENDUM B, golden rule 11).** A row name is Persian, the label
+    around it is English, and the parentheses and the layer number are NEUTRALS: joined into one
+    text node their placement is the bidi algorithm's decision rather than ours. The button's
+    LINE stays LTR chrome and only the name goes in a `<bdi>`.
+  */
+  const remedies =
+    references.length === 0
+      ? null
+      : references.map((reference) => {
+          const rowName = referenceRowName(reference, bank);
+          const slot = reference.slot;
+          const place = describeReferencePlace(reference, bank);
+          if (rowName === null || slot === undefined) {
+            return (
+              <Button
+                key={reference.itemId}
+                variant="danger"
+                aria-label={`Remove the item ${place}`}
+                onClick={() => void removeReference(reference)}
+              >
+                Remove that item
+              </Button>
+            );
+          }
+          return (
+            <Button
+              key={reference.itemId}
+              variant="secondary"
+              /*
+                🔴 §C4(e) — `Show` ALONE DOES NOT SAY WHAT HAPPENS. On a playout console the
+                operator cannot afford to wonder whether a press moves something on SCREEN or
+                on AIR, and this one only scrolls the layer table to the row and opens it. So
+                the label says the act, and the `title` says it in full.
+              */
+              title={`Close this dialog and go to the row holding it — ${place}`}
+              onClick={() => {
+                // Close first, then ask the table to go there: the picker sits over the list,
+                // and a scroll under a backdrop is not a remedy.
+                settle(null);
+                requestRowFocus(slot.layer);
+              }}
+            >
+              Go to <IsolatedName>{rowName}</IsolatedName> (layer {slot.layer})
+            </Button>
+          );
+        });
+
   const pickerDialog =
     request === null ? null : (
       <Modal
@@ -778,7 +873,9 @@ export function useTemplatePicker(): {
         emblem={LayoutTemplate}
         size="library"
         onClose={() => settle(null)}
-        {...(message !== null ? { message } : {})}
+        {...(message !== null
+          ? { message: remedies === null ? message : { ...message, remedies } }
+          : {})}
         footer={
           <>
             {/*
@@ -824,7 +921,23 @@ export function useTemplatePicker(): {
                 surface should be the most obvious control on it.
               */
               <ModalAction
-                actionRole="primary"
+                /*
+                  🔴 `MODAL-CHROME-10` ADDENDUM C §C3 — `cancel` (which resolves to `neutral`),
+                  not `primary`.
+
+                  ~~The reference swaps its footer's PRIMARY for this while its management view
+                  is up, and the swap is the point: the way out of a destructive surface should
+                  be the most obvious control on it.~~ **Reversed by the owner 2026-09-13.**
+                  Primary weight means "this is the committing action", and Manage COMMITS
+                  NOTHING — every act on it (a delete) has already happened by the time this
+                  button is reachable. A footer whose loudest control applies nothing teaches
+                  the operator that loud does not mean committing, on a console where it must.
+
+                  ⚠ `neutral` and not `ghost`: `ModalActionRole`'s own rule — neutral must not
+                  mean invisible. The way out stays plainly a control; it just stops
+                  outranking the ones that change something.
+                */
+                actionRole="cancel"
                 onClick={() => {
                   setManage(false);
                   setMessage(null);
@@ -870,6 +983,68 @@ export function useTemplatePicker(): {
           onDragLeave={onDragLeave}
           onDrop={onDrop}
         >
+          {/*
+            🔴 `MODAL-CHROME-10` ADDENDUM D §D1 — **ONE TOOLS ROW, IN THE DIALOG'S CHROME.**
+
+            Import was reachable from both views and sat in a different PLACE in each: measured
+            in Chromium, x 710.8 in selection and x 1160.5 in Manage — a 450 px jump on a view
+            switch. Trailing alignment could not fix it either, because the two rows are not the
+            same width: the selection view's tools row lives INSIDE `.cg-tpl-main`, which stops
+            367 px short of the frame to leave room for the 342 px aside, while Manage has no
+            aside and runs the full body.
+
+            So the row is not a property of either view any more. It is rendered ONCE, here,
+            above the switch — which is what "one slot" has to mean when the views underneath it
+            are shaped differently. Import is the trailing control, so its right edge is the
+            row's right edge in both.
+
+            ⚠ The KIND CHIPS stay inside `PickerList`: they filter that list and mean nothing in
+            Manage. Only the two STATION-level doors and the thing that scopes the view belong
+            to the chrome.
+          */}
+          <div className="cg-tpl-tools" data-template-tools="">
+            {manage ? (
+              <p className="cg-tpl-manage__note" data-template-manage-note="">
+                Deleting removes a template from this station, for every browser. It cannot be
+                undone.
+              </p>
+            ) : (
+              <label className="cg-tpl-search">
+                <Icon icon={Search} size={16} />
+                <input
+                  type="search"
+                  className="cg-field"
+                  placeholder="Search templates…"
+                  aria-label="Search templates"
+                  autoComplete="off"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </label>
+            )}
+            {/*
+              `RUNTIME-REPAIR-05` — IMPORT LIVES OUT HERE, not in the footer, because the
+              footer's one primary is the LOAD. The two station-level doors sit together at the
+              end of the row, where the reference puts its own `Manage`: bring a package IN,
+              and manage what is already here. Neither is about the row this dialog was opened
+              from — which is also why they belong to the chrome rather than to a view.
+
+              `Manage` is hidden while the operator is IN Manage: the way back is the footer's
+              own control (§C3), and two ways out of one view is how a footer stops meaning
+              anything.
+            */}
+            {!manage && (
+              <Button
+                variant="neutral"
+                className="cg-tpl-manage-btn"
+                data-template-manage-open=""
+                onClick={() => void openManage()}
+              >
+                Manage
+              </Button>
+            )}
+            <ImportDoor onImport={openImport} />
+          </div>
           {manage ? (
             <ManageView
               templates={request.templates}
@@ -877,53 +1052,11 @@ export function useTemplatePicker(): {
               onDelete={(t) => void deleteTemplate(t)}
             >
               {/*
-                `B-212` — WHERE the items are, each with the way there. A row the operator can
-                see gets "Show <row>"; a layer no row shows gets the one-item removal. The
-                sentence above names them; these are the remedies it used to withhold.
-
-                `RUNTIME-REPAIR-04` — rendered INSIDE the management view, because that is now
-                the only surface a deletion can be refused from. It is the same block, moved
-                with the control whose refusal it explains.
+                `B-212`'s remedies USED TO BE HERE, as a block under the list. They moved into
+                the refusal's own message region (`MODAL-CHROME-10` ADDENDUM C §C4) — see
+                `remedies` above. Nothing is rendered here now, and nothing should be: the
+                management view's only message is the pinned one.
               */}
-              {references.length > 0 && (
-                <div style={styles.references} data-in-use-references="">
-                  {references.map((reference) => {
-                    const rowName = referenceRowName(reference, bank);
-                    const slot = reference.slot;
-                    const place = describeReferencePlace(reference, bank);
-                    return (
-                      <div
-                        key={reference.itemId}
-                        style={styles.reference}
-                        data-in-use-reference={reference.itemId}
-                      >
-                        <span>{place}</span>
-                        {rowName !== null && slot !== undefined ? (
-                          <Button
-                            variant="secondary"
-                            onClick={() => {
-                              // Close first, then ask the table to go there: the picker sits
-                              // over the list, and a scroll under a backdrop is not a remedy.
-                              settle(null);
-                              requestRowFocus(slot.layer);
-                            }}
-                          >
-                            Show {rowName}
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="danger"
-                            aria-label={`Remove the item ${place}`}
-                            onClick={() => void removeReference(reference)}
-                          >
-                            Remove item
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </ManageView>
           ) : (
             /*
@@ -951,7 +1084,6 @@ export function useTemplatePicker(): {
                   <PickerList
                     request={request}
                     query={query}
-                    onQuery={setQuery}
                     kind={kind}
                     onKind={setKind}
                     unassigned={unassigned}
@@ -959,8 +1091,6 @@ export function useTemplatePicker(): {
                     onSelect={setSelected}
                     onCommit={commit}
                     onKeyDown={onListKeyDown}
-                    onManage={() => void openManage()}
-                    onImport={openImport}
                   />
                 )}
               </div>
@@ -1012,9 +1142,9 @@ export function useTemplatePicker(): {
                   <div className="cg-tpl-pick" data-template-selected={selected.templateId}>
                     <p className="cg-tpl-pick__eyebrow">Selected template</p>
                     {/* Golden rule 11 — the operator's word in the sentence, the id on the title. */}
-                    <bdi className="cg-tpl-pick__name" title={selected.templateId}>
+                    <IsolatedName className="cg-tpl-pick__name" title={selected.templateId}>
                       {templateDisplayName(selected)}
-                    </bdi>
+                    </IsolatedName>
                     <dl className="cg-tpl-kv">
                       <dt>Type</dt>
                       <dd>{kindOf(selected) === 'bed' ? 'Graphics bed' : selected.templateType}</dd>
@@ -1218,6 +1348,32 @@ function ImportDialog({
  * ⚠ The counts are a line of information under a name. They do not disable anything — see
  * the note at `usage` for why this console does not follow the drawing there.
  */
+/**
+ * 🔴 `MODAL-CHROME-10` ADDENDUM C §C2 — **THE IMPORT DOOR, DEFINED ONCE.**
+ *
+ * Import was reachable only from the selection view, and the operator who has just deleted a
+ * stale template is exactly the operator who wants to import its replacement — with the list
+ * he is maintaining still in front of him.
+ *
+ * ⚠ **ONE DEFINITION, NOT TWO COPIES.** The two views have different tool rows, so the control
+ * is MOUNTED twice and WRITTEN once. That distinction is the whole instruction: two copies of
+ * the markup drift, and the first thing to drift would be the ellipsis rule — one copy would
+ * keep `Import a .vcg` and the other would grow its dots back (§32.1). The handler is the
+ * same `openImport` either way; nothing about what it does depends on which view called it.
+ */
+function ImportDoor({ onImport }: { onImport: () => void }): JSX.Element {
+  return (
+    <Button
+      variant="neutral"
+      className="cg-tpl-manage-btn"
+      data-template-import-open=""
+      onClick={onImport}
+    >
+      Import a .vcg
+    </Button>
+  );
+}
+
 function ManageView({
   templates,
   usage,
@@ -1237,9 +1393,15 @@ function ManageView({
         and where it cannot be missed. A standing paragraph restating a confirm is prose
         explaining what the confirm expresses.
       */}
-      <p className="cg-tpl-manage__note" data-template-manage-note="">
-        Deleting removes a template from this station, for every browser. It cannot be undone.
-      </p>
+      {/*
+        §D1 — the sentence and the import door moved UP into the dialog's own tools row, which
+        both views now share. Nothing is rendered here.
+
+        AFTER importing from Manage the operator STAYS in Manage, deliberately: the import
+        dialog is a sub-dialog over this one, so closing it returns to the view underneath, and
+        that view is the list he came to maintain — with the new template now in it. Bouncing
+        him to the selection list would hide the outcome of the act he just performed.
+      */}
       {[...templates].reverse().map((t) => {
         const label = templateDisplayName(t);
         const used = usage.get(t.templateId) ?? 0;
@@ -1250,9 +1412,9 @@ function ManageView({
             </span>
             <span className="cg-tpl-manage-row__text">
               {/* Golden rule 11 — the operator's word in the sentence, the id on the `title`. */}
-              <bdi className="cg-tpl-manage-row__name" title={t.templateId}>
+              <IsolatedName className="cg-tpl-manage-row__name" title={t.templateId}>
                 {label}
-              </bdi>
+              </IsolatedName>
               <span className="cg-tpl-manage-row__use" data-manage-usage={String(used)}>
                 {used === 0 ? 'Not on any row' : `Used by ${count(used, 'row')}`}
               </span>
@@ -1264,7 +1426,16 @@ function ManageView({
               onClick={() => onDelete(t)}
             >
               <Icon icon={Trash2} size={14} />
-              Delete from station
+              {/*
+                🔴 `MODAL-CHROME-10` §2(c) — THE LABEL IS SHORT AND THE CONSEQUENCE IS NOT.
+                The short word is safe precisely because the long one is stated twice around
+                it: the `aria-label` above still reads `Delete <name> from this station` —
+                which is also what every finder addresses this button by — and the confirm
+                this opens still names the `.vcg` re-import and the plate bindings, with its
+                own commit button still reading `Delete from station`. Shortening the LABEL
+                is not weakening the sentence.
+              */}
+              Delete
             </Button>
           </div>
         );
@@ -1288,10 +1459,15 @@ function count(n: number, one: string): string {
   return `${String(n)} ${one}${n === 1 ? '' : 's'}`;
 }
 
+/**
+ * ⚠ `MODAL-CHROME-10` ADDENDUM D §D1 — this no longer owns the SEARCH box or the two
+ * station-level doors. They are the dialog's chrome now, rendered once above the view switch so
+ * Import cannot move when the view changes. What is left here is the list and the kind chips,
+ * which filter it.
+ */
 function PickerList({
   request,
   query,
-  onQuery,
   kind,
   onKind,
   unassigned,
@@ -1299,12 +1475,9 @@ function PickerList({
   onSelect,
   onCommit,
   onKeyDown,
-  onManage,
-  onImport,
 }: {
   request: PickRequest;
   query: string;
-  onQuery: (q: string) => void;
   kind: KindFilter;
   onKind: (k: KindFilter) => void;
   unassigned: (t: TemplateInfo) => string[];
@@ -1312,8 +1485,6 @@ function PickerList({
   onSelect: (t: TemplateInfo) => void;
   onCommit: (t: TemplateInfo) => void;
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
-  onManage: () => void;
-  onImport: () => void;
 }): JSX.Element {
   // Newest first: the template the operator most recently imported is the one they
   // are looking for. Then the search, then the kind chip.
@@ -1323,48 +1494,20 @@ function PickerList({
     .filter((t) => kind === 'all' || kindOf(t) === kind);
   return (
     <>
-      <div className="cg-tpl-tools">
-        <label className="cg-tpl-search">
-          <Icon icon={Search} size={16} />
-          <input
-            type="search"
-            className="cg-field"
-            placeholder="Search templates…"
-            aria-label="Search templates"
-            autoComplete="off"
-            value={query}
-            onChange={(e) => onQuery(e.target.value)}
-          />
-        </label>
-        {/*
-          `RUNTIME-REPAIR-05` — IMPORT MOVED HERE, out of the footer, because the footer's one
-          primary is now the LOAD. The two station-level doors sit together at the end of the
-          tools row, where the reference puts its own `Manage`: bring a package IN, and manage
-          what is already here. Neither is about the row this dialog was opened from.
-        */}
-        <Button
-          variant="neutral"
-          className="cg-tpl-manage-btn"
-          data-template-import-open=""
-          onClick={onImport}
-        >
-          Import a .vcg
-        </Button>
-        <Button
-          variant="neutral"
-          className="cg-tpl-manage-btn"
-          data-template-manage-open=""
-          onClick={onManage}
-        >
-          Manage
-        </Button>
-      </div>
       <div className="cg-tpl-filter" role="group" aria-label="Template kind">
         {KIND_CHIPS.map((chip) => (
           <Button
             key={chip.key}
             variant="neutral"
-            active={kind === chip.key}
+            /*
+              🔴 `MODAL-CHROME-10` §2(a) — NO `active` HERE. It painted `.is-on`, whose
+              neutral fill is `--r-rehearsing-strong` — `R-022`'s PVW violet — so a selected
+              filter made a claim about rehearsal on a surface where it cannot be true.
+              `aria-pressed` is the state, and `.cg-tpl-filter .cg-btn[aria-pressed="true"]`
+              is the paint: the console's own selected-not-on-air blue. Dropped rather than
+              overridden, so the violet is not merely outranked in the cascade — it is not in
+              it.
+            */
             aria-pressed={kind === chip.key}
             data-template-filter={chip.key}
             onClick={() => onKind(chip.key)}
@@ -1458,7 +1601,9 @@ function PickerRow({
           <Icon icon={templateKind === 'bed' ? Rows3 : LayoutTemplate} size={22} />
         </span>
         <span className="cg-tpl-text">
-          <bdi className="cg-tpl-name">{label}</bdi>
+          {/* ADDENDUM B — the BOX is LTR chrome, the NAME is isolated INLINE inside it. A
+                  `<bdi>` carrying the class was blockified here and flushed Persian titles right. */}
+          <IsolatedName className="cg-tpl-name">{label}</IsolatedName>
           <span className="cg-tpl-meta">
             <span>{templateKind === 'bed' ? 'Graphics bed' : t.templateType}</span>
             <span aria-hidden="true">·</span>

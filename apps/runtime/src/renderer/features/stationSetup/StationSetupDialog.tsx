@@ -15,7 +15,7 @@ import {
   Monitor,
   Radio,
   Server,
-  SlidersHorizontal,
+  Settings,
   Type,
   type LucideIcon,
 } from 'lucide-react';
@@ -826,7 +826,7 @@ export function StationSetupDialog({
     <Modal
       title="Station setup"
       /* `REPAIR-03` B, audit row 72 — the reference draws an emblem in this head. */
-      emblem={SlidersHorizontal}
+      emblem={Settings}
       /*
         `RUNTIME-REDESIGN-01` Phase 7 — the reference's `.settings-subtitle` (`Channel 1 · News ·
         Primary A`): the channel this dialog's per-channel tab reports, and which server is

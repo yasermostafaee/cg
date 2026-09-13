@@ -36,7 +36,7 @@ describe('describeTemplateReferences', () => {
         BANK,
       ),
     ).toBe(
-      '2 stack item(s) still use this template — on the row “Bed 1” (layer 9), on the row “لوگوی اصلی” (layer 99). Remove those items first.',
+      '2 rows still hold this template — on the row “Bed 1” (layer 9), on the row “لوگوی اصلی” (layer 99). Clear each with its own REMOVE first.',
     );
   });
 
@@ -51,13 +51,13 @@ describe('describeTemplateReferences', () => {
         BANK,
       ),
     ).toBe(
-      "2 stack item(s) still use this template — on CasparCG layer 60, which is not one of this station's rows, on CasparCG layer 61, which is not one of this station's rows. Remove those items first.",
+      "2 layers still hold this template — on CasparCG layer 60, which is not one of this station's rows, on CasparCG layer 61, which is not one of this station's rows. Clear each row with its own REMOVE first; a layer that is not a row is removed here.",
     );
   });
 
   it('says so when an item holds no layer at all', () => {
     expect(describeTemplateReferences([{ itemId: 'a' }], BANK)).toBe(
-      '1 stack item(s) still use this template — on the stack with no layer bound. Remove that item first.',
+      '1 place still holds this template — on this station, not yet on a layer. Remove it first.',
     );
   });
 
@@ -68,7 +68,7 @@ describe('describeTemplateReferences', () => {
     );
     expect(text).not.toMatch(/remove all/i);
     // …and keeps the fragment every surface and spec matches on.
-    expect(text).toMatch(/still use this template/);
+    expect(text).toMatch(/still holds? this template/);
   });
 
   it('with no bank known (the disconnected browser), names every layer as CasparCG does', () => {

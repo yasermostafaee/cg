@@ -458,7 +458,13 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
     return (
       <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
         <div className="cg-inspector-body" style={styles.scroll}>
-          <p style={styles.empty}>Select a stack item to inspect its fields.</p>
+          {/*
+            🔴 `MODAL-CHROME-10` ADDENDUM C §C4(c), FOUND IN PASSING. It read _"Select a stack
+            item"_. `stack item` is our word for `StackItemState` and it is not on the
+            operator's screen anywhere — he selects a ROW. Found by the second sweep axis while
+            taking the same vocabulary out of the deletion refusal; one defect, two surfaces.
+          */}
+          <p style={styles.empty}>Select a row to inspect its fields.</p>
         </div>
       </Panel>
     );

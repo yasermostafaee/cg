@@ -85,9 +85,16 @@ describe('LibraryStore', () => {
       { itemId: 'b' },
     ]);
     expect(refused).toMatchObject({ ok: false, reason: 'in-use' });
-    expect(refused.message).toContain('2 stack item(s) still use this template');
+    /*
+      ⚠ `places`, not `rows`: this is the browser's DISCONNECTED library path, which has no
+      bank to resolve names against, so no reference can be shown to be one of the station's
+      rows. The noun follows what is actually known — `describeTemplateReferences` picks
+      `row` / `layer` / `place` from the references, and getting a weaker word here is the
+      instrument working, not a defect.
+    */
+    expect(refused.message).toContain('2 places still hold this template');
     expect(refused.message).toContain('CasparCG layer 1-60');
-    expect(refused.message).toContain('no layer bound');
+    expect(refused.message).toContain('not yet on a layer');
     expect(refused.references).toHaveLength(2);
     expect(store.has('lower-third')).toBe(true);
 

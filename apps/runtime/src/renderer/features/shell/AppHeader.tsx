@@ -1,4 +1,4 @@
-import { Layers, Monitor, MonitorOff, ScrollText, SlidersHorizontal } from 'lucide-react';
+import { Layers, Monitor, MonitorOff, ScrollText, Settings } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { ChannelStrip } from '../channels/ChannelStrip.js';
@@ -134,19 +134,44 @@ export function AppHeader({ layout, onOpenSettings, onOpenAudit }: Props): JSX.E
         aria-label="Open Station setup"
         title="Station setup — the station's settings, in one place"
       >
-        <Icon icon={SlidersHorizontal} />
+        {/*
+          🔴 `MODAL-CHROME-10` §1(b) — A GEAR, WHICH THIS WAS NOT. It was `SlidersHorizontal`,
+          lucide's MIXER: three horizontal tracks with knobs. That is a picture of levels, and
+          on a playout console levels are a real thing one door along — the plate audio dialog
+          is literally a bank of faders. So the glyph named the wrong room. `Settings` is
+          lucide's gear (a lobed outline around a centre circle) and is the same set
+          `CONSOLE-MATCH-03` §5 took the bar's other five icons from; `Cog` was the other
+          candidate and was declined — fourteen nodes turn to mush at 14 px.
+
+          The same swap is made on this dialog's own header emblem, so the door and the room
+          wear one mark.
+        */}
+        <Icon icon={Settings} />
         SETTINGS
       </Button>
       {/*
-        🔴 `CONSOLE-MATCH-03` §5 — the reference's own word, which is `Audit log` and not
+        ~~🔴 `CONSOLE-MATCH-03` §5 — the reference's own word, which is `Audit log` and not
         `LOG`. It matters because the dialog this opens is TITLED "Audit log": a door labelled
         with a shortening of the room behind it is one more thing the operator has to learn,
-        and the bar had the width. The accessible name was already `Open audit log` and is
-        untouched, so nothing that addresses this button had to move.
+        and the bar had the width.~~
+
+        🔴 **REVERSED 2026-09-13 BY THE OWNER (`MODAL-CHROME-10` §1(a)) — the button reads
+        `LOG`.** The struck argument's premise survives and its conclusion does not: the room
+        still says what it is, because the MODAL's title is still `Audit log` and is untouched.
+        A door does not have to repeat the room's full name when the room announces itself the
+        moment it opens.
+
+        ⚠ **THE ACCESSIBLE NAME IS UNCHANGED, and that is not laziness.** `Open audit log` is
+        what every spec and the e2e fixture address this button by, so nothing that addresses
+        it had to move; a screen reader still hears the full name; and WCAG 2.5.3 (label in
+        name) holds, because the visible `LOG` is contained in it.
+
+        The CASING is the bar's own, which is CAPS on every label it carries —
+        `CG CONTROL`, `PVW · N`, `SHOW MONITORS` / `HIDE MONITORS`, `SETTINGS`.
       */}
       <Button onClick={onOpenAudit} aria-label="Open audit log">
         <Icon icon={ScrollText} />
-        AUDIT LOG
+        LOG
       </Button>
     </header>
   );

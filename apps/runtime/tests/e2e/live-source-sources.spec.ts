@@ -290,7 +290,7 @@ test('library: DELETE FROM STATION is a different verb from the row REMOVE, and 
   // … and the reason is IN THE DIALOG. It used to go to the command toast, which
   // is rendered under the modal's backdrop — pressing the button did nothing and
   // said nothing.
-  await expect(picker.locator('[data-modal-message]')).toContainText(/still use this template/);
+  await expect(picker.locator('[data-modal-message]')).toContainText(/still holds? this template/);
   /*
     …and the entry is still listed, because it is still there. `RUNTIME-REPAIR-04` — the list
     it is listed in here is the MANAGEMENT one, which is the surface the refusal was raised on;
@@ -302,10 +302,19 @@ test('library: DELETE FROM STATION is a different verb from the row REMOVE, and 
     there beside it, and no nudge toward Remove All. Pressing "Show" closes the picker
     and the table goes to the row — it ends SELECTED, so the Inspector shows it too.
   */
-  const references = picker.locator('[data-in-use-references]');
+  /*
+    ⚠ `MODAL-CHROME-10` ADDENDUM C §C4 — THE REMEDIES MOVED AND THE CLAIM DID NOT. They were
+    a block under the list (`[data-in-use-references]`), which made the refusal render on TWO
+    surfaces: the sentence pinned above, the way out scrolled away below. Both now live in the
+    ONE pinned message region, so this reads the region — and asserts the second surface has
+    not come back, which is the half a re-pointed locator would otherwise stop checking.
+  */
+  const references = picker.locator('[data-modal-message]');
   await expect(references).toContainText(/on the row “Bed \d+” \(layer \d+\)/);
+  await expect(picker.locator('[data-in-use-references]')).toHaveCount(0);
   await expect(picker).not.toContainText(/Remove All/i);
-  await references.getByRole('button', { name: /^Show Bed \d+$/ }).click();
+  // §C4(e) — `Show` did not say whether anything was about to move on screen or on air.
+  await references.getByRole('button', { name: /^Go to Bed \d+ \(layer \d+\)$/ }).click();
   await expect(picker).toHaveCount(0);
   await expect(app.layerRow(layer)).toHaveAttribute('aria-pressed', 'true');
 

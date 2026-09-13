@@ -34,6 +34,13 @@ const AMBER = 'rgb(243, 205, 136)'; // --r-caution-text
 const RED_INK = 'rgb(255, 170, 167)'; // --red     #ffaaa7
 const RED_BG = 'rgb(53, 34, 36)'; // --red-bg  #352224
 const RED_LINE = 'rgb(104, 64, 68)'; //           #684044
+/*
+  `MODAL-CHROME-10` §3 — the CONSOLE confirm's ground: the same family at fill weight. It is
+  spelled from its own token's value rather than reusing `RED_LINE`, even though the two are
+  the same six digits today: they are different JOBS (an edge and a ground) and a later retune
+  of one must not silently move the other's assertion with it.
+*/
+const CONFIRM_RED_BG = 'rgb(104, 64, 68)'; //     #684044 — --r-danger-confirm-bg
 const RED_HOVER = 'rgb(72, 42, 46)'; //           #482a2e
 const NOTICE_BG = 'rgb(41, 36, 28)'; // .notice   #29241c
 const NOTICE_LINE = 'rgb(84, 69, 45)'; //         #54452d
@@ -94,33 +101,66 @@ test('§1 — Revert and Apply layers sit 9 px apart, and so do the sub-dialog�
 });
 
 /**
- * 🔴 §2 — **TWO DESTRUCTIVE TREATMENTS, AND NEITHER IS A MISTAKE.**
+ * 🔴 §2 — **ONE DESTRUCTIVE FAMILY, TWO WEIGHTS. REVERSED 2026-09-13 BY THE OWNER.**
  *
- * The console's `useConfirm` keeps its SOLID AMBER, by a recorded reason: picking the red
- * outline would have made `Clear all` quieter — turning a filled button into an outline on the
- * one control that takes every graphic off air. Station setup's sub-dialog family takes the
- * reference's red outline, because its destructive act is a catalogue deletion and amber inside
- * that dialog already means BLOCKED.
+ * ⚠ ~~The console's `useConfirm` keeps its SOLID AMBER … Station setup's sub-dialog family
+ * takes the reference's red outline … BOTH ARE ASSERTED IN ONE TEST, on purpose: a test that
+ * checked the red alone would pass against a build that had harmonised the console's amber
+ * INTO it, which is the outcome this session was explicitly told not to reach.~~
  *
- * ⚠ **BOTH ARE ASSERTED IN ONE TEST, on purpose.** Each half is only meaningful beside the
- * other: a test that checked the red alone would pass against a build that had harmonised the
- * console's amber INTO it, which is the outcome this session was explicitly told not to reach.
+ * That is exactly what `MODAL-CHROME-10` §3 then asked for, and it is a REVERSAL rather than a
+ * drift: the owner decided the console confirm's destructive button takes the RED family too.
+ * The struck text stays because a reversed decision has to be as visible as the original was —
+ * the annotation with the full argument is in `controls.css`, beside the rule.
+ *
+ * ── WHAT THIS TEST STILL ENFORCES, AND IT IS THE HALF THAT MATTERED ─────────
+ *
+ * The old paragraph's real content was **no safety signal may weaken**: adopting the row
+ * buttons' RED OUTLINE would have turned `Clear all` — the one control that takes every
+ * graphic off air — from a filled button into an outline. So the reversal takes the red
+ * FAMILY at a PRIMARY's fill weight, and this test now asserts BOTH weights together for the
+ * same reason it used to assert both colours together: the console's must stay FILLED and the
+ * sub-dialog's must stay an OUTLINE THAT FILLS ON INTENT. A build that flattened either into
+ * the other would pass a test that checked only one.
  */
-test('§2 — the sub-dialog’s destructive is the reference red; the console’s stays solid amber', async ({
+test('§2 — one red family, two weights: the console confirm FILLS and the sub-dialog outlines', async ({
   app,
 }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1280, height: 800 });
 
-  // ── (a) THE CONSOLE'S — unchanged, and measured FIRST so a regression here is not masked.
+  /*
+    ── (a) THE CONSOLE'S — measured FIRST so a regression here is not masked.
+
+    `--r-danger-confirm-bg` (#684044), which is the sub-dialog family's own EDGE colour
+    promoted to a ground. It was `rgb(245, 158, 11)`, the solid amber, until the reversal.
+  */
   await page.getByRole('button', { name: 'Clear all rows holding a layer' }).click();
   const consoleConfirm = page.getByRole('dialog', { name: /^Clear all/ });
   await expect(consoleConfirm).toBeVisible();
   const clearAll = consoleConfirm.getByRole('button', { name: /^Clear all$/ });
-  await expect(clearAll).toHaveCSS('background-color', 'rgb(245, 158, 11)');
-  await expect(clearAll, 'a FILLED button, not an outline').toHaveCSS(
+  await expect(clearAll).toHaveCSS('background-color', CONFIRM_RED_BG);
+  await expect(
+    clearAll,
+    'the safety signal WEAKENED — the FILL went, which is the one loss the reversal was not allowed to take',
+  ).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  /*
+    ADDENDUM D §D3(c) — RINGED IN THE FAMILY'S OWN INK, so this button and Station setup's
+    confirms are visibly the same red rather than merely the same hue family. Measured side by
+    side, ours read `#684044` filled with white against their `#352224` with `#ffaaa7` ink:
+    same family, ours the duller because the BRIGHT half of that pair was missing from it.
+  */
+  await expect(clearAll, 'the ring in the family’s own red is gone').toHaveCSS(
     'border-color',
-    'rgb(245, 158, 11)',
+    RED_INK,
+  );
+  // White on #684044 is 8.73:1 — the numeric guard is `messageContrast.test.ts`.
+  await expect(clearAll).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await expect(clearAll, 'it is still the committing button').toHaveCSS('font-weight', '700');
+  // …and it must NOT have taken the row buttons' quiet ground with the hue.
+  await expect(clearAll, 'the console confirm adopted the OUTLINE, not the family').not.toHaveCSS(
+    'background-color',
+    RED_BG,
   );
   await consoleConfirm.getByRole('button', { name: 'Cancel' }).click();
   await expect(consoleConfirm).toBeHidden();

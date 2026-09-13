@@ -465,12 +465,34 @@ export type TemplateReference = z.infer<typeof TemplateReferenceSchema>;
  * (alias, else `Layer N` / `Bed N`, through the SAME two functions — one naming rule,
  * two readers), and a layer outside the bank as CasparCG names it, with the fact that it
  * is not a row said out loud. It does NOT mention Remove All. The old opening fragment
- * is kept so every surface and test that matched on _"still use this template"_ still
- * does.
+ * ~~The old opening fragment is kept so every surface and test that matched on _"still use
+ * this template"_ still does.~~
+ *
+ * 🔴 **REWORDED 2026-09-13 (`MODAL-CHROME-10` ADDENDUM C §C4(c)). Two defects in four words:**
+ *
+ *   1. **`item(s)` was a plural hack.** It was kept verbatim "because the tests match on it",
+ *      which is a test pinning a defect in place — the reason it was written down is the reason
+ *      it had to go. Singular and plural are now written properly, and every pinned copy moved
+ *      with it.
+ *   2. **`stack item` is DEVELOPER vocabulary.** There is no "stack item" on the operator's
+ *      screen. He has ROWS and he has LAYERS, and the same view's own footer already said so —
+ *      _"A row still holding a template must be cleared with its own REMOVE first."_ One rule
+ *      was being stated in two vocabularies, one of them ours.
+ *
+ * ⚠ **THE NOUN IS CHOSEN, NOT FIXED, and that is what keeps it honest.** `row` when every
+ * reference IS one of the station's rows — the footer's word, and the operator's. `layer` when
+ * one of them is not a row but is still on a layer, because `2 rows still hold this` directly
+ * above a place reading _"which is not one of this station's rows"_ is a sentence contradicting
+ * itself. `place` for the residue: a reference with no layer bound at all is neither, and
+ * calling it a layer would be the same contradiction one step further out. Three words, each
+ * the true one for its case, and not one of them ours.
  *
  * ⚠ ONE implementation, in the wire package, for the bridge, the offline mock and the
  * browser's disconnected library path — a refusal spelled three times is a refusal that
  * eventually disagrees with itself (golden rule 6).
+ *
+ * ⚠ **THE CONDITION IS UNTOUCHED.** A row still holding a template is still refused, on exactly
+ * the references it was refused on before. This is wording.
  */
 export function describeTemplateReferences(
   references: readonly TemplateReference[],
@@ -478,10 +500,21 @@ export function describeTemplateReferences(
 ): string {
   const count = references.length;
   const places = references.map((ref) => describeReferencePlace(ref, bank));
-  // `item(s) still use this template` is kept VERBATIM for every count: it is the fragment
-  // the E2E and the DOM tests match on, and a singular "still uses" broke both on the
-  // first local run. The count says the number; the places say where.
-  return `${String(count)} stack item(s) still use this template — ${places.join(', ')}. Remove ${count === 1 ? 'that item' : 'those items'} first.`;
+  const allRows = references.every((ref) => referenceRowName(ref, bank) !== null);
+  const allSeated = references.every((ref) => ref.slot !== undefined);
+  const noun = allRows ? 'row' : allSeated ? 'layer' : 'place';
+  const head =
+    count === 1
+      ? `1 ${noun} still holds this template`
+      : `${String(count)} ${noun}s still hold this template`;
+  const remedy = allRows
+    ? count === 1
+      ? "Clear it with the row's own REMOVE first."
+      : 'Clear each with its own REMOVE first.'
+    : count === 1
+      ? 'Remove it first.'
+      : 'Clear each row with its own REMOVE first; a layer that is not a row is removed here.';
+  return `${head} — ${places.join(', ')}. ${remedy}`;
 }
 
 /** One reference's place, in the operator's words. Exported for the surface's per-row line. */
@@ -490,7 +523,10 @@ export function describeReferencePlace(
   bank: FixedLayerBank | null,
 ): string {
   const slot = reference.slot;
-  if (slot === undefined) return 'on the stack with no layer bound';
+  // ADDENDUM C §C4(c) — "on the stack" was the same developer vocabulary the count sentence
+  // carried. The operator has no stack; what is true is that the station holds it and nothing
+  // has put it on a layer.
+  if (slot === undefined) return 'on this station, not yet on a layer';
   if (bank !== null && isFixedBankLayer(bank, slot.channel, slot.layer)) {
     const name = layerAlias(bank, slot.layer) ?? defaultLayerAlias(bank, slot.layer);
     return `on the row “${name}” (layer ${String(slot.layer)})`;

@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { X, type LucideIcon } from 'lucide-react';
 import { colors, cssVars } from '../theme.js';
 import { Icon } from './Icon.js';
@@ -135,6 +135,7 @@ export function Notice({
   dismissLabel,
   icon,
   title,
+  remedies,
 }: {
   noticeRole: NoticeRole;
   text: string;
@@ -176,6 +177,23 @@ export function Notice({
   icon?: LucideIcon;
   /** A bold line above `text`. With it, `text` becomes the quieter explanation under it. */
   title?: string;
+  /**
+   * 🔴 `MODAL-CHROME-10` ADDENDUM C §C4(e) — **THE WAY OUT, SEATED IN THE MESSAGE THAT
+   * NAMES IT.**
+   *
+   * Controls that RESOLVE this message — "go to the row that is holding it", "remove that one
+   * item". They belong here and not beside the box, because a remedy that floats next to a
+   * refusal reads as an unrelated control: the owner photographed exactly that, a blue button
+   * apparently belonging to nothing.
+   *
+   * ⚠ **THIS DOES NOT REOPEN `ModalMessage`'s §3 DECISION**, and the distinction is the whole
+   * reason it is safe. That decision made the SENTENCE data rather than a node, because four
+   * callers passing nodes gave four TREATMENTS — three of them the 2.08:1 ink. This slot takes
+   * CONTROLS, whose treatment comes from `Button` exactly as `ModalActionRole`'s does. Pass
+   * buttons and isolated names; never a styled sentence. The message's own words stay in
+   * `text` and `detail`, which are still strings.
+   */
+  remedies?: ReactNode;
 }): JSX.Element {
   const dismissable = onDismiss !== undefined;
   /*
@@ -183,7 +201,8 @@ export function Notice({
     so the three share one wrapper decision rather than three. Without any of them the markup
     is what it always was.
   */
-  const stacked = dismissable || icon !== undefined || title !== undefined;
+  const stacked =
+    dismissable || icon !== undefined || title !== undefined || remedies !== undefined;
   return (
     <div
       style={{
@@ -225,6 +244,25 @@ export function Notice({
           {detail !== undefined && detail !== '' && (
             <span dir="auto" style={{ color: DETAIL_COLOR[noticeRole], fontSize: '0.8rem' }}>
               {detail}
+            </span>
+          )}
+          {remedies !== undefined && (
+            /*
+              The remedies sit UNDER the sentence, inside the same box: one refusal, one
+              surface. The row wraps, because a template held by four rows offers four ways
+              out and a message must not push its own dismiss off the edge.
+            */
+            <span
+              className="cg-notice-remedies"
+              data-notice-remedies=""
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 'var(--r-space-2)',
+                marginTop: '0.35rem',
+              }}
+            >
+              {remedies}
             </span>
           )}
         </span>

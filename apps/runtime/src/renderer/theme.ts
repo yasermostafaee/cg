@@ -2216,7 +2216,22 @@ export const cssVars = {
    */
   '--r-modal-w-import': `min(${String(LIBRARY_PX.importW)}px, calc(100vw - ${String(LIBRARY_PX.importInset)}px))`,
   '--r-modal-w-fixed': `min(${String(STATION_SETUP_PX.frameW)}px, calc(100vw - ${String(STATION_SETUP_PX.frameInset)}px))`,
-  '--r-modal-h-fixed': `min(${String(STATION_SETUP_PX.frameH)}px, calc(100vh - ${String(STATION_SETUP_PX.frameInset)}px))`,
+  /**
+   * 🔴 `MODAL-CHROME-10` §4 — **THE FRAMED HEIGHT, AND IT IS ONE DECISION FOR THREE DIALOGS.**
+   *
+   * Station setup measured it (`.settings{height:min(810px,calc(100dvh - 64px))}`, and the
+   * frame holds on all five panes with the 536 clamp at 1280 x 600). The template picker and
+   * the audit log now take the same discipline — a declared frame, an inner scroll region —
+   * because they have the same defect Station setup had: their content SWITCHES under the
+   * operator (a filter, a search) and the frame moved with it.
+   *
+   * ⚠ **ONE TOKEN, NOT TWO WITH THE SAME VALUE.** `--r-modal-h-fixed` is an ALIAS of this and
+   * not a copy of the expression: two spellings of one rule is how the three frames come to
+   * disagree the day someone retunes one of them. `--r-modal-h-fixed` keeps its name because
+   * nine files pin Station setup by it, and the value it resolves to is unchanged.
+   */
+  '--r-modal-h-frame': `min(${String(STATION_SETUP_PX.frameH)}px, calc(100vh - ${String(STATION_SETUP_PX.frameInset)}px))`,
+  '--r-modal-h-fixed': 'var(--r-modal-h-frame)',
   /**
    * The fixed frame's HEAD and FOOT paddings — Phase 7, from the reference as rendered
    * (`.settings-head{min-height:90px;padding:21px 28px}`, `.panel-foot{padding:15px 32px}`).
@@ -3129,6 +3144,31 @@ export const cssVars = {
   '--r-setup-danger-line': '#684044',
   /** `.btn.danger:hover{background:#482a2e}` — the outline FILLS on intent, never at rest. */
   '--r-setup-danger-hover-bg': '#482a2e',
+  /**
+   * 🔴 `MODAL-CHROME-10` §3 — **THE CONSOLE CONFIRM'S DESTRUCTIVE PRIMARY, IN THIS FAMILY AT
+   * FILL WEIGHT. A REVERSAL, 2026-09-13, by the owner** — see the annotation in
+   * `controls.css` beside the rule that used to say the two treatments must not be
+   * harmonised.
+   *
+   * ⚠ **THE FAMILY, NOT THE ROW BUTTON'S TREATMENT.** Station setup's delete ROWS are quiet
+   * OUTLINED controls (`--r-setup-danger-bg` behind `--r-setup-danger-line`); a confirm
+   * dialog's commit button is not quiet, and adopting the outline would have made the
+   * committing control the faintest thing in the dialog. So the hues are the family's own and
+   * the WEIGHT is a primary's:
+   *
+   *   - the ground is the family's own EDGE colour promoted to a fill (`#684044`);
+   *   - the hover is that ground lifted by the LIFT THE FAMILY ITSELF DECLARES —
+   *     `#352224` to `#482a2e` is +19/+8/+10, and the same step on `#684044` is `#7b484e`,
+   *     so the lift is derived rather than picked;
+   *   - the ink is `--r-ink-on-fill`, like every other FILLED control here.
+   *
+   * ⚠ Measured on ITS OWN GROUND, which is the only ground a ratio means anything on:
+   * white on `#684044` is **8.73:1** and on `#7b484e` is **7.29:1**, both above the 4.5 AA
+   * text floor. (The family's own ink, `#ffaaa7`, would be 4.81:1 on that same fill — it
+   * passes, and white is the safer half of a pair that must stay legible under pressure.)
+   */
+  '--r-danger-confirm-bg': '#684044',
+  '--r-danger-confirm-hover-bg': '#7b484e',
   /** `--amber`: the ink `.foot-message.warning`, `.notice` and `.tag.warn` all take. */
   /*
    * 🔴 RETIRED 2026-09-13 — `--r-setup-caution-ink` `#f5c879` WAS a decision, and the owner

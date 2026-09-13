@@ -179,6 +179,15 @@ export function EmptiedAirNotice({ notice }: Props): JSX.Element | null {
                 void (async () => {
                   const ok = await confirm({
                     title: `Put ${String(count)} ${rowWord} back on air?`,
+                    /*
+                      🔴 `MODAL-CHROME-10` ADDENDUM D §D3(a) — **THE ONE CONFIRM IN THIS APP THAT
+                      IS NOT DESTRUCTIVE.** `useConfirm` now shows the trash mark by default,
+                      because it exists to gate acts that remove something or take it off air.
+                      This one PUTS CONTENT BACK, so the mark would be a lie about the button
+                      beneath it. Opted out here, where the reason is visible, rather than by
+                      leaving the default weak enough to miss nine dialogs.
+                    */
+                    destructive: false,
                     body: `This re-takes ${count === 1 ? 'it' : 'them'} and puts ${count === 1 ? 'it' : 'them'} on air now.`,
                     confirmLabel: 'Put back on air',
                     tone: 'play',

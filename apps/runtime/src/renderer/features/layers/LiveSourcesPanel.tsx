@@ -6,6 +6,7 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { isContextMenuKey } from '../../ui/useContextMenu.js';
+import { IsolatedName } from '../../ui/OperatorNames.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { BRIDGE_DOWN_REASON, casparRefusalReason } from '../../ui/reachWording.js';
@@ -592,7 +593,10 @@ export function LiveSourcesPanel({
                       title={`Open the row that owns live layer ${row.coordinate} and its Inspector`}
                       aria-label={`Open the row that owns live layer ${row.coordinate}`}
                     >
-                      <bdi className="cg-plate-owner-name">{row.ownerLabel}</bdi>
+                      {/* ADDENDUM B — the box is the button's own LTR chrome; only the
+                          characters are isolated. As a blockified `<bdi>` this cell resolved
+                          RTL and took its overflow/ellipsis side with it. */}
+                      <IsolatedName className="cg-plate-owner-name">{row.ownerLabel}</IsolatedName>
                     </Button>
                   </>
                 ) : (

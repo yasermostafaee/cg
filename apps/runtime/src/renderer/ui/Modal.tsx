@@ -117,6 +117,29 @@ const styles = {
      */
     maxHeight: '88vh',
     minHeight: 0,
+    /*
+      🔴 `MODAL-CHROME-10` §2(b) — **THE ROUNDED FRAME CLIPS ITS CHILDREN.**
+
+      A rounded box does not clip by default, so every child that paints a ground of its own
+      — the head band, the footer band, Station setup's full-bleed rail — painted its own
+      SQUARE corner over the frame's arc and the dialog read as a rectangle with four small
+      notches. Measured in Chromium at 1400 x 900 by hit-testing 2 px in from each corner
+      (inside the frame's box, outside its radius): the picker, the import dialog and the
+      audit log returned the head band at the top and `.cg-modal-footer` at the bottom, and
+      Station setup returned `.cg-rail` bottom-left and the footer bottom-right. Four
+      modals, one cause.
+
+      🔴 **IT IS FIXED AT THE CONTAINER, NOT ON EACH CHILD.** Rounding the bands instead would
+      need a different radius per corner per band, would have to be redone for every new
+      band, and would still be wrong the moment a child is full-bleed on one edge only. One
+      declaration here is the whole family, including the ones not written yet.
+
+      ⚠ Nothing inside a dialog is allowed to overflow it after this. Native `<select>`
+      popups are unaffected (the browser paints them outside the page box); the body owns the
+      scrolling it already had (`styles.body` is `overflow-y: auto`). If a future popover
+      needs to escape the frame, it portals — it does not delete this line.
+    */
+    overflow: 'hidden' as const,
   },
   /**
    * 🔴 `STATION-CHROME-02` §2 — **THE FIXED FRAME.**
@@ -399,6 +422,38 @@ const styles = {
    * here for one reason: the primitive already sets that property inline.
    */
   dialogRecord: { background: cssVars['--r-setup-surface'] },
+  /**
+   * 🔴 `MODAL-CHROME-10` §4 — **THE FRAME IS FIXED AND THE CONTENT SCROLLS**, for the two
+   * dialogs whose content is a LIST the operator filters.
+   *
+   * ── WHAT WAS WRONG, MEASURED ────────────────────────────────────────────
+   *
+   * The picker and the audit log took their height from their content, so filtering RESIZED
+   * the frame under the operator's hand. Measured in Chromium at 1400 x 900: the picker was
+   * 792 tall with every template listed, 484.1 with `Graphics beds` selected and 457.3 with
+   * a search that matched nothing — a 335 px jump, on a surface whose whole job is filtering.
+   * The footer he is aiming at moved every time he typed.
+   *
+   * ── WHY THIS IS `fixed`'S DISCIPLINE AND NOT A SECOND ONE ────────────────
+   *
+   * `STATION-CHROME-02` already answered this question once, for Station setup: a declared
+   * height, an inner scroll region and a viewport clamp, and `station-setup-frame.spec.ts`
+   * holds it on all five panes. The SAME height expression is reused rather than a second
+   * number invented — `--r-modal-h-frame`, which `--r-modal-h-fixed` is now an alias of, so
+   * the three framed dialogs cannot drift apart. The clamp is what makes it safe on a short
+   * screen: `min(810px, 100vh - 64px)` is 536 at 1280 x 600, exactly as Station setup is.
+   *
+   * ⚠ **A SHORT LIST MUST NOT STRETCH TO FILL IT** — the same warning `dialogFixed` carries.
+   * The empty space under two rows is correct; growing the list to swallow it would put the
+   * footer back where the content decides.
+   *
+   * ⚠ This is a HEIGHT only. Both dialogs keep their own widths (`--r-modal-w-library`,
+   * `--r-modal-w-ledger`), which are the reference's and are not this item's subject.
+   */
+  dialogFramed: {
+    height: cssVars['--r-modal-h-frame'],
+    maxHeight: cssVars['--r-modal-h-frame'],
+  },
   /*
     🔴 `SETTINGS-POLISH-04` §1 — AND THE GAP AND THE PADDING, for the same reason and by the
     same route.
@@ -477,6 +532,19 @@ const styles = {
  * EXACTLY as it is and makes the `Remove` confirms LOUDER than their old outline.
  * So no safety signal weakens in either direction, which is the tie-breaker.
  *
+ * 🔴🔴 **AMENDED 2026-09-13 BY THE OWNER (`MODAL-CHROME-10` §3) — THE HUE IS REVERSED AND
+ * THE ARGUMENT IS NOT.** The console confirm's destructive button is now RED, harmonised with
+ * Station setup's deletes. This table is deliberately UNCHANGED: `destructive` still resolves
+ * to `caution-strong`, and the reversal is one `[data-modal-layer="base"]` rule in
+ * `controls.css` — which is where the sub-dialog's own red already lives, so both weights of
+ * the family sit at the same door and the annotation of the superseded "do not harmonise them"
+ * is beside them.
+ *
+ * ⚠ **THE PARAGRAPH ABOVE STILL DECIDES THE WEIGHT.** "Picking `danger` would have made
+ * `Clear all` quieter" is exactly why the reversal takes the red FAMILY at a primary's fill
+ * weight and not the row buttons' outline. The colour changed; the rule that no safety signal
+ * may weaken did not.
+ *
  * `cancel` is `neutral` and never `ghost`: neutral must not mean INVISIBLE. A
  * ghost has no fill and no border and reads as a line of static text — the picker's
  * Cancel was one, and an operator could not tell it was pressable.
@@ -548,6 +616,12 @@ export interface ModalMessage {
   text: string;
   /** The specifics, when there are any — the bridge's own message, which names the layer. */
   detail?: string;
+  /**
+   * 🔴 `MODAL-CHROME-10` ADDENDUM C §C4(e) — the CONTROLS that resolve this message, seated
+   * inside it. See `Notice`'s `remedies` for why a control slot does not reopen §3's "the
+   * message is DATA" decision: §3 is about the SENTENCE, which is still a string here.
+   */
+  remedies?: ReactNode;
 }
 
 interface ModalProps {
@@ -719,6 +793,12 @@ export function Modal({
   /** `STATION-CHROME-02` §2 — one read of the frame decision, four places apply it. */
   const fixed = size === 'fixed';
   /*
+    `MODAL-CHROME-10` §4 — the two LIST dialogs take the fixed frame's height discipline. Read
+    once, here, so the style and any future consumer cannot come to disagree about which
+    sizes are framed.
+  */
+  const framed = size === 'library' || size === 'ledger';
+  /*
    * `MONITORS-01` audit row 74 — the `fixed` frame takes the drawing's own 19 px / 650 for
    * its title; every other dialog keeps the one shared treatment. Composed here rather than
    * at the two `<h2>` sites so the subtitle and no-subtitle branches cannot drift apart.
@@ -797,6 +877,7 @@ export function Modal({
         style={{
           ...styles.dialog,
           ...(fixed ? styles.dialogFixed : {}),
+          ...(framed ? styles.dialogFramed : {}),
           ...(size === 'record' ? styles.dialogRecord : {}),
           width: WIDTHS[size],
         }}
@@ -905,6 +986,7 @@ export function Modal({
                     noticeRole={m.role}
                     text={m.text}
                     {...(m.detail !== undefined ? { detail: m.detail } : {})}
+                    {...(m.remedies !== undefined ? { remedies: m.remedies } : {})}
                   />
                 ))}
               </div>
