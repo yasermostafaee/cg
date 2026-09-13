@@ -198,6 +198,43 @@ Persian / RTL is a core requirement.
     **passed**. Do not add the first one — and do not "fix" a vacuous assertion by weakening
     it to something jsdom can answer, which is the same defect with a fresh coat.
 
+## Cadence — classify every item before you start
+
+🔴 **SAY IN ONE LINE WHICH LANE EACH ITEM IS IN, before touching it.** The lane decides how often
+you gate and push, and nothing else.
+
+- **FAST LANE — visual only.** CSS, tokens, spacing, icons, copy inside a component, layout,
+  hover and focus treatment. Anything whose whole effect is what the screen looks like.
+- **FULL LANE.** The path to air · the wire/AMCP · an IPC channel schema · a persisted key · a
+  refusal CONDITION · shared config (`@cg/ui`, `CLAUDE.md`, `turbo.json`) · or a predicate
+  that decides what an operator can see or do.
+- 🔴 **If the lane is unclear it is FULL LANE.** Say so and carry on.
+
+**FAST LANE cadence — BATCH.** Do every fast-lane item in hand, committing per item as you go,
+running only the fast checks for what you touched (typecheck, lint, the touched package's dom
+specs). **ONE full gate at the end of the batch, then ONE push.** If the batch gate is red,
+bisect your own small commits rather than re-running the gate.
+
+**FULL LANE cadence — unchanged.** Per item: its own commit, its own full green gate, its own
+step-level e2e discharge READ before the next item starts.
+
+🔴 **NEVER BLOCK ON CI, in either lane.** CI is the record, not the gate. Push, keep working,
+read the step-level result when it lands and report it with the next batch.
+
+🔴 **If a fast-lane batch turns out to contain a full-lane change once you are in the code, stop
+batching, split it out, and say so.** That is the common case, not the rare one: a "just the
+colour" item that reaches a predicate is exactly how the lane is misread.
+
+⚠ **WHAT NEVER RELAXES.** The lane changes the CADENCE, never the floor:
+
+- no merge to `main`, and nothing handed over as a deliverable, without a **step-level e2e
+  discharge on that commit**;
+- `dev` is never left red — revert the batch and say why;
+- 🔴🔴 `silenceAllLivePlates` **STAYS UNSCOPED**;
+- refusal CONDITIONS do not change;
+- no wire, schema or persisted-key change rides a fast-lane batch;
+- a guard is never deleted or loosened to make a batch pass.
+
 ## Where features go
 
 | Feature kind                                    | Location                                                                                                                                                                                                                                                                                                                           |
