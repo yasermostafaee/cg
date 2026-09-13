@@ -5563,3 +5563,21 @@ Measured in Chromium at 1400 × 900 with four plates: the dialog is **860 × 790
 not hold. The dialog is at its height CAP rather than padded, so the "dead space below three
 rows" is not reproducible here either — reported rather than changed, because changing a
 frame on an unreproducible reading is how a correct surface gets broken.
+
+### 31.4 D9.4 — the CAPS claim is FALSIFIED; sentence case is the decision
+
+🔴 **Settled 2026-09-13, so nobody re-opens it from the same screenshot.** DELTA 7 §4(d)
+stated that the reference sets the audio states in CAPS — `AUDIBLE`, `SILENT`. It does not.
+Measured on `07-live-plates.html` in Chromium at 1280 × 800, `.plate-audio` renders
+**`Audible`**, **`Silent`** and **`Hidden by look`** — sentence case, `text-transform: none`.
+
+The owner's ruling: the CAPS was an assertion read off a screenshot, the measurement wins,
+and **ours is not changed**. Our vocabulary is deliberately shared across four surfaces (the
+plates table, the row summary chip, the audio dialog and the PVW overlay) so they cannot come
+to disagree; recasing it is a change to operator copy on all four, and it is not worth a
+string sweep for cosmetic parity — least of all with an instrument that has now
+under-reported four times on this tree (§27.2.2, and the notation miss recorded in
+`CLAUDE.md` beside golden rule 9).
+
+⚠ So the two differ ON PURPOSE. If a later session finds our CAPS against the drawing’s
+sentence case, this is the decision it is looking at, not a defect.

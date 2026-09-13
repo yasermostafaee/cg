@@ -2825,6 +2825,16 @@ leave the dev host. Nothing was sent to `192.168.21.114`.
 
 ## [ ] P-044 — `git add -A` commits whatever else changed the tree: a hand edit nobody reviewed shipped inside `57ca77d3` ⟨priority: high — the value that reached `dev` was chosen by neither the author nor the owner⟩ — FILED ONLY 2026-09-06 by `MODAL-CONTRACT-02`
 
+> ⚠ **AND `git add <dir>` IS `git add -A` WEARING A NARROWER PATH — added 2026-09-13, after
+> it happened a second time in different clothes.** A closing session ran
+> `git add docs openspec` to stage two documentation edits and swept in two of the owner's
+> UNTRACKED working files (`docs/design/station-setup-*.html`, 1 150 lines) that had been
+> sitting in the tree since before the session began. Untracked again in `d9336787`, both
+> still on disk unchanged — but the commit LOOKED reviewed, which is this item’s whole point.
+>
+> **The rule: stage by explicit FILE.** `git add <dir>` stages whatever else is in that
+> directory, and "whatever else" is exactly what neither the author nor the owner chose.
+
 **What:** `57ca77d3` shipped `rgb(35 30 38)` as the emptied-air marked-row wash. Nobody picked
 that value. The session that wrote the rule intended the notice strip's own
 `rgba(180, 83, 9, 0.12)` — its comment says so in as many words — and the owner was mid-tuning the
@@ -3110,3 +3120,47 @@ its own change, on a branch, never on `dev`.
 - **Number:** `P-046`, verified free at allocation with `git grep -n --untracked "P-046"` across
   the whole tree: the only hits were the registry's own "Next free" pointers, never an item.
   `P-047` returned nothing at all. The space stays contiguous (`P-001` … `P-046`).
+
+## [ ] P-047 — `live-look-reconcile` fails under gate load and passes 66/66 alone: a contention flake that reads as a product red ⟨priority: medium — it fails a landing gate on work that did not touch it⟩ — FILED 2026-09-13 by `CONSOLE-LOOK-06`
+
+**What.** During the overnight run a `pnpm gate` came back `92 successful, 93 total` on a
+commit that removed two files from tracking and changed nothing else. The failing task was
+`@cg/caspar-bridge:test`, and inside it exactly one case:
+
+```
+× B-161 neighbour 2 — a REHEARSING row with nothing seated: UPDATE reaches NO live layer
+  tests/live-look-reconcile.integration.test.ts
+```
+
+Re-run ALONE immediately afterwards: `66 passed (66)`, 24.2 s. Re-run as a full `pnpm gate`:
+`93 successful, 93 total`. **Nothing was changed between the red and the two greens.**
+
+**Why it is filed rather than shrugged at.** This is the `B-098` class — a timing-sensitive
+integration suite co-scheduled with the rest of the fan-out — and `bounded-turbo-cli` caps the
+width precisely to keep it rare, not to make it impossible. A flake here is expensive out of
+proportion to its rarity: it reds a LANDING gate, on a diff that cannot have caused it, and
+the honest response (re-run, confirm, push) costs four minutes and looks like ignoring a red.
+
+🔴 **Do NOT answer this with a longer timeout.** `B-073` already did that and `B-098` is that
+bound blown in turn. The question worth asking is what in this file is timing-sensitive at
+all — it is an integration suite driving a reconciler, and if a case there depends on wall
+clock rather than on an awaited settle, that dependency is the defect.
+
+**Acceptance.**
+
+- The suite SHALL NOT depend on wall-clock timing for its verdicts; every wait SHALL be on an
+  observable settle.
+- WHEN the gate runs it under full fan-out THEN the suite SHALL produce the same verdict it
+  produces alone.
+
+- **Cross-refs:** [[B-098]] (the load-flake class this belongs to), [[B-073]] (the longer
+  timeout that did not work), [[P-034]] (the bound that keeps it rare).
+- **Prefix class:** `P-`, platform — the dev loop and its gate.
+- **Number:** `P-047`, verified free at allocation with
+  `git grep -n --untracked "P-047"` across the whole tree: the only hit was `P-046`s own
+  allocation note recording it as free, never an item. The space stays contiguous
+  (`P-001` … `P-047`).
+
+⚠ `P-046`s allocation note still reads "`P-047` returned nothing at all". That is a DATED
+statement about the moment `P-046` was allocated and it was true then, so it is left standing
+rather than rewritten — the same rule this session applied to `B-168`.

@@ -10,42 +10,37 @@ how it was seen, and a green gate is never the evidence (golden rule 12).
 
 ## 1. Status of the list
 
-| #   | item                            | state                    | commit     |
-| --- | ------------------------------- | ------------------------ | ---------- |
-| 0a  | red correction into §29.2       | **landed**               | `a0c4abf1` |
-| 0b  | §B4 reconciliation              | **PARKED, deliberately** | —          |
-| 1   | DELTA 11 — green selected look  | **landed**               | `a0c4abf1` |
-| 2   | DELTA 9 — PENDING doctrine + §2 | **landed**               | `cdb3529f` |
-| 3   | this handover                   | **landed**               | —          |
-| 4   | DELTA 7 — Live plates tab       | **landed**               | `d202afd6` |
-| 5   | DELTA 8 — per-action toasts     | **landed (audio half)**  | `c06b9d4b` |
-| 6   | D8b / D9.1–9.9 — audio modal    | **7 of 9 already done**  | docs only  |
-| 7   | D7 — channel combobox           | **NOT STARTED** — §5     | —          |
+| #   | item                            | state                                 | commit            |
+| --- | ------------------------------- | ------------------------------------- | ----------------- |
+| 0a  | red correction into §29.2       | **landed**                            | `a0c4abf1`        |
+| 0b  | §B4 reconciliation              | **PARKED, deliberately**              | —                 |
+| 1   | DELTA 11 — green selected look  | **landed**                            | `a0c4abf1`        |
+| 2   | DELTA 9 — PENDING doctrine + §2 | **landed**                            | `cdb3529f`        |
+| 3   | this handover                   | **landed**                            | —                 |
+| 4   | DELTA 7 — Live plates tab       | **landed**                            | `d202afd6`        |
+| 5   | DELTA 8 — per-action toasts     | **landed (audio half)**               | `c06b9d4b`        |
+| 6   | D8b / D9.1–9.9 — audio modal    | **7 of 9 already done**               | docs only         |
+| 7   | D7 — channel combobox           | **superseded** by `CHANNEL-PICKER-09` | —                 |
+| 8   | closing order 1–4               | **landed**                            | `148fda82` + docs |
 
 ---
 
 ## 2. 🔴 Open questions for the owner — nothing below was guessed
 
-### 2.1 §B4 — which DRAWING governs the notice? (PARKED by the work order)
+### 2.1 §B4 — SETTLED 2026-09-13: the middle option
 
-The measurement that settles the framing, taken in Chromium at 1280 × 800 on
-`04-playout-layers.html` by mounting each class and reading `getComputedStyle`:
+**Each surface keeps its own approved geometry.** Station setup's nine pinned files are
+untouched and `SETTINGS-MATCH-02`'s sign-off stands. What unified is the INK.
 
-| class           | pad         | radius | ground          | ink                |
-| --------------- | ----------- | ------ | --------------- | ------------------ |
-| `.notice`       | `13px 15px` | 8      | `rgb(23 39 54)` | `rgb(190 214 229)` |
-| `.notice.warn`  | `13px 15px` | 8      | `rgb(53 45 30)` | `rgb(243 205 136)` |
-| `.notice.error` | `13px 15px` | 8      | `rgb(58 36 42)` | `rgb(255 170 167)` |
+⚠ **It was a real decision, not drift, and the owner overruled it knowingly:**
+`--r-setup-caution-ink` `#f5c879` came from `SETTINGS-POLISH-04` §3 — the settings drawing's
+own `--amber`. Retired in favour of `--r-caution-text` `rgb(243 205 136)`, which is already
+role-named, is the console drawing's ink, and is the more legible of the two on **both**
+grounds: **8.99:1** on `#352d1e` and **10.19:1** on `#29241c` (the retired value read 8.68 and
+9.84). The contrast guard now carries the setup ground as a seventh class.
 
-⭐ **`.notice.warn` IS our `Notice` refusal byte for byte.** The console banner is the drawing,
-not a fourth spelling. The outlier is `SetupNotice` (`rgb(245 200 121)` on `rgb(41 36 28)`,
-pad `15px 17px`, radius 10), whose geometry traces to the **Station setup** drawing — a
-different approved design, signed off by `SETTINGS-MATCH-02`.
-
-**The one-word answer needed:** does the console drawing govern Station setup's notice too
-(pad 15→13, radius 10→8, ground `#29241c`→`#352d1e`, across nine pinned files), or do we merge
-the COMPONENT and keep two measured skins? The component merge — moving `SetupNotice`'s icon
-and bold-title-over-body onto `Notice` — is uncontroversial either way.
+`Notice` gained `icon` and `title` as OPTIONAL props, both defaulting to absent, so
+`SetupNotice`'s capability can move later without its appearance moving now.
 
 ### 2.2 `S.14` — the focus ring is the LEGACY sky
 
@@ -179,17 +174,36 @@ rendered value; never trust document order in that file.**
 (`StackItemStateSchema.plateVolumes`) and the bridge's restore re-applies it, with a comment
 naming that exact failure — _"a dropped volume shows the right picture in silence"_.
 
-## 8. 🔴 NOT STARTED — D7, the channel combobox
+## 8. 🔴 THE NEXT SESSION'S ITEM — `CHANNEL-PICKER-09`
 
-The establish answers are banked in §5 above, so the next session measures nothing twice. What
-stopped it was the hour rather than a question: the swap is not only a control change —
-`ChannelScope` renders a `TabPanel` whose `aria-labelledby` points at a TAB that a combobox
-would delete, so the panel's labelling has to move with it or the surface gains an a11y defect.
-That is a structural change I was not willing to land unattended at the end of a long run.
+D7 is superseded by a standalone prompt, **`CHANNEL-PICKER-09`**, written for a fresh session.
+Everything §5 above banked still applies and must not be re-derived. Two things that prompt adds
+and this session did NOT do:
 
-⭐ It stays a UI SHAPE when it lands: `R-062` still records the three real gaps (five
-`z.void()` bulk verbs, no discovery call, the bank as the only channel authority) and none of
-them is touched by giving the picker a different shape.
+- **A channel NAME may not exist.** Before building, find out whether `channelSettings` carries
+  one. If it does, render `CH <id> · <name>` with the name in a `<bdi>`; if it does not, render
+  the id alone and say so — **inventing a name field is a schema change and is out of scope.**
+- **Look across all NINE reference pages** for one that draws the channel scope as a SELECT
+  rather than a tablist. The measurement banked in §5 read one file. If such a page exists it
+  changes what "the reference does" here.
+
+⚠ And the reason this was not landed unattended still stands: a combobox DELETES the tab that
+`ChannelScope`'s `TabPanel` takes its accessible name from. The panel must still be named
+afterwards — a panel with no accessible name is a regression even though nothing looks
+different.
+
+## 9. Filed this session
+
+- **`P-047`** — `live-look-reconcile` fails under gate load and passes **66/66** alone. The
+  `B-098` class. Filed with its acceptance; **not** answered with a longer timeout.
+- **`P-044`** gained a second note: `git add <dir>` **is** `git add -A` wearing a narrower
+  path. Stage by explicit file.
+- **`B-168` is ANNOTATED, not rewritten** — the owner reversed option (b) on 2026-09-13. A look
+  press will DECLARE an intent; nothing is built for it, and it gets `LOOK-INTENT-08` in a fresh
+  session. ⚠ The premise that raised it was wrong: the `PENDING` screenshot was the REFERENCE,
+  ours says `TAKING` / `UNCONFIRMED`, and our `pending` is a confirmation gap. `R-063` stands.
+- **D9.4's CAPS claim is FALSIFIED** (`design.md` §31.4). The reference is sentence case; ours
+  keeps CAPS deliberately, because the vocabulary is shared across four surfaces.
 
 ## 9. Reverted commits
 

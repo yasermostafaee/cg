@@ -6071,6 +6071,29 @@ plate. Assert the plate's rendered rect via `layerRenderedRect()`, not just `lay
 
 ## [~] B-168 — the LOOK PICKER does not SAY it commits immediately, on a surface where everything beside it waits for UPDATE ⟨priority: medium — the operator cannot tell which control has already changed air⟩ — RE-SCOPED and DECIDED 2026-08-25 (owner: option b); shipped `2b91f13f`. Linux e2e DISCHARGED: https://github.com/yasermostafaee/cg/actions/runs/32834755257 (`e2e` job `success`, step RAN)
 
+> 🔴🔴 **REVERSED BY THE OWNER, 2026-09-13 — option (b) IS SUPERSEDED. This record is
+> ANNOTATED, not rewritten (rule 14): a dated decision keeps its text, and a reversal must be
+> published as loudly as the original.**
+>
+> **What (b) was:** the look pick STAYS IMMEDIATE — not staged, `UPDATE` not involved, and the
+> control says so with `· NOW`. That is what shipped in `2b91f13f` and what the code does
+> today.
+>
+> **What replaces it:** the reference’s model — a look press **DECLARES an intent**, and the
+> change is applied afterwards. Nothing is built for this yet; it gets its own establish-first
+> prompt, **`LOOK-INTENT-08`**, in a fresh session, because it is behaviour on the path to air
+> and it reverses a published decision.
+>
+> ⚠ **AND THE PREMISE THAT RAISED THE REVERSAL WAS WRONG, which is worth more than the
+> reversal itself.** The `PENDING` screenshot behind it was the **REFERENCE**, not our product:
+> a tree-wide grep finds no `PENDING` anywhere operator-facing in ours, and our amber-clock
+> words are **`TAKING`** and **`UNCONFIRMED`** (`airStateVisual`). Our `pending` is computed as
+> `!isTerminalStatus(rec.intentStatus) && !isConfirmed(rec)` — **a CONFIRMATION gap, not a
+> staging gap.** So the contradiction that prompted this was never in our build.
+>
+> `R-063` stands exactly as landed — it is still true of the code today — but it is no longer
+> the end of the question. See `design.md` §30 and the handover of 2026-09-13.
+
 <!--
   🔴 THE HEADING WAS RE-SCOPED IN PLACE ON 2026-08-25, AND THE OLD ONE IS QUOTED HERE BECAUSE
   DELETING IT WOULD HIDE THE CORRECTION.
