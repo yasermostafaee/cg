@@ -21,6 +21,7 @@ import { CollapseSection } from './CollapseSection.js';
 import { NumberField, SelectField, TextField } from './controls.js';
 import * as s from './InspectorPanel.css.js';
 import * as cls from './ArrangementsSection.css.js';
+import { Tag } from '../../ui/Tag.js';
 
 /**
  * ⭐ **`multibox-layout-switch` C2 (`tasks.md` 5.3 / 5.4) — the ARRANGEMENTS section.**
@@ -172,7 +173,7 @@ function ArrangementRow({
           title={active ? 'Stop showing this arrangement' : 'Show this arrangement on the canvas'}
         >
           {/* The count is read off the cells every render — the two cannot drift. */}
-          <span className={cls.badge}>{count}-box</span>
+          <Tag className={cls.badge}>{count}-box</Tag>
           <span className={cls.name}>{arrangement.name}</span>
         </Button>
         <Button

@@ -4,6 +4,7 @@ import { STATION_SETUP_PX } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
 import { contractTag, sectionSpec, type SectionCommit } from './sections.js';
 import type { StationSetupSection } from './sections.js';
+import { Tag } from '../../ui/Tag.js';
 
 /**
  * `SETTINGS-MATCH-02` — the contract tag's glyph, which the reference draws on every one of
@@ -97,10 +98,10 @@ export function SetupSection({
           <p className="cg-setup-description">{spec.legend}</p>
           {summary}
         </div>
-        <span className="cg-setup-tag" data-section-commit={spec.commit}>
+        <Tag className="cg-setup-tag" data-section-commit={spec.commit}>
           <Icon icon={CONTRACT_ICON[spec.commit]} size={STATION_SETUP_PX.tagIcon} />
           {contractTag(spec.commit)}
-        </span>
+        </Tag>
       </div>
       {helper}
       {notice}

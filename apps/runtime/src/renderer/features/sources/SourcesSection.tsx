@@ -22,6 +22,7 @@ import type { ModalMessage } from '../../ui/Modal.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { useConfirm } from '../../ui/useDialog.js';
+import { Tag } from '../../ui/Tag.js';
 import {
   commitSourceCatalog,
   currentSourceAssignments,
@@ -436,7 +437,7 @@ export function SourcesSection({
             saves as you go and this does not. The footer already says so in words; the tag
             says it where the control is.
           */}
-          <span className="cg-setup-card-tag">Apply separately</span>
+          <Tag className="cg-setup-card-tag">Apply separately</Tag>
         </div>
         <div className="cg-card__body">
           <p className="cg-setup-lede">

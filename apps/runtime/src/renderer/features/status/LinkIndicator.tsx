@@ -2,6 +2,7 @@ import { useLink } from '../../hooks/useLink.js';
 import { colors, cssVars } from '../../theme.js';
 import type { BridgeLinkStatus } from '../../../shared/runtime-bridge.js';
 import type { CasparReach } from '../../ui/reachWording.js';
+import { Tag } from '../../ui/Tag.js';
 
 interface Visual {
   color: string;
@@ -161,7 +162,7 @@ export function LinkIndicator({
   const status = useLink();
   const v = visual(status, reach);
   return (
-    <span className="cg-pill" role="status" aria-label="Bridge link" title={v.title}>
+    <Tag className="cg-pill" role="status" aria-label="Bridge link" title={v.title}>
       {/*
         THE DOT MAY CARRY A HUE THE LABEL MAY NOT (owner: «فقط دایره کنار bridge
         live … رو سبز کن»). A green WORD in the footer is what could be glanced at
@@ -185,6 +186,6 @@ export function LinkIndicator({
       */}
       <span style={{ color: v.dotColor ?? v.color }}>●</span>
       <span style={{ color: v.color }}>{v.text}</span>
-    </span>
+    </Tag>
   );
 }

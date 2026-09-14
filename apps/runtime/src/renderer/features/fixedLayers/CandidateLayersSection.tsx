@@ -29,6 +29,7 @@ import { REMOVE_ON_AIR_REASON } from '../layers/layerRowActions.js';
 import { useFixedBankState, useFixedSlotsState } from '../../hooks/useFixedLayers.js';
 import { useStack } from '../../hooks/useStack.js';
 import { useLink } from '../../hooks/useLink.js';
+import { Tag } from '../../ui/Tag.js';
 
 /**
  * R-021 stage 2b / R-028 — the candidate-layer bank's configuration: per-layer VISIBILITY
@@ -232,14 +233,14 @@ export function CandidateLayersSummary(): JSX.Element | null {
   if (bank === null) return null;
   return (
     <div className="cg-setup-summary" data-layer-summary="">
-      <span className="cg-setup-tag">Channel {String(bank.channel)}</span>
-      <span className="cg-setup-tag">
+      <Tag className="cg-setup-tag">Channel {String(bank.channel)}</Tag>
+      <Tag className="cg-setup-tag">
         Layers {String(bank.start)}–{String(fixedBankEnd(bank))}
-      </span>
-      <span className="cg-setup-tag">
+      </Tag>
+      <Tag className="cg-setup-tag">
         <Icon icon={Lock} size={STATION_SETUP_PX.tagIcon} />
         Fixed bank
-      </span>
+      </Tag>
     </div>
   );
 }

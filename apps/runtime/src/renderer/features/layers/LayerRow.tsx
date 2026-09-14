@@ -6,6 +6,7 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Volume2 } from 'lucide-react';
 import { Icon } from '../../ui/Icon.js';
+import { Tag } from '../../ui/Tag.js';
 import { ContextMenu } from '../../ui/ContextMenu.js';
 import { isContextMenuKey, useContextMenu } from '../../ui/useContextMenu.js';
 import { operatorRowName, type OperatorRowName } from '../../ui/operatorNaming.js';
@@ -992,7 +993,7 @@ export function LayerRow({
           (() => {
             const summary = audioSummary(seatedPlates);
             return summary === null ? null : (
-              <span
+              <Tag
                 /*
                   §3 — IT NOW CARRIES THE STATE COLOUR THE PILLS ALREADY USE, and the earlier
                   argument for muted-only is retired rather than overridden by taste: it said a
@@ -1013,7 +1014,7 @@ export function LayerRow({
                 aria-label={summary.detail}
               >
                 {summary.label}
-              </span>
+              </Tag>
             );
           })()}
       </span>

@@ -4,6 +4,7 @@ import type { Scene } from '@cg/shared-schema';
 import { flattenElements } from '@cg/shared-schema';
 import { Icon } from '../../ui/Icon.js';
 import * as s from './ErrorMarkOverlay.css.js';
+import { Tag } from '../../ui/Tag.js';
 
 /**
  * ⭐ **`D-157` — MARK THE BOX THAT IS BLOCKING THE EXPORT, on the canvas.**
@@ -112,9 +113,9 @@ export function ErrorMarkOverlay({
               rather than merely painted, and `title` so a sighted author gets it on hover
               without opening anything.
             */}
-            <span className={s.badge} role="img" aria-label={description} title={description}>
+            <Tag className={s.badge} role="img" aria-label={description} title={description}>
               <Icon icon={TriangleAlert} size={12} />
-            </span>
+            </Tag>
           </div>
         );
       })}

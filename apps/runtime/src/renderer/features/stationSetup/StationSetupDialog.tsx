@@ -52,6 +52,7 @@ import {
 } from './sections.js';
 import { SetupNotice, type SetupNoticeSpec } from './SetupNotice.js';
 import { SetupSection } from './SetupSection.js';
+import { Tag } from '../../ui/Tag.js';
 
 /**
  * `STATION-SETUP-02` / `STATION-CHROME-01` §2 — **ONE HOME FOR THE STATION'S SETTINGS, IN
@@ -1103,9 +1104,9 @@ export function StationSetupDialog({
                 */}
               <section className="cg-card" aria-label="Primary server">
                 <div className="cg-card__head">
-                  <span className="cg-setup-server-chip" aria-hidden="true">
+                  <Tag className="cg-setup-server-chip" aria-hidden="true">
                     A
-                  </span>
+                  </Tag>
                   <span className="cg-card__title">Primary server</span>
                 </div>
                 <div className="cg-card__body">
@@ -1115,9 +1116,9 @@ export function StationSetupDialog({
 
               <section className="cg-card" aria-label="Backup server">
                 <div className="cg-card__head">
-                  <span className="cg-setup-server-chip" aria-hidden="true">
+                  <Tag className="cg-setup-server-chip" aria-hidden="true">
                     B
-                  </span>
+                  </Tag>
                   <span className="cg-card__title">Backup server</span>
                   {/*
                       The reference's `.tag` on this head, and it says something TRUE that the
@@ -1130,7 +1131,7 @@ export function StationSetupDialog({
                       tag (`Read only` / `Apply together` / `Auto-save`) at the pane's head.
                       The reference draws both, at those two levels, for that reason.
                     */}
-                  <span className="cg-setup-card-tag">Optional</span>
+                  <Tag className="cg-setup-card-tag">Optional</Tag>
                   <span className="cg-card__spacer" />
                   {backupEnabled && (
                     <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>

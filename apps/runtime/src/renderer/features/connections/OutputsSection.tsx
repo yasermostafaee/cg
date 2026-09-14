@@ -25,6 +25,7 @@ import {
 import { STATION_SETUP_PX, colors } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
 import { creationWords, formatClock, missingWords, runningWords } from './outputWords.js';
+import { Tag } from '../../ui/Tag.js';
 
 /**
  * `B-223` — THE TECHNICAL SURFACE for the declared-versus-running output check.
@@ -233,9 +234,9 @@ function ChannelRows({
             : `last checked ${formatClock(check.observedAt)}; CasparCG is unreachable, so this cannot be re-checked`}
         </span>
         {check.declared !== null && (
-          <span className="cg-setup-tag" data-output-count="">
+          <Tag className="cg-setup-tag" data-output-count="">
             {`${String(running)} of ${String(rows.length)} running`}
-          </span>
+          </Tag>
         )}
       </div>
       {check.declared !== null && <OutputTable rows={rows} />}

@@ -11,6 +11,7 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { LinkIndicator } from './LinkIndicator.js';
+import { Tag } from '../../ui/Tag.js';
 
 /**
  * 🔴 `AUDIT-CLOSE-01` B1 — THIS BAR NO LONGER TAKES THE TWO DOORS, and the record of what they
@@ -315,9 +316,9 @@ export function StatusBar(): JSX.Element {
         <LinkIndicator reach={casparReach} />
         {/* Nothing has answered yet. While the link is down that is not "loading" — there
             is nobody to load from (B-080/B-081). */}
-        <span className="cg-pill" style={stale ? styles.stale : undefined}>
+        <Tag className="cg-pill" style={stale ? styles.stale : undefined}>
           {stale ? 'SERVER HEALTH UNKNOWN' : 'Loading…'}
-        </span>
+        </Tag>
       </footer>
     );
   }
@@ -398,15 +399,15 @@ export function StatusBar(): JSX.Element {
         // R-006 — in test mode there is no server to describe. The per-server pills used to
         // read "PRIMARY A HEALTHY" in green here, straight from the mock's seed, which is
         // the claim that convinced the operator a graphic was on air. Say the true thing.
-        <span className="cg-pill" aria-label="Server status">
+        <Tag className="cg-pill" aria-label="Server status">
           <span style={styles.failedHard}>
             <Icon icon={TriangleAlert} size={11} /> NO SERVER — SIMULATED
           </span>
-        </span>
+        </Tag>
       ) : (
         <>
           {/* B-081 — while `stale`, the whole pill mutes: the green ● dot is a claim too. */}
-          <span
+          <Tag
             className="cg-pill"
             {...(stale
               ? { title: staleTitle(health.primary.state) }
@@ -433,9 +434,9 @@ export function StatusBar(): JSX.Element {
               PRIMARY {health.primary.label}
             </span>{' '}
             <span style={primary.style}>{primary.text}</span>
-          </span>
+          </Tag>
           {health.backup !== undefined && backup !== null ? (
-            <span
+            <Tag
               className="cg-pill"
               {...(stale
                 ? { title: staleTitle(health.backup.state) }
@@ -458,11 +459,11 @@ export function StatusBar(): JSX.Element {
               <span style={healthDotStyle(backup)}>○</span>{' '}
               <span style={styles.backup}>BACKUP {health.backup.label}</span>{' '}
               <span style={backup.style}>{backup.text}</span>
-            </span>
+            </Tag>
           ) : (
-            <span className="cg-pill">
+            <Tag className="cg-pill">
               <span style={styles.backup}>○ NO BACKUP</span>
-            </span>
+            </Tag>
           )}
           {/* B-094 — a SEPARATE indicator, deliberately not a pill STATE.
               The pill's vocabulary mirrors the session state machine exactly, and
@@ -474,7 +475,7 @@ export function StatusBar(): JSX.Element {
               BOTH, where a pill state would be overwritten by DEGRADED at exactly
               the moment the operator most needs the explanation. */}
           {primaryDeaf && (
-            <span
+            <Tag
               className="cg-pill"
               title={noOscTitle(health.primary.label)}
               aria-label={`No OSC from server ${health.primary.label}`}
@@ -482,10 +483,10 @@ export function StatusBar(): JSX.Element {
               <span style={styles.noOsc}>
                 <Icon icon={TriangleAlert} size={11} /> NO OSC FROM {health.primary.label}
               </span>
-            </span>
+            </Tag>
           )}
           {backupDeaf && health.backup !== undefined && (
-            <span
+            <Tag
               className="cg-pill"
               title={noOscTitle(health.backup.label)}
               aria-label={`No OSC from server ${health.backup.label}`}
@@ -493,7 +494,7 @@ export function StatusBar(): JSX.Element {
               <span style={styles.noOsc}>
                 <Icon icon={TriangleAlert} size={11} /> NO OSC FROM {health.backup.label}
               </span>
-            </span>
+            </Tag>
           )}
           {/*
             🔴 R-058 — REACHABLE BUT PRODUCING NOTHING, beside its sibling and never instead
@@ -511,7 +512,7 @@ export function StatusBar(): JSX.Element {
             design.
           */}
           {primaryDead.length > 0 && (
-            <span
+            <Tag
               className="cg-pill"
               title={deadChannelTitle(health.primary.label, primaryDead)}
               aria-label={`Server ${health.primary.label} is not producing frames on ${
@@ -521,10 +522,10 @@ export function StatusBar(): JSX.Element {
               <span style={styles.noOsc}>
                 ⚠ {health.primary.label} NOT PRODUCING · CH {primaryDead.join(', ')}
               </span>
-            </span>
+            </Tag>
           )}
           {backupDead.length > 0 && health.backup !== undefined && (
-            <span
+            <Tag
               className="cg-pill"
               title={deadChannelTitle(health.backup.label, backupDead)}
               aria-label={`Server ${health.backup.label} is not producing frames on ${
@@ -534,10 +535,10 @@ export function StatusBar(): JSX.Element {
               <span style={styles.noOsc}>
                 ⚠ {health.backup.label} NOT PRODUCING · CH {backupDead.join(', ')}
               </span>
-            </span>
+            </Tag>
           )}
           {/* The strategy is CONFIG, not health — it does not go stale with the link. */}
-          <span className="cg-pill">{health.strategy}</span>
+          <Tag className="cg-pill">{health.strategy}</Tag>
         </>
       )}
       {/*

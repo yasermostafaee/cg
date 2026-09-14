@@ -34,6 +34,7 @@ import { LivePlatesSection } from './LivePlatesSection.js';
 import { LooksBindingsSection } from './LooksBindingsSection.js';
 import { appliedPlateSources } from './livePlates.js';
 import { PositionPicker } from './PositionPicker.js';
+import { Tag } from '../../ui/Tag.js';
 import {
   draftsVersion,
   effectiveValue,
@@ -298,7 +299,7 @@ function MetaChip({
   dotColor?: string;
 }): JSX.Element {
   return (
-    <span className="cg-meta-chip">
+    <Tag className="cg-meta-chip">
       {/*
         THE DOT CARRIES THE STATE'S OWN COLOUR — owner's call, and it supersedes
         the constant sky dot that stood here.
@@ -324,7 +325,7 @@ function MetaChip({
       )}
       {label !== undefined && <span className="cg-meta-chip__label">{label}</span>}
       <span className="cg-meta-chip__value">{value}</span>
-    </span>
+    </Tag>
   );
 }
 

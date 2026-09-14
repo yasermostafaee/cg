@@ -44,6 +44,7 @@ import {
   subscribeSources,
 } from '../sources/sourceStore.js';
 import { templateDisplayName } from '../library/templateName.js';
+import { Tag } from '../../ui/Tag.js';
 
 /**
  * R-021 stage 3 — the template picker, shaped like `useConfirm`: a
@@ -1625,20 +1626,20 @@ function PickerRow({
               warn badge with its own short words; the app's sentence, which carries the
               remedy, stays beneath (`cg-tpl-reason`).
             */}
-            {wrongBank && <span className="cg-tag cg-tag--warn">{REFUSAL[accepts].chip}</span>}
+            {wrongBank && <Tag className="cg-tag cg-tag--warn">{REFUSAL[accepts].chip}</Tag>}
             {/*
               D-137 / C-015 — said on the row, not hidden behind a hover.
               `data-live-sources` carries the state machine-readably so the
               E2E asserts the STATE rather than the wording.
             */}
             {carrier === 'unknown' ? (
-              <span
+              <Tag
                 className="cg-tag cg-tag--warn"
                 data-live-sources="unknown"
                 title={STALE_CARRIER_TITLE}
               >
                 {STALE_CARRIER_LABEL}
-              </span>
+              </Tag>
             ) : (
               <span hidden data-live-sources={carrier} />
             )}
@@ -1648,13 +1649,13 @@ function PickerRow({
               resolve; the ids are what the assignment surface lists.
             */}
             {needsSource.length > 0 && (
-              <span
+              <Tag
                 className="cg-tag cg-tag--warn"
                 data-plates-unassigned={needsSource.join(',')}
                 title={UNASSIGNED_TITLE}
               >
                 Needs a source: {needsSource.join(', ')}
-              </span>
+              </Tag>
             )}
           </span>
         </span>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AsyncButton } from '../../ui/AsyncButton.js';
+import { Tag } from '../../ui/Tag.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import {
   OFF_TITLE,
@@ -108,7 +109,7 @@ export function PlateAudioStrip({
 
   return (
     <div className="cg-plate-strip" data-plate-audio={row.plate}>
-      <span
+      <Tag
         className="cg-plate-pill"
         title={audio.pill.detail}
         /*
@@ -133,7 +134,7 @@ export function PlateAudioStrip({
         <span className="cg-plate-pill-label" style={{ color: audio.pill.tone }}>
           {audio.pill.label}
         </span>
-      </span>
+      </Tag>
       <span className="cg-plate-gain">
         <input
           id={inputId}

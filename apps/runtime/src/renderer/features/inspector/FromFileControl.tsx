@@ -16,6 +16,7 @@ import { openStationSetup } from '../stationSetup/stationSetupStore.js';
 import { splitDefaultFor } from './fieldTargetStore.js';
 import { type FromFileFieldKind } from './fromFileContent.js';
 import { reloadFromFile, stageFromFile } from './fromFileOps.js';
+import { Tag } from '../../ui/Tag.js';
 import {
   attachFileSource,
   detachFileSource,
@@ -176,7 +177,7 @@ export function FromFileControl({
             here is the same glyph as the item-delete buttons one row up, doing
             something else, and attaching it to the name is what stops the two
             being confusable. */}
-        <span className="cg-file-chip">
+        <Tag className="cg-file-chip">
           <span className="cg-file-chip__name" title={state.source.name}>
             {state.source.name}
           </span>
@@ -189,7 +190,7 @@ export function FromFileControl({
           >
             ×
           </button>
-        </span>
+        </Tag>
         {needsGrant ? (
           <AsyncButton
             variant="secondary"

@@ -9,6 +9,7 @@ import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
 import { IssuesPanel } from '../issues/IssuesPanel.js';
 import { Modal, ModalButton } from '../shell/Modal.js';
+import { Tag } from '../../ui/Tag.js';
 
 interface Props {
   scene: Scene | null;
@@ -46,20 +47,20 @@ export function StatusBar({ scene, issues }: Props): JSX.Element {
   return (
     <footer className={s.bar} aria-label="Status bar">
       {scene === null ? (
-        <span className={s.pill}>no project</span>
+        <Tag className={s.pill}>no project</Tag>
       ) : (
         <>
-          <span className={s.pill} title="Frame rate">
+          <Tag className={s.pill} title="Frame rate">
             {scene.frameRate} fps
-          </span>
-          <span className={s.pill} title="Duration">
+          </Tag>
+          <Tag className={s.pill} title="Duration">
             {totalFrames}f · {durationSecs}s
-          </span>
+          </Tag>
         </>
       )}
-      <span className={s.pill} title="Resolution">
+      <Tag className={s.pill} title="Resolution">
         {scene === null ? '0×0' : `${scene.resolution.width}×${scene.resolution.height}`}
-      </span>
+      </Tag>
       {issues.length > 0 && (
         <Button
           variant="bare"

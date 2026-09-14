@@ -101,6 +101,27 @@ select:focus-visible {
   box-shadow: 0 0 0 2px var(--cg-accent);
 }
 
+/*
+ * 🔴 `TAG-NOT-BUTTON-07` — THE TAG CONTRACT, ENFORCED.
+ *
+ * A tag states a fact; it is not an affordance. These two declarations are the part of that
+ * rule which can be enforced globally: the pointer stops promising an action, and nothing
+ * animates under it. See `tag.ts` for why the marker is an attribute and not a class.
+ *
+ * ⚠ DELIBERATELY NOT A PAINT RULE. No colour, no border, no box — each app keeps its own tag
+ * treatment, so adopting the marker moves NO pixel in either app. That is what lets this land
+ * in shared config without the Designer changing; it is also why this rule can never be the
+ * place someone reaches for to restyle a tag.
+ *
+ * ⚠ `transition: none` rather than a `:hover` reset, because a hover treatment cannot be
+ * cancelled generically — you can only decline to declare one. What this DOES guarantee is
+ * that a declared one cannot ease in, and the guard checks the rest on the rendered surface.
+ */
+[data-cg-tag] {
+  cursor: default;
+  transition: none;
+}
+
 /* Dark, unobtrusive scrollbars for the operator chrome. */
 * {
   scrollbar-width: thin;

@@ -1,6 +1,7 @@
 import type { StackItemStatus } from '@cg/shared-schema';
 import { airStateVisual, badgeTone } from '../theme.js';
 import { unverifiedTitle } from './airStateWording.js';
+import { Tag } from './Tag.js';
 
 /**
  * R-007 — the stack item status pill. Colors come from the `--r-*` badge-tone
@@ -67,15 +68,11 @@ export function StatusBadge({
   const title = status === 'unverified' ? unverifiedTitle(oscBlind, bridgeDown) : undefined;
 
   return (
-    <span
-      className={`cg-badge cg-badge--${shownTone}`}
-      aria-label={`status ${label}`}
-      title={title}
-    >
+    <Tag className={`cg-badge cg-badge--${shownTone}`} aria-label={`status ${label}`} title={title}>
       <span className="cg-badge__icon" aria-hidden="true">
         {visual.icon}
       </span>
       {label}
-    </span>
+    </Tag>
   );
 }
