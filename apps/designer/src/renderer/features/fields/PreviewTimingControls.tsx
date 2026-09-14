@@ -195,7 +195,10 @@ export function PreviewTimingControls({
 
       {hasContent && mode !== 'manual' && mode !== 'static' && (
         <div className={s.row}>
-          <span className={s.label}>hold</span>
+          {/* "hold source", not "hold" — the timed-hold INPUT below is also labelled `hold`, and
+              two adjacent rows reading `hold` state different things. Mirrors the composition
+              inspector, whose select is "Hold source" and whose input is a hold duration. */}
+          <span className={s.label}>hold source</span>
           <Tag
             className={t.fact}
             data-testid="preview-hold-source-fact"
