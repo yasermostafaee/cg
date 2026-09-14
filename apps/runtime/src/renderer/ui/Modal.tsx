@@ -379,6 +379,21 @@ const styles = {
     boxSizing: 'border-box' as const,
   },
   /**
+   * 🔴 `PLATES-AUDIO-11` DELTA §2 — **THE BODY TAKES THE SLACK, SO THE FOOTER SITS ON THE
+   * FRAME'S BOTTOM EDGE.**
+   *
+   * A declared height alone does not put the footer at the bottom. `styles.body` is
+   * `overflowY: auto` with `minHeight: 0` but no `flex`, so with fewer rows than the frame
+   * holds it is CONTENT-sized: the footer floats up under the last row and the frame's lower
+   * third is dead space. Giving the body the remaining track is what pins the band.
+   *
+   * ⚠ Applied only where a caller opted in with `frame="fixed"`, NOT to every framed size.
+   * `library` and `ledger` keep exactly the layout `MODAL-CHROME-10` §4 measured and
+   * `modal-frame-chrome.spec.ts` holds; changing their body's flex would be re-tuning two
+   * signed-off surfaces to fix a third.
+   */
+  bodyFlush: { flex: '1 1 auto' },
+  /**
    * The fixed frame's footer BAR — its own padding, a rule above it, and the raised
    * surface that makes it read as chrome rather than as the last row of the content.
    * §2's assertion measures its top edge: it must not move as the tab changes.
@@ -992,7 +1007,9 @@ export function Modal({
                   */
                   size === 'fixed' || size === 'library'
                     ? { ...styles.body, ...styles.bodyFixed }
-                    : styles.body
+                    : frame === 'fixed'
+                      ? { ...styles.body, ...styles.bodyFlush }
+                      : styles.body
                 }
                 className="cg-modal-body"
                 data-modal-body=""

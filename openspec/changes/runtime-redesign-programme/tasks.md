@@ -1459,6 +1459,26 @@ renders answers "is this handled?" with a yes.
       and with none; **536** tall at 1280 × 600. The defect it replaces, measured by ablation:
       687.6 → 497.6, the frame's top moving 95 px. The row's name moved to the head band and
       `.cg-audio-head` is sticky, both consequences of the body now scrolling. §34.5.
+- [x] PA.7 **THE DELTA (owner, 2026-09-14) §1–§3 — the state colours, the footer, the
+      paragraph.** `Audible` GREEN on its own role token `--r-audible-text`
+      `rgb(128, 228, 176)`; `Silent` / `Muted` unchanged neutral; `Hidden by look` and
+      `Not seated` AMBER `--r-caution-text`. Both surfaces, one object. Measured on both
+      grounds (they resolve alike today and are listed twice anyway): green **11.24:1**, amber
+      **11.46:1**, grey **6.31:1**, all clear of AA 4.5 with no ink adjusted. §29 amended in one
+      dated line; §34.3's refusal annotated as superseded rather than deleted. The modal's
+      footer sits on the frame's bottom edge (`styles.bodyFlush`, opted in by `frame="fixed"`
+      only). The tab's not-seated paragraph is gone; its one operative fact is on the state's
+      tooltip. §34.7.
+- [x] PA.8 **THE PLANT'S CORRECTIONS, same day — a table that keeps its columns.**
+      `Seated for <name>` → `<name> ›`; `Held — not in the current look` → `Held`, uncoloured;
+      `Hidden by this look` → `Hidden by look`; the held row's sentence off the table and onto
+      its `title`; and the `Plate / source` cell names the CONFIGURED SOURCE (`sdi`, not
+      `DECKLINK DEVICE 1`), resolved through `resolvePlateSourcesForLook` with the row's
+      published look, falling back to the producer and never to an invented name. An owner
+      FILTER was built and withdrawn the same day — only one multi-frame row can be live at a
+      time. §34.8.
+- [ ] PA.9 🔴 **Linux `gate:e2e` OWED AGAIN for PA.7/PA.8.** Both alter what renders. Write the
+      run URL here beside this box.
 - [x] PA.6 🔴 **Linux `gate:e2e` DISCHARGED.** This item alters what renders on two surfaces,
       so the Windows Playwright run (210 passed) was a reason to push and never a discharge.
       The authoritative run is

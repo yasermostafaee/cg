@@ -136,34 +136,42 @@ export interface PlateAudioPill {
  *
  * ── COLOUR, AND WHY EACH CANDIDATE WAS RULED IN OR OUT ──────────────────────────
  *
- *   - **GREEN is out absolutely.** It is the sacred ON AIR mark of the layer TABLE, and a
+ * ⚠ **THE FIRST THREE BULLETS ARE SUPERSEDED, AND THEY ARE KEPT BECAUSE THEY WERE REASONED.**
+ * The owner overruled `held` on 2026-09-13 and `audible` plus `Not seated` on 2026-09-14; the
+ * blocks beside each value carry the amendments. Read them as the arguments that were weighed,
+ * never as the current rule.
+ *
+ *   - ~~**GREEN is out absolutely.**~~ It is the sacred ON AIR mark of the layer TABLE, and a
  *     plate borrowing it would put a second, unrelated air claim on a different surface —
- *     the rule `liveLayerRows` already states for this very tab.
- *   - **AMBER is out for `held`**, which is the choice a reader will question. Amber means
+ *     the rule `liveLayerRows` already states for this very tab. **(Amended: §29 now lets
+ *     green mark audible audio on these two surfaces, on its own token.)**
+ *   - ~~**AMBER is out for `held`**~~, which is the choice a reader will question. Amber means
  *     ATTENTION here, and `held` is a NORMAL, CHOSEN disposition — the neighbouring module
  *     says so in as many words: *"`held` is a normal, chosen disposition and wears a WORD,
- *     not a hue."* Following that rule is what keeps the two surfaces agreeing.
- *   - **SKY for `audible`.** It is unused on this surface, it is not a state hue anywhere in
+ *     not a hue."* **(Amended: see `HELD_TONE`.)**
+ *   - ~~**SKY for `audible`.**~~ It is unused on this surface, it is not a state hue anywhere in
  *     the LIVE PLATES tab, and "this plate can be heard" is a positive statement rather than
- *     something to go and look at.
- *   - **MUTED GREY for `silent`**, because silence is the DEFAULT: every producer the bridge
- *     creates is created muted, so the common case should recede.
+ *     something to go and look at. **(Amended: it is the green now.)**
+ *   - **MUTED GREY for `silent`**, which is the one that did NOT move: silence is the DEFAULT —
+ *     every producer the bridge creates is created muted — so the common case recedes.
  *
- * ── 🔴 `PLATES-AUDIO-11` §3 — THE GREEN WAS ASKED FOR AND IT IS REFUSED, WITH EVIDENCE ──
+ * ── 🔴 THE GREEN IS ADOPTED — OWNER DECISION, 2026-09-14 (`PLATES-AUDIO-11` DELTA §1) ──
  *
- * The owner asked for the reference's green on `Audible`. Measured on `08-live-audio.html`
- * in Chromium at 1280 × 800, the reference paints that word `rgb(128, 228, 176)` — and the
- * falsification is what settles it: setting `row(6).air = false` flips the dialog's own badge
- * from `On air` to `Ready` and the word stays `rgb(128, 228, 176)`. The class is
- * `p.held ? 'held' : gain && p.seated ? 'audible' : ''`; it never consults air. Under
- * `design.md` §29 green means ON AIR and nothing else, so adopting it would have the console
- * promising air on a row that is merely loaded — the case §3 of that prompt told us to report
- * rather than copy.
+ * `PLATES-AUDIO-11` §3 measured the reference's green at `rgb(128, 228, 176)`, established by
+ * falsification that it is NOT conditioned on air (taking the reference's row off air leaves
+ * the word green), and on that basis declined it under `design.md` §29's *green = ON AIR and
+ * nothing else*. **The owner amended §29 rather than the measurement: green ALSO marks audio
+ * that is audible, on this tab and in the audio modal.** Recorded, not re-argued — see
+ * `design.md` §29 and §34.3.
  *
- * ⭐ And the two surfaces DO unify, on the reference's own value: its LIVE PLATES tab paints
- * `.plate-audio.audible` with `--blue` `#74cdf6`, which IS `colors.ready` here. The reference's
- * modal green is not even in its own `:root` (its mint is `#85e4b6`); its tab ink is. So the
- * blue below is the reference's measured ink for this word, not a divergence from it.
+ * The ink is `--r-audible-text`, a THIRD green with its own role name: `--r-onair` is the layer
+ * table's sacred air mark and `--r-ok-text` is the healthy mint, and pointing this at either
+ * would collapse a distinction the palette keeps on purpose.
+ *
+ * ⚠ **SKY (`colors.ready`) IS RETIRED FROM THIS WORD**, and that is the half a reader will
+ * check: `Audible` wore the reference's own TAB ink (`--blue #74cdf6`) until this amendment.
+ * Blue means DECLARED-not-on-air everywhere else in this console, so the two could not both
+ * stay — and the owner chose the green.
  *
  * ── 🔴 `PLATES-AUDIO-11` §3 — SENTENCE CASE, WHICH SUPERSEDES `design.md` §31.4's SECOND HALF ──
  *
@@ -175,7 +183,7 @@ export interface PlateAudioPill {
 const PILL: Record<'audible' | 'silent', PlateAudioPill> = {
   audible: {
     label: 'Audible',
-    tone: colors.ready,
+    tone: cssVars['--r-audible-text'],
     detail: 'This plate is raised, so its source can be heard on air.',
   },
   silent: {
@@ -197,14 +205,62 @@ const PILL: Record<'audible' | 'silent', PlateAudioPill> = {
  * the dialog's old _"audible on air"_, which on a READY row was a claim about air that nothing
  * on the channel backed — the A12 class (`design.md` §12.8).
  *
- * Muted, like SILENT: nothing is wrong, and nothing is on air.
+ * 🔴 **AMBER SINCE THE `PLATES-AUDIO-11` DELTA (owner, 2026-09-14) — the same treatment as
+ * `hidden by look`, and the pairing is the point.** It was muted grey, on the argument that
+ * nothing is wrong. Both states now share the caution ink because they share the operator's
+ * question: *why can I not hear this box?* Grey answered that question by receding.
+ *
+ * ⚠ The DETAIL is the one fact that stops a fader being misleading — the volume is recorded
+ * now and applied when a look seats this frame — and on the LIVE PLATES tab it is the ONLY
+ * place that fact is said (the DELTA's §3 removed the row's paragraph). So it is not
+ * decoration: shorten it and an operator who moves that fader can believe something was sent.
  */
 export const UNSEATED_PILL: PlateAudioPill = {
   label: 'Not seated',
-  tone: colors.textMuted,
+  tone: cssVars['--r-caution-text'],
   detail:
-    'Nothing is on a layer for this plate yet. The volume is recorded now and applied when ' +
-    'this row’s next take seats the plate — nothing is sent until then.',
+    'Nothing is on a layer for this plate yet. The volume is recorded now and applied when a ' +
+    'look that uses this frame seats it — nothing is sent until then.',
+};
+
+/**
+ * 🔴 **`B-247` — A FRAME THAT *WAS* SEATED AND WAS TORN DOWN, which until now wore
+ * {@link UNSEATED_PILL} and was therefore indistinguishable from one that never had a
+ * producer.**
+ *
+ * ── WHY THE TWO MAY NOT SHARE A WORD ────────────────────────────────────────
+ *
+ * `Not seated`'s sentence says *"nothing is on a layer for this plate **yet**"*, and `yet`
+ * asserts a history. For a frame the look reconcile cleared it is the one false word in an
+ * otherwise correct sentence: that frame was on air a moment ago. The investigation
+ * (`LEDGER-SEAT-14`) measured the plant case — a three-frame row whose ledger went from three
+ * seats to one within the hour, with nothing in the audit log, because two of its three plates
+ * are `media` clips and §12.4 tears a clip down rather than holding it. The narrowing is
+ * CORRECT; being unable to tell it from "never seated" was not.
+ *
+ * ── THE CAUSE THIS SENTENCE NAMES, AND WHY IT IS SAFE TO NAME ONE ───────────
+ *
+ * ⚠ `releaseLivePlate` returns `torn-down` for TWO reasons — a `media` clip that cannot be
+ * held, and a plate **no look binds any more**. Only the first can reach this pill, and the
+ * reason is structural rather than a guard: {@link declaredFrameRows} builds a row only for a
+ * plate the row's template still DECLARES, and a plate nothing declares is not in that list.
+ * (`liveLayerRows.test.ts` pins it, so the invariant cannot quietly stop holding.)
+ *
+ * 🔴 **And the bridge's OWN sentence is not discarded — it is the row's `title`.** This pill
+ * answers the AUDIO column's question (*why can I not hear this, and does my fader still do
+ * anything?*); the verbatim, unparaphrased account of the decision travels on the row itself,
+ * so nothing here is a second opinion about what the bridge decided.
+ *
+ * ⚠ **AMBER, the same ink as `hidden by look` and `Not seated`** — owner, 2026-09-14. All
+ * three answer one operator question under pressure (*why can I not hear this box?*), and a
+ * state that answers it by receding is the one that gets misread as a fault.
+ */
+export const CLEARED_PILL: PlateAudioPill = {
+  label: 'Cleared',
+  tone: cssVars['--r-caution-text'],
+  detail:
+    'This frame was on air and was cleared: a clip cannot be held idle across a look. It is ' +
+    're-seated when a look shows it again — the volume is recorded now and applied then.',
 };
 
 /**
@@ -250,7 +306,10 @@ export function plateAudioPill(volume: number | undefined, held: boolean): Plate
   const { state, armed } = plateAudioVerdict(volume, held);
   if (state !== 'held') return PILL[state];
   return {
-    label: armed ? 'Armed · hidden by this look' : 'Hidden by this look',
+    // 🔴 SHORTENED — owner, 2026-09-14. `Hidden by this look` overflowed the Audio column
+    // and ellipsised on the plant (`Hidden by this lo…`). A column's value may not
+    // disturb the table; the full reading is in `detail`, on the hover.
+    label: armed ? 'Armed · hidden by look' : 'Hidden by look',
     tone: HELD_TONE,
     detail: armed
       ? 'Armed, not audible — the current look does not show this box. It becomes audible ' +

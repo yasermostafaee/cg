@@ -77,7 +77,11 @@ function stubBridge(): void {
       state: () => Promise.resolve([]),
       onStateChanged: () => () => undefined,
     },
-    liveLayers: { state: () => Promise.resolve([]), onStateChanged: () => () => undefined },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+      onPlateReleased: () => () => undefined,
+    },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
 }

@@ -1630,6 +1630,24 @@ export const cssVars = {
   '--r-field-line': '#435367',
   '--r-onair': colors.onAir, // sacred GREEN — ON AIR only (see the header)
   /**
+   * 🔴 **AUDIBLE — the reference's own green, and an OWNER AMENDMENT to §29's grammar.**
+   *
+   * `design.md` §29 read *green = ON AIR, now*, and nothing else. **Amended by the owner on
+   * 2026-09-14 (`PLATES-AUDIO-11` DELTA §1): green ALSO marks audio that is audible, on the
+   * LIVE PLATES tab and the Live audio modal.** That is the decision; it is recorded rather
+   * than argued, here and in `design.md` §29 and §34.3.
+   *
+   * The VALUE is the reference's, measured in Chromium at 1280 × 800 on `08-live-audio.html`:
+   * `.audio-slider small.audible` renders `rgb(128, 228, 176)`.
+   *
+   * ⚠ A THIRD green, and deliberately its own token rather than either neighbour.
+   * `--r-onair` (`rgb(44 255 122)`) is the layer table's sacred air mark and `--r-ok-text`
+   * (`#85e4b6`) is the healthy/acknowledged mint; pointing this at either would collapse a
+   * distinction the palette keeps on purpose (see `colors.onAir`'s own note). It is named for
+   * the ROLE it plays, never for the number.
+   */
+  '--r-audible-text': 'rgb(128, 228, 176)',
+  /**
    * AMBER AS INK — the caution role: Out / EXIT / UNCONFIRMED / dirty, a badge's word, an
    * outlined button's edge.
    *

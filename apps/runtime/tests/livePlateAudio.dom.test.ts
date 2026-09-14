@@ -222,7 +222,7 @@ describe('6.5f — the dialog states the rule and commits one decision at a time
     expect(text).toContain('guest-2');
     // 🔴 `PLATES-AUDIO-11` §3 — SENTENCE CASE, superseding `design.md` §31.4's second half.
     expect(text).toContain('Audible');
-    expect(text).toContain('Hidden by this look');
+    expect(text).toContain('Hidden by look');
     expect(text).toContain('100%');
     // `R-028` — the real coordinate is in the sentence, not behind a hover.
     expect(text).toContain('on 1-10');

@@ -11839,3 +11839,80 @@ the old spelling).
   _"Next free after this session is `B-235`"_, while `B-235` and `B-237`–`B-242` are all in use
   in code, tests and `openspec/changes/station-setup/tasks.md` with no PRD heading of their own.
   B-236 was the one genuine gap in that span. Pointer corrected in the registry.
+
+## [~] B-247 — the release REASON is computed, emitted, and delivered nowhere: `CasparRuntime` declares 19 emitters and the bridge seam forwards 18 ⟨priority: high — it is the one signal that tells an operator a guest's picture LEFT the ledger deliberately rather than by fault, and it reached nobody⟩ — FILED AND CLOSED IN CODE 2026-09-14 by `PLATE-RELEASE-15`
+
+**Repro:**
+
+1. Take a multi-box row whose plates include a `media` clip (the plant's `e506e319` binds
+   `l1 → sdi` (decklink), `l2 → media1`, `l3 → media2`).
+2. Read the bridge ledger — `~/.cg-runtime/bridge-live-layers.json`. Three seats.
+3. Switch to a look that shows `l1` only.
+4. Read the ledger again. **ONE seat.** The two `media` frames are gone, and the wire agrees
+   (`INFO` reports their band layers empty).
+5. Look for anything, anywhere, that says WHY. There is nothing — no audit line (a look switch
+   is not an audited action), no toast, and on the LIVE PLATES tab the two frames read
+   `Not seated`, whose tooltip says _"nothing is on a layer for this plate **yet**"_.
+
+**What is NOT the bug:** the narrowing itself is CORRECT. `multibox-layout-switch` §12.4 chose
+`held` for a producer a look stops showing, with a named fallback for the one form that cannot be
+held — a `media` clip runs to its end while parked and comes back BLACK, so it is torn down and
+re-seated on return. `LEDGER-SEAT-14` established this against the plant's own files and
+reproduced it against the AMCP mock with a positive control: the same row, same switch, with the
+two clips re-pointed at decklinks, keeps all three seats (parked at `fill=(2,2)`). Do not "fix"
+the teardown.
+
+**The bug is that §12.4's own escape clause was never wired.** It calls the fallback _"a NAMED,
+OBSERVABLE behaviour"_ rather than _"a teardown nobody can distinguish from a bug"_, and
+`releaseLivePlate` duly composes an operator-facing sentence for every plate the reconcile lets
+go, which `#applyLivePlatesUnguarded` duly emits on `livePlateReleased` — **subscribed by three
+tests and nothing else.** `wirePublishes` forwarded 18 of the runtime's 19 emitters. So the word
+existed, was correct, and was unreachable: the `B-147` (reader-less `autoSqueeze`) / `B-143`
+(zero-reader `assumed`) class, on the path to air.
+
+The operator-visible cost is that `Not seated` cannot distinguish a frame that never had a
+producer from one that WAS ON AIR and was cleared — and its sentence's `yet` asserts a history
+that did not happen. Reassuring in exactly the case where it should not be.
+
+**Fixed by:** a publish channel (`liveLayers.plate-released`) carrying the release verbatim; the
+forward in `wirePublishes`; `liveLayers.onPlateReleased` on both bridge implementations; and the
+tab's second word — `Cleared`, in the same amber as `hidden by look` and `Not seated`, with the
+bridge's own sentence on the row's `title`. Retraction is structural: `declaredFrameRows` skips a
+plate that has a ledger record before it consults the release, so a stale event cannot outlive the
+state it describes.
+
+**The guard, which is the half that outlives the fix:**
+`tools/caspar-bridge/tests/publish-coverage.test.ts` enumerates the emitters a real
+`CasparRuntime` declares, wraps each `subscribe`, calls the real `wirePublishes`, and fails naming
+any emitter that got no subscriber. It is `B-074`'s route-coverage guard one class over — the PUSH
+side, which is quieter still, because an unforwarded emitter produces no error at either end.
+**Planted twice and measured red both times** (`livePlateReleased` → `expected [
+'livePlateReleased' ] to deeply equal []`; `rehearseChanged` → the same naming that emitter), then
+reverted.
+
+**Regression-test note:** `tools/caspar-bridge/tests/publish-coverage.test.ts` (the guard);
+`tools/caspar-bridge/tests/live-layers-wire.test.ts` (the `B-247` end-to-end — a browser receives
+the release UNASKED; red-first, `timed out waiting for a frame` without the forward);
+`apps/runtime/tests/liveSourcesPanel.dom.test.ts` (five `B-247` blocks: `Cleared` vs `Not seated`
+with an unreleased control frame, the shared amber, the structural retraction with its positive
+control, a `held` release NOT reading cleared, and the invariant that keeps `CLEARED_PILL`'s
+wording honest — a plate the template no longer declares yields no row, so the pill's "a clip
+cannot be held idle" can never be the wrong cause); `apps/runtime/tests/mock-bridge-parity.test.ts`
+(the new method exists on both backends).
+
+- **Cross-refs:** [[B-145]] (the ledger this reports on), [[B-147]] and [[B-143]] (the
+  written-but-unreachable class), [[B-074]] (the route-coverage guard this one is modelled on),
+  [[B-232]] and [[B-211]] (golden rule 11 — the bridge's sentence names the plate handle, so it
+  rides a `title` rather than the row), [[B-225]] (`emptiedAir` — what it looks like when the
+  answer to "should this be standing state?" is YES).
+- **Prefix class:** `B-`, a runtime bug.
+- **Number:** `B-247`. Verified free before filing — the registry's duplicate audit printed
+  exactly `B-056` and `B-080`, the highest existing HEADING is `B-236`, and `git grep B-247`
+  returned nothing outside this session's own files. The registry's pointer already read
+  _"next free is `B-246`"_; `B-246` is claimed without a heading, so `B-247` is the next.
+
+**Known bound, stated rather than hidden:** the release is an EVENT, so a browser that was not
+connected when the reconcile ran — or one that reloads — shows `Not seated` for that frame again.
+That under-claims (the frame genuinely has no seat; only the HISTORY is missing) and never
+over-claims. Making it standing bridge state is a real decision with a real cost, and it was not
+taken here; if it is ever wanted, `emptiedAir` is the shape.

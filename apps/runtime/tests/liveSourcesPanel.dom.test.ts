@@ -15,7 +15,9 @@ import {
   releaseScopeOf,
   declaredFrameRows,
   type LiveLayerOwner,
+  type LiveLayerRowView,
 } from '../src/renderer/features/layers/liveLayerRows.js';
+import { colors, cssVars } from '../src/renderer/theme.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 import {
   onCommandError,
@@ -107,6 +109,8 @@ function stubBridge(
     liveLayers: {
       state: () => Promise.resolve([]),
       onStateChanged: () => () => undefined,
+      // `B-247` — the release reason. Never fired here; the subscription must exist.
+      onPlateReleased: () => () => undefined,
     },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
@@ -202,6 +206,31 @@ async function render(
       return counter.panics;
     },
   };
+}
+
+/** Render an explicit row array — the panel derives nothing, so this IS its whole input. */
+async function renderGiven(rows: readonly LiveLayerRowView[]): Promise<{ el: HTMLElement }> {
+  const { el } = await render([]);
+  const r = root;
+  await act(async () => {
+    r?.render(
+      createElement(
+        StrictMode,
+        null,
+        createElement(LiveSourcesPanel, {
+          rows,
+          ledgerReady: true,
+          blind: null,
+          onSelectOwner: () => undefined,
+          onPanic: () =>
+            Promise.resolve({ ok: true, silenced: 0, recorded: 0, rows: [], failed: [] }),
+          onApplyVolumes: () => Promise.resolve({ ok: true, refused: [] }),
+          onOpenAudio: () => undefined,
+        }),
+      ),
+    );
+  });
+  return { el };
 }
 
 const rowFor = (el: HTMLElement, coordinate: string): HTMLElement | null =>
@@ -977,7 +1006,7 @@ describe('add-multibox-audio — audio is visible without opening anything', () 
     );
 
     const strip = stripIn(el, 'guest-1');
-    expect(strip?.textContent).toMatch(/hidden by this look/i);
+    expect(strip?.textContent).toMatch(/hidden by look/i);
     expect(strip?.textContent).toMatch(/ARMED/i);
     expect(strip?.querySelector('input[type="range"]')?.hasAttribute('disabled')).toBe(false);
     expect(buttonIn(strip, 'ON')?.disabled).toBe(false);
@@ -1495,6 +1524,150 @@ describe('PLATES-AUDIO-11 — the LIVE PLATES tab', () => {
     expect(declaredFrameRows(stranded, () => ['guest-1', 'guest-2'])).toEqual([]);
   });
 
+  /**
+   * 🔴 **`B-247` — `Cleared` vs `Not seated`.**
+   *
+   * `LEDGER-SEAT-14` measured the plant case and reproduced it: a three-frame row whose ledger
+   * went from three seats to ONE within the hour, with nothing in the audit log, because two of
+   * its three plates are `media` clips and §12.4 tears a clip down rather than holding it. The
+   * narrowing is CORRECT. What was wrong is that the two torn-down frames then wore the same
+   * word — and the same sentence, *"nothing is on a layer for this plate **yet**"* — as a frame
+   * that never had a producer. `yet` was the one false word, and it was reassuring in exactly
+   * the case where it should not have been.
+   *
+   * The reason existed all along: `releaseLivePlate` composes it and the reconcile emits it on
+   * `livePlateReleased`, which — until `B-247` — `wirePublishes` did not forward.
+   */
+  const RELEASE = (plate: string, disposition: 'held' | 'torn-down' = 'torn-down') => ({
+    itemId: 'item-1',
+    plateId: plate,
+    disposition,
+    reason:
+      `plate "${plate}" is a media clip, which cannot be held idle — a clip held across a ` +
+      `look runs to its end and comes back black, so it was cleared and will be re-seated ` +
+      `when a look shows it again`,
+  });
+
+  it('🔴 B-247 — a frame that WAS seated and was torn down reads Cleared, not Not seated', async () => {
+    const seated = liveLayerRows([layer({ sourceId: 'guest-1' })], NAMED, null, () => 1);
+    const frames = declaredFrameRows(
+      seated,
+      () => ['guest-1', 'guest-2', 'guest-3'],
+      () => undefined,
+      () => null,
+      // The bridge heard a release for guest-2 only. guest-3 is the CONTROL: same row, same
+      // absence of a seat, no release — so a difference here can only be the release.
+      (_itemId, plateId) => (plateId === 'guest-2' ? RELEASE('guest-2') : null),
+    );
+    const cleared = frames.find((f) => f.plate === 'guest-2');
+    const unseated = frames.find((f) => f.plate === 'guest-3');
+
+    expect(cleared?.headline).toBe('Cleared');
+    expect(cleared?.audio?.pill.label).toBe('Cleared');
+    // The BRIDGE's own sentence, verbatim, on the row — never paraphrased by the surface.
+    expect(cleared?.detail).toBe(RELEASE('guest-2').reason);
+    // …and the fader fact, which is what stops an operator believing a move was sent.
+    expect(cleared?.audio?.pill.detail).toContain('recorded now and applied then');
+    expect(cleared?.audio?.pill.detail).toContain('was on air and was cleared');
+
+    // THE CONTROL — unchanged, including the `yet` that is true only for it.
+    expect(unseated?.headline).toBe('Not seated');
+    expect(unseated?.audio?.pill.label).toBe('Not seated');
+    expect(unseated?.audio?.pill.detail).toContain('yet');
+
+    // Neither is an alarm and neither has a layer: `Cleared` is a HISTORY, not a fault.
+    for (const f of [cleared, unseated]) {
+      expect(f?.coordinate).toBeNull();
+      expect(f?.needsAttention).toBe(false);
+      expect(f?.releasable).toBe(false);
+    }
+  });
+
+  it('🔴 B-247 — both wear the SAME amber, like `hidden by look`', async () => {
+    const seated = liveLayerRows([layer({ sourceId: 'guest-1' })], NAMED, null, () => 1);
+    const frames = declaredFrameRows(
+      seated,
+      () => ['guest-1', 'guest-2', 'guest-3'],
+      () => undefined,
+      () => null,
+      (_i, plateId) => (plateId === 'guest-2' ? RELEASE('guest-2') : null),
+    );
+    const tone = (plate: string) => frames.find((f) => f.plate === plate)?.audio?.pill.tone;
+    expect(tone('guest-2'), 'cleared').toBe(cssVars['--r-caution-text']);
+    expect(tone('guest-3'), 'not seated').toBe(cssVars['--r-caution-text']);
+  });
+
+  /**
+   * 🔴 **RETRACTION IS STRUCTURAL — the property the accumulator's lack of expiry rests on.**
+   *
+   * `usePlateReleases` never deletes an entry. That is only safe because a re-seated plate is
+   * skipped before the release is ever consulted, so a stale event cannot outlive the state it
+   * describes. If that ordering were ever inverted, the tab would report a plate as CLEARED
+   * while its producer is on air — the one direction this must never fail in.
+   */
+  it('🔴 B-247 — a plate that is seated again can never read Cleared, however stale the event', async () => {
+    const seated = liveLayerRows(
+      [layer({ layer: 10, sourceId: 'guest-1' }), layer({ layer: 11, sourceId: 'guest-2' })],
+      NAMED,
+      null,
+      () => 1,
+    );
+    // A release for guest-2 is still in the map — and guest-2 now HAS a seat again.
+    const frames = declaredFrameRows(
+      seated,
+      () => ['guest-1', 'guest-2'],
+      () => undefined,
+      () => null,
+      () => RELEASE('guest-2'),
+    );
+    expect(frames, 'a seated plate contributes no declared-frame row at all').toEqual([]);
+    // Positive control: the instrument fires when the plate is genuinely unseated.
+    expect(
+      declaredFrameRows(
+        seated,
+        () => ['guest-1', 'guest-2', 'guest-9'],
+        () => undefined,
+        () => null,
+        () => RELEASE('guest-9'),
+      ).map((f) => f.headline),
+    ).toEqual(['Cleared']);
+  });
+
+  it('🔴 B-247 — a HELD release is not `Cleared`: it still owns its seat', async () => {
+    /*
+      `releaseLivePlate` reports every plate it lets go, held or torn down. A held one keeps its
+      ledger record, so it is already a SEAT on this tab and must never also appear as a cleared
+      frame — that would be two contradictory rows for one plate.
+    */
+    const seated = liveLayerRows([layer({ sourceId: 'guest-1' })], NAMED, null, () => 1);
+    const frames = declaredFrameRows(
+      seated,
+      () => ['guest-1', 'guest-2'],
+      () => undefined,
+      () => null,
+      () => RELEASE('guest-2', 'held'),
+    );
+    expect(frames.map((f) => f.headline)).toEqual(['Not seated']);
+  });
+
+  it('🔴 B-247 — a plate the template no longer DECLARES yields no row, so the pill never lies', async () => {
+    /*
+      The invariant `CLEARED_PILL`'s wording rests on. `torn-down` has TWO causes — a media clip,
+      and a plate no look binds any more — and the pill names the first. The second cannot reach
+      it because this function iterates the template's DECLARED plates, and a plate nothing
+      declares is not in that list. Pinned here so the wording cannot quietly become wrong.
+    */
+    const seated = liveLayerRows([layer({ sourceId: 'guest-1' })], NAMED, null, () => 1);
+    const frames = declaredFrameRows(
+      seated,
+      () => ['guest-1'], // guest-2 is gone from the template
+      () => undefined,
+      () => null,
+      () => RELEASE('guest-2'),
+    );
+    expect(frames).toEqual([]);
+  });
+
   it('🔴 §2 — the toolbar counts PARTITION the rows on screen', async () => {
     const seated = liveLayerRows(
       [
@@ -1535,6 +1708,79 @@ describe('PLATES-AUDIO-11 — the LIVE PLATES tab', () => {
     expect(el.querySelectorAll('.cg-plate-row')).toHaveLength(3);
   });
 
+  /**
+   * 🔴 THE DELTA (owner, 2026-09-14) §1 and §3 — **the four state inks, and the paragraph that
+   * came off the row.**
+   */
+  it('🔴 DELTA §1 — audible is GREEN, held and not-seated are AMBER, silent stays neutral', async () => {
+    const seated = liveLayerRows(
+      [
+        layer({ layer: 10, sourceId: 'guest-1' }),
+        layer({ layer: 11, sourceId: 'guest-2', held: true }),
+        layer({ layer: 12, sourceId: 'guest-3' }),
+      ],
+      NAMED,
+      null,
+      (_i, plate) => (plate === 'guest-3' ? 0 : 1),
+    );
+    const frames = declaredFrameRows(seated, () => ['guest-1', 'guest-2', 'guest-3', 'guest-4']);
+    const tone = (plate: string): string | undefined =>
+      [...seated, ...frames].find((r) => r.plate === plate)?.audio?.pill.tone;
+    expect(tone('guest-1'), 'audible').toBe(cssVars['--r-audible-text']);
+    expect(tone('guest-2'), 'held').toBe(cssVars['--r-caution-text']);
+    expect(tone('guest-3'), 'silent — the one that did not move').toBe(colors.textMuted);
+    expect(tone('guest-4'), 'not seated shares held’s treatment').toBe(cssVars['--r-caution-text']);
+    // The three are distinct, or the test above would pass on a palette with one colour in it.
+    expect(new Set([tone('guest-1'), tone('guest-2'), tone('guest-3')]).size).toBe(3);
+  });
+
+  it('🔴 DELTA §3 — an unseated frame carries NO sentence in the row body, only on its state', async () => {
+    const seated = liveLayerRows([layer({ sourceId: 'guest-1' })], NAMED, null, () => 1);
+    const [frame] = declaredFrameRows(seated, () => ['guest-1', 'guest-2']);
+    /*
+      `plain` is what decides whether the tab renders the row's whole sentence on a second line.
+      It is the ALARM treatment, and a frame no look has entered is not an alarm.
+    */
+    expect(frame?.plain, 'no visible second line').toBe(true);
+    expect(frame?.detail).not.toMatch(/nothing is sent by a change here/i);
+    expect(frame?.detail.length ?? 0).toBeLessThan(80);
+    /*
+      …and the ONE fact that stops a fader misleading an operator survives, on the state's own
+      tooltip. Deleting it would let someone who moves that fader believe something was sent.
+    */
+    expect(frame?.audio?.pill.detail).toMatch(/recorded now and applied when a look/i);
+    expect(frame?.audio?.pill.detail).toMatch(/nothing is sent until then/i);
+  });
+
+  it('🔴 DELTA §3 — and the tab renders no detail cell for it', async () => {
+    const seated = liveLayerRows([layer({ sourceId: 'guest-1' })], NAMED, null, () => 1);
+    const all = [...seated, ...declaredFrameRows(seated, () => ['guest-1', 'guest-2'])];
+    const { el } = await render([], NAMED);
+    const r = root;
+    await act(async () => {
+      r?.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(LiveSourcesPanel, {
+            rows: all,
+            ledgerReady: true,
+            blind: null,
+            onSelectOwner: () => undefined,
+            onPanic: () =>
+              Promise.resolve({ ok: true, silenced: 0, recorded: 0, rows: [], failed: [] }),
+            onApplyVolumes: () => Promise.resolve({ ok: true, refused: [] }),
+            onOpenAudio: () => undefined,
+          }),
+        ),
+      );
+    });
+    const unseated = el.querySelector('[data-live-layer-seated="false"]');
+    expect(unseated, 'the positive control — the row is on screen at all').not.toBeNull();
+    expect(unseated?.querySelector('.cg-plate-detail')).toBeNull();
+    expect(unseated?.textContent).not.toMatch(/nothing is on air for it/i);
+  });
+
   it('🔴 §4(a) — the ⓘ note leads with the live-microphone warning', async () => {
     const { el } = await render([layer()], NAMED);
     const help = el.querySelector('.cg-plate-help');
@@ -1548,5 +1794,146 @@ describe('PLATES-AUDIO-11 — the LIVE PLATES tab', () => {
     expect(note).toMatch(/live microphone/i);
     // …and the note now also accounts for the rows §2 added.
     expect(note).toMatch(/frames those rows declare/i);
+  });
+});
+
+/**
+ * 🔴 **NO COLUMN VALUE MAY DISTURB THE TABLE'S ORDER** — the owner's rule, from a photograph of
+ * the plant on 2026-09-14 where `Seated for سه قاب`, `Held — not in the current look` and
+ * `Hidden by this look` between them pushed the columns out of line and ellipsised.
+ */
+describe('the LIVE PLATES table keeps its columns', () => {
+  const NAMED = ownerLabelFor(
+    [item('item-a')],
+    () => 'comp1',
+    () => 'bed1',
+  );
+
+  it('the Picture cell is ONE word and is not coloured', async () => {
+    const [held] = liveLayerRows([layer({ held: true })], NAMED, null);
+    expect(held?.headline).toBe('Held');
+    expect(held?.tone, 'the Picture column carries no state hue').toBe(colors.text);
+    // …and it carries no sentence across the table; its reading is on the row's title.
+    expect(held?.plain).toBe(true);
+    expect(held?.detail).toMatch(/muted and with no hole in front of it/);
+  });
+
+  it('the Audio word is short enough for its column', async () => {
+    const [held] = liveLayerRows([layer({ held: true })], NAMED, null);
+    expect(held?.audio?.pill.label).toBe('Hidden by look');
+    const [armed] = liveLayerRows([layer({ held: true })], NAMED, null, () => 1);
+    expect(armed?.audio?.pill.label).toBe('Armed · hidden by look');
+  });
+
+  it('the Owner cell is the row NAME and a chevron — no lead-in verb', async () => {
+    const { el } = await render([layer()], NAMED);
+    const owner = el.querySelector('.cg-plate-owner');
+    expect(owner?.textContent).toBe('bed1');
+    expect(owner?.textContent).not.toMatch(/seated for/i);
+    // The chevron is a MARK: present, and silent to a screen reader.
+    const glyph = el.querySelector('.cg-plate-owner-link svg');
+    expect(glyph).not.toBeNull();
+    expect(glyph?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('the Layer cell of an unseated frame is a dash, not a word twice its column', async () => {
+    const seated = liveLayerRows([layer({ sourceId: 'guest-1' })], NAMED, null, () => 1);
+    const all = [...seated, ...declaredFrameRows(seated, () => ['guest-1', 'guest-2'])];
+    const { el } = await render([], NAMED);
+    const r = root;
+    await act(async () => {
+      r?.render(
+        createElement(
+          StrictMode,
+          null,
+          createElement(LiveSourcesPanel, {
+            rows: all,
+            ledgerReady: true,
+            blind: null,
+            onSelectOwner: () => undefined,
+            onPanic: () =>
+              Promise.resolve({ ok: true, silenced: 0, recorded: 0, rows: [], failed: [] }),
+            onApplyVolumes: () => Promise.resolve({ ok: true, refused: [] }),
+            onOpenAudio: () => undefined,
+          }),
+        ),
+      );
+    });
+    const unseated = el.querySelector('[data-live-layer-seated="false"]');
+    expect(unseated?.querySelector('.cg-plate-coord')?.textContent).toBe('—');
+    // The WORD is in the Picture column, where every other row's state word already is.
+    expect(unseated?.querySelector('.cg-plate-picture')?.textContent).toBe('Not seated');
+  });
+});
+
+/**
+ * 🔴 **THE `Plate / source` COLUMN NAMES THE INPUT THE OPERATOR CONFIGURED** — owner,
+ * 2026-09-14: *"it must show the source name we enter in settings, not the video or device
+ * name."* The cell printed the ledger's `producer` — `DECKLINK DEVICE 1`, `"m1"` — which is an
+ * AMCP argument. Golden rule 11: his word in the cell, the argument on the `title`.
+ */
+describe('the LIVE PLATES source column', () => {
+  const NAMED = ownerLabelFor(
+    [item('item-a')],
+    () => 'comp1',
+    () => 'bed1',
+  );
+
+  it('shows the catalogue NAME, with the producer relocated to the title', async () => {
+    const rows = liveLayerRows(
+      [layer({ sourceId: 'l1', producer: 'DECKLINK DEVICE 1' })],
+      NAMED,
+      null,
+      () => undefined,
+      () => 'sdi',
+    );
+    expect(rows[0]?.sourceName).toBe('sdi');
+    const { el } = await renderGiven(rows);
+    const cell = el.querySelector('.cg-plate-source');
+    expect(cell?.textContent).toContain('sdi');
+    expect(cell?.textContent, 'the AMCP argument is not the sentence').not.toContain('DECKLINK');
+    expect(cell?.querySelector('.cg-plate-producer')?.getAttribute('title')).toContain(
+      'DECKLINK DEVICE 1',
+    );
+  });
+
+  it('🔴 falls back to the PRODUCER when nothing names the plate — never to an invented name', async () => {
+    /*
+      `sourceName` is null for an unassigned plate, a deleted catalogue entry, or a stack that
+      has not arrived. In each of those the producer is the only true thing the console holds,
+      and it IS on a layer right now — printing `— none —` would hide a live producer.
+    */
+    const rows = liveLayerRows(
+      [layer({ sourceId: 'l1', producer: 'DECKLINK DEVICE 1' })],
+      NAMED,
+      null,
+    );
+    expect(rows[0]?.sourceName).toBeNull();
+    const { el } = await renderGiven(rows);
+    const producer = el.querySelector('.cg-plate-source .cg-plate-producer');
+    expect(producer?.textContent).toBe('DECKLINK DEVICE 1');
+    expect(producer?.getAttribute('data-plate-unnamed')).toBe('true');
+    expect(producer?.getAttribute('title')).toMatch(/no source assigned in Station setup/i);
+  });
+
+  it('a declared frame that is not seated still names the input it WILL carry', async () => {
+    const seated = liveLayerRows(
+      [layer({ sourceId: 'l1' })],
+      NAMED,
+      null,
+      () => 1,
+      () => 'sdi',
+    );
+    const [frame] = declaredFrameRows(
+      seated,
+      () => ['l1', 'l2'],
+      () => undefined,
+      (_i, plate) => (plate === 'l2' ? 'media1' : null),
+    );
+    expect(frame?.plate).toBe('l2');
+    expect(frame?.producer, 'nothing is on a layer for it').toBe('');
+    expect(frame?.sourceName, 'but the BINDING already says which input it will carry').toBe(
+      'media1',
+    );
   });
 });

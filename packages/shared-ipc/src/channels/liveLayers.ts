@@ -145,3 +145,74 @@ export const LiveLayersStateChangedChannel = definePublishChannel(
   'liveLayers.state-changed',
   z.array(LiveLayerStateSchema),
 );
+
+// ───────── `B-247` — WHY A SEAT LEFT THE LEDGER, and not merely THAT it did ─────────
+
+/**
+ * 🔴 **`B-247` — THE REASON A PLATE STOPPED BEING SEATED, CARRIED ACROSS THE SEAM.**
+ *
+ * ── THE DEFECT THIS CLOSES ──────────────────────────────────────────────────
+ *
+ * `releaseLivePlate` has always computed an operator-facing sentence for every plate the
+ * reconcile lets go, and `#applyLivePlatesUnguarded` has always emitted it on
+ * `livePlateReleased` — which **nothing outside the test suite subscribed to.**
+ * `CasparRuntime` declared 19 emitters and `wirePublishes` forwarded 18. So §12.4's promise
+ * that the teardown fallback is *"a NAMED, OBSERVABLE behaviour"* rather than *"a teardown
+ * nobody can tell from a bug"* was true of the bridge and false of the console. Same class as
+ * `B-147`'s reader-less `autoSqueeze` and `B-143`'s zero-reader `assumed`: written, correct,
+ * unreachable.
+ *
+ * ── WHY THE REASON CANNOT BE RE-DERIVED BY THE SURFACE ──────────────────────
+ *
+ * 🔴 The tab COULD guess — *this row is on air, this frame is not in the active look, its
+ * source is a `media` producer, therefore it was torn down* — and that guess is a second
+ * spelling of `canHoldLivePlate`, living in the renderer, free to disagree with the bridge
+ * about a plate that is on air. Golden rule 6 forbids exactly that. The bridge already knows
+ * the answer; this channel is how the answer travels, rather than being recomputed at the far
+ * end from facts that only happen to imply it today.
+ *
+ * ── WHAT IT IS NOT ──────────────────────────────────────────────────────────
+ *
+ * ⚠ **An EVENT, not standing state, and that bound is deliberate.** It fires at the moment the
+ * reconcile lets a plate go; a browser that connects afterwards never sees it, and a reload
+ * loses it. That is acceptable HERE and would not be for an alarm: the fact it carries is a
+ * refinement of a state the ledger already publishes — the frame has no seat either way — so
+ * losing it degrades `Cleared` to `Not seated`, never to a claim that is wrong. Compare
+ * `EmptiedAirNoticeChangedChannel`, which is standing bridge state precisely because its fact
+ * IS the alarm and two browsers may not disagree about it.
+ *
+ * ⚠ And it is READ-ONLY, like the ledger channel above it. Nothing here takes a plate off air.
+ */
+export const LIVE_PLATE_DISPOSITIONS = ['held', 'torn-down'] as const;
+
+export type LivePlateDispositionWire = (typeof LIVE_PLATE_DISPOSITIONS)[number];
+
+/** One plate the reconcile let go, with the bridge's own sentence for why. */
+export const LivePlateReleaseSchema = z.object({
+  /** The stack row whose plate this is — the handle every item-scoped verb takes. */
+  itemId: IdSchema,
+  /** The SYMBOLIC plate id from the scene's declaration, e.g. `guest-1`. Never a device. */
+  plateId: z.string().min(1),
+  /**
+   * 🔴 **`held` KEEPS ITS LEDGER RECORD; `torn-down` DOES NOT.** That is the whole distinction
+   * the surface needs: a held plate is still on the tab as a seat, while a torn-down one has
+   * left the ledger and would otherwise be indistinguishable from a frame that never had a
+   * producer at all.
+   */
+  disposition: z.enum(LIVE_PLATE_DISPOSITIONS),
+  /**
+   * The operator-facing sentence, composed by `releaseLivePlate` and passed through verbatim.
+   *
+   * ⚠ **NOT re-worded at either end.** It is the bridge's account of a decision the bridge
+   * made, and a surface that paraphrased it would be stating a reason it did not compute.
+   */
+  reason: z.string().min(1),
+});
+
+export type LivePlateReleaseState = z.infer<typeof LivePlateReleaseSchema>;
+
+/** Pushed once per plate the reconcile releases — held or torn down. See the header above. */
+export const LivePlateReleasedChannel = definePublishChannel(
+  'liveLayers.plate-released',
+  LivePlateReleaseSchema,
+);

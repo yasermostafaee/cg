@@ -461,6 +461,55 @@ describe('the WIRE — the channel a browser actually reads', () => {
     ]);
     ws.close();
   });
+  it('🔴 `B-247` END TO END — the RELEASE REASON reaches a browser, not just the ledger change', async () => {
+    /*
+      🔴 **THE DEFECT, INVERTED.** `releaseLivePlate` has always composed an operator-facing
+      sentence for every plate the look reconcile lets go, and `#applyLivePlatesUnguarded` has
+      always emitted it on `livePlateReleased` — which NOTHING outside the test suite
+      subscribed to. 19 emitters declared, 18 forwarded. So §12.4's promise that the teardown
+      fallback is *"a NAMED, OBSERVABLE behaviour"* rather than *"a teardown nobody can tell
+      from a bug"* held for the bridge and was false for the console, for the whole life of
+      `multibox-layout-switch`.
+
+      This asserts the half that was missing: a browser, asking for nothing, RECEIVES it.
+
+      ⚠ The other half — that the reconcile emits one per released plate, with the right
+      disposition — is `live-look-reconcile.integration.test.ts`'s (it subscribes in three
+      places). Emitting here directly keeps this test about the SEAM, which is where the bug
+      was, and lets it run against a dead connection with no AMCP mock at all.
+    */
+    const handle = await createBridge({ port: 0, connection: deadConnection() });
+    dirs.push(handle);
+    const ws = await connect(handle.url);
+    const frames: WsFrame[] = [];
+    ws.on('message', (data: Buffer) => {
+      const f = parseWsFrame(data.toString());
+      if (f !== null) frames.push(f);
+    });
+
+    const release = {
+      itemId: 'item-a',
+      plateId: 'guest-2',
+      disposition: 'torn-down' as const,
+      reason:
+        'plate "guest-2" is a media clip, which cannot be held idle — a clip held across a ' +
+        'look runs to its end and comes back black, so it was cleared and will be re-seated ' +
+        'when a look shows it again',
+    };
+    handle.runtime.livePlateReleased.emit(release);
+
+    await waitFor(() =>
+      frames.some((f) => f.type === 'publish' && f.channel === 'liveLayers.plate-released'),
+    );
+    const pushed = frames.filter(
+      (f) => f.type === 'publish' && f.channel === 'liveLayers.plate-released',
+    );
+    const last = pushed[pushed.length - 1];
+    // VERBATIM — the surface may not be handed a paraphrase of a decision it did not make.
+    expect(last?.type === 'publish' ? last.payload : null).toEqual(release);
+    ws.close();
+  });
+
   it('🔴 4.3 END TO END — a bridge that ADOPTED a persisted ledger serves it to a browser', async () => {
     /*
       THE ACCEPTANCE SENTENCE ITSELF: *"WHEN the bridge restarts while live plates are

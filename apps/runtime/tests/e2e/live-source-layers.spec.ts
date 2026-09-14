@@ -68,8 +68,14 @@ test('the bridge-seated live layers appear on their own tab, distinguishable fro
     layer table shows one tab over. The composition is RELOCATED, not deleted: it rides the
     link's `title`, and both halves are asserted so neither can quietly go.
   */
-  await expect(onScreen).toContainText('Seated for');
+  /*
+    ⚠ AMENDED AGAIN 2026-09-14: the lead-in `Seated for` is gone too. On the plant it was the
+    widest thing in a column sized for a NAME, and it said nothing the `Owner` column header
+    does not. The cell is the row's name and a chevron — the reference's own shape.
+  */
+  await expect(onScreen, 'the verb is not in the cell').not.toContainText('Seated for');
   await expect(onScreen).toContainText('CLOCK');
+  await expect(onScreen.locator('.cg-plate-owner-link svg'), 'the chevron').toHaveCount(1);
   await expect(onScreen, 'a composition name must not be in the sentence').not.toContainText(
     'News Composite',
   );
@@ -149,10 +155,12 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
   await heldOn.click();
   /*
     ⚠ `PLATES-AUDIO-11` §3 — sentence case means the CLAUSE lowercases when it is not first.
-    The word is `Hidden by this look` on its own and `Armed · hidden by this look` when the
-    plate is armed, and asserting the capital in both is how one of the two goes unnoticed.
+    The word is `Hidden by look` on its own and `Armed · hidden by look` when the plate is
+    armed, and asserting the capital in both is how one of the two goes unnoticed.
+    ⚠ SHORTENED by the owner on 2026-09-14: `Hidden by this look` ellipsised inside the Audio
+    column on the plant, and a column value may not disturb the table's order.
   */
-  await expect(stripOf(held, 'guest-2')).toContainText('Armed · hidden by this look');
+  await expect(stripOf(held, 'guest-2')).toContainText('Armed · hidden by look');
   // …and it is NOT claimed to be audible, because the look is what decides that.
   await expect(stripOf(held, 'guest-2')).not.toContainText('Audible');
 

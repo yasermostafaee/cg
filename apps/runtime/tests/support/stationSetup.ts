@@ -171,6 +171,8 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
     liveLayers: {
       state: () => Promise.resolve(options.liveLayers ?? []),
       onStateChanged: () => () => undefined,
+      // `B-247` — the release reason. Never fired here; the subscription must exist.
+      onPlateReleased: () => () => undefined,
     },
     sources: {
       config: () => Promise.resolve(options.catalog ?? { sources: [] }),

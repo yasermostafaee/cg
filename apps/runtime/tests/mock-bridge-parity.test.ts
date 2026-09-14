@@ -208,7 +208,14 @@ const BRIDGE_SURFACE: {
     // verbs that reach a seated layer are item-scoped and already on `stack`, and
     // `layers.clear` refuses a live-source coordinate by name. A `clear` appearing
     // here later would be that refusal being re-opened from a different surface.
-    liveLayers: ['state', 'onStateChanged'],
+    /*
+      `B-247` — `onPlateReleased` carries the bridge's own sentence for a plate the look
+      reconcile let go. Listed here for this guard's founding reason: the mock CANNOT fire it
+      (no reconcile offline), so it is exactly the kind of method that could exist on one
+      backend and not the other and go unnoticed until the plant — which is what happened to
+      the emitter behind it for the whole life of `multibox-layout-switch`.
+    */
+    liveLayers: ['state', 'onStateChanged', 'onPlateReleased'],
     lock: ['engage', 'release', 'state', 'onStateChanged'],
     // R-028 (o1) — `onChanged`: the bridge-owned catalogue push.
     // R-022 — `html` is the RETAINED self-contained page for a template, read from

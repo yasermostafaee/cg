@@ -63,7 +63,11 @@ async function renderPanelWith(stack: StackItemState[]): Promise<HTMLDivElement>
       clear: () => Promise.resolve({ ok: true }),
       onStateChanged: () => () => undefined,
     },
-    liveLayers: { state: () => Promise.resolve([]), onStateChanged: () => () => undefined },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+      onPlateReleased: () => () => undefined,
+    },
     stack: {
       snapshot: () => Promise.resolve(stack),
       onStateChanged: () => () => undefined,

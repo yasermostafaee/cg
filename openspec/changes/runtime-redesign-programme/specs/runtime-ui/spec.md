@@ -374,7 +374,7 @@ that has no owner to open (stranded, blind) SHALL open nothing and SHALL NOT can
 ### Requirement: The audio dialog says what the ledger says, and ON is full volume
 
 The audio dialog SHALL state each plate's audio in the console's one vocabulary, read from the
-ledger — `Audible`, `Silent`, `Hidden by this look`, `Armed · hidden by this look` — and SHALL
+ledger — `Audible`, `Silent`, `Hidden by look`, `Armed · hidden by look` — and SHALL
 read a plate with no seat as `Not seated`, never as audible: a raised plate on a row that owns
 nothing is a recorded intent, not sound on air. The dialog's footer SHALL carry
 `ON = 100% · OFF = 0%` and the fact that SOLO silences every other frame of the row, hidden
@@ -390,7 +390,7 @@ The dialog SHALL offer ON, OFF and SOLO per plate with no second name for OFF.
 #### Scenario: A held plate reads as hidden
 
 - **WHEN** the dialog is opened on a row whose ledger holds a held seat **THEN** that plate
-  reads `Hidden by this look` with its coordinate beside it, and its ON, OFF and SOLO stay live
+  reads `Hidden by look` with its coordinate beside it, and its ON, OFF and SOLO stay live
 
 #### Scenario: The no-un-solo warning is on the SOLO control
 
@@ -402,11 +402,20 @@ The dialog SHALL offer ON, OFF and SOLO per plate with no second name for OFF.
 
 The LIVE PLATES tab SHALL name each layer's owner by the ROW the operator knows — the bank's
 alias for the layer that row sits on, else the bank's default name — with the composition name
-on a `title` and never in the visible sentence. It SHALL list, for every row that owns at least
+on a `title` and never in the visible sentence. It SHALL name each plate's INPUT by the source
+name the operator configured, resolving the binding through the same resolver the bridge uses,
+with the producer argument on a `title`. No cell's value may push the table's columns out of
+line: a state word that does not fit its column is shortened, never allowed to widen it. It SHALL list, for every row that owns at least
 one seat, the frames that row's template declares which the ledger has not seated, each reading
 `Not seated` in place of a coordinate and carrying live audio controls, so that no frame of a
 live row is unreachable from the surface that carries the faders. The toolbar's counts SHALL
 partition the rows on screen.
+
+#### Scenario: The source column names the configured input
+
+- **WHEN** a seated plate's binding resolves to a catalogue entry **THEN** the `Plate / source`
+  cell reads that entry's NAME, the producer argument is on its `title`, and where nothing
+  resolves the cell falls back to the producer rather than to an invented name
 
 #### Scenario: The owner cell names the row, not the composition
 

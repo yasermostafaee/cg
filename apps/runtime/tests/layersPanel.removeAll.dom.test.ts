@@ -75,6 +75,8 @@ function stubBridge(
     liveLayers: {
       state: () => Promise.resolve([]),
       onStateChanged: () => () => undefined,
+      // `B-247` — the release reason. Never fired here; the subscription must exist.
+      onPlateReleased: () => () => undefined,
     },
     stack: {
       snapshot: () => Promise.resolve(stack),
@@ -234,6 +236,8 @@ describe('StackPanel Remove-All — R-010', () => {
       liveLayers: {
         state: () => Promise.resolve([]),
         onStateChanged: () => () => undefined,
+        // `B-247` — the release reason. Never fired here; the subscription must exist.
+        onPlateReleased: () => () => undefined,
       },
       stack: {
         snapshot: () => Promise.resolve(items(2)),

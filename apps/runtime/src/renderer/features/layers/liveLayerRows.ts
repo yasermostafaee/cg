@@ -1,8 +1,9 @@
-import type { LiveLayerState } from '@cg/shared-ipc';
+import type { LiveLayerState, LivePlateReleaseState } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
-import { colors, cssVars } from '../../theme.js';
+import { colors } from '../../theme.js';
 import { shortId } from '../../ui/operatorNaming.js';
 import {
+  CLEARED_PILL,
   UNSEATED_PILL,
   plateAudioPill,
   type PlateAudioPill,
@@ -81,7 +82,28 @@ export interface LiveLayerRowView {
    * {@link liveLayerRows}, so the dot cannot claim something no visible row says.
    */
   plate: string;
+  /**
+   * The raw producer the bridge sent — `DECKLINK DEVICE 1`, `"m1"`, `route://1-2`.
+   *
+   * ⚠ TECHNICAL, and since 2026-09-14 it is NOT what the Plate / source column shows. It is
+   * the AMCP argument, and the operator did not choose those words: he named the input
+   * `sdi` in Station setup. See {@link sourceName}; this stays because it is what would be
+   * typed into a console by hand, and it rides the cell's `title`.
+   */
   producer: string;
+  /**
+   * 🔴 **WHAT THE OPERATOR CALLED THIS INPUT — the catalogue name, in his own words.**
+   *
+   * Owner, 2026-09-14: *"the Plate / source column must show the source name we enter in
+   * settings, not the video or device name."* Golden rule 11 exactly — `DECKLINK DEVICE 1` is
+   * an AMCP argument and `sdi` is the thing he configured and the thing he will say out loud.
+   *
+   * `null` when the console cannot honestly name one: the plate is unassigned, its catalogue
+   * entry has been deleted, or the stack has not arrived. A NULL is never papered over with
+   * the producer string dressed up as a name — the surface falls back to the producer and
+   * says so by showing it where a name would be.
+   */
+  sourceName: string | null;
   /** The ledger key — the handle every item-scoped verb takes. Always present. */
   itemId: string;
   /** What state this layer is in, in the operator's words. */
@@ -283,11 +305,18 @@ export function liveLayerRow(
    * test can build a raised plate without building a stack.
    */
   volumeOf: (itemId: string, plateId: string) => number | undefined = () => undefined,
+  /**
+   * The catalogue name in force for this plate — INJECTED for `volumeOf`'s reason. Resolving
+   * it needs the four-level binding chain AND the sources store, and this module must stay
+   * free of both; `LayersPanel` is the one place that can see them.
+   */
+  sourceNameOf: (itemId: string, plateId: string) => string | null = () => null,
 ): LiveLayerRowView {
   const base = {
     coordinate: liveLayerCoordinate(layer),
     plate: layer.sourceId,
     producer: layer.producer,
+    sourceName: sourceNameOf(layer.itemId, layer.sourceId),
     itemId: layer.itemId,
   };
   if (blind !== null) {
@@ -368,7 +397,22 @@ export function liveLayerRow(
     return {
       ...base,
       audio,
-      headline: 'Held — not in the current look',
+      /*
+        🔴 ONE WORD, AND THE COLUMN IS NOT COLOURED — owner, 2026-09-14, from a photograph of
+        the plant.
+
+        It read `Held — not in the current look` in AMBER, over a four-line sentence that ran
+        across the whole table. Both were wrong for a TABLE: a cell whose text is longer than
+        its column pushes the columns beside it out of line, and the owner's rule is that a
+        column's values may never disturb the table's order. The reference's own Picture cell
+        is one word (`Held`, measured on `07-live-plates.html`) and is not a state hue.
+
+        ⚠ The amber is NOT gone from this row — it is on the AUDIO column, where the state word
+        that explains the silence lives (`plateAudioPill`). One mark per row, in the column
+        whose question it answers.
+      */
+      headline: 'Held',
+      // The `title`, not a line across the table. `plain: true` below is what keeps it there.
       detail:
         `Seated for ${owner.row}, muted and with no hole in front of it. It is kept rather ` +
         `than torn down so returning to a look that shows it needs no fresh producer.`,
@@ -376,15 +420,14 @@ export function liveLayerRow(
       ownerDetail: owner.detail,
       releasable: false,
       needsAttention: false,
+      tone: colors.text,
       /*
-        🔴 `PLATES-AUDIO-11` §3 — AMBER, and the COLOUR block at the head of this file is
-        annotated for it rather than rewritten. `held` still is not a fault; the owner's
-        reversal is that it is the state most often MISREAD as one, so it is the state that
-        must catch the eye. One token with the audio pill's `HELD_TONE`, so the Picture cell
-        and the Audio cell of the same row cannot disagree about how loud `held` reads.
+        🔴 `true` SINCE THE PHOTOGRAPH. `plain` decides whether the tab renders the whole
+        sentence on a second line across the table, and that treatment is for an ALARM — a
+        stranded producer, an unconfirmed record. A HELD plate is a normal, chosen disposition
+        (§12.4) and its own Audio cell already says why it is silent.
       */
-      tone: cssVars['--r-caution-text'],
-      plain: false,
+      plain: true,
     };
   }
   return {
@@ -418,8 +461,9 @@ export function liveLayerRows(
   ownerOf: (itemId: string) => LiveLayerOwner | null,
   blind: LiveLayerBlindness | null,
   volumeOf: (itemId: string, plateId: string) => number | undefined = () => undefined,
+  sourceNameOf: (itemId: string, plateId: string) => string | null = () => null,
 ): LiveLayerRowView[] {
-  return layers.map((l) => liveLayerRow(l, ownerOf(l.itemId), blind, volumeOf));
+  return layers.map((l) => liveLayerRow(l, ownerOf(l.itemId), blind, volumeOf, sourceNameOf));
 }
 
 /**
@@ -467,6 +511,21 @@ export function declaredFrameRows(
   rows: readonly LiveLayerRowView[],
   declaredPlatesOf: (itemId: string) => readonly string[],
   volumeOf: (itemId: string, plateId: string) => number | undefined = () => undefined,
+  sourceNameOf: (itemId: string, plateId: string) => string | null = () => null,
+  /**
+   * 🔴 `B-247` — **was this frame TORN DOWN, or did it never have a producer?**
+   *
+   * Injected for the reason every other lookup here is: the release events arrive on their own
+   * bridge subscription and this module must stay free of it. Answering `null` — the default,
+   * and what every caller without the subscription gets — reproduces the previous behaviour
+   * exactly, which is what keeps the unseated row the ordinary case.
+   *
+   * ⚠ **The bridge's own sentence is what comes back, never a verdict computed here.** The
+   * renderer could guess this state (row on air + frame not in the active look + a `media`
+   * source ⇒ it was torn down), and that guess would be a second spelling of the bridge's
+   * `canHoldLivePlate` — golden rule 6's exact failure, in the surface, about a plate on air.
+   */
+  releasedOf: (itemId: string, plateId: string) => LivePlateReleaseState | null = () => null,
 ): LiveLayerRowView[] {
   const extra: LiveLayerRowView[] = [];
   const seen = new Set<string>();
@@ -479,29 +538,76 @@ export function declaredFrameRows(
       if (seated.has(plateId)) continue;
       seated.add(plateId);
       const volume = volumeOf(row.itemId, plateId);
+      /*
+        🔴 `B-247` — `torn-down` ONLY. A `held` release keeps its ledger record, so that plate
+        is already a SEAT on this tab and never reaches this loop; treating one as cleared here
+        would put a second, contradictory row under a plate the table is already showing.
+
+        ⚠ **RETRACTION IS STRUCTURAL, not a timer and not a cleanup pass.** The moment a look
+        seats this plate again its record is back in `rows`, `seated.has(plateId)` is true, and
+        the loop `continue`s before it can read the release at all. So a stale event cannot
+        outlive the state it describes — the strongest property available here, and the reason
+        the accumulator upstream is allowed to be a plain map that never expires.
+      */
+      const released = releasedOf(row.itemId, plateId);
+      const cleared = released !== null && released.disposition === 'torn-down' ? released : null;
       extra.push({
         coordinate: null,
         plate: plateId,
         // No producer: that IS the state. An empty string, never a word that looks like one.
         producer: '',
+        /*
+          The NAME is still known — it comes from the binding, not from the ledger — and it is
+          the useful half here: it says WHICH input this frame will carry when a look seats it.
+        */
+        sourceName: sourceNameOf(row.itemId, plateId),
         itemId: row.itemId,
-        headline: 'Not seated',
+        // 🔴 `B-247` — ONE WORD, like every other headline in this column, and the two are a
+        // real distinction rather than a shade of one: `Cleared` had a producer and lost it.
+        headline: cleared === null ? 'Not seated' : 'Cleared',
+        /*
+          🔴 SHORT SINCE THE DELTA (owner, 2026-09-14 §3). This was a four-line paragraph and it
+          rendered as a visible second line across the table on EVERY unseated frame — the tab's
+          `attention` treatment, which exists for an ALARM. A frame no look has entered is not
+          one. The fact an operator actually needs when he moves that fader — that the volume is
+          recorded and not sent — is on the STATE's own tooltip (`UNSEATED_PILL.detail`), which
+          is where §3 put it; this is the row's `title` and says only what the row IS.
+
+          🔴 `B-247` — AND FOR A CLEARED FRAME IT IS THE BRIDGE'S OWN SENTENCE, VERBATIM. That
+          sentence is the whole point of the channel: `releaseLivePlate` composed it, the
+          reconcile emitted it, and until `B-247` it reached nobody. Paraphrasing it here would
+          be the surface stating a reason it did not compute — so the pill carries OUR trimmed
+          wording for the audio question, and the authoritative account lives on the row.
+        */
         detail:
-          `This row's template declares this frame and the bridge holds no layer for it, so ` +
-          `nothing is on air for it and nothing is sent by a change here. The volume is ` +
-          `recorded now and applied when a look that uses this frame seats it.`,
+          cleared === null
+            ? `Declared by this row's template. No layer is seated for it.`
+            : cleared.reason,
         ownerLabel: row.ownerLabel,
         ownerDetail: row.ownerDetail,
         releasable: false,
         // Nothing is wrong: an unentered look's frame is the ordinary state of a live row.
         needsAttention: false,
+        /*
+          🔴 NEUTRAL, like every other Picture cell — owner, 2026-09-14. The amber for this
+          state is on the AUDIO column (`UNSEATED_PILL`), which is the column whose question it
+          answers. One mark per row.
+        */
         tone: colors.textMuted,
-        // Its sentence says what no other cell on the row does, so it stays visible.
-        plain: false,
+        /*
+          🔴 `plain: true` — NO VISIBLE SENTENCE. That flag decides whether the row keeps its
+          whole sentence on a second line, and every other `false` on it is an alarm or a
+          caveat. This row's own cells say everything: `Not seated` in the Layer column, the
+          same word on its pill, and the amber they share.
+        */
+        plain: true,
         // `held: false` — a frame with no seat is not HELD; §12.4's hold is a property of a
         // producer that exists. `UNSEATED_PILL` is the word, through `plateAudioPill`'s
         // sibling rather than a fourth state (see `plateAudio.ts`).
-        audio: { volume, held: false, pill: UNSEATED_PILL },
+        // 🔴 `B-247` — …and `CLEARED_PILL` for the frame that HAD one. Both wear the same
+        // amber: they answer one question (`why can I not hear this box?`) and differ only in
+        // what happened before.
+        audio: { volume, held: false, pill: cleared === null ? UNSEATED_PILL : CLEARED_PILL },
       });
     }
   }

@@ -133,30 +133,35 @@ const MESSAGE_CLASSES: readonly { name: string; ink: string; ground: string }[] 
     ink: cssVars['--r-look-btn-sel-ink'],
     ground: cssVars['--r-look-btn-sel-bg'],
   },
-  {
-    /*
-      🔴 `PLATES-AUDIO-11` §3 — THE HELD PLATE'S STATE WORD, which stopped being neutral.
+  /*
+    🔴 `PLATES-AUDIO-11` §3 AND ITS DELTA — **THE PLATE AUDIO STATE WORDS, EVERY INK ON BOTH
+    GROUNDS.**
 
-      `Hidden by this look` and the LIVE PLATES tab's `Held — not in the current look` both
-      moved from `colors.text` to the amber caution ink. A state word is a SENTENCE by this
-      guard's standard — it is the operator's only account of why a guest he can see is
-      silent — and moving an ink is precisely the edit that lands it on an unmeasured ground.
-    */
-    name: 'held plate state word (audio dialog body)',
-    ink: cssVars['--r-caution-text'],
-    ground: cssVars['--r-surface'],
-  },
-  {
-    /*
-      …and on the LIVE PLATES row under the pointer, which is a DIFFERENT ground and therefore
-      a different ratio. A ratio is a property of two values (§4.1), so the hover state is
-      measured rather than assumed to follow from the one above — even where the two tokens
-      happen to resolve alike today, which is exactly the coincidence a later retune breaks.
-    */
-    name: 'held plate state word (plate row, hovered)',
-    ink: cssVars['--r-caution-text'],
-    ground: cssVars['--r-table-row-hover'],
-  },
+    A state word is a SENTENCE by this guard's standard: it is the operator's only account of
+    why a guest he can see cannot be heard. Three inks now carry those words — the amber that
+    `held` and `Not seated` share, the green that `audible` took on 2026-09-14, and the muted
+    grey `silent` kept — and each is measured on BOTH surfaces' grounds, because a ratio is a
+    property of two values (§4.1) and moving an ink is exactly the edit that lands it on a
+    ground nobody measured.
+
+    ⚠ The two grounds resolve alike TODAY (`--r-surface` and `--r-table-row-hover` are both
+    `colors.panel`). They are still listed separately, because that is a coincidence a retune
+    breaks and the guard would then be measuring one surface while claiming two.
+  */
+  ...(
+    [
+      ['audible', cssVars['--r-audible-text']],
+      ['held / not seated', cssVars['--r-caution-text']],
+      ['silent', colors.textMuted],
+    ] as const
+  ).flatMap(([state, ink]) => [
+    { name: `plate audio — ${state} (audio dialog body)`, ink, ground: cssVars['--r-surface'] },
+    {
+      name: `plate audio — ${state} (plate row, hovered)`,
+      ink,
+      ground: cssVars['--r-table-row-hover'],
+    },
+  ]),
 ];
 
 describe('§B3(b) — every operator message clears AA for body text', () => {

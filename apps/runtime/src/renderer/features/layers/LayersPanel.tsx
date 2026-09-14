@@ -17,7 +17,19 @@ import { removeIsRefused } from './removeGate.js';
   count, stop and read that comment first — the answer is `removeIsRefused`.
 */
 import { isOnAirStatus, type StackItemState } from '@cg/shared-schema';
-import type { EmptiedAirRow, OrphanLayer, RestoreMigration, RestoreSkip } from '@cg/shared-ipc';
+import {
+  resolvePlateSourcesForLook,
+  type EmptiedAirRow,
+  type OrphanLayer,
+  type RestoreMigration,
+  type RestoreSkip,
+} from '@cg/shared-ipc';
+import {
+  currentSourceAssignments,
+  currentSourceCatalog,
+  sourcesVersion,
+  subscribeSources,
+} from '../sources/sourceStore.js';
 import {
   CircleArrowOutDownRight,
   Info,
@@ -59,6 +71,7 @@ import {
 import { useFixedBankState, useFixedSlotsState } from '../../hooks/useFixedLayers.js';
 import { useStationLayers } from '../../hooks/useStationLayers.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
+import { usePlateReleases } from '../../hooks/usePlateReleases.js';
 import { useStackDeliveryPending } from '../../hooks/useStackDeliveryPending.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { defaultLayerAlias, isLayerVisible, isLowBankLayer, isRehearsing } from '@cg/shared-ipc';
@@ -313,6 +326,16 @@ export function LayersPanel({
    */
   const { bank, ready: bankReady } = useFixedBankState();
   const { slots, ready: slotsReady } = useFixedSlotsState();
+  /*
+    The installation's source catalogue and its template assignments, for the LIVE PLATES
+    table's `Plate / source` column. Subscribed HERE rather than in the tab for
+    `operatorRowName`'s reason: this panel already holds the stack, and the four-level
+    binding chain needs the ITEM as well as the store. One reading serves the rows and the
+    declared frames below, so the two cannot name different inputs for one plate.
+  */
+  useSyncExternalStore(subscribeSources, sourcesVersion);
+  const sourceCatalog = currentSourceCatalog();
+  const sourceAssignments = currentSourceAssignments();
   const listReady = bankReady && slotsReady;
   // R-022 — ONE rehearse snapshot for the whole table, from the bridge.
   const rehearsals = useRehearse();
@@ -321,6 +344,12 @@ export function LayersPanel({
   // readiness: the zero-row case has no row to carry a blindness state, so the panel
   // needs the ledger's own arrival flag to avoid asserting that nothing is on air.
   const { value: live, ready: ledgerReady } = useLiveLayers();
+  /*
+    `B-247` — WHY a plate left that ledger, which the ledger payload itself cannot say. An
+    EVENT rather than a snapshot (see the hook), so it has no readiness of its own: a browser
+    that heard nothing shows every unseated frame as `Not seated`, exactly as before.
+  */
+  const plateReleases = usePlateReleases();
   // §4 — is a stack delivery in flight? An EMPTY stack is only an ANSWER when it is not.
   const deliveryPending = useStackDeliveryPending();
   /**
@@ -852,6 +881,45 @@ export function LayersPanel({
     (`Layer N` / `Bed N`), is ONE rule and `ui/operatorNaming.ts` owns it. A second spelling
     here is how the tab comes to call a row something the layer table does not.
   */
+  /*
+    🔴 **WHAT THE OPERATOR CALLED THE INPUT BEHIND EACH PLATE — owner, 2026-09-14.**
+
+    The LIVE PLATES table showed the ledger's `producer` (`DECKLINK DEVICE 1`, `"m1"`), which
+    is the AMCP argument. The operator named that input `sdi` in Station setup and that is the
+    word he will use. Golden rule 11 with the halves the other way round from usual: the
+    technical string is not an ID, but it is still not HIS word.
+
+    🔴 **THROUGH `resolvePlateSourcesForLook`, which is the function the BRIDGE delegates to —
+    never a local re-read of the assignment map.** The binding has FOUR levels (the template
+    assignment, the freeze taken at the take, the per-look composition and the `R-048` patch)
+    and `PreviewPanel` has already paid for resolving only the second: its overlay named the
+    template's default while air showed the bound source. A second resolution here would
+    reintroduce that split on a third surface.
+
+    ⚠ The ACTIVE LOOK is the item's own published `activeLookId`, so the name is the one a take
+    of this row, in this look, would put on air — the same rule the PVW overlay states.
+    ⚠ `null` for an unassigned plate or a deleted catalogue entry, and it stays `null`: the
+    surface falls back to the producer rather than dressing the argument up as a name.
+  */
+  const liveSourceName = (itemId: string, plateId: string): string | null => {
+    const item = items.find((i) => i.itemId === itemId);
+    if (item === undefined) return null;
+    const catalogId = resolvePlateSourcesForLook({
+      templateId: item.templateId,
+      plateIds: [plateId],
+      assignments: sourceAssignments,
+      ...(item.frozenAssignment !== undefined && { frozenAssignment: item.frozenAssignment }),
+      ...(item.lookSourceOverride !== undefined && { lookBindings: item.lookSourceOverride }),
+      ...(item.sourceOverride !== undefined && { overrides: item.sourceOverride }),
+      // REQUIRED, not optional: `undefined` is the positive statement *this carrier authors
+      // no looks*, and spreading the key away would make a missing look indistinguishable
+      // from a look the resolver was never told about.
+      lookId: item.activeLookId,
+    }).get(plateId);
+    if (catalogId === undefined || catalogId === null) return null;
+    return sourceCatalog.sources.find((c) => c.id === catalogId)?.name ?? null;
+  };
+
   const liveRowName = (itemId: string): string | null => {
     const slot = slots.find((sl) => sl.binding?.itemId === itemId);
     return slot === undefined
@@ -876,6 +944,7 @@ export function LayersPanel({
       never state a volume on a row the same pass called unknowable.
     */
     plateVolumeFor(items),
+    liveSourceName,
   );
   /*
     🔴 `PLATES-AUDIO-11` §2 — **THE FRAMES THE LEDGER HAS NOT SEATED, APPENDED TO THE SAME
@@ -894,6 +963,13 @@ export function LayersPanel({
         return templates.get(templateId)?.liveSources?.sources.map((p) => p.sourceId) ?? [];
       },
       plateVolumeFor(items),
+      liveSourceName,
+      /*
+        🔴 `B-247` — and WHETHER each unseated frame was TORN DOWN or never had a producer.
+        The bridge answers it (`releaseLivePlate`); this is only the join, for the same reason
+        the two lookups above it are injected — the subscription lives with the panel.
+      */
+      plateReleases,
     ),
   ];
   const liveStranded = hasStrandedLiveLayer(liveRows);

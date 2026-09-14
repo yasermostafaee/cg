@@ -65,7 +65,7 @@ test('the PLATE door — right-click on a seated plate opens the owner’s audio
   // Focus lands on the plate the operator pointed at — the HIDDEN frame, `guest-2`.
   await expect(page.locator(':focus')).toHaveAttribute('aria-label', 'Volume for guest-2');
   // 🔴 `PLATES-AUDIO-11` §3 — sentence case, superseding `design.md` §31.4's second half.
-  await expect(dialog.locator('[data-audio-plate="guest-2"]')).toContainText('Hidden by this look');
+  await expect(dialog.locator('[data-audio-plate="guest-2"]')).toContainText('Hidden by look');
   await dialog.locator('button', { hasText: /^Close$/ }).click();
   await expect(dialog).toHaveCount(0);
 
@@ -124,10 +124,22 @@ test('the LIVE PLATES table and the audio dialog carry the reference’s rendere
   const rowMin = await token(page, '--r-plate-row-min-h');
   const rowH = (await box(shown)).h;
   expect(rowH).toBeGreaterThanOrEqual(rowMin);
-  // …and the ordinary row is ONE line: no sentence under it (the held row keeps its caveat).
+  /*
+    …and EVERY ordinary row is ONE line.
+
+    🔴 AMENDED 2026-09-14: the HELD row used to keep a sentence under it and this asserted
+    exactly that. The owner photographed it on the plant — a four-line caveat running the width
+    of the table under a row whose own Audio cell already said `Hidden by look` — and the
+    treatment went back to what it is for: an ALARM (stranded, blind, adopted), none of which
+    the seeded mock has. The caveat is on the row's `title`, which is asserted rather than
+    dropped so it cannot quietly go too.
+  */
   expect(rowH).toBeLessThan(rowMin * 1.5);
   await expect(shown.locator('.cg-plate-detail')).toHaveCount(0);
-  await expect(app.liveSourceRow('1-11').locator('.cg-plate-detail')).toHaveCount(1);
+  const held = app.liveSourceRow('1-11');
+  await expect(held.locator('.cg-plate-detail')).toHaveCount(0);
+  expect((await box(held)).h).toBeLessThan(rowMin * 1.5);
+  await expect(held).toHaveAttribute('title', /muted and with no hole in front of it/);
 
   // The verbs — ON/OFF at 40 × 32, SOLO at 46 × 32.
   const strip = shown.locator('[data-plate-audio="guest-1"]');

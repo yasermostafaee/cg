@@ -54,6 +54,7 @@ import type {
   StackUpdateChannel,
   PlayoutLayerState,
   LiveLayerState,
+  LivePlateReleaseState,
   PlayoutLayersClearChannel,
   PlayoutLayersStateChannel,
   LiveLayersStateChannel,
@@ -462,6 +463,24 @@ export interface RuntimeBridge {
   liveLayers: {
     state(): Promise<ChannelResponse<typeof LiveLayersStateChannel>>;
     onStateChanged(handler: (state: LiveLayerState[]) => void): Unsubscribe;
+    /**
+     * 🔴 **`B-247` — WHY a plate stopped being seated, beside the ledger change that says
+     * THAT it did.**
+     *
+     * The bridge has always computed this sentence (`releaseLivePlate`) and always emitted
+     * it; until `B-247` nothing forwarded it, so §12.4's *"NAMED, OBSERVABLE behaviour"* was
+     * observable only to the bridge's own test suite. Without it the tab sees a three-seat
+     * row become a one-seat row and cannot tell a frame that was NEVER seated from one that
+     * WAS and was cleared — and it is the second that an operator needs a word for.
+     *
+     * ⚠ **AN EVENT, so it is only heard by a browser that was connected when it fired.** A
+     * reload loses it and the affected frame reads `Not seated` again. That is a deliberate
+     * bound and a safe one: the fact refines a state the ledger already publishes (no seat
+     * either way), so losing it under-claims rather than lying. It is NOT the shape to copy
+     * for anything an operator must not miss — `emptiedAir` is standing bridge state for
+     * exactly that reason.
+     */
+    onPlateReleased(release: (event: LivePlateReleaseState) => void): Unsubscribe;
   };
 
   templates: {

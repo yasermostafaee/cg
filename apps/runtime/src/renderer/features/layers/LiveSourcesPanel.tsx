@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Info } from 'lucide-react';
+import { ChevronRight, Info } from 'lucide-react';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
@@ -432,6 +432,19 @@ export function LiveSourcesPanel({
     (`3 occupied layers · 2 shown · 1 held`, measured) and an extra term appears exactly when
     there is an extra kind of row to explain.
   */
+  /*
+    ⚠ **AN OWNER FILTER WAS BUILT HERE AND WITHDRAWN BY THE OWNER, 2026-09-14** — the
+    reference's `#plate-owner-filter`, asked for and then retracted the same day: *"only one
+    multi-frame row can be live at a time"*, so the table never carries more than one owner's
+    frames and there is nothing to narrow.
+
+    Noted rather than silently absent, because the pull towards re-adding one from the drawing
+    is real. If the plant ever DOES run two multi-frame rows at once, the thing that made this
+    hard is worth carrying over: a filter may never hide a row that `needsAttention`. A stranded
+    producer is a live face on air that nothing else in the product can reach (`B-145`), and an
+    alarm conditional on a control the operator set minutes ago and has forgotten is not an
+    alarm.
+  */
   const seated = rows.filter((r) => r.coordinate !== null);
   const shownCount = seated.filter((r) => r.audio !== null && !r.audio.held).length;
   const heldCount = seated.filter((r) => r.audio?.held === true).length;
@@ -582,18 +595,50 @@ export function LiveSourcesPanel({
             >
               <span role="cell" className="cg-plate-coord">
                 {/*
-                  `R-028` — the real layer number stays visible. A declared frame has none, and
-                  the cell says WHY rather than printing a dash the operator has to interpret.
+                  `R-028` — the real layer number stays visible. A declared frame has none.
+
+                  🔴 A DASH, NOT THE WORD — owner, 2026-09-14. This cell printed `Not seated`,
+                  which is twice the width the Layer column is sized for (`--r-plate-coord-w`,
+                  sized for `1-10`) and pushed every column beside it out of line. The WORD is
+                  in the Picture column, where every other row's state word already is; this
+                  column carries only a coordinate or the absence of one.
                 */}
-                {row.coordinate ?? <span className="cg-plate-unseated">Not seated</span>}
+                {row.coordinate ?? (
+                  <span className="cg-plate-unseated" title="No layer is seated for this frame">
+                    —
+                  </span>
+                )}
               </span>
               <span role="cell" className="cg-plate-source">
                 <span className="cg-plate-slot" title="Template plate handle">
                   {row.plate}
                 </span>
-                {row.producer !== '' && (
-                  <bdi className="cg-plate-producer" title={row.producer}>
-                    {row.producer}
+                {/*
+                  🔴 **THE SOURCE THE OPERATOR NAMED, NOT THE PRODUCER ARGUMENT** — owner,
+                  2026-09-14. This printed the ledger's `producer` (`DECKLINK DEVICE 1`, `"m1"`);
+                  the operator called that input `sdi` in Station setup, and that is the word he
+                  will say. Golden rule 11's split, with the AMCP string on the `title`.
+
+                  ⚠ The FALLBACK is the producer, not an invented name. `sourceName` is `null`
+                  when the plate is unassigned, its catalogue entry has gone, or the stack has
+                  not arrived — and in each of those the producer is the only true thing the
+                  console has. Printing `— none —` there would hide a real producer that is on
+                  a layer right now.
+
+                  ⚠ Its own `<bdi>`: a catalogue name can be Persian and the row around it is
+                  LTR chrome.
+                */}
+                {(row.sourceName ?? row.producer) !== '' && (
+                  <bdi
+                    className="cg-plate-producer"
+                    data-plate-unnamed={row.sourceName === null ? 'true' : undefined}
+                    title={
+                      row.sourceName === null
+                        ? `${row.producer} — this plate has no source assigned in Station setup, so the console can only name what the bridge sent`
+                        : `${row.sourceName} · sent as ${row.producer}`
+                    }
+                  >
+                    {row.sourceName ?? row.producer}
                   </bdi>
                 )}
               </span>
@@ -633,7 +678,17 @@ export function LiveSourcesPanel({
                       change that broke a pin and that no delta had asked for. The coordinate
                       stays there, which is where `R-028`'s layer number belongs on a table.
                     */}
-                    <span className="cg-plate-owner-lead">Seated for</span>
+                    {/*
+                      🔴 THE LEAD-IN IS GONE — owner, 2026-09-14, and it takes the reference's
+                      shape exactly: `.plate-owner-link` is the NAME plus a chevron and nothing
+                      else (measured on `07-live-plates.html`: `Bed 1 ›`).
+
+                      ⚠ `design.md`'s audit row ARGUED the verb word should stay, on the
+                      strength of five tests pinning it. Superseded: on the plant
+                      `Seated for <Persian name>` was the widest thing in a column sized for a
+                      name, and a cell that disturbs the table's order is the defect the owner
+                      names. The verb said nothing the column header (`Owner`) does not.
+                    */}
                     <Button
                       variant="ghost"
                       className="cg-plate-owner-link"
@@ -662,6 +717,14 @@ export function LiveSourcesPanel({
                           characters are isolated. As a blockified `<bdi>` this cell resolved
                           RTL and took its overflow/ellipsis side with it. */}
                       <IsolatedName className="cg-plate-owner-name">{row.ownerLabel}</IsolatedName>
+                      {/*
+                        The reference's chevron, through the shared `Icon` (design system: no
+                        ad-hoc glyphs). `aria-hidden` by its own default — the button's
+                        accessible name already says it opens the row — and it does NOT mirror
+                        in RTL: the line is LTR chrome and the arrow points at the action, not
+                        along the text.
+                      */}
+                      <Icon icon={ChevronRight} size={13} />
                     </Button>
                   </>
                 ) : (

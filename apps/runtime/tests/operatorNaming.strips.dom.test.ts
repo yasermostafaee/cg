@@ -112,7 +112,11 @@ function baseStub(over: Record<string, unknown> = {}): void {
       clear: () => Promise.resolve({ ok: true }),
       onStateChanged: () => () => undefined,
     },
-    liveLayers: { state: () => Promise.resolve([]), onStateChanged: () => () => undefined },
+    liveLayers: {
+      state: () => Promise.resolve([]),
+      onStateChanged: () => () => undefined,
+      onPlateReleased: () => () => undefined,
+    },
     layers: { clear: () => Promise.resolve({ ok: true }) },
     stack: {
       snapshot: () => Promise.resolve([]),

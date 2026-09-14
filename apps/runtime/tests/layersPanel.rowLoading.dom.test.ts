@@ -138,6 +138,8 @@ function stubBridge(): {
     liveLayers: {
       state: () => Promise.resolve([]),
       onStateChanged: () => () => undefined,
+      // `B-247` — the release reason. Never fired here; the subscription must exist.
+      onPlateReleased: () => () => undefined,
     },
     stack: {
       snapshot: () => stack.promise,

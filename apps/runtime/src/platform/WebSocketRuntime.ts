@@ -27,6 +27,7 @@ import {
   PlayoutLayersStateChannel,
   LiveLayersStateChannel,
   LiveLayersStateChangedChannel,
+  LivePlateReleasedChannel,
   StackLoadChannel,
   StackNextChannel,
   StackOutChannel,
@@ -99,6 +100,7 @@ import {
   type PendingUpdate,
   type PlayoutLayerState,
   type LiveLayerState,
+  type LivePlateReleaseState,
   type RestoreMigration,
   type RestoreSkip,
   type TemplateInfo,
@@ -318,6 +320,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #playoutSubs = new Subs<PlayoutLayerState[]>();
   // B-145 (2.8) — the bridge-owned Live Source ledger push.
   readonly #liveLayerSubs = new Subs<LiveLayerState[]>();
+  // `B-247` — and WHY a plate left that ledger, which the ledger payload cannot say.
+  readonly #plateReleaseSubs = new Subs<LivePlateReleaseState>();
 
   #readyResolve: (() => void) | null = null;
   #readyReject: ((err: Error) => void) | null = null;
@@ -751,6 +755,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#liveLayerSubs.emit(p.data);
         break;
       }
+      case LivePlateReleasedChannel.name: {
+        const p = LivePlateReleasedChannel.payload.safeParse(payload);
+        if (p.success) this.#plateReleaseSubs.emit(p.data);
+        break;
+      }
       case LockStateChangedChannel.name: {
         const p = LockStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#lockSubs.emit(p.data);
@@ -1082,6 +1091,9 @@ export class WebSocketRuntime implements RuntimeBridge {
     state: () => this.#invoke(LiveLayersStateChannel, undefined),
     onStateChanged: (handler: (state: LiveLayerState[]) => void) =>
       this.#liveLayerSubs.add(handler),
+    // `B-247` — the bridge's own sentence for a plate the look reconcile let go.
+    onPlateReleased: (handler: (event: LivePlateReleaseState) => void) =>
+      this.#plateReleaseSubs.add(handler),
   };
 
   readonly lock = {

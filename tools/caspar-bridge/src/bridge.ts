@@ -38,6 +38,7 @@ import {
   PlayoutLayersStateChannel,
   LiveLayersStateChangedChannel,
   LiveLayersStateChannel,
+  LivePlateReleasedChannel,
   StackLoadChannel,
   StackNextChannel,
   BridgeCapabilitiesChannel,
@@ -907,8 +908,18 @@ function send(socket: WebSocket, frame: WsResponseFrame | WsPublishFrame): void 
   if (socket.readyState === socket.OPEN) socket.send(serializeWsFrame(frame));
 }
 
-/** Subscribe a connection to every publish channel; returns unsubscribers. */
-function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[] {
+/**
+ * Subscribe a connection to every publish channel; returns unsubscribers.
+ *
+ * 🔴 **EXPORTED FOR THE `B-247` PUBLISH-COVERAGE GUARD, exactly as {@link buildRoutes} is
+ * exported for `B-074`'s route-coverage guard.** An emitter `CasparRuntime` declares and this
+ * function does not subscribe is invisible in every other way — it is not a type error (the
+ * far end is a WebSocket), it breaks no test, and the bridge simply never sends the event. That
+ * is how `livePlateReleased` came to be computed, emitted and delivered nowhere for the life of
+ * `multibox-layout-switch`. `tests/publish-coverage.test.ts` calls this and asserts every
+ * emitter got a subscriber; do not make it private again.
+ */
+export function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[] {
   const push = (channel: AnyPublishChannel, payload: unknown): void => {
     const parsed = channel.payload.safeParse(payload);
     if (parsed.success)
@@ -957,6 +968,20 @@ function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[
     // R-022 — the rehearsing set, so a second browser never sees a rehearsing row
     // as an ordinary loaded one and loads onto it.
     backing.rehearseChanged.subscribe((r) => push(RehearseStateChangedChannel, r)),
+    /*
+      🔴 `B-247` — WHY a plate left the ledger, beside the ledger change itself.
+
+      The line above it (`liveLayersChanged`) says the seat is GONE; this says whether it was
+      HELD or TORN DOWN and what the bridge's reason was. Without it the console can see a
+      three-seat row become a one-seat row and has no way to tell a frame that was never seated
+      from one that was seated and cleared — which is precisely the state §12.4 promised would
+      be observable. It was emitted from the reconcile all along and subscribed by nothing.
+
+      ⚠ It rides the SAME emitter the reconcile already fires, after the wire and the ledger
+      agree (`caspar-runtime.ts` emits these only once both are settled), so a browser that
+      reads the ledger on this event sees the state the sentence describes.
+    */
+    backing.livePlateReleased.subscribe((r) => push(LivePlateReleasedChannel, r)),
   ];
 }
 

@@ -124,7 +124,7 @@ function stubBridge(f: Fixture): void {
     // `add-multibox-audio` — the panel reads the seated-layer ledger for the HELD half of
     // each box's audio glyph. Empty here: this file is about frame composition, and a
     // rehearsing row with nothing seated is not held.
-    liveLayers: { state: () => Promise.resolve([]), onStateChanged: noop },
+    liveLayers: { state: () => Promise.resolve([]), onStateChanged: noop, onPlateReleased: noop },
   };
   (window as unknown as { cg: unknown }).cg = stub;
 }

@@ -5352,13 +5352,19 @@ falsified by measurement in §28.6, and settled by the owner on that evidence in
 Do not re-open it from the reference alone.**
 
 ```
-green  = ON AIR, now
+green  = ON AIR, now — and, since the amendment below, AUDIBLE audio
 mint   = confirmation
 blue   = declared / selected, not on air
 amber  = ATTENTION — refused, or declared and not yet applied;
          told apart by SHAPE and PLACE, never by hue
 red    = DESTRUCTIVE ACTION CONTROLS ONLY — never a message class
 ```
+
+🔴 **AMENDED BY THE OWNER, 2026-09-14 (`PLATES-AUDIO-11` DELTA §1): green ALSO marks audio that
+is AUDIBLE, on the LIVE PLATES tab and in the Live audio modal.** Its own role token,
+`--r-audible-text` `rgb(128, 228, 176)` — the reference's measured value — kept distinct from
+`--r-onair` and `--r-ok-text` so the air mark and the healthy mint are not collapsed into it.
+The owner's decision, recorded rather than argued; §34.3 carries what was weighed.
 
 ### 29.1 Why amber does NOT split, though it carries two jobs
 
@@ -6099,6 +6105,11 @@ vocabularies are complete; they do not disagree, they name different things.
 
 ### 34.3 §3 — the green is REFUSED, with the falsification that refuses it
 
+🔴 **SUPERSEDED BY THE OWNER, 2026-09-14 — the green IS adopted.** The measurement and the
+falsification below are unchanged and are why the question reached the owner at all; what
+changed is the GRAMMAR they were tested against (§29). Everything from _"It does"_ to the
+blue paragraph is the argument that was weighed, not the current rule. See §34.7.
+
 The owner asked for the reference's green on what is on air and its amber on what is held, and
 named one check: if the reference paints that green on a row which is NOT on air, say so rather
 than copying it.
@@ -6183,3 +6194,88 @@ pathspec that has not been narrowed yet, not a result.
 at all: sentence case makes a clause LOWERCASE when it is not first, so the word is
 `Hidden by this look` alone and `Armed · hidden by this look` when armed. A recasing has two
 spellings per phrase, not one.
+
+### 34.7 THE DELTA — the state colours, the footer, and the paragraph (owner, 2026-09-14)
+
+Four instructions, taken as given. No establish phase was run and none is recorded here.
+
+**§1 — the three state colours, both surfaces.** `Audible` / `Audible · requested` GREEN;
+`Muted` / `Silent` unchanged neutral; `Silent · hidden by look` and `Not seated` AMBER. One
+token each, in `plateAudio.ts`, so the modal's state line and the tab's Audio column cannot
+carry different inks for one word.
+
+| state                 | ink                                     |
+| --------------------- | --------------------------------------- |
+| `Audible`             | `--r-audible-text` `rgb(128, 228, 176)` |
+| `Silent` / `Muted`    | `colors.textMuted` `#8e9eaf`            |
+| `Hidden by this look` | `--r-caution-text` `#f3cd88`            |
+| `Not seated`          | `--r-caution-text` `#f3cd88`            |
+
+`--r-audible-text` is a THIRD green with its own role name. `--r-onair` (`rgb(44 255 122)`) is
+the layer table's sacred air mark and `--r-ok-text` (`#85e4b6`) is the healthy mint; pointing
+this at either would collapse a distinction `colors.onAir`'s own note keeps on purpose. ⚠ The
+value is the reference's measured `rgb(128, 228, 176)`, which is **not** in the reference's own
+`:root` — adopted here as an explicit owner decision about OUR palette, not as a token import.
+
+⚠ `Audible` gave up `colors.ready` (`--blue #74cdf6`), which is the reference's own tab ink and
+what §34.3 had settled on. Blue means declared-not-on-air everywhere else in this console, so
+the two could not both stay.
+
+**Contrast, all three inks on both grounds.** `--r-surface` and `--r-table-row-hover` both
+resolve to `colors.panel` `#141b25` today; they are measured as two entries anyway, because
+that is a coincidence a retune breaks and the guard would then be measuring one surface while
+claiming two. Green **11.24:1**, amber **11.46:1**, muted grey **6.31:1** — all clear AA 4.5.
+No ink needed adjusting.
+
+**§2 — the footer sits on the frame's bottom edge.** A declared height alone did not put it
+there: `styles.body` is `overflowY: auto` with `minHeight: 0` and no `flex`, so with fewer rows
+than the frame holds it was CONTENT-sized and the footer floated up under the last row.
+`styles.bodyFlush` (`flex: 1 1 auto`) gives it the remaining track. ⚠ Applied only where a
+caller opted in with `frame="fixed"`; `library` and `ledger` keep exactly the layout
+`MODAL-CHROME-10` §4 measured.
+
+**§3 — the tab's paragraph is gone.** The four-line sentence on every unseated frame rendered
+through the tab's `attention` treatment, which exists for an ALARM, and a frame no look has
+entered is not one. `declaredFrameRows` sets `plain: true` (no visible second line) and its
+`detail` — the row's `title` — is now one clause saying what the row IS. The fact that stops a
+fader misleading anyone lives on the STATE's tooltip alone: _"The volume is recorded now and
+applied when a look that uses this frame seats it — nothing is sent until then."_
+
+⚠ **The sweep for the removed paragraph found it only on the MULTI-LINE pass**, and that is
+worth recording rather than glossing: `git grep` reported zero for
+`recorded now and applied when a look` because the sentence is built across a `' +` line break
+in `plateAudio.ts`. A per-line grep is blind to it — CLAUDE.md's own warning, met. The
+line-based passes (per-pathspec: `apps 887 / packages 435 / tools 400 / docs 115 /
+openspec 1015`) were proved live by a positive control before their zeros were believed.
+
+### 34.8 The plant's corrections, 2026-09-14 — a table that keeps its columns
+
+Four came off one photograph of the LIVE PLATES tab and one off the `Plate / source` column.
+Taken as given; the rule behind them is the owner's own: **a column's values may never disturb
+the table's order.**
+
+| was                                                 | is                   | why                                                                                       |
+| --------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------------- |
+| `Seated for <name>`                                 | `<name> ›`           | the verb said nothing the `Owner` header does not, and was the widest thing in the column |
+| `Held — not in the current look`, in amber          | `Held`, uncoloured   | the reference's own Picture cell is one word and no state hue                             |
+| `Hidden by this look`                               | `Hidden by look`     | it ellipsised inside the Audio column on the plant                                        |
+| the held row's four-line sentence, across the table | on the row's `title` | that treatment is for an ALARM; a held plate is a chosen disposition                      |
+| `DECKLINK DEVICE 1`, `"m1"`                         | `sdi`, `media1`      | an AMCP argument is not the operator's word (golden rule 11)                              |
+
+**The source name is resolved through `resolvePlateSourcesForLook`** — the function the BRIDGE
+delegates to — with the item's published `activeLookId`, so the cell names what a take of this
+row in this look would put on air. A local re-read of the assignment map would have resolved
+level 2 only, which is the split `PreviewPanel` has already paid for once: its overlay named the
+template's default while air showed the bound source. ⚠ The fallback when nothing resolves is
+the PRODUCER, never `— none —`: an unassigned plate's producer is on a layer right now, and
+hiding it would be the console declining to name something that is on air.
+
+⚠ **The amber did not leave these rows, it moved to one column.** `Held` and `Not seated` are
+neutral in the Picture cell; the caution ink is on the AUDIO cell, which is the column whose
+question — _why can I not hear this box?_ — it answers. One mark per row.
+
+⭐ **An owner FILTER was built and withdrawn the same day** (the reference's
+`#plate-owner-filter`): only one multi-frame row can be live at a time, so the table never
+carries more than one owner's frames. The note left in `LiveSourcesPanel` records the one thing
+that would have to hold if it ever returns — a filter may never hide a row that
+`needsAttention`, because an alarm conditional on a control set minutes ago is not an alarm.

@@ -247,6 +247,9 @@ export function createMockBridge(): RuntimeBridge {
     liveLayers: {
       state: () => Promise.resolve(mock.liveLayersState()),
       onStateChanged: (handler) => mock.liveLayersChanged.subscribe(handler),
+      // `B-247` — declared so the SPA can subscribe on either backend; never fired offline,
+      // for the reason the emitter's own note gives (the mock has no look reconcile).
+      onPlateReleased: (handler) => mock.livePlateReleased.subscribe(handler),
     },
 
     lock: {

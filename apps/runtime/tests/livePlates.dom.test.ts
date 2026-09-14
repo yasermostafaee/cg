@@ -207,7 +207,11 @@ describe('the Live sources section of Station setup defines sources and binds no
         set: () => Promise.resolve({ ok: true }),
       },
       playoutLayers: { state: () => Promise.resolve([]), onStateChanged: () => () => undefined },
-      liveLayers: { state: () => Promise.resolve([]), onStateChanged: () => () => undefined },
+      liveLayers: {
+        state: () => Promise.resolve([]),
+        onStateChanged: () => () => undefined,
+        onPlateReleased: () => () => undefined,
+      },
       delimiters: {
         list: () => Promise.resolve([]),
         onChanged: () => () => undefined,

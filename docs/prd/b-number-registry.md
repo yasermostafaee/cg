@@ -2790,3 +2790,27 @@ is worth recording precisely because the previous entry is about the time they d
 
 ⇒ **Next free after this session is `B-246`** (`B-001` … `B-245`, no gaps), **`D-161`**,
 **`C-034`** and **`P-047`** (`P-001` … `P-046`, no gaps, `P-046` taken here).
+
+### 2026-09-14 — `B-247` taken by `PLATE-RELEASE-15`, and the pointer was one behind again
+
+`B-247` was allocated for the bridge seam forwarding 18 of the runtime's 19 emitters, so
+`livePlateReleased` — §12.4's _"NAMED, OBSERVABLE"_ teardown reason — reached nobody outside the
+test suite. Filed in [bugs-runtime.md](bugs-runtime.md).
+
+Allocated the way the 2026-09-08 entry prescribes — by MEASURING, not by reading the pointer:
+
+- the duplicate audit printed **exactly `B-056` and `B-080`**, so the space was clean before
+  filing;
+- the highest existing **heading** is `B-236`, while `B-237`–`B-246` are claimed in code, tests
+  and change task lists with no PRD heading of their own — the same blind spot the two entries
+  above are about, and the reason the heading maximum may never be used as the pointer;
+- `git grep --untracked "B-247"` returned **nothing** outside this session's own files, and
+  `B-246` returned hits.
+
+⚠ **The pointer read `B-246` and `B-246` was already gone** — third consecutive session in which a
+dated pointer aged out before the next allocation. It is recorded here rather than sharpened,
+because the entry above already settled what to do about it: the pointer is a measurement, and
+the `git grep --untracked` at the moment of allocation is the instrument.
+
+⇒ **Next free after this session is `B-248`** (`B-247` taken here), **`D-161`**, **`C-034`** and
+**`P-047`** (unchanged).

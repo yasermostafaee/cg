@@ -174,6 +174,8 @@ function stubBridge(f: Fixture): void {
     liveLayers: {
       state: () => Promise.resolve(f.liveLayers ?? []),
       onStateChanged: noop,
+      // `B-247` — the release reason. Never fired here; the subscription must exist.
+      onPlateReleased: () => () => undefined,
     },
   };
   (window as unknown as { cg: unknown }).cg = stub;

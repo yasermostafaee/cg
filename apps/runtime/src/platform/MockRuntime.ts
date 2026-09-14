@@ -16,6 +16,7 @@ import type {
   PLAYOUT_CLEAR_REASONS,
   PlayoutLayerState,
   LiveLayerState,
+  LivePlateReleaseState,
   TemplateInfo,
   DelimiterOption,
   Rehearsal,
@@ -154,6 +155,26 @@ export class MockRuntime {
   readonly playoutStateChanged = new Emitter<PlayoutLayerState[]>();
   // B-145 (2.8) parity — the bridge's OWN Live Source ledger, pushed on change.
   readonly liveLayersChanged = new Emitter<LiveLayerState[]>();
+  /**
+   * `B-247` parity — WHY a plate left that ledger.
+   *
+   * 🔴 **DECLARED AND NEVER FIRED, and that is the TRUE answer for this session rather than a
+   * gap.** The bridge emits this from ONE place: the look reconcile
+   * (`#applyLivePlatesUnguarded`), for each plate `releaseLivePlate` decides to hold or tear
+   * down. The offline mock has no reconcile — `setActiveLook` records the look and touches the
+   * seed ledger not at all — so no plate is ever released by one, and an empty report is what
+   * actually happened. Same shape as `onRestoreSkips`: *"no restore, so an empty report is the
+   * true one."*
+   *
+   * ⚠ **Do NOT "restore parity" by firing this from `#releaseLivePlates`.** That models `out` /
+   * `stop` / `remove`, and the BRIDGE does not emit a release for those either — teardown goes
+   * through `teardownLiveLayers`, which releases the ledger silently. Firing here would teach
+   * the surface a signal air does not send, which is the `B-070` / `B-072` class this whole
+   * mock exists to avoid. Nor should it be fired by inventing a reconcile: that would put
+   * `canHoldLivePlate`'s policy into the mock, i.e. a second spelling of the one predicate
+   * whose absence from the renderer is the entire reason this channel exists.
+   */
+  readonly livePlateReleased = new Emitter<LivePlateReleaseState>();
   // R-034 parity — the shared delimiter list.
   readonly delimitersChanged = new Emitter<DelimiterOption[]>();
   // D-137 / C-015 parity — the installation's Live Source mapping.

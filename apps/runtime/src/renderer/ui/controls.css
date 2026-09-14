@@ -3460,16 +3460,31 @@ input[type='checkbox']:disabled:checked {
   white-space: nowrap;
   font-size: var(--r-plate-owner-text);
 }
-.cg-plate-owner-lead {
-  color: var(--r-text-muted);
-}
+/*
+ * `.cg-plate-owner-lead` IS GONE — owner, 2026-09-14. The cell was `Seated for <name>`; it is
+ * the NAME and a chevron now, which is the reference's own shape and which is what stops the
+ * widest cell in the table being a verb that says nothing the `Owner` column header does not.
+ * Removed rather than left unused: a dead rule is a rule with no reviewer.
+ */
 .cg-plate-owner .cg-btn {
   min-height: var(--r-plate-owner-btn-h);
   font-size: var(--r-plate-owner-text);
 }
+/*
+ * 🔴 EVERY COLUMN VALUE STAYS ON ONE LINE AND INSIDE ITS TRACK — owner, 2026-09-14: *"a
+ * column's values must never disturb the table's order"*. `white-space: nowrap` alone does not
+ * do it; without `min-width: 0` a grid item refuses to shrink below its content and pushes the
+ * tracks beside it instead, which is what a long state word did on the plant.
+ */
 .cg-plate-picture {
   font-size: var(--r-plate-word-text);
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cg-plate-owner {
+  min-width: 0;
 }
 /* The strip: the last three columns, laid out as a subgrid of the row. */
 .cg-plate-strip {
