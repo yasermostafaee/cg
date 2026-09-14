@@ -73,7 +73,16 @@
 ## 7. Evidence
 
 - [x] 7.1 `pnpm gate` green — 93/93 tasks, prettier clean, openspec 78/78.
-- [ ] 7.2 Linux `gate:e2e` discharge — a COMPLETED, GREEN `e2e` job whose run actually RAN, for
-      the commit carrying this change. **Run URL to be written here beside this tick.**
+- [x] 7.2 Linux `gate:e2e` DISCHARGED for `64efbb96`:
+      https://github.com/yasermostafaee/cg/actions/runs/34838029957 — completed/success, and
+      **both heavy jobs RAN**: `Lint • Typecheck • Test • Build` success and `E2E (Playwright)`
+      success. Neither was skipped, which is the half `P-029` makes it necessary to state.
+
+      ⚠ The previous commit `bd3e7455` was RED on that same job
+      (https://github.com/yasermostafaee/cg/actions/runs/34832310522) — the e2e suite still
+      addressed the pre-re-cut rows. Recorded rather than quietly superseded: it is the
+      measured instance of golden rule 12, a green `pnpm gate` saying nothing whatever
+      about what renders.
+
 - [ ] 7.3 Plant walkthrough: the bands are only finally real on a server. Rides the walkthrough,
       does not block this change.
