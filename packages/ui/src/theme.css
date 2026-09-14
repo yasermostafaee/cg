@@ -13,7 +13,39 @@
   --cg-border: #374151;
   --cg-text: #e5e7eb;
   --cg-text-muted: #9ca3af;
-  --cg-accent: #38bdf8;
+
+  /*
+   * 🔴 `UI-ACCENT-12` — **`--cg-accent` IS NOT DECLARED HERE, DELIBERATELY.**
+   *
+   * This package USED to own an accent (`#38bdf8`, the legacy sky) and paint it around every
+   * focused input in BOTH apps. That is a package deciding a colour on behalf of applications
+   * it knows nothing about, and it was wrong the moment the two apps' accents diverged: the
+   * Runtime's has been `#74cdf6` since the palette moved, so every focused field in the
+   * console rang in a blue the console does not use. It is also the painter that made an
+   * earlier fader ring the wrong colour — `:focus-visible` was already correct on the
+   * component, and this package-wide selector was overruling it.
+   *
+   * ⚠ THE FIX IS STRUCTURAL, NOT A NEW HEX. Changing the value here would have fixed the
+   * console by MOVING THE DESIGNER, which is why it was refused twice as a palette edit taken
+   * in passing.
+   *
+   * ── THE CONTRACT ─────────────────────────────────────────────────────────────────────────
+   *
+   *   `@cg/ui` holds no accent of its own. Its focus treatment READS `--cg-accent`, and the
+   *   CONSUMING APP supplies it — on `:root`, before first paint.
+   *
+   * The fallback is written at the single `var()` that reads it (below), not here, so that
+   * "undeclared" stays literally true and no app can pick this up as a value to override.
+   *
+   *   - Runtime — supplies `#74cdf6` from its OWN `--r-accent` token (`theme.ts`'s
+   *     `sharedVars`, written into `:root` by `applyThemeVars`). One value, one home: the
+   *     ring cannot drift from the accent it is meant to match.
+   *   - Designer — supplies NOTHING, and therefore takes the documented fallback, which is
+   *     exactly the value this line used to declare. Measured before and after: identical.
+   *
+   * A THIRD APP that supplies nothing renders exactly as today. That is the fallback's whole
+   * job — it is a compatibility floor, never a palette.
+   */
 
   --cg-radius-sm: 4px;
   --cg-radius-md: 6px;
@@ -94,11 +126,21 @@ select {
  * ⚠ SHARED — this file is `@cg/ui` and the DESIGNER renders through it too. That is why the
  * change is a SELECTOR and not a palette edit: no colour, no token and no component moved.
  */
+/*
+ * 🔴 `UI-ACCENT-12` — THE APP SUPPLIES THE ACCENT; THE FALLBACK IS THE COMPATIBILITY FLOOR.
+ *
+ * `#38bdf8` is not this package's accent — it is the value this rule painted before the
+ * contract existed, kept here so an app that supplies nothing renders EXACTLY as it did.
+ * It is the Designer's own accent (`designer/renderer/theme.ts`'s `colors.accent`), which is
+ * why the Designer can supply nothing and still be pixel-identical. Do not "tidy" it into a
+ * `:root` declaration: the moment it is declared, it stops being a floor and becomes a value
+ * every app inherits and must override — which is the defect this prompt undid.
+ */
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--cg-accent);
+  box-shadow: 0 0 0 2px var(--cg-accent, #38bdf8);
 }
 
 /*

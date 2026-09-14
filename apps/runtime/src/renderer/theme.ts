@@ -3592,6 +3592,28 @@ export const cssVars = {
 const THEME_STYLE_ID = 'cg-theme-vars';
 
 /**
+ * 🔴 `UI-ACCENT-12` — WHAT THIS APP SUPPLIES TO `@cg/ui`.
+ *
+ * `@cg/ui` is shared by the Designer and this app and therefore holds NO accent of its own: its
+ * global focus halo reads `--cg-accent` and the CONSUMING APP supplies it (see that package's
+ * `theme.css`). Before this, the package declared the legacy sky `#38bdf8` and painted it around
+ * every focused input here — a blue this console does not use anywhere else.
+ *
+ * ⚠ TAKEN FROM `--r-accent`, NEVER RE-SPELLED. The whole point is that the ring matches the
+ * accent; a second literal here is how the two drift the next time the palette moves. Writing
+ * the hex again would also put a colour literal outside the token home, which `tokenHome.test.ts`
+ * forbids for exactly this reason.
+ *
+ * ⚠ SEPARATE FROM `cssVars`, not a member of it. `cssVars` is the `--r-*` token home and several
+ * tests read it as such — `splashCss.test.ts` inverts it into a value → NAME map, so a `--cg-*`
+ * key sharing a value with `--r-accent` would shadow the `--r-` name that map is expected to
+ * return. Two maps, one `:root` block, no collision.
+ */
+export const sharedVars = {
+  '--cg-accent': ACCENT_SKY,
+} as const;
+
+/**
  * ── STATION-CHROME-01 §1 — HOW THE ONE HOME REACHES THE STYLESHEET ──────────
  *
  * `controls.css` used to REPEAT every value in its own `:root` block, with a parity
@@ -3612,7 +3634,7 @@ const THEME_STYLE_ID = 'cg-theme-vars';
  * the bundle, and mirrors its own values as documented literals (`splashCss.test.ts`).
  */
 export function applyThemeVars(root: HTMLElement, doc: Document = root.ownerDocument): void {
-  const body = Object.entries(cssVars)
+  const body = [...Object.entries(sharedVars), ...Object.entries(cssVars)]
     .map(([name, value]) => `  ${name}: ${value};`)
     .join('\n');
   const existing = doc.getElementById(THEME_STYLE_ID);
