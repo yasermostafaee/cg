@@ -28,6 +28,11 @@ import { IsolatedName } from '../../ui/OperatorNames.js';
 import { EDITOR_DIR } from '../../ui/editorTextDirection.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
+import {
+  REHEARSE_STATE_COLOR,
+  REHEARSE_STATE_WORD,
+  rehearseOwnsStateWord,
+} from '../layers/rowState.js';
 import { grantedFileSourcePaths } from './fileSourceGrants.js';
 import { detachUngrantedSources } from './fromFileStore.js';
 import { FromFileControl } from './FromFileControl.js';
@@ -537,6 +542,14 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
    * BOTH its hue and its word, so the two can never describe different rows.
    */
   const onAir = isOnAirStatus(item);
+  /*
+   * §2 — THE ROW'S STATE, IN THE ROW'S WORDS. One evaluation of the canonical visual, one
+   * ask of the canonical rehearse precedence; the chip below renders both.
+   */
+  const stateVisual = airStateVisual(item.status, item.pending);
+  const onPvw = rehearseOwnsStateWord(item.status, item.pending, rehearsing === true);
+  const stateWord = onPvw ? REHEARSE_STATE_WORD : stateVisual.label;
+  const stateColor = onPvw ? REHEARSE_STATE_COLOR : stateVisual.color;
 
   return (
     <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
@@ -608,10 +621,32 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
         <div className="cg-meta-chips">
           {/* The status word names itself, so it carries no label — only the dot
               that marks it as the state among the coordinates. */}
-          <MetaChip
-            value={`${item.status}${item.pending ? ' (pending)' : ''}`}
-            dotColor={airStateVisual(item.status, item.pending).color}
-          />
+          {/*
+            🔴 THE ROW'S OWN VOCABULARY — `INSPECTOR-DELTA` §2.
+
+            This printed the RAW WIRE STATUS: `playing`, `loaded`, `idle`, `on-air`,
+            `unverified`, with a ` (pending)` suffix bolted on. Those are the words of
+            `StackItemState['status']`, which is a transport enum — they are not on the
+            operator's screen anywhere else, and the layers table two panels away was
+            already calling the very same row `ON AIR`, `READY`, `TAKING`. One row, two
+            vocabularies, and the operator has to learn that `playing` and `ON AIR` are the
+            same thing (golden rule 11: the operator's words, and they are the words
+            already on screen).
+
+            ⚠ `airStateVisual` was ALREADY BEING CALLED HERE — for the dot's colour — and
+            its `.label` was dropped on the floor. So this is not a new derivation; it is
+            the other half of a value already in hand, read ONCE and used for both, which
+            is why the word and the hue can never describe different states.
+
+            ⚠ THE ` (pending)` SUFFIX IS GONE because the word now carries it:
+            `playing` + pending IS `TAKING` (`airStateVisual`), and `badgeTone` consults
+            `pending` for no other status. `TAKING (pending)` would say it twice.
+
+            ⚠ REHEARSE through the ONE predicate (`rehearseOwnsStateWord`), never a local
+            re-spelling of its precedence: the rule that an AIR claim beats a rehearse
+            badge is `rowState`'s, and two copies of it would agree by luck.
+          */}
+          <MetaChip value={stateWord} dotColor={stateColor} />
           {item.slot === undefined ? (
             <MetaChip value={layerDetail(undefined)} />
           ) : (

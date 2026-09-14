@@ -265,6 +265,53 @@ function withWire(explanation: string | undefined, wire: string): string {
     : `${explanation} CasparCG reports: ${wire}.`;
 }
 
+/**
+ * 🔴 **R-022's REHEARSE PRECEDENCE, AS ONE PREDICATE — `INSPECTOR-DELTA` §2.**
+ *
+ * Does REHEARSE own this row's state word? It is a pure function of the three things every
+ * surface showing a row already has, which is what makes extracting it possible at all:
+ * the item's `status`, its `pending`, and whether the bridge says the row is rehearsing.
+ * Every other input `rowState` takes (the wire observation, both link hops, the bank
+ * binding) is irrelevant to THIS question.
+ *
+ * ⚠ **WHY IT IS EXPORTED RATHER THAN LEFT INLINE.** The Inspector shows the same row's
+ * state in its own chip and knows only the item — it cannot call {@link rowState}, which
+ * wants ten inputs it has no way to obtain. Before this it printed the RAW WIRE WORD
+ * (`playing`, `loaded`) while the table two panels away said `ON AIR` and `READY` about the
+ * same row. The fix must not be a second spelling of this rule: golden rule 6 says the
+ * predicate is reused, never re-derived, and "rehearse loses to an air claim" is exactly the
+ * kind of precedence that would agree by luck until it did not.
+ *
+ * 🔴 **SUBORDINATE TO THE AIR CLAIM, and that ordering is the load-bearing part** — it is
+ * `rowState`'s own argument, kept verbatim because moving the code must not move the
+ * reasoning: if a row somehow claims air while we believe it is rehearsing, the AIR claim
+ * wins the display. The operator's one urgent question is "what is on air", and a rehearse
+ * badge over a live graphic answers it wrongly. `transient` is excluded for the same family
+ * of reason — a take in flight is a transition toward air.
+ */
+export function rehearseOwnsStateWord(
+  status: StackItemStatus,
+  pending: boolean,
+  rehearsing: boolean,
+): boolean {
+  if (!rehearsing) return false;
+  const tone = badgeTone(status, pending);
+  return tone !== 'onair' && tone !== 'transient';
+}
+
+/**
+ * The WORD a rehearsing row wears, in one place.
+ *
+ * ⚠ It is `ON PVW` and NOT `REHEARSING` — the same words as the verb that turns it on
+ * (`layerRowActions`' `ON PVW` / `OFF PVW`), so the button and the state it produces read as
+ * one thing. `REHEARSING` appears in this codebase's PROSE and nowhere on the operator's
+ * screen; do not introduce it as a label.
+ */
+export const REHEARSE_STATE_WORD = 'ON PVW';
+
+/** …and its mark colour — `R-022`'s violet, so a second surface cannot pick another. */
+export const REHEARSE_STATE_COLOR = colors.rehearsing;
+
 export function rowState({
   binding,
   pending,
@@ -417,16 +464,16 @@ export function rowState({
    *
    * `transient` is also excluded: a take in flight is a transition toward air.
    */
-  if (rehearsing && !claimsAir && tone !== 'transient') {
+  if (rehearseOwnsStateWord(status, pending, rehearsing)) {
     return {
       // A MONITOR, unique among this module's circles — shape carries the state
       // before colour does, and "playing on a monitor, not on air" is exactly what
       // rehearse is.
       icon: MonitorPlay,
-      color: colors.rehearsing,
+      color: REHEARSE_STATE_COLOR,
       // ON PVW — the same words as the verb that turns it on, so the button and
       // the state it produces read as one thing.
-      label: 'ON PVW',
+      label: REHEARSE_STATE_WORD,
       // `idle` and not `attention`: rehearse is a deliberate, safe operator choice,
       // not something to go and look at. Amber here would cry wolf.
       tone: 'idle',
