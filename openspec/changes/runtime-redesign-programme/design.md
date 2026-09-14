@@ -6562,3 +6562,247 @@ air — §6 forbids all three here, and the prompt asked for the report rather t
   goes red — and both its loops got positive controls, because each was a negative observation
   over a set that could have been empty. `inspectorToast.dom.test.ts` matched the commit
   control's whole `aria-label`, which the on-air case extends.
+
+## 36. `INSPECTOR-DELTA` — FOUR ITEMS, FIVE IN-FLIGHT CORRECTIONS, AND ONE REVERSAL
+
+Prompt `INSPECTOR-DELTA`, 2026-09-14, plus five owner messages sent while it was being built.
+FULL LANE. The shape of the session: two items were defects, one was answered by reading the
+drawing rather than the prompt, and the largest change arrived mid-flight and superseded work
+already finished.
+
+### 36.1 🔴 §1 — THE LOCK WAS A RENDERING, NOT A BEHAVIOUR
+
+On a row that is ON AIR, POSITION says `locked while on air` and both boxes render disabled —
+and dragging one still moved its value. **A field that LOOKS locked and accepts a drag is worse
+than one that never claimed to be locked**: the operator trusts the word and moves a graphic
+that is transmitting.
+
+**RED FIRST, measured in Chromium** (`position-lock-refuses-drag.spec.ts`, written and watched
+to fail before anything was touched):
+
+```
+Error: a locked X field must not move under a drag — the row is ON AIR
+Expected: "50"
+Received: "130"
+```
+
+🔴 **THE INTUITION THAT THIS CANNOT HAPPEN IS WRONG, AND THAT IS WHY IT SURVIVED REVIEW.**
+`disabled` rode in on `...rest` and reached the `<input>` only. A disabled form control is
+barred from ACTIVATION behaviour — no `click`, no focus, no typing — and it is easy to read
+that as "no pointer events either". It is not: **`pointerdown` IS dispatched to a disabled
+`<input type="text">`**, and that is the only event this gesture needs, because
+`runScrubGesture` then listens for the moves on the WINDOW. The browser's own guard stops at
+the edge of the thing the browser owns.
+
+One `inert` predicate (`disabled || readOnly`), read by the pointer guard AND the key guard —
+a pointer guard without the matching key guard is the same defect with a different input
+device. The `ew-resize` affordance is withheld from an inert field too: a locked box
+advertising the gesture it is about to refuse is the shape lying about the behaviour, and it is
+how the owner came to try the drag at all. **No refusal CONDITION moved** — `isPositionLocked`
+still decides who is locked; the control now obeys what it already claimed.
+
+⚠ **The spec uses raw `page.mouse`, not `locator.dragTo`.** Playwright's actionability checks
+refuse a disabled element before dispatching anything, so that route would have produced a
+GREEN that proves nothing about a real pointer. Its positive control drives the same helper
+against the same field while OFF AIR first, and that must MOVE.
+
+#### The sibling sweep — one found, in the other app, REPORTED not fixed
+
+Swept on two axes with per-pathspec proof (all six pathspecs match: designer/src 233,
+runtime/src 178, packages 438, tools 409, designer/tests 234, runtime/tests 236). The repo is
+**100 % Pointer Events** — `onMouseDown` returns **0** against `onPointerDown`'s **99**, a real
+zero proved by the sibling token on the identical command.
+
+🔴 **`apps/designer/src/renderer/features/timeline/ElementRow.tsx:461`** (attached at 543, 548, 555) drags an element's timeline lifespan into `updateElementLifespan`. It is a `<div>`, so
+nothing suppresses anything; `element.locked` is IN SCOPE and the file renders the lock toggle
+itself; the handler never reads it. **The canvas half of the SAME lock IS guarded**
+(`CanvasOverlay.tsx:529` — `if (!hit.locked) beginDrag(…)`). One lock, two surfaces, enforced
+on one.
+
+⚠ **Not fixed here, and the reason is a real uncertainty rather than scope discipline alone:**
+no written contract says the element lock covers the TIMELINE as well as the canvas. That is an
+owner question, and a different app.
+
+⭐ **Axis (b) found what axis (a) could not**, which is the argument for two axes in one line:
+`scrubGesture.ts` — the primitive itself — contains no `onPointerDown` string at all, and the
+two real `input[type=range]` volume sliders use `onChange`/`onPointerUp`. A third notation axis
+mattered too: `type="range"` → **0**, `type='range'` → **8**. A sweep on the double-quoted JSX
+spelling alone would have concluded the product has no range sliders.
+
+### 36.2 §2 — THE CHIP SPOKE THE WIRE'S VOCABULARY
+
+It printed the raw `StackItemState['status']` — `playing`, `loaded`, `idle`, `unverified` —
+with a ` (pending)` suffix bolted on. Those are transport words; the layers table two panels
+away was already calling the very same row `ON AIR`, `READY`, `TAKING`.
+
+⚠ **`airStateVisual` WAS ALREADY BEING CALLED HERE**, for the dot's colour, with its `.label`
+dropped on the floor. So this is not a new derivation — it is the other half of a value already
+in hand, read ONCE so the word and the hue can never describe different states.
+
+| status                            | word        |
+| --------------------------------- | ----------- |
+| `on-air`, `playing` (not pending) | ON AIR      |
+| `playing` + pending               | TAKING      |
+| `updating`                        | UPDATING    |
+| `unconfirmed`                     | UNCONFIRMED |
+| `unverified`                      | WAS ON AIR  |
+| `exiting`                         | EXIT        |
+| `loaded`, `idle`                  | READY       |
+| `error`                           | ERROR       |
+| `disconnected`                    | OFFLINE     |
+| fallback                          | IDLE        |
+| rehearsing                        | ON PVW      |
+
+⚠ **`EMPTY` is unreachable here by construction** — it is `rowState`'s word for an UNBOUND row,
+and the Inspector renders only when an item is selected. ⚠ **And `REHEARSING` is not a label at
+all**: it appears in this codebase's prose and nowhere on the operator's screen. The rendered
+word is `ON PVW`, matching the verb that turns it on. The prompt's vocabulary list names both;
+the product has one.
+
+**The rehearse precedence is EXTRACTED, not copied.** The Inspector cannot call `rowState` — it
+wants ten inputs this panel cannot obtain — so the alternative was a second spelling of "an air
+claim beats a rehearse badge", which is exactly the kind of precedence that agrees by luck until
+it does not. `rehearseOwnsStateWord(status, pending, rehearsing)` is now the one definition and
+both call it; it could be extracted at all because `badgeTone` consults nothing else.
+
+### 36.3 🔴 §4 — THE REFERENCE ANSWERS, AND IT IS NOT WHAT THE PROMPT DESCRIBED
+
+The prompt pointed at "the plain per-plate list (Plate 1 / Plate 2 / Plate 3, one select each)"
+and — correctly — told me to read the drawing myself. **The two surfaces differ, and the
+owner's description is the OTHER one.**
+
+|               | the Inspector's PER-ROW section                                                           | the channel-defaults dialog                   |
+| ------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------- |
+| markup        | `div.look-tabs` of `aria-pressed` buttons, then `#look-mappings`                          | a flat `.fields` list                         |
+| per-row label | **`Frame 1`, `Frame 2`**                                                                  | **`Plate 1`, `Plate 2`**                      |
+| inheritance   | `<option value="">Default (…)</option>`                                                   | none — the select IS the value                |
+| hint          | "Default inherits this channel's source mapping. Editing a look does not take it on air." | "Only the sample configuration changes here." |
+
+`Plate N` appears **nowhere** in the per-row section of any of the nine reference files. So the
+per-row section is built as the reference draws it: TABS.
+
+Ours rendered every look stacked at once, each with its own heading and full plate list — in a
+396 px panel, the whole section scrolling past.
+
+🔴 **NOTHING STAGED MAY BECOME INVISIBLE, which is the one thing tabs cost and stacking did
+not.** A look holding an unapplied edit marks its own tab with the same dirty dot a field
+carries, computed through the same `isLookBindingDirty` the rows use. That is strictly better
+than the old shape for the need the old comment named — composing an off-air look while another
+is on air — because an edit now announces itself instead of merely being further down a scroll.
+
+🔴 **AND THE GOLDEN-RULE-10 SENTENCE WAS MISSING ENTIRELY.** The reference carries _"Editing a
+look does not take it on air."_; a sweep of the whole renderer for `take it on air` found one
+hit, in the picker, about something else. It matters most here of all the places it could be
+missing: with tabs, pressing one LOOKS like switching what is showing, and it is not — it
+changes which look you are EDITING.
+
+### 36.4 THE POSITION SECTION — FOUR OWNER MESSAGES, EACH MEASURED
+
+Every step measured in Chromium at 1280 × 800 before and after.
+
+| the owner's words                                              | what was measured                                                                                                                                                                 | what changed                                                                            |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| «دکمه‌ها و اینپوتها … تراز باشن»                               | THREE left edges: anchor pad 0, dx/dy 112, `Apply position` 0 — the control that commits those two boxes sat under the pad, sharing an edge with the one thing it does not act on | one grid; pad spans the left column, fields and button stack in the right               |
+| «لیبل … با خود اینپوتها در یه خط»                              | labels sat ABOVE each box                                                                                                                                                         | a label\|box grid, centres aligned                                                      |
+| «لیبلها در انتها … ابتدای دکمه با ابتدای اینپوتها در یک راستا» | with labels leading, boxes began one label-width in while the row-spanning button began at the label edge                                                                         | label LAST, so the box column IS column one and the two starts coincide by construction |
+| «9 دکمه … کوچیکتر … با اینپوتها تراز»                          | pad 96 × 96 against a 72 px box stack                                                                                                                                             | pad **76 × 76**, and the stack's row gap set so `3 × 24 + 2 × 2 = 32 + 12 + 32`         |
+
+**POSITION section: 370 × 203 → 370 × 119.**
+
+⚠ **24 px IS THE FLOOR, NOT A STEP BELOW IT.** §12.3 records that the reference's own 20 px
+cells were REFUSED because a 20 px hit target is under the 24 px minimum (the `A8` shape). The
+pad shrank as far as it may and no further; anything smaller has to move the floor first, which
+is not a layout decision.
+
+⚠ **THE PAD'S SIZE AND THE STACK'S ROW GAP ARE A PAIR**, and both sites say so. Changing one
+without re-deriving the other silently un-aligns them, which is the raggedness this replaced.
+
+🔴 **THE SAME TRAP TWICE, IN ONE SECTION, AND NEITHER ERRORS.** A layout-direction change is
+not a free change to the children: `offsetField`'s `flex: 1 1 <width token>` became a flex-basis
+on HEIGHT when its parent became a column, and `offsets`' own `flex` shorthand went **INERT**
+when its parent became a grid — no error, no warning, it simply stops doing anything and the
+width cap is silently lost.
+
+### 36.5 🔴 THE REVERSAL — `Apply position` FOLDED INTO UPDATE
+
+Arrived mid-flight and superseded work already finished in §36.4: «دکمه apply position فقط یه
+مرحله اضافیه و همون دکمه update باید پوزیشن رو هم اعمال کنه و همچنین discard هم روش کار کنه» and
+«فقط در حالت pvw نیازه که … موقعیت در pvw تغییر کنه بصورت لحظه‌ای و realtime، در حقیقت با
+onchange اینپوتها».
+
+The row has ONE commit: UPDATE sends the text, the plates, the per-look composition and the
+placement; DISCARD drops all four; PVW follows the boxes as they are typed.
+
+⚠ **THE WIRE DID NOT MOVE.** The position still travels on `stack.setPosition`, its own
+channel, same payload — what changed is which CONTROL fires it. Folding it into the
+`stack.update` field-set would send the template a field it never declared, which is why
+`positionDrafts` is a separate map, and that reason is intact. No IPC schema, no persisted key.
+
+🔴 **THE OLD ARGUMENT WAS NOT WRONG — ITS PREMISE MOVED, which is the only honest way to retire
+one.** `draftStore`'s header argued DISCARD must leave the position alone and `isItemDirty` must
+not read it, because _"UPDATE does not send the position"_ and a chip pointing at an edit UPDATE
+would not send is a control whose word lies. UPDATE sends it now, so the same reasoning INVERTS
+and demands the opposite. The old text is REPLACED, not left standing beside the new.
+
+🔴 **A LOCKED ROW IS LEFT ALONE, which preserves the refusal rather than weakening it.**
+`setPosition` is refused on air and the boxes are disabled for exactly as long — but a draft
+staged OFF air survives a take, so an UPDATE pressed afterwards would fire a command the bridge
+is bound to refuse and drag the whole press down with it, reporting a failed update to an
+operator whose text edit was accepted. `sendPosition` asks the SAME predicate the picker
+disables its boxes with, so the two cannot disagree.
+
+#### 🔴 The regression the full suite caught, and why it is worth its own heading
+
+The first spelling of `effectivePosition` took a non-optional `applied`, and the caller filled
+the gap with `defaultPositionOf(templateId)`. Reasonable-looking, and wrong: **a row with no
+override must reach the rehearsal frame with NO position**, because the frame ABSTAINS on
+absence and an empty search resolves to CENTRED. Every correctly-placed graphic's preview would
+have jumped to the middle. `rehearse-composite` failed with `?pos=center&dx=0&dy=0` where it
+expected nothing. `undefined` in is `undefined` out now, and the SIGNATURE carries the rule
+rather than a comment asking the next caller to remember.
+
+⭐ **And the same suite recorded the feature working**: the frame now receives
+`?dx=0&dy=0`, `?dx=42&dy=0`, `?dx=42&dy=7` in turn. That spec asserts the LAST value is the one
+the bridge would serve AND that the intermediates arrived — so PVW cannot silently go back to
+waiting for UPDATE.
+
+### 36.6 EVERY SPEC RE-POINTED, NOT RELAXED — 8 FILES
+
+A contract reversal is the easiest moment in a project to lose a guard by "relaxing it to
+match", so each one is recorded:
+
+- **the decision itself** (`draftStore.test.ts`) — the assertion is INVERTED, with the old
+  test's own reasoning quoted as what demands the new one;
+- **the lock's observable** moved from the button to the BOXES — the half that actually refuses
+  a drag;
+- **two guards got STRONGER.** `B-072`'s blast radius is now _an untouched press sends NOTHING_
+  (there is no value left to revert to), and `rehearse-composite` gained the explicit realtime
+  assertion. Both carry a positive control proving a real edit still reaches the wire — the
+  first alone would pass against a position path that had stopped sending altogether;
+- **an absence entry was re-pointed off a dead string.** `stationSetupScope` asserted Station
+  setup contains no `Apply position`; with that string gone from the product the check would
+  have passed against every possible regression. An absence test for a string nothing contains
+  is vacuous, which is the same defect §35.5 fixed from the other direction.
+
+### 36.7 The runs
+
+- `pnpm gate`, foreground, uncached: **93 successful, 93 total · 0 cached**, exit 0 in
+  **247.6 s**, with its `---- gate ended` footer (`P-040`/`P-045`).
+- Runtime unit suite: **160 files, 1499 tests.**
+- 🔴 **DISCHARGED — Linux `e2e` on the code head `c9d67fe3`:**
+  <https://github.com/yasermostafaee/cg/actions/runs/34871745278> — run `conclusion: success`;
+  the **`E2E (Playwright)` job RAN** 16:57:18Z → 17:09:35Z (**737 s**, `completed/success`) and
+  its **`E2E` step is step 13, `completed/success`**. Read at the STEP level, never merely the
+  job. The suite really ran: `@cg/designer` **280 passed**, `@cg/runtime` **221 passed**.
+- ⚠ **ONE RED RUN ON THE WAY, cited because a session must not drop a run it caused.**
+  <https://github.com/yasermostafaee/cg/actions/runs/34857715219> on `3b744938` failed — step 13
+  `E2E` RAN, so a real result and not `P-046`. Entirely `@cg/designer` (1 failed, 1 flaky, 278
+  passed) on a canvas pixel read returning `0`; `@cg/runtime` 220 passed. **Not attributable**:
+  `apps/designer`, `packages`, `tools`, the lockfile, `package.json` and `turbo.json` are
+  BYTE-IDENTICAL to the green run 40 minutes earlier, compared by tree hash rather than assumed.
+  Confirmed a flake by the next run rather than argued as one.
+- ⚠ **`control-bytes`' FIRST CATCH IN THE TREE, one commit after it landed.** PowerShell's
+  `Set-Content -Encoding utf8` injected a **UTF-8 BOM** into `inspector-geometry.spec.ts` while
+  renaming a test title (`P-025`). Nothing else in the gate fails on one — prettier does not
+  strip it, tsc and eslint read the file happily — which is how seven survived here before.
+  Stripped with node: the tool that caused it cannot be the tool that fixes it.

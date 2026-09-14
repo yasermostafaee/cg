@@ -1280,10 +1280,50 @@ renders answers "is this handled?" with a yes.
       **§5(c) REPORTED, NOT BUILT** — what auditing a look switch would take, in four parts,
       `design.md` §35.6. The schema enumerates FIFTEEN actions, not the twelve the prompt said.
       Runs: runtime unit **1495 passing**; Windows Playwright **220 passed** (non-authoritative).
-- [ ] Q.11 🔴 **Linux `gate:e2e` for Q.10 — OWED.** The Windows run above is a reason to push and
-      never a discharge (golden rule 12a). To be filled with the run URL once CI on `dev`
-      completes, read at the STEP level (`P-046`/`P-029`): the `E2E` step must have RUN and read
-      `completed/success`, not merely the job.
+- [x] Q.11 🔴 **Linux `gate:e2e` for Q.10 — DISCHARGED on `3b744938`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34857715219> — ⚠ **that run is RED, and it
+      discharges NOTHING. It is cited because a session must not quietly drop a run it caused.**
+      Step 13 `E2E` **RAN** and FAILED, so it is a real suite result and not `P-046`'s
+      never-reached-the-suite shape. The failure was entirely `@cg/designer` (**1 failed, 1
+      flaky, 278 passed**) on `video-import.spec.ts:291`, a canvas pixel read returning `0`;
+      `@cg/runtime` was **220 passed**. Not attributable to that commit: `apps/designer`,
+      `packages`, `tools`, `pnpm-lock.yaml`, `package.json` and `turbo.json` are BYTE-IDENTICAL
+      between it and the green run 40 minutes earlier (tree hashes compared, not assumed).
+      **Confirmed a flake rather than argued as one** — the next run, on `419b0eef`
+      (<https://github.com/yasermostafaee/cg/actions/runs/34860833605>), is `conclusion: success`
+      with its `E2E` job RAN 15:14:30Z → 15:26:21Z and **step 13 `E2E` `completed/success`**.
+      That run is the discharge for Q.10's code, which `419b0eef` contains.
+- [x] Q.12 🔴 **`INSPECTOR-DELTA` — the four items, the owner's five in-flight corrections, and
+      the `Apply position` reversal, 2026-09-14.** FULL LANE.
+      **§1 — a locked field accepted a DRAG.** RED-FIRST, measured in Chromium: a locked X box
+      went **50 → 130** while the row was ON AIR. `disabled` reached the `<input>` only; a
+      disabled form control is barred from ACTIVATION behaviour, not from `pointerdown`, and
+      that is the only event the gesture needs because `runScrubGesture` listens for the moves
+      on the WINDOW. One `inert` predicate, read by the pointer AND the key path, with the
+      `ew-resize` affordance withheld too. No refusal CONDITION moved.
+      **§2 — the chip spoke the wire's vocabulary** (`playing`, `loaded`) while the layers table
+      two panels away called the same row `ON AIR` / `READY`. `airStateVisual` was already being
+      called here for the dot's colour with its `.label` dropped on the floor. Rehearse
+      precedence extracted to ONE predicate (`rehearseOwnsStateWord`) rather than re-spelled.
+      **§3/§4 and the owner's corrections** — see `design.md` §36.
+      **§5(c) of the earlier prompt** is `design.md` §35.6 and is unchanged by this item.
+- [x] Q.13 🔴 **Linux `gate:e2e` for Q.12 — DISCHARGED on the code head `c9d67fe3`:**
+      <https://github.com/yasermostafaee/cg/actions/runs/34871745278> — run `conclusion: success`;
+      the **`E2E (Playwright)` job RAN** 16:57:18Z → 17:09:35Z (**737 s**, `completed/success`),
+      and its **`E2E` step is step 13, `completed/success`**. Read at the STEP level and never
+      merely at the job (`P-046` is a red job whose suite never ran; `P-029` is its mirror). Not
+      skipped, not cancelled. The suite really ran: `@cg/designer` **280 passed**, `@cg/runtime`
+      **221 passed** — so the Q.11 Designer flake did not recur either.
+      `Lint · Typecheck · Test · Build` green beside it (193 s), `required` green.
+      Local `pnpm gate`, foreground, uncached: **93 successful, 93 total · 0 cached**, exit 0 in
+      **247.6 s**, with its `---- gate ended` footer (`P-040`/`P-045`), so not a killed capture.
+      Runtime unit suite **160 files / 1499 tests**.
+      ⚠ **Two reds caught before the push, both by instruments this tree added for exactly
+      them.** `rehearse-composite` failed with `?pos=center&dx=0&dy=0` where it expected
+      NOTHING — the PVW change had filled an absent position with the manifest default, which
+      would have re-centred every correctly-placed graphic's preview. And the new
+      `control-bytes` gate step (9d991b9b) refused a **UTF-8 BOM** PowerShell's `Set-Content`
+      injected into `inspector-geometry.spec.ts` — `P-025`, its first catch in the tree.
 - [x] Q.6 🔴 **Linux `gate:e2e` — DISCHARGED on `0a19dec6`, the commit that carries this work:**
       <https://github.com/yasermostafaee/cg/actions/runs/34655583610> — run `conclusion: success`, the **`E2E (Playwright)` job RAN** 22:48:48Z →
       23:00:37Z (**709 s**, `conclusion: success`), and its **`E2E` step is step 13,
