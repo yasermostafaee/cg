@@ -251,7 +251,7 @@ test('§B2 — the filter narrows the list, and never hides a row that would los
     `CONSOLE-LOOK-06` §3 took the reference's `N/M rows` form; the TOTAL is what this asserts
     and it must not move when the shown count does.
 
-    ⚠ Not to be confused with Station setup's own `29 of 29 rows` (`CandidateLayersSection`,
+    ⚠ Not to be confused with Station setup's own `30 of 30 rows` (`CandidateLayersSection`,
     `[data-layers-results]`), which is a different pane on a different surface and keeps its
     own wording — `station-setup-match.spec.ts` pins that one.
   */
@@ -276,7 +276,7 @@ test('§B2 — the filter narrows the list, and never hides a row that would los
     rows look like nearly all the time. It used to be unhideable, which made the search box
     useless there. It must filter away like anything else.
   */
-  await expect(app.layers.locator('[data-layer="70"]')).toHaveCount(0);
+  await expect(app.layers.locator('[data-layer="80"]')).toHaveCount(0);
 
   await search.fill('');
   await expect.poll(rowsNow).toBe(before);

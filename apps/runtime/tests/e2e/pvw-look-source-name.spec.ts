@@ -70,7 +70,7 @@ async function setUp(page: Page): Promise<void> {
           { id: 'studio-1', name: 'Studio 1', producer: { kind: 'route', channel: 2 } },
           { id: 'studio-3', name: 'Studio 3', producer: { kind: 'route', channel: 4 } },
         ],
-        layerRange: { start: 30, end: 39 },
+        layerRange: { start: 60, end: 79 },
       });
       // The TEMPLATE DEFAULT — level 2. This is the name the overlay used to show in
       // every look, whatever the operator bound.

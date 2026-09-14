@@ -42,15 +42,15 @@ test('B-224 — the state head and the longest real name are whole at the defaul
   await expect(header.locator('[data-air-tally]')).toHaveCount(0);
   await expect(stateHead).toHaveText('State');
   // The longest real row NAME, seeded on layer 73.
-  const name = app.layerRow(73).locator('[data-row-body]').first();
+  const name = app.layerRow(83).locator('[data-row-body]').first();
   await expect(name).toContainText('میانبرنامه روی انتن');
 
-  // Put one more count on the head: layer 70 is the seed's loaded graphic. The seed already
+  // Put one more count on the head: layer 80 is the seed's loaded graphic. The seed already
   // has rows on air from "another console", so the assertion is RELATIVE — the same reading
   // `audit-legibility.spec.ts` takes — and the number is the whole visible text.
   const air = subbar.locator('[data-air-tally]');
   const before = Number((await air.getAttribute('data-air-tally')) ?? '0');
-  await app.layerRow(70).getByRole('button', { name: 'PLAY' }).click();
+  await app.layerRow(80).getByRole('button', { name: 'PLAY' }).click();
   await expect(air).toHaveAttribute('data-air-tally', String(before + 1));
   // ⭐ THE WORDS ARE BACK. `B-224` cut them because 160 px would not fit in a 132 px cell;
   // the sub-bar is a full-width line, so the count reads as a sentence again instead of
@@ -63,9 +63,9 @@ test('B-224 — the state head and the longest real name are whole at the defaul
   expect(await overflows(air), 'air count clipped at the default width').toBe(false);
   expect(await overflows(name), 'longest real name clipped at the default width').toBe(false);
 
-  // The narrower case: the Inspector open beside the list. Selecting the BOUND row (70)
+  // The narrower case: the Inspector open beside the list. Selecting the BOUND row (80)
   // opens it — the Inspector is derived from a selected item, and layer 73 carries none.
-  await app.selectLayerRow(70);
+  await app.selectLayerRow(80);
   await expect(app.inspector).toBeVisible();
   expect(await overflows(air), 'air count clipped with the Inspector open').toBe(false);
   expect(await overflows(name), 'longest real name clipped with the Inspector open').toBe(false);

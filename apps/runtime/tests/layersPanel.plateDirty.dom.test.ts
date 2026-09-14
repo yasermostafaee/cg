@@ -82,7 +82,7 @@ const TEMPLATE: TemplateInfo = {
 
 const CATALOG: SourceCatalog = {
   sources: [{ id: SAVED_SOURCE, name: 'Studio A', producer: { kind: 'route', channel: 2 } }],
-  layerRange: { start: 10, end: 59 },
+  layerRange: { start: 60, end: 79 },
 };
 
 /** The plate's SAVED assignment — the baseline the row must compare against. */

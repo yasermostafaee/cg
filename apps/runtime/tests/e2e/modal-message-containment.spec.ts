@@ -203,8 +203,8 @@ test('a Live sources refusal is drawn inside the section pane, clear of the foot
 
   // The bridge's own validator (`checkSourceCatalog`): the band must be disjoint from the
   // candidate bank the mock seeds at 70 upward, so 50–75 reaches into it.
-  await dialog.getByLabel('Live source band start layer').fill('50');
-  await dialog.getByLabel('Live source band end layer').fill('75');
+  await dialog.getByLabel('Live source band start layer').fill('60');
+  await dialog.getByLabel('Live source band end layer').fill('85');
   await dialog.getByRole('button', { name: 'Apply band' }).click();
 
   const message = dialog.locator('[data-modal-message]');

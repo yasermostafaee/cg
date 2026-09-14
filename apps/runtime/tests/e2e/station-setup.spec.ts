@@ -199,7 +199,7 @@ test('§1 — the surviving deep links still land on their own tab', async ({ ap
   await app.openStationSetupAt('Layers');
   await expect(shown).toHaveAttribute('data-station-section', 'candidate-layers');
   const layers = dialog.getByRole('region', { name: 'Layers', exact: true });
-  await expect(layers.getByLabel('Show layer 70')).toBeChecked();
+  await expect(layers.getByLabel('Show layer 80')).toBeChecked();
   // ⭐ §2 — the bank's commit is in ITS OWN FOOTER now, not in the body.
   await expect(dialog.getByRole('button', { name: 'Apply layers' })).toBeVisible();
   await dismiss(dialog).click();

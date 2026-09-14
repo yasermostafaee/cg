@@ -32,7 +32,7 @@ const CATALOG: SourceCatalog = {
     { id: 'studio-3', name: 'Studio 3', producer: { kind: 'route', channel: 4 } },
     { id: 'studio-5', name: 'Studio 5', producer: { kind: 'route', channel: 6 } },
   ],
-  layerRange: { start: 30, end: 39 },
+  layerRange: { start: 60, end: 79 },
 };
 
 const ASSIGNMENTS: SourceAssignments = {

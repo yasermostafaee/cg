@@ -63,7 +63,7 @@ async function seedSources(page: Page): Promise<void> {
         { id: 'studio-1', name: 'Studio 1', producer: { kind: 'route', channel: 2 } },
         { id: 'studio-3', name: 'Studio 3', producer: { kind: 'route', channel: 4 } },
       ],
-      layerRange: { start: 30, end: 39 },
+      layerRange: { start: 60, end: 79 },
     });
     await w.cg.sources.setAssignments({
       assignments: ['l-1', 'l-2', 'l-3', 'l-4', 'l-5', 'l-6'].map((plateId) => ({
@@ -166,7 +166,7 @@ test('§4 — the look strip is exactly what the token home declares, measured i
     expect(value, `${name} is declared`).not.toBe('');
   }
 
-  const row = app.fixedRow(89); // the seeded look-bearing row
+  const row = app.fixedRow(99); // the seeded look-bearing row
   await row.scrollIntoViewIfNeeded();
   const strip = await row.locator('[data-look-picker]').evaluate((line) => {
     const label = line.querySelector<HTMLElement>('[title]');
@@ -316,12 +316,12 @@ test('DELTA 11 — no green for a SIMULATED air claim, and the air colour when t
 }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1400, height: 900 });
-  const row = app.fixedRow(89);
+  const row = app.fixedRow(99);
   const selected = row.locator('[data-look-strip] [aria-pressed="true"]');
   await expect(selected).toHaveCount(1);
 
   /*
-    The seeded row 89 CLAIMS AIR — its accessible name reads `SIM ON AIR` — and that is exactly
+    The seeded row 99 CLAIMS AIR — its accessible name reads `SIM ON AIR` — and that is exactly
     the case that must NOT go green. This is the assertion that would have caught the wrong
     predicate.
   */

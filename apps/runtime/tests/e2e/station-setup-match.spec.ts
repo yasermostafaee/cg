@@ -369,12 +369,12 @@ test('§4 — the Layers pane is the reference’s: a summary, a filter, five co
 
   // ── THE FILTER BAR, and it actually filters ──────────────────────────────────────
   const results = dialog.locator('[data-layers-results]');
-  await expect(results).toHaveText('29 of 29 rows');
+  await expect(results).toHaveText('30 of 30 rows');
   await expect(dialog.getByRole('checkbox', { name: 'Shown only' })).toBeVisible();
   const search = dialog.getByLabel('Filter by name, template or layer');
   await search.fill('CLOCK');
   await expect(results, 'the read-out says how many are hidden by the filter').toHaveText(
-    /^[1-9] of 29 rows$/,
+    /^[1-9] of 30 rows$/,
   );
   await expect(dialog.locator('[data-candidate-layer]')).toHaveCount(1);
 
@@ -384,7 +384,7 @@ test('§4 — the Layers pane is the reference’s: a summary, a filter, five co
   await expect(dialog.locator('[data-layers-empty]')).toContainText('No matching rows');
   await expect(dialog.locator('[data-candidate-layer]')).toHaveCount(0);
   await search.fill('');
-  await expect(results).toHaveText('29 of 29 rows');
+  await expect(results).toHaveText('30 of 30 rows');
 
   // ── THE TABLE: five columns, in the reference's order ────────────────────────────
   const heads = dialog.locator('.cg-layer-table').first().locator('thead th');
@@ -396,9 +396,9 @@ test('§4 — the Layers pane is the reference’s: a summary, a filter, five co
     NOT helping, and a hover does not discharge it there (golden rule 11). The operator's own
     row number sits under it, quieter.
   */
-  const row70 = dialog.locator('[data-candidate-layer="70"]');
-  await expect(row70.locator('.cg-layer-id')).toHaveText('70');
-  await expect(row70.locator('.cg-layer-row-number')).toHaveText(/^Row \d+$/);
+  const row80 = dialog.locator('[data-candidate-layer="80"]');
+  await expect(row80.locator('.cg-layer-id')).toHaveText('80');
+  await expect(row80.locator('.cg-layer-row-number')).toHaveText(/^Row \d+$/);
 
   // ── `Unassigned`, and the `visibility locked` label on a row that has a template ──
   await expect(dialog.locator('.cg-layer-none').first()).toHaveText('Unassigned');
@@ -422,7 +422,7 @@ test('§4 — the Layers pane is the reference’s: a summary, a filter, five co
     'Remove the template before hiding this row',
   );
   // POSITIVE CONTROL: an UNBOUND row's switch is live, so the rule above is not "all dead".
-  const freeRow = dialog.locator('[data-candidate-layer="75"]').getByRole('switch');
+  const freeRow = dialog.locator('[data-candidate-layer="85"]').getByRole('switch');
   await expect(freeRow).toBeEnabled();
 
   // ── THE FOOTNOTE, AND THE BED TABLE UNDER ITS OWN HEAD ───────────────────────────
@@ -436,8 +436,8 @@ test('§4 — the Layers pane is the reference’s: a summary, a filter, five co
   await expect(dialog.locator('.cg-layer-table')).toHaveCount(2);
 
   // ── A DIRTY ROW MARKS ITSELF, and the footer's commit is still the section's ─────
-  await dialog.getByLabel(/^Name for layer 75 /).fill('RENAMED');
-  await expect(dialog.locator('[data-candidate-layer="75"][data-row-dirty]')).toHaveCount(1);
+  await dialog.getByLabel(/^Name for layer 85 /).fill('RENAMED');
+  await expect(dialog.locator('[data-candidate-layer="85"][data-row-dirty]')).toHaveCount(1);
   await expect(dialog.getByRole('button', { name: 'Apply layers' })).toBeVisible();
 });
 

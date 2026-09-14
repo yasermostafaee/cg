@@ -142,19 +142,23 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   await dup.getByRole('button', { name: 'Cancel' }).click();
 
   // The band must be disjoint from the operator's candidate bank. The mock's
-  // seeded bank starts at 70, so 50–75 reaches into it and the refusal names
+  // seeded bank starts at 80, so 60–85 reaches into it and the refusal names
   // BOTH ranges rather than merely saying no.
-  await dialog.getByLabel('Live source band start layer').fill('50');
-  await dialog.getByLabel('Live source band end layer').fill('75');
+  await dialog.getByLabel('Live source band start layer').fill('60');
+  await dialog.getByLabel('Live source band end layer').fill('85');
   await dialog.getByRole('button', { name: 'Apply band' }).click();
   await expect(dialog.getByText(/must stay disjoint/)).toBeVisible();
   await expect(dialog.getByText(/Currently/)).toHaveCount(0);
 
   // A band clear of the bank is accepted, and the hint states what is in force.
-  await dialog.getByLabel('Live source band start layer').fill('10');
-  await dialog.getByLabel('Live source band end layer').fill('59');
+  //
+  // ⚠ `LAYER-BANDS-16` — this was 10–59, which is now BELOW the graphics beds (50–59) and
+  // would be refused by `low-bank-not-below-band` rather than accepted. The band that is
+  // clear of BOTH is the plate band itself.
+  await dialog.getByLabel('Live source band start layer').fill('60');
+  await dialog.getByLabel('Live source band end layer').fill('79');
   await dialog.getByRole('button', { name: 'Apply band' }).click();
-  await expect(dialog.getByText(/Currently 10–59/)).toBeVisible();
+  await expect(dialog.getByText(/Currently 60–79/)).toBeVisible();
 
   // Durable: the catalog survives closing and reopening the surface, because the
   // value lives on the bridge (here, the mock's store) and not in the modal. The
@@ -170,7 +174,7 @@ test('sources: an installation defines its lives, and the modal binds nothing', 
   await dialog.getByRole('button', { name: 'Edit Studio A' }).click();
   await expect(edit.getByLabel('DeckLink key device index')).toHaveValue('2');
   await edit.getByRole('button', { name: 'Cancel' }).click();
-  await expect(dialog.getByText(/Currently 10–59/)).toBeVisible();
+  await expect(dialog.getByText(/Currently 60–79/)).toBeVisible();
   await app.closeStationSetup();
 });
 

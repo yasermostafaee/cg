@@ -2,9 +2,9 @@ import { test, expect, buildValidVcg } from './fixtures/runtime.js';
 
 /**
  * R-021 → R-028 part B — the declared-layer rows, driven against the offline
- * MockRuntime's CG_E2E_FIXED_BANK seed (channel 1, operator layers 70–89 plus the nine
- * BED rows 1–9 added by `single-clock-look-switch`; 70–73 are the
- * four display cases html / ffmpeg / empty / unknown, and 88 is R-021 stage 4's
+ * MockRuntime's CG_E2E_FIXED_BANK seed (channel 1, operator layers 80–99 plus the ten
+ * BED rows 50–59 added by `single-clock-look-switch`; 80–83 are the
+ * four display cases html / ffmpeg / empty / unknown, and 98 is R-021 stage 4's
  * `restore-blocked` row — bound, over a producer that is not ours). The bridge-side truth —
  * real OSC tap + sweep + the exact-slot load — is integration-tested in
  * tools/caspar-bridge.
@@ -43,17 +43,22 @@ test('no declared bank means no rows at all', async ({ app }) => {
 });
 
 test('a seeded bank renders permanent rows with aliases and honest occupancy', async ({ app }) => {
-  // 19 since R-021 stage 4 added the blocked row (88) — every other case was
-  // already spoken for, and none of 70–87 models a BOUND row over a FOREIGN
-  // producer (71 is foreign but unbound).
+  // 19 since R-021 stage 4 added the blocked row (98) — every other case was
+  // already spoken for, and none of 80–97 models a BOUND row over a FOREIGN
+  // producer (81 is foreign but unbound).
   //
-  // 20 since §14.5 Stage E added the LOOK-BEARING row (89): no other seeded row
+  // 20 since §14.5 Stage E added the LOOK-BEARING row (99): no other seeded row
   // has a template that authors looks, so the picker would have had nowhere to
   // render. This assertion is the reason that seed cannot be added quietly — it
   // pins that the bank renders EXACTLY its declared rows, which is the property
   // R-021 exists to guarantee.
   //
-  // 🔴 `B-201` — TWENTY-NINE: the twenty operator rows PLUS the nine bed rows.
+  // 🔴 `B-201` — THIRTY: the twenty operator rows PLUS the TEN bed rows.
+  //
+  // ⚠ `LAYER-BANDS-16` — this was twenty-nine. The mock takes its bed half from
+  // `defaultFixedLayerBank()`, which declares the band ENTIRE, and the bed band grew
+  // from nine rows (1-9) to ten (50-59) in the re-cut. Every other fixture in that
+  // migration was a pure translation; this is the one place a COUNT legitimately moved.
   //
   // Deliberately still a LITERAL, and not derived from the bank. The comment above
   // states why and it survives the two-bank change intact: the number is a CANARY, and
@@ -64,7 +69,7 @@ test('a seeded bank renders permanent rows with aliases and honest occupancy', a
   // 20 and kept passing while the offline surface had no bed rows, no group head, and
   // nowhere a plate-bearing package could legally be loaded. Deriving the expectation
   // here is the one change that would make the canary stop singing.
-  await expect(app.layers.locator('[data-layer]')).toHaveCount(29);
+  await expect(app.layers.locator('[data-layer]')).toHaveCount(30);
 
   /*
     🔴 `B-201` — AND THE BED GROUP IS ACTUALLY THERE, which nothing asserted before.
@@ -76,17 +81,17 @@ test('a seeded bank renders permanent rows with aliases and honest occupancy', a
     actionable. So the group head and the bed rows are pinned separately.
   */
   await expect(app.layers.locator('[data-bed-group-head]')).toHaveCount(1);
-  for (const bed of [9, 5, 1]) {
+  for (const bed of [59, 55, 50]) {
     await expect(app.layerRow(bed)).toBeVisible();
   }
   // The beds are the LOWEST layers and the list is descending, so they sit at the
   // bottom — which is also where they are on air. The group head is drawn once, at the
   // FIRST of them, so the row immediately below it must be the highest bed row.
-  await expect(app.layerRow(9)).toContainText('Bed 1');
+  await expect(app.layerRow(59)).toContainText('Bed 1');
 
   // The ALIAS is the row's primary label.
-  await expect(app.layerRow(70)).toContainText('CLOCK');
-  await expect(app.layerRow(71)).toContainText('LOWER THIRD');
+  await expect(app.layerRow(80)).toContainText('CLOCK');
+  await expect(app.layerRow(81)).toContainText('LOWER THIRD');
 
   /*
     The REAL CasparCG layer number is no longer a COLUMN — the owner took it off the
@@ -97,7 +102,7 @@ test('a seeded bank renders permanent rows with aliases and honest occupancy', a
     troubleshooting, and the layer number is the vocabulary shared with the playout
     side (the reservation is 60–69, not "rows 1–4").
   */
-  for (const layer of [70, 73]) {
+  for (const layer of [80, 83]) {
     const { title, ariaLabel } = await app.layerNumberReachableOn(layer);
     expect(title).toContain(`CasparCG layer 1-${String(layer)}`);
     expect(ariaLabel).toContain(`CasparCG layer 1-${String(layer)}`);
@@ -121,7 +126,7 @@ test('a seeded bank renders permanent rows with aliases and honest occupancy', a
   // for a layer we have reason to ask about. It forbids forgetting something we
   // knew, not saying "nothing here" when we genuinely have nothing. The word goes
   // on doing its work for a BOUND row that cannot be confirmed — asserted below.
-  for (const layer of [71, 72, 73]) {
+  for (const layer of [81, 82, 83]) {
     await expect(app.layerState(layer)).toHaveText('EMPTY');
   }
 });
@@ -137,13 +142,13 @@ test('LOAD is offered on every unbound row — it touches no layer', async ({ ap
   //
   // This is also the owner's report: with CasparCG unreachable every row reads
   // 'unknown', so the old gate dimmed LOAD exactly when the rundown is built.
-  for (const layer of [71, 72, 73]) {
+  for (const layer of [81, 82, 83]) {
     await expect(app.layerRow(layer).getByRole('button', { name: 'LOAD' })).toBeEnabled();
   }
 
   // The shape is identical on every row — the buttons are present, just
   // disabled. This is the assertion that pins "the verb set never changes".
-  for (const layer of [70, 71, 72, 73]) {
+  for (const layer of [80, 81, 82, 83]) {
     const row = app.layerRow(layer);
     for (const verb of ['PLAY', 'NEXT', 'STOP', 'CLEAR']) {
       await expect(row.getByRole('button', { name: verb })).toBeVisible();
@@ -151,7 +156,7 @@ test('LOAD is offered on every unbound row — it touches no layer', async ({ ap
   }
   // …and an UNBOUND row can drive none of the ITEM-scoped verbs: there is no item to
   // act on.
-  for (const layer of [71, 72, 73]) {
+  for (const layer of [81, 82, 83]) {
     for (const verb of ['PLAY', 'NEXT', 'STOP']) {
       await expect(app.layerRow(layer).getByRole('button', { name: verb })).toBeDisabled();
     }
@@ -167,11 +172,11 @@ test('LOAD is offered on every unbound row — it touches no layer', async ({ ap
   // unbound row routes to the BANK-SCOPED layer clear, addressed to the LAYER and
   // permitted by STRUCTURE (in the declared bank AND not reserved) rather than by
   // observation — so it does something real, and it works precisely when occupancy
-  // reads `unknown`, which is row 73 here.
+  // reads `unknown`, which is row 83 here.
   //
   // That is the whole point of the owner's rule that CLEAR is always available: a
   // graphic must be removable even when the console cannot say what is on the layer.
-  for (const layer of [71, 72, 73]) {
+  for (const layer of [81, 82, 83]) {
     await expect(app.layerRow(layer).getByRole('button', { name: 'CLEAR' })).toBeEnabled();
   }
 });
@@ -180,7 +185,7 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   app,
 }) => {
   const page = app.page;
-  const row = app.layerRow(70);
+  const row = app.layerRow(80);
 
   /*
     CLEAR is available on a BOUND row before it is ever taken, and stays available
@@ -212,7 +217,7 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   await expect(confirmClear).toHaveCount(0);
   // Cancel did nothing: still occupied, verb still offered. Read through the state
   // cell's tooltip — see the occupancy note in the seeded-bank spec above.
-  await expect(app.layerState(70)).toHaveAttribute('title', /occupied — html producer/);
+  await expect(app.layerState(80)).toHaveAttribute('title', /occupied — html producer/);
   await expect(row.getByRole('button', { name: 'CLEAR' })).toBeEnabled();
 
   // The button path: cancel first, then confirm.
@@ -220,7 +225,7 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   await expect(confirmClear).toBeVisible();
   await confirmClear.getByRole('button', { name: 'Cancel' }).click();
   await expect(confirmClear).toHaveCount(0);
-  await expect(app.layerState(70)).toHaveAttribute('title', /occupied — html producer/);
+  await expect(app.layerState(80)).toHaveAttribute('title', /occupied — html producer/);
 
   await row.getByRole('button', { name: 'CLEAR' }).click();
   await confirmClear.getByRole('button', { name: 'Clear layer', exact: true }).click();
@@ -229,7 +234,7 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   // and the ROW SURVIVES — it is permanent, which is the whole point. C-012:
   // CLEAR kills the producer but leaves the TEMPLATE on the row, so the
   // operator can play it again without re-importing.
-  await expect(app.layerState(70)).toHaveAttribute('title', /reports: empty/);
+  await expect(app.layerState(80)).toHaveAttribute('title', /reports: empty/);
   await expect(row.getByRole('button', { name: 'PLAY' })).toBeEnabled();
   // CLEAR stays ENABLED after a successful clear, because the item is still BOUND to
   // the row — the producer is gone but the template is not. Pressing it again is a
@@ -239,7 +244,7 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
   await expect(row.getByRole('button', { name: 'CLEAR' })).toBeEnabled();
   // The unbound ffmpeg neighbour is untouched — and reads EMPTY, because no
   // template of ours is bound to it (see the occupancy test above).
-  await expect(app.layerState(71)).toHaveText('EMPTY');
+  await expect(app.layerState(81)).toHaveText('EMPTY');
 });
 
 test('import+load lands on the EXACT row, and the template stays available for reuse', async ({
@@ -249,11 +254,11 @@ test('import+load lands on the EXACT row, and the template stays available for r
 
   // ONE operator action on the row they chose: press LOAD, hand it a `.vcg`,
   // and the whole chain runs — import, register, bind to THIS layer.
-  await app.importVcg('clock.vcg', await buildValidVcg('tpl-fixed-e2e'), 74);
+  await app.importVcg('clock.vcg', await buildValidVcg('tpl-fixed-e2e'), 84);
 
   // 1. The created item is bound to THIS row's layer — the one assertion this
   //    whole task exists for. The row names it; no other row does.
-  await expect(app.layerRow(74)).toContainText('clock');
+  await expect(app.layerRow(84)).toContainText('clock');
 
   // 2. The template went into the SHARED registry — and STAYS there for reuse.
   await expect.poll(() => app.templateCount()).toBe(before + 1);
@@ -261,8 +266,8 @@ test('import+load lands on the EXACT row, and the template stays available for r
 
   // 3. A filled row offers REMOVE, not LOAD: rebinding is Remove-then-load,
   //    never one compound action that hides a destructive step.
-  await expect(app.layerRow(74).getByRole('button', { name: 'REMOVE' })).toBeVisible();
-  await expect(app.layerRow(74).getByRole('button', { name: 'LOAD' })).toHaveCount(0);
+  await expect(app.layerRow(84).getByRole('button', { name: 'REMOVE' })).toBeVisible();
+  await expect(app.layerRow(84).getByRole('button', { name: 'LOAD' })).toHaveCount(0);
 });
 
 // §6 — the picker is now reached through the row's own LOAD, not a context-menu
@@ -271,15 +276,15 @@ test('import+load lands on the EXACT row, and the template stays available for r
 test('picking an already-imported template binds the same exact row, without a second import', async ({
   app,
 }) => {
-  await app.importVcg('lower-third.vcg', await buildValidVcg('tpl-lib-e2e'), 74);
-  await expect(app.layerRow(74)).toContainText('lower third');
+  await app.importVcg('lower-third.vcg', await buildValidVcg('tpl-lib-e2e'), 84);
+  await expect(app.layerRow(84)).toContainText('lower third');
   const registrySize = await app.templateCount();
 
-  await app.loadTemplate('tpl-lib-e2e', 75);
+  await app.loadTemplate('tpl-lib-e2e', 85);
 
   // The row is headed by the FILE the operator imported, humanised — never the
   // raw id and never the scene's internal name.
-  await expect(app.layerRow(75)).toContainText('lower third');
+  await expect(app.layerRow(85)).toContainText('lower third');
   // Nothing was imported — the registry is exactly as it was.
   await expect.poll(() => app.templateCount()).toBe(registrySize);
 });
@@ -292,14 +297,14 @@ test('picking an already-imported template binds the same exact row, without a s
  * shows the `restore-blocked` state naming the retained item and the observed
  * occupancy, and the item is NOT loaded elsewhere, NOT adopted and NOT auto-cleared.
  *
- * The seeded row (88) is bound to an item retained as ON AIR while a decklink holds
+ * The seeded row (98) is bound to an item retained as ON AIR while a decklink holds
  * its layer, which is exactly the shape a bridge restart produces when somebody
  * else's feed has landed on an operator's declared row.
  */
 test('a restore-blocked row says BLOCKED, names what is on the layer, and offers no air verb', async ({
   app,
 }) => {
-  const row = app.layerRow(88);
+  const row = app.layerRow(98);
   await expect(row).toBeVisible();
 
   // THE WORD. Not the retained ON AIR — that is the assertion the whole state
@@ -338,11 +343,11 @@ test('a restore-blocked row says BLOCKED, names what is on the layer, and offers
 test('the blocked row’s CLEAR asks first, and names the producer it will destroy', async ({
   app,
 }) => {
-  const row = app.layerRow(88);
+  const row = app.layerRow(98);
   await row.getByRole('button', { name: 'CLEAR' }).click();
   const dialog = app.page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('decklink');
   // The layer NUMBER, which is the vocabulary shared with the playout side.
-  await expect(dialog).toContainText('1-88');
+  await expect(dialog).toContainText('1-98');
 });

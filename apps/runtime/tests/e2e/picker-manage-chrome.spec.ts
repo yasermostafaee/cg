@@ -119,7 +119,7 @@ test('§C4 — an in-use deletion is refused ONCE, in one place, with its way ou
     photographed: a Persian row name inside an English sentence, with quotes and parentheses
     around it — the neutrals whose placement the bidi algorithm decides if nobody isolates.
   */
-  await app.importVcg('held.vcg', await buildValidVcg('tpl-held'), 73);
+  await app.importVcg('held.vcg', await buildValidVcg('tpl-held'), 83);
   await app.openTemplatePicker();
   await page.getByRole('button', { name: 'Manage' }).click();
 

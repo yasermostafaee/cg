@@ -15,7 +15,7 @@ import { test, expect } from './fixtures/runtime.js';
 test('the look picker is on the row, shows what is live, and switches in one action', async ({
   app,
 }) => {
-  const row = app.fixedRow(89);
+  const row = app.fixedRow(99);
   await expect(row).toBeVisible();
 
   // ── 1. THE PICKER IS THERE, always, on a row whose template authors looks ──────
@@ -49,7 +49,7 @@ test('the picker sits OUTSIDE the verb block and leaves the six-verb grid alone'
     from ONE `gridTemplateColumns` call, and the last time a control was added without
     updating it, every header word from NEXT rightward sat above the wrong glyph.
   */
-  const row = app.fixedRow(89);
+  const row = app.fixedRow(99);
   const picker = row.locator('[data-look-picker]');
 
   // The picker spans every column, so it adds none.
@@ -64,12 +64,12 @@ test('the picker sits OUTSIDE the verb block and leaves the six-verb grid alone'
 
 test('a row whose template authors NO looks has no picker at all', async ({ app }) => {
   /*
-    The absent-vs-empty rule, on the surface. Row 70 carries a starter template with no
+    The absent-vs-empty rule, on the surface. Row 80 carries a starter template with no
     look group, so it must show no picker — and it must NOT be refused anything either.
     A picker on every row would be the shape rule misapplied to a control it does not
     govern; no picker here is the whole point of the distinction.
   */
-  const row = app.fixedRow(70);
+  const row = app.fixedRow(80);
   await expect(row).toBeVisible();
   await expect(row.locator('[data-look-picker]')).toHaveCount(0);
 });

@@ -107,8 +107,8 @@ test('a refusal stays in the viewport when the modal body is scrolled away from 
   // Refuse something. The band must be disjoint from the candidate bank, which the
   // mock seeds at 70 upward, so 50–75 reaches into it. This is the bridge's own
   // validator (`checkSourceCatalog`), not a stub.
-  await dialog.getByLabel('Live source band start layer').fill('50');
-  await dialog.getByLabel('Live source band end layer').fill('75');
+  await dialog.getByLabel('Live source band start layer').fill('60');
+  await dialog.getByLabel('Live source band end layer').fill('85');
   await dialog.getByRole('button', { name: 'Apply band' }).click();
   await expect(message).toBeVisible();
 

@@ -86,9 +86,9 @@ test('§3 — a row, its cells and its six verbs are exactly what the token home
   }
   const [padY, padX] = tokens.rowPad.split(/\s+/).map(px) as [number, number];
 
-  // A LOADED row (layer 70 is the seed's loaded graphic) and an EMPTY one (74).
-  const loaded = app.layerRow(70);
-  const empty = app.layerRow(74);
+  // A LOADED row (layer 80 is the seed's loaded graphic) and an EMPTY one (84).
+  const loaded = app.layerRow(80);
+  const empty = app.layerRow(84);
   await loaded.scrollIntoViewIfNeeded();
 
   const row = await loaded.evaluate((el) => {
@@ -182,20 +182,20 @@ test('§3 — hover lifts a loaded row and leaves an empty one alone; selection 
     `layer-row-hover.spec.ts`; what this line pins is that the row reads the token it is
     supposed to read.
   */
-  await app.layerRow(70).locator('[data-row-body]').hover();
-  await expectBg(70, await cssColour(page, t.rowHover));
+  await app.layerRow(80).locator('[data-row-body]').hover();
+  await expectBg(80, await cssColour(page, t.rowHover));
   // …and the EMPTY row does not react: it has nothing to select and must not invite it.
-  await app.layerRow(74).locator('[data-row-body]').hover();
-  await expectBg(74, await cssColour(page, t.emptyBg));
+  await app.layerRow(84).locator('[data-row-body]').hover();
+  await expectBg(84, await cssColour(page, t.emptyBg));
   await page.mouse.move(0, 0);
 
   // SELECTED — the accent wash and a 2 px inset frame in the accent, with the pointer
   // parked away so this is the RESTING look of a selected row.
-  await app.selectLayerRow(70);
+  await app.selectLayerRow(80);
   await expect(app.inspector).toBeVisible();
   await page.mouse.move(0, 0);
-  await expectBg(70, await cssColour(page, t.selectedFill));
-  const shadow = await app.layerRow(70).evaluate((el) => getComputedStyle(el).boxShadow);
+  await expectBg(80, await cssColour(page, t.selectedFill));
+  const shadow = await app.layerRow(80).evaluate((el) => getComputedStyle(el).boxShadow);
   expect(shadow).toContain('inset');
   expect(shadow).toContain(await cssColour(page, t.accent));
   expect(shadow).toMatch(/\b2px\b/);

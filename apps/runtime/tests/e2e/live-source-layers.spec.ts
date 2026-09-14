@@ -32,8 +32,8 @@ test('the bridge-seated live layers appear on their own tab, distinguishable fro
 
   // ── 4.1 — the seated layers APPEAR. This is the whole defect, inverted: before this
   //    surface both of these were lit with nothing anywhere naming them.
-  const onScreen = app.liveSourceRow('1-10');
-  const held = app.liveSourceRow('1-11');
+  const onScreen = app.liveSourceRow('1-60');
+  const held = app.liveSourceRow('1-61');
   await expect(onScreen).toBeVisible();
   await expect(held).toBeVisible();
 
@@ -113,8 +113,8 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
   app,
 }) => {
   await app.liveSourcesTab.click();
-  const onScreen = app.liveSourceRow('1-10');
-  const held = app.liveSourceRow('1-11');
+  const onScreen = app.liveSourceRow('1-60');
+  const held = app.liveSourceRow('1-61');
 
   // ── The strip is THERE, on every seated plate, with no dialog opened.
   const stripOf = (row: typeof onScreen, plate: string) =>

@@ -25,7 +25,7 @@ test('a seeded owned-slot warning names the layer and item, offers no Clear, and
 
   const banner = page.getByRole('alert', { name: 'Owned-layer occupancy warnings' });
   await expect(banner).toBeVisible();
-  await expect(banner).toContainText('Layer 1-10');
+  await expect(banner).toContainText('Layer 1-60');
   /*
     🔴 `B-233` — THIS ASSERTED THE RAW ITEM ID, and it was right about the old copy.
 
@@ -35,7 +35,7 @@ test('a seeded owned-slot warning names the layer and item, offers no Clear, and
     ⭐ It names the template and NOT the row, which is `B-232`'s own note being obeyed:
     naming the owner by its layer "would just repeat the coordinate the sentence has already
     printed two words earlier". The first attempt at this fix passed the slot anyway, and
-    this spec is what caught it — it rendered "put there by layer 10 (not a row) · …", saying
+    this spec is what caught it — it rendered "put there by layer 60 (not a row) · …", saying
     the coordinate twice and calling a layer an item owns "not a row".
   */
   await expect(banner).toContainText('News Composite');

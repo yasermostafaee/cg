@@ -43,7 +43,7 @@ async function registerTemplate(app: { page: Page }): Promise<void> {
         { id: 'studio-a', name: 'Studio A', producer: { kind: 'route', channel: 2 } },
         { id: 'studio-b', name: 'Studio B', producer: { kind: 'route', channel: 3 } },
       ],
-      layerRange: { start: 30, end: 39 },
+      layerRange: { start: 60, end: 79 },
     });
     await w.cg.sources.setAssignments({
       assignments: [

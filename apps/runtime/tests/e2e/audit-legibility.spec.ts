@@ -59,7 +59,7 @@ test('the layer table’s tally is the number in the air colour, says "on air" i
   const layer = await app.importVcg('tally.vcg', await buildValidVcg('tpl-e2e-tally'));
   const tally = app.layers.locator('[data-air-tally]');
   /*
-    The seeded bank already carries one documented on-air row (70), so the tally is not
+    The seeded bank already carries one documented on-air row (80), so the tally is not
     zero at rest — read what it says BEFORE the take, and assert the take adds exactly
     one. A LOADED row adds nothing: loading is a list action.
   */

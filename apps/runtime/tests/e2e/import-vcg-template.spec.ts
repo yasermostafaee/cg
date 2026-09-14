@@ -21,8 +21,8 @@ test('a verified .vcg is registered, loads onto a layer, and shows its fields', 
   const templateId = 'tpl-e2e-import';
   const before = await app.templateCount();
 
-  // Import AND load, in one action, onto the row the operator chose (layer 74).
-  await app.importVcg('valid.vcg', await buildValidVcg(templateId), 74);
+  // Import AND load, in one action, onto the row the operator chose (layer 84).
+  await app.importVcg('valid.vcg', await buildValidVcg(templateId), 84);
 
   /*
     🔴 REPLACED, NOT DELETED — and the reason is the rule, not this test.
@@ -41,7 +41,7 @@ test('a verified .vcg is registered, loads onto a layer, and shows its fields', 
   */
   // The row's OWN name, read off the row rather than hardcoded. Its `title` is exactly the
   // name, where `innerText` would also pick up the draft chip that sits beside it.
-  const landedOn = await app.layerRow(74).locator('[data-row-body]').getAttribute('title');
+  const landedOn = await app.layerRow(84).locator('[data-row-body]').getAttribute('title');
   expect(landedOn, 'the row does not name itself').not.toBeNull();
   await expect(app.success).toContainText('loaded');
   await expect(app.success).toContainText(landedOn ?? '');
@@ -50,7 +50,7 @@ test('a verified .vcg is registered, loads onto a layer, and shows its fields', 
 
   // It is on the row, headed by the FILE the operator imported — `valid.vcg` → "valid" —
   // not the scene's internal name ('e2e-lower-third') and never the raw id.
-  const row = app.layerRow(74);
+  const row = app.layerRow(84);
   await expect(row).toContainText('valid');
   await expect(row).not.toContainText(templateId);
 
@@ -58,7 +58,7 @@ test('a verified .vcg is registered, loads onto a layer, and shows its fields', 
   expect(await app.templateCount()).toBe(before + 1);
 
   // Selecting the row surfaces its field schema in the Inspector.
-  await app.selectLayerRow(74);
+  await app.selectLayerRow(84);
   await expect(app.inspector.getByText('Anchor name')).toBeVisible();
 });
 
@@ -67,7 +67,7 @@ test('a .vcg that fails verification shows a clear error and registers nothing',
 }) => {
   const before = await app.templateCount();
 
-  await app.importVcg('broken.vcg', buildInvalidVcg(), 74);
+  await app.importVcg('broken.vcg', buildInvalidVcg(), 84);
 
   /*
     🔴 A CLEAR ERROR IS SHOWN — IN THE IMPORT DIALOG, which is `RUNTIME-REPAIR-05`'s one
@@ -91,5 +91,5 @@ test('a .vcg that fails verification shows a clear error and registers nothing',
   */
   await app.page.getByRole('button', { name: 'Cancel' }).last().click();
   await app.closeTemplatePicker();
-  await expect(app.layerRow(74).getByRole('button', { name: 'LOAD' })).toBeEnabled();
+  await expect(app.layerRow(84).getByRole('button', { name: 'LOAD' })).toBeEnabled();
 });

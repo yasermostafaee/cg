@@ -22,7 +22,7 @@ import { expect, test } from './fixtures/runtime.js';
 
 const WIDE = { width: 1280, height: 800 };
 /** The seeded row that declares plates (`e2e-looks`, four boxes). */
-const PLATE_ROW = 89;
+const PLATE_ROW = 99;
 
 test.beforeEach(async ({ app }) => {
   await app.page.setViewportSize(WIDE);
@@ -53,7 +53,7 @@ test('the PLATE door — right-click on a seated plate opens the owner’s audio
 }) => {
   const page = app.page;
   await app.liveSourcesTab.click();
-  const held = app.liveSourceRow('1-11');
+  const held = app.liveSourceRow('1-61');
   await expect(held).toBeVisible();
 
   // Pointer.
@@ -70,7 +70,7 @@ test('the PLATE door — right-click on a seated plate opens the owner’s audio
   await expect(dialog).toHaveCount(0);
 
   // Keyboard, twice — the two keys the reference wires.
-  const shown = app.liveSourceRow('1-10');
+  const shown = app.liveSourceRow('1-60');
   await shown.focus();
   await page.keyboard.press('Shift+F10');
   await expect(dialog).toBeVisible();
@@ -115,7 +115,7 @@ test('the LIVE PLATES table and the audio dialog carry the reference’s rendere
 }) => {
   const page = app.page;
   await app.liveSourcesTab.click();
-  const shown = app.liveSourceRow('1-10');
+  const shown = app.liveSourceRow('1-60');
   await expect(shown).toBeVisible();
 
   // The head and the ordinary row — the reference's 30 px and 42 px.
@@ -136,7 +136,7 @@ test('the LIVE PLATES table and the audio dialog carry the reference’s rendere
   */
   expect(rowH).toBeLessThan(rowMin * 1.5);
   await expect(shown.locator('.cg-plate-detail')).toHaveCount(0);
-  const held = app.liveSourceRow('1-11');
+  const held = app.liveSourceRow('1-61');
   await expect(held.locator('.cg-plate-detail')).toHaveCount(0);
   expect((await box(held)).h).toBeLessThan(rowMin * 1.5);
   await expect(held).toHaveAttribute('title', /muted and with no hole in front of it/);
@@ -354,7 +354,7 @@ test('§5 — the audio dialog keeps ONE box whatever the frame count, and clamp
 
   // TWO frames — the seeded news row, reached from its own seated plate.
   await app.liveSourcesTab.click();
-  await app.liveSourceRow('1-10').click({ button: 'right' });
+  await app.liveSourceRow('1-60').click({ button: 'right' });
   await expect(dialog).toBeVisible();
   const fewer = await dialog.locator('[data-audio-plate]').count();
   expect(fewer, 'the two rows must differ, or this measures nothing').toBeLessThan(4);
@@ -396,7 +396,7 @@ test('§5 — the audio dialog keeps ONE box whatever the frame count, and clamp
     number Station setup, the picker and the audit log land on, because it is one expression.
   */
   await page.setViewportSize({ width: 1280, height: 600 });
-  await app.liveSourceRow('1-10').click({ button: 'right' });
+  await app.liveSourceRow('1-60').click({ button: 'right' });
   await expect(dialog).toBeVisible();
   expect((await dialogBox(page)).h, 'the audio dialog is not clamped on a short screen').toBe(536);
 });

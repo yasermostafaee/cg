@@ -22,11 +22,18 @@ import { pack } from '@cg/vcg-format';
  * starts deterministically.
  */
 /**
- * The first EMPTY row of the seeded bank. 70–73 hold the four documented
- * display cases (html / non-html producer / empty / unknown) and must keep
+ * The first EMPTY row of the seeded bank. The bank's first four rows hold the four
+ * documented display cases (html / non-html producer / empty / unknown) and must keep
  * them; everything from here up is seeded empty for the suite to load onto.
+ *
+ * ⚠ `LAYER-BANDS-16` — these are the SEED's rows, and the seed follows
+ * `DEFAULT_FIXED_BANK_START`, which moved 70 → 80 when the template band was re-cut. They
+ * are still written out rather than derived because a Playwright fixture reads best with
+ * the number the operator would see in the table; what keeps them honest is that clicking
+ * a row that does not exist fails loudly (the picker never opens), which is exactly how
+ * this was caught — a green `pnpm gate` says nothing about a row that is not there.
  */
-const FIRST_LOADABLE_LAYER = 74;
+const FIRST_LOADABLE_LAYER = 84;
 
 /**
  * The row `openTemplatePicker` uses when the caller does not name one.
@@ -37,21 +44,22 @@ const FIRST_LOADABLE_LAYER = 74;
  * `#nextLayer` never reaches it. (The same constraint held before, when the entry
  * point was a context menu item disabled on a filled row.)
  */
-const TEMPLATE_PROBE_LAYER = 85;
+const TEMPLATE_PROBE_LAYER = 95;
 
 /**
  * 🔴 `B-201` — THE FIRST LOADABLE **BED** ROW, and why the suite needs one at all.
  *
  * `single-clock-look-switch` split the bank: a package that DECLARES live plates is a
- * graphics bed and may only be loaded onto a bed row (1–9); the picker disables `Load` on an
- * operator row and the bridge refuses it as `wrong-bank`. Eleven specs were written before
- * that rule existed and load plate-bearing packages, so they need the other half of the bank.
+ * graphics bed and may only be loaded onto a bed row (the BED band, 50–59 since
+ * `LAYER-BANDS-16`); the picker disables `Load` on an operator row and the bridge refuses it
+ * as `wrong-bank`. Eleven specs were written before that rule existed and load plate-bearing
+ * packages, so they need the other half of the bank.
  *
  * The bed rows are seeded empty and all ticked by `MockRuntime.seedFixedBank`, so the whole
  * band is loadable — see that function for why the mock deviates from the two-row default.
  */
-const FIRST_LOADABLE_BED_LAYER = 1;
-const LAST_LOADABLE_BED_LAYER = 9;
+const FIRST_LOADABLE_BED_LAYER = 50;
+const LAST_LOADABLE_BED_LAYER = 59;
 
 export class RuntimeApp {
   constructor(readonly page: Page) {}

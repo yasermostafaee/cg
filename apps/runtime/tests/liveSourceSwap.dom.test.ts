@@ -34,7 +34,7 @@ const CATALOG: SourceCatalog = {
     { id: 'src-a', name: 'Studio A', format: '1080i5000', producer: { kind: 'route', channel: 2 } },
     { id: 'src-b', name: 'Baku', format: '1080i5000', producer: { kind: 'route', channel: 3 } },
   ],
-  layerRange: { start: 30, end: 39 },
+  layerRange: { start: 60, end: 79 },
 };
 
 const ASSIGNMENTS: SourceAssignments = {

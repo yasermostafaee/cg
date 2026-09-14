@@ -27,7 +27,7 @@ test('test mode is loud, badges SIM, and claims no healthy server', async ({ app
   // R-028 part B — addressed by LAYER, not `.first()`. Rows render newest-layer-first and
   // most of them are empty, so `.first()` now lands on an empty row whose PLAY is correctly
   // disabled. Layer 70 is the seed's loaded graphic.
-  await app.layerRow(70).getByRole('button', { name: 'PLAY' }).click();
+  await app.layerRow(80).getByRole('button', { name: 'PLAY' }).click();
 
   // … but it is badged SIM, never the broadcast-red ON AIR a real playout earns.
   const simBadge = page.getByLabel('status SIM ON AIR').first();

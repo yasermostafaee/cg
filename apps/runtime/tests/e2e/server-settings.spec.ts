@@ -40,7 +40,7 @@ test('settings panel: blocked while on air, Clear-All unblocks and the ROWS SURV
   // R-028 part B — addressed by LAYER, not `.first()`: rows render newest-layer
   // first and most are empty, so the first PLAY on the page belongs to an empty
   // row and is correctly disabled. Layer 70 is the seed's loaded graphic.
-  await app.layerRow(70).getByRole('button', { name: 'PLAY' }).click();
+  await app.layerRow(80).getByRole('button', { name: 'PLAY' }).click();
   await openServers(page);
   await expect(panel).toBeVisible();
   await expect(panel.getByLabel('Primary host')).toHaveValue('127.0.0.1');
@@ -91,7 +91,7 @@ test('settings panel: blocked while on air, Clear-All unblocks and the ROWS SURV
   await clearDialog.getByRole('button', { name: /^Clear/ }).click();
   // The ROW and its ITEM both survive — that is the whole difference from Remove-All.
   await expect(app.layers.locator('[data-item-id]')).not.toHaveCount(0);
-  await expect(app.layerRow(70).getByRole('button', { name: 'REMOVE' })).toBeVisible();
+  await expect(app.layerRow(80).getByRole('button', { name: 'REMOVE' })).toBeVisible();
 
   // 3. Reopened: unblocked; remote host → warning; Apply → applied.
   await openServers(page);
