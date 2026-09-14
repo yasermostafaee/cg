@@ -82,7 +82,26 @@ export function SourceDefaultsLink({
         {...(warning !== undefined && { title: warning })}
         onClick={() => setOpen(true)}
       >
-        Source defaults
+        {/*
+          ⚠ **THE UNDERLINE IS ON THE WORDS, NOT ON THE BUTTON — and that is the owner's
+          correction, measured rather than reasoned:** «خط ریز آبی زیر نقطه زرد جالب
+          نیست حذفش کن.»
+
+          With `text-decoration: underline` on the BUTTON, its accent line was drawn across
+          everything the button contains — the gap and the amber dot included — so a stray blue
+          tick sat under an amber mark. Underlining this span instead ends the line where the
+          words end, which is the only place a link decoration means anything.
+
+          🔴 **`display: inline-block` ON THE DOT IS NOT THE FIX, AND WAS TRIED FIRST.**
+          CSS Text Decoration 3 exempts an ATOMIC INLINE's *contents* from a propagated
+          decoration — it does not stop the ancestor drawing its own line across that box's
+          area, and Chromium draws it. Measured in Chromium at 1280×900 by counting accent
+          pixels in the dot's column band: **6** with `inline-block` alone, **0** with the
+          underline moved here, against **411** under the words as the positive control. A
+          `getComputedStyle` read could not have answered this — a decoration is PAINT, and the
+          descendant's own `text-decoration-line` computes to `none` either way (golden rule 12c).
+        */}
+        <span style={styles.label}>Source defaults</span>
         {warning !== undefined && (
           /*
             ⚠ **NEVER COLOUR ALONE.** The dot is amber — this palette's ATTENTION role, the
@@ -93,7 +112,11 @@ export function SourceDefaultsLink({
             the answer.
           */
           <span style={styles.warn} aria-label={warning}>
-            {' ●'}
+            {/*
+              The gap is a MARGIN now, not a leading space: a space inside an inline-block is
+              part of the atomic box, so it would sit inside the mark rather than before it.
+            */}
+            ●
           </span>
         )}
       </Button>
@@ -116,8 +139,22 @@ export function SourceDefaultsLink({
 }
 
 const styles = {
-  /** ATTENTION, not alarm — `colors.pending`, the token the `needs a source` line used. */
-  warn: { color: colors.pending, fontSize: '0.7rem', lineHeight: 1 },
+  /**
+   * ATTENTION, not alarm — `colors.pending`, the token the `needs a source` line used.
+   *
+   * `inline-block` + a MARGIN rather than a leading space, so the gap belongs to the mark's box
+   * and not to the link's text run. ⚠ It is NOT what removed the owner's blue line — that is
+   * the underline living on `label` instead of on the button; see the note at the call site,
+   * which records the measurement because the wrong fix looked correct on the spec text.
+   */
+  warn: {
+    display: 'inline-block',
+    verticalAlign: 'middle',
+    marginInlineStart: '0.35em',
+    color: colors.pending,
+    fontSize: '0.7rem',
+    lineHeight: 1,
+  },
   /**
    * The reference's `link-btn`: a small trailing control in a section caption. It reads as a
    * link while being a real button underneath.
@@ -132,6 +169,7 @@ const styles = {
     background: 'transparent',
     color: cssVars['--r-accent'],
     fontSize: 'var(--r-text-sm)',
-    textDecoration: 'underline',
   },
+  /** The link's line, bounded to the words — see the note at the call site. */
+  label: { textDecoration: 'underline' },
 } as const;
