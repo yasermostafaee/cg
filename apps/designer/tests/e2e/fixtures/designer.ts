@@ -843,21 +843,18 @@ export class DesignerApp {
   /**
    * Set a preview scope's session-only timing. `scope` is the group title shown in
    * the modal ("Timing (session)" for the root, "Timing — <instance>" for a child).
+   *
+   * ADR 0009 — there is no `mode` option and there cannot be one: the playout mode is
+   * designer-owned and the preview shows it as a fact. Set it with `setPlayoutTiming`
+   * (the Inspector) BEFORE opening the preview, which is what a designer actually does.
    */
   async setPreviewTiming(
     scope: string,
     opts: {
-      mode?: 'manual' | 'auto-out' | 'loop-cycle' | 'content-driven';
       holdMs?: number;
       repeat?: number;
     },
   ): Promise<void> {
-    if (opts.mode !== undefined) {
-      await this.previewDialog
-        .getByRole('combobox', { name: 'Preview playout mode' })
-        .first()
-        .selectOption(opts.mode);
-    }
     if (opts.holdMs !== undefined) {
       await this.previewDialog
         .getByRole('spinbutton', { name: 'Preview hold duration in milliseconds' })

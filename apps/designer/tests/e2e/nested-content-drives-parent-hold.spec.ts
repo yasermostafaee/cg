@@ -30,10 +30,10 @@ test.describe('B-031 — preview offers the content-driven hold for nested conte
     await app.page.keyboard.press('Escape'); // deselect the canvas-covering instance
 
     await app.openPreviewModal();
-    // The parent's preview timing offers the content-driven hold source — the per-scope
-    // content check now recurses the nested composition (shallow pre-B-031 hid it).
-    await expect(
-      app.previewDialog.getByRole('combobox', { name: 'Preview hold source' }).first(),
-    ).toBeVisible();
+    // The parent's preview STATES a hold source — the per-scope content check now recurses the
+    // nested composition (shallow pre-B-031 hid it), and the hold row renders only when the
+    // scope has a content source. ADR 0009 — the row is a FACT, not a select: the subject here
+    // is the recursion, and the recursion is what decides whether the row exists at all.
+    await expect(app.previewDialog.getByTestId('preview-hold-source-fact').first()).toBeVisible();
   });
 });

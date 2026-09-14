@@ -198,6 +198,25 @@ Persian / RTL is a core requirement.
     **passed**. Do not add the first one — and do not "fix" a vacuous assertion by weakening
     it to something jsdom can answer, which is the same defect with a fresh coat.
 
+13. 🔴 **A SETTING THAT CAN BREAK THE TEMPLATE'S OWN CONTRACT BELONGS TO WHOEVER AUTHORED THE
+    CONTRACT.** `hold = content-driven` means "stay until the content finishes". An operator who
+    changes it pulls the background out from under a headline sequence that is still running —
+    the template keeps its promise and the operator breaks it without knowing they did. So playout
+    `mode` and `holdSource` are **designer-owned**: authored in the Designer's composition
+    inspector, READ-ONLY on every other surface — the Designer's preview and CG Control alike.
+    Per-element CONTENT timing is the complement and stays **operator-owned, per session**: crawl
+    passes, crawl cycle seam, rotator passes, rotator item dwell. The full decision, both lists and
+    the surfaces are `docs/adrs/0009-timing-setting-ownership.md`.
+    ⚠ **Remove the CHANNEL, not the control.** A read-only decision enforced by hiding or disabling
+    a control is one edit away from coming back. `mode` and `holdSource` are ABSENT from the
+    preview's session-override TYPE, so there is no control to disable and no route a value could
+    travel — the compiler enforces it in code nobody thought to lint.
+    ⚠ **And a fact is written as a FACT, never as a disabled control** (this is golden rule 11's
+    door and 12(c)'s together). A greyed-out select tells the operator they lack a permission when
+    the truth is the value was never theirs to set. Render it through the app's `Tag` — whose type
+    makes `onClick`, `tabIndex` and `role="button"` inexpressible — with none of a control's
+    border, background or chrome. The strongest form of "it refuses" is that it does not exist.
+
 ## Cadence — classify every item before you start
 
 🔴 **SAY IN ONE LINE WHICH LANE EACH ITEM IS IN, before touching it.** The lane decides how often

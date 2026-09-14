@@ -133,20 +133,37 @@ describe('D-026 — per-scope preview timing tree', () => {
     expect(timingScopeList(scene).map((n) => n.path)).toEqual(['', 'c', 'c.g']);
   });
 
-  it('a child is timing-relevant only when its mode is auto-out / loop-cycle / content-driven', () => {
+  it("a child is timing-relevant only when the TEMPLATE'S STORED mode is auto-out / loop-cycle", () => {
+    // ADR 0009 — `mode` is designer-owned, so relevance reads the stored mode and nothing else.
     // Stored manual → not timing-relevant (the UI hides its controls).
     const manual = timingScopeList(parentScene({ playout: { mode: 'manual' } }));
     const home = manual.find((n) => n.path === 'home')!;
-    expect(TIMING_RELEVANT_MODES.has(effectiveMode(home.source, {}))).toBe(false);
-    // An override flips it on (session-only) without changing the stored default.
-    expect(TIMING_RELEVANT_MODES.has(effectiveMode(home.source, { mode: 'loop-cycle' }))).toBe(
-      true,
-    );
+    expect(TIMING_RELEVANT_MODES.has(effectiveMode(home.source))).toBe(false);
 
     // Stored loop-cycle → timing-relevant out of the box.
     const looped = timingScopeList(parentScene({ playout: { mode: 'loop-cycle' } }));
     const away = looped.find((n) => n.path === 'away')!;
-    expect(TIMING_RELEVANT_MODES.has(effectiveMode(away.source, {}))).toBe(true);
+    expect(TIMING_RELEVANT_MODES.has(effectiveMode(away.source))).toBe(true);
+  });
+
+  it('ADR 0009 — there is no session override that can flip a stored mode', () => {
+    // The escape hatch is closed STRUCTURALLY, not by a disabled control: `effectiveMode` takes
+    // the source alone, and `TimingOverride` has no `mode` key for a caller to set. This asserts
+    // the arity, because the Designer's typecheck excludes `tests/` — an extra argument here
+    // would be silently ignored at runtime and the old assertion would have gone on passing.
+    expect(effectiveMode.length).toBe(1);
+    const manual = timingScopeList(parentScene({ playout: { mode: 'manual' } }));
+    const home = manual.find((n) => n.path === 'home')!;
+    // Passing a would-be override cannot change the answer: it stays whatever `playoutOf`
+    // resolves the STORED playout to — here `static`, because D-114 resolves a composition
+    // with no out-point to `static` regardless of the mode it stores. That the answer is the
+    // resolver's and not the caller's is exactly the point.
+    expect(
+      (effectiveMode as (s: typeof home.source, o?: unknown) => string)(home.source, {
+        mode: 'loop-cycle',
+      }),
+    ).toBe('static');
+    expect(effectiveMode(home.source)).toBe('static');
   });
 });
 

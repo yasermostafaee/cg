@@ -161,6 +161,17 @@ test('EXPERIMENT 2 — a video ALONE freezes on a rebuild too: the trigger is th
   // An out-point so the preview's own timing knobs render at all. It adds no
   // animating element — the scene is still a video and nothing else.
   await app.addOutPoint();
+  // ADR 0009 — the mode is designer-owned, authored here BEFORE the preview opens. It is
+  // deliberately NOT the rebuild trigger below: setting it here is scene authoring, and the
+  // baseline play must happen with no session override in force. `auto-out` is what makes the
+  // preview's timed-hold knob render at all, and that knob is the trigger.
+  await app.setPlayoutTiming('auto-out');
+  // The STORED hold parks the composition ON AIR for the baseline play. Without it `auto-out`
+  // reaches its out-point and settles with holdMs 0, and the baseline samples a video that has
+  // already finished — the failure mode this line exists to prevent.
+  const storedHold = app.page.getByRole('spinbutton', { name: 'Hold duration in milliseconds' });
+  await storedHold.fill('60000');
+  await storedHold.blur();
 
   await app.openPreviewModal();
   const frame = app.previewFrame;
@@ -176,16 +187,22 @@ test('EXPERIMENT 2 — a video ALONE freezes on a rebuild too: the trigger is th
   expect(before.paused, 'the lone video plays BEFORE any rebuild').toBe(false);
   expect(before.advanced, 'currentTime advances BEFORE any rebuild').toBeGreaterThan(0);
 
-  // THE REBUILD — preview timing knobs, mid-playback, with no ticker and no Lottie in
+  // THE REBUILD — a preview timing knob, mid-playback, with no ticker and no Lottie in
   // sight. The long hold is not incidental: it parks the composition ON AIR for the
   // whole sample window, so an auto-out completing cannot masquerade as the freeze.
-  const mode = app.previewDialog.getByRole('combobox', { name: 'Preview playout mode' }).first();
-  await mode.selectOption('auto-out');
+  // Writing the session override is what posts `scene-replace`, which is the experiment's
+  // whole variable — the mode was authored before the modal opened (ADR 0009).
   const hold = app.previewDialog
     .getByLabel('Preview hold duration in milliseconds', { exact: true })
     .first();
-  await hold.fill('60000');
+  // A DIFFERENT value from the stored 60000 — filling the same number would write no override
+  // and post no `scene-replace`, and the experiment would silently test nothing.
+  await hold.fill('90000');
   await hold.blur();
+  // POSITIVE CONTROL — do not delete. Everything below asserts the video is STILL PLAYING, which
+  // is exactly what a test that triggered NO rebuild would also report. This line proves the
+  // override committed, so the "after" readings are about a rebuild that actually happened.
+  await expect(hold).toHaveValue('90000');
 
   await app.play();
   const after = await sampleVisibleVideo(frame);

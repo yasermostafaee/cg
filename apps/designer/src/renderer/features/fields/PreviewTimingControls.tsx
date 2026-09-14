@@ -8,6 +8,7 @@ import {
 } from '@cg/shared-schema';
 import { Callout } from '../../ui/Callout.js';
 import { Select } from '../../ui/Select.js';
+import { Tag } from '../../ui/Tag.js';
 import { CollapseSection } from '../inspector/CollapseSection.js';
 import { RealtimeNumberInput } from '../inspector/controls.js';
 import * as s from '../inspector/InspectorPanel.css.js';
@@ -25,9 +26,13 @@ export const TIMING_RELEVANT_MODES: ReadonlySet<PlayoutMode> = new Set<PlayoutMo
   'loop-cycle',
 ]);
 
-/** The effective playout mode of a scope: its override, else its stored default. */
-export function effectiveMode(source: TimingSource, override: TimingOverride): PlayoutMode {
-  return override.mode ?? playoutOf(source).mode;
+/**
+ * The playout mode a scope will run in. ADR 0009 — `mode` is DESIGNER-OWNED, so the
+ * preview cannot override it and the effective mode IS the stored one. Kept as the single
+ * canonical answer to "what mode will this scope run in", so no caller re-derives it.
+ */
+export function effectiveMode(source: TimingSource): PlayoutMode {
+  return playoutOf(source).mode;
 }
 
 /**
@@ -64,15 +69,19 @@ export interface CountdownTimingOverride {
 /**
  * D-020/D-028 — a session-only playout override. Held by the preview modal,
  * applied by rebuilding the preview runtime (`playoutOverride`/`scopeOverrides`),
- * and never written back to the stored template. Per-scope LIFECYCLE axes: `mode`
- * (open/close cycles), `holdSource` (timed `holdMs` vs. content completing), and
- * `repeat`. D-102 — CONTENT timing is PER-ELEMENT, keyed by the element's id: `tickers`
+ * and never written back to the stored template. Per-scope LIFECYCLE axes: `holdMs`
+ * and `repeat`. D-102 — CONTENT timing is PER-ELEMENT, keyed by the element's id: `tickers`
  * (Phase 1 — repeat / cycle-seam), `sequences` and `countdowns` (Phase 2), so two content
  * elements in one scope are tuned independently.
+ *
+ * 🔴 ADR 0009 — `mode` and `holdSource` are ABSENT BY DESIGN. They are DESIGNER-OWNED:
+ * they state what the template promises to do, and an operator who changes one breaks a
+ * promise the template's author made (a `content-driven` hold flipped to `timed` pulls the
+ * background out from under a sequence that is still running). They are not merely hidden
+ * from the preview's UI — removing them from this type removes the CHANNEL, so there is no
+ * control to disable and no value that could reach the runtime by another route.
  */
 export interface TimingOverride {
-  mode?: PlayoutMode;
-  holdSource?: HoldSource;
   holdMs?: number;
   repeat?: number | 'infinite';
   tickers?: Record<string, TickerTimingOverride>;
@@ -100,11 +109,17 @@ const HOLD_LABELS: Record<HoldSource, string> = {
  * override) so it re-syncs whenever the composition changes (out-point added or
  * removed, stored mode changed). Tuning here is **session-only**: it never
  * changes the template's stored defaults. With no out-point the entrance is the
- * whole timeline and the default is play-once-and-hold; `auto-out` / `loop-cycle`
- * are disabled because they have no exit segment to run. The Hold-source select
- * renders only when the scope contains a content source (a dead control teaches
- * nothing); D-102 Phase 1 — per-ticker timing rows are rendered separately by
- * `PreviewScopeTiming`, one per ticker. Authoritative live control belongs to the rundown.
+ * whole timeline and the default is play-once-and-hold.
+ *
+ * 🔴 ADR 0009 — `mode` and `hold` are shown here as READ-ONLY FACTS, never as controls.
+ * They are designer-owned: they state what the template promises to do, and the promise is
+ * the author's to make. The preview still SHOWS them because an operator-designer needs to
+ * see what the template will do. The hold FACT renders only when the scope contains a content
+ * source, for the same reason the select did: with nothing to drive it there is no hold
+ * source worth stating. Everything else here stays session-only and operator-owned.
+ *
+ * D-102 Phase 1 — per-ticker timing rows are rendered separately by `PreviewScopeTiming`,
+ * one per ticker. Authoritative live control belongs to the rundown.
  */
 export function PreviewTimingControls({
   source,
@@ -134,8 +149,9 @@ export function PreviewTimingControls({
 }): JSX.Element {
   const stored = playoutOf(source);
   const hasOutPoint = source.lifecycle !== undefined;
-  const mode = override.mode ?? stored.mode;
-  const holdSource = override.holdSource ?? stored.holdSource ?? 'timed';
+  // ADR 0009 — designer-owned: the stored value IS the effective one, with no override to fold in.
+  const mode = stored.mode;
+  const holdSource = stored.holdSource ?? 'timed';
   const holdMs = override.holdMs ?? stored.holdMs ?? 0;
   const repeat = override.repeat ?? stored.repeat;
   const repeatInfinite = repeat === 'infinite';
@@ -160,42 +176,39 @@ export function PreviewTimingControls({
         </Callout>
       )}
 
+      {/* ADR 0009 — `mode` and `hold` are the template's own promise about itself, authored in
+          the composition's playout settings. Here they are FACTS, not controls: plain text in
+          the value column, with none of a select's border or chrome, because a disabled select
+          would tell the operator-designer they lack a permission when the truth is that the
+          value was never theirs to set. `Tag` makes that structural — its type has no
+          `onClick`, no `tabIndex` and cannot carry `role="button"`. */}
       <div className={s.row}>
         <span className={s.label}>mode</span>
-        <Select
-          className={t.select}
-          value={mode}
-          aria-label="Preview playout mode"
-          onChange={(e) => onChange({ mode: e.target.value as PlayoutMode })}
+        <Tag
+          className={t.fact}
+          data-testid="preview-playout-mode-fact"
+          aria-label={`Playout mode — ${MODE_LABELS[mode]}`}
         >
-          {(Object.keys(MODE_LABELS) as PlayoutMode[]).map((m) => (
-            // D-114 — match the composition inspector: with no out-point only `static` is selectable
-            // (manual / auto-out / loop-cycle are disabled); with one, `static` is disabled. Keeps the
-            // preview and the main scene properties from getting mixed up.
-            <option key={m} value={m} disabled={hasOutPoint ? m === 'static' : m !== 'static'}>
-              {MODE_LABELS[m]}
-            </option>
-          ))}
-        </Select>
+          {MODE_LABELS[mode]}
+        </Tag>
       </div>
 
       {hasContent && mode !== 'manual' && mode !== 'static' && (
         <div className={s.row}>
           <span className={s.label}>hold</span>
-          <Select
-            className={t.select}
-            value={holdSource}
-            aria-label="Preview hold source"
-            onChange={(e) => onChange({ holdSource: e.target.value as HoldSource })}
+          <Tag
+            className={t.fact}
+            data-testid="preview-hold-source-fact"
+            aria-label={`Hold source — ${HOLD_LABELS[holdSource]}`}
           >
-            {(Object.keys(HOLD_LABELS) as HoldSource[]).map((h) => (
-              <option key={h} value={h}>
-                {HOLD_LABELS[h]}
-              </option>
-            ))}
-          </Select>
+            {HOLD_LABELS[holdSource]}
+          </Tag>
         </div>
       )}
+
+      <p className={t.hint}>
+        Set by the template — change the mode and hold in the composition&apos;s playout settings.
+      </p>
 
       {showHold && (
         <div className={s.row}>

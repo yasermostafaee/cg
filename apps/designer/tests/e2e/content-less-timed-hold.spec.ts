@@ -17,11 +17,15 @@ test.describe('B-032 — content-less timed hold honors holdMs (preview)', () =>
     await app.addRectangle({ x: 240, y: 130 });
     await app.setSceneDuration(30); // short scene ⇒ brief intro/outro, observable hold
     await app.addOutPoint();
+    // ADR 0009 — the mode is designer-owned, so it is authored in the Inspector BEFORE the
+    // preview opens; the preview shows it as a fact and offers no control for it.
+    await app.setPlayoutTiming('loop-cycle');
     await app.openPreviewModal();
 
-    await app.previewDialog
-      .getByRole('combobox', { name: 'Preview playout mode' })
-      .selectOption('loop-cycle');
+    // ADR 0009 — the preview STATES the authored mode rather than offering it.
+    await expect(app.previewDialog.getByTestId('preview-playout-mode-fact')).toHaveText(
+      /Loop cycle/i,
+    );
     const repeat = app.previewDialog.getByLabel('Preview repeat count', { exact: true });
     await repeat.fill('2');
     await repeat.blur();
@@ -42,7 +46,7 @@ test.describe('B-032 — content-less timed hold honors holdMs (preview)', () =>
     await expect(app.previewFrame.locator('body.cg-pending')).toHaveCount(0);
   });
 
-  test('no explicit out-point: the preview disables auto-out/loop-cycle and hides the holdMs input', async ({
+  test('no explicit out-point: the preview STATES the mode as a fact and hides the holdMs input', async ({
     app,
   }) => {
     await app.newProject('NoOutPoint');
@@ -50,11 +54,18 @@ test.describe('B-032 — content-less timed hold honors holdMs (preview)', () =>
     // Deliberately NO out-point added.
     await app.openPreviewModal();
 
-    // auto-out / loop-cycle need an out-point — they are disabled in the mode select, so the
-    // operator cannot select them (and thus cannot "set" a holdMs that would never run).
-    const mode = app.previewDialog.getByRole('combobox', { name: 'Preview playout mode' });
-    await expect(mode.getByRole('option', { name: /Auto-out/ })).toBeDisabled();
-    await expect(mode.getByRole('option', { name: /Loop cycle/ })).toBeDisabled();
+    // ADR 0009 — the mode is designer-owned. It is not a disabled select the operator failed
+    // to earn; there is NO select. This is the golden-rule-12(c) half: a thing that looks
+    // unoperable must actually refuse, and the strongest form of refusing is not existing.
+    await expect(
+      app.previewDialog.getByRole('combobox', { name: 'Preview playout mode' }),
+    ).toHaveCount(0);
+    await expect(
+      app.previewDialog.getByRole('combobox', { name: 'Preview hold source' }),
+    ).toHaveCount(0);
+    // D-114 — with no out-point `playoutOf` resolves the composition to `static`, and the
+    // preview states exactly that.
+    await expect(app.previewDialog.getByTestId('preview-playout-mode-fact')).toHaveText(/Static/i);
     // The timed holdMs input is not shown without an out-point.
     await expect(
       app.previewDialog.getByLabel('Preview hold duration in milliseconds', { exact: true }),
