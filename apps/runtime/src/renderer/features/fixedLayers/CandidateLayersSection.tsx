@@ -21,6 +21,7 @@ import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { fixedLayersReasonMessage } from '../../ui/fixedLayersReasonMessage.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { displayLabel } from '../library/templateName.js';
+import { IsolatedName } from '../../ui/OperatorNames.js';
 // 🔴 `B-238` — R-017's two canonical pieces, consumed rather than re-spelled: the ONE
 // renderer-side remove decision (which reads the bridge's published `removeExempt`), and the
 // ONE refusal sentence, which `errorCodeMessage` already maps `REMOVE_ON_AIR_CODE` to.
@@ -682,13 +683,37 @@ function BankEditor({
                     <span className="cg-layer-none">{row.occupied ? '' : 'Unassigned'}</span>
                   ) : (
                     <>
-                      <bdi
+                      {/*
+                        🔴 `MODAL-CHROME-10` ADDENDUM B — **the FIFTH surface to get this
+                        wrong, and it is the one the owner photographed.**
+
+                        This was a `<bdi>` carrying `.cg-layer-template`, which declares
+                        `display: block`. A `<bdi>`'s UA default is `unicode-bidi: isolate`
+                        PLUS `dir=auto`, so a Persian template name resolved the element's own
+                        `direction` to `rtl` — harmless while it is inline, but on a BLOCK that
+                        direction reaches the box's ALIGNMENT and `text-align: start` resolves
+                        to RIGHT. Persian titles flushed hard right in the Template column while
+                        English ones sat left, which is exactly what the operator reported.
+
+                        ⚠ The isolation is NOT the bug and must not be removed: these names are
+                        mixed (`زیرنویس معرفی — Guest Title`), and without it any name carrying
+                        a Latin word or digits reorders wrongly — a SILENT mis-rendering, which
+                        is worse than a visible misalignment because nobody photographs it.
+                        `IsolatedName` is the shape that keeps both: an LTR `<span>` for the
+                        BOX, an inline `<bdi>` for the CHARACTERS.
+                      */}
+                      <IsolatedName
                         className="cg-layer-template"
-                        title={row.slot?.binding?.templateId ?? row.slot?.binding?.templateType}
-                        dir="auto"
+                        {...(() => {
+                          // `exactOptionalPropertyTypes` — an ABSENT title and a title of
+                          // `undefined` are different things here, and only the first is legal.
+                          const id =
+                            row.slot?.binding?.templateId ?? row.slot?.binding?.templateType;
+                          return id === undefined ? {} : { title: id };
+                        })()}
                       >
                         {row.template}
-                      </bdi>
+                      </IsolatedName>
                       {/*
                         WHY THE SWITCH ON THIS ROW IS DEAD, said where the operator is looking
                         when he wonders. It is a statement about VISIBILITY and says so — it is
