@@ -70,13 +70,30 @@ function resolveWorkers(): number | undefined {
  * ⚠ **THE TWO SUITES SHARE ONE JOB, so their budgets must SUM under the cap.** CI runs
  * them SERIALLY (`bounded-turbo-cli` computes 1 concurrent task on the 4-vCPU runner), so
  * the arithmetic is 20 min cap − ~1.6 min setup − ~1 min build = ~17.4 min for both.
- * Designer takes 11 of it, this suite 5, leaving ~1.4 min of margin. Measured green
- * times are 6.3 min (designer) and 1.8 min (runtime), and each budget must also cover
- * this config's own 120 s `webServer` boot — so 5 min here is ~30 % headroom over a
- * realistic worst case of 2 min boot + 1.8 min tests. **Raise one and you must lower the
- * other**, or the cap fires first and the evidence goes back to being unreadable.
+ * **Raise one and you must lower the other**, or the cap fires first and the evidence goes
+ * back to being unreadable.
+ *
+ * 🔴 **REBALANCED 2026-09-15 — 8.5 (designer) + 7.5 (here) = 16, the same sum and the
+ * same ~1.4 min of margin. THE SPLIT WAS WRONG, NOT THE TOTAL, and this suite's own
+ * mechanism is what proved it.** Run 34894055817 (`189b5d43`) went RED having failed
+ * nothing: `199 passed`, **`23 did not run`**, two errors belonging to no test —
+ * _"Timed out waiting 300s for the test suite to run"_. That is P-038 working exactly as
+ * designed (Playwright ended the run and SAID so, instead of the job cap eating the output),
+ * and it is also the reading that a budget set against a 1.8 min suite had expired: this
+ * suite now measures ~5.6 min of tests (300 s × 223/199, extrapolated from where the cut
+ * landed) and the old 5 min could not hold even the tests, let alone the 120 s `webServer`
+ * boot the budget must also cover.
+ *
+ * ⚠ **A BUDGET IS A DEADLINE, AND A RED DEADLINE IS INDISTINGUISHABLE FROM A RED SUITE
+ * UNTIL SOMEBODY READS THE STEP.** The run's `conclusion` is `failure` either way; only
+ * `23 did not run` tells the two apart. So do not "fix" a timeout like this by deleting or
+ * skipping specs to fit — measure, and move the line.
+ *
+ * The numbers today: designer 6.6 min measured green against 8.5 (~29 % headroom), this
+ * suite ~5.6 against 7.5 (~34 %). Neither suite is near its own cap; the designer's 11 was
+ * simply holding room it has never used.
  */
-const CI_GLOBAL_TIMEOUT_MS = 5 * 60_000;
+const CI_GLOBAL_TIMEOUT_MS = 7.5 * 60_000;
 
 export default defineConfig({
   globalTimeout: process.env.CI ? CI_GLOBAL_TIMEOUT_MS : undefined,

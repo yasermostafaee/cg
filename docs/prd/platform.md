@@ -2467,11 +2467,29 @@ was unobtainable.
 **Fix — two parts, and the first is the one that matters.**
 
 1. **`globalTimeout`, CI-only, in BOTH Playwright configs**, set so the two suites' budgets SUM
-   under the job cap: designer **11 min**, runtime **5 min**, against ~17.4 min of usable room
+   under the job cap: designer **8.5 min**, runtime **7.5 min**, against ~17.4 min of usable room
    (20 min cap − ~1.6 min setup − ~1 min build). Playwright then ends its own run, exits 1 with a
    summary, and the job concludes **`failure`** with the failing specs named — inside the cap, so
    the cap stops being the thing that decides. ⚠ The two numbers are ONE sum: raising either
    obliges lowering the other, and each config's comment says so.
+
+   ⭐ **REBALANCED 2026-09-15 from 11 / 5 — same sum, same margin — and the rebalance is itself
+   evidence the mechanism works.** Run 34894055817 (`189b5d43`) concluded `failure` having failed
+   NOTHING: `199 passed`, **`23 did not run`**, and two errors belonging to no test — _"Timed out
+   waiting 300s for the test suite to run"_. That is exactly the legible outcome this item was
+   written to buy, applied to a cause it did not anticipate: the budget itself expiring. The
+   Runtime suite was 1.8 min when the 5 was chosen and is now ~5.6 min of tests (300 s × 223/199,
+   extrapolated from where the cut landed), which the 5 could not hold even before the 120 s
+   `webServer` boot each budget must also cover. The room came from the Designer's half, which has
+   never spent more than 6.6 of its 11.
+
+   🔴 **AND THE READING HAZARD THIS ADDS, because it is the cost of the fix:** a run that
+   blew its DEADLINE and a run with a FAILING SPEC now conclude identically — `failure` — and
+   only `N did not run` in the step output separates them. Read that line before attributing a red
+   `e2e` to the diff. The remedy for a timeout is to measure and move the line (or raise
+   `timeout-minutes` and redo the arithmetic in the runtime config, which owns it); it is NEVER to
+   delete or skip specs until the suite fits.
+
 2. **`--log-order=stream`** on `test:e2e` and `gate:e2e:run`. Output appears as it is produced
    instead of at a completion that may never come, so a hung suite is legible WHILE it hangs.
    `bounded-turbo-cli.mjs` forwards argv verbatim (it rewrites only `--concurrency`), so this needs
