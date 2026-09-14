@@ -244,18 +244,26 @@ test('the two plate states are told apart WITHOUT reading the label', async ({ a
   await app.closeStationSetup();
 
   await app.selectLayerRow(layer);
-  const plates = app.inspector.locator('[aria-label="Live plates"]');
-  await plates.getByLabel('Source for guest-1').selectOption({ label: 'Studio A' });
 
-  // 🔴 STAGED IS NOT ASSIGNED. The Inspector's control shows the draft; PVW must
-  // not, because a take at this moment would still be REFUSED. Showing it as
-  // bound would tell the operator the take will work at the exact moment it will
-  // not — which is the failure PVW is their last chance to catch.
+  /*
+    🔴 **UNASSIGNED IS UNASSIGNED, AND PVW SAYS SO.** A take of this plate would be REFUSED
+    (`live-source-unassigned`); showing it as bound would tell the operator the take will work
+    at the exact moment it will not — the failure PVW is their last chance to catch.
+
+    ⚠ **THE `STAGED` HALF OF THIS CASE IS GONE, and that is a behaviour change rather than a
+    weaker test.** It used to assert that an edit STAGED in the Inspector did not show here,
+    because the assignment only landed on the row's UPDATE. `SOURCE-DEFAULTS-20` gave the
+    defaults their own dialog with its own commit, so there is no staged-but-unwritten state
+    left to assert — the dialog's `Save` IS the assignment, and its `Cancel` writes nothing
+    (asserted in `live-source-sources.spec.ts`). What survives is the claim that matters to
+    this surface: unassigned reads as unassigned, assigned names its source.
+  */
   await expect(marker(page, 'guest-1')).toContainText('no source assigned');
+  await expect(marker(page, 'guest-1')).toHaveAttribute('data-live-plate-state', 'unassigned');
 
-  await app.applyEdits();
+  await app.setTemplateDefault('guest-1', 'Studio A');
 
-  // Applied: the plate flips state and names the INSTALLATION's source — the join
+  // Assigned: the plate flips state and names the INSTALLATION's source — the join
   // no exported page can make, because it carries a plate identifier and nothing
   // else.
   await expect(marker(page, 'guest-1')).toHaveAttribute('data-live-plate-state', 'assigned');

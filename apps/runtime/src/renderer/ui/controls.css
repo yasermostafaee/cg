@@ -1757,15 +1757,50 @@ textarea.cg-field--autogrow {
  * The rule under it stays: the reference separates sections with a rule ABOVE each one
  * after the first, which is the same separation drawn one edge over (design.md §12.3).
  */
-.cg-inspector-section > h2 {
+/*
+ * 🔴 **THE RULE BELONGS TO THE SECTION'S HEAD, WHICH IS NO LONGER ALWAYS AN `h2`** — the
+ * owner, 2026-09-14: «زیر Look inputs هم باید یه خط مثل بقیه بخشها باشه.»
+ *
+ * `SOURCE-DEFAULTS-20` puts a `link-btn` beside two of these headings (the reference's
+ * `.section-caption`), which made the `h2` a GRANDCHILD of the section — and a `>` selector
+ * stops matching a grandchild SILENTLY. The section lost its underline AND its type in one
+ * step, which is exactly what the owner saw.
+ *
+ * So the two halves are separated by what they belong to: the BOX (margin, the padding above
+ * the rule, the rule itself) belongs to whatever element is the section's head, `h2` or
+ * caption row; the TYPE belongs to the `h2` wherever it sits. Split this way a caption can be
+ * added to any section later without taking its rule away.
+ */
+.cg-inspector-section > h2,
+.cg-inspector-section > .cg-section-caption {
   margin: 0 0 var(--r-space-4);
   padding-bottom: var(--r-space-2);
   border-bottom: 1px solid var(--r-border);
+}
+
+/* The reference's `.section-caption`: the heading at one end, the door at the other. */
+.cg-inspector-section > .cg-section-caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--r-space-2);
+}
+
+.cg-inspector-section h2 {
   font-size: var(--r-insp-section-text);
   font-weight: var(--r-weight-semibold);
   letter-spacing: var(--r-insp-section-tracking);
   text-transform: uppercase;
   color: var(--r-text-secondary);
+}
+
+/* …and inside a caption the row owns the box, so the heading carries none of it. */
+.cg-inspector-section > .cg-section-caption > h2 {
+  margin: 0;
+  padding: 0;
+  border: none;
+  flex: 1;
+  min-width: 0;
 }
 
 /* ── Inspector control heights — a ROW decides, not the variants in it ──────

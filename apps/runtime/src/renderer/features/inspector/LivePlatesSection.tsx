@@ -2,20 +2,15 @@ import { useSyncExternalStore } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { DraftChip } from '../../ui/DraftChip.js';
+import { IsolatedName } from '../../ui/OperatorNames.js';
+import { SourceDefaultsLink } from './SourceDefaultsLink.js';
 import {
   assignmentsWereCarriedOver,
   currentSourceCatalog,
   sourcesVersion,
   subscribeSources,
 } from '../sources/sourceStore.js';
-import {
-  draftsVersion,
-  effectivePlateSource,
-  isPlateDirty,
-  stagePlateSource,
-  subscribeDrafts,
-} from './draftStore.js';
+import { draftsVersion, subscribeDrafts } from './draftStore.js';
 import { appliedPlateSources, frozenPlateSource, onAirPlateSource } from './livePlates.js';
 import { isOnAir } from '../stack/onAir.js';
 
@@ -31,28 +26,32 @@ import { isOnAir } from '../stack/onAir.js';
  * six plates before the first source existed. The binding belongs beside the
  * thing being bound, and selecting a template shows that template's plates only.
  *
- * ── 🔴 IT STAGES A DRAFT, THROUGH THE INSPECTOR'S OWN MECHANISM ─────────────
+ * ── 🔴 THE EDITOR LEFT THIS SECTION — `SOURCE-DEFAULTS-20` ───────────────────
  *
- * The picker writes to `draftStore` — the SAME module every other field on this
- * panel uses — and reaches the bridge only through `Update`. It is not
- * consistency for its own sake: **the assignment is TEMPLATE-level**, shared by
- * every row carrying this template, so a picker that committed on change would
- * let one stray click silently change what those other rows do, with no moment to
- * notice and nothing to undo. **The draft IS the confirmation step.**
+ * ⚠ **THE PARAGRAPH THAT STOOD HERE IS REPLACED, NOT ANNOTATED, because every sentence in
+ * it is now false.** It read that the picker writes to `draftStore`, reaches the bridge only
+ * through `Update`, and that _"the draft IS the confirmation step"_ — with `Discard`
+ * dropping it and `isItemDirty` seeing it.
  *
- * Everything that already guards an unapplied edit therefore guards this one,
- * because it is the same state: `Discard` drops it (`clearDraft`), the dirty
- * marker and the panel's unapplied-edits chip see it (`isItemDirty`), it SURVIVES
- * a selection switch and a panel/fullscreen round-trip (drafts are keyed by item,
- * and the prune that once destroyed them on remount fails closed —
- * `useStackHousekeeping`'s header), and `Update` writes it through `applyDraft`
- * alongside the field payload.
+ * The per-plate selects are in a DIALOG now (`TemplateDefaultsDialog`), opened by a link in
+ * a section caption, and it commits through its own `Save defaults`. The old argument's
+ * PREMISE survives and is the reason the new shape is better rather than merely different:
+ * the assignment is TEMPLATE-level, so it needs a confirmation step — and a row's `Update`
+ * was always the wrong one to be, because an installation-wide value rode one ROW's commit.
  *
- * ── 🔴 THE ASSIGNMENT IS TEMPLATE-LEVEL, AND THE SECTION SAYS SO ────────────
+ * ⚠ **CONSEQUENCE, RECORDED SO IT IS A KNOWN STATE RATHER THAN A TRAP:** nothing in the
+ * product stages a PLATE draft any more. `stagePlateSource`, `snapshotPlateDraft` and
+ * `applyDraft`'s `sendPlateAssignments` are intact and unreachable from the UI — inert, not
+ * wrong (an empty staged map makes that half a no-op). Removing them is owed and is not this
+ * change.
  *
- * It is the DEFAULT for every use of this template. That is stated in the
- * section, in a line, rather than hidden in a tooltip: an operator must not
- * discover it by surprise on air.
+ * ── WHAT STAYED, AND WHY IT IS NOT A SUMMARY BLOCK ──────────────────────────
+ *
+ * The two lines that say THIS ROW is not resolving the default: an emergency patch, and an
+ * assignment frozen at take. They are facts about the selected row, meaningless in a
+ * template-wide dialog that may be open for a template five rows are using — and both are
+ * gated on the row being ON AIR and diverging, so the ordinary case renders nothing at all.
+ * When there is nothing to say the section does not render, heading included.
  *
  * `R-048`'s fast on-air swap is the PER-RUN OVERRIDE that sits on top of this,
  * and it deliberately does NOT write back — an emergency substitution must never
@@ -120,6 +119,53 @@ export function LivePlatesSection({
   // A template with no live plates gets NO section. An empty heading is a
   // question the operator did not ask, on the panel they use most.
   if (plates.length === 0) return null;
+  /*
+    🔴 …AND THE SAME RULE NOW APPLIES ONE LEVEL UP. With the editor behind a link and the
+    link in `LOOK INPUTS` for a looks template, this section can have literally nothing to
+    say: no door (that section holds it) and no divergence line (the common case). An empty
+    heading is exactly what the guard above refuses, so it is refused here too rather than
+    left to be noticed later.
+
+    ⚠ Computed from what the section WILL render, not from the template's shape: the
+    divergence lines are gated on the row being on air AND diverging, so a looks template on
+    air with a patched plate still gets its section.
+  */
+  const hasLooks = (info?.liveSources?.looks?.length ?? 0) > 0;
+  /*
+    🔴 **AND THE HEADING GOES WITH THE CONTENT** — the owner, 2026-09-14: «کلمه Live plates
+    و فضایی که اشغال کرده رو هم حذف کن.»
+
+    With the editor behind a link, and the link in `LOOK INPUTS` for a looks template, this
+    section can have literally nothing left to say: no door, and no divergence line (which is
+    the common case — both are gated on the row being ON AIR and diverging). A heading with
+    nothing under it is the same defect the `plates.length === 0` guard above refuses, so it
+    is refused on the same terms rather than left to be noticed later.
+
+    ⚠ Computed from what the section WILL RENDER, not from the template's shape: a looks
+    template on air with a patched plate still gets its section, because it has something to
+    say. The two divergence predicates are evaluated once, here, and the map below reads the
+    same answers — a second derivation is how a heading comes back without its content.
+  */
+  /*
+    🔴 **DECLARED BEFORE `divergences`, AND THAT ORDER IS LOAD-BEARING — TYPESCRIPT WILL NOT
+    CATCH IT FOR YOU.**
+
+    `divergences` reads both of these inside a `plates.filter(…)` callback. TypeScript treats
+    an arrow body as DEFERRED, so a reference to a `const` declared further down compiles
+    without complaint — but `filter` invokes the callback IMMEDIATELY, so at runtime it is a
+    temporal-dead-zone throw on the first render of any template with a plate. It typechecked
+    clean in exactly that state before being moved.
+  */
+  const rowIsOnAir = isOnAir(item);
+  const applied = appliedPlateSources(item.templateId, plates);
+  const divergences = plates.filter((plate) => {
+    const appliedSource = applied.get(plate.sourceId) ?? null;
+    const onAir = onAirPlateSource(item, plate.sourceId, appliedSource);
+    const frozen = frozenPlateSource(item, plate.sourceId, appliedSource);
+    return (onAir.overridden && rowIsOnAir) || (!onAir.patched && frozen.diverged && rowIsOnAir);
+  });
+  const carried = assignmentsWereCarriedOver(item.templateId);
+  if (hasLooks && divergences.length === 0 && !carried) return null;
 
   /*
     🔴 **SESSION BP — WHY THIS EDITOR IS STILL HERE, AND WHY THAT IS NOW SAFE.**
@@ -160,52 +206,55 @@ export function LivePlatesSection({
     The override still EXISTS on such a row and still takes effect at its next take; that is
     what the timing sentence at the bottom is for.
   */
-  const rowIsOnAir = isOnAir(item);
-  const applied = appliedPlateSources(item.templateId, plates);
-  const staged = plates.filter((p) =>
-    isPlateDirty(item.itemId, p.sourceId, applied.get(p.sourceId) ?? null),
-  );
 
   return (
     <div className="cg-inspector-section" aria-label="Live plates">
-      <h2>Live plates</h2>
       {/*
-        🔴 **BM-2 §3.4 — THE SCOPE, NARROWED TO THE LEVEL THIS SECTION IS ACTUALLY ON.**
+        ⚠ **THE DOOR IS HERE ONLY WHEN `LOOK INPUTS` IS NOT.** The owner's call is that the
+        link sits above the frames (gh2) and not in a section of its own — so for a template
+        that declares LOOKS it lives there, and this section does not draw a second one.
 
-        It read _"Set for the template, not this row — every row using it takes the same
-        sources."_ That was true of a flat map and is a LIE about a four-level one: it says
-        "not this row" while two of the four levels ARE this row's, and an operator reading it
-        would conclude the panel cannot express what it plainly can.
-
-        §3.4 also requires the levels to read WITHOUT a paragraph. So neither this line nor
-        the one in LOOK INPUTS explains the model: each says only what ITS OWN control does,
-        and the two sit in resolution order down the panel. A patch, being the level that
-        overrides the others, announces itself on the rows it masks rather than in a legend
-        nobody reads under pressure.
+        🔴 But `LooksBindingsSection` renders nothing for a template WITHOUT looks, and this
+        is the only surface in the product that binds a plate to a source. Without the
+        fallback such a template would have no door at all and every fresh row of it would
+        start unbound with its take refused (`live-source-unassigned`) — the trap session BO
+        fell into and reverted. Exactly one of the two hosts draws it, never both.
       */}
-      <p style={styles.scope}>
-        The DEFAULT every row using this template starts from. A row can show something else per
-        look, below.
-      </p>
+      <div className="cg-section-caption">
+        <h2>Live plates</h2>
+        {!hasLooks && (
+          <SourceDefaultsLink templateId={item.templateId} info={info} plates={plates} />
+        )}
+      </div>
       {/*
-        A9 — a re-import KEEPS the bindings, and it has to SAY so. The owner met
-        it as a silent restore: the plates came back bound with no action and no
-        notice, which is indistinguishable from the product having invented them.
+        A9 — a re-import KEEPS the bindings, and it has to SAY so. The owner met it as a
+        silent restore: the plates came back bound with no action and no notice, which is
+        indistinguishable from the product having invented them.
       */}
-      {assignmentsWereCarriedOver(item.templateId) && (
+      {carried && (
         <p style={styles.carried} data-plates-carried-over="">
           These bindings were carried over from this template&rsquo;s previous import.
         </p>
       )}
-      {catalog.sources.length === 0 ? (
-        <p style={styles.empty}>
-          No sources are defined on this station yet — define them under Live sources first.
-        </p>
-      ) : null}
-      {plates.map((plate) => {
+      {/*
+        🔴 **`SOURCE-DEFAULTS-20` — THE SELECTS LEFT; THESE TWO LINES DID NOT, AND THE
+        DIFFERENCE IS WHAT EACH ONE IS ABOUT.**
+
+        What moved into the dialog is the TEMPLATE's default — one value per plate, shared by
+        every row using the template. What stays is the pair of lines that say THIS ROW is not
+        resolving that default: an emergency patch, and an assignment frozen at take. Those are
+        facts about the selected row, they have no meaning in a template-wide dialog that may
+        be open for a template five rows are using, and they are the reason the old block could
+        not simply be deleted.
+
+        ⚠ **THIS IS NOT THE SUMMARY BLOCK §4 FORBIDS.** It is not a list of the defaults — it
+        renders NOTHING in the ordinary case. Both lines are gated on the row being on air AND
+        on a divergence, so a row that is resolving its default costs exactly zero pixels here,
+        which is the space the move was for. They appear only when the panel would otherwise be
+        confidently wrong.
+      */}
+      {divergences.map((plate) => {
         const appliedSource = applied.get(plate.sourceId) ?? null;
-        const value = effectivePlateSource(item.itemId, plate.sourceId, appliedSource);
-        const dirty = isPlateDirty(item.itemId, plate.sourceId, appliedSource);
         // R-048 — the per-ROW patch, folded in through the ONE join that reads it.
         const onAir = onAirPlateSource(item, plate.sourceId, appliedSource);
         const onAirName =
@@ -213,115 +262,85 @@ export function LivePlatesSection({
           onAir.sourceId ??
           'nothing';
         // SESSION BP — what LEVEL 2 resolves to on this row, which for a row on air is the
-        // snapshot its take froze rather than the value in the picker above.
+        // snapshot its take froze rather than the value the dialog now edits.
         const frozen = frozenPlateSource(item, plate.sourceId, appliedSource);
         const frozenName =
           catalog.sources.find((src) => src.id === frozen.sourceId)?.name ??
           frozen.sourceId ??
           'nothing';
+        const patched = onAir.overridden && rowIsOnAir;
+        const isFrozen = !onAir.patched && frozen.diverged && rowIsOnAir;
+        if (!patched && !isFrozen) return null;
         return (
           <div key={plate.elementId} style={styles.row}>
-            <span style={styles.plate}>{plate.sourceId}</span>
-            <select
-              className={dirty ? 'cg-field is-dirty' : 'cg-field'}
-              style={{ width: 'auto' }}
-              aria-label={`Source for ${plate.sourceId}`}
-              value={value}
-              onChange={(e) => stagePlateSource(item.itemId, plate.sourceId, e.target.value)}
-            >
-              <option value="">— not assigned —</option>
-              {catalog.sources.map((source) => (
-                <option key={source.id} value={source.id}>
-                  {source.name}
-                </option>
-              ))}
-            </select>
-            {value === '' && (
-              <span style={styles.needs} data-plate-unassigned={plate.sourceId}>
-                needs a source
-              </span>
-            )}
+            <span style={styles.plate}>
+              <IsolatedName>{plate.sourceId}</IsolatedName>
+            </span>
             {/*
-              🔴 §12.5 / `tasks.md` 7.8 — WHAT IS ACTUALLY ON AIR, when it is not this.
+              🔴 §12.5 / `tasks.md` 7.8 — WHAT IS ACTUALLY ON AIR, when it is not the default.
 
-              The picker above shows the TEMPLATE ASSIGNMENT (draft-or-applied). If this
-              ROW has been patched with `swapLiveSource`, that assignment is not what is
-              composited — and until this line existed the panel said nothing, so the
-              operator read the assignment as the truth. §12.5 refused to ship its
-              "takes effect at the next take" wording without this, because telling
-              someone when a change lands while showing them the wrong current value is
-              a half-repair.
+              The dialog shows the TEMPLATE ASSIGNMENT. If this ROW has been patched with
+              `swapLiveSource`, that assignment is not what is composited — and without this
+              line the panel says nothing, so the operator reads the default as the truth.
+              §12.5 refused to ship its "takes effect at the next take" wording without this,
+              because telling someone when a change lands while showing them the wrong current
+              value is a half-repair.
             */}
-            {onAir.overridden && rowIsOnAir && (
+            {patched && (
               <span
                 style={styles.patched}
                 data-plate-overridden={plate.sourceId}
                 title={
-                  `This row is patched onto "${onAirName}" and ignores the assignment ` +
-                  `above. Change it with the row’s SOURCE verb; the assignment here is ` +
-                  `what a fresh take would use.`
+                  `This row is patched onto "${onAirName}" and ignores the template default. ` +
+                  `Change it with the row’s SOURCE verb; the default is what a fresh take ` +
+                  `would use.`
                 }
               >
                 on air: {onAirName} (patched on this row)
               </span>
             )}
             {/*
-              🔴 **SESSION BP — THE ROW HAS FROZEN THIS ASSIGNMENT, AND THE PICKER ABOVE
-              WOULD OTHERWISE LIE ABOUT IT.**
+              🔴 **SESSION BP — THE ROW HAS FROZEN THIS ASSIGNMENT.**
 
-              A row freezes level 2 at its take, so an edit made while it is on air changes
-              the value in this picker and changes NOTHING the row resolves. Left unsaid,
-              that is the confidently-wrong surface: the operator edits the default, the
-              panel agrees, air does not move, and there is nothing anywhere to explain the
-              gap. The timing line at the bottom says WHEN it lands; this says what the row
-              is on until then, per plate, because only the divergent plates need saying.
+              A row freezes level 2 at its take, so an edit made in the dialog while it is on
+              air changes the default and changes NOTHING the row resolves. Left unsaid, that
+              is the confidently-wrong surface: the operator edits the default, the dialog
+              agrees, air does not move, and there is nothing anywhere to explain the gap.
 
-              ⚠ It speaks about the ASSIGNMENT, never about air — levels 3 and 4 are not
-              frozen and can still change what this plate shows. The patch line above is the
-              one entitled to say "on air", and it wins here: an emergency patch outranks
-              level 2 entirely, so naming a frozen value beside it would be two answers to
-              one question.
+              ⚠ It speaks about the ASSIGNMENT, never about air — levels 3 and 4 are not frozen
+              and can still change what this plate shows. The patch line above is the one
+              entitled to say "on air", and it wins here: an emergency patch outranks level 2
+              entirely, so naming a frozen value beside it would be two answers to one question.
 
               🔴 **GATED ON `patched`, NOT ON `overridden`, and the difference is a false
-              sentence.** `overridden` means the patch DIVERGES FROM THE PICKER — it reads
-              false for a patch that happens to equal the live default. Such a patch is still
-              in force and still outranks the pin, so gating on `overridden` would let this
-              line announce the frozen source as what the row is on while the patch had it
-              somewhere else. See {@link onAirPlateSource}.
+              sentence.** `overridden` means the patch DIVERGES FROM THE DEFAULT — it reads
+              false for a patch that happens to equal it. Such a patch is still in force and
+              still outranks the pin. See {@link onAirPlateSource}.
             */}
-            {!onAir.patched && frozen.diverged && rowIsOnAir && (
+            {isFrozen && (
               <span
                 style={styles.patched}
                 data-plate-frozen={plate.sourceId}
                 title={
                   `This row froze the template assignment when it was taken, so it is on ` +
-                  `"${frozenName}" and the edit above does not reach it. Take the row again ` +
-                  `to adopt it, or set this look's input below to change it now.`
+                  `"${frozenName}" and an edit to the default does not reach it. Take the row ` +
+                  `again to adopt it, or set this look’s input below to change it now.`
                 }
               >
                 this row: {frozenName} (frozen at take)
               </span>
             )}
-            {dirty && <DraftChip label="unapplied" />}
           </div>
         );
       })}
       {/*
-        WHEN it takes effect, said where the operator makes the change.
-
-        A plate assignment is read when the item is TAKEN — it never re-composites
-        the graphic already on the channel. An operator editing a live item is the
-        normal case on this panel, not the edge case, so leaving this unsaid would
-        let them press Update, see nothing change on air, and reasonably conclude
-        it had not worked.
+        ⚠ **THE TIMING SENTENCE WENT WITH THE EDITOR** (`SOURCE-DEFAULTS-20`). It read
+        _"Takes effect at the next take, not on the graphic currently composited."_ and was
+        gated on a STAGED edit — there are no staged edits here any more, because the value is
+        committed by the dialog's own button rather than by the row's Update. The same fact is
+        said in the dialog's footer, where the change is now made; saying WHEN a change lands
+        on a surface that can no longer make one would be a sentence with no subject.
       */}
-      {staged.length > 0 && (
-        <p style={styles.timing} data-plate-timing="">
-          {item.status === 'on-air'
-            ? 'This item is ON AIR — Update saves the change, and it takes effect at its next take. To change what this row is showing NOW, use the row’s SOURCE verb: it patches this row only, and leaves the assignment here alone.'
-            : 'Takes effect at the next take, not on the graphic currently composited.'}
-        </p>
-      )}
     </div>
   );
 }

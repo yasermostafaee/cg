@@ -146,18 +146,27 @@ test('🔴 an ON-AIR row says what it is FROZEN on when the template default is 
   await app.selectLayerRow(row);
 
   const plates = app.inspector.locator('[aria-label="Live plates"]');
-  await expect(plates).toBeVisible();
-  // Nothing diverges yet, so the panel says nothing. Silence is the common case.
+  /*
+    ⚠ `SOURCE-DEFAULTS-20` — SILENCE IS NOW THE ABSENCE OF THE SECTION, not an empty one.
+    With the editor behind a link, a section with nothing to say renders NOTHING — heading
+    included (the owner's «کلمه Live plates و فضایی که اشغال کرده رو هم حذف کن»). The
+    claim is unchanged and if anything stronger: nothing diverges yet, so the panel spends no
+    words AND no pixels on it.
+  */
   await expect(plates.locator('[data-plate-frozen="l-1"]')).toHaveCount(0);
 
   await repointFromElsewhere(app);
 
   /*
-    🔴 THE ASSERTION. The picker moves to the new default — it is the control for the
-    TEMPLATE, and it is also the baseline a staged draft is dirty against, so it must keep
-    showing the live value. What must NOT happen is the panel implying that value is on air.
+    🔴 THE ASSERTION. The EDITOR moves to the new default — it is the control for the
+    TEMPLATE, so it must keep showing the live value. What must NOT happen is the panel
+    implying that value is on air.
   */
-  await expect(plates.locator('select[aria-label="Source for l-1"]')).toHaveValue('studio-b');
+  await app.inspector.locator('[data-open-template-defaults]').click();
+  const dialog = app.page.getByRole('dialog', { name: 'Source defaults' });
+  await expect(dialog.locator('[data-defaults-select="l-1"]')).toHaveValue('studio-b');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+
   const said = plates.locator('[data-plate-frozen="l-1"]');
   await expect(said).toBeVisible();
   await expect(said).toContainText('Studio A');
@@ -180,7 +189,13 @@ test('an OFF-AIR row is not pinned: the edit is simply what it will take', async
 
   await repointFromElsewhere(app);
 
-  const plates = app.inspector.locator('[aria-label="Live plates"]');
-  await expect(plates.locator('select[aria-label="Source for l-1"]')).toHaveValue('studio-b');
-  await expect(plates.locator('[data-plate-frozen="l-1"]')).toHaveCount(0);
+  await app.inspector.locator('[data-open-template-defaults]').click();
+  const dialog = app.page.getByRole('dialog', { name: 'Source defaults' });
+  await expect(dialog.locator('[data-defaults-select="l-1"]')).toHaveValue('studio-b');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  /*
+    …and NO pin line. An off-air row has no picture to protect, so it acquires none — which
+    with the section's new guard means the section does not render at all.
+  */
+  await expect(app.inspector.locator('[data-plate-frozen="l-1"]')).toHaveCount(0);
 });

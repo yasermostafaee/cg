@@ -568,6 +568,32 @@ export class RuntimeApp {
     await this.inspector.getByRole('button', { name: 'Apply staged edits' }).click();
   }
 
+  /**
+   * 🔴 `SOURCE-DEFAULTS-20` — **SET ONE OF THE SELECTED TEMPLATE'S SOURCE DEFAULTS.**
+   *
+   * The per-plate selects used to sit inline in the Inspector's LIVE PLATES section; they are
+   * in a dialog a link in the section head opens, and it commits with its own button rather
+   * than riding the row's Update. That is three steps where it used to be one, so it lives
+   * HERE rather than being spelled out in each spec — when the door moves again, the specs
+   * that merely need a default set do not each have to be found and edited.
+   *
+   * ⚠ The link is in `LOOK INPUTS` for a template that declares looks and in `LIVE PLATES`
+   * for one that does not, which is why this does NOT scope to either section: it asks the
+   * Inspector for the one door, wherever that template put it.
+   */
+  async setTemplateDefault(plateId: string, sourceLabel: string): Promise<void> {
+    await this.inspector.locator('[data-open-template-defaults]').click();
+    const dialog = this.page.getByRole('dialog', { name: 'Source defaults' });
+    await expect(dialog).toBeVisible();
+    await dialog
+      .locator(`[data-defaults-select="${plateId}"]`)
+      .selectOption({ label: sourceLabel });
+    await dialog.locator('[data-defaults-save]').click();
+    // The dialog closes on acceptance; a refusal keeps it open with the reason on it, so this
+    // also asserts the commit was ACCEPTED rather than leaving a spec to continue past one.
+    await expect(dialog).toHaveCount(0);
+  }
+
   /** R-003 — discard the selected item's staged edits. */
   async discardEdits(): Promise<void> {
     await this.inspector.getByRole('button', { name: 'Discard staged edits' }).click();

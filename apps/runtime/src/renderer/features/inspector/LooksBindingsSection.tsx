@@ -16,6 +16,7 @@ import {
 import { appliedPlateSources } from './livePlates.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
+import { SourceDefaultsLink } from './SourceDefaultsLink.js';
 import { isOnAir } from '../stack/onAir.js';
 
 /**
@@ -141,15 +142,35 @@ const styles = {
     fontWeight: 700,
     letterSpacing: '0.04em',
   },
+  /*
+   * 🔴 **LABEL BEFORE THE BOX, ON ONE LINE — owner, 2026-09-14:** «لیبل اینپوتها در خط
+   * جدا نباشه قبلش باشه بهتره.»
+   *
+   * A two-column grid rather than a stack, and it is the shape that satisfies BOTH of the
+   * owner's calls at once: the label LEADS on the same line, and `1fr` gives the box every
+   * pixel the label does not take — which is what «تمام صفحه کن مثل gh2» asked for. A
+   * label stacked above (the drawing's `.field.full`) spends a whole line per field, and in a
+   * panel this tall that is the space the move was made to reclaim.
+   *
+   * ⚠ The label column is `auto`: it takes the widest label and no more, so every box in the
+   * section starts on the SAME vertical without anyone choosing a number.
+   */
   row: {
-    display: 'flex',
-    gap: 'var(--r-space-2)',
+    display: 'grid',
+    gridTemplateColumns: 'auto minmax(0, 1fr)',
+    columnGap: 'var(--r-space-2)',
     alignItems: 'center',
     marginBottom: 'var(--r-space-1)',
     flexWrap: 'wrap' as const,
     paddingLeft: 'var(--r-space-3)',
   },
-  plate: { fontFamily: 'monospace', fontSize: 'var(--r-text-sm)', minWidth: '5rem' },
+  /** The field's label, leading its box on the same line. */
+  plate: {
+    color: colors.textSecondary,
+    fontSize: 'var(--r-text-sm)',
+    fontWeight: 'var(--r-weight-medium)',
+    whiteSpace: 'nowrap' as const,
+  },
   /** A per-look value an emergency patch has taken out of force — see the header's §2. */
   masked: { color: colors.pending, fontSize: '0.72rem', fontWeight: 700 },
   empty: { color: colors.textMuted, fontSize: 'var(--r-text-sm)', margin: 0 },
@@ -299,8 +320,22 @@ export function LooksBindingsSection({
 
   return (
     <div className="cg-inspector-section" aria-label="Look inputs">
-      {/* Sentence case in the source; the CAPS are the stylesheet's — see `Inspector.tsx`. */}
-      <h2>Look inputs</h2>
+      {/*
+        🔴 **THE DEFAULTS LINK LIVES HERE — owner, 2026-09-14 (gh2):** «لینک مودال هم بالای
+        فریمها باشه مثل gh2 نیاز نیست توی دو بخش جدا باشن.» The reference puts it in this
+        section's caption, above the frame selects it configures — not in a section of its own.
+
+        `.section-caption` is the drawing's shape: the heading at one end, a `link-btn` at the
+        other. Sentence case in the source; the CAPS are the stylesheet's (`Inspector.tsx`).
+      */}
+      <div className="cg-section-caption">
+        <h2>Look inputs</h2>
+        <SourceDefaultsLink
+          templateId={item.templateId}
+          info={info}
+          plates={carrier.sources ?? []}
+        />
+      </div>
       {/*
         🔴 **§3d — "above" USED TO POINT AT THE LIVE PLATES SECTION, WHICH IS NOW GONE HERE.**
 
@@ -310,24 +345,18 @@ export function LooksBindingsSection({
         operator cannot see is a value they cannot reason about, so the default moved INTO the
         control: each blank option names the value it inherits.
       */}
-      <p style={styles.scope}>
-        Set for THIS row — each look can show a different input. Blank takes the template&rsquo;s
-        own default, named in each list.{' '}
-        {/*
-          🔴 GOLDEN RULE 10, AND IT WAS MISSING FROM THIS SURFACE ENTIRELY —
-          `INSPECTOR-DELTA` §4. The reference carries it (`05-row-inspector.html`: _"Default
-          inherits this channel's source mapping. Editing a look does not take it on air."_)
-          and ours carried no equivalent anywhere: a sweep for `take it on air` across the
-          whole renderer found one hit, in the picker, about something else.
+      {/*
+        ⚠ **CUT TO ONE SENTENCE — owner, 2026-09-14:** «نیاز به اون همه توضیحات هم نیست.»
+        It carried three clauses — the level, what blank means, and the timing. The first two
+        are now said by the surface itself: the link names the level, and each list's blank
+        option NAMES the default it inherits (`Default (sdi)`).
 
-          It matters most here of all the places it could be missing. This section now shows
-          ONE look at a time behind a row of tabs, so pressing a tab LOOKS like switching
-          what is showing — and it is not: it changes which look you are EDITING. The
-          sentence is what separates the two, which is exactly the distinction golden rule 10
-          exists to protect.
-        */}
-        Editing a look does not take it on air.
-      </p>
+        🔴 **WHAT SURVIVES IS THE GOLDEN-RULE-10 CLAUSE, and it survives on purpose.** It is
+        the reference's own sentence, and it is the one fact the surface cannot show: pressing
+        a look tab LOOKS like switching what is on air, and it is not — it changes which look
+        you are EDITING.
+      */}
+      <p style={styles.scope}>Editing a look does not take it on air.</p>
       {/*
         THE TABS. One per authored look, the live one marked, and a dot on any look holding
         an unapplied edit — see `dirtyLooks`.
@@ -403,7 +432,7 @@ export function LooksBindingsSection({
               `lookBindings.dom.test.ts` pins that exactly one exists.
             */}
             {plates.length === 0 && <p style={styles.empty}>No frames in this look.</p>}
-            {plates.map((plate) => {
+            {plates.map((plate, plateIndex) => {
               const applied = bound[look.id]?.[plate.sourceId];
               /*
                 §3d — THE DEFAULT, NAMED IN THE CONTROL THAT INHERITS IT. `appliedPlateSources`
@@ -432,11 +461,26 @@ export function LooksBindingsSection({
               const masked = patch !== undefined && patch !== '';
               return (
                 <div key={`${look.id}:${plate.sourceId}`} style={styles.row}>
-                  <span style={styles.plate}>{plate.sourceId}</span>
+                  {/*
+                    🔴 **gh2 — THE LABEL LEADS ITS BOX** (owner, 2026-09-14:
+                    «اینپوتهای داخل اینسپکتور رو هم تمام صفحه کن مثل gh2»). It was a label
+                    BESIDE an auto-width select, which in a 396 px panel gave the box whatever
+                    was left after the longest plate id — so two rows of one look could carry
+                    two different box widths.
+
+                    ⚠ **`Frame N` IS THE LABEL AND THE PLATE ID IS ON THE `title`** — golden
+                    rule 11, and the drawing agrees. `plate.sourceId` is the template AUTHOR's
+                    identifier for a hole in a layout (`guest-1`); the operator reads a
+                    position. The id is RELOCATED, not deleted: the `aria-label` still carries
+                    it, so every existing finder and every screen reader still names the plate.
+                  */}
+                  <span style={styles.plate} title={plate.sourceId}>
+                    Plate {plateIndex + 1}
+                  </span>
                   <select
                     className={dirty ? 'cg-field is-dirty' : 'cg-field'}
                     style={{
-                      width: 'auto',
+                      width: '100%',
                       // §2.1 — STRUCK THROUGH, not greyed. The control stays enabled because
                       // §2.3 accepts the edit; what is communicated is "this value is not in
                       // force", which is a statement about the VALUE and not about the control.

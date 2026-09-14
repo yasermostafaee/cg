@@ -9,7 +9,6 @@ import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
 import { StationSetupDialog } from '../src/renderer/features/stationSetup/StationSetupDialog.js';
 import {
   __resetDraftsForTest,
-  clearDraft,
   isItemDirty,
   snapshotPlateDraft,
 } from '../src/renderer/features/inspector/draftStore.js';
@@ -82,12 +81,15 @@ const NO_PLATES: TemplateInfo = {
 let container: HTMLDivElement | null = null;
 let stored: SourceAssignments = { assignments: [] };
 const setCalls: SourceAssignments[] = [];
+/** §6 — set by a case that wants `sources.set-assignments` refused; reset between cases. */
+let refuse: { ok: false; reason?: string; message?: string } | null = null;
 
 beforeEach(() => {
   __resetDraftsForTest();
   __resetSourcesForTest();
   stored = { assignments: [] };
   setCalls.length = 0;
+  refuse = null;
 });
 
 afterEach(() => {
@@ -126,6 +128,12 @@ function bridgeStub(templates: readonly TemplateInfo[], info: TemplateInfo | nul
       onAssignmentsChanged: () => () => undefined,
       setAssignments: (req: SourceAssignments) => {
         setCalls.push(req);
+        /*
+          §6 — a REFUSAL the bridge can give, so the dialog's refusal path is exercised
+          against the real return shape rather than a hand-made one. `stored` is left ALONE on
+          a refusal, which is what makes "rewrites nothing" a real assertion.
+        */
+        if (refuse !== null) return Promise.resolve(refuse);
         stored = req;
         return Promise.resolve({ ok: true });
       },
@@ -136,13 +144,57 @@ function bridgeStub(templates: readonly TemplateInfo[], info: TemplateInfo | nul
 }
 
 /** Drive one plate's picker the way an operator does. */
-async function pick(el: HTMLElement, plateId: string, sourceId: string): Promise<void> {
-  const select = el.querySelector<HTMLSelectElement>(`select[aria-label="Source for ${plateId}"]`);
+/**
+ * 🔴 **`SOURCE-DEFAULTS-20` — THE EDITOR IS BEHIND A LINK NOW.**
+ *
+ * The per-plate selects were inline in the Inspector's LIVE PLATES section; they are in a
+ * dialog the section head opens. These specs are RE-POINTED at it rather than relaxed: every
+ * one still asserts the same values, the same options and the same wire traffic — what changed
+ * is that reaching the control is an act the operator performs, so the tests perform it.
+ */
+async function openDefaults(el: HTMLElement): Promise<HTMLElement> {
+  const link = el.querySelector<HTMLButtonElement>('[data-open-template-defaults]');
+  if (link === null) throw new Error('no Source defaults link in the section head');
+  await act(async () => {
+    link.click();
+    await Promise.resolve();
+  });
+  const dialog = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
+  if (dialog === undefined) throw new Error('the defaults dialog did not open');
+  return dialog;
+}
+
+/** The dialog's select for one plate. */
+function defaultsSelect(dialog: HTMLElement, plateId: string): HTMLSelectElement {
+  const select = dialog.querySelector<HTMLSelectElement>(
+    `select[aria-label="Default source for ${plateId}"]`,
+  );
   if (select === null) throw new Error(`no picker for ${plateId}`);
+  return select;
+}
+
+/** Open the dialog, choose a source for a plate, and leave the dialog open. */
+async function pick(el: HTMLElement, plateId: string, sourceId: string): Promise<HTMLElement> {
+  const dialog = await openDefaults(el);
+  const select = defaultsSelect(dialog, plateId);
   await act(async () => {
     select.value = sourceId;
     select.dispatchEvent(new Event('change', { bubbles: true }));
     await Promise.resolve();
+  });
+  return dialog;
+}
+
+/** …and press its commit, which is what now writes the assignment. */
+async function saveDefaults(dialog: HTMLElement): Promise<void> {
+  const save = dialog.querySelector<HTMLButtonElement>('[data-defaults-save]');
+  if (save === null) throw new Error('no Save defaults button');
+  await act(async () => {
+    save.click();
+    await Promise.resolve();
+  });
+  await act(async () => {
+    for (let i = 0; i < 8; i++) await Promise.resolve();
   });
 }
 
@@ -346,10 +398,20 @@ describe('the Inspector binds THIS template plates', () => {
     const el = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
     const section = el.querySelector('[aria-label="Live plates"]');
     expect(section).not.toBeNull();
-    expect(section?.querySelectorAll('select[aria-label^="Source for"]').length).toBe(2);
-    // A freshly imported template has ALL of its plates unassigned, which is the
-    // ordinary state and is named rather than left blank.
-    expect(section?.querySelectorAll('[data-plate-unassigned]').length).toBe(2);
+    /*
+      🔴 THE SECTION CARRIES THE DOOR, NOT THE EDITOR (`SOURCE-DEFAULTS-20`). The selects
+      are in the dialog it opens; what must still be true HERE is that the door exists and
+      that the section is not spending the panel on a list it no longer owns.
+    */
+    expect(section?.querySelector('[data-open-template-defaults]')).not.toBeNull();
+    expect(section?.querySelectorAll('select').length).toBe(0);
+
+    const dialog = await openDefaults(el as HTMLElement);
+    expect(dialog.querySelectorAll('[data-defaults-select]').length).toBe(2);
+    // A freshly imported template has ALL of its plates unassigned, which is the ordinary
+    // state — the blank option NAMES itself rather than leaving the box empty.
+    expect(defaultsSelect(dialog, 'guest-1').value).toBe('');
+    expect(defaultsSelect(dialog, 'guest-2').value).toBe('');
     /*
       The SCOPE is stated in the section, not hidden in a tooltip: this is the template's
       default, so editing it here changes every row using it.
@@ -360,7 +422,36 @@ describe('the Inspector binds THIS template plates', () => {
       model, because it says "not this row" while two of the four levels ARE this row's. What
       is asserted is unchanged: that the section says which level its own control is on.
     */
-    expect(section?.textContent).toContain('DEFAULT every row using this template starts from');
+    /*
+      The SCOPE is stated in the section, not hidden in a tooltip: this is the template's
+      default, so editing it changes every row using it.
+
+      ⚠ REWORDED TWICE, and both old spellings are kept here because each change was a
+      correction rather than a polish. BM-2 replaced _"Set for the template, not this row"_ —
+      true of a flat map, a LIE about the four-level model. `SOURCE-DEFAULTS-20` replaced
+      _"The DEFAULT every row using this template starts from"_, which was written to
+      introduce the selects that sat under it; with those behind a link the sentence's job is
+      to say what is behind it and at what LEVEL. What is asserted is unchanged: that the
+      section says which level its own control is on.
+    */
+    /*
+      🔴 THE SCOPE IS STATED WHERE THE CONTROL IS — and the control moved, so the sentence
+      did too (`SOURCE-DEFAULTS-20`, gh3). It has been reworded twice and both old spellings
+      are kept here because each change was a correction rather than a polish:
+
+        BM-2  replaced _"Set for the template, not this row"_ — true of a flat map, a LIE
+              about the four-level model, because it says "not this row" while two of the four
+              levels ARE this row's.
+        §1    moved the surviving sentence off the panel entirely. It existed to introduce the
+              selects that sat under it; with those in a dialog the panel has nothing to
+              introduce, and the owner's «نیاز به اون همه توضیحات هم نیست» is the
+              instruction not to leave prose behind where the thing it described has gone.
+
+      What is asserted is unchanged: that the operator is told which LEVEL this control is on,
+      at the moment they can act on it.
+    */
+    expect(dialog.textContent).toContain('apply to every row using this template');
+    expect(dialog.textContent).toContain('row overrides remain separate');
   });
 
   it('renders NO section for a template that declares no live plates', async () => {
@@ -372,52 +463,79 @@ describe('the Inspector binds THIS template plates', () => {
 
   it('offers every defined source by NAME, never by its internal id', async () => {
     const el = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
-    const select = el.querySelector<HTMLSelectElement>('select[aria-label="Source for guest-1"]');
-    const labels = [...(select?.options ?? [])].map((o) => o.textContent);
+    const dialog = await openDefaults(el as HTMLElement);
+    const select = defaultsSelect(dialog, 'guest-1');
+    const labels = [...select.options].map((o) => o.textContent);
     expect(labels).toEqual(['— not assigned —', 'Studio A', 'Baku']);
     // The id is the VALUE — stable across a rename — while the operator picks
     // the name.
-    expect([...(select?.options ?? [])].map((o) => o.value)).toEqual(['', 'src-aaa', 'src-bbb']);
+    expect([...select.options].map((o) => o.value)).toEqual(['', 'src-aaa', 'src-bbb']);
   });
 
-  it('A8 — changing the picker STAGES a draft and reaches the bridge with nothing', async () => {
+  /**
+   * 🔴 **A8's CLAIM SURVIVES; ITS MECHANISM CHANGED — `SOURCE-DEFAULTS-20` §3.**
+   *
+   * A8's point is that a TEMPLATE-wide edit must not reach the bridge the instant a select
+   * moves: the assignment changes what every row using the template does, so there has to be
+   * a moment to notice before it lands. That is unchanged and is asserted below.
+   *
+   * What changed is WHERE the confirmation lives. It used to be the ROW's draft store — the
+   * edit staged beside the row's field edits and rode the row's UPDATE — and §3 replaces that
+   * with the dialog's own `Save defaults`. The scope confusion is the reason it is an
+   * improvement rather than a lateral move: an installation-level value committed by one
+   * ROW's Update was always the wrong shape, and the inline block's own header said so.
+   *
+   * ⚠ So the DISCARD case below is gone rather than re-pointed, and that is a deliberate
+   * consequence: the row's DISCARD no longer has a plate edit to drop, because the dialog's
+   * `Cancel` owns that now. It is asserted here, because a claim that quietly stops being
+   * exercised is how a behaviour change hides.
+   */
+  it('§3 — changing the picker reaches the bridge with NOTHING until the dialog commits', async () => {
     const el = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
-    await pick(el, 'guest-1', 'src-aaa');
+    const dialog = await pick(el, 'guest-1', 'src-aaa');
 
-    // Nothing on the wire. The assignment is TEMPLATE-level, so a picker that
-    // committed on change would change what other rows do with no moment to
-    // notice — the draft IS the confirmation step.
+    // Nothing on the wire yet — the dialog's own button IS the confirmation step.
     expect(setCalls).toEqual([]);
-    expect(snapshotPlateDraft('item-1').get('guest-1')).toBe('src-aaa');
+    // …and it is NOT staged in the row's draft store either: a template-wide value must not
+    // ride a row's UPDATE.
+    expect(snapshotPlateDraft('item-1').get('guest-1')).toBeUndefined();
+    expect(isItemDirty('item-1', {}, new Map([['guest-1', null]]))).toBe(false);
 
-    // The control marks itself, and the panel's commit bar sees the same edit.
-    const select = el.querySelector<HTMLSelectElement>('select[aria-label="Source for guest-1"]');
-    expect(select?.className).toContain('is-dirty');
-    expect(el.textContent).toContain('● draft');
-    expect(
-      el.querySelector<HTMLButtonElement>('button[aria-label="Discard staged edits"]')?.disabled,
-    ).toBe(false);
-    // WHEN it takes effect, said where the change is made.
-    expect(el.querySelector('[data-plate-timing]')?.textContent).toContain('next take');
+    // The commit is enabled only once there is something to commit.
+    expect(dialog.querySelector<HTMLButtonElement>('[data-defaults-save]')?.disabled).toBe(false);
+
+    await saveDefaults(dialog);
+    expect(setCalls).toHaveLength(1);
+    expect(setCalls[0]?.assignments).toEqual([
+      { templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-aaa' },
+    ]);
   });
 
-  it('A8 — an ON-AIR item says the change lands at its NEXT take', async () => {
-    const onAir: StackItemState = { ...item('item-1', 'tpl-two-box'), status: 'on-air' };
-    const el = await renderInspector(onAir, TWO_BOX);
-    await pick(el, 'guest-1', 'src-aaa');
-    expect(el.querySelector('[data-plate-timing]')?.textContent).toContain('ON AIR');
-  });
-
-  it('A8 — Discard drops the plate draft, from the SAME call that drops the fields', async () => {
+  it('§3 — CANCEL discards the edit, and writes nothing', async () => {
     const el = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
-    await pick(el, 'guest-1', 'src-aaa');
+    const dialog = await pick(el, 'guest-1', 'src-aaa');
+    const cancel = [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Cancel');
     await act(async () => {
-      clearDraft('item-1');
+      cancel?.click();
       await Promise.resolve();
     });
-    const select = el.querySelector<HTMLSelectElement>('select[aria-label="Source for guest-1"]');
-    expect(select?.value).toBe('');
-    expect(isItemDirty('item-1', {}, new Map([['guest-1', null]]))).toBe(false);
+    expect(setCalls, 'Cancel writes nothing').toEqual([]);
+    // Reopening shows the APPLIED value, not the abandoned one — a discarded edit that came
+    // back on the next open would be an edit the operator thought they had dropped.
+    const again = await openDefaults(el as HTMLElement);
+    expect(defaultsSelect(again, 'guest-1').value).toBe('');
+  });
+
+  it('§6 — a REFUSED commit says why, keeps the edit, and rewrites nothing', async () => {
+    const el = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
+    refuse = { ok: false, reason: 'unknown-source', message: 'No such source: src-aaa.' };
+    const dialog = await pick(el, 'guest-1', 'src-aaa');
+    await saveDefaults(dialog);
+
+    // The reason is ON the dialog — never swallowed, never shown optimistically.
+    expect(dialog.textContent).toContain('No such source');
+    // The operator's edit is exactly where they left it, and the dialog is still open for it.
+    expect(defaultsSelect(dialog, 'guest-1').value).toBe('src-aaa');
   });
 
   it('🔴 an APPLIED assignment is TEMPLATE-LEVEL: a SECOND row reads the same binding', async () => {
@@ -427,20 +545,19 @@ describe('the Inspector binds THIS template plates', () => {
       assignments: [{ templateId: 'tpl-two-box', plateId: 'guest-1', sourceId: 'src-aaa' }],
     };
     const first = await renderInspector(item('item-1', 'tpl-two-box'), TWO_BOX);
-    expect(
-      first.querySelector<HTMLSelectElement>('select[aria-label="Source for guest-1"]')?.value,
-    ).toBe('src-aaa');
+    expect(defaultsSelect(await openDefaults(first as HTMLElement), 'guest-1').value).toBe(
+      'src-aaa',
+    );
     first.remove();
 
     // A DIFFERENT stack row, same template. It must read back the same binding —
     // that is what "template-level" means, and the label saying so is not
     // evidence that it is true.
     const second = await renderInspector(item('item-2', 'tpl-two-box'), TWO_BOX);
-    expect(
-      second.querySelector<HTMLSelectElement>('select[aria-label="Source for guest-1"]')?.value,
-    ).toBe('src-aaa');
+    const secondDialog = await openDefaults(second as HTMLElement);
+    expect(defaultsSelect(secondDialog, 'guest-1').value).toBe('src-aaa');
     // …and its OTHER plate is still owed one.
-    expect(second.querySelectorAll('[data-plate-unassigned]').length).toBe(1);
+    expect(defaultsSelect(secondDialog, 'guest-2').value).toBe('');
   });
 });
 
@@ -510,10 +627,13 @@ describe('BP — a frozen row says what it is on', () => {
     expect(said, 'the divergence must be stated').not.toBeNull();
     expect(said?.textContent).toContain('Studio A');
     expect(said?.textContent).toContain('frozen at take');
-    // …and the picker still shows the TEMPLATE's current value, which is what it edits.
-    expect(
-      el.querySelector<HTMLSelectElement>('select[aria-label="Source for guest-1"]')?.value,
-    ).toBe('src-bbb');
+    /*
+      …and the EDITOR still shows the TEMPLATE's current value, which is what it edits — now
+      one click away rather than inline. The pairing is the point of the case: the row says
+      what it is frozen on, the editor says what the template is set to, and the two differ.
+    */
+    const dialog = await openDefaults(el as HTMLElement);
+    expect(defaultsSelect(dialog, 'guest-1').value).toBe('src-bbb');
   });
 
   it('says NOTHING when the pin and the default agree — silence is the common case', async () => {

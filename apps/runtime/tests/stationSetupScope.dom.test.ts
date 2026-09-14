@@ -214,9 +214,18 @@ describe('§3 — the six that did not move', () => {
   });
 
   it('5. plate→source assignments stay in the Inspector — Station setup never binds a plate (§6)', async () => {
-    // Where they live today: the Inspector's Live plates section stages, `applyDraft` commits.
-    expect(read('features', 'inspector', 'LivePlatesSection.tsx')).toContain('Source for');
-    expect(read('features', 'inspector', 'applyDraft.ts')).toContain('commitSourceAssignments');
+    /*
+      Where they live today — `SOURCE-DEFAULTS-20` moved the editor out of the panel and into
+      a dialog the Inspector's section head opens. The CLAIM is unchanged and is what this
+      case is about: the binding lives on the INSPECTOR side of the product, never in Station
+      setup. Only the file that holds it moved.
+    */
+    expect(read('features', 'inspector', 'TemplateDefaultsDialog.tsx')).toContain(
+      'Default source for',
+    );
+    expect(read('features', 'inspector', 'TemplateDefaultsDialog.tsx')).toContain(
+      'commitSourceAssignments',
+    );
 
     stationSetupStub();
     const setup = await renderStationSetup({ section: 'sources' });

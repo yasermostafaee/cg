@@ -205,24 +205,57 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
     of the four levels ARE this row's. The CLAIM is unchanged: the section says which level
     its own control is on. Only the sentence moved.
   */
-  await expect(plates).toContainText('DEFAULT every row using this template starts from');
-  await expect(plates.locator('[data-plate-unassigned]')).toHaveCount(2);
+  /*
+    ⚠ `SOURCE-DEFAULTS-20` — THE SCOPE IS STATED WHERE THE CONTROL IS, and the control moved
+    into a dialog. The section now carries the DOOR; the sentence carrying the level went with
+    the selects it introduced.
+  */
+  await expect(plates.locator('[data-open-template-defaults]')).toBeVisible();
+  /*
+    ⚠ The per-plate `needs a source` markers went with the selects. The same fact is on the
+    DOOR now — one mark carrying the COUNT, so the operator sees from the panel that the
+    dialog is owed a visit (the owner's «یه هشدار کوچیک کنار لینک مودال»).
+  */
+  await expect(plates.locator('[data-open-template-defaults]')).toHaveAttribute(
+    'data-defaults-needed',
+    '2',
+  );
 
-  // ── A8: EDIT-THEN-ABANDON ────────────────────────────────────────────────
-  // The picker STAGES. Nothing has been written yet, which is the whole point:
-  // one stray click must not silently change what every other row does.
-  await plates.getByLabel('Source for guest-2').selectOption({ label: 'Baku' });
-  await expect(plates.locator('[data-plate-timing]')).toContainText('next take');
-  await expect(app.inspector.getByRole('button', { name: 'Discard staged edits' })).toBeEnabled();
-  await app.discardEdits();
-  await expect(plates.getByLabel('Source for guest-2')).toHaveValue('');
-  await expect(plates.locator('[data-plate-timing]')).toHaveCount(0);
+  /*
+    ── A8: EDIT-THEN-ABANDON ──────────────────────────────────────────
 
-  // ── A8: EDIT-THEN-APPLY ──────────────────────────────────────────────────
-  await plates.getByLabel('Source for guest-1').selectOption({ label: 'Studio A' });
-  // Still only a draft — the unassigned marker is gone because the CONTROL shows
-  // the draft, but the assignment is not in force until Update.
-  await expect(plates.locator('[data-plate-unassigned]')).toHaveCount(1);
+    🔴 **A8's CLAIM SURVIVES; ITS MECHANISM CHANGED (`SOURCE-DEFAULTS-20` §3).** A8 is that
+    a TEMPLATE-wide edit must not reach the bridge the instant a select moves — one stray
+    click must not silently change what every other row does. That is asserted below and is
+    unchanged.
+
+    What moved is WHERE the confirmation lives: it was the ROW's draft store (the edit staged
+    beside the row's fields and rode its UPDATE), and it is now the dialog's own `Cancel` /
+    `Save defaults`. The scope confusion is why that is an improvement rather than a lateral
+    move — an installation-wide value committed by one ROW's Update was always the wrong
+    shape.
+  */
+  await app.inspector.locator('[data-open-template-defaults]').click();
+  const defaults = page.getByRole('dialog', { name: 'Source defaults' });
+  await defaults.locator('[data-defaults-select="guest-2"]').selectOption({ label: 'Baku' });
+  // WHEN it takes effect, said where the change is made — the dialog's own footer now.
+  await expect(defaults.locator('[data-defaults-foot]')).toContainText('next take');
+  await expect(defaults.locator('[data-defaults-foot]')).toContainText('No playout command');
+  // ABANDON: Cancel writes nothing, and the plate is still owed a source.
+  await defaults.getByRole('button', { name: 'Cancel' }).click();
+  await expect(defaults).toHaveCount(0);
+  await expect(plates.locator('[data-open-template-defaults]')).toHaveAttribute(
+    'data-defaults-needed',
+    '2',
+  );
+
+  // ── A8: EDIT-THEN-SAVE ──────────────────────────────────────────
+  await app.setTemplateDefault('guest-1', 'Studio A');
+  // In force now: one plate answered, one still owed — and the door says so.
+  await expect(plates.locator('[data-open-template-defaults]')).toHaveAttribute(
+    'data-defaults-needed',
+    '1',
+  );
   await app.applyEdits();
   await expect(app.inspector.getByRole('button', { name: 'Discard staged edits' })).toBeDisabled();
 
@@ -230,10 +263,17 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   // same template reads back the binding the first one APPLIED.
   const second = await app.loadTemplate(TWO_BOX);
   await app.selectLayerRow(second);
-  await expect(app.inspector.getByLabel('Source for guest-1')).toHaveValue(/.+/);
-  await expect(
-    app.inspector.locator('[aria-label="Live plates"] [data-plate-unassigned]'),
-  ).toHaveCount(1);
+  /*
+    ⚠ READ FROM THE DOOR'S OWN COUNT. The per-plate `needs a source` markers went with the
+    selects into the dialog; the same fact is on the link, as the COUNT of plates still owed
+    one. A SECOND row of the same template must read back what the first one saved — one plate
+    answered, one still owed — and that is what template-level MEANS, so it is pinned rather
+    than trusted to the label that says it.
+  */
+  await expect(app.inspector.locator('[data-open-template-defaults]')).toHaveAttribute(
+    'data-defaults-needed',
+    '1',
+  );
 
   // Deleting a source that is in use is ALLOWED, CASCADES, and says at the
   // moment of deletion which plates it freed — an operator who learns at the
@@ -258,10 +298,12 @@ test('plates: the Inspector binds them, TEMPLATE-wide, and a deleted source says
   await app.closeStationSetup();
 
   // …and the plate is back to needing a source, which is a state the whole
-  // feature already handles, rather than a dangling binding nobody can see.
-  await expect(
-    app.inspector.locator('[aria-label="Live plates"] [data-plate-unassigned]'),
-  ).toHaveCount(2);
+  // feature already handles, rather than a dangling binding nobody can see. The door's count
+  // goes back to BOTH plates, which is also the operator's cue to reopen it.
+  await expect(app.inspector.locator('[data-open-template-defaults]')).toHaveAttribute(
+    'data-defaults-needed',
+    '2',
+  );
 });
 
 test('library: DELETE FROM STATION is a different verb from the row REMOVE, and it takes the bindings with it', async ({
@@ -278,11 +320,7 @@ test('library: DELETE FROM STATION is a different verb from the row REMOVE, and 
   // binding requires SELECTING the template, which requires LOADING it onto a row.
   const layer = await app.loadTemplate(TWO_BOX);
   await app.selectLayerRow(layer);
-  await app.inspector
-    .locator('[aria-label="Live plates"]')
-    .getByLabel('Source for guest-1')
-    .selectOption({ label: 'Studio A' });
-  await app.applyEdits();
+  await app.setTemplateDefault('guest-1', 'Studio A');
 
   // ── THE REPORTED BUG: while a row still holds it, the deletion is REFUSED …
   await app.openTemplatePicker();
