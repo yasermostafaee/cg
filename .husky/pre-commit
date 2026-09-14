@@ -6,4 +6,11 @@
 # there — touching the very file the guard exists to keep untouched.
 node tools/gate-hook/src/never-stage-cli.mjs || exit 1
 
+# GUARDS-18 §2 - the untracked-sweep guard, second and for the same reason: it must run
+# BEFORE lint-staged, or a commit about to be refused would already have reformatted the
+# owner's uncommitted files on its way there.
+# `--commit` is what licenses the baseline refresh: a bare run (checking the guard works)
+# must not move the thing it is checking.
+node tools/gate-hook/src/untracked-sweep-cli.mjs --commit || exit 1
+
 pnpm exec lint-staged

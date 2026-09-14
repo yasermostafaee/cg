@@ -1,4 +1,4 @@
-﻿# Tasks — harden-redundancy-single-and-two-server
+# Tasks — harden-redundancy-single-and-two-server
 
 ## 1. Artifacts + validation
 

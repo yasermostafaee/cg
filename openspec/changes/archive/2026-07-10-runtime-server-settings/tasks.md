@@ -1,4 +1,4 @@
-﻿# Tasks — runtime-server-settings
+# Tasks — runtime-server-settings
 
 ## 1. Artifacts
 

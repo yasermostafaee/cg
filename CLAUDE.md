@@ -401,6 +401,26 @@ meaningless for a markdown-only fold. This applies ONLY to a pure archive/docs c
 where NO source/test/build file changed; any commit that touches code keeps the full
 green gate above.
 
+**TWO GUARDS THAT ARE NOT TESTS (`GUARDS-18`).** Both exist because a written rule was not
+enough — each names an accident that happened more than once.
+
+- **`control-bytes` is a step in `gate:run`**, between `format:check` and `openspec validate`.
+  It reads the BYTES of every tracked text file and refuses a control byte (C0 except
+  `\t`/`\n`/`\r`, plus DEL) or a UTF-8 BOM. ~0.6 s for ~2,900 files.
+  🔴 **It must never be reimplemented on grep or ripgrep**: a NUL makes those treat the file as
+  BINARY and skip it IN SILENCE, which is the hole it closes (golden rule 9's own reason for
+  saying `git grep`). Binaries are exempted by EXTENSION, never by sniffing content — sniffing
+  is the same judgement grep makes and fails the same way. A file that trips it is FIXED;
+  `EXEMPT_PATHS` is empty and a test pins that it stays empty.
+- **`untracked-sweep` is a PRE-COMMIT hook**, beside `never-stage` and before `lint-staged`
+  (same ordering reason: lint-staged REWRITES staged files). It refuses a commit that stages a
+  path which was already untracked at the previous commit — the `git add -A` accident, which
+  has now happened three times (`P-044`). ~0.2 s. Its baseline lives in
+  `.git/cg-untracked-baseline`, so it can never be staged and never needs ignoring.
+  ⚠ **Do NOT silence it with `.gitignore`** — that hides the file instead of stopping the add,
+  and `AGENTS.md` is owed as a TRACKED pointer. To adopt a path on purpose, name it:
+  `CG_ADOPT_UNTRACKED="AGENTS.md" git commit …`.
+
 **The gate is enforced at turn end (P-009).** A committed Stop hook
 (`.claude/hooks/gate-stop.mjs`) runs when your turn ends: docs-only diffs get the
 carve-out above, every other diff gets `pnpm gate`. If it blocks you: the gate is RED —

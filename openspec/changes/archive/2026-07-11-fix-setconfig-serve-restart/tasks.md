@@ -1,4 +1,4 @@
-﻿# Tasks — fix-setconfig-serve-restart
+# Tasks — fix-setconfig-serve-restart
 
 ## 1. Artifacts
 

@@ -1,4 +1,4 @@
-﻿import { style } from '@vanilla-extract/css';
+import { style } from '@vanilla-extract/css';
 import { colors } from '../../theme.js';
 
 export const backdrop = style({
