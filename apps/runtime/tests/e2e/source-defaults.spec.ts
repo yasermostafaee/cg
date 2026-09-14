@@ -197,10 +197,16 @@ test('🔴 §4.2 — changing a default while a row is ON AIR sends nothing and 
   ).toEqual([]);
 
   /*
-    …and the row is still resolving what its take froze. The Inspector says so ON the row,
-    which is the surface that had to survive the move: `this row: <source> (frozen at take)`.
+    …and the row is still resolving what its take froze. The Inspector says so ON the plate's
+    own row in `LOOK INPUTS`, which is the surface that had to survive the move:
+    `this row: <source> (frozen at take)`.
+
+    ⚠ It used to be read from a `LIVE PLATES` section that no longer renders for a looks
+    template. Re-pointed to the new host rather than dropped — a locator aimed at a deleted
+    section passes `toHaveCount(0)` and fails nothing, so relaxing it would have quietly
+    deleted the half of §4.2 that is about what the OPERATOR can tell.
   */
-  const plates = app.inspector.locator('[aria-label="Live plates"]');
+  const plates = app.inspector.locator('[aria-label="Look inputs"]');
   await expect(
     plates.locator('[data-plate-frozen="guest-1"]'),
     'the row states that it is still on what it froze',

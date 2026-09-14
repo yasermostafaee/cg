@@ -13,7 +13,7 @@ import {
   stageLookBinding,
   subscribeDrafts,
 } from './draftStore.js';
-import { appliedPlateSources } from './livePlates.js';
+import { appliedPlateSources, frozenPlateSource, onAirPlateSource } from './livePlates.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { SourceDefaultsLink } from './SourceDefaultsLink.js';
@@ -57,6 +57,22 @@ import { isOnAir } from '../stack/onAir.js';
  */
 
 const styles = {
+  /**
+   * The ON-AIR divergence note, moved here from the deleted `LIVE PLATES` section.
+   *
+   * `pending` (amber) — this palette's ATTENTION role. A row running on a patch or a frozen
+   * assignment is exactly something to go and look at: it diverges from the template every
+   * other row uses. NOT green — green is the layer table's ON AIR mark, and this is a
+   * statement about WHICH source, not about being on air.
+   */
+  diverged: {
+    display: 'block',
+    gridColumn: '1 / -1',
+    marginTop: 'var(--r-space-1)',
+    color: colors.pending,
+    fontSize: '0.72rem',
+    fontWeight: 700,
+  },
   scope: { color: colors.textMuted, fontSize: 'var(--r-text-sm)', margin: '0 0 var(--r-space-3)' },
   look: { margin: '0 0 var(--r-space-3)' },
   lookHead: {
@@ -288,6 +304,64 @@ export function LooksBindingsSection({
   const badge = badgeFor(isOnAir(item), rehearsing);
   const defaults = appliedPlateSources(item.templateId, carrier.sources ?? []);
   const patches = item.sourceOverride ?? {};
+  /*
+    🔴 THE TWO ON-AIR DIVERGENCE MARKS, read through the SAME joins the `LIVE PLATES`
+    section used before it was deleted — `onAirPlateSource` and `frozenPlateSource`, never a
+    local re-derivation. Same attributes (`data-plate-overridden` / `data-plate-frozen`), same
+    wording, same gating; only the host moved.
+  */
+  const rowOnAir = isOnAir(item);
+  const divergenceOf = (plateId: string): JSX.Element | null => {
+    if (!rowOnAir) return null;
+    const appliedSource = defaults.get(plateId) ?? null;
+    const onAir = onAirPlateSource(item, plateId, appliedSource);
+    const frozen = frozenPlateSource(item, plateId, appliedSource);
+    // Through the file's OWN join, so this note and the `Default (…)` option beside it
+    // cannot name the same source two different ways.
+    const nameOf = (id: string | null | undefined): string =>
+      id === null || id === undefined ? 'nothing' : sourceName(id);
+    /*
+      §12.5 — WHAT IS ACTUALLY ON AIR, when it is not what this control shows. An `R-048`
+      patch outranks every level below it, so it speaks first and alone: naming a frozen value
+      beside it would be two answers to one question.
+    */
+    if (onAir.overridden) {
+      return (
+        <span
+          style={styles.diverged}
+          data-plate-overridden={plateId}
+          title={
+            `This row is patched onto "${nameOf(onAir.sourceId)}" and ignores the template ` +
+            `default. Change it with the row’s SOURCE verb; the default is what a fresh take ` +
+            `would use.`
+          }
+        >
+          on air: {nameOf(onAir.sourceId)} (patched on this row)
+        </span>
+      );
+    }
+    /*
+      🔴 GATED ON `patched`, NOT ON `overridden`, and the difference is a false sentence.
+      `overridden` means the patch DIVERGES from the default — it reads false for a patch that
+      happens to equal it. Such a patch is still in force and still outranks the pin.
+    */
+    if (!onAir.patched && frozen.diverged) {
+      return (
+        <span
+          style={styles.diverged}
+          data-plate-frozen={plateId}
+          title={
+            `This row froze the template assignment when it was taken, so it is on ` +
+            `"${nameOf(frozen.sourceId)}" and an edit to the default does not reach it. Take ` +
+            `the row again to adopt it, or set this look’s input to change it now.`
+          }
+        >
+          this row: {nameOf(frozen.sourceId)} (frozen at take)
+        </span>
+      );
+    }
+    return null;
+  };
   const bound = item.lookSourceOverride ?? {};
   /*
     WHICH LOOK IS BEING EDITED. The operator's pin if there is one and it still names a look
@@ -548,6 +622,27 @@ export function LooksBindingsSection({
                       takes effect when the patch is cleared
                     </span>
                   )}
+                  {/*
+                    🔴 **THE ROW'S DIVERGENCE, ON THE ROW — owner, 2026-09-15:** «این بخش قرمز
+                    فضای بیخودی اشغال کرده حذفش کن.»
+
+                    The `LIVE PLATES` section carried these two lines — a whole heading, a rule
+                    and a block for one short sentence. The SECTION is gone; the SENTENCE is
+                    not, and the difference is the point: what was wasteful was the container,
+                    not the fact.
+
+                    ⚠ **§12.5 REFUSED TO SHIP THE "takes effect at the next take" WORDING WITHOUT
+                    IT**, and that reasoning is untouched by where it lives. The dialog shows
+                    the TEMPLATE's default; if this row froze a different one at its take, or
+                    is patched onto something else, then the default is not what this row is
+                    on — and a panel that says nothing there is confidently wrong. Moving it
+                    HERE puts it on the plate's own control instead of a section away, which is
+                    strictly closer to where the operator is looking.
+
+                    It renders only when the row is ON AIR and actually diverges, so the
+                    ordinary case costs nothing.
+                  */}
+                  {divergenceOf(plate.sourceId)}
                 </div>
               );
             })}

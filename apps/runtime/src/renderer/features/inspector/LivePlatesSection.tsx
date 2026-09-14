@@ -158,14 +158,23 @@ export function LivePlatesSection({
   */
   const rowIsOnAir = isOnAir(item);
   const applied = appliedPlateSources(item.templateId, plates);
-  const divergences = plates.filter((plate) => {
-    const appliedSource = applied.get(plate.sourceId) ?? null;
-    const onAir = onAirPlateSource(item, plate.sourceId, appliedSource);
-    const frozen = frozenPlateSource(item, plate.sourceId, appliedSource);
-    return (onAir.overridden && rowIsOnAir) || (!onAir.patched && frozen.diverged && rowIsOnAir);
-  });
+  /*
+    🔴 **THIS SECTION EXISTS ONLY TO CARRY THE DOOR — owner, 2026-09-15:** «این بخش قرمز
+    فضای بیخودی اشغال کرده حذفش کن.»
+
+    A looks template put the `Source defaults` link in `LOOK INPUTS`, which left this section
+    drawing a heading, a rule and a block for one short divergence sentence — a container
+    costing more than its contents. The sentence moved onto the plate's own row over there
+    (`LooksBindingsSection`'s `divergenceOf`), where the operator is already looking, and the
+    section renders nothing at all for such a template.
+
+    ⚠ It still renders for a template WITHOUT looks, and that is not an exception — it is the
+    whole remaining job: there is no look section to host the link, and this is the only
+    surface in the product that binds a plate to a source. Without it such a template has no
+    door and every fresh row starts unbound with its take refused.
+  */
+  if (hasLooks) return null;
   const carried = assignmentsWereCarriedOver(item.templateId);
-  if (hasLooks && divergences.length === 0 && !carried) return null;
 
   /*
     🔴 **SESSION BP — WHY THIS EDITOR IS STILL HERE, AND WHY THAT IS NOW SAFE.**
@@ -253,7 +262,7 @@ export function LivePlatesSection({
         which is the space the move was for. They appear only when the panel would otherwise be
         confidently wrong.
       */}
-      {divergences.map((plate) => {
+      {plates.map((plate) => {
         const appliedSource = applied.get(plate.sourceId) ?? null;
         // R-048 — the per-ROW patch, folded in through the ONE join that reads it.
         const onAir = onAirPlateSource(item, plate.sourceId, appliedSource);

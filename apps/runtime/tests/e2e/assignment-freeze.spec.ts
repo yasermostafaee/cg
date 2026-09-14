@@ -145,13 +145,21 @@ test('🔴 an ON-AIR row says what it is FROZEN on when the template default is 
   await takeRow(app);
   await app.selectLayerRow(row);
 
-  const plates = app.inspector.locator('[aria-label="Live plates"]');
   /*
-    ⚠ `SOURCE-DEFAULTS-20` — SILENCE IS NOW THE ABSENCE OF THE SECTION, not an empty one.
-    With the editor behind a link, a section with nothing to say renders NOTHING — heading
-    included (the owner's «کلمه Live plates و فضایی که اشغال کرده رو هم حذف کن»). The
-    claim is unchanged and if anything stronger: nothing diverges yet, so the panel spends no
-    words AND no pixels on it.
+    ⚠ `SOURCE-DEFAULTS-20` — THE MARK IS READ WHERE IT NOW LIVES: on the plate's OWN row, in
+    `LOOK INPUTS`. The `LIVE PLATES` section that used to host it does not render at all for a
+    looks template any more (the owner's «این بخش قرمز فضای بیخودی اشغال کرده حذفش کن») — it
+    was a heading, a rule and a block around one short sentence. The SENTENCE is unchanged and
+    so is this claim; only its host moved, and it moved CLOSER to the control it is about.
+
+    ⚠ Re-pointed, NOT relaxed: had this been left scoped to the deleted section it would read
+    green for the strongest reason a locator can — there is nothing there to find, on air or
+    off — and the whole file would stop testing anything.
+  */
+  const plates = app.inspector.locator('[aria-label="Look inputs"]');
+  /*
+    Silence before the edit is the absence of the MARK, not of the section: the look section
+    renders for its own reason (it is the plate↔source control), and nothing diverges yet.
   */
   await expect(plates.locator('[data-plate-frozen="l-1"]')).toHaveCount(0);
 
@@ -194,8 +202,9 @@ test('an OFF-AIR row is not pinned: the edit is simply what it will take', async
   await expect(dialog.locator('[data-defaults-select="l-1"]')).toHaveValue('studio-b');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   /*
-    …and NO pin line. An off-air row has no picture to protect, so it acquires none — which
-    with the section's new guard means the section does not render at all.
+    …and NO pin line. An off-air row has no picture to protect, so it acquires none — the mark
+    is gated on the row being ON AIR before it asks whether anything diverges. Scoped to the
+    whole Inspector rather than to one section, so it would catch the line reappearing anywhere.
   */
   await expect(app.inspector.locator('[data-plate-frozen="l-1"]')).toHaveCount(0);
 });
