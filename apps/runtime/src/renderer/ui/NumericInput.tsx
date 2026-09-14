@@ -130,9 +130,7 @@ export function NumericInput({
         A locked field advertising the gesture it is about to refuse is the shape lying about
         the behaviour (golden rule 11), and it is how the owner came to try the drag at all.
       */
-      style={
-        scrub !== undefined && !inert ? { cursor: 'ew-resize', ...rest.style } : rest.style
-      }
+      style={scrub !== undefined && !inert ? { cursor: 'ew-resize', ...rest.style } : rest.style}
       onPointerDown={(e) => {
         rest.onPointerDown?.(e);
         if (inert || scrub === undefined || current === null || e.button !== 0) return;
