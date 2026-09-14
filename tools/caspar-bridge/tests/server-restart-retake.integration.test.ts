@@ -6,7 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-054 — `#loaded` (producer-existence bookkeeping) must not survive an AMCP
@@ -111,7 +111,7 @@ async function recvLines(m: MockHandle, file: string): Promise<string[]> {
 }
 
 async function bootRuntime(config: ConnectionConfig): Promise<CasparRuntime> {
-  const r = new CasparRuntime(config);
+  const r = new CasparRuntime(config, {}, { layerPolicy: TEST_LAYER_POLICY });
   runtime = r;
   r.start();
   await r.startServing();

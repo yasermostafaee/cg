@@ -8,7 +8,7 @@ import { retainedStateFor } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import type { RetainedStackItem, StackItemStatus } from '@cg/shared-schema';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-092 — the stack survives a restart of the BRIDGE process (end-to-end, real
@@ -131,7 +131,11 @@ function retain(r: CasparRuntime): RetainedStackItem[] {
  * a killed bridge).
  */
 async function onAirThenBridgeDies(m: MockHandle, oscPort: number): Promise<RetainedStackItem[]> {
-  const r = new CasparRuntime(singleServer(m.amcpPort, oscPort));
+  const r = new CasparRuntime(
+    singleServer(m.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   r.start();
   await r.startServing();
@@ -166,7 +170,11 @@ it('a BRIDGE-ONLY restart: the restored item keeps ON AIR and its live layer is 
   const session1Count = (await recvLines(mock, tracePath)).length;
 
   // ── the bridge comes back; the browser re-delivers its library, then its stack ──
-  const r2 = new CasparRuntime(singleServer(mock.amcpPort, oscPort));
+  const r2 = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime2 = r2;
   await r2.startServing();
   r2.templateImport(TEMPLATE, HTML);
@@ -221,7 +229,11 @@ it('a BRIDGE + CASPARCG restart: the restored item returns as LOADED on the empt
   expect(mock.layerState(SLOT)).toBeUndefined(); // genuinely empty
   const beforeRestore = (await recvLines(mock, tracePath)).length;
 
-  const r2 = new CasparRuntime(singleServer(amcpPort, oscPort));
+  const r2 = new CasparRuntime(
+    singleServer(amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime2 = r2;
   await r2.startServing();
   r2.templateImport(TEMPLATE, HTML);
@@ -265,7 +277,11 @@ it('INVARIANT: a layer the occupancy tap reports OCCUPIED has its adopt-CLEAR su
   // fired long ago and will not fire again — the decision has to be taken
   // INLINE, off the already-warm tap. Without that branch the item would sit
   // restored-but-undecided forever.
-  const r2 = new CasparRuntime(singleServer(mock.amcpPort, oscPort));
+  const r2 = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime2 = r2;
   r2.start();
   await r2.startServing();
@@ -295,7 +311,11 @@ it('FROZEN: the ORDINARY load path still adopt-CLEARs, and a live bridge is neve
 
   const retained = await onAirThenBridgeDies(mock, oscPort);
 
-  const r2 = new CasparRuntime(singleServer(mock.amcpPort, oscPort));
+  const r2 = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime2 = r2;
   await r2.startServing();
   r2.templateImport(TEMPLATE, HTML);
@@ -340,7 +360,7 @@ it('FROZEN: the ORDINARY load path still adopt-CLEARs, and a live bridge is neve
 it('FROZEN: restoring while NO server is reachable sends nothing, and the on-air verbs stay REFUSED (R-006)', async () => {
   const oscPort = await freeUdpPort();
   // No mock at all — nothing is listening.
-  const r = new CasparRuntime(singleServer(1, oscPort));
+  const r = new CasparRuntime(singleServer(1, oscPort), {}, { layerPolicy: TEST_LAYER_POLICY });
   runtime = r;
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
@@ -389,15 +409,19 @@ it('FROZEN: a restore never LIFTS B-086 — a mirror pair with the primary down 
     oscHz: 40,
   });
   try {
-    const r = new CasparRuntime({
-      servers: {
-        A: { host: '127.0.0.1', amcpPort: mock.amcpPort, oscPort: oscPortA },
-        B: { host: '127.0.0.1', amcpPort: backup.amcpPort, oscPort: oscPortB },
+    const r = new CasparRuntime(
+      {
+        servers: {
+          A: { host: '127.0.0.1', amcpPort: mock.amcpPort, oscPort: oscPortA },
+          B: { host: '127.0.0.1', amcpPort: backup.amcpPort, oscPort: oscPortB },
+        },
+        strategy: 'mirror-sync',
+        // Human-in-the-loop: no auto-failover, so A stays the primary while down.
+        autoFailoverEnabled: false,
       },
-      strategy: 'mirror-sync',
-      // Human-in-the-loop: no auto-failover, so A stays the primary while down.
-      autoFailoverEnabled: false,
-    });
+      {},
+      { layerPolicy: TEST_LAYER_POLICY },
+    );
     runtime = r;
     r.start();
     await r.startServing();
@@ -433,7 +457,13 @@ it('FROZEN: a restore never LIFTS B-086 — a mirror pair with the primary down 
     // …including for an item the restore genuinely seeds.
     expect(
       await r.restore([
-        { itemId: 'item2', templateId: 'lower-third', fields: {}, state: 'on-air' },
+        {
+          itemId: 'item2',
+          templateId: 'lower-third',
+          fields: {},
+          state: 'on-air',
+          slot: { channel: 1, layer: 110, server: 'primary' },
+        },
       ]),
     ).toEqual({ restored: 1, skipped: [], migrated: [] });
     expect(status(r, 'item2')).toBe('unverified');

@@ -114,7 +114,7 @@ it('S4 — fixedLayers.config returns the booted bank, and null with no bank', a
   const b = await boot({
     bank: {
       channel: 1,
-      low: { start: 1, count: 9 },
+      low: { start: 50, count: 9 },
       start: 70,
       count: 10,
       aliases: { '72': 'ساعت' },
@@ -122,7 +122,7 @@ it('S4 — fixedLayers.config returns the booted bank, and null with no bank', a
   });
   expect(b.runtime.fixedLayersConfig()).toEqual({
     channel: 1,
-    low: { start: 1, count: 9 },
+    low: { start: 50, count: 9 },
     start: 70,
     count: 10,
     aliases: { '72': 'ساعت' },
@@ -138,7 +138,9 @@ it('S4 — fixedLayers.config returns the booted bank, and null with no bank', a
 });
 
 it('S5 — R-028: the ceiling is FIXED live — resize refuses (nothing applied); alias changes apply + publish', async () => {
-  const b = await boot({ bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 } });
+  const b = await boot({
+    bank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 10 },
+  });
   const published: FixedSlotState[][] = [];
   b.runtime.fixedStateChanged.subscribe((s) => published.push(s));
 
@@ -146,7 +148,7 @@ it('S5 — R-028: the ceiling is FIXED live — resize refuses (nothing applied)
   for (const count of [12, 8]) {
     const refused = b.runtime.setFixedLayers({
       channel: 1,
-      low: { start: 1, count: 9 },
+      low: { start: 50, count: 9 },
       start: 70,
       count,
     });
@@ -158,7 +160,7 @@ it('S5 — R-028: the ceiling is FIXED live — resize refuses (nothing applied)
   // An alias change is a legitimate live change and publishes.
   const ok = b.runtime.setFixedLayers({
     channel: 1,
-    low: { start: 1, count: 9 },
+    low: { start: 50, count: 9 },
     start: 70,
     count: 10,
     aliases: { '71': 'LOWER THIRD' },
@@ -172,7 +174,7 @@ it('S5 — R-028: the ceiling is FIXED live — resize refuses (nothing applied)
 it('S6 — renumber and channel-change refuse with their codes; nothing applied/persisted/published', async () => {
   const file = tmpFile('bank.json');
   const b = await boot({
-    bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 },
+    bank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 10 },
     fixedLayersPath: file,
   });
   let configPublishes = 0;
@@ -183,7 +185,7 @@ it('S6 — renumber and channel-change refuse with their codes; nothing applied/
   const renumber = (await invokeRoute(
     b,
     'fixedLayers.set-config',
-    { channel: 1, low: { start: 1, count: 9 }, start: 71, count: 9 },
+    { channel: 1, low: { start: 50, count: 9 }, start: 71, count: 9 },
     file,
   )) as { ok: boolean; reason?: string };
   expect(renumber.ok).toBe(false);
@@ -192,7 +194,7 @@ it('S6 — renumber and channel-change refuse with their codes; nothing applied/
   const channelChange = (await invokeRoute(
     b,
     'fixedLayers.set-config',
-    { channel: 2, low: { start: 1, count: 9 }, start: 70, count: 10 },
+    { channel: 2, low: { start: 50, count: 9 }, start: 70, count: 10 },
     file,
   )) as { ok: boolean; reason?: string };
   expect(channelChange.ok).toBe(false);
@@ -200,7 +202,7 @@ it('S6 — renumber and channel-change refuse with their codes; nothing applied/
 
   expect(b.runtime.fixedLayersConfig()).toEqual({
     channel: 1,
-    low: { start: 1, count: 9 },
+    low: { start: 50, count: 9 },
     start: 70,
     count: 10,
   }); // unchanged
@@ -211,8 +213,11 @@ it('S6 — renumber and channel-change refuse with their codes; nothing applied/
 
 it('S7 — an applied set-config persists, and a fresh boot on that path loads the new bank', async () => {
   const file = tmpFile('bank.json');
+  // `LAYER-BANDS-16` — a TEMPLATE-BAND bank, unlike the in-memory fixtures elsewhere in
+  // this file. This one is written to a file and read back through `loadFixedLayerBank`,
+  // which refuses a pre-2026-09-14 bank by name.
   const b = await boot({
-    bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 },
+    bank: { channel: 1, low: { start: 50, count: 9 }, start: 80, count: 10 },
     fixedLayersPath: file,
   });
   await b.runtime.whenServerHealthy(HEALTH_MS);
@@ -222,7 +227,7 @@ it('S7 — an applied set-config persists, and a fresh boot on that path loads t
   const result = (await invokeRoute(
     b,
     'fixedLayers.set-config',
-    { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10, aliases: { '72': 'ساعت' } },
+    { channel: 1, low: { start: 50, count: 9 }, start: 80, count: 10, aliases: { '82': 'ساعت' } },
     file,
   )) as { ok: boolean };
   expect(result.ok).toBe(true);
@@ -236,16 +241,18 @@ it('S7 — an applied set-config persists, and a fresh boot on that path loads t
   const b2 = await boot({ fixedLayersPath: file });
   expect(b2.runtime.fixedLayersConfig()).toEqual({
     channel: 1,
-    low: { start: 1, count: 9 },
-    start: 70,
+    low: { start: 50, count: 9 },
+    start: 80,
     count: 10,
-    aliases: { '72': 'ساعت' },
+    aliases: { '82': 'ساعت' },
   });
   expect(b2.runtime.fixedSlots()).toHaveLength(19); // 10 operator + 9 bed rows
 });
 
 it('S8 — occupancy honesty: unknown before healthy; producer/empty on a hearing tap', async () => {
-  const b = await boot({ bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 } });
+  const b = await boot({
+    bank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 10 },
+  });
   if (mock === null) throw new Error('mock not booted');
 
   // BEFORE the session is healthy: every slot honestly UNKNOWN, never 'empty'.
@@ -271,7 +278,9 @@ it('S8 — occupancy honesty: unknown before healthy; producer/empty on a hearin
 });
 
 it('S9 — two identical sweeps publish ZERO; a real occupancy change publishes exactly one', async () => {
-  const b = await boot({ bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 } });
+  const b = await boot({
+    bank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 10 },
+  });
   if (mock === null) throw new Error('mock not booted');
   await b.runtime.whenServerHealthy(HEALTH_MS);
 
@@ -302,12 +311,14 @@ it('S9 — two identical sweeps publish ZERO; a real occupancy change publishes 
 });
 
 it('S10 — R-028 fail-closed untick over the REAL occupancy: unknown refuses, empty applies, producer refuses', async () => {
-  const b = await boot({ bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 } });
+  const b = await boot({
+    bank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 10 },
+  });
   if (mock === null) throw new Error('mock not booted');
   const untick = (layer: number): { ok: boolean; reason?: string; message?: string } =>
     b.runtime.setFixedLayers({
       channel: 1,
-      low: { start: 1, count: 9 },
+      low: { start: 50, count: 9 },
       start: 70,
       count: 10,
       visibility: { [String(layer)]: false },
@@ -335,7 +346,7 @@ it('S10 — R-028 fail-closed untick over the REAL occupancy: unknown refuses, e
   );
   const occupied = b.runtime.setFixedLayers({
     channel: 1,
-    low: { start: 1, count: 9 },
+    low: { start: 50, count: 9 },
     start: 70,
     count: 10,
     visibility: { '74': false, '75': false },

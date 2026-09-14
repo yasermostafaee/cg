@@ -12,7 +12,7 @@ import type {
 } from '@cg/shared-ipc';
 import type { LiveFitMode } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * C-015 phase 6 (task 6.0) — **THE ASSEMBLY: a declared plate actually puts a
@@ -166,6 +166,7 @@ async function boot(options: {
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 150,
       sourceCatalog: options.catalog ?? catalog(),
       sourceAssignments: options.assignments ?? assign([['guest-1', 'src-a']]),

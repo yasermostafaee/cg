@@ -5,7 +5,7 @@ import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { LiveLayerRecord } from '../src/live-layers.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * C-015 phase 5 — THE THIRD OWNERSHIP CLASS, at all three doors, plus the
@@ -105,7 +105,12 @@ async function boot(reservedLayers: readonly number[] = []): Promise<void> {
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS, reservedLayers },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: SWEEP_MS,
+      occupancyStaleMs: STALE_MS,
+      reservedLayers,
+    },
   );
   runtime.start();
   await runtime.startServing();

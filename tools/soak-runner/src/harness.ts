@@ -3,6 +3,7 @@ import {
   AmcpTransport,
   CommandQueue,
   LayerManager,
+  type LayerPolicy,
   OscTransport,
   Reconciler,
   RedundancyAdapter,
@@ -10,6 +11,20 @@ import {
   type ServerSession,
 } from '@cg/caspar-client';
 import { EventEmitter } from 'node:events';
+
+/**
+ * 🔴 `LAYER-BANDS-16` — **the soak harness DECLARES the dynamic range it allocates from.**
+ *
+ * `DEFAULT_LAYER_POLICY` is empty since the owner retired type-keyed dynamic allocation: the
+ * layer map cuts 50-99 into three ROLE bands and leaves 1-49 to the playout server, so there
+ * is nowhere a type-keyed range may legally sit and the product ships none. A bare
+ * `new LayerManager()` therefore allocates NOTHING — and a soak whose allocator hands back
+ * nothing runs every scenario over an empty stack while still reporting a duration, which is
+ * exactly how this failed: seven suites asserting `expected 0 to be greater than 0`.
+ *
+ * 110+ keeps the fixture clear of the product's whole map and above the floor.
+ */
+const SOAK_LAYER_POLICY: LayerPolicy = { 'lower-third': [110, 119] };
 
 /**
  * Soak harness. Boots `@cg/amcp-mock` instances + a thin runtime
@@ -162,7 +177,7 @@ async function buildStack(strategy: RedundancyStrategy, backup: SoakBackupMode):
     sessions: sessionB !== undefined ? { A: sessionA, B: sessionB } : { A: sessionA },
     adapter,
     reconciler: new Reconciler(),
-    layerManager: new LayerManager(),
+    layerManager: new LayerManager({ policy: SOAK_LAYER_POLICY }),
     async dispose() {
       queueA.dispose();
       queueB?.dispose();

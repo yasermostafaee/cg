@@ -15,7 +15,7 @@ import type { LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { LiveLayerLedger } from '../src/live-layers.js';
 import { loadPersistedLiveLayers, savePersistedLiveLayers } from '../src/live-layers-store.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * `UPDATE-INFORCE-02` / `B-216` — **WHAT A CONFIGURATION VERB MAY TOUCH IS DECIDED BY THE
@@ -177,6 +177,7 @@ async function bootRuntime(): Promise<CasparRuntime> {
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 150,
       lookMixerHoldMs: 0,
       sourceCatalog: CATALOG,

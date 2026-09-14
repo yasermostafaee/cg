@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-046 — declared single-server operation. The operator's default is ONE
@@ -46,7 +46,11 @@ function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
 it('single-server: healthy on A alone, playout works, no backup in health, failover refused, no churn', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  runtime = new CasparRuntime(singleServer(mock.amcpPort, oscPort));
+  runtime = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(

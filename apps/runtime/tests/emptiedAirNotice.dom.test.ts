@@ -53,7 +53,7 @@ const BANK: FixedLayerBank = {
   start: 70,
   count: 30,
   aliases: { '99': 'زیرنویس اصلی' },
-  low: { start: 1, count: 9, aliases: { '9': 'لوگوی اصلی' } },
+  low: { start: 50, count: 9, aliases: { '58': 'لوگوی اصلی' } },
 };
 
 /** The template whose UUID the notice was printing at the operator on 2026-09-06. */
@@ -176,7 +176,7 @@ describe('EmptiedAirNotice — presence and absence', () => {
  * 🔴 **`B-232` — THE NOTICE SPOKE IN IDS.**
  *
  * Measured on the plant 2026-09-06: the strip listed its rows as
- * `1-9 · e506e319-6e68-4603-a5f4-290b21616250` — a channel-layer and a raw template UUID.
+ * `1-58 · e506e319-6e68-4603-a5f4-290b21616250` — a channel-layer and a raw template UUID.
  * The operator knows those rows as «لوگوی اصلی» and «زیرنویس اصلی», the NAME column two
  * panels below, and has never typed a UUID.
  *
@@ -195,11 +195,11 @@ describe('EmptiedAirNotice — the rows are named in the operator’s words', ()
     const el = await render(
       notice({
         rows: [
-          { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 9 } },
+          { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 58 } },
         ],
       }),
     );
-    expect(el.textContent).not.toContain('1-9 · e506e319-6e68-4603-a5f4-290b21616250');
+    expect(el.textContent).not.toContain('1-58 · e506e319-6e68-4603-a5f4-290b21616250');
     expect(el.textContent).not.toContain('e506e319');
     expect(el.textContent).toContain('لوگوی اصلی');
   });
@@ -209,7 +209,7 @@ describe('EmptiedAirNotice — the rows are named in the operator’s words', ()
     const el = await render(
       notice({
         rows: [
-          { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 9 } },
+          { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 58 } },
         ],
       }),
     );
@@ -230,14 +230,14 @@ describe('EmptiedAirNotice — the rows are named in the operator’s words', ()
     const el = await render(
       notice({
         rows: [
-          { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 9 } },
+          { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 58 } },
         ],
       }),
     );
     // Visible text, not a tooltip: a hover is not available to someone reaching for the
     // number in order to type it into a hand-cleared CLEAR.
     const layer = el.querySelector<HTMLElement>('[data-emptied-layer]');
-    expect(layer?.textContent).toBe('1-9');
+    expect(layer?.textContent).toBe('1-58');
   });
 
   it('falls back to the default row name when the operator has aliased nothing', async () => {
@@ -289,7 +289,7 @@ describe('EmptiedAirNotice — the rows are named in the operator’s words', ()
     const el = await render(
       notice({
         rows: [
-          { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 9 } },
+          { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 58 } },
         ],
       }),
     );
@@ -318,7 +318,7 @@ describe('EmptiedAirNotice — the rows are named in the operator’s words', ()
     const el = await render(
       notice({
         rows: [
-          { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 9 } },
+          { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 58 } },
         ],
       }),
     );

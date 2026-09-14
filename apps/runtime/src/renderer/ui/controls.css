@@ -265,6 +265,29 @@
 }
 
 /*
+ * 🔴 ZERO IS NOT AN AIR CLAIM — the owner, 2026-09-14, looking at `0 on air` in the sacred
+ * green.
+ *
+ * The air colour is reserved for "something is on air" (`theme.ts`, and `StatusBar` says the
+ * same in prose). A chip that wears it while the number it carries is ZERO makes the one
+ * colour the operator is trained to read at a glance mean nothing — it is lit on a station
+ * with an empty air, every second of every quiet show, so by the time it means something he
+ * has already stopped seeing it. The count still reads `0 on air`: it is NOT hidden and NOT
+ * renamed, exactly as the stale treatment below is not. Only the CLAIM goes, because at zero
+ * there is no claim to make.
+ *
+ * Same neutral as `[data-unverifiable]`, and deliberately so — both are "this chip is not
+ * asserting air right now", for two different reasons. Keyed off the count the element
+ * already publishes (`data-air-tally`), so there is no second derivation of the number to
+ * drift from `airTally` (`B-213`).
+ */
+.cg-layers-subbar__onair[data-air-tally='0'] {
+  border-color: var(--r-border);
+  background: var(--r-surface-sunken);
+  color: var(--r-text-muted);
+}
+
+/*
  * 🔴 `CONSOLE-LOOK-06` DELTA D5 — §4's STALE TREATMENT, which arrived with the count.
  *
  * With neither hop up, nothing is confirming the number, so it stops wearing the air colour
@@ -4776,6 +4799,32 @@ input[type='checkbox']:disabled:checked {
 }
 
 /*
+ * ── 🔴 THE MARK PICTURES THE ACT — CLEAR AND STOP ARE NOT DELETIONS ─────────────────
+ *
+ * The owner, 2026-09-14: _"for clear/stop we must not use the delete icon and the red."_
+ * `useDialog`'s `CONFIRM_EMBLEM` carries the whole argument; this is its palette half.
+ *
+ * ⚠ The SHAPE is untouched — same tile, same size, same gap. Only the hue moves, and it
+ * moves to the verb's OWN `--r-verb-*` token, so the tile matches the button the operator
+ * just pressed instead of claiming a deletion that is not happening. Derived by `color-mix`
+ * from that one token, never typed as new hexes: severity and identity BY TOKEN.
+ *
+ * Measured against #0b1017 (`--r-surface-sunken`): the 15 % ground inks the glyph at
+ * 4.2:1 (clear) and 5.1:1 (stop) — both clear of the 3:1 graphics floor with room to spare.
+ */
+.cg-confirm-emblem[data-confirm-tone='clear'] {
+  border-color: color-mix(in srgb, var(--r-verb-clear) 42%, transparent);
+  background: color-mix(in srgb, var(--r-verb-clear) 15%, var(--r-surface-sunken));
+  color: var(--r-verb-clear);
+}
+
+.cg-confirm-emblem[data-confirm-tone='stop'] {
+  border-color: color-mix(in srgb, var(--r-verb-stop) 42%, transparent);
+  background: color-mix(in srgb, var(--r-verb-stop) 15%, var(--r-surface-sunken));
+  color: var(--r-verb-stop);
+}
+
+/*
  * ── 🔴 `SETTINGS-POLISH-04` §2 — **TWO DESTRUCTIVE TREATMENTS, AND EACH IS RIGHT WHERE IT
  * IS.** ────────────────────────────────────────────────────────────────────────────────────
  *
@@ -4858,6 +4907,94 @@ input[type='checkbox']:disabled:checked {
 [data-modal-layer='base'] .cg-btn[data-modal-role='destructive']:hover:not(:disabled) {
   background: var(--r-danger-confirm-hover-bg);
   border-color: var(--r-setup-danger-ink);
+  color: var(--r-ink-on-fill);
+}
+
+/*
+ * ── 🔴 A DELETION LOOKS THE SAME WHEREVER IT IS RAISED ──────────────────────────────
+ *
+ * The owner, 2026-09-14, with `Remove "zirnevis white" from Layer 3?` beside `Remove "sdi"?`:
+ * _"the delete button's text colour should be like the sources delete, and the border too."_
+ * Two dialogs doing the SAME ACT — dropping a record that cannot be brought back — read as
+ * two different buttons, because one was raised from the console and the other from inside
+ * Station setup. That is a distinction in the DIALOG'S PARENTAGE, and the operator is being
+ * asked to read it as a distinction in the ACT.
+ *
+ * So the base layer's `remove` takes the sub family's treatment WHOLE: ground, edge and ink
+ * together. ⚠ **Whole, and not just the two the owner named, and that is a measurement
+ * rather than scope creep.** `#ffaaa7` ink on the console's existing `#684044` fill is
+ * **4.81:1** at rest and **4.02:1** on its hover — the hover is BELOW the 4.5 AA floor, which
+ * is the exact objection recorded in the block above against inking this button in the
+ * family's red. The ink is legible on the button the owner pointed AT because that button's
+ * darker ground ships with it: on `#352224` it is **8.22:1**, and **7.02:1** on `#482a2e`.
+ * Taking the pair therefore delivers the photographed look and RAISES every ratio; taking the
+ * ink alone would have lowered one through the floor.
+ *
+ * ⚠ **The FILL is not lost, and that is what keeps §2's "no safety signal may weaken"
+ * intact.** This is still a filled button at a primary's weight — a darker fill, not an
+ * outline. And the console confirm that argument was actually about, `Clear all`, is now
+ * filled in `--r-verb-clear` (above); `settings-polish.spec.ts` §2(a) measures THAT one, so
+ * the fill claim is still under test.
+ *
+ * ⚠ Scoped to the VERB, not to the layer. `clear` and `stop` above keep their own colours;
+ * what travels here is the DELETION family, and it travels to every base confirm that
+ * declares itself a deletion — the row's REMOVE, REMOVE ALL, `Remove item` and `Delete from
+ * station` — rather than to the one dialog that was photographed.
+ */
+[data-modal-layer='base'] .cg-btn[data-modal-role='destructive'][data-verb-tone='remove'] {
+  background: var(--r-setup-danger-bg);
+  border-color: var(--r-setup-danger-line);
+  color: var(--r-setup-danger-ink);
+}
+
+[data-modal-layer='base']
+  .cg-btn[data-modal-role='destructive'][data-verb-tone='remove']:hover:not(:disabled) {
+  background: var(--r-setup-danger-hover-bg);
+  border-color: var(--r-setup-danger-line);
+  color: var(--r-setup-danger-ink);
+}
+
+/*
+ * ── 🔴 …AND THE SAME BUTTON WHEN THE VERB IS NOT A DELETION ─────────────────────────
+ *
+ * The emblem's rule, one element along — see `useDialog`'s `CONFIRM_EMBLEM` for why, and
+ * note what is NOT changing here: the fill, the weight, the white ink and the "fills
+ * brighter on intent" behaviour are all exactly the paragraph above. This button remains
+ * the loudest thing in the dialog. Only the HUE moves, from one red standing for three
+ * different acts to the verb's own `--r-verb-*` — the colour the operator pressed to get
+ * here.
+ *
+ * ⚠ Scoped to `[data-modal-layer='base']` like its parent: Station setup's `sub` family
+ * raises no CLEAR and no STOP, and widening a measured decision from one family to both is
+ * how a measured value becomes an average of two (`ConfirmRequest.layer`).
+ *
+ * ⚠ **THE INK STAYS WHITE, and again that is a measurement.** On the 40 % rest ground white
+ * is **11.5:1** (clear) and **9.9:1** (stop); on the 52 % hover ground **9.2:1** and
+ * **7.8:1**. Every one of the four is above the red they replace (8.73 / 7.29), so the
+ * legibility floor this dialog was tuned to is cleared, not spent. Inking with the verb
+ * token itself would not be — `#DE5105` on its own 40 % ground is 2.9:1.
+ */
+[data-modal-layer='base'] .cg-btn[data-modal-role='destructive'][data-verb-tone='clear'] {
+  background: color-mix(in srgb, var(--r-verb-clear) 40%, var(--r-surface-sunken));
+  border-color: var(--r-verb-clear);
+}
+
+[data-modal-layer='base']
+  .cg-btn[data-modal-role='destructive'][data-verb-tone='clear']:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--r-verb-clear) 52%, var(--r-surface-sunken));
+  border-color: var(--r-verb-clear);
+  color: var(--r-ink-on-fill);
+}
+
+[data-modal-layer='base'] .cg-btn[data-modal-role='destructive'][data-verb-tone='stop'] {
+  background: color-mix(in srgb, var(--r-verb-stop) 40%, var(--r-surface-sunken));
+  border-color: var(--r-verb-stop);
+}
+
+[data-modal-layer='base']
+  .cg-btn[data-modal-role='destructive'][data-verb-tone='stop']:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--r-verb-stop) 52%, var(--r-surface-sunken));
+  border-color: var(--r-verb-stop);
   color: var(--r-ink-on-fill);
 }
 

@@ -7,7 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import type { RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * C-015 phase 6 (6.5 / 6.5a / 6.5b / 6.5c / 6.5d) — **EVERY `CG ADD` IS PRECEDED BY
@@ -100,7 +100,11 @@ async function boot(): Promise<CasparRuntime> {
     `cg-addmute-${String(process.pid)}-${String(Date.now())}-${String(Math.round(performance.now() * 1000))}.ndjson`,
   );
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30, tracePath });
-  const r = new CasparRuntime(singleServer(mock.amcpPort, oscPort), {}, { sweepMs: 150 });
+  const r = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: 150 },
+  );
   runtime = r;
   r.start();
   await r.startServing();
@@ -156,7 +160,7 @@ it('SITE 1b — loadFixed emits NOTHING at all, so it needs no mute and no guard
   // LIST-ONLY. A path that cannot emit beats a guard that has to be remembered.
   const r = await boot();
   expect(
-    r.setFixedLayers({ channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 }).ok,
+    r.setFixedLayers({ channel: 1, low: { start: 50, count: 9 }, start: 70, count: 4 }).ok,
   ).toBe(true);
   const before = (await recvLines()).length;
 
@@ -173,7 +177,15 @@ it('🔴 SITE 2 — B-121: the reconnect reconciliation’s re-ADD is muted FIRS
   // entry point, rather than by calling the private decider.
   const r = await boot();
   const retained: RetainedStackItem[] = [
-    { itemId: 'item1', templateId: 'lower-third', fields: {}, state: 'loaded' },
+    {
+      itemId: 'item1',
+      templateId: 'lower-third',
+      fields: {},
+      state: 'loaded',
+      // The layer this test then measures the mute/ADD order on — a retained coordinate
+      // is honoured exactly now, so it has to be the one `SLOT` names.
+      slot: { ...SLOT, server: 'primary' as const },
+    },
   ];
 
   void r.restore(retained);

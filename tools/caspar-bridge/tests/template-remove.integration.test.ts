@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-005 — removing a template from the library, and the refusal that makes it safe.
@@ -59,7 +59,11 @@ const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>سل
 async function bootWithTemplate(): Promise<CasparRuntime> {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
-  const rt = new CasparRuntime(connectionFor(mock.amcpPort, oscPort));
+  const rt = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = rt;
   rt.start();
   await rt.startServing();

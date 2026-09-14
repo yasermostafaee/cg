@@ -65,7 +65,7 @@ describe('MockRuntime owned-slot occupancy (B-056 parity)', () => {
       // The seeded warning names a row `seedStack()` actually creates — the
       // E2E's remedy is removing that row (D-119 rebuilt the starter seed).
       expect(rt.ownedOccupancy()).toMatchObject([
-        { channel: 1, layer: 10, itemId: 'item-irib-news' },
+        { channel: 1, layer: 60, itemId: 'item-irib-news' },
       ]);
       expect(rt.stackSnapshot().map((i) => i.itemId)).toContain('item-irib-news');
       // A take does NOT resolve (bridge parity).
@@ -238,7 +238,7 @@ describe('🔴 B-145 (2.8) — the mock releases live plates on the SAME verbs t
 
   it('the armed seed starts seated — a console attaching to a bridge that already has plates', () => {
     const rt = armed();
-    expect(rt.liveLayersState().map((r) => r.layer)).toEqual([10, 11]);
+    expect(rt.liveLayersState().map((r) => r.layer)).toEqual([60, 61]);
   });
 
   it('UNARMED it is empty, because the offline mock has seated nothing', () => {
@@ -272,7 +272,7 @@ describe('🔴 B-145 (2.8) — the mock releases live plates on the SAME verbs t
 
     rt.take('item-irib-news');
 
-    expect(rt.liveLayersState().map((r) => r.layer)).toEqual([10, 11]);
+    expect(rt.liveLayersState().map((r) => r.layer)).toEqual([60, 61]);
   });
 
   it('every one of those transitions PUBLISHES, so a console never has to poll', () => {
@@ -283,7 +283,7 @@ describe('🔴 B-145 (2.8) — the mock releases live plates on the SAME verbs t
     rt.out('item-irib-news');
     rt.take('item-irib-news');
 
-    expect(seen).toEqual([[], [10, 11]]);
+    expect(seen).toEqual([[], [60, 61]]);
   });
 
   it('the seed is never `unverified` — the mock has no file to adopt from', () => {

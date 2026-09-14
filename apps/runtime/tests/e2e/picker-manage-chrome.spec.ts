@@ -1,4 +1,5 @@
-import { buildValidVcg, expect, test } from './fixtures/runtime.js';
+import type { Locator } from '@playwright/test';
+import { buildValidVcg, cssColour, expect, test } from './fixtures/runtime.js';
 
 /**
  * 🔴 `MODAL-CHROME-10` ADDENDUM C — **THE MANAGE LIST, AND A REFUSAL THAT RENDERED TWICE.**
@@ -324,12 +325,31 @@ test('§D3 — the delete confirm has the family’s mark, shape and red', async
   await expect(consequence).toContainText('the .vcg must be re-imported');
   await expect(consequence).toContainText("cleared with the row's own REMOVE first");
 
-  // (c) the family's red at a PRIMARY's weight, ringed in the family's own ink.
+  /*
+    (c) the family's red at a PRIMARY's weight — 🔴 and as of 2026-09-14 it is the DELETION
+    family exactly as Station setup draws it, ground + edge + ink together. The owner put the
+    two dialogs side by side: one act, two buttons, and the difference was where the dialog
+    had been raised from rather than what the button does. `controls.css` carries the argument
+    and the four ratios.
+
+    ⚠ Still FILLED and still 700 — a darker fill, never an outline. Asserted from the tokens
+    so this stays a claim about identity with that family rather than three hexes typed twice.
+  */
   const commit = confirm.getByRole('button', { name: 'Delete from station', exact: true });
-  await expect(commit).toHaveCSS('background-color', 'rgb(104, 64, 68)');
-  await expect(commit).toHaveCSS('border-color', 'rgb(255, 170, 167)');
-  await expect(commit).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await expect(commit).toHaveCSS(
+    'background-color',
+    await cssColour(page, 'var(--r-setup-danger-bg)'),
+  );
+  await expect(commit).toHaveCSS(
+    'border-color',
+    await cssColour(page, 'var(--r-setup-danger-line)'),
+  );
+  await expect(commit).toHaveCSS('color', await cssColour(page, 'var(--r-setup-danger-ink)'));
   await expect(commit).toHaveCSS('font-weight', '700');
+  await expect(commit, 'a deletion turned into an outline').not.toHaveCSS(
+    'background-color',
+    'rgba(0, 0, 0, 0)',
+  );
 
   await page.getByRole('button', { name: 'Cancel' }).last().click();
   await app.closeTemplatePicker();
@@ -359,4 +379,80 @@ test('§D3 — every destructive confirm carries the mark, and the constructive 
   const stopAll = page.getByRole('dialog', { name: /^Stop all/ });
   await expect(stopAll.locator('[data-confirm-emblem]'), 'Stop all lost its mark').toHaveCount(1);
   await stopAll.getByRole('button', { name: 'Cancel' }).click();
+});
+
+/**
+ * 🔴 **AND THE MARK PICTURES THE ACT** — the owner, 2026-09-14, photographing `Clear all 4
+ * row(s) holding a layer?` and `Clear Layer 3?` under a red bin.
+ *
+ * §D3 above proves the mark is THERE. This proves it is not LYING: CLEAR and STOP delete
+ * nothing — the dialogs say so in words two lines under the glyph — so the bin and the
+ * deletion red are REMOVE's alone. `useDialog`'s `CONFIRM_EMBLEM` carries the argument.
+ *
+ * ⚠ Read as a CONTRAST, all three in one case, for exactly the reason the docblock above
+ * gives for reading the marked and unmarked dialogs together: a case that checked CLEAR's
+ * new glyph alone would pass against a build that had given the bin to nothing at all, and
+ * one that checked REMOVE alone would pass against a build that had given it to everything.
+ * The distinction IS the deliverable, so the distinction is what is measured.
+ *
+ * ⚠ And it is an e2e, not a dom spec, for the colour half: jsdom is not running this sheet,
+ * and `color-mix` is resolved by the engine (golden rule 12c).
+ */
+test('the confirm mark pictures the act — CLEAR and STOP are not deletions', async ({ app }) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1400, height: 900 });
+
+  const emblemInk = async (dialog: Locator): Promise<string> =>
+    dialog.locator('[data-confirm-emblem]').evaluate((el) => getComputedStyle(el).color);
+
+  // ── CLEAR — the row's own XSquare, inked in the verb the operator pressed.
+  await page.getByRole('button', { name: 'Clear all rows holding a layer' }).click();
+  const clearAll = page.getByRole('dialog', { name: /^Clear all/ });
+  // `XSquare` is an alias — lucide paints it `lucide-square-x`. Read from the built bundle,
+  // not assumed from the import name.
+  await expect(clearAll.locator('[data-confirm-emblem] svg')).toHaveClass(/lucide-square-x/);
+  await expect(clearAll.locator('[data-confirm-emblem] svg')).not.toHaveClass(/lucide-trash/);
+  expect(await emblemInk(clearAll), 'the CLEAR mark is not wearing its verb').toBe(
+    await cssColour(page, 'var(--r-verb-clear)'),
+  );
+  await clearAll.getByRole('button', { name: 'Cancel' }).click();
+
+  // ── STOP — the graceful-exit glyph, and the same rule.
+  await page.getByRole('button', { name: 'Stop all on-air items' }).click();
+  const stopAll = page.getByRole('dialog', { name: /^Stop all/ });
+  await expect(stopAll.locator('[data-confirm-emblem] svg')).toHaveClass(
+    /lucide-circle-arrow-out-down-right/,
+  );
+  await expect(stopAll.locator('[data-confirm-emblem] svg')).not.toHaveClass(/lucide-trash/);
+  expect(await emblemInk(stopAll), 'the STOP mark is not wearing its verb').toBe(
+    await cssColour(page, 'var(--r-verb-stop)'),
+  );
+  await stopAll.getByRole('button', { name: 'Cancel' }).click();
+
+  /*
+    ── REMOVE — THE CONTROL. The bin still exists and still means what it says, on the one
+    console verb that cannot be undone. If this half ever goes, the change above stopped being
+    "the mark pictures the act" and became "there is no mark".
+
+    `Remove all` is WITHHELD while anything is on air (`R-017`), and the seed has rows on air —
+    so the row's own REMOVE is the reachable spelling of the same verb.
+  */
+  await page.getByRole('button', { name: 'Clear all rows holding a layer' }).click();
+  const confirmClear = page.getByRole('dialog', { name: /^Clear all/ });
+  await confirmClear.getByRole('button', { name: /^Clear all$/ }).click();
+  await expect(confirmClear).toBeHidden();
+
+  await page.getByRole('button', { name: 'Remove all items' }).click();
+  const removeAll = page.getByRole('dialog', { name: /^Remove all/ });
+  await expect(removeAll.locator('[data-confirm-emblem] svg')).toHaveClass(/lucide-trash/);
+  // …in the deletion family Station setup already draws — see §D3's (c) and `controls.css`.
+  await expect(removeAll.getByRole('button', { name: /^Remove all$/ })).toHaveCSS(
+    'background-color',
+    await cssColour(page, 'var(--r-setup-danger-bg)'),
+  );
+  await expect(removeAll.getByRole('button', { name: /^Remove all$/ })).toHaveCSS(
+    'color',
+    await cssColour(page, 'var(--r-setup-danger-ink)'),
+  );
+  await removeAll.getByRole('button', { name: 'Cancel' }).click();
 });

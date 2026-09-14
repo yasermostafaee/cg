@@ -13,7 +13,7 @@ import type {
 } from '@cg/shared-ipc';
 import { readCgControl, type LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * 🔴 **§14.5 / `tasks.md` 7.1–7.5 (LOOKS Stage E) — THE OPERATOR'S SWITCH, on the wire.**
@@ -183,6 +183,7 @@ async function boot(options: { template?: TemplateInfo } = {}): Promise<CasparRu
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 150,
       // `B-174` — this suite pins the page-first ORDER, not the hold's duration (that has
       // its own tests in `look-switch-hold.integration.test.ts`), so 0 keeps the order and
@@ -533,7 +534,13 @@ it('🔴 5.4 — the RESTORE door refuses it too: a template can change under a 
   r.templateImport(template({ looks: [] }), '<!doctype html><html></html>');
 
   const res = await r.restore([
-    { itemId: 'item-1', templateId: 'debate', fields: {}, state: 'on-air' },
+    {
+      itemId: 'item-1',
+      templateId: 'debate',
+      fields: {},
+      state: 'on-air',
+      slot: { channel: 1, layer: 110, server: 'primary' },
+    },
   ]);
 
   expect(res.skipped.map((s2) => s2.reason)).toContain('looks-none-authored');
@@ -562,6 +569,9 @@ it('🔴 a RESTORE re-applies the operator’s look, so the picker does not lie 
       templateId: 'debate',
       fields: {},
       state: 'on-air',
+      // `LAYER-BANDS-16` — a retained coordinate, honoured exactly. Without one an on-air
+      // row is skipped ot-declared\ and never reaches the look it is here to assert.
+      slot: { channel: 1, layer: 110, server: 'primary' },
       activeLookId: 'right',
     },
   ]);
@@ -574,7 +584,15 @@ it('a restore with NO look recorded still resolves to the authored default', asy
   // “nothing was chosen”, not “no look” — or the picker would have nothing marked.
   const r = await boot();
 
-  await r.restore([{ itemId: 'item-1', templateId: 'debate', fields: {}, state: 'on-air' }]);
+  await r.restore([
+    {
+      itemId: 'item-1',
+      templateId: 'debate',
+      fields: {},
+      state: 'on-air',
+      slot: { channel: 1, layer: 110, server: 'primary' },
+    },
+  ]);
 
   expect(publishedLook(r)).toBe('left');
 });

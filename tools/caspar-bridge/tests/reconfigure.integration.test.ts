@@ -18,7 +18,7 @@ import {
 } from '@cg/shared-ipc';
 import { CasparRuntime, deriveOscBindHost } from '../src/caspar-runtime.js';
 import { createBridge, type BridgeHandle } from '../src/index.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-010 — runtime server reconfiguration. Two amcp-mocks stand in for the
@@ -148,7 +148,11 @@ it('re-points the running bridge: refused on air, Remove-All clears + unblocks, 
     return { kind: 'ok', code: 202, verb: 'PLAY' };
   });
 
-  runtime = new CasparRuntime(singleServer(mockA.amcpPort, oscA));
+  runtime = new CasparRuntime(
+    singleServer(mockA.amcpPort, oscA),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport({ ...TEMPLATE }, HTML);

@@ -27,7 +27,11 @@ import {
  * of a package is DERIVED rather than chosen.
  */
 
-const HIGH = { channel: 1, start: 70, count: 10 };
+// `LAYER-BANDS-16` — a TEN-row operator bank at the foot of the template band. It is a
+// deviation from the shipped twenty on purpose (these tests are about the two halves, not
+// about the default), but it sits INSIDE the band: a bank at 70 would now be an old-map
+// bank, which is a different test's subject.
+const HIGH = { channel: 1, start: 80, count: 10 };
 
 function bank(over: Partial<FixedLayerBank> = {}): FixedLayerBank {
   return FixedLayerBankSchema.parse({ ...HIGH, ...over });
@@ -48,15 +52,16 @@ describe('the bed half is always declared', () => {
       // visible bed rows against a fresh install's two. The shape was right and the picture
       // was wrong, and nothing here looked at the picture.
       visibility: {
-        1: false,
-        2: false,
-        3: false,
-        4: false,
-        5: false,
-        6: false,
-        7: false,
-        8: true,
-        9: true,
+        50: false,
+        51: false,
+        52: false,
+        53: false,
+        54: false,
+        55: false,
+        56: false,
+        57: false,
+        58: true,
+        59: true,
       },
     });
   });
@@ -70,28 +75,28 @@ describe('the bed half is always declared', () => {
     const fresh = defaultFixedLayerBank();
     const shownOn = (b: FixedLayerBank): number[] => {
       const shown: number[] = [];
-      for (let layer = 1; layer <= 9; layer++) if (isLayerVisible(b, layer)) shown.push(layer);
+      for (let layer = 50; layer <= 59; layer++) if (isLayerVisible(b, layer)) shown.push(layer);
       return shown;
     };
     expect(shownOn(upgraded)).toEqual(shownOn(fresh));
-    expect(shownOn(upgraded)).toEqual([8, 9]);
+    expect(shownOn(upgraded)).toEqual([58, 59]);
   });
 
   it('B-202 — each parse gets its OWN tick record, not a shared one', () => {
     // `.default()` takes a thunk for this reason: a shared literal handed to two readers is
     // one mutation away from a default that differs between them in the same process.
     const first = FixedLayerBankSchema.parse(HIGH);
-    (first.low.visibility ?? {})['9'] = false;
-    expect(isLayerVisible(FixedLayerBankSchema.parse(HIGH), 9)).toBe(true);
+    (first.low.visibility ?? {})['59'] = false;
+    expect(isLayerVisible(FixedLayerBankSchema.parse(HIGH), 59)).toBe(true);
   });
 
   it('the built-in default bank states its beds explicitly, with the top two ticked', () => {
     const built = defaultFixedLayerBank();
-    expect(built.low.start).toBe(1);
-    expect(built.low.count).toBe(9);
+    expect(built.low.start).toBe(50);
+    expect(built.low.count).toBe(10);
     const shown = [];
-    for (let layer = 1; layer <= 9; layer++) if (isLayerVisible(built, layer)) shown.push(layer);
-    expect(shown).toEqual([8, 9]);
+    for (let layer = 50; layer <= 59; layer++) if (isLayerVisible(built, layer)) shown.push(layer);
+    expect(shown).toEqual([58, 59]);
   });
 
   it('🔴 layer 0 is not a bed row — it is legal and reads as "unset" in too many places', () => {
@@ -100,9 +105,26 @@ describe('the bed half is always declared', () => {
     );
   });
 
-  it('a bed range past the free band is refused by the schema, not discovered later', () => {
+  it('🔴 a bed BELOW the band floor is refused by the schema — the old 1-9 map is gone', () => {
+    // `LAYER-BANDS-16`: 1-49 is the playout server's. A bed declared there is the exact
+    // defect the re-cut exists to close, and it is refused where it is cheapest to refuse.
+    expect(FixedLayerBankSchema.safeParse({ ...HIGH, low: { start: 1, count: 9 } }).success).toBe(
+      false,
+    );
+    expect(FixedLayerBankSchema.safeParse({ ...HIGH, low: { start: 49, count: 1 } }).success).toBe(
+      false,
+    );
+  });
+
+  it('a bed range past the band is refused by the schema, not discovered later', () => {
     expect(
-      FixedLayerBankSchema.safeParse({ ...HIGH, low: { start: 1, count: MAX_LOW_FIXED_LAYER + 1 } })
+      FixedLayerBankSchema.safeParse({
+        ...HIGH,
+        low: { start: DEFAULT_LOW_BANK_START, count: DEFAULT_LOW_BANK_COUNT + 1 },
+      }).success,
+    ).toBe(false);
+    expect(
+      FixedLayerBankSchema.safeParse({ ...HIGH, low: { start: MAX_LOW_FIXED_LAYER + 1, count: 1 } })
         .success,
     ).toBe(false);
   });
@@ -110,11 +132,11 @@ describe('the bed half is always declared', () => {
 
 describe('isLowBankLayer — THE predicate the halves are told apart by', () => {
   it('answers from the DECLARED bed range, never from a hard-coded 1–9', () => {
-    // A station whose beds are 2–5 is the case a local `layer <= 9` gets wrong, and it gets
-    // it wrong silently: layers 1, 6, 7, 8 and 9 are not bed rows for that bank at all.
-    const narrow = bank({ low: { start: 2, count: 4 } });
-    expect(lowBankEnd(narrow)).toBe(5);
-    expect([1, 2, 3, 4, 5, 6, 70].map((l) => isLowBankLayer(narrow, l))).toEqual([
+    // A station whose beds are 52–55 is the case a local `layer <= 59` gets wrong, and it
+    // gets it wrong silently: 50, 51, 56, 57, 58 and 59 are not bed rows for that bank.
+    const narrow = bank({ low: { start: 52, count: 4 } });
+    expect(lowBankEnd(narrow)).toBe(55);
+    expect([51, 52, 53, 54, 55, 56, 80].map((l) => isLowBankLayer(narrow, l))).toEqual([
       false,
       true,
       true,
@@ -128,44 +150,44 @@ describe('isLowBankLayer — THE predicate the halves are told apart by', () => 
 
 describe('the two halves keep their OWN ticks, aliases and numbering', () => {
   it('a tick in one half says nothing about the same-numbered key in the other', () => {
-    const b = bank({ visibility: { '70': false }, low: { start: 1, count: 9, visibility: {} } });
-    expect(isLayerVisible(b, 70)).toBe(false);
-    // The bed half declares nothing about layer 1, and absent means visible — the operator
+    const b = bank({ visibility: { '80': false }, low: { start: 50, count: 10, visibility: {} } });
+    expect(isLayerVisible(b, 80)).toBe(false);
+    // The bed half declares nothing about layer 50, and absent means visible — the operator
     // half's record must not be consulted for it.
-    expect(isLayerVisible(b, 1)).toBe(true);
+    expect(isLayerVisible(b, 50)).toBe(true);
   });
 
   it('aliases are read from the half that owns the layer', () => {
     const b = bank({
-      aliases: { '79': 'CLOCK' },
-      low: { start: 1, count: 9, aliases: { '9': 'BED' } },
+      aliases: { '89': 'CLOCK' },
+      low: { start: 50, count: 10, aliases: { '59': 'BED' } },
     });
-    expect(layerAlias(b, 79)).toBe('CLOCK');
-    expect(layerAlias(b, 9)).toBe('BED');
-    expect(layerAlias(b, 8)).toBeUndefined();
+    expect(layerAlias(b, 89)).toBe('CLOCK');
+    expect(layerAlias(b, 59)).toBe('BED');
+    expect(layerAlias(b, 58)).toBeUndefined();
   });
 
   it('🔴 each half counts down from its OWN top, and beds are named BED', () => {
     const b = bank();
-    // Operator rows: 79 is `Layer 1`, as before the beds existed — unchanged, deliberately.
-    expect(bankPosition(b, 79)).toBe(1);
-    expect(defaultLayerAlias(b, 79)).toBe('Layer 1');
-    // Beds: 9 is `Bed 1`. Numbering them ON from the operator rows would make a bed's name
+    // Operator rows: 89 is `Layer 1`, as before the beds existed — unchanged, deliberately.
+    expect(bankPosition(b, 89)).toBe(1);
+    expect(defaultLayerAlias(b, 89)).toBe('Layer 1');
+    // Beds: 59 is `Bed 1`. Numbering them ON from the operator rows would make a bed's name
     // move whenever the operator bank's count changed.
-    expect(bankPosition(b, 9)).toBe(1);
-    expect(defaultLayerAlias(b, 9)).toBe('Bed 1');
-    expect(defaultLayerAlias(b, 1)).toBe('Bed 9');
+    expect(bankPosition(b, 59)).toBe(1);
+    expect(defaultLayerAlias(b, 59)).toBe('Bed 1');
+    expect(defaultLayerAlias(b, 50)).toBe('Bed 10');
   });
 });
 
 describe('fixedBankSlots — the UNION, which is what makes the shape cost nothing', () => {
   it('yields both halves, operator rows first', () => {
     const slots = fixedBankSlots(bank());
-    expect(slots).toHaveLength(19);
-    expect(slots[0]).toEqual({ channel: 1, layer: 70 });
-    expect(slots[9]).toEqual({ channel: 1, layer: 79 });
-    expect(slots[10]).toEqual({ channel: 1, layer: 1 });
-    expect(slots[18]).toEqual({ channel: 1, layer: 9 });
+    expect(slots).toHaveLength(20);
+    expect(slots[0]).toEqual({ channel: 1, layer: 80 });
+    expect(slots[9]).toEqual({ channel: 1, layer: 89 });
+    expect(slots[10]).toEqual({ channel: 1, layer: 50 });
+    expect(slots[19]).toEqual({ channel: 1, layer: 59 });
   });
 
   it('beds ride the bank’s channel — a bed and its plates are on one channel by construction', () => {
@@ -221,27 +243,27 @@ describe('the band must lie ABOVE the beds — disjointness is not enough', () =
 
   it('accepts the suggested band, which starts one layer above the default beds', () => {
     expect(() =>
-      validateSourceCatalog(catalog(10, 59), { fixedBank: bank(), reservedLayers: [] }),
+      validateSourceCatalog(catalog(60, 79), { fixedBank: bank(), reservedLayers: [] }),
     ).not.toThrow();
   });
 
   it('🔴 refuses a band that starts INSIDE the bed rows', () => {
     expect(() =>
-      validateSourceCatalog(catalog(5, 59), { fixedBank: bank(), reservedLayers: [] }),
+      validateSourceCatalog(catalog(55, 79), { fixedBank: bank(), reservedLayers: [] }),
     ).toThrow(/BELOW/);
   });
 
   it('🔴 refuses a band that is DISJOINT from the beds but sits BELOW them', () => {
-    // The case a plain overlap test would pass and this one must not: beds at 5–9, band at
-    // 1–3. Nothing collides, and every bed still draws OVER every plate — which is the one
-    // thing a bed may never do. Disjointness and strictly-below are different questions.
+    // The case a plain overlap test would pass and this one must not: beds at 55–59, band
+    // at 51–53. Nothing collides, and every bed still draws OVER every plate — which is the
+    // one thing a bed may never do. Disjointness and strictly-below are different questions.
     expect(() =>
-      validateSourceCatalog(catalog(1, 3), {
+      validateSourceCatalog(catalog(51, 53), {
         fixedBank: FixedLayerBankSchema.parse({
           channel: 1,
-          start: 70,
+          start: 80,
           count: 10,
-          low: { start: 5, count: 5 },
+          low: { start: 55, count: 5 },
         }),
         reservedLayers: [],
       }),

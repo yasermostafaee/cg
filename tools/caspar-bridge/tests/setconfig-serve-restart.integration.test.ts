@@ -6,7 +6,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { TemplateHttpServer, type TemplateServeOptions } from '../src/template-http-server.js';
-import { BOUNDED_STOP_MS, HEALTH_MS, track } from './support/harness.js';
+import { BOUNDED_STOP_MS, HEALTH_MS, TEST_LAYER_POLICY, track } from './support/harness.js';
 
 /**
  * fix-setconfig-serve-restart — R-010 regression (operator repro, live on
@@ -58,7 +58,16 @@ async function boot(options: { templateServer?: TemplateHttpServer } = {}): Prom
   const goodOsc = await freeUdpPort();
   const badOsc = await freeUdpPort(); // bindable but nothing pushes there — the operator's "wrong value"
   mock = await createMock({ amcpPort: 0, oscPort: goodOsc, oscHost: '127.0.0.1', oscHz: 30 });
-  runtime = new CasparRuntime(config(mock.amcpPort, goodOsc), {}, options);
+  // `LAYER-BANDS-16` — this suite loads through the DYNAMIC verb, and the product ships no
+  // dynamic ranges any more, so the deployment policy it tests against is stated here.
+  runtime = new CasparRuntime(
+    config(mock.amcpPort, goodOsc),
+    {},
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      ...options,
+    },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(

@@ -43,8 +43,8 @@ class NoopResizeObserver {
 (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = NoopResizeObserver;
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const ROW_A = 74;
-const ROW_B = 75;
+const ROW_A = 84;
+const ROW_B = 85;
 
 let root: Root | null = null;
 let host: HTMLDivElement | null = null;

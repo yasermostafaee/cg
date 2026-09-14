@@ -7,7 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import type { RetainedStackItem } from '@cg/shared-schema';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * The blind-tap hole in B-092's occupancy-aware restore, proven on real hardware
@@ -107,7 +107,11 @@ function status(r: CasparRuntime, itemId: string): string | undefined {
 
 /** Leave a LIVE producer on the probe slot, as a dead bridge session would. */
 async function orphanLiveProducer(m: MockHandle, oscPort: number): Promise<void> {
-  const r = new CasparRuntime(singleServer(m.amcpPort, oscPort));
+  const r = new CasparRuntime(
+    singleServer(m.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   r.start();
   await r.startServing();
@@ -136,7 +140,11 @@ it('THE REGRESSION: a BLIND tap over a LIVE layer sends NOTHING and says so hone
   // The fresh bridge binds an OSC port the mock never sends to: AMCP is fine,
   // the occupancy tap is deaf. This is the misconfigured-install shape.
   const deafPort = await freeUdpPort();
-  const r = new CasparRuntime(singleServer(mock.amcpPort, deafPort));
+  const r = new CasparRuntime(
+    singleServer(mock.amcpPort, deafPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
@@ -180,7 +188,11 @@ it('UNCHANGED: a HEARING tap over an occupied layer still adopts, sending nothin
   await orphanLiveProducer(mock, oscPort);
   const beforeRestore = (await recvLines(mock, tracePath)).length;
 
-  const r = new CasparRuntime(singleServer(mock.amcpPort, oscPort)); // OSC reaches it
+  const r = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  ); // OSC reaches it
   runtime = r;
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
@@ -214,7 +226,11 @@ it('UNCHANGED: a HEARING tap over a genuinely SILENT layer still re-ADDs as load
   expect(mock.layerState(SLOT)).toBeUndefined();
   const beforeRestore = (await recvLines(mock, tracePath)).length;
 
-  const r = new CasparRuntime(singleServer(amcpPort, oscPort));
+  const r = new CasparRuntime(
+    singleServer(amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
@@ -242,7 +258,10 @@ it('a blind restore RECOVERS: once OSC starts arriving, the sweep decides the it
 
   // Boot deaf, with a fast sweep so the retry is observable in test time.
   const deafPort = await freeUdpPort();
-  const r = new CasparRuntime(singleServer(mock.amcpPort, deafPort), undefined, { sweepMs: 300 });
+  const r = new CasparRuntime(singleServer(mock.amcpPort, deafPort), undefined, {
+    layerPolicy: TEST_LAYER_POLICY,
+    sweepMs: 300,
+  });
   runtime = r;
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
@@ -272,7 +291,10 @@ it('an operator action RETIRES a parked restore — a later decision cannot repl
   await orphanLiveProducer(mock, oscPort);
 
   const deafPort = await freeUdpPort();
-  const r = new CasparRuntime(singleServer(mock.amcpPort, deafPort), undefined, { sweepMs: 300 });
+  const r = new CasparRuntime(singleServer(mock.amcpPort, deafPort), undefined, {
+    layerPolicy: TEST_LAYER_POLICY,
+    sweepMs: 300,
+  });
   runtime = r;
   await r.startServing();
   r.templateImport(TEMPLATE, HTML);
@@ -307,7 +329,11 @@ it('while BLIND, no on-air claim is left confident — not even a non-restored i
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
 
   const deafPort = await freeUdpPort();
-  const r = new CasparRuntime(singleServer(mock.amcpPort, deafPort));
+  const r = new CasparRuntime(
+    singleServer(mock.amcpPort, deafPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   r.start();
   await r.startServing();

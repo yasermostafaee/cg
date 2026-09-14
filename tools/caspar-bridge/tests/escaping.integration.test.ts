@@ -4,7 +4,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import type { FieldValues } from '@cg/shared-schema';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-041 (take 2) — the full special-character matrix (`"`, `\` ×1–4, newline, tab,
@@ -79,7 +79,11 @@ const SPECIAL: FieldValues = {
 it('CG ADD + CG UPDATE carry the full B-041 matrix byte-exact (Persian + lists intact)', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
-  runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  runtime = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);

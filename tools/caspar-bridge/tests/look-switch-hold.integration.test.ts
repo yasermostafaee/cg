@@ -9,7 +9,7 @@ import type {
 } from '@cg/shared-ipc';
 import type { LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * 🔴 **`B-174` — THE MIXER HOLD ITSELF: its duration is real, its default derives from the
@@ -116,6 +116,7 @@ async function boot(
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 150,
       ...(lookMixerHoldMs !== undefined ? { lookMixerHoldMs } : {}),
       sourceCatalog: CATALOG,

@@ -48,10 +48,10 @@ let mock: MockHandle | null = null;
 let bridge: BridgeHandle | null = null;
 let tracePath: string | null = null;
 
-/** Bank 70–79 on channel 1; reservation 50–59 — the `clear-bank-scoped` layout. */
+/** Bank 70–79 on channel 1; reservation 30–39 — the `clear-bank-scoped` layout. */
 const BANK_START = 70;
 const BANK_COUNT = 10;
-const RESERVED = { ranges: [{ from: 50, to: 59 }] };
+const RESERVED = { ranges: [{ from: 30, to: 39 }] };
 const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>سلام</body></html>';
 
 afterEach(async () => {
@@ -106,7 +106,7 @@ async function boot(): Promise<BridgeHandle> {
     port: 0,
     connection: singleServer(mock.amcpPort, oscPort),
     reservedLayers: RESERVED,
-    fixedLayers: { channel: 1, low: { start: 1, count: 9 }, start: BANK_START, count: BANK_COUNT },
+    fixedLayers: { channel: 1, low: { start: 50, count: 9 }, start: BANK_START, count: BANK_COUNT },
     runtimeTuning: { sweepMs: 150, occupancyStaleMs: 800 },
   });
   bridge.runtime.templateImport(
@@ -201,7 +201,7 @@ it('a REFUSED bank clear reconciles NOTHING — the layer was never touched', as
   // A refusal is not a clear. Reconciling on one would knock a perfectly
   // resident producer's row back to `idle` and cost the operator their resume —
   // the exact inverse of the defect, produced by the fix for it.
-  expect((await b.runtime.clearBankLayer(1, 55)).ok).toBe(false); // reserved
+  expect((await b.runtime.clearBankLayer(1, 35)).ok).toBe(false); // reserved
   expect((await b.runtime.clearBankLayer(1, 69)).ok).toBe(false); // outside the bank
 
   expect(mock.layerState(slot)?.producer).toBe('html');

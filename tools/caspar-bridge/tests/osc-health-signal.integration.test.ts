@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-094 — the health snapshot must distinguish "this server is down" from "this
@@ -68,7 +68,11 @@ async function waitFor(cond: () => boolean, timeoutMs: number, what: string): Pr
 it('OSC flowing: health reports when the server was last heard', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
-  const r = new CasparRuntime(singleServer(mock.amcpPort, oscPort));
+  const r = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   r.start();
   await r.whenServerHealthy(HEALTH_MS);
@@ -85,7 +89,11 @@ it('AMCP answering but OSC never arrives: HEALTHY with no oscFreshAt — the mis
   const oscPort = await freeUdpPort();
   const deafPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
-  const r = new CasparRuntime(singleServer(mock.amcpPort, deafPort));
+  const r = new CasparRuntime(
+    singleServer(mock.amcpPort, deafPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   r.start();
   await r.startServing();
@@ -111,7 +119,11 @@ it('an idle-but-healthy server still counts as HEARD — no per-layer producers 
   // on every install between shows.
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
-  const r = new CasparRuntime(singleServer(mock.amcpPort, oscPort));
+  const r = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   r.start();
   await r.whenServerHealthy(HEALTH_MS);
@@ -129,7 +141,10 @@ it('the signal clears and re-publishes on its own once OSC starts arriving', asy
   const oscPort = await freeUdpPort();
   const deafPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
-  const r = new CasparRuntime(singleServer(mock.amcpPort, deafPort), undefined, { sweepMs: 300 });
+  const r = new CasparRuntime(singleServer(mock.amcpPort, deafPort), undefined, {
+    layerPolicy: TEST_LAYER_POLICY,
+    sweepMs: 300,
+  });
   runtime = r;
 
   const published: (string | undefined)[] = [];

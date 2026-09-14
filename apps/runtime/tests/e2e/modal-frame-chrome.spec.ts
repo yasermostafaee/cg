@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures/runtime.js';
+import { cssColour, expect, test } from './fixtures/runtime.js';
 import type { Page } from '@playwright/test';
 
 /**
@@ -206,16 +206,24 @@ test('§2(a)/§3 — a selected chip is the console selected BLUE, and the confi
     .poll(async () => commit.evaluate((b) => getComputedStyle(b).backgroundColor), {
       timeout: 4000,
     })
-    // `--r-danger-confirm-bg` (#684044). It was the solid amber; the owner reversed that
-    // recorded decision on 2026-09-13 — see the annotation in `controls.css`.
-    .toBe('rgb(104, 64, 68)');
+    /*
+      🔴 THE DELETION FAMILY, ground and ink together — reversed once on 2026-09-13 (solid
+      amber → `--r-danger-confirm-bg`) and again on 2026-09-14, when the owner put this dialog
+      beside Station setup's `Remove "sdi"?` and asked why one act wears two buttons. The
+      argument and the four measured ratios are in `controls.css`; it is read from the tokens
+      here so a later retune moves the assertion with the value.
+    */
+    .toBe(await cssColour(page, 'var(--r-setup-danger-bg)'));
   const paint = await commit.evaluate((b) => {
     const cs = getComputedStyle(b);
     return { ink: cs.color, weight: cs.fontWeight };
   });
-  // FILLED at a primary's weight, not the row buttons' quiet outline — white on #684044 is
-  // 8.73:1, guarded numerically in `messageContrast.test.ts`.
-  expect(paint.ink, 'the commit button is not carrying the fill ink').toBe('rgb(255, 255, 255)');
+  // FILLED at a primary's weight, not the row buttons' quiet outline. `#ffaaa7` on `#352224`
+  // is 8.22:1 — HIGHER than the white-on-`#684044` it replaces (8.73 at rest, 7.29 on hover;
+  // this pair is 8.22 and 7.02, and the ink alone on the old ground would have been 4.02).
+  expect(paint.ink, 'the commit button is not carrying the family ink').toBe(
+    await cssColour(page, 'var(--r-setup-danger-ink)'),
+  );
   expect(paint.weight, 'the commit button lost its primary weight').toBe('700');
 
   await page.getByRole('button', { name: 'Cancel' }).last().click();

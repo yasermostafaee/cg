@@ -13,7 +13,7 @@ import type {
 import type { RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { LiveLayerRecord } from '../src/live-layers.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * `add-multibox-audio` — **THE FOUR OPERATOR VERBS, AND THE ONE RULE THEY ALL HAVE TO
@@ -141,7 +141,12 @@ async function boot(): Promise<CasparRuntime> {
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 150, sourceCatalog: CATALOG, sourceAssignments: ASSIGNMENTS },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: 150,
+      sourceCatalog: CATALOG,
+      sourceAssignments: ASSIGNMENTS,
+    },
   );
   runtime = r;
   r.start();
@@ -594,6 +599,10 @@ describe('every verb’s intent survives a bridge blip, through retention', () =
           templateId: 'four-box',
           fields: {},
           state: 'on-air',
+          // `LAYER-BANDS-16` — the COORDINATE, which a browser retains and which
+          // `#slotForRestore` now honours instead of allocating a fresh one. Without it the
+          // restore is reported as `not-declared` and the intent under test never comes back.
+          ...(published?.slot !== undefined && { slot: published.slot }),
           ...(published?.plateVolumes !== undefined && { plateVolumes: published.plateVolumes }),
         },
       ];
@@ -602,7 +611,12 @@ describe('every verb’s intent survives a bridge blip, through retention', () =
       const fresh = new CasparRuntime(
         singleServer(mock?.amcpPort ?? 0, await freeUdpPort()),
         {},
-        { sweepMs: 150, sourceCatalog: CATALOG, sourceAssignments: ASSIGNMENTS },
+        {
+          layerPolicy: TEST_LAYER_POLICY,
+          sweepMs: 150,
+          sourceCatalog: CATALOG,
+          sourceAssignments: ASSIGNMENTS,
+        },
       );
       runtime = fresh;
       fresh.start();

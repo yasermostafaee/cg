@@ -16,7 +16,7 @@ import { createBridge, type BridgeHandle } from '../src/index.js';
  * The bank a station gets when its fixed-layers file is ABSENT used to be no
  * bank at all, so a fresh machine showed an empty Layers panel and an old
  * machine showed whatever its file last said — on 2026-08-01 that was a
- * four-layer 70–73 bank written before the thirty-layer decision, on one
+ * four-layer 80–83 bank written before the whole-band decision, on one
  * machine and not the other, with nothing anywhere announcing the difference.
  *
  * These boot against a DEAD CasparCG (unreachable AMCP, ephemeral OSC bind):
@@ -57,7 +57,7 @@ function visibleLayers(bank: FixedLayerBank): number[] {
   return out;
 }
 
-it('no config file: the station comes up on channel 1, layers 70–99, thirty rows, top five ticked', async () => {
+it('no config file: the station comes up on channel 1, layers 80–99, twenty rows, top five ticked', async () => {
   const fixedLayersPath = path.join(freshConfigDir(), 'bridge-fixed-layers.json');
   expect(fs.existsSync(fixedLayersPath)).toBe(false);
 
@@ -71,18 +71,19 @@ it('no config file: the station comes up on channel 1, layers 70–99, thirty ro
   expect(bank).not.toBeNull();
   if (bank === null) throw new Error('no bank');
   expect(bank.channel).toBe(1);
-  expect(bank.start).toBe(70);
-  expect(bank.count).toBe(30);
+  expect(bank.start).toBe(80);
+  expect(bank.count).toBe(20);
   expect(visibleLayers(bank)).toEqual([95, 96, 97, 98, 99]);
 
-  // All thirty are FENCED from automatic allocation, not just the five shown —
+  // All twenty are FENCED from automatic allocation, not just the five shown —
   // fencing derives from start/count, never from the ticks.
   const slots = bridge.runtime.fixedSlots();
-  // Thirty operator rows plus the nine BED rows the default bank also declares
-  // (`single-clock-look-switch`) — both halves fenced, for the same reason.
-  expect(slots).toHaveLength(39);
-  expect(slots[0]).toEqual({ channel: 1, layer: 70 });
-  expect(slots[29]).toEqual({ channel: 1, layer: 99 });
+  // Twenty operator rows plus the TEN bed rows the default bank also declares
+  // (`single-clock-look-switch`) — both halves fenced, for the same reason. The default
+  // declares each band WHOLE, so the two counts are the bands' own sizes.
+  expect(slots).toHaveLength(30);
+  expect(slots[0]).toEqual({ channel: 1, layer: 80 });
+  expect(slots[19]).toEqual({ channel: 1, layer: 99 });
 
   // Resolving a default must not WRITE one. The file still records a deviation
   // from the default; a bridge that persisted the default on boot would make
@@ -91,14 +92,14 @@ it('no config file: the station comes up on channel 1, layers 70–99, thirty ro
   expect(fs.existsSync(fixedLayersPath)).toBe(false);
 });
 
-it('a config file still wins: a station that declared 70–73 gets 70–73, not the default', async () => {
+it('a config file still wins: a station that declared 80–83 gets 80–83, not the default', async () => {
   const fixedLayersPath = path.join(freshConfigDir(), 'bridge-fixed-layers.json');
   const declared: FixedLayerBank = {
     channel: 1,
-    low: { start: 1, count: 9 },
-    start: 70,
+    low: { start: 50, count: 9 },
+    start: 80,
     count: 4,
-    aliases: { '70': 'logo22', '71': 'clock' },
+    aliases: { '80': 'logo22', '81': 'clock' },
   };
   fs.writeFileSync(fixedLayersPath, JSON.stringify(declared, null, 2), 'utf8');
 
@@ -121,7 +122,7 @@ it('a deliberately narrow bank is not widened by the default, ticks and all', as
   // field the default has an opinion about is set to something else here.
   const declared: FixedLayerBank = {
     channel: 2,
-    low: { start: 1, count: 9 },
+    low: { start: 50, count: 9 },
     start: 80,
     count: 2,
     visibility: { '80': false, '81': true },
@@ -139,7 +140,7 @@ it('a deliberately narrow bank is not widened by the default, ticks and all', as
     { channel: 2, layer: 81 },
     // The BED rows ride the same channel as the bank that declares them, and the file
     // said nothing about them — so they come from the schema default, on channel 2.
-    ...Array.from({ length: 9 }, (_, i) => ({ channel: 2, layer: i + 1 })),
+    ...Array.from({ length: 9 }, (_, i) => ({ channel: 2, layer: i + 50 })),
   ]);
 });
 

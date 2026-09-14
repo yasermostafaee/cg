@@ -13,7 +13,7 @@ import type {
 } from '@cg/shared-ipc';
 import type { LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * 🔴 **`RUNTIME-REDESIGN-01` §4 — A LOOK SWITCH PRESERVES THE SOURCE-TO-FRAME RELATIONSHIP.
@@ -159,6 +159,7 @@ async function boot(): Promise<CasparRuntime> {
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 150,
       lookMixerHoldMs: 0,
       sourceCatalog: catalog(),

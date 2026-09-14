@@ -223,7 +223,7 @@ describe('§2 — each role resolves to exactly ONE treatment', () => {
 describe('§3 — a refusal is pinned beside the action row, never appended to the scroll', () => {
   const BANK: FixedLayerBank = {
     channel: 1,
-    low: { start: 1, count: 9 },
+    low: { start: 50, count: 9 },
     // THIRTY layers, so the list genuinely scrolls and a refusal about a row far
     // down is genuinely off-screen when the list is at the top. Four would not
     // reproduce the operator's situation at all.

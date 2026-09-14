@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TEST_LAYER_POLICY } from './support/harness.js';
 import * as ipc from '@cg/shared-ipc';
 import { buildRoutes } from '../src/bridge.js';
 import { CasparRuntime } from '../src/caspar-runtime.js';
@@ -33,11 +34,15 @@ const routedNames = (): string[] => {
   // buildRoutes() only wires handlers onto the backing runtime — it neither connects
   // nor binds anything, so an unstarted CasparRuntime is enough and this test opens
   // no sockets.
-  const runtime = new CasparRuntime({
-    servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
-    strategy: 'mirror-sync',
-    autoFailoverEnabled: false,
-  });
+  const runtime = new CasparRuntime(
+    {
+      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+      strategy: 'mirror-sync',
+      autoFailoverEnabled: false,
+    },
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   return [...buildRoutes(runtime).keys()].sort();
 };
 

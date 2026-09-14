@@ -1,5 +1,4 @@
-import type { Page } from '@playwright/test';
-import { expect, test } from './fixtures/runtime.js';
+import { cssColour, expect, test } from './fixtures/runtime.js';
 
 /**
  * 🔴 `RUNTIME-REDESIGN-01` §3 — **THE LAYERS TABLE, MEASURED IN A REAL ENGINE.**
@@ -344,19 +343,5 @@ test('§3 — the top bar’s STOP ALL and CLEAR ALL hover to their own verb col
   await page.mouse.move(0, 0);
 });
 
-/**
- * Resolve a token's declared value (`#1b2532`, `rgb(30 38 51)`, `rgba(…)`) to the exact
- * string `getComputedStyle(...).backgroundColor` reports, by letting the browser do the
- * normalising. Comparing strings this way keeps the assertion on IDENTITY with the token
- * rather than on a parser here agreeing with Chromium's.
- */
-async function cssColour(page: Page, declared: string): Promise<string> {
-  return page.evaluate((value) => {
-    const probe = document.createElement('div');
-    probe.style.backgroundColor = value;
-    document.body.appendChild(probe);
-    const out = getComputedStyle(probe).backgroundColor;
-    probe.remove();
-    return out;
-  }, declared);
-}
+/* `cssColour` used to live here. It moved to `fixtures/runtime.ts` when a second spec needed
+   it — see the note there for why it is not copied. */

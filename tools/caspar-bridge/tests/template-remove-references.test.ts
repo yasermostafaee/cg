@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { TEST_LAYER_POLICY } from './support/harness.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 
@@ -27,7 +28,7 @@ const NOBODY: ConnectionConfig = {
 };
 const BANK = {
   channel: 1,
-  low: { start: 1, count: 9 },
+  low: { start: 50, count: 9 },
   start: 70,
   count: 4,
   aliases: { '72': 'زیرنویس' },
@@ -41,7 +42,11 @@ const FIXED_SLOTS = [
 const TEMPLATE: TemplateInfo = { templateId: 'tpl', templateType: 'lower-third', fields: [] };
 
 function boot(): CasparRuntime {
-  const r = new CasparRuntime(NOBODY, {}, { fixedSlots: FIXED_SLOTS, fixedBank: BANK });
+  const r = new CasparRuntime(
+    NOBODY,
+    {},
+    { layerPolicy: TEST_LAYER_POLICY, fixedSlots: FIXED_SLOTS, fixedBank: BANK },
+  );
   runtime = r;
   r.templateImport(TEMPLATE, '<html></html>');
   return r;

@@ -32,7 +32,7 @@ const BANK: FixedLayerBank = {
   start: 70,
   count: 30,
   aliases: { '98': 'زیرنویس اصلی', '99': 'لوگوی اصلی' },
-  low: { start: 1, count: 9 },
+  low: { start: 50, count: 9 },
 };
 
 const THREE_FRAMES: TemplateInfo = {
@@ -56,11 +56,11 @@ const REFUSED_ON_BED_1: AuditEntry = {
   action: 'take',
   itemId: 'item-9e064614-8e46-483a-82fe-0b750598cf88',
   templateId: THREE_FRAMES.templateId,
-  slot: { channel: 1, layer: 9, server: 'primary' },
+  slot: { channel: 1, layer: 58, server: 'primary' },
   outcome: 'failed',
   errorCode: 'amcp-404',
   command:
-    'CG 1-9 ADD 0 "http://192.168.21.93:64373/template/e506e319-6e68-4603-a5f4-290b21616250?cw=1920&ch=1080" 0 "…"',
+    'CG 1-58 ADD 0 "http://192.168.21.93:64373/template/e506e319-6e68-4603-a5f4-290b21616250?cw=1920&ch=1080" 0 "…"',
 };
 const LOGO_ON_LAYER_90: AuditEntry = {
   ts: '2026-09-04T12:18:47.561Z',
@@ -86,7 +86,7 @@ const YESTERDAY: AuditEntry = {
   action: 'out',
   itemId: 'item-335557e4-0000-4000-8000-000000000000',
   templateId: THREE_FRAMES.templateId,
-  slot: { channel: 1, layer: 9, server: 'primary' },
+  slot: { channel: 1, layer: 58, server: 'primary' },
   outcome: 'ok',
 };
 
@@ -272,7 +272,7 @@ describe('B-209 — a refused take shows the line that was refused', () => {
     await render();
     const row = rows()[0];
     expect(row?.querySelector('[data-audit-error-code]')?.textContent).toBe('amcp-404');
-    expect(row?.querySelector('[data-audit-command]')?.textContent).toContain('CG 1-9 ADD 0');
+    expect(row?.querySelector('[data-audit-command]')?.textContent).toContain('CG 1-58 ADD 0');
     expect(row?.querySelector('[data-audit-command]')?.textContent).toContain(':64373/template/');
   });
 

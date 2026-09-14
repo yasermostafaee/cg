@@ -9,7 +9,7 @@ import {
 } from '@cg/shared-ipc';
 import { buildRoutes, createBridge, refusedWhileLocked, type BridgeHandle } from '../src/index.js';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { track } from './support/harness.js';
+import { track, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * `B-229`, the half a renderer cannot do — **THE EXECUTING SIDE REFUSES WHILE LOCKED.**
@@ -237,11 +237,15 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
    * to add it to this list deliberately — which is a decision with a diff, not an omission.
    */
   it('THE CENSUS — every route is classified, and only these are reachable while locked', () => {
-    const runtime = new CasparRuntime({
-      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
-      strategy: 'mirror-sync',
-      autoFailoverEnabled: false,
-    });
+    const runtime = new CasparRuntime(
+      {
+        servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: false,
+      },
+      {},
+      { layerPolicy: TEST_LAYER_POLICY },
+    );
     // `buildRoutes` only wires handlers onto the backing runtime — it binds nothing, so an
     // unstarted runtime is enough and this spec opens no sockets.
     const routes = buildRoutes(runtime);
@@ -297,11 +301,15 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
     // The one channel carrying both an operator act and machinery. An operator's real import
     // is a catalogue change and is refused; `#resync`'s re-deliveries are marked and pass, so
     // a browser reloading against a locked bridge still reconciles its library.
-    const runtime = new CasparRuntime({
-      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
-      strategy: 'mirror-sync',
-      autoFailoverEnabled: false,
-    });
+    const runtime = new CasparRuntime(
+      {
+        servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+        strategy: 'mirror-sync',
+        autoFailoverEnabled: false,
+      },
+      {},
+      { layerPolicy: TEST_LAYER_POLICY },
+    );
     const route = buildRoutes(runtime).get('templates.import');
     if (route === undefined) throw new Error('templates.import is not routed');
 

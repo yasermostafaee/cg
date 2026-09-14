@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-028 part B — CONFIRMING the owner's observation, from the bridge's own
@@ -66,7 +66,7 @@ async function boot(reservedLayers: readonly number[]): Promise<CasparRuntime> {
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 150, occupancyStaleMs: 800, reservedLayers },
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: 150, occupancyStaleMs: 800, reservedLayers },
   );
   runtime.start();
   await runtime.startServing();
@@ -111,11 +111,12 @@ it('the EXACT-SLOT path is unaffected — R-028 rows load onto their own declare
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 150,
       occupancyStaleMs: 800,
       reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69],
       fixedSlots: [70, 71].map((layer) => ({ channel: 1, layer })),
-      fixedBank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 2 },
+      fixedBank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 2 },
     },
   );
   runtime.start();

@@ -101,7 +101,7 @@ it('T16 — a valid bank: fixedSlots() matches; a foreign producer on a bank lay
   bridge = await createBridge({
     port: 0,
     connection: singleServer(mock.amcpPort, oscPort),
-    fixedLayers: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 },
+    fixedLayers: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 10 },
     runtimeTuning: { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS },
   });
   await bridge.runtime.whenServerHealthy(HEALTH_MS);
@@ -152,8 +152,12 @@ it('T17 — a conflicting bank throws BEFORE binding, and no port is left listen
     createBridge({
       port: wsPort,
       connection: singleServer(mock.amcpPort, oscPort),
-      // 65–74 overlaps the 'custom' 60–69 dynamic range → refused at boot.
-      fixedLayers: { channel: 1, low: { start: 1, count: 9 }, start: 65, count: 10 },
+      // `LAYER-BANDS-16` — the conflict is now stated by the DEPLOYMENT, because the
+      // product ships no dynamic ranges of its own: an empty policy makes `overlaps-policy`
+      // vacuous, and a fixture that relied on the old built-in `custom` range would assert
+      // a refusal that can no longer happen. 65–74 overlaps the declared range below.
+      layerPolicy: { custom: [60, 69] },
+      fixedLayers: { channel: 1, low: { start: 50, count: 9 }, start: 65, count: 10 },
     }),
   ).rejects.toThrow(/overlaps/);
 

@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-038 Phase 3 — the regression that hid B-038, closed end-to-end. The bridge
@@ -61,7 +61,11 @@ const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>سل
 it('serves the template URL, CG ADDs it with real Persian fields, and CG UPDATE carries data', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
-  runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  runtime = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
@@ -105,7 +109,11 @@ it('serves the template URL, CG ADDs it with real Persian fields, and CG UPDATE 
 it('a load of an UNREGISTERED template 404s (the bridge serves nothing for it)', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
-  runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  runtime = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.startServing();
   await runtime.whenServerHealthy(HEALTH_MS);

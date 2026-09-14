@@ -1,59 +1,86 @@
 import { describe, expect, it } from 'vitest';
+import { TemplateTypeSchema } from '@cg/shared-schema';
+import { FIRST_ALLOCATABLE_LAYER } from '@cg/shared-ipc';
 import {
+  assertPolicyAboveFloor,
   DEFAULT_LAYER_POLICY,
   FixedPinnedConflictError,
   LayerManager,
   OutOfLayersError,
   UnknownTemplateTypeError,
+  type LayerPolicy,
 } from '../src/index.js';
+
+/**
+ * 🔴 **A TEST POLICY, and it is deliberately NOT the product map (`LAYER-BANDS-16`).**
+ *
+ * `DEFAULT_LAYER_POLICY` is EMPTY since the 2026-09-14 re-cut — placement is decided by a
+ * graphic's ROLE band now, not by its `templateType` — so the mechanism tests below bring
+ * their own ranges. They sit at 110+ on purpose: ABOVE the product's whole map, plainly a
+ * fixture rather than a shipped number, and above `FIRST_ALLOCATABLE_LAYER`, so nothing in
+ * this tree models allocating on the layers left free for the playout server. They were
+ * 10-69 before, which is now exactly that free span.
+ *
+ * What these tests exercise is `allocate()`'s arithmetic — lowest-free, per-type ranges,
+ * exhaustion, the pinned / fixed / reserved fences. None of it depends on which decades the
+ * ranges name, which is why moving them costs the coverage nothing.
+ */
+const TEST_POLICY: LayerPolicy = {
+  'lower-third': [110, 119],
+  ticker: [120, 129],
+  'breaking-news': [130, 139],
+  'logo-bug': [140, 149],
+  fullscreen: [150, 159],
+  custom: [160, 169],
+};
 
 describe('LayerManager', () => {
   it('allocates the lowest free layer in the policy range', () => {
-    const lm = new LayerManager();
+    const lm = new LayerManager({ policy: TEST_POLICY });
     const a = lm.allocate('lower-third', 1);
-    expect(a).toEqual({ channel: 1, layer: 10 });
+    expect(a).toEqual({ channel: 1, layer: 110 });
     const b = lm.allocate('lower-third', 1);
-    expect(b).toEqual({ channel: 1, layer: 11 });
+    expect(b).toEqual({ channel: 1, layer: 111 });
   });
 
   it('respects per-templateType ranges', () => {
-    const lm = new LayerManager();
-    expect(lm.allocate('ticker', 1)).toEqual({ channel: 1, layer: 20 });
-    expect(lm.allocate('breaking-news', 1)).toEqual({ channel: 1, layer: 30 });
-    expect(lm.allocate('fullscreen', 1)).toEqual({ channel: 1, layer: 50 });
+    const lm = new LayerManager({ policy: TEST_POLICY });
+    expect(lm.allocate('ticker', 1)).toEqual({ channel: 1, layer: 120 });
+    expect(lm.allocate('breaking-news', 1)).toEqual({ channel: 1, layer: 130 });
+    expect(lm.allocate('fullscreen', 1)).toEqual({ channel: 1, layer: 150 });
   });
 
   it('throws OutOfLayersError when the range is exhausted', () => {
-    const lm = new LayerManager();
-    const [low, high] = DEFAULT_LAYER_POLICY['lower-third']!;
+    const lm = new LayerManager({ policy: TEST_POLICY });
+    const [low, high] = TEST_POLICY['lower-third']!;
     for (let i = low; i <= high; i++) lm.allocate('lower-third', 1);
     expect(() => lm.allocate('lower-third', 1)).toThrow(OutOfLayersError);
   });
 
   it('emits out-of-layers when exhausted', () => {
-    const lm = new LayerManager();
+    const lm = new LayerManager({ policy: TEST_POLICY });
     const events: { templateType: string; channel: number }[] = [];
     lm.on('out-of-layers', (templateType, channel) => events.push({ templateType, channel }));
-    const [low, high] = DEFAULT_LAYER_POLICY['lower-third']!;
+    const [low, high] = TEST_POLICY['lower-third']!;
     for (let i = low; i <= high; i++) lm.allocate('lower-third', 1);
     expect(() => lm.allocate('lower-third', 1)).toThrow();
     expect(events).toEqual([{ templateType: 'lower-third', channel: 1 }]);
   });
 
   it('throws UnknownTemplateTypeError for a templateType not in the policy', () => {
-    const lm = new LayerManager();
+    const lm = new LayerManager({ policy: TEST_POLICY });
     expect(() => lm.allocate('imaginary', 1)).toThrow(UnknownTemplateTypeError);
   });
 
   it('deallocate() returns the slot to the free pool', () => {
-    const lm = new LayerManager();
+    const lm = new LayerManager({ policy: TEST_POLICY });
     const a = lm.allocate('lower-third', 1);
     lm.deallocate(a);
     expect(lm.allocate('lower-third', 1)).toEqual(a);
   });
 
   it('emits released on deallocate', () => {
-    const lm = new LayerManager();
+    const lm = new LayerManager({ policy: TEST_POLICY });
     const slot = lm.allocate('lower-third', 1);
     let released: typeof slot | null = null;
     lm.on('released', (s) => (released = s));
@@ -62,33 +89,33 @@ describe('LayerManager', () => {
   });
 
   it('keeps separate allocations per channel', () => {
-    const lm = new LayerManager();
-    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 10 });
-    expect(lm.allocate('lower-third', 2)).toEqual({ channel: 2, layer: 10 });
+    const lm = new LayerManager({ policy: TEST_POLICY });
+    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 110 });
+    expect(lm.allocate('lower-third', 2)).toEqual({ channel: 2, layer: 110 });
   });
 
   it('pinned slots are reported and not allocated by normal flow', () => {
     /*
-      The pin sits on the FIRST layer of the `logo-bug` range, which is what makes the
-      last assertion mean anything: the allocator has to skip it and hand out the next
-      one. The pin used to be layer 95 and the expected allocation 90, back when the
-      range was 90–99; the range moved to 40–49 (the operator's candidate bank took
-      70–99), so a pin at 95 would now be outside the range entirely and the allocator
-      would return 40 without ever having skipped anything.
+      The pin sits on the FIRST layer of the fixture's `logo-bug` range, which is what
+      makes the last assertion mean anything: the allocator has to skip it and hand out
+      the next one. A pin outside the range would leave the allocator returning the
+      range's first layer without ever having skipped anything.
     */
     const lm = new LayerManager({
-      pinned: [{ channel: 1, layer: 40, templateId: 'net-logo-bug', autoStart: true }],
+      policy: TEST_POLICY,
+      pinned: [{ channel: 1, layer: 140, templateId: 'net-logo-bug', autoStart: true }],
     });
-    expect(lm.isPinned({ channel: 1, layer: 40 })).toBe(true);
+    expect(lm.isPinned({ channel: 1, layer: 140 })).toBe(true);
     expect(lm.pinnedSlots()).toEqual([
-      { channel: 1, layer: 40, templateId: 'net-logo-bug', autoStart: true },
+      { channel: 1, layer: 140, templateId: 'net-logo-bug', autoStart: true },
     ]);
     // Allocator skips the pinned slot when looking for free space.
-    expect(lm.allocate('logo-bug', 1)).toEqual({ channel: 1, layer: 41 });
+    expect(lm.allocate('logo-bug', 1)).toEqual({ channel: 1, layer: 141 });
   });
 
   it('deallocate() on a pinned slot is a no-op', () => {
     const lm = new LayerManager({
+      policy: TEST_POLICY,
       pinned: [{ channel: 1, layer: 95, templateId: 'net-logo-bug', autoStart: true }],
     });
     lm.deallocate({ channel: 1, layer: 95 });
@@ -96,16 +123,16 @@ describe('LayerManager', () => {
   });
 
   it('observe() raises collision when OSC reports an unexpected producer', () => {
-    const lm = new LayerManager();
+    const lm = new LayerManager({ policy: TEST_POLICY });
     let collision: { slot: { channel: number; layer: number }; producer: string } | null = null;
     lm.on('collision', (slot, producer) => (collision = { slot, producer }));
-    const ok = lm.observe({ channel: 1, layer: 15 }, 'html');
+    const ok = lm.observe({ channel: 1, layer: 115 }, 'html');
     expect(ok).toBe(false);
-    expect(collision).toEqual({ slot: { channel: 1, layer: 15 }, producer: 'html' });
+    expect(collision).toEqual({ slot: { channel: 1, layer: 115 }, producer: 'html' });
   });
 
   it('observe() matches an allocated slot to OSC truth without emitting collision', () => {
-    const lm = new LayerManager();
+    const lm = new LayerManager({ policy: TEST_POLICY });
     let collided = false;
     lm.on('collision', () => (collided = true));
     const slot = lm.allocate('lower-third', 1);
@@ -114,26 +141,27 @@ describe('LayerManager', () => {
   });
 
   it('observe(empty) returns true even when previously allocated (caller deallocates)', () => {
-    const lm = new LayerManager();
+    const lm = new LayerManager({ policy: TEST_POLICY });
     const slot = lm.allocate('lower-third', 1);
     expect(lm.observe(slot, 'empty')).toBe(true);
   });
 
   it('observe(empty) ignores a pinned slot showing empty', () => {
     const lm = new LayerManager({
+      policy: TEST_POLICY,
       pinned: [{ channel: 1, layer: 95, templateId: 'logo', autoStart: true }],
     });
     expect(lm.observe({ channel: 1, layer: 95 }, 'empty')).toBe(true);
   });
 
   it('quarantine() marks a slot occupied so subsequent allocate() skips it', () => {
-    const lm = new LayerManager();
-    lm.quarantine({ channel: 1, layer: 10 });
-    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 11 });
+    const lm = new LayerManager({ policy: TEST_POLICY });
+    lm.quarantine({ channel: 1, layer: 110 });
+    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 111 });
   });
 
   it('allocations() lists every allocated (non-pinned) slot', () => {
-    const lm = new LayerManager();
+    const lm = new LayerManager({ policy: TEST_POLICY });
     const a = lm.allocate('lower-third', 1);
     const b = lm.allocate('ticker', 1);
     const list = lm.allocations();
@@ -143,12 +171,13 @@ describe('LayerManager', () => {
 
   it('isAllocated() reports correctly across pinned + allocated + free', () => {
     const lm = new LayerManager({
+      policy: TEST_POLICY,
       pinned: [{ channel: 1, layer: 95, templateId: 'logo', autoStart: true }],
     });
     const slot = lm.allocate('lower-third', 1);
     expect(lm.isAllocated({ channel: 1, layer: 95 })).toBe(true);
     expect(lm.isAllocated(slot)).toBe(true);
-    expect(lm.isAllocated({ channel: 1, layer: 12 })).toBe(false);
+    expect(lm.isAllocated({ channel: 1, layer: 112 })).toBe(false);
   });
 });
 
@@ -160,124 +189,125 @@ describe('LayerManager', () => {
  */
 describe('LayerManager — fixed operator slots (R-021)', () => {
   const FIXED = [
-    { channel: 1, layer: 12 },
-    { channel: 1, layer: 13 },
+    { channel: 1, layer: 112 },
+    { channel: 1, layer: 113 },
   ] as const;
 
   it('T1 — allocate() never returns a fixed slot, even with the range otherwise exhausted', () => {
-    // Deliberately places the fixed slots INSIDE the lower-third policy range
-    // (10–19), to prove the FENCING mechanism independently of the
+    // Deliberately places the fixed slots INSIDE the lower-third fixture range
+    // (110–119), to prove the FENCING mechanism independently of the
     // config-level disjointness prohibition (which forbids this arrangement
     // for a real install — the validator's tests cover that layer).
-    const lm = new LayerManager({ fixed: [...FIXED] });
+    const lm = new LayerManager({ policy: TEST_POLICY, fixed: [...FIXED] });
     const got: number[] = [];
     for (let i = 0; i < 8; i++) got.push(lm.allocate('lower-third', 1).layer);
-    expect(got).toEqual([10, 11, 14, 15, 16, 17, 18, 19]); // 12/13 skipped
+    expect(got).toEqual([110, 111, 114, 115, 116, 117, 118, 119]); // 112/113 skipped
     expect(() => lm.allocate('lower-third', 1)).toThrow(OutOfLayersError);
   });
 
   it('T2 — deallocate() never frees a fixed slot', () => {
-    const lm = new LayerManager({ fixed: [...FIXED] });
-    lm.deallocate({ channel: 1, layer: 12 });
-    expect(lm.isAllocated({ channel: 1, layer: 12 })).toBe(true);
-    expect(lm.isFixed({ channel: 1, layer: 12 })).toBe(true);
+    const lm = new LayerManager({ policy: TEST_POLICY, fixed: [...FIXED] });
+    lm.deallocate({ channel: 1, layer: 112 });
+    expect(lm.isAllocated({ channel: 1, layer: 112 })).toBe(true);
+    expect(lm.isFixed({ channel: 1, layer: 112 })).toBe(true);
   });
 
   it('T3 — bindFixed/unbindFixed round-trip; double-bind and non-fixed bind refuse; fence survives unbind', () => {
-    const lm = new LayerManager({ fixed: [...FIXED] });
-    const slot = { channel: 1, layer: 12 };
+    const lm = new LayerManager({ policy: TEST_POLICY, fixed: [...FIXED] });
+    const slot = { channel: 1, layer: 112 };
 
     expect(lm.bindFixed(slot, 'clock')).toBe(true);
     expect(lm.fixedBinding(slot)).toBe('clock');
     expect(lm.bindFixed(slot, 'other')).toBe(false); // already bound
-    expect(lm.bindFixed({ channel: 1, layer: 40 }, 'clock')).toBe(false); // not fixed
+    expect(lm.bindFixed({ channel: 1, layer: 140 }, 'clock')).toBe(false); // not fixed
 
     lm.unbindFixed(slot);
     expect(lm.fixedBinding(slot)).toBeUndefined();
     // Still fenced: dynamic allocation cannot land on it after unbind.
-    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 10 });
-    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 11 });
-    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 14 });
+    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 110 });
+    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 111 });
+    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 114 });
   });
 
   it('T3b — bindFixed emits allocated; unbindFixed emits released', () => {
-    const lm = new LayerManager({ fixed: [...FIXED] });
+    const lm = new LayerManager({ policy: TEST_POLICY, fixed: [...FIXED] });
     const events: string[] = [];
     lm.on('allocated', (s, t) => events.push(`alloc:${String(s.layer)}:${t}`));
     lm.on('released', (s) => events.push(`rel:${String(s.layer)}`));
-    lm.bindFixed({ channel: 1, layer: 12 }, 'clock');
-    lm.unbindFixed({ channel: 1, layer: 12 });
-    expect(events).toEqual(['alloc:12:clock', 'rel:12']);
+    lm.bindFixed({ channel: 1, layer: 112 }, 'clock');
+    lm.unbindFixed({ channel: 1, layer: 112 });
+    expect(events).toEqual(['alloc:112:clock', 'rel:112']);
   });
 
   it('T4 — reserve() on a fixed slot returns false (bindFixed is the exact-slot path)', () => {
-    const lm = new LayerManager({ fixed: [...FIXED] });
-    expect(lm.reserve({ channel: 1, layer: 12 }, 'clock')).toBe(false);
+    const lm = new LayerManager({ policy: TEST_POLICY, fixed: [...FIXED] });
+    expect(lm.reserve({ channel: 1, layer: 112 }, 'clock')).toBe(false);
   });
 
   it('T5 — unbound fixed slots are absent from allocations(); bound ones present with their type', () => {
-    const lm = new LayerManager({ fixed: [...FIXED] });
+    const lm = new LayerManager({ policy: TEST_POLICY, fixed: [...FIXED] });
     expect(lm.allocations()).toEqual([]); // fenced-but-unbound is not an allocation
-    lm.bindFixed({ channel: 1, layer: 13 }, 'clock');
-    expect(lm.allocations()).toEqual([{ slot: { channel: 1, layer: 13 }, templateType: 'clock' }]);
+    lm.bindFixed({ channel: 1, layer: 113 }, 'clock');
+    expect(lm.allocations()).toEqual([{ slot: { channel: 1, layer: 113 }, templateType: 'clock' }]);
     expect(lm.fixedSlots()).toEqual([...FIXED]);
   });
 
   it('T6 — quarantine() on a fixed slot is a no-op; observe(fixed, non-html) emits no collision', () => {
-    const lm = new LayerManager({ fixed: [...FIXED] });
+    const lm = new LayerManager({ policy: TEST_POLICY, fixed: [...FIXED] });
     let collided = false;
     lm.on('collision', () => (collided = true));
 
-    lm.quarantine({ channel: 1, layer: 12 });
+    lm.quarantine({ channel: 1, layer: 112 });
     expect(lm.quarantined()).toEqual([]);
 
-    expect(lm.observe({ channel: 1, layer: 12 }, 'decklink')).toBe(true);
+    expect(lm.observe({ channel: 1, layer: 112 }, 'decklink')).toBe(true);
     expect(collided).toBe(false);
     expect(lm.quarantined()).toEqual([]);
     // bindFixed still works after the foreign observation — the reason the
     // quarantine no-op exists.
-    expect(lm.bindFixed({ channel: 1, layer: 12 }, 'clock')).toBe(true);
+    expect(lm.bindFixed({ channel: 1, layer: 112 }, 'clock')).toBe(true);
   });
 
   it('S3 — applyFixed: adds fenced, releases removed, refuses removing a BOUND slot, pinned untouched', () => {
     const lm = new LayerManager({
+      policy: TEST_POLICY,
       pinned: [{ channel: 1, layer: 95, templateId: 'logo', autoStart: true }],
       fixed: [
-        { channel: 1, layer: 12 },
-        { channel: 1, layer: 13 },
+        { channel: 1, layer: 112 },
+        { channel: 1, layer: 113 },
       ],
     });
 
     // Grow: 14 joins the bank, immediately fenced from allocation.
     lm.applyFixed([
-      { channel: 1, layer: 12 },
-      { channel: 1, layer: 13 },
-      { channel: 1, layer: 14 },
+      { channel: 1, layer: 112 },
+      { channel: 1, layer: 113 },
+      { channel: 1, layer: 114 },
     ]);
-    expect(lm.isFixed({ channel: 1, layer: 14 })).toBe(true);
+    expect(lm.isFixed({ channel: 1, layer: 114 })).toBe(true);
     const got: number[] = [];
     for (let i = 0; i < 7; i++) got.push(lm.allocate('lower-third', 1).layer);
-    expect(got).toEqual([10, 11, 15, 16, 17, 18, 19]); // 12/13/14 all skipped
+    expect(got).toEqual([110, 111, 115, 116, 117, 118, 119]); // 112/113/114 all skipped
 
     // Shrink: 14 leaves the bank and returns to the free pool.
     lm.applyFixed([
-      { channel: 1, layer: 12 },
-      { channel: 1, layer: 13 },
+      { channel: 1, layer: 112 },
+      { channel: 1, layer: 113 },
     ]);
-    expect(lm.isFixed({ channel: 1, layer: 14 })).toBe(false);
-    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 14 });
+    expect(lm.isFixed({ channel: 1, layer: 114 })).toBe(false);
+    expect(lm.allocate('lower-third', 1)).toEqual({ channel: 1, layer: 114 });
 
     // A BOUND slot may never be removed — defence in depth behind the validator.
-    lm.bindFixed({ channel: 1, layer: 12 }, 'clock');
-    expect(() => lm.applyFixed([{ channel: 1, layer: 13 }])).toThrow(FixedPinnedConflictError);
-    expect(lm.isFixed({ channel: 1, layer: 12 })).toBe(true); // nothing mutated
-    expect(lm.fixedBinding({ channel: 1, layer: 12 })).toBe('clock');
+    lm.bindFixed({ channel: 1, layer: 112 }, 'clock');
+    expect(() => lm.applyFixed([{ channel: 1, layer: 113 }])).toThrow(FixedPinnedConflictError);
+    expect(lm.isFixed({ channel: 1, layer: 112 })).toBe(true); // nothing mutated
+    expect(lm.fixedBinding({ channel: 1, layer: 112 })).toBe('clock');
 
     // Pinned stays pinned throughout; declaring a pinned slot fixed still throws.
     expect(lm.isPinned({ channel: 1, layer: 95 })).toBe(true);
     expect(() =>
       lm.applyFixed([
-        { channel: 1, layer: 12 },
+        { channel: 1, layer: 112 },
         { channel: 1, layer: 95 },
       ]),
     ).toThrow(FixedPinnedConflictError);
@@ -287,48 +317,51 @@ describe('LayerManager — fixed operator slots (R-021)', () => {
     expect(
       () =>
         new LayerManager({
-          pinned: [{ channel: 1, layer: 12, templateId: 'logo', autoStart: true }],
-          fixed: [{ channel: 1, layer: 12 }],
+          policy: TEST_POLICY,
+          pinned: [{ channel: 1, layer: 112, templateId: 'logo', autoStart: true }],
+          fixed: [{ channel: 1, layer: 112 }],
         }),
     ).toThrow(FixedPinnedConflictError);
     try {
       new LayerManager({
-        pinned: [{ channel: 1, layer: 12, templateId: 'logo', autoStart: true }],
-        fixed: [{ channel: 1, layer: 12 }],
+        policy: TEST_POLICY,
+        pinned: [{ channel: 1, layer: 112, templateId: 'logo', autoStart: true }],
+        fixed: [{ channel: 1, layer: 112 }],
       });
       expect.unreachable('constructor must throw');
     } catch (err) {
-      expect((err as Error).message).toContain('1-12');
+      expect((err as Error).message).toContain('1-112');
     }
   });
 });
 
 describe('LayerManager — reserved playout layers (R-028 / C-015)', () => {
   it('allocate() never returns a reserved layer, whatever the policy range says', () => {
-    // The default policy's `custom` range is 60–69 — exactly where the playout
-    // split lives. With 60–68 reserved, allocation must skip straight to 69.
+    // The fixture policy's `custom` range is 160–169. With 160–168 reserved, allocation
+    // must skip straight to 169.
     const lm = new LayerManager({
-      reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68],
+      policy: TEST_POLICY,
+      reservedLayers: [160, 161, 162, 163, 164, 165, 166, 167, 168],
     });
-    expect(lm.allocate('custom', 1)).toEqual({ channel: 1, layer: 69 });
+    expect(lm.allocate('custom', 1)).toEqual({ channel: 1, layer: 169 });
     // Range now exhausted (everything else reserved): honest failure, no
     // silent spill onto a playout layer.
     expect(() => lm.allocate('custom', 1)).toThrow(OutOfLayersError);
   });
 
   it('reserve() refuses a reserved layer — a retained coordinate never lands on playout', () => {
-    const lm = new LayerManager({ reservedLayers: [65] });
-    expect(lm.reserve({ channel: 1, layer: 65 }, 'lower-third')).toBe(false);
-    expect(lm.reserve({ channel: 1, layer: 66 }, 'lower-third')).toBe(true);
+    const lm = new LayerManager({ policy: TEST_POLICY, reservedLayers: [165] });
+    expect(lm.reserve({ channel: 1, layer: 165 }, 'lower-third')).toBe(false);
+    expect(lm.reserve({ channel: 1, layer: 166 }, 'lower-third')).toBe(true);
   });
 
   it('the fence is per layer NUMBER across channels (conservative for the split)', () => {
-    const lm = new LayerManager({ reservedLayers: [60] });
-    expect(lm.reserve({ channel: 2, layer: 60 }, 'x')).toBe(false);
+    const lm = new LayerManager({ policy: TEST_POLICY, reservedLayers: [160] });
+    expect(lm.reserve({ channel: 2, layer: 160 }, 'x')).toBe(false);
   });
 });
 
-describe('R-028 (6.1/6.4) — allocation is not the OPERATOR path, and is not retired either', () => {
+describe('R-028 (6.1/6.4) + LAYER-BANDS-16 — allocation is not the OPERATOR path, and is not retired either', () => {
   /**
    * The half that must PASS, stated as its own test so nobody satisfies 6.1 by
    * deleting the mechanism.
@@ -340,43 +373,52 @@ describe('R-028 (6.1/6.4) — allocation is not the OPERATOR path, and is not re
    * on a declared range, and are never an operator's graphic. These two tests are
    * the two halves of one claim and should be read together.
    */
-  it('a DECLARED, non-operator caller can still allocate across the freed 10–59 span', () => {
+  it('a DECLARED, non-operator caller can still allocate on a policy it supplies', () => {
+    const lm = new LayerManager({ policy: TEST_POLICY });
+    expect(lm.allocate('lower-third', 1).layer).toBe(110);
+    expect(lm.allocate('ticker', 1).layer).toBe(120);
+    expect(lm.allocate('breaking-news', 1).layer).toBe(130);
+    expect(lm.allocate('logo-bug', 1).layer).toBe(140);
+    expect(lm.allocate('fullscreen', 1).layer).toBe(150);
+  });
+
+  /**
+   * 🔴 `LAYER-BANDS-16` — **THE SHIPPED POLICY IS EMPTY, AND THAT IS THE DECISION.**
+   *
+   * R-028 6.4 recorded 10–59 as the span its narrowing FREED, and the six template-type
+   * ranges were what lived there. The owner's 2026-09-14 re-cut answered the question the
+   * other way round: 1–49 is left to the playout server and 50–99 is cut into three ROLE
+   * bands, so a type-keyed range has nowhere legal to sit. Retiring the ranges is what
+   * "the map is the policy" means in code.
+   */
+  it('ships NO dynamic ranges — a station allocating by templateType must declare its own', () => {
+    expect(Object.keys(DEFAULT_LAYER_POLICY)).toEqual([]);
     const lm = new LayerManager();
-    // The span R-028 6.4 frees is exactly 10–59: `custom`'s 60–69 is the reserved
-    // playout range and stays fenced, and 70–99 is the operator bank. Allocation
-    // must still serve every decade inside it.
-    expect(lm.allocate('lower-third', 1).layer).toBe(10);
-    expect(lm.allocate('ticker', 1).layer).toBe(20);
-    expect(lm.allocate('breaking-news', 1).layer).toBe(30);
-    expect(lm.allocate('logo-bug', 1).layer).toBe(40);
-    expect(lm.allocate('fullscreen', 1).layer).toBe(50);
+    expect(() => lm.allocate('lower-third', 1)).toThrow(UnknownTemplateTypeError);
   });
 
-  it('the freed span is 10–59 EXACTLY — the two fences above it still hold', () => {
-    // Asserted against the two mechanisms rather than against the prose, because
-    // "10–59" is a claim about where a fence is, and a fence is the only thing
-    // that can be checked.
-    const lm = new LayerManager({
-      reservedLayers: [60, 61, 62, 63, 64, 65, 66, 67, 68, 69],
-      fixed: [
-        { channel: 1, layer: 70 },
-        { channel: 1, layer: 71 },
-      ],
-    });
-    // 60–69: declared to the playout team. Allocation cannot spill onto it, so
-    // `custom` — whose whole range IS that decade — fails honestly instead.
-    expect(() => lm.allocate('custom', 1)).toThrow(OutOfLayersError);
-    // 70+: the operator bank, born allocated. `reserve()` refuses it by
-    // construction and nothing dynamic can land there.
-    expect(lm.reserve({ channel: 1, layer: 70 }, 'lower-third')).toBe(false);
-    // …and everything below both fences is still allocatable.
-    expect(lm.allocate('fullscreen', 1)).toEqual({ channel: 1, layer: 50 });
+  it('🔴 refuses a policy that would allocate below the floor', () => {
+    // The guard that makes re-adding `lower-third: [10, 19]` a red rather than a silent
+    // return to allocating on the playout server's layers.
+    expect(() => {
+      assertPolicyAboveFloor(DEFAULT_LAYER_POLICY);
+    }).not.toThrow();
+    expect(() => {
+      assertPolicyAboveFloor({ 'lower-third': [10, 19] });
+    }).toThrow(/allocates below layer 50/);
+    expect(() => {
+      assertPolicyAboveFloor({ fullscreen: [49, 59] });
+    }).toThrow(/1-49 is left free for the playout server/);
+    expect(() => {
+      assertPolicyAboveFloor({ fullscreen: [FIRST_ALLOCATABLE_LAYER, 59] });
+    }).not.toThrow();
   });
 
-  it('`logo-bug` is still a policy KEY even though its range moved — the type did not go with it', () => {
-    // 6.4's record, made executable. The range moved 90–99 → 40–49 and is now
-    // descriptive; deleting the key (or the `templateType`) would break every
-    // `.vcg` that carries it.
-    expect(DEFAULT_LAYER_POLICY['logo-bug']).toEqual([40, 49]);
+  it('🔴 `logo-bug` is still a scene templateType — the type did not go with the range', () => {
+    // 6.4's record, made executable, and re-pointed at the thing that actually carries the
+    // vocabulary. The range is gone; the type travels inside every `.vcg` ever exported and
+    // deleting it would break those packages.
+    expect(TemplateTypeSchema.safeParse('logo-bug').success).toBe(true);
+    expect(DEFAULT_LAYER_POLICY['logo-bug']).toBeUndefined();
   });
 });

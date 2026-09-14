@@ -7,6 +7,8 @@ import {
   fixedBankSlots,
   isLayerVisible,
   lowBankEnd,
+  LAYER_BANDS,
+  bandText,
   type FixedLayerBank,
 } from '@cg/shared-ipc';
 import type { LayerPolicy, LayerSlot } from '@cg/caspar-client';
@@ -44,20 +46,64 @@ import type { LayerPolicy, LayerSlot } from '@cg/caspar-client';
  */
 
 /**
- * The highest layer a bank may reach.
+ * The highest layer a bank may reach — the top of the TEMPLATE band.
  *
- * RAISED FROM 89 TO 99 by owner decision, so the operator's candidate bank can be the
- * full 70–99 (thirty rows). design.md (e) recorded 70–89 as the free space because
- * `logo-bug` held 90–99 in the dynamic policy; that range MOVED to 40–49 in the same
- * change (`DEFAULT_LAYER_POLICY`), so 90–99 is genuinely free now rather than merely
- * declared free.
- *
- * The two had to move TOGETHER. Raising this alone would have produced a bank the
- * validator accepts and then refuses on `overlaps-policy`, or — worse, if that check
- * were also weakened — a bank sharing layers with automatic allocation, which is the
- * cross-subsystem destruction the disjointness rules exist to prevent.
+ * ⚠ **DERIVED, not restated (`LAYER-BANDS-16`, 2026-09-14).** The value is unchanged at
+ * 99; what changed is that it is now the same 99 `LAYER_BANDS.template.end` is, so a re-cut
+ * of the map moves the ceiling with it. It was a bare literal before, and a bare literal
+ * here is a ceiling that survives a renumbering of the band it is supposed to be the top of.
  */
-export const MAX_FIXED_LAYER = 99;
+export const MAX_FIXED_LAYER = LAYER_BANDS.template.end;
+
+/**
+ * 🔴 **THE OLD-MAP DECISION: a fixed-layers file written under the pre-2026-09-14 map is
+ * REFUSED, out loud, naming both maps.**
+ *
+ * The choice was refuse / ignore / rewrite, and refuse is the only one of the three that
+ * cannot put a graphic somewhere nobody asked for. IGNORING it would silently discard an
+ * operator's aliases and ticks and boot on a bank they did not declare. REWRITING it would
+ * have this process guess which of the old rows map onto which of the new ones — a 30-row
+ * bank onto a 20-row band has no answer, and a wrong guess is a named row pointing at a
+ * different layer, discovered on air.
+ *
+ * Most old files are caught by the SCHEMA first (`count: 30` exceeds the band's twenty), and
+ * a bare zod error names a field rather than the decision. This turns whichever way it is
+ * caught into one sentence, so the operator is told to move the file aside rather than left
+ * reading a parse failure. The remedy is the same in both directions: the file is renamed,
+ * the built-in default applies, and the aliases are re-entered against the new rows.
+ */
+export function describeOldMapBank(raw: unknown): string | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const record = raw as Record<string, unknown>;
+  const low =
+    typeof record['low'] === 'object' && record['low'] !== null
+      ? (record['low'] as Record<string, unknown>)
+      : null;
+  const start = record['start'];
+  const lowStart = low?.['start'];
+  const offenders: string[] = [];
+  if (typeof start === 'number' && start < LAYER_BANDS.template.start) {
+    offenders.push(
+      `its operator rows start at layer ${String(start)}, below the template band ` +
+        `${bandText(LAYER_BANDS.template)}`,
+    );
+  }
+  if (typeof lowStart === 'number' && lowStart < LAYER_BANDS.bed.start) {
+    offenders.push(
+      `its graphics-bed rows start at layer ${String(lowStart)}, below the bed band ` +
+        `${bandText(LAYER_BANDS.bed)}`,
+    );
+  }
+  if (offenders.length === 0) return null;
+  return (
+    `it was written under the OLD layer map — ${offenders.join(' and ')}. The map was ` +
+    `re-cut on 2026-09-14 to beds ${bandText(LAYER_BANDS.bed)}, live plates ` +
+    `${bandText(LAYER_BANDS.plate)} and templates ${bandText(LAYER_BANDS.template)}, ` +
+    `leaving 1-${String(LAYER_BANDS.bed.start - 1)} free for the playout server. Two maps ` +
+    `are never mixed: move this file aside (rename it, do not delete it) and the built-in ` +
+    `default bank applies, then re-enter the aliases and ticks against the new rows`
+  );
+}
 
 /**
  * R-021 stage 2a — DERIVED from the wire contract's shared const, so the
@@ -360,6 +406,16 @@ export function loadFixedLayerBank(filePath: string): FixedLayerBank | null {
       filePath,
       `invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
     );
+  }
+  // `LAYER-BANDS-16` — the OLD-MAP check runs BEFORE the schema and again after it, and
+  // both doors are needed. A pre-2026-09-14 file usually trips the schema first (thirty
+  // operator rows exceed the template band's twenty, a bed at layer 1 is below the band's
+  // floor), and a bare zod message names a field where the operator needs the decision; but
+  // an old file whose bank happens to be schema-legal — a four-row bank at 70 — would sail
+  // straight through, so the same sentence is the FIRST thing tried.
+  const oldMap = describeOldMapBank(parsed);
+  if (oldMap !== null) {
+    throw new FixedLayersFileError(filePath, oldMap);
   }
   const result = FixedLayerBankSchema.safeParse(parsed);
   if (!result.success) {

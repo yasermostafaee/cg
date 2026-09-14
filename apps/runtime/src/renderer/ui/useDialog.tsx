@@ -1,8 +1,35 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { Trash2 } from 'lucide-react';
+import { CircleArrowOutDownRight, Trash2, XSquare, type LucideIcon } from 'lucide-react';
 import type { VerbTone } from './rowAction.js';
 import { Icon } from './Icon.js';
 import { Modal, ModalAction } from './Modal.js';
+
+/**
+ * 🔴 **THE MARK PICTURES THE ACT — A TRASH CAN IS FOR AN ACT THAT DELETES** (the owner,
+ * 2026-09-14, photographing `Clear all …?` and `Clear Layer 3?` under a red bin).
+ *
+ * This is `EmptiedAirNotice`'s rule one step further in, and that call site already states
+ * the half this completes: a glyph that lies about the button beneath it is not a safety
+ * signal, it is noise. CLEAR and STOP delete NOTHING — the dialogs' own sentences say so in
+ * words two lines below the bin: _"The template stays on the row and can be played again"_,
+ * _"They stay loaded and can be taken again."_ REMOVE is the act that cannot be undone, and
+ * it keeps the bin and the red, alone, so that when the bin does appear it means something.
+ *
+ * ⚠ **NOT a weakening of the signal, and the distinction is the whole point.** §8d's rule —
+ * "the confirm dialog is the ONE place a destructive control reads destructive AT REST" —
+ * stands untouched: the emblem is still drawn, the confirm button is still FILLED and still
+ * the loudest thing in the frame. What changes is WHICH consequence it names. Severity by
+ * verb rather than one red for three different acts; the treatment comes from the same
+ * `--r-verb-*` token the row button and the bulk button already wear, so the operator's eye
+ * follows ONE colour from the verb he pressed to the button that commits it.
+ *
+ * ⚠ `remove` and an unset tone fall through to the bin. A new destructive verb that forgets
+ * to declare itself therefore gets the LOUDEST treatment, not the quietest.
+ */
+const CONFIRM_EMBLEM: Partial<Record<VerbTone, LucideIcon>> = {
+  clear: XSquare,
+  stop: CircleArrowOutDownRight,
+};
 
 /**
  * Promise-shaped replacements for `window.confirm` and `window.prompt`, so a caller keeps
@@ -165,8 +192,18 @@ export function useConfirm(): {
             DEFAULT is the mark: this hook gates destructive acts, so the exception is the one
             that gets written at its call site. */}
         {request.destructive !== false && (
-          <span className="cg-confirm-emblem" data-confirm-emblem="">
-            <Icon icon={Trash2} size={20} />
+          <span
+            className="cg-confirm-emblem"
+            data-confirm-emblem=""
+            /* The HUE travels with the glyph — see `CONFIRM_EMBLEM`. Published as an
+               attribute rather than an inline style so `controls.css` keeps owning the
+               palette and the two halves cannot come to disagree. */
+            {...(request.tone !== undefined ? { 'data-confirm-tone': request.tone } : {})}
+          >
+            <Icon
+              icon={request.tone === undefined ? Trash2 : (CONFIRM_EMBLEM[request.tone] ?? Trash2)}
+              size={20}
+            />
           </span>
         )}
         {request.body}

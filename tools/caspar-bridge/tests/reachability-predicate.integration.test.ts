@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS, track } from './support/harness.js';
+import { HEALTH_MS, track, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-100 — the bridge's link predicate must mean "no declared server is
@@ -97,7 +97,14 @@ function newRuntime(
   config: ConnectionConfig,
   sessionTuning?: typeof DEGRADED_TUNING,
 ): CasparRuntime {
-  const rt = new CasparRuntime(config, {}, sessionTuning ? { sessionTuning } : {});
+  const rt = new CasparRuntime(
+    config,
+    {},
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      ...(sessionTuning ? { sessionTuning } : {}),
+    },
+  );
   return track(rt, (r) => r.stop());
 }
 

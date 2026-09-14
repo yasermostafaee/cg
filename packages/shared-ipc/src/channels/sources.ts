@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { IdSchema, LiveFitModeSchema, LiveSourceIdSchema } from '@cg/shared-schema';
 import { fixedBankEnd, lowBankEnd, type FixedLayerBank } from './fixedLayers.js';
+import { LAYER_BANDS } from '../layer-bands.js';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 
@@ -324,11 +325,10 @@ export const MAX_LIVE_SOURCE_LAYER = 9999;
 /**
  * The layer band the bridge places Live Source producers on, INCLUSIVE.
  *
- * DECLARED, never defaulted. design.md §4 names 10–59 as the band R-028's own
- * 6.4 frees, and {@link SUGGESTED_LIVE_SOURCE_LAYER_RANGE} carries it as a
- * SUGGESTION for the editor — applying it automatically would be this project
- * choosing layer numbers for a plant it cannot see, and a station whose
- * reservation already sits inside 10–59 would then fail to boot on upgrade.
+ * DECLARED, never defaulted. {@link SUGGESTED_LIVE_SOURCE_LAYER_RANGE} carries the
+ * product's PLATE band as a SUGGESTION for the editor — applying it automatically would be
+ * this project choosing layer numbers for a plant it cannot see, and a station whose
+ * reservation already sits inside the band would then fail to boot on upgrade.
  *
  * NO CHANNEL. A Live Source is placed on whatever channel its template is on,
  * so the band is a statement about layer NUMBERS. Disjointness is therefore
@@ -344,8 +344,18 @@ export const LiveSourceLayerRangeSchema = z
   .refine((r) => r.end >= r.start, { message: '`end` must be >= `start`' });
 export type LiveSourceLayerRange = z.infer<typeof LiveSourceLayerRangeSchema>;
 
-/** design.md §4's band, offered in the editor and never applied on its own. */
-export const SUGGESTED_LIVE_SOURCE_LAYER_RANGE: LiveSourceLayerRange = { start: 10, end: 59 };
+/**
+ * THE PLATE band, offered in the editor and never applied on its own.
+ *
+ * ⚠ **IT MOVED FROM 10-59 TO `LAYER_BANDS.plate` (60-79) on 2026-09-14**, and it is
+ * DERIVED now rather than restated: the whole point of `layer-bands.ts` is that the band a
+ * plate goes on and the band the editor suggests are ONE number, so a re-cut moves both or
+ * the suggestion quietly points at someone else's layers.
+ */
+export const SUGGESTED_LIVE_SOURCE_LAYER_RANGE: LiveSourceLayerRange = {
+  start: LAYER_BANDS.plate.start,
+  end: LAYER_BANDS.plate.end,
+};
 
 /**
  * The installation's LIST of lives, replaced at once.

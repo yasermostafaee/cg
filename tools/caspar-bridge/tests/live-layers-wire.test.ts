@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { TEST_LAYER_POLICY } from './support/harness.js';
 import { WebSocket } from 'ws';
 import { parseWsFrame, serializeWsFrame, type WsFrame } from '@cg/shared-ipc';
 import fs from 'node:fs';
@@ -88,7 +89,8 @@ const projectSeated = (l: LiveLayerLedger | ReadonlyMap<string, readonly LiveLay
   projectLiveLayers(l, () => false);
 
 /** A runtime with no sockets — enough for bookkeeping, per the note above. */
-const bookkeepingRuntime = (): CasparRuntime => new CasparRuntime(deadConnection());
+const bookkeepingRuntime = (): CasparRuntime =>
+  new CasparRuntime(deadConnection(), {}, { layerPolicy: TEST_LAYER_POLICY });
 
 describe('4.1 — the seated layers are projected onto the wire', () => {
   it('an EMPTY ledger projects to an empty list, not to a placeholder row', () => {

@@ -56,7 +56,7 @@ const BANK: FixedLayerBank = {
   channel: 1,
   start: 70,
   count: 30,
-  low: { start: 1, count: 9 },
+  low: { start: 50, count: 9 },
 };
 
 let container: HTMLDivElement | null = null;

@@ -49,7 +49,7 @@ afterEach(async () => {
 
 const BANK: FixedLayerBank = {
   channel: 1,
-  low: { start: 1, count: 9 },
+  low: { start: 50, count: 9 },
   start: 70,
   count: 2,
   aliases: {},

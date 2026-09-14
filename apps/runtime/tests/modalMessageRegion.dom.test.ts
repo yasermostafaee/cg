@@ -145,7 +145,7 @@ describe('the census — every section of Station setup that can speak, speaks t
       binding: null,
     }));
     stationSetupStub({
-      bank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 30, aliases: {} },
+      bank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 30, aliases: {} },
       slots,
       fixedSetConfigResult: {
         ok: false,

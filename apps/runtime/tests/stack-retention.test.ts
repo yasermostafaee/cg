@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { WebSocket as WsWebSocket } from 'ws';
 import { createBridge, type BridgeHandle } from '@cg/caspar-bridge';
+import type { LayerPolicy } from '@cg/caspar-client';
 import { MemoryWorkspace } from '@cg/storage';
 import {
   parseWsFrame,
@@ -82,6 +83,18 @@ const TEMPLATE: TemplateInfo = {
   fields: [],
 };
 
+/**
+ * 🔴 `LAYER-BANDS-16` — **this suite loads through the DYNAMIC verb, so it states its ranges.**
+ *
+ * `stack.load` places a graphic by `templateType`, and the product ships NO ranges for that
+ * any more: the layer map cuts 50-99 into three role bands and leaves 1-49 to the playout
+ * server, so there is nowhere a type-keyed range may legally sit. A deployment that wants the
+ * verb declares its own, which is exactly what this does.
+ *
+ * 110+ keeps the fixture visibly outside the product's map and above the floor.
+ */
+const RETENTION_POLICY: LayerPolicy = { 'lower-third': [110, 119] };
+
 let handle: BridgeHandle | null = null;
 let runtime: WebSocketRuntime | null = null;
 
@@ -93,7 +106,11 @@ afterEach(async () => {
 });
 
 it('THE BUG: stack items survive a REAL bridge restart instead of vanishing', async () => {
-  handle = await createBridge({ port: 0, connection: ephemeralConnection() });
+  handle = await createBridge({
+    port: 0,
+    connection: ephemeralConnection(),
+    layerPolicy: RETENTION_POLICY,
+  });
   const port = handle.port;
   const retention = new StackRetentionStore(new MemoryWorkspace());
   await retention.hydrate();
@@ -123,7 +140,11 @@ it('THE BUG: stack items survive a REAL bridge restart instead of vanishing', as
   await awaitStatus(runtime, 'disconnected');
 
   // ── a fresh bridge starts on the same port, with an EMPTY stack ──
-  handle = await createBridge({ port, connection: ephemeralConnection() });
+  handle = await createBridge({
+    port,
+    connection: ephemeralConnection(),
+    layerPolicy: RETENTION_POLICY,
+  });
   expect(handle.runtime.stackSnapshot()).toEqual([]);
 
   await awaitStatus(runtime, 'live');
@@ -133,7 +154,7 @@ it('THE BUG: stack items survive a REAL bridge restart instead of vanishing', as
   expect(h.runtime.stackSnapshot().map((i) => i.itemId)).toEqual(['item1', 'item2']);
   // …with the operator's fields and layers intact.
   expect(h.runtime.stackSnapshot()[0]?.fields).toEqual({ h: 'یک' });
-  expect(h.runtime.stackSnapshot().map((i) => i.slot?.layer)).toEqual([10, 11]);
+  expect(h.runtime.stackSnapshot().map((i) => i.slot?.layer)).toEqual([110, 111]);
 
   // …and the SPA never adopts an empty stack: the rows do NOT disappear.
   await waitFor(() => lastPushed.length === 2);
@@ -142,7 +163,11 @@ it('THE BUG: stack items survive a REAL bridge restart instead of vanishing', as
 }, 20_000);
 
 it('a removal is a removal: it prunes the retention and does NOT walk back in on reconnect', async () => {
-  handle = await createBridge({ port: 0, connection: ephemeralConnection() });
+  handle = await createBridge({
+    port: 0,
+    connection: ephemeralConnection(),
+    layerPolicy: RETENTION_POLICY,
+  });
   const port = handle.port;
   const retention = new StackRetentionStore(new MemoryWorkspace());
   await retention.hydrate();
@@ -161,7 +186,11 @@ it('a removal is a removal: it prunes the retention and does NOT walk back in on
   await handle.close();
   handle = null;
   await awaitStatus(runtime, 'disconnected');
-  handle = await createBridge({ port, connection: ephemeralConnection() });
+  handle = await createBridge({
+    port,
+    connection: ephemeralConnection(),
+    layerPolicy: RETENTION_POLICY,
+  });
   await awaitStatus(runtime, 'live');
 
   const h = handle;

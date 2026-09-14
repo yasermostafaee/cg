@@ -6,7 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * C-012 — `CG STOP` as a distinct operator action, and the property that makes it
@@ -89,7 +89,11 @@ function status(r: CasparRuntime, itemId: string): string | undefined {
 
 /** Boot, import, load and take `item1` to a real OSC-backed ON AIR. */
 async function onAir(m: MockHandle, oscPort: number): Promise<CasparRuntime> {
-  const r = new CasparRuntime(singleServer(m.amcpPort, oscPort));
+  const r = new CasparRuntime(
+    singleServer(m.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   r.start();
   await r.startServing();
@@ -273,7 +277,11 @@ it('stopAll sends NOTHING when nothing is on air', async () => {
   );
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, tracePath });
-  const r = new CasparRuntime(singleServer(mock.amcpPort, oscPort));
+  const r = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   r.start();
   await r.startServing();

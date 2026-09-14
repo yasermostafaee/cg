@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { rasterVerdict, type ConnectionConfig, type TemplateInfo } from '@cg/shared-ipc';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-030 — the channel raster, end to end against the amcp-mock:
@@ -67,7 +67,11 @@ async function boot(): Promise<void> {
   // A fast sweep: the video-mode read piggybacks on the orphan sweep rather
   // than arming a second timer, so the test has to let one tick land.
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  runtime = new CasparRuntime(singleServer(mock.amcpPort, oscPort), {}, { sweepMs: 60 });
+  runtime = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: 60 },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
@@ -214,7 +218,11 @@ it('B-189 — re-sends while unreadable, then latches on the FIRST parsed reply'
     };
   });
 
-  runtime = new CasparRuntime(singleServer(mock.amcpPort, oscPort), {}, { sweepMs: 60 });
+  runtime = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: 60 },
+  );
   runtime.start();
   await runtime.startServing();
   await runtime.whenServerHealthy(HEALTH_MS);
@@ -301,7 +309,11 @@ async function bootWithMode(mode: string): Promise<{ release: () => void }> {
       data: `<?xml version="1.0" encoding="utf-8"?>\n<channel>\n   <format>${mode}</format>\n</channel>\n`,
     };
   });
-  runtime = new CasparRuntime(singleServer(mock.amcpPort, oscPort), {}, { sweepMs: 60 });
+  runtime = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: 60 },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);

@@ -4,7 +4,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemStatus } from '@cg/shared-schema';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-086 — honest ON AIR across a CasparCG link-loss (end-to-end, real bridge + mock CasparCG).
@@ -64,7 +64,7 @@ async function waitFor(cond: () => boolean, timeoutMs: number, what: string): Pr
 }
 
 async function bootRuntime(config: ConnectionConfig): Promise<CasparRuntime> {
-  const r = new CasparRuntime(config);
+  const r = new CasparRuntime(config, {}, { layerPolicy: TEST_LAYER_POLICY });
   runtime = r;
   r.start();
   await r.startServing();

@@ -7,7 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { LiveLayerRecord } from '../src/live-layers.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * C-015 phase 6 (task 6.6) — **Live Source teardown clears the producer AND resets
@@ -79,7 +79,11 @@ async function boot(): Promise<CasparRuntime> {
     `cg-liveteardown-${String(process.pid)}-${String(Date.now())}.ndjson`,
   );
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30, tracePath });
-  const r = new CasparRuntime(singleServer(mock.amcpPort, oscPort), {}, { sweepMs: 150 });
+  const r = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: 150 },
+  );
   runtime = r;
   r.start();
   await r.startServing();

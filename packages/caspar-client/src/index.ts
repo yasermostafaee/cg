@@ -40,6 +40,7 @@ export type { HeartbeatEvents, HeartbeatOptions, HeartbeatStatus } from './sessi
 export {
   LayerManager,
   DEFAULT_LAYER_POLICY,
+  assertPolicyAboveFloor,
   FixedPinnedConflictError,
   OutOfLayersError,
   UnknownTemplateTypeError,

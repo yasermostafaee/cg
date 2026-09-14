@@ -135,7 +135,7 @@ describe('Station setup — Candidate layers', () => {
     expect(stub.fixedSetConfig).toHaveBeenCalledTimes(1);
     expect(stub.fixedSetConfig).toHaveBeenCalledWith({
       channel: 1,
-      low: { start: 1, count: 9 },
+      low: { start: 50, count: 9 },
       start: 70,
       count: 2, // NEVER edited here — the ceiling is fixed at install
       aliases: { '70': 'CLOCK' },

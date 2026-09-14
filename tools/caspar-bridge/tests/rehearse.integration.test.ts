@@ -4,7 +4,7 @@ import type { ConnectionConfig, FixedLayerBank, TemplateInfo } from '@cg/shared-
 import { fixedBankSlots, isRehearsing } from '@cg/shared-ipc';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-022 — REHEARSE, end to end against the amcp-mock.
@@ -63,7 +63,11 @@ function freeUdpPort(): Promise<number> {
 async function boot(): Promise<void> {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  runtime = new CasparRuntime(singleServer(mock.amcpPort, oscPort), {}, { sweepMs: 60 });
+  runtime = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: 60 },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);
@@ -282,7 +286,11 @@ it('re-asserts every declared row’s volume at startup — a bridge that died m
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 60, fixedBank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 2 } },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: 60,
+      fixedBank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 2 },
+    },
   );
   runtime.start();
   await runtime.startServing();
@@ -359,7 +367,7 @@ it('mutes and restores EACH of several rehearsing rows independently', async () 
 it('the startup re-assert covers EVERY declared row, with no rehearse bookkeeping at all', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  const bank: FixedLayerBank = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 6 };
+  const bank: FixedLayerBank = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 6 };
   const layers = fixedBankSlots(bank).map((slot) => slot.layer);
   // Every row muted, and nothing anywhere recording that — the state a crash
   // mid-multi-row-rehearse leaves behind. Mixer state is CHANNEL state and
@@ -369,7 +377,7 @@ it('the startup re-assert covers EVERY declared row, with no rehearse bookkeepin
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 60, fixedBank: bank },
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: 60, fixedBank: bank },
   );
   runtime.start();
   await runtime.startServing();
@@ -401,21 +409,21 @@ it('the startup re-assert covers EVERY declared row, with no rehearse bookkeepin
 it('🔴 B-204 — a BED row muted by a dead rehearse is re-asserted at startup, like an operator row', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  // Beds at 2–6, NOT the default 1–9, so a hard-coded bed range fails as loudly
+  // Beds at 51–55, NOT the whole default band, so a hard-coded bed range fails as loudly
   // as a missing one.
-  const bank: FixedLayerBank = { channel: 1, low: { start: 2, count: 5 }, start: 70, count: 2 };
+  const bank: FixedLayerBank = { channel: 1, low: { start: 51, count: 5 }, start: 70, count: 2 };
   const bedLayers = fixedBankSlots(bank)
     .map((slot) => slot.layer)
     .filter((layer) => layer < bank.start);
-  expect(bedLayers).toEqual([2, 3, 4, 5, 6]);
+  expect(bedLayers).toEqual([51, 52, 53, 54, 55]);
   // The state a crashed bridge leaves behind: bed rows muted, nothing recording it.
   for (const layer of bedLayers) mock.setLayerVolume({ channel: 1, layer }, 0);
-  expect(mock.layerState({ channel: 1, layer: 6 })?.volume).toBe(0);
+  expect(mock.layerState({ channel: 1, layer: 55 })?.volume).toBe(0);
 
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 60, fixedBank: bank },
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: 60, fixedBank: bank },
   );
   runtime.start();
   await runtime.startServing();

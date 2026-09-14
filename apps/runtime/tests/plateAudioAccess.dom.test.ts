@@ -49,7 +49,7 @@ class NoopResizeObserver {
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 /** The seeded row that declares plates (`e2e-looks`, four boxes) — the row door's subject. */
-const PLATE_ROW = 89;
+const PLATE_ROW = 99;
 const NEWS = 'item-irib-news';
 const LOOKS = 'item-looks';
 
@@ -203,7 +203,7 @@ describe('the LAYER ROW door — right-click and its keyboard twins reach the au
 describe('the PLATE door — on LIVE PLATES, a seated plate opens its OWNING ROW’s audio', () => {
   it('right-click on a plate opens the dialog on the owner with THAT plate’s fader focused', async () => {
     await openLiveSourcesTab();
-    const held = plateRow('1-11');
+    const held = plateRow('1-61');
     const ev = await rightClick(held);
     expect(ev.defaultPrevented).toBe(true);
     expect(dialog()).not.toBeNull();
@@ -215,12 +215,12 @@ describe('the PLATE door — on LIVE PLATES, a seated plate opens its OWNING ROW
     // …and the hidden frame reads as hidden, never as audible (A12).
     const hidden = dialog()?.querySelector('[data-audio-plate="guest-2"]');
     expect(hidden?.textContent).toContain('Hidden by look');
-    expect(hidden?.textContent).toContain('on 1-11');
+    expect(hidden?.textContent).toContain('on 1-61');
   });
 
   it('🔴 `Shift+F10` and `ContextMenu` on a focused plate row open the same dialog', async () => {
     await openLiveSourcesTab();
-    const shown = plateRow('1-10');
+    const shown = plateRow('1-60');
     shown.focus();
     await key(shown, { key: 'F10', shiftKey: true });
     expect(dialog(), 'Shift+F10 opened the dialog').not.toBeNull();
@@ -247,7 +247,7 @@ describe('🔴 SOLO is scoped to the OWNING ROW — item-irib-news — hidden fr
     await act(flush);
 
     await openLiveSourcesTab();
-    await rightClick(plateRow('1-10'));
+    await rightClick(plateRow('1-60'));
     expect(dialog()).not.toBeNull();
     const solo = dialog()?.querySelector<HTMLButtonElement>('button[aria-label^="Solo guest-1"]');
     expect(solo?.disabled).toBe(false);

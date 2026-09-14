@@ -241,11 +241,39 @@ export function SourcesSection({
     };
   };
 
+  const band = catalog.layerRange;
+
+  /*
+    🔴 **WHAT THE FIELD SHOWS AND WHAT `Apply band` READS ARE ONE VALUE, READ ONCE.**
+
+    They were two, and the operator found it: an untouched field RENDERS the band in force
+    (`bandStart === '' ? String(band.start) : bandStart`) while the state behind it is still
+    the empty string, so pressing Apply on a form reading `60` and `79` — with
+    `Currently 60-79` printed directly underneath — refused with "the band is two layer
+    numbers". The screen said one thing and the handler read another, which is golden rule 7's
+    shape applied to a form: one value gated both the display and the commit, and it was
+    evaluated twice.
+
+    Hoisted to ONE expression that the inputs and the handler both read. An untouched field is
+    not "no answer" — it is the operator accepting what is already in force, which is exactly
+    what it looks like on screen.
+  */
+  const bandStartText = bandStart === '' && band !== undefined ? String(band.start) : bandStart;
+  const bandEndText = bandEnd === '' && band !== undefined ? String(band.end) : bandEnd;
+
   const applyBand = (): void => {
-    const start = parseLayerNumber(bandStart);
-    const end = parseLayerNumber(bandEnd);
+    const start = parseLayerNumber(bandStartText);
+    const end = parseLayerNumber(bandEndText);
     if (start === null || end === null) {
-      refuse('The band is two layer numbers, e.g. 10 and 59.');
+      /*
+        ⚠ `LAYER-BANDS-16` — the example is DERIVED from the suggested band, never restated.
+        It read "e.g. 10 and 59" until the 2026-09-14 re-cut, which is now precisely the span
+        left free for the playout server: the one sentence in this surface that tells an
+        operator which numbers to type was pointing at somebody else's layers.
+      */
+      refuse(
+        `The band is two layer numbers, e.g. ${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)} and ${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)}.`,
+      );
       return;
     }
     if (end < start) {
@@ -254,8 +282,6 @@ export function SourcesSection({
     }
     commitCatalog({ ...catalog, layerRange: { start, end } });
   };
-
-  const band = catalog.layerRange;
 
   /** `B-237` — ask, name the fallout, and only then send. */
   const removeSource = async (source: SourceDefinition, index: number): Promise<void> => {
@@ -464,7 +490,7 @@ export function SourcesSection({
                 allow="digits"
                 aria-label="Live source band start layer"
                 placeholder={String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}
-                value={bandStart === '' && band !== undefined ? String(band.start) : bandStart}
+                value={bandStartText}
                 onValueChange={setBandStart}
               />
             </div>
@@ -479,7 +505,7 @@ export function SourcesSection({
                 allow="digits"
                 aria-label="Live source band end layer"
                 placeholder={String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)}
-                value={bandEnd === '' && band !== undefined ? String(band.end) : bandEnd}
+                value={bandEndText}
                 onValueChange={setBandEnd}
               />
             </div>

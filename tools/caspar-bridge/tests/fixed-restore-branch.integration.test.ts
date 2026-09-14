@@ -7,7 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, FixedSlotState, TemplateInfo } from '@cg/shared-ipc';
 import type { RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-021 stage 4 (tasks 3.1–3.3) — **THE RESTORE BRANCH**: design.md §d tests
@@ -36,7 +36,7 @@ let tracePath: string | null = null;
 const SWEEP_MS = 150;
 const STALE_MS = 800;
 const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>سلام</body></html>';
-const BANK = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 };
+const BANK = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 4 };
 const FIXED_SLOTS = [
   { channel: 1, layer: 70 },
   { channel: 1, layer: 71 },
@@ -149,7 +149,13 @@ async function boot(opts: { blind?: boolean } = {}): Promise<CasparRuntime> {
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, listenPort),
     {},
-    { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS, fixedSlots: FIXED_SLOTS, fixedBank: BANK },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: SWEEP_MS,
+      occupancyStaleMs: STALE_MS,
+      fixedSlots: FIXED_SLOTS,
+      fixedBank: BANK,
+    },
   );
   runtime = r;
   r.start();
@@ -275,17 +281,32 @@ it('a BLIND tap DEFERS a declared row rather than blocking it — and sends noth
 }, 40_000);
 
 // ── §d test 5 ────────────────────────────────────────────────────────────────
-it('REGRESSION — a DYNAMIC retained slot keeps #368: exact slot first, then elsewhere', async () => {
+it('#368 — a DYNAMIC retained slot is taken EXACTLY, and is no longer re-homed when it cannot be', async () => {
+  /*
+   * 🔴 **REWRITTEN, NOT DELETED (`LAYER-BANDS-16`, owner decision 2026-09-14).**
+   *
+   * This test's subject — what `#slotForRestore` does with a DYNAMIC retained coordinate —
+   * still exists. Half of the answer changed: the exact-slot half stands exactly as it was,
+   * and the "then elsewhere" half now REFUSES instead of re-homing. A test whose behaviour
+   * was deliberately changed is rewritten to the new contract; only a test whose subject no
+   * longer exists is removed, and this one still has a subject.
+   *
+   * ── WHAT (b) USED TO DO, and why it is gone ─────────────────────────────────
+   *
+   * It fell through to `#allocate()` and re-homed the row onto another layer of the
+   * `lower-third` range. That was #368's hardware-validated check #2, and the reasoning
+   * was sound at the time: an anonymous layer costs the operator nothing to swap, while a
+   * declared row is a promise. The owner's re-cut of the layer map removed the premise —
+   * the dynamic ranges all lay in 1-49, which is now left to the playout server, so
+   * "re-home it onto another anonymous layer" means "put this graphic on somebody else's
+   * output". There is no longer a layer the bridge may invent, so it says so.
+   */
   const r = await boot();
 
-  // (a) THE EXACT-SLOT HALF. Layer 15 is free and inside `lower-third`'s 10–19
-  // range, and `#allocate()` hands out 10 — the range's FIRST free layer. So
-  // "came back on 15" is reachable only through the exact-slot reserve, and this
-  // assertion fails the moment that reserve is dropped. It was dropped: B-114
-  // REPLACED `reserve()` with `bindFixed()` instead of branching, which fixed the
-  // declared row and silently cost every dynamic row its exact-slot restore —
-  // consulting the wrong layer's occupancy, which is precisely the hazard
-  // `#slotForRestore`'s own contract forbids.
+  // (a) THE EXACT-SLOT HALF — UNCHANGED, and still the assertion that would catch B-114's
+  // regression. Layer 15 is free and inside `lower-third`'s 10–19 range, and `#allocate()`
+  // used to hand out 10 — the range's FIRST free layer — so "came back on 15" is reachable
+  // only through the exact-slot reserve.
   expect(await r.restore(retainedOn(15, 'dyn-exact'))).toEqual({
     restored: 1,
     skipped: [],
@@ -293,20 +314,21 @@ it('REGRESSION — a DYNAMIC retained slot keeps #368: exact slot first, then el
   });
   expect(itemSlot(r, 'dyn-exact')).toEqual({ channel: 1, layer: 15 });
 
-  // (b) THE FALL-THROUGH HALF, unchanged and deliberately NOT extended to declared
-  // rows: a second item retained on the SAME dynamic layer cannot have it, so it
-  // is re-homed rather than skipped (#368's hardware-validated check #2). An
-  // anonymous layer costs the operator nothing to swap; a declared row is a
-  // promise, which is the entire reason only this half falls through.
-  expect(await r.restore(retainedOn(15, 'dyn-taken'))).toEqual({
-    restored: 1,
-    skipped: [],
-    migrated: [],
-  });
-  const rehomed = itemSlot(r, 'dyn-taken');
-  expect(rehomed).not.toEqual({ channel: 1, layer: 15 });
-  expect(rehomed?.layer).toBeGreaterThanOrEqual(10);
-  expect(rehomed?.layer).toBeLessThanOrEqual(19);
+  // (b) THE FALL-THROUGH HALF, REFUSED. A second item retained on the SAME dynamic layer
+  // cannot have it, and there is nowhere else it may be put — so it is skipped, VISIBLY,
+  // with the reason that tells the operator what to do about it.
+  const second = await r.restore(retainedOn(15, 'dyn-taken'));
+  expect(second.restored).toBe(0);
+  expect(second.skipped).toHaveLength(1);
+  expect(second.skipped[0]?.itemId).toBe('dyn-taken');
+  // 🔴 `not-declared`, deliberately NOT `no-layer`: nothing is exhausted here, and telling
+  // the operator to "free something up" would send them to clear a row that would not help.
+  expect(second.skipped[0]?.reason).toBe('not-declared');
+  // And it really is gone from the stack rather than quietly parked somewhere.
+  expect(itemSlot(r, 'dyn-taken')).toBeUndefined();
+  // 🔴 THE ROW THAT WAS ALREADY THERE IS UNTOUCHED. A refusal that cost the incumbent its
+  // layer would be a worse outcome than the re-homing it replaced.
+  expect(itemSlot(r, 'dyn-exact')).toEqual({ channel: 1, layer: 15 });
 }, 40_000);
 
 it('a declared row already bound by another restored item is SKIPPED, never re-homed', async () => {

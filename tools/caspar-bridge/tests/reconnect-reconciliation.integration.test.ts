@@ -6,7 +6,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * Reconnect-reconciliation (Face 2 + the load guard) — a killed bridge leaves
@@ -70,7 +70,11 @@ const SLOT = { channel: 1, layer: 10 };
 
 /** Session 1: import → load → take → the bridge DIES with output on air. */
 async function orphanedSession(m: MockHandle, oscPort: number): Promise<void> {
-  const r = new CasparRuntime(connectionFor(m.amcpPort, oscPort, await freeUdpPort()));
+  const r = new CasparRuntime(
+    connectionFor(m.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   r.start();
   await r.startServing();
@@ -131,7 +135,11 @@ it('the fresh session ADOPTS the orphaned layer: CLEAR precedes its first CG ADD
   const session1Count = session1Lines.length;
 
   // Fresh session (re-delivery-shaped: the template is registered again).
-  const r2 = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  const r2 = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime2 = r2;
   r2.start();
   await r2.startServing();
@@ -200,7 +208,11 @@ it('a remove landing during the adopt-CLEAR window neither leaks the layer nor A
       }),
   );
 
-  const r = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  const r = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   r.start();
   await r.startServing();
@@ -246,7 +258,11 @@ it('EXP-A regression: a post-restart load with an EMPTY registry fails fast (unk
   await orphanedSession(mock, oscPort);
 
   // Fresh session, NO re-import (the pre-fix reconnect state).
-  const r2 = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  const r2 = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime2 = r2;
   r2.start();
   await r2.startServing();

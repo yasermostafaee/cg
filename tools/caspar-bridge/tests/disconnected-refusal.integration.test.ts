@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-006 — the on-air verbs are REFUSED while the server is not connected.
@@ -56,7 +56,11 @@ const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>hi</
 
 /** A runtime whose CasparCG is NOT there: AMCP port 1 never answers, so it never goes healthy. */
 async function bootDisconnected(): Promise<CasparRuntime> {
-  const rt = new CasparRuntime(connectionFor(1, await freeUdpPort()));
+  const rt = new CasparRuntime(
+    connectionFor(1, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = rt;
   rt.start();
   await rt.startServing();
@@ -104,7 +108,7 @@ describe('on-air verbs while disconnected — R-006', () => {
     const oscPort = await freeUdpPort();
     // Boot against a dead AMCP port, then bring a real server up on a DIFFERENT port and
     // reconfigure onto it — the closest thing to "the server came back".
-    const rt = new CasparRuntime(connectionFor(1, oscPort));
+    const rt = new CasparRuntime(connectionFor(1, oscPort), {}, { layerPolicy: TEST_LAYER_POLICY });
     runtime = rt;
     rt.start();
     await rt.startServing();
@@ -124,7 +128,11 @@ describe('on-air verbs while disconnected — R-006', () => {
   it('accepts the verbs again once the server is healthy', async () => {
     const oscPort = await freeUdpPort();
     mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
-    const rt = new CasparRuntime(connectionFor(mock.amcpPort, oscPort));
+    const rt = new CasparRuntime(
+      connectionFor(mock.amcpPort, oscPort),
+      {},
+      { layerPolicy: TEST_LAYER_POLICY },
+    );
     runtime = rt;
     rt.start();
     await rt.startServing();
@@ -185,7 +193,7 @@ describe('load while disconnected — B-082', () => {
 
   it('queues NOTHING: reconnecting does not put the skipped pre-roll on air by itself', async () => {
     const oscPort = await freeUdpPort();
-    const rt = new CasparRuntime(connectionFor(1, oscPort));
+    const rt = new CasparRuntime(connectionFor(1, oscPort), {}, { layerPolicy: TEST_LAYER_POLICY });
     runtime = rt;
     rt.start();
     await rt.startServing();
@@ -203,7 +211,7 @@ describe('load while disconnected — B-082', () => {
 
   it('PLAYS normally once the server is back — the take lazily re-ADDs before the PLAY', async () => {
     const oscPort = await freeUdpPort();
-    const rt = new CasparRuntime(connectionFor(1, oscPort));
+    const rt = new CasparRuntime(connectionFor(1, oscPort), {}, { layerPolicy: TEST_LAYER_POLICY });
     runtime = rt;
     rt.start();
     await rt.startServing();

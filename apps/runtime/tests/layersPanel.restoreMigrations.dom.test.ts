@@ -53,7 +53,7 @@ afterEach(async () => {
 
 const BANK: FixedLayerBank = {
   channel: 1,
-  low: { start: 1, count: 9 },
+  low: { start: 50, count: 9 },
   start: 70,
   count: 2,
   aliases: {},
@@ -67,7 +67,7 @@ const SLOTS: FixedSlotState[] = [
 const MOVED: RestoreMigration = {
   itemId: 'item-e602d912-4c1e-4c3b-9d1a-0c2b3f8a7e11',
   from: { channel: 1, layer: 70 },
-  to: { channel: 1, layer: 3 },
+  to: { channel: 1, layer: 53 },
   demoted: false,
 };
 
@@ -176,7 +176,7 @@ it('a row that came back on a DIFFERENT row is announced — by its row name, wi
   expect(text).toContain('1 row came back on a different row');
   // WHERE it came from and where it landed — the layer numbers, because that is what the
   // operator carries to the row he now has to find.
-  expect(text).toContain('moved from layer 70 to bed layer 3');
+  expect(text).toContain('moved from layer 70 to bed layer 53');
   // Named as the ROW it landed on, through the one canonical naming rule (golden rule 11),
   // and in its own bidi isolate. The alias is asked of the same function the table asks,
   // never spelled here — a spec that hard-coded `Bed 7` would go red on a bank change while
@@ -211,7 +211,7 @@ it('TWO migrated rows read as rows, not "2 row"', async () => {
     {
       itemId: 'item-ticker',
       from: { channel: 1, layer: 71 },
-      to: { channel: 1, layer: 2 },
+      to: { channel: 1, layer: 52 },
       demoted: false,
     },
   ]);
@@ -272,11 +272,11 @@ it('dismissing THIS report does not silence the NEXT one', async () => {
     {
       itemId: 'item-ticker',
       from: { channel: 1, layer: 71 },
-      to: { channel: 1, layer: 2 },
+      to: { channel: 1, layer: 52 },
       demoted: false,
     },
   ]);
   const el2 = await renderPanel();
   expect(migrations(el2)).not.toBeNull();
-  expect(migrations(el2)?.textContent).toContain('bed layer 2');
+  expect(migrations(el2)?.textContent).toContain('bed layer 52');
 });

@@ -12,7 +12,7 @@ import {
 } from '@cg/shared-ipc';
 import type { LiveSourceRect, RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * 🔴 **`single-clock-look-switch` — THE TWO BANKS, AT THE TWO DOORS THAT CAN GET THEM WRONG.**
@@ -39,11 +39,11 @@ const BANK = FixedLayerBankSchema.parse({
   channel: 1,
   start: 90,
   count: 10,
-  low: { start: 1, count: 2 },
+  low: { start: 50, count: 2 },
 });
 const OPERATOR_ROW = { channel: 1, layer: 95 };
 const RETAINED_OPERATOR_ROW = { ...OPERATOR_ROW, server: 'primary' as const };
-const BED_ROW = { channel: 1, layer: 2 };
+const BED_ROW = { channel: 1, layer: 51 };
 const RETAINED_BED_ROW = { ...BED_ROW, server: 'primary' as const };
 
 const RECT: LiveSourceRect = { x: 0, y: 0, width: 960, height: 540 };
@@ -161,7 +161,12 @@ async function boot(): Promise<CasparRuntime> {
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { fixedSlots: [...fixedBankSlots(BANK)], fixedBank: BANK, sweepMs: 150 },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      fixedSlots: [...fixedBankSlots(BANK)],
+      fixedBank: BANK,
+      sweepMs: 150,
+    },
   );
   runtime = r;
   r.start();
@@ -188,7 +193,7 @@ it('🔴 a graphics BED is REFUSED onto an operator row, and the row stays unbou
 it('🔴 …and is ACCEPTED onto a bed row — the same package, the other half of the bank', async () => {
   const r = await boot();
   expect(await r.loadFixed(BED_ROW, 'i1', 'debate', {})).toEqual({ accepted: true });
-  expect(r.fixedLayersState().find((s) => s.layer === 2)?.binding?.itemId).toBe('i1');
+  expect(r.fixedLayersState().find((s) => s.layer === 51)?.binding?.itemId).toBe('i1');
 }, 40_000);
 
 it('🔴 FURNITURE is REFUSED onto a bed row — the refusal runs in BOTH directions', async () => {
@@ -227,11 +232,11 @@ it('🔴 a retained BED held against an operator row MIGRATES to a bed row, repo
   // The row came back — B-092's whole point — and it came back SAID OUT LOUD, naming both
   // coordinates and the fact that the air claim did not travel with it.
   expect(result.migrated).toEqual([
-    { itemId: 'bed-1', from: OPERATOR_ROW, to: { channel: 1, layer: 2 }, demoted: true },
+    { itemId: 'bed-1', from: OPERATOR_ROW, to: { channel: 1, layer: 51 }, demoted: true },
   ]);
   // It is on the HIGHEST free bed row — `Bed 1`, the top of the bed group on the operator's
   // surface, which is where they will look for it.
-  expect(r.fixedLayersState().find((s) => s.layer === 2)?.binding?.itemId).toBe('bed-1');
+  expect(r.fixedLayersState().find((s) => s.layer === 51)?.binding?.itemId).toBe('bed-1');
   expect(r.fixedLayersState().find((s) => s.layer === 95)?.binding).toBeNull();
   /*
     🔴 AND IT IS NOT ON AIR. `#slotForRestore`'s contract is that a retained slot is taken
@@ -265,7 +270,7 @@ it('a retained bed ALREADY on a bed row is left exactly where it is', async () =
     { itemId: 'bed-1', templateId: 'debate', fields: {}, state: 'on-air', slot: RETAINED_BED_ROW },
   ]);
   expect(result.migrated).toEqual([]);
-  expect(r.fixedLayersState().find((s) => s.layer === 2)?.binding?.itemId).toBe('bed-1');
+  expect(r.fixedLayersState().find((s) => s.layer === 51)?.binding?.itemId).toBe('bed-1');
 }, 40_000);
 
 it('FURNITURE retained on an operator row is untouched — the migration is for beds only', async () => {
@@ -294,7 +299,7 @@ it('🔴 with every bed row taken, the migration SKIPS with its own reason', asy
       templateId: 'debate',
       fields: {},
       state: 'loaded',
-      slot: { channel: 1, layer: 1, server: 'primary' },
+      slot: { channel: 1, layer: 50, server: 'primary' },
     },
     { itemId: 'bed-2', templateId: 'debate', fields: {}, state: 'loaded', slot: RETAINED_BED_ROW },
   ]);

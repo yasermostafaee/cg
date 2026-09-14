@@ -8,7 +8,7 @@ import type {
   TemplateInfo,
 } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * 🔴 **`multibox-layout-switch` §12.6 — EXACTLY ONE MULTI-BOX TEMPLATE ON AIR PER
@@ -117,7 +117,12 @@ async function boot(templates: readonly TemplateInfo[]): Promise<CasparRuntime> 
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 150, sourceCatalog: CATALOG, sourceAssignments: assignmentsFor(templates) },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: 150,
+      sourceCatalog: CATALOG,
+      sourceAssignments: assignmentsFor(templates),
+    },
   );
   runtime = r;
   r.start();
@@ -179,8 +184,20 @@ it('🔴 DOOR 2 — a RESTORE that would seat a second multi-box template is ref
   const r = await boot([template('three-box', 3), template('two-box', 2)]);
 
   const result = await r.restore([
-    { itemId: 'item-1', templateId: 'three-box', fields: {}, state: 'on-air' },
-    { itemId: 'item-2', templateId: 'two-box', fields: {}, state: 'on-air' },
+    {
+      itemId: 'item-1',
+      templateId: 'three-box',
+      fields: {},
+      state: 'on-air',
+      slot: { channel: 1, layer: 110, server: 'primary' },
+    },
+    {
+      itemId: 'item-2',
+      templateId: 'two-box',
+      fields: {},
+      state: 'on-air',
+      slot: { channel: 1, layer: 111, server: 'primary' },
+    },
   ]);
 
   expect(result.restored, 'the first on-air multi-box row still comes back').toBe(1);
@@ -198,8 +215,20 @@ it('🔴 DOOR 2 — the refusal mutates NOTHING: the refused row holds no slot a
   const r = await boot([template('three-box', 3), template('two-box', 2)]);
 
   await r.restore([
-    { itemId: 'item-1', templateId: 'three-box', fields: {}, state: 'on-air' },
-    { itemId: 'item-2', templateId: 'two-box', fields: {}, state: 'on-air' },
+    {
+      itemId: 'item-1',
+      templateId: 'three-box',
+      fields: {},
+      state: 'on-air',
+      slot: { channel: 1, layer: 110, server: 'primary' },
+    },
+    {
+      itemId: 'item-2',
+      templateId: 'two-box',
+      fields: {},
+      state: 'on-air',
+      slot: { channel: 1, layer: 111, server: 'primary' },
+    },
   ]);
 
   expect(r.stackSnapshot().some((i) => i.itemId === 'item-2')).toBe(false);
@@ -215,8 +244,20 @@ it('DOOR 2 boundary — a LOADED multi-box row still restores: only an ON-AIR ro
   const r = await boot([template('three-box', 3), template('two-box', 2)]);
 
   const result = await r.restore([
-    { itemId: 'item-1', templateId: 'three-box', fields: {}, state: 'on-air' },
-    { itemId: 'item-2', templateId: 'two-box', fields: {}, state: 'loaded' },
+    {
+      itemId: 'item-1',
+      templateId: 'three-box',
+      fields: {},
+      state: 'on-air',
+      slot: { channel: 1, layer: 110, server: 'primary' },
+    },
+    {
+      itemId: 'item-2',
+      templateId: 'two-box',
+      fields: {},
+      state: 'loaded',
+      slot: { channel: 1, layer: 111, server: 'primary' },
+    },
   ]);
 
   expect(result.restored).toBe(2);
@@ -241,8 +282,20 @@ it('🔴 ONE predicate — both doors refuse the SAME pair and give the SAME sen
 
   const restoreRuntime = await boot([template('three-box', 3), template('two-box', 2)]);
   const restoreRefusal = await restoreRuntime.restore([
-    { itemId: 'item-1', templateId: 'three-box', fields: {}, state: 'on-air' },
-    { itemId: 'item-2', templateId: 'two-box', fields: {}, state: 'on-air' },
+    {
+      itemId: 'item-1',
+      templateId: 'three-box',
+      fields: {},
+      state: 'on-air',
+      slot: { channel: 1, layer: 110, server: 'primary' },
+    },
+    {
+      itemId: 'item-2',
+      templateId: 'two-box',
+      fields: {},
+      state: 'on-air',
+      slot: { channel: 1, layer: 111, server: 'primary' },
+    },
   ]);
 
   const restoreSkip = restoreRefusal.skipped.find((s) => s.itemId === 'item-2');

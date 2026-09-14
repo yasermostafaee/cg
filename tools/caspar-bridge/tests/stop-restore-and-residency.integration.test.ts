@@ -7,7 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import type { RetainedStackItem } from '@cg/shared-schema';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * Two questions C-012 raised, answered against the wire rather than by reasoning.
@@ -86,7 +86,11 @@ function status(r: CasparRuntime, itemId: string): string | undefined {
 }
 
 async function boot(m: MockHandle, oscPort: number): Promise<CasparRuntime> {
-  const r = new CasparRuntime(singleServer(m.amcpPort, oscPort));
+  const r = new CasparRuntime(
+    singleServer(m.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   r.start();
   await r.startServing();
@@ -189,7 +193,11 @@ it('B-092: a STOPPED item restored across a bridge restart is adopted WITHOUT be
       slot: { ...SLOT, server: 'primary' },
     },
   ];
-  const r2 = new CasparRuntime(singleServer(mock.amcpPort, oscPort));
+  const r2 = new CasparRuntime(
+    singleServer(mock.amcpPort, oscPort),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r2;
   await r2.startServing();
   r2.templateImport(TEMPLATE, HTML);

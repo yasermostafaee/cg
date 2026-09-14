@@ -13,7 +13,7 @@ import type {
 } from '@cg/shared-ipc';
 import type { LiveSourceRect, RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * 🔴 **SESSION BP — THE ROW FREEZES ITS TEMPLATE ASSIGNMENT AT TAKE.**
@@ -239,6 +239,7 @@ async function boot(options: { assignments?: SourceAssignments; catalog?: Source
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 150,
       sourceCatalog: options.catalog ?? catalog(),
       sourceAssignments: options.assignments ?? START,
@@ -482,6 +483,10 @@ it('🔴 §2.5 — the frozen assignment SURVIVES a bridge restart, or the blip 
       templateId: 'debate',
       fields: {},
       state: 'on-air',
+      // `LAYER-BANDS-16` — the COORDINATE the browser retains. `#slotForRestore` honours
+      // it and no longer allocates a fresh one, so without it this restore is reported as
+      // `not-declared` and the intent under test never comes back.
+      ...(published?.slot !== undefined && { slot: published.slot }),
       ...(published?.frozenAssignment !== undefined && {
         frozenAssignment: published.frozenAssignment,
       }),
@@ -494,7 +499,12 @@ it('🔴 §2.5 — the frozen assignment SURVIVES a bridge restart, or the blip 
     {},
     // ⚠ THE FRESH BRIDGE BOOTS ON THE EDITED ASSIGNMENT — which is the realistic case: the
     // file on disk is what somebody changed while the show was running.
-    { sweepMs: 150, sourceCatalog: catalog(), sourceAssignments: EDITED },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: 150,
+      sourceCatalog: catalog(),
+      sourceAssignments: EDITED,
+    },
   );
   runtime = fresh;
   fresh.start();

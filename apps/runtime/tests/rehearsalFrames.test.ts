@@ -21,7 +21,7 @@ import {
  * rather than on rendered output alone.
  */
 
-const BANK: FixedLayerBank = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 30 };
+const BANK: FixedLayerBank = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 30 };
 
 function subject(over: Partial<RehearsalSubject> & { layer: number }): RehearsalSubject {
   return {

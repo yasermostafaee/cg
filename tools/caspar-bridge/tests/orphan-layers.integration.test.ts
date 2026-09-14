@@ -4,7 +4,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { ConnectionConfig, OrphanLayer } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-009 — orphan-layer sweep against the mock's REAL OSC stream (the mock's
@@ -78,7 +78,7 @@ async function bootSingle(): Promise<{ emissions: OrphanLayer[][] }> {
   runtime = new CasparRuntime(
     singleServer(mockA.amcpPort, oscPort),
     {},
-    { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS },
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS },
   );
   const emissions: OrphanLayer[][] = [];
   runtime.orphansChanged.subscribe((o) => emissions.push(o));
@@ -174,7 +174,7 @@ it('the sweep follows the CURRENT primary across a failover', async () => {
       autoFailoverEnabled: false,
     },
     {},
-    { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS },
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS },
   );
   runtime.start();
   await runtime.startServing();
@@ -214,11 +214,12 @@ it('§1 — a foreign producer on an UNBOUND BANK layer surfaces as an orphan', 
     singleServer(mockA.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: SWEEP_MS,
       occupancyStaleMs: STALE_MS,
       // A declared bank, AND a declared playout reservation — the two exclusions
       // that must now behave differently from each other.
-      fixedBank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 },
+      fixedBank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 4 },
       fixedSlots: [
         { channel: 1, layer: 70 },
         { channel: 1, layer: 71 },
@@ -257,9 +258,10 @@ it('§1 GUARD — a producer on a RESERVED playout layer is never an orphan, and
     singleServer(mockA.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: SWEEP_MS,
       occupancyStaleMs: STALE_MS,
-      fixedBank: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 },
+      fixedBank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 4 },
       fixedSlots: [
         { channel: 1, layer: 70 },
         { channel: 1, layer: 71 },

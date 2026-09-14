@@ -60,7 +60,11 @@ async function buildStack(strategy: RedundancyStrategy = 'mirror-sync'): Promise
   const sessionA = makeFakeSession('A', queueA);
   const sessionB = makeFakeSession('B', queueB);
 
-  const layerManager = new LayerManager();
+  // `LAYER-BANDS-16` — the stack brings its OWN dynamic range. `DEFAULT_LAYER_POLICY` is
+  // empty since the layer map was re-cut (placement is decided by a graphic's ROLE band,
+  // not by its `templateType`), and 110+ keeps this fixture visibly out of the product's
+  // map and above the floor left free for the playout server.
+  const layerManager = new LayerManager({ policy: { 'lower-third': [110, 119] } });
   const reconciler = new Reconciler({ divergentAfterMs: 100 });
   const adapter = new RedundancyAdapter({
     strategy,
@@ -211,13 +215,13 @@ describe('§10 row: layer collision', () => {
     let collision: { slot: { channel: number; layer: number }; producer: string } | null = null;
     layerManager.on('collision', (slot, producer) => (collision = { slot, producer }));
 
-    // We never allocated 1:11; OSC pretends it's occupied with 'html'.
-    const ok = layerManager.observe({ channel: 1, layer: 11 }, 'html');
+    // We never allocated 1:111; OSC pretends it's occupied with 'html'.
+    const ok = layerManager.observe({ channel: 1, layer: 111 }, 'html');
     expect(ok).toBe(false);
-    expect(collision).toMatchObject({ slot: { channel: 1, layer: 11 }, producer: 'html' });
-    // Subsequent allocation should skip layer 11.
-    expect(layerManager.allocate('lower-third', 1)).toMatchObject({ channel: 1, layer: 10 });
-    expect(layerManager.allocate('lower-third', 1)).toMatchObject({ channel: 1, layer: 12 });
+    expect(collision).toMatchObject({ slot: { channel: 1, layer: 111 }, producer: 'html' });
+    // Subsequent allocation should skip layer 111.
+    expect(layerManager.allocate('lower-third', 1)).toMatchObject({ channel: 1, layer: 110 });
+    expect(layerManager.allocate('lower-third', 1)).toMatchObject({ channel: 1, layer: 112 });
   });
 });
 

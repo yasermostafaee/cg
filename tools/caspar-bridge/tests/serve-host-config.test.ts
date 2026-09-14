@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from 'vitest';
+import { TEST_LAYER_POLICY } from './support/harness.js';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import {
@@ -101,7 +102,11 @@ it('C-024: the flag layer wins FIELD BY FIELD, not object by object', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 it('C-024: a STORED serve host is what the bridge advertises (the layer B-162 lacked)', () => {
-  runtime = new CasparRuntime({ ...REMOTE_BACKUP, templateServeHost: '192.168.21.93' });
+  runtime = new CasparRuntime(
+    { ...REMOTE_BACKUP, templateServeHost: '192.168.21.93' },
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   expect(runtime.templateServeInfo().serveHost).toBe('192.168.21.93');
 });
 
@@ -120,6 +125,7 @@ it('C-024: a FLAG overrides the stored value, and the bridge reports the mask ra
     {
       serveHost: '10.9.9.9',
     },
+    { layerPolicy: TEST_LAYER_POLICY },
   );
   const info = runtime.templateServeInfo();
   expect(info.serveHost).toBe('10.9.9.9');
@@ -127,7 +133,11 @@ it('C-024: a FLAG overrides the stored value, and the bridge reports the mask ra
 });
 
 it('C-024: with no flag, NOTHING is reported as masked — a derived host is not an override', () => {
-  runtime = new CasparRuntime({ ...REMOTE_BACKUP, templateServeHost: '192.168.21.93' });
+  runtime = new CasparRuntime(
+    { ...REMOTE_BACKUP, templateServeHost: '192.168.21.93' },
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   expect(runtime.templateServeInfo().flagOverrides).toEqual({});
 });
 
@@ -138,8 +148,12 @@ it('C-024: an EMPTY stored serve host derives, and is byte-identical to an ABSEN
     IDENTICAL outcome. Testing both is the point: folding them at the schema would take the clear
     away, and treating `''` as an address would advertise nothing fetchable.
   */
-  const empty = new CasparRuntime({ ...LOCAL, templateServeHost: '' });
-  const absent = new CasparRuntime(LOCAL);
+  const empty = new CasparRuntime(
+    { ...LOCAL, templateServeHost: '' },
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
+  const absent = new CasparRuntime(LOCAL, {}, { layerPolicy: TEST_LAYER_POLICY });
   try {
     expect(empty.templateServeInfo().serveHost).toBe(absent.templateServeInfo().serveHost);
     expect(empty.templateServeInfo().port).toBe(absent.templateServeInfo().port);
@@ -155,18 +169,30 @@ it('C-024: a stored serve host that a remote server cannot fetch is NAMED, not s
     panel while a remote server is configured is the `--template-serve-host 127.0.0.1` typo with a
     different door, and it must reach the same verdict.
   */
-  runtime = new CasparRuntime({ ...REMOTE_BACKUP, templateServeHost: '127.0.0.1' });
+  runtime = new CasparRuntime(
+    { ...REMOTE_BACKUP, templateServeHost: '127.0.0.1' },
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   expect(runtime.templateServeInfo().unreachable).toEqual(['192.168.21.50']);
 });
 
 it('C-024: a PINNED stored port is the port served; an absent one stays ephemeral', async () => {
-  runtime = new CasparRuntime({ ...LOCAL, templateServePort: 0 });
+  runtime = new CasparRuntime(
+    { ...LOCAL, templateServePort: 0 },
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   // 0 is the explicit ephemeral request, so the bound port is whatever the OS gave — the point is
   // that the pin travelled at all, which the derived case cannot show.
   expect(runtime.templateServeInfo().port).toBe(0);
   await runtime.stop();
 
-  const pinned = new CasparRuntime({ ...LOCAL, templateServePort: 7913 });
+  const pinned = new CasparRuntime(
+    { ...LOCAL, templateServePort: 7913 },
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = pinned;
   expect(pinned.templateServeInfo().port).toBe(7913);
 });
@@ -177,7 +203,7 @@ it('C-024: an applied config puts a NEW serve host in force on the RUNNING bridg
     rebuilds template serving, so the address lands on the running process — which is why nothing
     in this change starts, stops or restarts a bridge, and why the panel must not offer to.
   */
-  runtime = new CasparRuntime(LOCAL);
+  runtime = new CasparRuntime(LOCAL, {}, { layerPolicy: TEST_LAYER_POLICY });
   const applied = await runtime.setConfig({ ...LOCAL, templateServeHost: '10.1.2.3' });
   expect(applied.ok).toBe(true);
   expect(runtime.templateServeInfo().serveHost).toBe('10.1.2.3');
@@ -190,7 +216,7 @@ it('C-024: a flag STILL wins after an apply — the stored value cannot take the
     the address to whatever the panel last saved. The flag is process-lifetime; an apply must not
     outlive it.
   */
-  runtime = new CasparRuntime(LOCAL, { serveHost: '10.9.9.9' });
+  runtime = new CasparRuntime(LOCAL, { serveHost: '10.9.9.9' }, { layerPolicy: TEST_LAYER_POLICY });
   await runtime.setConfig({ ...LOCAL, templateServeHost: '10.1.2.3' });
   expect(runtime.templateServeInfo().serveHost).toBe('10.9.9.9');
   expect(runtime.templateServeInfo().flagOverrides.serveHost).toBe('10.9.9.9');

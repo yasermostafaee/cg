@@ -40,8 +40,8 @@ class NoopResizeObserver {
 (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = NoopResizeObserver;
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const ROW_A = 74;
-const ROW_B = 75;
+const ROW_A = 84;
+const ROW_B = 85;
 const TEMPLATE_NAME = 'heading fixture';
 
 /** The template's DISPLAY name, by the one rule every surface uses (it prefers the file name). */

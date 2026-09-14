@@ -13,7 +13,7 @@ import type {
 } from '@cg/shared-ipc';
 import type { LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * 🔴 **`B-227` — THE LIVE-SEAT LEDGER MUST NOT OUTLIVE WHAT IT DESCRIBES.**
@@ -177,6 +177,7 @@ async function bootRuntime(): Promise<CasparRuntime> {
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 150,
       lookMixerHoldMs: 0,
       sourceCatalog: CATALOG,

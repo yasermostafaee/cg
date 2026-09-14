@@ -40,6 +40,8 @@ import {
   checkSourceAssignments,
   checkSourceCatalog,
   defaultFixedLayerBank,
+  DEFAULT_FIXED_BANK_START,
+  SUGGESTED_LIVE_SOURCE_LAYER_RANGE,
   DelimiterOptionSchema,
   fixedBankSlots,
   isFixedBankLayer,
@@ -1973,7 +1975,9 @@ function seedOwnedOccupancy(): OwnedOccupancyWarning[] {
     ? [
         {
           channel: 1,
-          layer: 10,
+          // LAYER-BANDS-16 — the plate band, not the literal 10 it used to be. That literal
+          // is now inside the span left free for the playout server.
+          layer: SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start,
           itemId: 'item-irib-news',
           producer: 'html',
           since: new Date().toISOString(),
@@ -1994,6 +1998,22 @@ function fixedBankSeedArmed(): boolean {
  * Clear). UNSEEDED, the mock has no bank — the panel renders nothing, exactly
  * like today.
  */
+/**
+ * The seeded bank's Nth row, as the string key an `aliases` / `visibility` record wants.
+ *
+ * `LAYER-BANDS-16` — ONE place the seed turns an offset into a layer number, reading the
+ * canonical default's `start`. Every other site in this file that names a seeded row calls
+ * it, so a re-cut of the template band moves the whole seed rather than half of it.
+ */
+export function seedLayer(offset: number): number {
+  return DEFAULT_FIXED_BANK_START + offset;
+}
+
+/** The same row as a record KEY. See {@link seedLayer}. */
+export function seedRow(offset: number): string {
+  return String(seedLayer(offset));
+}
+
 function seedFixedBank(): FixedLayerBank | null {
   if (!fixedBankSeedArmed()) return null;
   /*
@@ -2027,35 +2047,39 @@ function seedFixedBank(): FixedLayerBank | null {
   return {
     channel: 1,
     low: { start: low.start, count: low.count, visibility: lowVisibility },
-    start: 70,
-    // R-028 — EIGHTEEN rows, not four. 70–73 keep the four documented
-    // display cases (html / non-html / empty / unknown); 74–85 are seeded
-    // EMPTY so the E2E suite has rows it can actually LOAD onto; 86–87
-    // carry the seed's two remaining stack items. Since part B's occupancy
-    // gate refuses a load onto anything not observably empty — an unbound
-    // row can still carry a live graphic — one empty row would let exactly
-    // one spec load, once.
-    // R-021 stage 4 — NINETEEN. Layer 88 is the `restore-blocked` row: bound,
-    // observed carrying a producer that is not ours, and the item waiting. It
-    // needs its own row because every other case is already spoken for, and
-    // because the property under test is a BOUND row over a FOREIGN producer —
-    // which none of 70–87 models (71 is foreign but unbound).
-    // §14.5 Stage E — TWENTY. Layer 89 carries the LOOK-BEARING row, and it needs
-    // its own for the same reason 88 did: the property under test is a row whose
-    // template AUTHORS LOOKS, and no other seeded row has one, so the picker would
-    // have nowhere to render. It is also why 70 must stay look-less — the spec that
-    // proves a picker is ABSENT where there are no looks reads that row.
+    start: defaults.start,
+    // R-028 — EIGHTEEN rows, not four. The first four (`start`…`start + 3`) keep the four
+    // documented display cases (html / non-html / empty / unknown); the middle twelve are
+    // seeded EMPTY so the E2E suite has rows it can actually LOAD onto; the next two carry
+    // the seed's two remaining stack items. Since part B's occupancy gate refuses a load
+    // onto anything not observably empty — an unbound row can still carry a live graphic —
+    // one empty row would let exactly one spec load, once.
+    // R-021 stage 4 — NINETEEN. `start + 18` is the `restore-blocked` row: bound, observed
+    // carrying a producer that is not ours, and the item waiting. It needs its own row
+    // because every other case is already spoken for, and because the property under test
+    // is a BOUND row over a FOREIGN producer — which none of the others models (`start + 1`
+    // is foreign but unbound).
+    // §14.5 Stage E — TWENTY. `start + 19` carries the LOOK-BEARING row, and it needs its
+    // own for the same reason the one below it did: the property under test is a row whose
+    // template AUTHORS LOOKS, and no other seeded row has one, so the picker would have
+    // nowhere to render. It is also why `start` must stay look-less — the spec that proves
+    // a picker is ABSENT where there are no looks reads that row.
+    //
+    // ⚠ `LAYER-BANDS-16` — the OFFSETS are what this seed is about, never the absolute
+    // numbers. They were spelled `70`…`89` while the template band started at 70; the band
+    // moved to 80-99 on 2026-09-14 and a restated `70` would have seeded a bank BELOW the
+    // band, so every row is addressed as `seedRow(n)` off the canonical default's `start`.
     count: 20,
     aliases: {
-      '70': 'CLOCK',
-      '71': 'LOWER THIRD',
+      [seedRow(0)]: 'CLOCK',
+      [seedRow(1)]: 'LOWER THIRD',
       // `B-224` — the LONGEST real row name (a plant alias, from the owner's screenshot),
       // seeded so the E2E can hold the NAME column to it at the narrower panel width.
-      '73': 'میانبرنامه روی انتن',
-      '86': 'TICKER',
-      '87': 'LOGO BUG',
-      '88': 'STUDIO FEED',
-      '89': 'DEBATE',
+      [seedRow(3)]: 'میانبرنامه روی انتن',
+      [seedRow(16)]: 'TICKER',
+      [seedRow(17)]: 'LOGO BUG',
+      [seedRow(18)]: 'STUDIO FEED',
+      [seedRow(19)]: 'DEBATE',
     },
   };
 }
@@ -2071,25 +2095,28 @@ function seedFixedBank(): FixedLayerBank | null {
 function seedFixedObservations(): Map<number, FixedSlotObservation> {
   return fixedBankSeedArmed()
     ? new Map<number, FixedSlotObservation>([
-        [70, { kind: 'producer', producer: 'html' }],
-        [71, { kind: 'producer', producer: 'ffmpeg' }],
-        [72, { kind: 'empty' }],
-        [73, { kind: 'unknown' }],
+        // `LAYER-BANDS-16` — OFFSETS off the template band's start, never absolute layer
+        // numbers. These read `70`…`88` while the band started at 70; the band moved and a
+        // restated literal would have seeded observations for layers the bank no longer has.
+        [seedLayer(0), { kind: 'producer', producer: 'html' }],
+        [seedLayer(1), { kind: 'producer', producer: 'ffmpeg' }],
+        [seedLayer(2), { kind: 'empty' }],
+        [seedLayer(3), { kind: 'unknown' }],
         // Loadable rows for the E2E flows (see `seedFixedBank`). Without an
         // explicit `empty` these default to `unknown`, which the load gate
         // refuses — correctly, but it would leave the suite nowhere to load.
-        ...([74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85] as const).map(
-          (layer) => [layer, { kind: 'empty' }] as [number, FixedSlotObservation],
+        ...([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] as const).map(
+          (offset) => [seedLayer(offset), { kind: 'empty' }] as [number, FixedSlotObservation],
         ),
-        // 86/87 hold the seed's two IDLE items. Idle means no `CG ADD` has run,
+        // Offsets 16/17 hold the seed's two IDLE items. Idle means no `CG ADD` has run,
         // so there is no producer and the wire correctly sees an EMPTY layer —
         // a bound row over an empty layer is not a contradiction.
-        [86, { kind: 'empty' }],
-        [87, { kind: 'empty' }],
+        [seedLayer(16), { kind: 'empty' }],
+        [seedLayer(17), { kind: 'empty' }],
         // R-021 stage 4 — the blocked row's layer, held by somebody else's feed.
         // A kind our system never places, so "not html" is decidable from the wire
         // alone (video kinds are never enumerated).
-        [88, { kind: 'producer', producer: 'decklink' }],
+        [seedLayer(18), { kind: 'producer', producer: 'decklink' }],
         /*
           🔴 `B-201` — THE BED ROWS ARE LOADABLE TOO, and they have to be seeded to be.
 
@@ -2169,16 +2196,18 @@ function seedPlayoutLayers(): Map<number, FixedSlotObservation> {
  * so it has no unconfirmed records to model. A seed that claimed otherwise would put a
  * demotion on screen that test mode can never actually be in.
  *
- * The band is 10–11, inside `SUGGESTED_LIVE_SOURCE_LAYER_RANGE` (10–59) and
- * disjoint from the seeded fixed bank at 70+, exactly as a real install's
- * validator requires.
+ * The two plates take the FIRST TWO layers of `SUGGESTED_LIVE_SOURCE_LAYER_RANGE` — the
+ * product's PLATE band — which puts them above the bed band and below the seeded fixed
+ * bank, exactly as a real install's validator requires. `LAYER-BANDS-16`: they were the
+ * literals `10` and `11` while the suggested band started at 10, and a literal here would
+ * have left the mock seating plates below the floor after the 2026-09-14 re-cut.
  */
 function seedLiveLayers(): LiveLayerState[] {
   return fixedBankSeedArmed()
     ? [
         {
           channel: 1,
-          layer: 10,
+          layer: SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start,
           itemId: 'item-irib-news',
           sourceId: 'guest-1',
           role: 'fill',
@@ -2188,7 +2217,7 @@ function seedLiveLayers(): LiveLayerState[] {
         },
         {
           channel: 1,
-          layer: 11,
+          layer: SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start + 1,
           itemId: 'item-irib-news',
           sourceId: 'guest-2',
           role: 'fill',
@@ -2226,7 +2255,7 @@ function seedLiveLayers(): LiveLayerState[] {
  * decklink. BLOCKED has to outrank it, and the E2E has to be able to see that.
  */
 const BLOCKED_SEED = {
-  layer: 88,
+  layer: seedLayer(18),
   itemId: 'item-blocked-restore',
   templateType: 'clock',
 } as const;
@@ -2274,7 +2303,7 @@ export function seedBlockedStackItem(): StackItemState[] {
  * one reconcile; a subset pair would let a broken switch look fine.
  */
 const LOOKS_SEED = {
-  layer: 89,
+  layer: seedLayer(19),
   itemId: 'item-looks',
   templateId: 'e2e-looks',
   templateType: 'custom',
@@ -2411,15 +2440,15 @@ function seedFixedBindings(): [
 ][] {
   if (!fixedBankSeedArmed()) return [];
   const types = ['clock', 'ticker', 'logo-bug'];
-  // 70 takes the seed's LOADED item, because 70 is the row observed as an html
+  // Offset 0 takes the seed's LOADED item, because that is the row observed as an html
   // producer and a loaded item HAS one — binding and wire agree. The two IDLE
-  // items go on 86/87, observed empty, for the same reason in reverse. 71–73
-  // stay UNBOUND so they keep modelling the foreign-producer / empty / unknown
+  // items go on offsets 16/17, observed empty, for the same reason in reverse. Offsets
+  // 1–3 stay UNBOUND so they keep modelling the foreign-producer / empty / unknown
   // display cases cleanly.
-  const layers = [70, 86, 87];
+  const layers = [seedLayer(0), seedLayer(16), seedLayer(17)];
   const bindings: [number, { itemId: string; templateType: string; templateId: string }][] =
     seedStack().map((item, i) => [
-      layers[i] ?? 89 + i,
+      layers[i] ?? seedLayer(19 + i),
       { itemId: item.itemId, templateType: types[i] ?? 'custom', templateId: item.templateId },
     ]);
   // §14.5 Stage E — and the look-bearing row, so the picker has somewhere to render.

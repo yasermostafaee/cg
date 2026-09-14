@@ -4,7 +4,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type AmcpRequest, type HandlerContext, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * BROADCAST SAFETY — Clear-All is per-LAYER, never per-channel.
@@ -120,7 +120,11 @@ it('Clear-All CLEARs only our own layers — the program feed survives on air', 
   expect(mock.layerState(PROGRAM)?.onAir).toBe(true);
   expect(mock.layerState(PROGRAM)?.filePath).toBe('program-feed.mov');
 
-  runtime = new CasparRuntime(connectionFor(amcpPort, oscPort, await freeUdpPort()));
+  runtime = new CasparRuntime(
+    connectionFor(amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(LOWER_THIRD, HTML);
@@ -180,7 +184,11 @@ it('an item holding no layer is never CLEARed — there is nothing of ours to cl
 
   await sendRaw(mock.amcpPort, `PLAY 1-1 "program-feed.mov"`);
 
-  runtime = new CasparRuntime(connectionFor(mock.amcpPort, oscPort, await freeUdpPort()));
+  runtime = new CasparRuntime(
+    connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.startServing();
   await runtime.whenServerHealthy(HEALTH_MS);

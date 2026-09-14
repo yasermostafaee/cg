@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * 🔴 `R-017` — **THE BRIDGE HALF OF THE REFUSAL, ASSERTED AT THE WIRE.**
@@ -69,7 +69,7 @@ const HTML = '<!doctype html><html><head><meta charset="utf-8"></head><body>سل
 /** DECLARED OPERATOR ROWS (bank 70..73) — the surface R-017 protects. */
 const SLOT = { channel: 1, layer: 70 };
 const SLOT_B = { channel: 1, layer: 71 };
-const BANK = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 };
+const BANK = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 4 };
 const FIXED_SLOTS = [SLOT, SLOT_B];
 
 async function boot(): Promise<{ rt: CasparRuntime; mk: MockHandle }> {
@@ -82,7 +82,7 @@ async function boot(): Promise<{ rt: CasparRuntime; mk: MockHandle }> {
   runtime = new CasparRuntime(
     connectionFor(mock.amcpPort, oscPort, await freeUdpPort()),
     {},
-    { fixedSlots: FIXED_SLOTS, fixedBank: BANK },
+    { layerPolicy: TEST_LAYER_POLICY, fixedSlots: FIXED_SLOTS, fixedBank: BANK },
   );
   runtime.start();
   await runtime.startServing();

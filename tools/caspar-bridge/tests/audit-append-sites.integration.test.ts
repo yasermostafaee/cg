@@ -7,7 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
 import { UNATTRIBUTED_ACTOR, type ConnectionConfig, type TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * ⭐ **B-141 §5a — THE SEVEN PLAYOUT VERBS, AND THE REFUSALS ARE THE POINT.**
@@ -157,7 +157,7 @@ async function boot(opts: { reachable: boolean }): Promise<{ r: CasparRuntime; f
     // any of them reaching a wire.
     config = singleServer(await freeUdpPort(), oscPort);
   }
-  const r = new CasparRuntime(config, {}, { auditLogPath: file });
+  const r = new CasparRuntime(config, {}, { layerPolicy: TEST_LAYER_POLICY, auditLogPath: file });
   runtime = r;
   r.start();
   await r.startServing();
@@ -365,6 +365,7 @@ describe('B-141 — the REFUSALS, each with the code that refused it', () => {
         singleServer(mock.amcpPort, oscPort),
         {},
         {
+          layerPolicy: TEST_LAYER_POLICY,
           auditLogPath: file,
           fixedSlots: [{ channel: 1, layer: 71 }],
         },
@@ -496,7 +497,11 @@ describe('B-141 — an audit write can never take the station off air', () => {
 
       const oscPort = await freeUdpPort();
       mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40 });
-      const r = new CasparRuntime(singleServer(mock.amcpPort, oscPort), {}, { auditLogPath: file });
+      const r = new CasparRuntime(
+        singleServer(mock.amcpPort, oscPort),
+        {},
+        { layerPolicy: TEST_LAYER_POLICY, auditLogPath: file },
+      );
       runtime = r;
       r.start();
       await r.startServing();
@@ -550,7 +555,11 @@ describe('B-141 — an audit write can never take the station off air', () => {
     { timeout: 60_000 },
     async () => {
       const oscPort = await freeUdpPort();
-      const r = new CasparRuntime(singleServer(await freeUdpPort(), oscPort));
+      const r = new CasparRuntime(
+        singleServer(await freeUdpPort(), oscPort),
+        {},
+        { layerPolicy: TEST_LAYER_POLICY },
+      );
       runtime = r;
       const health = r.auditHealth();
       expect(health).toEqual({ configured: false, path: null, errorCount: 0, lastError: null });

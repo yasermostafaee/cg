@@ -12,7 +12,7 @@ import type {
 } from '@cg/shared-ipc';
 import type { LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * 🔴 **THE OWNER'S SEQUENCE: on air → STOP → switch the look while stopped → PLAY.**
@@ -151,6 +151,7 @@ async function boot(): Promise<CasparRuntime> {
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       lookMixerHoldMs: 0,
       sweepMs: 150,
       sourceCatalog: CATALOG,

@@ -12,7 +12,7 @@ import type {
 } from '@cg/shared-ipc';
 import type { RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-048 / C-015 phase 6 (6.9 / 6.9a / 6.9b / 6.9c / 6.9d) — **SWAP ONE PLATE'S
@@ -133,7 +133,12 @@ async function boot(): Promise<CasparRuntime> {
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 150, sourceCatalog: CATALOG, sourceAssignments: ASSIGNMENTS },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: 150,
+      sourceCatalog: CATALOG,
+      sourceAssignments: ASSIGNMENTS,
+    },
   );
   runtime = r;
   r.start();
@@ -308,6 +313,10 @@ it('🔴 6.9d — the override SURVIVES a bridge restart, through retention', as
       templateId: 'lower-third',
       fields: {},
       state: 'on-air',
+      // `LAYER-BANDS-16` — the COORDINATE the browser retains. `#slotForRestore` honours
+      // it and no longer allocates a fresh one, so without it this restore is reported as
+      // `not-declared` and the intent under test never comes back.
+      ...(published?.slot !== undefined && { slot: published.slot }),
       ...(published?.sourceOverride !== undefined && {
         sourceOverride: published.sourceOverride,
       }),
@@ -318,7 +327,12 @@ it('🔴 6.9d — the override SURVIVES a bridge restart, through retention', as
   const fresh = new CasparRuntime(
     singleServer(mock?.amcpPort ?? 0, await freeUdpPort()),
     {},
-    { sweepMs: 150, sourceCatalog: CATALOG, sourceAssignments: ASSIGNMENTS },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: 150,
+      sourceCatalog: CATALOG,
+      sourceAssignments: ASSIGNMENTS,
+    },
   );
   runtime = fresh;
   fresh.start();

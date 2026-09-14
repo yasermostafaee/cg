@@ -12,7 +12,7 @@ import type {
 } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { LiveLayerRecord } from '../src/live-layers.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * 🔴 **PANIC — "SILENCE ALL BOXES", SCOPED TO THE LEDGER RATHER THAN TO BELIEVED STATUS.**
@@ -138,7 +138,12 @@ async function boot(): Promise<CasparRuntime> {
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 150, sourceCatalog: CATALOG, sourceAssignments: ASSIGNMENTS },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: 150,
+      sourceCatalog: CATALOG,
+      sourceAssignments: ASSIGNMENTS,
+    },
   );
   runtime = r;
   r.start();

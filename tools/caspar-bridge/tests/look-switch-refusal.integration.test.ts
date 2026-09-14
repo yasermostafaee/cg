@@ -18,7 +18,7 @@ import type {
 } from '@cg/shared-ipc';
 import type { LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * 🔴 **`B-166` / `B-167` — A LOOK SWITCH THAT REFUSES MUST HAVE CHANGED NOTHING, AND ONE THAT
@@ -184,6 +184,7 @@ async function boot(): Promise<CasparRuntime> {
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       // `B-174` — what this suite pins is WHAT a refusal leaves behind, never how long the
       // hold is (that has its own tests in `look-switch-hold.integration.test.ts`), so the
       // hold is off here rather than sleeping 40 ms per switch.

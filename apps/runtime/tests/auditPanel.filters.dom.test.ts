@@ -24,7 +24,7 @@ const BANK: FixedLayerBank = {
   start: 70,
   count: 30,
   aliases: { '98': 'زیرنویس اصلی' },
-  low: { start: 1, count: 9 },
+  low: { start: 50, count: 9 },
 };
 const THREE_FRAMES: TemplateInfo = {
   templateId: 'e506e319-6e68-4603-a5f4-290b21616250',
@@ -39,7 +39,7 @@ const OK_ON_BED_1: AuditEntry = {
   action: 'take',
   itemId: 'item-9e064614-8e46-483a-82fe-0b750598cf88',
   templateId: THREE_FRAMES.templateId,
-  slot: { channel: 1, layer: 9, server: 'primary' },
+  slot: { channel: 1, layer: 58, server: 'primary' },
   outcome: 'ok',
 };
 const REFUSED_ON_98: AuditEntry = {

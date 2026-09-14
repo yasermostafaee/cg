@@ -7,7 +7,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { AuditEntry } from '@cg/shared-schema';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * ⭐ **`B-209` — A REFUSED TAKE RECORDS THE LINE THAT WAS REFUSED, BESIDE THE CODE.**
@@ -39,7 +39,7 @@ let mock: MockHandle | null = null;
 let runtime: CasparRuntime | null = null;
 let auditDir: string | null = null;
 
-const BANK = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 };
+const BANK = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 4 };
 const FIXED_SLOTS = [
   { channel: 1, layer: 70 },
   { channel: 1, layer: 71 },
@@ -110,7 +110,12 @@ async function bootUnserved(): Promise<{ r: CasparRuntime; file: string }> {
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { auditLogPath: file, fixedSlots: FIXED_SLOTS, fixedBank: BANK },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      auditLogPath: file,
+      fixedSlots: FIXED_SLOTS,
+      fixedBank: BANK,
+    },
   );
   runtime = r;
   r.start();

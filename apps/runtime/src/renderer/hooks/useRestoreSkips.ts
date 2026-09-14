@@ -105,5 +105,19 @@ export function restoreSkipReason(skip: RestoreSkip): string {
      */
     case 'no-bed-row':
       return 'it is a graphics bed and every bed row is taken — remove a template from one of the bed rows, then load it again';
+    /*
+     * 🔴 `LAYER-BANDS-16` — the row remembers a layer that is not a declared row, and since
+     * the layer map was re-cut there is no dynamic layer left to put it on instead (every
+     * one of those lay in 1-49, which is the playout server's). Worded away from
+     * `no-layer`'s "free something up" for the reason that reason exists: nothing is
+     * exhausted here and freeing a row would not help. The operator has to DECLARE a row.
+     *
+     * The layer number is not repeated in this clause because it is already IN the sentence
+     * — `operatorRowName` puts the retained coordinate into the row's name, immediately to
+     * the left of this text, which is `R-028`'s "keep the real layer number visible where a
+     * row is named in a sentence" already discharged.
+     */
+    case 'not-declared':
+      return 'its layer is not a declared row any more — declare a row for it in CG Control, then load it onto that row';
   }
 }

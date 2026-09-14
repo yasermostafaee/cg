@@ -28,7 +28,7 @@ describe('channelIds — the union of every channel the bridge already names', (
       ],
       observed: [],
     };
-    const bank = { channel: 2, low: { start: 1, count: 9 }, start: 70, count: 2 };
+    const bank = { channel: 2, low: { start: 50, count: 9 }, start: 70, count: 2 };
     expect(channelIds(bank, settings)).toEqual([1, 2, 3]);
     // The bank's channel already declared in settings appears ONCE.
     expect(channelIds({ ...bank, channel: 3 }, settings)).toEqual([1, 3]);

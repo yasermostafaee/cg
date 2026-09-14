@@ -21,7 +21,7 @@ const BANK: FixedLayerBank = {
   start: 70,
   count: 30,
   aliases: { '98': 'زیرنویس اصلی', '99': 'لوگوی اصلی' },
-  low: { start: 1, count: 9 },
+  low: { start: 50, count: 9 },
 };
 
 const TEMPLATE: TemplateInfo = {
@@ -66,12 +66,12 @@ describe('operatorRowName', () => {
   it('falls back to the default row name for a bed the operator has not aliased', () => {
     // The plant's real state: `low.aliases` is absent, so layer 9 is `Bed 1`.
     const name = operatorRowName(
-      { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 9 } },
+      { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 58 } },
       BANK,
       TEMPLATES,
     );
     expect(name.names).toEqual(['Bed 1', '3ghab']);
-    expect(name.layer).toBe('1-9');
+    expect(name.layer).toBe('1-58');
   });
 
   it('keeps the real coordinate beside a named row', () => {

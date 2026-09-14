@@ -186,7 +186,31 @@ type SetConfigResult = ChannelResponse<typeof ConnectionsSetConfigChannel>;
  */
 type RestorePlacement =
   | {
-      slot: CommandSlot;
+      /**
+       * 🔴 `LAYER-BANDS-16` — **`null` means THE ROW NEEDS NO LAYER**, and that is a
+       * different answer from every skip.
+       *
+       * A `cleared` or `error` row holds nothing on the channel: `isRestorable` says so in
+       * as many words, and for those two states occupancy is not even consulted. Such a row
+       * must still COME BACK — visibly, wearing its state and its reason — and it comes back
+       * onto no coordinate at all.
+       *
+       * ⚠ **WHAT THIS REPLACES, recorded so nobody "restores" it as a fix.** Until the
+       * dynamic allocator was retired, `#slotForRestore` fell through to `#allocate()`, so
+       * an errored row — one that never had a producer and never will — was handed a
+       * DYNAMIC LAYER IT NEVER USED: assigned, written into `#slots`, and given OSC
+       * interest on a layer nothing would ever be placed on. That was not a feature; it was
+       * the allocator being the only way this function knew how to return. The layers it
+       * invented came from the dynamic ranges, which after the 2026-09-14 re-cut lie in the
+       * span left to the playout server — so bringing the fall-through back would put a
+       * phantom claim on somebody else's layer.
+       *
+       * ⚠ INTERNAL. This type is module-local and never crosses the seam: `StackItemState`
+       * and `RetainedStackItem` already declare `slot` OPTIONAL, and `Reconciler.restoreItem`
+       * never took one, so a row that comes back without a layer needs no wire, IPC or
+       * persisted-key change.
+       */
+      slot: CommandSlot | null;
       /**
        * `single-clock-look-switch` — set when the retained coordinate was an OPERATOR row and
        * the package turned out to be a graphics BED, so the row was re-homed onto a bed row.
@@ -2375,6 +2399,13 @@ export class CasparRuntime {
       }
       const { slot } = placement;
       /*
+        🔴 `LAYER-BANDS-16` — `slot === null` is a row that needs NO LAYER (see
+        `RestorePlacement`). Every block below that touches a layer is already gated on
+        `isRetainedOnAir` or `isRestorable`, both of which are FALSE for the only states
+        that reach here with a null slot — so the guards added below are the compiler
+        seeing what those predicates already guarantee, never a second opinion about it.
+      */
+      /*
         `single-clock-look-switch` — THE MIGRATED ROW'S STATE, RESOLVED ONCE, HERE.
 
         A bed re-homed off an operator row comes back present but NOT on air (see
@@ -2387,7 +2418,10 @@ export class CasparRuntime {
       const migratedFrom = 'migratedFrom' in placement ? placement.migratedFrom : undefined;
       const restoredState: RetainedStackItem['state'] =
         migratedFrom !== undefined && isRetainedOnAir(item.state) ? 'loaded' : item.state;
-      if (migratedFrom !== undefined) {
+      // `slot !== null` is true by construction here — a MIGRATED row is one that was
+      // re-homed ONTO a bed row, so it has a destination — but it is written out rather
+      // than asserted past, so the compiler checks the invariant instead of trusting it.
+      if (migratedFrom !== undefined && slot !== null) {
         migrated.push({
           itemId: item.itemId,
           from: { channel: migratedFrom.channel, layer: migratedFrom.layer },
@@ -2412,7 +2446,10 @@ export class CasparRuntime {
         Refused BEFORE `restoreItem`, so a refused restore mutates nothing — the same
         discipline the take door keeps, and the same as the three skips above it.
       */
-      if (isRetainedOnAir(restoredState)) {
+      // Same shape: `isRetainedOnAir` implies `isRestorable`, and only a NON-restorable row
+      // can arrive with a null slot — so this can never be the thing that skips a refusal.
+      // Written out so that stays a fact the compiler holds rather than a comment.
+      if (isRetainedOnAir(restoredState) && slot !== null) {
         const exclusivity = this.#refuseSecondMultiBox(item.itemId, item.templateId, slot.channel);
         if (exclusivity !== null) {
           // B-114 — release by the SAME door the slot was taken through (see below).
@@ -2468,17 +2505,28 @@ export class CasparRuntime {
         // the fence), so using it alone here would leave the row bound to an
         // item the reconciler just refused — a permanently occupied row holding
         // nothing, which no verb can clear.
-        if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
-        else this.#layers.deallocate(slot);
+        // Nothing was taken for a no-layer row, so there is nothing to give back.
+        if (slot !== null) {
+          if (this.#layers.isFixed(slot)) this.#layers.unbindFixed(slot);
+          else this.#layers.deallocate(slot);
+        }
         skipped.push({ itemId: item.itemId, reason: 'already-held', ...restoreSkipNaming(item) });
         continue;
       }
-      this.#slots.set(item.itemId, slot);
-      this.#reconciler.assignSlot(item.itemId, { ...slot, server: 'primary' });
-      // Bound for EVERY restored row including a cleared one: an `out` retains its
-      // slot (B-109's own trace), so the row keeps its layer identity and OSC is
-      // what confirms the layer really is idle.
-      this.#addInterest(slot);
+      // Bound for EVERY restored row that HAS a layer, including a cleared one: an `out`
+      // retains its slot (B-109's own trace), so the row keeps its layer identity and OSC
+      // is what confirms the layer really is idle.
+      //
+      // 🔴 A row with NO layer takes none of these three steps, and that is the whole
+      // point: no `#slots` entry, no published coordinate, and no OSC interest opened on a
+      // layer nothing will ever be placed on. The row still comes back — `restoreItem`
+      // above has already seated it, with its state and its `errorCode` — it simply comes
+      // back without a coordinate, which `StackItemState.slot` has always allowed.
+      if (slot !== null) {
+        this.#slots.set(item.itemId, slot);
+        this.#reconciler.assignSlot(item.itemId, { ...slot, server: 'primary' });
+        this.#addInterest(slot);
+      }
       // R-011 — the operator's placement is intent too, and #sendAdd reads it
       // off #positions, so it must be back BEFORE any re-ADD decision runs.
       //
@@ -2561,7 +2609,7 @@ export class CasparRuntime {
        * refused. A second copy of the predicate inside `#decidePendingRestores` is the
        * kind of drift golden rule 6 exists to prevent.
        */
-      if (isRestorable(item.state)) {
+      if (isRestorable(item.state) && slot !== null) {
         this.#pendingRestore.set(item.itemId, {
           slot,
           templateId: item.templateId,
@@ -2683,14 +2731,45 @@ export class CasparRuntime {
         // returned as a skip and NOT allocated elsewhere — see the method's note.
         return this.#layers.bindFixed(slot, templateType) ? { slot } : { skip: 'fixed-slot-taken' };
       }
-      // ── A DYNAMIC layer — #368, unchanged: exact slot first, then elsewhere. ──
+      // ── A DYNAMIC layer — #368: the EXACT slot, and now nowhere else. ─────────
+      //
+      // `reserve()` still honours a retained coordinate that is free: a row that came back
+      // exactly where the operator left it is the good case and is untouched.
       if (this.#layers.reserve(slot, item.templateId)) return { slot };
+      /*
+        🔴 `LAYER-BANDS-16` — AND THE "ELSEWHERE" HALF IS GONE, DELIBERATELY.
+
+        This used to fall through to `#allocate()`, which would have re-homed the row onto
+        a dynamic range. Every one of those ranges lay in 1-49 — the span the owner's re-cut
+        leaves to the playout server — so the fall-through's remaining behaviour was
+        "silently put this graphic on somebody else's output". The dynamic policy is empty
+        now, so `#allocate()` would throw in any case; what matters is that the skip is
+        reported as what it IS rather than as an exhausted range.
+      */
+      return this.#placementWithoutLayer(item);
     }
-    try {
-      return { slot: this.#allocate(item.templateId) };
-    } catch {
-      return { skip: 'no-layer' };
-    }
+    /*
+      No retained coordinate at all — nothing to honour and nothing to allocate from.
+    */
+    return this.#placementWithoutLayer(item);
+  }
+
+  /**
+   * 🔴 What a row with NO usable coordinate gets, and the split is `isRestorable` — THE
+   * canonical predicate, the same one this file already gates `#pendingRestore` on.
+   *
+   * A row that may be re-seated (`on-air` / `loaded`) genuinely needs a layer, and there is
+   * no longer an allocator to invent one: it is skipped, VISIBLY, with the sentence that
+   * tells the operator to declare a row. A row that may NOT be re-seated (`cleared` /
+   * `error`) holds nothing on the channel and never will — so a missing coordinate is not a
+   * reason to drop it, and dropping it would be the worse failure of the two: a row that
+   * vanishes after a restart takes its error message with it, and the operator never learns
+   * it was broken.
+   *
+   * ⚠ ONE predicate, not a local re-derivation of "which states own a layer" (golden rule 6).
+   */
+  #placementWithoutLayer(item: RetainedStackItem): RestorePlacement {
+    return isRestorable(item.state) ? { skip: 'not-declared' } : { slot: null };
   }
 
   /**

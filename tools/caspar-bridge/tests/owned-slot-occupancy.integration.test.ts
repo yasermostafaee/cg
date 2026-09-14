@@ -5,7 +5,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { OwnedOccupancyWarning, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-056 — the owned-slot occupancy warning. Mirror pair where the PRIMARY's
@@ -123,15 +123,19 @@ async function bootMirrorWithDeadPrimary(opts: { foreignOnPrimary: boolean }): P
     mockA = await createMock({ amcpPort: 0, oscPort: oscA, oscHost: '127.0.0.1', oscHz: 30 });
   }
   mockB = await createMock({ amcpPort: 0, oscPort: oscB, oscHost: '127.0.0.1', oscHz: 30 });
-  const r = new CasparRuntime({
-    servers: {
-      A: { host: '127.0.0.1', amcpPort: deadAmcpPort, oscPort: oscA },
-      B: { host: '127.0.0.1', amcpPort: mockB.amcpPort, oscPort: oscB },
+  const r = new CasparRuntime(
+    {
+      servers: {
+        A: { host: '127.0.0.1', amcpPort: deadAmcpPort, oscPort: oscA },
+        B: { host: '127.0.0.1', amcpPort: mockB.amcpPort, oscPort: oscB },
+      },
+      strategy: 'mirror-sync',
+      // The PRD scenario: no failover — the unreachable A STAYS primary.
+      autoFailoverEnabled: false,
     },
-    strategy: 'mirror-sync',
-    // The PRD scenario: no failover — the unreachable A STAYS primary.
-    autoFailoverEnabled: false,
-  });
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime = r;
   const emissions: OwnedOccupancyWarning[][] = [];
   r.ownedOccupancyChanged.subscribe((w) => emissions.push(w));

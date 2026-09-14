@@ -151,7 +151,7 @@ it('S3 — a band overlapping the candidate bank throws BEFORE binding, naming b
     createBridge({
       port: wsPort,
       connection: singleServer(mock.amcpPort, oscPort),
-      fixedLayers: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 30 },
+      fixedLayers: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 30 },
       // 50–75 reaches into the operator's candidate bank.
       sourceCatalog: { sources: [], layerRange: { start: 50, end: 75 } },
     }),
@@ -190,7 +190,7 @@ it('S5 — the catalog is in force, with its provenance, before the first client
         producer: { kind: 'route', channel: 2 },
       },
     ],
-    layerRange: { start: 10, end: 59 },
+    layerRange: { start: 60, end: 69 },
   };
   fs.writeFileSync(file, JSON.stringify(value), 'utf8');
 
@@ -212,9 +212,12 @@ it('S6 — a change is validated against the SAME bank and reservation the boot 
   bridge = await createBridge({
     port: 0,
     connection: singleServer(mock.amcpPort, oscPort),
-    fixedLayers: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 30 },
-    reservedLayers: { ranges: [{ from: 60, to: 69 }] },
-    sourceCatalog: { sources: [], layerRange: { start: 10, end: 59 } },
+    // `LAYER-BANDS-16` — beds 50-58 < band 60-69 < reservation 70-79 < bank 80-99. All
+    // three refusals below need their own space, and the bank questions are asked before
+    // the reserved one, so a band under the beds would never reach the reserved arm.
+    fixedLayers: { channel: 1, low: { start: 50, count: 9 }, start: 80, count: 20 },
+    reservedLayers: { ranges: [{ from: 70, to: 79 }] },
+    sourceCatalog: { sources: [], layerRange: { start: 60, end: 69 } },
   });
   await bridge.runtime.whenServerHealthy(HEALTH_MS);
 
@@ -222,22 +225,22 @@ it('S6 — a change is validated against the SAME bank and reservation the boot 
   // can trigger with a graphic on air.
   const intoBank = bridge.runtime.setSourceCatalog({
     sources: [],
-    layerRange: { start: 10, end: 72 },
+    layerRange: { start: 60, end: 85 },
   });
   expect(intoBank).toMatchObject({ ok: false, reason: 'overlaps-fixed-bank' });
 
   const intoReserved = bridge.runtime.setSourceCatalog({
     sources: [],
-    layerRange: { start: 10, end: 61 },
+    layerRange: { start: 60, end: 72 },
   });
   expect(intoReserved).toMatchObject({ ok: false, reason: 'overlaps-reserved' });
 
   // The refusals left the catalog in force untouched.
-  expect(bridge.runtime.sourceCatalog().layerRange).toEqual({ start: 10, end: 59 });
+  expect(bridge.runtime.sourceCatalog().layerRange).toEqual({ start: 60, end: 69 });
 
   const ok = bridge.runtime.setSourceCatalog({
     sources: [{ id: 'src-aaa', name: 'Studio A', producer: { kind: 'route', channel: 2 } }],
-    layerRange: { start: 10, end: 59 },
+    layerRange: { start: 60, end: 69 },
   });
   expect(ok).toEqual({ ok: true });
   expect(bridge.runtime.sourceCatalog().sources).toHaveLength(1);

@@ -924,6 +924,31 @@ export async function chooseSourceKind(scope: Locator, kind: string): Promise<vo
     .check();
 }
 
+/**
+ * Resolve a declared CSS colour — a token reference, a hex, an `rgb()`, a `color-mix(…)` —
+ * to the exact string `getComputedStyle` reports, by letting the browser do the normalising.
+ * Comparing that way keeps an assertion on IDENTITY with the token rather than on a parser
+ * here agreeing with Chromium's, which is what "severity and identity BY TOKEN, never by
+ * hex" asks for on the test side.
+ *
+ * ⚠ The probe is appended to `<body>` so it INHERITS the app's custom properties: a detached
+ * element resolves `var(--r-verb-clear)` to nothing and the helper would quietly answer
+ * `rgba(0, 0, 0, 0)` for every token — a pass against any colour at all.
+ *
+ * Lives here, and not beside its first caller, because a second local copy is how one helper
+ * becomes two that disagree. `layer-table-geometry.spec.ts` had the original.
+ */
+export async function cssColour(page: Page, declared: string): Promise<string> {
+  return page.evaluate((value) => {
+    const probe = document.createElement('div');
+    probe.style.backgroundColor = value;
+    document.body.appendChild(probe);
+    const out = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return out;
+  }, declared);
+}
+
 export async function disableSplash(page: Page): Promise<void> {
   await page.addInitScript(() => {
     (window as unknown as { __CG_SPLASH_DISABLED__: boolean }).__CG_SPLASH_DISABLED__ = true;

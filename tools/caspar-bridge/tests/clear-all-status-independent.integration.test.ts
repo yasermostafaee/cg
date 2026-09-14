@@ -5,7 +5,7 @@ import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { LiveLayerRecord } from '../src/live-layers.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-122 — CLEAR ALL IS AN ESCAPE HATCH, SO IT MUST NOT ASK THE BOOKKEEPING.
@@ -120,7 +120,7 @@ async function boot(over: { deaf?: boolean } = {}): Promise<CasparRuntime> {
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, listenPort),
     {},
-    { sweepMs: 150, occupancyStaleMs: 800 },
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: 150, occupancyStaleMs: 800 },
   );
   runtime.start();
   await runtime.startServing();

@@ -91,7 +91,7 @@ interface TwoRows {
 }
 
 /** Only ever used to NAME a row, through the one composition — never as a channel authority. */
-const BANK_FOR_NAMES = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 2 };
+const BANK_FOR_NAMES = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 2 };
 
 /**
  * The row carrying a given item — found by `data-item-id`, the row's own stable hook, NOT by
@@ -335,7 +335,7 @@ describe('§4 — choosing a channel changes what is REPORTED, never what is HEL
     ],
     observed: [],
   };
-  const BANK = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 2 };
+  const BANK = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 2 };
 
   it('the store holds a CHOICE and no channel state, so a selection cannot mutate a channel', () => {
     expect(readChannelChoice(), 'nothing chosen at rest').toBeNull();

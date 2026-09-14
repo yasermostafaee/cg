@@ -593,6 +593,24 @@ export const RestoreSkipReasonSchema = z.enum([
    * and look at, while this one says the whole low group is full.
    */
   'no-bed-row',
+  /**
+   * 🔴 `LAYER-BANDS-16` — the retained coordinate is NOT a declared row, and there is no
+   * longer any dynamic layer to fall back to.
+   *
+   * The 2026-09-14 re-cut retired the type-keyed dynamic ranges: every one of them lay in
+   * 1-49, the span now left to the playout server, so re-homing this row would have meant
+   * putting a graphic on somebody else's output. The row therefore does not come back, and
+   * the remedy is for the operator to DECLARE a row for it and load it there.
+   *
+   * ⚠ **Deliberately NOT `no-layer`, and the distinction is the whole reason this exists.**
+   * `no-layer` says the range is exhausted and tells the operator to free something up —
+   * which would now be a lie twice over: nothing is exhausted, and freeing a row would not
+   * help, because the coordinate this row remembers is not a row at all. The owner's
+   * condition on retiring dynamic allocation was that this skip be VISIBLE and say what to
+   * do; a reason that sent the operator to clear an unrelated row would satisfy the letter
+   * of that and none of the point.
+   */
+  'not-declared',
 ]);
 export type RestoreSkipReason = z.infer<typeof RestoreSkipReasonSchema>;
 

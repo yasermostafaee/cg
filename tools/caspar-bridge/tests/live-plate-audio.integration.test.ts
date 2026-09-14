@@ -12,7 +12,7 @@ import type {
 } from '@cg/shared-ipc';
 import type { RetainedStackItem } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * C-015 phase 6 (6.5f) — **THE RAISE HALF OF THE AUDIO RULE: the explicit recorded
@@ -128,7 +128,12 @@ async function boot(): Promise<CasparRuntime> {
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 150, sourceCatalog: CATALOG, sourceAssignments: ASSIGNMENTS },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: 150,
+      sourceCatalog: CATALOG,
+      sourceAssignments: ASSIGNMENTS,
+    },
   );
   runtime = r;
   r.start();
@@ -266,6 +271,7 @@ it('🔴 6.5f/6.9d — the intent SURVIVES a bridge restart, through retention',
       templateId: 'lower-third',
       fields: {},
       state: 'on-air',
+      ...(published?.slot !== undefined && { slot: published.slot }),
       ...(published?.plateVolumes !== undefined && { plateVolumes: published.plateVolumes }),
     },
   ];
@@ -274,7 +280,12 @@ it('🔴 6.5f/6.9d — the intent SURVIVES a bridge restart, through retention',
   const fresh = new CasparRuntime(
     singleServer(mock?.amcpPort ?? 0, await freeUdpPort()),
     {},
-    { sweepMs: 150, sourceCatalog: CATALOG, sourceAssignments: ASSIGNMENTS },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: 150,
+      sourceCatalog: CATALOG,
+      sourceAssignments: ASSIGNMENTS,
+    },
   );
   runtime = fresh;
   fresh.start();

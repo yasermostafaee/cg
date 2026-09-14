@@ -32,7 +32,7 @@ import { installMemoryStorage } from './support/localStorage.js';
  * that it exists and what it says.
  */
 
-const RELOCATED = 'زیرنویس اصلی — item-e602d912-1a2b, on 1-10';
+const RELOCATED = 'زیرنویس اصلی — item-e602d912-1a2b, on 1-60';
 
 function pointer(type: string, target: Element): void {
   target.dispatchEvent(new Event(type, { bubbles: true }));
@@ -155,7 +155,7 @@ class NoopResizeObserver {
 describe('guard item 22 — the MOUNT: the whole App serves a row verb’s title through the one tooltip', () => {
   let root: Root | null = null;
   let host: HTMLDivElement | null = null;
-  const ROW = 74;
+  const ROW = 84;
 
   beforeEach(async () => {
     (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = NoopResizeObserver;

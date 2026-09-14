@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { test, expect } from './fixtures/runtime.js';
+import { cssColour, test, expect } from './fixtures/runtime.js';
 
 /**
  * 🔴 `SETTINGS-POLISH-04` — **SEVEN VISUAL DEFECTS THE OWNER FOUND ON THE BUILT DIALOG**, each
@@ -132,35 +132,63 @@ test('§2 — one red family, two weights: the console confirm FILLS and the sub
   /*
     ── (a) THE CONSOLE'S — measured FIRST so a regression here is not masked.
 
-    `--r-danger-confirm-bg` (#684044), which is the sub-dialog family's own EDGE colour
-    promoted to a ground. It was `rgb(245, 158, 11)`, the solid amber, until the reversal.
+    🔴 **THE HUE MOVED AGAIN ON 2026-09-14, AND THE WEIGHT DID NOT.** The owner: a CLEAR is
+    not a deletion, so it may not wear the deletion red (nor the bin above it — that half is
+    `picker-manage-chrome.spec.ts`). `Clear all` now fills in its own `--r-verb-clear`, the
+    colour of the button that opened it.
+
+    ⚠ **What this half of the test was ALWAYS about is the FILL, and that is untouched** —
+    see the docblock: "no safety signal may weaken". So the assertions below are the same
+    ones, with the hue re-pointed: FILLED (not transparent, not the quiet outline ground),
+    ringed in its verb's own bright ink, white at 700. A build that flattened this into an
+    outline still fails here, which is the whole job of (a).
+
+    ⚠ And it is asserted from the TOKENS, resolved by the browser — never from a hex typed
+    here. `--r-verb-clear` is the owner's held value and the ground is a `color-mix` of it;
+    re-spelling either would give that value a second home.
   */
   await page.getByRole('button', { name: 'Clear all rows holding a layer' }).click();
   const consoleConfirm = page.getByRole('dialog', { name: /^Clear all/ });
   await expect(consoleConfirm).toBeVisible();
   const clearAll = consoleConfirm.getByRole('button', { name: /^Clear all$/ });
-  await expect(clearAll).toHaveCSS('background-color', CONFIRM_RED_BG);
+  await expect(clearAll).toHaveCSS(
+    'background-color',
+    await cssColour(page, 'color-mix(in srgb, var(--r-verb-clear) 40%, var(--r-surface-sunken))'),
+  );
   await expect(
     clearAll,
-    'the safety signal WEAKENED — the FILL went, which is the one loss the reversal was not allowed to take',
+    'the safety signal WEAKENED — the FILL went, which is the one loss no reversal was allowed to take',
   ).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   /*
-    ADDENDUM D §D3(c) — RINGED IN THE FAMILY'S OWN INK, so this button and Station setup's
-    confirms are visibly the same red rather than merely the same hue family. Measured side by
-    side, ours read `#684044` filled with white against their `#352224` with `#ffaaa7` ink:
-    same family, ours the duller because the BRIGHT half of that pair was missing from it.
+    RINGED IN ITS OWN VERB'S INK — the same shape ADDENDUM D §D3(c) gave the red one (a dull
+    fill wants the bright half of its pair back), aimed at the verb instead of the family.
   */
-  await expect(clearAll, 'the ring in the family’s own red is gone').toHaveCSS(
+  await expect(clearAll, 'the ring in the verb’s own colour is gone').toHaveCSS(
     'border-color',
-    RED_INK,
+    await cssColour(page, 'var(--r-verb-clear)'),
   );
-  // White on #684044 is 8.73:1 — the numeric guard is `messageContrast.test.ts`.
+  // White on that ground is 11.5:1 — the derivation and the four measured ratios are beside
+  // the rule in `controls.css`.
   await expect(clearAll).toHaveCSS('color', 'rgb(255, 255, 255)');
   await expect(clearAll, 'it is still the committing button').toHaveCSS('font-weight', '700');
   // …and it must NOT have taken the row buttons' quiet ground with the hue.
   await expect(clearAll, 'the console confirm adopted the OUTLINE, not the family').not.toHaveCSS(
     'background-color',
     RED_BG,
+  );
+  /*
+    🔴 THE REGRESSION THIS EXISTS TO CATCH: the deletion red coming back to a verb that
+    deletes nothing. Named explicitly, because every other assertion in this block would pass
+    against a build that had re-harmonised `Clear all` into `Remove`'s treatment — which is
+    exactly the shape of the drift the ORIGINAL docblock was written to prevent, one hue on.
+  */
+  await expect(clearAll, 'CLEAR is wearing the deletion red again').not.toHaveCSS(
+    'background-color',
+    CONFIRM_RED_BG,
+  );
+  await expect(clearAll, 'CLEAR is ringed in the deletion red again').not.toHaveCSS(
+    'border-color',
+    RED_INK,
   );
   await consoleConfirm.getByRole('button', { name: 'Cancel' }).click();
   await expect(consoleConfirm).toBeHidden();

@@ -5,7 +5,7 @@ import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { LiveLayerRecord } from '../src/live-layers.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-028 (6.2 / 6.3 / 6.5) — **THE THREE DECLARED CLASSES, IN ONE SWEEP.**
@@ -54,7 +54,7 @@ const BANK_LAYER = 71; // class 1 — a declared operator row, left UNBOUND
 const UNDECLARED_LAYER = 45; // no class at all — the control
 
 const RESERVED = [60, 61, 62, 63, 64, 65, 66, 67, 68, 69];
-const BANK = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 };
+const BANK = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 4 };
 const FIXED_SLOTS = [
   { channel: 1, layer: 70 },
   { channel: 1, layer: 71 },
@@ -131,6 +131,7 @@ async function bootAllThree(): Promise<CasparRuntime> {
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: SWEEP_MS,
       occupancyStaleMs: STALE_MS,
       reservedLayers: RESERVED,

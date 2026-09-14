@@ -120,7 +120,7 @@ function stubBridge(): void {
           start: LAYER,
           count: 1,
           aliases: { [String(LAYER)]: 'BOX' },
-          low: { start: 1, count: 1, visibility: { '1': false } },
+          low: { start: 50, count: 1, visibility: { '1': false } },
         }),
       state: () =>
         Promise.resolve([

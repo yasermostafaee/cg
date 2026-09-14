@@ -4,7 +4,7 @@ import { createMock, type MockHandle, type AmcpRequest, type HandlerContext } fr
 import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * C-014 — allocation is occupancy-aware: an ordinary "Add item" must never
@@ -106,7 +106,7 @@ async function boot(): Promise<{ clears: string[] }> {
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS },
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS },
   );
   runtime.start();
   await runtime.startServing();
@@ -200,7 +200,7 @@ it('PINNED: a blind tap fails OPEN — allocation proceeds exactly as before C-0
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS },
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS },
   );
   runtime.start();
   await runtime.startServing();

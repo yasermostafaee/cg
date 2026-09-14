@@ -13,7 +13,7 @@ import type {
 } from '@cg/shared-ipc';
 import { readCgControl, type LiveFitMode, type LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * `multibox-layout-switch` `design.md` §4 / `tasks.md` 6.1–6.6 (LOOKS phase 3) — **THE ONE
@@ -274,6 +274,7 @@ async function boot(
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 150,
       // `B-174` — 0 keeps the page-first ORDER (which this suite pins) while skipping the
       // 40 ms sleep on each of this file's dozens of switches; the hold's DURATION has its

@@ -1,4 +1,5 @@
 import { afterEach } from 'vitest';
+import type { LayerPolicy } from '@cg/caspar-client';
 
 /**
  * B-073 — shared release + budget helpers for the socket/timer integration suites.
@@ -41,6 +42,49 @@ import { afterEach } from 'vitest';
  * Budget for `whenServerHealthy()` in tests. Deliberately far above the ~150 ms a
  * healthy handshake really takes: it is a liveness bound, NOT a performance assert.
  */
+/**
+ * 🔴 **THE SUITE'S OWN DYNAMIC ALLOCATION RANGES (`LAYER-BANDS-16`, 2026-09-14).**
+ *
+ * `DEFAULT_LAYER_POLICY` is EMPTY since the owner retired type-keyed dynamic allocation: the
+ * layer map cuts 50-99 into three ROLE bands and leaves 1-49 to the playout server, so the
+ * product ships no ranges of its own. Every test here that reaches `CasparRuntime.load()` —
+ * the plain dynamic verb — therefore has to DECLARE the deployment policy it is testing
+ * against, and does, at each `new CasparRuntime(...)`.
+ *
+ * ⚠ **DO NOT "SIMPLIFY" THIS BY PUTTING A DEFAULT BACK.** That is the explicit condition the
+ * decision was taken under. A default policy is what let ~360 tests pass without ever saying
+ * which layers they expected, and it is what made "we allocate on layer 10" a fact nobody
+ * had written down.
+ *
+ * ── WHY THESE ARE STILL THE OLD DECADES ─────────────────────────────────────
+ *
+ * Because this is a DEPLOYMENT'S declared policy, not the product's map, and hundreds of
+ * wire assertions below name the resulting coordinates (`CG 1-10 ADD`, …). Moving them would
+ * have re-written the expected AMCP of half the suite to prove nothing: what these tests
+ * exercise is the allocator's arithmetic and the fences around it, neither of which depends
+ * on which decades a station declared. The product's own floor is asserted where it belongs,
+ * against `DEFAULT_LAYER_POLICY`, by `assertPolicyAboveFloor`.
+ */
+export const TEST_LAYER_POLICY: LayerPolicy = {
+  'logo-bug': [40, 49],
+  'lower-third': [10, 19],
+  ticker: [20, 29],
+  'breaking-news': [30, 39],
+  /*
+    ⚠ **NO `fullscreen: [50, 59]`, and its absence is load-bearing.** That decade is the
+    graphics-BED band now; `validateFixedBank` refuses a bank whose rows overlap any dynamic
+    range, and every fixture in this suite declares bed rows at 50+ — so a policy carrying it
+    made the bridge refuse to BOOT with `overlaps-policy`, in tests whose subject was
+    something else entirely. It is the same arithmetic that retired the shipped policy.
+
+    ⚠ **`custom` STAYS, and do not "tidy" it away.** `CasparRuntime.#allocate` falls back to
+    `custom` for any `templateType` the policy does not name, so removing it does not narrow
+    the fixture — it breaks every dynamic load in the suite at once (measured: 11 failures
+    became 178).
+  */
+  custom: [60, 69],
+};
+
 export const HEALTH_MS = 15_000;
 
 /**

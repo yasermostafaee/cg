@@ -4,7 +4,7 @@ import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import type { FieldValues } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * B-066 (the "????" downstream symptom) — UTF-8 INTEGRITY of the field
@@ -61,11 +61,15 @@ const PERSIAN: FieldValues = {
 it('a Persian field payload reaches the CG ADD wire byte-exact — exact codepoints, zero "?"', async () => {
   const oscPort = await freeUdpPort();
   mock = await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 30 });
-  runtime = new CasparRuntime({
-    servers: { A: { host: '127.0.0.1', amcpPort: mock.amcpPort, oscPort } },
-    strategy: 'mirror-sync',
-    autoFailoverEnabled: true,
-  });
+  runtime = new CasparRuntime(
+    {
+      servers: { A: { host: '127.0.0.1', amcpPort: mock.amcpPort, oscPort } },
+      strategy: 'mirror-sync',
+      autoFailoverEnabled: true,
+    },
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
   runtime.start();
   await runtime.startServing();
   runtime.templateImport(TEMPLATE, HTML);

@@ -8,7 +8,7 @@ import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { createBridge, type BridgeHandle } from '../src/bridge.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * R-028 (o1 / 3.2 / 3.3) — the bridge OWNS the template catalogue:
@@ -36,7 +36,7 @@ let foreignTransport: AmcpTransport | null = null;
 const SWEEP_MS = 150;
 const STALE_MS = 800;
 const HTML = '<!doctype html><html><body>پایین‌ثلث</body></html>';
-const BANK = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 };
+const BANK = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 4 };
 const FIXED_SLOTS = [70, 71, 72, 73].map((layer) => ({ channel: 1, layer }));
 
 afterEach(async () => {
@@ -116,6 +116,7 @@ async function bootRuntime(
     cfg,
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: SWEEP_MS,
       occupancyStaleMs: STALE_MS,
       ...(extra.noBank === true ? {} : { fixedSlots: FIXED_SLOTS, fixedBank: BANK }),
@@ -266,7 +267,7 @@ it('R-028 (2.3) — installing a bank LIVE with pre-hidden layers fails closed o
   // BEFORE the session is healthy the tap has never heard: unknown → refuse.
   const blind = r.setFixedLayers({
     channel: 1,
-    low: { start: 1, count: 9 },
+    low: { start: 50, count: 9 },
     start: 70,
     count: 4,
     visibility: { '71': false },
@@ -280,7 +281,7 @@ it('R-028 (2.3) — installing a bank LIVE with pre-hidden layers fails closed o
   await waitFor(() => {
     const probe = r.setFixedLayers({
       channel: 1,
-      low: { start: 1, count: 9 },
+      low: { start: 50, count: 9 },
       start: 70,
       count: 4,
       visibility: { '71': false },
@@ -334,7 +335,7 @@ it('R-028 (2.5) — a candidate ceiling intersecting the reserved playout range 
     createBridge({
       port: 0,
       connection: singleServer(mock.amcpPort, oscPort),
-      fixedLayers: { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 10 },
+      fixedLayers: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 10 },
       reservedLayers: { ranges: [{ from: 75, to: 84 }] },
     }),
   ).rejects.toThrow(/70–79.*75–84|75–84.*70–79/s);

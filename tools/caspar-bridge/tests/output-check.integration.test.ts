@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { outputVerdictOf, type ConnectionConfig, type RunningConsumer } from '@cg/shared-ipc';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * `C-029` — the program-output check, end to end against the amcp-mock, on the plant's own
@@ -110,6 +110,7 @@ async function boot(
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 60,
       outputRecheckMs: options.outputRecheckMs ?? 150,
       ...(options.createMissingConsumers !== undefined
@@ -279,6 +280,7 @@ it('with creation ON: exactly ONE ADD, the declaration’s own device and flags,
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 60,
       outputRecheckMs: 150,
       createMissingConsumers: true,
@@ -318,6 +320,7 @@ it('with creation ON and a server that accepts: the 202 is VERIFIED by a re-read
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 60,
       outputRecheckMs: 60_000,
       createMissingConsumers: true,
@@ -355,10 +358,7 @@ it('with creation ON but only a MONITOR missing: nothing is sent and the reason 
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    {
-      sweepMs: 60,
-      createMissingConsumers: true,
-    },
+    { layerPolicy: TEST_LAYER_POLICY, sweepMs: 60, createMissingConsumers: true },
   );
   runtime.start();
   await runtime.startServing();

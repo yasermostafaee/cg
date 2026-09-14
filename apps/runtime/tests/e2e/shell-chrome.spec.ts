@@ -608,16 +608,48 @@ test('§D5b — the air count wears the air colour, and drops it when nothing ca
     a test that re-spells it is a second home for it (§4's "by TOKEN, never by hex").
   */
   const unverifiable = await air.getAttribute('data-unverifiable');
+  const count = Number((await air.getAttribute('data-air-tally')) ?? '0');
   const colour = await air.evaluate((el) => getComputedStyle(el).color);
   const muted = await app.layers
     .locator('[data-layers-tally-rows]')
     .evaluate((el) => getComputedStyle(el).color);
 
-  if (unverifiable === null) {
+  if (unverifiable === null && count > 0) {
     // Confirmed: the count wears the sacred green, distinct from the muted text beside it.
     expect(colour, 'a confirmed air count must not read as ordinary text').not.toBe(muted);
   } else {
     // Withdrawn: it keeps the number and gives up the claim, which is exactly the grey.
     expect(colour, 'an unconfirmed air count must not wear the air colour').toBe(muted);
   }
+});
+
+/*
+  🔴 THE OWNER'S ZERO (2026-09-14) — `0 on air` in the sacred green, on a station with an
+  empty air. The colour means "something is on air"; at zero there is nothing to claim, so
+  the chip gives the colour up while keeping the number.
+
+  Measured in a real engine and as a DIFFERENCE against the muted sibling, never against a
+  hex — `--r-onair` is the owner's held value and a test that re-spells it is a second home
+  for it. And it is an e2e rather than a dom spec because the rule lives in a stylesheet
+  jsdom is not running (golden rule 12(c)).
+*/
+test('§D5c — the air count gives up the air colour when the number is zero', async ({ app }) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const air = app.layers.locator('[data-air-tally]');
+  await expect(air).toHaveCount(1);
+
+  // Take everything off air, so the count is a CONFIRMED zero rather than an unknown one.
+  await page.getByRole('button', { name: 'Clear all rows holding a layer' }).click();
+  const confirm = page.getByRole('dialog', { name: /^Clear all/ });
+  await confirm.getByRole('button', { name: /^Clear all$/ }).click();
+  await expect(confirm).toBeHidden();
+  await expect(air).toHaveAttribute('data-air-tally', '0');
+  await expect(air).toHaveText('0 on air');
+
+  const muted = await app.layers
+    .locator('[data-layers-tally-rows]')
+    .evaluate((el) => getComputedStyle(el).color);
+  const colour = await air.evaluate((el) => getComputedStyle(el).color);
+  expect(colour, 'a zero air count must not wear the air colour').toBe(muted);
 });

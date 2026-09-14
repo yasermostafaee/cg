@@ -49,6 +49,9 @@ export * from './channels/preview.js';
 export * from './channels/templates.js';
 export * from './channels/audit.js';
 export * from './channels/updates.js';
+// THE layer map — the three role bands and the guard over them. Exported BEFORE the
+// channels that derive their defaults from it, so a reader meets the map first.
+export * from './layer-bands.js';
 export * from './channels/fixedLayers.js';
 export * from './channels/playoutLayers.js';
 // B-145 acceptance 1 (display half) — the bridge's OWN Live Source ledger, the

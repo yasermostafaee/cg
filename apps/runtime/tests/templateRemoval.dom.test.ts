@@ -82,7 +82,7 @@ const BANK: FixedLayerBank = {
   start: 70,
   count: 30,
   aliases: { '99': 'لوگوی اصلی' },
-  low: { start: 1, count: 9 },
+  low: { start: 50, count: 9 },
 };
 
 function installBridge(): void {

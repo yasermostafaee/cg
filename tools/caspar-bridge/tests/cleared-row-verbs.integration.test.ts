@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * WHAT THE LAYER-ACTING VERBS DO ON A **CLEARED** ROW — the state where the item
@@ -29,7 +29,7 @@ let runtime: CasparRuntime | null = null;
 const SWEEP_MS = 150;
 const STALE_MS = 800;
 const HTML = '<!doctype html><html><body>served</body></html>';
-const BANK = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 };
+const BANK = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 4 };
 const FIXED_SLOTS = [
   { channel: 1, layer: 70 },
   { channel: 1, layer: 71 },
@@ -86,7 +86,13 @@ async function boot(): Promise<CasparRuntime> {
   runtime = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS, fixedSlots: FIXED_SLOTS, fixedBank: BANK },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: SWEEP_MS,
+      occupancyStaleMs: STALE_MS,
+      fixedSlots: FIXED_SLOTS,
+      fixedBank: BANK,
+    },
   );
   runtime.start();
   await runtime.startServing();
@@ -320,7 +326,13 @@ it('a rundown can be built with CasparCG UNREACHABLE — import and bind both su
   runtime = new CasparRuntime(
     singleServer(65_501, oscPort),
     {},
-    { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS, fixedSlots: FIXED_SLOTS, fixedBank: BANK },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: SWEEP_MS,
+      occupancyStaleMs: STALE_MS,
+      fixedSlots: FIXED_SLOTS,
+      fixedBank: BANK,
+    },
   );
   runtime.start();
   await runtime.startServing();

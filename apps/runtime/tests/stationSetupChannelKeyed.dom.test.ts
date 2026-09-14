@@ -138,7 +138,7 @@ describe('§7 — the Channel tab is keyed to the selected channel, and only tha
     stationSetupStub({
       raster: TWO_CHANNELS,
       health: TWO_CHANNEL_HEALTH,
-      bank: { channel: 3, low: { start: 1, count: 9 }, start: 70, count: 2 },
+      bank: { channel: 3, low: { start: 50, count: 9 }, start: 70, count: 2 },
     });
     selectChannel(3);
     const dialog = await renderStationSetup({ section: 'channel' });

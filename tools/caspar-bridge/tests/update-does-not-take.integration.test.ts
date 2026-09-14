@@ -14,7 +14,7 @@ import type {
 import { isOnAirStatus } from '@cg/shared-schema';
 import type { LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * `RUNTIME-REDESIGN-01` §3 — **`Update` does not take.**
@@ -160,7 +160,13 @@ async function boot(): Promise<CasparRuntime> {
   const r = new CasparRuntime(
     singleServer(mock.amcpPort, oscPort),
     {},
-    { sweepMs: 150, lookMixerHoldMs: 0, sourceCatalog: CATALOG, sourceAssignments: ASSIGNMENTS },
+    {
+      layerPolicy: TEST_LAYER_POLICY,
+      sweepMs: 150,
+      lookMixerHoldMs: 0,
+      sourceCatalog: CATALOG,
+      sourceAssignments: ASSIGNMENTS,
+    },
   );
   r.start();
   await r.startServing();

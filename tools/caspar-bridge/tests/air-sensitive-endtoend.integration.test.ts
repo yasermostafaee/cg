@@ -14,7 +14,7 @@ import {
 } from '@cg/shared-ipc';
 import type { LiveSourceRect } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
-import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * 🔴 **`RUNTIME-REDESIGN-01` PHASE 10 — THE SIX AIR-SENSITIVE SCENARIOS, END TO END, IN ONE
@@ -79,9 +79,11 @@ let tracePath: string | null = null;
  * looks) and both that need the REMOVE refusal (which is scoped to `operator-row`) have to
  * live on the same kind of row. Discovered by taking the refusal, not by reading it.
  */
-const SLOT_A = { channel: 1, layer: 1 };
-const SLOT_B = { channel: 1, layer: 2 };
-const BANK = { channel: 1, low: { start: 1, count: 9 }, start: 70, count: 4 };
+// `LAYER-BANDS-16` — bed rows, which moved with the band. The bank below declares beds
+// at 50+, and a row at layer 1 is no longer a row at all.
+const SLOT_A = { channel: 1, layer: 50 };
+const SLOT_B = { channel: 1, layer: 51 };
+const BANK = { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 4 };
 /** The live-plate band. Disjoint from the bank's rows AND from its low layers. */
 const BAND = { start: 30, end: 39 };
 const SCENE = { width: 1920, height: 1080 };
@@ -204,6 +206,7 @@ async function boot(): Promise<CasparRuntime> {
     singleServer(mock.amcpPort, oscPort),
     {},
     {
+      layerPolicy: TEST_LAYER_POLICY,
       sweepMs: 150,
       lookMixerHoldMs: 0,
       sourceCatalog: CATALOG,
@@ -413,7 +416,7 @@ it('🔴 PHASE 10 — the six air-sensitive scenarios, in one operator session, 
   expect((await r.stopItem('row-a')).accepted).toBe(true);
   let lines = await since(before);
   expect(
-    lines.some((l) => l.startsWith('CG 1-1 STOP')),
+    lines.some((l) => l.startsWith('CG 1-50 STOP')),
     'STOP sends CG STOP',
   ).toBe(true);
   expect(
@@ -421,7 +424,7 @@ it('🔴 PHASE 10 — the six air-sensitive scenarios, in one operator session, 
     'STOP is not a CLEAR',
   ).toBe(false);
   expect(
-    lines.some((l) => l.startsWith('CG 1-1 ADD')),
+    lines.some((l) => l.startsWith('CG 1-50 ADD')),
     'STOP is not a re-ADD',
   ).toBe(false);
   await waitFor(() => statusOf(r, 'row-a') === 'loaded', 10_000, 'row-a settles at LOADED');
@@ -432,11 +435,11 @@ it('🔴 PHASE 10 — the six air-sensitive scenarios, in one operator session, 
   expect((await r.take('row-a')).accepted).toBe(true);
   lines = await since(before);
   expect(
-    lines.some((l) => l.startsWith('CG 1-1 PLAY')),
+    lines.some((l) => l.startsWith('CG 1-50 PLAY')),
     'resumed',
   ).toBe(true);
   expect(
-    lines.some((l) => l.startsWith('CG 1-1 ADD')),
+    lines.some((l) => l.startsWith('CG 1-50 ADD')),
     'not reloaded',
   ).toBe(false);
   await waitFor(() => statusOf(r, 'row-a') === 'on-air', 10_000, 'row-a back ON AIR');

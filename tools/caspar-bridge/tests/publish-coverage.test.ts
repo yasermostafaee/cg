@@ -1,4 +1,5 @@
 import type { WebSocket } from 'ws';
+import { TEST_LAYER_POLICY } from './support/harness.js';
 import { describe, expect, it } from 'vitest';
 import { wirePublishes } from '../src/bridge.js';
 import { CasparRuntime } from '../src/caspar-runtime.js';
@@ -72,11 +73,15 @@ function closedSocket(): WebSocket {
 function measure(): { declared: string[]; forwarded: string[]; unforwarded: string[] } {
   // Neither connects nor binds anything — an unstarted runtime is enough, exactly as
   // `route-coverage.test.ts` argues for `buildRoutes`. This test opens no sockets.
-  const runtime = new CasparRuntime({
-    servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
-    strategy: 'mirror-sync',
-    autoFailoverEnabled: false,
-  });
+  const runtime = new CasparRuntime(
+    {
+      servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
+      strategy: 'mirror-sync',
+      autoFailoverEnabled: false,
+    },
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
+  );
 
   const declared: string[] = [];
   const forwarded = new Set<string>();

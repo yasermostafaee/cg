@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { FieldValuesSchema, IdSchema } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
+import { LAYER_BANDS, bandSize } from '../layer-bands.js';
 
 /**
  * R-021 — the fixed operator layer bank: the BANK shape (stage 1), the
@@ -9,7 +10,8 @@ import { definePublishChannel } from '../publish.js';
  * the exact-slot LOAD (stage 3). Layer VERB channels arrive with stage 4.
  *
  * The bank declares a contiguous run of operator-designated layers on one
- * channel (default TEN at 70–79), each optionally aliased for display.
+ * channel (default: the whole TEMPLATE band, `LAYER_BANDS.template`), each optionally
+ * aliased for display.
  * Numeric bounds that depend on OTHER config live in the VALIDATOR
  * (`tools/caspar-bridge/src/fixed-layers-store.ts`) — deliberately not here —
  * so refusals can name the ceiling and both offending ranges (design.md (a)/(e):
@@ -18,8 +20,13 @@ import { definePublishChannel } from '../publish.js';
  */
 /**
  * THE built-in default bank — what a machine with NO persisted fixed-layers
- * file comes up with. Owner decision, 2026-07-30: channel 1, the full 70–99
- * ceiling, the top five rows ticked.
+ * file comes up with. Channel 1, the full TEMPLATE band, the top five rows ticked.
+ *
+ * ⚠ **THE NUMBERS ARE NOT HERE. They are `LAYER_BANDS.template` (`../layer-bands.ts`),
+ * and 2026-09-14 is why.** The owner re-cut the map that day — beds 50-59, plates 60-79,
+ * templates 80-99, with 1-49 left free for the playout server — and this bank moved from
+ * 70-99 (thirty rows) to 80-99 (twenty). A constant that restated `70` would have been the
+ * second copy that did not move, which is the whole shape `layer-bands.ts` exists to close.
  *
  * WHY THESE ARE CONSTANTS AND NOT LITERALS. They are read from three places —
  * the schema's `.default()`s (what a PARTIAL file leaves unsaid),
@@ -30,12 +37,12 @@ import { definePublishChannel } from '../publish.js';
  */
 export const DEFAULT_FIXED_BANK_CHANNEL = 1;
 /** First layer of the default bank. */
-export const DEFAULT_FIXED_BANK_START = 70;
-/** Rows in the default bank — the full 70–99 ceiling. */
-export const DEFAULT_FIXED_BANK_COUNT = 30;
+export const DEFAULT_FIXED_BANK_START = LAYER_BANDS.template.start;
+/** Rows in the default bank — the whole TEMPLATE band. */
+export const DEFAULT_FIXED_BANK_COUNT = bandSize(LAYER_BANDS.template);
 /**
  * How many of the default bank's rows are TICKED (displayed), counting down
- * from its highest layer: 99, 98, 97, 96, 95. The other twenty-five are
+ * from its highest layer: 99, 98, 97, 96, 95. The other fifteen are
  * declared — and therefore fenced from automatic allocation — but hidden, so
  * the operator can reveal one without a bridge restart (the ceiling is fixed
  * at install; the ticks are live).
@@ -60,27 +67,40 @@ export const DEFAULT_FIXED_BANK_VISIBLE_ROWS = 5;
  * consumers keeps working untouched. A parallel bank object would have been a second place
  * a layer coordinate lives, which is the drift `design.md` §1 rejects in exactly these words.
  *
- * ── WHY 1–9 ─────────────────────────────────────────────────────────────────
+ * ── WHERE THE BEDS LIVE: `LAYER_BANDS.bed`, AND IT MOVED ────────────────────
  *
- * They are free (`DEFAULT_LAYER_POLICY` spans 10–69, this bank is 70–99, the playout
- * reservation is 60–69, the suggested Live Source band starts at 10) and they are BELOW every
- * band a station can declare, since `LiveSourceLayerRangeSchema` is validated disjoint from
- * both. **Layer 0 is excluded** — it is a legal layer number and reads as "unset" in too many
- * places to spend the ambiguity on one extra slot.
+ * 🔴 **THEY USED TO BE 1-9, AND THAT WAS THE DEFECT (`LAYER-BANDS-16`, 2026-09-14).**
+ * The reasoning at the time was that 1-9 is free of everything WE allocate — and it was,
+ * and that is not the same question. 1-9 is exactly where a playout server is likely to be
+ * working on a shared channel, and a bed of ours landing on a playout layer is
+ * indistinguishable from the playout system's own graphic on the wire. The owner's re-cut
+ * moved the beds to **50-59** and left **1-49 free** for the playout server and anything
+ * else on the channel; `FIRST_ALLOCATABLE_LAYER` is where that floor is written down, with
+ * its reason attached so nobody reclaims the band later.
+ *
+ * The bed band is still BELOW every band above it — that is a REQUIREMENT and not a
+ * coincidence, since a higher CasparCG layer renders over a lower one and a bed is
+ * composited UNDER its own plates. `assertLayerBands` enforces the ordering; the
+ * `low-bank-not-below-band` refusal enforces it again against a station's DECLARED band,
+ * which is the half that can move.
+ *
+ * **Layer 0 is still excluded** — it is a legal layer number and reads as "unset" in too
+ * many places to spend the ambiguity on one extra slot. It now sits far below the floor
+ * anyway.
  */
-export const MAX_LOW_FIXED_LAYER = 9;
+export const MAX_LOW_FIXED_LAYER = LAYER_BANDS.bed.end;
 /** First layer of the default bed bank. */
-export const DEFAULT_LOW_BANK_START = 1;
-/** Rows in the default bed bank — the whole free band. */
-export const DEFAULT_LOW_BANK_COUNT = 9;
+export const DEFAULT_LOW_BANK_START = LAYER_BANDS.bed.start;
+/** Rows in the default bed bank — the whole BED band. */
+export const DEFAULT_LOW_BANK_COUNT = bandSize(LAYER_BANDS.bed);
 /**
  * How many bed rows are TICKED by default, counting down from the highest.
  *
- * TWO, not nine and not one. `B-195` found exactly ONE of the client's twelve packages
- * carries plates, so nine visible bed rows would be eight rows of noise; one would leave the
+ * TWO, not ten and not one. `B-195` found exactly ONE of the client's twelve packages
+ * carries plates, so ten visible bed rows would be eight rows of noise; one would leave the
  * operator no way to stage the next programme's bed while the current one is on air without
- * first editing config. The other seven stay DECLARED — and therefore fenced — but hidden,
- * exactly the pattern the operator bank already uses for its twenty-five.
+ * first editing config. The other eight stay DECLARED — and therefore fenced — but hidden,
+ * exactly the pattern the operator bank already uses for its fifteen.
  */
 export const DEFAULT_LOW_BANK_VISIBLE_ROWS = 2;
 
@@ -114,10 +134,28 @@ export function defaultLowBankVisibility(): Record<string, boolean> {
  * a value that can only ever be wrong.
  */
 export const LowFixedLayerBankSchema = z.object({
-  /** First bed layer. Immutable mid-session, like the operator bank's `start`. */
-  start: z.number().int().positive().max(MAX_LOW_FIXED_LAYER).default(DEFAULT_LOW_BANK_START),
-  /** Bed rows. Fixed at install, like the operator bank's `count`. */
-  count: z.number().int().min(1).max(MAX_LOW_FIXED_LAYER).default(DEFAULT_LOW_BANK_COUNT),
+  /**
+   * First bed layer. Immutable mid-session, like the operator bank's `start`.
+   *
+   * ⚠ **BOUNDED AT BOTH ENDS NOW, and the lower bound is the new half.** While the band
+   * started at 1 a `.positive()` lower bound WAS the band's floor; at 50-59 it is not, and
+   * a bed declared at 1 would be a graphic of ours on a playout layer. The bound is the
+   * band's own `start`, never a literal.
+   */
+  start: z
+    .number()
+    .int()
+    .min(LAYER_BANDS.bed.start)
+    .max(LAYER_BANDS.bed.end)
+    .default(DEFAULT_LOW_BANK_START),
+  /**
+   * Bed rows. Fixed at install, like the operator bank's `count`.
+   *
+   * ⚠ The ceiling is the band's SIZE, not its last layer. The two were the same number
+   * while the band was 1-9 and are not at 50-59 — a `.max(MAX_LOW_FIXED_LAYER)` here would
+   * now admit a fifty-nine-row bed bank running to layer 108.
+   */
+  count: z.number().int().min(1).max(bandSize(LAYER_BANDS.bed)).default(DEFAULT_LOW_BANK_COUNT),
   /** Optional display aliases, keyed by layer number (as a numeric string). */
   aliases: z.record(z.string().regex(/^\d+$/), z.string().min(1)).optional(),
   /** Per-layer visibility ticks. Absent means VISIBLE, as in the operator bank. */
@@ -133,10 +171,21 @@ export const FixedLayerBankSchema = z.object({
   /**
    * R-028 — the FIXED CEILING of candidate layers. Immutable mid-session
    * (validator-enforced: `resize-refused`); changing it means editing the
-   * persisted install config and restarting the bridge. The 89 layer ceiling
-   * is validator-enforced. Replaces R-021's mutable, grow-at-end `count`.
+   * persisted install config and restarting the bridge. Replaces R-021's
+   * mutable, grow-at-end `count`.
+   *
+   * ⚠ The ceiling is the TEMPLATE band's size — twenty as of the 2026-09-14 re-cut, down
+   * from the thirty that `70-99` held. A persisted file declaring the old thirty rows does
+   * not parse, which is the REFUSAL the old-map decision asks for: see
+   * `fixed-layers-store.ts`'s `describeOldMapBank`, which turns that parse failure into a
+   * sentence naming both maps rather than a bare schema error.
    */
-  count: z.number().int().min(1).max(30).default(DEFAULT_FIXED_BANK_COUNT),
+  count: z
+    .number()
+    .int()
+    .min(1)
+    .max(bandSize(LAYER_BANDS.template))
+    .default(DEFAULT_FIXED_BANK_COUNT),
   /** Optional display aliases, keyed by layer number (as a numeric string). */
   aliases: z.record(z.string().regex(/^\d+$/), z.string().min(1)).optional(),
   /**
@@ -151,10 +200,9 @@ export const FixedLayerBankSchema = z.object({
   /**
    * `single-clock-look-switch` — the BED rows (see {@link LowFixedLayerBankSchema}).
    *
-   * DEFAULTED, never optional. A station that has never heard of beds still gets 1–9 fenced,
-   * which costs nothing (they were outside every allocation range already) and means no
-   * reader anywhere has to branch on "is a bed bank declared?". A persisted file written
-   * before this field existed parses into the default, so the upgrade needs no migration.
+   * DEFAULTED, never optional. A station that has never heard of beds still gets the whole
+   * BED band fenced, which costs nothing (it is outside every allocation range already) and
+   * means no reader anywhere has to branch on "is a bed bank declared?".
    *
    * ⚠ **`visibility` IS PART OF THAT DEFAULT AND MUST STAY PART OF IT (`B-202`).** This is
    * the path an UPGRADED station takes — every `bridge-fixed-layers.json` written before
@@ -236,8 +284,8 @@ export function fixedBankSlots(bank: FixedLayerBank): { channel: number; layer: 
 }
 
 /**
- * THE bank a station gets when it has declared none — channel 1, layers 70–99,
- * the top five ticked and the remaining twenty-five declared-but-hidden.
+ * THE bank a station gets when it has declared none — channel 1, the whole TEMPLATE band
+ * (`LAYER_BANDS.template`), the top five ticked and the rest declared-but-hidden.
  *
  * THE POINT OF IT. A persisted fixed-layers file now records a DEVIATION from
  * this bank; it does not supply the bank. That is what makes a new machine
@@ -252,7 +300,7 @@ export function fixedBankSlots(bank: FixedLayerBank): { channel: number; layer: 
  * readers in the same process, which is the exact class of bug the constants
  * above exist to close.
  *
- * VISIBILITY IS WRITTEN OUT IN FULL — all thirty keys, `true` for the top five
+ * VISIBILITY IS WRITTEN OUT IN FULL — every key in the band, `true` for the top five
  * and `false` for the rest — rather than relying on `isLayerVisible`'s
  * absent-means-visible rule for the ticked ones. The bank is persisted verbatim
  * the first time the operator changes anything, and a file that states every
@@ -314,7 +362,7 @@ export function isLayerVisible(bank: FixedLayerBank, layer: number): boolean {
  *     in the bank;
  *   - the `#` column is plain DISPLAY ORDER, 1 at the top of the rendered list.
  *
- * With the shipped bank (70–99 declared, the top five ticked) they read identically,
+ * With the shipped bank (80-99 declared, the top five ticked) they read identically,
  * because the shown rows are the top five in order: `#1` is layer 99, which is
  * `Layer 1`. They can diverge only if a NON-CONTIGUOUS set is ticked — untick 97 and
  * the third visible row is `#3` but still `Layer 4`. That is the accepted trade, and
@@ -325,7 +373,7 @@ export function isLayerVisible(bank: FixedLayerBank, layer: number): boolean {
  * neither may renumber anything. `Layer 1` is always the bank's highest layer whether
  * or not it is currently ticked. If unticking a row renumbered the ones past it,
  * "Layer 2" would mean different rows on different days — a positional handle that
- * silently renumbers is worse than none at all. This matters more with thirty declared
+ * silently renumbers is worse than none at all. This matters more with twenty declared
  * and five shown than it did with four of four.
  */
 export function bankPosition(bank: FixedLayerBank, layer: number): number {

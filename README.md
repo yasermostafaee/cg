@@ -96,18 +96,42 @@ bank in force and where that bank came from**:
 
 ```
 [caspar-bridge] WS listening on ws://127.0.0.1:5280 → CasparCG via @cg/caspar-client
-[caspar-bridge] candidate layers: channel 1, layers 70-99 (30 declared, 5 shown) - from built-in default (no file at C:\Users\you\.cg-runtime\bridge-fixed-layers.json)
+[caspar-bridge] candidate layers: channel 1, layers 80-99 (20 declared, 5 shown) - from built-in default (no file at C:\Users\you\.cg-runtime\bridge-fixed-layers.json)
 ```
 
 #### What a new machine needs
 
 **For the candidate layers, nothing.** A machine with no config comes up on
-channel 1, layers 70–99, thirty rows declared with the top five (99, 98, 97, 96, 95) shown. `~/.cg-runtime/bridge-fixed-layers.json` records a _deviation_ from
+channel 1, layers 80–99, twenty rows declared with the top five (99, 98, 97, 96, 95) shown. `~/.cg-runtime/bridge-fixed-layers.json` records a _deviation_ from
 that default — it does not supply it, and a machine that never deviates never
 needs the file. **A machine that already has one keeps whatever it says**, which
 is the one thing to check when standing up a machine that has been used before:
 read the `candidate layers:` line above, and if the bank is not the one you want,
-delete the file and restart. Nothing overwrites it for you.
+move the file aside and restart. Nothing overwrites it for you.
+
+##### The layer map, and why 1–49 is left alone
+
+The channel is cut into three bands by ROLE, and the order is a requirement
+rather than a convention — a higher CasparCG layer renders **above** a lower
+one, and a graphics bed is composited **under** the live plates it declares:
+
+| Layers    | Role                                                                         |
+| --------- | ---------------------------------------------------------------------------- |
+| **1–49**  | **FREE — not ours.** The playout server's, and anything else on the channel. |
+| **50–59** | Graphics beds — the multi-box frame itself                                   |
+| **60–79** | Live plates — the frame's inputs / live sources                              |
+| **80–99** | Templates — the operator's candidate layer bank                              |
+
+🔴 **Nothing this product allocates goes below layer 50.** The beds used to sit
+at 1–9, which is exactly where a playout server is likely to be working: a
+graphic of ours landing on a playout layer is indistinguishable from theirs on
+the wire (OSC reports producer _kind_, not identity), so the collision is found
+on air or not at all. 1–49 is not spare capacity — it is someone else's.
+
+**A fixed-layers file written under the old map is REFUSED at boot**, by name,
+saying both maps and what to do: move the file aside (rename it — do not delete
+it), let the built-in default apply, and re-enter the aliases and ticks against
+the new rows. The two maps are never mixed.
 
 **Nothing else, either, if CasparCG is on the same box** — the built-in
 connection is a single server at `127.0.0.1:5250` (AMCP) / `6250` (OSC). If it

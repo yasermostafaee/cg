@@ -183,6 +183,20 @@ export interface BridgeOptions {
    * Validated against the fixed bank at boot; fenced from allocation for the
    * life of the process.
    */
+  /**
+   * 🔴 `LAYER-BANDS-16` — **the DEPLOYMENT's dynamic allocation ranges, if it declares any.**
+   *
+   * The product ships NONE: `DEFAULT_LAYER_POLICY` is empty since the owner retired
+   * type-keyed dynamic allocation, because every range it used to carry lay in 1-49 — the
+   * span the layer map leaves to the playout server. An installation that genuinely wants
+   * `layers.load` to place a graphic by `templateType` declares its own ranges here, and
+   * every fence that reads the policy (`overlaps-policy` at config time, `reservedLayers`
+   * at allocation time) applies to them unchanged.
+   *
+   * Absent means absent, not "the old six ranges": a bridge with no policy refuses a dynamic
+   * load rather than guessing a layer, which is the whole point of the retirement.
+   */
+  layerPolicy?: LayerPolicy;
   reservedLayers?: ReservedLayers;
   /**
    * R-028 / C-015 — where the reserved playout layers load from (JSON). An
@@ -586,7 +600,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   // never a warning (fixed-layers-store.ts header). The policy is resolved
   // ONCE and the SAME object goes to both the validator and the LayerManager —
   // never two copies of the policy.
-  const layerPolicy = DEFAULT_LAYER_POLICY;
+  const layerPolicy = options.layerPolicy ?? DEFAULT_LAYER_POLICY;
   // R-028 / C-015 — the reserved playout layers, from REAL config (explicit >
   // persisted file > nothing). Resolved ONCE; the SAME list goes to the boot
   // validator, every live-change validation, and the LayerManager's

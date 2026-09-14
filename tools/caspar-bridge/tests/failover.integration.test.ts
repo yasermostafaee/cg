@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig } from '@cg/shared-ipc';
-import { HEALTH_MS } from './support/harness.js';
+import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
  * C-001 Phase 3a — real redundancy/failover, driven against TWO `amcp-mock`
@@ -69,6 +69,8 @@ async function bootPair(autoFailoverEnabled: boolean): Promise<void> {
   mockB = await createMock({ amcpPort: 0, oscPort: oscB, oscHost: '127.0.0.1', oscHz: 30 });
   runtime = new CasparRuntime(
     twoServer(mockA.amcpPort, oscA, mockB.amcpPort, oscB, autoFailoverEnabled),
+    {},
+    { layerPolicy: TEST_LAYER_POLICY },
   );
   runtime.start();
   // B-038 Phase 3 — serve the template so the (now-resolving) mock 202s `CG ADD`
