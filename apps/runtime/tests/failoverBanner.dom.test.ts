@@ -5,6 +5,7 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ConnectionHealth } from '@cg/shared-ipc';
 import { FailoverBanner } from '../src/renderer/features/connections/FailoverBanner.js';
+import { expectTagsAreNotButtons } from './support/tagShape.js';
 import { colors, cssVars } from '../src/renderer/theme.js';
 
 /**
@@ -211,5 +212,64 @@ describe('guard item 9 — the failover banner renders under its conditions, and
       'live',
     );
     expect(strip(el)).not.toBeNull();
+  });
+
+  /**
+   * 🔴 `INSPECTOR-AUDIT-05` CLOSE-OUT — **THE TAG SWEEP HAD A HOLE HERE, AND THE HOLE WAS
+   * NOT THE MARKER.**
+   *
+   * The two server chips were hand-styled `<span>`s: no marker, and no tag CLASS either, so
+   * they were invisible to BOTH of the tag guard's questions at once — shape (which walks
+   * `[data-cg-tag]`) and coverage (which walks {@link TAG_CLASSES}). That is the same class of
+   * defect as a `<bdi>` sweep walking past a field that carries no `<bdi>`: **a sweep keyed on
+   * a marker cannot see the thing whose defect IS the missing marker.** They render through
+   * `Tag` now, which fixes the shape half at the source — the primitive has no `onClick` and
+   * no `tabIndex` in its type, so this cannot regress without a compile error.
+   *
+   * ⚠ **BUT THE CONVERSION ALONE WOULD NOT HAVE BEEN SEEN BY ANY GUARD, and that is why this
+   * test exists rather than a line in a changelog.** The console-wide sweep
+   * (`tagsAreNotButtons.dom.test.ts`) mounts the app under the MOCK bridge, where `link` is
+   * `offline-mock` and this component returns `null` by design (`R-006`, asserted two tests
+   * up). The Playwright sweep walks Station setup's five tabs. **So no existing guard renders
+   * this surface at all**, and adding the marker would have bought a contract nothing checks.
+   *
+   * The surface is rendered HERE, on a live link, so the shared assertion is run HERE — the
+   * same three questions every other surface is asked, from the same module, so this one
+   * cannot come to mean something different. `atLeast: 2` is the positive control: both chips,
+   * named, so the day one of them stops rendering this goes red rather than quietly sweeping
+   * less.
+   */
+  it('🔴 its server chips are TAGS — the one surface neither tag guard can render', async () => {
+    const { el } = await mount(
+      {
+        ...healthy('B'),
+        lastFailover: { at: AT, reason: 'manual', from: 'A', to: 'B' },
+      },
+      'live',
+    );
+    const banner = strip(el);
+    expect(banner, 'the banner must render, or the sweep below proves nothing').not.toBeNull();
+
+    expectTagsAreNotButtons(banner as HTMLElement, 'the failover banner', 2);
+
+    // …and they are the two we mean, not two of something else that happens to be marked.
+    const text = [...(banner as HTMLElement).querySelectorAll('[data-cg-tag]')].map((t) =>
+      (t.textContent ?? '').trim(),
+    );
+    expect(text.sort()).toEqual(['primary: B', 'strategy: mirror-sync']);
+
+    /*
+      ⭐ AND THE COMPLEMENT, in the same test for the reason `tag-not-button.spec.ts` gives:
+      a guard that only FORBADE could be discharged by flattening every chip into text, which
+      would take a working control away from a keyboard operator. This strip carries a real
+      one — Dismiss — and it must stay a button.
+    */
+    const dismiss = (banner as HTMLElement).querySelector(
+      'button[aria-label="Dismiss failover banner"]',
+    );
+    expect(
+      dismiss,
+      'a manual failover can be acknowledged, so Dismiss is a real button',
+    ).not.toBeNull();
   });
 });

@@ -40,6 +40,26 @@ import { expectTagsAreNotButtons } from './support/tagShape.js';
  * Chrome's (golden rule 12), so CURSOR and HOVER are not asserted here — they are measured in
  * a real engine by `tests/e2e/tag-not-button.spec.ts`. What IS real in jsdom is the element
  * type, the ARIA role, focusability and the marker, which is exactly what this file asks.
+ *
+ * 🔴 **AND THE BLIND SPOT THAT IS NOT ABOUT JSDOM — A SURFACE THIS HARNESS NEVER RENDERS
+ * IS ONE THIS GUARD CANNOT SPEAK FOR.** Recorded as an explicit boundary rather than left
+ * merely true, because a guard whose limits are unwritten reads as total — the same reason
+ * `control-bytes`' `EXEMPT_PATHS` is pinned EMPTY rather than assumed so.
+ *
+ * This file mounts the console under the MOCK bridge. Any component that returns `null` in
+ * test mode is therefore absent from the sweep, and its absence looks exactly like passing:
+ * the tally simply gets smaller. The known member of that set is **`FailoverBanner`**, which
+ * returns `null` on an `offline-mock` link by design (`R-006`: a banner shouting "PRIMARY A
+ * unhealthy" about hardware that does not exist is a fresh implication that a real server is
+ * broken). Its two server chips sat as hand-styled `<span>`s — no marker AND no tag class, so
+ * invisible to both of this guard's questions — until `INSPECTOR-AUDIT-05`'s close-out.
+ *
+ * ⭐ **THE COMPLEMENT IS A TEST, NOT A NOTE.** `failoverBanner.dom.test.ts` renders that strip
+ * on a LIVE link and runs `expectTagsAreNotButtons` over it — the same three questions, from
+ * the same module. **If you add a component that suppresses itself in test mode, it owes the
+ * same treatment: render it where it is real and sweep it there.** Do not widen this file's
+ * mock to make such a surface appear; the suppression is the behaviour under test two files
+ * over.
  */
 
 class NoopResizeObserver {

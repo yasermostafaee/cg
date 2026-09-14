@@ -3,6 +3,7 @@ import { Info, TriangleAlert } from 'lucide-react';
 import type { ConnectionHealth, FailoverInfo } from '@cg/shared-ipc';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
+import { Tag } from '../../ui/Tag.js';
 import { colors, cssVars, NOTICE_PX } from '../../theme.js';
 import { useLink } from '../../hooks/useLink.js';
 
@@ -83,6 +84,18 @@ const styles = {
   },
   text: { flex: 1, minWidth: 0 },
   meta: { display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 },
+  /*
+   * 🔴 THE TWO SERVER CHIPS. They render through `Tag` — they state a FACT
+   * (which machine is primary, which strategy is in force) and nothing happens when
+   * they are pressed.
+   *
+   * ⚠ The STYLE stays inline and this object stays here on purpose. `Tag`'s own
+   * contract is that appearance is the caller's, and the treatment is tone-ADAPTIVE:
+   * `currentColor` for the edge and an opacity over the strip's own ink, so one
+   * declaration serves the notice, caution and alarm grounds. Lifting it into a
+   * `controls.css` class would have to spell the `0.1rem 0.5rem` padding, which
+   * `tokenHome` forbids, or mint two tokens for a pill that has exactly one user.
+   */
   chip: {
     padding: '0.1rem 0.5rem',
     borderRadius: cssVars['--r-radius-full'],
@@ -128,8 +141,8 @@ export function FailoverBanner({ health }: Props): JSX.Element | null {
         {message(showRecent ? recent : undefined, health, primaryUnhealthy)}
       </span>
       <span style={styles.meta}>
-        <span style={styles.chip}>primary: {health.primary.label}</span>
-        <span style={styles.chip}>strategy: {health.strategy}</span>
+        <Tag style={styles.chip}>primary: {health.primary.label}</Tag>
+        <Tag style={styles.chip}>strategy: {health.strategy}</Tag>
         {/* A completed event can be acknowledged; a broken primary cannot be hidden. */}
         {showRecent && !primaryUnhealthy && (
           <Button
