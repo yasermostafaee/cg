@@ -1245,6 +1245,45 @@ renders answers "is this handled?" with a yes.
       "No Take is sent" sub-line; the audit dialog's 1224 × 744 frame, its 98 px filter bar and
       the event-details drawer with its TECHNICAL block. 🔴 Ours keeps LOCAL time and its Actor
       column; only the reference's SHAPE is adopted.
+      ⚠ **SUPERSEDED IN PART, 2026-09-14 (`INSPECTOR-AUDIT-05`).** "NOT BUILT" was true of the
+      §25.6 DELTAS and was never true of the surfaces: both were already standing and most of
+      what this item lists has since landed by other routes. What is now settled, with the
+      values it falsified, is `design.md` §35 — and the **"No Take is sent" sub-line named above
+      is GONE by the owner's decision** (§35.3), so building this item as written would restore
+      something deliberately removed. Read §35 before acting on this line.
+- [x] Q.10 🔴 **`INSPECTOR-AUDIT-05` — the Inspector and the audit log, against the reference,
+      2026-09-14.** FULL LANE. Five items, and the shape of the session is that three of them
+      were VERIFIED rather than built — the chips were already `Tag`s, the ellipsis rule already
+      held, the audit frame already stood.
+      **§1 — one copy defect, older than the re-cut:** `fixedLayersReasonMessage` explained the
+      `exceeds-ceiling` refusal as "past layer 89" while the bridge has enforced
+      `LAYER_BANDS.template.end` = 99 since July. It reads the live map now. Sweep counts per
+      pathspec in `design.md` §35.1, with the 207 sub-floor test literals deliberately left and
+      the reason stated.
+      **§2 — the sixth isolation surface was found before it shipped:** the item's own `title`
+      field rendered as a bare text node, which a sweep for `<bdi>` could not see precisely
+      because it had none. Three sites now route through `IsolatedName`. Section headings moved
+      to sentence case in the SOURCE with nothing on screen moving (the CAPS are the
+      stylesheet's), which is what the reference does too — measured.
+      **§3 — the Update decision had NOT landed, and now has:** green only on air, reading
+      `Update on air`; `accent` off air, the treatment `Apply position` already wears (10.52:1 on
+      its own ground); the sub-line removed, with its CSS rule and token. No refusal CONDITION,
+      no gate and no wire behaviour moved.
+      **§4 — `--r-panel-bar-h` is LEFT ALONE, measured:** it is not binding on either bar (both
+      are content-driven, 57 px and 53 px), so lowering it changes nothing at all; forcing a true
+      32 px bar moves the chrome 25 px and the row count 7 → 7 against a 67 px pitch. The
+      positive control reported 8 when a row's worth of chrome was removed, so the negative is a
+      finding.
+      **§5 — two intentions became guards:** the audit dialog's prototype furniture and the
+      three surfaces we declined are now asserted ABSENT with a positive control, and the
+      "ids in full" half of golden rule 11 has a test for the first time.
+      **§5(c) REPORTED, NOT BUILT** — what auditing a look switch would take, in four parts,
+      `design.md` §35.6. The schema enumerates FIFTEEN actions, not the twelve the prompt said.
+      Runs: runtime unit **1495 passing**; Windows Playwright **220 passed** (non-authoritative).
+- [ ] Q.11 🔴 **Linux `gate:e2e` for Q.10 — OWED.** The Windows run above is a reason to push and
+      never a discharge (golden rule 12a). To be filled with the run URL once CI on `dev`
+      completes, read at the STEP level (`P-046`/`P-029`): the `E2E` step must have RUN and read
+      `completed/success`, not merely the job.
 - [x] Q.6 🔴 **Linux `gate:e2e` — DISCHARGED on `0a19dec6`, the commit that carries this work:**
       <https://github.com/yasermostafaee/cg/actions/runs/34655583610> — run `conclusion: success`, the **`E2E (Playwright)` job RAN** 22:48:48Z →
       23:00:37Z (**709 s**, `conclusion: success`), and its **`E2E` step is step 13,

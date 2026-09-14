@@ -4514,6 +4514,24 @@ and must stay exactly this honest.
 ⚠ **`Reset` in the Position caption is `R-061(b)` / audit row 51 and the owner PARKED it.** Build
 the section without it.
 
+🔴🔴 **ANNOTATED 2026-09-14 BY `INSPECTOR-AUDIT-05` §§3-4 — four values above are now
+falsified or superseded. The measurements stand; what changed is what we DO with them. Full
+argument in §35; annotated here so nobody builds from the paragraph alone.**
+
+1. 🔴 **THE SUB-LINE IS GONE — owner decision, §3.** _"must stay exactly this honest"_ is
+   SUPERSEDED. The sentence existed to disown a claim the BUTTON was making; the button now
+   tells the truth by itself (green only on air) and there is nothing left to disown. Asserted
+   ABSENT in `inspector-geometry.spec.ts` and `inspector-commit.spec.ts`, so a parity pass
+   cannot paste it back from the drawing, which still draws it.
+2. **`Update on air` LANDED; the second sentence did not.** The live row's word is the
+   reference's; its sub-line is not, because there is no sub-line in either state now.
+3. ⚠ **The reference greens its Update in BOTH states** — `rgb(34 221 122)` off air too,
+   measured in Chromium at 1280 × 800 on `05-row-inspector.html`. Ours is a deliberate
+   departure from the drawing, not a miss.
+4. **396 × 706 is the REFERENCE's box, and ours is 396 × 647.8** at 1280 × 800 — the WIDTH is
+   identical, the height is the shell's. And the footer is **394 × 51** now, not the
+   reference's 394 × 98.84: that figure included the `p.target-hint` this session removed.
+
 **§4 — the audit log.** NOT built; measured. The dialog is **1224 × 744**, radius 14; head
 **1222 × 98.19** (`padding: 22px 26px`, gap 14); `.audit-tools` **1222 × 98** (`padding: 18px 25px`,
 gap 12) holding a **626.7 × 39.59** search (radius 7, `padding: 9px 11px 9px 35px`) and three
@@ -4523,8 +4541,12 @@ a `.audit-detail` drawer (ground `rgb(17 29 42)`, `padding: 20px`); `th` **42.5*
 **1222 × 72**, `padding: 16px 26px`.
 
 **What OURS already has** and the reference does not: an **Actor** column and its `B-143` caveat.
-**What ours lacks:** the `Date` filter, `Follow new events`, `Reset filters`, the selected-row left
-accent, and the **event-details drawer** — result chip, `<Action> · <Item>`, the template, an info
+⚠ **ANNOTATED 2026-09-14 (`INSPECTOR-AUDIT-05` §5): `Reset filters` HAS since landed** — Phase 8
+put it in the footer beside the count, where it shows only while a filter is narrowing the list.
+The other four below are still absent, and three of them are now ASSERTED absent (§35.5) rather
+than merely intended.
+**What ours lacks:** the `Date` filter, `Follow new events`, ~~`Reset filters`~~, the selected-row
+left accent, and the **event-details drawer** — result chip, `<Action> · <Item>`, the template, an info
 strip carrying the event's own sentence, `Time / Channel / Action`, and a `TECHNICAL DETAILS` block
 with **Event ID · Item ID · Template ID** in mono plus `⧉ Copy event details`. 🔴 Golden rule 11
 lands exactly here: those ids belong in the TECHNICAL block and on the copy button, never in the
@@ -4787,6 +4809,15 @@ centred in it.
 ⭐ **So the head shrink bought 21 px of picture, not one row.** Buying a row means lowering
 `--r-panel-bar-h`, which is shared with the Inspector's bar and therefore belongs to
 `INSPECTOR-AUDIT-05`, not here.
+
+🔴 **ANSWERED, AND THE PREMISE ABOVE IS FALSIFIED — `INSPECTOR-AUDIT-05` §4, measured.** _"their
+height is the panel bar's 52 px floor"_ is not true of either bar: the LAYERS bar renders **57
+px** and the INSPECTOR's **53 px**, both driven by their own CONTENTS, so the 52 px floor is not
+binding on either and **lowering `--r-panel-bar-h` changes nothing at all** — 44 / 40 / 36 / 32 px
+all measured byte-identical. Forcing the bar to a true 32 px (floor, padding and control heights
+together) moves the chrome 183.45 → 158.45 and the row count **7 → 7**, because the row pitch is
+**67 px** and the cut yields 25. The token keeps its meaning and its value. See §35.4 for the
+positive control that makes that a finding rather than a dead instrument.
 
 ### 26.9 FIXED / ARGUED
 
@@ -6279,3 +6310,255 @@ question — _why can I not hear this box?_ — it answers. One mark per row.
 carries more than one owner's frames. The note left in `LiveSourcesPanel` records the one thing
 that would have to hold if it ever returns — a filter may never hide a row that
 `needsAttention`, because an alarm conditional on a control set minutes ago is not an alarm.
+
+## 35. `INSPECTOR-AUDIT-05` — THE INSPECTOR AND THE AUDIT LOG
+
+Prompt `INSPECTOR-AUDIT-05`, 2026-09-14. FULL LANE. Both surfaces were measured in full by
+`CONSOLE-MATCH-03` (§25.6) precisely so this session would not re-measure them; what it did
+measure is only what the tree had since falsified, and each of those is annotated where it
+stands rather than rewritten.
+
+### 35.1 §1 — THE LAYER RE-CUT ON THIS SURFACE: one defect, and it predates the re-cut
+
+**Every coordinate the Inspector shows is DERIVED, and that was verified rather than assumed.**
+The status line's chips read `item.slot.layer` / `.channel` / `.server`; the no-layer case is
+`layerDetail(undefined)`; `LIVE PLATES` composes its coordinate from the row
+(`liveLayerRows.ts`). Nothing on either surface carries a layer literal.
+
+🔴 **THE ONE DEFECT IS IN COPY, AND IT IS OLDER THAN THE RE-CUT.**
+`fixedLayersReasonMessage.ts` explained the `exceeds-ceiling` refusal as _"The bank would extend
+past layer **89** — the fixed-layer ceiling."_ The bridge's ceiling is `MAX_FIXED_LAYER`, which
+is `LAYER_BANDS.template.end` — **99** since the re-cut, and 99 since the bank moved to 70-99 in
+July (`DEBT.md`: _"`exceeds-ceiling` — `MAX_FIXED_LAYER` was 89, since design.md (e) recorded
+70-89 as the free space"_). So the one surface that explains that refusal has been quoting a
+boundary the bridge stopped enforcing two months ago, and an operator reading it would have
+concluded a legal bank was illegal. It reads `LAYER_BANDS.template.end` now — the live map, not
+a restatement, which is `layer-bands.ts`'s own warning about a coordinate in a message.
+
+**The other defect is a test FIXTURE, not copy:** `inspectorToast.dom.test.ts` seated its on-air
+item at `layer: 10`, inside the playout server's range. Moved to **84**, a template-band layer.
+
+#### The sweep, per pathspec, two axes
+
+Every pathspec was proved to match before its result was trusted — `apps/runtime/src` 178 files,
+`apps/runtime/tests` 235, `apps/designer/src` 233, `packages` 438, `tools` 437, `docs` 156,
+`openspec` 1019.
+
+| axis                                                | src | tests | packages | tools | docs | openspec |
+| --------------------------------------------------- | --- | ----- | -------- | ----- | ---- | -------- |
+| **A1** the literal `1-9` in either dash             | 4   | 4     | 8        | 234   | 15   | 2        |
+| **A2** `layer` adjacent to a digit                  | 40  | 137   | 56       | 60    | —    | —        |
+| **A3** `extend past layer` / `layer 89` / `ceiling` | 2   | 0     | 0        | 0     | 1    | 2        |
+| **B** a band BOUND restated as a bare constant      | 1   | —     | 10       | 3     | —    | —        |
+
+**Axis B is the one that could have hidden a real defect and did not.** Every
+`MAX_`/`MIN_`/`FIRST_` layer constant in the tree reads `LAYER_BANDS` (`MAX_LOW_FIXED_LAYER`,
+`MAX_FIXED_LAYER`) or is the definition itself (`FIRST_ALLOCATABLE_LAYER`); the two `9999`s are
+CasparCG's own layer ceiling and name a different thing. The sweep for a band bound written as a
+bare assignment returned three hits and none is a layer bound (`ROW_NAME_MAX`, the floor itself,
+a probe clearance).
+
+⚠ **WHAT WAS DELIBERATELY NOT CHANGED, and the count, so nobody reads the silence as a clean
+sweep.** **207** sub-floor layer literals sit in tests across `apps/runtime/tests` (41),
+`packages` (62) and `tools` (104). They are NOT illegal: 1-49 is free because we must not
+ALLOCATE there, and a layer the product is TOLD about — an orphan, an adopted producer, a
+coordinate a layer-manager unit is handed — is legitimately in that range. Rewriting them would
+delete the coverage of exactly the out-of-band case the floor exists to create. **The ones that
+matter are fixtures modelling one of OUR SEATED ROWS**, which is why `inspectorToast`'s moved and
+the other 206 did not.
+
+⚠ And two comment EXAMPLES citing layer 10 were left alone, on §25.8's own rule —
+`OrphanLayersBanner.tsx` quotes a strip CI actually rendered, `Inspector.tsx` quotes what its
+line used to say. Both are past tense and both are records; rewriting them would falsify the
+record rather than correct it.
+
+### 35.2 §2 — THE INSPECTOR: three of the five were already met
+
+- **(a) THE CHIPS ARE `Tag`s.** Met before this session. `playing` (the status word), `layer N`,
+  `channel N` and `primary` (the SERVER name) are all one component — `MetaChip`, built on `Tag`
+  — and `DraftChip` is too. The guard that holds it is not a comment:
+  `tagsAreNotButtons.dom.test.ts` mounts the WHOLE console and asks the marker question from both
+  sides, and `tag-not-button.spec.ts` measures cursor and hover in a real engine.
+- **(b) SENTENCE CASE — the SOURCE moved and NOTHING ON SCREEN DID.** `FIELDS` to `Fields`,
+  `LOOK INPUTS` to `Look inputs`, `POSITION` to `Position`. The CAPS are the stylesheet's
+  (`.cg-inspector-section > h2` sets `text-transform: uppercase`), so the rendered strings are
+  byte-identical — measured: source `Position`/`Fields`, rendered `POSITION`/`FIELDS`. What moves
+  is the ACCESSIBLE NAME, which is computed from the text node and not from the transform.
+  ⭐ **And this is what the reference does too**, measured in Chromium at 1280 × 800 on
+  `05-row-inspector.html`: its `.inspector-section h3` sources read `Position` and `Fields` and
+  compute `text-transform: uppercase`. The parity was in the RENDERING all along; the divergence
+  was in the source.
+  ⚠ **The ellipsis rule (§32) was checked and needed nothing.** `From file…` keeps its dots
+  (`showOpenFilePicker`, a real chooser); the audit log's `Search events or templates…` and
+  `Reading the audit record…` are placeholder and progress, which §32.1 excludes by name; no
+  in-app-dialog control on either surface carries dots.
+  ⚠ **REPORTED, NOT CHANGED (§32.3's precedent):** the PANEL TITLES are still `INSPECTOR` and
+  `LAYERS` in source, uppercased by `.cg-panel-title`. Recasing those is a four-panel question
+  about shared chrome, not an Inspector one.
+- **(c) 🔴 THE SIXTH SURFACE WAS FOUND, and it is the one a sweep for `<bdi>` could not see.**
+  The Inspector's own heading and template line already had the right SHAPE (an inline `<bdi>` in
+  a block box) and now go through `IsolatedName`, which adds the explicit LTR direction that
+  makes the box immune to an RTL ancestor. But **three sites had no isolation at all**, and the
+  one that matters is the item's own `title` FIELD — operator-typed content, in this station
+  overwhelmingly Persian, rendered as a bare text node. A grep for `<bdi>` finds nothing there
+  **precisely because it has none**, which is why §2(c)'s warning was worth heeding rather than
+  answering with a search. All three now route through the one component: the content headline,
+  the field's authored NAME, and a composition group's heading.
+- **(d) COLOURS** — the only ink this session touched is the off-air commit control's, and it is
+  a pair that already existed: `rgb(207 232 248)` on `rgb(23 50 67)`, **10.52:1**, measured on ITS
+  OWN ground. No new hex, no new token; the control reads `variant="accent"`, the same declaration
+  `Apply position` reads, so the two cannot drift.
+  ⚠ `locked while on air` stays MUTED, and that was considered rather than missed: §29's amber is
+  the refusal BANNER's treatment, and this is an inline note under a disabled control, not a
+  message class.
+- **(e) NO REFUSAL CONDITION MOVED.** `applyRefusal` (`casparRefusalReason`) and
+  `isPositionLocked` are untouched, and so is every word of `locked while on air`.
+
+⚠ **REPORTED, NOT CHANGED, FOUND IN PASSING:** `FailoverBanner`'s server chip renders as a
+hand-styled pill — a bordered `span` with inline styles, not a `Tag`. It carries no hover and no
+pointer cursor so it does not LOOK pressable, but it is invisible to both tag guards, which see
+only the marker and the tag CLASSES. It is not the Inspector and is not in this diff.
+
+### 35.3 §3 — THE UPDATE DECISION HAD **NOT** LANDED. It has now.
+
+The tree carried `variant="commit"` UNCONDITIONALLY — the play family's green on every row, on
+air or not — the word `Update` in both states, and the sub-line. All three are the owner's
+decision, and all three moved:
+
+| state   | was                      | is                                                       |
+| ------- | ------------------------ | -------------------------------------------------------- |
+| off air | green `commit`, `Update` | `accent` — `Apply position`'s own treatment — `Update`   |
+| on air  | green `commit`, `Update` | green `commit`, **`Update on air`**                      |
+| either  | a `target-hint` sub-line | **no sub-line**, and its CSS rule and token are gone too |
+
+🔴 **NOTHING ABOUT THE PRESS CHANGED, and that is the load-bearing half.** Same `onApply`, same
+`applyDraft`, same CasparCG gate, same refusal CONDITION. Golden rule 10 is served BETTER than
+before, not waived: a green button on an off-air row was the class making a claim the press
+cannot keep, and the sub-line existed to disown it. The hue now follows the FACT.
+
+**THE PREDICATE IS `isOnAirStatus`** — the one definition both sides of the seam read, read ONCE
+and used for BOTH the hue and the word so the two can never describe different rows. Never
+`rehearsing`, which seats nothing on the channel (`B-216`). It counts `updating` / `exiting` /
+`unconfirmed` / `pending` as on air, which is the right way for a LABEL to fail too: `Update on
+air` about a row whose air state is unknown is the honest reading, where a bare `Update` would be
+a quiet promise that nothing is live.
+
+⚠ **The accessible name GAINED the fact rather than being replaced by it** — `Apply staged edits`
+off air, `Apply staged edits to the on-air row` on it. Every existing finder still matches (the
+opening words are unchanged), and a screen-reader operator is now told by the CONTROL what the
+colour tells everyone else. `inspectorToast.dom.test.ts`'s helper matches the label's opening
+words rather than the whole attribute, which is what its three callers always meant.
+
+### 35.4 §4 — `--r-panel-bar-h`: THE CUT BUYS NO ROW, AND THE TOKEN IS NOT EVEN THE LEVER
+
+Measured in Chromium at 1280 × 800, monitors folded, the banner region subtracted — the same
+procedure `shell-chrome.spec.ts` §B uses.
+
+| `--r-panel-bar-h` | LAYERS bar | INSPECTOR bar | chrome | rows |
+| ----------------- | ---------- | ------------- | ------ | ---- |
+| 52 (shipped)      | **57**     | **53**        | 183.45 | 7    |
+| 44 / 40 / 36 / 32 | 57         | 53            | 183.45 | 7    |
+
+🔴 **THE TOKEN IS NOT BINDING ON EITHER BAR.** Both are taller than the 52 px floor and are
+driven by their own CONTENTS — the LAYERS bar by its tab group inside its block padding, the
+Inspector's by its 28 px controls. So lowering it is not a smaller change than expected; it is
+**no change at all**, at every value tried. That falsifies §26.8's parting claim that the tabs'
+height _is_ the floor.
+
+**And forcing the bar to a TRUE 32 px** — floor, block padding and control heights together —
+moves the chrome **183.45 to 158.45 (−25 px)** and the row count **7 to 7**. The row pitch is
+**67 px**; 25 does not buy one.
+
+⭐ **THE POSITIVE CONTROL, without which that 7-to-7 would be void.** A negative observation is
+not a result until the instrument is shown able to report the opposite — a row counter that
+always said 7 would pass this exactly as written. So a whole row's worth of chrome was removed on
+top (the sub-bar hidden, chrome to 118.45) and **the counter reported 8**. The measurement is
+real; the answer is that the cut does not pay.
+
+🔴 **SO THE TOKEN IS LEFT EXACTLY AS IT IS.** §4's own instruction: a change that costs a token's
+meaning and buys nothing is not a win. What a row would actually cost is the bar's PADDING and
+its controls' heights — a different item, with a different argument, on a primitive four panels
+share.
+
+⚠ **`shell-chrome.spec.ts`'s budget comment is now one number stale** and is left for that item
+to correct: it itemises _"+9.5 the panel bar is 53"_, and 53 is the INSPECTOR's bar; the LAYERS
+bar above the first row is 57, and the chrome today measures 183.45 rather than the 181.5
+recorded. The BUDGET (195) is unaffected and still has ~12 px of slack.
+
+### 35.5 §5 — THE AUDIT LOG: the frame held, and two intentions became guards
+
+**The frame was verified, not re-done.** `MODAL-CHROME-10` §33.6 fixed it at 1250 × 810 with
+entries and filtered to none, clamping to 536 at 1280 × 600, and `library-audit-geometry.spec.ts`
+still pins it — green.
+
+**(a) THE FURNITURE IS ASSERTED ABSENT NOW.** §25.5 named four prototype strings as not-copied
+and `shell-chrome.spec.ts` §C3 asserts three — but all three live on the SHELL, and the audit
+dialog's share (`Sample records`, and _"Identifiers and this event are sample data."_) was an
+intention with nothing holding it. The same new test also pins the three surfaces §25.6 records
+as deliberately declined — the `View event` drawer, `Follow new events` and the `Date` filter —
+because each IS drawn in `03-audit-log.html` and a later parity pass would add them back
+believing they were missed. ⭐ **With its own positive control in the same test**: every
+assertion in it is a negative observation, so the same locator is asked for something that IS
+there (the dialog's subtitle, the `Refresh` button, and exactly one each of the `Action` /
+`Result` / `Actor` filters) before any of the absences are trusted.
+
+**(b) THE IDS ARE KEPT IN FULL, and that half now has a test.** `audit-legibility` pinned the
+NAMES and pinned that the ids are not gone; what nothing pinned is that the FULL id is REACHABLE
+— shortening for the eye is only safe because the whole value is one hover and one click away, so
+a `shortId` that had quietly become the only spelling would have passed every assertion the file
+had. Both ids are now asserted complete in the tooltip AND on the copy button, with the
+shortening asserted only where there is something to shorten (`shortId` cuts a UUID and returns a
+short human id unchanged, deliberately). ⚠ And the SENTENCE half with it: the names element
+carries no id at all.
+
+### 35.6 🔴 §5(c) — REPORTED, NOT BUILT: what it would take to audit a LOOK SWITCH
+
+**First, a correction to the prompt's own number: the schema enumerates FIFTEEN actions, not
+twelve** — load, take, update, out, remove, failover, reconnect, import, export, stop, next,
+lock-engage, lock-release, update-deferred, update-installed. The finding is unchanged and is
+worse than it sounds: a LOOK SWITCH is not among them, nor a SOURCE SWAP, nor a PLATE VOLUME
+change. For a broadcast console, _"which look was on air at 14:30"_ is the question asked after
+an incident, and an hour of real activity reads as an empty log.
+
+**It is four changes, and the third is the one that decides whether the record is worth having.**
+
+1. **The action member — a SCHEMA change.** The action enum gains `look-switch` (and, if the
+   owner wants them, `source-swap` and `plate-volume`). Cheap, and it costs nothing downstream:
+   `ACTION_OPTIONS` is DERIVED from the schema (`B-141`), so the panel's filter gains the new
+   kind the moment it becomes writable.
+2. **The wrap — and it is not one line.** `setActiveLook`, `swapLiveSource` and `setPlateVolume`
+   answer with an `ok`/`reason` shape, while `#audited` and `auditVerdict` take an
+   `accepted`/`errorCode` one. So either `auditVerdict` learns the second shape or each call site
+   adapts. ⚠ **The adapter is where a defect would hide**: `setActiveLook` has several refusal
+   doors above its reconcile, and a wrap that recorded `ok` on a look the reconcile refused would
+   be a log that is confidently wrong — which is worse than the silence it replaces.
+3. 🔴 **THE PAYLOAD — THE ENTRY HAS NOWHERE TO PUT WHICH.** An `AuditEntry` carries `itemId`,
+   `templateId`, `slot`, `outcome`, `errorCode`, `command` and hashes. There is no field for
+   which look, which source, or what level. Without one the record says _"a look switch happened
+   on this row at 14:30"_ and not WHICH — precisely the question the incident asks — so the entry
+   would answer the easy half and leave the hard half exactly where it is. A narrow optional
+   field carrying a from/to pair is the smallest honest shape.
+4. **The reader.** A look id is an internal id, so golden rule 11 puts the look's LABEL in the
+   sentence and the id behind it. The join already exists: `AuditPanel` fetches `templates.list()`
+   on every refresh, and a template's live-source looks carry both an id and a label.
+
+⚠ **And the mock.** `MockRuntime` keeps its own audit, so without the same entries there the
+offline surface and every e2e would show a log the bridge writes and the console never sees.
+
+**Why it is not in this diff:** (1) and (3) are IPC-schema changes and (2) touches the path to
+air — §6 forbids all three here, and the prompt asked for the report rather than the build.
+
+### 35.7 The runs
+
+- `pnpm --filter @cg/runtime test`: **160 files, 1495 tests, all passing.**
+- `pnpm --filter @cg/runtime test:e2e` (full suite, Windows, against a fresh build):
+  **220 passed.** ⚠ **NON-AUTHORITATIVE** (golden rule 12a) — a reason to push, never a discharge.
+- ⚠ **Two RED unit tests caught locally before the push, and both are why the suite is run.**
+  `inspector.dirAuto.dom.test.ts` asserted the whole panel carried no literal direction — a cheap
+  over-approximation that was true when written and became wrong the moment the panel adopted
+  `IsolatedName`. It was **narrowed to what its own sentence says (EDITORS) and STRENGTHENED
+  there**, with the exception stated precisely rather than waved through: a literal direction is
+  permitted only on a box that holds a `bdi` and no control, so one drifting onto an editor still
+  goes red — and both its loops got positive controls, because each was a negative observation
+  over a set that could have been empty. `inspectorToast.dom.test.ts` matched the commit
+  control's whole `aria-label`, which the on-air case extends.
