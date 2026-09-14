@@ -257,7 +257,7 @@ function sameServerConfig(a: ConnectionConfig, b: ConnectionConfig): boolean {
       String(c.autoFailoverEnabled),
       c.templateServeHost ?? '',
       c.templateServePort === undefined ? '' : String(c.templateServePort),
-    ].join('');
+    ].join('\u0001');
   return key(a) === key(b);
 }
 

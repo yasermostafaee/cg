@@ -829,7 +829,7 @@ export const PLATES_PX = {
   gainH: 26,
   gainGap: 9,
   /**
-   * …and its CORNER — order-radius: 7px (MONITORS-01, audit row 58). NOT a step on
+   * …and its CORNER — `border-radius: 7px (MONITORS-01, audit row 58). NOT a step on
    * the radius scale and deliberately not folded into one: it is this control's own
    * dimension, measured off the drawing, the same way gainW and gainH are.
    */
