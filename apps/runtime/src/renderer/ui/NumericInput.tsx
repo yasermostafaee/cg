@@ -87,6 +87,36 @@ export function NumericInput({
   const current =
     numeric !== null && value.trim() !== '' && Number.isFinite(numeric) ? numeric : null;
   const emit = (next: number): void => onValueChange(String(next));
+  /*
+   * 🔴🔴 **DISABLED IS A BEHAVIOUR, NOT A RENDERING** — `INSPECTOR-DELTA` §1, measured.
+   *
+   * `disabled` rode in on `...rest` and reached the `<input>` only, so the browser stopped
+   * TYPING and this component went on running the whole scrub gesture. On a row that is ON
+   * AIR the POSITION section says `locked while on air` and renders both boxes disabled —
+   * and a drag still moved the value. Measured in Chromium, `position-lock-refuses-drag`:
+   * a locked X field went **50 → 130** under one drag.
+   *
+   * ⚠ **THE INTUITION THAT THIS CANNOT HAPPEN IS WRONG, which is why it survived.** A
+   * disabled form control is barred from ACTIVATION behaviour — no `click`, no focus, no
+   * typing — and it is easy to read that as "no pointer events either". It is not:
+   * `pointerdown` is dispatched to a disabled `<input type="text">` and it is the only event
+   * this gesture needs, because `runScrubGesture` then listens on the WINDOW for the moves.
+   * The browser's own guard stops at the edge of the thing the browser owns.
+   *
+   * 🔴 A field that LOOKS locked and accepts a drag is worse than one that never claimed to
+   * be locked: the operator trusts the word and moves a graphic that is transmitting. So the
+   * refusal is asked HERE, of the props, once — and the two gestures read the SAME
+   * evaluation, because a pointer guard without the matching key guard is the same defect
+   * with a different input device.
+   *
+   * ⚠ `readOnly` is included deliberately. It is the other spelling of "you may not change
+   * this value", and a gesture that honours one and not the other is a rule with two
+   * meanings. No caller pairs it with `scrub` today; that is exactly when to close it.
+   *
+   * ⚠ This changes NO refusal CONDITION. `isPositionLocked` is untouched and decides who is
+   * locked; this only makes the control obey what it already claims.
+   */
+  const inert = rest.disabled === true || rest.readOnly === true;
 
   return (
     <input
@@ -94,12 +124,18 @@ export function NumericInput({
       type="text"
       inputMode={decimal ? 'decimal' : 'numeric'}
       value={value}
-      // `ew-resize` is the affordance: it says "drag me sideways" before the
-      // operator tries. Only when scrubbing is actually enabled.
-      style={scrub !== undefined ? { cursor: 'ew-resize', ...rest.style } : rest.style}
+      /*
+        `ew-resize` is the affordance: it says "drag me sideways" before the operator tries.
+        Only when scrubbing is actually enabled — and only when it will actually be honoured.
+        A locked field advertising the gesture it is about to refuse is the shape lying about
+        the behaviour (golden rule 11), and it is how the owner came to try the drag at all.
+      */
+      style={
+        scrub !== undefined && !inert ? { cursor: 'ew-resize', ...rest.style } : rest.style
+      }
       onPointerDown={(e) => {
         rest.onPointerDown?.(e);
-        if (scrub === undefined || current === null || e.button !== 0) return;
+        if (inert || scrub === undefined || current === null || e.button !== 0) return;
         const el = e.currentTarget;
         // Already editing? Let the click place the caret normally — a scrub would
         // hijack an ordinary text interaction.
@@ -119,7 +155,8 @@ export function NumericInput({
       }}
       onKeyDown={(e) => {
         rest.onKeyDown?.(e);
-        if (scrub === undefined || current === null || e.defaultPrevented) return;
+        // THE SAME `inert`, read from the same place as the pointer guard above.
+        if (inert || scrub === undefined || current === null || e.defaultPrevented) return;
         const next = arrowStep(e, { value: current, ...scrub });
         if (next === null) return;
         // Stop the caret from also jumping to the start/end of the text.
