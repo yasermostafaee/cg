@@ -54,7 +54,43 @@ const styles = {
    * BOTH steps on this scale — so the argument never chose between them and the drawing
    * did. It buys the two fields 4 px each.
    */
-  offsets: { display: 'flex', gap: 'var(--r-space-2)', alignItems: 'flex-end' },
+  /*
+   * 🔴 STACKED — `INSPECTOR-DELTA` §3, the owner's call. The three controls used to share
+   * one line, and in a 396 px panel that line was the complaint: two number boxes and a
+   * two-word button competing for the same width, the button crowded against them.
+   *
+   * ⚠ **A DELIBERATE DEPARTURE FROM THE DRAWING, recorded as one** so a later parity pass
+   * does not "restore" it. Measured in Chromium at 1280 × 800: the reference puts the anchor
+   * grid, X, Y and `Apply position` on ONE grid row — `.position-controls` is 370 × 64,
+   * `grid-template-columns: 66px 90.2969px 90.2969px 99.4062px`. Ours is now two stacked
+   * fields beside the grid, with the button on its own row beneath.
+   *
+   * The CAP is the reference's own measured field width (`--r-insp-position-field-w`, 90 px
+   * against the 90.3 it paints). Stacking removes the competition that stretched ours to
+   * 120.86 × 32; WITHOUT the cap they would take the whole 370 px section instead, which is
+   * further from the drawing than where they started.
+   */
+  offsets: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 'var(--r-space-2)',
+    alignItems: 'stretch',
+    // GROW NEVER, SHRINK IF IT MUST — the cap is a ceiling, not a fixed size.
+    flex: '0 1 var(--r-insp-position-field-w)',
+    minWidth: 0,
+  },
+  /*
+   * `Apply position` ON ITS OWN ROW, at its own size — §3: "it must not shrink into a
+   * corner". The row is `flex-start`, so the button is the width of its own words rather
+   * than the section's.
+   */
+  applyRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--r-space-2)',
+    marginTop: 'var(--r-space-3)',
+    flexWrap: 'wrap' as const,
+  },
   /**
    * One nudge input with its own label ABOVE it, so the two never compete for a row.
    *
@@ -68,8 +104,16 @@ const styles = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 'var(--r-space-1)',
-    flex: '1 1 var(--r-insp-offset-min-w)',
-    minWidth: 'var(--r-insp-offset-min-w)',
+    /*
+      ⚠ `0 0 auto` NOW THAT THE PARENT IS A COLUMN. This read
+      `1 1 var(--r-insp-offset-min-w)`, which shared one ROW between X and Y; in a column
+      the same declaration is a flex-basis on HEIGHT, so a WIDTH token would have been
+      stretching each field's box vertically. **A layout-direction change is not a free
+      change to the children** — every flex shorthand on them has to be re-read against the
+      new axis, and this is the one that would have gone wrong silently.
+    */
+    flex: '0 0 auto',
+    minWidth: 0,
   },
   /** The reference's label rank: 12 px, medium, the second ink — not the muted caption. */
   offsetLabel: {
@@ -268,40 +312,46 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
               See `.cg-btn--accent` in `controls.css` for why colour may mean
               hierarchy here and must not on the layer table.
 
-              IN the nudge row, bottom-aligned with the two inputs, per the mock —
-              not on a line of its own below them. It commits what those boxes hold,
-              so it belongs beside them; on its own row it read as a section-level
-              action and left an empty band across the panel. */}
-          <AsyncButton
-            variant="accent"
-            aria-label="Apply position"
-            disabled={locked}
-            run={() =>
-              window.cg.stack
-                .setPosition({
-                  itemId: item.itemId,
-                  position: { anchor, offset: { x: offset(dx), y: offset(dy) } },
-                })
-                .then((r) => ({
-                  accepted: r.ok,
-                  ...(r.reason !== undefined ? { errorCode: r.reason } : {}),
-                }))
-            }
-            // #334 — a refusal surfaces as the command TOAST, not pinned inline beside the
-            // control where its wrapped text bloated this narrow panel. `setPosition` does
-            // NOT self-report (unlike `applyDraft`), so this is the report, not a suppressor.
-            // The MESSAGE is unchanged: the button already mapped `r.reason` through
-            // `errorCodeMessage`, and the toast carries that same mapping — only its
-            // placement moves.
-            onError={reportCommandError}
-          >
-            Apply position
-          </AsyncButton>
-          {/* …and the same CHIP the commit bar shows for staged field edits, so the
-              two kinds of unapplied change read as one idea. Beside the button that
-              clears it, which is where an operator looks once they have noticed. */}
-          {dirty && !locked && <DraftChip label="unapplied position" />}
+              🔴 SUPERSEDED, `INSPECTOR-DELTA` §3 (owner). This read: "IN the nudge row,
+              bottom-aligned with the two inputs, per the mock — not on a line of its own
+              below them… on its own row it read as a section-level action and left an empty
+              band across the panel." That argument was sound while X and Y sat side by side
+              and the three really were one row of controls. With the fields STACKED there is
+              no row left to sit in, and the empty band it warned about is now the thing the
+              stacking bought — the owner's instruction is that this button keeps its own
+              treatment and its own row and does not shrink into a corner. */}
         </div>
+      </div>
+      <div className="cg-position-apply" style={styles.applyRow}>
+        <AsyncButton
+          variant="accent"
+          aria-label="Apply position"
+          disabled={locked}
+          run={() =>
+            window.cg.stack
+              .setPosition({
+                itemId: item.itemId,
+                position: { anchor, offset: { x: offset(dx), y: offset(dy) } },
+              })
+              .then((r) => ({
+                accepted: r.ok,
+                ...(r.reason !== undefined ? { errorCode: r.reason } : {}),
+              }))
+          }
+          // #334 — a refusal surfaces as the command TOAST, not pinned inline beside the
+          // control where its wrapped text bloated this narrow panel. `setPosition` does
+          // NOT self-report (unlike `applyDraft`), so this is the report, not a suppressor.
+          // The MESSAGE is unchanged: the button already mapped `r.reason` through
+          // `errorCodeMessage`, and the toast carries that same mapping — only its
+          // placement moves.
+          onError={reportCommandError}
+        >
+          Apply position
+        </AsyncButton>
+        {/* …and the same CHIP the commit bar shows for staged field edits, so the
+            two kinds of unapplied change read as one idea. Beside the button that
+            clears it, which is where an operator looks once they have noticed. */}
+        {dirty && !locked && <DraftChip label="unapplied position" />}
       </div>
       {/* BELOW the row, not inside it: it is a note about why the controls above are
           inert, and a note that sits in the control row changes the row's height as

@@ -1812,8 +1812,10 @@ textarea.cg-field--autogrow {
   font-size: var(--r-insp-foot-btn-text);
   padding-block: 0;
 }
-/* "Apply position" sits IN the nudge row and must line up with the two number
-   boxes beside it, so it takes the field height rather than a button height. */
+/* "Apply position" has its OWN row now (`INSPECTOR-DELTA` §3) and keeps the field height it
+   had beside the boxes — the section's controls stay one size whatever row they are on, which
+   is what stops the button reading as a different rank of thing once it moved. */
+.cg-position-apply .cg-btn,
 .cg-position-row .cg-btn {
   height: var(--r-insp-position-field-h);
   min-height: var(--r-insp-position-field-h);

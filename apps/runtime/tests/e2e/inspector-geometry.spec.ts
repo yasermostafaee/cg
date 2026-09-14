@@ -96,7 +96,24 @@ test('the Update button stays pinned at the foot of the panel at every panel hei
   }
 });
 
-test('X and Y align: same top, same height, same width, and Apply position on their baseline', async ({
+/**
+ * 🔴 **RE-POINTED, NOT WEAKENED — `INSPECTOR-DELTA` §3.** This asserted the OLD contract:
+ * X and Y side by side on one line with `Apply position` on their baseline, growing to fill
+ * the row. The owner's call stacked them and gave the button its own row, so the old
+ * assertions describe a layout that is deliberately gone.
+ *
+ * The replacement is the SAME STRENGTH on the new axis, and deliberately so — a layout
+ * change is the easiest moment to lose a guard by "relaxing it to match". Side-by-side was
+ * pinned by `same top` + `X before Y`; stacked is pinned by `same left` + `X above Y`, and
+ * `same width` / `same height` survive unchanged because they were never about the axis.
+ *
+ * ⚠ AND THE GROWTH CLAIM IS INVERTED RATHER THAN DROPPED. It used to prove the fields FILL
+ * their row (they grew when the panel did). They are now CAPPED at the reference's own
+ * measured field width, so the claim worth holding is the opposite one: widening the panel
+ * must NOT stretch them. Dropping the fullscreen leg entirely would have left the cap
+ * untested, which is the part most likely to be undone by accident.
+ */
+test('X and Y stack: same left, same width, Y under X, and Apply position on its own row', async ({
   app,
 }) => {
   const page = app.page;
@@ -108,29 +125,37 @@ test('X and Y align: same top, same height, same width, and Apply position on th
   const x = await box(app.inspector.getByLabel('Position offset X'));
   const y = await box(app.inspector.getByLabel('Position offset Y'));
   const apply = await box(app.inspector.getByRole('button', { name: 'Apply position' }));
-  expect(Math.abs(x.y - y.y), 'same top').toBeLessThanOrEqual(1);
+  expect(Math.abs(x.x - y.x), 'same left').toBeLessThanOrEqual(1);
   expect(Math.abs(x.height - y.height), 'same height').toBeLessThanOrEqual(1);
   expect(Math.abs(x.width - y.width), 'same width').toBeLessThanOrEqual(1);
-  expect(x.x + x.width, 'X sits before Y').toBeLessThanOrEqual(y.x);
-  // The button commits what the two boxes hold, so it sits on THEIR baseline.
-  expect(
-    Math.abs(apply.y + apply.height - (x.y + x.height)),
-    'Apply on the baseline',
-  ).toBeLessThanOrEqual(1);
-  // The reference's 32 px position boxes, from the token home.
+  expect(x.y + x.height, 'X sits above Y').toBeLessThanOrEqual(y.y + 1);
+
+  // THE BUTTON IS ON ITS OWN ROW — below both boxes, not on their baseline.
+  expect(apply.y, 'Apply starts below the Y box').toBeGreaterThanOrEqual(y.y + y.height - 1);
+  /*
+    …and it did NOT shrink into a corner (§3). Its own words are what set its width, so the
+    floor is generous enough to prove it is not a squeezed remnant of the old row.
+  */
+  expect(apply.width, 'Apply position keeps a pressable width').toBeGreaterThan(80);
+
+  // The reference's 32 px position boxes, from the token home — the button keeps that
+  // height on its new row, so the section's controls stay one size.
   const h = await tokenPx(page, '--r-insp-position-field-h');
   expect(Math.round(x.height)).toBe(h);
   expect(Math.round(apply.height)).toBe(h);
 
-  // …and they FILL the row between the grid and the button: at a wider panel they grow,
-  // and stay equal, rather than sitting at a fixed width.
+  // THE CAP: the reference's own measured field width, and widening the panel must not
+  // stretch past it (it painted 90.3 × 32 in Chromium at 1280 × 800).
+  const capped = await tokenPx(page, '--r-insp-position-field-w');
+  expect(Math.round(x.width), 'the field takes the reference’s width').toBe(capped);
+
   await app.inspector.getByRole('button', { name: 'Show INSPECTOR fullscreen' }).click();
   await expect
     .poll(async () => (await app.inspector.boundingBox())?.width ?? 0)
     .toBeGreaterThan(900);
   const xWide = await box(app.inspector.getByLabel('Position offset X'));
   const yWide = await box(app.inspector.getByLabel('Position offset Y'));
-  expect(xWide.width).toBeGreaterThan(x.width);
+  expect(Math.round(xWide.width), 'a wider panel must NOT stretch a capped field').toBe(capped);
   expect(Math.abs(xWide.width - yWide.width)).toBeLessThanOrEqual(1);
 });
 

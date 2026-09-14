@@ -767,6 +767,20 @@ export const INSPECTOR_PX = {
   fieldH: 31,
   /** The two position inputs — `.inspector .position-controls input{height:32px}`. */
   positionFieldH: 32,
+  /**
+   * 🔴 …and their WIDTH, measured rather than declared — `INSPECTOR-DELTA` §3.
+   *
+   * The reference declares `minmax(48px,1fr)` for these two columns, which is not a width;
+   * rendered in Chromium at 1280 × 800 the grid resolves to
+   * `66px 90.2969px 90.2969px 99.4062px` and each input paints **90.3 × 32**. Ours painted
+   * **120.86 × 32** because they filled the row between the anchor grid and the button.
+   *
+   * ⚠ It is a CEILING on a stacked column, not a fixed size. Stacking the two fields (the
+   * owner's call) removes the horizontal competition that made them 120 px wide; without a
+   * cap they would simply take the whole 370 px section instead, which is further from the
+   * drawing than where they started.
+   */
+  positionFieldW: 90,
   /** …and the floor each takes in the `minmax(48px,1fr)` columns they fill. */
   offsetMinW: 48,
   /** The footer — `.inspector-foot{padding:9px 12px}`, its buttons and their gap. */
@@ -2876,6 +2890,7 @@ export const cssVars = {
   '--r-insp-field-pad': `${String(INSPECTOR_PX.fieldPadY)}px ${String(INSPECTOR_PX.fieldPadX)}px`,
   '--r-insp-field-h': `${String(INSPECTOR_PX.fieldH)}px`,
   '--r-insp-position-field-h': `${String(INSPECTOR_PX.positionFieldH)}px`,
+  '--r-insp-position-field-w': `${String(INSPECTOR_PX.positionFieldW)}px`,
   '--r-insp-offset-min-w': `${String(INSPECTOR_PX.offsetMinW)}px`,
   '--r-insp-foot-pad': `${String(INSPECTOR_PX.footPadY)}px ${String(INSPECTOR_PX.footPadX)}px`,
   '--r-insp-foot-gap': `${String(INSPECTOR_PX.footGap)}px`,
