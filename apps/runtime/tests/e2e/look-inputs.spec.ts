@@ -109,15 +109,41 @@ test('LOOK INPUTS lists every look with its own frames, and the flat template ke
   const looks = app.inspector.locator('[aria-label="Look inputs"]');
   await expect(looks).toBeVisible();
 
-  // BOTH looks at once — the whole point: 2-box's inputs and solo's, side by side, so the
-  // operator can compose the one that is off air while the other is on it.
+  /*
+    🔴 `INSPECTOR-DELTA` §4 — ONE LOOK AT A TIME, BEHIND TABS, which is what the reference
+    draws (`05-row-inspector.html`: `div.look-tabs` of `aria-pressed` buttons, then a
+    `#look-mappings` list holding only the selected look's frames). This asserted BOTH looks
+    visible at once — "the whole point … side by side" — and that shape is deliberately gone.
+
+    ⚠ RE-POINTED, NOT RELAXED. Every look must still be REACHABLE and must still offer only
+    its own frames; the tab press is the difference. And the composing-while-off-air need the
+    old comment named is served better than before, not worse: a look holding an unapplied
+    edit now marks its own tab, so an edit on a look you have navigated away from still
+    announces itself instead of merely being further down a scroll.
+  */
+  await expect(looks.locator('[data-look-tab="two"]')).toBeVisible();
+  await expect(looks.locator('[data-look-tab="solo"]')).toBeVisible();
+
+  // The LIVE look is the one open on arrival, and it offers only its own frames.
   await expect(looks.locator('[data-look-row="two"]')).toBeVisible();
-  await expect(looks.locator('[data-look-row="solo"]')).toBeVisible();
-  // Each look offers only ITS OWN frames. `l-2` is not in solo.
   await expect(looks.locator('[data-look-binding="two:l-1"]')).toBeVisible();
   await expect(looks.locator('[data-look-binding="two:l-2"]')).toBeVisible();
+
+  // Press the other tab: `solo` has `l-1` and, by construction, no `l-2`.
+  await looks.locator('[data-look-tab="solo"]').click();
   await expect(looks.locator('[data-look-binding="solo:l-1"]')).toBeVisible();
   await expect(looks.locator('[data-look-binding="solo:l-2"]')).toHaveCount(0);
+  /*
+    ⚠ THE POSITIVE CONTROL. `solo:l-2` being absent is TRUE and WORTHLESS if the tab press did
+    nothing — so the switch is proved by the row only `solo` has, and by `two`'s going away.
+  */
+  await expect(looks.locator('[data-look-row="solo"]')).toBeVisible();
+  await expect(looks.locator('[data-look-row="two"]')).toHaveCount(0);
+
+  // …and back, so the section is not a one-way trip. The rest of this test reads `two`'s
+  // own control, so it is also the state the assertions below need.
+  await looks.locator('[data-look-tab="two"]').click();
+  await expect(looks.locator('[data-look-binding="two:l-2"]')).toBeVisible();
 
   /*
     §3d — THE DEFAULT IS NAMED INSIDE THE CONTROL THAT INHERITS IT. The blank option used to

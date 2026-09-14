@@ -34,19 +34,47 @@ const ANCHOR_GRID: readonly (readonly PositionAnchor[])[] = [
  */
 const styles = {
   /** The grid and the nudge inputs side by side — one control, read left to right. */
-  placement: {
-    display: 'flex',
-    gap: 'var(--r-space-4)',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap' as const,
-  },
   /*
-   * The two nudge inputs AND "Apply position", bottom-aligned (the mock's
-   * `.nudge`). `flex-end` is the load-bearing bit: each nudge field is a label
-   * STACKED over its input, so aligning on the top would hang the button level
-   * with the 11px labels instead of with the boxes it acts on. Aligned on the
-   * baseline of the controls, the three read as one row of controls.
+   * 🔴 ONE GRID, SO EVERY CONTROL IN THIS SECTION SHARES AN EDGE — the owner, 2026-09-14:
+   * «در قسمت پوزیشن دکمه‌ها و اینپوتها باید با هم هماهنگی داشته باشن و المانها نسبت به هم
+   * تراز باشن و در جای مناسب قرار داشته باشن.»
+   *
+   * ── WHAT WAS ACTUALLY OUT OF LINE, measured in Chromium at 1280 × 800 ──────────────
+   *
+   * The section was a flex row (anchor grid + stacked fields) with the button on a
+   * free-standing row beneath, and that arrangement gave the eye THREE left edges:
+   *
+   *     anchor grid   left   0    top  43
+   *     dx / dy       left  112   top  43
+   *     Apply         left   0    top 171
+   *
+   * So `Apply position` — the control that commits exactly those two boxes — sat under the
+   * ANCHOR GRID, sharing an edge with the one thing it does not act on, and sharing none
+   * with the two it does. A 12 px dead band sat between them on top of that.
+   *
+   * ── THE FIX IS STRUCTURAL, not a margin ───────────────────────────────────────────
+   *
+   * Two columns: the anchor grid spans both rows on the left; the fields and the button
+   * stack in the right column, so they resolve to ONE left edge by construction rather than
+   * by two paddings that agree today. `justify-content: start` keeps the block at the
+   * section's left rather than spreading it across 370 px.
+   *
+   * ⚠ The column is `auto`, so it takes the width of its widest child — the BUTTON, at its
+   * natural 112.3 — while the inputs keep the reference's measured 90 px cap inside it.
+   * Left-aligned with equal heights is the harmony that matters here; forcing the two to one
+   * width would mean either stretching the fields off the drawing's size or shrinking the
+   * button into the corner §3 forbids.
    */
+  placement: {
+    display: 'grid',
+    gridTemplateColumns: 'auto auto',
+    justifyContent: 'start',
+    columnGap: 'var(--r-space-4)',
+    rowGap: 'var(--r-space-3)',
+    alignItems: 'start',
+  },
+  /** The 3 × 3 grid pairs with the FIELDS, so it starts at their top and spans both rows. */
+  anchorCell: { gridColumn: '1', gridRow: '1', alignSelf: 'start' },
   /*
    * 🔴 `MONITORS-01` — AUDIT ROW 30: the gap is `--r-space-2` (8), not `--r-space-3` (12).
    * Measured in Chromium at 1280 × 800, the reference's `.position-controls` renders
@@ -70,13 +98,42 @@ const styles = {
    * 120.86 × 32; WITHOUT the cap they would take the whole 370 px section instead, which is
    * further from the drawing than where they started.
    */
+  /*
+   * 🔴 LABEL BESIDE ITS INPUT, ON ONE LINE — the owner, 2026-09-14: «لیبل اینپوتهای
+   * پوزیشن با خود اینپوتها در یه خط باشن بهتره و منظمتر دیده میشه.»
+   *
+   * A two-column grid — BOX, then label — so `dx` and `dy` align with each other, the two
+   * boxes align with each other, and the pairing is read across rather than down.
+   *
+   * 🔴 **THE LABEL TRAILS ITS BOX, and that is the owner's reason rather than a taste
+   * call** (2026-09-14): «لیبل‌ها در انتها باشن بهتره چون باعث میشه ابتدای دکمه با
+   * ابتدای اینپوتها در یک راستا باشد.» With the labels leading, the boxes began one label-width
+   * in and `Apply position` — which spans the row — began at the LABEL edge, so the button
+   * and the boxes it commits started on two different verticals. Put the label last and the
+   * box column IS column one: the button's start and the boxes' start become the same line
+   * by construction.
+   *
+   * ⚠ The swap is in the DOM, not a CSS `order`. Only one element per row is focusable, so
+   * tab order is untouched either way — but a visual order that disagrees with the source is
+   * a trap for the next reader, and there is nothing here that requires one.
+   *
+   * The label column is `auto`: it takes the wider of the two words and no more.
+   *
+   * ⚠ The previous spelling stacked a label ABOVE each box and is gone; the reference does
+   * the same thing (`X px` over its input), so this is a second deliberate departure from
+   * the drawing on the owner's call, recorded beside the first.
+   */
   offsets: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 'var(--r-space-2)',
-    alignItems: 'stretch',
-    // GROW NEVER, SHRINK IF IT MUST — the cap is a ceiling, not a fixed size.
-    flex: '0 1 var(--r-insp-position-field-w)',
+    // Column 2 of the outer grid — beside the anchor pad.
+    gridColumn: '2',
+    gridRow: '1',
+    display: 'grid',
+    // BOX first, LABEL second — see the note above for why that order and not the other.
+    gridTemplateColumns: 'var(--r-insp-position-field-w) auto',
+    columnGap: 'var(--r-space-2)',
+    rowGap: 'var(--r-space-2)',
+    alignItems: 'center',
+    justifyItems: 'start',
     minWidth: 0,
   },
   /*
@@ -85,42 +142,44 @@ const styles = {
    * than the section's.
    */
   applyRow: {
+    // SPANS the label and box columns, so it starts on the edge every row here shares.
+    gridColumn: '1 / -1',
     display: 'flex',
     alignItems: 'center',
     gap: 'var(--r-space-2)',
-    marginTop: 'var(--r-space-3)',
     flexWrap: 'wrap' as const,
+    marginTop: 'var(--r-space-1)',
   },
   /**
    * One nudge input with its own label ABOVE it, so the two never compete for a row.
    *
-   * `RUNTIME-REDESIGN-01` Phase 5 — the two fields FILL the row between the anchor grid and
-   * the button, sharing it equally, instead of sitting at a fixed 74 px each: the reference
-   * renders `.position-controls` as `66px minmax(48px,1fr) minmax(48px,1fr) auto`, so X and Y
-   * grow with the panel and stay the same width as each other at every width (`design.md`
-   * §12.3). A 48 px floor keeps a digit legible when the panel is dragged narrow.
+   * ⚠ **SUPERSEDED, `INSPECTOR-DELTA` §3.** This said the two fields FILL the row between
+   * the anchor grid and the button, growing with the panel — the reference's
+   * `66px minmax(48px,1fr) minmax(48px,1fr) auto`. They are STACKED and CAPPED now, so they
+   * neither share a row nor grow. The reference's own shape is recorded at `offsets` above;
+   * the claim that ours matches it is the part that is no longer true.
    */
-  offsetField: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 'var(--r-space-1)',
-    /*
-      ⚠ `0 0 auto` NOW THAT THE PARENT IS A COLUMN. This read
-      `1 1 var(--r-insp-offset-min-w)`, which shared one ROW between X and Y; in a column
-      the same declaration is a flex-basis on HEIGHT, so a WIDTH token would have been
-      stretching each field's box vertically. **A layout-direction change is not a free
-      change to the children** — every flex shorthand on them has to be re-read against the
-      new axis, and this is the one that would have gone wrong silently.
-    */
-    flex: '0 0 auto',
-    minWidth: 0,
-  },
+  /*
+   * 🔴 `display: contents` — THE WRAPPER STAYS IN THE JSX AND LEAVES THE LAYOUT.
+   *
+   * Each field is still one element in the markup (its label and its box belong together,
+   * and a reader should not have to pair them by eye), but a wrapper between the grid and
+   * its cells would make each PAIR one cell and defeat the alignment entirely: the two
+   * labels would size independently and the boxes would not line up. `display: contents`
+   * promotes the label and the input into the parent grid while keeping the grouping.
+   *
+   * ⚠ It renders no box of its own, so it must carry no border, background or padding —
+   * there would be nothing to paint them on.
+   */
+  offsetField: { display: 'contents' as const },
   /** The reference's label rank: 12 px, medium, the second ink — not the muted caption. */
   offsetLabel: {
     color: colors.textSecondary,
     fontSize: 'var(--r-insp-label-text)',
     fontWeight: 'var(--r-weight-medium)',
     lineHeight: 'var(--r-insp-label-line)',
+    // Beside its box now, so it must not wrap mid-row and push the grid's rows apart.
+    whiteSpace: 'nowrap' as const,
   },
   offsetInput: { width: '100%' },
   lock: {
@@ -246,7 +305,12 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
           painting moves to `controls.css`, where a selected fill and a hover can
           actually be expressed.
         */}
-        <div className="cg-anchor-grid" role="group" aria-label="Position anchor">
+        <div
+          className="cg-anchor-grid"
+          style={styles.anchorCell}
+          role="group"
+          aria-label="Position anchor"
+        >
           {ANCHOR_GRID.flat().map((a) => (
             <Button
               key={a}
@@ -282,7 +346,6 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
               that was missing. The a11y contract here is unchanged by this pass;
               only the stacking of the visible text is new. */}
           <div style={styles.offsetField}>
-            <span style={styles.offsetLabel}>dx</span>
             <NumericInput
               className="cg-field"
               style={styles.offsetInput}
@@ -293,9 +356,9 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
               onValueChange={setDx}
               aria-label="Position offset X"
             />
+            <span style={styles.offsetLabel}>dx</span>
           </div>
           <div style={styles.offsetField}>
-            <span style={styles.offsetLabel}>dy</span>
             <NumericInput
               className="cg-field"
               style={styles.offsetInput}
@@ -306,6 +369,7 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
               onValueChange={setDy}
               aria-label="Position offset Y"
             />
+            <span style={styles.offsetLabel}>dy</span>
           </div>
           {/* ONE OF THE THREE ACCENTED ACTIONS (owner request), with Add item and
               Update — this is the action the POSITION section exists to perform.
@@ -320,38 +384,38 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
               no row left to sit in, and the empty band it warned about is now the thing the
               stacking bought — the owner's instruction is that this button keeps its own
               treatment and its own row and does not shrink into a corner. */}
-        </div>
-      </div>
-      <div className="cg-position-apply" style={styles.applyRow}>
-        <AsyncButton
-          variant="accent"
-          aria-label="Apply position"
-          disabled={locked}
-          run={() =>
-            window.cg.stack
-              .setPosition({
-                itemId: item.itemId,
-                position: { anchor, offset: { x: offset(dx), y: offset(dy) } },
-              })
-              .then((r) => ({
-                accepted: r.ok,
-                ...(r.reason !== undefined ? { errorCode: r.reason } : {}),
-              }))
-          }
-          // #334 — a refusal surfaces as the command TOAST, not pinned inline beside the
-          // control where its wrapped text bloated this narrow panel. `setPosition` does
-          // NOT self-report (unlike `applyDraft`), so this is the report, not a suppressor.
-          // The MESSAGE is unchanged: the button already mapped `r.reason` through
-          // `errorCodeMessage`, and the toast carries that same mapping — only its
-          // placement moves.
-          onError={reportCommandError}
-        >
-          Apply position
-        </AsyncButton>
-        {/* …and the same CHIP the commit bar shows for staged field edits, so the
+          <div className="cg-position-apply" style={styles.applyRow}>
+            <AsyncButton
+              variant="accent"
+              aria-label="Apply position"
+              disabled={locked}
+              run={() =>
+                window.cg.stack
+                  .setPosition({
+                    itemId: item.itemId,
+                    position: { anchor, offset: { x: offset(dx), y: offset(dy) } },
+                  })
+                  .then((r) => ({
+                    accepted: r.ok,
+                    ...(r.reason !== undefined ? { errorCode: r.reason } : {}),
+                  }))
+              }
+              // #334 — a refusal surfaces as the command TOAST, not pinned inline beside the
+              // control where its wrapped text bloated this narrow panel. `setPosition` does
+              // NOT self-report (unlike `applyDraft`), so this is the report, not a suppressor.
+              // The MESSAGE is unchanged: the button already mapped `r.reason` through
+              // `errorCodeMessage`, and the toast carries that same mapping — only its
+              // placement moves.
+              onError={reportCommandError}
+            >
+              Apply position
+            </AsyncButton>
+            {/* …and the same CHIP the commit bar shows for staged field edits, so the
             two kinds of unapplied change read as one idea. Beside the button that
             clears it, which is where an operator looks once they have noticed. */}
-        {dirty && !locked && <DraftChip label="unapplied position" />}
+            {dirty && !locked && <DraftChip label="unapplied position" />}
+          </div>
+        </div>
       </div>
       {/* BELOW the row, not inside it: it is a note about why the controls above are
           inert, and a note that sits in the control row changes the row's height as

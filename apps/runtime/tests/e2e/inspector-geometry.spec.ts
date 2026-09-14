@@ -10,7 +10,9 @@ import { buildListFieldVcg, expect, test } from './fixtures/runtime.js';
  *
  *   - the Update button stays PINNED at the foot of the panel, at MORE THAN ONE panel height
  *     and with content both shorter and longer than the panel;
- *   - X and Y ALIGN — same top, same height, same width, the button on their baseline;
+ *   - X and Y ALIGN — same left, same width, Y under X, `Apply position` on its own row
+ *     (it was same TOP and the button on their baseline until `INSPECTOR-DELTA` §3 stacked
+ *     them; the claim is the same strength on the new axis, see the test's own note);
  *   - an input's focus is ONE ring, not two;
  *   - subtitle items reorder by their GRIP HANDLE — by pointer, not only by the keyboard
  *     path `stage-inspector-edits.spec.ts` already drives.

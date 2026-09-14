@@ -109,12 +109,43 @@ async function render(
   return host;
 }
 
+/**
+ * 🔴 `INSPECTOR-DELTA` §4 — **PRESS A LOOK TAB.**
+ *
+ * The section used to stack every look on screen at once, so a spec could reach any look's
+ * rows straight after render. The reference draws it as TABS with one look's frames below
+ * (`05-row-inspector.html`: `div.look-tabs` + `#look-mappings`), and the owner took that
+ * shape, so reaching a look is now an ACT the operator performs and the specs perform it too.
+ *
+ * ⚠ The specs below are RE-POINTED, not relaxed: every assertion they made about a look's
+ * frames still has to hold, of the same look, with the same values — what changed is that
+ * the look must be SELECTED first. An assertion that quietly became "and the row is absent"
+ * would be this change erasing its own coverage.
+ */
+async function selectLook(el: HTMLElement, lookId: string): Promise<void> {
+  const tab = el.querySelector<HTMLButtonElement>(`[data-look-tab="${lookId}"]`);
+  if (tab === null) throw new Error(`no tab for look ${lookId}`);
+  await act(async () => {
+    tab.click();
+  });
+}
+
 it('🔴 §6.5 — the LIVE look is distinguishable from the others, in the markup', async () => {
   const el = await render();
 
-  // Both looks are listed — the point of the section is seeing them at the same time.
+  /*
+    EVERY look is reachable — one TAB each. That replaces "both are listed": the section shows
+    one look's frames at a time now, and what must stay true is that none of them is
+    unreachable, which is the property the old assertion was really protecting.
+  */
+  expect(el.querySelector('[data-look-tab="two"]')).not.toBeNull();
+  expect(el.querySelector('[data-look-tab="solo"]')).not.toBeNull();
+  // …and the LIVE look is the one selected on open, with its frames showing.
+  expect(el.querySelector('[data-look-tab="two"]')?.hasAttribute('data-look-tab-active')).toBe(
+    true,
+  );
   expect(el.querySelector('[data-look-row="two"]')).not.toBeNull();
-  expect(el.querySelector('[data-look-row="solo"]')).not.toBeNull();
+  expect(el.querySelector('[data-look-row="solo"]')).toBeNull();
   // …and exactly ONE is marked live, the one the row is actually showing.
   expect(el.querySelector('[data-look-live="two"]')).not.toBeNull();
   expect(el.querySelector('[data-look-live="solo"]')).toBeNull();
@@ -125,11 +156,21 @@ it('🔴 §6.5 — the LIVE look is distinguishable from the others, in the mark
 
 it('each look lists ONLY its own frames — solo has one, 2-box has two', async () => {
   const el = await render();
+  // `two` is live, so it is the look on open.
   expect(el.querySelector('[data-look-binding="two:l-1"]')).not.toBeNull();
   expect(el.querySelector('[data-look-binding="two:l-2"]')).not.toBeNull();
+
+  await selectLook(el, 'solo');
   expect(el.querySelector('[data-look-binding="solo:l-1"]')).not.toBeNull();
   // `l-2` is not in solo, so solo must not offer an input for it.
   expect(el.querySelector('[data-look-binding="solo:l-2"]')).toBeNull();
+  /*
+    ⚠ AND THE POSITIVE CONTROL FOR THE TAB ITSELF. `solo:l-2` being absent is the claim, and
+    it is TRUE and WORTHLESS if the tab press did nothing and we are still looking at `two`.
+    So the switch is proved by the row that only `solo` has.
+  */
+  expect(el.querySelector('[data-look-row="solo"]'), 'the tab press switched looks').not.toBeNull();
+  expect(el.querySelector('[data-look-row="two"]')).toBeNull();
 });
 
 it('🔴 §6.3 — an emergency patch is VISIBLE on every row it masks, and says what is on air', async () => {
@@ -142,21 +183,33 @@ it('🔴 §6.3 — an emergency patch is VISIBLE on every row it masks, and says
     lookSourceOverride: { solo: { 'l-1': 'studio-3' } },
   });
 
-  // The patch is on `l-1`, so BOTH looks' `l-1` rows are masked — it is in force everywhere.
-  for (const key of ['two:l-1', 'solo:l-1']) {
+  /*
+    The patch is on `l-1`, so EVERY look's `l-1` row is masked — it is in force everywhere.
+    ⚠ `INSPECTOR-DELTA` §4: one look shows at a time now, so "every look" is walked by
+    PRESSING each tab rather than read off one screen. The claim is unchanged and so is its
+    strength; only the reaching of it is.
+  */
+  for (const [lookId, key] of [
+    ['two', 'two:l-1'],
+    ['solo', 'solo:l-1'],
+  ] as const) {
+    await selectLook(el, lookId);
     const select = el.querySelector(`[data-look-binding="${key}"]`);
+    expect(select, `${key} is reachable once its tab is pressed`).not.toBeNull();
     expect(select?.hasAttribute('data-look-binding-masked'), key).toBe(true);
     // 🔴 STRUCK THROUGH, NOT DISABLED. Grey reads as "this control is broken"; the operator
     // must be able to tell "overridden" from "unavailable", and must still be able to edit.
     expect((select as HTMLSelectElement | null)?.disabled, `${key} stays usable`).toBe(false);
     expect((select as HTMLElement | null)?.style.textDecoration).toBe('line-through');
+
+    // …and the row NAMES what is actually on air, in words — in EVERY look, not just one.
+    const note = el.querySelector('[data-look-binding-patched="l-1"]');
+    expect(note?.textContent, key).toContain('not in force');
+    expect(note?.textContent, key).toContain('Studio 5');
   }
-  // …and the row NAMES what is actually on air, in words.
-  const note = el.querySelector('[data-look-binding-patched="l-1"]');
-  expect(note?.textContent).toContain('not in force');
-  expect(note?.textContent).toContain('Studio 5');
 
   // `l-2` has no patch, so its row is untouched — masking is per PLATE, not per row.
+  await selectLook(el, 'two');
   expect(
     el.querySelector('[data-look-binding="two:l-2"]')?.hasAttribute('data-look-binding-masked'),
   ).toBe(false);
@@ -204,6 +257,8 @@ it('🔴 §2.3 — editing a MASKED binding is ACCEPTED and staged, and says it 
     sourceOverride: { 'l-1': 'studio-5' },
   });
 
+  // `INSPECTOR-DELTA` §4 — `solo` is not the live look, so reach it the way an operator does.
+  await selectLook(el, 'solo');
   const select = el.querySelector('[data-look-binding="solo:l-1"]') as HTMLSelectElement | null;
   expect(select).not.toBeNull();
   await act(async () => {

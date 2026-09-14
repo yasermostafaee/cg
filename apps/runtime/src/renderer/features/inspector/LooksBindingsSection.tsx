@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { activeLookOf } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
@@ -15,6 +15,7 @@ import {
 } from './draftStore.js';
 import { appliedPlateSources } from './livePlates.js';
 import { reportCommandError } from '../status/commandFeedback.js';
+import { IsolatedName } from '../../ui/OperatorNames.js';
 import { isOnAir } from '../stack/onAir.js';
 
 /**
@@ -62,6 +63,26 @@ const styles = {
     gap: 'var(--r-space-2)',
     alignItems: 'baseline',
     marginBottom: 'var(--r-space-1)',
+  },
+  /*
+   * 🔴 THE LOOK TABS — `INSPECTOR-DELTA` §4, and this IS what the reference draws.
+   *
+   * Read out of `05-row-inspector.html` rather than taken from prose: the per-row section is
+   * `<div class="look-tabs" aria-label="Look to edit">` holding one `<button aria-pressed>`
+   * per authored look, then a `#look-mappings` list showing ONLY the selected look's frames.
+   * Ours rendered EVERY look stacked, each with its own heading and its own full list of
+   * plates — in a 396 px panel that is the whole section scrolling past, and it is what the
+   * owner meant by "does not read like the drawing".
+   *
+   * ⚠ A TAB IS PRESSABLE, so it is a real `<button>` with a focus ring and `aria-pressed`,
+   * NOT a `Tag`. The rule is a MATCH, not a ban (`TAG-NOT-BUTTON-07` §3): a shape that
+   * cannot be pressed must not look like a control, and a shape that CAN must stay one.
+   */
+  lookTabs: {
+    display: 'flex',
+    gap: 'var(--r-space-1)',
+    flexWrap: 'wrap' as const,
+    marginBottom: 'var(--r-space-2)',
   },
   lookName: { fontWeight: 700, fontSize: 'var(--r-text-sm)' },
   /**
@@ -223,6 +244,19 @@ export function LooksBindingsSection({
 }): JSX.Element | null {
   useSyncExternalStore(subscribeSources, sourcesVersion);
   useSyncExternalStore(subscribeDrafts, draftsVersion);
+  /*
+    🔴 WHICH LOOK THE OPERATOR IS EDITING — `INSPECTOR-DELTA` §4.
+
+    `null` means "whichever one is live", which is what a freshly opened Inspector should
+    show and what it should keep showing when a take changes the live look under it. Only an
+    explicit tab press pins it, and it stays pinned until the row is deselected (the section
+    is keyed by item upstream, so switching rows re-seeds it).
+
+    ⚠ ABOVE THE EARLY RETURN, and it has to be: hooks may not sit behind a conditional, and
+    the `carrier === undefined` bail below is exactly that. Declaring it here costs nothing
+    on a template with no looks — the component returns before anything reads it.
+  */
+  const [pinnedLookId, setPinnedLookId] = useState<string | null>(null);
   const carrier = info?.liveSources;
   const looks = carrier?.looks ?? [];
   // A template with no LOOKS gets no section — its plates have one answer, and the flat list
@@ -234,6 +268,34 @@ export function LooksBindingsSection({
   const defaults = appliedPlateSources(item.templateId, carrier.sources ?? []);
   const patches = item.sourceOverride ?? {};
   const bound = item.lookSourceOverride ?? {};
+  /*
+    WHICH LOOK IS BEING EDITED. The operator's pin if there is one and it still names a look
+    this template has; otherwise the LIVE look; otherwise the first. The fallback chain is
+    total, so `activeLook` is never undefined and the section can never render tabs with no
+    body — a template that was re-imported with different looks is exactly how a pinned id
+    comes to name nothing.
+  */
+  const activeLook =
+    looks.find((l) => l.id === pinnedLookId) ??
+    looks.find((l) => l.id === liveLookId) ??
+    (looks[0] as (typeof looks)[number]);
+  /*
+    Which looks hold an unapplied edit — asked of EVERY look, not just the visible one,
+    because that is the whole point: the tabs hide the others and a hidden draft that says
+    nothing is a draft the operator will lose. Read through the same `isLookBindingDirty`
+    the rows below use, so a tab's dot and a row's chip cannot disagree.
+  */
+  const dirtyLooks = new Set(
+    looks
+      .filter((look) =>
+        (carrier.sources ?? [])
+          .filter((p) => look.rects[p.sourceId] !== undefined)
+          .some((p) =>
+            isLookBindingDirty(item.itemId, look.id, p.sourceId, bound[look.id]?.[p.sourceId]),
+          ),
+      )
+      .map((look) => look.id),
+  );
 
   return (
     <div className="cg-inspector-section" aria-label="Look inputs">
@@ -250,16 +312,42 @@ export function LooksBindingsSection({
       */}
       <p style={styles.scope}>
         Set for THIS row — each look can show a different input. Blank takes the template&rsquo;s
-        own default, named in each list.
+        own default, named in each list.{' '}
+        {/*
+          🔴 GOLDEN RULE 10, AND IT WAS MISSING FROM THIS SURFACE ENTIRELY —
+          `INSPECTOR-DELTA` §4. The reference carries it (`05-row-inspector.html`: _"Default
+          inherits this channel's source mapping. Editing a look does not take it on air."_)
+          and ours carried no equivalent anywhere: a sweep for `take it on air` across the
+          whole renderer found one hit, in the picker, about something else.
+
+          It matters most here of all the places it could be missing. This section now shows
+          ONE look at a time behind a row of tabs, so pressing a tab LOOKS like switching
+          what is showing — and it is not: it changes which look you are EDITING. The
+          sentence is what separates the two, which is exactly the distinction golden rule 10
+          exists to protect.
+        */}
+        Editing a look does not take it on air.
       </p>
-      {looks.map((look) => {
-        const rects = look.rects;
-        const plates = (carrier.sources ?? []).filter((p) => rects[p.sourceId] !== undefined);
-        const isLive = look.id === liveLookId;
-        return (
-          <div key={look.id} style={styles.look} data-look-row={look.id}>
-            <div style={styles.lookHead}>
-              <span style={styles.lookName}>{look.name}</span>
+      {/*
+        THE TABS. One per authored look, the live one marked, and a dot on any look holding
+        an unapplied edit — see `dirtyLooks`.
+      */}
+      <div style={styles.lookTabs} role="group" aria-label="Look to edit">
+        {looks.map((look) => {
+          const isLive = look.id === liveLookId;
+          const isActive = look.id === activeLook.id;
+          return (
+            <Button
+              key={look.id}
+              variant={isActive ? 'secondary' : 'neutral'}
+              active={isActive}
+              aria-pressed={isActive}
+              data-look-tab={look.id}
+              {...(isActive ? { 'data-look-tab-active': '' } : {})}
+              onClick={() => setPinnedLookId(look.id)}
+            >
+              {/* The look's name is the TEMPLATE AUTHOR'S string — isolated, never bare. */}
+              <IsolatedName>{look.name}</IsolatedName>
               {isLive && (
                 <span
                   /*
@@ -273,10 +361,47 @@ export function LooksBindingsSection({
                   data-look-live={look.id}
                   data-look-badge={badge.tone}
                 >
+                  {' '}
                   {badge.text}
                 </span>
               )}
-            </div>
+              {/*
+                🔴 NOTHING STAGED MAY BECOME INVISIBLE. Stacking every look meant a draft was
+                always on screen; tabs hide all but one, so a look with unapplied edits that
+                is not the selected tab would silently stop reporting itself. The dot is the
+                same mark a dirty field carries, so "not applied yet" looks identical
+                wherever it appears in this panel.
+              */}
+              {dirtyLooks.has(look.id) && (
+                <span
+                  className="cg-dirty-dot"
+                  data-look-tab-dirty={look.id}
+                  aria-label={`${look.name} has unapplied edits`}
+                >
+                  ●
+                </span>
+              )}
+            </Button>
+          );
+        })}
+      </div>
+      {[activeLook].map((look) => {
+        const rects = look.rects;
+        const plates = (carrier.sources ?? []).filter((p) => rects[p.sourceId] !== undefined);
+        return (
+          <div key={look.id} style={styles.look} data-look-row={look.id}>
+            {/*
+              🔴 THE PER-LOOK HEADING IS GONE — `INSPECTOR-DELTA` §4. It named the look and
+              carried the live badge, which was right while every look was stacked on screen
+              and each block needed to say which one it was. With ONE look showing behind a
+              row of tabs, the tab already names it and already carries the badge, and a
+              heading repeating the pressed tab directly beneath it is the surface saying the
+              same thing twice — the reference's `#look-mappings` has no heading either.
+
+              ⚠ `data-look-live` / `data-look-badge` MOVED to the tab rather than being
+              duplicated. Two of them would be two claims about one fact, and
+              `lookBindings.dom.test.ts` pins that exactly one exists.
+            */}
             {plates.length === 0 && <p style={styles.empty}>No frames in this look.</p>}
             {plates.map((plate) => {
               const applied = bound[look.id]?.[plate.sourceId];
