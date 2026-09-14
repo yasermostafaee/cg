@@ -8,6 +8,7 @@ import type { StackItemState } from '@cg/shared-schema';
 import { StationSetupDialog } from '../src/renderer/features/stationSetup/StationSetupDialog.js';
 import { stationSetupStub } from './support/stationSetup.js';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
+import { applyDraft } from '../src/renderer/features/inspector/applyDraft.js';
 import { PositionPicker } from '../src/renderer/features/inspector/PositionPicker.js';
 import {
   __resetDraftsForTest,
@@ -239,24 +240,25 @@ describe('Inspector fields — R-020', () => {
 describe('PositionPicker offsets — R-020', () => {
   it('Persian-typed offsets apply as canonical numbers on the wire', async () => {
     const setPosition = vi.fn(() => Promise.resolve({ ok: true }));
-    const stub = { stack: { setPosition } };
+    // `stack.update` too: the commit is UPDATE now, and `applyDraft` always sends the field
+    // half (the documented `B-048` re-send). See `positionPicker.dom.test.ts`'s stub note.
+    const update = vi.fn(() => Promise.resolve({ accepted: true }));
+    const stub = { stack: { setPosition, update } };
     (window as unknown as { cg: typeof stub }).cg = stub;
-    const el = await render(
-      createElement(PositionPicker, {
-        item: {
-          itemId: 'item-1',
-          templateId: 'tpl-pos',
-          fields: {},
-          status: 'loaded',
-          pending: false,
-        },
-      }),
-    );
+    const subject: StackItemState = {
+      itemId: 'item-1',
+      templateId: 'tpl-pos',
+      fields: {},
+      status: 'loaded',
+      pending: false,
+    };
+    const el = await render(createElement(PositionPicker, { item: subject }));
     await setInput(inputByLabel(el, 'Position offset X'), '-۴۰');
     await setInput(inputByLabel(el, 'Position offset Y'), '٧');
     expect(inputByLabel(el, 'Position offset X').value).toBe('-40');
     await act(async () => {
-      el.querySelector<HTMLButtonElement>('button[aria-label="Apply position"]')?.click();
+      // `INSPECTOR-DELTA` — the commit is UPDATE now; `applyDraft` is what it calls.
+      await applyDraft(subject);
       await Promise.resolve();
     });
     expect(setPosition).toHaveBeenCalledWith({

@@ -391,15 +391,41 @@ test('an applied position reaches the SELECTED row’s frame and no other', asyn
   // Select the edited row and apply a position.
   await app.selectStackRow('tpl-edited');
   const picker = app.inspector;
-  await expect(picker.getByRole('button', { name: 'Apply position' })).toBeEnabled();
+  await expect(picker.getByLabel('Position offset X')).toBeEnabled();
   await picker.getByRole('button', { name: 'Anchor top-left' }).click();
   await picker.getByLabel('Position offset X').fill('42');
   await picker.getByLabel('Position offset Y').fill('7');
-  await picker.getByRole('button', { name: 'Apply position' }).click();
+  // `INSPECTOR-DELTA` — the row's ONE Update commits the placement now.
+  await app.applyEdits();
 
-  // THE FIX: the override arrives at that page, spelled exactly as the bridge
-  // spells it onto CasparCG's served URL.
-  await expect.poll(async () => appliedOn('tpl-edited')).toEqual(['?pos=top-left&dx=42&dy=7']);
+  /*
+    🔴 THE FIX: the override arrives at that page, spelled exactly as the bridge spells it
+    onto CasparCG's served URL — asserted on the LAST value rather than on the only one.
+
+    ⚠ **WHY THE LIST GREW, and why that is the feature and not a leak.** This used to be a
+    single entry, because PVW saw the position only once it was APPLIED. The owner's call
+    (2026-09-14): «فقط در حالت pvw نیازه که با تغییر پوزیشن بدون اپدیت هم موقعیت در pvw تغییر
+    کنه بصورت لحظه‌ای و realtime، در حقیقت با onchange اینپوتها» — in PVW the placement must
+    follow the boxes as they are typed, with no UPDATE in between. So the anchor press and
+    each keystroke now reach the frame in turn (`?dx=0&dy=0`, `?dx=42&dy=0`, `?dx=42&dy=7`),
+    which is exactly what was asked for.
+
+    What must still be true is what this test was always about: the FINAL value is the one
+    the bridge would serve, and it lands on the SELECTED row's frame only.
+  */
+  await expect
+    .poll(async () => (await appliedOn('tpl-edited')).at(-1))
+    .toEqual('?pos=top-left&dx=42&dy=7');
+
+  /*
+    …and the realtime claim itself, asserted rather than merely tolerated: the frame was
+    handed the intermediate placements BEFORE the commit. Without this the test would pass
+    against a PVW that had gone back to waiting for UPDATE, which is the behaviour the owner
+    asked to change.
+  */
+  const seen = await appliedOn('tpl-edited');
+  expect(seen.length, 'PVW followed the boxes as they were typed').toBeGreaterThan(1);
+  expect(seen).toContain('?pos=top-left&dx=42&dy=0');
 
   // …and the other frame's document was never touched.
   expect(await appliedOn('tpl-untouched')).toEqual([]);
@@ -501,7 +527,8 @@ test('the scene is byte-identical after a position rehearsal', async ({ app }) =
   const picker = app.inspector;
   await picker.getByRole('button', { name: 'Anchor bottom-left' }).click();
   await picker.getByLabel('Position offset X').fill('-5');
-  await picker.getByRole('button', { name: 'Apply position' }).click();
+  // `INSPECTOR-DELTA` — the row's ONE Update commits the placement now.
+  await app.applyEdits();
   await expect
     .poll(async () =>
       frames(page)

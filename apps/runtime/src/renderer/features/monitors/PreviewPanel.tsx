@@ -20,7 +20,12 @@ import { useFixedBank, useFixedSlots } from '../../hooks/useFixedLayers.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { plateAudioState } from '../layers/plateAudio.js';
-import { buildApplyPayload, draftsVersion, subscribeDrafts } from '../inspector/draftStore.js';
+import {
+  buildApplyPayload,
+  draftsVersion,
+  effectivePosition,
+  subscribeDrafts,
+} from '../inspector/draftStore.js';
 import {
   currentSourceAssignments,
   currentSourceCatalog,
@@ -158,7 +163,34 @@ export function PreviewPanel(): JSX.Element {
           layer: r.layer,
           channel: r.channel,
           rowName: rowNameFor(bank, r.layer, alias),
-          position: item.position,
+          /*
+            🔴 THE STAGED PLACEMENT, LIVE — owner, 2026-09-14: «فقط در حالت pvw نیازه که
+            با تغییر پوزیشن بدون اپدیت هم موقعیت در pvw تغییر کنه بصورت لحظه‌ای و realtime، در
+            حقیقت با onchange اینپوتها.»
+
+            This is the FIELD rule above applied to the placement, and it became necessary in
+            the same breath: `Apply position` used to let an operator commit a move on its
+            own and watch it land, and it is gone — UPDATE carries the position now. Without
+            this line the preview would show the OLD placement until the whole row was
+            committed, so the one surface that exists to check a graphic before air would be
+            the one surface that could not show the change being made.
+
+            It costs no extra wiring: this panel already re-renders on `draftsVersion` (for
+            the fields), so "realtime, on the inputs' onChange" falls out of the subscription
+            that is already here.
+
+            ⚠ PVW ONLY. Nothing here reaches CasparCG (`R-022` — the rehearsal is a local
+            browser render), and the row's state and the air path go on reading the APPLIED
+            `item.position`, which is the only value that is true of the channel.
+
+            🔴 AND `item.position` IS PASSED RAW, `undefined` INCLUDED. The first spelling
+            filled that gap with `defaultPositionOf(item.templateId)` — reasonable-looking, and
+            wrong: a row with no override must reach the frame with NO position, because the
+            frame ABSTAINS on absence and an empty search resolves to CENTRED. That would have
+            moved every correctly-placed graphic's preview to the middle. `rehearse-composite`
+            caught it on the full suite; `effectivePosition`'s signature now carries the rule.
+          */
+          position: effectivePosition(item.itemId, item.position),
           // The operator's EFFECTIVE values: applied fields with any staged
           // edits layered on, through the same `buildApplyPayload` the
           // Inspector's Apply uses — so what is rehearsed is exactly what Apply

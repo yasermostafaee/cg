@@ -5,7 +5,7 @@ import { buildValidVcg, expect, test } from './fixtures/runtime.js';
  *
  * The owner's decision: the Inspector's commit control is green ONLY while the row is on
  * air, and says `Update on air` when it is; off air it takes the ordinary accented
- * treatment — the same hue and weight as `Apply position` one section up — and the
+ * treatment — the accent this panel's section actions wear — and the
  * `.target-hint` sub-line ("Saves this row’s configuration. No Take is sent.") comes out.
  *
  * ── WHY THIS IS AN E2E AND NOT A DOM SPEC ─────────────────────────────────────────────
@@ -18,12 +18,13 @@ import { buildValidVcg, expect, test } from './fixtures/runtime.js';
  * ⚠ AND THE COMPARISON IS BETWEEN THE TWO STATES, never against a pinned hex. A pinned
  * colour would go red the day the owner retunes `--r-verb-play` and would say nothing
  * about the thing that actually matters — that the two states are DIFFERENT, and that the
- * off-air one is the same treatment `Apply position` already wears. Same reason
+ * off-air one is the panel's ordinary accent. Same reason
  * `bar-icon-composition.spec.ts` compares two button families rather than pinning 8 px.
  */
 test('the commit control is accented off air, green and named `Update on air` on air, and carries no sub-line in either state', async ({
   app,
 }) => {
+  const page = app.page;
   const templateId = 'tpl-e2e-commit';
   const layer = await app.importVcg('commit.vcg', await buildValidVcg(templateId));
   await app.selectLayerRow(layer);
@@ -39,12 +40,29 @@ test('the commit control is accented off air, green and named `Update on air` on
   await expect(commit).toHaveAttribute('data-inspector-commit', 'off-air');
   await expect(commit).toHaveText('Update');
   const offAir = await commit.evaluate(look);
-  // …and it is the treatment `Apply position` wears — the section action that likewise
-  // reaches no output. Read from the live control, so retuning the token moves both.
-  const applyPosition = await app.inspector
-    .getByRole('button', { name: 'Apply position' })
-    .evaluate(look);
-  expect(offAir, 'off air, Update wears `Apply position`’s treatment').toBe(applyPosition);
+  /*
+    ⚠ THE COMPARISON LOST ITS PARTNER. It read the off-air Update against `Apply position`,
+    which was the other `accent` control on this panel — and `INSPECTOR-DELTA` folded that
+    button into Update itself, so there is nothing left to compare against on this surface.
+
+    The claim is kept by reading the TOKEN the variant is built from rather than a sibling
+    control. That is a weaker instrument than control-vs-control (it cannot catch the class
+    being swapped for one that happens to resolve the same fill), which is why the on-air leg
+    below still compares the two STATES against each other — the property that actually
+    matters here is that they DIFFER, and that is measured control-to-control as before.
+  */
+  const accentFill = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue('--r-accent-fill').trim(),
+  );
+  const asRendered = await page.evaluate((hex: string) => {
+    const el = document.createElement('span');
+    el.style.backgroundColor = hex;
+    document.body.appendChild(el);
+    const c = getComputedStyle(el).backgroundColor;
+    el.remove();
+    return c;
+  }, accentFill);
+  expect(offAir.split(' | ')[0], 'off air, Update wears the accent fill').toBe(asRendered);
 
   // THE SUB-LINE IS GONE — asserted, so a parity pass cannot paste it back quietly.
   await expect(app.inspector.getByText(/No Take is sent/i)).toHaveCount(0);

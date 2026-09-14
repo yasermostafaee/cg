@@ -2,13 +2,19 @@ import type { FieldValue, FieldValues, StackItemState } from '@cg/shared-schema'
 import { reportCommandError } from '../status/commandFeedback.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { commitSourceAssignments, currentSourceAssignments } from '../sources/sourceStore.js';
+import { defaultPositionOf } from '../stack/defaultPositionStore.js';
+import { isPositionLocked } from './PositionPicker.js';
 import {
   buildApplyPayload,
   buildLookBindingsPayload,
   buildOverlayPayload,
+  clearPositionDraft,
   clearStagedLookBindingsMatching,
   clearStagedMatching,
   clearStagedPlatesMatching,
+  isPositionDirty,
+  offsetNumber,
+  positionDraftOf,
   singleFieldOverlay,
   snapshotDraft,
   snapshotLookBindingDraft,
@@ -61,18 +67,88 @@ export function applyDraft(
       bindingsPayload,
       lookBindings,
     );
-  if (plates.size === 0) return fields();
+  /*
+    🔴 **THE POSITION RIDES THE SAME PRESS — owner, 2026-09-14.** `Apply position` is gone;
+    UPDATE commits the row's whole draft, text and placement together.
+
+    ⚠ **IT IS STILL `stack.setPosition`, ITS OWN CHANNEL.** No wire, no IPC schema and no
+    payload changed — what moved is which CONTROL fires it. Folding a position into the
+    `stack.update` field-set would send the template a field it never declared, which is the
+    reason `positionDrafts` is a separate map in the first place, and that reason is intact.
+
+    🔴 **AND IT IS NOT SENT ON A LOCKED ROW, which preserves the refusal rather than
+    weakening it.** `setPosition` is refused while the row is on air (`R-011`), and the boxes
+    are disabled for exactly as long. But a draft staged OFF air survives a take — drafts
+    outlive selection changes by design — so an UPDATE pressed after that take would fire a
+    command the bridge is bound to refuse and drag the whole press down with it, reporting a
+    failed update to an operator whose text edit was accepted. Asking the SAME predicate the
+    picker disables its boxes with (`isPositionLocked`) means the two can never disagree
+    about who is locked, and no refusal CONDITION moves.
+  */
+  const position = (): Promise<boolean> => sendPosition(item);
+  if (plates.size === 0)
+    return position().then((ok) => fields().then((r) => (ok ? r : { ...r, accepted: false })));
   // PLATES FIRST, and it is not arbitrary: the assignment reaches NOTHING on air
   // (it is read at the next take), while `stack.update` reaches the graphic that
   // is on the channel now. Doing the harmless half first means a refused
   // assignment cannot leave a half-applied on-air change behind it.
   return sendPlateAssignments(item, plates).then((platesAccepted) =>
-    // BOTH halves run regardless, and the verdict is the AND of them: a refused
+    // EVERY half runs regardless, and the verdict is the AND of them: a refused
     // assignment must not silently discard a field edit the operator also staged,
     // and a refused field update must not make an accepted assignment look
     // rejected. Each half clears only its OWN staged entries, on its own success.
-    fields().then((res) => (platesAccepted ? res : { ...res, accepted: false })),
+    position().then((positionAccepted) =>
+      fields().then((res) =>
+        platesAccepted && positionAccepted ? res : { ...res, accepted: false },
+      ),
+    ),
   );
+}
+
+/**
+ * Send the item's staged POSITION, if it has one that differs from what is applied.
+ *
+ * Resolves `true` when there was nothing to do as well as when the send was accepted — the
+ * caller ANDs it into the press's verdict, and "no position staged" must not read as a
+ * refusal. The staged value is cleared only on acceptance, exactly as a field's is: a
+ * refused move stays staged, the dirty mark stays up, and the operator's placement is still
+ * theirs to retry.
+ */
+function sendPosition(item: StackItemState): Promise<boolean> {
+  const draft = positionDraftOf(item.itemId);
+  if (draft === undefined) return Promise.resolve(true);
+  const applied = item.position ?? defaultPositionOf(item.templateId);
+  if (!isPositionDirty(item.itemId, applied)) return Promise.resolve(true);
+  // See the note at the call site: a locked row is left alone rather than refused.
+  if (isPositionLocked(item)) return Promise.resolve(true);
+  return window.cg.stack
+    .setPosition({
+      itemId: item.itemId,
+      position: {
+        anchor: draft.anchor,
+        offset: { x: offsetNumber(draft.x), y: offsetNumber(draft.y) },
+      },
+    })
+    .then(
+      (res) => {
+        if (res.ok) {
+          clearPositionDraft(item.itemId);
+          return true;
+        }
+        /*
+          `setPosition`'s answer carries a REASON CODE and no sentence of its own (unlike
+          `stack.update`), so the wording comes from the same `errorCodeMessage` table the
+          old `Apply position` button read — the message the operator saw before this move
+          is the message they see now.
+        */
+        reportCommandError(errorCodeMessage(res.reason) ?? 'The position was not accepted.');
+        return false;
+      },
+      (err: unknown) => {
+        reportCommandError(err instanceof Error ? err.message : 'The position could not be sent.');
+        return false;
+      },
+    );
 }
 
 /**

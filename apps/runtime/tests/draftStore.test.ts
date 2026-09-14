@@ -9,6 +9,7 @@ import {
   hasStaged,
   isFieldDirty,
   isItemDirty,
+  effectivePosition,
   positionDraftOf,
   pruneDrafts,
   snapshotDraft,
@@ -153,8 +154,10 @@ describe('discard + prune', () => {
  * selection round trip cannot lose it (it used to be `PositionPicker`'s own `useState`,
  * keyed by item and therefore remounted — and emptied — on every selection change).
  */
-describe('the position draft — kept per item, swept by prune, left alone by Discard', () => {
+describe('the position draft — kept per item, swept by prune, DROPPED by Discard', () => {
   const DRAFT = { anchor: 'top-left' as const, x: '42', y: '-7' };
+  /** What the row has APPLIED, for the dirty comparison. */
+  const APPLIED_POSITION = { anchor: 'center' as const, offset: { x: 10, y: -20 } };
 
   it('stages and reads back, per item', () => {
     stagePosition(A, DRAFT);
@@ -167,13 +170,73 @@ describe('the position draft — kept per item, swept by prune, left alone by Di
     expect(positionDraftOf(A)).toEqual({ anchor: 'center', x: '-', y: '1.' });
   });
 
-  it('is NOT dropped by clearDraft (Discard) and does NOT make the item dirty — UPDATE does not send it', () => {
+  /**
+   * 🔴 **REVERSED BY THE OWNER, 2026-09-14 — and the assertion is INVERTED rather than
+   * deleted, because the behaviour it pinned is exactly the behaviour that changed.**
+   *
+   * It read: _"is NOT dropped by clearDraft (Discard) and does NOT make the item dirty —
+   * UPDATE does not send it"_, and that was correct while `Apply position` was the position's
+   * own control. «دکمه apply position فقط یه مرحله اضافیه و همون دکمه update باید
+   * پوزیشن رو هم اعمال کنه و همچنین discard هم روش کار کنه.»
+   *
+   * ⚠ The OLD test's own reasoning is what demands the new one: it existed so a chip could
+   * never point at an edit UPDATE would not send. UPDATE sends the position now, so the same
+   * rule inverts — a position that survived a Discard, or that left the bar reporting itself
+   * clean, would be the unapplied edit nobody can see.
+   */
+  it('🔴 IS dropped by clearDraft (Discard) and DOES make the item dirty — UPDATE sends it now', () => {
     stagePosition(A, DRAFT);
     stageField(A, ['title'], 'x');
+    // Dirty BEFORE the discard, and dirty BECAUSE of the position: the field is staged as
+    // `'x'` against an applied `'x'`, so only the position can be making this true.
+    expect(isItemDirty(A, { title: 'x' }, NO_PLATES, undefined, APPLIED_POSITION)).toBe(true);
+
     clearDraft(A);
     expect(hasStaged(A, ['title'])).toBe(false);
-    expect(positionDraftOf(A)).toEqual(DRAFT);
-    expect(isItemDirty(A, {}, NO_PLATES)).toBe(false);
+    expect(positionDraftOf(A)).toBeUndefined();
+    expect(isItemDirty(A, { title: 'x' }, NO_PLATES, undefined, APPLIED_POSITION)).toBe(false);
+  });
+
+  /**
+   * ⚠ **A POSITION EQUAL TO THE APPLIED ONE IS NOT DIRTY**, and the comparison is on the
+   * VALUES a send would carry rather than on the typed strings. Without this, a box the
+   * operator typed and retyped back — or left as `-0` — would demand an UPDATE that changes
+   * nothing, which is how a dirty mark stops meaning anything.
+   */
+  it('a staged position identical to the applied one leaves the item clean', () => {
+    stagePosition(A, { anchor: APPLIED_POSITION.anchor, x: '10', y: '-20' });
+    expect(isItemDirty(A, {}, NO_PLATES, undefined, APPLIED_POSITION)).toBe(false);
+    stagePosition(A, { anchor: APPLIED_POSITION.anchor, x: '11', y: '-20' });
+    expect(isItemDirty(A, {}, NO_PLATES, undefined, APPLIED_POSITION)).toBe(true);
+  });
+
+  /**
+   * …and a half-typed box is not a move. `'-'`, `'1.'` and `''` are in-progress states the
+   * store keeps AS TYPED (the test above pins that); what a send carries for them is `0`, so
+   * that is what the dirty test has to compare, or the panel reports a move the wire would
+   * not make.
+   */
+  it('an in-progress offset compares as the number a send would carry', () => {
+    stagePosition(A, { anchor: APPLIED_POSITION.anchor, x: '', y: '-20' });
+    // `''` sends 0, and applied x is 10 — a real difference.
+    expect(isItemDirty(A, {}, NO_PLATES, undefined, APPLIED_POSITION)).toBe(true);
+    stagePosition(A, { anchor: APPLIED_POSITION.anchor, x: '10', y: '-' });
+    // `'-'` sends 0, and applied y is -20 — also a real difference, from the other box.
+    expect(isItemDirty(A, {}, NO_PLATES, undefined, APPLIED_POSITION)).toBe(true);
+  });
+
+  /**
+   * 🔴 PVW SEES THE STAGED MOVE, the air path does not — owner, 2026-09-14: the preview
+   * must follow the boxes with no UPDATE in between. `effectivePosition` is the position half
+   * of `buildApplyPayload` and exists for that one caller.
+   */
+  it('effectivePosition overlays the staged move, and is the applied value without one', () => {
+    expect(effectivePosition(A, APPLIED_POSITION)).toEqual(APPLIED_POSITION);
+    stagePosition(A, { anchor: 'bottom-right', x: '5', y: '' });
+    expect(effectivePosition(A, APPLIED_POSITION)).toEqual({
+      anchor: 'bottom-right',
+      offset: { x: 5, y: 0 },
+    });
   });
 
   it('is swept by pruneDrafts once the row has left the stack, and only then', () => {

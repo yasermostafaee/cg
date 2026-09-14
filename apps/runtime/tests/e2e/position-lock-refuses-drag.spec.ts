@@ -1,3 +1,4 @@
+import type { Locator, Page } from '@playwright/test';
 import { buildPositionedVcg, expect, test } from './fixtures/runtime.js';
 
 /**
@@ -33,11 +34,7 @@ import { buildPositionedVcg, expect, test } from './fixtures/runtime.js';
  */
 
 /** The scrub gesture as a pointer actually performs it — no actionability gate. */
-async function dragBy(
-  page: import('@playwright/test').Page,
-  field: import('@playwright/test').Locator,
-  dx: number,
-): Promise<void> {
+async function dragBy(page: Page, field: Locator, dx: number): Promise<void> {
   const box = await field.boundingBox();
   expect(box, 'the field is laid out — a null box would make the drag a no-op').not.toBeNull();
   const b = box!;

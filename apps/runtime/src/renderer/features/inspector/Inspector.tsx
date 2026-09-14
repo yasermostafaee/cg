@@ -28,6 +28,7 @@ import { IsolatedName } from '../../ui/OperatorNames.js';
 import { EDITOR_DIR } from '../../ui/editorTextDirection.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
+import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import {
   REHEARSE_STATE_COLOR,
   REHEARSE_STATE_WORD,
@@ -516,6 +517,13 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
     appliedPlateSources(item.templateId, info?.liveSources?.sources ?? []),
     // BM-2 — and the per-look composition, which stages here too and is the SAME fact.
     item.lookSourceOverride,
+    /*
+      🔴 …and the POSITION, since UPDATE commits it now (owner, 2026-09-14). The chip and
+      the enabled verb both read this ONE function, so a staged move that did not answer here
+      would leave the bar reporting itself clean with a placement still to send — and
+      DISCARD, which now drops it, would throw it away with nothing having said it was there.
+    */
+    item.position ?? defaultPositionOf(item.templateId),
   );
   const isEmpty = rootFields.length === 0 && groups.length === 0;
 

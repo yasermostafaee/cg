@@ -1,4 +1,4 @@
-import type { Locator, Page } from '@playwright/test';
+﻿import type { Locator, Page } from '@playwright/test';
 import { buildListFieldVcg, expect, test } from './fixtures/runtime.js';
 
 /**
@@ -10,9 +10,10 @@ import { buildListFieldVcg, expect, test } from './fixtures/runtime.js';
  *
  *   - the Update button stays PINNED at the foot of the panel, at MORE THAN ONE panel height
  *     and with content both shorter and longer than the panel;
- *   - X and Y ALIGN — same left, same width, Y under X, `Apply position` on its own row
- *     (it was same TOP and the button on their baseline until `INSPECTOR-DELTA` §3 stacked
- *     them; the claim is the same strength on the new axis, see the test's own note);
+ *   - X and Y ALIGN — same left, same width, Y under X, and the anchor pad's top and bottom
+ *     edges land on the two boxes' (it was same TOP with `Apply position` on their baseline
+ *     until `INSPECTOR-DELTA` stacked them, and that button no longer exists — UPDATE
+ *     commits the placement; see the test's own note for how each claim was re-pointed);
  *   - an input's focus is ONE ring, not two;
  *   - subtitle items reorder by their GRIP HANDLE — by pointer, not only by the keyboard
  *     path `stage-inspector-edits.spec.ts` already drives.
@@ -115,7 +116,7 @@ test('the Update button stays pinned at the foot of the panel at every panel hei
  * must NOT stretch them. Dropping the fullscreen leg entirely would have left the cap
  * untested, which is the part most likely to be undone by accident.
  */
-test('X and Y stack: same left, same width, Y under X, and Apply position on its own row', async ({
+test('X and Y stack: same left, same width, Y under X, and the anchor pad lines up with them', async ({
   app,
 }) => {
   const page = app.page;
@@ -126,25 +127,34 @@ test('X and Y stack: same left, same width, Y under X, and Apply position on its
 
   const x = await box(app.inspector.getByLabel('Position offset X'));
   const y = await box(app.inspector.getByLabel('Position offset Y'));
-  const apply = await box(app.inspector.getByRole('button', { name: 'Apply position' }));
+  const pad = await box(app.inspector.locator('.cg-anchor-grid'));
   expect(Math.abs(x.x - y.x), 'same left').toBeLessThanOrEqual(1);
   expect(Math.abs(x.height - y.height), 'same height').toBeLessThanOrEqual(1);
   expect(Math.abs(x.width - y.width), 'same width').toBeLessThanOrEqual(1);
   expect(x.y + x.height, 'X sits above Y').toBeLessThanOrEqual(y.y + 1);
 
-  // THE BUTTON IS ON ITS OWN ROW — below both boxes, not on their baseline.
-  expect(apply.y, 'Apply starts below the Y box').toBeGreaterThanOrEqual(y.y + y.height - 1);
   /*
-    …and it did NOT shrink into a corner (§3). Its own words are what set its width, so the
-    floor is generous enough to prove it is not a squeezed remnant of the old row.
+    🔴 `Apply position` IS GONE (owner, 2026-09-14 — UPDATE commits the placement), so what
+    this test guards on the horizontal axis moved to the ANCHOR PAD: the owner's ask was that
+    the nine cells be smaller and line up with the boxes, and "lines up" is two exact edges —
+    the pad's top on the first box's top, its bottom on the second box's bottom. That is an
+    arithmetic identity between two independently-written numbers (3 × 24 + 2 × 2 = 32 + 12 +
+    32), which is exactly the kind of agreement that rots silently, so it is pinned.
   */
-  expect(apply.width, 'Apply position keeps a pressable width').toBeGreaterThan(80);
+  expect(Math.abs(pad.y - x.y), 'the pad’s top is the first box’s top').toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(pad.y + pad.height - (y.y + y.height)),
+    'the pad’s bottom is the second box’s bottom',
+  ).toBeLessThanOrEqual(1);
+  // …and it is SQUARE and smaller than it was (96 px before the owner's call).
+  expect(Math.abs(pad.width - pad.height), 'the pad is square').toBeLessThanOrEqual(1);
+  expect(pad.width, 'the pad shrank').toBeLessThan(96);
 
-  // The reference's 32 px position boxes, from the token home — the button keeps that
-  // height on its new row, so the section's controls stay one size.
+  // The reference's 32 px position boxes, from the token home.
   const h = await tokenPx(page, '--r-insp-position-field-h');
   expect(Math.round(x.height)).toBe(h);
-  expect(Math.round(apply.height)).toBe(h);
+  // The section carries no commit control of its own any more — the row has ONE.
+  await expect(app.inspector.getByRole('button', { name: 'Apply position' })).toHaveCount(0);
 
   // THE CAP: the reference's own measured field width, and widening the panel must not
   // stretch past it (it painted 90.3 × 32 in Chromium at 1280 × 800).

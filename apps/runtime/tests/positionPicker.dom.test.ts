@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { PositionPicker } from '../src/renderer/features/inspector/PositionPicker.js';
 import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
+import { applyDraft } from '../src/renderer/features/inspector/applyDraft.js';
 import { recordDefaultPosition } from '../src/renderer/features/stack/defaultPositionStore.js';
 
 /**
@@ -39,11 +40,19 @@ function item(status: StackItemStatus, pending = false): StackItemState {
   };
 }
 
-function stubBridge(): { setPosition: Mock } {
+function stubBridge(): { setPosition: Mock; update: Mock } {
   const setPosition = vi.fn(() => Promise.resolve({ ok: true }));
-  const stub = { stack: { setPosition } };
+  /*
+    🔴 `stack.update` IS PART OF THE STUB NOW — the commit moved to UPDATE (owner,
+    2026-09-14), and `applyDraft` sends the FIELD half on every press whether or not a field
+    is staged (the documented `B-048` re-send). A stub carrying only `setPosition` would fail
+    these specs on the wrong thing — a missing function rather than a wrong payload — which
+    is the shape of failure that gets a test "fixed" by deleting the assertion under it.
+  */
+  const update = vi.fn(() => Promise.resolve({ accepted: true }));
+  const stub = { stack: { setPosition, update } };
   (window as unknown as { cg: typeof stub }).cg = stub;
-  return { setPosition };
+  return { setPosition, update };
 }
 
 async function render(state: StackItemState): Promise<HTMLDivElement> {
@@ -82,9 +91,19 @@ describe('PositionPicker — R-011', () => {
     );
   });
 
-  it('Apply sends exactly one stack.set-position with the picked anchor+offset', async () => {
+  /**
+   * 🔴 **THE COMMIT MOVED TO UPDATE — owner, 2026-09-14.** «دکمه apply position فقط یه
+   * مرحله اضافیه و همون دکمه update باید پوزیشن رو هم اعمال کنه.»
+   *
+   * These specs drove `Apply position`, which no longer exists. They are RE-POINTED at the
+   * control that owns the commit now — `applyDraft`, the function behind UPDATE — not at a
+   * weaker claim: each still asserts the same `stack.setPosition` payload, once, from the same
+   * staged state. What a spec may not do at a moment like this is quietly stop checking.
+   */
+  it('UPDATE sends exactly one stack.set-position with the picked anchor+offset', async () => {
     const { setPosition } = stubBridge();
-    const el = await render(item('loaded'));
+    const subject = item('loaded');
+    const el = await render(subject);
     await act(async () => {
       el.querySelector<HTMLButtonElement>('button[aria-label="Anchor top-right"]')?.click();
     });
@@ -96,8 +115,7 @@ describe('PositionPicker — R-011', () => {
       dxInput?.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await act(async () => {
-      el.querySelector<HTMLButtonElement>('button[aria-label="Apply position"]')?.click();
-      await Promise.resolve();
+      await applyDraft(subject);
     });
     expect(setPosition).toHaveBeenCalledTimes(1);
     expect(setPosition).toHaveBeenCalledWith({
@@ -130,8 +148,17 @@ describe('PositionPicker — R-011', () => {
     for (const status of ['loaded', 'idle'] as const) {
       const el = await render(item(status));
       expect(el.textContent).not.toContain('locked while on air');
+      /*
+        The lock's observable is the CONTROLS, since the commit left this section: the two
+        boxes and the nine anchor cells. Asserting the boxes rather than a button is not a
+        weaker test — it is the same predicate read where it now shows, and it is the half
+        that actually refuses a drag (`position-lock-refuses-drag`).
+      */
       expect(
-        el.querySelector<HTMLButtonElement>('button[aria-label="Apply position"]')?.disabled,
+        el.querySelector<HTMLInputElement>('input[aria-label="Position offset X"]')?.disabled,
+      ).toBe(false);
+      expect(
+        el.querySelector<HTMLButtonElement>('button[aria-label="Anchor center"]')?.disabled,
       ).toBe(false);
       container?.remove();
       container = null;
@@ -156,7 +183,7 @@ describe('PositionPicker — R-011', () => {
     // item status is untouched by rehearse.
     const rehearsing = await render(item('loaded'));
     expect(
-      rehearsing.querySelector<HTMLButtonElement>('button[aria-label="Apply position"]')?.disabled,
+      rehearsing.querySelector<HTMLInputElement>('input[aria-label="Position offset X"]')?.disabled,
     ).toBe(false);
     expect(rehearsing.textContent).not.toContain('locked while on air');
     container?.remove();
@@ -164,7 +191,7 @@ describe('PositionPicker — R-011', () => {
 
     const onAir = await render(item('on-air'));
     expect(
-      onAir.querySelector<HTMLButtonElement>('button[aria-label="Apply position"]')?.disabled,
+      onAir.querySelector<HTMLInputElement>('input[aria-label="Position offset X"]')?.disabled,
     ).toBe(true);
     expect(onAir.textContent).toContain('locked while on air');
   });
@@ -272,20 +299,44 @@ describe('PositionPicker — B-072 override read-back', () => {
     expect(again.querySelector('[aria-label="Position has unapplied changes"]')).not.toBeNull();
   });
 
-  it('BLAST-RADIUS GUARD: re-Apply without editing sends the OVERRIDE, never the default', async () => {
+  /**
+   * 🔴 **THE GUARD SURVIVES AND ITS CLAIM GETS STRONGER, which is the only reason it may
+   * change at all.**
+   *
+   * It read: _"re-Apply without editing sends the OVERRIDE, never the default"_ — the
+   * `B-072` defect was a re-press sending the manifest default and destroying a correct
+   * on-air position. With the commit folded into UPDATE, a press with NOTHING STAGED sends
+   * no `stack.setPosition` at all, so the override cannot be overwritten by a value the
+   * operator never typed. `never the default` is now enforced by there being no send.
+   *
+   * ⚠ Both halves are asserted: the untouched press sends nothing, AND the same press after
+   * a real edit still sends the edit. Asserting only the first would pass against a position
+   * path that had stopped working entirely.
+   */
+  it('BLAST-RADIUS GUARD: UPDATE without editing sends NO set-position, and the override stands', async () => {
     const { setPosition } = stubBridge();
     recordDefaultPosition('tpl-pos', { anchor: 'top-left', offset: { x: 5, y: 5 } });
-    const el = await render(withOverride());
+    const subject = withOverride();
+    const el = await render(subject);
 
-    // The operator reselects and — touching nothing — presses Apply. This used
-    // to send the manifest default and destroy the correct on-air position.
+    // The operator reselects and — touching nothing — presses UPDATE.
     await act(async () => {
-      el.querySelector<HTMLButtonElement>('button[aria-label="Apply position"]')?.click();
-      await Promise.resolve();
+      await applyDraft(subject);
     });
+    expect(setPosition).not.toHaveBeenCalled();
 
+    // …and the positive control: a REAL edit still reaches the wire from the same press.
+    await act(async () => {
+      el.querySelector<HTMLButtonElement>('button[aria-label="Anchor top-right"]')?.click();
+    });
+    await act(async () => {
+      await applyDraft(subject);
+    });
     expect(setPosition).toHaveBeenCalledTimes(1);
-    expect(setPosition).toHaveBeenCalledWith({ itemId: 'item-1', position: OVERRIDE });
+    expect(setPosition).toHaveBeenCalledWith({
+      itemId: 'item-1',
+      position: { anchor: 'top-right', offset: OVERRIDE.offset },
+    });
     // Explicitly NOT the manifest default, and NOT centered.
     expect(setPosition).not.toHaveBeenCalledWith({
       itemId: 'item-1',

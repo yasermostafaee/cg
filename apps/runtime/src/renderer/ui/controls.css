@@ -1920,19 +1920,39 @@ textarea.cg-field--autogrow {
  * never disagree about which anchor is chosen.
  */
 
+/*
+ * 🔴 SIZED TO THE TWO INPUTS — the owner, 2026-09-14: «9 دکمه پوزیشن رو هم کوچیکتر
+ * کن و با اینپوتها تراز و مرتب کن.»
+ *
+ * The arithmetic is the whole point, so it is written down rather than left as three numbers
+ * that happen to work: the pad must be EXACTLY as tall as the dx/dy stack beside it, so its
+ * top edge is the first box's top and its bottom edge is the second box's bottom.
+ *
+ *     the stack   32 + 12 + 32          = 76      (two boxes, one `--r-space-3` between)
+ *     the pad     24 + 2 + 24 + 2 + 24  = 76      (three cells, 2 px gutters)
+ *
+ * ⚠ **24 px IS THE FLOOR AND NOT A STEP BELOW IT.** `design.md` §12.3 records that the
+ * reference's own 20 px cells were REFUSED here because a 20 px hit target is under the 24 px
+ * minimum (the `A8` shape). 24 is that minimum exactly, so the pad shrank as far as it may and
+ * no further. Anything smaller has to move the floor first, which is not a layout decision.
+ *
+ * ⚠ And the two numbers are a PAIR: changing the field stack's row gap without re-deriving
+ * the cell size (or the reverse) silently un-aligns them, which is exactly the raggedness this
+ * replaced. `PositionPicker`'s `offsets` carries the matching note.
+ */
 .cg-anchor-grid {
   display: grid;
-  grid-template-columns: repeat(3, 30px);
-  grid-template-rows: repeat(3, 30px);
-  gap: 3px;
+  grid-template-columns: repeat(3, 24px);
+  grid-template-rows: repeat(3, 24px);
+  gap: 2px;
   flex: 0 0 auto;
 }
 
 .cg-btn.cg-anchor-cell {
-  width: 30px;
-  min-width: 30px;
-  height: 30px;
-  min-height: 30px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
   padding: 0;
   border-radius: 3px;
   border: 1px solid var(--r-border-strong);

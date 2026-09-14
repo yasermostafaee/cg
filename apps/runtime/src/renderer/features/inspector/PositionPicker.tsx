@@ -2,12 +2,9 @@ import { useSyncExternalStore } from 'react';
 import { isOnAirStatus } from '@cg/shared-schema';
 import type { PositionAnchor, StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
-import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
-import { DraftChip } from '../../ui/DraftChip.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
-import { reportCommandError } from '../status/commandFeedback.js';
 import {
   draftsVersion,
   positionDraftOf,
@@ -131,7 +128,14 @@ const styles = {
     // BOX first, LABEL second — see the note above for why that order and not the other.
     gridTemplateColumns: 'var(--r-insp-position-field-w) auto',
     columnGap: 'var(--r-space-2)',
-    rowGap: 'var(--r-space-2)',
+    /*
+      ⚠ `--r-space-3` (12), and it is HALF OF A PAIR rather than a free choice: the two
+      32 px boxes with 12 between them stand 76 px, which is exactly the anchor pad's
+      24 + 2 + 24 + 2 + 24. That is what makes the pad's top and bottom edges land on the two
+      boxes' own. Change one and the other has to be re-derived — `controls.css`
+      (`.cg-anchor-grid`) carries the same warning from the other side.
+    */
+    rowGap: 'var(--r-space-3)',
     alignItems: 'center',
     justifyItems: 'start',
     minWidth: 0,
@@ -371,50 +375,21 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
             />
             <span style={styles.offsetLabel}>dy</span>
           </div>
-          {/* ONE OF THE THREE ACCENTED ACTIONS (owner request), with Add item and
-              Update — this is the action the POSITION section exists to perform.
-              See `.cg-btn--accent` in `controls.css` for why colour may mean
-              hierarchy here and must not on the layer table.
+          {/*
+            🔴 `Apply position` IS GONE — the owner, 2026-09-14: «دکمه apply position فقط یه
+            مرحله اضافیه و همون دکمه update باید پوزیشن رو هم اعمال کنه و همچنین discard هم
+            روش کار کنه.»
 
-              🔴 SUPERSEDED, `INSPECTOR-DELTA` §3 (owner). This read: "IN the nudge row,
-              bottom-aligned with the two inputs, per the mock — not on a line of its own
-              below them… on its own row it read as a section-level action and left an empty
-              band across the panel." That argument was sound while X and Y sat side by side
-              and the three really were one row of controls. With the fields STACKED there is
-              no row left to sit in, and the empty band it warned about is now the thing the
-              stacking bought — the owner's instruction is that this button keeps its own
-              treatment and its own row and does not shrink into a corner. */}
-          <div className="cg-position-apply" style={styles.applyRow}>
-            <AsyncButton
-              variant="accent"
-              aria-label="Apply position"
-              disabled={locked}
-              run={() =>
-                window.cg.stack
-                  .setPosition({
-                    itemId: item.itemId,
-                    position: { anchor, offset: { x: offset(dx), y: offset(dy) } },
-                  })
-                  .then((r) => ({
-                    accepted: r.ok,
-                    ...(r.reason !== undefined ? { errorCode: r.reason } : {}),
-                  }))
-              }
-              // #334 — a refusal surfaces as the command TOAST, not pinned inline beside the
-              // control where its wrapped text bloated this narrow panel. `setPosition` does
-              // NOT self-report (unlike `applyDraft`), so this is the report, not a suppressor.
-              // The MESSAGE is unchanged: the button already mapped `r.reason` through
-              // `errorCodeMessage`, and the toast carries that same mapping — only its
-              // placement moves.
-              onError={reportCommandError}
-            >
-              Apply position
-            </AsyncButton>
-            {/* …and the same CHIP the commit bar shows for staged field edits, so the
-            two kinds of unapplied change read as one idea. Beside the button that
-            clears it, which is where an operator looks once they have noticed. */}
-            {dirty && !locked && <DraftChip label="unapplied position" />}
-          </div>
+            The row has ONE commit now: UPDATE sends the text, the plates, the per-look
+            composition and the placement, and DISCARD drops all four. `applyDraft` carries
+            the position on `stack.setPosition` exactly as this button did — the wire did not
+            move, the control did.
+
+            ⚠ The section keeps its own DIRTY DOT (on the heading above). It is not
+            redundant with the commit bar's chip: the chip says this ROW has something
+            staged, the dot says WHICH SECTION it is in, and on a panel that scrolls the
+            second question is the one the operator is actually asking.
+          */}
         </div>
       </div>
       {/* BELOW the row, not inside it: it is a note about why the controls above are

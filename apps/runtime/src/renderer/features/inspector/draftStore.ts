@@ -113,18 +113,33 @@ const lookBindingDrafts = new Map<string, Map<string, Map<string, string>>>();
  *
  * The same reason `plateDrafts` is: the field overlay IS the `stack.update` payload, and a
  * position living in it would be sent to the template as a field it never declared. A
- * position is applied through `stack.setPosition`, its own channel, by its own control.
+ * position travels on `stack.setPosition`, its own channel. **That is unchanged and is the
+ * reason this map still exists** — the reversal below is about which CONTROL commits it,
+ * never about which wire carries it.
  *
- * ── WHAT `clearDraft` DOES NOT DO, deliberately ──────────────────────────────
+ * ── 🔴 THE POSITION IS PART OF THE ROW'S ONE COMMIT (owner, 2026-09-14) ──────
  *
- * `clearDraft` (the commit bar's DISCARD) leaves the position draft alone, and
- * `isItemDirty` does not read it. Both halves follow from one fact: UPDATE does not send
- * the position. If a position draft lit the row's `● draft` chip and enabled its UPDATE
- * verb, pressing UPDATE would apply nothing of what the chip pointed at — a control whose
- * word says "apply this" while leaving it staged. The position keeps its OWN lifecycle:
- * its own dirty dot, its own `Apply position`, and its own honest-marker rule (the dot
- * clears by itself when the applied value catches up, exactly as a field's does). A prune
- * still sweeps it, because a draft for a row that has left the stack is unreachable.
+ * ⚠ **THIS REVERSES A RECORDED DECISION, and the old text is REPLACED rather than left
+ * standing beside it.** It read: _"`clearDraft` (the commit bar's DISCARD) leaves the
+ * position draft alone, and `isItemDirty` does not read it. Both halves follow from one
+ * fact: UPDATE does not send the position… The position keeps its OWN lifecycle: its own
+ * dirty dot, its own `Apply position`…"_
+ *
+ * The owner's call: «دکمه apply position فقط یه مرحله اضافیه و همون دکمه update باید
+ * پوزیشن رو هم اعمال کنه و همچنین discard هم روش کار کنه» — `Apply position` is an extra
+ * step; UPDATE should apply the position too, and DISCARD should work on it.
+ *
+ * 🔴 **THE OLD ARGUMENT WAS NOT WRONG — ITS PREMISE MOVED, which is the only honest way to
+ * retire it.** It said a chip pointing at an edit UPDATE would not send is a control whose
+ * word lies. That was exactly right *while UPDATE did not send the position*. UPDATE sends
+ * it now, so the same reasoning inverts and demands the opposite: the chip MUST light, the
+ * verb MUST be enabled, and DISCARD MUST drop it — a staged position that survived a
+ * Discard would be the unapplied edit nobody can see, which is the defect that argument
+ * existed to prevent.
+ *
+ * So `clearDraft` drops it and {@link isItemDirty} reads it, alongside the fields, the
+ * plates and the per-look composition. A prune still sweeps it, because a draft for a row
+ * that has left the stack is unreachable.
  *
  * The offsets are kept as the STRINGS the operator typed, not as numbers: `"-"`, `"1."`
  * and `""` are in-progress states a round trip must not flatten to `0`.
@@ -146,6 +161,17 @@ export function stagePosition(itemId: string, draft: PositionDraft): void {
 /** The item's staged position, or `undefined` when nothing is staged for it. */
 export function positionDraftOf(itemId: string): PositionDraft | undefined {
   return positionDrafts.get(itemId);
+}
+
+/**
+ * Drop just the position draft — what an ACCEPTED send clears.
+ *
+ * ⚠ Narrower than {@link clearDraft} on purpose: a press commits several halves and each
+ * clears only its own, so an accepted position must not take an unrelated field edit the
+ * operator staged during the round trip with it. Same rule as `clearStagedMatching`.
+ */
+export function clearPositionDraft(itemId: string): void {
+  if (positionDrafts.delete(itemId)) bump();
 }
 
 /** The staged value for one `(look, plate)`, or `undefined` when nothing is staged. */
@@ -494,6 +520,13 @@ export function isItemDirty(
   appliedPlates: ReadonlyMap<string, string | null>,
   /** Session BM-2 — the row's applied per-look map, from `StackItemState.lookSourceOverride`. */
   appliedLookBindings?: Readonly<Record<string, Readonly<Record<string, string>>>> | undefined,
+  /**
+   * 🔴 The row's APPLIED position — `INSPECTOR-DELTA`, owner 2026-09-14. Optional because
+   * every caller that does not show a position picker (and every existing test) has no such
+   * value to pass, and a row with nothing staged is clean either way; passing it is what
+   * makes the commit bar answer for the position as well as the text.
+   */
+  appliedPosition?: { anchor: PositionAnchor; offset: { x: number; y: number } } | undefined,
 ): boolean {
   const item = drafts.get(itemId);
   if (item !== undefined) {
@@ -524,6 +557,13 @@ export function isItemDirty(
       }
     }
   }
+  /*
+    🔴 …AND THE POSITION, now that UPDATE sends it (this module's header carries the owner's
+    reversal and why the old argument inverts rather than merely losing). The chip and the
+    verb read THIS function and nothing else, so a staged position that did not answer here
+    would leave the panel reporting itself clean with a move still to send.
+  */
+  if (appliedPosition !== undefined && isPositionDirty(itemId, appliedPosition)) return true;
   return false;
 }
 
@@ -561,14 +601,100 @@ export function buildOverlayPayload(applied: FieldValues, overlay: FieldValues):
   return deepMerge(applied, overlay);
 }
 
-/** Drop an item's entire draft — fields AND plates — on Discard. */
+/** Drop an item's entire draft — fields, plates, per-look inputs AND position — on Discard. */
 export function clearDraft(itemId: string): void {
   const hadFields = drafts.delete(itemId);
   const hadPlates = plateDrafts.delete(itemId);
   // Session BM-2 — and the per-look composition. A Discard that left one behind would be an
   // unapplied edit the operator can no longer see, on a panel reporting itself clean.
   const hadLooks = lookBindingDrafts.delete(itemId);
-  if (hadFields || hadPlates || hadLooks) bump();
+  /*
+    🔴 …AND THE POSITION, since the owner folded it into the one commit (see this module's
+    header). It is listed LAST only because it arrived last; it is not a lesser member —
+    a Discard that left it staged is precisely the "unapplied edit nobody can see" the line
+    above is about, on the one edit that moves a graphic rather than its text.
+  */
+  const hadPosition = positionDrafts.delete(itemId);
+  if (hadFields || hadPlates || hadLooks || hadPosition) bump();
+}
+
+/**
+ * Is the item's staged position different from what is APPLIED?
+ *
+ * ⚠ The comparison is on the VALUES a send would carry, not on the strings: the draft keeps
+ * `"-"`, `"1."` and `""` as typed, and `offsetNumber` collapses each to the number
+ * `stack.setPosition` would receive. Comparing the raw strings would report a row dirty
+ * because the operator typed `-0` where `0` is applied — an UPDATE the panel demands and
+ * that would change nothing.
+ */
+export function isPositionDirty(
+  itemId: string,
+  applied: { anchor: PositionAnchor; offset: { x: number; y: number } },
+): boolean {
+  const draft = positionDrafts.get(itemId);
+  if (draft === undefined) return false;
+  return (
+    draft.anchor !== applied.anchor ||
+    offsetNumber(draft.x) !== applied.offset.x ||
+    offsetNumber(draft.y) !== applied.offset.y
+  );
+}
+
+/**
+ * One typed offset as the number a send carries. Anything that is not a finite number is
+ * `0` — the same collapse `PositionPicker` has always applied at the moment of sending, kept
+ * here so the dirty test and the send cannot disagree about what a half-typed box means.
+ */
+export function offsetNumber(raw: string): number {
+  const n = Number(raw);
+  return raw.trim() !== '' && Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * 🔴 **THE POSITION AS THE OPERATOR HAS IT — applied, with any staged move overlaid.**
+ *
+ * The position half of {@link buildApplyPayload}, and it exists for the same reason and is
+ * used by the same surface: PVW renders the EFFECTIVE values so that what is rehearsed is
+ * exactly what a press would send.
+ *
+ * The owner asked for it specifically once `Apply position` was folded into UPDATE
+ * (2026-09-14): «فقط در حالت pvw نیازه که با تغییر پوزیشن بدون اپدیت هم موقعیت در pvw تغییر
+ * کنه بصورت لحظه‌ای و realtime، در حقیقت با onchange اینپوتها» — in PVW the placement must
+ * follow the boxes as they are typed, with no UPDATE in between. That is what makes the
+ * merged commit workable rather than blind: the button that used to let an operator SEE a
+ * move before committing it is gone, so the preview has to show the move instead.
+ *
+ * ⚠ **PVW ONLY, and that is a property of the CALLER rather than of this function.** It
+ * reports what is staged; nothing here reaches CasparCG (`R-022`: the rehearsal is a local
+ * browser render). The row's own state and the air path keep reading `item.position`, which
+ * is the applied value and the only one that is true of the channel.
+ *
+ * 🔴 **`undefined` IN IS `undefined` OUT, AND THAT IS LOAD-BEARING — it is not defensive
+ * typing.** A row with no applied override must reach the rehearsal frame with NO position
+ * at all, because the frame ABSTAINS on absence: an empty search would resolve to CENTRED
+ * and move a correctly-placed graphic (`rehearse-composite.spec.ts`, "an applied position
+ * reaches the SELECTED row's frame and no other"). The first spelling of this function took
+ * a non-optional `applied` and its caller filled the gap with the manifest default — which
+ * silently turned every abstaining row into `?pos=center&dx=0&dy=0`. The e2e caught it; the
+ * signature is what stops it coming back.
+ */
+export function effectivePosition(
+  itemId: string,
+  applied: { anchor: PositionAnchor; offset: { x: number; y: number } } | undefined,
+): { anchor: PositionAnchor; offset: { x: number; y: number } } | undefined {
+  const draft = positionDrafts.get(itemId);
+  // No staged move: whatever is applied, INCLUDING nothing. See the note above.
+  if (draft === undefined) return applied;
+  /*
+    A draft carries the whole placement (the picker seeds it from the applied value, or from
+    the manifest default, before it stages anything), so it is built from the draft alone —
+    `applied` is not consulted here and must not be, or a row with no override would inherit
+    a centre it never chose.
+  */
+  return {
+    anchor: draft.anchor,
+    offset: { x: offsetNumber(draft.x), y: offsetNumber(draft.y) },
+  };
 }
 
 /** A deep copy of the item's current draft (the fields an apply will send). */

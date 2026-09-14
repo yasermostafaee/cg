@@ -193,13 +193,20 @@ describe('§3 — the six that did not move', () => {
     expect(row).toContain('<LivePlateAudioDialog');
     expect(row).toContain('<LiveSourceSwapDialog');
     expect(read('features', 'inspector', 'PositionPicker.tsx')).toContain(
-      'aria-label="Apply position"',
+      /*
+        ⚠ `INSPECTOR-DELTA` — was `aria-label="Apply position"`, and that button no longer
+        exists anywhere. Left as-is this entry would have become VACUOUS: an absence test for
+        a string the product does not contain passes against every possible regression. The
+        section's own landmark takes its place — it is still the thing that must be in the
+        Inspector and never in Station setup.
+      */
+      'aria-label="On-air position"',
     );
 
     stationSetupStub();
     const setup = await renderStationSetup();
-    expect(setup.querySelector('[aria-label="Apply position"]')).toBeNull();
-    expect(setup.textContent).not.toMatch(/Apply position|Swap source|Plate audio/);
+    expect(setup.querySelector('[aria-label="On-air position"]')).toBeNull();
+    expect(setup.textContent).not.toMatch(/On-air position|Swap source|Plate audio/);
     expect(stationSetupSource()).not.toMatch(/\b(swapLiveSource|setPlateVolumes?|setPosition)\(/);
     expect(stationSetupSource()).not.toMatch(
       /from '.*\/(PositionPicker|LivePlateAudioDialog|LiveSourceSwapDialog)\.js'/,
