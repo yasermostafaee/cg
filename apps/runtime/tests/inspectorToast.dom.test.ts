@@ -44,7 +44,8 @@ function itemWith(status: StackItemState['status'] = 'on-air'): StackItemState {
     fields: { title: 'عنوان' },
     status,
     pending: false,
-    slot: { channel: 1, layer: 10, server: 'primary' },
+    // `LAYER-BANDS-16` — a TEMPLATE layer (80-99). Layer 10 is the playout server's now.
+    slot: { channel: 1, layer: 84, server: 'primary' },
   };
 }
 
@@ -97,8 +98,15 @@ async function render(element: ReturnType<typeof createElement>): Promise<void> 
   });
 }
 
+/**
+ * ⚠ MATCHED ON THE LABEL'S OPENING WORDS, not the whole attribute — `INSPECTOR-AUDIT-05` §3.
+ * The Inspector's commit control now tells a screen-reader operator which kind of row it is
+ * about (`Apply staged edits` off air, `Apply staged edits to the on-air row` on it), and the
+ * items here are on air by default. A full-attribute match would pin the state rather than
+ * the control, which is the opposite of what every caller in this file means.
+ */
 async function clickByLabel(label: string): Promise<void> {
-  const btn = container?.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  const btn = container?.querySelector<HTMLButtonElement>(`button[aria-label^="${label}"]`);
   if (btn === null || btn === undefined) throw new Error(`no button labelled ${label}`);
   await act(async () => {
     btn.click();

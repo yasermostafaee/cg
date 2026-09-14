@@ -9,6 +9,7 @@ import {
   fieldAllowsFileSource,
   fieldTypeTakesFileSource,
   isFieldNamespace,
+  isOnAirStatus,
   type CompositionFieldGroup,
   type DynamicField,
   type FieldValue,
@@ -23,6 +24,7 @@ import { Button } from '../../ui/Button.js';
 import { DraftChip } from '../../ui/DraftChip.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { Panel } from '../../ui/Panel.js';
+import { IsolatedName } from '../../ui/OperatorNames.js';
 import { EDITOR_DIR } from '../../ui/editorTextDirection.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
@@ -530,6 +532,11 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
    */
   const rowName = nameOf({ itemId: item.itemId, templateId: item.templateId, slot: rowSlot });
   const heading = rowName.names[0] ?? label;
+  /*
+   * §3 — IS THIS ROW ON AIR? Read ONCE, here, and used by the commit control below for
+   * BOTH its hue and its word, so the two can never describe different rows.
+   */
+  const onAir = isOnAirStatus(item);
 
   return (
     <Panel id="inspector" as="aside" title="INSPECTOR" ariaLabel="Inspector" onClose={onClose}>
@@ -546,7 +553,15 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
           editing the wrong row's draft is real, and the heading is what the operator reads.
         */}
         <h3 style={styles.title} title={rowName.title} data-inspector-heading="">
-          <bdi>{heading}</bdi>
+          {/*
+            `MODAL-CHROME-10` ADDENDUM B, through the one component. The `<bdi>` was already
+            INLINE here and therefore already correct; what `IsolatedName` adds is the
+            explicit `dir="ltr"` on the box, which is what makes the pattern immune to an
+            ancestor that ever resolves RTL — and it puts this surface on the SAME
+            implementation as the four that had to be repaired, so a future change reaches
+            all of them. The isolation itself is never removed (see `OperatorNames.tsx`).
+          */}
+          <IsolatedName>{heading}</IsolatedName>
           {/* A row with no place in the bank is headed by its template; the stub stays with it. */}
           {heading === label && ambiguous && (
             <span style={styles.titleStub} data-template-stub={templateIdStub(item.templateId)}>
@@ -563,7 +578,7 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
         */}
         {heading !== label && (
           <div style={styles.templateLine} title={item.templateId} data-inspector-template="">
-            <bdi>{label}</bdi>
+            <IsolatedName>{label}</IsolatedName>
             {ambiguous && (
               <span style={styles.titleStub} data-template-stub={templateIdStub(item.templateId)}>
                 {' '}
@@ -572,7 +587,19 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
             )}
           </div>
         )}
-        {contentTitle !== '' && <div style={styles.contentTitle}>{contentTitle}</div>}
+        {/*
+          🔴 §2(c) — THE SIXTH SURFACE, CAUGHT BEFORE IT SHIPPED. This is the item's own
+          `title` FIELD: operator-typed content, in this station overwhelmingly Persian, and
+          it was rendered as a bare text node with no isolation of any kind. A headline
+          mixing a Persian phrase with a Latin name or a digit run reorders around its own
+          neutrals with nothing to stop it — the `B-232` defect exactly, on a surface the
+          sweep for `<bdi>` could not find precisely BECAUSE it had none.
+        */}
+        {contentTitle !== '' && (
+          <div style={styles.contentTitle}>
+            <IsolatedName>{contentTitle}</IsolatedName>
+          </div>
+        )}
         {/* ALWAYS SHOWN, including the no-layer case: "no layer" is not an absence of
           information, it is the answer to "why is this not on air?". The old line rendered
           only when a slot existed, so it went blank exactly when the operator was trying to
@@ -608,7 +635,16 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
             its tracking, and the largest gap in the gradient beneath it. Same
             class as POSITION, so the two sections cannot drift apart. */}
         <div className="cg-inspector-section">
-          <h2>FIELDS</h2>
+          {/*
+            §31.4 / §2(b) — SENTENCE CASE IN THE SOURCE; the CAPS are the STYLESHEET's
+            (`.cg-inspector-section > h2 { text-transform: uppercase }`). Nothing on screen moves.
+            What moves is the ACCESSIBLE NAME, which is computed from the text node and not from
+            the transform: a screen reader was being handed `FIELDS` and now gets `Fields`. The
+            reference does exactly this — measured in Chromium at 1280 × 800 on
+            `05-row-inspector.html`, its `.inspector-section h3` sources read `Position` and
+            `Fields` and compute `text-transform: uppercase`.
+          */}
+          <h2>Fields</h2>
           {isEmpty ? (
             <p style={styles.empty}>No fields.</p>
           ) : (
@@ -734,27 +770,73 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
             reaches air when the link returns. That is the whole point of the
             offline surface, and gating the fields instead would destroy it.
           */}
+          {/*
+            🔴 GREEN IS THE ON-AIR CASE AND NOTHING ELSE — owner decision,
+            `INSPECTOR-AUDIT-05` §3, and it supersedes the block above rather than
+            contradicting it.
+
+            What the block above argues is still exactly right: a FILLED GREEN BUTTON means
+            AN ACTION THAT REACHES AIR, and Update joining PLAY in that class was truthful
+            — on a row that is on air. On a row that is NOT, it was the class making a
+            claim the press cannot keep: the change lands in STATE and the next take seats
+            it (golden rule 10), and a green button is the loudest way this console has of
+            saying otherwise. So the hue now follows the FACT rather than the verb, and off
+            air the control takes `accent` — the same sky, the same weight, as
+            `Apply position` one section up, which is likewise the action its section
+            exists to perform and likewise reaches no output.
+
+            ⚠ AND THE LABEL MOVES WITH IT, which is the half that makes the colour
+            legible: green + `Update on air` says what it is in the operator's words, so
+            the hue is reinforcement and never the signal — the same construction the
+            status chip uses one panel up. The reference greens its Update in BOTH states
+            (measured in Chromium at 1280 × 800: `rgb(34 221 122)` off air as well); this
+            is a deliberate departure from the drawing, on the owner's call.
+
+            THE PREDICATE IS `isOnAirStatus`, the ONE definition both sides of the seam
+            read — never a second local spelling of the state list (golden rule 6), and
+            never `rehearsing`, which seats nothing on the channel (`B-216`). It counts
+            `updating` / `exiting` / `unconfirmed` / `pending` as on air, and that is the
+            right way for a LABEL to fail too: saying `Update on air` about a row whose air
+            state is unknown is the honest reading, where a bare `Update` would be a quiet
+            promise that nothing is live.
+
+            ⚠ NOTHING ABOUT WHAT THE PRESS DOES CHANGES. Same `onApply`, same
+            `applyDraft`, same CasparCG gate, same refusal CONDITION. This is appearance and
+            copy only — a configuration verb stays a configuration verb.
+          */}
           <AsyncButton
-            variant="commit"
-            aria-label="Apply staged edits"
+            variant={onAir ? 'commit' : 'accent'}
+            /*
+              The accessible name keeps `Apply staged edits` as its opening words in both
+              states — it is what every finder and every voice command already says — and
+              GAINS the fact the colour carries, so a screen-reader operator is told the row
+              is live by the control itself rather than only by the chip above it.
+            */
+            aria-label={onAir ? 'Apply staged edits to the on-air row' : 'Apply staged edits'}
             disabled={applyRefusal !== undefined}
             {...(applyRefusal !== undefined ? { title: applyRefusal } : {})}
             run={() => onApply(itemId)}
             onError={() => undefined}
+            data-inspector-commit={onAir ? 'on-air' : 'off-air'}
           >
-            Update
+            {onAir ? 'Update on air' : 'Update'}
           </AsyncButton>
           {dirty && <DraftChip label="unapplied edits" />}
           {/*
-            The reference's `.target-hint`, adopted with its sentence. It is TRUE of this
-            button in both of its cases — on a row that owns no live layers Update lands in
-            STATE and the next take seats it; on a row on air it is `CG UPDATE`, never `PLAY`
-            — and it puts golden rule 10 (`B-161`) where the operator's eye is, which is the
-            one place the rule can do him any good at 2 a.m.
+            🔴 THE `.target-hint` SUB-LINE IS GONE — owner decision, `INSPECTOR-AUDIT-05`
+            §3. It read _"Saves this row’s configuration. No Take is sent."_ and
+            `design.md` §25.6 required it to stay "exactly this honest"; that requirement is
+            SUPERSEDED, not forgotten, and §25.6 is annotated where it stands.
+
+            The reasoning, recorded because deleting a golden-rule-10 sentence is the kind of
+            thing a later reader will want to re-add: the sentence existed to disown a claim
+            the BUTTON was making. A green Update on an off-air row said "this reaches air",
+            and a line of 11 px muted prose underneath said it does not — a hint whose job is
+            to contradict the control above it, which §25.8 already named as a heading that
+            needs fixing rather than a hint that needs keeping. With the hue now telling the
+            truth by itself and the on-air case saying exactly what it is in its own label,
+            the sentence has nothing left to disown.
           */}
-          <p className="cg-inspector-actions__hint">
-            Saves this row’s configuration. No Take is sent.
-          </p>
         </div>
       </div>
     </Panel>
@@ -783,7 +865,10 @@ function FieldGroup({
   const itemId = item.itemId;
   return (
     <section style={styles.group} aria-label={`${group.label ?? group.name} fields`}>
-      <h3 style={styles.groupHeading}>{group.label ?? group.name}</h3>
+      {/* Authored too — a composition's label comes from the template package. */}
+      <h3 style={styles.groupHeading}>
+        <IsolatedName>{group.label ?? group.name}</IsolatedName>
+      </h3>
       {group.aggregate.fields.map((f) => (
         <FieldEditor
           key={`${itemId}-${[...path, f.id].join('/')}`}
@@ -860,7 +945,16 @@ function FieldEditor({
         twice at two sizes, which is noise dressed as hierarchy.
       */}
       <span style={styles.fieldLabel}>
-        <span style={styles.fieldName}>{label}</span>
+        {/*
+          The AUTHORED name is the template author's string, not this console's chrome — a
+          Persian field label beside a Latin binding key is the ordinary case here — so its
+          characters are isolated and its BOX stays the LTR flex item it already was
+          (`MODAL-CHROME-10` ADDENDUM B: a `<bdi>` made a flex item would flush its own text
+          to the wrong side).
+        */}
+        <span style={styles.fieldName}>
+          <IsolatedName>{label}</IsolatedName>
+        </span>
         {label !== fieldId && (
           <span style={styles.fieldKey} title={fieldId}>
             {fieldId}

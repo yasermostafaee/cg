@@ -775,7 +775,14 @@ export const INSPECTOR_PX = {
   footGap: 10,
   footBtnMinW: 104,
   footBtnText: 13,
-  /** The hint under the buttons — `.inspector-foot .target-hint{font-size:11px}`. */
+  /**
+   * The hint under the buttons — `.inspector-foot .target-hint{font-size:11px}`.
+   *
+   * ⚠ NO LONGER RENDERED. `INSPECTOR-AUDIT-05` §3 took the sub-line off the commit bar
+   * (the owner's call — see `Inspector.tsx`), so this has no `--r-insp-hint-text` beside it
+   * any more. It stays here as the MEASUREMENT of the reference, which is what this object
+   * is: a record of what `05-row-inspector.html` paints, not a list of what we use.
+   */
   hintText: 11,
 } as const;
 /*
@@ -2874,7 +2881,6 @@ export const cssVars = {
   '--r-insp-foot-gap': `${String(INSPECTOR_PX.footGap)}px`,
   '--r-insp-foot-btn-min-w': `${String(INSPECTOR_PX.footBtnMinW)}px`,
   '--r-insp-foot-btn-text': `${String(INSPECTOR_PX.footBtnText)}px`,
-  '--r-insp-hint-text': `${String(INSPECTOR_PX.hintText)}px`,
   /**
    * The footer's upward shadow — `.inspector-foot{box-shadow:0 -5px 12px #0002}`: what lifts
    * the pinned bar off the field list it is stuck over, so scrolled content reads as passing

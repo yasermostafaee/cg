@@ -261,7 +261,7 @@ test('the Inspector paints the reference’s rendered geometry from the token ho
   }, secondary);
   expect(headingStyle.color).toBe(secondaryRgb);
 
-  // The foot: padded `9px 12px`, two 32 px buttons on a 104 px floor, and the hint under them.
+  // The foot: padded `9px 12px`, two 32 px buttons on a 104 px floor.
   const foot = app.inspector.locator('.cg-inspector-actions');
   expect(await foot.evaluate((el) => getComputedStyle(el).padding)).toBe('9px 12px');
   for (const name of ['Apply staged edits', 'Discard staged edits']) {
@@ -269,7 +269,14 @@ test('the Inspector paints the reference’s rendered geometry from the token ho
     expect(Math.round(b.height), name).toBe(32);
     expect(b.width, name).toBeGreaterThanOrEqual(await tokenPx(page, '--r-insp-foot-btn-min-w'));
   }
-  await expect(foot.getByText('Saves this row’s configuration. No Take is sent.')).toBeVisible();
+  /*
+    🔴 AND THE SUB-LINE IS ASSERTED ABSENT, not merely deleted (`INSPECTOR-AUDIT-05` §3,
+    owner). It read "Saves this row’s configuration. No Take is sent." and the reference still
+    draws it, so a later parity pass reading `05-row-inspector.html` would put it straight
+    back. An absence that is asserted is a guard; an intended one is a wish.
+  */
+  await expect(foot.getByText(/No Take is sent/i)).toHaveCount(0);
+  await expect(app.inspector.locator('.cg-inspector-actions__hint')).toHaveCount(0);
   // Discard leads, Update trails — the reference's order.
   const discard = await box(app.inspector.getByRole('button', { name: 'Discard staged edits' }));
   const update = await box(app.inspector.getByRole('button', { name: 'Apply staged edits' }));

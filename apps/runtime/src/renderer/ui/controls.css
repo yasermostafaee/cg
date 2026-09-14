@@ -1825,20 +1825,6 @@ textarea.cg-field--autogrow {
   height: var(--r-insp-position-field-h);
   min-height: var(--r-insp-position-field-h);
 }
-/*
- * The hint under the commit bar — the reference's `.target-hint`, and its sentence: it says
- * on the surface what golden rule 10 says in `CLAUDE.md`, that UPDATE is a configuration
- * verb and never a take.
- */
-.cg-inspector-actions__hint {
-  flex: 0 0 100%;
-  margin: 0;
-  text-align: center;
-  font-size: var(--r-insp-hint-text);
-  line-height: 1.5;
-  color: var(--r-text-muted);
-}
-
 /* ── Inspector metadata chips (status / layer / channel / server) ───────────
  *
  * These were two loose prose lines under the item's title. Two sentences read as

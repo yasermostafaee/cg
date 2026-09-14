@@ -178,8 +178,9 @@ export function PositionPicker({ item }: { item: StackItemState }): JSX.Element 
 
   return (
     <div className="cg-inspector-section" aria-label="On-air position">
+      {/* Sentence case in the source; the CAPS are the stylesheet's — see `Inspector.tsx`. */}
       <h2>
-        POSITION
+        Position
         {/* The SAME mark a dirty field carries, from the same class — so "not
             applied yet" looks identical wherever it appears in this panel. */}
         {dirty && (

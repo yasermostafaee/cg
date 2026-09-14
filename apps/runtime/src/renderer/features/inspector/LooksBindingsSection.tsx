@@ -237,7 +237,8 @@ export function LooksBindingsSection({
 
   return (
     <div className="cg-inspector-section" aria-label="Look inputs">
-      <h2>LOOK INPUTS</h2>
+      {/* Sentence case in the source; the CAPS are the stylesheet's — see `Inspector.tsx`. */}
+      <h2>Look inputs</h2>
       {/*
         🔴 **§3d — "above" USED TO POINT AT THE LIVE PLATES SECTION, WHICH IS NOW GONE HERE.**
 

@@ -137,11 +137,38 @@ describe('item 6 — free-text editors delegate direction to the browser', () =>
 
   it('NO editor pins a literal direction — that is what would leak into authoring', async () => {
     const el = await render();
-    // The whole panel: not one `dir="rtl"` / `dir="ltr"` anywhere. A hard-coded
-    // direction on an editor is the first step toward one reaching a value.
-    expect(el.querySelectorAll('[dir="rtl"], [dir="ltr"]')).toHaveLength(0);
-    for (const node of el.querySelectorAll('[dir]')) {
-      expect(node.getAttribute('dir')).toBe('auto');
+    /*
+      🔴 NARROWED TO WHAT THE SENTENCE ABOVE SAYS — EDITORS — and STRENGTHENED on that
+      axis, `INSPECTOR-AUDIT-05` §2(c).
+
+      It used to assert the WHOLE PANEL carried no literal `dir`, which was a cheap
+      over-approximation: true when it was written, and it became wrong the moment the
+      panel adopted `IsolatedName` (`MODAL-CHROME-10` ADDENDUM B). That component is the
+      canonical repair for a bidi defect measured on four surfaces, and its LTR box is
+      exactly the point of it — a `<bdi>`'s own `dir=auto` reaching a BLOCK's ALIGNMENT is
+      what flushed Persian names to the wrong side, and an LTR wrapper is what stops it
+      without removing the isolation.
+
+      So the rule this file owns is asked precisely: every VALUE-CARRYING control delegates
+      direction to the browser. And the exception is not waved through — a literal `dir` is
+      permitted only on a NAME'S BOX, which is asserted to hold a `<bdi>` and no control at
+      all, so a `dir="ltr"` that drifted onto an editor still goes red here.
+    */
+    const editors = el.querySelectorAll('input, textarea, select, [contenteditable]');
+    // The positive control: without it this loop passes against a panel that rendered none.
+    expect(editors.length, 'the panel rendered editors to measure').toBeGreaterThan(0);
+    for (const node of editors) {
+      const dir = node.getAttribute('dir');
+      expect(dir === null || dir === 'auto', `${node.tagName} pins dir=${String(dir)}`).toBe(true);
+    }
+    // Nothing anywhere in the panel pins RTL — that direction is never ours to assert.
+    expect(el.querySelectorAll('[dir="rtl"]')).toHaveLength(0);
+    const ltr = el.querySelectorAll('[dir="ltr"]');
+    // …and its own positive control: an empty set would make the loop below say nothing.
+    expect(ltr.length, 'the panel rendered isolated names to measure').toBeGreaterThan(0);
+    for (const node of ltr) {
+      expect(node.querySelector('input, textarea, select, [contenteditable]')).toBeNull();
+      expect(node.firstElementChild?.tagName, 'a literal LTR box is a name’s box').toBe('BDI');
     }
   });
 });
