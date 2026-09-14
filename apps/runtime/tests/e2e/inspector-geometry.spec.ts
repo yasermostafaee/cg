@@ -1,4 +1,4 @@
-﻿import type { Locator, Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { buildListFieldVcg, expect, test } from './fixtures/runtime.js';
 
 /**
