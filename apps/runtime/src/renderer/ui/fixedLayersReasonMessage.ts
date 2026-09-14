@@ -1,4 +1,4 @@
-import type { FIXED_LAYERS_SET_CONFIG_REASONS } from '@cg/shared-ipc';
+import { LAYER_BANDS, type FIXED_LAYERS_SET_CONFIG_REASONS } from '@cg/shared-ipc';
 
 /**
  * R-021 stage 2b — operator wording for a refused `fixedLayers.set-config`,
@@ -16,7 +16,17 @@ import type { FIXED_LAYERS_SET_CONFIG_REASONS } from '@cg/shared-ipc';
 type FixedLayersSetConfigReason = (typeof FIXED_LAYERS_SET_CONFIG_REASONS)[number];
 
 const MESSAGES = {
-  'exceeds-ceiling': 'The bank would extend past layer 89 — the fixed-layer ceiling.',
+  /*
+   * 🔴 THE CEILING IS READ FROM THE LIVE MAP, NEVER RESTATED.
+   *
+   * This sentence said `layer 89` and the ceiling has been `LAYER_BANDS.template.end`
+   * since the 2026-09-14 re-cut (`fixed-layers-store.ts`'s `MAX_FIXED_LAYER`) — so the
+   * one surface that explains the refusal was quoting a boundary ten layers below the
+   * one the bridge enforces, and the operator reading it would have concluded a legal
+   * bank was illegal. A band bound written a second time cannot notice when the first
+   * one moves, which is `layer-bands.ts`'s own warning about a coordinate in a message.
+   */
+  'exceeds-ceiling': `The bank would extend past layer ${String(LAYER_BANDS.template.end)} — the fixed-layer ceiling.`,
   'overlaps-policy':
     'The bank would overlap a dynamic template-type range — the two must stay disjoint.',
   'overlaps-reserved':
