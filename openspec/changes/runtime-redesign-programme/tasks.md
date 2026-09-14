@@ -1477,8 +1477,18 @@ renders answers "is this handled?" with a yes.
       published look, falling back to the producer and never to an invented name. An owner
       FILTER was built and withdrawn the same day — only one multi-frame row can be live at a
       time. §34.8.
-- [ ] PA.9 🔴 **Linux `gate:e2e` OWED AGAIN for PA.7/PA.8.** Both alter what renders. Write the
-      run URL here beside this box.
+- [x] PA.9 🔴 **Linux `gate:e2e` DISCHARGED for PA.7/PA.8 — and for `B-247`, which rides the
+      same commit.** All three alter what renders, so the Windows Playwright run (210 passed) was
+      a reason to push and never a discharge. The authoritative run is
+      **https://github.com/yasermostafaee/cg/actions/runs/34802603518** for `79e4937c` —
+      `conclusion: success`, and the `E2E (Playwright)` job **RAN** (its `E2E` step is
+      `success`; the one skipped step is the browser INSTALL, a cache hit, exactly as in PA.6).
+      Checked both directions per `P-029` / `P-046`: a green run whose `e2e` was skipped would
+      not discharge this, and neither would a red job that never reached the suite.
+      ⚠ **It covers the COMBINATION, not either change alone.** `79e4937c` carries PA.7/PA.8's
+      delta and `B-247` together — four files carry both (`liveLayerRows.ts`, `plateAudio.ts`,
+      `LayersPanel.tsx`, `liveSourcesPanel.dom.test.ts`) — so no run on this commit is evidence
+      about one of them in isolation, and the commit message says so too.
 - [x] PA.6 🔴 **Linux `gate:e2e` DISCHARGED.** This item alters what renders on two surfaces,
       so the Windows Playwright run (210 passed) was a reason to push and never a discharge.
       The authoritative run is
