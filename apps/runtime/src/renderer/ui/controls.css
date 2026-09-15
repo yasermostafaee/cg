@@ -1530,6 +1530,69 @@
 .cg-field.is-dirty {
   border-color: var(--r-dirty);
 }
+
+/*
+ * 🔴 **A NUMERIC FIELD THAT CARRIES ITS UNIT — owner, 2026-09-15.**
+ *
+ * «برای گپ هم باید نشون داده بشه که مقدار بر اساس ثانیه هست مثل اینپوتهای دیزاینر» — the gap
+ * field must say its value is in SECONDS, the way the Designer's do. The owner sent the
+ * Designer's own shape: `speed [120] px/s`, `gap [48] px` — the unit INSIDE the field's border,
+ * dim, hugging the number.
+ *
+ * ⚠ **IT IS REBUILT HERE RATHER THAN IMPORTED, and that is the house rule, not laziness.**
+ * `@cg/ui` is TOKENS ONLY and components are app-local (`CLAUDE.md`), so the Designer's
+ * `NumberField` cannot be reached from this app. What crosses is the TREATMENT — dim ink, small,
+ * unshrinkable, inside the field — and the tokens it is built from are this app's.
+ *
+ * ── WHY THE WRAPPER IS THE FIELD AND THE INPUT IS BARE ──────────────────────
+ *
+ * The unit has to sit BESIDE the number, not at the far edge of a full-width box, or it reads as
+ * a separate column rather than as the value's unit. So the wrapper carries `.cg-field`'s chrome
+ * and the input inside it is stripped of its own — which means the focus ring has to move too:
+ * `:focus-within` on the wrapper, because the element that takes focus is no longer the element
+ * that draws the border. A field that stopped showing focus would be the accessibility
+ * regression this rule is one edit away from.
+ */
+.cg-num-unit {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.2rem;
+  padding: 0.3rem 0.5rem;
+  /* Short numeric values only — owner: «اینپوتها نیاز نیست اینقدر کشیده باشن». */
+  width: var(--r-num-unit-w);
+}
+.cg-num-unit > input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  width: 100%;
+}
+.cg-num-unit:focus-within {
+  border-color: var(--r-accent);
+  box-shadow: 0 0 0 var(--r-focus-ring) var(--r-accent);
+}
+/* The unit itself: dim, small, and never shrinks — it is the one part that must stay readable. */
+.cg-unit {
+  color: var(--r-text-muted);
+  font-size: var(--r-text-sm);
+  flex-shrink: 0;
+  /* It is a LABEL for the value beside it, not a target: clicking it focuses the input. */
+  pointer-events: none;
+}
+
+/*
+ * A bare numeric field that takes a SHORT value — the pass count. Same narrowing as the unit
+ * field above and for the same reason; it simply has no unit to hang.
+ */
+.cg-num-short {
+  width: var(--r-num-unit-w);
+}
 textarea.cg-field {
   resize: vertical;
   line-height: 1.4;

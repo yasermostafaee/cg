@@ -292,9 +292,33 @@ describe('🔴 DELTA A2 — on air the console states what it SENT, never a coun
 
   it('states what was sent, as a fact about the past', () => {
     mount(row({ status: 'on-air', timingOverride: { repeat: 2 } }), template(LOOPS));
-    expect(host.querySelector('[data-testid="timing-passes-sent"]')?.textContent).toMatch(
-      /^Sent 2 more/,
+    expect(host.querySelector('[data-testid="timing-passes-sent"]')?.textContent).toBe(
+      'Sent 2 more passes',
     );
+  });
+
+  it('🔴 owner 2026-09-15 — the NUMBER is the thing, so the number is what reads', () => {
+    /*
+      «Sent 5 more متنش باید مشخص‌تر باشه مخصوصاً عددش». The whole line was the muted caption
+      ink, so the count was set in the same dim grey as the punctuation around it. The count is
+      lifted out on its own element; the rest of the sentence stays a caption.
+    */
+    mount(row({ status: 'on-air', timingOverride: { repeat: 5 } }), template(LOOPS));
+    const line = host.querySelector('[data-testid="timing-passes-sent"]')!;
+    const strong = line.querySelector('strong');
+    expect(strong, 'the count is not distinguished from the words around it').not.toBeNull();
+    expect(strong?.textContent).toBe('5 more');
+
+    /*
+      …and it is actually PAINTED differently, not merely wrapped in an element that could be.
+      An inline style is a value jsdom's cascade really resolves — the one class of visual claim
+      golden rule 12c says this environment answers honestly — so this is a measurement here and
+      not a stand-in for one.
+    */
+    const lineInk = getComputedStyle(line).color;
+    const countInk = getComputedStyle(strong!).color;
+    expect(countInk, 'the count is the same muted grey as the words around it').not.toBe('');
+    expect(countInk, 'the count is the same muted grey as the words around it').not.toBe(lineInk);
   });
 
   it('carries the local time of an accepted send, and omits it when there is none', () => {
@@ -302,12 +326,12 @@ describe('🔴 DELTA A2 — on air the console states what it SENT, never a coun
     // was sent and omits the when rather than timing the republish that carried it here.
     mount(row({ status: 'on-air', timingOverride: { repeat: 2 } }), template(LOOPS));
     expect(host.querySelector('[data-testid="timing-passes-sent"]')?.textContent).toBe(
-      'Sent 2 more',
+      'Sent 2 more passes',
     );
     recordSentPasses('item-1');
     mount(row({ status: 'on-air', timingOverride: { repeat: 2 } }), template(LOOPS));
     expect(host.querySelector('[data-testid="timing-passes-sent"]')?.textContent).toMatch(
-      /^Sent 2 more · .+/,
+      /^Sent 2 more passes · .+/,
     );
   });
 
@@ -318,11 +342,16 @@ describe('🔴 DELTA A2 — on air the console states what it SENT, never a coun
     );
   });
 
-  it('spells infinite the one way', () => {
+  it('🔴 answers in the two-state control’s own words — until stop, never the bare glyph', () => {
+    /*
+      The two-state control above this line says `Until stop`. A readout answering `∞` would be
+      the label-in-two-places defect one surface along — and the glyph was taken off the control
+      precisely because the owner could not read it.
+    */
     mount(row({ status: 'on-air', timingOverride: { repeat: 'infinite' } }), template(LOOPS));
-    expect(host.querySelector('[data-testid="timing-passes-sent"]')?.textContent).toMatch(
-      /^Sent ∞ more/,
-    );
+    const line = host.querySelector('[data-testid="timing-passes-sent"]');
+    expect(line?.textContent).toBe('Sent until stop');
+    expect(line?.textContent, 'the glyph came back in the readout').not.toMatch(/∞/);
   });
 
   it('OFF AIR the box shows the STORED count — that one IS a fact the console holds', () => {
@@ -348,9 +377,43 @@ describe('§4 — inheritance is SHOWN as inheritance', () => {
     expect(choice('Until stop')?.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('the gap names its inherited value in seconds', () => {
+  it('the gap names its inherited value, and the FIELD carries the unit', () => {
+    /*
+      🔴 Owner, 2026-09-15: «برای گپ هم باید نشون داده بشه که مقدار بر اساس ثانیه هست مثل
+      اینپوتهای دیزاینر». The unit used to live inside the placeholder, so it vanished the
+      moment anyone typed — a unit stated at exactly the wrong moment. It is rendered beside the
+      value now, the way the Designer's `speed [120] px/s` is, and is therefore visible while
+      the operator is typing the number it applies to.
+    */
     mount(row(), template({ ...LOOPS, delayMs: 2500 } as never));
-    expect(byLabel('Gap between passes')?.placeholder).toBe('Default (2.5 s)');
+    expect(byLabel('Gap between passes')?.placeholder).toBe('Default (2.5)');
+    const unit = host.querySelector('.cg-num-unit .cg-unit');
+    expect(unit?.textContent, 'the field does not say what the number is measured in').toBe('s');
+  });
+
+  it('🔴 and the unit is still there once a value is typed', () => {
+    // The whole point of moving it out of the placeholder. Pinned separately because the
+    // placeholder case above would go on passing if the unit only ever rendered when empty.
+    mount(
+      row({ timingOverride: { delayMs: 1500 } }),
+      template({ ...LOOPS, delayMs: 2500 } as never),
+    );
+    expect(byLabel('Gap between passes')?.value).toBe('1.5');
+    expect(host.querySelector('.cg-num-unit .cg-unit')?.textContent).toBe('s');
+  });
+
+  it('🔴 owner 2026-09-15 — the boxes are SHORT; they take short numeric values', () => {
+    // «اینپوتها نیاز نیست اینقدر کشیده باشن چون فقط مقادیر عددی کوتاه میگیرن». A box stretched
+    // to the panel's width says "type a lot here" about a value that is never long.
+    // ⚠ jsdom has no layout, so the WIDTH itself cannot be measured here (golden rule 12c) —
+    // what is pinned is that both boxes carry the class that sets it, and the class's own
+    // declaration lives in `controls.css` where a stylesheet test can reach it.
+    mount(row({ timingOverride: { repeat: 3 } }), template(LOOPS));
+    expect(byLabel('Passes next take')?.className).toContain('cg-num-short');
+    expect(
+      host.querySelector('.cg-num-unit'),
+      'the gap box is not the narrow unit field',
+    ).not.toBeNull();
   });
 
   it('once the operator has stored a gap, the box shows it', () => {

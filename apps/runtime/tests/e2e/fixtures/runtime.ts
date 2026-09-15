@@ -919,6 +919,51 @@ export async function buildPositionedVcg(templateId = 'tpl-e2e-pos'): Promise<Ui
   });
 }
 
+/**
+ * 🔴 `TIMING-WIRE-22 · DELTA B4` — a `.vcg` whose scene LOOPS, so the Inspector's Timing section
+ * renders its controls rather than only its two facts.
+ *
+ * `loop-cycle` on the ROOT is what `templateTimingOf` reads since `DELTA B1` (an exported
+ * template's root IS the composition the designer chose), and `repeat`/`delayMs` give the
+ * section something to state as INHERITED — which is the case the owner's note is about, since a
+ * placeholder is what carries the inherited value.
+ */
+export async function buildLoopingVcg(templateId = 'tpl-e2e-loop'): Promise<Uint8Array> {
+  const scene = fixtureScene();
+  scene.playout = {
+    mode: 'loop-cycle',
+    holdSource: 'timed',
+    holdMs: 3000,
+    repeat: 3,
+    delayMs: 2500,
+  };
+  scene.lifecycle = { outPoint: 40 };
+  const fontDeps: readonly FontReference[] = scene.fonts;
+  const assetIndex: readonly AssetEntry[] = [];
+  const manifestExtras = {
+    id: templateId,
+    name: 'e2e-looping',
+    authoring: {
+      designerVersion: '0.0.0',
+      createdAt: '2026-06-29T00:00:00.000Z',
+      exportedAt: '2026-06-29T00:01:00.000Z',
+    },
+    compatibility: { minRuntimeVersion: '0.0.0', minCasparCGVersion: '2.3.0' },
+    fontDeps,
+    assetIndex,
+  } satisfies Pick<Manifest, 'id' | 'name' | 'authoring' | 'compatibility'> & {
+    fontDeps: readonly FontReference[];
+    assetIndex: readonly AssetEntry[];
+  };
+  return pack({
+    scene,
+    manifestExtras,
+    indexHtml: '<!doctype html><html><body>placeholder</body></html>',
+    cgJs: '/* placeholder template runtime */',
+    cgCss: '/* placeholder template styles */',
+  });
+}
+
 /** Bytes that are NOT a valid `.vcg` — `verify()` fails to even unpack them. */
 export function buildInvalidVcg(): Uint8Array {
   return new TextEncoder().encode('this is not a .vcg archive');

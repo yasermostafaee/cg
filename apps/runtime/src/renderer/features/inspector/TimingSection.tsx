@@ -204,10 +204,6 @@ function PassesControl({
     draft?.passes?.text ?? (onAir || typeof applied !== 'number' ? '' : String(applied));
 
   const sentAtLabel = lastSentPasses(item.itemId);
-  const sentLine =
-    applied === undefined
-      ? 'Nothing sent'
-      : `Sent ${passesWord(applied)} more${sentAtLabel === undefined ? '' : ` · ${sentAtLabel}`}`;
 
   return (
     <div style={styles.stack}>
@@ -244,6 +240,7 @@ function PassesControl({
       </div>
       {chosen === 'count' && (
         <NumericInput
+          className="cg-field cg-num-short"
           value={typed}
           onValueChange={(text) => {
             stageTiming(item.itemId, { passes: { kind: 'count', text } });
@@ -258,11 +255,7 @@ function PassesControl({
           }}
         />
       )}
-      {onAir && (
-        <p style={styles.hint} data-testid="timing-passes-sent">
-          {sentLine}
-        </p>
-      )}
+      {onAir && <SentLine value={applied} at={sentAtLabel} />}
     </div>
   );
 }
@@ -282,37 +275,98 @@ function DelayControl({
     stored value IS what the next pass will wait — on air and off — and showing it is honest in
     both states.
   */
-  const typed =
-    draft?.gapSeconds ?? (applied === undefined ? '' : String(Math.round(applied / 100) / 10));
+  const typed = draft?.gapSeconds ?? (applied === undefined ? '' : secondsOf(applied));
 
   return (
     <div style={styles.stack}>
       <span style={styles.label}>Gap between passes</span>
-      <NumericInput
-        value={typed}
-        onValueChange={(gapSeconds) => {
-          stageTiming(item.itemId, { gapSeconds });
-        }}
-        decimal
-        aria-label="Gap between passes"
-        placeholder={`Default (${secondsWord(inheritedMs)})`}
-        onBlur={() => {
-          const raw = typed.trim();
-          if (raw === '') return;
-          const n = Number(raw);
-          // `0` is legal and means no gap, so it is NOT refused here.
-          if (!Number.isFinite(n) || n < 0) reportCommandError(`"${raw}" is not a gap in seconds.`);
-        }}
-      />
+      {/*
+        🔴 THE UNIT IS IN THE FIELD — owner, 2026-09-15, pointing at the Designer's own
+        `speed [120] px/s`. The gap was a bare number that happened to be seconds, and the only
+        thing saying so was the word "Default" in a placeholder that vanished the moment anybody
+        typed. A unit that disappears when the value appears is a unit stated at exactly the
+        wrong moment.
+
+        The wrapper carries the field chrome and the input is bare inside it, so the `s` sits
+        beside the number rather than at the far edge of the box; `controls.css` carries why,
+        including where the focus ring had to move to.
+      */}
+      <span className="cg-field cg-num-unit">
+        <NumericInput
+          value={typed}
+          onValueChange={(gapSeconds) => {
+            stageTiming(item.itemId, { gapSeconds });
+          }}
+          decimal
+          aria-label="Gap between passes"
+          placeholder={`Default (${secondsOf(inheritedMs)})`}
+          onBlur={() => {
+            const raw = typed.trim();
+            if (raw === '') return;
+            const n = Number(raw);
+            // `0` is legal and means no gap, so it is NOT refused here.
+            if (!Number.isFinite(n) || n < 0)
+              reportCommandError(`"${raw}" is not a gap in seconds.`);
+          }}
+        />
+        <span className="cg-unit">s</span>
+      </span>
     </div>
+  );
+}
+
+/**
+ * 🔴 WHAT THIS CONSOLE SENT, WITH THE NUMBER READABLE — owner, 2026-09-15:
+ * «Sent 5 more متنش باید مشخص‌تر باشه مخصوصاً عددش».
+ *
+ * It read `Sent 5 more · 12:03:10`, entirely in the muted caption ink, so the one piece of
+ * information on the line — the COUNT — was set in the same dim grey as the punctuation around
+ * it. Two things are fixed and they are separate: the number is lifted to the panel's real ink
+ * at semibold, and the sentence names what was counted. "5 more" of what was left to the reader.
+ *
+ * ⚠ `until stop` rather than `∞`: the two-state control above this line says `Until stop`, and
+ * a readout that answers in a different vocabulary from the control that set it is the
+ * label-in-two-places defect one surface along. The bare glyph was removed from the control for
+ * being unreadable; keeping it in the readout would have kept exactly that problem.
+ */
+function SentLine({
+  value,
+  at,
+}: {
+  value: number | 'infinite' | undefined;
+  at: string | undefined;
+}): JSX.Element {
+  if (value === undefined) {
+    return (
+      <p style={styles.hint} data-testid="timing-passes-sent">
+        Nothing sent
+      </p>
+    );
+  }
+  return (
+    <p style={styles.hint} data-testid="timing-passes-sent">
+      {'Sent '}
+      <strong style={styles.sentValue}>
+        {value === 'infinite' ? 'until stop' : `${String(value)} more`}
+      </strong>
+      {value === 'infinite' ? '' : ' passes'}
+      {at === undefined ? '' : ` · ${at}`}
+    </p>
   );
 }
 
 /** `∞` for infinite, else the number. The ONE spelling, so two rows cannot disagree. */
 const passesWord = (v: number | 'infinite'): string => (v === 'infinite' ? '∞' : String(v));
 
-/** A gap in ms as the operator thinks of it — seconds, one decimal. */
-const secondsWord = (ms: number): string => `${String(Math.round(ms / 100) / 10)} s`;
+/**
+ * A gap in ms as the operator thinks of it: SECONDS, one decimal, as a bare number.
+ *
+ * ⚠ It carries no unit, and did until the owner's 2026-09-15 note. The unit is rendered by the
+ * FIELD now (`.cg-unit`), so appending one here would print it twice — and this is the one
+ * function both the displayed value and the placeholder go through, which is what makes that a
+ * single decision rather than two that can drift.
+ */
+const secondsOf = (ms: number): string => String(Math.round(ms / 100) / 10);
 
 /**
  * 🔴 REFUSED WITH A REASON — never silently rewritten, and never on the way to the wire.
@@ -338,4 +392,15 @@ const styles = {
   stack: { display: 'flex', flexDirection: 'column', gap: '0.2rem', margin: '0.5rem 0' },
   label: { color: colors.textMuted, fontSize: '0.7rem', minWidth: '5.5rem' },
   hint: { color: colors.textMuted, fontSize: '0.66rem', lineHeight: 1.4, margin: '0.15rem 0 0' },
+  /*
+    The COUNT, in the panel's real ink at semibold — the rest of the line stays the muted caption.
+    It is a value inside a fact sentence, which is exactly the rank this console gives a value
+    elsewhere (`.cg-meta-chip__value`), reached here through the same two tokens rather than a
+    second hand-picked pair.
+  */
+  sentValue: {
+    color: colors.text,
+    fontWeight: 'var(--r-weight-semibold)',
+    fontSize: '0.72rem',
+  },
 } as const satisfies Record<string, React.CSSProperties>;

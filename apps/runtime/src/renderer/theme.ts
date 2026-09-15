@@ -2625,6 +2625,16 @@ export const cssVars = {
    * checkboxes, `.cg-tooltip`, `.cg-plate-spacer`, `.cg-plate-help`, `.cg-audio-index`,
    * `.cg-code-chip`, `.cg-audit-caveat` and `.cg-audit-table`, all still `--r-radius-sm`.
    */
+  /*
+   * 🔴 A SHORT NUMERIC FIELD — owner, 2026-09-15: «اینپوتها نیاز نیست اینقدر کشیده باشن چون
+   * فقط مقادیر عددی کوتاه میگیرن». A pass count is one to three digits and a gap is like `1.5`;
+   * a box stretched to the panel's width says "type a lot here" about a value that is never
+   * long, and reads as a text field beside the real ones.
+   *
+   * It is a TOKEN and not a literal in `controls.css` because two rules need the same number
+   * (`.cg-num-unit` and `.cg-num-short`), and two literals is how one of them later drifts.
+   */
+  '--r-num-unit-w': '7rem',
   '--r-radius-field': '5px',
   '--r-radius-md': '6px',
   '--r-radius-lg': '10px',
