@@ -17,6 +17,8 @@ import {
   jsxA11y,
   BANK_SHAPE_RULE_ID,
   NO_HARDCODED_ORIGIN_RULE_ID,
+  RAW_CONTROL_RULE_ID,
+  rawControlRule,
 } from '../dist/index.js';
 
 /**
@@ -451,4 +453,121 @@ for (const c of cases) {
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
+// `TIMING-WIRE-22 · DELTA B · R2` — the raw-control RATCHET (`cg/raw-control`).
+//
+// Three directions, because a ratchet that only counts UPWARDS is a ceiling: new debt in a
+// clean file, new debt in a file that already has an allowance, and — the half that makes it
+// a ratchet — an allowance that has grown STALE because the debt was paid. The third is what
+// stops a frozen number becoming a licence somebody spends later without review.
+//
+// ⚠ The rule is exercised DIRECTLY here rather than through a tier, because it is enabled per
+// APP (the frozen list is the app's own debt) and no tier turns it on. That is the same reason
+// the origin guard has a "not enabled by the node tier" case: what a tier does NOT do is part
+// of the contract too.
+{
+  const withRule = (allow) => [
+    {
+      files: ['**/*.tsx'],
+      plugins: { cg: { rules: { 'raw-control': rawControlRule } } },
+      languageOptions: {
+        parserOptions: { ecmaFeatures: { jsx: true }, ecmaVersion: 'latest', sourceType: 'module' },
+      },
+      rules: { 'cg/raw-control': ['error', { allow }] },
+    },
+  ];
+  const lintAs = async (allow, code, filePath) => {
+    const eslint = new ESLint({ baseConfig: withRule(allow), overrideConfigFile: true });
+    const results = await eslint.lintText(code, { filePath });
+    return (results[0]?.messages ?? []).filter((m) => m.ruleId === RAW_CONTROL_RULE_ID);
+  };
+
+  const ONE_INPUT = 'export const A = () => <div><input aria-label="a" /></div>;\n';
+  const TWO_INPUTS =
+    'export const A = () => <div><input aria-label="a" /><input aria-label="b" /></div>;\n';
+  const STYLED = 'export const A = () => <Button style={{ color: "red" }}>x</Button>;\n';
+  const CLEAN = 'export const A = () => <div className="cg-x"><NumericInput value="1" /></div>;\n';
+  const FILE = 'src/renderer/features/x/Panel.tsx';
+
+  /** @type {{name: string, allow: Record<string, number>, code: string, expect: 'fires'|'clean', messageId?: string}[]} */
+  const ratchetCases = [
+    { name: 'a raw <input> in an UNLISTED file fires', allow: {}, code: ONE_INPUT, expect: 'fires' },
+    {
+      name: 'a `style` prop on a control primitive fires',
+      allow: {},
+      code: STYLED,
+      expect: 'fires',
+    },
+    {
+      name: 'a frozen file at its exact count is CLEAN',
+      allow: { [FILE]: 1 },
+      code: ONE_INPUT,
+      expect: 'clean',
+    },
+    {
+      name: 'one MORE than the frozen count fires',
+      allow: { [FILE]: 1 },
+      code: TWO_INPUTS,
+      expect: 'fires',
+    },
+    {
+      name: 'FEWER than the frozen count fires — a stale allowance is a licence',
+      allow: { [FILE]: 2 },
+      code: ONE_INPUT,
+      expect: 'fires',
+    },
+    {
+      name: 'a file with no offending site and no entry is CLEAN',
+      allow: {},
+      code: CLEAN,
+      expect: 'clean',
+    },
+    {
+      name: 'an allowance does NOT extend to a neighbouring file',
+      allow: { 'src/renderer/features/x/Other.tsx': 4 },
+      code: ONE_INPUT,
+      expect: 'fires',
+    },
+  ];
+
+  for (const c of ratchetCases) {
+    const found = await lintAs(c.allow, c.code, FILE);
+    const fired = found.length > 0;
+    if (fired === (c.expect === 'fires')) {
+      console.log(`  PASS  raw-control: ${c.name}`);
+      passed += 1;
+    } else {
+      console.error(`  FAIL  raw-control: ${c.name}`);
+      console.error(
+        `        got: ${found.map((m) => m.message).join(' | ') || '(no messages)'}`,
+      );
+      failed += 1;
+    }
+  }
+
+  // The stale message must NAME both numbers — it is the only one that asks for an edit to
+  // the config rather than to the code, so a vague version of it would not be actionable.
+  const stale = await lintAs({ [FILE]: 3 }, ONE_INPUT, FILE);
+  if (stale.some((m) => m.message.includes('frozen at 3') && m.message.includes('now has 1'))) {
+    console.log('  PASS  raw-control: the stale message names the frozen count and the truth');
+    passed += 1;
+  } else {
+    console.error('  FAIL  raw-control: the stale message does not name both numbers');
+    console.error(`        got: ${stale.map((m) => m.message).join(' | ') || '(no messages)'}`);
+    failed += 1;
+  }
+
+  // Only the EXCESS is reported, so the message lands on the edit that was just made rather
+  // than on a line the file has carried for months.
+  const excess = await lintAs({ [FILE]: 1 }, TWO_INPUTS, FILE);
+  if (excess.length === 1) {
+    console.log('  PASS  raw-control: reports only the EXCESS, not every site in the file');
+    passed += 1;
+  } else {
+    console.error(
+      `  FAIL  raw-control: reported ${String(excess.length)} site(s) where 1 was expected`,
+    );
+    failed += 1;
+  }
+}
+
 assert.equal(failed, 0, 'eslint-config smoke checks failed');

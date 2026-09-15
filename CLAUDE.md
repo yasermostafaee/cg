@@ -708,15 +708,27 @@ specs; engine docs cover "how it's built".
   never declares is the silent form of the same defect: `TimingSection` invented
   `cg-fact`, no rule existed, and the two facts rendered as bare text beside a
   panel of chips — green in every gate, wrong on screen (golden rule 12).
-  ⚠ **HOW MUCH OF THIS A LINT RULE ACTUALLY CATCHES, stated so nobody trusts a
-  guard that is not there.** `<button>` and `<select>` outside `renderer/ui/` are
-  refused by `no-restricted-syntax` — **in the DESIGNER only**
-  (`apps/designer/eslint.config.mjs`); the Runtime has the same config shape and
-  not that rule. Raw `<input>` and a `style` prop on a control are caught by
-  NOTHING, in either app. `DELTA B3` was to widen it and stopped on its own
-  threshold: the widened rule finds **32 raw `<input>` sites across 14 files** in
-  the Runtime renderer, and a guard landed red is a guard the next session turns
-  off. Until that debt is paid this bullet is a REVIEW rule, not a mechanical one.
+  ⚠ **WHAT A LINT RULE ACTUALLY CATCHES, stated so nobody trusts a guard that is
+  not there — or misses one that is.**
+  - `<button>` and `<select>` outside `renderer/ui/` are refused by
+    `no-restricted-syntax` — **in the DESIGNER only**
+    (`apps/designer/eslint.config.mjs`); the Runtime has the same config shape and
+    not that rule.
+  - 🔴 **A raw `<input>`, and a `style` prop on `Button`/`AsyncButton`/`NumericInput`/`Tag`,
+    are refused in the RUNTIME renderer by `cg/raw-control` — ENFORCED FOR NEW CODE**
+    (`TIMING-WIRE-22 · DELTA B · R2`). It is a **RATCHET, not a ban**: the 40 sites the
+    renderer already carried (32 raw inputs across 14 files, plus 8 styled primitives across 5) are FROZEN per file as a count in `apps/runtime/eslint.config.mjs`, and the rule
+    refuses movement in BOTH directions — more than the number is new debt, **fewer** means
+    the debt was paid and the number is now a lie, so it can only ever shrink. Paying one
+    down means lowering its number in the same commit; the rule says so if you forget.
+    ⚠ The DESIGNER is not enabled: 37 sites across 20 files there, redder than the Runtime.
+    That is its own item, not a rider.
+  - The ratchet's downward check is why there is NO separate pinning test: a test reading the
+    frozen list would be a second reader under a different turbo `inputs` glob, which is the
+    silent-under-cache-hit hole this file records three times. One reader, one glob.
+  - What it still cannot see: a control behind a local wrapper component, a `className` that
+    restyles a primitive (the legitimate route), `style` on a raw HTML element, and `.ts`
+    files. For those this bullet stays a REVIEW rule.
 - Components are styled with `renderer/theme.ts` + vanilla-extract (the app's
   real design system). `@cg/ui` is **tokens-only** — do NOT add components
   there or change the palette.

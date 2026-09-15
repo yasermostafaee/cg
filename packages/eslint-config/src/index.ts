@@ -23,6 +23,14 @@ export {
 } from './rules/cef-compat.js';
 export { cefCompat } from './configs/cef-compat.js';
 
+/*
+ * `TIMING-WIRE-22 · DELTA B · R2` — the raw-control RATCHET. Registered by `base` on the ONE
+ * `cg` plugin object; ENABLED per app, because the frozen debt it carries is per app. Exported
+ * so a config can name the rule id without spelling it, and so the rule object is reachable for
+ * a direct probe.
+ */
+export { RAW_CONTROL_RULE_ID, rawControlRule } from './rules/raw-control.js';
+
 // P-039 — the bank-shape guard. Registered by `base` under the `cg` namespace; exported
 // so the smoke check can assert on the one rule id and so a consumer can widen the
 // owner-file exemption deliberately rather than by copying the pattern.
