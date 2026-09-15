@@ -131,24 +131,106 @@ describe('DELTA A1 — re-sending a relative count RE-ARMS it', () => {
   });
 });
 
-describe('DELTA A1 / A3 — a count set BEFORE play() does not survive play()', () => {
-  it('🔴 play() snapshots the AUTHORED repeat, discarding a pre-play count', () => {
-    /*
-      `play()` is `cyclesLeft = repeatOf(this.o.playout)`, so anything `setRemainingPasses` wrote
-      beforehand is overwritten. That is correct for what the method IS — a live edit to a
-      running loop — but it means the OFF-AIR path cannot be built on it: a count delivered by
-      `CG ADD` (which reaches the page through `update()`) is discarded by the `CG PLAY` that
-      follows it.
-    */
-    const h = make({ ...looping(), repeat: 3 });
-    h.controller.setRemainingPasses(0); // "out after the current pass" — before anything runs
+describe('🔴 DELTA B0 — a count set BEFORE play() is the count that airs', () => {
+  /*
+    `Passes next take` promised something the system did not do. The off-air count reaches the
+    page on the `CG ADD` payload, through `update()`, and the `CG PLAY` that follows used to
+    overwrite it with the authored `repeat` — so the operator set 2, saw it stored, took the
+    row, and watched the template run its own count.
+
+    🔴 **THE TWO READINGS ARE DIFFERENT NUMBERS, AND THAT IS THE DESIGN, NOT AN INCONSISTENCY.**
+    The console says so in its own two labels:
+
+      - OFF AIR — "Passes next take": a TOTAL. `2` airs two passes.
+      - ON AIR — "Passes remaining": relative, the pass on screen uncounted. `2` means that one
+        finishes and two more play — three in total.
+
+    One stored operator value, read as a total by `play()` and as a remainder by a live edit.
+    Anything else would make one of the two labels lie.
+  */
+  it('an operator count set before play() wins over the authored repeat — as a TOTAL', () => {
+    const h = make({ ...looping(), repeat: 5 });
+    h.controller.setRemainingPasses(2); // off air: "two passes next take"
     h.controller.play();
 
-    // If the pre-play count had survived, this would settle after one pass.
     h.clock.advance(PASS_MS);
-    expect(h.events, 'the pre-play count survived — it does not').toEqual([]);
+    expect(h.events, 'it ended after one — the count was read as a remainder').toEqual([]);
     h.clock.advance(PASS_MS);
+    expect(h.events, 'two passes were asked for and two passes ran').toContain('settle');
+  });
+
+  it('with NO operator count set, the authored repeat applies exactly as before', () => {
+    // The other half of the rule, and the one that must not move: a template nobody has
+    // touched keeps running what its author asked for.
+    const h = make({ ...looping(), repeat: 2 });
+    h.controller.play();
+
     h.clock.advance(PASS_MS);
-    expect(h.events, 'it ran the AUTHORED 3 instead').toContain('settle');
+    expect(h.events).toEqual([]);
+    h.clock.advance(PASS_MS);
+    expect(h.events).toContain('settle');
+  });
+
+  it('an infinite set before play() survives it', () => {
+    const h = make({ ...looping(), repeat: 2 });
+    h.controller.setRemainingPasses('infinite');
+    h.controller.play();
+
+    for (let i = 0; i < 6; i++) h.clock.advance(PASS_MS);
+    expect(h.events, 'it stopped despite being told to keep going').toEqual([]);
+  });
+
+  it('ZERO set before play() settles after the FIRST pass, not after one more', () => {
+    /*
+      `0` as a total cannot un-play the pass the take has already started — the `CG ADD` and the
+      `CG PLAY` have happened. So it settles at the first boundary. What it must NOT do is take
+      the on-air reading (`0` = "let the current one finish, then out"), which from a standing
+      start would seat `1` and run a pass the operator did not ask for. Same number, and the
+      difference between the two readings is exactly one pass.
+    */
+    const h = make({ ...looping(), repeat: 3 });
+    h.controller.setRemainingPasses(0);
+    h.controller.play();
+
+    h.clock.advance(PASS_MS);
+    expect(h.events).toContain('settle');
+  });
+
+  it('a GAP set before play() survives it too', () => {
+    // `play()` never touched `delayMs`, so this half was already correct — pinned so it stays
+    // that way, because B0 changes the method around it.
+    const h = make({ ...looping(), repeat: 2, delayMs: 0 });
+    h.controller.setDelayMs(400);
+    h.controller.play();
+
+    h.clock.advance(PASS_MS); // pass 1 ends, the gap begins
+    expect(h.events).toEqual([]);
+    h.clock.advance(100);
+    expect(h.events, 'the gap was discarded by play()').toEqual([]);
+    h.clock.advance(400);
+    h.clock.advance(PASS_MS);
+    expect(h.events).toContain('settle');
+  });
+});
+
+describe('DELTA A3 — SUPERSEDED BY B0, kept as the record of what was wrong', () => {
+  /*
+    ⚠ This block used to assert the OPPOSITE — that `play()` discarded a pre-play count — and
+    it was right when it was written. `DELTA A3` established that as a defect (the console's
+    `Passes next take` label promised something the system did not do), and `DELTA B0` fixed it.
+
+    The case is REPLACED rather than deleted so the reversal is legible: an assertion that was
+    green, correct, and describing a defect is exactly the kind a later reader is entitled to
+    find an account of.
+  */
+  it('the pre-play count now survives, and the authored repeat is what it displaces', () => {
+    const h = make({ ...looping(), repeat: 3 });
+    h.controller.setRemainingPasses(1); // "one pass next take", against an authored 3
+    h.controller.play();
+
+    h.clock.advance(PASS_MS);
+    expect(h.events, 'it ran the AUTHORED 3 — the operator value was discarded again').toContain(
+      'settle',
+    );
   });
 });

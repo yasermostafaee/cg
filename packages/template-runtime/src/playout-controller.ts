@@ -163,6 +163,15 @@ export class PlayoutController {
 
   // Cycles left for `loop-cycle` (`'infinite'` repeats until stop()).
   private cyclesLeft: number | 'infinite' = 1;
+  /**
+   * 🔴 `DELTA B0` — the OPERATOR's pass count, or `null` when they have set none.
+   *
+   * Distinct from `cyclesLeft`, which counts DOWN: this is the value as stated, kept so that
+   * `play()` can seat it instead of the template's authored `repeat`. `null` — never `0` — is
+   * the unset sentinel, because `0` is a legal instruction and a truthiness test here would
+   * erase it.
+   */
+  private pendingPasses: number | 'infinite' | null = null;
   // D-028 — identifies the CURRENT content hold; bumped by stop()/reset()/
   // startOutro() so a stale `waitForContent` resolution (after stop, or from a
   // previous cycle) can never trigger a second outro.
@@ -200,9 +209,17 @@ export class PlayoutController {
   /** Begin playback: play-once-and-hold, or repeat per the cyclic modes. */
   play(): void {
     this.reset();
-    // `TIMING-BUILD-21` §3 — the default lives in the schema (`repeatOf`), not here. This read
-    // was `repeat ?? 1`, which quietly made a stored `loop-cycle` with no count play ONCE.
-    this.cyclesLeft = this.cyclic() ? repeatOf(this.o.playout) : 1;
+    /*
+      🔴 `TIMING-WIRE-22 · DELTA B0` — AN OPERATOR COUNT SET BEFORE THE TAKE IS THE COUNT THAT
+      AIRS. It used to be discarded here, which made the console's `Passes next take` label a
+      promise the system did not keep: the value reached the page on the `CG ADD` payload,
+      through `update()`, and this line then overwrote it with the authored `repeat`.
+
+      `TIMING-BUILD-21` §3 — with NO operator value the default still lives in the schema
+      (`repeatOf`), not here. That read was once `repeat ?? 1`, which quietly made a stored
+      `loop-cycle` with no count play ONCE.
+    */
+    this.cyclesLeft = this.cyclic() ? (this.pendingPasses ?? repeatOf(this.o.playout)) : 1;
     this.startIntro();
   }
 
@@ -309,6 +326,26 @@ export class PlayoutController {
 
   setRemainingPasses(passes: number | 'infinite'): void {
     if (this.settled || !this.cyclic()) return;
+    /*
+      🔴 `DELTA B0` — THE OPERATOR'S VALUE IS REMEMBERED FOR THE NEXT `play()`, whichever state
+      it arrives in. One stored number, read two ways — exactly the two the console's own labels
+      promise:
+
+        - BEFORE a run ("Passes next take") it is a TOTAL: `play()` seats it whole.
+        - DURING a run ("Passes remaining") it is a REMAINDER: the pass on screen is not one of
+          them, so it seats `n + 1`.
+
+      Storing it on the live path too means a re-take of a still-resident producer (`C-012`'s
+      graceful stop) runs the count the operator last asked for, which is what the row shows.
+    */
+    this.pendingPasses = passes === 'infinite' ? 'infinite' : Math.max(0, Math.floor(passes));
+    /*
+      NOT RUNNING — `phase` is `idle` only before the first `play()` or after a settle, and a
+      settled controller returned above. So this is the pre-take case: remember it and let
+      `play()` seat it as a total. Seating `cyclesLeft` here instead would be read as a
+      remainder by the first pass boundary and run one pass too many.
+    */
+    if (this.phase === 'idle') return;
     if (passes === 'infinite') {
       this.cyclesLeft = 'infinite';
       return;
