@@ -117,21 +117,42 @@ function report(url: string, take: string): Promise<number> {
   });
 }
 
-/**
- * 🔴 **THE TOKEN IS READ OFF THE WIRE, never from an accessor the test asked for.**
- *
- * The page learns its token exactly one way — from the `__cg` payload of the `CG ADD` — so that
- * is what the test reads. A helper that handed the test the bridge's own map would pass just as
- * well if the token never reached the payload at all, which is the defect (`0f54e00d`) this
- * whole feature is downstream of.
- */
-function tokenFromAdd(lines: readonly string[]): string | undefined {
-  const add = linesMatching(lines, /^CG 1-10 ADD /).at(-1);
-  if (add === undefined) return undefined;
-  const quoted = /"((?:[^"\\]|\\.)*)"\s*$/.exec(add);
+/** The `__cg` control object a single AMCP line carried, or undefined if it carried none. */
+function controlOf(line: string): ReturnType<typeof readCgControl> {
+  const quoted = /"((?:[^"\\]|\\.)*)"\s*$/.exec(line);
   if (quoted?.[1] === undefined) return undefined;
   const json = quoted[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-  return readCgControl(JSON.parse(json) as unknown)?.take;
+  return readCgControl(JSON.parse(json) as unknown);
+}
+
+/**
+ * 🔴 **THE TOKEN THE PAGE IS HOLDING NOW, READ OFF THE WIRE — never from an accessor the test
+ * asked the bridge for.**
+ *
+ * A helper that handed the test the bridge's own map would pass just as well if the token never
+ * reached the payload at all, which is the defect class (`0f54e00d`) this whole feature is
+ * downstream of. So the test reads what the page reads.
+ *
+ * ⚠ **WHICHEVER COMMAND CARRIED IT LAST, and that is not a convenience.** Two commands can
+ * carry a token — the `CG ADD` that builds a page, and the pre-PLAY `CG UPDATE` that refreshes
+ * a RESIDENT one — and the page takes the last writer, because that is the run it is about to
+ * play. Reading only the ADD is how the first draft of this file went red: `load()` ADDs, then
+ * `take()` finds the producer already resident and refreshes, so the ADD's token is superseded
+ * before the graphic is ever on air.
+ */
+function currentToken(lines: readonly string[]): string | undefined {
+  const carriers = linesMatching(lines, /^CG 1-10 (ADD|UPDATE) /);
+  for (let i = carriers.length - 1; i >= 0; i--) {
+    const take = controlOf(carriers[i] as string)?.take;
+    if (take !== undefined) return take;
+  }
+  return undefined;
+}
+
+/** The token on the last `CG ADD` specifically — for the cases about the LOAD payload. */
+function tokenFromAdd(lines: readonly string[]): string | undefined {
+  const add = linesMatching(lines, /^CG 1-10 ADD /).at(-1);
+  return add === undefined ? undefined : controlOf(add)?.take;
 }
 
 async function onAir(): Promise<{ r: CasparRuntime; url: string; auditFile: string }> {
@@ -190,6 +211,9 @@ async function auditRows(file: string, atLeast: number): Promise<AuditEntry[]> {
 describe('SELF-STOP-24 §2.3 — a completion report stops the row it names', () => {
   it('the load payload carries a take token', { timeout: 60_000 }, async () => {
     await onAir();
+    // Deliberately `tokenFromAdd`, not `currentToken`: this case is about the LOAD payload
+    // specifically. The take that follows supersedes it, which is a different claim and has
+    // its own case below.
     expect(tokenFromAdd(await wire()), 'the ADD carried no take token').toMatch(/^[0-9a-f]{32}$/);
   });
 
@@ -198,7 +222,7 @@ describe('SELF-STOP-24 §2.3 — a completion report stops the row it names', ()
     { timeout: 60_000 },
     async () => {
       const { r, url } = await onAir();
-      const take = tokenFromAdd(await wire());
+      const take = currentToken(await wire());
       expect(take, 'no token — the rest of this case proves nothing').toBeDefined();
 
       expect(await report(url, take as string)).toBe(204);
@@ -233,7 +257,7 @@ describe('SELF-STOP-24 §2.3 — a completion report stops the row it names', ()
       // The primary's page and the backup's page are the SAME page, fetched from the same URL,
       // so both report the same run. The token is spent on first use.
       const { url } = await onAir();
-      const take = tokenFromAdd(await wire()) as string;
+      const take = currentToken(await wire()) as string;
 
       const first = await report(url, take);
       const second = await report(url, take);
@@ -250,7 +274,7 @@ describe('SELF-STOP-24 §2.3 — a completion report stops the row it names', ()
     { timeout: 60_000 },
     async () => {
       const { r, url } = await onAir();
-      const take = tokenFromAdd(await wire()) as string;
+      const take = currentToken(await wire()) as string;
 
       expect((await r.stopItem('item1')).accepted).toBe(true);
       await settleWire(/^CG 1-10 STOP/, 1);
@@ -266,7 +290,7 @@ describe('SELF-STOP-24 §2.3 — a completion report stops the row it names', ()
 
   it('a report arriving after the row was taken OUT is ignored', { timeout: 60_000 }, async () => {
     const { r, url } = await onAir();
-    const take = tokenFromAdd(await wire()) as string;
+    const take = currentToken(await wire()) as string;
 
     expect((await r.out('item1')).accepted).toBe(true);
     await delay(150);
@@ -277,11 +301,98 @@ describe('SELF-STOP-24 §2.3 — a completion report stops the row it names', ()
   });
 
   it(
+    'a RE-TAKE of a resident producer is told a NEW token before the play',
+    { timeout: 60_000 },
+    async () => {
+      /*
+        🔴 **THE CASE THE WHOLE REFRESH EXISTS FOR.** A take of a still-resident producer sends
+        NO `CG ADD` — the page is the same page, which is exactly what makes `C-012`'s resume
+        instant. So without a refresh the second run would inherit the first run's token, and a
+        report from the run that FINISHED would stop the run that had just started.
+      */
+      const { r } = await onAir();
+      const first = currentToken(await wire());
+      expect(first, 'no token on the load — this case proves nothing').toBeDefined();
+
+      expect((await r.stopItem('item1')).accepted).toBe(true);
+      await settleWire(/^CG 1-10 STOP/, 1);
+      const addsBefore = linesMatching(await wire(), /^CG 1-10 ADD /).length;
+
+      expect((await r.take('item1')).accepted).toBe(true);
+      const after = await wire();
+
+      expect(
+        linesMatching(after, /^CG 1-10 ADD /),
+        'the re-take re-ADDed — this is not the resident path',
+      ).toHaveLength(addsBefore);
+      const second = currentToken(after);
+      expect(
+        linesMatching(after, /^CG 1-10 UPDATE /).length,
+        'no pre-PLAY UPDATE was sent at all',
+      ).toBeGreaterThan(0);
+      expect(second, 'the resident take told the page no token').toMatch(/^[0-9a-f]{32}$/);
+      expect(second, 'the re-take reused the finished run token').not.toBe(first);
+    },
+  );
+
+  it(
+    'a report carrying the PREVIOUS take token after a re-take is IGNORED',
+    { timeout: 60_000 },
+    async () => {
+      const { r, url } = await onAir();
+      const stale = currentToken(await wire()) as string;
+
+      expect((await r.stopItem('item1')).accepted).toBe(true);
+      await settleWire(/^CG 1-10 STOP/, 1);
+      expect((await r.take('item1')).accepted).toBe(true);
+      const stopsBefore = linesMatching(await wire(), /^CG 1-10 STOP/).length;
+
+      expect(await report(url, stale), 'a finished run stopped a newer one').toBe(404);
+      await delay(200);
+
+      expect(linesMatching(await wire(), /^CG 1-10 STOP/)).toHaveLength(stopsBefore);
+    },
+  );
+
+  it('and the NEW token stops the second run', { timeout: 60_000 }, async () => {
+    // The positive control for the case above: the refresh must not merely invalidate the old
+    // token, it must arm the new run. Without this, "nothing happened" would be satisfied by a
+    // completion channel that had quietly stopped working.
+    const { r, url } = await onAir();
+    expect((await r.stopItem('item1')).accepted).toBe(true);
+    await settleWire(/^CG 1-10 STOP/, 1);
+    expect((await r.take('item1')).accepted).toBe(true);
+    const fresh = currentToken(await wire()) as string;
+    const stopsBefore = linesMatching(await wire(), /^CG 1-10 STOP/).length;
+
+    expect(await report(url, fresh)).toBe(204);
+    await settleWire(/^CG 1-10 STOP/, stopsBefore + 1);
+
+    expect(linesMatching(await wire(), /^CG 1-10 STOP/)).toHaveLength(stopsBefore + 1);
+  });
+
+  it('a look-less template is told its token too', { timeout: 60_000 }, async () => {
+    // The tell used to be the LOOK tell, which only fires for a template that has looks. The
+    // fixture here declares none, so if the refresh were still gated on a look this row would
+    // come back from a re-take with no way to report its own completion.
+    const { r } = await onAir();
+    expect(TEMPLATE.liveSources, 'the fixture grew looks — this case proves nothing').toBe(
+      undefined,
+    );
+
+    expect((await r.stopItem('item1')).accepted).toBe(true);
+    await settleWire(/^CG 1-10 STOP/, 1);
+    expect((await r.take('item1')).accepted).toBe(true);
+
+    expect(currentToken(await wire())).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it(
     'the audit names the TEMPLATE as the actor, on the existing stop action',
     { timeout: 60_000 },
     async () => {
       const { url, auditFile } = await onAir();
-      const take = tokenFromAdd(await wire()) as string;
+      const take = currentToken(await wire()) as string;
 
       expect(await report(url, take)).toBe(204);
 

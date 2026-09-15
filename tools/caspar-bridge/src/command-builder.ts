@@ -188,6 +188,30 @@ export class CommandBuilder {
   }
 
   /**
+   * 🔴 `SELF-STOP-24` / `C-013` — **tell a RESIDENT page which take it is now running.**
+   *
+   * The third member of this family, and it exists for the one route into air that carries no
+   * payload of its own: a take of a producer that is still resident sends a bare `CG PLAY` and
+   * no `CG ADD` (`C-012`'s resume, which is the whole point of STOP leaving the producer). The
+   * page is therefore the SAME page, still holding the PREVIOUS run's token — and a report from
+   * the run that finished would stop the run that has just started.
+   *
+   * ⚠ **The look rides along rather than being sent separately.** `B-191` already tells a
+   * resident page its look at this exact moment, and two commands is two chances for them to
+   * land apart. When the row has no look — a template with none — this sends the token alone,
+   * which is the case the look tell could never cover because it was gated on having one.
+   *
+   * ⚠ A CONFIGURATION verb (golden rule 10): no `PLAY`, nothing seated, nothing un-muted. It
+   * changes what the graphic about to be played will REPORT, not what is on air.
+   */
+  updateTake(slot: CommandSlot, take: string, lookId?: string, fields: FieldValues = {}): string {
+    const control: CgControl = { take, ...(lookId !== undefined && { look: lookId }) };
+    return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
+      serialize(withCgControl(fields, control)),
+    )}`;
+  }
+
+  /**
    * C-012 — GRACEFUL stop: tell the template to run its own outro and leave the
    * producer RESIDENT on the layer.
    *

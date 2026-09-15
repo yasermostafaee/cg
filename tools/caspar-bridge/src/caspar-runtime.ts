@@ -3427,11 +3427,22 @@ export class CasparRuntime {
         than a take the operator was told did not happen while the wire had already moved. It
         is reported instead — the take says what is wrong with what it just did.
       */
-      const lookId = this.activeLookId(itemId);
-      if (lookId !== undefined) {
-        const told = await this.#tellPageLook(itemId, slot, lookId);
-        if (!told.ok) lookTellFailed = lookId;
-      }
+      /*
+        🔴 `SELF-STOP-24` — AND THE TAKE TOKEN IS REFRESHED IN THE SAME BREATH, WHICH IS WHY
+        THIS TELL IS NO LONGER GATED ON HAVING A LOOK.
+
+        The look half is unchanged and is `B-191`'s, above. What is new is that this branch —
+        the resident producer, no `CG ADD` — is the ONE route into air that carries no payload,
+        so it is the one place a page keeps the PREVIOUS run's token. A report from the run that
+        finished would then stop the run that had just started; `template-completion-stop`
+        measured exactly that before this line existed.
+
+        ⚠ **A look-less template needs the token as much as a look-bearing one does**, so the
+        tell is now unconditional. That is one extra `CG UPDATE` on the resident-take path for a
+        template with no looks — a configuration verb carrying no fields, seating nothing.
+      */
+      const told = await this.#tellPageTake(itemId, slot);
+      if (!told.ok && told.lookId !== undefined) lookTellFailed = told.lookId;
     }
 
     // R-022 — RE-ASSERT THE INTENDED VOLUME, UNCONDITIONALLY, ON EVERY TAKE.
@@ -5657,6 +5668,46 @@ export class CasparRuntime {
    * real CasparCG 403s it on an empty layer. A row whose producer was destroyed has no page to
    * tell, which is case 2 of {@link #recordActiveLook} and is handled by the caller.
    */
+  /**
+   * 🔴 `SELF-STOP-24` — mint this take's token and tell the RESIDENT page about it, carrying
+   * the row's look in the same command when it has one.
+   *
+   * ⚠ **THE MINT HAPPENS BEFORE THE SEND, AND THAT ORDER IS THE SAFE ONE.** Minting only on
+   * success would leave the map holding the PREVIOUS token — which the page also still holds —
+   * so a report from the finished run would match and stop the run that just started. Minting
+   * first means a failed tell leaves the page holding a token that names nothing: its reports
+   * are ignored, the row simply cannot self-stop this run, and that is exactly the documented
+   * degrade (`C-013`: "behaviour degrades to today's").
+   *
+   * ⚠ **A failed tell does NOT refuse the take** — the caller reports it instead, which is
+   * `B-191`'s rule for the look and is if anything clearer here: the graphic is mid-way to air,
+   * and a take the operator was told did not happen while the wire had already moved is a
+   * larger failure than a run that cannot report its own end.
+   */
+  async #tellPageTake(
+    itemId: string,
+    slot: CommandSlot,
+  ): Promise<{ ok: boolean; lookId?: string; errorCode?: string }> {
+    const lookId = this.activeLookId(itemId);
+    const take = this.#mintTakeToken(itemId);
+    const told = await this.#send(
+      this.#builder.updateTake(slot, take, lookId),
+      this.#nextSeq(),
+      'urgent',
+    );
+    if (!told.ok) {
+      return {
+        ok: false,
+        ...(lookId !== undefined && { lookId }),
+        ...(told.errorCode !== undefined && { errorCode: told.errorCode }),
+      };
+    }
+    // The look half's side effect, unchanged: `#activeLooks` names the look the page is
+    // punching at, and it becomes true the moment the page has been told.
+    if (lookId !== undefined) this.#recordActiveLook(itemId, lookId);
+    return { ok: true };
+  }
+
   async #tellPageLook(
     itemId: string,
     slot: CommandSlot,
