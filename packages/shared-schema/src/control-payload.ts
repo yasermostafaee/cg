@@ -67,6 +67,20 @@ export interface CgPlateFit {
   mode: LiveFitMode;
 }
 
+/**
+ * 🔴 `TIMING-WIRE-22` — the pass timing as it crosses to the page. Both members optional, and
+ * absent means "unchanged" rather than "default": a payload that mentions neither must leave a
+ * running loop alone.
+ *
+ * ⚠ `passes` is the OPERATOR'S quantity — remaining from now, `0` legal — not the template's
+ * authored total (`PlayoutObjectSchema.repeat`, which floors at 1). The two are different
+ * numbers that happen to share a name; see `StackItemTimingOverrideSchema` for why.
+ */
+export interface CgPassTiming {
+  passes?: number | 'infinite';
+  delayMs?: number;
+}
+
 /** Bridge→page control data. Every member optional: a payload may carry any subset. */
 export interface CgControl {
   /**
@@ -78,6 +92,26 @@ export interface CgControl {
    * changes nothing.
    */
   look?: string;
+  /**
+   * 🔴 `TIMING-WIRE-22` (a) — THE ROW'S LIVE PASS TIMING, carried to the page.
+   *
+   * The pass loop runs in the TEMPLATE'S OWN JS inside CasparCG's CEF, and no AMCP verb carries
+   * timing (the surface is ADD / PLAY / UPDATE / STOP / NEXT / CLEAR / MIXER). So the only road
+   * from the console to a running loop is this object, riding a `CG UPDATE` — which is exactly
+   * the extension this namespace was created for.
+   *
+   * The page hands it to `TemplateRuntime.setPassTiming`, which edits the running controller in
+   * place. It does NOT rebuild the scene: every other route to a playout knob goes through
+   * `scene-replace`, and on air that is a black frame in the middle of a live graphic.
+   *
+   * - `passes` — PASSES REMAINING FROM NOW. The pass on screen is not one of them; `0` means
+   *   "after this pass, go out" and still runs `mode`'s outro; `'infinite'` keeps it going.
+   * - `delayMs` — the gap BETWEEN passes, applying from the NEXT gap. Not `holdMs`.
+   *
+   * ⚠ Absent means "this payload says nothing about timing", never "reset it to the default".
+   * A template's update that carries no timing must leave a running count exactly where it is.
+   */
+  timing?: CgPassTiming;
   /*
     🔴 **`single-clock-look-switch` — `from` AND `plates` ARE GONE, and each for its own reason.**
 
@@ -132,7 +166,43 @@ export function readCgControl(payload: unknown): CgControl | undefined {
   // Unknown members are DROPPED rather than carried through, which is what lets a newer
   // bridge talk to an older page and the reverse: a payload from a build that still sends
   // `from` or `plates` is read for its `look` and the rest is ignored.
-  return { ...(typeof look === 'string' && look !== '' ? { look } : {}) };
+  return {
+    ...(typeof look === 'string' && look !== '' ? { look } : {}),
+    ...readPassTiming((raw as Record<string, unknown>)['timing']),
+  };
+}
+
+/**
+ * 🔴 `TIMING-WIRE-22` (a) — read the timing member, defensively, MEMBER BY MEMBER.
+ *
+ * Same standard as the rest of this file and for the same reason: this crosses AMCP from a
+ * process that may be a different build, and a page that throws inside `update()` takes the
+ * whole graphic off air. So every shape check is a drop, never a throw.
+ *
+ * ⚠ **A BAD MEMBER IS DROPPED ON ITS OWN, not with its sibling.** A malformed `delayMs` must not
+ * also discard a perfectly good `passes`: the operator asked for two more passes, and losing
+ * that because a gap arrived as a string would be a silent refusal of the half that mattered.
+ *
+ * ⚠ `passes` accepts `0` and rejects a negative or fractional count. That floor is the
+ * OPERATOR'S (`0` = "out after this pass"), deliberately not the authored total's floor of 1 —
+ * clamping a 0 up to 1 here would silently turn "go out" into "one more pass", which is the
+ * class of silent rewrite this tree has already paid for twice.
+ */
+function readPassTiming(raw: unknown): { timing?: CgPassTiming } {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const r = raw as Record<string, unknown>;
+  const passes = r['passes'];
+  const delayMs = r['delayMs'];
+  const timing: CgPassTiming = {
+    ...(passes === 'infinite' ||
+    (typeof passes === 'number' && Number.isInteger(passes) && passes >= 0)
+      ? { passes: passes as number | 'infinite' }
+      : {}),
+    ...(typeof delayMs === 'number' && Number.isFinite(delayMs) && delayMs >= 0 ? { delayMs } : {}),
+  };
+  // An EMPTY timing object is not returned: a reader cannot tell "no timing" from "timing
+  // saying nothing", and the second would be read as a change when it is not one.
+  return Object.keys(timing).length === 0 ? {} : { timing };
 }
 
 /**

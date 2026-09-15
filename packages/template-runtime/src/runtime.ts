@@ -1934,6 +1934,29 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const rootSub = wireScopeSubtree(built.scopeTree, '', true);
   const rootNode = rootSub.node;
 
+  /**
+   * 🔴 `TIMING-WIRE-22` — THE ONE PLACE a live pass-timing change is applied.
+   *
+   * Two callers reach it and they must never diverge: the public `setPassTiming` (the Designer
+   * preview, tests) and `update()`'s `__cg.timing` member (the console, through `CG UPDATE` —
+   * the only road to a loop running inside CEF). A second copy is how the wire and the API come
+   * to disagree about what a count means (golden rule 6).
+   *
+   * ⚠ DELAY BEFORE PASSES, and the order is not arbitrary. `setRemainingPasses(0)` during a gap
+   * settles the graphic; doing that first would leave a delay write landing on a controller that
+   * has just finished, which is a write nobody can observe. Setting the gap first means the
+   * value is in place for whatever the count then decides.
+   *
+   * ⚠ ROOT ONLY — deliberately not cascaded. `markFinalCycle` cascades because a parent's exit
+   * must end its children's; a TIMING configuration is the row's own, and pushing a count into
+   * every nested instance would silently re-time furniture the operator never addressed.
+   */
+  const applyPassTiming = (timing: { passes?: number | 'infinite'; delayMs?: number }): void => {
+    if (machine.state === 'removed') return;
+    if (timing.delayMs !== undefined) rootNode.controller.setDelayMs(timing.delayMs);
+    if (timing.passes !== undefined) rootNode.controller.setRemainingPasses(timing.passes);
+  };
+
   applyScopedFieldValues(scene, scene, {}, built.scopeTree);
 
   // D-026 — every scope (the root scene + each nested instance) owns its animated
@@ -2446,11 +2469,7 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
      * addressed.
      */
     setPassTiming(timing: { passes?: number | 'infinite'; delayMs?: number }): void {
-      if (machine.state === 'removed') return;
-      // The delay is read fresh at every pass boundary, so writing it here is all that is
-      // needed for "takes effect from the NEXT pass, never disturbs the running one".
-      if (timing.delayMs !== undefined) rootNode.controller.setDelayMs(timing.delayMs);
-      if (timing.passes !== undefined) rootNode.controller.setRemainingPasses(timing.passes);
+      applyPassTiming(timing);
     },
 
     setActiveLook(lookId: string): boolean {
@@ -2497,6 +2516,24 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       if (control?.look === undefined || !enterLook(control.look)) {
         repunch(arrangementView);
       }
+      /*
+        🔴 `TIMING-WIRE-22` (b) — THE ROW'S LIVE PASS TIMING, applied to the RUNNING controller.
+
+        This is the far end of the only road from the console to a running loop: the pass loop
+        lives in this page's own JS inside CEF, and no AMCP verb carries timing, so a `CG UPDATE`
+        with a `__cg.timing` member is the whole mechanism.
+
+        ⚠ AFTER the field values and AFTER the look, deliberately. A timing change is a
+        CONFIGURATION verb (golden rule 10): it must not race the content the same payload
+        carries, and applying it last means the graphic the new count applies to is the graphic
+        this update just produced.
+
+        ⚠ ABSENT MEANS UNCHANGED. An ordinary field update carries no `timing` and must leave a
+        running count exactly where it is — `setPassTiming` is not called at all in that case,
+        rather than called with defaults, because "no opinion" and "reset to the template's
+        value" are different instructions and only one of them was given.
+      */
+      if (control?.timing !== undefined) applyPassTiming(control.timing);
       bus.emit('update');
     },
 
