@@ -690,6 +690,33 @@ specs; engine docs cover "how it's built".
 
 ## Design system — interactive controls
 
+- 🔴 **AN OPERATOR SURFACE CARRIES NO EXPLANATORY PROSE.** Labels, values, state
+  facts and refusal sentences — nothing else. A sentence explaining how a feature
+  works is read once, never again, and then occupies the space a real message
+  needs; explanation lives in the docs and in training, and the long form of a
+  word lives in its `title` at most. Golden rules 11 (the operator's words) and
+  13 (who owns a setting) still apply on top of this — it narrows what may be
+  said, not who owns what. Measured instance: the Timing section shipped with five
+  such lines, and `TIMING-WIRE-22 · DELTA B2` removed them. ⭐ Pin the rule as an
+  ABSENCE where you apply it — that is the direction it regresses in: the next
+  person adds one helpful line and nothing fails.
+- 🔴 **A NEW CONTROL REUSES THE SHARED PRIMITIVES WITH NO LOCAL STYLING.** No
+  `style` prop on a control, no raw `<input>`/`<button>`/`<select>` in a feature,
+  and no second copy of a treatment that already has a declaration — name your
+  surface in the existing selector instead. A feature must not need its controls
+  restyled to look like the rest of the console. ⚠ And a class the stylesheet
+  never declares is the silent form of the same defect: `TimingSection` invented
+  `cg-fact`, no rule existed, and the two facts rendered as bare text beside a
+  panel of chips — green in every gate, wrong on screen (golden rule 12).
+  ⚠ **HOW MUCH OF THIS A LINT RULE ACTUALLY CATCHES, stated so nobody trusts a
+  guard that is not there.** `<button>` and `<select>` outside `renderer/ui/` are
+  refused by `no-restricted-syntax` — **in the DESIGNER only**
+  (`apps/designer/eslint.config.mjs`); the Runtime has the same config shape and
+  not that rule. Raw `<input>` and a `style` prop on a control are caught by
+  NOTHING, in either app. `DELTA B3` was to widen it and stopped on its own
+  threshold: the widened rule finds **32 raw `<input>` sites across 14 files** in
+  the Runtime renderer, and a guard landed red is a guard the next session turns
+  off. Until that debt is paid this bullet is a REVIEW rule, not a mechanical one.
 - Components are styled with `renderer/theme.ts` + vanilla-extract (the app's
   real design system). `@cg/ui` is **tokens-only** — do NOT add components
   there or change the palette.
