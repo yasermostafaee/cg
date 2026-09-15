@@ -127,13 +127,38 @@ the controller) and now means `'infinite'`, stated once in the schema. A mode na
 `playout.repeat`, so this affects every loop-cycle composition authored before that
 date. Owner-decided, on test data, with no migration.
 
-**Still NOT built — the console's own timing section and the wire beneath it.** The
-pass loop runs inside the template's JS in CasparCG's CEF, no AMCP verb carries
-timing, and the only mid-air channel is `CG UPDATE`'s `__cg` control object. So a
-console control needs a new `__cg` member, the page's update handler routed to
-`setPassTiming`, a per-row IPC channel gated by `#ownsLiveSeats`, and the bridge's
-retention re-apply. Until that exists, a console control would set a value that never
-reached air — which is worse than no control.
+**The console's timing section and the wire beneath it are BUILT** (`TIMING-WIRE-22`,
+2026-09-15). The pass loop runs inside the template's JS in CasparCG's CEF and no AMCP
+verb carries timing, so the road is `CG UPDATE`'s `__cg` control object: a `timing`
+member on it, the page's update handler routed to `setPassTiming`, a
+`stack.set-pass-timing` channel gated by `#ownsLiveSeats`, the bridge's restore
+re-apply (including a tell to an ADOPTED page, whose producer never rebuilt), and the
+publisher fast-path. The section states `mode`/`hold` as `Tag` facts and offers passes
+and gap as controls that name what they inherit.
+
+⚠ **Two corrections are recorded here because both were guesses that read as correct.**
+
+1. **The row's timing is NOT the scene root's.** Every real template has `layers: []`
+   and a set `entryCompositionId`, so `playoutOf(scene)` answers `static` for all of
+   them. Reading the root made the console state `Static` for every template and offer
+   no control, while the runtime's root-only apply early-returned on a non-cyclic
+   controller — the road was dead at both ends, with green tests. `templateTimingOf`
+   resolves the ENTRY composition for what the row does and the first LOOPING scope for
+   the count and gap an override inherits; `applyPassTiming` reaches every scope that
+   actually loops. **A screenshot caught this, not a test.**
+2. **"Does this template loop" is its own bit**, not `repeat !== undefined`. A scope can
+   be `loop-cycle` with no authored count — the common case, since the Designer never
+   wrote `playout.repeat` before `TIMING-BUILD-21` — so deriving it from `repeat` hides
+   the controls on exactly the templates that need them.
+
+🔴 **STILL NEEDS A REAL SERVER, and it is one check.** Everything above is proven either
+side of the CEF boundary — the bridge composes and sends the right `CG UPDATE` (asserted
+on the AMCP trace), and a real `TemplateRuntime` given that payload changes its loop
+without restarting. What no mock can prove is the JOIN: that those bytes survive
+CasparCG's `CG UPDATE` path into the page's `window.update` intact. **The plant
+walkthrough must add: take a looping template, set passes to 2 on air, and watch that the
+pass on screen finishes uninterrupted, exactly two more play, and it goes out —
+no restart, no cut, no jump to frame one.**
 
 The decisions this feature inherits, settled before it was built and unchanged by
 building it:
