@@ -1,6 +1,7 @@
 import * as http from 'node:http';
 import type * as net from 'node:net';
 import * as os from 'node:os';
+import { TEMPLATE_COMPLETE_PATH } from '@cg/shared-schema';
 
 /** Where/how the template HTTP server binds + the host CasparCG uses to reach it. */
 export interface TemplateServeOptions {
@@ -26,6 +27,17 @@ export interface TemplateServeOverride {
  * bounded (the B-064 requirement) without severing legitimate fetches.
  */
 const STOP_GRACE_MS = 500;
+
+/**
+ * `SELF-STOP-24` — the completion body's hard ceiling.
+ *
+ * A report is `{"take":"<32 hex>"}` — about 45 bytes. Anything appreciably larger is not one,
+ * and READING IT TO FIND THAT OUT is the whole of the exposure: this route answers on an
+ * interface that is routable whenever a remote CasparCG is configured, so an unbounded read is
+ * an unbounded allocation reachable by anyone on the LAN. The bound is generous enough that a
+ * longer token or an extra member could never trip it, and small enough that nothing is stored.
+ */
+const MAX_COMPLETE_BODY = 1024;
 
 /** True for loopback CasparCG hosts → serve loopback, no LAN exposure. */
 export function isLoopbackHost(host: string): boolean {
@@ -186,8 +198,30 @@ export class TemplateHttpServer {
    */
   readonly #busy = new Set<net.Socket>();
 
-  constructor(getHtml: (templateId: string) => string | null) {
+  /**
+   * 🔴 `SELF-STOP-24` / `C-013` — **WHO DECIDES WHETHER A COMPLETION REPORT IS LIVE.**
+   *
+   * Injected, like `getHtml`, and for the same reason: this server holds no template state and
+   * it holds no take state either. It knows how to parse a report and nothing about what a
+   * token means — the bridge answers that, because the bridge is where the ledger, the row's
+   * air status and the stop path all already live.
+   *
+   * Returns `true` when the token named a LIVE take and the stop was started. The stop itself is
+   * asynchronous and is NOT awaited here: the page never reads this answer (see
+   * `completion-ping.ts`), so holding the socket open for an AMCP round trip would buy nothing
+   * and would put a template's fetch inside the `#busy` set that `stop()` waits on.
+   *
+   * Absent ⇒ the route does not exist. Every pre-existing construction site passes one argument
+   * and must keep behaving exactly as it did.
+   */
+  readonly #onComplete: ((take: string) => boolean) | undefined;
+
+  constructor(
+    getHtml: (templateId: string) => string | null,
+    onComplete?: (take: string) => boolean,
+  ) {
     this.#getHtml = getHtml;
+    this.#onComplete = onComplete;
   }
 
   /** Start listening. Idempotent — a second call resolves without rebinding. */
@@ -233,6 +267,15 @@ export class TemplateHttpServer {
 
   #handle(req: http.IncomingMessage, res: http.ServerResponse): void {
     const path = (req.url ?? '/').split('?')[0] ?? '/';
+    /*
+      🔴 `SELF-STOP-24` — the completion report. BEFORE the template match because it is a
+      different verb on a different path and there is nothing to share; after it would only
+      make the common `GET` pay for a comparison it can never match.
+    */
+    if (path === TEMPLATE_COMPLETE_PATH) {
+      this.#handleComplete(req, res);
+      return;
+    }
     const match = /^\/template\/([^/]+)$/.exec(path);
     if (match !== null) {
       const id = decodeURIComponent(match[1] ?? '');
@@ -248,6 +291,94 @@ export class TemplateHttpServer {
     }
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('not found');
+  }
+
+  /**
+   * 🔴 `SELF-STOP-24` §2.2 — read one completion report, or refuse it.
+   *
+   * **EVERY refusal is the same `404` with no side effect**, which is the answer an unknown
+   * template id already gets. A `400` would distinguish "you asked badly" from "that does not
+   * exist", and the only party that difference helps is one probing the route.
+   *
+   * ⚠ **The rejection is LOGGED and never acted on.** A stale report is the expected case on a
+   * mirrored plant — the backup's copy of the page reports the same run the primary already
+   * did — so this is not an alarm. It is the line that answers "why did that row not come off
+   * air" at 03:00, which is the one question the record could not answer before `C-013`.
+   */
+  #handleComplete(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const refuse = (why: string): void => {
+      process.stderr.write(`[caspar-bridge] template completion refused (${why})\n`);
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('not found');
+    };
+    if (this.#onComplete === undefined) {
+      // No handler wired: the route does not exist for this server. Silent — a bridge built
+      // without one is not misconfigured, it is a unit-test fixture.
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('not found');
+      return;
+    }
+    if (req.method !== 'POST') {
+      refuse(`method ${req.method ?? 'none'}`);
+      return;
+    }
+    let body = '';
+    let overflowed = false;
+    req.setEncoding('utf-8');
+    req.on('data', (chunk: string) => {
+      if (overflowed) return;
+      body += chunk;
+      if (body.length > MAX_COMPLETE_BODY) {
+        /*
+          ⚠ **STOP ACCUMULATING, ANSWER, AND DRAIN — do NOT `destroy()` the request.**
+
+          The bound being defended is MEMORY, and dropping the buffer is the whole of it: what
+          follows is read and discarded in constant space. Destroying instead resets the
+          connection, and the reset RACES the 404 down the same socket — the client sees
+          `ECONNRESET` instead of the answer roughly half the time, which is an intermittent
+          failure invented to defend against nothing. (Measured here, not reasoned about: the
+          first spelling of this branch destroyed, and the test for it failed on the reset.)
+        */
+        overflowed = true;
+        body = '';
+        refuse('body too large');
+        req.resume();
+      }
+    });
+    req.on('end', () => {
+      if (overflowed) return;
+      let take: unknown;
+      try {
+        const parsed: unknown = JSON.parse(body);
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          refuse('body is not an object');
+          return;
+        }
+        take = (parsed as Record<string, unknown>)['take'];
+      } catch {
+        refuse('body is not JSON');
+        return;
+      }
+      if (typeof take !== 'string' || take === '') {
+        refuse('no take token');
+        return;
+      }
+      let accepted = false;
+      try {
+        accepted = this.#onComplete?.(take) ?? false;
+      } catch (err) {
+        // A throw from the bridge is not the page's problem, but an unanswered request is a
+        // socket `stop()` waits on — so it is answered, and the reason is kept.
+        refuse(`handler threw: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+      if (!accepted) {
+        refuse('token names no live take');
+        return;
+      }
+      res.writeHead(204);
+      res.end();
+    });
   }
 
   /** Whether the server is bound and serving. */
