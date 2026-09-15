@@ -3002,32 +3002,34 @@ export class CasparRuntime {
         this.#restoreBlocked.delete(itemId);
         this.#adopted.add(adoptionKey(slot));
         /*
-          🔴 `TIMING-WIRE-22` (d) — TELL AN ADOPTED PAGE ITS PASS TIMING. The half of the
-          restore that the map alone does not deliver, and the only branch that needs it.
+          🔴 `TIMING-WIRE-22 · DELTA A1` — **NOTHING IS TOLD TO AN ADOPTED PAGE, AND A TELL HERE
+          WOULD CORRUPT THE COUNT.** This branch briefly HAD one; it is gone, and the reason is
+          worth the paragraph because the argument for adding it sounds right.
 
-          This producer SURVIVED, so the page never rebuilt: its controller is still running on
-          the count it snapshotted at `play()`, which is the template's AUTHORED `repeat`. The
-          operator's override lived in the process that just died and came back through
-          retention — so without this line the row publishes "2 passes" while the picture loops
-          forever, and every surface reports it as normal. Stored value and live behaviour
-          disagreeing is the worst outcome this feature has.
+          `passes` is RELATIVE — "remaining FROM NOW" — so it is an INSTRUCTION, and instructions
+          are not idempotent. Re-sending the stored `2` to a page that has already run one of its
+          two gives the operator two more instead of one
+          (`packages/template-runtime/tests/pass-count-is-relative.test.ts` pins that arithmetic).
 
-          The RE-ADD branch below needs nothing: `#sendAdd` carries the timing into the fresh
-          build through its control payload.
+          ⚠ **AND THE STATE THE TELL WAS WRITTEN FOR CANNOT ARISE.** Only `isRestorable` states
+          reach this branch — `on-air` or `loaded`:
 
-          ⚠ Best-effort and deliberately NOT awaited into the decision: a page that cannot be
-          reached is already a row in trouble, and blocking the restore sweep on one `CG UPDATE`
-          would hold up every other row's decision behind it. The intent is already recorded
-          (it came from retention), so the next take carries it regardless.
+            - `on-air` — `#ownsLiveSeats` is true, so an accepted set REACHED this producer and
+              the page holds it. A tell re-arms.
+            - `loaded` — the gate recorded without sending, so the page really does lack it; but
+              it has not `play()`ed, and `play()` snapshots `repeatOf(playout)` over anything set
+              beforehand. A tell would be discarded by the take seconds later.
+
+          So there is no adopted state a tell helps and one it corrupts. What the restore carries
+          is the MAP — the bridge's own record, re-applied above — which is what the console reads
+          and what `#sendAdd` gives a REBUILT page.
+
+          ⭐ The RE-ADD branch below keeps its carrier and is the opposite case: a rebuilt page
+          starts over by definition, so the ADD payload is the only thing that could tell it.
+          ⚠ What that payload then DOES is `DELTA A3`'s finding, unfixed and filed: `CG ADD … 0
+          <data>` reaches the page through `update()`, and the `CG PLAY` that follows resets
+          `cyclesLeft` from the authored `repeat`, discarding it.
         */
-        const adoptedTiming = this.#passTimings.get(itemId);
-        if (adoptedTiming !== undefined) {
-          void this.#send(
-            this.#builder.updatePassTiming(slot, CasparRuntime.#wireTiming(adoptedTiming)),
-            this.#nextSeq(),
-            'normal',
-          );
-        }
         continue;
       }
 
