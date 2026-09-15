@@ -196,6 +196,60 @@ it('(c) an unknown item is refused with an EXISTING reason, and records nothing'
   expect(res.reason, 'no new refusal condition may be invented').toBe('unknown-item');
 });
 
+it('🔴 (d) a restore RE-APPLIES the value — both halves, and the second is the point', async () => {
+  /*
+    §3, stated exactly: this is NOT "the value survives a restart" — the schema already proves
+    that. It is that the value is re-applied to the template NOW RUNNING.
+
+    The two halves are asserted separately because they fail separately:
+
+      HALF 1 — the intent comes back. A restore that dropped it would leave the console showing
+      the template's authored count for a row the operator had changed.
+
+      HALF 2 — the row PUBLISHES it, which is what every surface reads. A restore that
+      repopulated the bridge's map without publishing would leave the console showing one number
+      while the bridge held another; that disagreement between stored value and live behaviour
+      is the worst outcome available to this feature.
+  */
+  const r = await boot();
+
+  await r.restore([
+    {
+      itemId: 'item-1',
+      templateId: 'looper',
+      fields: {},
+      state: 'on-air',
+      slot: { channel: 1, layer: 110, server: 'primary' },
+      timingOverride: { repeat: 2, delayMs: 1500 },
+    },
+  ]);
+
+  const published = r.stackSnapshot().find((i) => i.itemId === 'item-1');
+  expect(published, 'the row did not come back at all').toBeDefined();
+  expect(
+    published?.timingOverride,
+    'the restored row lost the operator’s count — stored and live now disagree',
+  ).toEqual({ repeat: 2, delayMs: 1500 });
+});
+
+it('(d) a restore with NO override recorded comes back inheriting, not zeroed', async () => {
+  // ABSENT means inheriting, which is a third state. A restore that supplied a default here
+  // would silently author a count on every row that predates the field.
+  const r = await boot();
+
+  await r.restore([
+    {
+      itemId: 'item-1',
+      templateId: 'looper',
+      fields: {},
+      state: 'on-air',
+      slot: { channel: 1, layer: 110, server: 'primary' },
+    },
+  ]);
+
+  expect(r.stackSnapshot().find((i) => i.itemId === 'item-1')?.timingOverride).toBeUndefined();
+});
+
 it('(d) a FRESH BUILD carries the recorded count into its ADD payload', async () => {
   /*
     The re-ADD half of the restore, reached by the ordinary route rather than by staging a
