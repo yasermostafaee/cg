@@ -185,9 +185,14 @@ restarting. What no mock can prove is the JOIN: that those bytes survive CasparC
 2. Take a looping template and **set passes to 2 on air** → the pass on screen finishes
    uninterrupted, exactly two more play, then it goes out — no restart, no cut, no jump to
    frame one.
-3. **Read the ROW after the last pass**, and read the section's text. The row is expected to
-   still claim ON AIR (`C-013` / `C-017`, both open — this control makes that latent defect
-   routine), and the section should say what was SENT, not a live count.
+3. **Read the ROW after the last pass**, and read the section's text. ⚠ **AMENDED 2026-09-15 —
+   this step used to expect the row to STILL CLAIM ON AIR**, on the ground that `C-013` and
+   `C-017` were both open. They are not: `SELF-STOP-24` built the completion channel, so on a
+   RE-IMPORTED template the row is now expected to stop reading ON AIR by itself within about a
+   second of the last pass's outro, and to rest READY with a PLAY that resumes instantly. A row
+   that still claims ON AIR here means either the template was not re-imported (step 1) or the
+   page's report never arrived — see the checks below for how to tell those apart. The section
+   should still say what was SENT, not a live count (that half is `C-035`, filed and not built).
 4. **Repeat, restarting the BRIDGE after the first extra pass** → exactly ONE more plays.
    Two would mean a restore re-armed a relative count.
 5. **A template imported before this build** shows `Timing controls appear after this
@@ -352,12 +357,47 @@ without strong justification. This decision is that justification, and the relax
 narrowest one available — `connect-src 'self'`, same origin only — with the take token as the
 real guard: a page that was given no token opens nothing, whatever the policy permits.
 
-⚠ **And the line anchors in "Related PRD items" above have drifted.** `C-013` is at
-`docs/prd/caspar.md:304` and `C-017` at `:661` as of this date, not `:284` / `:641`. Both items
-do exist and both still read `⟨priority: medium⟩`, so that block's substantive claim holds —
-only its coordinates are stale.
+⚠ **And the "Related PRD items" block above is now stale in TWO ways, both of them this
+session's doing.** Its coordinates have drifted — `C-013` is at `docs/prd/caspar.md:304` and
+`C-017` at `:661`, not `:284` / `:641` — and, more importantly, **its statuses are no longer
+`[ ]` / `[ ]`.** `C-013` is `[~]`, building here; `C-017` carries the dated supersession of its
+terminal verb. Both still read `⟨priority: medium⟩`, so the priority half of that block holds.
+The block is left as written and corrected here rather than rewritten, because it is the record
+of what an earlier session measured.
 
 Built in `openspec/changes/template-signals-completion/`.
+
+### The plant checks this owes — WRITTEN DOWN, NOT DONE
+
+None of these can be performed off the plant, and the reason is specific rather than general:
+`fetch` from a served page **inside CasparCG's CEF** is the `B-066` class — verify, never
+assume. Everything upstream of that hop is measured (the CSP in a real engine, the page's
+emitter and reporter, the wire's `CG … STOP`, the console's row); the hop itself is not.
+
+🔴 **STEP 0, BEFORE ANY OF THE REST: RE-IMPORT EVERY TEMPLATE.** The page is baked at import
+(`C-034`), so a template imported before this build has a page that cannot report. Skipping
+this makes every check below fail for the wrong reason, and it is the same first step the
+timing walkthrough already carries.
+
+1. **A logo set to 2 passes.** After the second pass's outro the row stops reading ON AIR by
+   itself, within about a second. PLAY brings it back at once — no re-load, no visible rebuild.
+2. **A timed auto-out title.** The same.
+3. **A template whose authored run is finite.** The same. (Operator crawl passes are not built;
+   this is the template's own authored count.)
+4. **An infinite loop, and a `manual` graphic.** Neither ever stops itself, however long it is
+   left. This is the check that would catch a page reporting when it must not.
+5. **A manual STOP pressed just before the end.** ONE stop, no error toast, and the row lands
+   where a manual STOP always leaves it.
+6. **The bridge restarted mid-run.** Say what the row shows. Expected: the report is lost, so
+   the row goes on claiming ON AIR exactly as it did before this change — the fail-safe
+   direction, and never a blanked layer.
+7. **With the BACKUP server connected.** One stop, not two. Both servers run the same page from
+   the same URL, so both report; the token is spent on first use.
+
+⚠ **Read 1–3 against 6.** A row that does not stop has two possible causes — a page that never
+reported (the CEF hop, or a template not re-imported) and a report the bridge refused as stale.
+The bridge logs every refusal, so the audit and the bridge's stderr tell them apart; a silent
+row with nothing logged is the CEF hop.
 
 ## Alternatives considered
 

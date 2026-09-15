@@ -166,8 +166,13 @@ descendant and the ancestry was verified, not assumed.
 - [x] `R-063` (`docs/prd/runtime.md`) cross-referenced. ⚠ It stays `[x]` — it is a RECORDED
       DOCTRINE, not an implementation item, and flipping it to `[~]` would misrepresent it
       as unfinished.
-- [ ] `C-013` / `C-017` — the "row still claims ON AIR after the last pass" pair. This
-      control makes that state routine rather than rare.
+- [x] `C-013` / `C-017` — the "row still claims ON AIR after the last pass" pair. This
+      control makes that state routine rather than rare. ⚠ **AMENDED 2026-09-15 — the pair is
+      no longer a latent defect this feature makes routine; it is BUILT.** `SELF-STOP-24`
+      (`openspec/changes/template-signals-completion/`) added the completion channel out of
+      CEF, so a re-imported template that finishes stops its own row. `C-013` is `[~]`;
+      `C-017`'s same-origin ping half stands and its hard-CLEAR verb is superseded by STOP.
+      Ticked here because the cross-reference is discharged, not because this change built it.
 - [ ] `C-011` — persist the template registry. Its "keep the `.vcg` bytes" option and
       `C-034`'s "re-derive from what is kept" are opposite answers to one problem; only one
       should be built.

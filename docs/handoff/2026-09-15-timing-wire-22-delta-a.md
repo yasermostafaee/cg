@@ -64,6 +64,10 @@ through CasparCG is a plant measurement.
   latent defect routine, because it lets an operator make a looping template finite on
   purpose. Both still read `⟨priority: medium⟩`; `DELTA A4` states the owner raised them on
   2026-09-09, and no such note exists in `caspar.md`.
+  ⚠ **SUPERSEDED THE SAME DAY, by `SELF-STOP-24`** (`openspec/changes/template-signals-completion/`):
+  the completion channel out of CEF exists, so a RE-IMPORTED template that finishes now stops
+  its own row. The sentence above is kept as the record of what was true when this handoff was
+  written, which is what a handoff is for — but it is no longer a description of the tree.
 - **No OpenSpec change exists for `TIMING-BUILD-21` or `TIMING-WIRE-22`.** Both landed as
   direct commits, so there is no `tasks.md` to hold the e2e run URLs; they are in ADR 0009
   instead. The next session touching playout timing should open one and fold it in.
