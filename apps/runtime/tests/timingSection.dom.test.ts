@@ -165,6 +165,51 @@ describe('🔴 §4 — the count says what it will do in the state it is in', ()
   });
 });
 
+describe('🔴 DELTA A2 — on air the console states what it SENT, never a count it cannot see', () => {
+  /*
+    The pass counter lives in the page's controller inside CEF and NO return path carries it, so
+    the console can only ever know what it sent. A numeric placeholder under "Passes remaining"
+    is therefore a reading with a shelf life: one pass after "set 2" it still says 2 while ONE
+    remains, and after the count runs out it says 2 over a graphic that has gone. It decays with
+    nobody touching anything, which is the worst shape a false readout can have.
+  */
+  it('shows NO number in the box while on air', () => {
+    mount(row({ status: 'on-air', timingOverride: { repeat: 2 } }), template(LOOPS));
+    expect(
+      byLabel('Passes remaining')?.placeholder,
+      'a number here is a claim about the page that nothing backs',
+    ).toBe('');
+  });
+
+  it('states what was sent, as a fact about the past', () => {
+    mount(row({ status: 'on-air', timingOverride: { repeat: 2 } }), template(LOOPS));
+    const sent = host.querySelector('[data-testid="timing-passes-sent"]');
+    expect(sent?.textContent).toMatch(/^Sent 2 more/);
+  });
+
+  it('says so plainly when nothing has been sent this run', () => {
+    mount(row({ status: 'on-air' }), template(LOOPS));
+    expect(host.querySelector('[data-testid="timing-passes-sent"]')?.textContent).toMatch(
+      /Nothing sent this run/i,
+    );
+  });
+
+  it('spells infinite the one way', () => {
+    mount(row({ status: 'on-air', timingOverride: { repeat: 'infinite' } }), template(LOOPS));
+    expect(host.querySelector('[data-testid="timing-passes-sent"]')?.textContent).toMatch(
+      /^Sent ∞ more/,
+    );
+  });
+
+  it('OFF AIR the placeholder stays — that one IS a stored fact the console holds', () => {
+    // The asymmetry is the point: the next take's count is stored and knowable; a running
+    // page's remaining count is not.
+    mount(row({ status: 'idle', timingOverride: { repeat: 2 } }), template(LOOPS));
+    expect(byLabel('Passes next take')?.placeholder).toBe('2');
+    expect(host.querySelector('[data-testid="timing-passes-sent"]')).toBeNull();
+  });
+});
+
 describe('§4 — inheritance is SHOWN as inheritance', () => {
   it('names the inherited count rather than showing a bare value', () => {
     mount(row(), template({ ...LOOPS, repeat: 3 }));

@@ -90,7 +90,11 @@ export function TimingSection({
             reportCommandError(
               res.message ?? 'The timing change was not accepted. The row keeps the timing on air.',
             );
+            return;
           }
+          // `DELTA A2` — stamped only on ACCEPTANCE, so the line can never time a send the
+          // bridge refused. It is what this console did, and it is true from then on.
+          if (patch.passes !== undefined) recordSentPasses(item.itemId);
         },
         (err: unknown) => {
           reportCommandError(
@@ -132,6 +136,7 @@ export function TimingSection({
       {loops && (
         <>
           <PassesControl
+            itemId={item.itemId}
             onAir={onAir}
             busy={busy}
             authored={playout.repeat}
@@ -175,12 +180,14 @@ const passesWord = (v: number | 'infinite'): string => (v === 'infinite' ? '∞'
  * spelled here once each and chosen by `onAir`, never by a caller passing a string.
  */
 function PassesControl({
+  itemId,
   onAir,
   busy,
   authored,
   override,
   onCommit,
 }: {
+  itemId: string;
   onAir: boolean;
   busy: boolean;
   authored: number | 'infinite' | undefined;
@@ -199,6 +206,30 @@ function PassesControl({
   const help = onAir
     ? 'From now — the pass on screen is not counted. 0 goes out after it.'
     : 'The count this row will run when it is next taken.';
+  /*
+    🔴 `DELTA A2` — **ON AIR THE BOX SHOWS NO NUMBER, BECAUSE THE CONSOLE CANNOT SEE ONE.**
+
+    The pass counter lives in `PlayoutController.cyclesLeft`, inside the page, inside CEF. It is
+    carried by NO return path: swept for `cyclesLeft` / `passesLeft` / `remainingPasses` /
+    `passesRemaining` / `cycleCount` across `caspar-client`, `caspar-bridge`, `shared-ipc` and
+    the Runtime app and found in none of them, against a positive control of 15 files matching
+    `osc`. The console can only ever know what it SENT.
+
+    So a numeric placeholder under "Passes remaining" is a false reading with a shelf life: one
+    pass after "set 2" it still says 2 while ONE remains, and after the count runs out it still
+    says 2 over a graphic that has gone. That is precisely the belief this console exists to
+    prevent, and it decays on its own without anybody touching anything.
+
+    On air the box therefore carries no placeholder at all and a FACT LINE states what was sent
+    and when — a claim that stays true forever, because it is about the past. OFF AIR the
+    placeholder stays: the count for the next take is a STORED value the console really does
+    hold, so naming it (and naming what it inherits) is honest there.
+  */
+  const sent = onAir ? lastSentPasses(itemId) : undefined;
+  const sentLine =
+    override === undefined
+      ? 'Nothing sent this run — the template’s own count is running.'
+      : `Sent ${passesWord(override)} more${sent === undefined ? '' : ` · ${sent}`}`;
 
   return (
     <div style={styles.stack}>
@@ -219,8 +250,14 @@ function PassesControl({
           style={styles.num}
           aria-label={label}
           disabled={busy}
+          // ON AIR: no number — see the note above. OFF AIR: the stored count, naming what it
+          // inherits when the operator has set nothing.
           placeholder={
-            override === undefined ? `Default (${passesWord(inherited)})` : passesWord(shown)
+            onAir
+              ? ''
+              : override === undefined
+                ? `Default (${passesWord(inherited)})`
+                : passesWord(shown)
           }
           onBlur={(e) => {
             const raw = e.currentTarget.value;
@@ -253,9 +290,33 @@ function PassesControl({
           ∞
         </Button>
       </div>
+      {onAir && (
+        <p style={styles.hint} data-testid="timing-passes-sent">
+          {sentLine}
+        </p>
+      )}
       <p style={styles.hint}>{help}</p>
     </div>
   );
+}
+
+/**
+ * 🔴 `DELTA A2` — WHEN THIS BROWSER LAST SENT A PASS COUNT for an item, as a local clock time.
+ *
+ * Browser-local and deliberately NOT persisted or carried on the wire: the console is stating
+ * something it did itself, and the only honest source for "when" is the moment it happened here.
+ * A count set from ANOTHER console, or before this page was loaded, has no time this browser can
+ * know — so the line then says what was sent and simply omits the when, rather than inventing
+ * one from a republish (which would time the RECONCILE, not the operator's action).
+ */
+const sentAt = new Map<string, string>();
+
+function recordSentPasses(itemId: string): void {
+  sentAt.set(itemId, new Date().toLocaleTimeString());
+}
+
+function lastSentPasses(itemId: string): string | undefined {
+  return sentAt.get(itemId);
 }
 
 /** The gap between passes, in SECONDS on this surface — an operator thinks in seconds. */
