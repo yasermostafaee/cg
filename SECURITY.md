@@ -24,8 +24,18 @@ should be treated like signed software:
   where templates flow between teams or organizations.
 - Configure the Runtime to require signatures (`runtime.requireSignedTemplates: true`)
   for production playout chains.
-- Templates ship with CSP `connect-src 'none'`, blocking outbound network calls;
-  do not relax this without strong justification.
+- Templates ship with CSP `connect-src 'self'` — a template can reach the bridge that
+  served it, and no other destination. It was `'none'` (by falling back to
+  `default-src 'none'`) until 2026-09-15; the relaxation is the owner's decision recorded in
+  [ADR 0009](docs/adrs/0009-timing-setting-ownership.md) and built in
+  `openspec/changes/template-signals-completion/`, and it exists for exactly one message: a
+  template telling the bridge that its own run has finished, so the row stops claiming ON AIR
+  ([[C-013]]). **Do not widen it further without strong justification** — a host list or a
+  scheme wildcard is what "phoning home" means, and `'self'` is not.
+- **The narrow part is not the policy, it is the key.** A page opens no connection at all unless
+  the bridge handed it a per-take token inside the reserved `__cg` payload. A single-file
+  template dropped into CasparCG by hand, a template served by anything that is not this bridge,
+  and the Designer's own preview all receive no token and therefore never open a socket.
 
 ## Reporting a vulnerability
 

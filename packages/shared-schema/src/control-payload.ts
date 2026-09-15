@@ -49,6 +49,19 @@ import type { LiveFitMode } from './live-fit.js';
 export const CG_CONTROL_KEY = '__cg';
 
 /**
+ * 🔴 `SELF-STOP-24` / `C-013` — **the path a served page reports its own completion on.**
+ *
+ * It lives beside {@link CG_CONTROL_KEY} because it is the RETURN leg of the same channel: the
+ * bridge writes a take token into `__cg`, and the page posts that token back here. Two halves of
+ * one round trip, so they are declared together and neither side gets to spell it locally — a
+ * path written twice is a channel that works until somebody renames one end.
+ *
+ * Absolute, not relative: the served page lives at `/template/<id>`, so a relative `complete`
+ * would resolve to `/template/complete` and 404 forever, silently.
+ */
+export const TEMPLATE_COMPLETE_PATH = '/complete';
+
+/**
  * ⭐ `C-028` — **the two INSTALLATION facts one plate's fit depends on.**
  *
  * The page cannot know either. `aspect` comes from the ASSIGNED source through `D-147`'s
@@ -112,6 +125,31 @@ export interface CgControl {
    * A template's update that carries no timing must leave a running count exactly where it is.
    */
   timing?: CgPassTiming;
+  /**
+   * 🔴 `SELF-STOP-24` / `C-013` — **WHICH TAKE THIS PAGE IS CURRENTLY RUNNING.**
+   *
+   * The page reports its own completion back to the bridge, and a report has to name the TAKE.
+   * Naming the template or the layer is not enough: four different things would otherwise stop
+   * a run that had only just started —
+   *
+   *  1. a page from an OLDER take (an `out` destroyed the producer, a re-ADD built a new page);
+   *  2. a re-ADD from `setPosition`;
+   *  3. a RE-TAKE of a still-resident producer — `stop` then `PLAY`, the SAME page;
+   *  4. the BACKUP server's copy of the same page, which mirror-sync hands the SAME URL.
+   *
+   * (1) and (2) are handled by minting at the `CG ADD` chokepoint — a new page is a new token.
+   * (4) is handled by the bridge spending the token on first use. **(3) is why this member has
+   * to be REFRESHED and not merely issued**: the page is the same page, so a token that named
+   * only the page would let run 1's in-flight report stop run 2.
+   *
+   * ⚠ **It is the ARMING KEY as well as the name.** A page that was never given one opens no
+   * connection at all — which is what makes the served page's `connect-src 'self'` safe, and
+   * what keeps the manually-dropped single-file artifact (no origin to ping) silent by
+   * construction rather than by a check.
+   *
+   * Absent means "this payload says nothing about the take", never "forget the one you have".
+   */
+  take?: string;
   /*
     🔴 **`single-clock-look-switch` — `from` AND `plates` ARE GONE, and each for its own reason.**
 
@@ -163,11 +201,20 @@ export function readCgControl(payload: unknown): CgControl | undefined {
   const raw = (payload as Record<string, unknown>)[CG_CONTROL_KEY];
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
   const look = (raw as Record<string, unknown>)['look'];
+  const take = (raw as Record<string, unknown>)['take'];
   // Unknown members are DROPPED rather than carried through, which is what lets a newer
   // bridge talk to an older page and the reverse: a payload from a build that still sends
   // `from` or `plates` is read for its `look` and the rest is ignored.
   return {
     ...(typeof look === 'string' && look !== '' ? { look } : {}),
+    /*
+      `SELF-STOP-24` — the same shape test the look gets, and the empty-string rejection is
+      load-bearing rather than tidy: an empty token would ARM the page to report a take that
+      names nothing, so every run of every template would send one request the bridge could
+      only answer 404. Dropped on its own, never with a sibling — a malformed token must not
+      also discard a perfectly good count.
+    */
+    ...(typeof take === 'string' && take !== '' ? { take } : {}),
     ...readPassTiming((raw as Record<string, unknown>)['timing']),
   };
 }

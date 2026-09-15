@@ -45,6 +45,37 @@ export interface PlayoutControllerOptions {
   /** Fully settled hidden (outro finished). */
   onSettle: () => void;
   /**
+   * 🔴 `SELF-STOP-24` / `C-013` — THE RUN ENDED BY ITSELF, and nothing outside asked it to.
+   *
+   * Fired immediately BEFORE {@link onSettle}, from exactly the two places a lifecycle reaches
+   * its terminal without an external command:
+   *
+   *  - `onOutroEnd()` with no cycles left — the authored run is over;
+   *  - `setRemainingPasses(0)` during the between-passes gap — the count ran out and the pass
+   *    the operator declined never started.
+   *
+   * 🔴 **`stop()` DOES NOT FIRE IT, and that is the whole distinction this callback exists to
+   * draw.** {@link onSettle} cannot serve: every exit converges there, so a listener on it
+   * cannot tell a template that FINISHED from one that was TAKEN OFF. The bridge asked for the
+   * operator stop and does not need telling — and once a stale report is a thing that can stop
+   * a row, an unnecessary report is not merely noise.
+   *
+   * ⚠ The discriminator is read HERE rather than as an "an exit was requested" flag on the
+   * runtime. Such a flag would have to be set by `stop()`, `out()` and the deferred-outro
+   * resume, and cleared by `play()` — four sites that must agree, which is the shape this tree
+   * has paid for repeatedly. A controller already knows which of its own methods it is standing
+   * in.
+   *
+   * ⚠ `static`, `manual` and every infinite lifecycle never reach either site, so they never
+   * fire. That is a property of the control flow below rather than a guard anybody wrote — see
+   * `self-end-signal.test.ts`, which pins it as an ABSENCE precisely because nothing fails if a
+   * later edit gives them a way there.
+   *
+   * Absent ⇒ a silent no-op. Only the GLOBAL ROOT wires it: a nested instance settling is not
+   * the template finishing.
+   */
+  onSelfEnd?: (() => void) | undefined;
+  /**
    * D-028 / D-104 follow-up — fired once per cycle the moment the ENTRANCE animation
    * completes (the intro's settle frame — see `holdEntryFrame`), which is the start of
    * the hold. The runtime resets + starts the scope's content drivers (tickers / clocks
@@ -184,6 +215,22 @@ export class PlayoutController {
   // Reset by `play()` (via `reset()`); an infinite loop / manual hold / paused
   // scope is NOT settled, so it still exits on stop.
   private settled = false;
+  /*
+    🔴 `SELF-STOP-24` — DID SOMETHING OUTSIDE ASK FOR THIS EXIT?
+
+    Set by the two methods an external command reaches — `stop()` and `markFinalCycle()`,
+    which the runtime cascades from its own `stop()`/`out()` — and cleared by `reset()`, which
+    `play()` and `destroy()` already call. Read at ONE place: the guard on `onSelfEnd`.
+
+    🔴 **IT IS NOT REDUNDANT WITH THE TERMINAL BRANCH, and the test that proves it was written
+    before the code.** The reflex is that `onOutroEnd()`'s no-cycles-left branch IS the natural
+    end, so firing there is enough. It is not: `stop()` sets `cyclesLeft = 1` and plays the
+    outro, so the operator's exit arrives at that same branch with the same state and is
+    indistinguishable from a finite loop running out. Without this flag an operator STOP
+    announced itself as the template finishing — measured, not feared
+    (`self-end-signal.test.ts`).
+  */
+  private exitRequested = false;
   // D-125 §D6.2b — supersede token for the ASYNC element-outro gate: bumped by
   // `reset()` (play() / destroy()), so a gate resolution belonging to a superseded
   // exit can never start a stale background leg (B-031/B-033 territory).
@@ -234,6 +281,9 @@ export class PlayoutController {
    */
   stop(): void {
     if (this.settled) return; // already finished — don't replay the exit
+    // `SELF-STOP-24` — whatever this exit settles as, it was ASKED FOR. Set before every
+    // return below, including the gap short-circuit, which settles inline.
+    this.exitRequested = true;
     this.clearHold();
     // Force the current cycle to be the last, then play the outro once. An empty
     // outro (`outPoint === active.out`, e.g. no marker) settles instantly.
@@ -271,6 +321,11 @@ export class PlayoutController {
    */
   markFinalCycle(): void {
     if (this.settled) return;
+    // `SELF-STOP-24` — the runtime cascades this ONLY from its own `stop()`/`out()`, so it is
+    // an external exit request arriving one step ahead of the cascaded `stop()`. Marked here as
+    // well as there because the in-flight boundary it finalizes can settle on its own, reaching
+    // `onOutroEnd()`'s terminal branch before any `stop()` does.
+    this.exitRequested = true;
     this.cyclesLeft = 1;
   }
 
@@ -360,6 +415,15 @@ export class PlayoutController {
       this.phase = 'idle';
       this.settled = true;
       this.announceExit();
+      // 🔴 `SELF-STOP-24` — A SELF-END TOO, and the one that looks least like one.
+      //
+      // An operator typed the zero, so the reflex is to call this an operator exit. It is not:
+      // what they set is a COUNT, which is a configuration verb (golden rule 10), and the run
+      // then ended because the count ran out — exactly as it would have on its own had the
+      // author written the same number. The pass they declined never started, so nothing was
+      // interrupted. `stop()` is the operator ending a run that had passes left; this is a run
+      // with none.
+      this.o.onSelfEnd?.();
       this.o.onSettle();
       return;
     }
@@ -628,6 +692,12 @@ export class PlayoutController {
     this.phase = 'idle';
     this.settled = true;
     this.announceExit();
+    // 🔴 `SELF-STOP-24` — THE AUTHORED RUN IS OVER: an `auto-out` that reached its out-point,
+    // or the last pass of a finite loop. An infinite loop returned above at the `'infinite'`
+    // branch and never arrives here, which is why this needs no mode check of its own — but it
+    // DOES need the `exitRequested` guard, because a `stop()` reaches this same branch with
+    // this same state. See the field.
+    if (!this.exitRequested) this.o.onSelfEnd?.();
     this.o.onSettle();
   }
 
@@ -782,6 +852,9 @@ export class PlayoutController {
     this.paused = false;
     this.exitAnnounced = false;
     this.settled = false;
+    // `SELF-STOP-24` — a fresh run is not carrying the last one's exit. `reset()` is reached by
+    // `play()` and `destroy()`, which are the only two ways a controller starts over.
+    this.exitRequested = false;
     // D-125 §D6.2b — invalidate any in-flight element-outro gate and drop a deferred
     // background leg: after a reset (play()/destroy()) the old exit no longer owns
     // the scene, and its stale resolution must be inert.

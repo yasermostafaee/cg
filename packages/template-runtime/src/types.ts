@@ -26,6 +26,15 @@ export type LifecycleEvent =
   | 'play.start'
   | 'play.end'
   | 'update'
+  /**
+   * 🔴 `SELF-STOP-24` / `C-013` — the ROOT finished ON ITS OWN. Emitted once per run, before
+   * `stop.start`/`stop.end`, and NEVER for an exit that `stop()`, `out()` or `remove()` began.
+   *
+   * It exists because `stop.end` cannot answer the question: every exit converges there, so a
+   * listener on it cannot tell a template that FINISHED from one that was TAKEN OFF — and the
+   * whole of `C-013` is that distinction.
+   */
+  | 'self-end'
   | 'stop.start'
   | 'stop.end'
   | 'error';
@@ -36,8 +45,23 @@ export interface ErrorEvent {
   elementId?: string;
 }
 
+/**
+ * 🔴 `SELF-STOP-24` — what a `self-end` carries.
+ *
+ * `take` is the token the page was last given, which names the RUN that just ended. Absent when
+ * the page was never given one — a Designer preview, a single-file artifact dropped over
+ * `file://`, any host that is not this bridge.
+ *
+ * ⚠ **The event fires either way, and the absence is the reporter's problem rather than the
+ * runtime's.** Keeping "the lifecycle ended" separate from "there is somewhere to report it"
+ * is what lets the preview observe a self-end while opening no connection at all.
+ */
+export interface SelfEndEvent {
+  take?: string;
+}
+
 export type EventListener<E extends LifecycleEvent> = (
-  payload: E extends 'error' ? ErrorEvent : void,
+  payload: E extends 'error' ? ErrorEvent : E extends 'self-end' ? SelfEndEvent : void,
 ) => void;
 
 /**

@@ -693,6 +693,23 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
     bus.emit('stop.end');
   };
 
+  /*
+    🔴 `SELF-STOP-24` / `C-013` — **WHICH TAKE THIS PAGE IS RUNNING, as last told.**
+
+    Lifted from `__cg.take` on BOTH delivery doors and carried on the `self-end` event so a
+    report names the RUN that ended. `undefined` until something tells us, and `undefined` is a
+    real answer: a Designer preview and a single-file artifact over `file://` never receive one,
+    and the reporter opens no connection without it.
+
+    ⚠ **LAST WRITER WINS, and that is the re-take contract.** A take of a still-resident producer
+    sends no `CG ADD` — the page is the SAME page — so the bridge refreshes the token with a
+    pre-PLAY update. Overwriting is how run 2 stops naming run 1.
+
+    ⚠ It survives `play()`, deliberately. The bridge's refresh arrives BEFORE the play on the
+    resident path, and clearing it here would throw away the value that take just seated.
+  */
+  let takeToken: string | undefined;
+
   const noop = (): void => undefined;
   // Assigned once the wiring exists (the closure below fires long after). The
   // ROOT settling on its own (auto-out / finite loop-cycle / finite
@@ -1736,6 +1753,21 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
           applyContentGateAtFrame(frame);
         },
         onExitStart: isGlobalRoot ? rootOnExitStart : noop,
+        /*
+          🔴 `SELF-STOP-24` — THE GLOBAL ROOT ONLY.
+
+          A nested composition instance completing its own lifecycle is not the template
+          finishing: its parent is still on air, and the existing cascade already takes every
+          nested scope off with the root when the root does end. Wiring this per scope would
+          report a run as over while its graphic was still on screen.
+        */
+        ...(isGlobalRoot
+          ? {
+              onSelfEnd: (): void => {
+                bus.emit('self-end', { ...(takeToken !== undefined && { take: takeToken }) });
+              },
+            }
+          : {}),
         onSettle: isGlobalRoot
           ? (): void => {
               onRootSettled();
@@ -2465,6 +2497,19 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         presence and never called with defaults.
       */
       if (control?.timing !== undefined) applyPassTiming(control.timing);
+      /*
+        🔴 `SELF-STOP-24` — THE TAKE TOKEN, LIFTED ON THIS DOOR TOO.
+
+        `0f54e00d` is the whole reason this line exists rather than only its twin in `update()`:
+        the bridge attaches control data to the `CG ADD` payload, and CasparCG hands a
+        template's LOAD-TIME data to the page through whichever global it uses — for many hosts
+        that is `play(data)`. A token read on `update()` alone would be dropped on exactly the
+        delivery path a fresh take uses, and the feature would silently do nothing.
+
+        ⚠ ABSENT MEANS UNCHANGED, like every other member: an ordinary take of a page that was
+        already told keeps the token it has.
+      */
+      if (control?.take !== undefined) takeToken = control.take;
       cascade(rootNode, (c) => c.play());
       // Session Z — THE TRIPWIRE. Everything above put a graphic ON AIR. If the machine
       // did not follow, the two have diverged, and the consequence is SILENT and total:
@@ -2576,6 +2621,14 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         value" are different instructions and only one of them was given.
       */
       if (control?.timing !== undefined) applyPassTiming(control.timing);
+      /*
+        🔴 `SELF-STOP-24` — THE TAKE TOKEN ON THE UPDATE DOOR.
+
+        This is the door the RE-TAKE refresh arrives on. A take of a still-resident producer
+        sends no `CG ADD`, so the bridge tells the page its new token with a pre-PLAY
+        `CG UPDATE` — the same seam `B-191` already uses to tell a resident page its look.
+      */
+      if (control?.take !== undefined) takeToken = control.take;
       bus.emit('update');
     },
 

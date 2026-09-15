@@ -147,7 +147,7 @@ style-src   'self';
 font-src    'self';
 img-src     'self' data:;
 media-src   'self';
-connect-src 'none';
+connect-src 'none';   /* the .vcg's own index.html — see the note below */
 frame-ancestors 'self';
 base-uri 'none';
 form-action 'none';
@@ -156,6 +156,13 @@ form-action 'none';
 - **No `unsafe-eval`**: modern GSAP doesn't need it; we ship pre-bundled.
 - **No `unsafe-inline`** for styles or scripts: all styles in `cg.css`, all scripts in `cg.js`.
 - **`connect-src 'none'`** prevents a template from phoning home — broadcast templates have no business making network calls.
+  ⚠ **This block is the `.vcg`'s own `index.html`, which is never served** (the bridge serves
+  the single-file HTML rendered at import — see `B-232`), so the policy that actually reaches
+  CasparCG is the one in `ExporterSingleFile`. **That one has named `connect-src 'self'` since
+  2026-09-15**, so the sentence above is no longer true of the page on air: a served template
+  can reach the bridge that served it, and nothing else. The reason, the decision and the
+  narrowing guard are in `SECURITY.md` and ADR 0009; the one message it carries is a template
+  reporting that its own run has finished (`C-013`).
 - **`img-src data:` is allowed** for tiny inline placeholders only; binary images come from the bundled `assets/` directory.
 
 Templates that violate CSP fail-fast in the editor (operator sees the error before export).
