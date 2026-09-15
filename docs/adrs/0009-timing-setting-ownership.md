@@ -315,6 +315,50 @@ are discharged by it as well as by their own runs.
 - `B-248` (`docs/prd/bugs-runtime.md:11920`) — `[ ]`, filed by `DELTA A7`: a timing set is in
   flight and the row says nothing.
 
+## A template that finishes by itself takes its row off air — DECIDED 2026-09-15
+
+This ADR is about WHO OWNS a timing setting. The owner's decision of 2026-09-15 is about what
+happens when the setting has been honoured to the end, and it belongs here because it is the
+same arc: a logo authored for two passes, an operator who set it to two passes, and the moment
+those two passes are over.
+
+**The decision, in the owner's words:** when a template's run is complete — a logo meant to
+play only 2 times, a title that lasts a few seconds and closes — it should stop itself and no
+longer be ON AIR.
+
+What that settles:
+
+- **The terminal verb is STOP**, `C-012`'s. The row leaves ON AIR and lands exactly where a
+  manual STOP leaves it: the producer resident, and a later PLAY instant with no re-load.
+- **`C-017`'s hard CLEAR is superseded.** That item proposed a hard clear on the ground that
+  the outro had already played and the layer was visually empty. It is annotated with this
+  date rather than rewritten, because what it got right is the TRANSPORT and that half stands:
+  the served template pings its own origin. One transport serves both `C-013` and `C-017`.
+- **It applies to every lifecycle that ends by itself** — a timed `auto-out`, a `loop-cycle`
+  with a finite count including an operator's pre-take or on-air count and `0`, and a finite
+  content-driven hold. **Never to `static`, `manual` or anything infinite.**
+- **No timer, ever.** The bridge acts only on the page's signal. `C-013` is explicit —
+  "nothing guesses at completion with a timer" — and `C-012` already refused to chase an
+  outro with one.
+- **A stale signal is ignored**: a wrong take token, or a row already stopped, re-taken or
+  updated.
+- **A lost signal leaves today's behaviour.** It fails safe, and is never a new way to blank a
+  live layer.
+
+⚠ **One thing this decision costs, stated because it is not obvious:** the served page's CSP
+named no `connect-src`, so it fell back to `default-src 'none'` and the page could not open a
+connection at all. `SECURITY.md` states that as a shipped property and says not to relax it
+without strong justification. This decision is that justification, and the relaxation is the
+narrowest one available — `connect-src 'self'`, same origin only — with the take token as the
+real guard: a page that was given no token opens nothing, whatever the policy permits.
+
+⚠ **And the line anchors in "Related PRD items" above have drifted.** `C-013` is at
+`docs/prd/caspar.md:304` and `C-017` at `:661` as of this date, not `:284` / `:641`. Both items
+do exist and both still read `⟨priority: medium⟩`, so that block's substantive claim holds —
+only its coordinates are stale.
+
+Built in `openspec/changes/template-signals-completion/`.
+
 ## Alternatives considered
 
 - **Leave the preview's `mode` / `hold` selects and label them "session only".** The

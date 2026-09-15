@@ -2821,3 +2821,25 @@ place rather than restated: `TIMING-WIRE-22` then filed `B-248` (the in-flight g
 on a staged position, `bugs-runtime`), each with a heading. Originally: **`B-248`** (`B-247` taken
 here), **`D-161`**, **`C-034`** and
 **`P-047`** (unchanged).
+
+### 2026-09-15 — `C-035` taken by `SELF-STOP-24`, and the pointer was RIGHT this time
+
+`C-035` was allocated for the per-pass half of the completion channel — the page could report
+each PASS boundary on the channel `C-013` builds, which would let the Inspector state a LIVE
+remaining count instead of the one it sent. Filed in [caspar.md](caspar.md), not built.
+
+Allocated by MEASURING, per the 2026-09-08 entry:
+
+- `git grep -n --untracked -E "^## \[.\] C-035" -- docs` returned **nothing**;
+- the positive control on the same regex for `C-034` returned `caspar.md:2189`, so the
+  instrument was live;
+- `git grep -n --untracked "C-035" -- docs` returned exactly ONE hit — this file's own pointer
+  line — and no heading anywhere.
+
+⭐ **The pointer read `C-035` and `C-035` was free.** Recorded because the four entries above it
+record the opposite, and a run of misses that ends is worth the same one line as a run that
+continues: the pointer is still a measurement rather than an authority, and the
+`git grep --untracked` at the moment of allocation is still the instrument — it simply agreed this time.
+
+⇒ **Next free after this session is `B-251`** (unchanged — `SELF-STOP-24` filed no bug),
+**`D-161`** (unchanged), **`C-036`** (`C-001` … `C-035`, no gaps) and **`P-047`** (unchanged).

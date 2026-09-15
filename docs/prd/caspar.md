@@ -301,7 +301,7 @@ untouched. CLEAR's behaviour is unchanged — STOP is purely additive.
 content-timing policy that finishes the current pass before letting natural completion close the
 hold, on the existing override seam. Once this verb exists, C-008 has a command to end with.
 
-## [ ] C-013 — an item whose content has FINISHED should stop itself instead of staying ON AIR: the template signals completion to the bridge ⟨priority: medium⟩
+## [~] C-013 — an item whose content has FINISHED should stop itself instead of staying ON AIR: the template signals completion to the bridge ⟨priority: medium⟩ — building in `openspec/changes/template-signals-completion/` (SELF-STOP-24, 2026-09-15)
 
 **What:** When a playing item's content finishes, the item ends itself gracefully — via the
 now-shipped STOP path ([[C-012]]): outro runs, the producer stays resident — instead of claiming
@@ -658,7 +658,7 @@ facilities — a station with a monitor wall and a station with none are both ta
 design.** That is why the acceptance bullet about being OFF by default and toggleable stops being a
 nicety: it is the mechanism by which one product serves both. Do not quietly design it away.
 
-## [ ] C-017 — auto-clear a layer when a finite template run completes: the served template pings its own origin, the bridge CLEARs ⟨priority: medium⟩
+## [ ] C-017 — auto-clear a layer when a finite template run completes: the served template pings its own origin, the bridge CLEARs ⟨priority: medium⟩ — ⚠ TERMINAL VERB SUPERSEDED 2026-09-15 (owner): the verb is [[C-012]] STOP, not CLEAR. The same-origin PING half STANDS and is being built once for both items in `openspec/changes/template-signals-completion/` ([[C-013]]). This item is annotated, not rewritten: what it got right is the transport.
 
 **What:** A finite graphic (e.g. a ticker with a set repeat count) should leave air by itself:
 after content completes AND the outro has played, the layer should CLEAR without operator
@@ -2278,3 +2278,42 @@ genuine alternatives and only one should be built.**
   nothing, against a positive control on the same regex for `C-033` which returned
   `caspar.md:2105`. The `C-` space is contiguous `C-001 … C-033` (33 headings, max 33) and the
   registry's dated pointer independently reads `C-034`.
+
+## [ ] C-035 — the completion channel reports each PASS boundary, so `Passes remaining` shows a live count instead of what was sent ⟨priority: low⟩ — FILED 2026-09-15 by `SELF-STOP-24`
+
+**What:** The page→bridge channel built by [[C-013]] carries one message today: "this take has
+finished". The same channel could report each PASS boundary as it is crossed. The bridge would
+then hold a live remaining-count per row, and the Inspector's pass control could state
+`Passes remaining: 2` as an OBSERVATION rather than `Sent 3 more` as a record of what was asked
+for.
+
+**Why:** `R-063`'s DECLARED / APPLIED / UNCONFIRMED doctrine says a row must be honest about
+which of the three a value is in. A pass count set on air is DECLARED and, once the page has
+taken it, APPLIED — but the number the console shows is still the one it SENT, and it does not
+move as the passes play. An operator watching a logo run its last pass has no way to see that it
+is the last one. The count is the one timing value that CHANGES while the graphic is on air, so
+it is the one where "what was sent" and "what is true" diverge by design.
+
+**Acceptance:**
+
+- WHEN a page crosses a pass boundary THEN it reports the boundary on the SAME channel the
+  completion report uses, naming the take
+- WHEN the bridge holds a live count for a row THEN the console states it as an observation, in
+  the operator's words, distinct from a value that was merely sent
+- WHEN no boundary report arrives (an older page, a lost message) THEN the console states what
+  was SENT, exactly as today — the live count is additive and never a new way to show a wrong
+  number
+- WHEN the row is not on air THEN there is no live count and the pre-take reading is unchanged
+
+**Notes:** NOT BUILT by `SELF-STOP-24`, deliberately: that session's authorisation was one
+message and one verb, and a per-boundary report is a different traffic profile (a message per
+pass, on every looping row, for the life of the run) that wants its own decision about rate,
+coalescing and what happens when a row loops forever. — DEPENDS ON [[C-013]]'s transport, the
+take token and the `connect-src 'self'` relaxation, all of which ship with it. — Cross-refs
+[[R-063]] (the doctrine), [[B-248]] (a timing set is in flight and the row says nothing — the
+same honesty gap one step earlier), [[C-003]] (on-air per-child timing override).
+
+- **Number:** `C-035`. Verified free at the moment of commit, not of planning, per the
+  registry's standing warning: `git grep -n --untracked -E "^## \[.\] C-035" -- docs` returned
+  nothing, against a positive control on the same regex for `C-034` which returned
+  `caspar.md:2189`. The registry's dated pointer independently reads `C-035`.
