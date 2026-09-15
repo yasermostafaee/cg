@@ -117,6 +117,38 @@ describe('templateTimingOf — the loop is found wherever it sits', () => {
     expect(templateTimingOf(s).loop).toBeUndefined();
   });
 
+  it('🔴 DELTA A5 — A STATED KNOWN LIMIT: with TWO looping scopes, the display names only the first', () => {
+    /*
+      🔴 **THE DISPLAY READS ONE SCOPE; THE APPLY REACHES EVERY ONE.** `templateTimingOf` takes
+      the count and gap an override inherits from the FIRST looping scope, while
+      `applyPassTiming` walks the whole scope tree. For a template with two loops that authored
+      DIFFERENT counts, the console would name one of them and set both.
+
+      ⚠ **MEASURED BEFORE BEING FILED AS A LIMIT RATHER THAN A BUG: the case does not exist in
+      this corpus.** Across all five starter templates and the one scene fixture in
+      `tools/template-fixtures`, the count of templates with more than one looping scope is
+      ZERO — `ticker` and `logo-bug` have exactly one each (`comp-ticker-pulse`,
+      `comp-logo-mark`), the other four have none. So nothing today displays a number it then
+      applies somewhere else.
+
+      This case exists so the limit is a STATED one with a test showing what happens, rather
+      than a surprise the day a template authors two loops. What "2" should mean on such a
+      template is the owner's call — `R-064` is the per-scope stage — and until then the
+      honest reading of this assertion is "documented, not endorsed".
+    */
+    const s = scene({
+      entryCompositionId: 'entry',
+      compositions: [
+        comp('entry', { mode: 'loop-cycle', repeat: 3, delayMs: 1000 }, { outPoint: 50 }),
+        comp('second', { mode: 'loop-cycle', repeat: 7, delayMs: 9000 }, { outPoint: 50 }),
+      ],
+    } as Partial<Scene>);
+
+    // The FIRST looping scope, depth-first from the entry — the second's 7 and 9000 are not
+    // shown anywhere, and an override typed against this display reaches both scopes.
+    expect(templateTimingOf(s).loop).toEqual({ repeat: 3, delayMs: 1000 });
+  });
+
   it('carries the looping scope’s authored gap, which is what an override inherits', () => {
     const s = scene({
       entryCompositionId: 'entry',

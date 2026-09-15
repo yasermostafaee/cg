@@ -69,10 +69,10 @@ instead of two is still a crawl doing what it said it does.
   per-element crawl / rotator / countdown rows) keep working unchanged, and its
   footer sentence stays true: session only, stored defaults untouched, authoritative
   live control belongs to the rundown.
-- **CG Control** — read-only, always. The console has no timing section today
-  (verified: `apps/runtime/src` contains no reference to `holdSource`, `playoutOf`,
-  `PlayoutMode`, `HoldSource`, `loop-cycle` or `auto-out`). When one is built,
-  `mode` and `hold` appear in it as **statements, never as inputs**.
+- **CG Control** — read-only, always: `mode` and `hold` appear as **statements, never as
+  inputs**. ⚠ When this was written the console had no timing section at all; it has one
+  now (`TIMING-WIRE-22` §4, below), and it honours this rule — the two are `Tag` facts
+  beside operator-owned controls for passes and gap.
 
 ### A read-only fact is written as a fact
 
@@ -132,9 +132,17 @@ date. Owner-decided, on test data, with no migration.
 verb carries timing, so the road is `CG UPDATE`'s `__cg` control object: a `timing`
 member on it, the page's update handler routed to `setPassTiming`, a
 `stack.set-pass-timing` channel gated by `#ownsLiveSeats`, the bridge's restore
-re-apply (including a tell to an ADOPTED page, whose producer never rebuilt), and the
-publisher fast-path. The section states `mode`/`hold` as `Tag` facts and offers passes
-and gap as controls that name what they inherit.
+re-apply, and the publisher fast-path. The section states `mode`/`hold` as `Tag` facts
+and offers passes and gap as controls that name what they inherit.
+
+⚠ **The restore re-applies the bridge's MAP and tells the page NOTHING** (`DELTA A1`). An
+earlier spelling of this sentence said it also told an adopted page, and that was the
+defect: `passes` is RELATIVE — "remaining from now" — so re-sending the stored `2` to a
+page that has already run one of its two gives the operator two more instead of one. And
+the state it was written for cannot arise: an `on-air` row's page was necessarily sent the
+value (the bridge records only on acceptance), and a `loaded` row has not `play()`ed, which
+discards anything set beforehand. A REBUILT page is the opposite case and keeps its carrier
+in `#sendAdd`.
 
 ⚠ **Two corrections are recorded here because both were guesses that read as correct.**
 
@@ -151,14 +159,34 @@ and gap as controls that name what they inherit.
    wrote `playout.repeat` before `TIMING-BUILD-21` — so deriving it from `repeat` hides
    the controls on exactly the templates that need them.
 
-🔴 **STILL NEEDS A REAL SERVER, and it is one check.** Everything above is proven either
-side of the CEF boundary — the bridge composes and sends the right `CG UPDATE` (asserted
-on the AMCP trace), and a real `TemplateRuntime` given that payload changes its loop
-without restarting. What no mock can prove is the JOIN: that those bytes survive
-CasparCG's `CG UPDATE` path into the page's `window.update` intact. **The plant
-walkthrough must add: take a looping template, set passes to 2 on air, and watch that the
-pass on screen finishes uninterrupted, exactly two more play, and it goes out —
-no restart, no cut, no jump to frame one.**
+🔴 **STILL NEEDS A REAL SERVER.** Everything above is proven either side of the CEF
+boundary — the bridge composes and sends the right `CG UPDATE` (asserted on the AMCP
+trace), and a real `TemplateRuntime` given that payload changes its loop without
+restarting. What no mock can prove is the JOIN: that those bytes survive CasparCG's
+`CG UPDATE` path into the page's `window.update` intact.
+
+### The plant walkthrough must add these five steps
+
+1. **After deploying, RE-IMPORT the looping templates.** A library entry keeps the page it
+   was imported with, and timing only works on a page built by this build or later. This
+   step is first because skipping it makes every step below fail for the wrong reason.
+2. Take a looping template and **set passes to 2 on air** → the pass on screen finishes
+   uninterrupted, exactly two more play, then it goes out — no restart, no cut, no jump to
+   frame one.
+3. **Read the ROW after the last pass**, and read the section's text. The row is expected to
+   still claim ON AIR (`C-013` / `C-017`, both open — this control makes that latent defect
+   routine), and the section should say what was SENT, not a live count.
+4. **Repeat, restarting the BRIDGE after the first extra pass** → exactly ONE more plays.
+   Two would mean a restore re-armed a relative count.
+5. **A template imported before this build** shows `Timing controls appear after this
+template is re-imported.` and no control.
+
+### Delivery note — one behaviour change reaches air
+
+**An absent `repeat` used to mean ONE pass and now means INFINITE.** The Designer never
+wrote `playout.repeat`, so this is every `loop-cycle` composition authored before
+2026-09-15. Owner-decided, on test data, with no migration. The Designer shows the
+effective `∞` rather than an empty box so an author cannot be surprised by it.
 
 The decisions this feature inherits, settled before it was built and unchanged by
 building it:
@@ -185,6 +213,79 @@ building it:
   turning 0 into 1.
 - **It must not become a way to schedule.** It is a gap between repeats of one
   template; authoritative live control still belongs to the rundown.
+
+## The record — commits, discharges, and one gap
+
+🔴 **THERE IS NO OPENSPEC CHANGE FOR `TIMING-BUILD-21` OR `TIMING-WIRE-22`, and that is a
+gap rather than a decision.** `git grep` for either identifier under `openspec/` returns
+ZERO hits. Both features landed as direct commits on `dev`, so their `tasks.md` — the place
+CLAUDE.md's workflow puts the e2e run URLs "beside the ticked item, so the evidence outlives
+the session that produced it" — does not exist. The evidence is therefore recorded HERE, in
+the ADR that already owns the decision, and the next session that touches playout timing
+should open a change and fold this in.
+
+`openspec/changes/timing-setting-ownership/` covers only `TIMING-OWNERSHIP-19` (the
+read-only decision), not the build or the wire.
+
+### Step-level e2e discharge
+
+Every row below is a COMPLETED, `success` run whose `E2E (Playwright)` job actually RAN,
+with the counts read rather than the conclusion trusted.
+
+| Commit     | What                                | Run                                                                          | Designer      | Runtime     |
+| ---------- | ----------------------------------- | ---------------------------------------------------------------------------- | ------------- | ----------- |
+| `a53b79ea` | BUILD-21 — the live-change contract | [34944866939](https://github.com/yasermostafaee/cg/actions/runs/34944866939) | 279 + 1 flaky | 224 passed  |
+| `8d85bd0d` | BUILD-21 — doc-sync                 | [34945956177](https://github.com/yasermostafaee/cg/actions/runs/34945956177) | ran           | ran         |
+| `d440cd7f` | WIRE-22 (a) + (b)                   | [34948110281](https://github.com/yasermostafaee/cg/actions/runs/34948110281) | 279 + 1 flaky | 224 passed  |
+| `bc4222bb` | WIRE-22 (c) + (d) + (e)             | [34950915296](https://github.com/yasermostafaee/cg/actions/runs/34950915296) | 280 passed    | 224 passed  |
+| `d3ddfcb5` | WIRE-22 §4 — the console section    | [34954955145](https://github.com/yasermostafaee/cg/actions/runs/34954955145) | 278 + 2 flaky | 224 passed  |
+| `49216e18` | docs only                           | [34955455633](https://github.com/yasermostafaee/cg/actions/runs/34955455633) | **skipped**   | **skipped** |
+| `a4ec9401` | the restore proof                   | [34956636122](https://github.com/yasermostafaee/cg/actions/runs/34956636122) | ran           | ran         |
+
+⚠ `49216e18`'s `e2e` was SKIPPED because the diff was docs-only. That is correct CI
+behaviour (`P-029`) and it **discharges nothing** — it is recorded so nobody later reads a
+green run beside it as evidence about the suite.
+
+⭐ **`d440cd7f` CONTAINS `a53b79ea` AND `8d85bd0d`** (verified with `git merge-base
+--is-ancestor`), so its completed green run covers the whole tree at those commits too:
+the `ci` and `e2e` jobs are whole-tree, not diff-scoped. `TIMING-BUILD-21`'s commits 3 and 4
+are discharged by it as well as by their own runs.
+
+**The two flaky specs, named and assessed** (`DELTA A8`):
+
+- `live-source.spec.ts:511` — _MULTIPLE independent Live Sources each get their own id_
+  (flaky on `d440cd7f` and `d3ddfcb5`). **Cannot pass vacuously**: it asserts
+  `toHaveCount(2)` before comparing ids, so a page that rendered fewer sources fails rather
+  than passing with nothing to compare. **Not the `P-047` class** — its own comment
+  documents a knife-edge FIXTURE GEOMETRY (the plates' separation is `delta / zoom`, and the
+  zoom depends on how wide the surrounding panels happen to render), not load contention.
+- `video-import.spec.ts:291` — _a premultiplied-alpha source imports WITHOUT the black
+  fringe_ (flaky on `d3ddfcb5`). **Cannot pass vacuously**: every failure path returns
+  `{ ok: false, why }` and the test asserts `toMatchObject({ ok: true })` before reading any
+  pixel, then checks positive thresholds on both the opaque and the half-alpha region.
+  Closer to `P-047`'s CONTENTION family (a decode under a loaded gate) but a different spec
+  and a different suite, so not that item.
+
+### `DELTA A` — the follow-up commits
+
+| Commit     | Item                                           | Run                                                                                               |
+| ---------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `87cdbc04` | A1 — a restore never re-sends a relative count | [34960476329](https://github.com/yasermostafaee/cg/actions/runs/34960476329) — `e2e` ran, success |
+| `53a26a20` | A2 — on air, state what was SENT               | [34960973690](https://github.com/yasermostafaee/cg/actions/runs/34960973690) — `e2e` ran, success |
+| `b8f5cdc2` | A6 — an old import says why                    | read at hand-over                                                                                 |
+
+### Related PRD items
+
+- `R-063` (`docs/prd/runtime.md:3703`) — `[x]` RECORDED 2026-09-13. The DECLARED / APPLIED /
+  UNCONFIRMED doctrine `B-248` belongs under.
+- `C-003` (`docs/prd/caspar.md:71`) — `[ ]`, priority medium. On-air per-child timing
+  override; `DELTA A5`'s per-scope question is its territory.
+- `C-013` (`docs/prd/caspar.md:284`) and `C-017` (`docs/prd/caspar.md:641`) — both `[ ]`,
+  both still reading `⟨priority: medium⟩`. ⚠ `DELTA A4` states the owner raised both on
+  2026-09-09; **no such note exists in `caspar.md`** (`git grep 2026-09-09` there returns
+  nothing), so the raise is not in the record and the files still say medium.
+- `B-248` (`docs/prd/bugs-runtime.md:11920`) — `[ ]`, filed by `DELTA A7`: a timing set is in
+  flight and the row says nothing.
 
 ## Alternatives considered
 

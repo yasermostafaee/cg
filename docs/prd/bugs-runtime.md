@@ -11916,3 +11916,42 @@ connected when the reconcile ran — or one that reloads — shows `Not seated` 
 That under-claims (the frame genuinely has no seat; only the HISTORY is missing) and never
 over-claims. Making it standing bridge state is a real decision with a real cost, and it was not
 taken here; if it is ever wanted, `emptiedAir` is the shape.
+
+## [ ] B-248 — a timing set is IN FLIGHT and the row says nothing: the console's only signal is a disabled input ⟨priority: medium — the window is one round trip, but it is the one moment the operator is asking "did that take?"⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA A7`
+
+**What:** `stack.set-pass-timing` is a round trip — the console SETS an intent, the bridge sends a
+`CG UPDATE`, the page APPLIES it — and while it is in flight the row shows no sign of it. The only
+change on screen is that the Timing section's two inputs go `disabled`, which says that something
+is happening but not what, and says it in the one vocabulary a control cannot explain itself in.
+
+**Why:** `R-063` settled the doctrine that a row shows whether a change is DECLARED, APPLIED or
+merely UNCONFIRMED. Every other per-row verb on this surface wears it. A timing set does not,
+because a CONFIGURATION verb does not move the row's STATUS: the bridge publishes `timingOverride`
+only on acceptance, so between the press and the answer there is nothing for the row to render.
+The window is short, and the moment is exactly when an operator is deciding whether to press again.
+
+**What was done instead, and why it is not enough:** the control is UNCONTROLLED, so it structurally
+cannot display a number the bridge has not accepted — which is the important half (nothing is ever
+shown as set before it is carried). The missing half is the positive signal that the press was
+received at all.
+
+**Acceptance:**
+
+- WHEN a pass-count or gap set is in flight THEN the row wears the treatment it already has for an
+  unconfirmed change (`TAKING` / `UNCONFIRMED`, the amber clock), rather than a second in-flight
+  vocabulary invented for this control
+- WHEN the set is accepted THEN the treatment clears and the section states what was sent
+- WHEN the set is refused THEN the refusal reaches the persistent surface (it already does) and no
+  in-flight treatment is left behind
+
+**Notes:** ⚠ `DELTA A7` asked this to cross-reference `LOOK-PENDING-08` as the item that will own
+the in-flight visible-duration floor. **That identifier does not exist in this tree** — `git grep
+LOOK-PENDING` returns 0 hits across all tracked and untracked files — so it is recorded here as
+unresolved rather than cited as if it were real. The doctrine this belongs under is `R-063`
+(`docs/prd/runtime.md:3703`, `[x]` RECORDED 2026-09-13); whoever owns the visible-duration floor
+should adopt this item.
+
+⚠ The number: `B-248`. The registry's pointer at `b-number-registry.md:2815` already reads _"Next
+free after this session is `B-248`"_ — `B-246` is claimed without a heading and `B-247` is taken by
+`PLATE-RELEASE-15`. The brief's note said `B-246`; that was stale, and it is a claim rather than a
+heading either way.

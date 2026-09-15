@@ -282,6 +282,10 @@ function PassesControl({
           style={styles.num}
           aria-label={label}
           disabled={busy}
+          // `DELTA A7` / `B-248` — a disabled control cannot say WHY on its own, so it says it
+          // here. This is the narrow half; the row-level in-flight treatment `R-063`'s doctrine
+          // asks for is filed, not built.
+          {...(busy ? { title: 'Sending — waiting for the bridge to accept it.' } : {})}
           // ON AIR: no number — see the note above. OFF AIR: the stored count, naming what it
           // inherits when the operator has set nothing.
           placeholder={
@@ -377,6 +381,7 @@ function DelayControl({
         style={styles.num}
         aria-label="Gap between passes"
         disabled={busy}
+        {...(busy ? { title: 'Sending — waiting for the bridge to accept it.' } : {})}
         placeholder={override === undefined ? `Default (${secs(inheritedMs)})` : secs(shownMs)}
         onBlur={(e) => {
           const raw = e.currentTarget.value.trim();
