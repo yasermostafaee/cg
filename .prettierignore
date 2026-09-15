@@ -26,6 +26,13 @@ packages/single-file-export/src/generated/
 # green when they exist.
 apps/designer/src/generated/
 
+# The owner's working directory for material handed to / produced with an assistant —
+# briefs, contracts, API sketches. UNTRACKED and outside the product, but `format:check`
+# globs the whole tree, so a file dropped here fails a landing gate on work that did not
+# touch it. Ignored rather than formatted: this is the owner's material and reformatting it
+# would edit content nobody asked to change — the same rule as the evidence paths above.
+Claude outputs/
+
 # Generated harness output — written to cwd by @cg/caspar-amcp-probe (C-001 Phase 3b)
 caspar-amcp-probe-*.results.json
 caspar-amcp-probe-*.wire.ndjson
