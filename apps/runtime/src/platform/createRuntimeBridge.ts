@@ -97,6 +97,35 @@ function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
 }
 
 /**
+ * 🔴 `SELF-STOP-24` §2.5 — **AN E2E SEAM FOR "THE PAGE FINISHED", GATED ON `CG_E2E`.**
+ *
+ * The same convention `RefusalBanner`'s `CG_TEST_REFUSE` and `MockRuntime`'s `CG_E2E_ORPHAN`
+ * seeds already use in this app.
+ *
+ * ⚠ **WHY A SEAM AND NOT A TIMER.** The signal this models comes from a page running inside
+ * CasparCG's CEF, reporting over HTTP to the bridge that served it. Offline there is no page,
+ * no CEF and no HTTP route — so there is nothing a spec could wait for. The alternative would
+ * be product code that guesses at completion after N milliseconds, which is the single thing
+ * `C-013` forbids in so many words: *"nothing guesses at completion with a timer"*. A seam adds
+ * no behaviour; it makes an existing entry point reachable from a test.
+ *
+ * ⚠ It cannot fire in production: without `CG_E2E` the properties are never assigned, and the
+ * whole mock is unreachable without an explicit test-mode request in the first place.
+ */
+function armCompletionSeam(mock: MockRuntime): void {
+  const w = globalThis as unknown as {
+    CG_E2E?: boolean;
+    CG_TEST_TAKE_TOKEN?: (itemId: string) => string | undefined;
+    CG_TEST_TEMPLATE_COMPLETED?: (take: string) => boolean;
+  };
+  if (w.CG_E2E !== true) return;
+  // The token a row's page would be holding. A spec asks for it rather than being handed a
+  // guess, so a stale-token case can be built out of a REAL previous token.
+  w.CG_TEST_TAKE_TOKEN = (itemId: string) => mock.currentTakeToken(itemId);
+  w.CG_TEST_TEMPLATE_COMPLETED = (take: string) => mock.templateCompleted(take);
+}
+
+/**
  * The in-memory simulation, wrapped to satisfy the `RuntimeBridge` contract. Its link
  * status is a constant `offline-mock`, which the UI renders as a loud, persistent TEST MODE
  * banner — not a pill among pills.
@@ -110,6 +139,7 @@ function withTimeout(promise: Promise<void>, ms: number): Promise<void> {
 export function createMockBridge(): RuntimeBridge {
   const mock = new MockRuntime();
   const OFFLINE: BridgeLinkStatus = 'offline-mock';
+  armCompletionSeam(mock);
 
   return {
     getAppInfo: () => Promise.resolve(APP_INFO),

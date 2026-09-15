@@ -286,6 +286,69 @@ export class MockRuntime {
     });
   }
 
+  /*
+    🔴 `SELF-STOP-24` / `C-013` PARITY — **ITEM ID → THE TOKEN NAMING ITS CURRENT TAKE.**
+
+    The same shape the bridge keeps, and minted at the same two moments: the load that would
+    build a page, and the take that would tell a resident one. Offline there is no page and no
+    HTTP route, so nothing ever REPORTS on its own — the report arrives through
+    {@link templateCompleted}, driven by a test.
+
+    ⚠ **Modelled rather than stubbed, for the `B-070`/`B-072` reason this whole mock exists.**
+    A mock that accepted any string would let a spec pass against a completion channel with no
+    staleness at all, and the console would be built against semantics the bridge does not
+    have. The stale cases are the ones worth having in test mode.
+  */
+  readonly #takeTokens = new Map<string, string>();
+
+  /**
+   * `SELF-STOP-24` parity — a fresh token for this row's take, retiring its previous one.
+   *
+   * Offline this is a counter rather than 128 random bits, deliberately: the bridge's token is
+   * unguessable because its route answers on a routable interface, and there is no route here.
+   * A readable token makes a failing spec legible.
+   */
+  #mintTakeToken(itemId: string): string {
+    const token = `mock-take-${String(this.#nextTakeToken++)}`;
+    this.#takeTokens.set(itemId, token);
+    return token;
+  }
+  #nextTakeToken = 1;
+
+  /** `SELF-STOP-24` parity — the token a row's page would currently be holding. */
+  currentTakeToken(itemId: string): string | undefined {
+    return this.#takeTokens.get(itemId);
+  }
+
+  /**
+   * 🔴 `SELF-STOP-24` / `C-013` PARITY — **the served page has reported that its own run
+   * finished.** Mirrors the bridge's receipt exactly, including both refusals:
+   *
+   *  - the token must name a LIVE take, and matching SPENDS it (so two reports of one run —
+   *    the mirrored plant — produce ONE stop);
+   *  - the row must still be on air, and `exiting` does not count: a departure already under
+   *    way must not collect a second command.
+   *
+   * Returns whether it acted, which is what the bridge's route turns into `204` / `404`.
+   */
+  templateCompleted(take: string): boolean {
+    let owner: string | undefined;
+    for (const [itemId, token] of this.#takeTokens) {
+      if (token === take) {
+        owner = itemId;
+        break;
+      }
+    }
+    if (owner === undefined) return false;
+    this.#takeTokens.delete(owner);
+    const item = this.#find(owner);
+    if (item === null) return false;
+    if (item.status === 'exiting') return false;
+    if (!isOnAirStatus(item)) return false;
+    this.stop(owner);
+    return true;
+  }
+
   load(itemId: string, templateId: string, fields: FieldValues): { accepted: boolean } {
     const next: StackItemState = { itemId, templateId, fields, status: 'loaded', pending: false };
     const idx = this.#stack.findIndex((i) => i.itemId === itemId);
@@ -293,6 +356,8 @@ export class MockRuntime {
     else this.#stack[idx] = next;
     // B-070 parity — CG ADD creates the producer.
     this.#loaded.add(itemId);
+    // `SELF-STOP-24` parity — the ADD that builds a page carries its take token.
+    this.#mintTakeToken(itemId);
     this.#settleSlotObservation(itemId, 'producer');
     this.#audit.unshift(auditEntry('load', this.#auditItem(itemId, templateId)));
     this.#emitStack();
@@ -310,6 +375,14 @@ export class MockRuntime {
     // B-070/B-039 parity — a take with no live producer re-ADDs first, so a
     // producer always exists afterwards.
     this.#loaded.add(itemId);
+    /*
+      `SELF-STOP-24` parity — EVERY route into air refreshes the token, and the re-take is the
+      one that matters: the bridge's resident-producer path sends no `CG ADD`, so it tells the
+      page a new token with a pre-PLAY `CG UPDATE`. Without the refresh here a mock spec could
+      not reproduce the defect that path exists to prevent — a report from the run that finished
+      stopping the run that had just started.
+    */
+    this.#mintTakeToken(itemId);
     this.#settleSlotObservation(itemId, 'producer');
     this.#transition(itemId, 'playing', true);
     this.#audit.unshift(auditEntry('take', this.#auditItem(itemId, item.templateId)));
@@ -1935,13 +2008,43 @@ export class MockRuntime {
    * real path additionally expires to `unconfirmed` after 5 s without an ack —
    * the mock never loses acks, so it has no unconfirmed path.
    */
+  /**
+   * 🔴 **THE LAST SETTLE SCHEDULED FOR AN ITEM IS THE ONE THAT LANDS — B-044 parity.**
+   *
+   * ── THE RACE THIS CLOSES, MEASURED ────────────────────────────────────────────────────────
+   *
+   * Every verb schedules a settle 160 ms out and the timer used to gate on `pending` alone. Two
+   * verbs inside that window therefore fought over ONE flag: the FIRST timer fired, wrote its
+   * own status and cleared `pending`, and the SECOND then found `pending` false and returned —
+   * leaving the row resting on the state of the verb that had already been superseded.
+   *
+   * Concretely, and this is how it was found (`template-self-stop.spec.ts`, 3 failures in 30
+   * runs): take, then stop within 160 ms. The take's settle lands after the stop's transition,
+   * writes `on-air`, clears `pending` — and the stop's settle declines. **The row reads ON AIR
+   * with nothing on it, for the rest of the session.** Which is `C-013`'s own complaint,
+   * reproduced by the mock that is supposed to model its fix.
+   *
+   * ⚠ **It is not specific to the completion path.** The failing sequences included a plain
+   * operator STOP after a take — so any spec driving two verbs at API speed could hit it, and
+   * three of the eleven runtime specs that do would have been intermittently wrong rather than
+   * failing. A generation counter is the same thing the real Reconciler does with
+   * `lastIntentSeq`: a later intent supersedes an earlier one rather than racing it.
+   *
+   * ⚠ `pending` is still required. It is what a `#transition` sets, so a settle whose item was
+   * patched to a resting state by some other path must still decline.
+   */
   #settle(itemId: string, status: StackItemStatus): void {
+    const gen = (this.#settleGen.get(itemId) ?? 0) + 1;
+    this.#settleGen.set(itemId, gen);
     setTimeout(() => {
+      if (this.#settleGen.get(itemId) !== gen) return; // superseded by a later verb
       const item = this.#find(itemId);
       if (item === null || !item.pending) return;
       this.#patch(itemId, { status, pending: false });
     }, 160);
   }
+  /** Which settle is the current one per item — see {@link #settle}. */
+  readonly #settleGen = new Map<string, number>();
 
   #emitStack(): void {
     this.stackChanged.emit(this.stackSnapshot());
