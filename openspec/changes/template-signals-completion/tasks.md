@@ -86,9 +86,10 @@ Each numbered item is its own commit, its own full green gate, and its own step-
 - [x] 5.6 A pre-existing `MockRuntime` settle race fixed — found by 5.3, 3 failures in 30 runs
 - [x] Gate green (uncached, exit 0) · Windows: full Runtime e2e 235 passed; the new spec 30/30
       under `--repeat-each=5` · commit `6353005d` · e2e run
-      [35018788151](https://github.com/yasermostafaee/cg/actions/runs/35018788151) — **result
-      not yet read at hand-over; it was still in progress.** Read it before treating item 5 as
-      discharged.
+      [35018788151](https://github.com/yasermostafaee/cg/actions/runs/35018788151) — `e2e` job
+      RAN, `conclusion: success`. ⚠ The line above this one said "still in progress, read it
+      before treating item 5 as discharged"; it completed green and the claim is now the read
+      one rather than the pending one.
 
 ## 6. The record, after building
 
@@ -96,7 +97,10 @@ Each numbered item is its own commit, its own full green gate, and its own step-
       AIR, citing `C-013`/`C-017` as open. This change closed that, so the string was false.
 - [x] 6.2 The §3 plant checks written into ADR 0009 beside the decision
 - [x] 6.3 This file carries every commit beside its run URL
-- [ ] Gate green · commit `________` · e2e run `________`
+- [x] Docs-only commit `d6d895a4` · its gate is `openspec validate --all --strict` (82
+      passed) + `format:check` (clean), per the docs-only carve-out — no source, test or build
+      file changed, so no Linux `e2e` is owed by it
+- [x] 6.4 This file's own stale line about run `35018788151` corrected once the run landed
 
 ## 7. Owed on the plant — NOT dischargeable here
 
