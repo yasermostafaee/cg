@@ -156,6 +156,10 @@ export function createMockBridge(): RuntimeBridge {
         Promise.resolve(mock.swapLiveSource(req.itemId, req.plateId, req.sourceId, req.lookId)),
       // §14 (LOOKS) Stage E — the row’s look picker.
       setActiveLook: (req) => Promise.resolve(mock.setActiveLook(req.itemId, req.lookId)),
+      setPassTiming: (req) =>
+        Promise.resolve(
+          mock.setPassTiming(req.itemId, { passes: req.passes, delayMs: req.delayMs }),
+        ),
       removeAll: () => Promise.resolve(mock.removeAll()),
       clearAll: () => Promise.resolve(mock.clearAll()),
       stopAll: () => Promise.resolve(mock.stopAll()),

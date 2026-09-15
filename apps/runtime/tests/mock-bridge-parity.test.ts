@@ -133,6 +133,8 @@ const BRIDGE_SURFACE: {
       'swapLiveSource',
       // §14 (LOOKS) Stage E — the row’s look picker.
       'setActiveLook',
+      // `TIMING-WIRE-22` (c) — the per-row pass-timing configuration verb.
+      'setPassTiming',
       // C-015 (6.5f) — the per-plate audio intent. The mock has no producers, so it
       // models the INTENT half only (record + publish) and answers the same
       // contract; the wire assertion is integration-tested bridge-side.

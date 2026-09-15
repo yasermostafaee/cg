@@ -50,6 +50,7 @@ import {
   StackRemoveAllChannel,
   StackRemoveChannel,
   StackSetActiveLookChannel,
+  StackSetPassTimingChannel,
   StackSetPlateVolumeChannel,
   StackSetPlateVolumesChannel,
   StackSilenceAllLivePlatesChannel,
@@ -1117,6 +1118,14 @@ export function buildRoutes(
     // nothing else switches a look.
     route(StackSetActiveLookChannel, 'operator', (r: { itemId: string; lookId: string }) =>
       b.setActiveLook(r.itemId, r.lookId),
+    ),
+    // `TIMING-WIRE-22` (c) — a CONFIGURATION verb: it carries no Take, and changes what the
+    // graphic already on the channel will do next.
+    route(
+      StackSetPassTimingChannel,
+      'operator',
+      (r: { itemId: string; passes?: number | 'infinite'; delayMs?: number }) =>
+        b.setPassTiming(r.itemId, { passes: r.passes, delayMs: r.delayMs }),
     ),
     // C-015 (6.5f) — the explicit recorded intent that raises a plate's audio.
     route(

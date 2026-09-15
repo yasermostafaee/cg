@@ -23,6 +23,7 @@ import {
 import type {
   AuditEntry,
   CgControl,
+  CgPassTiming,
   FieldValues,
   LiveFitMode,
   LivePlateVolumes,
@@ -31,6 +32,7 @@ import type {
   Position,
   RetainedStackItem,
   StackItemState,
+  StackItemTimingOverride,
 } from '@cg/shared-schema';
 import { isOnAirStatus, isRetainedOnAir, withCgControl } from '@cg/shared-schema';
 import {
@@ -1072,6 +1074,16 @@ export class CasparRuntime {
    */
   readonly #plateVolumes = new Map<string, LivePlateVolumes>();
   /**
+   * 🔴 `TIMING-WIRE-22` — the operator's PASS TIMING intent, per item. Beside `#plateVolumes`
+   * and with the same lifetime: it is the INTENT, not a reading of the page, so it outlives the
+   * ledger and is what a restore re-applies.
+   *
+   * ⚠ Written only by a set that SUCCEEDED. A refused set records nothing — the same contract
+   * `swapLiveSource` and `setActiveLook` settled, and for the same reason: an intent left here
+   * by a failed send is not inert, it is what the next reconcile and the next take would read.
+   */
+  readonly #passTimings = new Map<string, StackItemTimingOverride>();
+  /**
    * B-092 — restored items awaiting their adopt-vs-re-ADD decision.
    *
    * Retained stack intent arrives when the SPA reconnects, which on a bridge
@@ -1928,6 +1940,11 @@ export class CasparRuntime {
       // worst class of defect this product has. The Inspector names it on any plate where the
       // two disagree, and it cannot do that unless it can read it.
       const frozenAssignment = this.#frozenAssignments.get(item.itemId);
+      // 🔴 `TIMING-WIRE-22` (e) — the row's PASS TIMING intent, published for the same reason
+      // the audio intent is: the console cannot show what it cannot read, and a count is not
+      // visible on the picture either. Without this the Inspector would have to guess, and a
+      // surface that guesses about air is the class of defect this product refuses.
+      const timingOverride = this.#passTimings.get(item.itemId);
       /*
         🔴 `B-228` — THE BRIDGE'S OWN ANSWER TO "may this be removed", SAID OUT LOUD.
 
@@ -1965,6 +1982,12 @@ export class CasparRuntime {
         frozenAssignment === undefined &&
         plateVolumes === undefined &&
         activeLookId === undefined &&
+        // 🔴 `TIMING-WIRE-22` (e) — BOTH HALVES, and this is the half that bites. A row whose
+        // ONLY override is a pass count would take the fast path above and be published without
+        // it, so the console would show the count reverting the instant anything republished.
+        // The comment above names `lookSourceOverride` as having been missed here on the day it
+        // was added; this is that list, one entry longer, added on the day of.
+        timingOverride === undefined &&
         !removeExempt
       )
         return item;
@@ -1976,6 +1999,7 @@ export class CasparRuntime {
         ...(frozenAssignment !== undefined && { frozenAssignment }),
         ...(plateVolumes !== undefined && { plateVolumes }),
         ...(activeLookId !== undefined && { activeLookId }),
+        ...(timingOverride !== undefined && { timingOverride }),
         ...(removeExempt && { removeExempt: true }),
       };
     });
@@ -2593,6 +2617,32 @@ export class CasparRuntime {
         this.#activeLooks.set(item.itemId, item.activeLookId);
       }
       /*
+        🔴 `TIMING-WIRE-22` (d) — THE PASS TIMING, re-applied HERE for the same reason as its
+        neighbours, and then TOLD TO AN ADOPTED PAGE below, which none of them needs.
+
+        ⚠ **This map alone is NOT the requirement, and mistaking it for the requirement is the
+        whole trap.** The schema already proves the value SURVIVES a restart. What §3 asks is
+        that the template NOW RUNNING obeys it — and timing differs from every neighbour here
+        in exactly that way:
+
+        - a RE-ADD carries it into the fresh build through `#sendAdd`'s control payload, the
+          same road the look takes;
+        - an ADOPTED row is the hard case. The producer survived, so the page is still looping
+          on the count it snapshotted at `play()` — which is the AUTHORED repeat, not the
+          operator's later override, because the process that held that override just died.
+          Restoring the map without telling the page leaves a row whose stored count says two
+          and whose picture loops forever, with every surface reporting it as normal. That
+          disagreement between stored value and live behaviour is the worst outcome available
+          to this feature, which is why the adopt branch sends.
+
+        ⚠ Like `#activeLooks` above, this is a DIRECT re-apply and must not become a fresh
+        `setPassTiming` call: that would send a `CG UPDATE` mid-restore, before the
+        adopt-vs-re-ADD decision has worked out whether there is a producer to send it to.
+      */
+      if (item.timingOverride !== undefined) {
+        this.#passTimings.set(item.itemId, { ...item.timingOverride });
+      }
+      /*
        * 🔴 B-109 / B-107 — THE PENDING RESTORE IS THE LICENCE TO TOUCH THE LAYER, and
        * only a restorable state gets one.
        *
@@ -2951,6 +3001,33 @@ export class CasparRuntime {
         // a producer, and it is ours.
         this.#restoreBlocked.delete(itemId);
         this.#adopted.add(adoptionKey(slot));
+        /*
+          🔴 `TIMING-WIRE-22` (d) — TELL AN ADOPTED PAGE ITS PASS TIMING. The half of the
+          restore that the map alone does not deliver, and the only branch that needs it.
+
+          This producer SURVIVED, so the page never rebuilt: its controller is still running on
+          the count it snapshotted at `play()`, which is the template's AUTHORED `repeat`. The
+          operator's override lived in the process that just died and came back through
+          retention — so without this line the row publishes "2 passes" while the picture loops
+          forever, and every surface reports it as normal. Stored value and live behaviour
+          disagreeing is the worst outcome this feature has.
+
+          The RE-ADD branch below needs nothing: `#sendAdd` carries the timing into the fresh
+          build through its control payload.
+
+          ⚠ Best-effort and deliberately NOT awaited into the decision: a page that cannot be
+          reached is already a row in trouble, and blocking the restore sweep on one `CG UPDATE`
+          would hold up every other row's decision behind it. The intent is already recorded
+          (it came from retention), so the next take carries it regardless.
+        */
+        const adoptedTiming = this.#passTimings.get(itemId);
+        if (adoptedTiming !== undefined) {
+          void this.#send(
+            this.#builder.updatePassTiming(slot, CasparRuntime.#wireTiming(adoptedTiming)),
+            this.#nextSeq(),
+            'normal',
+          );
+        }
         continue;
       }
 
@@ -5646,6 +5723,93 @@ export class CasparRuntime {
    * empty look; every plate a torn-down clip), and treating that as "not on air" told the
    * operator a switch had succeeded while every hole stayed dark.
    */
+  /**
+   * 🔴 `TIMING-WIRE-22` (c) — SET ONE ROW'S PASS TIMING.
+   *
+   * A CONFIGURATION verb (golden rule 10): it sends no `PLAY`, seats nothing, un-mutes nothing
+   * and fills nothing. It changes what the graphic already on the channel will do next, and on
+   * a row that owns no live seats it does nothing but record the intent for the next take.
+   *
+   * 🔴 **THE GATE IS `#ownsLiveSeats`, THE ONE PREDICATE** — not `isOnAirStatus` alone and never
+   * the rehearse flag. A row whose seats survived a bridge restart while its status did not
+   * (`B-145` boot adoption) holds producers that are on the channel and must be told; a
+   * REHEARSING row owns nothing (PVW is a browser render). Same door as `update`,
+   * `swapLiveSource` and `setActiveLook`, for the reason `B-216` settled.
+   *
+   * 🔴 **A REFUSED SET RECORDS NOTHING.** `#passTimings` is written only after the send is
+   * accepted — the contract `swapLiveSource` and `setActiveLook` both keep, and for the reason
+   * `7.9` gives: an intent left behind by a failed send is not inert. It is what `#sendAdd`
+   * reads into the next take's payload, so recording a refused count would arm a later,
+   * unrelated action to apply a number nobody agreed to. The console therefore goes on
+   * displaying what air is actually doing, which is §2's rule.
+   *
+   * ⚠ NO NEW REFUSAL CONDITION. The two reasons it can answer — `unknown-item` and
+   * `amcp-error` — both already exist on this surface with those spellings.
+   */
+  /**
+   * 🔴 `TIMING-WIRE-22` — THE ONE PLACE the stored override becomes a wire payload, and the one
+   * place the two names meet.
+   *
+   * The row's stored field is `repeat`, because it overrides the template's `PlayoutSchema.repeat`
+   * and a field should be named after what it displaces. The wire member is `passes`, because
+   * what crosses to a RUNNING page is the operator's instruction — passes remaining from now,
+   * `0` legal — which is a different quantity from an authored total.
+   *
+   * Two names for two meanings is honest; two names meeting SILENTLY is not, which is why the
+   * conversion is a named function called from both send sites rather than an object literal
+   * spelled out twice.
+   */
+  static #wireTiming(stored: StackItemTimingOverride): CgPassTiming {
+    return {
+      ...(stored.repeat !== undefined && { passes: stored.repeat }),
+      ...(stored.delayMs !== undefined && { delayMs: stored.delayMs }),
+    };
+  }
+
+  async setPassTiming(
+    itemId: string,
+    timing: { passes?: number | 'infinite' | undefined; delayMs?: number | undefined },
+  ): Promise<{ ok: boolean; reason?: string; message?: string }> {
+    const item = this.#reconciler.get(itemId);
+    const slot = this.#slots.get(itemId);
+    if (item === null || slot === undefined) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    // A call that states nothing is a no-op rather than a refusal: nothing was asked for, so
+    // nothing failed, and answering `false` would put a refusal on the surface for a press the
+    // operator never made.
+    if (timing.passes === undefined && timing.delayMs === undefined) return { ok: true };
+    const next: StackItemTimingOverride = {
+      ...this.#passTimings.get(itemId),
+      ...(timing.passes !== undefined && { repeat: timing.passes }),
+      ...(timing.delayMs !== undefined && { delayMs: timing.delayMs }),
+    };
+    /*
+      An off-air row REACHES NOTHING, so recording the intent IS the whole action — the same
+      shape `setActiveLook`'s case 2 has, and what makes the next take carry it (`#sendAdd`).
+    */
+    if (!this.#ownsLiveSeats(itemId)) {
+      this.#passTimings.set(itemId, next);
+      this.#markDirty(itemId);
+      return { ok: true };
+    }
+    const { ok, errorCode } = await this.#send(
+      this.#builder.updatePassTiming(slot, CasparRuntime.#wireTiming(next)),
+      this.#nextSeq(),
+      'normal',
+    );
+    if (!ok) {
+      return {
+        ok: false,
+        reason: errorCode ?? 'amcp-error',
+        message: 'CasparCG did not accept the timing change. The row keeps the timing on air.',
+      };
+    }
+    this.#passTimings.set(itemId, next);
+    this.#markDirty(itemId);
+    return { ok: true };
+  }
+
   async setActiveLook(
     itemId: string,
     lookId: string,
@@ -10981,8 +11145,24 @@ export class CasparRuntime {
       declines to attach an empty control object, so a plateless non-LOOKS template's
       payload is byte-for-byte what it is today.
     */
+    /*
+      🔴 `TIMING-WIRE-22` (d) — AND THE PASS TIMING RIDES IT TOO, for the same argument again.
+
+      A fresh build snapshots its count from the template's AUTHORED `repeat` at `play()`. The
+      operator's override lives only in `#passTimings`, so without this every re-ADD — a take
+      after a `stop`, and the re-ADD half of a restore — would put the graphic back on the
+      authored count with the console still showing the operator's. Attaching it at the one
+      chokepoint means a plain take carries it as surely as a restore does.
+
+      ⚠ Absent when the row has no override, and `withCgControl` declines to attach an empty
+      control object, so an ordinary row's payload is byte-for-byte what it was.
+    */
     const activeLook = this.#activeLookOf(itemId);
-    const control: CgControl = { ...(activeLook !== undefined && { look: activeLook.id }) };
+    const passTiming = this.#passTimings.get(itemId);
+    const control: CgControl = {
+      ...(activeLook !== undefined && { look: activeLook.id }),
+      ...(passTiming !== undefined && { timing: CasparRuntime.#wireTiming(passTiming) }),
+    };
     const addFields = withCgControl(fields, control);
     const { ok, errorCode, command } = await this.#send(
       this.#builder.load(slot, templateArg, addFields),

@@ -1,6 +1,11 @@
 import { quote } from '@cg/caspar-client';
 import type { SourceProducer } from '@cg/shared-ipc';
-import { withCgControl, type CgControl, type FieldValues } from '@cg/shared-schema';
+import {
+  withCgControl,
+  type CgControl,
+  type CgPassTiming,
+  type FieldValues,
+} from '@cg/shared-schema';
 import type { NormalizedRect } from './live-layers.js';
 
 /** A CasparCG `(channel, layer)` coordinate. */
@@ -153,6 +158,30 @@ export class CommandBuilder {
       flips its own per-look decoration, and it still has to be told which look that is.
     */
     const control: CgControl = { look: lookId };
+    return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
+      serialize(withCgControl(fields, control)),
+    )}`;
+  }
+
+  /**
+   * 🔴 `TIMING-WIRE-22` (c) — **tell the PAGE its new pass timing.**
+   *
+   * The same `CG UPDATE` verb, the same escape chain and the same reserved key as
+   * {@link updateLook}, for the same reason: `CG UPDATE` is the one form proven on 2.3.2 to
+   * deliver a JSON payload to `window.update` intact, and the pass loop it is steering runs in
+   * the page's own JS inside CEF where no AMCP verb can reach it.
+   *
+   * `fields` is normally EMPTY — changing a count changes no author value — but it is a
+   * parameter for the same reason `updateLook`'s is: a caller with fields to send anyway must
+   * be able to send both in ONE command, because a second command is a second chance for the
+   * two to land apart.
+   *
+   * ⚠ This is a CONFIGURATION verb (golden rule 10). It sends no `PLAY`, seats nothing, and
+   * puts nothing on air that was not already there; it changes what the graphic already on the
+   * channel will do next.
+   */
+  updatePassTiming(slot: CommandSlot, timing: CgPassTiming, fields: FieldValues = {}): string {
+    const control: CgControl = { timing };
     return `CG ${target(slot)} UPDATE ${String(FLASH_LAYER)} ${quote(
       serialize(withCgControl(fields, control)),
     )}`;

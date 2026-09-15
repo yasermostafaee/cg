@@ -631,6 +631,32 @@ export class MockRuntime {
    * stack does not carry, and a look the template does not author. A mock that accepted
    * either would teach the surface that any string is a look.
    */
+  /**
+   * `TIMING-WIRE-22` (c) — the offline mock's half of the pass-timing set.
+   *
+   * There is no wire and no served page here, so recording the intent IS the whole action —
+   * the same shape `setActiveLook` below has, arriving from the same argument. ⚠ Do NOT "restore
+   * parity" by adding refusal handling: there is no send to refuse, and inventing one would make
+   * the mock model a failure the offline path cannot have.
+   */
+  setPassTiming(
+    itemId: string,
+    timing: { passes?: number | 'infinite' | undefined; delayMs?: number | undefined },
+  ): { ok: boolean; reason?: string; message?: string } {
+    const item = this.#find(itemId);
+    if (item === null) {
+      return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
+    }
+    if (timing.passes === undefined && timing.delayMs === undefined) return { ok: true };
+    item.timingOverride = {
+      ...item.timingOverride,
+      ...(timing.passes !== undefined && { repeat: timing.passes }),
+      ...(timing.delayMs !== undefined && { delayMs: timing.delayMs }),
+    };
+    this.#emitStack();
+    return { ok: true };
+  }
+
   setActiveLook(
     itemId: string,
     lookId: string,

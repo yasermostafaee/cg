@@ -42,6 +42,7 @@ import {
   StackSilenceAllLivePlatesChannel,
   StackSetPositionChannel,
   StackSetActiveLookChannel,
+  StackSetPassTimingChannel,
   StackSwapLiveSourceChannel,
   StackSnapshotChannel,
   StackStateChangedChannel,
@@ -905,6 +906,8 @@ export class WebSocketRuntime implements RuntimeBridge {
     // simply cannot reach it.
     setActiveLook: (req: ChannelRequest<typeof StackSetActiveLookChannel>) =>
       this.#invoke(StackSetActiveLookChannel, req),
+    setPassTiming: (req: ChannelRequest<typeof StackSetPassTimingChannel>) =>
+      this.#invoke(StackSetPassTimingChannel, req),
     setPlateVolume: (req: ChannelRequest<typeof StackSetPlateVolumeChannel>) =>
       this.#invoke(StackSetPlateVolumeChannel, req),
     // `add-multibox-audio` — the MAP door: FADER, ON/OFF and SOLO all arrive here.

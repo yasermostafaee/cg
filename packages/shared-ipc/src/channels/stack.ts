@@ -267,6 +267,45 @@ export const StackSwapLiveSourceChannel = defineChannel(
  * second copy of a vocabulary that already has an owner. The `message` is what the operator
  * reads; the reason is for logs, tests and the fallback wording.
  */
+/**
+ * 🔴 `TIMING-WIRE-22` (c) — **SET ONE ROW'S PASS TIMING: how many more passes, and the gap
+ * between them.**
+ *
+ * A CONFIGURATION verb (golden rule 10), and the payload says so: it names an `itemId` and the
+ * values, and it carries no Take. It sends no `PLAY`, seats nothing and un-mutes nothing — it
+ * changes what the graphic already on the channel will do NEXT. Gated by `#ownsLiveSeats` like
+ * every other per-row configuration verb, so an off-air row records the intent and an on-air row
+ * also carries it to the page.
+ *
+ * 🔴 **`passes` IS REMAINING-FROM-NOW WHILE THE ROW IS ON AIR**, not a total, and the pass on
+ * screen is not one of them: `2` means that one finishes and two more play. `0` is a legal
+ * INSTRUCTION — "out after this pass" — which is why the floor is 0 here and 1 on the template's
+ * authored `repeat`. They are different quantities that share a name.
+ *
+ * ⚠ **A REFUSED SET RECORDS NOTHING**, exactly as `set-active-look` and `swap-live-source`
+ * settled it: an intent left behind by a failed send is not inert — it is what the next reconcile
+ * and the next take read, so a refusal would arm a later action to apply a count nobody agreed
+ * to. The console then keeps displaying what air is actually doing.
+ */
+export const StackSetPassTimingChannel = defineChannel(
+  'stack.set-pass-timing',
+  z.object({
+    itemId: IdSchema,
+    /**
+     * Passes REMAINING FROM NOW (`0` = out after the current pass) or forever. Absent means
+     * "this call says nothing about the count" — never "reset it".
+     */
+    passes: z.union([z.number().int().min(0), z.literal('infinite')]).optional(),
+    /** The gap BETWEEN passes in ms (`0` = no gap). Absent means "unchanged". */
+    delayMs: z.number().min(0).optional(),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.string().optional(),
+    message: z.string().optional(),
+  }),
+);
+
 export const StackSetActiveLookChannel = defineChannel(
   'stack.set-active-look',
   z.object({

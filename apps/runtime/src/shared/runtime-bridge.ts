@@ -47,6 +47,7 @@ import type {
   StackSilenceAllLivePlatesChannel,
   StackSetPositionChannel,
   StackSetActiveLookChannel,
+  StackSetPassTimingChannel,
   StackSwapLiveSourceChannel,
   StackSnapshotChannel,
   StackStopAllChannel,
@@ -214,6 +215,17 @@ export interface RuntimeBridge {
     setActiveLook(
       req: ChannelRequest<typeof StackSetActiveLookChannel>,
     ): Promise<ChannelResponse<typeof StackSetActiveLookChannel>>;
+    /**
+     * `TIMING-WIRE-22` (c) — set this row's PASS TIMING: how many more passes, and the gap
+     * between them. A CONFIGURATION verb — it carries no Take and seats nothing; it changes what
+     * the graphic already on the channel will do next. On a row that owns no live seats it
+     * records the intent for the next take.
+     *
+     * ⚠ A refused set records NOTHING, so the console keeps displaying what air is doing.
+     */
+    setPassTiming(
+      req: ChannelRequest<typeof StackSetPassTimingChannel>,
+    ): Promise<ChannelResponse<typeof StackSetPassTimingChannel>>;
     /**
      * C-015 phase 6 (6.5f) — raise or mute ONE plate's audio. The EXPLICIT
      * RECORDED INTENT the mute rule defers to, and the only thing that may make a
