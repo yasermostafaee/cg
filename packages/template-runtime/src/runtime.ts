@@ -2433,6 +2433,26 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
       repunch(view);
     },
 
+    /**
+     * 🔴 `TIMING-BUILD-21` §6 / §7 — see the doc on `TemplateRuntime.setPassTiming`.
+     *
+     * ⚠ It MUTATES the root scope's live playout object rather than rebuilding the scene, and
+     * that is the entire point. Every other route to a playout knob goes through
+     * `scene-replace` → `remove()` + `createRuntime()`, which on air is a black frame.
+     *
+     * ⚠ ROOT ONLY — deliberately not cascaded. `markFinalCycle` cascades because a parent's
+     * exit must end its children's; a TIMING configuration is the row's own, and pushing a
+     * count into every nested instance would silently re-time furniture the operator never
+     * addressed.
+     */
+    setPassTiming(timing: { passes?: number | 'infinite'; delayMs?: number }): void {
+      if (machine.state === 'removed') return;
+      // The delay is read fresh at every pass boundary, so writing it here is all that is
+      // needed for "takes effect from the NEXT pass, never disturbs the running one".
+      if (timing.delayMs !== undefined) rootNode.controller.setDelayMs(timing.delayMs);
+      if (timing.passes !== undefined) rootNode.controller.setRemainingPasses(timing.passes);
+    },
+
     setActiveLook(lookId: string): boolean {
       if (machine.state === 'removed') return false;
       return enterLook(lookId);

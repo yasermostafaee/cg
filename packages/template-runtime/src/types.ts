@@ -75,6 +75,30 @@ export interface TemplateRuntime {
   setArrangementView(view: ArrangementView | undefined): void;
 
   /**
+   * 🔴 `TIMING-BUILD-21` §6 / §7 — CHANGE THE LIVE PASS TIMING WITHOUT RESTARTING THE GRAPHIC.
+   *
+   * The seam a console's "two more passes then out" reaches. Everything else that changes a
+   * playout knob today does it by tearing the runtime down and rebuilding it (the Designer
+   * preview's `scene-replace`), which is a black frame in the middle of a live template. This
+   * changes the running controller in place.
+   *
+   * - `passes` is PASSES REMAINING FROM NOW; the pass on screen is not one of them, and `0`
+   *   means "after this pass, go out" — an instruction, not a stop, so `mode`'s out behaviour
+   *   still runs. `'infinite'` keeps it going.
+   * - `delayMs` takes effect from the NEXT gap. The gap in flight keeps its original length:
+   *   the controller re-reads the delay at every boundary rather than snapshotting it, so a
+   *   change can never stretch or truncate a wait already running.
+   *
+   * ⚠ ROOT SCOPE ONLY. A nested composition instance keeps its own lifecycle, exactly as the
+   * per-scope overrides do — a row's timing is the row's, not every child's.
+   *
+   * ⚠ A settled graphic ignores it, and so does a non-cyclic `mode`: see
+   * `PlayoutController.setRemainingPasses` for why each is a silent no-op HERE rather than a
+   * refusal. The refusal belongs at the surface, where a reason can be given.
+   */
+  setPassTiming(timing: { passes?: number | 'infinite'; delayMs?: number }): void;
+
+  /**
    * `multibox-layout-switch` §14 (LOOKS) phase 1D — switch the ACTIVE LOOK. Exactly one
    * look's instance is visible; the switch is a visibility flip plus a re-punch — a CUT,
    * v1's only mode. Returns `false` (and changes nothing) for an unknown look id or a

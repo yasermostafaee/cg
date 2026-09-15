@@ -257,6 +257,74 @@ export class PlayoutController {
     this.cyclesLeft = 1;
   }
 
+  /**
+   * 🔴 `TIMING-BUILD-21` §6 — SET PASSES REMAINING FROM NOW, WITHOUT DISTURBING THE PASS ON
+   * SCREEN. The one affordance that changes a live count, and the reason it exists at all.
+   *
+   * Before this, the only way to change a playout knob on a running graphic was to tear the
+   * runtime down and rebuild it — which is a black frame in the middle of a live template. An
+   * operator asking for "two more passes then out" must not pay for it with a restart, a cut,
+   * or an instant stop because passes already ran.
+   *
+   * 🔴 **THE NUMBER IS REMAINING, AND THE PASS ON SCREEN IS NOT ONE OF THEM.** `cyclesLeft`
+   * counts the current pass plus the rest, so `passes` maps to `passes + 1`. Typing 2 means
+   * this one finishes and two more play. Counting the current pass would make 2 mean
+   * one-and-a-bit, which is not a number anybody asked for.
+   *
+   * 🔴 **`0` IS AN INSTRUCTION, NOT A STOP.** It means "after this pass, go out" — `mode`'s out
+   * behaviour still runs, so the outro plays and the graphic leaves the way it was designed to.
+   * It is emphatically not a cut.
+   *
+   * ⚠ A SETTLED controller ignores it: re-arming a finished graphic from a CONFIGURATION verb
+   * would put a picture back on screen that the operator had taken off — a playout effect from
+   * a non-playout action, which is golden rule 10 inverted.
+   *
+   * ⚠ A NON-CYCLIC mode ignores it too. `auto-out` / `manual` / `static` have no pass loop to
+   * extend, and extending one would mean changing `mode` — which is DESIGNER-OWNED (ADR 0009)
+   * and not this verb's to touch. The console does not offer the control on such a row; this is
+   * the backstop, not the refusal, and the refusal belongs at the surface where a reason can be
+   * given.
+   */
+  /**
+   * 🔴 `TIMING-BUILD-21` §7 — set the gap BETWEEN passes, live.
+   *
+   * There is nothing to schedule here and that is the design: `beginNextPass` re-reads the
+   * delay from this object at every boundary, so writing the new value IS the whole change.
+   * The gap currently in flight keeps the length it started with — which is exactly the
+   * contract ("takes effect from the NEXT pass, never disturbs the running one"), obtained by
+   * not snapshotting rather than by special-casing.
+   *
+   * ⚠ Deliberately does NOT re-arm a running gap. Re-arming would let a change stretch or
+   * truncate a wait already under way, and a truncated gap is a graphic reappearing earlier
+   * than the operator was told it would.
+   */
+  setDelayMs(ms: number): void {
+    if (this.settled) return;
+    this.o.playout.delayMs = Math.max(0, ms);
+  }
+
+  setRemainingPasses(passes: number | 'infinite'): void {
+    if (this.settled || !this.cyclic()) return;
+    if (passes === 'infinite') {
+      this.cyclesLeft = 'infinite';
+      return;
+    }
+    const remaining = Math.max(0, Math.floor(passes));
+    // Asked for NOTHING MORE while the gap before the next pass is already running: that pass
+    // has not started, so there is nothing to let finish. Cancel the wait and settle, rather
+    // than starting a pass the operator has just said they do not want.
+    if (remaining === 0 && this.phase === 'gap') {
+      this.clearHold();
+      this.cyclesLeft = 1;
+      this.phase = 'idle';
+      this.settled = true;
+      this.announceExit();
+      this.o.onSettle();
+      return;
+    }
+    this.cyclesLeft = remaining + 1;
+  }
+
   pause(): void {
     if (this.paused) return;
     this.paused = true;
