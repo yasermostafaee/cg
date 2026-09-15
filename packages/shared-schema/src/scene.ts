@@ -53,12 +53,61 @@ export type PlayoutMode = z.infer<typeof PlayoutModeSchema>;
 export const HoldSourceSchema = z.enum(['timed', 'content-driven']);
 export type HoldSource = z.infer<typeof HoldSourceSchema>;
 
+/**
+ * 🔴 `TIMING-BUILD-21` §3 — THE TWO TIMING DEFAULTS, STATED ONCE, HERE.
+ *
+ * Every consumer reads them through {@link repeatOf} / {@link delayMsOf} rather than
+ * restating `?? something` at its own call site. A default restated at three call sites is
+ * three chances for them to disagree, and this pair has already disagreed once: the
+ * controller privately defaulted `repeat` to ONE cycle while the schema said nothing, so a
+ * mode literally named `loop-cycle` played once.
+ */
+export const DEFAULT_REPEAT = 'infinite' as const;
+export const DEFAULT_DELAY_MS = 0;
+
 const PlayoutObjectSchema = z.object({
   mode: PlayoutModeSchema.default('manual'),
   /** Absent ⇒ 'timed' (resolved by `playoutOf` / the controller). */
   holdSource: HoldSourceSchema.optional(),
+  /**
+   * The hold WITHIN a pass — how long the composition sits parked at `outPoint` before the
+   * outro runs. ⚠ NOT the gap between passes; see {@link PlayoutObjectSchema.delayMs}.
+   */
   holdMs: z.number().min(0).optional(),
+  /**
+   * How many open/close passes `loop-cycle` runs. Absent ⇒ {@link DEFAULT_REPEAT}
+   * (`'infinite'`), read through {@link repeatOf}.
+   *
+   * ⚠ `min(1)` is deliberate and is NOT the operator's live value. This is the AUTHORED
+   * total — a designer asking for zero passes is asking for a graphic that never shows, which
+   * is a mistake rather than an intent. The operator's per-row override is a different
+   * quantity (passes REMAINING FROM NOW, where `0` is the legal instruction "out after this
+   * one") and carries its own floor — see `StackItemTimingOverrideSchema`.
+   */
   repeat: z.union([z.number().int().min(1), z.literal('infinite')]).optional(),
+  /**
+   * 🔴 THE GAP BETWEEN PASSES — dead air deliberately left between one pass ending and the
+   * next beginning, so a looped template breathes instead of restarting the instant it ends.
+   * Absent ⇒ {@link DEFAULT_DELAY_MS} (`0`, meaning no gap), read through {@link delayMsOf}.
+   *
+   * ⚠ **`delayMs` IS NOT `holdMs`, AND THE TWO MUST NEVER BE CONFLATED.** They are different
+   * spans on opposite sides of the outro, and swapping them is invisible until it is on air:
+   *
+   * ```text
+   *   intro → [ hold: holdMs ] → outro → [ delay: delayMs ] → intro → …
+   *            ^ WITHIN a pass             ^ BETWEEN passes
+   * ```
+   *
+   * `holdMs` is the graphic ON SCREEN, parked and readable. `delayMs` is the graphic GONE —
+   * the screen is clear. A value meant for one, put in the other, produces a graphic that
+   * lingers when it should be absent, or vanishes when it should be readable.
+   *
+   * ⚠ It never delays the FIRST showing (ADR 0009): an operator who presses Play and sees
+   * nothing presses again, and a press whose result is invisible is a press that gets
+   * repeated. A pre-roll delay is a separate, explicitly out-of-scope feature that would also
+   * need the row to SAY it is waiting, cancellably.
+   */
+  delayMs: z.number().min(0).optional(),
 });
 
 /**
@@ -640,6 +689,33 @@ export function playoutOf(scene: Pick<Scene, 'playout' | 'lifecycle'>): Playout 
   // the auto-out-without-out-point case is legacy / programmatic only.
   if (scene.lifecycle === undefined && base.mode === 'manual') return { ...base, mode: 'static' };
   return base;
+}
+
+/**
+ * 🔴 `TIMING-BUILD-21` §3 — how many passes this playout runs. Absent ⇒ {@link DEFAULT_REPEAT}.
+ *
+ * THE ONE PLACE THAT ANSWERS IT. Before this existed the answer lived privately in
+ * `PlayoutController` as `repeat ?? 1`, so a stored `loop-cycle` with no explicit count played
+ * ONCE — a mode named "loop cycle" that did not loop. Reuse this rather than re-deriving; a
+ * second local copy is how a default comes to disagree with itself (golden rule 6).
+ *
+ * ⚠ BEHAVIOUR CHANGE, deliberate and owner-decided: a composition storing `loop-cycle` with no
+ * `repeat` now loops until `stop()` where it previously played once. The Designer never wrote
+ * `playout.repeat`, so that is every loop-cycle composition authored before `TIMING-BUILD-21`.
+ */
+export function repeatOf(playout: Pick<Playout, 'repeat'>): number | 'infinite' {
+  return playout.repeat ?? DEFAULT_REPEAT;
+}
+
+/**
+ * 🔴 `TIMING-BUILD-21` §3 — the gap BETWEEN passes in milliseconds. Absent ⇒
+ * {@link DEFAULT_DELAY_MS} (no gap). The one place that answers it; see {@link repeatOf}.
+ *
+ * ⚠ Not the hold WITHIN a pass — that is `holdMs`. See the field's own declaration for the
+ * diagram of which span is which.
+ */
+export function delayMsOf(playout: Pick<Playout, 'delayMs'>): number {
+  return playout.delayMs ?? DEFAULT_DELAY_MS;
 }
 
 /**

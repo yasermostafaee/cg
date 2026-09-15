@@ -1,4 +1,10 @@
-import type { FrameRange, Lifecycle, Playout } from '@cg/shared-schema';
+import {
+  delayMsOf,
+  repeatOf,
+  type FrameRange,
+  type Lifecycle,
+  type Playout,
+} from '@cg/shared-schema';
 import { FrameDriver } from './frame-driver.js';
 import type { RuntimeClock } from './types.js';
 
@@ -102,7 +108,14 @@ export interface PlayoutControllerOptions {
   clock?: RuntimeClock | undefined;
 }
 
-type Phase = 'idle' | 'intro' | 'hold' | 'outro';
+/**
+ * `TIMING-BUILD-21` §7 — `gap` is the BETWEEN-PASSES delay: the outro has finished, the graphic
+ * is OFF SCREEN, and the next intro has not started. It is deliberately NOT `hold` (the graphic
+ * is on screen there) and NOT `idle` (the composition has not settled and `stop()` still has a
+ * cycle to end). Giving it its own name is what lets `resume()` re-arm it and `stop()` cut it
+ * short without either having to guess which kind of wait a pending timer represents.
+ */
+type Phase = 'idle' | 'intro' | 'hold' | 'outro' | 'gap';
 
 interface NormalizedClock {
   raf: (cb: (timestamp: number) => void) => number;
@@ -187,7 +200,9 @@ export class PlayoutController {
   /** Begin playback: play-once-and-hold, or repeat per the cyclic modes. */
   play(): void {
     this.reset();
-    this.cyclesLeft = this.cyclic() ? (this.o.playout.repeat ?? 1) : 1;
+    // `TIMING-BUILD-21` §3 — the default lives in the schema (`repeatOf`), not here. This read
+    // was `repeat ?? 1`, which quietly made a stored `loop-cycle` with no count play ONCE.
+    this.cyclesLeft = this.cyclic() ? repeatOf(this.o.playout) : 1;
     this.startIntro();
   }
 
@@ -207,6 +222,18 @@ export class PlayoutController {
     // outro (`outPoint === active.out`, e.g. no marker) settles instantly.
     this.cyclesLeft = 1;
     if (this.phase === 'outro') return; // already exiting
+    // 🔴 `TIMING-BUILD-21` §7 — stopping DURING the between-passes gap settles immediately.
+    // The outro for that pass has already run and the graphic is off screen; `startOutro()`
+    // here would replay an exit from a hidden state — an outro animation over nothing, and a
+    // second `onExitStart` for one departure. The gap is the one wait that is already outside
+    // the graphic's life, so ending it IS the end.
+    if (this.phase === 'gap') {
+      this.phase = 'idle';
+      this.settled = true;
+      this.announceExit();
+      this.o.onSettle();
+      return;
+    }
     this.startOutro();
   }
 
@@ -248,7 +275,13 @@ export class PlayoutController {
     if (!this.paused) return;
     this.paused = false;
     this.driver?.resume();
-    if (this.phase === 'hold' && this.holdCb !== null && this.holdRemainingMs !== null) {
+    // `TIMING-BUILD-21` §7 — `gap` re-arms exactly as `hold` does. Both are a pending timer the
+    // pause froze; leaving `gap` out would strand a paused looping template off screen forever.
+    if (
+      (this.phase === 'hold' || this.phase === 'gap') &&
+      this.holdCb !== null &&
+      this.holdRemainingMs !== null
+    ) {
       const cb = this.holdCb;
       this.scheduleHold(this.holdRemainingMs, cb);
       this.holdRemainingMs = null;
@@ -474,14 +507,12 @@ export class PlayoutController {
       // (Lottie intro + completion + outro ledger) BEFORE the next intro leg, so
       // cycle N+1 replays the furniture's intro and its exit plays the outro again.
       if (this.cyclesLeft === 'infinite') {
-        this.o.onCycleRestart?.();
-        this.startIntro();
+        this.beginNextPass();
         return;
       }
       this.cyclesLeft -= 1;
       if (this.cyclesLeft >= 1) {
-        this.o.onCycleRestart?.();
-        this.startIntro();
+        this.beginNextPass();
         return;
       }
     }
@@ -489,6 +520,34 @@ export class PlayoutController {
     this.settled = true;
     this.announceExit();
     this.o.onSettle();
+  }
+
+  /**
+   * 🔴 `TIMING-BUILD-21` §7 — start the next pass, after the authored gap.
+   *
+   * The delay is **re-read from `this.o.playout` at EVERY boundary, never snapshotted**, which
+   * is the whole of the "changing it on air takes effect from the NEXT pass and never disturbs
+   * the running one" contract: the pass in flight already committed to whatever gap followed
+   * it, and the next one asks again. (Contrast `cyclesLeft`, which IS snapshotted at `play()`
+   * because it counts DOWN — see `setRemainingPasses` for how a live count change edits the
+   * counter in place rather than restarting the loop.)
+   *
+   * ⚠ Zero means no gap and must stay SYNCHRONOUS — deferring a 0 ms gap through the timer
+   * would insert a frame of black between passes on every looping template that never asked
+   * for one, which is the defect this feature exists to let an author OPT INTO.
+   */
+  private beginNextPass(): void {
+    const start = (): void => {
+      this.o.onCycleRestart?.();
+      this.startIntro();
+    };
+    const gapMs = delayMsOf(this.o.playout);
+    if (gapMs <= 0) {
+      start();
+      return;
+    }
+    this.phase = 'gap';
+    this.scheduleHold(gapMs, start);
   }
 
   /** Emit `onExitStart` once per exit (the graphic is going off air). */

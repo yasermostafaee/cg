@@ -340,6 +340,11 @@ export interface PlayoutOverride {
   holdMs?: number;
   repeat?: number | 'infinite';
   /**
+   * `TIMING-BUILD-21` — the gap BETWEEN passes (not the hold WITHIN one; see `holdMs` and
+   * `PlayoutObjectSchema.delayMs`). Session-only here, like every other key on this type.
+   */
+  delayMs?: number;
+  /**
    * D-102 Phase 1 — PER-ELEMENT ticker timing, keyed by the ticker element's id (replaces the
    * old per-scope `tickerRepeat`/`tickerBoundary`, which could only address one ticker per
    * scope). Each ticker's override applies to its OWN driver. Session-only.

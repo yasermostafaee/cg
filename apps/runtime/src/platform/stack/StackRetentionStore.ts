@@ -135,6 +135,13 @@ function toRetained(item: StackItemState): RetainedStackItem {
     // the audio rule is nothing but memory, so losing the memory IS losing the
     // feature (B-107 / B-109).
     ...(item.plateVolumes !== undefined && { plateVolumes: item.plateVolumes }),
+    // 🔴 `TIMING-BUILD-21` §2(a) — and the row's TIMING override, which fails the same way the
+    // audio intent does: losing it shows the right picture behaving wrongly. The operator asks
+    // for two more passes and out; a blip drops the count; the row comes back on its authored
+    // `infinite` and loops until somebody notices a graphic that should have gone. Declaring it
+    // on the schema is only half — this is the site that actually copies it across, and the
+    // schema would have stripped it in silence had this been forgotten.
+    ...(item.timingOverride !== undefined && { timingOverride: item.timingOverride }),
     // §14 (LOOKS) Stage E — and the ACTIVE LOOK. The bridge’s own map is process memory,
     // so this is the only thing that carries the operator’s choice across a blip. Dropped,
     // an adopted row leaves the picker asserting a look that is not on air, and a re-ADDed

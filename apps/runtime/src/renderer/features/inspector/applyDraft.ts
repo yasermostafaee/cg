@@ -152,6 +152,43 @@ function sendPosition(item: StackItemState): Promise<boolean> {
 }
 
 /**
+ * 🔴 `TIMING-BUILD-21` §2(c) — the assignment rebuild, SPREADING each prior entry.
+ *
+ * This was an exhaustive three-key object literal (`{ templateId, plateId, sourceId }`) and it
+ * ATE THE OPERATOR'S `fit` OVERRIDE. The shape is the same silent-drop site as the runtime's
+ * four-key playout literal: the entries being rewritten are first filtered OUT of `rest`, then
+ * rebuilt here, so every key the rebuild does not name is dropped — with no compiler error,
+ * because `fit` is optional.
+ *
+ * The symptom is quiet and late: an operator sets a plate's fit mode, later re-points that plate
+ * at a different source, and the fit silently reverts to the author's. Spreading the prior
+ * assignment carries `fit` — and any key added to `TemplateSourceAssignmentSchema` after today.
+ *
+ * ⚠ Exported as a pure function so the guard can test the REAL rebuild rather than a
+ * re-derivation of it. The three named keys stay AFTER the spread: they are this call's subject
+ * and must win over whatever the prior entry said.
+ */
+export function nextPlateAssignments<
+  T extends { templateId: string; plateId: string; sourceId: string },
+>(current: readonly T[], templateId: string, plates: ReadonlyMap<string, string>): T[] {
+  const rest = current.filter((a) => !(a.templateId === templateId && plates.has(a.plateId)));
+  const priorOf = (plateId: string): T | undefined =>
+    current.find((a) => a.templateId === templateId && a.plateId === plateId);
+  const added = [...plates.entries()]
+    .filter(([, sourceId]) => sourceId !== '')
+    .map(([plateId, sourceId]) => {
+      const prior = priorOf(plateId);
+      // A plate that HAS a prior entry keeps every key of it, with this call's three winning.
+      // A plate with none is a brand-new assignment: the three keys are all there is, and
+      // inventing any other would be worse than omitting it.
+      return prior === undefined
+        ? ({ templateId, plateId, sourceId } as T)
+        : { ...prior, templateId, plateId, sourceId };
+    });
+  return [...rest, ...added];
+}
+
+/**
  * D-137 / C-015 — write the item's staged plate assignments through
  * `sources.set-assignments`.
  *
@@ -165,14 +202,12 @@ function sendPlateAssignments(
   item: StackItemState,
   plates: ReadonlyMap<string, string>,
 ): Promise<boolean> {
-  const current = currentSourceAssignments();
-  const rest = current.assignments.filter(
-    (a) => !(a.templateId === item.templateId && plates.has(a.plateId)),
+  const next = nextPlateAssignments(
+    currentSourceAssignments().assignments,
+    item.templateId,
+    plates,
   );
-  const added = [...plates.entries()]
-    .filter(([, sourceId]) => sourceId !== '')
-    .map(([plateId, sourceId]) => ({ templateId: item.templateId, plateId, sourceId }));
-  return commitSourceAssignments({ assignments: [...rest, ...added] }).then((refusal) => {
+  return commitSourceAssignments({ assignments: next }).then((refusal) => {
     if (refusal === null) {
       clearStagedPlatesMatching(item.itemId, plates);
       return true;

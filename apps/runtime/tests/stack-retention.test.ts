@@ -777,6 +777,10 @@ it('🔴 every OPEN-AXIS field a published row carries survives toRetained — d
     activeLookId: 'solo',
     lookSourceOverride: { solo: { 'l-1': 'studio-3' } },
     frozenAssignment: { 'l-1': 'studio-1' },
+    // `TIMING-BUILD-21` §2(a) — the row's passes/delay override. Added here the day the field
+    // was added, because this guard refuses to run against a fixture that does not populate
+    // every carriable key: an unpopulated field would make the assertion below pass vacuously.
+    timingOverride: { repeat: 2, delayMs: 1500 },
   } as unknown as StackItemState;
 
   /*

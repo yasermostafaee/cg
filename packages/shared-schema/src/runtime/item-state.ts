@@ -40,6 +40,28 @@ export const StackItemStatusSchema = z.enum([
 ]);
 export type StackItemStatus = z.infer<typeof StackItemStatusSchema>;
 
+/**
+ * 🔴 `TIMING-BUILD-21` — the OPERATOR's per-row timing override. Both keys are absent when the
+ * row is inheriting, which is a THIRD STATE and not a missing value: absent means "whatever the
+ * template authored", and the console shows it as `Default (∞)` / `Default (2 s)` rather than as
+ * a bare number, so the operator can tell an inherited value from one they set.
+ *
+ * 🔴 **`repeat` HERE IS A DIFFERENT QUANTITY FROM `PlayoutObjectSchema.repeat`, and the floor is
+ * where that shows.** The authored one is a TOTAL and floors at 1 — a designer asking for zero
+ * passes is asking for a graphic that never shows. This one, while the row is ON AIR, is PASSES
+ * REMAINING FROM NOW, and `0` is a legal instruction meaning "let the pass on screen finish,
+ * then go out". Flooring it at 1 would silently rewrite that instruction into "one more pass" —
+ * a clamp the operator cannot see, which is the class this tree has already found twice. Off air
+ * the same field is the count for the next take.
+ */
+export const StackItemTimingOverrideSchema = z.object({
+  /** Passes: a count (`0` legal — see above) or forever. Absent ⇒ inheriting the template's. */
+  repeat: z.union([z.number().int().min(0), z.literal('infinite')]).optional(),
+  /** The gap BETWEEN passes, ms. `0` is legal and means no gap. Absent ⇒ inheriting. */
+  delayMs: z.number().min(0).optional(),
+});
+export type StackItemTimingOverride = z.infer<typeof StackItemTimingOverrideSchema>;
+
 /** Reconciled view of one item on the operator's stack. */
 export const StackItemStateSchema = z.object({
   itemId: IdSchema,
@@ -159,6 +181,18 @@ export const StackItemStateSchema = z.object({
    * it: leave this field out of retention.
    */
   removeExempt: z.boolean().optional(),
+  /**
+   * 🔴 `TIMING-BUILD-21` — the row's LIVE timing override, the published half of the pair whose
+   * retained half is {@link RetainedStackItemSchema.timingOverride}.
+   *
+   * It is on BOTH schemas deliberately, and they are not redundant: this one is what the
+   * console reads to render the row's current passes/delay, and the retained one is what
+   * survives a restart. A field on only one of the two is the failure this feature exists to
+   * avoid — present on the wire and gone after a blip, or retained and invisible.
+   *
+   * ⚠ ABSENT MEANS INHERITING the template's authored values, not "zero" and not "one".
+   */
+  timingOverride: StackItemTimingOverrideSchema.optional(),
 });
 export type StackItemState = z.infer<typeof StackItemStateSchema>;
 
@@ -471,5 +505,16 @@ export const RetainedStackItemSchema = z.object({
    * durable store and already re-delivers.
    */
   activeLookId: z.string().min(1).optional(),
+  /**
+   * 🔴 `TIMING-BUILD-21` §2(a) — the ROW's per-session timing override, on the OPEN axis
+   * beside {@link sourceOverride} and for the identical reason.
+   *
+   * **WITHOUT THIS THE FIELDS WORK UNTIL THE FIRST RESTART AND THEN VANISH — the worst
+   * failure shape there is.** This schema is a strict `z.object` AND it is the `stack.restore`
+   * wire payload, so an UNDECLARED key is stripped silently: no error, no warning, no log.
+   * The operator sets two more passes, sees it take, the bridge blips, and the row comes back
+   * looping forever with the console showing it as normal. `B-107` / `B-109` exactly.
+   */
+  timingOverride: StackItemTimingOverrideSchema.optional(),
 });
 export type RetainedStackItem = z.infer<typeof RetainedStackItemSchema>;

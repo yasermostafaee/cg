@@ -81,6 +81,7 @@ import { ensureZoneCss } from './zone-css.js';
 import { EventBus } from './event-bus.js';
 import { LifecycleStateMachine } from './lifecycle.js';
 import { PlayoutController } from './playout-controller.js';
+import { mergePlayoutOverride } from './playout-merge.js';
 import {
   buildRepeaterRows,
   buildScene,
@@ -664,12 +665,10 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
   const effectivePlayoutFor = (scope: FieldScope, path: string): Playout => {
     const b = playoutOf(scope.source);
     const o = overrides[path];
-    const merged: Playout = {
-      mode: o?.mode ?? b.mode,
-      holdSource: o?.holdSource ?? b.holdSource,
-      holdMs: o?.holdMs ?? b.holdMs,
-      repeat: o?.repeat ?? b.repeat,
-    };
+    // 🔴 `TIMING-BUILD-21` §2(b) — the merge is `mergePlayoutOverride`, which SPREADS the base
+    // instead of re-listing its keys. See that function for why an exhaustive literal here was
+    // a silent drop site on the path to air.
+    const merged: Playout = mergePlayoutOverride(b, o);
     // B-032 — a content-driven hold with NO effective content drivers (own + nested, drivesHold-aware)
     // is a zero-length, meaningless hold: resolve it to TIMED so the authored `holdMs` is honored and
     // export + on-air agree. The static `@cg/shared-schema` `hasEffectiveHoldDrivers` does the same on

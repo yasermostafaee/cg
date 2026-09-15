@@ -287,8 +287,40 @@ describe('createRuntime — two-loop ticker playout (D-028)', () => {
     const events: string[] = [];
     runtime.on('stop.end', () => events.push('stop.end'));
     await runtime.play({});
-    // Normalized to loop-cycle (1 cycle) + content-driven hold: one ticker run
-    // (repeat 1 ⇒ completes at 7100ms), then exit.
+    /*
+      🔴 `TIMING-BUILD-21` §3 — THIS CASE CHANGED, DELIBERATELY, and it is the clearest
+      statement of what changed. It used to read "loop-cycle (1 cycle) … then exit", because an
+      absent `repeat` privately defaulted to ONE in the controller. The default now lives in the
+      schema (`repeatOf`) and is INFINITE, so a stored `loop-cycle` with no count loops — which
+      is what a mode named "loop cycle" was always supposed to mean.
+
+      The legacy document under test stores no `repeat`, so it is exactly the shape the change
+      affects: one ticker run completes the content-driven hold at 7100 ms, the outro plays, and
+      the composition goes round again instead of settling.
+    */
+    await run(clock, 7000);
+    expect(events).toEqual([]);
+    await run(clock, 200);
+    expect(events, 'an absent repeat now loops rather than settling after one cycle').toEqual([]);
+    // Still normalized and still under the operator's control: stop() ends it.
+    runtime.stop();
+    await run(clock, 2000);
+    expect(events).toEqual(['stop.end']);
+  });
+
+  it('an EXPLICIT repeat of 1 settles after one cycle, as it always did', async () => {
+    // The complement of the case above: what changed is the DEFAULT, not the meaning of a
+    // stated count. A document that says `repeat: 1` behaves exactly as before.
+    const clock = makeClock();
+    const scene = tickerScene({ tickerRepeat: 1 });
+    const explicit = {
+      ...scene,
+      playout: { mode: 'loop-cycle', holdSource: 'content-driven', repeat: 1 },
+    } as unknown as Scene;
+    const runtime = createRuntime(explicit, { skipFontLoad: true, clock, tickerMeasure });
+    const events: string[] = [];
+    runtime.on('stop.end', () => events.push('stop.end'));
+    await runtime.play({});
     await run(clock, 7000);
     expect(events).toEqual([]);
     await run(clock, 200);
