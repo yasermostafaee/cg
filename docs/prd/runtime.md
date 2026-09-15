@@ -3702,6 +3702,13 @@ is done.
 
 ## [x] R-063 — DOCTRINE: a row shows whether a change is DECLARED, APPLIED, or merely UNCONFIRMED ⟨priority: high — two surfaces were reported as contradicting each other and neither was lying⟩ — RECORDED 2026-09-13
 
+⚠ **Cross-reference, 2026-09-15 — `openspec/changes/timing-pass-control/`.** The timing arc
+added a per-row CONFIGURATION verb (`stack.set-pass-timing`) that this doctrine governs, and
+[[B-248]] is filed under it: a timing set is in flight and the row says nothing, because a
+configuration verb does not move the row's STATUS. **This item stays `[x]`** — it is a
+RECORDED DOCTRINE, not an implementation item, and flipping it to `[~]` would misrepresent
+it as unfinished work. What is unfinished is `B-248`, which has its own number.
+
 **What.** The on-row rendering of golden rule 10 (_a configuration verb is never a playout
 verb_), written down so the two are findable from each other:
 

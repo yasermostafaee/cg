@@ -241,6 +241,22 @@ read-only decision), not the build or the wire.
 
 ### Step-level e2e discharge
 
+🔴 **MOVED, 2026-09-15 (`TIMING-WIRE-22 · DELTA B · R4/B7`) — THE RUN URLs NOW LIVE IN
+`openspec/changes/timing-pass-control/tasks.md`.** An ADR keeps the DECISIONS; a discharge
+record belongs beside the work it discharges, where the next reader is already looking for
+the tick. The two tables below are kept as they were WRITTEN rather than deleted — a record
+that is edited to look tidier than it was is not a record — but they are **superseded**, and
+`tasks.md` is the copy to read and to extend:
+
+- it carries every commit of the whole arc, not only `BUILD-21` and `WIRE-22`;
+- it resolves the `b8f5cdc2` row below, which reads "read at hand-over" with no URL: the run
+  is [34962521234](https://github.com/yasermostafaee/cg/actions/runs/34962521234), `ci` and
+  `e2e` both RAN green;
+- it names, for each commit with no run of its own, the descendant whose whole-tree run
+  covers it — a distinction these tables do not draw;
+- and it keeps the `49216e18` skipped-`e2e` caveat attached to its row, so the
+  non-discharge cannot be read as a discharge anywhere.
+
 Every row below is a COMPLETED, `success` run whose `E2E (Playwright)` job actually RAN,
 with the counts read rather than the conclusion trusted.
 

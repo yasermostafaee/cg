@@ -68,7 +68,7 @@ playlist channel over a `route://`, so the plant's air path is untouched ([[C-02
 **recommended in principle and NOT adopted** — gated on §12.5's four measurements and one owner
 question (is a second channel acceptable in the production config at all, and who changes it).
 
-## [ ] C-003 — On-air per-child timing override ⟨priority: medium⟩
+## [~] C-003 — On-air per-child timing override ⟨priority: medium⟩ — PARTIALLY DELIVERED 2026-09-15 by `openspec/changes/timing-pass-control/`
 
 **What:** Expose the runtime's per-scope playout overrides (mode / holdMs / repeat,
 keyed by nested-instance path) as a LIVE on-air control, not just a preview session.
@@ -77,6 +77,26 @@ to retime nested instances live during a show.
 **Acceptance to be detailed when scheduled.**
 **Notes:** the runtime seam exists (`RuntimeBootOptions.scopeOverrides`); this is the
 control-app surface for it. Depends on C-002 + D-026.
+
+⚠ **PARTIALLY DELIVERED, and which half matters.** `openspec/changes/timing-pass-control/`
+shipped a LIVE on-air timing override with a console surface, a wire member, a bridge verb
+and a restore — the whole road this item asked for. What it did NOT ship is this item's
+KEYING: C-003 asks for an override keyed by nested-instance PATH, and what exists is a
+**per-ROW** override that the page fans out to every scope which actually loops.
+
+That was deliberate (see the change's `design.md` §1): an operator selects a ROW and asks
+for "two more passes", and a console that made them pick a scope would ask a question the
+template's author already answered. The fan-out is filtered, not blanket — the page's
+appliers no-op on a controller that is not cyclic.
+
+**So what stays open under this number:** per-scope keying, for the case where one template
+has more than one looping scope. Re-measured 2026-09-15 with the corrected resolver: still
+**zero** such templates in the corpus, so it is a stated limit rather than a live defect.
+What "2 passes" should mean on such a template is the owner's call.
+
+⚠ Per-ELEMENT content timing (crawl passes, cycle seam, rotator dwell) is a different
+question and is not this item — it is established, unbuilt, and sized in the change's
+`tasks.md` §5.
 
 ## [ ] C-004 — Sports core: match-state model ⟨priority: medium⟩
 
@@ -2165,3 +2185,96 @@ real run will print the notice for `decklink@301`.
   re-creation is attempted only for what is missing), [[B-174]] (what the harness measures).
 - **Number:** taken from the headings (highest `C-032`) and cross-checked against the registry's
   dated pointer — they agree; see the registry entry.
+
+## [ ] C-034 — after an upgrade the station RE-DERIVES every template's page and metadata from what it retained, and says so in one line ⟨priority: high — every page-runtime fix so far has carried an unannounced manual step, and until it is done an old page silently ignores the new controls⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B · R4`
+
+**What:** On an app or bridge upgrade, the station rebuilds each registered template's served
+HTML and its `TemplateInfo` from the record it already keeps, without the operator finding and
+re-importing every `.vcg`. It states in ONE line that it did, and how many. It never touches a
+row that is on air mid-take.
+
+**Why:** A template's page is BAKED AT IMPORT — `produceTemplateDelivery` derives the metadata
+and renders the HTML in one call, from one unpacked scene, using the app's OWN bundled runtime
+(the `cg.js` inside a `.vcg` is never served — [[B-232]]'s neighbourhood,
+`bugs-runtime.md:8325`). So a fix to `@cg/template-runtime` reaches nothing already imported.
+
+**This is not hypothetical and it is not rare — 2026-09-15 alone produced three:**
+
+1. `92711fcf` (`DELTA B1`) — `TemplateInfo.playout` gained a derivation version. A record
+   without it is WRONG, not old, so the console refuses to state its facts and shows a
+   re-import sentence.
+2. `0f54e00d` (`DELTA B6`) — the page's `play(data)` never lifted `__cg.timing`, so an
+   operator's pass count was silently dropped on the take. Measured on the plant: «روی تعداد
+   هم فرقی نداره».
+3. `SELF-STOP-24` will add a third.
+
+Each cost the owner a full manual re-import of every template, discovered only because the
+session said so out loud. **A station that upgrades without reading a commit message gets an
+old page that ignores the new controls, with nothing on any surface saying why.**
+
+**⚠ THE CRUX, ESTABLISHED AND MEASURED (2026-09-15), so this item is sized rather than
+guessed:** the `.vcg` bytes are kept NOWHERE — not by the bridge (`TemplateRegistry` persists
+exactly `{info, html, importedAt}`), not by the browser (`LibraryStore` keeps
+`{template, html}`), and `importVcgFile` drops the bytes on return. **But the retained `html`
+is sufficient.** Every input the exporter needs is inlined in it:
+
+| Exporter input                                 | At re-derive time                                                               | Verdict                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `scene`                                        | `var scene = {…}` in the boot script; already parsed back by two existing tests | **RECOVERABLE**, verbatim                                               |
+| image / video bytes                            | `assetUrls` as `data:<mime>;base64,…` keyed by `assetId`                        | **RECOVERABLE**                                                         |
+| Lottie animation data                          | `lottieAssets` baked as a JS literal                                            | **RECOVERABLE**                                                         |
+| operator `asset-*` fonts                       | `@font-face{font-family:"asset-<id>"; src:url(data:font/woff2…)}`               | **RECOVERABLE** (parse the first `<style>`)                             |
+| `cgJsIife` / `cgCss` / app fonts               | the NEW build — which is the whole point                                        | **RECOVERABLE**                                                         |
+| `manifest.id`, `sourceFileName`                | `info`                                                                          | **RECOVERABLE**                                                         |
+| `AssetMeta.filename`                           | only its MIME survives, and the mime map is invertible                          | **functionally recoverable**                                            |
+| `manifest.compatibility.minRuntimeVersion`     | nowhere in `TemplateInfo`                                                       | 🔴 **LOST** — the [[B-196]] shortfall gate cannot be re-run             |
+| `manifest.integrity` / `signing` / `authoring` | nowhere                                                                         | 🔴 **LOST** — a re-derived page is UNSIGNED and cannot be re-`verify`'d |
+
+**So the honest shape of this item is: a re-derive produces a page that is byte-equivalent in
+CONTENT and carries no publisher attestation.** That is a real trade and it must be decided, not
+slipped in — see the open question.
+
+**Acceptance:**
+
+- WHEN the app or the bridge starts with a build whose template-runtime differs from the one a
+  record was produced with THEN every such template is re-derived from its retained `html` +
+  `info`, and the served page and `TemplateInfo` are replaced atomically
+- WHEN the re-derive runs THEN the operator is told in ONE line — how many templates, and that
+  it happened — and never with a per-template list or a progress dialog
+- WHEN a row is ON AIR or mid-take THEN its served page is NOT swapped underneath it; the
+  re-derive defers that template until the row is off air, and says which are deferred
+- WHEN a template cannot be re-derived (an unparseable stored page, a scene the current schema
+  rejects) THEN it is left exactly as it was, the operator is told WHICH ones and that they need
+  a `.vcg` re-import, and no other template is affected
+- WHEN a re-derived template is inspected THEN the console states its timing facts from the
+  CURRENT derivation version — i.e. the re-import sentence is gone for it
+- AND the re-derive is IDEMPOTENT: running it twice produces the same page and the same
+  `TemplateInfo`
+
+**Open question the owner must answer before this is built:** a re-derived page carries no
+`manifest.integrity`, no signature and no `minRuntimeVersion`. Three options — (a) accept it and
+mark the record `re-derived`, dropping the ability to re-verify; (b) persist the `.vcg` bytes
+instead, which is [[C-011]]'s approach and makes this item unnecessary; (c) persist just the
+manifest beside `{info, html}`, which is small and keeps the gate. **(b) and this item are
+genuine alternatives and only one should be built.**
+
+**Notes:**
+
+- ⚠ **Not a duplicate of [[C-011]], and the two must be read together.** C-011 persists the
+  template registry and its Placement note already contemplates _"the delivered
+  `{ template, html }` or the raw `.vcg` bytes"_. Keeping the archive (C-011's (b)) and
+  rebuilding from what is kept (this item) are OPPOSITE answers to the same problem.
+- C-011's Placement note is also why this is a `C-` item: it ruled that the renderer/Library
+  face of a template-persistence item belongs inside the C- item and is _"not a separate R-
+  entry"_. The re-derive has the same shape — the exporter runs browser-side, the record lives
+  bridge-side.
+- The RE-DELIVERY that exists today is not this: `WebSocketRuntime` re-sends the
+  already-produced `html` on reconnect. No exporter runs, so an old page stays an old page.
+- **Cross-refs:** [[C-011]] (persist the registry — the alternative), [[B-196]] (the
+  `minRuntimeVersion` gate this would lose), [[R-063]] (a row says whether a change is declared,
+  applied or unconfirmed — the deferred-while-on-air half).
+- **Number:** `C-034`. Verified free at the moment of commit, not of planning, per the
+  registry's standing warning: `git grep -n --untracked -E "^## \[.\] C-034" -- docs` returned
+  nothing, against a positive control on the same regex for `C-033` which returned
+  `caspar.md:2105`. The `C-` space is contiguous `C-001 … C-033` (33 headings, max 33) and the
+  registry's dated pointer independently reads `C-034`.
