@@ -146,6 +146,18 @@ in `#sendAdd`.
 
 ⚠ **Two corrections are recorded here because both were guesses that read as correct.**
 
+> ⚠ **CORRECTION 1 BELOW IS ITSELF SUPERSEDED — annotated 2026-09-15 (`DELTA B1`), left
+> standing because the reversal is the record.** It was measured on STARTER PROJECT SCENES
+> (`packages/starter-templates`), and **that shape never reaches air**: the Runtime only ever
+> imports an EXPORTED `.vcg`, whose root IS the chosen composition (the exporter flattens it
+> there). Measured on the plant's own saved records, `~/.cg-runtime/bridge-templates/`:
+> `میان‌برنامه (روی آنتن)` has `layers: 1` at the root with `playout {auto-out,
+content-driven}`. So the resolver reads the ROOT after all — and `entryCompositionId` is a
+> Designer-side pointer the runtime never reads (swept across five render-path packages, each
+> pathspec proven non-empty). The fallback it relied on was the real defect: a per-composition
+> export names a composition the package does not contain, so `?? comps[0]` published a clock
+> panel's `static / timed` over a live crawler. See `B-249`.
+
 1. **The row's timing is NOT the scene root's.** Every real template has `layers: []`
    and a set `entryCompositionId`, so `playoutOf(scene)` answers `static` for all of
    them. Reading the root made the console state `Static` for every template and offer

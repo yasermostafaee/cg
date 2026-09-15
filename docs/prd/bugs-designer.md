@@ -4019,3 +4019,42 @@ runtime's, and the runtime is untouched by this fix (the authorisation boundary)
   [[B-197]] (rounded corners on a plate — adjacent, untouched), [[D-159]].
 - **Number:** taken immediately after `B-219` in the same sweep; `git grep -n "B-220"` returned
   nothing anywhere before this heading was written.
+
+## [ ] B-249 — a per-composition export writes an `entryCompositionId` the package does not contain ⟨priority: low — nothing reads it today, which is exactly why it will be trusted by whatever reads it next⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B1.5`
+
+**What:** A Designer per-composition export flattens the chosen composition into the scene ROOT
+and carries the compositions it NESTS in `compositions` — but it copies the project's
+`entryCompositionId` through unchanged, and that id names the composition that was just
+flattened away. Measured on the plant's saved records (`~/.cg-runtime/bridge-templates/`,
+2026-09-15): `میان‌برنامه (روی آنتن)` carries `entryCompositionId: 'comp-irib'` while
+`compositions` holds only `comp-irib-t/g/b`; `آرم (روی آنتن)` carries `'comp-logo-bug'` with
+`compositions: []`.
+
+**Why it is worth a number even though nothing breaks today:** a dangling id is a lie that reads
+as data. `TIMING-WIRE-22`'s first resolver trusted it — `find(entryId) ?? comps[0]` — and the
+`??` turned "the id names nothing" into "answer with whichever panel is first", so the console
+published a clock panel's `static / timed` over a live crawler. That resolver has been fixed to
+read the ROOT (`DELTA B1`), but the bad id is still in every package.
+
+**Who reads it — established, 2026-09-15:**
+
+- **The runtime: nobody.** Swept across the render path with every pathspec proven non-empty
+  first — `template-runtime/src` (29 files), `shared-schema/src` (34), `single-file-export/src`
+  (6), `vcg-format/src` (11), `caspar-bridge/src` (24). The only hits are the schema's own
+  declaration and `templateTimingOf`. The runtime plays the ROOT.
+- **The Designer on re-open: not reachable.** `ensureCompositions` (`scene-doc.ts:247`) is the
+  one reader, and it opens PROJECT packages; the Designer has no path that unpacks a `.vcg`
+  export (`git grep 'unpack(' -- apps/designer/src` returns nothing). So a dangling id in an
+  export is never resolved by anything today.
+
+**Acceptance:**
+
+- WHEN a per-composition export is written THEN its `entryCompositionId` either names a
+  composition the package contains or is ABSENT — never a dangling id
+- WHEN a consumer resolves it THEN a miss is an explicit "not found", never a positional
+  fallback
+
+**Notes:** the safe fix is almost certainly to OMIT the field on a per-composition export (the
+root IS the entry there, so the pointer has nothing to say) rather than to rewrite it. ⚠ Do not
+"fix" this by making a consumer tolerate it — `DELTA B1` already had to delete one such
+tolerance, and it is what made the defect invisible.

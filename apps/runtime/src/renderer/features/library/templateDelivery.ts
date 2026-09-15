@@ -8,6 +8,7 @@ import type {
 import {
   aggregateCompositionFields,
   hasNextStep,
+  TEMPLATE_TIMING_VERSION,
   templateTimingOf,
   runtimeShortfall,
   runtimeShortfallMessage,
@@ -236,6 +237,7 @@ export async function produceTemplateDelivery(
     playout: (() => {
       const t = templateTimingOf(scene);
       return {
+        v: TEMPLATE_TIMING_VERSION,
         mode: t.mode,
         ...(t.holdSource !== undefined ? { holdSource: t.holdSource } : {}),
         ...(t.holdMs !== undefined ? { holdMs: t.holdMs } : {}),

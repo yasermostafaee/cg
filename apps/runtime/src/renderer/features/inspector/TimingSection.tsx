@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
-import type { StackItemState } from '@cg/shared-schema';
+import { TEMPLATE_TIMING_VERSION, type StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Tag } from '../../ui/Tag.js';
 import { Button } from '../../ui/Button.js';
@@ -84,7 +84,19 @@ export function TimingSection({
     script, or a bridge-side default are all the same hazard. If the metadata is ever separated
     from the render, this gate needs a real capability bit instead.
   */
-  if (playout === undefined) {
+  /*
+    🔴 `DELTA B1.4` — A RECORD FROM AN OLDER DERIVATION IS WRONG, NOT MERELY OLD, so it is
+    treated exactly like a record with no `playout` at all.
+
+    Before `v: 2` this block was derived from the ENTRY composition with a `comps[0]` fallback.
+    A per-composition export names an `entryCompositionId` its own package does not contain, so
+    the fallback published whichever panel happened to be listed first: the plant's
+    `میان‌برنامه (روی آنتن)` read `static / timed` — a clock panel's — over a crawler that is
+    `auto-out / content-driven`. Showing those facts is worse than showing none, because a
+    console that is confidently wrong is the one thing an operator cannot defend against.
+  */
+  const stale = playout !== undefined && playout.v !== TEMPLATE_TIMING_VERSION;
+  if (playout === undefined || stale) {
     if (info == null) return null;
     return (
       <div className="cg-inspector-section">

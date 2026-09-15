@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { TemplateInfo } from '@cg/shared-ipc';
-import type { StackItemState } from '@cg/shared-schema';
+import { TEMPLATE_TIMING_VERSION, type StackItemState } from '@cg/shared-schema';
 
 /**
  * 🔴 **`TIMING-WIRE-22` §4 — THE CONSOLE'S TIMING SECTION.**
@@ -117,7 +117,12 @@ function commit(label: string, value: string): void {
   section cannot derive "does this loop" from the mode. The realistic shape is therefore a
   non-looping mode WITH `loops: true`, which is what `logo-bug` actually is.
 */
-const LOOPS = { mode: 'manual', holdSource: 'timed', loops: true } as const;
+const LOOPS = {
+  v: TEMPLATE_TIMING_VERSION,
+  mode: 'manual',
+  holdSource: 'timed',
+  loops: true,
+} as const;
 
 describe('§4 — mode and hold are FACTS, never inputs', () => {
   it('states them, and offers no control for either', () => {
@@ -147,6 +152,19 @@ describe('§4 — mode and hold are FACTS, never inputs', () => {
     // …and it still states nothing it cannot know, and offers nothing it cannot carry.
     expect(host.querySelector('[data-testid="timing-mode-fact"]')).toBeNull();
     expect(byLabel('Passes next take')).toBeNull();
+  });
+
+  it('🔴 DELTA B1.4 — a record from an OLDER derivation is refused, not displayed', () => {
+    /*
+      Stale facts here are WRONG, not old. Before `v: 2` the block was derived from the entry
+      composition with a `comps[0]` fallback, so a per-composition export published whichever
+      panel was listed first — the plant's crawler read `static / timed` (a clock panel's) over
+      `auto-out / content-driven`. A console that is confidently wrong is the one thing an
+      operator cannot defend against, so an unversioned record gets the re-import sentence.
+    */
+    mount(row(), template({ mode: 'loop-cycle', holdSource: 'timed', loops: true } as never));
+    expect(host.querySelector('[data-testid="timing-needs-reimport"]')).not.toBeNull();
+    expect(host.querySelector('[data-testid="timing-mode-fact"]')).toBeNull();
   });
 
   it('says nothing at all while the Inspector is still FETCHING the template', () => {
@@ -287,7 +305,10 @@ describe('§4 — the controls exist only where they mean something', () => {
   it('a non-looping template gets the facts and no pass controls', () => {
     // A gap BETWEEN passes is meaningless where there is only ever one pass; a control that can
     // only no-op is the anti-pattern R-021 stage 2b named.
-    mount(row(), template({ mode: 'auto-out', holdSource: 'timed' }));
+    mount(
+      row(),
+      template({ v: TEMPLATE_TIMING_VERSION, mode: 'auto-out', holdSource: 'timed' } as never),
+    );
     expect(host.querySelector('[data-testid="timing-mode-fact"]')).not.toBeNull();
     expect(byLabel('Passes next take')).toBeNull();
     expect(byLabel('Gap between passes')).toBeNull();

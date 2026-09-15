@@ -1,4 +1,10 @@
-import { templateTimingOf, resolveDefaultPosition, type StackItemState } from '@cg/shared-schema';
+import {
+  TEMPLATE_TIMING_VERSION,
+  templateTimingOf,
+  resolveDefaultPosition,
+  type Scene,
+  type StackItemState,
+} from '@cg/shared-schema';
 import type { ConnectionConfig, ConnectionHealth, TemplateInfo } from '@cg/shared-ipc';
 import { collectLiveSources } from '@cg/vcg-format';
 import { STARTER_TEMPLATES } from '@cg/starter-templates';
@@ -10,6 +16,27 @@ import { STARTER_TEMPLATES } from '@cg/starter-templates';
  * stack starts with a few rows so the operator UI isn't empty.
  */
 
+/**
+ * `DELTA B1` — a starter PROJECT scene shaped the way an EXPORT of it would be: the entry
+ * composition promoted to the root, which is where the Designer's exporter puts it and where the
+ * runtime looks for the graphic.
+ *
+ * ⚠ MOCK-ONLY. The real import path never calls this — it unpacks a `.vcg` that is already in
+ * this shape. It exists so the offline console and the E2E suite see what an operator sees
+ * rather than a project scene's empty root.
+ */
+function asExported(scene: Scene): Scene {
+  const comps = scene.compositions ?? [];
+  const entry = comps.find((c) => c.id === scene.entryCompositionId) ?? comps[0];
+  if (entry === undefined) return scene;
+  return {
+    ...scene,
+    layers: entry.layers,
+    ...(entry.playout !== undefined ? { playout: entry.playout } : {}),
+    ...(entry.lifecycle !== undefined ? { lifecycle: entry.lifecycle } : {}),
+  };
+}
+
 /** Available templates, derived from the bundled starter pack. */
 export function seedTemplates(): TemplateInfo[] {
   return STARTER_TEMPLATES.map((s) => ({
@@ -20,24 +47,31 @@ export function seedTemplates(): TemplateInfo[] {
     templateType: s.scene.templateType,
     fields: s.scene.fields,
     /*
-      🔴 `TIMING-WIRE-22` §4 — the PLAYOUT, derived here for exactly the reason the block
-      below states, and through the same canonical `templateTimingOf` the real import path uses.
+      🔴 `TIMING-WIRE-22` §4 / `DELTA B1` — the PLAYOUT, through the canonical
+      `templateTimingOf` the real import path uses, but over an APPROXIMATION of the shape that
+      path actually receives.
 
-      ⚠ NOT `playoutOf(s.scene)`. Every starter has `layers: []` and a set `entryCompositionId`,
-      so the scene ROOT resolves to `static` for all five — the console would have stated
-      `Static` for every template and offered no pass control anywhere.
+      ⚠ **A STARTER IS A PROJECT SCENE, NOT AN EXPORT, and the two differ exactly where this
+      matters.** A starter has `layers: []` with its real content in `compositions`; an EXPORTED
+      `.vcg` — the only shape the Runtime ever imports — has the chosen composition FLATTENED
+      INTO THE ROOT (measured on the plant's saved records: `میان‌برنامه (روی آنتن)` carries
+      `layers: 1` at the root with `playout {auto-out, content-driven}`). Handing the resolver a
+      project scene would make every seeded starter read `Static` with no controls, which is a
+      truthful answer about a shape that never reaches air and a misleading one about the
+      product.
 
-      A seeded starter is synthesised from a scene this function is holding, so it is not a
-      "pre-carrier" record and must not wear that state. Omitting it would hide the console's
-      whole Timing section in the offline mock — the section renders nothing for a template
-      that predates the field — so every offline session and every E2E would be developed
-      against a console that has no timing at all, while the live path has one. That is the
-      MockRuntime-vs-bridge divergence `mock-bridge-parity`'s header was written about, in the
-      one direction a method-tree guard cannot see.
+      So the seed promotes the entry composition to the root first. That is a MOCK concern and
+      deliberately local: it approximates the Designer's export rather than re-implementing it,
+      and nothing on the real path reads this.
+
+      Without a `playout` at all the console's whole Timing section would be invisible offline
+      and in every E2E — the `mock-bridge-parity` divergence, in the one direction a
+      method-tree guard cannot see.
     */
     playout: (() => {
-      const t = templateTimingOf(s.scene);
+      const t = templateTimingOf(asExported(s.scene));
       return {
+        v: TEMPLATE_TIMING_VERSION,
         mode: t.mode,
         ...(t.holdSource !== undefined ? { holdSource: t.holdSource } : {}),
         ...(t.holdMs !== undefined ? { holdMs: t.holdMs } : {}),

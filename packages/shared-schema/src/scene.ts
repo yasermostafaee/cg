@@ -747,39 +747,100 @@ export function templateTimingOf(scene: Scene): {
   holdMs?: number;
   loop?: { repeat?: number | 'infinite'; delayMs?: number };
 } {
-  const comps = scene.compositions ?? [];
-  const entryId = scene.entryCompositionId;
-  const entry =
-    (entryId !== undefined ? comps.find((c) => c.id === entryId) : undefined) ?? comps[0];
-  // No compositions at all ⇒ the scene IS the graphic (a hand-authored or flattened template).
-  const head = entry ?? scene;
-  const resolved = playoutOf(head);
+  /*
+    🔴 **THE ROOT IS THE GRAPHIC.** An exported template's root IS the composition the designer
+    chose: the exporter flattens it there. Measured on the plant's own saved records
+    (`~/.cg-runtime/bridge-templates/*.json`, 2026-09-15) — `میان‌برنامه (روی آنتن)` has
+    `layers: 1` at the root with `playout {auto-out, content-driven}` and `lifecycle.outPoint 60`,
+    and its `compositions` holds only the three panels it nests.
+  */
+  const resolved = playoutOf(scene);
 
   /*
-    The looping scope, depth-first from the entry and then across the rest. `compositions` is a
-    FLAT list keyed by id, so this is a scan rather than a tree walk — the nesting is expressed
-    by `composition` elements referencing ids, and a scan finds the loop wherever it sits without
-    having to re-derive that graph here.
+    🔴 **THE LOOPING SCOPES ARE THE ONES THE RUNTIME WOULD WIRE — reachable composition
+    INSTANCES, by the same rule `hasEffectiveHoldDrivers` walks.** A `compositions` entry is a
+    DEFINITION, not a scope: it becomes one only where a `composition` ELEMENT references it. So
+    a flat scan of `compositions` can name a scope that never plays, and `applyPassTiming` —
+    which walks the real scope tree — would then act on a different set than the display named.
+    One resolution, shared (golden rule 6).
   */
-  const ordered = entry === undefined ? [] : [entry, ...comps.filter((c) => c !== entry)];
-  const looping = ordered.find((c) => playoutOf(c).mode === 'loop-cycle');
-  const loopSource = looping ?? (resolved.mode === 'loop-cycle' ? head : undefined);
-  const loopPlayout = loopSource === undefined ? undefined : playoutOf(loopSource);
+  const comps = scene.compositions ?? [];
+  const visited = new Set<string>();
+  const reachable: Composition[] = [];
+  const walk = (children: readonly Element[]): void => {
+    for (const el of children) {
+      if (el.visible === false) continue;
+      if (el.type === 'container') {
+        walk(el.children);
+        continue;
+      }
+      if (el.type === 'composition') {
+        if (visited.has(el.compositionId)) continue;
+        visited.add(el.compositionId);
+        const comp = comps.find((c) => c.id === el.compositionId);
+        if (comp === undefined) continue;
+        reachable.push(comp);
+        for (const layer of comp.layers) walk(layer.children);
+      }
+    }
+  };
+  for (const layer of scene.layers) walk(layer.children);
+
+  // The root first — it is the graphic — then its reachable instances in wiring order.
+  const loopSource =
+    resolved.mode === 'loop-cycle'
+      ? { playout: resolved }
+      : reachable
+          .map((c) => ({ playout: playoutOf(c) }))
+          .find((c) => c.playout.mode === 'loop-cycle');
 
   return {
     mode: resolved.mode,
-    ...(resolved.holdSource !== undefined ? { holdSource: resolved.holdSource } : {}),
+    // `DELTA B1.3` — a hold only EXISTS under the modes that run one. `manual` ends on `stop()`
+    // and `static` hard-cuts, so stating a hold source for either describes a phase that never
+    // happens. The same two modes the Designer's own hold select is offered for.
+    ...(resolved.holdSource !== undefined && MODES_WITH_A_HOLD.has(resolved.mode)
+      ? { holdSource: resolved.holdSource }
+      : {}),
     ...(resolved.holdMs !== undefined ? { holdMs: resolved.holdMs } : {}),
-    ...(loopPlayout !== undefined
+    ...(loopSource !== undefined
       ? {
           loop: {
-            ...(loopPlayout.repeat !== undefined ? { repeat: loopPlayout.repeat } : {}),
-            ...(loopPlayout.delayMs !== undefined ? { delayMs: loopPlayout.delayMs } : {}),
+            ...(loopSource.playout.repeat !== undefined
+              ? { repeat: loopSource.playout.repeat }
+              : {}),
+            ...(loopSource.playout.delayMs !== undefined
+              ? { delayMs: loopSource.playout.delayMs }
+              : {}),
           },
         }
       : {}),
   };
 }
+
+/**
+ * `DELTA B1.3` — the modes that actually run a hold, so a console does not state a hold source
+ * for `manual` (ends on `stop()`) or `static` (hard cut). Mirrors `TIMING_RELEVANT_MODES` in the
+ * Designer's preview, which gates the same question from the other side.
+ */
+const MODES_WITH_A_HOLD: ReadonlySet<PlayoutMode> = new Set<PlayoutMode>([
+  'auto-out',
+  'loop-cycle',
+]);
+
+/**
+ * 🔴 `DELTA B1.4` — THE DERIVATION VERSION OF `TemplateInfo.playout`.
+ *
+ * A record derived by an OLDER resolver is not merely old, it is WRONG: before 2026-09-15 this
+ * function read the ENTRY composition and fell back to `comps[0]` on a dangling id, so a
+ * per-composition export published the timing of whichever panel happened to be first — a clock
+ * panel's `static / timed` over a crawler that is `auto-out / content-driven`.
+ *
+ * Bump this whenever the derivation changes what it would answer for the same scene. A console
+ * that reads a record without the CURRENT version must show the re-import sentence instead of
+ * its facts: stale facts here are confidently wrong, which is the worst thing a console can be.
+ */
+export const TEMPLATE_TIMING_VERSION = 2;
 
 /**
  * B-032 — does this composition tree have any EFFECTIVE content hold driver: a `ticker` /

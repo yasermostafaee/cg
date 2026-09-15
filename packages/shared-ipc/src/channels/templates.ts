@@ -309,7 +309,21 @@ export const TemplateInfoSchema = z.object({
    */
   playout: z
     .object({
-      /** The ENTRY composition's mode — what the ROW does. Not the scene root's (a wrapper). */
+      /**
+       * 🔴 `DELTA B1.4` — WHICH DERIVATION PRODUCED THIS BLOCK. An IPC-visible schema change,
+       * and deliberately so: a record derived by an older resolver is WRONG, not merely old.
+       *
+       * Before `v: 2` this block was derived from the ENTRY composition with a `comps[0]`
+       * fallback, so a per-composition export — whose `entryCompositionId` names a composition
+       * the package does not contain — published the timing of whichever panel happened to be
+       * listed first. The plant's `میان‌برنامه (روی آنتن)` read `static / timed` (a clock
+       * panel's) over a crawler that is `auto-out / content-driven`.
+       *
+       * ⚠ ABSENT or older than `TEMPLATE_TIMING_VERSION` ⇒ the console states NOTHING and asks
+       * for a re-import. Showing the block's facts would be confidently wrong.
+       */
+      v: z.number().int().optional(),
+      /** The ROOT's mode — the graphic the runtime plays. An export flattens it there. */
       mode: z.string(),
       holdSource: z.string().optional(),
       holdMs: z.number().optional(),

@@ -1,22 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { templateTimingOf, playoutOf } from '../src/scene.js';
+import { templateTimingOf, playoutOf, TEMPLATE_TIMING_VERSION } from '../src/scene.js';
 import type { Scene } from '../src/scene.js';
 
 /**
- * 🔴 `TIMING-WIRE-22` — **THE TIMING A CONSOLE STATES FOR A WHOLE TEMPLATE.**
+ * 🔴 `TIMING-WIRE-22 · DELTA B1` — **THE TIMING A CONSOLE STATES IS THE TIMING OF THE GRAPHIC
+ * THE RUNTIME ACTUALLY PLAYS.**
  *
- * The bug this exists to prevent shipped silently once and was caught by a SCREENSHOT, not by a
- * test: the console read `playoutOf(scene)` — the scene ROOT — and every real template has
- * `layers: []` with a set `entryCompositionId`, so the root resolves to `static`. The section
- * stated `Static` for every template in existence and never offered a pass control. Green, and
- * completely wrong.
+ * ── THE TWO WRONG ANSWERS THIS FILE HAS NOW SEEN ─────────────────────────────
  *
- * Two facts make it wrong, and both are pinned below:
+ * 1. **The scene ROOT** — correct, and the answer here. An EXPORTED template's root IS the
+ *    composition the designer chose; the exporter flattens it there.
+ * 2. **The ENTRY composition** — what this file used to assert, and wrong on the shape that
+ *    reaches air. It was measured on STARTER PROJECT SCENES (`layers: []`, content in
+ *    `compositions`), which the Runtime never imports.
  *
- *  1. The row's MODE is the ENTRY composition's, not the root's.
- *  2. The scope that actually LOOPS is often a level below the entry again — `logo-bug`'s entry
- *     is `manual` while its `comp-logo-mark` child repeats forever. So "does this template loop"
- *     cannot be answered from the entry's mode either.
+ * ⚠ **AND THE FALLBACK WAS WORSE THAN THE RULE.** `entryCompositionId` names a composition a
+ * per-composition export does not contain, so `find(entryId) ?? comps[0]` silently answered for
+ * whichever panel happened to be listed first. Measured on the plant's own saved records
+ * (`~/.cg-runtime/bridge-templates/`, 2026-09-15): `میان‌برنامه (روی آنتن)` published
+ * `static / timed` — a clock panel's defaults — over a crawler whose root is
+ * `auto-out / content-driven`.
+ *
+ * ⭐ **`entryCompositionId` IS A DESIGNER-SIDE POINTER AND THE RUNTIME NEVER READS IT.** Swept
+ * across the render path with each pathspec proven non-empty first:
+ * `template-runtime/src` (29 files), `shared-schema/src` (34), `single-file-export/src` (6),
+ * `vcg-format/src` (11), `caspar-bridge/src` (24) — the only hits are the schema's own
+ * declaration and this resolver.
  */
 
 function scene(over: Partial<Scene>): Scene {
@@ -34,128 +43,185 @@ function scene(over: Partial<Scene>): Scene {
   } as unknown as Scene;
 }
 
-const comp = (id: string, playout?: unknown, lifecycle?: unknown): unknown => ({
+/** A layer holding the given elements. */
+const layer = (children: unknown[]): unknown => ({
+  id: 'L1',
+  name: 'l',
+  visible: true,
+  locked: false,
+  blendMode: 'normal',
+  children,
+});
+
+/** A `composition` ELEMENT — the thing that makes a definition into a scope. */
+const instance = (compositionId: string): unknown => ({
+  id: `inst-${compositionId}`,
+  name: compositionId,
+  type: 'composition',
+  compositionId,
+  visible: true,
+});
+
+/**
+ * A composition DEFINITION. ⚠ A bare one (no `playout`) also carries NO `lifecycle`, which is
+ * the plant's actual shape for the panels a crawler nests — and it matters: `playoutOf` resolves
+ * a no-out-point composition to `static`, which is precisely the value the old `comps[0]`
+ * fallback published over a live crawler.
+ */
+const comp = (id: string, playout?: unknown, children: unknown[] = []): unknown => ({
   id,
   name: id,
   resolution: { width: 1920, height: 1080 },
   frameRange: { in: 0, out: 100 },
-  layers: [],
-  ...(playout !== undefined ? { playout } : {}),
-  ...(lifecycle !== undefined ? { lifecycle } : {}),
+  layers: [layer(children)],
+  ...(playout !== undefined ? { playout, lifecycle: { outPoint: 50 } } : {}),
 });
 
-describe('templateTimingOf — the ENTRY composition, not the scene root', () => {
-  it('reads the entry composition named by entryCompositionId', () => {
+describe('DELTA B1 — the ROOT is the graphic', () => {
+  it("states the ROOT's mode, which is where an export puts the chosen composition", () => {
     const s = scene({
-      entryCompositionId: 'entry',
-      compositions: [
-        comp('other', { mode: 'loop-cycle' }, { outPoint: 50 }),
-        comp('entry', { mode: 'auto-out', holdSource: 'timed', holdMs: 6000 }, { outPoint: 65 }),
-      ],
+      playout: { mode: 'auto-out', holdSource: 'content-driven' },
+      lifecycle: { outPoint: 60 },
+      layers: [layer([])],
     } as Partial<Scene>);
 
     expect(templateTimingOf(s).mode).toBe('auto-out');
-    // …and the root would have said something else entirely, which is the whole point.
-    expect(playoutOf(s).mode, 'the root is a wrapper — this is the trap').toBe('static');
+    expect(templateTimingOf(s).holdSource).toBe('content-driven');
   });
 
-  it('falls back to the FIRST composition when no entry is named', () => {
+  it('🔴 IGNORES a dangling entryCompositionId — never falls back to comps[0]', () => {
+    /*
+      The plant's `میان‌برنامه (روی آنتن)` exactly: the root is the crawler, `entryCompositionId`
+      names `comp-irib` which is NOT in the package, and `compositions` holds only the panels it
+      nests. The old fallback answered with the first panel's `static / timed`.
+    */
     const s = scene({
-      compositions: [comp('first', { mode: 'manual' }, { outPoint: 50 }), comp('second')],
+      entryCompositionId: 'comp-irib',
+      playout: { mode: 'auto-out', holdSource: 'content-driven' },
+      lifecycle: { outPoint: 60 },
+      layers: [layer([instance('panel-t')])],
+      compositions: [comp('panel-t'), comp('panel-g'), comp('panel-b')],
     } as Partial<Scene>);
-    expect(templateTimingOf(s).mode).toBe('manual');
+
+    expect(templateTimingOf(s).mode, 'it answered for a panel again').toBe('auto-out');
+    // The panels resolve to `static`; that is what the old fallback published.
+    const firstPanel = (s.compositions ?? [])[0];
+    expect(firstPanel).toBeDefined();
+    if (firstPanel !== undefined) expect(playoutOf(firstPanel).mode).toBe('static');
   });
 
-  it('a scene with NO compositions IS the graphic', () => {
+  it('a scene with no compositions reads its own root', () => {
+    // The plant's `آرم (روی آنتن)` shape — `compositions: []`, root `loop-cycle`. It used to be
+    // right BY ACCIDENT (the fallback found nothing and fell through); now it is right by rule.
+    const s = scene({
+      playout: { mode: 'loop-cycle', holdMs: 10_000, repeat: 'infinite', delayMs: 2000 },
+      lifecycle: { outPoint: 70 },
+      layers: [layer([])],
+      compositions: [],
+    } as Partial<Scene>);
+
+    const t = templateTimingOf(s);
+    expect(t.mode).toBe('loop-cycle');
+    expect(t.loop).toEqual({ repeat: 'infinite', delayMs: 2000 });
+  });
+});
+
+describe('DELTA B1 — a looping scope is one the runtime would WIRE', () => {
+  it('finds a loop in a REACHABLE nested instance', () => {
+    const s = scene({
+      playout: { mode: 'manual' },
+      lifecycle: { outPoint: 70 },
+      layers: [layer([instance('mark')])],
+      compositions: [comp('mark', { mode: 'loop-cycle', repeat: 'infinite' })],
+    } as Partial<Scene>);
+
+    const t = templateTimingOf(s);
+    expect(t.mode, "the ROW's mode is the root's").toBe('manual');
+    expect(t.loop).toEqual({ repeat: 'infinite' });
+  });
+
+  it('🔴 IGNORES a looping composition NOTHING references', () => {
+    /*
+      A `compositions` entry is a DEFINITION, not a scope — it becomes one only where a
+      `composition` element references it. A flat scan would name this orphan, and
+      `applyPassTiming`, which walks the real scope tree, would then act on a different set than
+      the display named. One resolution, shared.
+    */
     const s = scene({
       playout: { mode: 'auto-out' },
       lifecycle: { outPoint: 50 },
-    } as Partial<Scene>);
-    expect(templateTimingOf(s).mode).toBe('auto-out');
-  });
-});
-
-describe('templateTimingOf — the loop is found wherever it sits', () => {
-  it('finds a loop BELOW the entry, whose own mode does not loop', () => {
-    // `logo-bug`'s exact shape: a `manual` entry over a child that repeats forever.
-    const s = scene({
-      entryCompositionId: 'entry',
-      compositions: [
-        comp('entry', { mode: 'manual' }, { outPoint: 70 }),
-        comp('mark', { mode: 'loop-cycle', holdMs: 8000, repeat: 'infinite' }, { outPoint: 70 }),
-      ],
+      layers: [layer([])],
+      compositions: [comp('orphan', { mode: 'loop-cycle', repeat: 4 })],
     } as Partial<Scene>);
 
-    const t = templateTimingOf(s);
-    expect(t.mode, "the ROW's mode is still the entry's").toBe('manual');
-    expect(t.loop, 'the loop was not found — the pass controls would be hidden').toEqual({
-      repeat: 'infinite',
-    });
+    expect(
+      templateTimingOf(s).loop,
+      'an unreferenced definition was treated as a scope',
+    ).toBeUndefined();
   });
 
-  it('a looping scope with NO authored count still reports that it loops', () => {
-    /*
-      🔴 The case that makes `loops` a separate bit from `repeat`. The Designer never wrote
-      `playout.repeat` before TIMING-BUILD-21, so this is the COMMON shape — and deriving "does
-      it loop" from `repeat !== undefined` would hide the controls on exactly those templates.
-    */
+  it('a loop with NO authored count still reports that it loops', () => {
+    // The bit that makes `loops` separate from `repeat`: the Designer never wrote
+    // `playout.repeat` before TIMING-BUILD-21, so this is the common shape.
     const s = scene({
-      entryCompositionId: 'entry',
-      compositions: [comp('entry', { mode: 'loop-cycle' }, { outPoint: 50 })],
+      playout: { mode: 'loop-cycle' },
+      lifecycle: { outPoint: 50 },
+      layers: [layer([])],
     } as Partial<Scene>);
 
-    const t = templateTimingOf(s);
-    expect(t.loop, 'a loop with no authored count reads as no loop').toEqual({});
-    expect(t.loop).toBeDefined();
+    expect(templateTimingOf(s).loop).toEqual({});
   });
 
   it('reports NO loop when nothing loops', () => {
     const s = scene({
-      entryCompositionId: 'entry',
-      compositions: [comp('entry', { mode: 'auto-out' }, { outPoint: 50 })],
+      playout: { mode: 'auto-out' },
+      lifecycle: { outPoint: 50 },
+      layers: [layer([])],
     } as Partial<Scene>);
     expect(templateTimingOf(s).loop).toBeUndefined();
   });
 
-  it('🔴 DELTA A5 — A STATED KNOWN LIMIT: with TWO looping scopes, the display names only the first', () => {
-    /*
-      🔴 **THE DISPLAY READS ONE SCOPE; THE APPLY REACHES EVERY ONE.** `templateTimingOf` takes
-      the count and gap an override inherits from the FIRST looping scope, while
-      `applyPassTiming` walks the whole scope tree. For a template with two loops that authored
-      DIFFERENT counts, the console would name one of them and set both.
-
-      ⚠ **MEASURED BEFORE BEING FILED AS A LIMIT RATHER THAN A BUG: the case does not exist in
-      this corpus.** Across all five starter templates and the one scene fixture in
-      `tools/template-fixtures`, the count of templates with more than one looping scope is
-      ZERO — `ticker` and `logo-bug` have exactly one each (`comp-ticker-pulse`,
-      `comp-logo-mark`), the other four have none. So nothing today displays a number it then
-      applies somewhere else.
-
-      This case exists so the limit is a STATED one with a test showing what happens, rather
-      than a surprise the day a template authors two loops. What "2" should mean on such a
-      template is the owner's call — `R-064` is the per-scope stage — and until then the
-      honest reading of this assertion is "documented, not endorsed".
-    */
+  it('🔴 DELTA A5 (re-run) — a STATED LIMIT: two looping scopes, and only the first is named', () => {
+    // Re-measured with the fixed resolver: still zero such templates in the corpus, so this
+    // stays a documented limit rather than a live bug. What "2" means there is the owner's call.
     const s = scene({
-      entryCompositionId: 'entry',
-      compositions: [
-        comp('entry', { mode: 'loop-cycle', repeat: 3, delayMs: 1000 }, { outPoint: 50 }),
-        comp('second', { mode: 'loop-cycle', repeat: 7, delayMs: 9000 }, { outPoint: 50 }),
-      ],
+      playout: { mode: 'loop-cycle', repeat: 3, delayMs: 1000 },
+      lifecycle: { outPoint: 50 },
+      layers: [layer([instance('second')])],
+      compositions: [comp('second', { mode: 'loop-cycle', repeat: 7, delayMs: 9000 })],
     } as Partial<Scene>);
 
-    // The FIRST looping scope, depth-first from the entry — the second's 7 and 9000 are not
-    // shown anywhere, and an override typed against this display reaches both scopes.
+    // The ROOT wins — it is the graphic — and the nested loop's 7 / 9000 are not shown.
     expect(templateTimingOf(s).loop).toEqual({ repeat: 3, delayMs: 1000 });
   });
+});
 
-  it('carries the looping scope’s authored gap, which is what an override inherits', () => {
+describe('DELTA B1.3 — a hold is stated only where one runs', () => {
+  it.each([
+    ['manual', 'ends on stop()'],
+    ['static', 'hard-cuts'],
+  ])('states no hold source for %s (%s)', (mode) => {
     const s = scene({
-      entryCompositionId: 'entry',
-      compositions: [
-        comp('entry', { mode: 'loop-cycle', repeat: 3, delayMs: 2000 }, { outPoint: 50 }),
-      ],
-    } as Partial<Scene>);
-    expect(templateTimingOf(s).loop).toEqual({ repeat: 3, delayMs: 2000 });
+      playout: { mode, holdSource: 'timed' },
+      lifecycle: { outPoint: 50 },
+      layers: [layer([])],
+    } as unknown as Partial<Scene>);
+    expect(templateTimingOf(s).holdSource).toBeUndefined();
+  });
+
+  it.each([['auto-out'], ['loop-cycle']])('states it for %s', (mode) => {
+    const s = scene({
+      playout: { mode, holdSource: 'timed' },
+      lifecycle: { outPoint: 50 },
+      layers: [layer([])],
+    } as unknown as Partial<Scene>);
+    expect(templateTimingOf(s).holdSource).toBe('timed');
+  });
+});
+
+describe('DELTA B1.4 — the derivation is versioned', () => {
+  it('has a current version a consumer can compare against', () => {
+    // A record without it was derived by the entry-composition resolver and is WRONG, not old.
+    expect(TEMPLATE_TIMING_VERSION).toBeGreaterThanOrEqual(2);
   });
 });
