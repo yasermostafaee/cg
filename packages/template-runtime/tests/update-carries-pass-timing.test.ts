@@ -112,6 +112,122 @@ const runPasses = (l: Live, n: number): void => {
   for (let i = 0; i < n; i++) l.clock.advance(PASS_MS);
 };
 
+/**
+ * 🔴 **`TIMING-WIRE-22 · DELTA B6` — AND THE SAME PAYLOAD DELIVERED THROUGH `play()`.**
+ *
+ * ── THE DEFECT THIS FILE DID NOT COVER, AND HOW IT REACHED AIR ──────────────
+ *
+ * The bridge attaches the operator's count to the `CG ADD` data payload (`#sendAdd`), and
+ * CasparCG hands a template's LOAD-TIME data to the page through whichever global it uses — for
+ * many hosts that is `play(data)`, not `update(data)`. `play()` already lifted the control
+ * payload and honoured `control.look` for exactly that reason; `control.timing` was never added
+ * beside it, so on the `play` delivery path the count was read and then DROPPED.
+ *
+ * The consequence on the plant (owner, 2026-09-15): «روی تعداد هم فرقی نداره هر تعدادی باشه» —
+ * whatever count is set, the take ignores it. `DELTA B0` made `play()` honour a count seated
+ * before it, and this is the other half of that promise: seating it.
+ *
+ * ⚠ **THE ORDER IS LOAD-BEARING AND IT IS THE OPPOSITE OF THE LOOK'S.** The look is entered
+ * LAST, because `restoreContent()` would otherwise un-hide what it hid. The timing must be
+ * seated BEFORE the controller cascade, because `PlayoutController.play()` SNAPSHOTS the count
+ * into `cyclesLeft` — applied afterwards it would be read as a live edit to a loop that had
+ * already chosen its total, which is a different quantity (`DELTA A1`).
+ */
+describe('DELTA B6 — a count delivered on the TAKE, through play()', () => {
+  it('🔴 two passes on the ADD payload end the loop after exactly two', async () => {
+    const clock = makeClock();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    let settles = 0;
+    rt.on('stop.end', () => {
+      settles += 1;
+    });
+
+    // The bridge's `CG ADD <layer> <tpl> 0 <data>` → this page's `play(data)`.
+    await rt.play(withCgControl({} as FieldValues, { timing: { passes: 2 } }));
+
+    clock.advance(PASS_MS);
+    expect(settles, 'it ended after one pass').toBe(0);
+    clock.advance(PASS_MS);
+    expect(settles, 'two passes were asked for on the take and the loop did not end').toBe(1);
+    host.remove();
+  });
+
+  it('🔴 and INFINITE on the ADD payload keeps it looping', async () => {
+    /*
+      The owner's actual report: «لوگو رو با اینکه روی بینهایت میذارم ولی فقط یکبار پخش میشه».
+      The template's own `repeat` is already infinite, so this case can only fail if the payload
+      is applied WRONGLY — which is the hazard of fixing the drop by seating the value in the
+      wrong place, or of reading an absent member as a zero.
+    */
+    const clock = makeClock();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    let settles = 0;
+    rt.on('stop.end', () => {
+      settles += 1;
+    });
+
+    await rt.play(withCgControl({} as FieldValues, { timing: { passes: 'infinite' } }));
+
+    for (let i = 0; i < 12; i++) clock.advance(PASS_MS);
+    expect(settles, 'an infinite loop closed itself').toBe(0);
+    host.remove();
+  });
+
+  it('a take with NO timing member leaves the authored count alone', async () => {
+    // "No opinion" and "reset to the template's value" are different instructions, and only the
+    // first one is being given here. The authored `repeat` is infinite, so it must keep looping.
+    const clock = makeClock();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    let settles = 0;
+    rt.on('stop.end', () => {
+      settles += 1;
+    });
+
+    await rt.play({});
+
+    for (let i = 0; i < 12; i++) clock.advance(PASS_MS);
+    expect(settles).toBe(0);
+    host.remove();
+  });
+
+  it('the gap on the ADD payload is honoured from the FIRST boundary', async () => {
+    // `delayMs` is read at every boundary rather than snapshotted, so the only way it can be
+    // wrong on a take is if the payload never reached the controller at all.
+    const clock = makeClock();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const rt = createRuntime(loopingScene(), { host, skipFontLoad: true, clock });
+    let settles = 0;
+    rt.on('stop.end', () => {
+      settles += 1;
+    });
+
+    await rt.play(withCgControl({} as FieldValues, { timing: { passes: 2, delayMs: 500 } }));
+
+    clock.advance(PASS_MS); // pass 1 ends; the gap starts
+    clock.advance(499); // still inside the gap — pass 2 has not begun
+    expect(settles, 'the gap was skipped').toBe(0);
+    /*
+      ⚠ THREE SEPARATE ADVANCES, and that is this HARNESS rather than the product: `advance`
+      fires the timers due at the new `now` in ONE round, and the gap timer SCHEDULES the next
+      hold when it fires. Rolling the gap and the pass into a single jump leaves that hold due in
+      the future, and the case then reads as "the loop never ended" — a harness artefact
+      indistinguishable from a real defect, which is how it first failed here.
+    */
+    clock.advance(1); // the gap elapses; pass 2 begins
+    expect(settles).toBe(0);
+    clock.advance(PASS_MS); // pass 2 runs out — the second of the two asked for
+    expect(settles, 'the gap was ignored, or the count was').toBe(1);
+    host.remove();
+  });
+});
+
 describe('TIMING-WIRE-22 (b) — the page applies __cg.timing to the running controller', () => {
   it('a CG UPDATE carrying two passes ends the loop after exactly two more', async () => {
     const l = await onAir();

@@ -2439,6 +2439,32 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
         for (const child of n.children) rearmSettled(child);
       };
       rearmSettled(rootNode);
+      /*
+        🔴 **`DELTA B6` — THE OPERATOR'S PASS TIMING IS SEATED HERE, BEFORE THE CASCADE.**
+
+        `play()` has lifted the control payload since the look fix, and that fix's own note says
+        why: the bridge attaches control data to the `CG ADD` payload, and CasparCG hands a
+        template's LOAD-TIME data to the page through whichever global it uses — for many hosts
+        that is `play(data)`, not `update(data)`. "Read on `update()` alone, that fix was inert
+        on any host that delivers load data through `play`."
+
+        `control.timing` was never added beside `control.look`, so on that delivery path the
+        count was read and then DROPPED. Measured on the plant (owner, 2026-09-15): «روی تعداد
+        هم فرقی نداره هر تعدادی باشه» — whatever count is set, the take ignores it. `DELTA B0`
+        made `play()` HONOUR a count seated before it; this is the half that seats it.
+
+        ⚠ **THE POSITION IS LOAD-BEARING AND IT IS THE OPPOSITE OF THE LOOK'S.** The look is
+        entered LAST because `restoreContent()` would otherwise un-hide what it hid. The timing
+        must be applied BEFORE the cascade, because `PlayoutController.play()` SNAPSHOTS the
+        count into `cyclesLeft` — applied afterwards it would be read as a live edit to a loop
+        that has already chosen its total, which is a different quantity entirely (`DELTA A1`:
+        the running count is "remaining FROM NOW", the pre-take one is a TOTAL).
+
+        ⚠ ABSENT MEANS UNCHANGED, exactly as on `update()`: an ordinary take carries no
+        `timing` and must leave the authored `repeat` alone, so this is guarded on the member's
+        presence and never called with defaults.
+      */
+      if (control?.timing !== undefined) applyPassTiming(control.timing);
       cascade(rootNode, (c) => c.play());
       // Session Z — THE TRIPWIRE. Everything above put a graphic ON AIR. If the machine
       // did not follow, the two have diverged, and the consequence is SILENT and total:
