@@ -2812,5 +2812,9 @@ dated pointer aged out before the next allocation. It is recorded here rather th
 because the entry above already settled what to do about it: the pointer is a measurement, and
 the `git grep --untracked` at the moment of allocation is the instrument.
 
-⇒ **Next free after this session is `B-248`** (`B-247` taken here), **`D-161`**, **`C-034`** and
+⇒ **Next free after this session is `B-251`** — the line below read `B-248` and is corrected in
+place rather than restated: `TIMING-WIRE-22` then filed `B-248` (the in-flight gap, `bugs-runtime`),
+`B-249` (the dangling `entryCompositionId`, `bugs-designer`) and `B-250` (the row chip's blind spot
+on a staged position, `bugs-runtime`), each with a heading. Originally: **`B-248`** (`B-247` taken
+here), **`D-161`**, **`C-034`** and
 **`P-047`** (unchanged).

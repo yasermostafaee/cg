@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import type { TemplateInfo } from '@cg/shared-ipc';
 import { TEMPLATE_TIMING_VERSION, type StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
@@ -7,6 +7,8 @@ import { Button } from '../../ui/Button.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { isOnAir } from '../stack/onAir.js';
 import { reportCommandError } from '../status/commandFeedback.js';
+import { lastSentPasses } from './timingSent.js';
+import { draftsVersion, stageTiming, subscribeDrafts, timingDraftOf } from './draftStore.js';
 
 /**
  * 🔴 **`TIMING-WIRE-22` §4 — THE CONSOLE'S TIMING SECTION.**
@@ -16,6 +18,13 @@ import { reportCommandError } from '../status/commandFeedback.js';
  * `mode` and `hold` are FACTS — `Tag`s, never inputs and never DISABLED inputs. A greyed box
  * tells the operator they lack a permission; the truth is the value was never theirs to set.
  * `passes` and `gap` are CONTROLS, inherited until the operator sets them.
+ *
+ * ── 🔴 `DELTA B4` — AND THEY DRAFT, LIKE EVERY OTHER INSPECTOR EDIT ─────────
+ *
+ * **This component sends nothing.** It stages into the one draft store, and the commit bar's
+ * `Update` / `Update on air` spends it together with the field and position edits in ONE press;
+ * `Discard` drops it with them. What that replaces was a BLUR commit — so a click anywhere else
+ * on the panel sent a command toward air, and the typed number vanished on the way.
  *
  * ── 🔴 THE LABEL CHANGES WITH THE STATE ─────────────────────────────────────
  *
@@ -33,8 +42,8 @@ import { reportCommandError } from '../status/commandFeedback.js';
  * ── 🔴 `DELTA A2` — ON AIR THE BOX SHOWS NO NUMBER ──────────────────────────
  *
  * The pass counter lives in the page inside CEF and NO return path carries it, so the console
- * can only ever know what it SENT. A numeric placeholder under "Passes remaining" is a reading
- * with a shelf life — one pass later it is wrong, and it decays with nobody touching anything.
+ * can only ever know what it SENT. A number under "Passes remaining" is a reading with a shelf
+ * life — one pass later it is wrong, and it decays with nobody touching anything.
  */
 export function TimingSection({
   item,
@@ -44,7 +53,9 @@ export function TimingSection({
   /** `null` while the Inspector is still fetching it — the same shape its siblings take. */
   info: TemplateInfo | null | undefined;
 }): JSX.Element | null {
-  const [busy, setBusy] = useState(false);
+  // The draft is module state, so this section re-renders from the store's version counter —
+  // the same subscription every other drafting control on this panel already uses.
+  useSyncExternalStore(subscribeDrafts, draftsVersion, draftsVersion);
   const playout = info?.playout;
   /*
     🔴 `DELTA A6` + `DELTA B1.4` — AN OLD OR STALE RECORD SAYS WHY, instead of vanishing or
@@ -75,35 +86,12 @@ export function TimingSection({
   }
 
   const onAir = isOnAir(item);
-  const override = item.timingOverride;
   /*
     `loops` is the TEMPLATE's bit, not `mode === 'loop-cycle'`: the row's mode is the root's,
     and the scope that repeats is often a nested instance below it. Deriving it from `mode`
     would hide the pass controls on exactly the templates that loop.
   */
   const loops = playout.loops === true;
-
-  const send = (patch: { passes?: number | 'infinite'; delayMs?: number }): void => {
-    setBusy(true);
-    void window.cg.stack
-      .setPassTiming({ itemId: item.itemId, ...patch })
-      .then(
-        (res) => {
-          // A refusal is PERSISTENT, not a toast (DELTA R), and the display is not touched: the
-          // control renders from the row's published value, which the bridge writes only on
-          // acceptance.
-          if (!res.ok) {
-            reportCommandError(res.message ?? 'The timing change was not accepted.');
-            return;
-          }
-          if (patch.passes !== undefined) recordSentPasses(item.itemId);
-        },
-        (err: unknown) => {
-          reportCommandError(err instanceof Error ? err.message : 'The timing change failed.');
-        },
-      )
-      .finally(() => setBusy(false));
-  };
 
   return (
     <div className="cg-inspector-section">
@@ -134,20 +122,8 @@ export function TimingSection({
 
       {loops && (
         <>
-          <PassesControl
-            itemId={item.itemId}
-            onAir={onAir}
-            busy={busy}
-            authored={playout.repeat}
-            override={override?.repeat}
-            onCommit={(passes) => send({ passes })}
-          />
-          <DelayControl
-            busy={busy}
-            authored={playout.delayMs}
-            override={override?.delayMs}
-            onCommit={(delayMs) => send({ delayMs })}
-          />
+          <PassesControl item={item} onAir={onAir} authored={playout.repeat} />
+          <DelayControl item={item} authored={playout.delayMs} />
         </>
       )}
     </div>
@@ -178,92 +154,110 @@ const HOLD_LONG: Record<string, string> = {
   'content-driven': 'Holds until the content completes',
 };
 
-/** `∞` for infinite, else the number. The ONE spelling, so two rows cannot disagree. */
-const passesWord = (v: number | 'infinite'): string => (v === 'infinite' ? '∞' : String(v));
-
+/**
+ * 🔴 `DELTA B4` — THE PASS COUNT: A LABELLED TWO-STATE CHOICE, THEN A NUMBER.
+ *
+ * ── WHY THE BARE `∞` IS GONE ────────────────────────────────────────────────
+ *
+ * Owner-observed: it was not understood. It was a ghost button beside a box, and nothing said
+ * whether it was the state the row was IN or an action pressing it would take — so the one
+ * thing a toggle exists to carry, WHICH OF THE TWO IS SELECTED, was the thing it did not carry.
+ * `Until stop` / `Count` say what they mean in words, and `aria-pressed` makes the selection a
+ * fact the paint and a screen reader read from one place.
+ *
+ * ⚠ THE COUNT BOX BELONGS TO THE `Count` STATE and is not rendered beside `Until stop`. A box
+ * that cannot affect anything is the R-021 stage-2b anti-pattern, and a DISABLED one would be
+ * the greyed control this section's header refuses on the facts above.
+ */
 function PassesControl({
-  itemId,
+  item,
   onAir,
-  busy,
   authored,
-  override,
-  onCommit,
 }: {
-  itemId: string;
+  item: StackItemState;
   onAir: boolean;
-  busy: boolean;
   authored: number | 'infinite' | undefined;
-  override: number | 'infinite' | undefined;
-  onCommit: (passes: number | 'infinite') => void;
 }): JSX.Element {
-  /*
-    🔴 `DELTA B3` — THE HOUSE PRIMITIVE, WITH NO `style` PROP.
-
-    These were raw `<input className="cg-input" style={…}>`, and the inline style is why they
-    did not match POSITION's `dx`/`dy` and why the gap box read as disabled. `NumericInput` is
-    what POSITION uses; it also carries the `INSPECTOR-DELTA` §1 guard that makes `disabled` a
-    BEHAVIOUR rather than a rendering, which a raw input does not.
-
-    ⚠ The value is held locally so typing survives a re-render. `DELTA B4` moves it into the
-    draft store, where Update / Discard own it.
-  */
-  const [typed, setTyped] = useState('');
+  const draft = timingDraftOf(item.itemId);
+  const applied = item.timingOverride?.repeat;
   const inherited = authored ?? 'infinite';
-  const shown = override ?? inherited;
   const label = onAir ? 'Passes remaining' : 'Passes next take';
-  const sentAtLabel = lastSentPasses(itemId);
-  const sentLine =
-    override === undefined
-      ? 'Nothing sent'
-      : `Sent ${passesWord(override)} more${sentAtLabel === undefined ? '' : ` · ${sentAtLabel}`}`;
+  /*
+    WHICH STATE IS SELECTED, resolved once from three layers in falling authority: the draft the
+    operator is composing, then the count this row has stored, then what the template authored.
+    One resolution, so the two buttons and the box can never disagree about the answer.
+  */
+  const chosen: 'until-stop' | 'count' =
+    draft?.passes !== undefined
+      ? draft.passes.kind
+      : (applied ?? inherited) === 'infinite'
+        ? 'until-stop'
+        : 'count';
+  /*
+    🔴 WHAT THE BOX HOLDS, and the on-air asymmetry is `DELTA A2`'s.
 
-  const commit = (): void => {
-    const raw = typed.trim();
-    setTyped('');
-    if (raw === '') return;
-    const parsed = parsePasses(raw);
-    if (parsed === undefined) {
-      // 🔴 REFUSED WITH A REASON — never silently rewritten. `0` is an instruction and reaches
-      // the bridge; what is refused is text that is not a count. One clause (`DELTA B2`).
-      reportCommandError(`"${raw}" is not a pass count.`);
-      return;
-    }
-    onCommit(parsed);
-  };
+    A draft in progress always wins — that is the whole of "typing stays visible". With no
+    draft: OFF AIR it shows the STORED count, which is a value the console really does hold;
+    ON AIR it shows nothing, because the page's remaining count is a number nothing here sees.
+  */
+  const typed =
+    draft?.passes?.text ?? (onAir || typeof applied !== 'number' ? '' : String(applied));
+
+  const sentAtLabel = lastSentPasses(item.itemId);
+  const sentLine =
+    applied === undefined
+      ? 'Nothing sent'
+      : `Sent ${passesWord(applied)} more${sentAtLabel === undefined ? '' : ` · ${sentAtLabel}`}`;
 
   return (
     <div style={styles.stack}>
       <span style={styles.label}>{label}</span>
-      <div style={styles.inline}>
-        <NumericInput
-          value={typed}
-          onValueChange={setTyped}
-          aria-label={label}
-          disabled={busy}
-          // ON AIR: no number — the console cannot see the page's counter. OFF AIR: the stored
-          // count, naming what it inherits when the operator has set nothing.
-          placeholder={
-            onAir
-              ? ''
-              : override === undefined
-                ? `Default (${passesWord(inherited)})`
-                : passesWord(shown)
-          }
-          {...(busy ? { title: 'Sending…' } : {})}
-          onBlur={commit}
-        />
+      {/*
+        The house's segmented group: a `role="group"` of `Button`s keyed on `aria-pressed`,
+        painted by the shared selected-not-on-air family. No `style` prop and no new colour —
+        `controls.css` names `.cg-timing-choice` in the template picker's own chip selectors, so
+        "a chosen thing that is not on air" keeps ONE appearance in this app.
+      */}
+      <div className="cg-timing-choice" role="group" aria-label={label}>
         <Button
-          variant="ghost"
-          disabled={busy}
-          title="Keep looping until stop"
+          variant="neutral"
+          aria-pressed={chosen === 'until-stop'}
           onClick={() => {
-            setTyped('');
-            onCommit('infinite');
+            // Carry the box's text INTO the choice, so a flip back to `Count` returns the
+            // operator's number rather than re-seeding from what the row has stored.
+            stageTiming(item.itemId, { passes: { kind: 'until-stop', text: typed } });
           }}
         >
-          ∞
+          Until stop
+        </Button>
+        <Button
+          variant="neutral"
+          aria-pressed={chosen === 'count'}
+          onClick={() => {
+            // Carry whatever the box already holds across the switch — pressing `Count` after
+            // typing 3 and changing your mind twice must not eat the 3.
+            stageTiming(item.itemId, { passes: { kind: 'count', text: typed } });
+          }}
+        >
+          Count
         </Button>
       </div>
+      {chosen === 'count' && (
+        <NumericInput
+          value={typed}
+          onValueChange={(text) => {
+            stageTiming(item.itemId, { passes: { kind: 'count', text } });
+          }}
+          aria-label={label}
+          // OFF AIR: names what it inherits when the operator has stored nothing. ON AIR: no
+          // number and no placeholder either — a placeholder would be that same unseeable
+          // count in lighter ink.
+          placeholder={onAir ? '' : `Default (${passesWord(inherited)})`}
+          onBlur={() => {
+            refuseIfNotACount(typed);
+          }}
+        />
+      )}
       {onAir && (
         <p style={styles.hint} data-testid="timing-passes-sent">
           {sentLine}
@@ -274,86 +268,74 @@ function PassesControl({
 }
 
 function DelayControl({
-  busy,
+  item,
   authored,
-  override,
-  onCommit,
 }: {
-  busy: boolean;
+  item: StackItemState;
   authored: number | undefined;
-  override: number | undefined;
-  onCommit: (delayMs: number) => void;
 }): JSX.Element {
-  const [typed, setTyped] = useState('');
+  const draft = timingDraftOf(item.itemId);
+  const applied = item.timingOverride?.delayMs;
   const inheritedMs = authored ?? 0;
-  const shownMs = override ?? inheritedMs;
-  const secs = (ms: number): string => `${String(Math.round(ms / 100) / 10)} s`;
+  /*
+    The gap has no on-air asymmetry: unlike the pass count it is not consumed as it runs, so the
+    stored value IS what the next pass will wait — on air and off — and showing it is honest in
+    both states.
+  */
+  const typed =
+    draft?.gapSeconds ?? (applied === undefined ? '' : String(Math.round(applied / 100) / 10));
 
   return (
     <div style={styles.stack}>
       <span style={styles.label}>Gap between passes</span>
       <NumericInput
         value={typed}
-        onValueChange={setTyped}
+        onValueChange={(gapSeconds) => {
+          stageTiming(item.itemId, { gapSeconds });
+        }}
         decimal
         aria-label="Gap between passes"
-        disabled={busy}
-        placeholder={override === undefined ? `Default (${secs(inheritedMs)})` : secs(shownMs)}
-        {...(busy ? { title: 'Sending…' } : {})}
+        placeholder={`Default (${secondsWord(inheritedMs)})`}
         onBlur={() => {
           const raw = typed.trim();
-          setTyped('');
           if (raw === '') return;
           const n = Number(raw);
           // `0` is legal and means no gap, so it is NOT refused here.
-          if (!Number.isFinite(n) || n < 0) {
-            reportCommandError(`"${raw}" is not a gap in seconds.`);
-            return;
-          }
-          onCommit(Math.round(n * 1000));
+          if (!Number.isFinite(n) || n < 0) reportCommandError(`"${raw}" is not a gap in seconds.`);
         }}
       />
     </div>
   );
 }
 
-/**
- * `DELTA A2` — when this browser last sent a pass count, as a local clock time.
- *
- * Browser-local and deliberately not persisted: the console is stating something it did itself,
- * and the only honest source for "when" is the moment it happened here. A count set from another
- * console has no time this browser can know, so the line omits it rather than timing a
- * republish — which would time the RECONCILE, not the operator's action.
- */
-const sentAt = new Map<string, string>();
+/** `∞` for infinite, else the number. The ONE spelling, so two rows cannot disagree. */
+const passesWord = (v: number | 'infinite'): string => (v === 'infinite' ? '∞' : String(v));
 
-function recordSentPasses(itemId: string): void {
-  sentAt.set(itemId, new Date().toLocaleTimeString());
-}
-
-function lastSentPasses(itemId: string): string | undefined {
-  return sentAt.get(itemId);
-}
+/** A gap in ms as the operator thinks of it — seconds, one decimal. */
+const secondsWord = (ms: number): string => `${String(Math.round(ms / 100) / 10)} s`;
 
 /**
- * Text → a pass count, or `undefined` for "not a count".
+ * 🔴 REFUSED WITH A REASON — never silently rewritten, and never on the way to the wire.
  *
- * ⚠ `0` returns `0`, not `undefined`: it is the instruction "out after this pass". Reading it as
- * absent is the silent-clamp failure this tree has paid for twice.
+ * ⚠ What is refused is TEXT THAT IS NOT A COUNT. `0` is an instruction ("out after this pass")
+ * and reaches the bridge; reading it as absent is the silent-clamp failure this tree has paid
+ * for twice.
+ *
+ * ⚠ And since `DELTA B4` a refusal changes nothing about the draft — the text stays in the box
+ * for the operator to correct. What a press would CARRY is decided by `timingPassesOf`, which
+ * answers `undefined` for the same text, so nonsense cannot reach air whether or not this
+ * sentence was ever read.
  */
-function parsePasses(raw: string): number | 'infinite' | undefined {
+function refuseIfNotACount(raw: string): void {
   const s = raw.trim();
-  if (s === '') return undefined;
-  if (s === '∞' || s.toLowerCase() === 'inf' || s.toLowerCase() === 'infinite') return 'infinite';
+  if (s === '') return;
   const n = Number(s);
-  if (!Number.isInteger(n) || n < 0) return undefined;
-  return n;
+  if (!Number.isInteger(n) || n < 0) reportCommandError(`"${s}" is not a pass count.`);
 }
 
 const styles = {
   row: { display: 'flex', alignItems: 'baseline', gap: '0.5rem', margin: '0.25rem 0' },
   stack: { display: 'flex', flexDirection: 'column', gap: '0.2rem', margin: '0.5rem 0' },
-  inline: { display: 'flex', alignItems: 'center', gap: '0.35rem' },
   label: { color: colors.textMuted, fontSize: '0.7rem', minWidth: '5.5rem' },
   hint: { color: colors.textMuted, fontSize: '0.66rem', lineHeight: 1.4, margin: '0.15rem 0 0' },
 } as const satisfies Record<string, React.CSSProperties>;

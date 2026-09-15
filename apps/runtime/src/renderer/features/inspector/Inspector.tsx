@@ -525,6 +525,12 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
       DISCARD, which now drops it, would throw it away with nothing having said it was there.
     */
     item.position ?? defaultPositionOf(item.templateId),
+    /*
+      🔴 …and the TIMING (`DELTA B4`). It stages like every other edit now and `Update` spends
+      it, so the bar has to see it: a pass count staged against a bar reporting itself clean is
+      an Update the operator cannot press and a Discard that reads as nothing to discard.
+    */
+    item.timingOverride,
   );
   const isEmpty = rootFields.length === 0 && groups.length === 0;
 

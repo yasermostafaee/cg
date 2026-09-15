@@ -3,6 +3,7 @@ import {
   type FieldValue,
   type FieldValues,
   type PositionAnchor,
+  type StackItemTimingOverride,
 } from '@cg/shared-schema';
 
 /**
@@ -172,6 +173,133 @@ export function positionDraftOf(itemId: string): PositionDraft | undefined {
  */
 export function clearPositionDraft(itemId: string): void {
   if (positionDrafts.delete(itemId)) bump();
+}
+
+/**
+ * 🔴 `TIMING-WIRE-22 · DELTA B4` — **A TIMING EDIT IS A DRAFT, LIKE EVERY OTHER ONE.**
+ *
+ * ── WHAT IT REPLACES, AND WHY THAT WAS WRONG ─────────────────────────────────
+ *
+ * The passes and gap boxes committed ON BLUR. Two things followed, both owner-observed: the
+ * typed value VANISHED (the box cleared itself before the operator could check the number),
+ * and a blur — a click anywhere else on the panel — SENT A COMMAND TOWARD AIR. Every other
+ * Inspector edit stages and waits for one press; timing was the only surface on which looking
+ * away was a commit.
+ *
+ * ── WHY IT IS A FIFTH MAP AND NOT A KEY IN THE FIELD OVERLAY ─────────────────
+ *
+ * The same reason `plateDrafts` and `positionDrafts` are: that overlay IS the `stack.update`
+ * payload, and a pass count living in it would be sent to the template as a field it never
+ * declared. Timing travels on `stack.set-pass-timing`, its own channel. What changes here is
+ * only which CONTROL commits it — no wire, no IPC schema and no persisted key moves.
+ *
+ * ── 🔴 THE VALUES ARE KEPT AS THE OPERATOR TYPED THEM ───────────────────────
+ *
+ * `""`, `"1."` and `"-"` are in-progress states, and a draft that round-tripped them through
+ * a number would flatten each to `0` under the operator's cursor. The same rule
+ * {@link PositionDraft} keeps, for the same reason.
+ *
+ * ⚠ `passes` is a DISCRIMINATED UNION rather than a string with `'infinite'` smuggled into it.
+ * "Until stop" is a CHOICE made on a two-state control, not text anybody typed, and a sentinel
+ * string would be indistinguishable from an operator typing the word.
+ *
+ * ⚠ **AND `until-stop` CARRIES THE TEXT IT CAME FROM**, which looks redundant and is not. The
+ * two-state control is a round trip an operator makes while thinking — type 7, try `Until stop`,
+ * change your mind — and without this the flip back to `Count` re-seeded the box from the row's
+ * STORED count and ate the 7. Measured: staged 7, flipped twice, got 3 back. The CHOICE decides
+ * what a press sends; the text is only remembered, and `timingPassesOf` never reads it here.
+ */
+export interface TimingDraft {
+  /** The passes half. `undefined` — the operator has not touched it. */
+  readonly passes?:
+    | { readonly kind: 'until-stop'; readonly text?: string | undefined }
+    | { readonly kind: 'count'; readonly text: string }
+    | undefined;
+  /** The gap in SECONDS, as typed. `undefined` — untouched. */
+  readonly gapSeconds?: string | undefined;
+}
+
+const timingDrafts = new Map<string, TimingDraft>();
+
+/**
+ * Stage one half of the item's timing draft, MERGING with whatever is already staged.
+ *
+ * ⚠ Merging rather than replacing is the contract: the two halves are edited by two separate
+ * controls, and a replace would mean typing a gap silently dropped a pass count the operator
+ * had just chosen. A caller that means "forget the passes half" passes `{ passes: undefined }`,
+ * which is why the merge reads the KEY's presence and not the value's.
+ */
+export function stageTiming(itemId: string, patch: TimingDraft): void {
+  const prior = timingDrafts.get(itemId) ?? {};
+  timingDrafts.set(itemId, {
+    ...prior,
+    ...('passes' in patch ? { passes: patch.passes } : {}),
+    ...('gapSeconds' in patch ? { gapSeconds: patch.gapSeconds } : {}),
+  });
+  bump();
+}
+
+/** The item's staged timing, or `undefined` when nothing is staged for it. */
+export function timingDraftOf(itemId: string): TimingDraft | undefined {
+  return timingDrafts.get(itemId);
+}
+
+/**
+ * Drop just the timing draft — what an ACCEPTED send clears.
+ *
+ * ⚠ Narrower than {@link clearDraft}, for the reason {@link clearPositionDraft} states: one
+ * press commits several halves and each clears only its own, so an accepted timing change must
+ * not take a field edit staged during the round trip with it.
+ */
+export function clearTimingDraft(itemId: string): void {
+  if (timingDrafts.delete(itemId)) bump();
+}
+
+/**
+ * The passes value a send would carry, or `undefined` when the draft states none.
+ *
+ * ⚠ `0` returns `0`. It is the instruction "out after this pass", and reading it as absent is
+ * the silent-clamp failure this feature already guards against at three other layers. Anything
+ * that is not a whole number ≥ 0 returns `undefined` — the control REFUSES such text with a
+ * reason rather than sending a rewritten value, so `undefined` here can only ever mean
+ * "nothing to send" and never "send something else".
+ */
+export function timingPassesOf(draft: TimingDraft | undefined): number | 'infinite' | undefined {
+  const passes = draft?.passes;
+  if (passes === undefined) return undefined;
+  if (passes.kind === 'until-stop') return 'infinite';
+  const text = passes.text.trim();
+  if (text === '') return undefined;
+  const n = Number(text);
+  return Number.isInteger(n) && n >= 0 ? n : undefined;
+}
+
+/** The gap a send would carry in MILLISECONDS, or `undefined` when the draft states none. */
+export function timingDelayMsOf(draft: TimingDraft | undefined): number | undefined {
+  const text = draft?.gapSeconds?.trim();
+  if (text === undefined || text === '') return undefined;
+  const seconds = Number(text);
+  return Number.isFinite(seconds) && seconds >= 0 ? Math.round(seconds * 1000) : undefined;
+}
+
+/**
+ * Is the item's staged timing different from what is APPLIED?
+ *
+ * ⚠ The comparison is on the VALUES a send would carry, not on the strings — the rule
+ * {@link isPositionDirty} keeps, for its reason. A draft reading `"2"` against an applied `2`
+ * is NOT dirty, so re-typing the number already stored does not demand an UPDATE that would
+ * change nothing; and a half-typed `"1."` carries no value, so it is not dirty either.
+ */
+export function isTimingDirty(
+  itemId: string,
+  applied: StackItemTimingOverride | undefined,
+): boolean {
+  const draft = timingDrafts.get(itemId);
+  if (draft === undefined) return false;
+  const passes = timingPassesOf(draft);
+  if (passes !== undefined && passes !== applied?.repeat) return true;
+  const delayMs = timingDelayMsOf(draft);
+  return delayMs !== undefined && delayMs !== applied?.delayMs;
 }
 
 /** The staged value for one `(look, plate)`, or `undefined` when nothing is staged. */
@@ -527,6 +655,12 @@ export function isItemDirty(
    * makes the commit bar answer for the position as well as the text.
    */
   appliedPosition?: { anchor: PositionAnchor; offset: { x: number; y: number } } | undefined,
+  /**
+   * 🔴 The row's APPLIED timing override — `DELTA B4`. Optional for the reason
+   * `appliedPosition` is: a caller with no timing surface has no such value to pass, and a row
+   * with nothing staged is clean either way.
+   */
+  appliedTiming?: StackItemTimingOverride | undefined,
 ): boolean {
   const item = drafts.get(itemId);
   if (item !== undefined) {
@@ -564,6 +698,15 @@ export function isItemDirty(
     would leave the panel reporting itself clean with a move still to send.
   */
   if (appliedPosition !== undefined && isPositionDirty(itemId, appliedPosition)) return true;
+  /*
+    🔴 …AND THE TIMING (`DELTA B4`). Unlike the position it needs no applied argument to be
+    RESOLVED — `StackItemState.timingOverride` is the applied truth outright — but it is passed
+    in for the reason everything else here is: this module stages edits and does not know what a
+    row has applied. A staged count that did not answer here would leave the bar reporting itself
+    clean with a pass count still to send, and DISCARD would drop it having never said it was
+    there.
+  */
+  if (isTimingDirty(itemId, appliedTiming)) return true;
   return false;
 }
 
@@ -615,7 +758,10 @@ export function clearDraft(itemId: string): void {
     above is about, on the one edit that moves a graphic rather than its text.
   */
   const hadPosition = positionDrafts.delete(itemId);
-  if (hadFields || hadPlates || hadLooks || hadPosition) bump();
+  // …AND THE TIMING (`DELTA B4`), by the same argument: a staged count that survived a Discard
+  // is an unapplied edit nobody can see, and this one reaches air at the next take.
+  const hadTiming = timingDrafts.delete(itemId);
+  if (hadFields || hadPlates || hadLooks || hadPosition || hadTiming) bump();
 }
 
 /**
@@ -764,11 +910,16 @@ export function pruneDrafts(snapshot: StackPruneInput): void {
   if (!snapshot.ready) return;
   const live = snapshot.liveItemIds;
   let changed = false;
-  // EVERY map, from the one guard. A draft of any kind that outlived this sweep would be an
-  // unapplied edit the operator can no longer see or reach. The position draft is swept
-  // here too — it is the one map `clearDraft` leaves alone (see its header), and a prune
-  // is not a Discard: the row is GONE, so there is nothing left for the draft to belong to.
-  for (const map of [drafts, plateDrafts, lookBindingDrafts, positionDrafts] as {
+  /*
+    EVERY map, from the one guard. A draft of any kind that outlived this sweep would be an
+    unapplied edit the operator can no longer see or reach.
+
+    ⚠ This used to say the position was "the one map `clearDraft` leaves alone". That stopped
+    being true when the owner folded the position into the one commit (2026-09-14), and it is
+    corrected rather than left standing: Discard drops every map in this list. A prune differs
+    only in its reason — the ROW is gone, so there is nothing left for any draft to belong to.
+  */
+  for (const map of [drafts, plateDrafts, lookBindingDrafts, positionDrafts, timingDrafts] as {
     delete: (k: string) => boolean;
     keys: () => IterableIterator<string>;
   }[]) {
@@ -788,6 +939,7 @@ export function __resetDraftsForTest(): void {
   plateDrafts.clear();
   lookBindingDrafts.clear();
   positionDrafts.clear();
+  timingDrafts.clear();
   bump();
 }
 

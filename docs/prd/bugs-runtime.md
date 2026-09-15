@@ -11955,3 +11955,53 @@ should adopt this item.
 free after this session is `B-248`"_ — `B-246` is claimed without a heading and `B-247` is taken by
 `PLATE-RELEASE-15`. The brief's note said `B-246`; that was stale, and it is a claim rather than a
 heading either way.
+
+## [ ] B-250 — the stack row's dirty chip cannot see a staged POSITION, so one edit is invisible on the surface the operator watches ⟨priority: medium — the edit is never lost, but the row denies it exists⟩ — FILED 2026-09-15 by `TIMING-WIRE-22 · DELTA B4`
+
+**What:** `isItemDirty` answers for a staged position only when its caller hands it the row's
+APPLIED position. The Inspector does (`Inspector.tsx`, via `item.position ?? defaultPositionOf`);
+the stack row does not (`LayersPanel.tsx`, which passes `undefined`). So after the operator moves
+a graphic and leaves the panel, the Inspector's chip says there is an unapplied edit and the row's
+chip says there is not.
+
+**Measured, not reasoned** (2026-09-15, one staged position, the two callers' own argument lists):
+
+```
+{ inspectorSeesPosition: true,  rowSeesPosition: false,
+  inspectorSeesTiming:   true,  rowSeesTiming:   true  }
+```
+
+**Why it is a defect and not a choice:** it was a choice until 2026-09-14. The old contract was
+that the position kept its OWN lifecycle — its own dirty dot and its own `Apply position` button —
+and a row chip that ignored it was correct, because UPDATE did not send it. The owner then folded
+the position into the one commit («دکمه apply position فقط یه مرحله اضافیه و همون دکمه update باید
+پوزیشن رو هم اعمال کنه و همچنین discard هم روش کار کنه»). UPDATE sends it now and DISCARD drops it,
+so the row's UPDATE verb has work to do that the row's chip denies — and a Discard pressed from the
+row throws away an edit nothing on that surface ever said was there. `draftStore.ts`'s own header
+already argues exactly this for the Inspector's chip; the row was not carried across with it.
+
+**Why the fix is not one line:** the row has `item.position` but not the template's manifest
+default, and `defaultPositionOf(templateId)` is what resolves "nothing set" into a comparable
+value. `LayersPanel` can reach that store, so it is small — but it is a second caller learning a
+resolution rule, which is the shape golden rule 6 warns about. The better shape is that
+`isItemDirty` takes the `StackItemState` it is already being fed piecemeal and resolves both
+halves itself, leaving one place that knows what "applied" means. That is a refactor with five
+callers and it was not in `DELTA B4`'s authorised scope.
+
+**Acceptance:**
+
+- WHEN a position is staged for a row THEN the stack row's dirty chip reads dirty, in agreement
+  with the Inspector's
+- WHEN it is discarded or applied THEN both chips clear together
+- AND the resolution of "what is applied" happens in ONE place, not once per caller
+
+**Notes:** the TIMING half of the same function does agree across both callers, and deliberately —
+`timingOverride` IS the applied truth, carried on the item, so there is nothing to resolve and the
+row was given the argument when `DELTA B4` added it. The two arguments are asymmetric for a
+reason, and `LayersPanel.tsx` carries that reason at the call site.
+
+⚠ The number: `B-250`. `B-248` (this session, `DELTA A7`) and `B-249` (this session,
+`bugs-designer.md`) are taken; the registry's pointer at `b-number-registry.md:2815` reads
+_"Next free after this session is `B-248`"_ and is stale by two. Verified free before filing:
+`git grep B-250` across `docs`, `apps`, `packages`, `tools` and `openspec` returned exactly one
+hit — the `LayersPanel.tsx` call-site comment written by this same item.

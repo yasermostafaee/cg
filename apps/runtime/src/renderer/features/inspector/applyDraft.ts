@@ -4,11 +4,13 @@ import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { commitSourceAssignments, currentSourceAssignments } from '../sources/sourceStore.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import { isPositionLocked } from './PositionPicker.js';
+import { recordSentPasses } from './timingSent.js';
 import {
   buildApplyPayload,
   buildLookBindingsPayload,
   buildOverlayPayload,
   clearPositionDraft,
+  clearTimingDraft,
   clearStagedLookBindingsMatching,
   clearStagedMatching,
   clearStagedPlatesMatching,
@@ -20,6 +22,9 @@ import {
   snapshotLookBindingDraft,
   snapshotPlateDraft,
   stageField,
+  timingDelayMsOf,
+  timingDraftOf,
+  timingPassesOf,
   type FieldPath,
 } from './draftStore.js';
 
@@ -86,22 +91,108 @@ export function applyDraft(
     about who is locked, and no refusal CONDITION moves.
   */
   const position = (): Promise<boolean> => sendPosition(item);
-  if (plates.size === 0)
-    return position().then((ok) => fields().then((r) => (ok ? r : { ...r, accepted: false })));
-  // PLATES FIRST, and it is not arbitrary: the assignment reaches NOTHING on air
-  // (it is read at the next take), while `stack.update` reaches the graphic that
-  // is on the channel now. Doing the harmless half first means a refused
-  // assignment cannot leave a half-applied on-air change behind it.
-  return sendPlateAssignments(item, plates).then((platesAccepted) =>
-    // EVERY half runs regardless, and the verdict is the AND of them: a refused
-    // assignment must not silently discard a field edit the operator also staged,
-    // and a refused field update must not make an accepted assignment look
-    // rejected. Each half clears only its OWN staged entries, on its own success.
-    position().then((positionAccepted) =>
-      fields().then((res) =>
-        platesAccepted && positionAccepted ? res : { ...res, accepted: false },
-      ),
-    ),
+  /*
+    🔴 **AND THE TIMING RIDES THE SAME PRESS — `DELTA B4`.** It was committed on BLUR, which
+    made looking away from the box a command toward air; it is a draft now, and this is where
+    the draft is spent.
+
+    ⚠ **IT IS STILL `stack.set-pass-timing`, ITS OWN CHANNEL — the answer to B4's question.**
+    It does NOT ride the field update's `CG UPDATE`: it is a SEPARATE `CG UPDATE` carrying only
+    `__cg.timing`, sent immediately before the fields, exactly as the position is sent on
+    `stack.setPosition`. Folding it into the field payload would mean this renderer composing
+    `__cg` itself — a reserved key the BRIDGE owns and strips — and would make one wire message
+    answer to two owners. No wire, no IPC schema and no payload shape moved for B4.
+  */
+  const timing = (): Promise<boolean> => sendTiming(item);
+  /*
+    PLATES FIRST, and it is not arbitrary: the assignment reaches NOTHING on air (it is read at
+    the next take), while `stack.update` reaches the graphic on the channel now. Doing the
+    harmless halves first means a refused one cannot leave a half-applied on-air change behind
+    it. The FIELDS are therefore always last.
+
+    EVERY half runs regardless, and the verdict is the AND of them: a refused assignment must
+    not silently discard a field edit the operator also staged, and a refused field update must
+    not make an accepted assignment look rejected. Each half clears only its OWN staged
+    entries, on its own success.
+
+    ⚠ The chain is a fold rather than nested `.then`s because a fourth half made the nesting
+    the place a mistake would hide. It is the SAME sequence and the SAME verdict: each half
+    awaits the one before it, and `ok` can only ever go from true to false.
+  */
+  const preflight: (() => Promise<boolean>)[] = [
+    ...(plates.size === 0 ? [] : [(): Promise<boolean> => sendPlateAssignments(item, plates)]),
+    position,
+    timing,
+  ];
+  return preflight
+    .reduce<
+      Promise<boolean>
+    >((prior, half) => prior.then((ok) => half().then((mine) => ok && mine)), Promise.resolve(true))
+    .then((ok) => fields().then((res) => (ok ? res : { ...res, accepted: false })));
+}
+
+/**
+ * Send the item's staged TIMING, if it has one that states a value.
+ *
+ * Resolves `true` when there was nothing to do as well as when the send was accepted — the
+ * caller ANDs it into the press's verdict, and "no timing staged" must not read as a refusal.
+ * The draft is cleared only on ACCEPTANCE, exactly as a field's and a position's are: a refused
+ * count stays staged, the dirty mark stays up, and the operator's number is still theirs.
+ *
+ * 🔴 **OFF AIR THIS SENDS ZERO AMCP AND THAT IS THE POINT (golden rule 10).** The call is still
+ * made — the bridge RECORDS the intent so the next take carries it (`#sendAdd`) — but
+ * `setPassTiming` gates its wire send on `#ownsLiveSeats`, so a row that owns no live seats
+ * produces no `CG UPDATE`, no `PLAY` and no fill. The console does not decide that; it asks the
+ * one predicate that already owns the question, which is why there is no second spelling of
+ * "is this row live" on this side of the seam.
+ *
+ * ⚠ A HALF-TYPED DRAFT SENDS NOTHING RATHER THAN A GUESS. `timingPassesOf` answers `undefined`
+ * for anything that is not a whole count, so `"tw"` left in the box when UPDATE is pressed
+ * carries no `passes` member at all — it is not rewritten to a number, and it does not fail the
+ * press. What refuses bad text with a reason is the CONTROL, at the moment it is typed.
+ */
+function sendTiming(item: StackItemState): Promise<boolean> {
+  const draft = timingDraftOf(item.itemId);
+  if (draft === undefined) return Promise.resolve(true);
+  const passes = timingPassesOf(draft);
+  const delayMs = timingDelayMsOf(draft);
+  const applied = item.timingOverride;
+  const patch = {
+    ...(passes !== undefined && passes !== applied?.repeat && { passes }),
+    ...(delayMs !== undefined && delayMs !== applied?.delayMs && { delayMs }),
+  };
+  /*
+    Nothing that differs from what is applied ⇒ nothing to send, and the draft is dropped
+    because it has become a restatement of the truth rather than an edit. Leaving it staged
+    would keep a dirty chip up over a row with nothing outstanding — the panel disagreeing with
+    itself, which is the defect the chip exists to prevent.
+  */
+  if (patch.passes === undefined && patch.delayMs === undefined) {
+    clearTimingDraft(item.itemId);
+    return Promise.resolve(true);
+  }
+  return window.cg.stack.setPassTiming({ itemId: item.itemId, ...patch }).then(
+    (res) => {
+      if (res.ok) {
+        clearTimingDraft(item.itemId);
+        // `DELTA A2` — stamped only on ACCEPTANCE, so the line can never time a send the
+        // bridge refused. It is what this console did, and it stays true from then on.
+        if (patch.passes !== undefined) recordSentPasses(item.itemId);
+        return true;
+      }
+      /*
+        `setPassTiming` answers with a SENTENCE of its own (unlike `setPosition`, which carries
+        a reason code), so it is reported as written rather than re-worded here: the bridge
+        knows whether CasparCG refused the command or the row left the stack, and this side
+        does not.
+      */
+      reportCommandError(res.message ?? 'The timing change was not accepted.');
+      return false;
+    },
+    (err: unknown) => {
+      reportCommandError(err instanceof Error ? err.message : 'The timing change failed.');
+      return false;
+    },
   );
 }
 

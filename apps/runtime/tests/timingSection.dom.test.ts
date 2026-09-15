@@ -8,8 +8,6 @@ import { TEMPLATE_TIMING_VERSION, type StackItemState } from '@cg/shared-schema'
 /**
  * 🔴 **`TIMING-WIRE-22` §4 — THE CONSOLE'S TIMING SECTION.**
  *
- * Three claims, and the second is the one the previous session could not build:
- *
  *  1. `mode` and `hold` are FACTS — `Tag`s, never inputs and never DISABLED inputs (ADR 0009).
  *     A greyed box tells the operator they lack a permission; the truth is the value was never
  *     theirs to set.
@@ -19,13 +17,19 @@ import { TEMPLATE_TIMING_VERSION, type StackItemState } from '@cg/shared-schema'
  *  3. Inheritance is SHOWN as inheritance — `Default (∞)`, never a bare `∞` — so a value the
  *     operator chose can be told from one they were given.
  *
- * ⚠ And §2's rule: the control never displays a number the template has not accepted. It renders
- * from the row's PUBLISHED `timingOverride`, which the bridge writes only after a set it
- * accepted, so a refused set leaves the display showing what air is doing without anything
- * having to put it back.
+ * ── 🔴 `DELTA B4` — AND THIS SECTION SENDS NOTHING ──────────────────────────
+ *
+ * It stages into the draft store; `Update` spends the draft and `Discard` drops it. So the
+ * bridge stub below is a TRIPWIRE rather than a subject: the cases assert `sent` is empty,
+ * because the defect B4 exists to remove is a control that reaches toward air when the operator
+ * merely looks away from it. The commit half is pinned in `timingDraftCommit.dom.test.ts`.
  */
 
 const { TimingSection } = await import('../src/renderer/features/inspector/TimingSection.js');
+const { __resetDraftsForTest, timingDraftOf } =
+  await import('../src/renderer/features/inspector/draftStore.js');
+const { __resetSentPassesForTest, recordSentPasses } =
+  await import('../src/renderer/features/inspector/timingSent.js');
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -46,6 +50,8 @@ beforeEach(() => {
   root = createRoot(host);
   sent.length = 0;
   errors.length = 0;
+  __resetDraftsForTest();
+  __resetSentPassesForTest();
   (globalThis as unknown as { window: { cg: unknown } }).window.cg = {
     stack: {
       setPassTiming: (req: unknown) => {
@@ -89,29 +95,26 @@ function mount(item: StackItemState, info: TemplateInfo | null | undefined): voi
 
 const text = (): string => host.textContent ?? '';
 const byLabel = (l: string): HTMLInputElement | null =>
-  host.querySelector<HTMLInputElement>(`[aria-label="${l}"]`);
+  host.querySelector<HTMLInputElement>(`input[aria-label="${l}"]`);
+const choice = (name: string): HTMLButtonElement | null => {
+  for (const b of host.querySelectorAll<HTMLButtonElement>('button')) {
+    if (b.textContent === name) return b;
+  }
+  return null;
+};
 
 /**
- * Type a value and commit it.
+ * Type into a control, through React rather than around it.
  *
- * ⚠ The event is `focusout`, NOT `blur`. React's `onBlur` is delegated at the root and `blur`
- * does not bubble, so it is `focusout` that React actually listens for — a dispatched `blur`
- * reaches nothing and the handler never runs, which reads in a test exactly like a control that
- * sends nothing.
- *
- * 🔴 `DELTA B3` — **AND THE VALUE GOES IN THROUGH REACT, NOT AROUND IT.**
- *
- * The box is now `ui/NumericInput`, which is CONTROLLED: the typed text lives in React state,
- * not in the DOM node. A bare `el.value = …` therefore writes a string the component overwrites
- * on its next render and never sees — the commit handler would read an empty draft and send
- * nothing, and every assertion about what was sent would fail for a reason that has nothing to
- * do with the product.
+ * 🔴 `DELTA B3` — the box is `ui/NumericInput`, which is CONTROLLED: the text lives in React
+ * state, not in the DOM node. A bare `el.value = …` writes a string the component overwrites on
+ * its next render and never sees, so the draft would stay empty and every assertion about what
+ * was staged would fail for a reason that has nothing to do with the product.
  *
  * ⚠ React installs its own `value` setter on the element to track changes, so assigning through
  * the element skips the tracker and `onChange` never fires. Calling the PROTOTYPE's setter
  * writes the DOM without touching the tracker, and the dispatched `input` then looks exactly
- * like a keystroke. This is the same defeat-the-tracker step every controlled-input test needs;
- * it is spelled out here because its absence fails SILENTLY.
+ * like a keystroke. Spelled out because its absence fails SILENTLY.
  */
 const nativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
 
@@ -125,7 +128,16 @@ function type(label: string, value: string): HTMLInputElement {
   return el;
 }
 
-function commit(label: string, value: string): void {
+/**
+ * Type, then LEAVE the control.
+ *
+ * ⚠ The event is `focusout`, NOT `blur`. React's `onBlur` is delegated at the root and `blur`
+ * does not bubble, so `focusout` is what React actually listens for — a dispatched `blur`
+ * reaches nothing and the handler never runs, which reads in a test exactly like a control that
+ * does nothing on blur. Since `DELTA B4` doing nothing IS the contract, that confusion would be
+ * fatal here: the tripwire below would pass having fired an event nobody listens for.
+ */
+function blurAfterTyping(label: string, value: string): void {
   const el = type(label, value);
   act(() => {
     el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
@@ -186,7 +198,7 @@ describe('§4 — mode and hold are FACTS, never inputs', () => {
     // fails in exactly the way a green gate cannot see (golden rule 12).
     mount(row(), template(LOOPS));
     for (const id of ['timing-mode-fact', 'timing-hold-fact']) {
-      expect(host.querySelector('[data-testid="' + id + '"]')?.className).toBe('cg-meta-chip');
+      expect(host.querySelector(`[data-testid="${id}"]`)?.className).toBe('cg-meta-chip');
     }
   });
 
@@ -197,19 +209,13 @@ describe('§4 — mode and hold are FACTS, never inputs', () => {
     expect(host.querySelector('[data-testid="timing-needs-reimport"]')?.textContent).toBe(
       'Timing controls appear after this template is re-imported.',
     );
-    // …and it still states nothing it cannot know, and offers nothing it cannot carry.
     expect(host.querySelector('[data-testid="timing-mode-fact"]')).toBeNull();
-    expect(byLabel('Passes next take')).toBeNull();
   });
 
   it('🔴 DELTA B1.4 — a record from an OLDER derivation is refused, not displayed', () => {
-    /*
-      Stale facts here are WRONG, not old. Before `v: 2` the block was derived from the entry
-      composition with a `comps[0]` fallback, so a per-composition export published whichever
-      panel was listed first — the plant's crawler read `static / timed` (a clock panel's) over
-      `auto-out / content-driven`. A console that is confidently wrong is the one thing an
-      operator cannot defend against, so an unversioned record gets the re-import sentence.
-    */
+    // It was derived by the entry-composition resolver, which published whichever panel a
+    // per-composition export listed first. Those facts are WRONG, not old, and a console that
+    // is confidently wrong is the one thing an operator cannot defend against.
     mount(row(), template({ mode: 'loop-cycle', holdSource: 'timed', loops: true } as never));
     expect(host.querySelector('[data-testid="timing-needs-reimport"]')).not.toBeNull();
     expect(host.querySelector('[data-testid="timing-mode-fact"]')).toBeNull();
@@ -230,23 +236,23 @@ describe('🔴 §4 — the count says what it will do in the state it is in', ()
       gone. What "remaining" means is documented in ADR 0009 and taught in training, not on the
       panel. This test therefore pins the LABEL, which is the thing the operator reads.
     */
-    mount(row({ status: 'on-air' }), template(LOOPS));
+    mount(row({ status: 'on-air', timingOverride: { repeat: 2 } }), template(LOOPS));
     expect(byLabel('Passes remaining'), 'the on-air label is missing').not.toBeNull();
     expect(byLabel('Passes next take')).toBeNull();
   });
 
   it('OFF AIR the same field is the count for the NEXT TAKE', () => {
-    mount(row({ status: 'idle' }), template(LOOPS));
+    mount(row({ status: 'idle', timingOverride: { repeat: 2 } }), template(LOOPS));
     expect(byLabel('Passes next take'), 'the off-air label is missing').not.toBeNull();
     expect(byLabel('Passes remaining')).toBeNull();
   });
 
   it('🔴 DELTA B2 — the section TEACHES NOTHING: no explanatory sentence survives', () => {
     /*
-      The five lines this pins the absence of are not a style preference. An operator surface
-      states LABELS, VALUES, STATE FACTS and REFUSALS; a sentence explaining how the feature
-      works is read once, never again, and then occupies the space a real message needs. The
-      rule is CLAUDE.md's, under "Design system — interactive controls".
+      The lines this pins the absence of are not a style preference. An operator surface states
+      LABELS, VALUES, STATE FACTS and REFUSALS; a sentence explaining how the feature works is
+      read once, never again, and then occupies the space a real message needs. The rule is
+      CLAUDE.md's, under "Design system — interactive controls".
 
       Pinned as an ABSENCE because that is the direction this regresses in: the next person to
       touch the panel adds one helpful line, and nothing fails.
@@ -263,7 +269,7 @@ describe('🔴 §4 — the count says what it will do in the state it is in', ()
     for (const status of ['on-air', 'idle'] as const) {
       mount(row({ status }), template(LOOPS));
       for (const re of REMOVED) {
-        expect(text(), String(re) + ' came back on a ' + status + ' row').not.toMatch(re);
+        expect(text(), `${String(re)} came back on a ${status} row`).not.toMatch(re);
       }
     }
   });
@@ -272,23 +278,37 @@ describe('🔴 §4 — the count says what it will do in the state it is in', ()
 describe('🔴 DELTA A2 — on air the console states what it SENT, never a count it cannot see', () => {
   /*
     The pass counter lives in the page's controller inside CEF and NO return path carries it, so
-    the console can only ever know what it sent. A numeric placeholder under "Passes remaining"
-    is therefore a reading with a shelf life: one pass after "set 2" it still says 2 while ONE
-    remains, and after the count runs out it says 2 over a graphic that has gone. It decays with
-    nobody touching anything, which is the worst shape a false readout can have.
+    the console can only ever know what it sent. A number under "Passes remaining" is therefore
+    a reading with a shelf life: one pass after "set 2" it still says 2 while ONE remains, and
+    after the count runs out it says 2 over a graphic that has gone. It decays with nobody
+    touching anything, which is the worst shape a false readout can have.
   */
   it('shows NO number in the box while on air', () => {
     mount(row({ status: 'on-air', timingOverride: { repeat: 2 } }), template(LOOPS));
-    expect(
-      byLabel('Passes remaining')?.placeholder,
-      'a number here is a claim about the page that nothing backs',
-    ).toBe('');
+    const box = byLabel('Passes remaining');
+    expect(box?.value, 'a number here is a claim about the page that nothing backs').toBe('');
+    expect(box?.placeholder, 'the same claim in lighter ink is the same claim').toBe('');
   });
 
   it('states what was sent, as a fact about the past', () => {
     mount(row({ status: 'on-air', timingOverride: { repeat: 2 } }), template(LOOPS));
-    const sent = host.querySelector('[data-testid="timing-passes-sent"]');
-    expect(sent?.textContent).toMatch(/^Sent 2 more/);
+    expect(host.querySelector('[data-testid="timing-passes-sent"]')?.textContent).toMatch(
+      /^Sent 2 more/,
+    );
+  });
+
+  it('carries the local time of an accepted send, and omits it when there is none', () => {
+    // A count set from ANOTHER console has no time this browser can know, so the line says what
+    // was sent and omits the when rather than timing the republish that carried it here.
+    mount(row({ status: 'on-air', timingOverride: { repeat: 2 } }), template(LOOPS));
+    expect(host.querySelector('[data-testid="timing-passes-sent"]')?.textContent).toBe(
+      'Sent 2 more',
+    );
+    recordSentPasses('item-1');
+    mount(row({ status: 'on-air', timingOverride: { repeat: 2 } }), template(LOOPS));
+    expect(host.querySelector('[data-testid="timing-passes-sent"]')?.textContent).toMatch(
+      /^Sent 2 more · .+/,
+    );
   });
 
   it('says so plainly when nothing has been sent this run', () => {
@@ -305,95 +325,197 @@ describe('🔴 DELTA A2 — on air the console states what it SENT, never a coun
     );
   });
 
-  it('OFF AIR the placeholder stays — that one IS a stored fact the console holds', () => {
+  it('OFF AIR the box shows the STORED count — that one IS a fact the console holds', () => {
     // The asymmetry is the point: the next take's count is stored and knowable; a running
     // page's remaining count is not.
     mount(row({ status: 'idle', timingOverride: { repeat: 2 } }), template(LOOPS));
-    expect(byLabel('Passes next take')?.placeholder).toBe('2');
+    expect(byLabel('Passes next take')?.value).toBe('2');
     expect(host.querySelector('[data-testid="timing-passes-sent"]')).toBeNull();
   });
 });
 
 describe('§4 — inheritance is SHOWN as inheritance', () => {
   it('names the inherited count rather than showing a bare value', () => {
-    mount(row(), template({ ...LOOPS, repeat: 3 }));
+    mount(row(), template({ ...LOOPS, repeat: 3 } as never));
     expect(byLabel('Passes next take')?.placeholder).toBe('Default (3)');
   });
 
-  it('an UNAUTHORED count reads Default (∞) — never an empty box meaning forever', () => {
-    // §5's rule, on this surface: an empty field that means "forever" is the kind of silence
-    // this product forbids.
+  it('an UNAUTHORED count selects Until stop — never an empty box meaning forever', () => {
     mount(row(), template(LOOPS));
-    expect(byLabel('Passes next take')?.placeholder).toBe('Default (∞)');
+    // With nothing authored and nothing stored, the STATE is the statement — which is stronger
+    // than a placeholder naming it, and is why there is no count box to read here.
+    expect(byLabel('Passes next take')).toBeNull();
+    expect(choice('Until stop')?.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('the gap names its inherited value in seconds', () => {
-    mount(row(), template({ ...LOOPS, delayMs: 2000 }));
-    expect(byLabel('Gap between passes')?.placeholder).toBe('Default (2 s)');
+    mount(row(), template({ ...LOOPS, delayMs: 2500 } as never));
+    expect(byLabel('Gap between passes')?.placeholder).toBe('Default (2.5 s)');
   });
 
-  it('once the operator sets one, it is no longer shown as a default', () => {
-    mount(row({ timingOverride: { repeat: 2 } }), template({ ...LOOPS, repeat: 3 }));
-    expect(byLabel('Passes next take')?.placeholder).toBe('2');
+  it('once the operator has stored a gap, the box shows it', () => {
+    mount(
+      row({ timingOverride: { delayMs: 1500 } }),
+      template({ ...LOOPS, delayMs: 2500 } as never),
+    );
+    expect(byLabel('Gap between passes')?.value).toBe('1.5');
+  });
+});
+
+describe('🔴 DELTA B4 — the section SENDS NOTHING; it stages', () => {
+  it('🔴 a BLUR sends no command — the whole of B4 in one assertion', () => {
+    /*
+      Owner-observed and the reason B4 exists: a click anywhere else on the panel was a commit
+      toward air. Every other Inspector edit waits for one press; timing was the only surface on
+      which looking away was an action.
+    */
+    mount(row({ status: 'on-air', timingOverride: { repeat: 9 } }), template(LOOPS));
+    blurAfterTyping('Passes remaining', '3');
+    expect(sent, 'a blur reached toward air').toEqual([]);
+    expect(timingDraftOf('item-1')?.passes, 'the edit was not staged either').toEqual({
+      kind: 'count',
+      text: '3',
+    });
+    expect(errors).toEqual([]);
+  });
+
+  it('🔴 and the typed value STAYS VISIBLE, which is the other half of what was wrong', () => {
+    // The box used to clear itself on blur, so the number was gone before the operator could
+    // check it — the edit was destroyed and sent in one gesture.
+    mount(row({ status: 'on-air', timingOverride: { repeat: 9 } }), template(LOOPS));
+    blurAfterTyping('Passes remaining', '3');
+    expect(byLabel('Passes remaining')?.value).toBe('3');
+  });
+
+  it('stages what was typed, as the value a press would carry', () => {
+    mount(row({ status: 'on-air' }), template(LOOPS));
+    // A template that loops forever and a row storing nothing IS `Until stop`, so there is no
+    // count box until the operator says they want one. That is the two-state contract, not a
+    // missing control — and this line is the shape of every count edit on such a row.
+    act(() => choice('Count')?.click());
+    type('Passes remaining', '3');
+    expect(timingDraftOf('item-1')?.passes).toEqual({ kind: 'count', text: '3' });
+  });
+
+  it('stages the gap in SECONDS as typed, not rounded into a number', () => {
+    // `"1."` is a state a round trip through a number would flatten under the cursor.
+    mount(row(), template(LOOPS));
+    type('Gap between passes', '1.');
+    expect(timingDraftOf('item-1')?.gapSeconds).toBe('1.');
+    expect(byLabel('Gap between passes')?.value).toBe('1.');
+  });
+
+  it('a Persian-typed count is normalised before it is staged', () => {
+    // What the house primitive is FOR. This console is operated on a Persian keyboard, and a
+    // raw box staged `۳` for a parser that reads it as nonsense.
+    mount(row({ status: 'on-air' }), template(LOOPS));
+    act(() => choice('Count')?.click());
+    type('Passes remaining', '۳');
+    expect(timingDraftOf('item-1')?.passes).toEqual({ kind: 'count', text: '3' });
+  });
+
+  it('a Persian DECIMAL gap normalises too — ٫ is not a digit', () => {
+    mount(row(), template(LOOPS));
+    type('Gap between passes', '۱٫۵');
+    expect(timingDraftOf('item-1')?.gapSeconds).toBe('1.5');
+  });
+});
+
+describe('🔴 DELTA B4 — Until stop / Count is a LABELLED two-state choice', () => {
+  it('the bare ∞ is gone, and both states are named in words', () => {
+    // Owner-observed: the `∞` was not understood. Nothing said whether it was the state the row
+    // was IN or an action pressing it would take.
+    mount(row(), template(LOOPS));
+    expect(choice('∞'), 'the bare glyph is still there').toBeNull();
+    expect(choice('Until stop')).not.toBeNull();
+    expect(choice('Count')).not.toBeNull();
+  });
+
+  it('SHOWS which one is selected, which is the thing a toggle exists to carry', () => {
+    mount(row(), template(LOOPS));
+    expect(choice('Until stop')?.getAttribute('aria-pressed')).toBe('true');
+    expect(choice('Count')?.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('a STORED count selects Count without anyone having pressed it', () => {
+    mount(row({ timingOverride: { repeat: 3 } }), template(LOOPS));
+    expect(choice('Count')?.getAttribute('aria-pressed')).toBe('true');
+    expect(choice('Until stop')?.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('choosing Until stop is a DRAFT, not a send', () => {
+    mount(row({ status: 'on-air', timingOverride: { repeat: 3 } }), template(LOOPS));
+    act(() => choice('Until stop')?.click());
+    expect(sent, 'choosing a state reached toward air').toEqual([]);
+    // The remembered text rides along (it is '' on air, where no count is shown); what the
+    // press will CARRY is the kind, and that is what this asserts.
+    expect(timingDraftOf('item-1')?.passes?.kind).toBe('until-stop');
+    expect(choice('Until stop')?.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('the count box belongs to Count and is not rendered beside Until stop', () => {
+    // A box that cannot affect anything is the R-021 stage-2b anti-pattern, and a DISABLED one
+    // would be the greyed control this section refuses on the facts above it.
+    mount(row({ timingOverride: { repeat: 3 } }), template(LOOPS));
+    expect(byLabel('Passes next take')).not.toBeNull();
+    act(() => choice('Until stop')?.click());
+    expect(byLabel('Passes next take')).toBeNull();
+  });
+
+  it('switching to Count keeps the number already in the box', () => {
+    mount(row({ timingOverride: { repeat: 3 } }), template(LOOPS));
+    type('Passes next take', '7');
+    act(() => choice('Until stop')?.click());
+    act(() => choice('Count')?.click());
+    expect(byLabel('Passes next take')?.value, 'the round trip ate the number').toBe('7');
   });
 });
 
 describe('§4 — 0 is an instruction; a non-count is REFUSED with a reason', () => {
-  it('sends 0 rather than treating it as empty', () => {
+  it('stages 0 rather than treating it as empty', () => {
     mount(row({ status: 'on-air' }), template(LOOPS));
-    commit('Passes remaining', '0');
-    expect(sent).toEqual([{ itemId: 'item-1', passes: 0 }]);
+    act(() => choice('Count')?.click());
+    blurAfterTyping('Passes remaining', '0');
+    expect(timingDraftOf('item-1')?.passes).toEqual({ kind: 'count', text: '0' });
     expect(errors, '0 was refused — it is an instruction').toEqual([]);
   });
 
-  it('sends a gap of 0, which means no gap', () => {
+  it('stages a gap of 0, which means no gap', () => {
     mount(row(), template(LOOPS));
-    commit('Gap between passes', '0');
-    expect(sent).toEqual([{ itemId: 'item-1', delayMs: 0 }]);
+    blurAfterTyping('Gap between passes', '0');
+    expect(timingDraftOf('item-1')?.gapSeconds).toBe('0');
+    expect(errors).toEqual([]);
   });
 
-  it('REFUSES a non-count with a reason and sends nothing — never a silent rewrite', () => {
+  it('REFUSES a non-count with a reason — never a silent rewrite', () => {
     mount(row({ status: 'on-air' }), template(LOOPS));
-    commit('Passes remaining', 'two');
-    expect(sent, 'a nonsense value reached the wire').toEqual([]);
+    act(() => choice('Count')?.click());
+    blurAfterTyping('Passes remaining', 'two');
     expect(errors[0], 'refused without saying why').toMatch(/not a pass count/i);
+    expect(sent, 'nonsense reached toward air').toEqual([]);
+  });
+
+  it('🔴 and a refusal LEAVES THE TEXT for the operator to correct', () => {
+    // The old control cleared the box on refusal, so the operator was told their value was
+    // wrong and simultaneously deprived of it. What stops nonsense reaching air is
+    // `timingPassesOf`, not the clearing.
+    mount(row({ status: 'on-air' }), template(LOOPS));
+    act(() => choice('Count')?.click());
+    blurAfterTyping('Passes remaining', 'two');
+    expect(byLabel('Passes remaining')?.value).toBe('two');
   });
 
   it('refuses a negative count rather than clamping it up', () => {
     mount(row({ status: 'on-air' }), template(LOOPS));
-    commit('Passes remaining', '-1');
-    expect(sent).toEqual([]);
+    act(() => choice('Count')?.click());
+    blurAfterTyping('Passes remaining', '-1');
     expect(errors).toHaveLength(1);
   });
 
-  it('accepts ∞ as keep-going', () => {
-    mount(row({ status: 'on-air' }), template(LOOPS));
-    commit('Passes remaining', '∞');
-    expect(sent).toEqual([{ itemId: 'item-1', passes: 'infinite' }]);
-  });
-
-  it('🔴 DELTA B3 — a PERSIAN-typed count reaches the wire as a number', () => {
-    /*
-      What the house primitive is FOR, and what the raw <input> here never did. This console is
-      operated on a Persian keyboard: `۳` typed into a raw box arrived as `۳`, `parsePasses`
-      read it as not-a-count, and the operator was told their own digit was nonsense. R-020's
-      normalisation lives inside `ui/NumericInput`, so adopting the primitive fixes it here and
-      at every future numeric field without anyone remembering to.
-    */
-    mount(row({ status: 'on-air' }), template(LOOPS));
-    commit('Passes remaining', '۳');
-    expect(sent, 'a Persian digit was refused as nonsense').toEqual([
-      { itemId: 'item-1', passes: 3 },
-    ]);
-    expect(errors).toEqual([]);
-  });
-
-  it('🔴 DELTA B3 — and a Persian DECIMAL gap does too', () => {
-    // ٫ (U+066B) is the Persian decimal separator, which `latinDigits` alone does not cover —
-    // it is the `decimal` prop that handles it, so the gap box must declare one.
+  it('refuses a gap that is not seconds', () => {
     mount(row(), template(LOOPS));
-    commit('Gap between passes', '۱٫۵');
-    expect(sent).toEqual([{ itemId: 'item-1', delayMs: 1500 }]);
+    blurAfterTyping('Gap between passes', '-2');
+    expect(errors[0]).toMatch(/not a gap in seconds/i);
   });
 });
 
@@ -408,5 +530,6 @@ describe('§4 — the controls exist only where they mean something', () => {
     expect(host.querySelector('[data-testid="timing-mode-fact"]')).not.toBeNull();
     expect(byLabel('Passes next take')).toBeNull();
     expect(byLabel('Gap between passes')).toBeNull();
+    expect(choice('Until stop')).toBeNull();
   });
 });

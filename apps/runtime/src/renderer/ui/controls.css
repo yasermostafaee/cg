@@ -6330,13 +6330,28 @@ input[type='checkbox']:disabled:checked {
   padding: 0 var(--r-tpl-filter-pad-x) var(--r-tpl-filter-pad-bottom);
   border-bottom: 1px solid var(--r-border);
 }
-.cg-tpl-filter .cg-btn {
+.cg-tpl-filter .cg-btn,
+.cg-timing-choice .cg-btn {
   min-height: var(--r-tpl-chip-h);
   height: var(--r-tpl-chip-h);
   padding: var(--r-tpl-chip-pad);
   border-radius: var(--r-tpl-chip-radius);
   font-size: var(--r-tpl-chip-text);
   font-weight: var(--r-weight-medium);
+}
+/*
+ * 🔴 `TIMING-WIRE-22 · DELTA B4` — the Inspector's `Until stop` / `Count` choice: the SECOND
+ * surface of the two-state chip group above.
+ *
+ * It takes the CHIP (the shared rule it is named in, one selector up) and not the PICKER's
+ * chrome: `.cg-tpl-filter`'s padding and `border-bottom` are that panel's own framing, and
+ * inheriting them would put a rule line across an Inspector section. So the group's own block is
+ * two properties, both from the same token family — reuse where the shape is shared, a
+ * declaration only where the two surfaces genuinely differ.
+ */
+.cg-timing-choice {
+  display: flex;
+  gap: var(--r-tpl-chip-gap);
 }
 /*
  * 🔴 `MODAL-CHROME-10` §2(a) — **A SELECTED FILTER CHIP IS BLUE. IT WAS PURPLE, AND PURPLE
@@ -6353,21 +6368,29 @@ input[type='checkbox']:disabled:checked {
  * `--r-look-btn-sel-*` family. Reused rather than re-picked, so "a chosen thing that is not
  * on air" has one appearance in this app and not two blues.
  *
- * ⚠ Scoped to `.cg-tpl-filter` and keyed off `aria-pressed` — the attribute the chip
- * already emits — so it cannot reach the rehearse toggle, and a chip that stops reporting its
- * pressed state loses its paint rather than keeping it silently.
+ * ⚠ Scoped by CLASS and keyed off `aria-pressed` — the attribute the chip already emits — so
+ * it cannot reach the rehearse toggle, and a chip that stops reporting its pressed state loses
+ * its paint rather than keeping it silently.
+ *
+ * ⭐ The Inspector's `Until stop` / `Count` choice (`DELTA B4`) is named in these selectors
+ * rather than given a declaration of its own. That is the paragraph above applied a second time:
+ * "a chosen thing that is not on air" gets ONE appearance in this app, so a future retune of the
+ * family reaches both surfaces or neither. A copy of these five properties inside
+ * `TimingSection.tsx` is exactly what the raw-control rule exists to refuse.
  *
  * ⚠ Ink is `--r-look-btn-sel-ink` (white on `#2e4e67`, measured 9.42:1 when that pair was
  * adopted). The WEIGHT lifts to semibold, because a chip carries no other mark of selection.
  */
-.cg-tpl-filter .cg-btn[aria-pressed='true'] {
+.cg-tpl-filter .cg-btn[aria-pressed='true'],
+.cg-timing-choice .cg-btn[aria-pressed='true'] {
   background: var(--r-look-btn-sel-bg);
   border-color: var(--r-look-btn-sel-line);
   box-shadow: inset 0 0 0 1px var(--r-look-btn-sel-ring);
   color: var(--r-look-btn-sel-ink);
   font-weight: var(--r-weight-semibold);
 }
-.cg-tpl-filter .cg-btn[aria-pressed='true']:hover:not(:disabled) {
+.cg-tpl-filter .cg-btn[aria-pressed='true']:hover:not(:disabled),
+.cg-timing-choice .cg-btn[aria-pressed='true']:hover:not(:disabled) {
   /* LIFT, never swap to the neutral hover — an engaged chip must not read as switched off
      under the pointer. Same direction the `.is-on` family uses. */
   background: var(--r-look-btn-sel-line);
