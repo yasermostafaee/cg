@@ -34,6 +34,7 @@ deliberate exceptions are the subpaths listed after the table:
 | `applyAnimationAtFrame`, `collectAnimatedElements`           | Per-frame animation application.                                                                                                   |
 | `interpolateAtFrame`, `applyEasing`, `lerpHexColor`          | Keyframe math.                                                                                                                     |
 | `FrameDriver`, `PlayoutController`                           | The timing primitives (normally owned by `createRuntime`).                                                                         |
+| `mergePlayoutOverride(base, override?)`                      | Layer a session override over a resolved playout by SPREADING the base — never re-list its keys (`TIMING-BUILD-21` §2b).           |
 | `TickerDriver`, `tickerDriverFor`, `coerceTickerItems`       | The ticker/crawler treadmill — inner repeat loop + `whenComplete()` content completion (D-028; normally owned by `createRuntime`). |
 | `ClockDriver`, `clockInitialText`                            | The digital-clock driver — wall/countup/countdown repaint + countdown `whenComplete()` (D-027; normally owned by `createRuntime`). |
 | `formatWallClock`, `formatCountClock`                        | The pure clock format-string engine (tokens, overflow absorption, digit mapping).                                                  |
@@ -318,6 +319,26 @@ Playout **modes** (`scene.playout.mode`):
 | `manual` _(default)_ | hold frozen until `stop()`                                          |
 | `auto-out`           | hold once, then run the outro automatically                         |
 | `loop-cycle`         | repeat IN → hold → OUT for `repeat` cycles (`'infinite'` = forever) |
+
+**`TIMING-BUILD-21` — the two axes a pass loop has beyond `mode`.**
+
+- **`repeat`** — how many passes. Absent ⇒ **`'infinite'`**, resolved by `@cg/shared-schema`'s
+  `repeatOf`. ⚠ It used to default to ONE, privately, inside this controller, so a stored
+  `loop-cycle` with no count played once. The default now lives in the schema and there is
+  exactly one statement of it.
+- **`delayMs`** — the gap BETWEEN passes, resolved by `delayMsOf` (absent ⇒ `0`). ⚠ **Not
+  `holdMs`.** `holdMs` is the hold WITHIN a pass, graphic on screen and readable; `delayMs` is
+  after the outro, graphic GONE. It never delays the first showing. While it runs, the
+  controller is in its own **`gap`** phase — neither `hold` (on screen) nor `idle` (settled) —
+  which is what lets `resume()` re-arm it and `stop()` end it without replaying an outro over an
+  already-hidden graphic.
+
+**Changing either ON AIR, without a restart:** `TemplateRuntime.setPassTiming({ passes, delayMs })`
+→ `PlayoutController.setRemainingPasses` / `setDelayMs`. `passes` is PASSES REMAINING FROM NOW
+(the pass on screen is not one of them; `0` means "after this pass, go out" and still runs `mode`'s
+outro). `delayMs` is re-read at every boundary rather than snapshotted, so a change applies to the
+NEXT gap and can never stretch or truncate one already running. Every other route to a playout knob
+rebuilds the scene, which on air is a black frame.
 
 What ends each hold is the orthogonal **`holdSource`** axis (`auto-out` and
 `loop-cycle`; ignored by `manual`): `'timed'` (default) holds for `holdMs`;

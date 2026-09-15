@@ -107,16 +107,36 @@ that refuses.
 - **Four Designer e2e specs drove the removed selects** and now set the mode in the
   Inspector before opening the preview, which is what a designer actually does.
 
-## Deferred — a delay between passes (not built)
+## The delay between passes — BUILT (`TIMING-BUILD-21`, 2026-09-15)
 
-A delay before a template shows, whose main use is a gap between repeats of a looped
-template, was specified alongside this decision and is **not built**. It needs a
-stored home and the template has none: nothing in `@cg/shared-schema` holds a
-between-passes gap today, so a designer-authored default would add a field to
-`PlayoutSchema` — a schema change, out of scope here.
+This section recorded a deferral. The owner took the schema decision and it is now
+built, so the deferral is **superseded** — but the decisions below are not, and they
+are what the implementation follows. They are kept, in their original words, because
+they are the reasoning and only their status changed.
 
-When it is built, it inherits this ADR's rule and the following decisions, which are
-settled now so they are not re-litigated later:
+**What shipped:** `PlayoutSchema.delayMs` (the gap between passes, beside `repeat`,
+which already existed but had no authoring control); both authored in the Designer's
+Playout section; the runtime's own `gap` phase and
+`TemplateRuntime.setPassTiming({ passes, delayMs })` for changing either on air
+without a restart.
+
+**One decision was taken that this section did not anticipate, and it is a behaviour
+change on the path to air:** an absent `repeat` used to mean ONE pass (privately, in
+the controller) and now means `'infinite'`, stated once in the schema. A mode named
+`loop-cycle` that played once was the latent defect; the Designer never wrote
+`playout.repeat`, so this affects every loop-cycle composition authored before that
+date. Owner-decided, on test data, with no migration.
+
+**Still NOT built — the console's own timing section and the wire beneath it.** The
+pass loop runs inside the template's JS in CasparCG's CEF, no AMCP verb carries
+timing, and the only mid-air channel is `CG UPDATE`'s `__cg` control object. So a
+console control needs a new `__cg` member, the page's update handler routed to
+`setPassTiming`, a per-row IPC channel gated by `#ownsLiveSeats`, and the bridge's
+retention re-apply. Until that exists, a console control would set a value that never
+reached air — which is worse than no control.
+
+The decisions this feature inherits, settled before it was built and unchanged by
+building it:
 
 - **The designer authors a default; the operator overrides it per row, per session.**
   It is both a design intent ("this lower-third needs breathing room between
