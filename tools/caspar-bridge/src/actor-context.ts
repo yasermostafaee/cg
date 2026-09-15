@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { normalizeActor, UNATTRIBUTED_ACTOR } from '@cg/shared-ipc';
+import { normalizeActor, TEMPLATE_ACTOR, UNATTRIBUTED_ACTOR } from '@cg/shared-ipc';
 
 /**
  * B-141 follow-up — WHO the bridge records as having acted, for the duration of one
@@ -46,6 +46,23 @@ const actorStore = new AsyncLocalStorage<string>();
  */
 export function runAsActor<T>(raw: unknown, fn: () => T): T {
   return actorStore.run(normalizeActor(raw), fn);
+}
+
+/**
+ * 🔴 `SELF-STOP-24` / `C-013` — run `fn` with THE TEMPLATE as the acting party.
+ *
+ * The one caller is the completion route: a served page has reported that its own run finished,
+ * and the stop that follows was asked for by no console.
+ *
+ * ⚠ **It sets the value DIRECTLY rather than through {@link runAsActor}, and that is not a way
+ * around the guard — it is the other side of it.** `normalizeActor` REFUSES
+ * {@link TEMPLATE_ACTOR} because the wire is a place a human types a console name and could
+ * otherwise claim to be a template. This function is not the wire: it is the bridge attributing
+ * an action to itself, in-process, with no client anywhere in the call. Routing it through the
+ * wire's normaliser would mean the bridge could not name the one actor the constant exists for.
+ */
+export function runAsTemplate<T>(fn: () => T): T {
+  return actorStore.run(TEMPLATE_ACTOR, fn);
 }
 
 /**

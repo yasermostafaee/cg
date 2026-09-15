@@ -26,6 +26,26 @@ import { z } from 'zod';
  */
 export const UNATTRIBUTED_ACTOR = 'unattributed';
 
+/**
+ * 🔴 `SELF-STOP-24` / `C-013` — **what the record writes when THE TEMPLATE took its own row
+ * off air**, because its content had finished and nobody pressed anything.
+ *
+ * The first non-operator actor this system has had. Every other append answers either a typed
+ * console name or {@link UNATTRIBUTED_ACTOR}, and neither would do here: a console name would be
+ * a lie, and "unattributed" would file a graphic ending its own run in the same bucket as
+ * housekeeping — while the ONE question this row exists to answer is *why did that row come off
+ * air when nobody touched it*.
+ *
+ * ⚠ **RESERVED, not conventional.** A console's name is typed by a human who is free to type
+ * anything, so {@link normalizeActor} REFUSES this value from the wire (see there for why the
+ * refusal is after trimming and case-insensitive). Without that a console called `template`
+ * would be indistinguishable in the log from the templates themselves.
+ *
+ * ⚠ The ACTION stays `stop`. It is the same verb reaching air by the same path; only who asked
+ * differs, which is exactly what an actor field is for.
+ */
+export const TEMPLATE_ACTOR = 'template';
+
 /** Longest operator name accepted on the wire; a label, not a free-text field. */
 export const MAX_ACTOR_LENGTH = 64;
 
@@ -43,7 +63,21 @@ export const MAX_ACTOR_LENGTH = 64;
 export function normalizeActor(raw: unknown): string {
   if (typeof raw !== 'string') return UNATTRIBUTED_ACTOR;
   const trimmed = raw.trim().slice(0, MAX_ACTOR_LENGTH).trim();
-  return trimmed === '' ? UNATTRIBUTED_ACTOR : trimmed;
+  if (trimmed === '') return UNATTRIBUTED_ACTOR;
+  /*
+    🔴 `SELF-STOP-24` — {@link TEMPLATE_ACTOR} IS NOT A NAME A CONSOLE MAY CLAIM.
+
+    ⚠ **After the trim, and case-insensitive, and both halves are load-bearing.** Placed before
+    the trim it is defeated by a leading space; compared exactly it is defeated by a capital
+    letter. Either way a console ends up indistinguishable in the log from the templates
+    themselves, which is the one distinction the constant exists to make.
+
+    ⚠ **Whole-name, never a banned substring.** Refusing anything CONTAINING it would take
+    "Template Suite 2" away from a gallery that had every right to it, silently and for a reason
+    nobody at that console could discover.
+  */
+  if (trimmed.toLowerCase() === TEMPLATE_ACTOR) return UNATTRIBUTED_ACTOR;
+  return trimmed;
 }
 
 /**

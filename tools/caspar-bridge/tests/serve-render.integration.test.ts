@@ -3,6 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
+import { readCgControl, stripCgControl } from '@cg/shared-schema';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
@@ -89,9 +90,18 @@ it('serves the template URL, CG ADDs it with real Persian fields, and CG UPDATE 
   expect(add?.template).toMatch(
     /^http:\/\/127\.0\.0\.1:\d+\/template\/lower-third\?cw=1920&ch=1080$/,
   );
-  // …and the data arg is the REAL field JSON (Persian intact), never "{}".
+  /*
+    …and the data arg is the REAL field JSON (Persian intact), never "{}".
+
+    🔴 `SELF-STOP-24` — STRIPPED FIRST, as the page strips it: since `C-013` every `CG ADD`
+    carries a take token under the reserved `__cg` key, and the page lifts that off before the
+    field machinery sees the payload. The token's presence is asserted rather than ignored, so a
+    build that stopped attaching it still fails here.
+  */
   expect(add?.data).not.toBe('{}');
-  expect(JSON.parse(add?.data ?? '{}')).toEqual(fields);
+  const rawAdd = JSON.parse(add?.data ?? '{}') as Record<string, unknown>;
+  expect(stripCgControl(rawAdd)).toEqual(fields);
+  expect(readCgControl(rawAdd)?.take, 'the ADD carried no take token').toMatch(/^[0-9a-f]{32}$/);
 
   // ── take → CG PLAY acked ──
   expect((await runtime.take('item1')).accepted).toBe(true);

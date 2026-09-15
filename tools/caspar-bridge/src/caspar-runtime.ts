@@ -105,7 +105,8 @@ import {
   type EmptiedAirNotice,
   type EmptiedAirRefusal,
 } from '@cg/shared-ipc';
-import { operatorActor } from './actor-context.js';
+import { randomBytes } from 'node:crypto';
+import { operatorActor, runAsTemplate } from './actor-context.js';
 import {
   ChannelSettingsStore,
   adoptionNotice,
@@ -1090,6 +1091,23 @@ export class CasparRuntime {
    * by a failed send is not inert, it is what the next reconcile and the next take would read.
    */
   readonly #passTimings = new Map<string, StackItemTimingOverride>();
+  /*
+    🔴 `SELF-STOP-24` / `C-013` — **ITEM ID → THE TOKEN THAT NAMES ITS CURRENT TAKE.**
+
+    ⚠ **ONE MAP, scanned, rather than two kept in step.** The route needs token → item and the
+    mint needs item → token, and the obvious shape is a pair of maps. A pair is a pair that can
+    drift, and drift here means a token that still names a row after the row moved on — which is
+    a stop on a run nobody reported. The stack is tens of rows, so the scan is free and the
+    invariant is structural: writing a row's new token DELETES its old one because it is the
+    same key.
+
+    ⚠ It is NOT cleared on every exit path. Nothing needs it to be: a row's entry is replaced on
+    its next route into air, matching SPENDS it, and an unspent leftover can do nothing because
+    {@link #completionMayStop} asks the row's state as well. Clearing it at `out`, `remove`,
+    `stopItem` and each restore would be four more places to forget one — and the one forgotten
+    would fail by stopping a LIVE row, which is the direction that costs a picture.
+  */
+  readonly #takeTokens = new Map<string, string>();
   /**
    * B-092 — restored items awaiting their adopt-vs-re-ADD decision.
    *
@@ -1551,7 +1569,13 @@ export class CasparRuntime {
     this.#throwAfterMixerLines = options.faultInjection?.throwAfterMixerLines ?? 0;
     this.#sessionTuning = options.sessionTuning ?? {};
     this.#templateServer =
-      options.templateServer ?? new TemplateHttpServer((id) => this.#templates.html(id));
+      options.templateServer ??
+      new TemplateHttpServer(
+        (id) => this.#templates.html(id),
+        // `SELF-STOP-24` — the completion route's decision. Bound here rather than passed down
+        // because the server holds no take state: this is the only object that can answer it.
+        (take) => this.#onTemplateComplete(take),
+      );
     this.#config = config;
     this.#serveOverride = serveOverride;
     // B-038 Phase 3 — serve loopback when EVERY CasparCG is local; an opt-in
@@ -11209,11 +11233,25 @@ export class CasparRuntime {
       ⚠ Absent when the row has no override, and `withCgControl` declines to attach an empty
       control object, so an ordinary row's payload is byte-for-byte what it was.
     */
+    /*
+      🔴 `SELF-STOP-24` — AND THE TAKE TOKEN RIDES IT, at the same one chokepoint and for a
+      reason the look and the timing do not have.
+
+      This is the page's ARMING KEY. Without a token the served page opens no connection at all
+      (`completion-ping.ts`), so attaching it here is what turns the completion channel on — and
+      attaching it only here is what keeps it off for a `.vcg` dropped into CasparCG by hand and
+      for the Designer's own preview, neither of which passes through this method.
+
+      ⚠ Minted UNCONDITIONALLY, like the look and for the same argument: a fresh page is a fresh
+      run whether or not anything else about the row changed, and a page carrying the PREVIOUS
+      page's token could report a run that is already over.
+    */
     const activeLook = this.#activeLookOf(itemId);
     const passTiming = this.#passTimings.get(itemId);
     const control: CgControl = {
       ...(activeLook !== undefined && { look: activeLook.id }),
       ...(passTiming !== undefined && { timing: CasparRuntime.#wireTiming(passTiming) }),
+      take: this.#mintTakeToken(itemId),
     };
     const addFields = withCgControl(fields, control);
     const { ok, errorCode, command } = await this.#send(
@@ -11242,6 +11280,93 @@ export class CasparRuntime {
       if (s.channel === slot.channel && s.layer === slot.layer) return itemId;
     }
     return undefined;
+  }
+
+  /**
+   * 🔴 `SELF-STOP-24` — a fresh token for this row's current take, retiring its previous one.
+   *
+   * 128 random bits, hex. Unguessable matters here in a way it does not for most ids in this
+   * process: the template server binds a ROUTABLE interface whenever any configured CasparCG is
+   * remote, so this token is the only thing standing between the LAN and a stop on a live row.
+   * A counter or a timestamp would be a stop anybody on the network could ask for.
+   */
+  #mintTakeToken(itemId: string): string {
+    const token = randomBytes(16).toString('hex');
+    this.#takeTokens.set(itemId, token);
+    return token;
+  }
+
+  /**
+   * 🔴 `SELF-STOP-24` / `C-013` — **THE RECEIPT. A served page has reported that its own run
+   * finished; decide whether that is still true, and if so end the row the way STOP does.**
+   *
+   * Returns whether the report was acted on. The route turns that into `204` or `404`; the page
+   * never reads either (see `completion-ping.ts`), so the answer exists for the record and for
+   * the tests, not for the sender.
+   *
+   * ── TWO CONDITIONS, READ ONCE ─────────────────────────────────────────────────────────────
+   *
+   * A report acts only when the token names a LIVE take AND the row is still on air. Matching
+   * SPENDS the token whatever happens next, which is what makes the mirrored plant produce one
+   * stop: the primary's page and the backup's page are the SAME page fetched from the SAME URL,
+   * so both report the same run, and the second finds nothing.
+   *
+   * The state half is what handles the operator race without a second list of invalidation
+   * sites — see {@link #completionMayStop}.
+   *
+   * ── WHY THE STOP IS NOT AWAITED ───────────────────────────────────────────────────────────
+   *
+   * It is an AMCP round trip, and holding the HTTP response open for it would put a template's
+   * own fetch inside the socket set `TemplateHttpServer.stop()` waits on — B-064's bound, paid
+   * for by a request nobody reads. The outcome is recorded where outcomes belong: the audit row
+   * `stopItem` already writes.
+   */
+  #onTemplateComplete(take: string): boolean {
+    let owner: string | undefined;
+    for (const [itemId, token] of this.#takeTokens) {
+      if (token === take) {
+        owner = itemId;
+        break;
+      }
+    }
+    if (owner === undefined) return false;
+    // SPENT on a match, before any decision below. A report that arrives too late has still
+    // consumed the run it named — the next one is a different take with a different token.
+    this.#takeTokens.delete(owner);
+    if (!this.#completionMayStop(owner)) return false;
+    /*
+      🔴 THE SAME INTERNAL STOP THE OPERATOR'S BUTTON RUNS, through the same audited wrapper.
+
+      Not a copy of it, and not `#stopItemImpl` directly: `stopItem` is where the audit row, the
+      parked-restore retirement, the link-down refusal, the live-plate teardown and the thaw all
+      live, and every one of them is as true of a template's stop as of an operator's. A second
+      path would be the one-rule-two-spellings failure this tree keeps paying for, on the path to
+      air (golden rule 6).
+    */
+    void runAsTemplate(() => this.stopItem(owner)).catch(() => undefined);
+    return true;
+  }
+
+  /**
+   * 🔴 `SELF-STOP-24` — may a completion report still take this row off air?
+   *
+   * `isOnAirStatus` is the canonical predicate and it is asked here rather than re-derived —
+   * with ONE named exclusion on top of it.
+   *
+   * ⚠ **`exiting` is EXCLUDED, and that is the operator race.** `isOnAirStatus` counts
+   * `exiting` as on air, correctly: the picture has not gone yet. But `exiting` means a
+   * departure is ALREADY under way — the operator pressed STOP, or OUT — and a completion
+   * report landing in that window would send a second command for one departure. The spec's
+   * wording is "one stop, no error", and this is where that is true.
+   *
+   * ⚠ Everything else falls out of the status without a second list: a row already stopped is
+   * `loaded`, a row taken out is `idle`, and neither is on air.
+   */
+  #completionMayStop(itemId: string): boolean {
+    const item = this.#reconciler.get(itemId);
+    if (item === null || item === undefined) return false;
+    if (item.status === 'exiting') return false;
+    return isOnAirStatus(item);
   }
 
   #markDirty(itemId: string): void {

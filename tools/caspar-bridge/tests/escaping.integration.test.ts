@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import type { FieldValues } from '@cg/shared-schema';
+import { readCgControl, stripCgControl, type FieldValues } from '@cg/shared-schema';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
 /**
@@ -96,9 +96,23 @@ it('CG ADD + CG UPDATE carry the full B-041 matrix byte-exact (Persian + lists i
   const add = mock.lastCgAdd(slot);
   // The two-layer decode must NOT have flagged the emission…
   expect(add?.rejected).toBeUndefined();
-  // …and what window.update receives JSON.parses back to the original object.
-  const addParsed = JSON.parse(add?.data ?? '{}') as FieldValues;
+  /*
+    …and what window.update receives JSON.parses back to the original object.
+
+    🔴 `SELF-STOP-24` — **STRIPPED FIRST, exactly as the page strips it.** Since `C-013` every
+    `CG ADD` carries a take token under the reserved `__cg` key, and the page lifts that off
+    before anything treats the payload as fields (`stripCgControl` — half of the reserved key's
+    collision proof). Comparing the raw payload here would assert that a control channel does not
+    exist; what this file is about is that FIELD VALUES survive the wire byte-exact, which is
+    what the strip leaves behind.
+
+    ⚠ The control key's PRESENCE is asserted below rather than ignored, so a build that silently
+    stopped attaching the token still fails this file.
+  */
+  const rawAdd = JSON.parse(add?.data ?? '{}') as Record<string, unknown>;
+  const addParsed = stripCgControl(rawAdd) as FieldValues;
   expect(addParsed).toEqual(SPECIAL);
+  expect(readCgControl(rawAdd)?.take, 'the ADD carried no take token').toMatch(/^[0-9a-f]{32}$/);
   // List fields stay structured arrays (not stringified blobs).
   expect(Array.isArray(addParsed['ticker'])).toBe(true);
 
