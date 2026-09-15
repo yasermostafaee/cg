@@ -98,11 +98,24 @@ descendant and the ancestry was verified, not assumed.
 - [x] 🔴 `play()` seats the operator's pass timing instead of dropping it — `0f54e00d` ·
       [run 34986964638](https://github.com/yasermostafaee/cg/actions/runs/34986964638) ·
       `ci` and `e2e` both RAN green
-- [ ] One focus ring on the gap field, not two — `d4ee57f2` · run not yet read
-- [ ] R2 — the `cg/raw-control` ratchet — `980c42e5` · run not yet read
-- [ ] R1 — the pre-take count pinned on the `update(data)` host — `72dbd863` · run not yet
-      read
-- [ ] R3 — a timing set is in the audit log — `009a25da` · run not yet read
+- [x] One focus ring on the gap field, not two — `d4ee57f2` ·
+      [run 34989676332](https://github.com/yasermostafaee/cg/actions/runs/34989676332) ·
+      `ci` and `e2e` both RAN green
+- [x] R2 — the `cg/raw-control` ratchet — `980c42e5` · **no run of its own** (push burst).
+      Covered by
+      [run 34992963204](https://github.com/yasermostafaee/cg/actions/runs/34992963204) on its
+      descendant `72dbd863`, whose `ci` and `e2e` both RAN green.
+- [x] R1 — the pre-take count pinned on the `update(data)` delivery host — `72dbd863` ·
+      [run 34992963204](https://github.com/yasermostafaee/cg/actions/runs/34992963204) ·
+      `ci` and `e2e` both RAN green
+- [x] R3 — a timing set is in the audit log, with the value asked for — `009a25da` ·
+      [run 34994925132](https://github.com/yasermostafaee/cg/actions/runs/34994925132) ·
+      `ci` and `e2e` both RAN green
+- [ ] R4 + B7 — this change dir, `C-034`, and the links — `d30094aa` ·
+      [run 34996551595](https://github.com/yasermostafaee/cg/actions/runs/34996551595) —
+      IN PROGRESS at the time of writing. ⚠ Docs-only, so its `e2e` may legitimately be
+      SKIPPED (`P-029`); read the job, and if it skipped, this row is discharged by the
+      next code push's whole-tree run rather than by this one.
 
 ## 5. Still open
 
