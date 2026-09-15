@@ -104,6 +104,53 @@ test.describe('DELTA B4 — the Timing section as the owner sees it', () => {
     expect(unitInk, 'the unit is painted exactly like the value it qualifies').not.toBe(valueInk);
   });
 
+  test('🔴 ONE focus ring, on the wrapper — owner: «بردر اینپوت داخلی رو حذف کن»', async ({
+    app,
+    page,
+  }) => {
+    /*
+      The gap field is a WRAPPER carrying the field chrome with a bare input inside it, so there
+      are two elements that can each draw a ring — and both did. Measured in Chromium before the
+      fix, with the field focused:
+
+        inner  input → border 0px none, outline none, box-shadow rgb(116 205 246) 0 0 0 2px
+        wrapper span → border 1px solid rgb(116 205 246), box-shadow rgb(116 205 246) 0 0 0 2px
+
+      The inner one came from `@cg/ui`'s shared `input:focus-visible` halo, which is a
+      BOX-SHADOW on purpose — its own comment says it is a box-shadow precisely because
+      components set `outline: none` inline, so the halo survives them. Zeroing `border` and
+      `outline` on the inner input therefore suppressed the two properties that were never
+      drawing it.
+
+      ⚠ This is pinned in a BROWSER and not in jsdom, and not only for the usual reason. The
+      claim is about which of TWO nested elements paints, and about a shared rule from another
+      package resolving against a local one at equal specificity — a cascade question whose
+      answer jsdom is entitled to get differently (golden rule 12c).
+    */
+    const section = app.inspector.locator('.cg-inspector-section', { hasText: 'Timing' });
+    const field = section.locator('.cg-num-unit');
+    const input = section.getByLabel('Gap between passes');
+
+    await input.focus();
+
+    // The INNER input draws nothing: no halo, no border, no outline.
+    await expect(input, 'the inner input still draws its own ring').toHaveCSS('box-shadow', 'none');
+    await expect(input).toHaveCSS('border-width', '0px');
+
+    // …and the WRAPPER still shows focus, because it is the thing that looks like the field.
+    // A field that stopped showing focus would be the accessibility regression this is one
+    // edit away from, so the ring is asserted PRESENT, not merely "not doubled".
+    const wrapperShadow = await field.evaluate((el) => getComputedStyle(el).boxShadow);
+    expect(wrapperShadow, 'focus is no longer visible at all').not.toBe('none');
+
+    // The unit sits INSIDE that one ring, which is what makes the field read as one control.
+    await expect(field.locator('.cg-unit')).toBeVisible();
+
+    // Blurring takes the ring away — otherwise "present" above would pass on a permanent ring.
+    await page.locator('body').click({ position: { x: 2, y: 2 } });
+    await expect(field).toHaveCSS('box-shadow', 'none');
+  });
+
   test('the two-state choice SHOWS which is selected — not only to a screen reader', async ({
     app,
     page,

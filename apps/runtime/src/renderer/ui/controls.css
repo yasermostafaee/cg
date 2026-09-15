@@ -1573,6 +1573,38 @@
   outline: none;
   width: 100%;
 }
+/*
+ * 🔴 **ONE RING, ON THE WRAPPER — owner, 2026-09-15:** «یه خط دور اینپوت داخلی میافته و یه خط
+ * دور کلش به همراه s. بردر اینپوت داخلی رو حذف کن».
+ *
+ * ── WHY ZEROING THE BORDER WAS NOT ENOUGH, AND WHY THIS IS NOT `outline` EITHER ───────────
+ *
+ * The rule above already sets `border: 0` and `outline: none` on the inner input, and MEASURED
+ * in Chromium both held. The second ring was a **`box-shadow`**, from `@cg/ui`'s shared
+ * `input:focus-visible { box-shadow: 0 0 0 2px var(--cg-accent) }` — and that declaration is
+ * deliberately a box-shadow precisely BECAUSE components set `outline: none` inline, so the
+ * halo survives them. Its own comment says so. Suppressing `border` and `outline` therefore
+ * suppresses the two properties that were never drawing the ring.
+ *
+ * Measured on the focused gap field before this rule existed:
+ *   inner  input → border 0px none, outline none, box-shadow rgb(116 205 246) 0 0 0 2px
+ *   wrapper span → border 1px solid rgb(116 205 246), box-shadow rgb(116 205 246) 0 0 0 2px
+ * Two rings, one inside the other, with the unit sitting between them.
+ *
+ * ⚠ **SPECIFICITY, NOT SOURCE ORDER.** `input:focus-visible` and `.cg-num-unit > input` are
+ * both (0,1,1), so which wins would depend on which stylesheet the app happens to load last —
+ * a rule that works by accident of bundling order. Adding the pseudo-class here makes this
+ * (0,2,1) and settles it in the cascade, where it can be read.
+ *
+ * ⚠ **THE RING IS NOT DELETED — IT MOVED, and it had already moved.** `:focus-within` on the
+ * wrapper is what draws focus now, because the wrapper is the thing that LOOKS like the field
+ * (it carries `.cg-field`'s border and background; the input inside it is bare). A field that
+ * stopped showing focus would be an accessibility regression; what is removed here is the
+ * DUPLICATE, not the signal.
+ */
+.cg-num-unit > input:focus-visible {
+  box-shadow: none;
+}
 .cg-num-unit:focus-within {
   border-color: var(--r-accent);
   box-shadow: 0 0 0 var(--r-focus-ring) var(--r-accent);
