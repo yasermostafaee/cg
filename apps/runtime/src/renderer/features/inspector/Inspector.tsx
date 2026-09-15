@@ -40,6 +40,7 @@ import { FromFileControl } from './FromFileControl.js';
 import { ListFieldEditor } from './ListFieldEditor.js';
 import { LivePlatesSection } from './LivePlatesSection.js';
 import { LooksBindingsSection } from './LooksBindingsSection.js';
+import { TimingSection } from './TimingSection.js';
 import { appliedPlateSources } from './livePlates.js';
 import { PositionPicker } from './PositionPicker.js';
 import { Tag } from '../../ui/Tag.js';
@@ -674,6 +675,10 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
         {/* BM-2 — the per-look inputs sit BELOW the default they fall back to, so the two
             levels read top-down in the order they resolve. */}
         <LooksBindingsSection item={item} info={info} rehearsing={rehearsing} />
+        {/* `TIMING-WIRE-22` §4 — the template's timing: `mode`/`hold` as FACTS, and the
+            operator's passes/gap as controls. Renders nothing for a template imported before
+            `TemplateInfo.playout` existed, rather than guessing what it does. */}
+        <TimingSection item={item} info={info} />
         {/* `cg-inspector-section` carries the shared rhythm — the heading's rule,
             its tracking, and the largest gap in the gradient beneath it. Same
             class as POSITION, so the two sections cannot drift apart. */}

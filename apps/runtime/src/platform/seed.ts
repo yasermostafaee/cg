@@ -1,4 +1,4 @@
-import { resolveDefaultPosition, type StackItemState } from '@cg/shared-schema';
+import { templateTimingOf, resolveDefaultPosition, type StackItemState } from '@cg/shared-schema';
 import type { ConnectionConfig, ConnectionHealth, TemplateInfo } from '@cg/shared-ipc';
 import { collectLiveSources } from '@cg/vcg-format';
 import { STARTER_TEMPLATES } from '@cg/starter-templates';
@@ -19,6 +19,33 @@ export function seedTemplates(): TemplateInfo[] {
     name: s.label,
     templateType: s.scene.templateType,
     fields: s.scene.fields,
+    /*
+      🔴 `TIMING-WIRE-22` §4 — the PLAYOUT, derived here for exactly the reason the block
+      below states, and through the same canonical `templateTimingOf` the real import path uses.
+
+      ⚠ NOT `playoutOf(s.scene)`. Every starter has `layers: []` and a set `entryCompositionId`,
+      so the scene ROOT resolves to `static` for all five — the console would have stated
+      `Static` for every template and offered no pass control anywhere.
+
+      A seeded starter is synthesised from a scene this function is holding, so it is not a
+      "pre-carrier" record and must not wear that state. Omitting it would hide the console's
+      whole Timing section in the offline mock — the section renders nothing for a template
+      that predates the field — so every offline session and every E2E would be developed
+      against a console that has no timing at all, while the live path has one. That is the
+      MockRuntime-vs-bridge divergence `mock-bridge-parity`'s header was written about, in the
+      one direction a method-tree guard cannot see.
+    */
+    playout: (() => {
+      const t = templateTimingOf(s.scene);
+      return {
+        mode: t.mode,
+        ...(t.holdSource !== undefined ? { holdSource: t.holdSource } : {}),
+        ...(t.holdMs !== undefined ? { holdMs: t.holdMs } : {}),
+        ...(t.loop !== undefined ? { loops: true } : {}),
+        ...(t.loop?.repeat !== undefined ? { repeat: t.loop.repeat } : {}),
+        ...(t.loop?.delayMs !== undefined ? { delayMs: t.loop.delayMs } : {}),
+      };
+    })(),
     // D-137 / C-015 — DERIVED here, not omitted. A seeded starter is synthesised
     // from a scene this function is holding, so it is not a "pre-carrier" record
     // and must not wear that state: leaving the block off would make every

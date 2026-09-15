@@ -287,6 +287,48 @@ export const TemplateInfoSchema = z.object({
    */
   hasNext: z.boolean().optional(),
   /**
+   * 🔴 `TIMING-WIRE-22` §4 — **WHAT THIS TEMPLATE'S TIMING IS, so the console can STATE it.**
+   *
+   * Derived at import from the unpacked scene by the canonical `playoutOf`, exactly as
+   * `hasNext` above is — and for the identical reason, which `templateDelivery.ts` states
+   * plainly: that is the one moment the app holds the scene, no `.vcg` ever reaches the bridge,
+   * and a fact not captured there is not recoverable later.
+   *
+   * It is what makes the console's timing section possible at all, in two ways:
+   *
+   *  - `mode` and `holdSource` are the FACTS the section states (ADR 0009 — designer-owned,
+   *    read-only on every surface but the Designer's own inspector). Without them the console
+   *    would have nothing to say.
+   *  - `repeat` and `delayMs` are the AUTHORED DEFAULTS an operator override inherits from, so
+   *    a row with no override can show `Default (∞)` / `Default (2 s)` and NAME the value. A
+   *    console that guessed the default would be confidently wrong on every template that
+   *    authored one — the worst class of defect this product has.
+   *
+   * ⚠ ABSENT means a template imported by a build that predates this field. The section then
+   * states nothing rather than guessing: re-import to get it. Degradation, not a second rule.
+   */
+  playout: z
+    .object({
+      /** The ENTRY composition's mode — what the ROW does. Not the scene root's (a wrapper). */
+      mode: z.string(),
+      holdSource: z.string().optional(),
+      holdMs: z.number().optional(),
+      /**
+       * 🔴 Does ANY scope in this template loop? The pass controls are offered on this and
+       * nothing else.
+       *
+       * It is a separate bit from `repeat` because the two answer different questions, and
+       * conflating them is how the control disappears on the templates that need it most: a
+       * scope can be `loop-cycle` with NO authored `repeat` (the common case — the Designer
+       * never wrote one before today), so `repeat === undefined` cannot mean "does not loop".
+       */
+      loops: z.boolean().optional(),
+      /** The looping scope's AUTHORED count and gap — what an override inherits from. */
+      repeat: z.union([z.number(), z.literal('infinite')]).optional(),
+      delayMs: z.number().optional(),
+    })
+    .optional(),
+  /**
    * D-137 / C-015 — the Live Source carrier. See {@link TemplateLiveSourcesSchema}
    * for why it is one block, why `defaultPosition` inside it is required, and why
    * the block itself is optional.

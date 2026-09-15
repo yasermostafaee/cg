@@ -8,6 +8,7 @@ import type {
 import {
   aggregateCompositionFields,
   hasNextStep,
+  templateTimingOf,
   runtimeShortfall,
   runtimeShortfallMessage,
   type Manifest,
@@ -212,6 +213,37 @@ export async function produceTemplateDelivery(
     // It rides `TemplateInfo` (not a browser-local store like R-011/R-018) so
     // the bridge persists it and every browser gets the same answer.
     hasNext: hasNextStep(scene, scene.compositions),
+    /*
+      🔴 `TIMING-WIRE-22` §4 — the template's PLAYOUT, derived at this same one moment and for
+      the reason stated two comments down: no `.vcg` reaches the bridge, so a fact not captured
+      here is not recoverable later.
+
+      🔴 Through `templateTimingOf`, NOT `playoutOf(scene)`. The scene root of a real template
+      is a wrapper — every starter has `layers: []` and a set `entryCompositionId` — so
+      `playoutOf(scene)` answers `static` for all of them, and the console would state `Static`
+      for every template in existence while offering no pass control at all. The resolver reads
+      the ENTRY composition for what the row DOES, and the first looping scope for the count and
+      gap an override inherits from. This was found by screenshotting the section, not by any
+      test: the first spelling was green and wrong.
+
+      ⚠ `repeat` and `delayMs` are carried as AUTHORED — absent when the template authored
+      none — rather than resolved through `repeatOf`/`delayMsOf`. The console needs to tell
+      "the author asked for infinite" from "the author said nothing and the default is
+      infinite": they display identically today, but only one of them changes if the default
+      ever does, and an override UI that cannot see which it inherits cannot honestly say
+      `Default (…)`.
+    */
+    playout: (() => {
+      const t = templateTimingOf(scene);
+      return {
+        mode: t.mode,
+        ...(t.holdSource !== undefined ? { holdSource: t.holdSource } : {}),
+        ...(t.holdMs !== undefined ? { holdMs: t.holdMs } : {}),
+        ...(t.loop !== undefined ? { loops: true } : {}),
+        ...(t.loop?.repeat !== undefined ? { repeat: t.loop.repeat } : {}),
+        ...(t.loop?.delayMs !== undefined ? { delayMs: t.loop.delayMs } : {}),
+      };
+    })(),
     // D-137 / C-015 — the Live Source carrier, derived at the SAME moment and for
     // the same reason as `hasNext`: this is the only point in the product where
     // the unpacked scene is in hand. `LibraryEntry` is `{ template, html }`, the

@@ -1947,14 +1947,30 @@ export function createRuntime(scene: Scene, options: RuntimeBootOptions = {}): T
    * has just finished, which is a write nobody can observe. Setting the gap first means the
    * value is in place for whatever the count then decides.
    *
-   * ⚠ ROOT ONLY — deliberately not cascaded. `markFinalCycle` cascades because a parent's exit
-   * must end its children's; a TIMING configuration is the row's own, and pushing a count into
-   * every nested instance would silently re-time furniture the operator never addressed.
+   * 🔴 **IT GOES TO EVERY SCOPE THAT ACTUALLY LOOPS, NOT TO THE ROOT.** An earlier spelling of
+   * this said "root only — pushing a count into every nested instance would silently re-time
+   * furniture the operator never addressed". That was a guess, and it was wrong in the way that
+   * makes a feature dead rather than dangerous.
+   *
+   * Measured across all five starter templates: every one has `layers: []` and a set
+   * `entryCompositionId`, so the ROOT scope resolves to `static` — and a static controller is
+   * not cyclic, so `setRemainingPasses` early-returned and the whole road from the console
+   * delivered nothing. The `loop-cycle` is on the entry composition, or a level below it again
+   * (`logo-bug`'s entry is `manual`; its `comp-logo-mark` child is the infinite loop).
+   *
+   * ⚠ The "re-timing furniture" worry the old note raised is answered by the FILTER, not by the
+   * scope: `setRemainingPasses` and `setDelayMs` are no-ops on a controller that is not cyclic,
+   * so this reaches exactly the loops and nothing else. A template with no loop takes no effect
+   * at all, which is the same outcome the old rule gave for the wrong reason.
    */
   const applyPassTiming = (timing: { passes?: number | 'infinite'; delayMs?: number }): void => {
     if (machine.state === 'removed') return;
-    if (timing.delayMs !== undefined) rootNode.controller.setDelayMs(timing.delayMs);
-    if (timing.passes !== undefined) rootNode.controller.setRemainingPasses(timing.passes);
+    const visit = (node: ScopeNode): void => {
+      if (timing.delayMs !== undefined) node.controller.setDelayMs(timing.delayMs);
+      if (timing.passes !== undefined) node.controller.setRemainingPasses(timing.passes);
+      for (const child of node.children) visit(child);
+    };
+    visit(rootNode);
   };
 
   applyScopedFieldValues(scene, scene, {}, built.scopeTree);

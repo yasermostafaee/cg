@@ -719,6 +719,69 @@ export function delayMsOf(playout: Pick<Playout, 'delayMs'>): number {
 }
 
 /**
+ * 🔴 `TIMING-WIRE-22` — **THE TIMING A CONSOLE SHOULD STATE FOR A WHOLE TEMPLATE.**
+ *
+ * `playoutOf(scene)` answers for the scene ROOT, and for a real template that is the wrong
+ * question. Measured across all five starters: every one has `layers: []`, a set
+ * `entryCompositionId`, and a root that therefore resolves to `static` — while the timing that
+ * describes the graphic lives on the ENTRY COMPOSITION, and the `loop-cycle` that actually
+ * repeats is sometimes a level BELOW that again (`logo-bug`'s entry is `manual`; its
+ * `comp-logo-mark` child is the infinite loop).
+ *
+ * So one scope cannot answer both halves honestly, and this returns both:
+ *
+ *  - **`mode` / `holdSource` / `holdMs` — the ENTRY composition's.** That is what the ROW does:
+ *    "holds until stop", "outro after the hold". Reporting a looping child's mode here would
+ *    describe a piece of furniture rather than the graphic the operator took.
+ *  - **`loop` — the first LOOPING scope's authored count and gap**, depth-first from the entry,
+ *    or absent when nothing loops. That is the thing a pass count can act on, so it is the thing
+ *    whose defaults an override inherits from.
+ *
+ * ⚠ Reading the root instead is not a small error: it makes the console show `Static` for every
+ * template in existence and offer no pass control at all. That is how this was first written,
+ * and the screenshot is what caught it.
+ */
+export function templateTimingOf(scene: Scene): {
+  mode: PlayoutMode;
+  holdSource?: HoldSource;
+  holdMs?: number;
+  loop?: { repeat?: number | 'infinite'; delayMs?: number };
+} {
+  const comps = scene.compositions ?? [];
+  const entryId = scene.entryCompositionId;
+  const entry =
+    (entryId !== undefined ? comps.find((c) => c.id === entryId) : undefined) ?? comps[0];
+  // No compositions at all ⇒ the scene IS the graphic (a hand-authored or flattened template).
+  const head = entry ?? scene;
+  const resolved = playoutOf(head);
+
+  /*
+    The looping scope, depth-first from the entry and then across the rest. `compositions` is a
+    FLAT list keyed by id, so this is a scan rather than a tree walk — the nesting is expressed
+    by `composition` elements referencing ids, and a scan finds the loop wherever it sits without
+    having to re-derive that graph here.
+  */
+  const ordered = entry === undefined ? [] : [entry, ...comps.filter((c) => c !== entry)];
+  const looping = ordered.find((c) => playoutOf(c).mode === 'loop-cycle');
+  const loopSource = looping ?? (resolved.mode === 'loop-cycle' ? head : undefined);
+  const loopPlayout = loopSource === undefined ? undefined : playoutOf(loopSource);
+
+  return {
+    mode: resolved.mode,
+    ...(resolved.holdSource !== undefined ? { holdSource: resolved.holdSource } : {}),
+    ...(resolved.holdMs !== undefined ? { holdMs: resolved.holdMs } : {}),
+    ...(loopPlayout !== undefined
+      ? {
+          loop: {
+            ...(loopPlayout.repeat !== undefined ? { repeat: loopPlayout.repeat } : {}),
+            ...(loopPlayout.delayMs !== undefined ? { delayMs: loopPlayout.delayMs } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+/**
  * B-032 — does this composition tree have any EFFECTIVE content hold driver: a `ticker` /
  * `sequence` / countdown `clock` (absent `drivesHold` ⇒ drives), or an OPTED-IN media element —
  * `lottie` (D-125) / `video` (D-128), `drivesHold === true` — in its OWN layers OR reachable

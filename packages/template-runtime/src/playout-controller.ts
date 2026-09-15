@@ -299,7 +299,11 @@ export class PlayoutController {
    * than the operator was told it would.
    */
   setDelayMs(ms: number): void {
-    if (this.settled) return;
+    // `!cyclic()` for the same reason `setRemainingPasses` has it, and so that the runtime's
+    // tree-wide apply can truthfully say it reaches exactly the loops: a gap BETWEEN passes is
+    // meaningless where there are no passes, and writing one would leave a value on a scope that
+    // could start honouring it if its mode ever changed under a later edit.
+    if (this.settled || !this.cyclic()) return;
     this.o.playout.delayMs = Math.max(0, ms);
   }
 
