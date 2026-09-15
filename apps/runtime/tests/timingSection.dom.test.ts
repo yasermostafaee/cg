@@ -99,21 +99,42 @@ const byLabel = (l: string): HTMLInputElement | null =>
  * reaches nothing and the handler never runs, which reads in a test exactly like a control that
  * sends nothing.
  *
- * The input is UNCONTROLLED (the operator's typing lives in the DOM until commit), so setting
- * `el.value` directly is the whole of "typing" here — no React value tracker to defeat.
+ * 🔴 `DELTA B3` — **AND THE VALUE GOES IN THROUGH REACT, NOT AROUND IT.**
+ *
+ * The box is now `ui/NumericInput`, which is CONTROLLED: the typed text lives in React state,
+ * not in the DOM node. A bare `el.value = …` therefore writes a string the component overwrites
+ * on its next render and never sees — the commit handler would read an empty draft and send
+ * nothing, and every assertion about what was sent would fail for a reason that has nothing to
+ * do with the product.
+ *
+ * ⚠ React installs its own `value` setter on the element to track changes, so assigning through
+ * the element skips the tracker and `onChange` never fires. Calling the PROTOTYPE's setter
+ * writes the DOM without touching the tracker, and the dispatched `input` then looks exactly
+ * like a keystroke. This is the same defeat-the-tracker step every controlled-input test needs;
+ * it is spelled out here because its absence fails SILENTLY.
  */
-function commit(label: string, value: string): void {
+const nativeValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+
+function type(label: string, value: string): HTMLInputElement {
   const el = byLabel(label);
   if (el === null) throw new Error(`no control labelled "${label}"`);
   act(() => {
-    el.value = value;
+    nativeValue?.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  return el;
+}
+
+function commit(label: string, value: string): void {
+  const el = type(label, value);
+  act(() => {
     el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
   });
 }
 
 /*
-  🔴 `loops` IS ITS OWN BIT, and this fixture says so deliberately. The row's `mode` is the ENTRY
-  composition's — often `manual` — while the scope that repeats is a level below it, so the
+  🔴 `loops` IS ITS OWN BIT, and this fixture says so deliberately. The row's `mode` is the
+  ROOT's — often `manual` — while the scope that repeats is a nested instance below it, so the
   section cannot derive "does this loop" from the mode. The realistic shape is therefore a
   non-looping mode WITH `loops: true`, which is what `logo-bug` actually is.
 */
@@ -140,6 +161,33 @@ describe('§4 — mode and hold are FACTS, never inputs', () => {
     expect(fact.tagName).toBe('SPAN');
     expect(fact.hasAttribute('data-cg-tag')).toBe(true);
     expect(fact.getAttribute('role')).toBeNull();
+  });
+
+  it('🔴 DELTA B2 — the fact is the WORD; its long form is on the title', () => {
+    /*
+      These read "Loop cycle — repeats in → hold → out" on the panel. An operator reading a row
+      under pressure wants the NAME of the thing; the sentence explaining it is an explanation,
+      and an explanation on a chip is prose wearing a value's clothes.
+    */
+    mount(row(), template({ ...LOOPS, mode: 'loop-cycle' } as never));
+    const fact = host.querySelector('[data-testid="timing-mode-fact"]')!;
+    expect(fact.textContent).toBe('Loop cycle');
+    expect(fact.getAttribute('title'), 'the long form was dropped, not relocated').toBe(
+      'Repeats in → hold → out',
+    );
+    const hold = host.querySelector('[data-testid="timing-hold-fact"]')!;
+    expect(hold.textContent).toBe('Timed');
+    expect(hold.getAttribute('title')).toBe('Holds for a duration');
+  });
+
+  it('🔴 DELTA B3 — the facts wear the Inspector house chip, not a class nothing declares', () => {
+    // `cg-fact` was invented here and no stylesheet ever declared it, so the two facts rendered
+    // as bare text while every other stated value on this panel is a chip. A class with no rule
+    // fails in exactly the way a green gate cannot see (golden rule 12).
+    mount(row(), template(LOOPS));
+    for (const id of ['timing-mode-fact', 'timing-hold-fact']) {
+      expect(host.querySelector('[data-testid="' + id + '"]')?.className).toBe('cg-meta-chip');
+    }
   });
 
   it('🔴 DELTA A6 — an OLD import says why, instead of vanishing', () => {
@@ -176,24 +224,48 @@ describe('§4 — mode and hold are FACTS, never inputs', () => {
 });
 
 describe('🔴 §4 — the count says what it will do in the state it is in', () => {
-  it('ON AIR it is passes REMAINING FROM NOW, and says the current pass is not counted', () => {
+  it('ON AIR it is passes REMAINING FROM NOW, and the LABEL is what says so', () => {
+    /*
+      DELTA B2 — the label carries the contract; the two sentences that used to explain it are
+      gone. What "remaining" means is documented in ADR 0009 and taught in training, not on the
+      panel. This test therefore pins the LABEL, which is the thing the operator reads.
+    */
     mount(row({ status: 'on-air' }), template(LOOPS));
     expect(byLabel('Passes remaining'), 'the on-air label is missing').not.toBeNull();
     expect(byLabel('Passes next take')).toBeNull();
-    expect(text()).toMatch(/the pass on screen is not counted/i);
-    expect(text()).toMatch(/0 goes out after it/i);
   });
 
   it('OFF AIR the same field is the count for the NEXT TAKE', () => {
     mount(row({ status: 'idle' }), template(LOOPS));
     expect(byLabel('Passes next take'), 'the off-air label is missing').not.toBeNull();
     expect(byLabel('Passes remaining')).toBeNull();
-    expect(text()).toMatch(/next taken/i);
   });
 
-  it('on air it says a change does not disturb the pass on screen', () => {
-    mount(row({ status: 'on-air' }), template(LOOPS));
-    expect(text()).toMatch(/the pass on screen is not disturbed/i);
+  it('🔴 DELTA B2 — the section TEACHES NOTHING: no explanatory sentence survives', () => {
+    /*
+      The five lines this pins the absence of are not a style preference. An operator surface
+      states LABELS, VALUES, STATE FACTS and REFUSALS; a sentence explaining how the feature
+      works is read once, never again, and then occupies the space a real message needs. The
+      rule is CLAUDE.md's, under "Design system — interactive controls".
+
+      Pinned as an ABSENCE because that is the direction this regresses in: the next person to
+      touch the panel adds one helpful line, and nothing fails.
+    */
+    const REMOVED = [
+      /Set by the template/i,
+      /the pass on screen is not counted/i,
+      /count this row will run/i,
+      /Dead air between repeats/i,
+      /delays the first showing/i,
+      /Takes effect from the next pass/i,
+      /Applies from the next take/i,
+    ];
+    for (const status of ['on-air', 'idle'] as const) {
+      mount(row({ status }), template(LOOPS));
+      for (const re of REMOVED) {
+        expect(text(), String(re) + ' came back on a ' + status + ' row').not.toMatch(re);
+      }
+    }
   });
 });
 
@@ -221,8 +293,8 @@ describe('🔴 DELTA A2 — on air the console states what it SENT, never a coun
 
   it('says so plainly when nothing has been sent this run', () => {
     mount(row({ status: 'on-air' }), template(LOOPS));
-    expect(host.querySelector('[data-testid="timing-passes-sent"]')?.textContent).toMatch(
-      /Nothing sent this run/i,
+    expect(host.querySelector('[data-testid="timing-passes-sent"]')?.textContent).toBe(
+      'Nothing sent',
     );
   });
 
@@ -298,6 +370,30 @@ describe('§4 — 0 is an instruction; a non-count is REFUSED with a reason', ()
     mount(row({ status: 'on-air' }), template(LOOPS));
     commit('Passes remaining', '∞');
     expect(sent).toEqual([{ itemId: 'item-1', passes: 'infinite' }]);
+  });
+
+  it('🔴 DELTA B3 — a PERSIAN-typed count reaches the wire as a number', () => {
+    /*
+      What the house primitive is FOR, and what the raw <input> here never did. This console is
+      operated on a Persian keyboard: `۳` typed into a raw box arrived as `۳`, `parsePasses`
+      read it as not-a-count, and the operator was told their own digit was nonsense. R-020's
+      normalisation lives inside `ui/NumericInput`, so adopting the primitive fixes it here and
+      at every future numeric field without anyone remembering to.
+    */
+    mount(row({ status: 'on-air' }), template(LOOPS));
+    commit('Passes remaining', '۳');
+    expect(sent, 'a Persian digit was refused as nonsense').toEqual([
+      { itemId: 'item-1', passes: 3 },
+    ]);
+    expect(errors).toEqual([]);
+  });
+
+  it('🔴 DELTA B3 — and a Persian DECIMAL gap does too', () => {
+    // ٫ (U+066B) is the Persian decimal separator, which `latinDigits` alone does not cover —
+    // it is the `decimal` prop that handles it, so the gap box must declare one.
+    mount(row(), template(LOOPS));
+    commit('Gap between passes', '۱٫۵');
+    expect(sent).toEqual([{ itemId: 'item-1', delayMs: 1500 }]);
   });
 });
 
