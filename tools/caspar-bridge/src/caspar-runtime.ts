@@ -533,6 +533,13 @@ interface AuditDetail {
    * a rule and becomes a habit.
    */
   wireFailure?: string;
+  /**
+   * `TIMING-WIRE-22 · DELTA B · R3` — `set-pass-timing` ONLY: the values the operator ASKED
+   * FOR, carried here so the `{ detail, verdict } → AuditEntry` mapping stays in one place.
+   * Never the row's resulting state: a set carrying only a gap leaves an earlier count in
+   * force, and recording the merged result would attribute that count to this press.
+   */
+  timing?: AuditEntry['timing'];
 }
 
 /**
@@ -5772,15 +5779,45 @@ export class CasparRuntime {
     itemId: string,
     timing: { passes?: number | 'infinite' | undefined; delayMs?: number | undefined },
   ): Promise<{ ok: boolean; reason?: string; message?: string }> {
+    /*
+      🔴 `DELTA B · R3` — EVERY OUTCOME OF THIS VERB IS RECORDED, and the log could not answer
+      "who set that count, and when" until it was. That question cost an afternoon on the plant
+      when a logo played one pass and closed: every other per-row verb the operator can press
+      was already in the log, and this one was the hole.
+
+      ⚠ **RECORDED THROUGH `#recordOutcome`, NOT `#audited`** — the `templateImport` precedent.
+      The wrapper is bounded to `T extends { accepted: boolean }` and this verb answers
+      `{ ok, reason?, message? }`, so it shares no shape with it. What it DOES share is
+      `#recordOutcome`, which is where the `{ detail, verdict } → AuditEntry` mapping lives —
+      one mapping, two call shapes, rather than a second mapping for a second shape.
+    */
+    const asked: AuditEntry['timing'] = {
+      ...(timing.passes !== undefined ? { passes: timing.passes } : {}),
+      ...(timing.delayMs !== undefined ? { delayMs: timing.delayMs } : {}),
+    };
     const item = this.#reconciler.get(itemId);
     const slot = this.#slots.get(itemId);
     if (item === null || slot === undefined) {
+      // No `#itemDetail` here: there is no item to read a template or a slot from, and a
+      // record naming ids it never resolved would be worse than one naming only what it knows.
+      this.#recordOutcome(
+        'set-pass-timing',
+        { itemId, timing: asked },
+        { outcome: 'failed', errorCode: 'unknown-item' },
+      );
       return { ok: false, reason: 'unknown-item', message: 'That item is not on the stack.' };
     }
-    // A call that states nothing is a no-op rather than a refusal: nothing was asked for, so
-    // nothing failed, and answering `false` would put a refusal on the surface for a press the
-    // operator never made.
+    /*
+      A call that states nothing is a no-op rather than a refusal: nothing was asked for, so
+      nothing failed, and answering `false` would put a refusal on the surface for a press the
+      operator never made.
+
+      ⚠ AND IT WRITES NO ROW — the `redelivery` precedent. It answers `ok: true`, so an
+      "audit every accepted call" reading would log it; a log with a row for a press nobody
+      made is a log people stop reading.
+    */
     if (timing.passes === undefined && timing.delayMs === undefined) return { ok: true };
+    const detail: AuditDetail = { ...this.#itemDetail(itemId), timing: asked };
     const next: StackItemTimingOverride = {
       ...this.#passTimings.get(itemId),
       ...(timing.passes !== undefined && { repeat: timing.passes }),
@@ -5793,14 +5830,24 @@ export class CasparRuntime {
     if (!this.#ownsLiveSeats(itemId)) {
       this.#passTimings.set(itemId, next);
       this.#markDirty(itemId);
+      // An accepted set that reached no wire is still a set: the next take carries it, so the
+      // log must show it or the count appears on air with nothing accounting for it.
+      this.#recordOutcome('set-pass-timing', detail, { outcome: 'ok' });
       return { ok: true };
     }
-    const { ok, errorCode } = await this.#send(
+    // `command` is destructured now — `B-209`: a refusal records the AMCP line it came back
+    // on, beside the code. Every sibling impl carries it up for exactly this.
+    const { ok, errorCode, command } = await this.#send(
       this.#builder.updatePassTiming(slot, CasparRuntime.#wireTiming(next)),
       this.#nextSeq(),
       'normal',
     );
     if (!ok) {
+      this.#recordOutcome('set-pass-timing', detail, {
+        outcome: errorCode === AMCP_TIMEOUT_CODE ? 'timeout' : 'failed',
+        errorCode: errorCode ?? 'amcp-error',
+        ...(command !== undefined ? { command } : {}),
+      });
       return {
         ok: false,
         reason: errorCode ?? 'amcp-error',
@@ -5809,6 +5856,7 @@ export class CasparRuntime {
     }
     this.#passTimings.set(itemId, next);
     this.#markDirty(itemId);
+    this.#recordOutcome('set-pass-timing', detail, { outcome: 'ok' });
     return { ok: true };
   }
 
@@ -10022,6 +10070,8 @@ export class CasparRuntime {
       ...(verdict.errorCode !== undefined ? { errorCode: verdict.errorCode } : {}),
       // `B-209` — the refused line, beside the code it was refused with.
       ...(verdict.command !== undefined ? { command: verdict.command } : {}),
+      // `R3` — what a `set-pass-timing` press asked for. Absent on every other action.
+      ...(detail.timing !== undefined ? { timing: detail.timing } : {}),
     });
   }
 

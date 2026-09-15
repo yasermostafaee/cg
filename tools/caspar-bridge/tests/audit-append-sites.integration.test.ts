@@ -44,6 +44,18 @@ const PLAYOUT_VERBS = ['load', 'take', 'update', 'stop', 'next', 'out', 'remove'
  * action to `AuditEntrySchema` forces a decision HERE — drive it above, or name it here —
  * instead of silently escaping the "every playout verb" claim.
  */
+/**
+ * 🔴 `TIMING-WIRE-22 · DELTA B · R3` — PER-ITEM CONFIGURATION VERBS, driven by their own suite
+ * at the foot of this file.
+ *
+ * A third list rather than an eighth entry in `PLAYOUT_VERBS`, because golden rule 10 turns on
+ * exactly this distinction: a configuration verb puts a value IN FORCE and seats nothing, while
+ * a playout verb reaches air. Filing it above would make the "every playout verb" claim say
+ * something it does not mean, and the suite above asserts things — a `slot` on every row, one
+ * row per verb after a TAKE — that are properties of playout verbs specifically.
+ */
+const CONFIG_VERBS = ['set-pass-timing'] as const;
+
 const NON_VERB_ACTIONS = [
   'failover',
   'reconnect',
@@ -56,7 +68,7 @@ const NON_VERB_ACTIONS = [
 ] as const;
 
 it('the "every playout verb" list is COMPLETE — each schema action is driven or named non-verb', () => {
-  expect([...PLAYOUT_VERBS, ...NON_VERB_ACTIONS].sort()).toEqual(
+  expect([...PLAYOUT_VERBS, ...CONFIG_VERBS, ...NON_VERB_ACTIONS].sort()).toEqual(
     [...AuditEntrySchema.shape.action.options].sort(),
   );
 });
@@ -583,6 +595,124 @@ describe('B-141 — a REDELIVERY is not an operator import', () => {
 
       const rows = await entriesOnDisk(file, 1);
       expect(forAction(rows, 'import')).toHaveLength(1);
+    },
+  );
+});
+
+/**
+ * 🔴 **`TIMING-WIRE-22 · DELTA B · R3` — A TIMING SET IS IN THE LOG.**
+ *
+ * Owner, 2026-09-15: nobody could tell who set a count or when, and one read of that record
+ * would have answered why a logo played one pass and closed. Every other per-row verb the
+ * operator can press was already recorded; this was the hole.
+ *
+ * ⚠ The four cases below are the four OUTCOMES, not four spellings of one: an accepted set that
+ * reached the wire, an accepted set that reached NOTHING (and is still a set, because the next
+ * take carries it), a refusal, and the call that must write NO row at all.
+ */
+describe('DELTA B · R3 — set-pass-timing is recorded, at its real outcome', () => {
+  it(
+    'an ON-AIR set writes ONE ok row naming the item, template, layer and the value ASKED FOR',
+    { timeout: 60_000 },
+    async () => {
+      const { r, file } = await onAir();
+
+      expect((await r.setPassTiming('item1', { passes: 3, delayMs: 1500 })).ok).toBe(true);
+
+      // import + load + take + this.
+      const rows = await entriesOnDisk(file, 4);
+      const mine = forAction(rows, 'set-pass-timing');
+      expect(mine, 'one set-pass-timing row').toHaveLength(1);
+      expect(mine[0]).toMatchObject({
+        actor: UNATTRIBUTED_ACTOR,
+        outcome: 'ok',
+        itemId: 'item1',
+        templateId: 'lower-third',
+        timing: { passes: 3, delayMs: 1500 },
+      });
+      expect(mine[0]?.slot).toMatchObject({ channel: 1, layer: 10 });
+      expect(mine[0]?.errorCode).toBeUndefined();
+    },
+  );
+
+  it(
+    '🔴 an OFF-AIR set is recorded too — it reaches no wire, and the next take carries it',
+    { timeout: 60_000 },
+    async () => {
+      /*
+        The row that would be easiest to omit and the one that matters most: `#ownsLiveSeats`
+        is false, so nothing crosses the wire and there is no AMCP line to point at. The set is
+        still a set — `#sendAdd` reads it into the next take's payload — so a log that skipped
+        it would show a count appearing on air with nothing accounting for it.
+      */
+      const { r, file } = await boot({ reachable: true });
+      r.templateImport(TEMPLATE, HTML);
+      expect((await r.load('item1', 'lower-third', {})).accepted).toBe(true);
+
+      expect((await r.setPassTiming('item1', { passes: 'infinite' })).ok).toBe(true);
+
+      const rows = await entriesOnDisk(file, 3);
+      const mine = forAction(rows, 'set-pass-timing');
+      expect(mine, 'the off-air set was not recorded').toHaveLength(1);
+      expect(mine[0]).toMatchObject({
+        outcome: 'ok',
+        itemId: 'item1',
+        timing: { passes: 'infinite' },
+      });
+      // No `delayMs` member: the record is what was ASKED, not the row's merged state.
+      expect(
+        mine[0]?.timing?.delayMs,
+        'a value nobody asked for was attributed to this press',
+      ).toBeUndefined();
+    },
+  );
+
+  it(
+    'a REFUSED set records the refusal and its existing reason code',
+    { timeout: 60_000 },
+    async () => {
+      const { r, file } = await boot({ reachable: true });
+      r.templateImport(TEMPLATE, HTML);
+
+      const res = await r.setPassTiming('nope', { passes: 2 });
+      expect(res.ok).toBe(false);
+      expect(res.reason, 'no new refusal condition may be invented').toBe('unknown-item');
+
+      const rows = await entriesOnDisk(file, 2);
+      const mine = forAction(rows, 'set-pass-timing');
+      expect(mine).toHaveLength(1);
+      expect(mine[0]).toMatchObject({
+        outcome: 'failed',
+        errorCode: 'unknown-item',
+        itemId: 'nope',
+        timing: { passes: 2 },
+      });
+      // Nothing was resolved, so nothing is named: an entry claiming a template or a layer it
+      // never looked up would be worse than one naming only what it knows.
+      expect(mine[0]?.templateId).toBeUndefined();
+      expect(mine[0]?.slot).toBeUndefined();
+    },
+  );
+
+  it(
+    '🔴 a call that states NEITHER member writes NO row — a press nobody made',
+    { timeout: 60_000 },
+    async () => {
+      /*
+        It answers `ok: true`, so an "audit every accepted call" reading logs it. The
+        `redelivery` precedent is the same shape: a log with rows for actions nobody performed
+        is a log people stop reading, and this one would fill with them — the console sends a
+        patch built from a draft, and a draft with nothing outstanding produces exactly this.
+      */
+      const { r, file } = await onAir();
+
+      expect((await r.setPassTiming('item1', {})).ok).toBe(true);
+
+      const rows = await entriesOnDisk(file, 3);
+      expect(
+        forAction(rows, 'set-pass-timing'),
+        'a no-op press was written to the log',
+      ).toHaveLength(0);
     },
   );
 });

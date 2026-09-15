@@ -63,6 +63,39 @@ export interface AuditTimeParts {
  * An unparseable stamp is rendered as itself: the record is never rewritten to look
  * tidier than it is.
  */
+/**
+ * 🔴 `TIMING-WIRE-22 · DELTA B · R3` — a `set-pass-timing` row's VALUE, as one clause.
+ *
+ * ── WHY THE WORDING IS HERE AND NOT IN THE RECORD ───────────────────────────
+ *
+ * The entry stores DATA (`{ passes?, delayMs? }`) and this turns it into words, which is
+ * `B-211`'s rule applied to a value rather than a name: the record keeps what cannot be
+ * re-derived, the surface does the wording. A stored sentence could not be re-worded, could not
+ * be translated, and would be a fourth copy of a vocabulary the console already owns.
+ *
+ * ⚠ **`Until stop`, NOT `∞`.** The Inspector's two-state control says `Until stop`, and a log
+ * answering in a different vocabulary from the control that set it is the label-in-two-places
+ * defect one surface along. The glyph came off that control for being unreadable.
+ *
+ * ⚠ `0` is a real answer and must survive: it is the instruction "out after the current pass",
+ * so the tests below are written against `0` and not only against a truthy count.
+ *
+ * Returns `null` when there is nothing to state, so a caller renders no empty element.
+ */
+export function timingClause(
+  timing: { passes?: number | 'infinite' | undefined; delayMs?: number | undefined } | undefined,
+): string | null {
+  if (timing === undefined) return null;
+  const parts: string[] = [];
+  if (timing.passes !== undefined) {
+    parts.push(timing.passes === 'infinite' ? 'until stop' : `${String(timing.passes)} passes`);
+  }
+  if (timing.delayMs !== undefined) {
+    parts.push(`gap ${String(Math.round(timing.delayMs / 100) / 10)} s`);
+  }
+  return parts.length === 0 ? null : parts.join(' · ');
+}
+
 export function auditTimeParts(ts: string, timeZone?: string): AuditTimeParts {
   const instant = Date.parse(ts);
   if (!Number.isFinite(instant)) return { date: '', time: ts, utc: ts };

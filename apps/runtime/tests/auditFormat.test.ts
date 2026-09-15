@@ -5,6 +5,7 @@ import {
   placeName,
   shortId,
   templateName,
+  timingClause,
 } from '../src/renderer/features/audit/auditFormat.js';
 
 /**
@@ -113,5 +114,45 @@ describe('templateName', () => {
   it('is null when the registry no longer holds the template', () => {
     expect(templateName('gone', new Map())).toBeNull();
     expect(templateName(undefined, new Map())).toBeNull();
+  });
+});
+
+/**
+ * 🔴 `TIMING-WIRE-22 · DELTA B · R3` — the VALUE a `set-pass-timing` row carried, worded.
+ *
+ * The record stores DATA and the surface does the wording (`B-211`'s rule applied to a value),
+ * so this is where the wording is pinned — React-free, like the rest of this file.
+ */
+describe('R3 — timingClause', () => {
+  it("words a count in the operator's unit", () => {
+    expect(timingClause({ passes: 3 })).toBe('3 passes');
+  });
+
+  it('🔴 answers in the CONTROL\'s words — "until stop", never the bare ∞', () => {
+    // The Inspector's two-state control says `Until stop`. A log answering `∞` would be the
+    // label-in-two-places defect one surface along, and that glyph came off the control for
+    // being unreadable.
+    expect(timingClause({ passes: 'infinite' })).toBe('until stop');
+    expect(timingClause({ passes: 'infinite' })).not.toMatch(/∞/);
+  });
+
+  it('🔴 ZERO is a real answer and survives', () => {
+    // `0` is the instruction "out after the current pass". A truthiness test here would erase
+    // the one value this feature has had to defend at four separate layers.
+    expect(timingClause({ passes: 0 })).toBe('0 passes');
+  });
+
+  it('words a gap in seconds, one decimal', () => {
+    expect(timingClause({ delayMs: 1500 })).toBe('gap 1.5 s');
+    expect(timingClause({ delayMs: 0 })).toBe('gap 0 s');
+  });
+
+  it('joins both halves with the house separator', () => {
+    expect(timingClause({ passes: 2, delayMs: 2500 })).toBe('2 passes · gap 2.5 s');
+  });
+
+  it('says nothing when there is nothing to state, so no empty element is rendered', () => {
+    expect(timingClause(undefined)).toBeNull();
+    expect(timingClause({})).toBeNull();
   });
 });

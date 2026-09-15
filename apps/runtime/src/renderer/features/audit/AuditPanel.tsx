@@ -13,7 +13,7 @@ import { Icon } from '../../ui/Icon.js';
 import { Notice } from '../../ui/Notice.js';
 import { Modal, ModalAction } from '../../ui/Modal.js';
 import { OperatorNames } from '../../ui/OperatorNames.js';
-import { auditTimeParts, placeName, shortId, templateName } from './auditFormat.js';
+import { auditTimeParts, placeName, shortId, templateName, timingClause } from './auditFormat.js';
 
 interface Props {
   open: boolean;
@@ -163,6 +163,9 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       e.templateId,
       e.errorCode,
       e.command,
+      // `R3` — the timing clause is ON the row, and this file's rule is that a hit is
+      // something VISIBLE. Searching "until stop" has to find the rows that say it.
+      timingClause(e.timing),
     ]
       .filter((v): v is string => typeof v === 'string' && v !== '')
       .join(' ')
@@ -471,6 +474,8 @@ function Row({
   const place = placeName(entry.slot, bank);
   const template = templateName(entry.templateId, templates);
   const names = [place, template].filter((n): n is string => n !== null);
+  // `R3` — the VALUE a `set-pass-timing` row carried, worded once and read twice below.
+  const timing = timingClause(entry.timing);
   return (
     <div className="cg-audit-row" data-audit-row="">
       {/* `B-210` — the clock the operator is looking at; the UTC stamp on hover. */}
@@ -520,6 +525,17 @@ function Row({
           {entry.itemId !== undefined ? <IdChip kind="item" id={entry.itemId} /> : null}
           {entry.templateId !== undefined ? <IdChip kind="template" id={entry.templateId} /> : null}
         </span>
+        {/*
+          `R3` — WHAT was set, for a `set-pass-timing` row. One clause, no prose: it is a
+          VALUE, which is one of the four things an operator surface may state. It sits with
+          the ids rather than with the names because it is neither a place nor a template —
+          and it stays LTR chrome like the coordinate above it, since it is digits and English.
+        */}
+        {timing !== null ? (
+          <span className="cg-audit-timing" data-audit-timing="">
+            {timing}
+          </span>
+        ) : null}
         {/* `B-209` — the line CasparCG refused, beside the code it refused it with. */}
         {entry.command !== undefined ? (
           <span className="cg-audit-command" data-audit-command="" title={entry.command}>

@@ -6950,6 +6950,16 @@ input[type='checkbox']:disabled:checked {
 }
 .cg-audit-slot,
 .cg-audit-ids,
+/*
+ * `TIMING-WIRE-22 · DELTA B · R3` — the VALUE a `set-pass-timing` row carried, named in the
+ * existing selector rather than given a declaration of its own. It is the same rank as the
+ * coordinate and the refused line beside it: a small, dim fact under the row's name.
+ *
+ * ⚠ Named here and not left to a class nobody declares — `TimingSection` invented `cg-fact`
+ * six commits ago, no rule existed, and the two facts rendered as bare text beside a panel of
+ * chips. Green in every gate, wrong on screen.
+ */
+.cg-audit-timing,
 .cg-audit-command {
   display: flex;
   flex-wrap: wrap;
