@@ -429,6 +429,18 @@ const selectStyle: CSSProperties = {
 
 const mutedStyle: CSSProperties = { color: colors.textMuted, fontSize: '0.66rem' };
 const hintStyle: CSSProperties = { ...mutedStyle, lineHeight: 1.4, margin: '0.35rem 0 0' };
+/**
+ * `TIMING-BUILD-21` §4 — an OWNERSHIP heading over a group of playout fields. Heavier than a
+ * hint and separated from the rows above it, because it introduces what follows rather than
+ * commenting on what precedes: the whole point of the mark is which fields it covers.
+ */
+const groupHeadStyle: CSSProperties = {
+  color: colors.text,
+  fontSize: '0.66rem',
+  fontWeight: 600,
+  lineHeight: 1.4,
+  margin: '0.6rem 0 0.3rem',
+};
 const checklistStyle: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
@@ -813,8 +825,17 @@ function ThreeLoopsTip(): JSX.Element {
  * `mode` (the design-time decision: what kind of template this is), wired to
  * `designerStore.setPlayout`. The single `outPoint` marker is dragged on the
  * timeline (this section just reports it). B-032 — the TIMED `holdMs` is authored
- * here too (a stored default that EXPORTS, still overridable in the preview);
- * `repeat` remains a preview/control-surface session override.
+ * here too (a stored default that EXPORTS, still overridable in the preview).
+ *
+ * 🔴 `TIMING-BUILD-21` §4 — `repeat` and `delayMs` are authored here as well. `repeat` used to
+ * be "a preview/control-surface session override" and that sentence was wrong twice over: it is
+ * a stored schema field, and it had no authoring control anywhere, so a designer could rehearse
+ * a three-pass loop and export a template that stored nothing.
+ *
+ * ⚠ The section carries TWO OWNERSHIPS and marks them (ADR 0009): `mode` and `hold` are
+ * designer-only everywhere downstream; `hold ms`, `repeat` and `delay ms` are defaults the
+ * operator may override per row. Keep the marking accurate if a field is added — an author who
+ * believes an overridable value is guaranteed designs against a promise nobody made.
  */
 export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
   const playout = playoutOf(scene);
@@ -835,6 +856,18 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
   const hasDrivers = hasEffectiveHoldDrivers(scene, scene.compositions);
   const holdSourceEff: HoldSource = hasDrivers ? (playout.holdSource ?? 'timed') : 'timed';
   const showHoldMs = (mode === 'auto-out' || mode === 'loop-cycle') && holdSourceEff === 'timed';
+  /*
+    🔴 `TIMING-BUILD-21` §4 — `repeat` gets an AUTHORED home, which it never had: the field was
+    declared on the schema but only ever written by the preview's session override, so a
+    designer could rehearse a three-pass loop and export a template that did not store it.
+
+    ⚠ The DISPLAYED value is the STORED one, not the resolved one. `repeatOf` answers
+    `'infinite'` for an absent field, and showing that would make the checkbox tick itself on a
+    composition nobody has touched — an authored value the author never authored. Absent means
+    "not stated", and the control says so by resting on `infinite`, which IS what absent does.
+  */
+  const storedRepeat = playout.repeat;
+  const repeatInfinite = (storedRepeat ?? 'infinite') === 'infinite';
 
   /** Default out-point at 75 % of the active region (leaves room for the exit). */
   function defaultMarker(): { outPoint: number } {
@@ -872,6 +905,27 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
 
   return (
     <CollapseSection title="Playout" defaultExpanded>
+      {/*
+        🔴 `TIMING-BUILD-21` §4 — THE OWNERSHIP MARK, and why the panel needs one.
+
+        These fields have TWO owners (ADR 0009) and nothing on the panel said so. An author who
+        assumes all of them are guaranteed downstream designs against a promise that does not
+        exist: `mode` and `hold` really are fixed everywhere else, but a count or a gap is the
+        operator's to change on the night. It is the difference between "this graphic WILL run
+        three times" and "three times is where the operator starts".
+
+        ⚠ Each mark is a HEADING OVER ITS OWN GROUP, not a footnote under it. Rendered and
+        looked at: as a trailing line, "Set by the template" sat directly above the three
+        overridable inputs and read as introducing them — the marking said the opposite of what
+        it meant. A heading cannot be misread that way.
+
+        ⚠ The split follows what EXISTS, not a wish: designer-only means no session override is
+        expressible anywhere. `mode` and `holdSource` were removed from the preview's override
+        type outright; `holdMs`, `repeat` and `delayMs` all have one.
+      */}
+      <p style={groupHeadStyle}>
+        Set by the template — the preview and CG Control only state these
+      </p>
       <div className={s.row}>
         <span className={s.label}>mode</span>
         <Select
@@ -917,6 +971,12 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
         mode !== 'static' &&
         playout.holdSource === 'content-driven' && <ContentHoldChecklist scene={scene} />}
 
+      {(showHoldMs || mode === 'loop-cycle') && (
+        <p style={groupHeadStyle}>
+          Operator can override per row — these are the defaults a row starts from
+        </p>
+      )}
+
       {showHoldMs && (
         <div className={s.row}>
           <span className={s.label}>hold ms</span>
@@ -935,6 +995,67 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
         </div>
       )}
 
+      {mode === 'loop-cycle' && (
+        <>
+          <div className={s.row}>
+            <span className={s.label}>repeat</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {repeatInfinite ? (
+                <span style={mutedStyle}>∞ until stop</span>
+              ) : (
+                <RealtimeNumberInput
+                  style={holdMsNumStyle}
+                  scrub={false}
+                  min={1}
+                  step={1}
+                  value={typeof storedRepeat === 'number' ? storedRepeat : 1}
+                  onCommit={(n) => designerStore.setPlayout({ repeat: Math.max(1, Math.round(n)) })}
+                  ariaLabel="Repeat passes"
+                />
+              )}
+              <label
+                style={{ ...mutedStyle, display: 'flex', alignItems: 'center', gap: '0.25rem' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={repeatInfinite}
+                  aria-label="Repeat forever"
+                  onChange={(e) =>
+                    designerStore.setPlayout({ repeat: e.target.checked ? 'infinite' : 1 })
+                  }
+                />
+                infinite
+              </label>
+            </div>
+          </div>
+
+          <div className={s.row}>
+            {/*
+              `delay ms`, in MILLISECONDS — the same unit as `hold ms` directly above it. Two
+              duration fields on one panel in two different units is how a 2 becomes 2 ms.
+            */}
+            <span className={s.label}>delay ms</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <RealtimeNumberInput
+                style={holdMsNumStyle}
+                scrub={false}
+                min={0}
+                step={100}
+                value={playout.delayMs ?? 0}
+                onCommit={(n) => designerStore.setPlayout({ delayMs: Math.max(0, Math.round(n)) })}
+                ariaLabel="Delay between passes in milliseconds"
+              />
+              <span style={mutedStyle}>ms</span>
+            </div>
+          </div>
+
+          <p style={hintStyle}>
+            The gap between passes — the graphic is off screen for it. It never delays the first
+            showing.
+          </p>
+        </>
+      )}
+
       {lifecycle !== undefined ? (
         <>
           <div className={cls.actionRow}>
@@ -945,7 +1066,7 @@ export function PlayoutSection({ scene }: { scene: Scene }): JSX.Element {
             </Button>
           </div>
           <p className={cls.caption}>
-            Drag the marker on the timeline. Repeat is tuned live in the preview.
+            Drag the marker on the timeline. Repeat and delay are authored above.
           </p>
         </>
       ) : (
