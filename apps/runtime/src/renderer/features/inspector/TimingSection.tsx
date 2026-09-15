@@ -58,11 +58,43 @@ export function TimingSection({
   const [busy, setBusy] = useState(false);
   const playout = info?.playout;
   /*
-    A template imported before `TemplateInfo.playout` existed states nothing rather than
-    guessing. Re-import to get it — degradation, not a second rule, and the same shape
-    `hasNext` uses for a template that predates IT.
+    🔴 `DELTA A6` — **AN OLD IMPORT SAYS WHY, INSTEAD OF VANISHING.**
+
+    A template imported before `TemplateInfo.playout` existed carries no timing metadata, so the
+    section cannot state anything and must not guess. But rendering NOTHING is the silence this
+    product forbids: the operator finds a control on one row and no control on the next, with
+    the panel offering no account of the difference, and the only way to learn the reason is to
+    ask someone. One sentence turns an absence into a fact with a remedy.
+
+    ⚠ It renders for a template with `info` but no `playout` — NOT while `info` is still `null`
+    (the Inspector is fetching it), which would flash "re-import" at every row selection.
+
+    🔴 **THE INVARIANT THAT KEEPS A DEAD CONTROL OFF AN OLD PAGE, stated here because the next
+    person to touch it will be tempted to break it:**
+
+        `playout` metadata and a page that can read `__cg.timing` are produced by the SAME
+        import — `produceTemplateDelivery` derives the metadata and renders the HTML in one
+        call, from one unpacked scene.
+
+    That is the whole reason an absent `playout` is a safe proxy for "this page cannot obey a
+    timing command". ⚠ **Anything that ever BACK-FILLS `playout` onto an existing registry entry
+    without rebuilding its HTML breaks it** — the console would then offer a live pass control
+    over a page from an older build that ignores `__cg.timing`, and the operator would set a
+    count, see it accepted, and watch the graphic loop on regardless. A migration, a repair
+    script, or a bridge-side default are all the same hazard. If the metadata is ever separated
+    from the render, this gate needs a real capability bit instead.
   */
-  if (playout === undefined) return null;
+  if (playout === undefined) {
+    if (info == null) return null;
+    return (
+      <div className="cg-inspector-section">
+        <h2>Timing</h2>
+        <p style={styles.hint} data-testid="timing-needs-reimport">
+          Timing controls appear after this template is re-imported.
+        </p>
+      </div>
+    );
+  }
 
   const onAir = isOnAir(item);
   const override = item.timingOverride;

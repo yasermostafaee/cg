@@ -81,7 +81,7 @@ function row(over: Partial<StackItemState> = {}): StackItemState {
   } as unknown as StackItemState;
 }
 
-function mount(item: StackItemState, info: TemplateInfo | undefined): void {
+function mount(item: StackItemState, info: TemplateInfo | null | undefined): void {
   act(() => {
     root.render(createElement(TimingSection, { item, info }));
   });
@@ -137,8 +137,22 @@ describe('§4 — mode and hold are FACTS, never inputs', () => {
     expect(fact.getAttribute('role')).toBeNull();
   });
 
-  it('a template imported before the field existed states NOTHING rather than guessing', () => {
+  it('🔴 DELTA A6 — an OLD import says why, instead of vanishing', () => {
+    // A control that disappears without a reason is the silence this product forbids: the
+    // operator finds a control on one row and none on the next, with nothing accounting for it.
     mount(row(), template(undefined));
+    expect(host.querySelector('[data-testid="timing-needs-reimport"]')?.textContent).toBe(
+      'Timing controls appear after this template is re-imported.',
+    );
+    // …and it still states nothing it cannot know, and offers nothing it cannot carry.
+    expect(host.querySelector('[data-testid="timing-mode-fact"]')).toBeNull();
+    expect(byLabel('Passes next take')).toBeNull();
+  });
+
+  it('says nothing at all while the Inspector is still FETCHING the template', () => {
+    // `null` is "not known yet", not "known to be old". Flashing a re-import notice at every row
+    // selection would make the sentence noise, and noise is how a real one stops being read.
+    mount(row(), null);
     expect(text()).toBe('');
   });
 });
