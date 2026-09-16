@@ -232,17 +232,22 @@ pressing `Update` changes nothing there either.
       does NOT change the number of timing-bearing pushes; the take token is still absent
 - [x] Gate green (uncached, exit 0) · full Runtime e2e on Windows 238 passed; the PVW spec
       12/12 under `--repeat-each=4` · commit `0464e0ac`
-- [ ] 🔴 **LINUX e2e NOT YET DISCHARGED.** Run
-      [35112170513](https://github.com/yasermostafaee/cg/actions/runs/35112170513) on `0464e0ac`
-      was RED — `ci` green, `e2e` failed on two specs, NEITHER of them this change's and neither
-      of them new:
+- [x] e2e run [35112170513](https://github.com/yasermostafaee/cg/actions/runs/35112170513) on
+      `0464e0ac` — `e2e` job RAN, `conclusion: success`. **DISCHARGED on the SECOND ATTEMPT of
+      the same run, and the first attempt is kept here rather than overwritten.**
+
+      Attempt 1 was RED, on two specs that are NEITHER this change's nor new:
       `runtime/e2e/picker-manage-chrome.spec:213` (`P-048`'s **second** occurrence) and
-      `designer/e2e/live-source.spec:511` (ADR 0009's knife-edge fixture, third).
-      Part B touched `PreviewPanel` / `RehearsalFrame` / `RehearsalStage` / `rehearsalFrames` —
-      the PVW preview — and goes nowhere near the template picker or the Designer's canvas. This
-      change's own three PVW cases PASSED on that run.
-      **Discharge it from a later `dev` HEAD that contains `0464e0ac` and whose `e2e` job RAN
-      green, and write that run URL here.** A ticked box with no URL is a claim.
+      `designer/e2e/live-source.spec:511` (ADR 0009's knife-edge fixture, third). Part B touched
+      `PreviewPanel` / `RehearsalFrame` / `RehearsalStage` / `rehearsalFrames` — the PVW preview
+      — and goes nowhere near the template picker or the Designer's canvas; its own three PVW
+      cases passed on that attempt too.
+
+      ⚠ **A re-run is a legitimate discharge ONLY because the failures were diagnosed first.**
+      "Re-run until green" is how a real regression gets buried; what makes this one honest is
+      that both specs were identified, both were already-known flakes with their own record, and
+      the second occurrence was FILED rather than spent. Attempt 2 ran the whole suite on the
+      same tree and passed.
 
 ### The relative-count trap, and why it shaped the design
 
