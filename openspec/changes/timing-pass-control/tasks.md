@@ -137,7 +137,9 @@ The owner, 2026-09-16, on the news ticker `نوار خبر (روی آنتن)`: t
       `__cg.timing`
 - [x] 7.7 Three fixtures corrected from "no `playout`" / "`manual` + `loops`" to a real
       `loop-cycle` template — they were exercising the refusal while claiming to exercise the road
-- [ ] Gate green · commit `________` · e2e run `________`
+- [x] Gate green (uncached, exit 0) · Runtime unit suite 1597 passed · commit `befda67d` ·
+      e2e run [35106197970](https://github.com/yasermostafaee/cg/actions/runs/35106197970) —
+      `e2e` job RAN, `conclusion: success`
 
 ### What §A0 established and did NOT change
 
@@ -228,7 +230,19 @@ pressing `Update` changes nothing there either.
       boot and when the VALUE changes — its own effect, keyed on the value, never on `payload`
 - [x] 8.4 RED FIRST in a real browser: PVW is told `Count 1`; a field edit reaches the frame and
       does NOT change the number of timing-bearing pushes; the take token is still absent
-- [ ] Gate green · commit `________` · e2e run `________`
+- [x] Gate green (uncached, exit 0) · full Runtime e2e on Windows 238 passed; the PVW spec
+      12/12 under `--repeat-each=4` · commit `0464e0ac`
+- [ ] 🔴 **LINUX e2e NOT YET DISCHARGED.** Run
+      [35112170513](https://github.com/yasermostafaee/cg/actions/runs/35112170513) on `0464e0ac`
+      was RED — `ci` green, `e2e` failed on two specs, NEITHER of them this change's and neither
+      of them new:
+      `runtime/e2e/picker-manage-chrome.spec:213` (`P-048`'s **second** occurrence) and
+      `designer/e2e/live-source.spec:511` (ADR 0009's knife-edge fixture, third).
+      Part B touched `PreviewPanel` / `RehearsalFrame` / `RehearsalStage` / `rehearsalFrames` —
+      the PVW preview — and goes nowhere near the template picker or the Designer's canvas. This
+      change's own three PVW cases PASSED on that run.
+      **Discharge it from a later `dev` HEAD that contains `0464e0ac` and whose `e2e` job RAN
+      green, and write that run URL here.** A ticked box with no URL is a claim.
 
 ### The relative-count trap, and why it shaped the design
 

@@ -3236,6 +3236,34 @@ decode under a loaded gate). Both failed again in this run; neither is new and n
 re-filed here. — ⚠ **Nothing was fixed by `REPLY 1`**; the prompt's instruction was to record,
 not to repair.
 
+**⭐ SECOND OCCURRENCE, 2026-09-16 — `picker-manage-chrome.spec.ts:213` recurred, and "first-time"
+is now a measured claim rather than a guess.**
+
+Run [35112170513](https://github.com/yasermostafaee/cg/actions/runs/35112170513) on `0464e0ac`
+(`PASSES-CYCLE-ONLY-26` Part B) failed its `e2e` job with two specs:
+
+| spec                                        | case                                                    | status                              |
+| ------------------------------------------- | ------------------------------------------------------- | ----------------------------------- |
+| `runtime/e2e/picker-manage-chrome.spec:213` | §D1 — Import occupies the SAME slot in both views       | **2nd occurrence** — this item      |
+| `designer/e2e/live-source.spec:511`         | MULTIPLE independent Live Sources each get their own id | 3rd — ADR 0009's knife-edge fixture |
+
+**What the second occurrence settles, and what it does not.**
+
+- It settles that `picker-manage-chrome:213` is a RECURRING flake and not a one-off, so this item
+  does not close as "never happened again". The same assertion failed both times —
+  `expect(manage, 'Import moves when the view changes').toEqual(selection)` — so it is the same
+  defect, not two.
+- It does NOT settle the cause. Both runs carried a diff that cannot have touched the template
+  picker: `f7fd432f` was the `C-013` page runtime and the export CSP; `0464e0ac` was the PVW
+  preview payload. Neither goes near the picker's slot geometry.
+- ⚠ The pair no longer fails TOGETHER, which weakens the original "one LOAD event" reading: on
+  this run `looks.spec:75` passed and `video-import.spec:291` passed, while these two failed. Two
+  independent knife-edges is now at least as good an explanation as one load event, and the item's
+  framing should not harden around the load reading before there is evidence for it.
+
+**Still fixed nowhere, and still not by a retry.** Recorded so the next reader inherits two data
+points instead of one.
+
 - **Number:** `P-048`. Verified free at the moment of commit, not of planning:
   `git grep -n --untracked -E "^## \[.\] P-048" -- docs` returned nothing, against a positive
   control on the same regex for `P-047` which returned `platform.md:3142`. The registry's dated
