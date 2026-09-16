@@ -27,9 +27,17 @@ Each numbered item is its own commit, its own full green gate, and its own step-
 
   ⚠ **This commit's OWN run was RED, and it is discharged by a LATER `dev` HEAD instead.**
   [35007222705](https://github.com/yasermostafaee/cg/actions/runs/35007222705) failed with FOUR
-  Playwright failures across THREE unrelated subsystems — the Runtime picker's slot geometry,
-  the Designer's live-source ids and its `looks` stage render, and the Designer's
-  premultiplied-alpha video import. None touches a CSP directive or a lifecycle event.
+  Playwright specs, **named here rather than summarised** (`REPLY 1` §R4):
+
+  | spec                                        | case                                                          | seen before?                        |
+  | ------------------------------------------- | ------------------------------------------------------------- | ----------------------------------- |
+  | `runtime/e2e/picker-manage-chrome.spec:213` | §D1 — Import occupies the SAME slot in both views             | **NO** — first time ⇒ `P-048`       |
+  | `designer/e2e/looks.spec:75`                | the 6-box debate … the selector switches the canvas           | **NO** — first time ⇒ `P-048`       |
+  | `designer/e2e/live-source.spec:511`         | MULTIPLE independent Live Sources each get their own id       | yes — ADR 0009 (knife-edge fixture) |
+  | `designer/e2e/video-import.spec:291`        | a premultiplied-alpha source imports WITHOUT the black fringe | yes — ADR 0009 (decode contention)  |
+
+  None touches a CSP directive or a lifecycle event. The two first-time failures are filed as
+  [`P-048`](../../../docs/prd/platform.md); the two already-assessed ones are NOT re-filed.
 
   The discharge is [35009537814](https://github.com/yasermostafaee/cg/actions/runs/35009537814)
   on `bf00530b`, whose `e2e` job **RAN** and passed. That commit's tree CONTAINS every line of
@@ -121,3 +129,25 @@ The full list, with what to read and how to tell two failures apart, is in ADR 0
 CEF. Everything upstream of it is measured — the CSP in a real engine, the page's emitter and
 reporter, the `CG … STOP` on the wire, the console's row. The hop itself is the `B-066` class:
 verify, never assume.
+
+## 8. `REPLY 1` — two token holes checked, the CSP decision recorded
+
+- [x] 8.1 R1 — the pre-PLAY tell carries ONLY `__cg` (no fields, so no last-sent values and no
+      unsent draft). Measured on the wire, not on the builder
+- [x] 8.2 R1 — on-air field values, the operator's COUNT, and a running content-driven hold all
+      survive the tell; a tell mid-run does not restart it. **No hole found — no product change**
+- [x] 8.3 R2 — host census: `withCgControl` has five call sites, four in the bridge and ONE
+      outside it (`RehearsalFrame`). A `take` is composed in exactly two places, both bridge
+- [x] 8.4 R2 — PVW is handed NO take token, proved in Chromium against the running app; and a
+      `srcdoc` frame reports `about:srcdoc`, which the reporter's protocol guard already refuses.
+      **No hole found — no product change**
+- [x] 8.5 R3 — `connect-src 'self'` recorded as the OWNER'S DECISION of 2026-09-16 in
+      `SECURITY.md` and ADR 0009
+- [x] 8.6 R3 — the control WebSocket is a different origin: `DEFAULT_BRIDGE_PORT` (`ws-frame.ts`,
+      bound at `bridge.ts`) vs the template server's ephemeral port (`deriveServeOptions`)
+- [x] 8.7 R3 — the route set is now `TEMPLATE_SERVER_ROUTES`; the router consults it and nothing
+      else, and `template-server-route-set.test.ts` pins it. Ablation: a planted `GET /identity`
+      fails the pin
+- [x] 8.8 R4 — the four flakes named above; `P-048` filed for the two that were first-time
+- [x] 8.9 R5 — the LOG line MEASURED and quoted into ADR 0009's plant check 1
+- [ ] Gate green · commit `________` · e2e run `________`

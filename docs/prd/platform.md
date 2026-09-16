@@ -3182,3 +3182,61 @@ clock rather than on an awaited settle, that dependency is the defect.
 ⚠ `P-046`s allocation note still reads "`P-047` returned nothing at all". That is a DATED
 statement about the moment `P-046` was allocated and it was true then, so it is left standing
 rather than rewritten — the same rule this session applied to `B-168`.
+
+## [ ] P-048 — two CI `e2e` specs failed together on a diff that could not have touched them, and NEITHER had flaked before ⟨priority: medium — a red landing run on unrelated work, and the pair reds together⟩ — FILED 2026-09-16 by `SELF-STOP-24 · REPLY 1`
+
+**What.** Run [35007222705](https://github.com/yasermostafaee/cg/actions/runs/35007222705) on
+`f7fd432f` failed its `e2e` job with FOUR specs. Two of them are already assessed in
+[ADR 0009](../adrs/0009-timing-setting-ownership.md) ("The two flaky specs, named and
+assessed"). **The other two had never failed anywhere in the record**, which is why they get a
+number instead of being folded into [[B-098]]:
+
+1. `apps/runtime/tests/e2e/picker-manage-chrome.spec.ts:213` —
+   _"§D1 — Import occupies the SAME slot in both views"_. Failed on the first attempt AND on
+   retry #1 (464 ms, then 833 ms). Its assertion is
+   `expect(manage, 'Import moves when the view changes').toEqual(selection)` — a comparison of
+   the Import control's slot INDEX between the picker's two views.
+2. `apps/designer/tests/e2e/looks.spec.ts:75` —
+   _"the 6-box debate: group → six sources → two looks → the selector switches the canvas"_.
+   Failed with `Error: stage or plate not rendered`, reached from
+   `expect(Math.abs(plateBox.x - (stageBox.x + 320 * scale))).toBeLessThan(2)`.
+
+**Why it is filed rather than shrugged at.** The diff on `f7fd432f` was the `C-013` page
+runtime, the single-file export's CSP and two bridge-adjacent schema members. **It touches
+neither the Runtime's template picker nor the Designer's look selector**, and the same tree plus
+a bridge-only diff passed completely twenty minutes later on `bf00530b`
+([35009537814](https://github.com/yasermostafaee/cg/actions/runs/35009537814)) — so the code was
+not the cause. That leaves a flake, and a flake that reds a landing run on unrelated work costs
+the same four minutes and the same "is this me?" that [[P-047]] is filed for.
+
+⚠ **The pair failing TOGETHER is the fact worth keeping.** Four specs across three subsystems in
+one run, two of them first-time, is the signature of a LOAD event rather than two independent
+knife-edges — which points at the [[B-098]] family (a whole suite co-scheduled at full width)
+rather than at either spec. `P-034` bounded `test:e2e`'s fan-out on the LOCAL host; CI runs the
+Playwright suite on `ubuntu-latest` under whatever width the runner gives it, and nothing in
+this repo bounds that.
+
+**Acceptance:**
+
+- WHEN either named spec fails again in CI THEN this item carries the second occurrence and its
+  run URL, so "first-time" stops being a guess
+- WHEN the cause is identified THEN it is fixed at the cause — **NOT by a longer timeout**
+  ([[B-073]] did that and [[B-098]] is that bound blown in turn), and **NOT by a retry count**,
+  which converts a red into a slow green and deletes the evidence
+- WHEN neither recurs in a reasonable number of CI runs THEN this item is closed as a
+  one-off, with the runs cited — an absence is a result only once the instrument has been busy
+
+**Notes:** NOT the same as [[P-047]], which is one named `@cg/caspar-bridge` INTEGRATION case
+under local gate load; this is the CI `e2e` job. NOT [[B-098]] either, whose subject is the
+`caspar-bridge` suite's `did not reach HEALTHY` bound — but the same FAMILY, and if a cause is
+ever found it is likely one cause. — WHAT WAS ALREADY KNOWN, so the new half is legible: ADR
+0009 records `live-source.spec.ts:511` flaky on `d440cd7f` and `d3ddfcb5` (a knife-edge fixture
+geometry, explicitly not the load class) and `video-import.spec.ts:291` flaky on `d3ddfcb5` (a
+decode under a loaded gate). Both failed again in this run; neither is new and neither is
+re-filed here. — ⚠ **Nothing was fixed by `REPLY 1`**; the prompt's instruction was to record,
+not to repair.
+
+- **Number:** `P-048`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] P-048" -- docs` returned nothing, against a positive
+  control on the same regex for `P-047` which returned `platform.md:3142`. The registry's dated
+  pointer independently reads `P-047` as the last taken.

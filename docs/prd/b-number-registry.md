@@ -2843,3 +2843,26 @@ continues: the pointer is still a measurement rather than an authority, and the
 
 ⇒ **Next free after this session is `B-251`** (unchanged — `SELF-STOP-24` filed no bug),
 **`D-161`** (unchanged), **`C-036`** (`C-001` … `C-035`, no gaps) and **`P-047`** (unchanged).
+
+### 2026-09-16 — `P-048` taken by `SELF-STOP-24 · REPLY 1` (two first-time CI e2e flakes)
+
+`P-048` was allocated for the two specs in run 35007222705 that had never failed anywhere in the
+record — `picker-manage-chrome.spec.ts:213` and `looks.spec.ts:75`. The other two failures in
+that run are already assessed in ADR 0009 and were NOT re-filed. Filed in
+[platform.md](platform.md), fixed nowhere: the instruction was to record.
+
+Allocated by MEASURING:
+
+- `git grep -n --untracked -E "^## \[.\] P-048" -- docs` returned **nothing**;
+- the positive control on the same regex for `P-047` returned `platform.md:3142`, so the
+  instrument was live;
+- `git grep -n --untracked "P-048" -- docs` returned no hit at all, not even a pointer.
+
+⚠ **"Never flaked before" is a claim about the RECORD, not about the world.** It was established
+by searching `docs` for each spec's title and path: `live-source.spec.ts:511` and
+`video-import.spec.ts:291` are both named in ADR 0009's flake block; the other two appear
+nowhere. A flake that happened and was never written down would look identical to a first-time
+one — which is the argument for writing them down.
+
+⇒ **Next free after this session is `B-251`**, **`D-161`**, **`C-036`** and **`P-049`**
+(`P-001` … `P-048`, no gaps).

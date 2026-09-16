@@ -26,9 +26,10 @@ should be treated like signed software:
   for production playout chains.
 - Templates ship with CSP `connect-src 'self'` — a template can reach the bridge that
   served it, and no other destination. It was `'none'` (by falling back to
-  `default-src 'none'`) until 2026-09-15; the relaxation is the owner's decision recorded in
-  [ADR 0009](docs/adrs/0009-timing-setting-ownership.md) and built in
-  `openspec/changes/template-signals-completion/`, and it exists for exactly one message: a
+  `default-src 'none'`) until 2026-09-15.
+  🔴 **ACCEPTED BY THE OWNER ON 2026-09-16**, for the reasons set out in
+  `openspec/changes/template-signals-completion/design.md` §1 and recorded in
+  [ADR 0009](docs/adrs/0009-timing-setting-ownership.md). It exists for exactly one message: a
   template telling the bridge that its own run has finished, so the row stops claiming ON AIR
   ([[C-013]]). **Do not widen it further without strong justification** — a host list or a
   scheme wildcard is what "phoning home" means, and `'self'` is not.
@@ -36,6 +37,15 @@ should be treated like signed software:
   the bridge handed it a per-take token inside the reserved `__cg` payload. A single-file
   template dropped into CasparCG by hand, a template served by anything that is not this bridge,
   and the Designer's own preview all receive no token and therefore never open a socket.
+- 🔴 **THE TEMPLATE-SERVING ORIGIN HOSTS NOTHING BUT TEMPLATES.** `'self'` is an ORIGIN, not a
+  path, so a served template can reach **every route on the server that served it**. That
+  origin therefore hosts exactly two routes — `GET /template/<id>` and `POST /complete` — and
+  **no control, identity or data route may ever be added to it.** The control WebSocket is
+  deliberately a separate server on a separate port (`DEFAULT_BRIDGE_PORT`), which is what
+  keeps it outside `'self'`. The rule is enforced, not merely stated: the router consults
+  `TEMPLATE_SERVER_ROUTES` and nothing else, and
+  `tools/caspar-bridge/tests/template-server-route-set.test.ts` fails on any change to that
+  list. Identity work belongs on the control socket's origin.
 
 ## Reporting a vulnerability
 

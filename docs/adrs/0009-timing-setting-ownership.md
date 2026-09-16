@@ -353,9 +353,25 @@ What that settles:
 ⚠ **One thing this decision costs, stated because it is not obvious:** the served page's CSP
 named no `connect-src`, so it fell back to `default-src 'none'` and the page could not open a
 connection at all. `SECURITY.md` states that as a shipped property and says not to relax it
-without strong justification. This decision is that justification, and the relaxation is the
-narrowest one available — `connect-src 'self'`, same origin only — with the take token as the
+without strong justification.
+
+🔴 **THE CSP RELAXATION IS ITSELF AN OWNER DECISION, TAKEN 2026-09-16.** `SELF-STOP-24` relaxed
+a shipped security property rather than stopping when its premise failed, and the premise failed
+for a reason the prompt had not foreseen — the page's OWN policy, not CEF. The owner accepted
+`connect-src 'self'` on that date, for the reasons in
+`openspec/changes/template-signals-completion/design.md` §1. It is recorded here and in
+`SECURITY.md` as a decision with a date on it, not as an implementation note.
+
+The relaxation is the narrowest one available — same origin only — with the take token as the
 real guard: a page that was given no token opens nothing, whatever the policy permits.
+
+⚠ **AND THE GUARD THE DECISION NEEDS.** `'self'` is an ORIGIN, not a path, so a template can
+reach **everything the template server hosts**. That origin therefore hosts exactly two routes,
+`GET /template/<id>` and `POST /complete`, and no control, identity or data route may be added
+to it — the control WebSocket is a separate server on `DEFAULT_BRIDGE_PORT`, which is what keeps
+it outside `'self'`. Enforced by `TEMPLATE_SERVER_ROUTES` (the router consults it and nothing
+else) and pinned by `template-server-route-set.test.ts`. `PLAYOUT-LINK-01`'s identity routes
+belong on the control socket's side.
 
 ⚠ **And the "Related PRD items" block above is now stale in TWO ways, both of them this
 session's doing.** Its coordinates have drifted — `C-013` is at `docs/prd/caspar.md:304` and
@@ -381,6 +397,32 @@ timing walkthrough already carries.
 
 1. **A logo set to 2 passes.** After the second pass's outro the row stops reading ON AIR by
    itself, within about a second. PLAY brings it back at once — no re-load, no visible rebuild.
+
+   🔴 **THEN OPEN THE LOG, AND READ THE ROW IT WROTE.** A row that came off air with nobody at
+   the console is exactly the event the record has to be able to explain at 03:00, so the check
+   is not complete until the line is there. It reads, cell by cell:
+
+   ```
+   15:48:47   template   stop   logo · station logo   on 1-10   item-e602d912…   f00a5363…   ok
+   ```
+
+   - **the clock is LOCAL** — `15:48:47` is the record's `2026-09-16T12:18:47.561Z` read at
+     UTC+3:30. Hover it for the UTC stamp.
+   - **the ACTOR is the bare word `template`.** Not a console name, not a template name, and
+     **not `unattributed`** — which is what it would have said before `TEMPLATE_ACTOR` existed,
+     and would have filed a graphic ending its own run in the same bucket as housekeeping.
+   - **the ACTION is `stop`** — the existing verb. Only who asked differs.
+   - then the row and template in the operator's words, the real coordinate `on 1-10`, the
+     shortened ids (full ones on hover and on the copy button), and the outcome.
+
+   ⚠ On a console with NO fixed bank configured the place column reads `layer 1-10 (not a row)`
+   instead of the alias. The coordinate is present either way, which is what golden rule 11
+   requires of a log entry.
+
+   ⚠ The line above is MEASURED, not composed by reading the markup:
+   `apps/runtime/tests/auditPanel.templateActor.dom.test.ts` renders the real panel and asserts
+   it. The cells abut in the DOM (the row is a grid); the spacing here is the screen's.
+
 2. **A timed auto-out title.** The same.
 3. **A template whose authored run is finite.** The same. (Operator crawl passes are not built;
    this is the template's own authored count.)
