@@ -2537,6 +2537,65 @@ mixer volumes. — The test fixtures (`cg-op1`, `cg-op2`, `cg-admin`, `cg-view`,
 rule, which needs an administrator on their side; nothing here can start before it. — Cross-refs
 [[C-037]], [[C-038]], [[C-039]], [[R-066]], [[C-018]], [[C-020]].
 
+🔴 **PRE-FLIGHT ATTEMPTED AND STOPPED, 2026-09-16 (`APASAI-CORE-RECON-01`). Still `[ ]` — nothing
+was measured against apasai-core, and the reason is TWO blockers, one per side.** Recorded here so
+the next attempt does not rediscover them.
+
+**Theirs — the allow rule is absent, and they say so in writing.**
+[`PLAYOUT-CG-RESPONSE-C-v1.md`](../integration/playout/PLAYOUT-CG-RESPONSE-C-v1.md) §1 lists the
+firewall as verified on `192.168.21.111`: `Apasai - Block external playout-core AMCP` (TCP 5250)
+**enabled**, the engine API (8080/8443) and PGM streams (9250–9269, 9350–9369) **allowed**, and
+`Apasai - Allow AMCP from trusted hosts` **absent**. Their own closing line: _"The joint test is
+blocked on exactly one thing: item 1."_ The ordering they asked for is theirs first — they confirm
+the rule, then we open inbound UDP 6250 — so item 2 is **not** owed yet either.
+
+**Ours — a VPN tunnel makes every reachability reading from this box void, in both directions.**
+`v2rayN` (pid 7632) drives a `sing-box` TUN (`singbox_tun`, `172.18.0.1/30`) whose `0.0.0.0/0`
+route wins over the LAN's on-link `192.168.21.0/24`. Measured:
+
+| probe                                                 | result                              | what it proves                                                                               |
+| ----------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------- |
+| `Test-NetConnection … -Port 5250`                     | `False`, `SourceAddress 172.18.0.1` | nothing about their firewall — wrong source                                                  |
+| socket **unbound** → `.111:5250`                      | CONNECTED, 3 ms                     | **nothing** — see the control below                                                          |
+| socket unbound → `.111` ports **5251 / 9999 / 1**     | **all CONNECTED, 1 ms**             | the proxy completes the handshake locally; every CONNECTED through the tunnel is an artefact |
+| socket unbound → `192.168.21.253:5250` (no such host) | TIMEOUT                             | the proxy is not accepting everything — the `.111` results specifically are void             |
+| socket **bound to `192.168.21.93`** → `.111:5250`     | TIMEOUT                             | consistent with their block rule                                                             |
+| socket bound to `.93` → `.111:8080`                   | **TIMEOUT**                         | ⚠ their table says 8080 is ALLOWED to the LAN — so this one is OURS                          |
+| socket bound to `.93` → gateway `192.168.21.1:80/443` | ECONNREFUSED                        | the LAN adapter, link and return path all work                                               |
+
+🔴 **The lesson is the instrument, not the network.** A bare `connect()` through a TUN proxy is a
+lying probe: it answered for a port nothing serves. Any future reachability claim from this box
+needs the dead-port control beside it, and the tunnel down — otherwise a `degraded` health reading
+or a failed template fetch would get recorded as a fact about apasai-core when it is a fact about
+`sing-box` (golden rule 8, on the one axis this whole item exists to judge).
+
+**What the next attempt needs, in order:** (1) their administrator runs
+`secure-ports.ps1 -AllowAmcpFrom 192.168.21.93` and confirms in writing; (2) the tunnel is down (or
+excludes `192.168.21.0/24`) and `.111:8080` answers from a socket **bound to `192.168.21.93`** —
+that is the positive control that the LAN path is real; (3) then open inbound UDP 6250; (4) then
+run. Both our inbound rules already exist and are correctly scoped: `CG bridge OSC in` (UDP 6250)
+and `CG bridge templates in` (TCP 7911), both `RemoteAddress 192.168.21.111`, Allow, enabled.
+
+**Two desk findings that survive the stop, both about §2 step 3.**
+
+- **The July probes CAN be aimed at `2-80`** — `caspar-amcp-probe.mjs` takes
+  `--caspar-host`/`--caspar-port`/`--serve-host`/`--serve-port`/`--channel`/`--layer` (defaults
+  `1`/`10`), and `lifecycle-probe.mjs` the same (defaults `1`/`45`). Neither hard-codes `1-10`, so
+  no hand-typed substitute is needed. ⚠ `amcp-poke.mjs` **does not exist in the tree** — raw AMCP
+  needs a throwaway client.
+- ⚠ **Their fixture servers bind 7900 and 7901, not 7911**, which is the only template port our
+  firewall rule opens. Without a rule for those two, the probes' `update fired` column reads "no"
+  for a FIREWALL reason and not a Caspar reason — so either add `TCP 7900-7901 from
+192.168.21.111` before the run, or report that column as unmeasured.
+
+**And the unprompted-on-connect list, verified from source before any connection** (`§1`'s safety
+check, and it passes): with the channel-2 bank the bridge emits **30 × `MIXER VOLUME 2-<L> 1`** on
+layers **50–59 and 80–99** — `#reassertDeclaredVolumes` (`caspar-runtime.ts:3805`, `R-022`/`B-204`)
+walks `fixedBankSlots`, which is BOTH halves of the bank — plus `INFO CONFIG` read once per
+connection (`C-029`). **Nothing below layer 50, nothing on channel 1, and no `CLEAR`.** Consumer
+creation is off unless `--create-missing-consumers` is passed (`=== true`, absent is OFF). So
+connecting re-asserts unity volume on 30 layers of channel 2 — the Playout team should be told.
+
 - **Number:** `C-040`. Verified free at the moment of commit, not of planning:
   `git grep -n --untracked -E "^## \[.\] C-040" -- docs` returned nothing, against a positive
   control on the same regex for `C-036` which returned `caspar.md:2321`.
