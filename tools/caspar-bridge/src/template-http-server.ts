@@ -162,6 +162,54 @@ export function templateServeUnreachableWarning(
 }
 
 /**
+ * 🔴 `SELF-STOP-24 · REPLY 1` §R3 — **EVERY ROUTE THIS ORIGIN SERVES, IN ONE LIST.**
+ *
+ * ── WHY A LIST RATHER THAN TWO `if`s ──────────────────────────────────────────────────────
+ *
+ * The owner accepted `connect-src 'self'` on the served page (2026-09-16), and `'self'` is an
+ * ORIGIN, not a path. So a template can reach **anything this server hosts** — which makes the
+ * server's route set a security boundary rather than an implementation detail, and a boundary
+ * that is spelled inline in a handler is a boundary nobody can see being widened.
+ *
+ * The router consults this table and nothing else, so a route that is not here cannot be
+ * served, and `template-server-route-set.test.ts` fails the moment the table changes.
+ *
+ * 🔴 **DO NOT ADD A CONTROL, IDENTITY OR DATA ROUTE HERE.** `SECURITY.md` states the rule; the
+ * short form is that a template is untrusted code and this is the one origin it can talk to.
+ * The control WebSocket is deliberately a DIFFERENT server on a different port
+ * (`DEFAULT_BRIDGE_PORT`, bound in `bridge.ts`), which is what keeps `'self'` away from it.
+ * `PLAYOUT-LINK-01` will bring identity routes; they belong on that side, not this one.
+ */
+export interface TemplateServerRoute {
+  /** How the route reads in a census, e.g. `GET /template/<id>`. */
+  readonly name: string;
+  /** The single method this route answers. Anything else is refused. */
+  readonly method: 'GET' | 'POST';
+  /** Which handler serves it — the router's discriminant. */
+  readonly kind: 'template' | 'complete';
+  /** Does this path select the route? Query already stripped. */
+  readonly match: (path: string) => boolean;
+}
+
+export const TEMPLATE_SERVER_ROUTES: readonly TemplateServerRoute[] = [
+  {
+    name: 'GET /template/<id>',
+    method: 'GET',
+    kind: 'template',
+    match: (path) => TEMPLATE_PATH_RE.test(path),
+  },
+  {
+    name: `POST ${TEMPLATE_COMPLETE_PATH}`,
+    method: 'POST',
+    kind: 'complete',
+    match: (path) => path === TEMPLATE_COMPLETE_PATH,
+  },
+];
+
+/** The served-template path, in one place so the route table and the handler cannot disagree. */
+const TEMPLATE_PATH_RE = /^\/template\/([^/]+)$/;
+
+/**
  * B-038 Phase 3 — serves each retained template's self-contained HTML over HTTP
  * (mirrors `caspar-amcp-probe`'s `ProbeServer`). `GET /template/<id>` → the stored
  * HTML (`200 text/html; charset=utf-8`); an unknown id → `404`.
@@ -268,15 +316,23 @@ export class TemplateHttpServer {
   #handle(req: http.IncomingMessage, res: http.ServerResponse): void {
     const path = (req.url ?? '/').split('?')[0] ?? '/';
     /*
-      🔴 `SELF-STOP-24` — the completion report. BEFORE the template match because it is a
-      different verb on a different path and there is nothing to share; after it would only
-      make the common `GET` pay for a comparison it can never match.
+      🔴 `REPLY 1` §R3 — **THE ROUTER CONSULTS {@link TEMPLATE_SERVER_ROUTES} AND NOTHING ELSE.**
+
+      Not a tidy-up: `connect-src 'self'` makes this server's route SET a security boundary, and
+      a boundary spelled as inline `if`s is one that can be widened without anybody seeing it.
+      A path that matches no entry is a `404` before any handler is reached.
     */
-    if (path === TEMPLATE_COMPLETE_PATH) {
+    const route = TEMPLATE_SERVER_ROUTES.find((r) => r.match(path));
+    if (route === undefined) {
+      res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end('not found');
+      return;
+    }
+    if (route.kind === 'complete') {
       this.#handleComplete(req, res);
       return;
     }
-    const match = /^\/template\/([^/]+)$/.exec(path);
+    const match = TEMPLATE_PATH_RE.exec(path);
     if (match !== null) {
       const id = decodeURIComponent(match[1] ?? '');
       const html = this.#getHtml(id);
@@ -289,6 +345,9 @@ export class TemplateHttpServer {
       res.end('template not found');
       return;
     }
+    // Unreachable: the route matched `TEMPLATE_PATH_RE` to get here. Kept as the honest
+    // fall-through rather than a throw — a 404 is the right answer to any path this server
+    // does not own, and an exception on an HTTP handler is not.
     res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
     res.end('not found');
   }
@@ -318,6 +377,8 @@ export class TemplateHttpServer {
       res.end('not found');
       return;
     }
+    // The table declares this route `POST`; the refusal lives HERE rather than in the router
+    // so a wrong method is LOGGED as a refusal instead of silently reading as an unknown path.
     if (req.method !== 'POST') {
       refuse(`method ${req.method ?? 'none'}`);
       return;
