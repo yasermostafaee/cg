@@ -150,4 +150,16 @@ verify, never assume.
       fails the pin
 - [x] 8.8 R4 — the four flakes named above; `P-048` filed for the two that were first-time
 - [x] 8.9 R5 — the LOG line MEASURED and quoted into ADR 0009's plant check 1
-- [ ] Gate green · commit `________` · e2e run `________`
+- [x] Gate green (uncached, exit 0) · Windows: full Runtime e2e 236 passed · commits
+      `ae343ec3` (R1+R2 proofs), `c1ffec74` (R3 route table + pin), `b6208709` (R3 record, R4,
+      R5) · e2e run
+      [35095154264](https://github.com/yasermostafaee/cg/actions/runs/35095154264) on
+      `b6208709` — `e2e` job RAN, `conclusion: success`. The tip contains all three and the job
+      is whole-tree, so it discharges each.
+- [x] 8.10 ⚠ **A CORRECTION to `SELF-STOP-24`'s own report.** That report said `d6d895a4` "got
+      NO CI run of its own — superseded while pending". **That was wrong**: run
+      [35021342721](https://github.com/yasermostafaee/cg/actions/runs/35021342721) exists and is
+      green, with `ci` and `e2e` correctly SKIPPED because the diff was docs-only (`P-029`). It
+      was read too early, not absent. Nothing owed changes — a skipped job discharges nothing
+      either way — but "no run" and "a run whose jobs were skipped" are different facts, and the
+      record should carry the true one.
