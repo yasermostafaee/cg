@@ -1,0 +1,16 @@
+{
+  "channels": [
+    {
+      "id": "apasai",
+      "name": "آپاسای",
+      "casparHost": "192.168.21.111",
+      "casparChannel": 1
+    },
+    {
+      "id": "cg-test2",
+      "name": "کانال دوم (تست CG)",
+      "casparHost": "192.168.21.111",
+      "casparChannel": 2
+    }
+  ]
+}

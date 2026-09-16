@@ -3877,3 +3877,59 @@ this reuses), [[B-151]] (the same door, the look member), [[R-022]] (PVW reaches
 - **Number:** `R-065`. Verified free at the moment of commit, not of planning:
   `git grep -n --untracked -E "^## \[.\] R-065" -- docs` returned nothing, against a positive
   control on the same regex for `R-064` which returned this file.
+
+## [ ] R-066 — sign-in surface, permitted-channel strip, viewer state, and retiring the self-declared console name ⟨priority: high⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+
+**What:** The console half of the Playout link. A sign-in surface when the bridge advertises
+`auth: 'playout'`; the token held per console and presented on every reconnect; a channel strip
+that lists only the principal's permitted channels; a viewer read-only state; and the retirement
+of the self-declared operator name together with every copy of its caveat.
+
+**Why:** [[C-037]] and [[C-038]] make the bridge refuse what the principal may not do — but a
+refusal the operator cannot anticipate is a console that feels broken. The operator needs to know
+who they are signed in as, which channels are theirs, and (for a viewer) that reading is the whole
+of it. And once identity is PROVEN, the _"a LABEL you typed, not a verified sign-in"_ caveat stops
+being honest and becomes wrong: it would be telling the operator the record is weaker than it is.
+
+**Acceptance:**
+
+- WHEN the bridge advertises `auth: 'playout'` THEN the console shows a sign-in (Persian/RTL,
+  shared primitives, no raw controls) over the live stack; PANIC and every intent are refused
+  underneath until signed in; and the link indicator names the state in the operator's words
+- WHEN signed in THEN the token is held per console, survives a reload, is presented on every
+  (re)connect, and is refreshed about 10 minutes before expiry while the page is open; sign-out
+  clears it
+- WHEN the principal's channel set is known THEN the strip lists ONLY those channels (`channelIds`
+  in `features/channels/channelList.ts` gains the principal as an input), and a channel the bank
+  names but the principal may not operate is shown READ-ONLY, not hidden
+- WHEN the principal is a `viewer` THEN every surface is read-only and says so once, in the
+  operator's words — the controls are ABSENT as facts, not greyed out (golden rule 13)
+- WHEN identity is verified THEN the Audit panel's _"self-declared label, not a verified sign-in"_
+  copy and the operator-name field are RETIRED, and a two-axis `git grep` sweep — by the SENTENCE
+  and by the `operatorName` SYMBOL — finds no stale copy in tests, docs or task lists
+- WHEN auth is OFF THEN every surface is byte-identical to today
+
+**Notes:** 🔴 THE SWEEP IS THE HARD PART, and it is a golden-rule-9 sweep on two axes because one
+axis provably misses. Measured at `546258d3`: the STRING pass (`self-declared`, case-insensitive)
+returns 19 hits in 16 files; the SYMBOL pass (`operatorName`) returns 44 files, including
+`WebSocketRuntime.ts`, `createRuntimeBridge.ts` and `persistedKeyCensus.test.ts` which the string
+pass does not see. And the caveat is BUILT ACROSS LINES in `AuditPanel.tsx:322-325`, so a per-line
+grep for `LABEL you typed` finds it in ten test and doc files and MISSES the source it came from —
+scan multi-line. Known sites: `apps/runtime/src/renderer/features/audit/AuditPanel.tsx` (~293,
+~323, ~340), `apps/runtime/src/platform/operatorName.ts:12`,
+`apps/runtime/src/shared/runtime-bridge.ts:562`, `packages/shared-ipc/src/ws-frame.ts:93`,
+`tools/caspar-bridge/src/actor-context.ts:10`, `tools/caspar-bridge/src/bridge.ts:903`,
+`tools/caspar-bridge/src/caspar-runtime.ts:507`, `docs/prd/runtime.md:2910` (inside [[R-054]]'s
+notes), `docs/prd/bugs-runtime.md:3683` and `:9687`, plus four e2e/dom specs and five spec/design
+files under `openspec/changes/`. — The persisted key `cg.runtime.operatorName` retires with the
+field; `persistedKeyCensus.test.ts` is a consumer. — An E2E is OWED (this renders; golden rule 12).
+— `docs/operator-guide/README.md` gains a sign-in paragraph. — [[R-054]] records the operator-name
+field as a setting that must MOVE into the Settings shell _"and the honesty caveat travels with
+it"_; this item retires both instead, so R-054's bullet must be updated rather than left
+contradicting. — Depends on [[C-037]] and [[C-038]]. Cross-refs [[R-062]], [[C-039]], [[B-141]],
+[[B-153]], [[R-017]], [[R-022]].
+
+- **Number:** `R-066`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] R-066" -- docs` returned nothing, against a positive
+  control on the same regex for `R-065` which returned `runtime.md:3830`. The registry's dated
+  pointer independently reads `R-066`.

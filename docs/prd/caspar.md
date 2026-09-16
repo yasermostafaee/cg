@@ -2358,3 +2358,185 @@ per template. — Cross-refs [[R-064]], [[C-034]], [[C-035]].
   `git grep -n --untracked -E "^## \[.\] C-036" -- docs` returned nothing, against a positive
   control on the same regex for `C-035` which returned `caspar.md:2282`. The registry's dated
   pointer independently reads `C-036`.
+
+## [ ] C-037 — bridge authentication: a Playout-issued JWT establishes the socket's principal ⟨priority: high⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+
+**What:** Give the control WebSocket a principal. A socket sends an `auth` frame carrying a
+Playout-issued JWT; the bridge verifies it OFFLINE (ES256 against the Playout's JWKS) and holds
+the resulting principal for that socket. An authorisation gate sits at `handleMessage`, beside the
+`B-229` lock gate, at the one chokepoint every request passes. Auth is a MODE: OFF is today, byte
+for byte.
+
+**Why:** The control socket has no authentication at all. `packages/shared-ipc/src/ws-frame.ts`
+says so in as many words — `actor` is _"SELF-DECLARED and UNVERIFIED … the control socket is
+unauthenticated loopback"_ — and `wss.on('connection', …)` in `tools/caspar-bridge/src/bridge.ts`
+serves every socket that arrives. The plant is adopting the Apasai Playout, which already holds
+the operator directory and (since its build 2.8.43) per-channel grants, so identity can be
+federated rather than invented. `actor-context.ts` has been waiting for exactly this: _"the day
+identity becomes provable, this function is the only thing that changes."_
+
+**Acceptance:**
+
+- WHEN auth is ON and a socket sends no `auth` frame THEN only `bridge.capabilities` and the
+  `auth.*` channels answer; everything else is refused with the one sentence and nothing is sent
+  to CasparCG
+- WHEN a valid ES256 token arrives (its `kid` in the cached JWKS, `iss` byte-equal to config,
+  `aud` containing `cg-control`, within ±60 s) THEN the principal is set, `operatorActor()` yields
+  the token's `name`, the audit record carries `sub` beside it, and two browsers with two tokens
+  interleave without crossing (the ALS seam)
+- WHEN the `kid` is unknown THEN the JWKS is re-fetched at most once per 60 s before refusing
+- WHEN the token expires mid-session THEN intents are refused with the sentence, `read` keeps
+  answering, the socket stays open, nothing on air changes; and a fresh `auth` frame on the SAME
+  socket restores every control with no reload
+- WHEN the Playout is unreachable THEN already-verified tokens keep working to expiry and a new
+  sign-in fails with a sentence naming the Playout
+- WHEN a `jti` appears on `GET /api/cg/revoked` (D9, live) THEN within 60 s NEW intents from that
+  token are refused with the sentence, reads keep answering, and an unreachable Playout leaves the
+  bridge holding the last list it saw
+- WHEN auth is OFF THEN behaviour is byte-identical to today — every existing integration test
+  green and unchanged — and `bridge.capabilities` says so
+- WHEN the bridge binds a non-loopback host with auth OFF THEN the existing warning prints (owner
+  default; see ADR 0010 rule 11)
+- WHEN the template HTTP server's route set is listed THEN it carries no `auth`, identity or
+  control route — only the template files and `POST /complete` (ADR 0010 rule 13, pinned by
+  `tools/caspar-bridge/tests/template-server-route-set.test.ts`)
+
+**Notes:** `auth` is a FOURTH frame type in `ws-frame.ts`, which today is a three-member
+discriminated union (`request` / `response` / `publish`). — The refusal string lives in
+`@cg/shared-ipc` beside `LOCK_ENGAGED_REFUSAL`, under the `R-017` one-string discipline. —
+`jose` (or equivalent) becomes a NEW dependency of `tools/caspar-bridge`, so `pnpm-lock.yaml`
+moves: flag it as shared config when it lands. — Config keys `playout.issuer`, `playout.jwksUrl`,
+`playout.tokenUrl`, `playout.refreshUrl`, `playout.channelsUrl`, `playout.revokedUrl`,
+`playout.audience`, persisted bridge-side under `R-010`'s precedence (CLI flags > file > default).
+— `bridge.capabilities` gains `auth: 'off' | 'playout'`, the sign-in address and the contract
+version, for `B-153`'s reason: it is asked at connect, before the operator can press anything. —
+The contract is `docs/integration/playout/`. — 🔴 This changes NO refusal CONDITION on the air
+path, nothing about the lock, and nothing about PANIC. — Cross-refs [[C-038]] (the per-channel
+half), [[R-066]] (the console surface), [[R-010]], [[B-141]], [[B-153]], [[B-229]].
+
+- **Number:** `C-037`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] C-037" -- docs` returned nothing, against a positive
+  control on the same regex for `C-036` which returned `caspar.md:2321`. The registry's dated
+  pointer independently reads `C-037`.
+
+## [ ] C-038 — per-channel authorisation at the one chokepoint ⟨priority: high⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+
+**What:** Every route carries a permission class — `read` / `operator` / `station-admin` — as a
+REQUIRED argument of `route(…)`, exactly as `lock` is today, and the gate at `handleMessage`
+checks the request's channels against the principal's `cg_channels`.
+
+**Why:** A principal without a permission model is a login, not authorisation. The shape is
+already proven here: `B-229` made `lock` the third and REQUIRED argument of `route(…)` precisely
+so _"a new channel cannot be routed without classifying it"_, and a census test walks every route
+rather than sampling. The permission class is the same rule on a second axis, and putting it
+anywhere but that one chokepoint is how the site nobody looked at gets missed.
+
+**Acceptance:**
+
+- WHEN a route is registered THEN it carries a permission class (`read` / `operator` /
+  `station-admin`) as a REQUIRED argument beside `lock`, and a census test walks every route
+- WHEN roles are evaluated THEN they are hierarchical (`station-admin ⊇ operator ⊇ viewer`), so
+  `["station-admin","operator","viewer"]` and `["station-admin"]` grant the same
+- WHEN an intent touches a channel outside `cg_channels` THEN it is refused with the one sentence
+  naming the channel, nothing is sent, and the audit records the refusal with the verified actor
+- WHEN a bulk verb (`removeAll`, `clearAll`, `stopAll`, `snapshot`) is called THEN it requires
+  every channel it touches and is refused all-or-nothing
+- WHEN `silenceAllLivePlates` is called THEN it requires `operator` and stays UNSCOPED (owner
+  answer A16)
+- WHEN a `viewer` (`cg_channels: []`) is connected THEN every `read` route answers and every
+  intent, PANIC included, is refused with the sentence
+- WHEN [[R-062]]'s discovery call lands THEN the permission check reads the same channel set
+  (golden rule 6 — one predicate, not two that agree)
+
+**Notes:** The per-item channel resolver is `item.slot.channel` (`StackItemStateSchema.slot`,
+`{ channel, layer, server }`), which is already globally unique per operator row. — The
+`station-admin` set covers `connections.set-config`, the fixed bank, sources, delimiters and
+channel settings; the EXACT set is decided in the change's design with the route census in front
+of it, not guessed here. — The UI mirrors refusals in the operator's words (golden rule 11) and
+hides nothing that is merely refused. — A `viewer` token carries `cg_channels: []`
+unconditionally (Playout clarification C8), so "viewer = every read, no command" holds by
+construction. — 🔴 Golden rule 10's gate does not move, and no refusal CONDITION on the air path
+changes. — Depends on [[C-037]]. Cross-refs [[R-062]], [[R-066]], [[B-229]], [[B-074]].
+
+- **Number:** `C-038`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] C-038" -- docs` returned nothing, against a positive
+  control on the same regex for `C-036` which returned `caspar.md:2321`.
+
+## [ ] C-039 — the Playout's channel catalogue as the FIRST channel-discovery source ⟨priority: medium⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+
+**What:** Feed [[R-062]]'s channel-discovery call from the Playout's `GET /api/cg/channels`
+(`{id, name, casparHost, casparChannel}`) first, keeping the two sources the renderer unions
+today — `fixedLayers.config.channel` and `channelSettings.settings[].channel` — as fallbacks.
+
+**Why:** [[R-062]] gap 2 is _"there is no channel-discovery call on the contract"_, and its own
+note says `features/channels/channelList.ts` is _"the one function a discovery call would feed"_.
+The Playout now publishes exactly that list, with the operator-facing NAMES the console should be
+showing, and `casparHost` + `casparChannel` is the join key [[C-038]] needs against `cg_channels`.
+D4 is live on the test Playout today.
+
+**Acceptance:**
+
+- WHEN `playout.channelsUrl` is configured and answers THEN the discovery call returns the
+  Playout's channels (id, name, `casparHost`, `casparChannel`) FIRST, the bank and channel
+  settings as fallbacks, and the strip shows the Playout's NAMES
+- WHEN the Playout does not answer THEN the list is the two existing sources and no alarm is
+  raised
+- WHEN the catalogue changes THEN the list updates without a bridge restart (polled at most every
+  30 s, with `ETag`)
+- WHEN a channel index is not in the catalogue — a preview channel `N+1..2N` — THEN the bridge
+  never addresses or probes it
+
+**Notes:** `casparHost` must be spelled exactly as the bridge's `servers.A.host`
+(`192.168.21.111` on the test box) or the join with `cg_channels` silently matches nothing. — A
+snapshot of the live D4 response is `docs/integration/playout/handoff/2026-09-16/channels.json`;
+the endpoint itself is `http://192.168.21.111:8080/api/cg/channels`. — 🔴 Every read from the
+Playout degrades to ABSENT and never gates a verb (ADR 0010 rule 8). — Depends on [[C-037]] and
+[[R-062]]. Cross-refs [[C-038]], [[R-066]].
+
+- **Number:** `C-039`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] C-039" -- docs` returned nothing, against a positive
+  control on the same regex for `C-036` which returned `caspar.md:2321`.
+
+## [ ] C-040 — validate the bridge against apasai-core on the test Playout ⟨priority: high — blocks the joint test⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+
+**What:** Point a bridge at apasai-core on the test Playout and re-run the recon this repo already
+owns, recording the result in the same shape as `docs/recon/2026-07-28-casparcg-250-validation.md`.
+Then run the contract's §8 checklist from the bridge host with the five test users.
+
+**Why:** Every validation this repo holds was measured against stock `2.5.0 69e8ad5 Stable`.
+apasai-core reports `2.5.0 6b29237 Dev` and is a fork — the Playout team states nothing we use
+changed (Q2) and we believe them, but a statement is not a measurement, and this repo has never
+seen that build. Nothing else on the Playout link can be trusted until the wire underneath it has
+been read here.
+
+**Acceptance:**
+
+- WHEN the Playout team has added the TCP 5250 allow rule for `192.168.21.93`, and that host
+  allows inbound UDP 6250, THEN a bridge on it reaches `192.168.21.111:5250`, `VERSION` answers
+  `2.5.0 6b29237 Dev`, OSC ticks arrive, and health reads `healthy` — not `degraded`
+- WHEN the recon scripts of `docs/recon/2026-07-28-casparcg-250-validation.md`
+  (`tools/caspar-amcp-probe`, the b1/b2 captures) are re-run against apasai-core THEN the result
+  is recorded as `docs/recon/<date>-apasai-core-validation.md` in the same shape, including the
+  additive verbs observed (`MIXER … AUDIOMAP`, the `pgm` consumer, `webrtc`) and the Flash-off fact
+- WHEN a template is `CG ADD`ed from the bridge's own HTTP server (7911) THEN apasai-core's HTML
+  module renders it (Flash being disabled is irrelevant — every template we serve is HTML)
+- WHEN the five test users sign in from the console origin THEN `cg-op1` is refused on channel 2
+  with the sentence, `cg-op2` operates 1 and 2, `cg-admin` operates everything, `cg-view` reads
+  only (`cg_channels: []`), and `cg-noch` is refused at sign-in with `403 no_cg_access`
+- WHEN `cg-op1` is revoked through the Playout's manual endpoint THEN within 60 s its next command
+  is refused with the sentence while its console still shows the stack
+
+**Notes:** The engine stays on build **2.8.45** for this run (the Playout team's commitment) —
+name that build in the recon record or the result is not attributable. — 🔴 No service credential
+exists: apasai-core's AMCP is unauthenticated (Q1), so the "credential seam" this item was
+originally expected to carry is DROPPED. The gate is the firewall rule, and it is a deployment
+prerequisite rather than a code task. — Plant-command hygiene applies even though this is a TEST
+Playout: one line at a time, in the named window, and remember that connecting a bridge re-asserts
+mixer volumes. — The test fixtures (`cg-op1`, `cg-op2`, `cg-admin`, `cg-view`, `cg-noch`, channel
+`cg-test2`) are temporary and we say when they are released. — DEPENDS on the Playout team's allow
+rule, which needs an administrator on their side; nothing here can start before it. — Cross-refs
+[[C-037]], [[C-038]], [[C-039]], [[R-066]], [[C-018]], [[C-020]].
+
+- **Number:** `C-040`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] C-040" -- docs` returned nothing, against a positive
+  control on the same regex for `C-036` which returned `caspar.md:2321`.

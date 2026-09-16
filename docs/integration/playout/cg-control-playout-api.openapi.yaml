@@ -1,0 +1,333 @@
+openapi: 3.1.0
+info:
+  title: CG Control ↔ Apasai Playout — identity & channel API
+  version: 1.0.0-draft
+  summary: Endpoints the Playout provides so CG Control can sign operators in, verify tokens offline, and read the channel catalogue.
+  description: |
+    Contract v1 (2026-09-15). Companion of PLAYOUT-INTEGRATION-CONTRACT-v1.md.
+    The Playout is the identity provider and channel authority for CG Control. It is NOT in the
+    CasparCG command path — the CG bridge keeps driving apasai-core directly over AMCP/OSC.
+    Paths below are suggested defaults; the CG bridge is configured with full URLs, so other paths are fine.
+servers:
+  - url: '{playoutBaseUrl}'
+    variables:
+      playoutBaseUrl:
+        default: 'https://playout.example.local'
+        description: Base URL of the Playout API as reachable from the CG Control browser and the CG bridge host.
+tags:
+  - name: auth
+    description: Sign-in and token refresh (called by the CG Control browser; CORS required)
+  - name: keys
+    description: Public keys for offline token verification (fetched by the CG bridge)
+  - name: channels
+    description: Channel catalogue (read-only)
+paths:
+  /api/cg/auth/token:
+    post:
+      tags: [auth]
+      operationId: cgSignIn
+      summary: Sign in and issue the CG Control access token (D1, MUST)
+      description: Verifies the operator's Playout credentials and returns a JWT whose claims follow CgTokenClaims.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TokenRequest' }
+      responses:
+        '200':
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '401': { $ref: '#/components/responses/InvalidCredentials' }
+        '403': { $ref: '#/components/responses/NoCgAccess' }
+        '423': { $ref: '#/components/responses/AccountLocked' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /api/cg/auth/refresh:
+    post:
+      tags: [auth]
+      operationId: cgRefresh
+      summary: Exchange a refresh token for a new access token (D2, MUST)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshRequest' }
+      responses:
+        '200':
+          description: New access token (refresh token SHOULD be rotated)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '401':
+          description: Refresh token expired, revoked, or reused after rotation
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                { error: invalid_refresh_token, message: 'Refresh token is no longer valid.' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /.well-known/jwks.json:
+    get:
+      tags: [keys]
+      operationId: cgJwks
+      summary: Public signing keys as a JWK Set (D3, MUST)
+      description: |
+        RFC 7517 JWK Set. Public, no authentication. Cache-Control: public, max-age=3600.
+        Publish a new key BEFORE signing with it and keep the previous kid for at least 24 h after rotation.
+      responses:
+        '200':
+          description: JWK Set
+          headers:
+            Cache-Control:
+              schema: { type: string, example: 'public, max-age=3600' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/JwkSet' }
+  /api/cg/channels:
+    get:
+      tags: [channels]
+      operationId: cgChannels
+      summary: Every channel of the station (D4, SHOULD)
+      description: |
+        Returns all channels; permissions come from the token, not from filtering here.
+        casparHost + casparChannel MUST use the same spelling as cg_channels in the token — that pair is the join key.
+        ETag / If-None-Match SHOULD be supported; the CG bridge polls at most every 30 s.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: header
+          name: If-None-Match
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Channel catalogue
+          headers:
+            ETag:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ChannelsResponse' }
+        '304': { description: Not modified }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+  /api/cg/me:
+    get:
+      tags: [auth]
+      operationId: cgMe
+      summary: Principal echo for the presented token (D8, MAY)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: The principal encoded in the token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Principal' }
+        '401': { $ref: '#/components/responses/InvalidToken' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: The access token issued by /api/cg/auth/token (claims per CgTokenClaims).
+  responses:
+    InvalidCredentials:
+      description: Username or password wrong
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: invalid_credentials, message: 'Username or password is wrong.' }
+    NoCgAccess:
+      description: Valid user, but no CG role or no channels
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: no_cg_access, message: 'This account has no CG Control access.' }
+    AccountLocked:
+      description: Account locked by the Playout
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: account_locked, message: 'Account is locked.' }
+    RateLimited:
+      description: Too many attempts (SHOULD be ~10 failed attempts per 5 minutes per IP+user)
+      headers:
+        Retry-After:
+          schema: { type: integer, description: seconds }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: rate_limited, message: 'Too many attempts. Try again later.' }
+    InvalidToken:
+      description: Missing, malformed, expired, or wrongly signed bearer token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { error: invalid_token, message: 'Token is not valid.' }
+  schemas:
+    TokenRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1 }
+      additionalProperties: false
+    RefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string, minLength: 1 }
+      additionalProperties: false
+    TokenResponse:
+      type: object
+      required: [token_type, access_token, expires_in, refresh_token]
+      properties:
+        token_type: { type: string, const: Bearer }
+        access_token:
+          type: string
+          description: Compact JWS; claims per CgTokenClaims; alg RS256 or ES256; header carries kid.
+        expires_in:
+          {
+            type: integer,
+            minimum: 60,
+            description: Seconds until access_token expires (default 43200 = 12 h).,
+          }
+        refresh_token: { type: string, description: Opaque; SHOULD be rotated on each refresh. }
+        principal:
+          $ref: '#/components/schemas/Principal'
+          description: Convenience echo for the UI. The CG bridge trusts only the JWT.
+    Principal:
+      type: object
+      required: [sub, name, roles, cg_channels]
+      properties:
+        sub: { type: string, minLength: 1 }
+        name: { type: string, minLength: 1, maxLength: 64 }
+        roles: { $ref: '#/components/schemas/Roles' }
+        cg_channels: { $ref: '#/components/schemas/CgChannels' }
+    Roles:
+      type: array
+      minItems: 1
+      uniqueItems: true
+      items:
+        type: string
+        enum: [viewer, operator, station-admin]
+    ChannelRef:
+      type: object
+      required: [host, channel]
+      properties:
+        host:
+          type: string
+          minLength: 1
+          description: CasparCG server address exactly as the CG bridge connects to it (e.g. 192.168.21.114).
+        channel: { type: integer, minimum: 1, description: CasparCG channel index }
+      additionalProperties: false
+    CgChannels:
+      description: Channels the user may operate; the string "*" means every channel.
+      oneOf:
+        - type: string
+          const: '*'
+        - type: array
+          items: { $ref: '#/components/schemas/ChannelRef' }
+    CgTokenClaims:
+      description: Claims of the access token (JWT payload). Other claims are allowed and ignored by the CG bridge.
+      type: object
+      required: [iss, aud, sub, name, roles, cg_channels, iat, exp]
+      properties:
+        iss:
+          {
+            type: string,
+            minLength: 1,
+            description: Must equal the bridge's configured issuer byte-for-byte.,
+          }
+        aud:
+          description: Must equal or contain "cg-control".
+          oneOf:
+            - { type: string, const: cg-control }
+            - { type: array, items: { type: string }, contains: { const: cg-control } }
+        sub: { type: string, minLength: 1, description: Stable user id, never reused. }
+        name:
+          {
+            type: string,
+            minLength: 1,
+            maxLength: 64,
+            description: Display name; written to the CG audit log as the actor.,
+          }
+        roles: { $ref: '#/components/schemas/Roles' }
+        cg_channels: { $ref: '#/components/schemas/CgChannels' }
+        iat: { type: integer }
+        nbf: { type: integer }
+        exp: { type: integer }
+        jti: { type: string }
+      example:
+        iss: 'https://playout.example.local'
+        aud: cg-control
+        sub: u-1042
+        name: 'علی رضایی'
+        roles: [operator]
+        cg_channels:
+          - { host: '192.168.21.114', channel: 1 }
+          - { host: '192.168.21.114', channel: 2 }
+        iat: 1789460000
+        exp: 1789503200
+        jti: '5c1c4e7a-…'
+    Channel:
+      type: object
+      required: [id, name, casparHost, casparChannel]
+      properties:
+        id: { type: string, minLength: 1, description: Stable Playout channel id }
+        name: { type: string, minLength: 1, description: Operator-facing name (Persian expected) }
+        casparHost: { type: string, minLength: 1, description: Same spelling as ChannelRef.host }
+        casparChannel: { type: integer, minimum: 1, description: Same value as ChannelRef.channel }
+    ChannelsResponse:
+      type: object
+      required: [channels]
+      properties:
+        channels:
+          type: array
+          items: { $ref: '#/components/schemas/Channel' }
+      example:
+        channels:
+          - { id: ch-news, name: 'خبر', casparHost: '192.168.21.114', casparChannel: 1 }
+          - { id: ch-sport, name: 'ورزش', casparHost: '192.168.21.114', casparChannel: 2 }
+    Jwk:
+      type: object
+      required: [kty, kid, use, alg]
+      properties:
+        kty: { type: string, enum: [RSA, EC] }
+        kid: { type: string, minLength: 1 }
+        use: { type: string, const: sig }
+        alg: { type: string, enum: [RS256, ES256] }
+        n: { type: string, description: RSA modulus (base64url) }
+        e: { type: string, description: RSA exponent (base64url) }
+        crv: { type: string, enum: [P-256] }
+        x: { type: string, description: EC x (base64url) }
+        y: { type: string, description: EC y (base64url) }
+    JwkSet:
+      type: object
+      required: [keys]
+      properties:
+        keys:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/Jwk' }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Stable snake_case code
+          enum:
+            [
+              invalid_credentials,
+              no_cg_access,
+              account_locked,
+              rate_limited,
+              invalid_refresh_token,
+              invalid_token,
+            ]
+        message:
+          {
+            type: string,
+            description: Free text for humans (Persian welcome); CG Control maps error to its own sentence.,
+          }

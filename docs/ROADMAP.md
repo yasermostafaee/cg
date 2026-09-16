@@ -423,6 +423,25 @@ second machine + JWT auth). Everything else previously listed here is either arc
 Done) or queued in the PRD without a slot in this order — the PRD files remain the backlog
 of record.
 
+## Playout link — ADR 0010 (decided 2026-09-15, contract v1 + v1.1 accepted 2026-09-16)
+
+The plant is adopting the Apasai Playout, and CG Control federates identity from it while the
+path to air stays direct to CasparCG ([ADR 0010](./adrs/0010-playout-link.md), contract in
+[docs/integration/playout/](./integration/playout/README.md)). In order; nothing above is
+re-sequenced by it.
+
+1. **[C-037](./prd/caspar.md)** — bridge authentication: a Playout-issued JWT establishes the
+   socket's principal, verified offline at the one chokepoint. Auth OFF stays byte-identical.
+2. **[C-038](./prd/caspar.md)** — per-channel authorisation: a permission class beside every
+   route's `LockPolicy`, censused, checked against the token's `cg_channels`.
+3. **[R-066](./prd/runtime.md)** — the console half: sign-in, the permitted-channel strip, the
+   viewer read-only state, and retiring the self-declared operator name and its caveat.
+4. **[C-039](./prd/caspar.md)** — the Playout's channel catalogue as the FIRST source of
+   [R-062](./prd/runtime.md)'s discovery call, the two existing sources as fallbacks.
+5. **[C-040](./prd/caspar.md)** — validate the bridge against apasai-core on the test Playout
+   and record the recon. **Blocked** until the Playout team's administrator adds the TCP 5250
+   allow rule for the bridge host.
+
 ## Then — hardening wave (after features)
 
 No PRD items filed yet — file them when this wave is scheduled.

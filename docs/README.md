@@ -24,6 +24,11 @@ Proposed → Accepted → Superseded.
 - ADR 0004 — OSC as source of truth for on-air state _(planned)_
 - ADR 0005 — Frame-locked animations _(planned)_
 
+## Integration records
+
+- [CG Control ↔ Apasai Playout](integration/playout/README.md) — the contract both teams
+  signed, their responses and ours, and the dated evidence snapshots ([ADR 0010](adrs/0010-playout-link.md)).
+
 ## End-user guides
 
 - [Operator guide](operator-guide/) _(M10)_
