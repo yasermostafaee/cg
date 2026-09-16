@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { TemplateInfo } from '@cg/shared-ipc';
+import type { StackItemState } from '@cg/shared-schema';
+import { useTemplateIndex } from './hooks/useTemplateIndex.js';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
 import { AuditPanel } from './features/audit/AuditPanel.js';
 import { FailoverBanner } from './features/connections/FailoverBanner.js';
@@ -86,6 +89,14 @@ export function isEditable(target: EventTarget | null): boolean {
 
 export function App(): JSX.Element {
   const items = useStack();
+  /*
+    `PASSES-CYCLE-ONLY-26` §A1.2 — the TEMPLATE facts an UPDATE press needs. What pass timing a
+    press may send depends on the template's stated mode, and `applyDraft` is deliberately free
+    of stores; the index is held here, beside the stack it is keyed on.
+  */
+  const templates = useTemplateIndex(items.map((i) => i.templateId));
+  const playoutOfItem = (item: StackItemState): TemplateInfo['playout'] | undefined =>
+    templates.get(item.templateId)?.playout;
   // B-156 — read ONCE here and threaded to both the layer table and the Inspector.
   const rehearsals = useRehearse();
   const lock = useLock();
@@ -382,7 +393,7 @@ export function App(): JSX.Element {
                       onUpdate={(id) => {
                         const target = items.find((i) => i.itemId === id);
                         return target !== undefined
-                          ? applyDraft(target)
+                          ? applyDraft(target, playoutOfItem(target))
                           : Promise.resolve({ accepted: false });
                       }}
                     />
@@ -410,7 +421,7 @@ export function App(): JSX.Element {
                 onApply={(id) => {
                   const target = items.find((i) => i.itemId === id);
                   return target !== undefined
-                    ? applyDraft(target)
+                    ? applyDraft(target, playoutOfItem(target))
                     : Promise.resolve({ accepted: false });
                 }}
                 onDiscard={(id) => clearDraft(id)}
@@ -464,7 +475,7 @@ export function App(): JSX.Element {
                 onApply={(id) => {
                   const target = items.find((i) => i.itemId === id);
                   return target !== undefined
-                    ? applyDraft(target)
+                    ? applyDraft(target, playoutOfItem(target))
                     : Promise.resolve({ accepted: false });
                 }}
                 onDiscard={(id) => clearDraft(id)}

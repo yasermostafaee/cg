@@ -145,17 +145,113 @@ function blurAfterTyping(label: string, value: string): void {
 }
 
 /*
-  🔴 `loops` IS ITS OWN BIT, and this fixture says so deliberately. The row's `mode` is the
-  ROOT's — often `manual` — while the scope that repeats is a nested instance below it, so the
-  section cannot derive "does this loop" from the mode. The realistic shape is therefore a
-  non-looping mode WITH `loops: true`, which is what `logo-bug` actually is.
+  🔴 **`PASSES-CYCLE-ONLY-26` (owner, 2026-09-16) — THE PASS CONTROLS EXIST ONLY UNDER MODE
+  `Loop cycle`, so this fixture is a `loop-cycle` one.**
+
+  It used to be `{mode: 'manual', loops: true}`, on the reasoning that `loops` is its own bit
+  because the repeating scope is often a nested instance below a non-looping root. That
+  reasoning was TRUE and the conclusion was wrong: the nested scope that loops is usually not
+  the graphic. On the plant's news ticker it is a BLINKING DOT — the section read
+  `Auto-out / Content-driven` while offering a count that reached only the dot, so `Count 2`
+  made the dot blink twice and vanish.
+
+  The controls now follow the mode the section STATES. `loops` is still on the record (it is
+  what `templateTimingOf` derived) and is no longer what the controls are offered on.
 */
 const LOOPS = {
   v: TEMPLATE_TIMING_VERSION,
-  mode: 'manual',
+  mode: 'loop-cycle',
   holdSource: 'timed',
   loops: true,
 } as const;
+
+/** The plant's news ticker: a content-driven crawl whose only `loop-cycle` scope is a dot. */
+const TICKER = {
+  v: TEMPLATE_TIMING_VERSION,
+  mode: 'auto-out',
+  holdSource: 'content-driven',
+  loops: true,
+  repeat: 'infinite',
+} as const;
+
+describe('🔴 PASSES-CYCLE-ONLY-26 — the pass controls follow the STATED mode', () => {
+  /*
+    ── THE OWNER'S OBSERVATION, AND WHY IT IS A LIE RATHER THAN A GAP ──────────────────────
+
+    On `نوار خبر (روی آنتن)` the section read `Auto-out` / `Content-driven` and still showed
+    `Until stop` / `Count`, a gap box and `Default (∞)`. Changing them did nothing he could
+    see. Measured on the stored record (`c44d061f`, re-verified at HEAD): the root is
+    `auto-out`/`content-driven` with a crawl of `repeat: 2`, and the ONLY `loop-cycle` scope in
+    the whole template is a nested «چشمک» — a blinking dot, `holdMs: 0`, `repeat: 'infinite'`.
+
+    `applyPassTiming` walks every scope and `setRemainingPasses` returns early on a non-cyclic
+    one, so the count reached the DOT and nothing else. `Count 2` = the dot blinks twice and
+    disappears. `Default (∞)` = the dot's count, stated on a graphic that ends after two crawl
+    passes.
+
+    A control that states another scope's number and silently steers a decoration is worse than
+    no control: it is the console being confidently wrong, which is the one thing an operator
+    cannot defend against.
+  */
+  const ROWS = [
+    ['Manual', { v: TEMPLATE_TIMING_VERSION, mode: 'manual' }],
+    ['Auto-out / Timed', { v: TEMPLATE_TIMING_VERSION, mode: 'auto-out', holdSource: 'timed' }],
+    ['Static', { v: TEMPLATE_TIMING_VERSION, mode: 'static' }],
+  ] as const;
+
+  for (const [name, playout] of ROWS) {
+    it(`${name} shows NO pass control and NO gap box`, () => {
+      mount(row(), template(playout as never));
+      expect(
+        host.querySelector('[data-testid="timing-mode-fact"]'),
+        'the row did not render',
+      ).not.toBeNull();
+      expect(choice('Until stop'), `${name} offered Until stop`).toBeNull();
+      expect(choice('Count'), `${name} offered Count`).toBeNull();
+      expect(byLabel('Passes'), `${name} offered a passes box`).toBeNull();
+      expect(text(), `${name} stated a default count`).not.toContain('Default');
+    });
+
+    it(`${name} shows none even when something INSIDE it loops`, () => {
+      // The ticker's shape: a non-looping root whose only cyclic scope is a nested decoration.
+      // This is the case the old loops gate was built for, and it is exactly the wrong one.
+      mount(row(), template({ ...(playout as object), loops: true, repeat: 'infinite' } as never));
+      expect(choice('Until stop'), `${name} + a nested loop offered Until stop`).toBeNull();
+      expect(byLabel('Passes'), `${name} + a nested loop offered a passes box`).toBeNull();
+    });
+  }
+
+  it('🔴 the plant ticker that started this shows Mode and Hold and nothing else', () => {
+    mount(row(), template(TICKER as never));
+    expect(host.querySelector('[data-testid="timing-mode-fact"]')?.textContent).toBe('Auto-out');
+    expect(host.querySelector('[data-testid="timing-hold-fact"]')?.textContent).toBe(
+      'Content-driven',
+    );
+    expect(choice('Until stop')).toBeNull();
+    expect(choice('Count')).toBeNull();
+    expect(byLabel('Gap between passes')).toBeNull();
+    expect(text()).not.toContain('∞');
+  });
+
+  it('Loop cycle + Timed KEEPS them', () => {
+    mount(row(), template({ ...LOOPS } as never));
+    expect(choice('Until stop'), 'a real loop lost its control').not.toBeNull();
+  });
+
+  it('Loop cycle + Content-driven KEEPS them — the HOLD does not decide', () => {
+    // The rule is about MODE. A loop whose hold is content-driven still repeats, and its pass
+    // count is still the operator's.
+    mount(row(), template({ ...LOOPS, holdSource: 'content-driven' } as never));
+    expect(choice('Until stop')).not.toBeNull();
+  });
+
+  it('Loop cycle keeps them even with the loops bit ABSENT from the record', () => {
+    // The loops bit is no longer what they are offered on, so a record that never carried the bit
+    // (or carried it false) must still get the controls when the mode says loop-cycle.
+    mount(row(), template({ v: TEMPLATE_TIMING_VERSION, mode: 'loop-cycle' } as never));
+    expect(choice('Until stop')).not.toBeNull();
+  });
+});
 
 describe('§4 — mode and hold are FACTS, never inputs', () => {
   it('states them, and offers no control for either', () => {

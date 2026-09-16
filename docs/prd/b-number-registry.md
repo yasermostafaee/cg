@@ -2866,3 +2866,21 @@ one — which is the argument for writing them down.
 
 ⇒ **Next free after this session is `B-251`**, **`D-161`**, **`C-036`** and **`P-049`**
 (`P-001` … `P-048`, no gaps).
+
+### 2026-09-16 — `R-064`, `C-036` and `P-049` taken by `PASSES-CYCLE-ONLY-26`
+
+- `R-064` — the pass controls follow the STATED mode (Part A), [runtime.md](runtime.md).
+- `C-036` — the latent nested-loop reach of `applyPassTiming`, filed and NOT fixed because no
+  template in the tree or on the plant has that shape, [caspar.md](caspar.md).
+- `P-049` — three `pre*` hooks regenerate one file concurrently and the rename `EPERM`s,
+  [platform.md](platform.md).
+
+Each allocated by MEASURING, with a positive control on the same regex: `R-063` returned
+`runtime.md:3703`, `C-035` returned `caspar.md:2282`, and `P-048` returned `platform.md:3186`.
+
+⚠ **The `R-` half of the pointer has not been stated by any dated entry above, so it is stated
+here.** `R-064` was taken by measurement, not by reading a pointer — which is the standing rule
+and the reason a missing pointer costs nothing.
+
+⇒ **Next free after this session is `B-251`**, **`D-161`**, **`C-037`**, **`R-065`** and
+**`P-050`**.

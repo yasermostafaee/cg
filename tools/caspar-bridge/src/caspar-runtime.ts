@@ -106,6 +106,7 @@ import {
   type EmptiedAirRefusal,
 } from '@cg/shared-ipc';
 import { randomBytes } from 'node:crypto';
+import { templateAdmitsPassTiming } from '@cg/shared-ipc';
 import { operatorActor, runAsTemplate } from './actor-context.js';
 import {
   ChannelSettingsStore,
@@ -5902,7 +5903,20 @@ export class CasparRuntime {
       An off-air row REACHES NOTHING, so recording the intent IS the whole action — the same
       shape `setActiveLook`'s case 2 has, and what makes the next take carry it (`#sendAdd`).
     */
-    if (!this.#ownsLiveSeats(itemId)) {
+    /*
+      `PASSES-CYCLE-ONLY-26` — **AND A TEMPLATE WHOSE MODE IS NOT `loop-cycle` REACHES NOTHING
+      EITHER**, for a different reason than the off-air row above but by the same route.
+
+      The off-air case reaches nothing because there is no producer; this one because the count
+      has nowhere useful to land — the only cyclic scope is a nested decoration, and steering it
+      is the defect this item exists to remove. Recording it is still the whole action: the
+      value is the operator's, and a re-authored template would honour it.
+
+      ⚠ The verb keeps its contract. It answers `ok`, writes its audit row, and refuses nothing
+      — a refusal here would put a sentence on the surface for a control the operator can no
+      longer even see.
+    */
+    if (!this.#ownsLiveSeats(itemId) || !this.#admitsPassTiming(item?.templateId)) {
       this.#passTimings.set(itemId, next);
       this.#markDirty(itemId);
       // An accepted set that reached no wire is still a set: the next take carries it, so the
@@ -11298,7 +11312,11 @@ export class CasparRuntime {
       page's token could report a run that is already over.
     */
     const activeLook = this.#activeLookOf(itemId);
-    const passTiming = this.#passTimings.get(itemId);
+    // `PASSES-CYCLE-ONLY-26` — a recorded count crosses only for a template whose stated mode
+    // is `loop-cycle`. See `#admitsPassTiming`: the record keeps it either way.
+    const passTiming = this.#admitsPassTiming(templateId)
+      ? this.#passTimings.get(itemId)
+      : undefined;
     const control: CgControl = {
       ...(activeLook !== undefined && { look: activeLook.id }),
       ...(passTiming !== undefined && { timing: CasparRuntime.#wireTiming(passTiming) }),
@@ -11341,6 +11359,28 @@ export class CasparRuntime {
    * remote, so this token is the only thing standing between the LAN and a stop on a live row.
    * A counter or a timestamp would be a stop anybody on the network could ask for.
    */
+  /**
+   * 🔴 `PASSES-CYCLE-ONLY-26` (owner, 2026-09-16) — **MAY THIS ROW'S PASS TIMING REACH THE
+   * PAGE AT ALL?**
+   *
+   * The console now offers the pass controls only under mode `loop-cycle`. That alone does not
+   * make the rule true of AIR: a count set while the controls WERE visible is still in
+   * `#passTimings`, and `#sendAdd` attaches whatever is there to every take. So the plant's
+   * news ticker would go on receiving a count for its blinking dot — invisibly, with no surface
+   * left to explain it.
+   *
+   * ⚠ **THIS GATES THE WIRE, NEVER THE RECORD.** "No silent migration of stored data": the
+   * value stays where the operator put it, and if the template is ever re-authored as a
+   * `loop-cycle` graphic their number is still theirs. What changes is that it does not cross.
+   *
+   * ⚠ The predicate itself is `templateAdmitsPassTiming` in `@cg/shared-ipc`, shared with the
+   * console's Inspector and its press/PVW builder. Three machines, one spelling (golden rule 6).
+   */
+  #admitsPassTiming(templateId: string | undefined): boolean {
+    if (templateId === undefined) return false;
+    return templateAdmitsPassTiming(this.#templates.get(templateId)?.playout);
+  }
+
   #mintTakeToken(itemId: string): string {
     const token = randomBytes(16).toString('hex');
     this.#takeTokens.set(itemId, token);

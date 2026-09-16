@@ -3768,3 +3768,61 @@ not applied" will be wrong.
   immediately and the row SHALL show the confirmation-gap state until the wire answers.
 - The console SHALL NOT render a state whose meaning is "declared, not yet applied" while the
   action that produced it applied immediately.
+
+## [~] R-064 — the pass and gap controls exist ONLY when the stated Mode is `Loop cycle`; a hidden control sends nothing ⟨priority: high — the console was confidently wrong on the plant's two busiest rows⟩ — FILED 2026-09-16 by `PASSES-CYCLE-ONLY-26` Part A, building in `openspec/changes/timing-pass-control/` §7
+
+**What:** The Inspector's Timing section offers the pass count and the between-pass gap only for
+a template whose stated `mode` is `loop-cycle`. `manual`, `auto-out` and `static` never show them
+— whatever loops INSIDE the graphic. The `hold` does not decide: `loop-cycle` + `timed` and
+`loop-cycle` + `content-driven` both keep them. A row whose controls are hidden sends no stored
+override and no draft, on a take or an `Update`.
+
+**Why (owner, 2026-09-16):** on the news ticker `نوار خبر (روی آنتن)` the section read
+`Auto-out` / `Content-driven` and still showed `Until stop` / `Count`, a gap box and
+`Default (∞)`. Changing them did nothing he could see.
+
+**Measured on the stored records, re-verified at HEAD:**
+
+- `c44d061f…` — the root is `auto-out` / `content-driven`; its ticker `crawl` has `repeat: 2`, so
+  the graphic ends by itself after two crawl passes. The root nests `live-dot` →
+  `comp-ticker-pulse` («چشمک»): `loop-cycle`, `holdMs: 0`, `repeat: 'infinite'`. **A blinking
+  dot.**
+- `templateTimingOf` takes `loop` from the first reachable `loop-cycle` instance when the root is
+  not one, so the published block was `{auto-out, content-driven, loops: true, repeat: infinite}`
+  — the loop fields are the DOT's.
+- `applyPassTiming` walks every scope and `setRemainingPasses` returns early on a non-cyclic one,
+  so **`Count 2` made the dot blink twice and vanish**, and `Default (∞)` stated the dot's count
+  on a graphic that ends after two crawl passes.
+- `4ccad4c4…` (same name, older import, root `manual`, crawl infinite) has the same dot and showed
+  the same controls under `Manual`.
+
+**The defect class, stated plainly:** a control that names another scope's number and silently
+steers a decoration is worse than no control. It is the console being confidently wrong, which is
+the one thing an operator cannot defend against — the same standard [[B-143]]'s `assumed` and
+[[R-063]]'s DECLARED / APPLIED / UNCONFIRMED doctrine are held to.
+
+**Acceptance:**
+
+- WHEN the stated mode is `loop-cycle` THEN the pass control and the gap control are offered,
+  whatever the hold source
+- WHEN the stated mode is `manual`, `auto-out` or `static` THEN neither is offered, even where a
+  nested scope in the same template loops, and no authored default count is stated
+- WHEN a row whose controls are hidden is taken or updated THEN no `__cg.timing` reaches the page
+- WHEN a count was stored while the controls were visible THEN it is NOT migrated or deleted —
+  only the wire is gated, so a template re-authored as a loop still honours the operator's number
+
+**Notes:** ONE predicate, `templateAdmitsPassTiming` (`@cg/shared-ipc`), with three consumers —
+the Inspector's render gate, the console's press/PVW builder (`timingToSend.ts`), and the bridge's
+wire gate. Three machines, one spelling (golden rule 6). — THE WRAPPER CASE was established and
+deliberately NOT excepted: exporting a starter at its default `entryCompositionId` publishes the
+wrapper's `manual` with a loop taken from the graphic inside it, so `logo-bug` @ `comp-logo-bug`
+reads `Manual` with no pass controls. The owner decides whether that wants an exception; the
+plant's own logo is exported at `comp-logo-mark` and is unaffected. — The Designer ALREADY gated
+its own `repeat` control on `mode === 'loop-cycle'`, so the console was the only inconsistent
+surface. — NO RE-IMPORT is owed: nothing here touches the page runtime or the import metadata.
+— Cross-refs [[R-065]] (Part B — PVW plays the count), [[C-036]] (the latent nested-loop reach),
+[[C-034]] (the re-import tax), [[R-063]] (the honesty doctrine).
+
+- **Number:** `R-064`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] R-064" -- docs` returned nothing, against a positive
+  control on the same regex for `R-063` which returned `runtime.md:3703`.

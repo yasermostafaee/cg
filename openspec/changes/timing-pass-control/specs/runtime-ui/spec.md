@@ -4,26 +4,45 @@
 
 ### Requirement: The Inspector states a row's timing and offers the operator's half of it
 
-The Inspector SHALL present a Timing section for a selected row whose template carries
-timing metadata. The section SHALL state `mode` and `hold` as non-interactive FACTS, and
-SHALL offer controls for the pass count and the gap between passes ONLY where the
-template actually loops — a count and a gap mean nothing where there is only ever one
-pass, and a control that can only no-op is worse than no control.
+The Inspector SHALL present a Timing section for a selected row whose template carries timing metadata.
+
+The section SHALL state `mode` and `hold` as non-interactive FACTS, and SHALL offer controls for
+the pass count and the gap between passes ONLY where the MODE IT STATES is `loop-cycle`.
+
+⚠ **AMENDED 2026-09-16 (owner) — this used to read "only where the template actually loops",
+meaning the derived `loops` bit, and that was wrong on the plant.** `loops` answers "does ANY
+scope in this template repeat", and the honest answer is often "yes, a decoration does". On the
+news ticker the section stated `Auto-out` / `Content-driven` while offering a count that reached
+only a nested blinking dot, so the operator changed the numbers and nothing he could see
+happened. A control that steers another scope is worse than no control.
+
+The HOLD SHALL NOT decide: `loop-cycle` with a timed hold and `loop-cycle` with a content-driven
+hold both keep the controls.
 
 The facts SHALL be stated in the short form, with any longer wording reachable only from
 the element's `title`.
 
-#### Scenario: A looping template gets facts and controls
+#### Scenario: A loop-cycle template gets facts and controls
 
-- **WHEN** the operator selects a row whose template loops
+- **WHEN** the operator selects a row whose template states mode `loop-cycle`
 - **THEN** the section states the mode and the hold source, and offers a pass control
   and a gap control
 
-#### Scenario: A non-looping template gets facts and no pass controls
+#### Scenario: The hold source does not decide
 
-- **WHEN** the operator selects a row whose template does not loop
+- **WHEN** the stated mode is `loop-cycle` and the hold source is content-driven
+- **THEN** the pass control and the gap control are still offered
+
+#### Scenario: A manual, auto-out or static template gets facts and no pass controls
+
+- **WHEN** the operator selects a row whose stated mode is `manual`, `auto-out` or `static`
 - **THEN** the section states the mode and the hold source, and offers neither a pass
   control nor a gap control
+
+#### Scenario: Something looping INSIDE a non-looping graphic changes nothing
+
+- **WHEN** the row's stated mode is not `loop-cycle` and a nested scope in the same template does loop
+- **THEN** no pass control and no gap control are offered, and no authored default count is stated
 
 ### Requirement: The pass control states which reading it is in
 

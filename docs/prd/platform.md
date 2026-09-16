@@ -3240,3 +3240,54 @@ not to repair.
   `git grep -n --untracked -E "^## \[.\] P-048" -- docs` returned nothing, against a positive
   control on the same regex for `P-047` which returned `platform.md:3142`. The registry's dated
   pointer independently reads `P-047` as the last taken.
+
+## [ ] P-049 — three `pre*` hooks regenerate ONE file concurrently under the gate, and the rename loses: `EPERM` reds a landing gate on unrelated work ⟨priority: medium — same cost as [[P-047]]: a red gate on a diff that cannot have caused it⟩ — FILED 2026-09-16 by `PASSES-CYCLE-ONLY-26`
+
+**What.** A `pnpm gate` came back `92 successful, 93 total` with `@cg/single-file-export#typecheck`
+failing before `tsc` ever ran:
+
+```
+$ node ./scripts/bundle-runtime.mjs
+Error: EPERM: operation not permitted, rename
+  '…/src/generated/cg-runtime-bundles.ts.tmp-6416' -> '…/src/generated/cg-runtime-bundles.ts'
+  at async .../scripts/bundle-runtime.mjs:138  { errno: -4048, code: 'EPERM', syscall: 'rename' }
+```
+
+Re-run immediately afterwards on **the identical tree, with nothing changed**: `exit 0`,
+`93 successful, 93 total`.
+
+**Why it happens.** `@cg/single-file-export` declares `prebuild`, `pretypecheck` AND `pretest`,
+and all three run the same `bundle-runtime.mjs`, which writes `cg-runtime-bundles.ts` via a
+temp file and a rename. Under the gate those tasks are co-scheduled, so two generators race for
+one path — and on Windows a rename over a file another process still holds open is `EPERM`, not
+a silent overwrite. The write-to-temp-then-rename is otherwise exactly right; what is missing is
+that the three callers are not serialised against each other.
+
+**Why it is filed rather than shrugged at.** It is [[P-047]]'s argument applied to a different
+mechanism: a landing gate goes red on a diff that cannot have caused it, and the honest response
+— re-run, confirm, push — costs five minutes and looks like ignoring a red. It is also NOT a
+contention flake in the [[B-098]] sense (no timing bound, no CPU starvation): it is two writers
+and one path, so it is fixable rather than merely rare.
+
+**Acceptance:**
+
+- WHEN two of the three `pre*` hooks run concurrently THEN the generated file is written once and
+  neither task fails
+- WHEN the generated artifact is already current THEN regenerating is a no-op rather than a
+  rewrite — a rename that never happens cannot race
+- ⚠ NOT answered by a retry loop around the rename, and NOT by dropping one of the hooks without
+  checking what it guarantees: `pretest`/`pretypecheck` exist so a stale bundle cannot be tested
+  or typechecked, which is the [[P-034]]/turbo-inputs family this repo has already paid for
+
+**Notes:** Observed once, on 2026-09-16, during `PASSES-CYCLE-ONLY-26` Part A's gate. Recorded
+with its full error and its clean re-run so a second occurrence has something to join rather than
+looking like a first. — The likely shapes of a fix: make the generator CONTENT-ADDRESSED (write
+only when the bytes differ), or give the three hooks one lock the way `P-013` gave the gate one.
+Both are small; which is right depends on whether a stale-bundle guarantee has to survive a
+concurrent writer at all. — Cross-refs [[P-047]] (the same cost, a different mechanism),
+[[P-013]] (the host gate lock — the precedent for serialising one chokepoint), [[P-034]] (why the
+`pre*` hooks exist at all).
+
+- **Number:** `P-049`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] P-049" -- docs` returned nothing, against a positive
+  control on the same regex for `P-048` which returned `platform.md:3186`.

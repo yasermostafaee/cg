@@ -1,4 +1,6 @@
 import type { FieldValue, FieldValues, StackItemState } from '@cg/shared-schema';
+import type { TemplateInfo } from '@cg/shared-ipc';
+import { timingPatchToSend } from './timingToSend.js';
 import { reportCommandError } from '../status/commandFeedback.js';
 import { errorCodeMessage } from '../../ui/errorCodeMessage.js';
 import { commitSourceAssignments, currentSourceAssignments } from '../sources/sourceStore.js';
@@ -22,9 +24,7 @@ import {
   snapshotLookBindingDraft,
   snapshotPlateDraft,
   stageField,
-  timingDelayMsOf,
   timingDraftOf,
-  timingPassesOf,
   type FieldPath,
 } from './draftStore.js';
 
@@ -40,6 +40,14 @@ import {
  */
 export function applyDraft(
   item: StackItemState,
+  /**
+   * 🔴 `PASSES-CYCLE-ONLY-26` §A1.2 — the TEMPLATE's playout, because what timing a press may
+   * send depends on it. Threaded rather than looked up here: this module is deliberately free
+   * of stores it does not own, and the caller already holds the template index.
+   *
+   * `undefined` is a real answer — an old import states no mode — and admits no timing.
+   */
+  playout?: TemplateInfo['playout'] | undefined,
 ): Promise<{ accepted: boolean; errorCode?: string | undefined }> {
   const sent = snapshotDraft(item.itemId);
   const plates = snapshotPlateDraft(item.itemId);
@@ -103,7 +111,7 @@ export function applyDraft(
     `__cg` itself — a reserved key the BRIDGE owns and strips — and would make one wire message
     answer to two owners. No wire, no IPC schema and no payload shape moved for B4.
   */
-  const timing = (): Promise<boolean> => sendTiming(item);
+  const timing = (): Promise<boolean> => sendTiming(item, playout);
   /*
     PLATES FIRST, and it is not arbitrary: the assignment reaches NOTHING on air (it is read at
     the next take), while `stack.update` reaches the graphic on the channel now. Doing the
@@ -151,23 +159,27 @@ export function applyDraft(
  * carries no `passes` member at all — it is not rewritten to a number, and it does not fail the
  * press. What refuses bad text with a reason is the CONTROL, at the moment it is typed.
  */
-function sendTiming(item: StackItemState): Promise<boolean> {
+function sendTiming(
+  item: StackItemState,
+  playout: TemplateInfo['playout'] | undefined,
+): Promise<boolean> {
   const draft = timingDraftOf(item.itemId);
   if (draft === undefined) return Promise.resolve(true);
-  const passes = timingPassesOf(draft);
-  const delayMs = timingDelayMsOf(draft);
-  const applied = item.timingOverride;
-  const patch = {
-    ...(passes !== undefined && passes !== applied?.repeat && { passes }),
-    ...(delayMs !== undefined && delayMs !== applied?.delayMs && { delayMs }),
-  };
   /*
-    Nothing that differs from what is applied ⇒ nothing to send, and the draft is dropped
-    because it has become a restatement of the truth rather than an edit. Leaving it staged
-    would keep a dirty chip up over a row with nothing outstanding — the panel disagreeing with
-    itself, which is the defect the chip exists to prevent.
+    🔴 `PASSES-CYCLE-ONLY-26` §A1.2 — **THE DIFF COMES FROM THE ONE BUILDER, GATE AND ALL.**
+
+    It used to be computed inline here. It moved to `timingToSend.ts` because PVW needs the
+    same decision (`effectiveTimingFor` is its sibling, behind the same gate), and two places
+    deciding what timing may leave this console is the shape this tree keeps paying for.
+
+    `undefined` now covers BOTH "nothing differs from what is applied" and "this template does
+    not admit pass timing at all", and the draft is dropped either way: in the first case it has
+    become a restatement of the truth rather than an edit, and in the second it is a value the
+    operator can no longer see or change. Leaving either staged would keep a dirty chip up over
+    a row with nothing outstanding — the panel disagreeing with itself.
   */
-  if (patch.passes === undefined && patch.delayMs === undefined) {
+  const patch = timingPatchToSend(playout, item);
+  if (patch === undefined) {
     clearTimingDraft(item.itemId);
     return Promise.resolve(true);
   }

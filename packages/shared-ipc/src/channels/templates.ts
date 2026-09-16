@@ -328,13 +328,17 @@ export const TemplateInfoSchema = z.object({
       holdSource: z.string().optional(),
       holdMs: z.number().optional(),
       /**
-       * 🔴 Does ANY scope in this template loop? The pass controls are offered on this and
-       * nothing else.
+       * Does ANY scope in this template loop? Derived by `templateTimingOf`, which finds the
+       * first reachable `loop-cycle` scope.
        *
-       * It is a separate bit from `repeat` because the two answer different questions, and
-       * conflating them is how the control disappears on the templates that need it most: a
-       * scope can be `loop-cycle` with NO authored `repeat` (the common case — the Designer
-       * never wrote one before today), so `repeat === undefined` cannot mean "does not loop".
+       * 🔴 **IT IS NOT WHAT THE PASS CONTROLS ARE OFFERED ON — see
+       * {@link templateAdmitsPassTiming} (owner, 2026-09-16).** It used to be, on the reasoning
+       * that the repeating scope is often a nested instance below a non-looping root. The
+       * reasoning was true; the conclusion was wrong, because that nested scope is usually not
+       * the graphic. On the plant's news ticker it is a BLINKING DOT.
+       *
+       * It stays on the record because it is a true derived fact and other readers may want it.
+       * What changed is who decides the controls.
        */
       loops: z.boolean().optional(),
       /** The looping scope's AUTHORED count and gap — what an override inherits from. */
@@ -632,3 +636,38 @@ export const TemplatesChangedChannel = definePublishChannel(
   'templates.changed',
   z.array(TemplateInfoSchema),
 );
+
+/**
+ * 🔴 `PASSES-CYCLE-ONLY-26` (owner, 2026-09-16) — **DOES THIS TEMPLATE GET PASS CONTROLS?**
+ *
+ * ── THE RULE ──────────────────────────────────────────────────────────────────────────────
+ *
+ * The pass count and the between-pass gap exist ONLY when the Mode the console STATES is
+ * `loop-cycle`. `manual`, `auto-out` and `static` never get them — whatever loops inside the
+ * graphic. The HOLD does not decide: `loop-cycle` + `timed` and `loop-cycle` + `content-driven`
+ * both keep them.
+ *
+ * ── WHY IT IS NOT `playout.loops` ─────────────────────────────────────────────────────────
+ *
+ * `loops` answers "does ANY scope in this template repeat", and the honest answer is often
+ * "yes, a decoration does". On the plant's news ticker `نوار خبر (روی آنتن)` the root is
+ * `auto-out` / `content-driven` with a crawl of `repeat: 2`, and the only `loop-cycle` scope is
+ * a nested «چشمک» — a blinking dot at `holdMs: 0`, `repeat: 'infinite'`. So the section stated
+ * the DOT's `Default (∞)` over a graphic that ends after two crawl passes, and `Count 2` made
+ * the dot blink twice and vanish. The operator changed the numbers and nothing he could see
+ * happened.
+ *
+ * A control that steers another scope is worse than no control: the console is confidently
+ * wrong, which is the one thing an operator cannot defend against.
+ *
+ * ⚠ **ONE SPELLING, THREE CONSUMERS**, which is why this lives here rather than in the console:
+ * the Inspector decides whether to SHOW them, the console's press/PVW builder decides whether to
+ * SEND them, and the bridge decides whether to ATTACH a stored one to `__cg`. Three machines
+ * would otherwise each carry their own copy of the rule (golden rule 6).
+ *
+ * ⚠ An ABSENT `playout` is not admitted. A record from a build that predates the block says
+ * nothing about its mode, and the console already asks for a re-import in that case.
+ */
+export function templateAdmitsPassTiming(playout: TemplateInfo['playout'] | undefined): boolean {
+  return playout?.mode === 'loop-cycle';
+}

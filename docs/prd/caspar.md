@@ -2317,3 +2317,44 @@ same honesty gap one step earlier), [[C-003]] (on-air per-child timing override)
   registry's standing warning: `git grep -n --untracked -E "^## \[.\] C-035" -- docs` returned
   nothing, against a positive control on the same regex for `C-034` which returned
   `caspar.md:2189`. The registry's dated pointer independently reads `C-035`.
+
+## [ ] C-036 — a pass count set on a looping graphic would also re-time a loop NESTED inside it; no template has that shape today ⟨priority: low — latent, and unreachable by any template in the tree or on the plant⟩ — FILED 2026-09-16 by `PASSES-CYCLE-ONLY-26` §A1.4
+
+**What:** `applyPassTiming` (`packages/template-runtime/src/runtime.ts`) walks the whole scope
+tree and calls `setRemainingPasses` on every controller. `setRemainingPasses` returns early for a
+non-cyclic scope, so today the count reaches exactly the cyclic ones. Where the ROOT is
+`loop-cycle` AND a nested instance is also `loop-cycle`, the operator's count would be applied to
+BOTH — the graphic's own passes and an inner decoration's — when only the root's is the number
+the console named.
+
+**Why it is filed and not fixed:** §A1.4 authorised the page-side fix only if such a template
+exists. **None does.** Measured 2026-09-16:
+
+- the five bundled starters, scoped to EVERY one of their compositions through the real export
+  path (`scopeSceneToComposition`): the only scopes that resolve to `loop-cycle` are
+  `comp-logo-mark` and `comp-ticker-pulse`, and each has `compositions: []` after scoping — no
+  nested instance at all;
+- the six records stored on the plant (`~/.cg-runtime/bridge-templates/`): the one `loop-cycle`
+  root is `آرم (روی آنتن)` (`1280f613`), decoded to `layers: 1, comps: 0`.
+
+A page-runtime change would force a re-import of every template ([[C-034]]), which is a real cost
+to pay for a shape nothing has.
+
+**Acceptance:**
+
+- WHEN a template exists whose root is `loop-cycle` and which nests a `loop-cycle` instance THEN
+  `applyPassTiming` applies the operator's count to the ROOT's loop only
+- WHEN that fix lands THEN it is flagged as forcing a re-import, in the commit and to the owner
+
+**Notes:** The complement of [[R-064]], which removed the controls from templates whose only loop
+is a nested decoration — the two together say "the count belongs to the graphic the console
+names". — The reach is `applyPassTiming`'s `visit(rootNode)` recursion; a fix would stop at the
+root rather than descend, and would need to keep `setDelayMs`'s reach honest in the same breath
+(the gap has the identical shape). — WHY NOT JUST DO IT: a page-runtime change is only delivered
+by re-importing every template, and until [[C-034]] is built that is a manual step the owner pays
+per template. — Cross-refs [[R-064]], [[C-034]], [[C-035]].
+
+- **Number:** `C-036`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] C-036" -- docs` returned nothing, against a positive
+  control on the same regex for `C-035` which returned `caspar.md:2282`. The registry's dated
+  pointer independently reads `C-036`.

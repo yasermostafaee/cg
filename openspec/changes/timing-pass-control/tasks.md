@@ -117,6 +117,43 @@ descendant and the ancestry was verified, not assumed.
       SKIPPED (`P-029`); read the job, and if it skipped, this row is discharged by the
       next code push's whole-tree run rather than by this one.
 
+## 7. `PASSES-CYCLE-ONLY-26` Part A — the controls follow the STATED mode (`R-064`)
+
+The owner, 2026-09-16, on the news ticker `نوار خبر (روی آنتن)`: the section reads
+`Auto-out` / `Content-driven` and still shows `Until stop` / `Count`, a gap box and
+`Default (∞)`. Changing them does nothing he can see.
+
+- [x] 7.1 DIAGNOSIS re-verified at HEAD on the two stored ticker records. `c44d061f`: root
+      `auto-out`/`content-driven`, crawl `repeat: 2`, and the ONLY `loop-cycle` scope is a nested
+      «چشمک» — `holdMs: 0`, `repeat: 'infinite'`. `4ccad4c4` (older): root `manual`, same dot.
+      `setRemainingPasses` returns early on a non-cyclic scope, so the count reached the DOT alone
+- [x] 7.2 `templateAdmitsPassTiming` — ONE predicate in `@cg/shared-ipc`, three consumers
+- [x] 7.3 The Inspector shows the controls on it, not on `loops`; both comments rewritten
+- [x] 7.4 `timingToSend.ts` — the one place that decides what timing leaves the console, behind
+      that gate. `timingPatchToSend` for a press, `effectiveTimingFor` for PVW (Part B)
+- [x] 7.5 The bridge gates the WIRE, never the record: no stored count rides a take or a
+      mid-air update for a template that does not admit it. No silent migration
+- [x] 7.6 RED FIRST: the visibility matrix, and a stored count on the ticker row sending no
+      `__cg.timing`
+- [x] 7.7 Three fixtures corrected from "no `playout`" / "`manual` + `loops`" to a real
+      `loop-cycle` template — they were exercising the refusal while claiming to exercise the road
+- [ ] Gate green · commit `________` · e2e run `________`
+
+### What §A0 established and did NOT change
+
+- **The WRAPPER case reaches the Runtime** (§A0.2). Exporting at the default
+  `entryCompositionId` scopes the ENTRY composition to the root and keeps its closure, so
+  `logo-bug` @ `comp-logo-bug` publishes `manual` + a loop taken from `comp-logo-mark`. Under the
+  owner's rule that template reads `Manual` with no pass controls. **No exception was built** —
+  the owner decides. The other starters are unaffected (their loops are decorations or absent),
+  and the plant's own logo is exported at `comp-logo-mark`, so it still reads `Loop cycle`.
+- **No template has a loop INSIDE a looping root** (§A0.3) — not in the five bundled starters at
+  any scope, not in the six stored records. So `applyPassTiming` was left alone and the latent
+  concern is filed as `C-036`. **No re-import is owed by Part A.**
+- **The Designer already gates its own `repeat` control on `mode === 'loop-cycle'`**
+  (`PlayoutSection.tsx`), so it was already consistent with the rule; the console was the odd
+  surface out.
+
 ## 5. Still open
 
 - [ ] 🔴 **THE PLANT WALKTHROUGH — A REAL SERVER IS STILL OWED.** Everything is proven

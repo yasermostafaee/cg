@@ -34,6 +34,39 @@ on this surface with those spellings.
 - **WHEN** a timing set names a row that is not on the stack
 - **THEN** it is refused with the existing unknown-item reason and records nothing
 
+### Requirement: Pass timing reaches the page only for a template that admits it
+
+The bridge SHALL attach a row's stored pass timing to the page ONLY when the row's template states mode `loop-cycle`.
+
+⚠ **ADDED 2026-09-16 (owner).** The console stopped offering the controls for any other mode on
+the same date, but that alone does not make the rule true of AIR: a count set while the controls
+WERE visible is still recorded, and every take attaches whatever is recorded. The plant's news
+ticker would go on receiving a count for its blinking dot, invisibly, with no surface left to
+explain it.
+
+The RECORD SHALL NOT be migrated or deleted. The stored value stays where the operator put it —
+if the template is ever re-authored as a looping graphic, their number is still theirs. What the
+rule gates is the wire.
+
+A set for a template that does not admit pass timing SHALL still be ACCEPTED and recorded and
+SHALL still write its audit row. It SHALL NOT be refused: a refusal sentence for a control the
+operator can no longer see explains nothing.
+
+#### Scenario: A stored count on a non-looping template does not ride the take
+
+- **WHEN** a row whose template states `auto-out` has a recorded pass count and is taken
+- **THEN** the load payload carries no timing member, and still carries the take token
+
+#### Scenario: A stored count on a non-looping template does not cross mid-air
+
+- **WHEN** a pass timing is set on an on-air row whose template states `auto-out`
+- **THEN** no mid-air update carrying timing is sent, the set is accepted, and it is recorded
+
+#### Scenario: A looping template is unaffected
+
+- **WHEN** a pass timing is set on an on-air row whose template states `loop-cycle`
+- **THEN** exactly one mid-air update carrying the timing crosses to the page
+
 ### Requirement: A refused timing set records nothing
 
 The bridge SHALL write the row's stored timing ONLY after a send it accepted. A recorded

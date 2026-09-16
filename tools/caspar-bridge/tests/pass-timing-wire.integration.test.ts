@@ -2,10 +2,10 @@ import * as dgram from 'node:dgram';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import type { ConnectionConfig, TemplateInfo } from '@cg/shared-ipc';
-import { readCgControl } from '@cg/shared-schema';
+import { readCgControl, TEMPLATE_TIMING_VERSION } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { awaitChannelModeRead, HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
 
@@ -67,9 +67,41 @@ function singleServer(amcpPort: number, oscPort: number): ConnectionConfig {
   };
 }
 
-/** A plain template with no live sources — the timing road is orthogonal to plates. */
+/**
+ * A plain template with no live sources — the timing road is orthogonal to plates.
+ *
+ * 🔴 `PASSES-CYCLE-ONLY-26` — **it now DECLARES `loop-cycle`, and that is not decoration.**
+ * Pass timing reaches the wire only for a template whose stated mode is `loop-cycle`
+ * (`templateAdmitsPassTiming`), so a fixture with no `playout` at all would exercise the
+ * REFUSAL while claiming to exercise the road. Every case below is about a template that
+ * genuinely loops; the fixture now says so.
+ */
 function template(): TemplateInfo {
-  return { templateId: 'looper', templateType: 'looper', fields: [] } satisfies TemplateInfo;
+  return {
+    templateId: 'looper',
+    templateType: 'looper',
+    fields: [],
+    playout: { v: TEMPLATE_TIMING_VERSION, mode: 'loop-cycle', holdSource: 'timed', loops: true },
+  } satisfies TemplateInfo;
+}
+
+/**
+ * The plant's news ticker: `auto-out` / `content-driven`, whose only `loop-cycle` scope is a
+ * nested blinking dot — so `loops` is true and the graphic itself does not repeat.
+ */
+function tickerTemplate(): TemplateInfo {
+  return {
+    templateId: 'ticker',
+    templateType: 'ticker',
+    fields: [],
+    playout: {
+      v: TEMPLATE_TIMING_VERSION,
+      mode: 'auto-out',
+      holdSource: 'content-driven',
+      loops: true,
+      repeat: 'infinite',
+    },
+  } satisfies TemplateInfo;
 }
 
 async function boot(): Promise<CasparRuntime> {
@@ -89,6 +121,7 @@ async function boot(): Promise<CasparRuntime> {
   r.start();
   await r.startServing();
   r.templateImport(template(), '<!doctype html><html></html>');
+  r.templateImport(tickerTemplate(), '<!doctype html><html></html>');
   await r.whenServerHealthy(HEALTH_MS);
   // A negative observation is only valid from a proven-quiescent wire (flake family 3).
   await awaitChannelModeRead(r);
@@ -127,6 +160,84 @@ async function onAir(r: CasparRuntime, itemId = 'item-1'): Promise<void> {
   await r.load(itemId, 'looper', {});
   expect((await r.take(itemId)).accepted).toBe(true);
 }
+
+/** The `__cg` control object of the LAST `CG … ADD` in a trace slice, or undefined. */
+function lastAddControl(lines: readonly string[]): Record<string, unknown> | undefined {
+  const add = [...lines].reverse().find((l) => /CG \d+-\d+ ADD /.test(l));
+  if (add === undefined) return undefined;
+  const quoted = /"((?:[^"\\]|\\.)*)"\s*$/.exec(add.trim());
+  if (quoted?.[1] === undefined) return undefined;
+  const json = quoted[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  try {
+    return readCgControl(JSON.parse(json) as unknown) as unknown as Record<string, unknown>;
+  } catch {
+    return undefined;
+  }
+}
+
+describe('🔴 PASSES-CYCLE-ONLY-26 — no hidden state reaches air', () => {
+  /*
+    ── THE RULE, AT THE WIRE ─────────────────────────────────────────────────────────────────
+
+    The console now shows the pass controls only under mode `loop-cycle`. That alone does not
+    make the rule true of AIR: a count set while the controls WERE visible is still recorded in
+    `#passTimings`, and `#sendAdd` attaches whatever is there to every take. So the plant's
+    ticker would go on receiving a count for its blinking dot — invisibly, with no surface left
+    to explain it.
+
+    ⚠ **Recording is NOT touched — "no silent migration of stored data".** The value stays in
+    the record; what changes is that it no longer reaches the page. The distinction matters: if
+    the template is ever re-authored as a `loop-cycle` graphic, the operator's number is still
+    theirs.
+  */
+  it('a stored count on the TICKER row sends no __cg.timing on a take', async () => {
+    const r = await boot();
+    await r.load('tick-1', 'ticker', {});
+    expect((await r.take('tick-1')).accepted).toBe(true);
+    // Recorded — exactly as a count set while the controls were visible would be.
+    expect((await r.setPassTiming('tick-1', { passes: 2 })).ok).toBe(true);
+
+    // A fresh build: out, then take again, so the take re-ADDs and composes a payload.
+    expect((await r.out('tick-1')).accepted).toBe(true);
+    const before = (await recvLines()).length;
+    expect((await r.take('tick-1')).accepted).toBe(true);
+
+    const control = lastAddControl(await since(before));
+    expect(control, 'no ADD was sent — nothing below is measured').toBeDefined();
+    expect(
+      control?.['timing'],
+      "the ticker's ADD carried a count for its blinking dot",
+    ).toBeUndefined();
+    // The token still rides — this gate is about timing only.
+    expect(control?.['take'], 'the gate took the take token with it').toBeDefined();
+  });
+
+  it('a stored count on the TICKER row sends no CG UPDATE carrying timing', async () => {
+    const r = await boot();
+    await r.load('tick-1', 'ticker', {});
+    expect((await r.take('tick-1')).accepted).toBe(true);
+    const before = (await recvLines()).length;
+
+    const res = await r.setPassTiming('tick-1', { passes: 2 });
+
+    // It is RECORDED and not refused — the verb keeps its contract and its audit row.
+    expect(res.ok, 'the set was refused rather than simply not sent').toBe(true);
+    const control = lastControl(await since(before));
+    expect(control?.['timing'], 'the count crossed to the ticker page').toBeUndefined();
+  });
+
+  it('the LOOPER row is unaffected — its count still reaches the page', async () => {
+    // The positive control. Without it "no timing on the wire" is satisfied by a gate that
+    // blocks everything, and the two cases above would pass over a dead feature.
+    const r = await boot();
+    await onAir(r);
+    const before = (await recvLines()).length;
+
+    expect((await r.setPassTiming('item-1', { passes: 2 })).ok).toBe(true);
+
+    expect(lastControl(await since(before))?.['timing']).toEqual({ passes: 2 });
+  });
+});
 
 it('(c) an on-air set sends a CG UPDATE carrying the count, and records it', async () => {
   const r = await boot();

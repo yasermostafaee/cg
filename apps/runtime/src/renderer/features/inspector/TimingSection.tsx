@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { TemplateInfo } from '@cg/shared-ipc';
+import { templateAdmitsPassTiming, type TemplateInfo } from '@cg/shared-ipc';
 import { TEMPLATE_TIMING_VERSION, type StackItemState } from '@cg/shared-schema';
 import { colors } from '../../theme.js';
 import { Tag } from '../../ui/Tag.js';
@@ -87,11 +87,20 @@ export function TimingSection({
 
   const onAir = isOnAir(item);
   /*
-    `loops` is the TEMPLATE's bit, not `mode === 'loop-cycle'`: the row's mode is the root's,
-    and the scope that repeats is often a nested instance below it. Deriving it from `mode`
-    would hide the pass controls on exactly the templates that loop.
+    🔴 `PASSES-CYCLE-ONLY-26` (owner, 2026-09-16) — **THE CONTROLS FOLLOW THE MODE THIS SECTION
+    STATES, and nothing else.**
+
+    This read `playout.loops === true` — "does ANY scope in this template repeat" — on the
+    reasoning that the repeating scope is often a nested instance below a non-looping root, so
+    deriving it from `mode` would hide the controls on the templates that loop. That reasoning
+    was TRUE and its conclusion was wrong: the nested scope that loops is usually not the
+    graphic. On the plant's news ticker it is a blinking dot, so this section read
+    `Auto-out / Content-driven` and offered a count that reached only the dot.
+
+    The rule and the measurement are in {@link templateAdmitsPassTiming}; this is one of its
+    three consumers and must not re-derive it.
   */
-  const loops = playout.loops === true;
+  const admitsPassTiming = templateAdmitsPassTiming(playout);
 
   return (
     <div className="cg-inspector-section">
@@ -120,7 +129,7 @@ export function TimingSection({
         </div>
       )}
 
-      {loops && (
+      {admitsPassTiming && (
         <>
           <PassesControl item={item} onAir={onAir} authored={playout.repeat} />
           <DelayControl item={item} authored={playout.delayMs} />

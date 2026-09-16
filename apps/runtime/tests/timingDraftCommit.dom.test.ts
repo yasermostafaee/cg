@@ -1,6 +1,7 @@
 /** @vitest-environment jsdom */
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import type { StackItemState } from '@cg/shared-schema';
+import { TEMPLATE_TIMING_VERSION, type StackItemState } from '@cg/shared-schema';
+import type { TemplateInfo } from '@cg/shared-ipc';
 import { applyDraft } from '../src/renderer/features/inspector/applyDraft.js';
 import {
   __resetDraftsForTest,
@@ -38,6 +39,24 @@ import {
  * lines. What this file pins is the half it owns: the call is still MADE off air, so the next
  * take carries the count.
  */
+
+/**
+ * 🔴 `PASSES-CYCLE-ONLY-26` (owner, 2026-09-16) — every case in this file is about a LOOPING
+ * template, which since that item is the only kind whose pass timing a press may send at all.
+ *
+ * The fixture now SAYS so instead of leaving `playout` absent. A template that states no mode
+ * admits no timing, so an absent block would exercise the REFUSAL while claiming to exercise the
+ * press — green for the wrong reason, which is the worst kind.
+ */
+const LOOP_CYCLE = {
+  v: TEMPLATE_TIMING_VERSION,
+  mode: 'loop-cycle',
+  holdSource: 'timed',
+  loops: true,
+} as TemplateInfo['playout'];
+
+/** `applyDraft` for a looping row — the second argument is the same for every case here. */
+const applyLoop = (it: StackItemState): ReturnType<typeof applyDraft> => applyDraft(it, LOOP_CYCLE);
 
 const item = (over: Partial<StackItemState> = {}): StackItemState =>
   ({
@@ -92,7 +111,7 @@ describe('🔴 DELTA B4 — UPDATE spends the timing draft, exactly once', () =>
     const subject = item({ status: 'on-air' });
     stageTiming('item-1', { passes: { kind: 'count', text: '3' } });
 
-    await applyDraft(subject);
+    await applyLoop(subject);
 
     expect(setPassTiming).toHaveBeenCalledTimes(1);
     expect(setPassTiming).toHaveBeenCalledWith({ itemId: 'item-1', passes: 3 });
@@ -105,7 +124,7 @@ describe('🔴 DELTA B4 — UPDATE spends the timing draft, exactly once', () =>
     stageTiming('item-1', { passes: { kind: 'count', text: '2' } });
     stageTiming('item-1', { gapSeconds: '1.5' });
 
-    await applyDraft(item({ status: 'on-air' }));
+    await applyLoop(item({ status: 'on-air' }));
 
     expect(setPassTiming).toHaveBeenCalledTimes(1);
     expect(setPassTiming).toHaveBeenCalledWith({ itemId: 'item-1', passes: 2, delayMs: 1500 });
@@ -115,7 +134,7 @@ describe('🔴 DELTA B4 — UPDATE spends the timing draft, exactly once', () =>
     const { setPassTiming } = stubBridge();
     stageTiming('item-1', { passes: { kind: 'until-stop' } });
 
-    await applyDraft(item({ status: 'on-air', timingOverride: { repeat: 3 } }));
+    await applyLoop(item({ status: 'on-air', timingOverride: { repeat: 3 } }));
 
     expect(setPassTiming).toHaveBeenCalledWith({ itemId: 'item-1', passes: 'infinite' });
   });
@@ -126,7 +145,7 @@ describe('🔴 DELTA B4 — UPDATE spends the timing draft, exactly once', () =>
     const { setPassTiming } = stubBridge();
     stageTiming('item-1', { passes: { kind: 'count', text: '0' } });
 
-    await applyDraft(item({ status: 'on-air', timingOverride: { repeat: 5 } }));
+    await applyLoop(item({ status: 'on-air', timingOverride: { repeat: 5 } }));
 
     expect(setPassTiming).toHaveBeenCalledWith({ itemId: 'item-1', passes: 0 });
   });
@@ -137,11 +156,11 @@ describe('🔴 DELTA B4 — UPDATE spends the timing draft, exactly once', () =>
     // decide that itself and leave the intent unrecorded.
     const { setPassTiming } = stubBridge();
 
-    await applyDraft(item({ status: 'idle' }));
+    await applyLoop(item({ status: 'idle' }));
     expect(setPassTiming, 'nothing staged, so nothing to send').not.toHaveBeenCalled();
 
     stageTiming('item-1', { passes: { kind: 'count', text: '4' } });
-    await applyDraft(item({ status: 'idle' }));
+    await applyLoop(item({ status: 'idle' }));
     expect(setPassTiming).toHaveBeenCalledWith({ itemId: 'item-1', passes: 4 });
   });
 
@@ -150,7 +169,7 @@ describe('🔴 DELTA B4 — UPDATE spends the timing draft, exactly once', () =>
     // put a configuration command on the wire.
     const { setPassTiming, update } = stubBridge();
 
-    await applyDraft(item({ status: 'on-air' }));
+    await applyLoop(item({ status: 'on-air' }));
 
     expect(setPassTiming).not.toHaveBeenCalled();
     expect(update, 'the field half must still run').toHaveBeenCalledTimes(1);
@@ -162,7 +181,7 @@ describe('🔴 DELTA B4 — UPDATE spends the timing draft, exactly once', () =>
     const { setPassTiming } = stubBridge();
     stageTiming('item-1', { passes: { kind: 'count', text: '2' } });
 
-    await applyDraft(item({ status: 'on-air', timingOverride: { repeat: 2 } }));
+    await applyLoop(item({ status: 'on-air', timingOverride: { repeat: 2 } }));
 
     expect(setPassTiming).not.toHaveBeenCalled();
     expect(
@@ -178,7 +197,7 @@ describe('🔴 DELTA B4 — UPDATE spends the timing draft, exactly once', () =>
     stageTiming('item-1', { passes: { kind: 'count', text: 'tw' } });
     stageTiming('item-1', { gapSeconds: '2' });
 
-    const res = await applyDraft(item({ status: 'on-air' }));
+    const res = await applyLoop(item({ status: 'on-air' }));
 
     expect(setPassTiming).toHaveBeenCalledWith({ itemId: 'item-1', delayMs: 2000 });
     expect(res.accepted, 'unparseable text must not fail the whole press').toBe(true);
@@ -190,7 +209,7 @@ describe('🔴 DELTA B4 — acceptance clears the draft; a refusal keeps it', ()
     stubBridge({ ok: true });
     stageTiming('item-1', { passes: { kind: 'count', text: '3' } });
 
-    await applyDraft(item({ status: 'on-air' }));
+    await applyLoop(item({ status: 'on-air' }));
 
     expect(timingDraftOf('item-1')).toBeUndefined();
     expect(
@@ -208,7 +227,7 @@ describe('🔴 DELTA B4 — acceptance clears the draft; a refusal keeps it', ()
     stubBridge({ ok: false, message: 'CasparCG did not accept the timing change.' });
     stageTiming('item-1', { passes: { kind: 'count', text: '3' } });
 
-    const res = await applyDraft(item({ status: 'on-air' }));
+    const res = await applyLoop(item({ status: 'on-air' }));
 
     expect(timingDraftOf('item-1')?.passes).toEqual({ kind: 'count', text: '3' });
     expect(res.accepted, 'a refused half must drag the press down with it').toBe(false);
@@ -219,7 +238,7 @@ describe('🔴 DELTA B4 — acceptance clears the draft; a refusal keeps it', ()
     stubBridge({ ok: false, message: 'no' });
     stageTiming('item-1', { passes: { kind: 'count', text: '3' } });
 
-    await applyDraft(item({ status: 'on-air' }));
+    await applyLoop(item({ status: 'on-air' }));
 
     expect(lastSentPasses('item-1')).toBeUndefined();
   });
@@ -236,7 +255,7 @@ describe('🔴 DELTA B4 — acceptance clears the draft; a refusal keeps it', ()
     (globalThis as unknown as { window: { cg: typeof stub } }).window.cg = stub;
     stageTiming('item-1', { passes: { kind: 'count', text: '3' } });
 
-    const res = await applyDraft(item({ status: 'on-air' }));
+    const res = await applyLoop(item({ status: 'on-air' }));
 
     expect(errors[0]).toBe('link down');
     expect(timingDraftOf('item-1')).toBeDefined();
@@ -250,7 +269,7 @@ describe('🔴 DELTA B4 — DISCARD drops it with the rest', () => {
     stageTiming('item-1', { passes: { kind: 'count', text: '3' } });
 
     clearDraft('item-1');
-    await applyDraft(item({ status: 'on-air' }));
+    await applyLoop(item({ status: 'on-air' }));
 
     expect(timingDraftOf('item-1')).toBeUndefined();
     expect(setPassTiming, 'a discarded edit reached the wire').not.toHaveBeenCalled();
