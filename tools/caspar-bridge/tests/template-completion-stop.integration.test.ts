@@ -117,6 +117,14 @@ function report(url: string, take: string): Promise<number> {
   });
 }
 
+/** The whole JSON payload a single AMCP line carried, or undefined if it carried none. */
+function payloadOf(line: string): Record<string, unknown> | undefined {
+  const quoted = /"((?:[^"\\]|\\.)*)"\s*$/.exec(line);
+  if (quoted?.[1] === undefined) return undefined;
+  const json = quoted[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+  return JSON.parse(json) as Record<string, unknown>;
+}
+
 /** The `__cg` control object a single AMCP line carried, or undefined if it carried none. */
 function controlOf(line: string): ReturnType<typeof readCgControl> {
   const quoted = /"((?:[^"\\]|\\.)*)"\s*$/.exec(line);
@@ -332,6 +340,41 @@ describe('SELF-STOP-24 §2.3 — a completion report stops the row it names', ()
       ).toBeGreaterThan(0);
       expect(second, 'the resident take told the page no token').toMatch(/^[0-9a-f]{32}$/);
       expect(second, 'the re-take reused the finished run token').not.toBe(first);
+    },
+  );
+
+  it(
+    'the pre-PLAY tell carries ONLY __cg — no field data, and so no unsent draft',
+    { timeout: 60_000 },
+    async () => {
+      /*
+        🔴 `REPLY 1` §R1.1 — **WHAT THAT `CG UPDATE` ACTUALLY CARRIES, measured on the wire.**
+
+        `750b28ea` made this tell reach EVERY template, not just look-bearing ones, so the
+        question "does it also carry field data, and if so is it the last-SENT values or the
+        Inspector's unsent DRAFT?" has to be answered rather than reasoned about. It carries
+        NEITHER: `updateTake`'s `fields` defaults to `{}` and `#tellPageTake` passes none, so the
+        payload's only key is the reserved one.
+
+        Pinned here rather than on the builder because a builder unit test would still pass if a
+        caller started handing it fields. This asserts what left the bridge.
+      */
+      const { r } = await onAir();
+      expect((await r.stopItem('item1')).accepted).toBe(true);
+      await settleWire(/^CG 1-10 STOP/, 1);
+
+      const before = linesMatching(await wire(), /^CG 1-10 UPDATE /).length;
+      expect((await r.take('item1')).accepted).toBe(true);
+
+      const tells = linesMatching(await wire(), /^CG 1-10 UPDATE /).slice(before);
+      expect(tells, 'the resident take sent no tell — nothing below is measured').toHaveLength(1);
+
+      const payload = payloadOf(tells[0] as string);
+      expect(payload, 'the tell carried no payload at all').toBeDefined();
+      expect(
+        Object.keys(payload ?? {}),
+        'the tell carried field data — a draft or a stale value could ride a take',
+      ).toEqual(['__cg']);
     },
   );
 

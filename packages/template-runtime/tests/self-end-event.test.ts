@@ -101,7 +101,7 @@ function mount(playout: Record<string, unknown>): Live {
   const clock = makeClock();
   const host = document.createElement('div');
   document.body.appendChild(host);
-  const rt = createRuntime(scene(playout), { host, skipFontLoad: true, clock });
+  const rt = createRuntime(scene(playout), { root: host, skipFontLoad: true, clock });
   const ends: (string | undefined)[] = [];
   let stopEnds = 0;
   rt.on('self-end', (e) => {
@@ -173,7 +173,7 @@ describe('SELF-STOP-24 — the runtime emits self-end, once, with the take it wa
     const clock = makeClock();
     const host = document.createElement('div');
     document.body.appendChild(host);
-    const rt = createRuntime(scene(twoPasses), { host, skipFontLoad: true, clock });
+    const rt = createRuntime(scene(twoPasses), { root: host, skipFontLoad: true, clock });
     rt.on('self-end', () => order.push('self-end'));
     rt.on('stop.end', () => order.push('stop.end'));
     await rt.play(payload('t'));

@@ -85,6 +85,30 @@ describe('SELF-STOP-24 — the served page reports its own completion', () => {
     expect(win.fetch as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['about:', 'about:srcdoc', "the console's PVW / rehearsal frame"],
+    ['blob:', 'blob:http://localhost/abc', 'a blob-URL preview host'],
+  ])('🔴 REPLY 1 §R2 — a %s page opens no connection (%s — %s)', (protocol, origin, _host) => {
+    /*
+        The PREVIEW HOSTS, refused by the same guard as `file://` and named here so the refusal
+        is a decision rather than a side effect.
+
+        `pvw-holds-no-take-token.spec.ts` proves in Chromium that the console's rehearsal frame
+        reports exactly `about:srcdoc`, and that PVW is handed no token in the first place. This
+        is the second half of that belt: even if a token ever reached a preview host, the
+        reporter would not open a socket for it. Two independent reasons, on different axes —
+        which is what "only a CasparCG page may hold a live token" needs to survive one of them
+        being edited by somebody who did not read this.
+      */
+    const { rt, selfEnd } = fakeRuntime();
+    const win = fakeWin({ location: { protocol, origin } });
+    install(rt, win);
+
+    selfEnd({ take: 'tok-1' });
+
+    expect(win.fetch as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
   it('the SAME token twice sends one request', () => {
     const { rt, selfEnd } = fakeRuntime();
     const win = fakeWin();
