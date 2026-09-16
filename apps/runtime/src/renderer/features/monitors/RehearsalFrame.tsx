@@ -4,6 +4,7 @@ import type { FieldValues, Position } from '@cg/shared-schema';
 import { positionQuery, withCgControl } from '@cg/shared-schema';
 import type { ChannelRaster } from '@cg/shared-ipc';
 import { applyOperatorPosition, type PageRuntimeWindow } from './frameEnvironment.js';
+import type { TimingToSend } from '../inspector/timingToSend.js';
 import { frameBox } from './rehearsalFrames.js';
 
 /**
@@ -131,6 +132,8 @@ interface Props {
    * delivers, which is the whole fidelity claim rehearse is built on.
    */
   activeLookId: string | undefined;
+  /** `PASSES-CYCLE-ONLY-26` Part B — the operator's effective pass timing, or undefined. */
+  timing: TimingToSend | undefined;
   handleRef?: Ref<RehearsalFrameHandle>;
   /** Told whenever this frame's readiness flips, so the stage can gate its transport. */
   onReadyChange?: (itemId: string, ready: boolean) => void;
@@ -146,6 +149,7 @@ export function RehearsalFrame({
   position,
   rowName,
   activeLookId,
+  timing,
   handleRef,
   onReadyChange,
 }: Props): JSX.Element {
@@ -174,14 +178,45 @@ export function RehearsalFrame({
     [fields, activeLookId],
   );
 
+  /*
+    🔴 `PASSES-CYCLE-ONLY-26` Part B — **THE TIMING RIDES `play()`, AND RIDES `update()` ONLY
+    WHEN IT CHANGES. The two are different rules and collapsing them re-arms a live count.**
+
+    `play()` SEATS the count as a TOTAL (`DELTA B0`): the controller snapshots it, so a PLAY
+    must always carry it or PVW starts on the authored default.
+
+    `update()` is the trap. The effect that pushes field edits re-fires on EVERY draft change —
+    that responsiveness is most of what rehearse is for — and on a RUNNING page
+    `__cg.timing.passes` means "passes REMAINING FROM NOW". Folding the timing into `payload()`
+    would therefore re-arm the count on every keystroke in an unrelated text field: type four
+    characters during a two-pass run and the graphic has been told "two more" four times.
+
+    So the timing is NOT in `payload()`. It has its own effect below, keyed on the timing VALUE,
+    which fires on the first boot (before any play, where it is stored as a pending total) and
+    again only when the number itself changes.
+  */
+  const playPayload = useCallback(
+    (): string =>
+      JSON.stringify(
+        withCgControl(fields, {
+          ...(activeLookId !== undefined && { look: activeLookId }),
+          ...(timing !== undefined && { timing }),
+        }),
+      ),
+    [fields, activeLookId, timing],
+  );
+
+  /** The timing's VALUE as a stable key — an object identity would re-fire on every render. */
+  const timingKey = timing === undefined ? null : JSON.stringify(timing);
+
   useImperativeHandle(
     handleRef,
     () => ({
-      play: () => templateWindow()?.play?.(payload()),
+      play: () => templateWindow()?.play?.(playPayload()),
       next: () => templateWindow()?.next?.(),
       stop: () => templateWindow()?.stop?.(),
     }),
-    [templateWindow, payload],
+    [templateWindow, playPayload],
   );
 
   // Re-arm on a template change: a fresh document has not booted yet.
@@ -216,6 +251,30 @@ export function RehearsalFrame({
     if (!ready) return;
     templateWindow()?.update?.(payload());
   }, [ready, payload, templateWindow]);
+
+  /*
+    🔴 `PASSES-CYCLE-ONLY-26` Part B — **THE TIMING'S OWN PUSH, keyed on its VALUE.**
+
+    Deliberately separate from the field/look effect above, and keyed on `timingKey` rather than
+    on `timing`: the value arrives as a fresh object out of every panel render, so depending on
+    the object would re-fire on every unrelated push — which is precisely the relative-count
+    re-arm this separation exists to prevent. (The placement effect below carries the same rule
+    for the same reason; see its note.)
+
+    It fires on the FIRST boot — before any play, where `setRemainingPasses` stores the number as
+    a pending TOTAL for `play()` to seat — and thereafter only when the operator's number itself
+    changes, which IS an instruction to re-arm.
+
+    ⚠ It sends the timing ALONE, carrying no fields. An absent field payload merges nothing, and
+    an absent `look` member means "this payload says nothing about looks" — neither disturbs what
+    the page already has.
+  */
+  useEffect(() => {
+    if (!ready || timingKey === null) return;
+    templateWindow()?.update?.(
+      JSON.stringify(withCgControl({} as FieldValues, { timing: JSON.parse(timingKey) as never })),
+    );
+  }, [ready, timingKey, templateWindow]);
 
   // THE POSITION EDIT REACHING THE PREVIEW. `ready` and the placement are BOTH
   // dependencies, and that pairing is what makes an Apply visible: `ready`

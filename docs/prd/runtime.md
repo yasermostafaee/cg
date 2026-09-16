@@ -3826,3 +3826,54 @@ surface. — NO RE-IMPORT is owed: nothing here touches the page runtime or the 
 - **Number:** `R-064`. Verified free at the moment of commit, not of planning:
   `git grep -n --untracked -E "^## \[.\] R-064" -- docs` returned nothing, against a positive
   control on the same regex for `R-063` which returned `runtime.md:3703`.
+
+## [~] R-065 — PVW plays the operator's pass count and gap, not the template's authored defaults ⟨priority: high — the one surface that exists to check a graphic before air was showing a different graphic⟩ — FILED 2026-09-16 by `PASSES-CYCLE-ONLY-26` Part B, building in `openspec/changes/timing-pass-control/` §8
+
+**What:** the rehearsal preview plays the pass count and the between-pass gap the operator has
+set, exactly as a take would. The value is the EFFECTIVE one — the staged draft layered on the
+stored override — through the SAME builder that decides what an UPDATE press sends. A row with no
+override reaches the page with no timing at all, so it runs its authored default.
+
+**Why (owner, 2026-09-16):** in PVW the timing always ran the template's authored defaults. The
+logo `آرم (روی آنتن)` set to `Count 1` did not play one pass, and pressing `Update` changed
+nothing there either.
+
+**Measured at HEAD before the fix:** `RehearsalFrame` built its payload as
+`withCgControl(fields, { look })` — fields and the active look, nothing else — and `PreviewPanel`
+handed the frame `fields` (through `buildApplyPayload`) and `activeLookId` and no timing at all.
+So the page never received `__cg.timing`.
+
+**This is [[B-151]]'s shape one member later.** PVW once received no LOOK for exactly the same
+reason: a third delivery door that the work which added the member never knocked on. The plant
+gets `__cg` on `CG ADD` and `CG UPDATE`; the Designer's canvas gets its look by `postMessage`;
+PVW got nothing. The lesson that did not carry was that PVW is a DOOR, not a mirror.
+
+⚠ **A discrepancy worth recording, since the prompt's premise differed from the tree.** The
+prompt describes the logo as authored `repeat: 'infinite'`. The stored record and the decoded
+scene both say `repeat: 2` — the owner re-imported it at 12:51:53Z, nineteen minutes after the
+other five records (12:32:39Z), so the prompt described the EARLIER import. The defect is
+identical either way: PVW ran the authored number and ignored the operator's.
+
+**Acceptance:**
+
+- WHEN a row whose template loops has a pass count set and is put on PVW THEN the preview page is
+  told that count before it is played
+- WHEN the operator types into an unrelated field while a rehearsing page is running THEN the
+  field edit reaches the page and the count is NOT re-sent
+- WHEN a row whose pass controls are hidden ([[R-064]]) is put on PVW THEN its payload carries no
+  timing member
+- WHEN any row is put on PVW THEN the payload still carries no take token ([[C-013]])
+
+**Notes:** 🔴 THE RELATIVE-COUNT TRAP shaped the design. `__cg.timing.passes` on a RUNNING page
+means "passes REMAINING FROM NOW", and the frame's field-push effect re-fires on every draft
+change — so folding the timing into that payload would re-arm the count on every keystroke in an
+unrelated text box. The timing therefore rides `play()` always (a play SEATS a total) and rides
+`update()` only on the first boot and when the value itself changes, through its own effect keyed
+on the VALUE rather than on the object. — NOTHING REACHES CasparCG: PVW is a local browser render
+([[R-022]]), so this is a preview-only change and no wire verb moved. — NO RE-IMPORT is owed: the
+page runtime and the import metadata are untouched. — Cross-refs [[R-064]] (Part A — the gate
+this reuses), [[B-151]] (the same door, the look member), [[R-022]] (PVW reaches no plant).
+
+- **Number:** `R-065`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] R-065" -- docs` returned nothing, against a positive
+  control on the same regex for `R-064` which returned this file.

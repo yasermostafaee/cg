@@ -44,6 +44,44 @@ the element's `title`.
 - **WHEN** the row's stated mode is not `loop-cycle` and a nested scope in the same template does loop
 - **THEN** no pass control and no gap control are offered, and no authored default count is stated
 
+### Requirement: The rehearsal preview plays the operator's pass timing
+
+PVW SHALL play the pass count and the between-pass gap the operator has set, exactly as a take would.
+
+The value SHALL be the EFFECTIVE one — the staged draft layered on the stored override — through
+the SAME builder that decides what an UPDATE press sends, so a row whose pass controls are hidden
+gets no timing in the preview either. A row with NO override SHALL reach the page with no timing
+at all, so the page runs its authored default.
+
+⚠ **ADDED 2026-09-16 (owner).** PVW ran the authored defaults: its payload carried the fields and
+the active look and nothing else, so a row set to `Count 1` rehearsed at whatever the author
+wrote, and pressing `Update` changed nothing there either.
+
+The timing SHALL ride the PLAY always, because a play seats the count as a total. It SHALL ride an
+UPDATE only on the first boot and when the timing value itself changes. It SHALL NOT ride an
+update carrying an unrelated field or look change: on a running page the count is "passes
+remaining from now", so re-sending it with every keystroke would re-arm the run.
+
+#### Scenario: A rehearsing row is told the operator's count
+
+- **WHEN** a row whose template loops has a pass count set and is put on PVW
+- **THEN** the preview page is told that count, before it is played
+
+#### Scenario: A field edit does not re-arm a running preview
+
+- **WHEN** the operator types into an unrelated field while a rehearsing page is running
+- **THEN** the field edit reaches the page and the number of pushes carrying timing does not change
+
+#### Scenario: A row whose pass controls are hidden gets no timing in the preview
+
+- **WHEN** a row whose stated mode is not `loop-cycle` is put on PVW
+- **THEN** its preview payload carries no timing member
+
+#### Scenario: The preview payload still carries no take token
+
+- **WHEN** any row is put on PVW
+- **THEN** the payload carries no take token, so the preview can neither spend nor fire a real row's completion
+
 ### Requirement: The pass control states which reading it is in
 
 The pass control's label SHALL change with the row's air state: ON AIR it is PASSES

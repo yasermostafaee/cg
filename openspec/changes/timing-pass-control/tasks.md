@@ -213,3 +213,39 @@ The owner, 2026-09-16, on the news ticker `نوار خبر (روی آنتن)`: t
 - [ ] `C-011` — persist the template registry. Its "keep the `.vcg` bytes" option and
       `C-034`'s "re-derive from what is kept" are opposite answers to one problem; only one
       should be built.
+
+## 8. `PASSES-CYCLE-ONLY-26` Part B — PVW plays the operator's count (`R-065`)
+
+The owner, 2026-09-16: in PVW the timing always runs the template's authored defaults, and
+pressing `Update` changes nothing there either.
+
+- [x] 8.1 CONFIRMED at HEAD: `RehearsalFrame`'s payload was `withCgControl(fields, {look})` —
+      fields and look only — and `PreviewPanel` handed it no timing at all. `B-151`'s shape one
+      member later: a third delivery door the timing work never knocked on
+- [x] 8.2 The subject carries `effectiveTimingFor(info?.playout, item)` — the SAME builder
+      `timingPatchToSend` sits beside, behind Part A's gate, so a hidden-control row gets none
+- [x] 8.3 The timing rides `play()` ALWAYS (it seats a total) and `update()` only on the first
+      boot and when the VALUE changes — its own effect, keyed on the value, never on `payload`
+- [x] 8.4 RED FIRST in a real browser: PVW is told `Count 1`; a field edit reaches the frame and
+      does NOT change the number of timing-bearing pushes; the take token is still absent
+- [ ] Gate green · commit `________` · e2e run `________`
+
+### The relative-count trap, and why it shaped the design
+
+`__cg.timing.passes` on a RUNNING page means "passes REMAINING FROM NOW" (`DELTA A1`). The
+frame's field-push effect re-fires on every draft change — that responsiveness is most of what
+rehearse is for — so folding the timing into that payload would re-arm the count on every
+keystroke in an unrelated text box: type four characters during a two-pass run and the graphic
+has been told "two more" four times.
+
+So the timing is NOT in `payload()`. It has its own effect keyed on the timing VALUE
+(`JSON.stringify`, not the object — the object is fresh out of every panel render, which is the
+same trap the placement effect already documents).
+
+⚠ **Three locators had to be MEASURED rather than assumed, and each would have passed
+vacuously.** The pass box's accessible name is air-state dependent (`Passes next take` off air);
+a field input's accessible name is the field's ID (`anchor`), not its display label, which is a
+sibling span; and clicking an already-selected row's body TOGGLES the Inspector shut, so the spec
+does not re-select after rehearsing. The first draft of the field case found no input at all and
+skipped its own typing — it was green and proved nothing, which is why it now asserts the field
+pushes INCREASED as its positive control.

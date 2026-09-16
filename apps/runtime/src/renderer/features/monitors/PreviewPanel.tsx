@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { REFERENCE_RASTER } from '@cg/shared-ipc';
 import { Panel } from '../../ui/Panel.js';
+import { effectiveTimingFor } from '../inspector/timingToSend.js';
 import { Button } from '../../ui/Button.js';
 import { rehearsalCaption } from './rehearsalFrames.js';
 import { MonitorHead, MonitorHeadFact } from '../../ui/MonitorHead.js';
@@ -199,6 +200,20 @@ export function PreviewPanel(): JSX.Element {
           liveSources: live,
           // `B-151` — the bridge's published look drives BOTH halves of the preview.
           activeLookId: item.activeLookId,
+          /*
+            🔴 `PASSES-CYCLE-ONLY-26` Part B (`R-065`) — **THE OPERATOR'S PASS TIMING, through
+            the SAME builder a press uses.**
+
+            PVW ran the AUTHORED defaults: this subject carried fields and a look and nothing
+            else, so the page never saw `__cg.timing` and a row set to `Count 1` rehearsed at
+            whatever the author wrote. `B-151`'s shape one member later.
+
+            `effectiveTimingFor` is `timingPatchToSend`'s sibling behind the same gate, so a row
+            whose controls Part A hides gets no timing here either — one decision, not two. It
+            layers the staged draft over the stored value, which is the rule `buildApplyPayload`
+            already gives the fields: what is rehearsed is exactly what Apply would send.
+          */
+          timing: effectiveTimingFor(info?.playout, item),
           /**
            * 🔴 **SESSION BQ — THE RESOLUTION INPUTS, all four levels, not a pre-joined
            * name map.**

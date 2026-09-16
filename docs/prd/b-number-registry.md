@@ -2882,5 +2882,7 @@ Each allocated by MEASURING, with a positive control on the same regex: `R-063` 
 here.** `R-064` was taken by measurement, not by reading a pointer — which is the standing rule
 and the reason a missing pointer costs nothing.
 
-⇒ **Next free after this session is `B-251`**, **`D-161`**, **`C-037`**, **`R-065`** and
-**`P-050`**.
+⇒ **Next free after this session is `B-251`**, **`D-161`**, **`C-037`**, **`R-066`** and
+**`P-050`** — `R-065` was taken by the same session for `PASSES-CYCLE-ONLY-26` Part B (PVW plays
+the operator count, [runtime.md](runtime.md)), measured free against a positive control on
+`R-064`.

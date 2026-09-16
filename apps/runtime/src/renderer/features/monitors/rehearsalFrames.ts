@@ -8,6 +8,7 @@ import {
 } from '@cg/shared-ipc';
 import type { FieldValues, Position } from '@cg/shared-schema';
 import type { PlateSourceLookup } from './livePlateGeometry.js';
+import type { TimingToSend } from '../inspector/timingToSend.js';
 
 /**
  * R-022 — the SUBJECTS of a rehearsal render: one per rehearsing row, resolved
@@ -70,6 +71,23 @@ export interface RehearsalSubject {
    * overlay, the page, the row's picker and the look the next take enters.
    */
   activeLookId: string | undefined;
+  /**
+   * 🔴 `PASSES-CYCLE-ONLY-26` Part B (`R-065`, owner 2026-09-16) — **THE OPERATOR'S PASS COUNT
+   * AND GAP, so PVW plays what a take would play.**
+   *
+   * PVW ran the template's AUTHORED defaults: the payload was `withCgControl(fields, {look})`
+   * and nothing else, so the page never received `__cg.timing` and a row set to `Count 1` was
+   * rehearsed at whatever the author wrote. Pressing `Update` changed nothing there either.
+   *
+   * This is `B-151`'s shape one member later — PVW once got no LOOK for the same reason, a
+   * delivery door the work that added the member never knocked on.
+   *
+   * It is the EFFECTIVE value (`effectiveTimingFor`): the staged draft layered on the stored
+   * override, which is the same "exactly what Apply would send" rule the fields already follow.
+   * `undefined` means ABSTAIN — the page runs its authored default, which is what a row with no
+   * override genuinely has.
+   */
+  timing: TimingToSend | undefined;
 }
 
 /**

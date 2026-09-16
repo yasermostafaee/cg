@@ -32,6 +32,7 @@ function subject(over: Partial<RehearsalSubject> & { layer: number }): Rehearsal
     fields: {},
     liveSources: undefined,
     activeLookId: undefined,
+    timing: undefined,
     /*
       SESSION BQ — the subject carries the RESOLUTION INPUTS now, not a pre-joined
       plate-keyed name map. See `PlateSourceLookup` for why the old shape WAS the defect.
