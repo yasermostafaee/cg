@@ -2526,55 +2526,86 @@ been read here.
 - WHEN `cg-op1` is revoked through the Playout's manual endpoint THEN within 60 s its next command
   is refused with the sentence while its console still shows the stack
 
-**Notes:** The engine stays on build **2.8.45** for this run (the Playout team's commitment) —
-name that build in the recon record or the result is not attributable. — 🔴 No service credential
+**Notes:** The engine is on build **2.8.48** for this run — moved from the pinned 2.8.45, which
+was self-blocking (it recreates its blanket firewall block on every start and could not hold the
+allow rule). Name **2.8.48** in the recon record or the result is not attributable. — 🔴 No service credential
 exists: apasai-core's AMCP is unauthenticated (Q1), so the "credential seam" this item was
 originally expected to carry is DROPPED. The gate is the firewall rule, and it is a deployment
 prerequisite rather than a code task. — Plant-command hygiene applies even though this is a TEST
 Playout: one line at a time, in the named window, and remember that connecting a bridge re-asserts
 mixer volumes. — The test fixtures (`cg-op1`, `cg-op2`, `cg-admin`, `cg-view`, `cg-noch`, channel
-`cg-test2`) are temporary and we say when they are released. — DEPENDS on the Playout team's allow
-rule, which needs an administrator on their side; nothing here can start before it. — Cross-refs
+`cg-test2`) are temporary and we say when they are released. — The Playout team's allow rule, which
+this item depended on and which needed an administrator on their side, is **APPLIED as of
+2026-09-21**; see the pre-flight note below for what that took. — Cross-refs
 [[C-037]], [[C-038]], [[C-039]], [[R-066]], [[C-018]], [[C-020]].
 
-🔴 **PRE-FLIGHT ATTEMPTED AND STOPPED, 2026-09-16 (`APASAI-CORE-RECON-01`). Still `[ ]` — nothing
-was measured against apasai-core, and the reason is TWO blockers, one per side.** Recorded here so
-the next attempt does not rediscover them.
+🔴 **PRE-FLIGHT ATTEMPTED AND STOPPED 2026-09-16 (`APASAI-CORE-RECON-01`), UNBLOCKED 2026-09-21.
+Still `[ ]` — the measurement has not run, and that is now the only reason.** Both blockers, one
+per side, are CLEARED. What they turned out to be is recorded here so the next attempt rediscovers
+none of it; the session that does the run is `APASAI-CORE-RECON-01 v2`.
 
-**Theirs — the allow rule is absent, and they say so in writing.**
-[`PLAYOUT-CG-RESPONSE-C-v1.md`](../integration/playout/PLAYOUT-CG-RESPONSE-C-v1.md) §1 lists the
-firewall as verified on `192.168.21.111`: `Apasai - Block external playout-core AMCP` (TCP 5250)
-**enabled**, the engine API (8080/8443) and PGM streams (9250–9269, 9350–9369) **allowed**, and
-`Apasai - Allow AMCP from trusted hosts` **absent**. Their own closing line: _"The joint test is
-blocked on exactly one thing: item 1."_ The ordering they asked for is theirs first — they confirm
-the rule, then we open inbound UDP 6250 — so item 2 is **not** owed yet either.
+**1. An explicit Block beats any Allow in Windows Defender Firewall.**
+[`PLAYOUT-CG-RESPONSE-D-v1.md`](../integration/playout/PLAYOUT-CG-RESPONSE-D-v1.md) §1. We raised
+it in Reply C and again in Reply D §3; rather than take our word for it, the Playout team verified
+it against Microsoft's own documentation. The documented evaluation order is Windows Service
+Hardening → connection security → **authenticated bypass** → **block** → **allow** → default, and
+the only construct that lets an allow beat a block is an authenticated-bypass rule
+(`-OverrideBlockRules`), which requires IPsec and `RemoteUser` accounts listed. Their
+`Apasai - Allow AMCP from trusted hosts` was an ordinary allow rule and **would have been inert
+even once applied**; the remote scope of `Apasai - Block external playout-core AMCP` was `Any`, so
+it covered `192.168.21.93`. ⭐ **A partner's "the rule is applied" is not the same as "the rule is
+in force", and the difference is invisible in a rule listing.**
 
-**Ours — a VPN tunnel makes every reachability reading from this box void, in both directions.**
-`v2rayN` (pid 7632) drives a `sing-box` TUN (`singbox_tun`, `172.18.0.1/30`) whose `0.0.0.0/0`
-route wins over the LAN's on-link `192.168.21.0/24`. Measured:
+**2. ⭐⭐ A rule listing is not enforcement.**
+[Response D](../integration/playout/PLAYOUT-CG-RESPONSE-D-v1.md) §2–§3: on `192.168.21.111` all
+three connected interfaces are categorised **Public** and the **Public profile's firewall is off**,
+so none of their `Apasai - *` rules apply — and TCP 5250 was open to the whole LAN, with
+apasai-core listening on `0.0.0.0:5250`. That is why a port nobody serves answered our SYN with
+`RST` in 3.7 ms instead of the silence a Block produces, which is the reading in
+[Reply D](../integration/playout/CG-CONTROL-REPLY-D-2026-09-21.md) §2 that opened this thread.
+Their Response C table was **accurate and described a machine on which none of it was in force**.
+⭐ **Always ask for the profile/enabled state beside a rule listing — theirs or ours.**
 
-| probe                                                 | result                              | what it proves                                                                               |
-| ----------------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------------------- |
-| `Test-NetConnection … -Port 5250`                     | `False`, `SourceAddress 172.18.0.1` | nothing about their firewall — wrong source                                                  |
-| socket **unbound** → `.111:5250`                      | CONNECTED, 3 ms                     | **nothing** — see the control below                                                          |
-| socket unbound → `.111` ports **5251 / 9999 / 1**     | **all CONNECTED, 1 ms**             | the proxy completes the handshake locally; every CONNECTED through the tunnel is an artefact |
-| socket unbound → `192.168.21.253:5250` (no such host) | TIMEOUT                             | the proxy is not accepting everything — the `.111` results specifically are void             |
-| socket **bound to `192.168.21.93`** → `.111:5250`     | TIMEOUT                             | consistent with their block rule                                                             |
-| socket bound to `.93` → `.111:8080`                   | **TIMEOUT**                         | ⚠ their table says 8080 is ALLOWED to the LAN — so this one is OURS                          |
-| socket bound to `.93` → gateway `192.168.21.1:80/443` | ECONNREFUSED                        | the LAN adapter, link and return path all work                                               |
+**3. Our side measured clean, and how** — recorded so no future session re-chases the VPN. From
+`192.168.21.93` with v2rayN fully exited: one default route via `192.168.21.1` plus the on-link
+`192.168.21.0/24`, no tunnel adapter, `DefaultOutboundAction` NotConfigured on all three profiles,
+loopback connect 0.00 s, and a `pktmon` capture showing our SYN leaving the NIC and their host's
+own MAC answering — `192.168.21.111` at 8080, 8443 and 9250 all CONNECTED in 0.00 s from a socket
+sourced at `192.168.21.93`
+([Reply D](../integration/playout/CG-CONTROL-REPLY-D-2026-09-21.md) §1–§2). Two method notes worth
+keeping: **a failure's SHAPE carries the meaning** — a fast `RST` means reachable with nothing
+listening, NOT blocked, while ~21 s of silence is a drop, which is what a Block looks like — and a
+`Net.Sockets.TcpClient` connect reports a refusal only after ~2 s of its own retries, so that 2 s
+is the client retrying an instant reset rather than a delayed answer.
 
-🔴 **The lesson is the instrument, not the network.** A bare `connect()` through a TUN proxy is a
-lying probe: it answered for a port nothing serves. Any future reachability claim from this box
-needs the dead-port control beside it, and the tunnel down — otherwise a `degraded` health reading
-or a failed template fetch would get recorded as a fact about apasai-core when it is a fact about
-`sing-box` (golden rule 8, on the one axis this whole item exists to judge).
+**4. The engine pin was self-blocking on their side, and they moved off it.** A 2.8.45 engine
+recreates its blanket block on every start, so it cannot hold an allow rule; their corrected
+twin-rule model ships in 2.8.47
+([Response D](../integration/playout/PLAYOUT-CG-RESPONSE-D-v1.md) §4) and the test Playout is now
+on **2.8.48**. The engine build named in the recon record therefore comes from their authorisation
+file, not from us. apasai-core — `2.5.0 6b29237 Dev`, which is what this item actually validates —
+is unchanged as far as they have stated, and we asked them to confirm it explicitly for the new
+engine build in [Reply E](../integration/playout/CG-CONTROL-REPLY-E-2026-09-21.md) §3. ⚠ **That
+question is still open**, so read `VERSION` and confirm it before anything is written to channel 2.
 
-**What the next attempt needs, in order:** (1) their administrator runs
-`secure-ports.ps1 -AllowAmcpFrom 192.168.21.93` and confirms in writing; (2) the tunnel is down (or
-excludes `192.168.21.0/24`) and `.111:8080` answers from a socket **bound to `192.168.21.93`** —
-that is the positive control that the LAN path is real; (3) then open inbound UDP 6250; (4) then
-run. Both our inbound rules already exist and are correctly scoped: `CG bridge OSC in` (UDP 6250)
-and `CG bridge templates in` (TCP 7911), both `RemoteAddress 192.168.21.111`, Allow, enabled.
+🔴 **THE BLOCKER IS CLEARED.**
+[`PLAYOUT-CG-RESPONSE-E-v1.md`](../integration/playout/PLAYOUT-CG-RESPONSE-E-v1.md) is the written
+authorisation: an inbound allow on TCP 5250 scoped to exactly `192.168.21.93`; the old block rule
+with remote `Any` **replaced** by one whose scope stops at `…-192.168.21.92` and resumes at
+`192.168.21.94-…`, so no block matches us at all; and — the part that was false in Response C —
+**all three firewall profiles enabled**, with the profile table printed beside the listing. They
+did not out-rank the block, **they removed our address from it**. Their `Error` → `Warning` log
+pair shows only enforcement changing between the two states, with no rule touched. ⚠ It answers
+our Reply D and **crossed with our Reply E**, so Reply E's two questions — the twelve any-port
+`apasai-engine` / `apasai-core` program rules, and the core build above — are untouched by it.
+
+**Our item 2 was never owed separately:** all three inbound rules on `192.168.21.93` already
+exist, Allow, enabled, remote `192.168.21.111` — `CG bridge OSC in` (UDP 6250),
+`CG bridge templates in` (TCP 7911), and `CG probe fixtures in` (TCP 7900–7901) for the probes'
+fixture servers. **We have sent nothing to TCP 5250** and we tell them immediately before we connect, as
+agreed. One reading is owed back to them: what a host that is **not** `192.168.21.93` observes on
+5250 — they expect a silent drop now rather than a reset
+([Response E](../integration/playout/PLAYOUT-CG-RESPONSE-E-v1.md) §6).
 
 **Two desk findings that survive the stop, both about §2 step 3.**
 
@@ -2583,10 +2614,9 @@ and `CG bridge templates in` (TCP 7911), both `RemoteAddress 192.168.21.111`, Al
   `1`/`10`), and `lifecycle-probe.mjs` the same (defaults `1`/`45`). Neither hard-codes `1-10`, so
   no hand-typed substitute is needed. ⚠ `amcp-poke.mjs` **does not exist in the tree** — raw AMCP
   needs a throwaway client.
-- ⚠ **Their fixture servers bind 7900 and 7901, not 7911**, which is the only template port our
-  firewall rule opens. Without a rule for those two, the probes' `update fired` column reads "no"
-  for a FIREWALL reason and not a Caspar reason — so either add `TCP 7900-7901 from
-192.168.21.111` before the run, or report that column as unmeasured.
+- ⚠ **Their fixture servers bind 7900 and 7901, not 7911**, which is why `CG probe fixtures in`
+  exists as its own rule. Without it the probes' `update fired` column would read "no" for a
+  FIREWALL reason and not a Caspar reason.
 
 **And the unprompted-on-connect list, verified from source before any connection** (`§1`'s safety
 check, and it passes): with the channel-2 bank the bridge emits **30 × `MIXER VOLUME 2-<L> 1`** on
@@ -2594,7 +2624,8 @@ layers **50–59 and 80–99** — `#reassertDeclaredVolumes` (`caspar-runtime.t
 walks `fixedBankSlots`, which is BOTH halves of the bank — plus `INFO CONFIG` read once per
 connection (`C-029`). **Nothing below layer 50, nothing on channel 1, and no `CLEAR`.** Consumer
 creation is off unless `--create-missing-consumers` is passed (`=== true`, absent is OFF). So
-connecting re-asserts unity volume on 30 layers of channel 2 — the Playout team should be told.
+connecting re-asserts unity volume on 30 layers of channel 2 — the Playout team has been told
+(Reply C §3, Reply D §4).
 
 - **Number:** `C-040`. Verified free at the moment of commit, not of planning:
   `git grep -n --untracked -E "^## \[.\] C-040" -- docs` returned nothing, against a positive

@@ -4,53 +4,108 @@ The documents the two teams exchanged, adopted verbatim; [ADR 0010](../../adrs/0
 is the decision resting on them. 🔴 **Change this folder only by a versioned addendum, never by
 editing v1 in place** — each file was consumed verbatim by the other team's assistant.
 
-| File                                  | What it is                                                                                                                                  |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PLAYOUT-INTEGRATION-CONTRACT-v1.md`  | The contract, v1 (2026-09-15). Topology, the JWT claims, D1–D8, roles, the acceptance checklist.                                            |
-| `cg-control-playout-api.openapi.yaml` | OpenAPI 3.1 of D1–D5 / D8 — the machine-readable half of the same contract.                                                                 |
-| `PLAYOUT-CG-RESPONSE-v1.md`           | Their first response (build 2.8.44): C1–C7, O1–O3, the Q1–Q7 answers, their 17/17 run.                                                      |
-| `CG-CONTROL-REPLY-A-2026-09-16.md`    | Our Reply A = **Addendum A**: C1–C7 adopted, O1 viewer sign-in ON, O2 → D9 proposed, O3 the `iss` rule, our deployment facts.               |
-| `PLAYOUT-CG-RESPONSE-B-v1.md`         | Their Response B (build 2.8.45): O1 ON plus **C8**, **D9 implemented verbatim**, the firewall script prepared, 22/22.                       |
-| `CG-CONTROL-REPLY-B-2026-09-16.md`    | Our Reply B: C8 folded into Addendum A, D9 accepted as **v1.1 live**, the open-items table.                                                 |
-| `PLAYOUT-CG-RESPONSE-C-v1.md`         | Their Response C (2026-09-16, 2.8.45 pinned): the firewall table, the refreshed handoff, and the CG routes re-run over the network address. |
-| `handoff/2026-09-16/`                 | Dated evidence snapshots from the test Playout — `jwks.json` and `channels.json`.                                                           |
+| File                                  | What it is                                                                                                                                                                                                                                                   |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PLAYOUT-INTEGRATION-CONTRACT-v1.md`  | The contract, v1 (2026-09-15). Topology, the JWT claims, D1–D8, roles, the acceptance checklist.                                                                                                                                                             |
+| `cg-control-playout-api.openapi.yaml` | OpenAPI 3.1 of D1–D5 / D8 — the machine-readable half of the same contract.                                                                                                                                                                                  |
+| `PLAYOUT-CG-RESPONSE-v1.md`           | Their first response (build 2.8.44): C1–C7, O1–O3, the Q1–Q7 answers, their 17/17 run.                                                                                                                                                                       |
+| `CG-CONTROL-REPLY-A-2026-09-16.md`    | Our Reply A = **Addendum A**: C1–C7 adopted, O1 viewer sign-in ON, O2 → D9 proposed, O3 the `iss` rule, our deployment facts.                                                                                                                                |
+| `PLAYOUT-CG-RESPONSE-B-v1.md`         | Their Response B (build 2.8.45): O1 ON plus **C8**, **D9 implemented verbatim**, the firewall script prepared, 22/22.                                                                                                                                        |
+| `CG-CONTROL-REPLY-B-2026-09-16.md`    | Our Reply B: C8 folded into Addendum A, D9 accepted as **v1.1 live**, the open-items table.                                                                                                                                                                  |
+| `PLAYOUT-CG-RESPONSE-C-v1.md`         | Their Response C (2026-09-16, 2.8.45 pinned): the firewall table, the refreshed handoff, and the CG routes re-run over the network address. ⚠ Its firewall table was NOT in force — see Response D.                                                          |
+| `CG-CONTROL-REPLY-C-2026-09-16.md`    | Our Reply C (2026-09-16): item 1 awaited in writing with both rules listed, our three inbound rules, and what the bridge sends on connect. First raised that a **Block outranks an Allow**.                                                                  |
+| `CG-CONTROL-REPLY-D-2026-09-21.md`    | Our Reply D (2026-09-21): 8080 / 8443 / 9250 measured reachable from `192.168.21.93`, the `pktmon` capture, and the observation that a **`RST` on 9999** contradicts their table.                                                                            |
+| `PLAYOUT-CG-RESPONSE-D-v1.md`         | Their Response D (2026-09-21, engine 2.8.47): both our points conceded and verified against Microsoft's docs — the allow rule was **inert**, and the **Public profile's firewall is off**, so 5250 was open to the whole LAN. The corrected twin-rule model. |
+| `CG-CONTROL-REPLY-E-2026-09-21.md`    | Our Reply E (2026-09-21): the twelve any-port program rules blunt their Decision 1; a time-boxed window on the pinned 2.8.45 offered as a third path; and **does 2.8.47 still carry apasai-core `2.5.0 6b29237 Dev`?**                                       |
+| `PLAYOUT-CG-RESPONSE-E-v1.md`         | Their Response E (2026-09-21, engine **2.8.48**): **item 1 complete — the written authorisation.** It answers our Reply D §3 and **crossed with our Reply E**, so Reply E's questions are untouched by it and stay open.                                     |
+| `handoff/2026-09-16/`                 | Dated evidence snapshots from the test Playout — `jwks.json` and `channels.json`.                                                                                                                                                                            |
 
 **Contract status.** v1 accepted by both sides · **Addendum A** carries C1–**C8** · **v1.1 / D9
-(`GET /api/cg/revoked`) implemented and LIVE**, not a proposal.
+(`GET /api/cg/revoked`) implemented and LIVE**, not a proposal. Nothing in the Response C → E
+exchange touched the contract; all of it was firewall, enforcement and build.
 
-🔴 **The AMCP allow rule is NOT applied, and the joint test is blocked on exactly that.** Response
-C §1 states it plainly and lists the firewall as verified on `192.168.21.111`: the block rule
-(`Apasai - Block external playout-core AMCP`, TCP 5250) is **enabled**, the engine API (TCP
-8080/8443) and the PGM streams (TCP 9250–9269, 9350–9369) are **allowed**, and
-`Apasai - Allow AMCP from trusted hosts` is **absent**. An administrator must run
-`secure-ports.ps1 -AllowAmcpFrom 192.168.21.93` on their machine. **The order is theirs first:**
-they confirm the rule in writing here, and only then do we open inbound UDP 6250 on
-`192.168.21.93`, so each change stays attributable.
+## Item 1 is DONE — and how it was actually done (2026-09-21)
 
-Response C also records what is DONE on their side: the refreshed handoff (in
-`C:\CIaB_Claude\_cg-handoff\` with a `MANIFEST.md` — **not adopted here**, and `revoked.json` is
-still not in this folder), both sample tokens re-verified after the key reset against the live
-JWKS (`kid 2026-09-16-ce8a`), and every CG route exercised over the **network** address rather
-than loopback. The property that matters for the bridge: `iss` is configured, not derived from
-the request `Host`, so it stays byte-identical whichever address reaches the engine.
+🔴 **Superseded, kept because the trail is the lesson.** Until 2026-09-21 this section read that
+the AMCP allow rule was not applied and the joint test was blocked on exactly that. Both halves
+turned out to be true for a **different reason than either side thought**, and the correction is
+worth more than the fix.
+
+**What Response C claimed, and what was actually in force.** Response C §1 listed the rules on
+`192.168.21.111` as verified: the block rule enabled, the engine API and PGM ranges allowed,
+`Apasai - Allow AMCP from trusted hosts` absent. The table was accurate **and described a machine
+on which none of it was being enforced** — all three connected interfaces are categorised
+**Public** and the Public profile's firewall was **off** (Response D §2–§3). TCP 5250 was open to
+the whole LAN with apasai-core listening on `0.0.0.0:5250`. ⭐ **A rule listing is not
+enforcement; ask for the profile/enabled state beside it — theirs or ours.**
+
+**And the rule would not have worked even once applied.** Windows Defender Firewall evaluates an
+explicit **Block** ahead of any **Allow** (Response D §1, verified by them against Microsoft's
+documentation after our Reply C and Reply D §3 raised it). Only an authenticated-bypass rule
+(`-OverrideBlockRules`, requiring IPsec and `RemoteUser`) lets an allow beat a block, and theirs
+was an ordinary allow rule. The block rule's remote scope was `Any`, so it covered
+`192.168.21.93`. ⭐ **"The rule is applied" is not "the rule is in force", and the difference is
+invisible in a rule listing.**
+
+**What Response E establishes — the written authorisation.** An inbound allow on TCP 5250 scoped
+to exactly `192.168.21.93`; the old `Apasai - Block external playout-core AMCP` with remote `Any`
+**replaced** by `Apasai - Block untrusted playout-core AMCP`, whose scope stops at
+`…-192.168.21.92` and resumes at `192.168.21.94-…`; and — the part that was false in Response C —
+**all three firewall profiles enabled**, with the profile table printed beside the listing. They
+did not out-rank the block: **they removed our address from it**, so no block matches us and the
+allow decides. Their `Error` → `Warning` log pair (§3) shows only enforcement changing between the
+two states, with no rule touched.
+
+**Build.** The engine moved to **2.8.48**. The 2.8.45 pin was self-blocking — that build recreates
+its blanket block on every start and cannot hold an allow rule (Response D §4) — so **2.8.48 is
+the build to name in the recon record**. apasai-core, which is what `C-040` actually validates, is
+`2.5.0 6b29237 Dev` and is unchanged as far as they have stated.
+
+## Open items, true as of 2026-09-21
+
+1. ✅ **Item 1 — the TCP 5250 allow rule — DONE**, in writing, in
+   `PLAYOUT-CG-RESPONSE-E-v1.md`. Not merely configured: they read the rules back and map the
+   listener's interface to its profile before reporting success.
+2. ✅ **Item 2 — our side — in place and scoped.** Three inbound rules on `192.168.21.93`, all
+   Allow, enabled, remote `192.168.21.111`: `CG bridge OSC in` (UDP 6250),
+   `CG bridge templates in` (TCP 7911), `CG probe fixtures in` (TCP 7900–7901, for the recon run
+   only).
+3. 🔴 **We have still sent nothing to TCP 5250.** The measurement itself has not run — that is
+   `C-040`, and we tell them immediately before we connect, as agreed.
+4. **Reply E's questions are still open** — Response E crossed with it and answers Reply D
+   instead. (a) The twelve auto-created `apasai-engine` / `apasai-core` program rules — inbound,
+   allow, **any port, any remote address** — are in the Response D §3 listing and absent from
+   Response E's; removed, or simply not shown? Now that the profiles are enabled they permit every
+   other port those two binaries bind, from anywhere on the LAN. (b) Does the 2.8.48 engine still
+   carry apasai-core `2.5.0 6b29237 Dev`? That core build, not the engine build, is what `C-040`
+   validates. ⚠ Reply E §3's other half — the time-boxed window on the pinned 2.8.45 — is
+   **overtaken**: they applied the rule and moved the build instead, which is the better outcome.
+5. **Owed to them:** an independent reading of what a host that is **not** `192.168.21.93`
+   observes on 5250 (Response E §6). They expect a silent drop rather than a reset.
+6. **`revoked.json` still has not reached this folder.** D9 is live and the endpoint is
+   specified; the dated snapshot is not here.
+7. **The test fixtures are still ours to release** — `cg-op1`, `cg-op2`, `cg-admin`, `cg-view`,
+   `cg-noch` and channel `cg-test2` — after the plant deployment, and we say when.
 
 **The test Playout.** Base URL `http://192.168.21.111:8080` — which is also `iss`, byte-for-byte,
 and never derived. `aud` contains `cg-control`. Signing is ES256 and **the JWKS is read LIVE**;
-the snapshot here is dated evidence and nothing else. Engine build **2.8.45** is pinned for our
-re-validation so the result is attributable. Five temporary test users exist, named here and
-nowhere near their password — `cg-op1`, `cg-op2`, `cg-admin`, `cg-view`, `cg-noch` — as is
-channel `cg-test2`; we say when the fixtures are released.
+the snapshot here is dated evidence and nothing else. Engine build **2.8.48** (was 2.8.45; see
+above). Five temporary test users exist, named here and nowhere near their password — `cg-op1`,
+`cg-op2`, `cg-admin`, `cg-view`, `cg-noch` — as is channel `cg-test2`.
 
 🔴 **No credential lives in this folder.** The sample tokens are NOT adopted, and the R5 password
 line in `PLAYOUT-CG-RESPONSE-v1.md` is redacted in place and marked as such — the ONE content edit
-made on adoption. `handoff/2026-09-16/jwks.json` is PUBLIC key material (three P-256 points, no
-`d`) and is **stale**: the Playout team reset its signing keys after testing on 2026-09-16, which
-is why the bridge reads the JWKS live.
+made on adoption. The five files adopted on 2026-09-21 were scanned before copying and carry
+none: no password, secret, API key, bearer token, JWT or private-key material.
+`handoff/2026-09-16/jwks.json` is PUBLIC key material (three P-256 points, no `d`) and is
+**stale**: the Playout team reset its signing keys after testing on 2026-09-16, which is why the
+bridge reads the JWKS live.
 
 ⚠ **Presentation moved, content did not.** `format:check` globs the whole tree, so every file here
 was run through `prettier --write`: markdown emphasis respelled `*x*` → `_x_`, table cells padded,
 the contract's embedded JSON block reflowed, and the YAML re-quoted with bracket spacing. Verified
 after the fact — the two JSON snapshots are deep-equal to the originals, and the four other
 markdown files are identical once emphasis and table padding are normalised. No value changed
-anywhere. If byte-fidelity is wanted instead, the route is a `.prettierignore` entry, the same one
-`tools/*/evidence/**` and `docs/recon/ciab-client-tools.json` already use for the same reason.
+anywhere. The same applies to the five files adopted on 2026-09-21. If byte-fidelity is wanted
+instead, the route is a `.prettierignore` entry, the same one `tools/*/evidence/**` and
+`docs/recon/ciab-client-tools.json` already use for the same reason.

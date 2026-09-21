@@ -20,9 +20,21 @@ Proposed → Accepted → Superseded.
 
 - [ADR 0001 — Monorepo with pnpm + Turborepo](adrs/0001-monorepo-with-pnpm-turborepo.md)
 - [ADR 0002 — Two separate Electron apps](adrs/0002-two-electron-apps.md)
-- ADR 0003 — Iframe preview, not Konva _(planned)_
-- ADR 0004 — OSC as source of truth for on-air state _(planned)_
-- ADR 0005 — Frame-locked animations _(planned)_
+- [ADR 0003 — Persian rendering in CasparCG CEF](adrs/0003-persian-rendering-in-cef.md)
+- [ADR 0004 — OSC schema revisions for CasparCG 2.3.x](adrs/0004-osc-schema-revisions.md)
+- [ADR 0005 — Frame-rate sync in CasparCG CEF](adrs/0005-frame-rate-sync.md)
+- [ADR 0006 — AMCP update mechanism for the HTML producer](adrs/0006-amcp-update-mechanism-unresolved.md)
+  — open question RESOLVED (`CG UPDATE`)
+- [ADR 0007 — Migrate from Electron to a browser-based React platform](adrs/0007-electron-to-browser-migration.md)
+- [ADR 0008 — Thick CasparCG bridge (smart proxy), not a thin byte-relay](adrs/0008-thick-caspar-bridge.md)
+- [ADR 0009 — Who owns which timing setting](adrs/0009-timing-setting-ownership.md)
+- [ADR 0010 — CG Control's link to the Playout](adrs/0010-playout-link.md) — identity and channel
+  permissions from the Playout; the path to air stays direct to CasparCG
+
+⚠ Three decisions were once listed here as _planned_ at numbers **0003–0005** — iframe preview vs
+Konva, OSC as the source of truth for on-air state, and frame-locked animations. Those numbers are
+taken by the Accepted ADRs above ("numbered and never renumbered"), so the three are unwritten and
+unnumbered, not missing files.
 
 ## Integration records
 
