@@ -5,7 +5,7 @@ import { stoppedChannelsOf } from '@cg/shared-ipc';
 import { useConnections } from '../../hooks/useConnections.js';
 import { resolveCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
-import { useLock } from '../../hooks/useLock.js';
+import { useLock, useLockCoverage } from '../../hooks/useLock.js';
 import { EngageLockDialog } from '../lock/EngageLockDialog.js';
 import { colors, cssVars } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -302,6 +302,7 @@ export function StatusBar(): JSX.Element {
   // ask the ROLE and never the channel. See `useHoldsOperatorRole`.
   const holdsOperator = useHoldsOperatorRole();
   const lock = useLock();
+  const lockCoverage = useLockCoverage().kind;
   /** §7 — is the engage form open? */
   const [engaging, setEngaging] = useState(false);
   const link = useLink();
@@ -628,11 +629,15 @@ export function StatusBar(): JSX.Element {
         PIN is set fresh at every engage and is ephemeral (`#lockPin`, in memory), so the
         button belongs where the engage is (`STATION-CHROME-01` §7).
       */}
-      {lock.engaged ? (
+      {lockCoverage === 'all' ? (
         <span style={styles.lock}>
           <Icon icon={Lock} size={11} /> LOCKED
         </span>
-      ) : !holdsOperator /*
+      ) : lock.engaged ? /*
+          🔴 `B-257` — A LOCK THAT DOES NOT COVER ALL OF THIS CONSOLE says nothing here, and the
+          engage is ABSENT: the bridge holds one lock at a time and refuses a second. A console
+          the lock reaches only in part reads that on the channel strip, beside the channel.
+        */ null : !holdsOperator /*
           🔴 `C-038` — **A VIEWER GETS NO LOCK BUTTON AT ALL.**
 
           The lock gates station OPERATION, so it belongs to whoever may operate the station:

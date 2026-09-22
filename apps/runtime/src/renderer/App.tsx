@@ -37,7 +37,7 @@ import { useConnections } from './hooks/useConnections.js';
 import { initDelimiters } from './features/inspector/delimiterStore.js';
 import { initSources } from './features/sources/sourceStore.js';
 import { useStackHousekeeping } from './hooks/useStackHousekeeping.js';
-import { useLock } from './hooks/useLock.js';
+import { useLock, useLockCoverage } from './hooks/useLock.js';
 import { useOrphans } from './hooks/useOrphans.js';
 import { useOwnedOccupancy } from './hooks/useOwnedOccupancy.js';
 import { useEmptiedAir } from './hooks/useEmptiedAir.js';
@@ -101,6 +101,9 @@ export function App(): JSX.Element {
   // B-156 — read ONCE here and threaded to both the layer table and the Inspector.
   const rehearsals = useRehearse();
   const lock = useLock();
+  // `B-257` — the lock screen covers the console only when the lock covers ALL of it. A partly
+  // covered console keeps its other channels; the strip names the covered ones.
+  const lockCovers = useLockCoverage().kind === 'all';
   const health = useConnections();
   const orphans = useOrphans();
   const ownedOccupancy = useOwnedOccupancy();
@@ -506,7 +509,7 @@ export function App(): JSX.Element {
         */}
         <SignInOverlay />
         <LockOverlay
-          engaged={lock.engaged}
+          engaged={lockCovers}
           {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}
           {...(lock.reason !== undefined ? { reason: lock.reason } : {})}
           onRelease={(pin) => window.cg.lock.release({ pin })}

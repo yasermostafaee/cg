@@ -97,7 +97,13 @@ export interface FakePlayoutUser {
 }
 
 /** Which fixture user a mint is for. */
-export type FakeUserKey = 'operator' | 'viewer' | 'longName' | 'admin' | 'otherStation';
+export type FakeUserKey =
+  | 'operator'
+  | 'viewer'
+  | 'longName'
+  | 'admin'
+  | 'otherStation'
+  | 'channelTwo';
 
 /** `cg-op1` — one channel, Persian display name. The ordinary operator. */
 export const FAKE_OPERATOR: FakePlayoutUser = {
@@ -188,13 +194,31 @@ export const FAKE_OTHER_STATION_USER: FakePlayoutUser = {
   cgChannels: [{ host: '192.0.2.10', channel: 1 }],
 };
 
-/** The five fixture users, by key. */
+/**
+ * 🔴 `B-257` — `cg-op-ch2` — **A FULL OPERATOR OF THIS STATION'S HOST, GRANTED CHANNEL 2 ONLY.**
+ *
+ * The principal `B-257` was measured with: an operator whose channels do not overlap
+ * `cg-op1`'s. While `cg-op1` holds a lock, this user's console must not read as locked, and a
+ * channel-1 command of theirs must be refused for PERMISSION, never for a PIN they do not hold.
+ * Every other fixture user holds channel 1 or nothing, so without this one no suite and no
+ * visual check could put two consoles with DIFFERENT channels side by side.
+ */
+export const FAKE_CHANNEL_TWO_OPERATOR: FakePlayoutUser = {
+  username: 'cg-op-ch2',
+  sub: 'u-7715',
+  name: 'رضا احمدی',
+  roles: ['operator', 'viewer'],
+  cgChannels: [{ host: '127.0.0.1', channel: 2 }],
+};
+
+/** The six fixture users, by key. */
 export const FAKE_USERS: Readonly<Record<FakeUserKey, FakePlayoutUser>> = {
   operator: FAKE_OPERATOR,
   viewer: FAKE_VIEWER,
   longName: FAKE_LONG_NAME_USER,
   admin: FAKE_ADMIN,
   otherStation: FAKE_OTHER_STATION_USER,
+  channelTwo: FAKE_CHANNEL_TWO_OPERATOR,
 };
 
 /**

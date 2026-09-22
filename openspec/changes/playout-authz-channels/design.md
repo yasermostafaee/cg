@@ -182,6 +182,12 @@ them — it must not, however, change the REFUSAL CODE they return, or a console
 `stack.remove-all` / `stack.clear-all` / `stack.stop-all` are **not** in this table: they are
 scoped, all-or-nothing, over the union of the channels their members resolve to.
 
+⚠ **SUPERSEDED 2026-09-23 for the `lock.engage` row (`B-257`, `BRIDGE-TRUTH-01`).** "The lock is
+console-wide" was not true: it was BRIDGE-wide, and it refused every channel's verbs while its PIN
+was known only to the engager. The lock now covers the engager's channel set, captured at engage —
+see `openspec/changes/bridge-truth/design.md` §2. The row is left as written because it is the
+premise that audit measured false.
+
 ## 6. Why `lock.engage` and `lock.release` are both `operator`
 
 A viewer who can engage the lock can obstruct an operator while holding no authority over

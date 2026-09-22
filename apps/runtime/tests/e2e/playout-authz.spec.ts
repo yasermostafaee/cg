@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import {
   startFakePlayout,
+  FAKE_CHANNEL_TWO_OPERATOR,
   FAKE_OPERATOR,
   FAKE_VIEWER,
   FAKE_PLAYOUT_PASSWORD,
@@ -241,6 +242,65 @@ test('🔴 an OPERATOR on the same station keeps every verb — the positive con
   // …and the granted channel is NOT marked.
   const strip = page.getByRole('tablist', { name: 'Channels' });
   await expect(strip.getByRole('tab').first()).not.toContainText('READ ONLY');
+});
+
+/*
+  🔴 `B-257` — **A LOCK COVERS THE ENGAGER'S CHANNELS, AND A CONSOLE IT DOES NOT REACH DOES NOT
+  PRESENT ITSELF AS LOCKED.**
+
+  Two browser contexts, because the token is held per console: `cg-op1` (channel 1, the
+  station's declared channel) and `cg-op-ch2` (channel 2 only). The wire half — channel 2's
+  CLEAR and PANIC passing, a second channel-1 principal still meeting the lock, and channel 2
+  refused on channel 1 by PERMISSION — is `lock-scope.integration.test.ts`. This proves what only
+  a real page can: the lock screen is up on one console and absent on the other.
+
+  ⭐ Every absence on the second page has its control on the FIRST page, with the same locator:
+  the lock screen and the LOCKED chip are shown there, so the instrument was live.
+*/
+test('🔴 B-257 — channel 1 locks its own console, and channel 2’s console is not locked', async ({
+  page,
+  browser,
+}) => {
+  const station = await startStation();
+  const init = `window.__CG_BRIDGE_URL__ = ${JSON.stringify(station.bridgeUrl)};`;
+  await page.addInitScript(init);
+  await page.goto('/');
+  await signIn(page, FAKE_OPERATOR.username);
+
+  const otherContext = await browser.newContext();
+  try {
+    const two = await otherContext.newPage();
+    await two.addInitScript(init);
+    await two.goto(`${new URL(page.url()).origin}/`);
+    await signIn(two, FAKE_CHANNEL_TWO_OPERATOR.username);
+    await expect(two.getByLabel('Sign-in state')).toContainText(FAKE_CHANNEL_TWO_OPERATOR.name);
+
+    // Control — before any lock, channel 2's operator holds the role and is offered the engage.
+    const engageTwo = two.locator('footer').getByRole('button', { name: /Lock/ });
+    await expect(engageTwo).toHaveCount(1);
+
+    await page.locator('footer').getByRole('button', { name: /Lock/ }).click();
+    await page.getByLabel(/^Lock PIN \(/).fill('1234');
+    const again = page.getByLabel('Lock PIN again');
+    await again.fill('1234');
+    await again.press('Enter');
+
+    // Positive control — the engager's console IS locked, read with the locators used below.
+    await expect(page.getByRole('dialog', { name: 'Lock screen' })).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.locator('footer').getByText('LOCKED', { exact: true })).toHaveCount(1);
+
+    // FIRST, proof this page HEARD the lock: its engage goes absent (the bridge holds one lock at
+    // a time). Without this, the two absences below could be read before the publish arrived and
+    // would pass having measured nothing.
+    await expect(engageTwo).toHaveCount(0, { timeout: 20_000 });
+    // THE FIX — having heard it, the console the lock does not reach reads as not locked.
+    await expect(two.getByRole('dialog', { name: 'Lock screen' })).toHaveCount(0);
+    await expect(two.locator('footer').getByText('LOCKED', { exact: true })).toHaveCount(0);
+  } finally {
+    await otherContext.close();
+  }
 });
 
 test('🔴 the channel strip survives a RELOAD still scoped to the principal', async ({ page }) => {

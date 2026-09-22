@@ -8069,6 +8069,23 @@ export class CasparRuntime {
   }
 
   /**
+   * 🔴 `B-257` — **THE CHANNELS PANIC WOULD REACH, right now: every channel the ledger holds a
+   * seat on.** The SAME map {@link silenceAllLivePlates} walks, so the lock judges the reach
+   * PANIC will actually have rather than a second idea of it.
+   *
+   * ⚠ It does NOT scope PANIC and must not be used to. PANIC stays unscoped (A16, CLAUDE.md's
+   * floor): what it silences is still the whole ledger. The one reader is the lock, which asks a
+   * different question — whether a covered-set lock should refuse this press at all.
+   */
+  liveLedgerChannels(): readonly number[] {
+    const channels = new Set<number>();
+    for (const records of this.#liveLayers.values()) {
+      for (const record of records) channels.add(record.slot.channel);
+    }
+    return [...channels].sort((a, b) => a - b);
+  }
+
+  /**
    * `add-multibox-audio` — **A MAP OF PLATE VOLUMES FOR ONE ROW, APPLIED AS ONE ACTION.**
    *
    * ── WHY THIS EXISTS BESIDE {@link setLivePlateVolume} ──────────────────────
@@ -9887,9 +9904,48 @@ export class CasparRuntime {
   lockState(): LockState {
     return this.#lock;
   }
-  engage(pin: string): { ok: boolean } {
+  /**
+   * Engage the lock. `channels` is `B-257`'s covered set — the ENGAGER's channels, captured by
+   * the caller at this moment — and ABSENT means every channel, which is the lock as it always
+   * was (auth OFF, or an engager holding `'*'`).
+   *
+   * ⚠ **ONE LOCK AT A TIME, refused here and not only at the gate.** An every-channel lock
+   * refuses a second engage at the gate (`lock.engage` is an intent), so on that path this
+   * branch is unreachable. A COVERED-SET lock does not refuse a principal who holds none of its
+   * channels, and that principal's engage reaches this method — where replacing `#lock` would
+   * change the PIN, and the scope, under the operator who engaged first.
+   */
+  engage(pin: string, channels?: readonly number[]): { ok: boolean } {
+    if (this.#lock.engaged) {
+      this.#recordAudit({
+        actor: operatorActor(),
+        action: 'lock-engage',
+        outcome: 'failed',
+        errorCode: 'already-engaged',
+      });
+      return { ok: false };
+    }
+    /*
+      A covered-set lock covering NOTHING restricts nobody and would still hold the one lock
+      slot, so every other operator's engage would be refused for a lock that locks nothing.
+      Refused instead: an engager who holds no channel here has nothing of theirs to lock.
+    */
+    if (channels !== undefined && channels.length === 0) {
+      this.#recordAudit({
+        actor: operatorActor(),
+        action: 'lock-engage',
+        outcome: 'failed',
+        errorCode: 'no-channel-held',
+      });
+      return { ok: false };
+    }
     this.#lockPin = pin;
-    this.#lock = { engaged: true, reason: 'operator', engagedAt: new Date().toISOString() };
+    this.#lock = {
+      engaged: true,
+      reason: 'operator',
+      engagedAt: new Date().toISOString(),
+      ...(channels !== undefined ? { channels: [...new Set(channels)].sort((a, b) => a - b) } : {}),
+    };
     this.lockChanged.emit(this.#lock);
     // B-141 — the PIN is never recorded, only that the lock was engaged.
     this.#recordAudit({ actor: operatorActor(), action: 'lock-engage', outcome: 'ok' });
@@ -9973,7 +10029,33 @@ export class CasparRuntime {
       wrapper. What it does share is `#recordOutcome` — the mapping lives in one
       place even though the call shapes are two.
     */
-    if (redelivery) return this.#templateImportImpl(template, html, true);
+    if (redelivery) {
+      /*
+        🔴 `B-260` (a) — **A RE-DELIVERY THAT CHANGES THE CATALOGUE WRITES A ROW.**
+
+        The paragraph above still holds for the re-delivery that changes NOTHING — the burst a
+        reconnect sends, byte-identical to what the bridge holds — and that one stays silent.
+        But a re-delivery can REGISTER an id or REPLACE a held one's HTML (`B-085`'s local-wins
+        repair), and either changes what the next take puts on air. `B-260` measured a locked
+        console doing exactly that with nothing in the record; "every template mutation writes
+        a row" has no exceptions.
+
+        Classified BEFORE the import, because afterwards the held copy is the new one and
+        every re-delivery would read as unchanged.
+      */
+      const change = this.templateRedeliveryChange(template, html);
+      const result = this.#templateImportImpl(template, html, true);
+      if (change === 'register' || change === 'replace') {
+        this.#recordOutcome(
+          'template-redeliver',
+          { templateId: template.templateId },
+          {
+            outcome: 'ok',
+          },
+        );
+      }
+      return result;
+    }
     const detail: AuditDetail = { templateId: template.templateId };
     let result: { registered: boolean; templateId: string; skipped?: boolean };
     try {
@@ -10017,6 +10099,34 @@ export class CasparRuntime {
     this.#publishFixedStateIfChanged();
     return result;
   }
+
+  /**
+   * 🔴 `B-260` — **WHAT A RE-DELIVERY OF THIS TEMPLATE WOULD DO TO THE CATALOGUE**, asked
+   * before it is applied.
+   *
+   *   - `tombstoned` — the id was deliberately removed; the re-delivery is ignored (R-028 B).
+   *   - `register`   — the bridge does not hold the id; the re-delivery would ADD it.
+   *   - `replace`    — the bridge holds a DIFFERENT copy; the re-delivery would OVERWRITE it.
+   *   - `none`       — the bridge already holds exactly this; nothing would change.
+   *
+   * Two readers, one answer: `templateImport` writes its row from it, and the bridge's lock
+   * gate refuses a `replace` under a lock — so "would this overwrite?" cannot be answered two
+   * ways. Both sides of the comparison have been through the same `TemplateInfoSchema` parse
+   * (the wire's and the registry's load), so their key order is the schema's.
+   */
+  templateRedeliveryChange(
+    template: TemplateInfo,
+    html: string,
+  ): 'tombstoned' | 'register' | 'replace' | 'none' {
+    if (this.#removedTemplateIds.has(template.templateId)) return 'tombstoned';
+    const held = this.#templates.get(template.templateId);
+    if (held === null) return 'register';
+    const same =
+      this.#templates.html(template.templateId) === html &&
+      JSON.stringify(held) === JSON.stringify(template);
+    return same ? 'none' : 'replace';
+  }
+
   /** The retained HTML for a template id, or `null` (the Phase 3 serve seam). */
   templateHtml(templateId: string): string | null {
     return this.#templates.html(templateId);
@@ -10050,6 +10160,29 @@ export class CasparRuntime {
    * genuinely different now. See the same note on `TemplateReferenceSchema`.
    */
   templateRemove(templateId: string): {
+    ok: boolean;
+    reason?: 'in-use' | 'unknown-template';
+    message?: string;
+    references?: TemplateReference[];
+  } {
+    /*
+      🔴 `B-260` (a) — every template mutation writes a row, and a removal is the mutation that
+      can poison every row referencing the template. It wrote NOTHING before this, so the record
+      could not say who emptied the catalogue. A refused removal is recorded too, with its
+      reason, as the other operator verbs' refusals are.
+    */
+    const verdict = this.#templateRemoveImpl(templateId);
+    this.#recordOutcome(
+      'template-remove',
+      { templateId },
+      verdict.ok
+        ? { outcome: 'ok' }
+        : { outcome: 'failed', errorCode: verdict.reason ?? 'refused' },
+    );
+    return verdict;
+  }
+
+  #templateRemoveImpl(templateId: string): {
     ok: boolean;
     reason?: 'in-use' | 'unknown-template';
     message?: string;

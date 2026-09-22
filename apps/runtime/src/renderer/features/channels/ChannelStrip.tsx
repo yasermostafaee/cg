@@ -1,3 +1,4 @@
+import { useLockCoverage } from '../../hooks/useLock.js';
 import { TabStrip, type TabSpec } from '../../ui/Tabs.js';
 import { selectChannel } from './channelStore.js';
 import { useSelectedChannel } from './useSelectedChannel.js';
@@ -20,6 +21,8 @@ import { useSelectedChannel } from './useSelectedChannel.js';
  */
 export function ChannelStrip(): JSX.Element {
   const { channels, selected, operable } = useSelectedChannel();
+  const coverage = useLockCoverage();
+  const locked = coverage.kind === 'partial' ? coverage.channels : [];
 
   /*
     🔴 `C-038` / `R-066` bullet 3 — **A CHANNEL THIS PRINCIPAL MAY NOT OPERATE IS SHOWN
@@ -40,11 +43,25 @@ export function ChannelStrip(): JSX.Element {
     changes" — and a read-only channel is neither. Borrowing one would make the rail say the
     wrong thing in a vocabulary the dialog already uses.
   */
+  /*
+    🔴 `B-257` — a channel this principal holds that a lock covering PART of the console covers
+    reads LOCKED, by the same label mechanism: it is a fact about the channel, stated where the
+    channel is. It is neither READ ONLY (the principal does hold it) nor plain (its intents are
+    refused while the lock holds).
+
+    ⚠ UNREACHABLE while the station declares one channel — `#declaredChannels()` is the bank's
+    channel alone, so a principal holds at most one channel here and a lock covers all of a
+    console or none of it. Read HERE rather than in `useSelectedChannel`, so the one surface that
+    can say it does, and the verbs on such a channel stay offered: the bridge refuses them with
+    the lock sentence. Withdrawing them belongs with a second declared channel (`R-062`).
+  */
   const tabs: TabSpec[] = channels.map((channel) => ({
     id: String(channel),
-    label: operable.includes(channel)
-      ? `CHANNEL ${String(channel)}`
-      : `CHANNEL ${String(channel)} · READ ONLY`,
+    label: locked.includes(channel)
+      ? `CHANNEL ${String(channel)} · LOCKED`
+      : operable.includes(channel)
+        ? `CHANNEL ${String(channel)}`
+        : `CHANNEL ${String(channel)} · READ ONLY`,
   }));
 
   return (

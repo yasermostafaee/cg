@@ -70,6 +70,22 @@ export const AuditEntrySchema = z.object({
       separate decision, not a rider on this one.
     */
     'refused',
+    /*
+      🔴 `B-260` (a) — **EVERY TEMPLATE MUTATION WRITES A ROW, no exceptions.**
+
+      `template-redeliver` is a console's reconnect re-delivery that CHANGED the catalogue —
+      registered an id the bridge did not hold, or replaced a held one's HTML. It is its own
+      action rather than an `import`, because it is not an operator import (`B-141`): it is
+      the console's machinery, and a reader must be able to tell the two apart. A re-delivery
+      that changes nothing is not a mutation and writes nothing, so a reconnect still does not
+      bury the log.
+
+      `template-remove` is a removal from the catalogue. It wrote no row at all before this,
+      which made the one mutation that can poison every row referencing a template invisible
+      to the record.
+    */
+    'template-redeliver',
+    'template-remove',
   ]),
   /**
    * 🔴 `C-037` / ADR 0010 rule 3 — the token's `sub`: an opaque, stable user id, kept

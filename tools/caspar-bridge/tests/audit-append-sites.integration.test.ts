@@ -90,6 +90,14 @@ const NON_VERB_ACTIONS = [
     one.
   */
   'refused',
+  /*
+    🔴 `B-260` (a) — the two TEMPLATE mutations that wrote no row: a re-delivery that changed the
+    catalogue, and a removal from it. Catalogue writes, not playout verbs — neither carries a
+    `slot` or reaches air on its own. Driven by `tests/lock-scope.integration.test.ts`, which
+    asserts one row per change and none for a re-delivery that changes nothing.
+  */
+  'template-redeliver',
+  'template-remove',
 ] as const;
 
 it('the "every playout verb" list is COMPLETE — each schema action is driven or named non-verb', () => {

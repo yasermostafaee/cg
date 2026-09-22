@@ -109,9 +109,12 @@ import {
   type ChannelSettings,
   type ConnectionConfig,
   type FixedLayerBank,
+  type LockState,
+  type PlayoutPrincipal,
   type ReservedLayers,
   type SourceAssignments,
   type SourceCatalog,
+  type TemplateInfo,
   type WsPublishFrame,
   type WsResponseFrame,
 } from '@cg/shared-ipc';
@@ -549,6 +552,151 @@ export function refusedWhileLocked(route: Route, req: unknown): boolean {
     case 'operator-unless-redelivery':
       return (req as { redelivery?: boolean } | null)?.redelivery !== true;
   }
+}
+
+/**
+ * 🔴 `B-258` — **IS THIS FRAME THE CONSOLE'S RECONNECT MACHINERY, rather than a press?**
+ *
+ * The lock exempted exactly these two frames with the reason _"the client's own reconnect
+ * machinery, not a press"_, and the classification lives in `LockPolicy` — so this reads it
+ * rather than keeping a second list (golden rule 6). The permission gate is right to REFUSE
+ * them to a principal without the class; what it must not do is RECORD that refusal as
+ * something the principal pressed. A viewer's reconnect wrote `refused · stack.restore` under
+ * her name on every connect: a row for an act nobody performed, which is the record's worst
+ * failure (`B-141`).
+ */
+export function isReconnectMachinery(route: Route, req: unknown): boolean {
+  if (route.lock === 'resync') return true;
+  return (
+    route.lock === 'operator-unless-redelivery' &&
+    (req as { redelivery?: boolean } | null)?.redelivery === true
+  );
+}
+
+/**
+ * 🔴 `B-257` — **THE CHANNELS A LOCK ENGAGED NOW WOULD COVER: the engager's, and nothing
+ * else.** `undefined` means every channel — auth OFF, or an engager holding `'*'` — which is
+ * the lock exactly as it was.
+ *
+ * A principal may only restrict what it holds authority over. It is EXACTLY the engager's
+ * `permittedChannels` — the same `grantedChannels` composition `authStateFor` sends the console,
+ * over the station's declared channels and hosts as they are at this moment — so the set the
+ * lock stores and the set the engaging console displays as its own cannot differ.
+ *
+ * ⚠ CAPTURED by the caller at engage and stored on the lock. Never re-derived later: a token
+ * refresh, a principal swap on the engaging console or a server-list edit must not move what a
+ * lock that is already engaged covers.
+ */
+export function lockScopeAtEngage(
+  principal: PlayoutPrincipal | null,
+  runtime: CasparRuntime,
+): readonly number[] | undefined {
+  if (principal === null || principal.channels === '*') return undefined;
+  return grantedChannels(
+    principal.channels,
+    configuredCasparHosts(runtime.config()),
+    runtime.declaredChannels(),
+  );
+}
+
+/**
+ * 🔴 `B-257` — **WHICH OF A LOCK'S COVERED CHANNELS THIS PRINCIPAL HOLDS.** An empty answer
+ * means the lock does not reach this console at all: it holds nothing the lock covers, so the
+ * lock has nothing of its to restrict — and that console must not present itself as locked.
+ *
+ * `null` (no principal) holds nothing. The every-channel lock never asks this; it refuses as
+ * it always has.
+ */
+export function coveredChannelsHeld(
+  covered: readonly number[],
+  principal: PlayoutPrincipal | null,
+  runtime: CasparRuntime,
+): readonly number[] {
+  if (principal === null) return [];
+  const hosts = configuredCasparHosts(runtime.config());
+  return covered.filter((c) => grantsChannel(principal.channels, hosts, c));
+}
+
+/**
+ * 🔴 `B-257` — **DOES THIS LOCK REACH THIS PRINCIPAL AT ALL?** The every-channel lock reaches
+ * everybody; a covered-set lock reaches a principal who holds one of its channels. The ONE
+ * answer to "is this console locked", asked by the request gate, by the `auth` frame
+ * (`B-259`), and mirrored — from the same two inputs — by the console's lock surfaces.
+ */
+export function lockReaches(
+  lock: LockState,
+  principal: PlayoutPrincipal | null,
+  runtime: CasparRuntime,
+): boolean {
+  if (!lock.engaged) return false;
+  if (lock.channels === undefined) return true;
+  return coveredChannelsHeld(lock.channels, principal, runtime).length > 0;
+}
+
+/**
+ * 🔴 `B-257` / `B-260` — **DOES THE LOCK REFUSE THIS REQUEST, FROM THIS PRINCIPAL?** The one
+ * decision the gate asks. {@link refusedWhileLocked} is kept exactly as it was — the census in
+ * `lock-refuses-intents` pins it — and answers "is this an intent at all"; this answers the
+ * rest.
+ *
+ * ── THE EVERY-CHANNEL LOCK — BYTE-IDENTICAL ─────────────────────────────────
+ *
+ * `lock.channels` absent (auth OFF, or an engager holding `'*'`): every intent is refused, for
+ * every socket, exactly as before. `B-229` stands unchanged there, no-carve-out answer and all.
+ *
+ * ── THE COVERED-SET LOCK ────────────────────────────────────────────────────
+ *
+ * It refuses an intent only when it touches a covered channel THIS PRINCIPAL HOLDS:
+ *
+ *   - a principal holding none of the covered channels is not locked at all. An intent of
+ *     theirs that touches a covered channel is one they hold no grant for, so the PERMISSION
+ *     gate refuses it with the sentence that names the real obstacle — a PIN they do not have
+ *     is not it (my audit's B2);
+ *   - an intent that resolves to channels is refused iff one of them is covered and held;
+ *   - an intent that resolves to NO channel — the station-wide verbs, and a verb on a row with
+ *     no layer — touches every channel the principal holds, so it is refused;
+ *   - PANIC is judged by where it REACHES: the channels its ledger holds seats on
+ *     ({@link CasparRuntime.liveLedgerChannels}). It is not scoped by this — it silences the
+ *     whole ledger or nothing (A16) — this only decides whether the lock lets the press through.
+ *
+ * ── `B-260` (b) — A RE-DELIVERY MAY NOT OVERWRITE UNDER A LOCK ─────────────
+ *
+ * The re-delivery exemption's reason is "not a press", and on the lock's own axis that reason
+ * was false: a re-delivery of a held id REPLACES its HTML, so a locked console could change
+ * what the next take airs. Refused when it would `replace` a held copy and the lock reaches
+ * this principal; a re-delivery that REGISTERS a missing id, or changes nothing, still passes —
+ * the reconnect keeps working under a lock, and nothing held is overwritten.
+ */
+export function lockRefuses(
+  route: Route,
+  req: unknown,
+  lock: LockState,
+  principal: PlayoutPrincipal | null,
+  runtime: CasparRuntime,
+): boolean {
+  if (!lock.engaged) return false;
+  const reaches = (): boolean => lockReaches(lock, principal, runtime);
+
+  if (!refusedWhileLocked(route, req)) {
+    if (!isReconnectMachinery(route, req) || route.lock !== 'operator-unless-redelivery') {
+      return false;
+    }
+    const r = req as { template?: TemplateInfo; html?: string } | null;
+    if (r?.template === undefined || r.html === undefined) return false;
+    return reaches() && runtime.templateRedeliveryChange(r.template, r.html) === 'replace';
+  }
+
+  if (lock.channels === undefined) return true;
+  const held = coveredChannelsHeld(lock.channels, principal, runtime);
+  if (held.length === 0) return false;
+  const footprint =
+    route.channel.name === StackSilenceAllLivePlatesChannel.name
+      ? runtime.liveLedgerChannels()
+      : channelsForRequest(route, req, runtime);
+  if (footprint.length === 0 && route.channel.name !== StackSilenceAllLivePlatesChannel.name) {
+    return true;
+  }
+  return footprint.some((c) => held.includes(c));
 }
 
 /**
@@ -1222,7 +1370,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         socket,
         routes,
         data.toString(),
-        () => runtime.lockState().engaged,
+        () => runtime.lockState(),
         session,
         playoutAuth,
         runtime,
@@ -1329,7 +1477,7 @@ async function handleMessage(
   socket: WebSocket,
   routes: Map<string, Route>,
   raw: string,
-  isLocked: () => boolean,
+  lockState: () => LockState,
   session: AuthSession,
   playoutAuth: PlayoutAuth | null,
   runtime: CasparRuntime,
@@ -1399,7 +1547,18 @@ async function handleMessage(
     non-skew message through verbatim, so this reaches every existing `err.message` surface
     already worded for an operator, with no renderer change.
   */
-  if (isLocked() && refusedWhileLocked(route, parsedReq.data)) {
+  /*
+    🔴 `B-257` — a COVERED-SET lock's verdict turns on WHO is asking, so it waits for a
+    sign-in that is still landing (see the wait below) before it decides, and re-reads the
+    lock after that wait rather than judging on a value from before it. The every-channel
+    lock does not depend on the principal and decides at once, exactly as it always did.
+  */
+  let lock = lockState();
+  if (lock.engaged && lock.channels !== undefined) {
+    await session.whenSettled();
+    lock = lockState();
+  }
+  if (lockRefuses(route, parsedReq.data, lock, session.token?.principal ?? null, runtime)) {
     send(socket, errorResponse(frame.id, LOCK_ENGAGED_REFUSAL));
     return;
   }
@@ -1472,7 +1631,12 @@ async function handleMessage(
       the census can walk it without writing rows. The gate acts; the predicate decides.
     */
     const principal = session?.token?.principal;
-    if (principal !== undefined) {
+    /*
+      🔴 `B-258` — the console's reconnect machinery is REFUSED, and NOT RECORDED as a press.
+      The refusal still goes back on the wire, so the console hears it; what does not happen is
+      a row naming a person for an act they never performed.
+    */
+    if (principal !== undefined && !isReconnectMachinery(route, parsedReq.data)) {
       runtime.recordAuthzRefusal({
         actor: principal.name,
         actorSub: principal.sub,
@@ -1577,6 +1741,30 @@ async function handleAuthFrame(
 
     Computed BEFORE `adopt`, because after it the previous principal is gone.
   */
+  /*
+    🔴 `B-259` — **A LOCKED CONSOLE DOES NOT CHANGE HANDS BY TOKEN.**
+
+    A principal change is sign-out plus sign-in in one frame, and sign-out is refused while the
+    lock reaches this socket (`B-229`'s no-carve-out answer, pinned at
+    `lock-refuses-intents.integration.test.ts:281`). This frame is outside the route table, so
+    the request gate never saw it and the swap went through; `B-259` measured it.
+
+    ⚠ **The REFRESH passes — same `sub`.** The console re-presents a refreshed token about ten
+    minutes before expiry (D2); refusing that would lapse the session of a console locked across
+    a token's lifetime. A FIRST sign-in on a socket passes too (there is nobody to displace) —
+    a console reloaded under a lock must still be able to sign in.
+
+    Judged against the socket's CURRENT principal, read AFTER the verification's await.
+  */
+  const current = session.token?.principal ?? null;
+  if (
+    current !== null &&
+    current.sub !== result.token.principal.sub &&
+    lockReaches(runtime.lockState(), current, runtime)
+  ) {
+    send(socket, errorResponse(frame.id, LOCK_ENGAGED_REFUSAL));
+    return;
+  }
   session.adopt(result.token);
   playoutAuth.noteLiveToken(result.token.rawToken);
   /*
@@ -2119,7 +2307,14 @@ export function buildRoutes(
     // SEE which row owns a lit layer, never to add a fourth way to cut one.
     route(LiveLayersStateChannel, 'read', 'read', () => b.liveLayersState()),
 
-    route(LockEngageChannel, 'operator', 'operator', (r: { pin: string }) => b.engage(r.pin)),
+    /*
+      🔴 `B-257` — the engage CAPTURES the engager's channels. `lockScopeAtEngage` answers
+      `undefined` (every channel) with auth OFF — no session, no principal — and for an engager
+      holding `'*'`, so both keep today's lock byte for byte.
+    */
+    route(LockEngageChannel, 'operator', 'operator', (r: { pin: string }) =>
+      b.engage(r.pin, lockScopeAtEngage(currentAuthSession()?.token?.principal ?? null, b)),
+    ),
     route(LockReleaseChannel, 'unlock', 'operator', (r: { pin: string }) => b.release(r.pin)),
     route(LockStateChannel, 'read', 'read', () => b.lockState()),
 

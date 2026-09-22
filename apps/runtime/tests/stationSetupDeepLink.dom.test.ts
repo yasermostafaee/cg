@@ -198,6 +198,11 @@ describe('a deep link opens ONE dialog at the named section', () => {
         get: () => Promise.resolve({ settings: [], observed: [] }),
         onChanged: () => () => undefined,
       },
+      // `B-257` — the channel strip reads how much of the console a lock covers.
+      lock: {
+        state: () => Promise.resolve({ engaged: false }),
+        onStateChanged: () => () => undefined,
+      },
     };
     // `C-038` — the channel list is scoped to the principal, so every stub needs one.
     (stub as { auth?: unknown }).auth = authStub();

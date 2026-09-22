@@ -198,6 +198,11 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
     },
     // `C-038` — the channel list is scoped to the principal, so every stub needs one.
     auth: authStub(options.auth),
+    // `B-257` — the channel strip reads how much of the console a lock covers.
+    lock: {
+      state: () => Promise.resolve({ engaged: false }),
+      onStateChanged: () => () => undefined,
+    },
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
   return {

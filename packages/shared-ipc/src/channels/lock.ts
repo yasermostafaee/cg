@@ -19,6 +19,20 @@ const LockStateSchema = z.object({
    * elapsed time on the LockOverlay. Absent when `engaged === false`.
    */
   engagedAt: z.string().datetime().optional(),
+  /**
+   * 🔴 `B-257` — **THE CHANNELS THIS LOCK COVERS: the engager's channel set, captured at the
+   * moment of engage.** ABSENT means EVERY channel — auth OFF, or an engager holding `'*'` —
+   * which is the lock exactly as it was before this field existed.
+   *
+   * A principal may only restrict what it holds authority over. The lock was bridge-wide while
+   * its PIN was known only to the engager, so an operator granted channel 1 could lock an
+   * operator of channel 2 out of CLEAR and PANIC on a channel the first one could not touch.
+   *
+   * ⚠ CAPTURED, never recomputed: a later token refresh, a principal swap on the engaging
+   * console or a server-list edit does not move what the lock covers. The bridge decides
+   * refusals from THIS list; a console reads it to decide what it presents as locked.
+   */
+  channels: z.array(z.number().int().positive()).optional(),
 });
 
 export type LockState = z.infer<typeof LockStateSchema>;
