@@ -74,8 +74,15 @@
       https://github.com/yasermostafaee/cg/actions/runs/35765969467 · `conclusion: success`,
       and the `E2E (Playwright)` job **RAN** (checked, not assumed — a skipped job proves
       nothing, `P-029`)
-- [ ] 🔴 **A second discharge is owed for the e2e commit itself**, which carries
-      `playout-authz.spec.ts` and the signed-out strip fix
+- [x] 🔴 **Linux `e2e` discharged for `eb79f41d`, the commit carrying ALL of the code** —
+      https://github.com/yasermostafaee/cg/actions/runs/35770331904 · `conclusion: success`,
+      and the `E2E (Playwright)` job **RAN** (read back from the API, not taken from a
+      notification). This one supersedes the `65ef6b5c` discharge above rather than adding to
+      it: `eb79f41d` contains that commit plus `playout-authz.spec.ts`, the signed-out strip
+      fix and the Station setup gate, and the `ci` and `e2e` jobs are whole-tree — the
+      changed-path classification decides WHETHER they run, never WHAT they cover.
+      ⚠ `3e6bd7e2` sits on top of it and is docs-only, so it changes nothing the suite
+      covers.
 
 ## 7. 🔴 Owed work, named rather than left to be found
 
