@@ -20,6 +20,7 @@ import {
   EmptiedAirRestoreChannel,
   LockEngageChannel,
   LockReleaseChannel,
+  AuthStateChangedChannel,
   LockStateChangedChannel,
   LockStateChannel,
   PlayoutLayersClearChannel,
@@ -119,7 +120,6 @@ import type {
 import * as ipcChannels from '@cg/shared-ipc';
 import { bridgeErrorFrom, BridgeSkewError } from '../shared/bridgeSkew.js';
 import { LibraryStore } from './library/LibraryStore.js';
-import { getOperatorName, operatorActorForWire, setOperatorName } from './operatorName.js';
 import {
   loadPlayoutSession,
   PlayoutSignInError,
@@ -1221,6 +1221,24 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#plateReleaseSubs.emit(p.data);
         break;
       }
+      /*
+        🔴 `OPERATOR-NAME-SWEEP-01` § 3(a) — **THE BRIDGE SAYS THE PERMISSIONS MOVED.**
+
+        The console does not re-derive anything here; it adopts the answer the gate itself
+        computed. That is the whole point of the channel: a station-admin repointing the
+        servers changes who may drive which channel, and a strip that learned it only on the
+        next reconnect would keep offering a channel the bridge had begun refusing.
+
+        ⚠ It goes through {@link #setPrincipal}, the ONE writer for the pair, rather than
+        assigning `#permittedChannels` directly. The principal and its channels always arrive
+        together and a second writer is how they would come to disagree — which is the defect
+        this channel exists to close, one level down.
+      */
+      case AuthStateChangedChannel.name: {
+        const p = AuthStateChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#setPrincipal(p.data.principal, p.data.permittedChannels);
+        break;
+      }
       case LockStateChangedChannel.name: {
         const p = LockStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#lockSubs.emit(p.data);
@@ -1337,7 +1355,6 @@ export class WebSocketRuntime implements RuntimeBridge {
           id,
           channel: channel.name,
           payload: validatedReq,
-          actor: operatorActorForWire(),
         }),
       );
     });
@@ -1734,12 +1751,6 @@ export class WebSocketRuntime implements RuntimeBridge {
     // list can be reported as a quiet session only when the instrument that
     // produced it is provably live.
     health: () => this.#invoke(AuditHealthChannel, {}),
-    // Browser-local, not a channel: the value's whole purpose is to differ per
-    // console. See `operatorName.ts` for what it is worth (and what it is not).
-    operatorName: () => getOperatorName(),
-    setOperatorName: (name: string) => {
-      setOperatorName(name);
-    },
   };
 
   readonly update = {

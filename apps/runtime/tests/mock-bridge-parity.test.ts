@@ -230,12 +230,20 @@ const BRIDGE_SURFACE: {
     // mock with `null` (it retains no rendered page, so the rehearsal panel shows
     // its honest "unavailable in this browser" state).
     templates: ['get', 'list', 'import', 'remove', 'onChanged', 'html'],
-    // B-141 follow-up — `operatorName` / `setOperatorName` are the per-console
-    // operator name recorded as the audit `actor`. Browser-local in BOTH backends
-    // (same storage, same module), which is precisely why they belong here: the
-    // mock's own audit rows carry the same actor, so test mode is not the one place
-    // where the column disagrees with every other build.
-    audit: ['recent', 'health', 'operatorName', 'setOperatorName'],
+    /*
+      🔴 `OPERATOR-NAME-SWEEP-01` — **`operatorName` / `setOperatorName` LEFT THIS LIST, and
+      this guard is the reason the removal is safe.**
+
+      They were here because the self-declared console label was browser-local in BOTH
+      backends, so test mode recorded the same actor as a live one. Identity is proven now
+      (`C-037`/`C-038`), the label is retired, and the members are gone from the contract.
+
+      ⚠ This list is asserted with `toEqual` in BOTH directions against the mock AND the live
+      bridge, so it could not be bypassed: leaving the two names here after the contract lost
+      them is red, and so is dropping a member that still exists. The guard is UPDATED as a
+      consumer, which is the only correct way to move a census.
+    */
+    audit: ['recent', 'health'],
     update: ['request', 'state', 'cancel', 'onStateChanged'],
     /**
      * R-022 — REHEARSE belongs in this guard for exactly the reason

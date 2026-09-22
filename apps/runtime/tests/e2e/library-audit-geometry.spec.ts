@@ -8,8 +8,9 @@ import { buildValidVcg, expect, test } from './fixtures/runtime.js';
  * with each dialog opened by the page's own `data-start` (`design.md` §15.3): a search box 39
  * tall, 32 px kind chips, 56 × 49 thumbnails under a 15 px name; and a ledger-wide frame whose
  * table head is `12px 16px` at 12 px and whose cells are `15px 16px` at 13 px, with an actor
- * column the reference does NOT draw (guard item 27) and the console strip kept small beside
- * it. Every number is READ from the token home (`--r-tpl-*`, `--r-audit-*`, `--r-modal-w-*`)
+ * column the reference does NOT draw (guard item 27). The console strip that used to sit beside
+ * it is retired (`OPERATOR-NAME-SWEEP-01`), and its ABSENCE is what is asserted here now.
+ * Every number is READ from the token home (`--r-tpl-*`, `--r-audit-*`, `--r-modal-w-*`)
  * and compared against what the page paints, so a token that stops being read fails here
  * rather than passing on a coincidence.
  *
@@ -177,7 +178,7 @@ test('§8 — the picker measures to `LIBRARY_PX` at 1280 × 800', async ({ app 
   await app.closeTemplatePicker();
 });
 
-test('§8 — the audit log measures to `AUDIT_LOG_PX`, with the actor column and the small console strip beside it', async ({
+test('§8 — the audit log measures to `AUDIT_LOG_PX`, with the actor column and NO console strip', async ({
   app,
 }) => {
   const page = app.page;
@@ -201,8 +202,6 @@ test('§8 — the audit log measures to `AUDIT_LOG_PX`, with the actor column an
       badgeText: read('--r-audit-badge-text'),
       selectH: read('--r-audit-select-h'),
       fieldW: read('--r-audit-field-w'),
-      consoleW: read('--r-audit-console-input-w'),
-      caveatText: read('--r-audit-caveat-text'),
       subtitleText: read('--r-modal-subtitle-text'),
     };
   });
@@ -287,43 +286,24 @@ test('§8 — the audit log measures to `AUDIT_LOG_PX`, with the actor column an
   // Golden rule 11 — the coordinate stays in the entry.
   await expect(take.locator('[data-audit-slot]')).toHaveText(new RegExp(`^on 1-${String(layer)}$`));
 
-  // THE CONSOLE STRIP — the field SMALL (132 wide, the select's height), the caveat beside it
-  // at 12 px, the whole strip above the table's top edge and over its first columns.
-  const strip = log.locator('[data-audit-console]');
-  const field = strip.locator('#audit-operator');
-  const fieldBox = await field.evaluate((el) => {
-    const r = el.getBoundingClientRect();
-    return { w: r.width, h: r.height };
-  });
-  expect(Math.round(fieldBox.w)).toBe(px(tokens.consoleW));
-  expect(Math.round(fieldBox.h)).toBe(px(tokens.selectH));
-  const caveat = strip.locator('[data-audit-caveat]');
-  await expect(caveat).toContainText('It is a LABEL you typed, not a verified sign-in');
-  expect(px(await caveat.evaluate((el) => getComputedStyle(el).fontSize))).toBe(
-    px(tokens.caveatText),
-  );
-  const geometry = await page.evaluate(() => {
-    const s = document.querySelector('[data-audit-console]');
-    const t = document.querySelector('[data-audit-table]');
-    const a = document.querySelector('[data-audit-actor-head]');
-    if (s === null || t === null || a === null)
-      throw new Error('strip, table or actor head missing');
-    const sr = s.getBoundingClientRect();
-    const tr = t.getBoundingClientRect();
-    const ar = a.getBoundingClientRect();
-    return {
-      stripBottom: sr.bottom,
-      tableTop: tr.top,
-      stripLeft: sr.left,
-      actorLeft: ar.left,
-      actorRight: ar.right,
-    };
-  });
-  expect(geometry.stripBottom).toBeLessThanOrEqual(geometry.tableTop);
-  // Beside the column: the strip starts at the table's edge and spans past the actor column.
-  expect(geometry.stripLeft).toBeLessThanOrEqual(geometry.actorLeft);
-  const stripRight = await strip.evaluate((el) => el.getBoundingClientRect().right);
-  expect(stripRight).toBeGreaterThanOrEqual(geometry.actorRight);
+  /*
+    🔴 `OPERATOR-NAME-SWEEP-01` — **THE CONSOLE STRIP IS GONE, and its geometry block with it.**
+
+    What stood here measured the field at 132 px, the caveat at 12 px, and the strip's box
+    against the table's top edge and the actor column's left and right — a careful piece of
+    real-browser measurement (golden rule 12c) for a control that no longer exists.
+
+    ⭐ **Its absence is asserted, with a control.** The panel is proved LIVE by everything above
+    — the frame's 1224 px, the column widths, a row's padding and its actor cell — so a
+    `toHaveCount(0)` here cannot pass against a dialog that failed to render.
+
+    ⚠ The two tokens it read (`--r-audit-console-input-w`, `--r-audit-caveat-text`) left
+    `theme.ts` in the same commit. `tokenHome` catches a token read-but-undeclared and never
+    one declared with no reader, so nothing else would have noticed them going stale.
+  */
+  await expect(log.locator('[data-audit-console]')).toHaveCount(0);
+  await expect(log.locator('#audit-operator')).toHaveCount(0);
+  await expect(log.locator('[data-audit-caveat]')).toHaveCount(0);
 
   // THE FOOTER — the count, then Close.
   await expect(log.locator('[data-audit-count]')).toHaveText(/^\d+ of \d+ events$/);

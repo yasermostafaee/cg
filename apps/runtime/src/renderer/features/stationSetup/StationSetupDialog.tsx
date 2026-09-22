@@ -98,7 +98,9 @@ import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
  *
  * ── WHAT DELIBERATELY DID NOT MOVE IN ───────────────────────────────────────
  *
- * The operator name (`B-143`); the lock PIN (one press from the status bar, engaged while
+ * ⚠ The operator name USED TO HEAD THIS LIST and is no longer on it: it was retired
+ * outright by `OPERATOR-NAME-SWEEP-01` rather than moved, so there is nothing left to keep
+ * out of this dialog. The lock PIN (one press from the status bar, engaged while
  * walking away from a live desk — `STATION-CHROME-01` §7 re-confirmed this); panel widths
  * and the Inspector overlay; per-plate audio, the per-row source override and the on-air
  * position; the plate→source ASSIGNMENTS; and the stack, which is the work, not a setting.
@@ -342,6 +344,7 @@ function SetupField({
   after,
   error,
   id,
+  readOnlyValue,
   children,
 }: {
   label: string;
@@ -353,6 +356,21 @@ function SetupField({
   error: string | null;
   /** Stable id root, so the control and its error can be bound together. */
   id: string;
+  /**
+   * 🔴 `OPERATOR-NAME-SWEEP-01` § 3(b) — **THE VALUE, AS A VALUE, for a principal who may not
+   * commit this dialog.**
+   *
+   * Supplied by the caller because only the caller knows what the field's value READS as — a
+   * port is its digits, a host is its string, a raster is "1920 × 1080". When present AND the
+   * dialog is read-only, it is rendered INSTEAD of `children`.
+   *
+   * ⚠ **Not a `disabled` control, and the difference is the requirement.** Golden rule 13: a
+   * greyed-out input says "you cannot type here just now", which reads as a transient
+   * condition; the truth is that this setting is not this principal's to change. A fact is
+   * written as a fact. It is also the treatment `ChannelSection` already uses for the video
+   * format, which is designer-owned for a different reason — one appearance, one meaning.
+   */
+  readOnlyValue?: string | undefined;
   children: ReactNode;
 }): JSX.Element {
   const errorId = `${id}-error`;
@@ -363,15 +381,23 @@ function SetupField({
         {optional && <span className="cg-setup-field__optional"> · optional</span>}
       </span>
       {/*
-        The control is cloned rather than wrapped so the caller keeps owning it: this decides
-        only that an invalid field is MARKED invalid and POINTS at its sentence, which are the
-        two things a caller would otherwise have to remember per field.
+        🔴 § 3(b) — the VALUE stands in for the control when this principal cannot commit.
+
+        `Tag`'s type makes `onClick`, `tabIndex` and `role="button"` inexpressible, so what
+        renders here cannot become a control by accident — the enforcement is the type, not a
+        review note. `data-setup-readonly` is the handle the spec reads.
       */}
-      {isValidElement(children)
-        ? cloneElement(children as ReactElement<Record<string, unknown>>, {
-            ...(error !== null ? { 'aria-invalid': true, 'aria-describedby': errorId } : {}),
-          })
-        : children}
+      {readOnlyValue !== undefined ? (
+        <Tag className="cg-setup-field__value" data-setup-readonly="">
+          {readOnlyValue}
+        </Tag>
+      ) : isValidElement(children) ? (
+        cloneElement(children as ReactElement<Record<string, unknown>>, {
+          ...(error !== null ? { 'aria-invalid': true, 'aria-describedby': errorId } : {}),
+        })
+      ) : (
+        children
+      )}
       {after}
       {hint !== undefined && <p className="cg-setup-field__hint">{hint}</p>}
       {error !== null && (
@@ -929,6 +955,7 @@ export function StationSetupDialog({
     <div className="cg-setup-fields cg-setup-fields--three">
       <SetupField
         label="Host"
+        {...(holdsStationAdmin ? {} : { readOnlyValue: draft.host })}
         error={hostError(draft.host, { label: 'Host' })}
         id={`${prefix}-host`}
       >
@@ -945,6 +972,7 @@ export function StationSetupDialog({
       </SetupField>
       <SetupField
         label="AMCP port"
+        {...(holdsStationAdmin ? {} : { readOnlyValue: draft.amcpPort })}
         error={portError(draft.amcpPort, { min: 1, label: 'AMCP port' })}
         id={`${prefix}-amcp`}
       >
@@ -961,6 +989,7 @@ export function StationSetupDialog({
       </SetupField>
       <SetupField
         label="OSC port"
+        {...(holdsStationAdmin ? {} : { readOnlyValue: draft.oscPort })}
         error={portError(draft.oscPort, { min: 0, label: 'OSC port' })}
         id={`${prefix}-osc`}
       >
@@ -1350,6 +1379,11 @@ export function StationSetupDialog({
                           when left empty, which is why blank is legal on both (§10.3). */}
                     <SetupField
                       label="Serve host"
+                      {...(holdsStationAdmin
+                        ? {}
+                        : {
+                            readOnlyValue: serveHost === '' ? 'derived automatically' : serveHost,
+                          })}
                       optional
                       id="serve-host"
                       error={hostError(serveHost, {
@@ -1391,6 +1425,11 @@ export function StationSetupDialog({
                     </SetupField>
                     <SetupField
                       label="Serve port"
+                      {...(holdsStationAdmin
+                        ? {}
+                        : {
+                            readOnlyValue: servePort === '' ? 'assigned automatically' : servePort,
+                          })}
                       optional
                       id="serve-port"
                       error={portError(servePort, {

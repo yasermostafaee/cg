@@ -46,8 +46,22 @@ test('the audit log names the row and the template, shows local time to the seco
     'tpl-e2e-audit',
   );
   await expect(take.getByRole('button', { name: 'Copy item id' })).toBeVisible();
-  // The caveat about WHO is untouched.
-  await expect(log).toContainText('It is a LABEL you typed, not a verified sign-in');
+  /*
+    🔴 `OPERATOR-NAME-SWEEP-01` — **THE CAVEAT IS GONE, AND THIS ASSERTS ITS ABSENCE.**
+
+    It read "the caveat about WHO is untouched" and pinned the sentence. Identity is proven
+    now, so that sentence would be false above these rows.
+
+    ⭐ **The positive control is the line above and the two below**: this same locator is
+    asserted to CONTAIN the item id, the Copy button and — next line — a real actor value. A
+    bare "does not contain" against a panel that failed to open would pass for the wrong
+    reason, which is exactly what `PLAYOUT-AUTHZ-01`'s first e2e did before a control caught
+    it.
+  */
+  await expect(log).not.toContainText('LABEL you typed');
+  await expect(log).not.toContainText('not a verified sign-in');
+  // …and the ACTOR column is still there, carrying a value — the control for the two above.
+  await expect(log.locator('[data-audit-actor]').first()).not.toBeEmpty();
   // The footer's Close — the primitive's ✕ is also named Close, and sits first in the DOM.
   await log.getByRole('button', { name: 'Close' }).last().click();
   await expect(log).toHaveCount(0);

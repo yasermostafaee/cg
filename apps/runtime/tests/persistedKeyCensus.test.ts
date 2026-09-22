@@ -87,7 +87,20 @@ function inventory(): {
  */
 const BEFORE_AND_AFTER = {
   realLocalStorage: [
-    'cg.runtime.operatorName',
+    /*
+      🔴 `OPERATOR-NAME-SWEEP-01` — **`cg.runtime.operatorName` IS GONE, and its absence is
+      recorded here rather than silently dropped.**
+
+      It held the SELF-DECLARED console label that every control request carried as `actor`.
+      Identity is proven now, so the key answers a question the Playout token answers properly
+      and the sentence that qualified it had become false on screen.
+
+      ⚠ **There is no migration and none is owed.** Nothing READS the old value any more, so a
+      browser that still has the key simply keeps a string nobody asks for; it is not data the
+      operator can lose, because it was never data the system trusted. A migration that deleted
+      it would be a write to every console's storage to remove a value that costs nothing —
+      the kind of change that can fail and cannot succeed visibly.
+    */
     /*
       🔴 `R-066` — the Playout session this console holds: the access token, the opaque
       refresh token and the expiry. ONE key, per browser profile, so that "survives a reload"

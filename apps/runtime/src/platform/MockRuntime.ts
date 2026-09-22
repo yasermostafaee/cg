@@ -56,10 +56,10 @@ import {
   REMOVE_ON_AIR_CODE,
   SourceAssignmentsSchema,
   SourceCatalogSchema,
+  UNATTRIBUTED_ACTOR,
   videoModeRaster,
 } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
-import { operatorActorForWire } from './operatorName.js';
 import { configuredHosts, isLoopbackHost } from '../shared/loopback.js';
 import { seedConfig, seedHealth, seedStack, seedTemplates } from './seed.js';
 
@@ -2053,15 +2053,18 @@ export class MockRuntime {
 
 function auditEntry(action: AuditEntry['action'], extra: Partial<AuditEntry>): AuditEntry {
   /*
-    B-141 follow-up — the mock records the SAME actor the real bridge would: this
-    console's declared name, or `unattributed` when it has none. A mock that kept
-    writing the old `'operator'` literal would make the offline console the one place
-    where the audit column disagrees with every other build, and the parity is the
-    point of this mock's audit at all.
+    B-141 follow-up — the mock records the SAME actor the real bridge would.
+
+    🔴 `OPERATOR-NAME-SWEEP-01` — and that is now `unattributed`, always. The self-declared
+    console name is retired: test mode has no Playout to sign in to, so there is no identity
+    to record and `unattributed` is the honest answer rather than a fallback. A mock that
+    invented a name — or kept the old `'operator'` literal — would make the offline console
+    the one place where the audit column claims something the system does not know, and
+    parity with the real bridge is the point of this mock's audit at all.
   */
   return {
     ts: new Date().toISOString(),
-    actor: operatorActorForWire(),
+    actor: UNATTRIBUTED_ACTOR,
     action,
     outcome: 'ok',
     ...extra,

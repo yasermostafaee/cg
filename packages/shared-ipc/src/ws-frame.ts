@@ -90,9 +90,20 @@ export function normalizeActor(raw: unknown): string {
  * is OPTIONAL so that an older browser, or any client that declines to say, still gets
  * its request served — and recorded as {@link UNATTRIBUTED_ACTOR}, never dropped.
  *
- * 🔴 It is SELF-DECLARED and UNVERIFIED. The control socket is unauthenticated
- * loopback: this field answers "which console, as labelled", never "which person,
- * proven". Nothing downstream may treat it as identity.
+ * 🔴 **NOTHING SENDS IT ANY MORE, and the field is kept for the reason it was made optional.**
+ *
+ * It carried a SELF-DECLARED console label, typed by whoever sat down, back when the control
+ * socket was unauthenticated loopback and there was no better answer. `OPERATOR-NAME-SWEEP-01`
+ * retired that label: identity is proven now — a socket establishes a principal with
+ * {@link WsAuthFrameSchema} and the bridge verifies it offline — so the console makes no claim
+ * about who it is and omits this field entirely.
+ *
+ * ⚠ **It stays OPTIONAL in the schema rather than being deleted**, and the distinction matters:
+ * deleting it would refuse a frame from an older browser that still sends one, which is a
+ * compatibility break for no gain. A value that DOES arrive is still self-declared and still
+ * never identity — when a principal exists the bridge ignores it outright
+ * (`actor-context.ts`), and when none does it is normalised to {@link UNATTRIBUTED_ACTOR}
+ * exactly as an absent one is. So the two paths converge and neither can be mistaken for proof.
  */
 export const WsRequestFrameSchema = z.object({
   type: z.literal('request'),
@@ -144,8 +155,10 @@ export type WsPublishFrame = z.infer<typeof WsPublishFrameSchema>;
  * byte of it reaches a verifier. Cryptographic code should never be the first thing to see a
  * malformed input.
  *
- * ⚠ It replaces nothing. `actor` on a request frame stays exactly what it was — self-declared
- * and unverified — and when a principal exists the bridge simply stops consulting it.
+ * ⚠ It replaced the `actor` field rather than sitting beside it. When this change landed the
+ * two coexisted — a verified principal simply won — and `OPERATOR-NAME-SWEEP-01` finished the
+ * job: the console now sends no `actor` at all, so there is one answer to "who acted" and it
+ * came out of a signature check.
  */
 export const WsAuthFrameSchema = z.object({
   type: z.literal('auth'),

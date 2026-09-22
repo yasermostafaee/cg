@@ -4699,6 +4699,27 @@ input[type='checkbox']:disabled:checked {
   line-height: 1.6;
   color: var(--r-text-muted);
 }
+/*
+ * OPERATOR-NAME-SWEEP-01 3(b) — A SETTING SHOWN AS A VALUE, for a principal who may not
+ * commit this dialog.
+ *
+ * It deliberately has NONE of a control's chrome: no border, no background, no focus ring,
+ * no min-height matching the inputs beside it. Golden rule 13 — a greyed-out input says
+ * "not just now", which is a transient condition; this setting is not this principal's to
+ * change at all, and a fact is written as a fact.
+ *
+ * The face is MONO like the fields it stands in for, because the values are addresses and
+ * ports: the 1/l and 0/O distinction matters as much when reading one as when typing it.
+ */
+.cg-setup-field__value {
+  font-family: var(--r-font-mono);
+  font-size: var(--r-setup-field-label-text);
+  color: var(--r-text);
+  padding: 0;
+  border: 0;
+  background: none;
+  line-height: 1.6;
+}
 
 /*
  * A tag on a CARD head — the reference's `.tag` at that level (its `Optional` on the backup
@@ -6892,7 +6913,9 @@ input[type='checkbox']:disabled:checked {
  * whose head is 12 px / 500 on the soft ground and whose cells are `15px 16px` at 13 px — a
  * strong line over a small line in the item cell, a tag in the outcome cell — and a footer
  * count beside Close. The ACTOR column is NOT in the reference: it is guard item 27, added back
- * with its `B-143` caveat and the console-name field kept small beside it (owner answer A1).
+ * with its caveat and the console-name field kept small beside it (owner answer A1).
+ * ⚠ `OPERATOR-NAME-SWEEP-01` — the FIELD and the CAVEAT are since retired; the ACTOR column
+ * stayed, and now carries a name the bridge verified rather than one somebody typed.
  */
 .cg-audit-tools {
   display: flex;
@@ -6934,38 +6957,15 @@ input[type='checkbox']:disabled:checked {
   min-height: var(--r-audit-select-h);
 }
 /*
- * THE CONSOLE STRIP — `B-143`'s field and its caveat, small (A1), directly above the table and
- * over its first columns, so the caveat is read in the same glance as the ACTOR column it
- * qualifies. It is not in Station setup and must not move there (`stationSetupScope`).
+ * THE CONSOLE STRIP IS GONE (`OPERATOR-NAME-SWEEP-01`).
+ *
+ * `.cg-audit-console`, its label, its `.cg-field` and `.cg-audit-caveat` styled `B-143`'s
+ * self-declared console-name field and the sentence that qualified it. Identity is proven now
+ * (`C-037`/`C-038`), so the field is retired and the caveat had become false above verified
+ * rows. The two tokens they consumed — `--r-audit-console-input-w` and `--r-audit-caveat-text`
+ * — left `theme.ts` in the same commit, because `tokenHome` only catches a token READ but not
+ * declared, never one declared with nothing left to read it.
  */
-.cg-audit-console {
-  display: flex;
-  align-items: center;
-  gap: var(--r-audit-tools-gap);
-  font-size: var(--r-audit-field-label-text);
-}
-.cg-audit-console > label {
-  font-weight: var(--r-weight-medium);
-  color: var(--r-text-secondary);
-  white-space: nowrap;
-}
-.cg-audit-console .cg-field {
-  width: var(--r-audit-console-input-w);
-  flex: none;
-  height: var(--r-audit-select-h);
-  min-height: var(--r-audit-select-h);
-  padding: var(--r-audit-select-pad);
-  border-radius: var(--r-audit-select-radius);
-  font-size: var(--r-audit-select-text);
-  line-height: normal;
-}
-.cg-audit-caveat {
-  flex: 1 1 20rem;
-  min-width: 0;
-  font-size: var(--r-audit-caveat-text);
-  line-height: 1.4;
-  color: var(--r-text-muted);
-}
 .cg-audit-table {
   flex: 1;
   min-height: 0;

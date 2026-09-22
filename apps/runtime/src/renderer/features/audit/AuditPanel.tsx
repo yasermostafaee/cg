@@ -1,12 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Check, Copy, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
-import {
-  MAX_ACTOR_LENGTH,
-  UNATTRIBUTED_ACTOR,
-  type FixedLayerBank,
-  type TemplateInfo,
-} from '@cg/shared-ipc';
+import { type FixedLayerBank, type TemplateInfo } from '@cg/shared-ipc';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
@@ -88,6 +83,13 @@ type AuditHealth = Awaited<ReturnType<typeof window.cg.audit.health>>;
  * both, and the field that writes the actor — guard item 27 (`design.md` §3), owner
  * answer A1: the picker STAYS, made SMALL, BESIDE the column it qualifies, and never in
  * Station setup. A log that names nobody is the `B-143` failure with the sign flipped.
+ *
+ * ⚠ `OPERATOR-NAME-SWEEP-01` — that sentence is now LITERALLY TRUE on a station running
+ * `auth: 'off'`: with the self-declared label retired and no Playout to sign in to, every row
+ * records `unattributed`. It is the honest answer rather than a regression — the label it
+ * replaced was a claim nobody checked — and the remedy is federating identity, not typing a
+ * name. Said here because the next reader will otherwise take this line for a promise the
+ * panel no longer keeps.
  */
 export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [entries, setEntries] = useState<readonly AuditEntry[]>([]);
@@ -124,7 +126,6 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     is actually SENT is re-read at every request, so a stale field here can never make
     the record wrong — only the box.
   */
-  const [operatorName, setOperatorNameState] = useState<string>('');
   /*
     `B-211` — the two joins a name needs, fetched with every refresh. A template
     deleted since the entry was written simply has no name any more, and the row
@@ -178,7 +179,6 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
 
   useEffect(() => {
     if (!open) return;
-    setOperatorNameState(window.cg.audit.operatorName());
     void refresh();
     // `refresh` is intentionally not in deps — recreating it on every
     // render would cause an infinite re-fetch loop. Filter state IS in
@@ -405,43 +405,32 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         </AsyncButton>
       </div>
       {/*
-        ⭐ THE HONESTY HALF, ON THE SURFACE — not only in the design doc.
+        🔴 `OPERATOR-NAME-SWEEP-01` — **THE CONSOLE-NAME FIELD AND ITS CAVEAT ARE GONE.**
 
-        The value below is SELF-DECLARED and UNVERIFIED: the control socket is
-        unauthenticated loopback, so the record answers "which console, as labelled"
-        and never "which person, proven". Anyone can type anything, and a shared
-        console carries the last name typed straight through a shift change.
+        What stood here was a text box labelled "This console" and, beside it, a sentence
+        warning that the recorded actor was merely a label somebody had typed rather than a
+        proven sign-in. Both were CORRECT when they shipped (`B-141`): the control socket was
+        unauthenticated loopback, the value was self-declared, and saying so on the surface was
+        the honest half that `B-143` had taught us not to leave in a design note.
 
-        Saying that only in a design note is the exact failure `assumed` already made
-        (B-143): the system knows the limits of what it knows, and the operator — the
-        one who acts on it — is the one not told. So it is written where the log is
-        read, in the operator's words, beside the column it qualifies.
+        ⚠ The old wording is deliberately NOT quoted here. `operatorNameRetired.test.ts` asserts
+        those clauses appear NOWHERE in source — comments included — because an exception list
+        for "a comment may quote it" is a list whose first entry is how the sentence returns.
+        The archived `audit-actor-console-name` change keeps the exact words, where history
+        belongs.
 
-        `B-211` did not touch this sentence, deliberately: naming the ROW and the
-        TEMPLATE better must not read as naming the PERSON better. Phase 8 (owner answer
-        A1) made the FIELD small and kept the strip directly above the ACTOR column; the
-        sentence is byte for byte what it was.
+        They are gone because the premise is gone. `C-037` verifies a Playout-issued token and
+        `C-038` gates every route on it, so the rows below carry a name that came out of a
+        signature check, with the operator's `sub` beside it. A sentence dismissing that as
+        something somebody typed is not a caution any more — it is **false, displayed directly
+        above the evidence that contradicts it**, and it tells the operator the record is
+        weaker than it is. Under auth OFF the console now sends no `actor` at all and the bridge records
+        `unattributed`, which is the state the system is actually in.
+
+        ⚠ **The identity is stated elsewhere, not nowhere.** `IdentityIndicator` in the status
+        bar names who is signed in, once, on the axis that measures it — this panel shows the
+        RECORD, and the record now speaks for itself.
       */}
-      <div className="cg-audit-console" data-audit-console="">
-        <label htmlFor="audit-operator">This console</label>
-        <input
-          id="audit-operator"
-          className="cg-field"
-          placeholder="unattributed"
-          maxLength={MAX_ACTOR_LENGTH}
-          value={operatorName}
-          onChange={(e) => {
-            setOperatorNameState(e.target.value);
-            window.cg.audit.setOperatorName(e.target.value);
-          }}
-        />
-        <span className="cg-audit-caveat" data-audit-caveat="">
-          Recorded as the <strong>actor</strong> of everything done from this console. It is a LABEL
-          you typed, not a verified sign-in — it says which console, not which person, and it does
-          not change when somebody else takes the chair. Left empty, actions record{' '}
-          <strong>{UNATTRIBUTED_ACTOR}</strong>.
-        </span>
-      </div>
       <div className="cg-audit-table" data-audit-table="">
         <div className="cg-audit-head" data-audit-head="">
           {/* `B-210` — local wall-clock time; the record's UTC stamp is the cell's title. */}
@@ -454,7 +443,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
           */}
           <span
             data-audit-actor-head=""
-            title="The console name typed above — a self-declared label, not a verified sign-in."
+            title="The signed-in operator, as the bridge verified them. Rows written with no principal record 'unattributed'."
           >
             Actor
           </span>

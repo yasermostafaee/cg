@@ -6,9 +6,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectionHealth } from '@cg/shared-ipc';
-import { AuditPanel } from '../src/renderer/features/audit/AuditPanel.js';
 import { StatusBar } from '../src/renderer/features/status/StatusBar.js';
-import { clearPortals, openDialog } from './support/dialog.js';
+import { clearPortals } from './support/dialog.js';
 import {
   renderStationSetup,
   stationSetupStub,
@@ -97,36 +96,23 @@ const HEALTH: ConnectionHealth = {
 };
 
 describe('§3 — the six that did not move', () => {
-  it('1. the operator name is still in the Audit panel, beside its caveat — and nowhere in Station setup', async () => {
-    (window as unknown as { cg: unknown }).cg = {
-      audit: {
-        recent: () => Promise.resolve([]),
-        health: () => Promise.resolve({ path: null, writable: false, lastError: null }),
-        operatorName: () => 'desk 2',
-        setOperatorName: () => undefined,
-      },
-      templates: { list: () => Promise.resolve([]) },
-      fixedLayers: { config: () => Promise.resolve(null), onConfigChanged: () => () => undefined },
-    };
-    await render(createElement(AuditPanel, { open: true, onClose: () => undefined }));
-    const audit = openDialog();
-    const field = audit?.querySelector<HTMLInputElement>('#audit-operator');
-    expect(field?.value).toBe('desk 2');
-    // The CAVEAT, beside the field — the half `B-143` says must travel with it.
-    expect(audit?.textContent).toContain('not a verified sign-in');
-    expect(audit?.textContent).toContain('which console, not which person');
-    await act(async () => {
-      root?.unmount();
-    });
-    root = null;
-    clearPortals();
+  /*
+    🔴 `OPERATOR-NAME-SWEEP-01` — **CASE 1 OF SIX IS RETIRED, because the thing it scoped is
+    gone from BOTH sides.**
 
-    stationSetupStub();
-    const setup = await renderStationSetup();
-    expect(setup.querySelector('#audit-operator')).toBeNull();
-    expect(setup.textContent).not.toContain('This console');
-    expect(stationSetupSource()).not.toMatch(/\b(setOperatorName|operatorName)\(/);
-  });
+    It asserted that the operator-name field lived in the Audit panel beside its caveat and
+    NOT in Station setup — a real scope decision when the field existed, and the proof
+    `StationSetupDialog.tsx`'s own "what deliberately did not move in" comment pointed at.
+
+    Identity is proven now (`C-037`/`C-038`), the field and its caveat are retired, and a
+    guard asserting "it is here, not there" about something that is NOWHERE would pass for the
+    wrong reason — the shape this repo calls a vacuous test. The five other cases below are
+    untouched: each still scopes a control that exists.
+
+    ⚠ What replaces it is not another absence check here. `operatorNameRetired.test.ts` is the
+    permanent two-axis guard, and it fails if either the symbol or the sentence comes back
+    anywhere in source — which is the property this case would now be trying to express.
+  */
 
   it('2. the lock PIN is still one press from the status bar — and Station setup has no lock control', async () => {
     const stub = {

@@ -1514,7 +1514,9 @@ export const LIBRARY_PX = {
  * (`B-211` put the names, the ids and the refused line ON the row), its `Date` filter, its
  * `Follow new events` (the panel has no live tail by design), and its `Sample records · UTC`
  * badge. And what the reference does NOT draw and this phase ADDS BACK: the ACTOR column, its
- * `B-143` caveat and the console-name picker beside it — guard item 27 (`design.md` §3).
+ * caveat and the console-name picker beside it — guard item 27 (`design.md` §3).
+ * ⚠ `OPERATOR-NAME-SWEEP-01` — the caveat and the picker are retired (identity is proven);
+ * the COLUMN and its own metrics remain, which is what the rest of this block sizes.
  */
 export const AUDIT_LOG_PX = {
   /** The frame — `.audit-modal{width:min(1250px,calc(100vw - 56px))}`; 1222 at 1280. */
@@ -1563,9 +1565,6 @@ export const AUDIT_LOG_PX = {
   /** The footer — the count 12 px muted; `Reset filters` 13 px. */
   countText: 12,
   resetText: 13,
-  /** The console strip (the app's own, kept small by owner answer A1) — the field 132 wide; the caveat 12 px. */
-  consoleInputW: 132,
-  caveatText: 12,
 } as const;
 /** The line weight an ACCENTED surface takes: the reference's `.badge.ready` edge. */
 const ACCENT_LINE = '#31556a';
@@ -2623,7 +2622,7 @@ export const cssVars = {
    * the app), the sub-bar's on-air chip, and the header's `PVW · N` badge — 4 px → 5 px. What it
    * deliberately does NOT move: `.cg-btn`, `.cg-file-chip`, `.cg-list-item`, the drag handle,
    * checkboxes, `.cg-tooltip`, `.cg-plate-spacer`, `.cg-plate-help`, `.cg-audio-index`,
-   * `.cg-code-chip`, `.cg-audit-caveat` and `.cg-audit-table`, all still `--r-radius-sm`.
+   * `.cg-code-chip` and `.cg-audit-table`, all still `--r-radius-sm`.
    */
   /*
    * 🔴 A SHORT NUMERIC FIELD — owner, 2026-09-15: «اینپوتها نیاز نیست اینقدر کشیده باشن چون
@@ -3611,8 +3610,6 @@ export const cssVars = {
   '--r-audit-reason-text': `${String(AUDIT_LOG_PX.reasonText)}px`,
   '--r-audit-count-text': `${String(AUDIT_LOG_PX.countText)}px`,
   '--r-audit-reset-text': `${String(AUDIT_LOG_PX.resetText)}px`,
-  '--r-audit-console-input-w': `${String(AUDIT_LOG_PX.consoleInputW)}px`,
-  '--r-audit-caveat-text': `${String(AUDIT_LOG_PX.caveatText)}px`,
   // Motion
   '--r-dur-fast': '120ms',
   '--r-dur-med': '200ms',

@@ -654,26 +654,22 @@ export interface RuntimeBridge {
      * produced it.
      */
     health(): Promise<ChannelResponse<typeof AuditHealthChannel>>;
-    /**
-     * B-141 follow-up — THIS CONSOLE's operator name: the value sent with every
-     * control request and recorded as the audit `actor`.
-     *
-     * Browser-local by nature and deliberately NOT an `@cg/shared-ipc` channel, the
-     * same reasoning as `templates.html` above: the whole point is that it differs
-     * PER CONSOLE. A bridge-side setting would be one value for the whole gallery,
-     * which is the question already answered by the constant it replaces.
-     *
-     * 🔴 SELF-DECLARED AND UNVERIFIED, and every surface that shows it must say so.
-     * It answers "which console, as labelled", never "which person, proven": anyone
-     * can type anything, and a shared console keeps the last name typed across a
-     * shift change. Empty (the default) records `unattributed` — a state, not a name.
-     *
-     * Synchronous on purpose: it is local storage, not a round trip, and the Audit
-     * panel renders it without a loading state.
-     */
-    operatorName(): string;
-    /** Set this console's operator name; empty clears it back to unattributed. */
-    setOperatorName(name: string): void;
+    /*
+      🔴 `OPERATOR-NAME-SWEEP-01` — **THE TWO AUDIT MEMBERS THAT READ AND WROTE THE CONSOLE
+      LABEL ARE GONE FROM THIS CONTRACT, and the removal is the point rather than a tidy-up.**
+
+      They were the typed seam a browser-held, SELF-DECLARED console label hung from, and
+      every surface that showed it was obliged to say what it was worth. Identity is proven
+      now — `C-037` verifies a Playout token and `C-038` gates on it — so the label answers
+      a question the system can already answer properly, and the caveat that qualified it had
+      become a false statement displayed above verified names.
+
+      ⚠ **The CHANNEL is removed, not the control** (golden rule 13's door): a contract member
+      left in place with no UI is one edit away from coming back, and a type that cannot
+      express the value is the only version of this decision that cannot be undone by
+      accident. Under auth OFF the request frame now carries no `actor` at all and the bridge
+      records `unattributed` — see `proposal.md` for why that is the honest answer.
+    */
   };
 
   update: {

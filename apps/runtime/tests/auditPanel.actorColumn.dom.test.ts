@@ -4,7 +4,6 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuditEntry } from '@cg/shared-schema';
-import { MAX_ACTOR_LENGTH } from '@cg/shared-ipc';
 import { AuditPanel } from '../src/renderer/features/audit/AuditPanel.js';
 import { clearPortals, openDialog } from './support/dialog.js';
 
@@ -153,8 +152,18 @@ describe('guard item 27 — the actor COLUMN the reference does not draw', () =>
     // The header cell is marked so nothing can rename or drop it unnoticed…
     const actorHead = head?.querySelector('[data-audit-actor-head]');
     expect(actorHead?.textContent).toBe('Actor');
-    // …and it says, on hover, what the value under it is: a label, not a sign-in.
-    expect(actorHead?.getAttribute('title')).toMatch(/not a verified sign-in/);
+    /*
+      🔴 `OPERATOR-NAME-SWEEP-01` — …and it says, on hover, what the value under it now IS.
+
+      It used to read "the console name typed above — a self-declared label, not a verified
+      sign-in", which was true of a browser-held label and is false of a name that came out of
+      a signature check. The COLUMN survives (guard item 27); only its qualifier moved.
+    */
+    expect(actorHead?.getAttribute('title')).toMatch(/as the bridge verified them/);
+    expect(
+      actorHead?.getAttribute('title'),
+      'the retired caveat came back on the column head',
+    ).not.toMatch(/self-declared|verified sign-in|typed/i);
   });
 
   it("every row's actor cell carries that record's actor, verbatim, in its own isolate", async () => {
@@ -176,40 +185,24 @@ describe('guard item 27 — the actor COLUMN the reference does not draw', () =>
     expect(rows()[0]?.querySelector('[data-audit-names]')?.textContent).not.toContain('desk 2');
   });
 
-  it('the caveat and the console-name field are ONE strip, and that strip sits over the table', async () => {
-    stubBridge([DESK_2]);
-    await render();
-    const strip = dialog().querySelector<HTMLElement>('[data-audit-console]');
-    expect(strip, 'the console strip').not.toBeNull();
-    const field = strip?.querySelector<HTMLInputElement>('#audit-operator');
-    const caveat = strip?.querySelector<HTMLElement>('[data-audit-caveat]');
-    expect(field, 'the field is INSIDE the strip').not.toBeNull();
-    expect(caveat, 'the caveat is INSIDE the same strip').not.toBeNull();
-    // `B-143`'s sentence, byte for byte — the three older tests pin the wording; this one
-    // pins that it is the caveat BESIDE the field and not a copy elsewhere.
-    expect(caveat?.textContent).toContain('It is a LABEL you typed, not a verified sign-in');
-    expect(caveat?.textContent).toContain('it says which console, not which person');
-    // The strip PRECEDES the table in the document, so it is read before the column it
-    // qualifies rather than found under it.
-    const table = dialog().querySelector<HTMLElement>('[data-audit-table]');
-    expect(table).not.toBeNull();
-    const order = strip?.compareDocumentPosition(table as Node) ?? 0;
-    expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // And it is NOT inside the table — beside the column, not a row of it.
-    expect(table?.contains(strip)).toBe(false);
-  });
+  /*
+    🔴 `OPERATOR-NAME-SWEEP-01` — **TWO TESTS RETIRED WITH THE THING THEY TESTED.**
 
-  it('the field is small — bounded by the wire limit — and still the ONE writer of the actor', async () => {
-    const { written } = stubBridge([DESK_2]);
-    await render();
-    const field = dialog().querySelector<HTMLInputElement>('#audit-operator');
-    expect(field?.value).toBe('desk 2');
-    expect(field?.maxLength).toBe(MAX_ACTOR_LENGTH);
-    expect(field?.getAttribute('placeholder')).toBe('unattributed');
-    await type(field as HTMLInputElement, 'desk 3');
-    expect(written).toEqual(['desk 3']);
-  });
+    What stood here pinned (a) that the caveat and the console-name field were ONE strip above
+    the table, and (b) that the field was bounded by `MAX_ACTOR_LENGTH` and was "the ONE writer
+    of the actor". Both were correct and both are now untestable: the field and its sentence
+    are gone, because identity is proven (`C-037`/`C-038`) and a caveat calling a verified name
+    "a label you typed" is false on screen.
 
+    ⚠ They are DELETED rather than weakened to assert the absence. An absence assertion here
+    would pass against a panel that failed to render at all — and the absence IS covered, once,
+    by the permanent two-axis guard in `operatorNameRetired.test.ts`, which fails if either the
+    symbol or the sentence reappears anywhere in source.
+
+    What SURVIVES is everything about the column itself: its position, its `<bdi>` isolation,
+    its title, and the actor FILTER below — the record is still filtered by who acted, and
+    under proven identity that question finally has a trustworthy answer.
+  */
   it('the actor FILTER still narrows the tail on the bridge, by the same column', async () => {
     const { recentCalls } = stubBridge([DESK_2, NOBODY]);
     await render();

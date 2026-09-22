@@ -155,7 +155,6 @@ async function render(): Promise<void> {
 const rows = (): HTMLElement[] => [
   ...(openDialog()?.querySelectorAll<HTMLElement>('[data-audit-row]') ?? []),
 ];
-const text = (): string => openDialog()?.textContent ?? '';
 
 describe('B-210 — the time column is the control room clock', () => {
   it('shows LOCAL time to the second, and keeps the UTC stamp as the title', async () => {
@@ -258,15 +257,18 @@ describe('B-211 — names first, ids beneath and never deleted', () => {
     expect(row?.querySelector('[data-audit-id="item"]')).toBeNull();
   });
 
-  it('does NOT change the console caveat — naming rows better is not naming people better', async () => {
-    stubBridge([REFUSED_ON_BED_1], [THREE_FRAMES], BANK);
-    await render();
-    expect(text()).toContain('It is a LABEL you typed, not a verified sign-in');
-    expect(text()).toContain('it says which console, not which person');
-  });
-});
+  /*
+    🔴 `OPERATOR-NAME-SWEEP-01` — **`B-211`'s "does NOT change the console caveat" is RETIRED
+    because the caveat is.**
 
-describe('B-209 — a refused take shows the line that was refused', () => {
+    It asserted that naming ROWS better had not quietly also renamed the PERSON — a real and
+    careful distinction at the time, pinned by quoting the caveat's own sentence. That sentence
+    no longer exists: identity is proven, and the panel states the record rather than
+    qualifying it.
+
+    ⚠ The half of `B-211` that still matters is untouched above — the row NAMES and the ids
+    beneath them. Only the assertion that quoted the retired sentence is gone.
+  */
   it('renders the recorded command beside the code', async () => {
     stubBridge([REFUSED_ON_BED_1], [THREE_FRAMES], BANK);
     await render();

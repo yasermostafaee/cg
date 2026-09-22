@@ -91,7 +91,10 @@ export default [
         'error',
         {
           allow: {
-            'src/renderer/features/audit/AuditPanel.tsx': 3,
+            // `OPERATOR-NAME-SWEEP-01` — 3 → 2: the `#audit-operator` raw input retired with
+            // the self-declared console name. The ratchet refuses movement in BOTH directions, so
+            // this number had to fall in the same commit — a debt paid is a number that is now a lie.
+            'src/renderer/features/audit/AuditPanel.tsx': 2,
             'src/renderer/features/fixedLayers/CandidateLayersSection.tsx': 4,
             'src/renderer/features/fixedLayers/useTemplatePicker.tsx': 2,
             'src/renderer/features/inspector/DelimitersSection.tsx': 2,
