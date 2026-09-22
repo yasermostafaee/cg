@@ -1,6 +1,7 @@
 import {
   cloneElement,
   isValidElement,
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -266,6 +267,19 @@ function toDraft(ep: { host: string; amcpPort: number; oscPort: number }): Endpo
 }
 
 /**
+ * The two endpoints a station with NO stored config is offered, and the backup a station
+ * with no `servers.B` is offered when the operator presses Add backup.
+ *
+ * ⚠ These are SUGGESTIONS for a field that has nothing behind it, never a claim about what
+ * is in force: the pane reads `No backup declared` while `backupEnabled` is false, and a
+ * backup draft is only ever shown once the operator has opened that door himself. Hoisted
+ * out of `useState` so the close-discard below has exactly one thing to restore to when the
+ * bridge declares no backup — a second literal is how the two come to disagree.
+ */
+const PRIMARY_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '5250', oscPort: '6250' };
+const BACKUP_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '5251', oscPort: '6251' };
+
+/**
  * 🔴 `SETTINGS-MATCH-02` §10.6 — **ONE LABELLED FIELD, WITH ITS OWN REFUSAL UNDER IT.**
  *
  * ── WHERE AN INVALID FIELD IS REPORTED, AND WHY IT MOVED ────────────────────
@@ -372,17 +386,9 @@ export function StationSetupDialog({
   */
   const { selected: channel } = useSelectedChannel();
   const [active, setActive] = useState<StationSetupSection>(section);
-  const [primary, setPrimary] = useState<EndpointDraft>({
-    host: '127.0.0.1',
-    amcpPort: '5250',
-    oscPort: '6250',
-  });
+  const [primary, setPrimary] = useState<EndpointDraft>(PRIMARY_SUGGESTION);
   const [backupEnabled, setBackupEnabled] = useState(false);
-  const [backup, setBackup] = useState<EndpointDraft>({
-    host: '127.0.0.1',
-    amcpPort: '5251',
-    oscPort: '6251',
-  });
+  const [backup, setBackup] = useState<EndpointDraft>(BACKUP_SUGGESTION);
   /*
     `C-024` — THE STORED SERVE ADDRESS, AS DRAFT STRINGS. Strings because this is a form: the
     empty field is a real state the operator can reach by clearing it, and it MEANS "derive it".
@@ -467,19 +473,41 @@ export function StationSetupDialog({
     [],
   );
 
+  /**
+   * 🔴 `MODAL-TRUTH-01` §2 — **ONE RESTORE OF THE SERVERS FIELDS FROM A STORED CONFIG**,
+   * called by the load, by `Revert`, and by the close-discard below.
+   *
+   * It was written out three times before this — in the load effect, in `revertServers`, and
+   * nowhere at all on close, which is how the third one came to be missing. A draft restored
+   * by two copies of the same seven assignments is one edit away from a pane that reverts
+   * differently depending on which door the operator used.
+   *
+   * ⚠ It restores the FIELDS and nothing else. The messages are deliberately NOT cleared
+   * here: this is also the `onConfigChanged` handler, and a push that arrives just after
+   * this console's own successful apply would wipe the outcome sentence the operator is
+   * reading. The two callers that DO want the messages gone clear them themselves.
+   *
+   * ⚠ And an absent `servers.B` restores the backup draft to its SUGGESTION rather than
+   * leaving it. A stale host under a closed `Add backup` door is the same defect this
+   * change is about, one door further in.
+   */
+  const restoreServersDraft = useCallback((config: ConnectionConfig): void => {
+    setPrimary(toDraft(config.servers.A));
+    setBackupEnabled(config.servers.B !== undefined);
+    setBackup(config.servers.B === undefined ? BACKUP_SUGGESTION : toDraft(config.servers.B));
+    setStrategy(config.strategy);
+    setAutoFailover(config.autoFailoverEnabled);
+    setServeHost(config.templateServeHost ?? '');
+    setServePort(config.templateServePort === undefined ? '' : String(config.templateServePort));
+  }, []);
+
   // Load the current config when opened; refresh when any client applies one.
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     const applyConfig = (config: ConnectionConfig): void => {
       if (cancelled) return;
-      setPrimary(toDraft(config.servers.A));
-      setBackupEnabled(config.servers.B !== undefined);
-      if (config.servers.B !== undefined) setBackup(toDraft(config.servers.B));
-      setStrategy(config.strategy);
-      setAutoFailover(config.autoFailoverEnabled);
-      setServeHost(config.templateServeHost ?? '');
-      setServePort(config.templateServePort === undefined ? '' : String(config.templateServePort));
+      restoreServersDraft(config);
       setLoaded(config);
     };
     void window.cg.connections.config().then(applyConfig);
@@ -501,12 +529,54 @@ export function StationSetupDialog({
       cancelled = true;
       unsubscribe();
     };
-  }, [open]);
+  }, [open, restoreServersDraft]);
 
-  // A closed dialog forgets its section messages: the next open starts clean.
+  /**
+   * 🔴 `MODAL-TRUTH-01` §2 — **CLOSING DISCARDS THE UNAPPLIED DRAFT, AT THE MOMENT OF
+   * CLOSING.**
+   *
+   * ── WHAT THE OPERATOR SAW ───────────────────────────────────────────────────
+   *
+   * Type a host, dismiss without applying, open again — and the typed host was still in the
+   * field, reading exactly like a value that had been applied. Nothing on the surface tells
+   * the two apart: the field looks the same either way, and the operator's own evidence that
+   * it was applied is that it survived a close.
+   *
+   * ── WHY THE RE-READ WAS NOT THE FIX, MEASURED ───────────────────────────────
+   *
+   * `App` keeps this dialog MOUNTED and toggles `open` (it returns `null` below), so every
+   * section BELOW unmounts on close and loses its draft — the bank's aliases and the Live
+   * sources band both reset for free, and that is why only this pane has the defect. This
+   * component's own `useState` survives, and the only thing that used to correct it was the
+   * asynchronous `connections.config()` above. Measured in jsdom, three ways:
+   *
+   *   · bridge answers            → the field resets, but only AFTER the round trip;
+   *   · `config()` REJECTS        → the field never resets, and the rejection is unhandled;
+   *   · `config()` never answers  → the field never resets.
+   *
+   * So the draft was on screen for the whole of every reopen, and permanently on a station
+   * whose bridge is down — which is exactly when an operator opens Station setup. A read
+   * that has not landed cannot be the thing that makes the surface honest (`B-101`'s axis
+   * rule, one dialog up): the discard is a LOCAL act and is done locally, at close, without
+   * waiting for anything.
+   *
+   * ⚠ **This does not weaken the `B-240` question.** The ✕, Escape and the backdrop still
+   * ask before dropping a draft and still name what would be lost; this is what happens
+   * once the operator has answered `Leave and discard`, which until now was a button that
+   * discarded nothing.
+   *
+   * ⚠ `status` and `refusal` go with it — a Servers outcome or refusal from a previous
+   * opening is a statement about an act the operator has since left behind, which is this
+   * change's whole subject. `sectionMessages` was already cleared here for that reason.
+   */
   useEffect(() => {
-    if (!open) setSectionMessages({});
-  }, [open]);
+    if (open) return;
+    setSectionMessages({});
+    setStatus(null);
+    setRefusal(null);
+    setAddingBackup(false);
+    if (loaded !== null) restoreServersDraft(loaded);
+  }, [open, loaded, restoreServersDraft]);
 
   /*
     THE DEEP LINK LANDS ON THE TAB, not merely on the dialog. Keyed on `requestId` so a
@@ -700,13 +770,7 @@ export function StationSetupDialog({
    */
   const revertServers = (): void => {
     if (loaded === null) return;
-    setPrimary(toDraft(loaded.servers.A));
-    setBackupEnabled(loaded.servers.B !== undefined);
-    if (loaded.servers.B !== undefined) setBackup(toDraft(loaded.servers.B));
-    setStrategy(loaded.strategy);
-    setAutoFailover(loaded.autoFailoverEnabled);
-    setServeHost(loaded.templateServeHost ?? '');
-    setServePort(loaded.templateServePort === undefined ? '' : String(loaded.templateServePort));
+    restoreServersDraft(loaded);
     setRefusal(null);
     setStatus(null);
   };

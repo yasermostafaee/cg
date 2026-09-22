@@ -207,6 +207,12 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
 
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;
+/** The props the last `renderStationSetup` used, so `setSetupOpen` can re-render with them. */
+let lastProps: {
+  section: StationSetupSection;
+  requestId: number;
+  onClose: () => void;
+} | null = null;
 
 /** Let the dialog's pulls resolve and its effects settle. */
 export async function settleSetup(): Promise<void> {
@@ -225,26 +231,55 @@ export async function renderStationSetup(
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
+  lastProps = {
+    section: options.section ?? DEFAULT_STATION_SETUP_SECTION,
+    requestId: options.requestId ?? 1,
+    onClose: options.onClose ?? ((): void => undefined),
+  };
+  await renderWithOpen(true);
+  const dialog = openDialog();
+  if (dialog === null) throw new Error('Station setup did not open');
+  return dialog;
+}
+
+async function renderWithOpen(open: boolean): Promise<void> {
   const r = root;
+  const props = lastProps;
+  if (r === null || props === null) throw new Error('renderStationSetup() has not run');
   await act(async () => {
     r.render(
-      createElement(
-        StrictMode,
-        null,
-        createElement(StationSetupDialog, {
-          open: true,
-          section: options.section ?? DEFAULT_STATION_SETUP_SECTION,
-          requestId: options.requestId ?? 1,
-          onClose: options.onClose ?? ((): void => undefined),
-        }),
-      ),
+      createElement(StrictMode, null, createElement(StationSetupDialog, { open, ...props })),
     );
     await Promise.resolve();
     await Promise.resolve();
   });
   await settleSetup();
+}
+
+/**
+ * `MODAL-TRUTH-01` — DISMISS AND RE-OPEN THE SAME MOUNTED DIALOG.
+ *
+ * `App` keeps `StationSetupDialog` mounted and toggles its `open` prop, so a spec that
+ * unmounts and re-renders would be testing a case the operator cannot reach: React would
+ * drop the component state the defect is about. This re-renders the SAME root with a new
+ * `open`, which is exactly what the store's `closeStationSetup` / `openStationSetup` do.
+ *
+ * `requestId` advances on re-open, as it does in the app: every open request is a new one.
+ */
+export async function reopenStationSetup(
+  options: { section?: StationSetupSection } = {},
+): Promise<HTMLElement> {
+  const props = lastProps;
+  if (props === null) throw new Error('renderStationSetup() has not run');
+  await renderWithOpen(false);
+  lastProps = {
+    ...props,
+    ...(options.section === undefined ? {} : { section: options.section }),
+    requestId: props.requestId + 1,
+  };
+  await renderWithOpen(true);
   const dialog = openDialog();
-  if (dialog === null) throw new Error('Station setup did not open');
+  if (dialog === null) throw new Error('Station setup did not re-open');
   return dialog;
 }
 
@@ -257,6 +292,7 @@ export async function unmountStationSetup(): Promise<void> {
     });
   }
   root = null;
+  lastProps = null;
   container?.remove();
   container = null;
 }
