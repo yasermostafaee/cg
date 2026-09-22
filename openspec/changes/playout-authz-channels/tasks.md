@@ -64,10 +64,14 @@
 
 ## 6. Gate and discharge
 
-- [ ] `pnpm gate` green
-- [ ] Commits + push to `dev`
-- [ ] 🔴 **Linux `e2e` run URL, on the commit that carries the change** — owed, and this is a
-      render change, so a green gate is no evidence about it (golden rule 12)
+- [x] `pnpm gate` green — 93/93 tasks, `0 cached`, 84/84 OpenSpec items
+- [x] Commits + push to `dev` (`dfe94088` · `c9a94a7f` · `65ef6b5c`), remote head verified
+- [x] 🔴 **Linux `e2e` discharged for `65ef6b5c`** —
+      https://github.com/yasermostafaee/cg/actions/runs/35765969467 · `conclusion: success`,
+      and the `E2E (Playwright)` job **RAN** (checked, not assumed — a skipped job proves
+      nothing, `P-029`)
+- [ ] 🔴 **A second discharge is owed for the e2e commit itself**, which carries
+      `playout-authz.spec.ts` and the signed-out strip fix
 
 ## 7. 🔴 Owner answer owed
 

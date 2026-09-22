@@ -72,24 +72,25 @@ export function channelIds(
 }
 
 /**
- * The principal's permitted channels as a set, or `null` when nothing is scoped — auth OFF,
- * or the bridge has not answered yet.
+ * The principal's permitted channels as a set, or `null` when there is NO PRINCIPAL TO SCOPE
+ * TO — which is every state but `signed-in`.
  *
- * ⚠ `signed-out` and `expired` are NOT `null`: a lapsed session grants nothing, and
- * returning "unscoped" for them would hand a console whose token the bridge stopped accepting
- * the full run of the station.
+ * 🔴 **`signed-out` AND `expired` RETURN `null`, AND THE FIRST DRAFT HAD THEM RETURN AN EMPTY
+ * SET. That was a defect, and it was found by looking at the page rather than at the code.**
+ *
+ * An empty set means "granted nothing", so every tab came up marked `CHANNEL 1 · READ ONLY`
+ * on a console that had not signed in yet — underneath the sign-in overlay, in the one glance
+ * before anybody types. That is a surface asserting a restriction the system has not stated:
+ * the operator has not been refused a channel, they have not yet said who they are. Same for a
+ * lapsed session, where the honest fact is "your session ended" and the identity pill says it.
+ *
+ * ⚠ **This loosens nothing.** It is about what the STRIP SAYS, not about what may be pressed:
+ * `useCanOperate` keeps its own switch and answers `false` for both states, so the controls
+ * stay absent and the bridge refuses regardless. Two different questions, deliberately
+ * answered in two different places.
  */
 function permittedSet(auth: AuthSessionState): ReadonlySet<number> | null {
-  switch (auth.kind) {
-    case 'off':
-    case 'unknown':
-      return null;
-    case 'signed-out':
-    case 'expired':
-      return new Set();
-    case 'signed-in':
-      return new Set(auth.permittedChannels);
-  }
+  return auth.kind === 'signed-in' ? new Set(auth.permittedChannels) : null;
 }
 
 /**

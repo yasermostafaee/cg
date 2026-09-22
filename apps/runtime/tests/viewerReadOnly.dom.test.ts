@@ -101,9 +101,21 @@ describe('R-066 bullet 3 — the permitted-channel strip', () => {
     expect(operableChannels([1, 2, 3], { kind: 'unknown' })).toEqual([1, 2, 3]);
   });
 
-  it('a lapsed session grants nothing, and is not mistaken for "unscoped"', () => {
-    expect(operableChannels([1, 2], { kind: 'expired', name: 'x' })).toEqual([]);
-    expect(operableChannels([1, 2], { kind: 'signed-out' })).toEqual([]);
+  /**
+   * 🔴 **A CONSOLE THAT HAS NOT SIGNED IN MARKS NOTHING — measured on the real page, where the
+   * first draft marked everything.**
+   *
+   * With `signed-out` answering "granted nothing", every tab read `CHANNEL 1 · READ ONLY`
+   * underneath the sign-in overlay, before anybody had typed a character. The operator has not
+   * been refused a channel; they have not yet said who they are, and a surface must not assert
+   * a restriction the system has not stated.
+   *
+   * ⚠ This is about what the STRIP SAYS. `useCanOperate` still answers `false` for both
+   * states, so nothing is pressable — asserted in the absence specs below.
+   */
+  it('a signed-out or lapsed console marks NO channel read-only', () => {
+    expect(operableChannels([1, 2], { kind: 'expired', name: 'x' })).toEqual([1, 2]);
+    expect(operableChannels([1, 2], { kind: 'signed-out' })).toEqual([1, 2]);
   });
 
   /**
