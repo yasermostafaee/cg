@@ -330,3 +330,79 @@ test('§8 — the audit log measures to `AUDIT_LOG_PX`, with the actor column an
   await log.getByRole('button', { name: 'Close' }).last().click();
   await expect(log).toHaveCount(0);
 });
+
+/**
+ * 🔴 `MODAL-TRUTH-01` §3.1 — **THE AUDIT LOG'S FOOTER SITS ON THE FRAME'S BOTTOM EDGE,
+ * WHATEVER THE BODY'S HEIGHT.**
+ *
+ * Owner-reported and photographed: the shell held its full declared height while the inner
+ * column sized to content, so `0 of 0 events` + `Close` sat directly under a two-line body
+ * with a large dead region beneath them INSIDE the shell.
+ *
+ * The rule is `PLATES-AUDIO-11` DELTA §2's, written in `Modal.tsx`'s `styles.bodyFlush`:
+ * _"A declared height alone does not put the footer at the bottom … with fewer rows than
+ * the frame holds it is CONTENT-sized: the footer floats up under the last row and the
+ * frame's lower third is dead space."_ The audit log never got it because that note scoped
+ * the fix to the `frame="fixed"` opt-in; this asserts the opt-in was taken.
+ *
+ * ⚠ **This test is here and not in jsdom for the reason the file header gives**, and the
+ * EMPTY record is the point: with a full table the footer is at the bottom either way, so a
+ * spec that logged some events first would have passed over the defect. The mock's audit
+ * starts empty, so this opens the log having done nothing.
+ */
+test('`MODAL-TRUTH-01` §3.1 — an EMPTY audit log keeps its footer on the frame’s bottom edge', async ({
+  app,
+}) => {
+  const page = app.page;
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.getByRole('button', { name: 'Open audit log' }).click();
+  const log = page.getByRole('dialog', { name: 'Audit log' });
+  await expect(log).toBeVisible();
+  // The record really is empty — the condition this test is about.
+  await expect(log.locator('[data-audit-count]')).toHaveText('0 of 0 events');
+
+  const geometry = await log.evaluate((el) => {
+    const body = el.querySelector('[data-modal-body]');
+    const foot = el.querySelector('.cg-modal-footer');
+    const empty = el.querySelector('.cg-audit-empty');
+    if (body === null || foot === null || empty === null)
+      throw new Error('body, footer or empty state missing');
+    const d = el.getBoundingClientRect();
+    const b = body.getBoundingClientRect();
+    const f = foot.getBoundingClientRect();
+    const e = empty.getBoundingClientRect();
+    return {
+      dialogBottom: d.bottom,
+      dialogHeight: d.height,
+      footBottom: f.bottom,
+      footTop: f.top,
+      bodyBottom: b.bottom,
+      contentBottom: e.bottom,
+    };
+  });
+
+  /*
+    POSITIVE CONTROLS, first, because the assertion below is trivially satisfied by a body
+    that happens to fill the frame and would then have measured nothing.
+
+    (1) The frame is DECLARED, not intrinsic — `--r-modal-h-frame` is `min(810px,
+        100vh - 64px)` = 736 at this viewport.
+    (2) The body genuinely has SLACK: its last content — the one-line empty state — ends
+        well above the body's own bottom edge, which is what "the body took the slack"
+        means and is exactly the space that used to sit UNDER the footer instead.
+
+    ⚠ `scrollHeight` cannot serve as (2): it is `max(content, clientHeight)`, so it equals
+    the box height for any content shorter than the box and reads the same either way. It
+    was the first thing written here and it fired on the fixed build.
+  */
+  expect(geometry.dialogHeight).toBeGreaterThan(600);
+  expect(geometry.bodyBottom - geometry.contentBottom).toBeGreaterThan(100);
+
+  // THE ASSERTION: no dead region under the footer — it ends where the frame does.
+  expect(Math.abs(geometry.dialogBottom - geometry.footBottom)).toBeLessThanOrEqual(2);
+  // And the band is still a band: the body took the slack, the footer did not grow into it.
+  expect(geometry.footBottom - geometry.footTop).toBeLessThan(120);
+
+  await log.getByRole('button', { name: 'Close' }).last().click();
+  await expect(log).toHaveCount(0);
+});

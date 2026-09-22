@@ -48,6 +48,15 @@ const OUTCOME_OPTIONS = ['all', ...AuditEntrySchema.shape.outcome.options] as co
 
 type OutcomeFilter = (typeof OUTCOME_OPTIONS)[number];
 
+/**
+ * `MODAL-TRUTH-01` §3.3 — what the dialog says when the record could not be read at all.
+ *
+ * A plain statement of what happened, spelled ONCE: the body renders it and the Refresh
+ * button reports it, and a second copy is how the two come to say different things. It
+ * carries no advice — the console is not the place to teach how to start a bridge.
+ */
+const READ_FAILED_TEXT = 'The audit record could not be read — the bridge did not answer.';
+
 /** B-141 — the bridge's own answer to "is this instrument live?" (`audit.health`). */
 type AuditHealth = Awaited<ReturnType<typeof window.cg.audit.health>>;
 
@@ -83,6 +92,21 @@ type AuditHealth = Awaited<ReturnType<typeof window.cg.audit.health>>;
 export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [entries, setEntries] = useState<readonly AuditEntry[]>([]);
   /*
+    🔴 `MODAL-TRUTH-01` §3.2/§3.3 — **HAS THE READ ANSWERED, ON ITS OWN AXIS.**
+
+    Not derived from `health`, and not from `entries.length`. `health` answers a different
+    question — is the WRITER live — and reading one channel's silence as the other's answer
+    is `B-101` in miniature; `entries.length` cannot tell an empty record from a read that
+    never happened, which is the whole of `B-141` one layer down. So the fetch's own
+    condition is stored as the fetch's own value.
+
+    `reading` only ever describes the FIRST read: a later refresh keeps the count on screen
+    while it runs rather than blanking it on every filter keystroke.
+  */
+  const [read, setRead] = useState<
+    { kind: 'reading' } | { kind: 'ready' } | { kind: 'failed'; detail: string }
+  >({ kind: 'reading' });
+  /*
     B-141 — THE POSITIVE CONTROL, fetched beside the tail and never inferred from
     it. `null` means "not asked yet", which is itself distinct from every answer:
     an empty list before the health read has landed says nothing at all, so the
@@ -110,24 +134,46 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [templates, setTemplates] = useState<ReadonlyMap<string, TemplateInfo>>(new Map());
   const [bank, setBank] = useState<FixedLayerBank | null>(null);
 
-  async function refresh(): Promise<void> {
+  async function refresh(): Promise<{ accepted: boolean; message?: string }> {
     const req: { limit: number; action?: AuditEntry['action']; actor?: string } = { limit: 200 };
     if (actionFilter !== 'all') req.action = actionFilter;
     const trimmedActor = actorFilter.trim();
     if (trimmedActor !== '') req.actor = trimmedActor;
-    // Both, together, every time: a health reading from before the entries were
-    // fetched could report a writer that has failed since, and the operator would
-    // read a failing instrument's silence as quiet.
-    const [next, nextHealth, list, nextBank] = await Promise.all([
-      window.cg.audit.recent(req),
-      window.cg.audit.health(),
-      window.cg.templates.list(),
-      window.cg.fixedLayers.config(),
-    ]);
-    setEntries(next);
-    setHealth(nextHealth);
-    setTemplates(new Map(list.map((t) => [t.templateId, t])));
-    setBank(nextBank);
+    try {
+      // Both, together, every time: a health reading from before the entries were
+      // fetched could report a writer that has failed since, and the operator would
+      // read a failing instrument's silence as quiet.
+      const [next, nextHealth, list, nextBank] = await Promise.all([
+        window.cg.audit.recent(req),
+        window.cg.audit.health(),
+        window.cg.templates.list(),
+        window.cg.fixedLayers.config(),
+      ]);
+      setEntries(next);
+      setHealth(nextHealth);
+      setTemplates(new Map(list.map((t) => [t.templateId, t])));
+      setBank(nextBank);
+      setRead({ kind: 'ready' });
+      return { accepted: true };
+    } catch (err) {
+      /*
+        🔴 `MODAL-TRUTH-01` §3.3 — **A READ THAT CANNOT HAPPEN SAYS SO.**
+
+        This used to be uncaught: `void refresh()` below left an unhandled rejection and
+        `health` stayed `null`, so the dialog sat on `Reading the audit record…` for as
+        long as it was open. Measured with a bridge that refuses the connection — that
+        sentence, forever, beside a footer claiming `0 of 0 events`. Silence where an
+        error belongs is the same defect as the counter beside it: the surface reporting a
+        state that is not the one it is in.
+
+        What FAILED is kept separate from what the record SAYS. `health` and `entries` are
+        deliberately left alone — a refresh that fails after a good read has not unmade the
+        rows already on screen, and blanking them would replace one wrong statement with
+        another.
+      */
+      setRead({ kind: 'failed', detail: err instanceof Error ? err.message : String(err) });
+      return { accepted: false, message: READ_FAILED_TEXT };
+    }
   }
 
   useEffect(() => {
@@ -138,6 +184,19 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     // render would cause an infinite re-fetch loop. Filter state IS in
     // deps so changing a filter triggers exactly one refetch.
   }, [open, actionFilter, actorFilter]);
+
+  /*
+    `MODAL-TRUTH-01` — a CLOSED panel forgets what it read, so the next opening starts from
+    `Reading…` rather than showing the previous session's rows under a fresh count, or a
+    failure the operator has since walked away from. Same rule as Station setup's
+    close-discard, one dialog along.
+  */
+  useEffect(() => {
+    if (open) return;
+    setEntries([]);
+    setHealth(null);
+    setRead({ kind: 'reading' });
+  }, [open]);
 
   if (!open) return null;
 
@@ -192,6 +251,34 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       subtitle="Station actions and their recorded outcomes."
       ariaLabel="Audit log"
       size="ledger"
+      /*
+        🔴 `MODAL-TRUTH-01` §3.1 — **THE EXISTING FOOTER RULE, APPLIED THROUGH ITS OWN DOOR.**
+
+        `PLATES-AUDIO-11` DELTA §2 wrote the rule and the diagnosis in `Modal.tsx`'s
+        `styles.bodyFlush`: _"A declared height alone does not put the footer at the bottom.
+        `styles.body` is `overflowY: auto` with `minHeight: 0` but no `flex`, so with fewer
+        rows than the frame holds it is CONTENT-sized: the footer floats up under the last
+        row and the frame's lower third is dead space."_ That is this dialog, exactly, and
+        the owner photographed it: `0 of 0 events` under a two-line body, with a large dead
+        region beneath it inside a shell still holding its full declared height.
+
+        It never got the rule because that note ALSO scoped it — _"Applied only where a
+        caller opted in with `frame="fixed"`, NOT to every framed size. `library` and
+        `ledger` keep exactly the layout `MODAL-CHROME-10` §4 measured"_ — on the ground
+        that re-tuning two signed-off surfaces to fix a third would be worse. So this is
+        the OPT-IN being taken, not a second mechanism and not a new rule: `frame` is
+        documented there as "a DOOR, not a second mechanism", it resolves to the same
+        `bodyFlush` and the same `--r-modal-h-frame`, and the template picker is untouched.
+
+        ⚠ It changes NOTHING about the outer box: `ledger` is already in `framed`, so the
+        height and the clamp are the ones `modal-frame-chrome.spec.ts` §4 holds. What moves
+        is where the footer sits INSIDE it.
+
+        ⚠ And `MODAL-CHROME-10` §4's own warning still holds — a short list must not STRETCH
+        to fill the frame. It does not: the body takes the slack as a scroll region, so two
+        rows stay two rows with empty space under them, and the band is pinned to the edge.
+      */
+      frame="fixed"
       onClose={onClose}
       /*
         ONE action, and its role is `cancel` — not `primary` (owner).
@@ -211,9 +298,38 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
       footer={
         <>
           <span className="cg-audit-foot-info">
-            <span data-audit-count={String(shown.length)}>
-              {String(shown.length)} of {String(entries.length)} events
-            </span>
+            {/*
+              🔴 `MODAL-TRUTH-01` §3.2 — **THE COUNTER DOES NOT CLAIM A NUMBER BEFORE THE
+              READ SETTLES.**
+
+              The owner photographed `Reading the audit record…` in the body and
+              `0 of 0 events` in the footer, at the same moment. The BODY was the truthful
+              one — `health === null` genuinely means "not asked yet" — and the counter was
+              the stale half: it rendered `entries.length` unconditionally, and `entries`
+              starts as `[]`, so every read was preceded by a footer asserting a total of
+              the record it had not opened. Measured with a bridge that never answers: that
+              pair on screen indefinitely.
+
+              So the count is rendered only for a read that has ANSWERED. The other two
+              conditions get a label each — state facts, three words at most, in the place
+              the count would be, because a footer that empties reads as a missing element.
+            */}
+            {read.kind === 'ready' ? (
+              <span data-audit-count={String(shown.length)}>
+                {String(shown.length)} of {String(entries.length)} events
+              </span>
+            ) : (
+              /*
+                ⚠ `data-audit-count` is ABSENT here, not empty. It is the selector four
+                specs and `library-audit-geometry.spec.ts` use to read the count, and an
+                attribute that is present while no count is being claimed would let every
+                one of them assert against a label — which is the defect wearing a test.
+                `data-audit-read` is the separate handle for the separate condition.
+              */
+              <span data-audit-read={read.kind}>
+                {read.kind === 'reading' ? 'Reading…' : 'Not read'}
+              </span>
+            )}
             {filtered && (
               <Button variant="ghost" onClick={resetFilters} data-audit-reset="">
                 Reset filters
@@ -279,11 +395,12 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
             onChange={(e) => setActorFilter(e.target.value)}
           />
         </div>
-        <AsyncButton
-          variant="neutral"
-          icon={RefreshCw}
-          run={() => refresh().then(() => ({ accepted: true }))}
-        >
+        {/*
+          `MODAL-TRUTH-01` §3.3 — a Refresh that could not read reports NOT ACCEPTED. It
+          used to map every settlement to `{ accepted: true }`, so a refresh against a dead
+          bridge flashed success — the button agreeing with the body's silence.
+        */}
+        <AsyncButton variant="neutral" icon={RefreshCw} run={() => refresh()}>
           Refresh
         </AsyncButton>
       </div>
@@ -346,7 +463,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
           <span>Outcome</span>
         </div>
         {shown.length === 0 ? (
-          <EmptyState health={health} filtered={filtered} />
+          <EmptyState health={health} filtered={filtered} read={read} />
         ) : (
           shown.map((e, idx) => {
             /*
@@ -397,12 +514,37 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
 function EmptyState({
   health,
   filtered,
+  read,
 }: {
   health: AuditHealth | null;
   filtered: boolean;
+  read: { kind: 'reading' } | { kind: 'ready' } | { kind: 'failed'; detail: string };
 }): JSX.Element {
+  /*
+    🔴 `MODAL-TRUTH-01` §3.3 — THE FAILED READ IS ANSWERED BEFORE ANYTHING ELSE, and it is
+    answered from the READ's own state rather than from `health`.
+
+    `health` is `null` both when the read has not happened yet and when it could not happen,
+    and this branch used to be the only reader of that: a bridge that never answered left
+    `Reading the audit record…` on screen for as long as the dialog was open. Three empty
+    states were already told apart here for exactly this reason (`B-141`); this is the
+    fourth, and it is the one that is not empty at all — nothing was read.
+
+    It is a `refusal` Notice with `aria="status"`, like the two faults below: the amber
+    attention treatment, not the neutral remark that would dress an unreadable record as
+    an ordinary observation. The bridge's own words go in the detail; the sentence above
+    them states what happened and offers no advice.
+  */
+  if (read.kind === 'failed') {
+    return (
+      <div className="cg-audit-fault">
+        <Notice noticeRole="refusal" aria="status" text={READ_FAILED_TEXT} detail={read.detail} />
+      </div>
+    );
+  }
   // Not asked yet — say nothing rather than guess. The read is one round trip away.
-  if (health === null) return <p className="cg-audit-empty">Reading the audit record…</p>;
+  if (read.kind === 'reading' || health === null)
+    return <p className="cg-audit-empty">Reading the audit record…</p>;
   /*
     `noticeRole="refusal"` is the palette's ATTENTION treatment (amber), which is
     what these two are — not `notice`, which is the neutral statement and would
