@@ -167,7 +167,13 @@ describe('C-037 — auth OFF is the bridge that was already there', () => {
       'an `auth` frame to a bridge with auth OFF was treated as an error',
     ).toBeUndefined();
     // `status` is the gate's own verdict, carried so a surface cannot derive a second one.
-    expect(res.payload).toEqual({ mode: 'off', principal: null, status: 'off' });
+    expect(res.payload).toEqual({
+      mode: 'off',
+      principal: null,
+      status: 'off',
+      // `C-038` — auth off scopes nothing; every control stays reachable.
+      permittedChannels: [],
+    });
   });
 
   it('…and the same frame on an auth-ON bridge is REFUSED — the control for that answer', async () => {

@@ -5,6 +5,12 @@ import {
   AuditRecentChannel,
   AUTH_NO_TOKEN,
   AUTH_REQUIRED_REFUSAL,
+  AUTHZ_ROLE_REFUSAL,
+  authzChannelRefusal,
+  type PermissionClass,
+  grantsChannel,
+  grantedChannels,
+  holdsPermissionClass,
   AuthSignOutChannel,
   AuthStateChannel,
   type AuthState,
@@ -499,11 +505,29 @@ type LockPolicy =
    */
   | 'operator-unless-redelivery';
 
-/** One request route: a channel, its handler, and whether the lock lets it through. */
+/**
+ * One request route: a channel, its handler, and the two policy axes that decide whether a
+ * given press gets through.
+ *
+ * ⚠ **`lock` and `perm` are DIFFERENT QUESTIONS and must not be collapsed.** The lock asks
+ * _"is this console currently accepting intents at all"_ — a station-level safety gate whose
+ * key is a PIN. The permission class asks _"may THIS PRINCIPAL do this"_ — an identity gate
+ * whose key is a token. `lock.release` is the sharpest illustration: it is exempt from the
+ * lock (it IS the way out) and it still requires the `operator` class, because a viewer must
+ * not unlock a console an operator deliberately locked.
+ */
 interface Route {
   readonly channel: AnyChannel;
   readonly handle: (req: unknown) => unknown;
   readonly lock: LockPolicy;
+  /**
+   * 🔴 `C-038` — the rung of the principal hierarchy this route sits on. The FOURTH field,
+   * and REQUIRED, for the identical reason `lock` is the third: a new channel cannot be
+   * routed without answering the question, which is what keeps the claim true a year from
+   * now. See `PermissionClass` in `@cg/shared-ipc` for the three values and why `read` is a
+   * statement about WHO rather than about what the route writes.
+   */
+  readonly perm: PermissionClass;
 }
 
 /**
@@ -632,6 +656,154 @@ export function authGateState(
   }
   playoutAuth.noteLiveToken(held.rawToken);
   return 'signed-in';
+}
+
+/**
+ * 🔴 `C-038` — **WHICH CHANNELS A REQUEST TOUCHES. The ONE resolver.**
+ *
+ * Exported for the census in `tests/authz-classes.integration.test.ts`, which walks every
+ * route rather than sampling — the same discipline `refusedWhileLocked` and `refusedByAuth`
+ * are held to, and for the same reason: "every channel-bearing route is scoped" is a claim
+ * about each route, and no sample can make it.
+ *
+ * ── THREE WAYS A REQUEST BECOMES A CHANNEL, AND THEY ARE NOT INTERCHANGEABLE ─
+ *
+ *   (a) **the request SAYS so** — `layers.clear`, `playoutLayers.clear`, `fixedLayers.load`,
+ *       `fixedLayers.clear-layer`, `fixedLayers.set-config`, `channelSettings.set`, and
+ *       `stack.restore` (one per item, so N of them);
+ *   (b) **an `itemId` resolves through the runtime's ledgers** — every per-item verb, via
+ *       {@link CasparRuntime.channelsForItem}, which unions `#slots` and `#liveLayers`;
+ *   (c) **the verb's scope is the whole stack** — the bulk verbs, which union every member's
+ *       channels and are then decided ALL-OR-NOTHING.
+ *
+ * ⭐ **AN EMPTY ARRAY MEANS "NOTHING TO AUTHORISE", AND IS NOT A REFUSAL.** See `design.md`
+ * §4: `slot` is optional and the unbound state is deliberately reachable, so a `remove` on a
+ * row that never bound a layer touches no channel and nothing on air. Refusing it would take
+ * away an action that works today and call it a safety property — the exact shape this
+ * change exists to prevent. The ROLE check still applies; only the channel check is vacuous.
+ *
+ * 🔴 **`stack.silence-all-live-plates` IS ABSENT ON PURPOSE.** Owner answer A16 and
+ * CLAUDE.md's cadence floor both say it STAYS UNSCOPED. An emergency control must not depend
+ * on the bookkeeping whose failure is the emergency — the argument that deleted `B-122`'s
+ * status predicate, one door over. Adding it here would be the same defect with a fresh coat.
+ */
+export function channelsForRequest(
+  route: Route,
+  req: unknown,
+  runtime: CasparRuntime,
+): readonly number[] {
+  const name = route.channel.name;
+
+  // 🔴 A16 — unscoped, deliberately. Named FIRST so it cannot be reached by a later branch.
+  if (name === StackSilenceAllLivePlatesChannel.name) return [];
+
+  // (a) the request carries the coordinate itself.
+  const explicit = (req as { channel?: unknown } | null)?.channel;
+  if (typeof explicit === 'number') return [explicit];
+
+  // (a′) `stack.restore` carries N items, each with its own optional slot.
+  if (name === StackRestoreChannel.name) {
+    const items = (req as { items?: readonly { slot?: { channel?: number } }[] } | null)?.items;
+    const channels = new Set<number>();
+    for (const item of items ?? []) {
+      if (typeof item.slot?.channel === 'number') channels.add(item.slot.channel);
+    }
+    return [...channels];
+  }
+
+  // (b) one item, resolved through the runtime's two ledgers.
+  const itemId = (req as { itemId?: unknown } | null)?.itemId;
+  if (typeof itemId === 'string') return runtime.channelsForItem(itemId);
+
+  // (b′) `air.restore` carries a LIST of item ids; every one of them must be permitted.
+  const itemIds = (req as { itemIds?: unknown } | null)?.itemIds;
+  if (Array.isArray(itemIds)) {
+    const channels = new Set<number>();
+    for (const id of itemIds as unknown[]) {
+      if (typeof id === 'string') for (const c of runtime.channelsForItem(id)) channels.add(c);
+    }
+    return [...channels];
+  }
+
+  /*
+    (c) THE BULK VERBS — the union of every member's channels, decided all-or-nothing by the
+    caller. The ordering is the requirement `#removeRefusal` already forces on `removeAll`: a
+    gate that refused as it went would act on every permitted row it reached before meeting a
+    forbidden one, and then report that the action did not happen — while it had.
+  */
+  if (
+    name === StackRemoveAllChannel.name ||
+    name === StackClearAllChannel.name ||
+    name === StackStopAllChannel.name
+  ) {
+    const channels = new Set<number>();
+    for (const item of runtime.stackSnapshot()) {
+      for (const c of runtime.channelsForItem(item.itemId)) channels.add(c);
+    }
+    return [...channels];
+  }
+
+  return [];
+}
+
+/**
+ * 🔴 `C-038` — **MAY THIS PRINCIPAL SEND THIS REQUEST? The single decision, and the sentence
+ * it is refused with.** `null` means yes.
+ *
+ * ⚠ **AUTH OFF RETURNS FIRST, BEFORE ANYTHING IS READ.** No role lookup, no channel
+ * resolution, no config read. That is what makes "auth OFF is byte-identical" a property of
+ * the code rather than a claim about it — and it is why the mode check is here rather than at
+ * the call site, where a future second caller could forget it.
+ *
+ * ⚠ **THE ROLE IS CHECKED BEFORE THE CHANNEL, and the order is the message.** A viewer who
+ * presses TAKE should be told their sign-in does not allow that command — not that it does
+ * not cover channel 1, which is true, useless, and sends them to ask for a channel they still
+ * could not use. The narrower sentence is only right once the broader one passes.
+ */
+/**
+ * A permission refusal: the sentence the operator reads, and — when the refusal was about a
+ * CHANNEL rather than the role — which one.
+ *
+ * ⚠ **The channel rides the verdict rather than being re-derived by the caller**, because the
+ * audit row and the sentence must name the SAME channel. Two derivations is how they would come
+ * to disagree in exactly the dispute the row exists to settle (golden rule 6).
+ */
+export interface AuthzRefusal {
+  readonly message: string;
+  readonly casparChannel?: number;
+}
+
+export function authzRefusal(
+  route: Route,
+  req: unknown,
+  session: AuthSession | null,
+  playoutAuth: PlayoutAuth | null,
+  runtime: CasparRuntime,
+): AuthzRefusal | null {
+  if (playoutAuth === null) return null;
+
+  /*
+    `openToUnauthenticated` names the door that has to be open before there is anybody to
+    authorise — `bridge.capabilities` and `auth.*`. A principal-less socket has already been
+    refused above for everything else, so what reaches here is the door itself.
+  */
+  if (openToUnauthenticated(route.channel.name)) return null;
+
+  const principal = session?.token?.principal ?? null;
+  if (principal === null) return null; // `refusedByAuth` owns this case; never double-refuse.
+
+  if (!holdsPermissionClass(principal.roles, route.perm)) {
+    return { message: AUTHZ_ROLE_REFUSAL };
+  }
+
+  const channels = channelsForRequest(route, req, runtime);
+  if (channels.length === 0) return null; // nothing here to authorise — `design.md` §4.
+
+  const hosts = configuredCasparHosts(runtime.config());
+  const refused = channels.find((c) => !grantsChannel(principal.channels, hosts, c));
+  return refused === undefined
+    ? null
+    : { message: authzChannelRefusal(refused), casparChannel: refused };
 }
 
 /**
@@ -1213,6 +1385,45 @@ async function handleMessage(
     return;
   }
 
+  /*
+    🔴 `C-038` — **THE AUTHORISATION GATE, AFTER AUTHENTICATION AND BEFORE THE HANDLER.**
+
+    The order is the requirement, not a style choice. A socket with no principal must be told
+    it is not signed in (the gate above), never that its permissions are insufficient — the
+    second sentence names a remedy that would send an unauthenticated operator to an account
+    manager for a problem a sign-in fixes.
+
+    ⚠ **AUTH OFF RETURNS HERE, BEFORE ANYTHING IS RESOLVED.** `authzRefusal` reads the mode
+    first, so a station that has not federated identity does no role lookup, no channel
+    resolution and no config read on any request. That is what makes "auth OFF is
+    byte-identical" a property of the code rather than a claim about it.
+  */
+  const authz = authzRefusal(route, parsedReq.data, session, playoutAuth, runtime);
+  if (authz !== null) {
+    /*
+      🔴 `C-038` acceptance — **THE REFUSAL IS RECORDED, WITH THE VERIFIED ACTOR.**
+
+      A permission refusal is the one kind a dispute turns on the next day: somebody says the
+      console would not let them do their job, and the log is what settles it. `C-037`'s gate
+      and `B-229`'s lock both refuse SILENTLY — that is their own decision and this does not
+      change it — but neither of those turns on WHO, and this one does.
+
+      ⚠ Written here rather than inside `authzRefusal`, so that the predicate stays pure and
+      the census can walk it without writing rows. The gate acts; the predicate decides.
+    */
+    const principal = session?.token?.principal;
+    if (principal !== undefined) {
+      runtime.recordAuthzRefusal({
+        actor: principal.name,
+        actorSub: principal.sub,
+        channel: route.channel.name,
+        ...(authz.casparChannel !== undefined ? { casparChannel: authz.casparChannel } : {}),
+      });
+    }
+    send(socket, errorResponse(frame.id, authz.message));
+    return;
+  }
+
   try {
     /*
       Stack ops are async (they await their AMCP ack); await every handler.
@@ -1270,7 +1481,13 @@ async function handleAuthFrame(
     send(socket, {
       type: 'response',
       id: frame.id,
-      payload: { mode: 'off', principal: null, status: 'off' } satisfies AuthState,
+      payload: {
+        mode: 'off',
+        principal: null,
+        status: 'off',
+        // Auth off: no principal to scope to, and every control is reachable.
+        permittedChannels: [],
+      } satisfies AuthState,
     });
     return;
   }
@@ -1331,6 +1548,18 @@ async function handleAuthFrame(
       mode: 'playout',
       principal: result.token.principal,
       status: 'signed-in',
+      /*
+        ⭐ Carried on the `auth` REPLY as well as on `auth.state`, so a console knows which
+        channels are its the moment it signs in rather than after a second round trip. Both
+        come from the same call, so they cannot describe different permissions.
+      */
+      permittedChannels: [
+        ...grantedChannels(
+          result.token.principal.channels,
+          configuredCasparHosts(runtime.config()),
+          runtime.declaredChannels(),
+        ),
+      ],
     } satisfies AuthState,
   });
 }
@@ -1482,15 +1711,22 @@ export function buildRoutes(
     routed without classifying it, which is what keeps "the lock refuses everything"
     true a year from now. See {@link LockPolicy} for the four values and the owner's
     reasoning behind the no-carve-out answer.
+
+    🔴 `C-038` — and `perm` is the FOURTH, required for the identical reason one axis over.
+    Deliberately a POSITIONAL argument rather than a field on an options bag with a default:
+    a default is the mechanism by which every future route silently becomes `operator`, and
+    the compiler refusing to build is the only version of this rule nobody can forget.
   */
   const route = (
     channel: AnyChannel,
     lock: LockPolicy,
+    perm: PermissionClass,
     handle: (req: never) => unknown,
   ): Route => ({
     channel,
     handle: handle as (req: unknown) => unknown,
     lock,
+    perm,
   });
 
   /**
@@ -1537,7 +1773,7 @@ export function buildRoutes(
       intent: the lock refuses everything (the owner's no-carve-out answer) and signing out is
       something the operator does, not something they read.
     */
-    route(AuthStateChannel, 'read', () => {
+    route(AuthStateChannel, 'read', 'read', () => {
       /*
         🔴 IT ASKS THE ONE PREDICATE. It used to report `token?.principal` directly, and
         that was a lie a spec MEASURED: with intents already refused for a revoked `jti`, this
@@ -1545,13 +1781,36 @@ export function buildRoutes(
         to be able to say WHOSE session ended — but the verdict beside it is the gate's own.
       */
       const session = currentAuthSession();
+      const principal = session?.token?.principal ?? null;
+      const status = authState(session);
       return {
         mode: authMode,
-        principal: session?.token?.principal ?? null,
-        status: authState(session),
+        principal,
+        status,
+        /*
+          🔴 `C-038` — **THE PERMITTED-CHANNEL LIST, COMPUTED HERE AND NOWHERE ELSE.**
+
+          `grantsChannel` stays the ONE implementation and this is its one caller, because
+          this is the side that holds the connection config. A console re-deriving the same
+          verdict would need `configuredCasparHosts` in a second package (`B-162`'s hole) and
+          could disagree with the gate whenever its config read were stale — a control offered
+          that the bridge then refuses.
+
+          ⚠ Gated on `signed-in` rather than on the principal being non-null: a principal
+          survives expiry and revocation on purpose (see `AuthStateSchema.principal`), and a
+          session that has stopped holding must not go on advertising channels.
+        */
+        permittedChannels:
+          principal === null || status !== 'signed-in'
+            ? []
+            : grantedChannels(
+                principal.channels,
+                configuredCasparHosts(b.config()),
+                b.declaredChannels(),
+              ),
       };
     }),
-    route(AuthSignOutChannel, 'operator', () => {
+    route(AuthSignOutChannel, 'operator', 'read', () => {
       const session = currentAuthSession();
       const leaving = session?.token?.principal ?? null;
       // The bridge must stop calling the Playout with a token whose operator has left.
@@ -1567,7 +1826,7 @@ export function buildRoutes(
       session?.clear();
       return { ok: true as const };
     }),
-    route(AppInfoChannel, 'read', () => ({
+    route(AppInfoChannel, 'read', 'read', () => ({
       name: 'cg Bridge',
       version: '0.0.0',
       platform: 'node',
@@ -1576,13 +1835,15 @@ export function buildRoutes(
     route(
       StackLoadChannel,
       'operator',
+      'operator',
       (r: { itemId: string; templateId: string; fields: never }) =>
         b.load(r.itemId, r.templateId, r.fields),
     ),
-    route(StackTakeChannel, 'operator', (r: { itemId: string }) => b.take(r.itemId)),
+    route(StackTakeChannel, 'operator', 'operator', (r: { itemId: string }) => b.take(r.itemId)),
     // Session BM-2 — the texts AND the row's per-look inputs, in ONE atomic call.
     route(
       StackUpdateChannel,
+      'operator',
       'operator',
       (r: {
         itemId: string;
@@ -1592,14 +1853,23 @@ export function buildRoutes(
       }) => b.update(r.itemId, r.fields, r.mergeMode, r.lookBindings),
     ),
     // C-012 — the graceful stop (outro runs, producer stays resident).
-    route(StackStopChannel, 'operator', (r: { itemId: string }) => b.stopItem(r.itemId)),
+    route(StackStopChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.stopItem(r.itemId),
+    ),
     // R-028 (o2 / 5.4) — advance the template's sequence.
-    route(StackNextChannel, 'operator', (r: { itemId: string }) => b.nextItem(r.itemId)),
-    route(StackOutChannel, 'operator', (r: { itemId: string }) => b.out(r.itemId)),
-    route(StackRemoveChannel, 'operator', (r: { itemId: string }) => b.remove(r.itemId)),
+    route(StackNextChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.nextItem(r.itemId),
+    ),
+    route(StackOutChannel, 'operator', 'operator', (r: { itemId: string }) => b.out(r.itemId)),
+    route(StackRemoveChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.remove(r.itemId),
+    ),
     // R-011 — the operator's per-item on-air position override.
-    route(StackSetPositionChannel, 'operator', (r: { itemId: string; position: never }) =>
-      b.setPosition(r.itemId, r.position),
+    route(
+      StackSetPositionChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; position: never }) => b.setPosition(r.itemId, r.position),
     ),
     // R-048 — the operator repoints ONE plate of ONE row, on air. A per-item
     // override: the template assignment and the installation catalog are untouched.
@@ -1608,6 +1878,7 @@ export function buildRoutes(
     route(
       StackSwapLiveSourceChannel,
       'operator',
+      'operator',
       (r: { itemId: string; plateId: string; sourceId: string | null; lookId?: string }) =>
         b.swapLiveSource(r.itemId, r.plateId, r.sourceId, r.lookId),
     ),
@@ -1615,13 +1886,17 @@ export function buildRoutes(
     // validates the plan, tells the page on the CG UPDATE payload so it moves the HOLES,
     // then moves the FILLS after the B-174 mixer hold. Both halves off the same look id;
     // nothing else switches a look.
-    route(StackSetActiveLookChannel, 'operator', (r: { itemId: string; lookId: string }) =>
-      b.setActiveLook(r.itemId, r.lookId),
+    route(
+      StackSetActiveLookChannel,
+      'operator',
+      'operator',
+      (r: { itemId: string; lookId: string }) => b.setActiveLook(r.itemId, r.lookId),
     ),
     // `TIMING-WIRE-22` (c) — a CONFIGURATION verb: it carries no Take, and changes what the
     // graphic already on the channel will do next.
     route(
       StackSetPassTimingChannel,
+      'operator',
       'operator',
       (r: { itemId: string; passes?: number | 'infinite'; delayMs?: number }) =>
         b.setPassTiming(r.itemId, { passes: r.passes, delayMs: r.delayMs }),
@@ -1629,6 +1904,7 @@ export function buildRoutes(
     // C-015 (6.5f) — the explicit recorded intent that raises a plate's audio.
     route(
       StackSetPlateVolumeChannel,
+      'operator',
       'operator',
       (r: { itemId: string; plateId: string; volume: number }) =>
         b.setLivePlateVolume(r.itemId, r.plateId, r.volume),
@@ -1639,6 +1915,7 @@ export function buildRoutes(
     route(
       StackSetPlateVolumesChannel,
       'operator',
+      'operator',
       (r: { itemId: string; volumes: Readonly<Record<string, number>> }) =>
         b.setLivePlateVolumes(r.itemId, r.volumes),
     ),
@@ -1646,21 +1923,21 @@ export function buildRoutes(
     // for, whatever any status claims. It takes NO arguments, and that is the point: the
     // scope is not the caller's to choose (B-122 — a browser-resolved scope is an emergency
     // control gated on bookkeeping that may not have arrived).
-    route(StackSilenceAllLivePlatesChannel, 'operator', () => b.silenceAllLivePlates()),
+    route(StackSilenceAllLivePlatesChannel, 'operator', 'operator', () => b.silenceAllLivePlates()),
     // R-010 — the sanctioned clear-everything path (unblocks set-config).
-    route(StackRemoveAllChannel, 'operator', () => b.removeAll()),
-    route(StackClearAllChannel, 'operator', () => b.clearAll()),
+    route(StackRemoveAllChannel, 'operator', 'operator', () => b.removeAll()),
+    route(StackClearAllChannel, 'operator', 'operator', () => b.clearAll()),
     // C-012 / R-028 — the GRACEFUL bulk: every on-air item runs its own outro.
-    route(StackStopAllChannel, 'operator', () => b.stopAll()),
-    route(StackSnapshotChannel, 'read', () => b.stackSnapshot()),
+    route(StackStopAllChannel, 'operator', 'operator', () => b.stopAll()),
+    route(StackSnapshotChannel, 'read', 'read', () => b.stackSnapshot()),
     // B-092 — the browser re-delivers its RETAINED stack intent on every
     // (re)connect, so the stack survives a restart of this process. Seeds state
     // and publishes; sends nothing to CasparCG until occupancy is knowable.
-    route(StackRestoreChannel, 'resync', (r: { items: never }) => b.restore(r.items)),
+    route(StackRestoreChannel, 'resync', 'operator', (r: { items: never }) => b.restore(r.items)),
 
-    route(ConnectionsConfigChannel, 'read', () => b.config()),
+    route(ConnectionsConfigChannel, 'read', 'read', () => b.config()),
     // R-010 — runtime reconfiguration; persisted only after a successful apply.
-    route(ConnectionsSetConfigChannel, 'operator', async (r: ConnectionConfig) => {
+    route(ConnectionsSetConfigChannel, 'operator', 'station-admin', async (r: ConnectionConfig) => {
       const result = await b.setConfig(r);
       if (result.ok && persistPath !== undefined) savePersistedConnection(persistPath, r);
       return result;
@@ -1675,17 +1952,17 @@ export function buildRoutes(
       merely looked at it, and a panel showing an address the bridge is not using is the defect this
       whole item exists to remove.
     */
-    route(ConnectionsTemplateServeChannel, 'read', () => b.templateServeInfo()),
-    route(ConnectionsHealthChannel, 'read', () => b.health()),
-    route(ConnectionsFailoverChannel, 'operator', () => b.failover()),
+    route(ConnectionsTemplateServeChannel, 'read', 'read', () => b.templateServeInfo()),
+    route(ConnectionsHealthChannel, 'read', 'read', () => b.health()),
+    route(ConnectionsFailoverChannel, 'operator', 'operator', () => b.failover()),
 
     // R-009 — orphan-layer surface + explicit per-layer Clear.
-    route(LayersOrphansChannel, 'read', () => b.orphans()),
-    route(LayersClearChannel, 'operator', (r: { channel: number; layer: number }) =>
+    route(LayersOrphansChannel, 'read', 'read', () => b.orphans()),
+    route(LayersClearChannel, 'operator', 'operator', (r: { channel: number; layer: number }) =>
       b.clearLayer(r.channel, r.layer),
     ),
     // B-056 — owned-slot occupancy warnings (no Clear: the remedy is Out/Remove).
-    route(LayersOwnedOccupancyChannel, 'read', () => b.ownedOccupancy()),
+    route(LayersOwnedOccupancyChannel, 'read', 'read', () => b.ownedOccupancy()),
 
     /*
       B-225 — the playout server stopped carrying what this console had put on air. The
@@ -1693,18 +1970,18 @@ export function buildRoutes(
       on the bridge restores by itself (the owner's 2026-09-05 decision — an unattended
       machine must not put a graphic on air), so `restore` is reachable only from a press.
     */
-    route(EmptiedAirNoticeChannel, 'read', () => b.emptiedAir()),
-    route(EmptiedAirRestoreChannel, 'operator', (r: { itemIds: string[] }) =>
+    route(EmptiedAirNoticeChannel, 'read', 'read', () => b.emptiedAir()),
+    route(EmptiedAirRestoreChannel, 'operator', 'operator', (r: { itemIds: string[] }) =>
       b.restoreEmptiedAir(r.itemIds),
     ),
-    route(EmptiedAirDismissChannel, 'operator', () => b.dismissEmptiedAir()),
+    route(EmptiedAirDismissChannel, 'operator', 'operator', () => b.dismissEmptiedAir()),
 
     // R-021 stage 2a — the fixed-bank wire contract: config read/update +
     // per-slot state. Order on an applied change: validate → apply → persist
     // (non-fatal, the R-010 savePersistedConnection stance) → publish (the
     // runtime publishes from setFixedLayers itself, after apply).
-    route(FixedLayersConfigChannel, 'read', () => b.fixedLayersConfig()),
-    route(FixedLayersSetConfigChannel, 'operator', (r: FixedLayerBank) => {
+    route(FixedLayersConfigChannel, 'read', 'read', () => b.fixedLayersConfig()),
+    route(FixedLayersSetConfigChannel, 'operator', 'station-admin', (r: FixedLayerBank) => {
       const result = b.setFixedLayers(r);
       if (result.ok && fixedLayersPath !== undefined) {
         try {
@@ -1718,10 +1995,11 @@ export function buildRoutes(
       }
       return result;
     }),
-    route(FixedLayersStateChannel, 'read', () => b.fixedLayersState()),
+    route(FixedLayersStateChannel, 'read', 'read', () => b.fixedLayersState()),
     // R-021 stage 3 — the EXACT-SLOT load: `bindFixed`, never `reserve`/allocate.
     route(
       FixedLayersLoadChannel,
+      'operator',
       'operator',
       (r: { channel: number; layer: number; itemId: string; templateId: string; fields: never }) =>
         b.loadFixed({ channel: r.channel, layer: r.layer }, r.itemId, r.templateId, r.fields),
@@ -1730,17 +2008,23 @@ export function buildRoutes(
     // reserved), never by occupancy — so it still works when occupancy is `unknown`,
     // which is exactly when the operator needs it. The guard lives in
     // `clearBankLayer`, bridge-side, so no UI state can bypass it.
-    route(FixedLayersClearLayerChannel, 'operator', (r: { channel: number; layer: number }) =>
-      b.clearBankLayer(r.channel, r.layer),
+    route(
+      FixedLayersClearLayerChannel,
+      'operator',
+      'operator',
+      (r: { channel: number; layer: number }) => b.clearBankLayer(r.channel, r.layer),
     ),
 
     // R-028 part B — the declared playout layers + the operator's DELIBERATE,
     // kind-gated clear. A separate door from `layers.clear` (which still
     // refuses reserved layers): only an operator who opened the playout tab
     // can reach this, and the bridge holds the html-only gate.
-    route(PlayoutLayersStateChannel, 'read', () => b.playoutLayersState()),
-    route(PlayoutLayersClearChannel, 'operator', (r: { channel: number; layer: number }) =>
-      b.playoutClear(r.channel, r.layer),
+    route(PlayoutLayersStateChannel, 'read', 'read', () => b.playoutLayersState()),
+    route(
+      PlayoutLayersClearChannel,
+      'operator',
+      'operator',
+      (r: { channel: number; layer: number }) => b.playoutClear(r.channel, r.layer),
     ),
 
     // B-145 acceptance 1, display half (tasks.md 2.8) — the bridge's OWN Live
@@ -1749,59 +2033,68 @@ export function buildRoutes(
     // stack.set-plate-volume, stack.out / stack.remove), and layers.clear refuses
     // a live-source coordinate BY NAME. This channel exists so the operator can
     // SEE which row owns a lit layer, never to add a fourth way to cut one.
-    route(LiveLayersStateChannel, 'read', () => b.liveLayersState()),
+    route(LiveLayersStateChannel, 'read', 'read', () => b.liveLayersState()),
 
-    route(LockEngageChannel, 'operator', (r: { pin: string }) => b.engage(r.pin)),
-    route(LockReleaseChannel, 'unlock', (r: { pin: string }) => b.release(r.pin)),
-    route(LockStateChannel, 'read', () => b.lockState()),
+    route(LockEngageChannel, 'operator', 'operator', (r: { pin: string }) => b.engage(r.pin)),
+    route(LockReleaseChannel, 'unlock', 'operator', (r: { pin: string }) => b.release(r.pin)),
+    route(LockStateChannel, 'read', 'read', () => b.lockState()),
 
-    route(TemplatesGetChannel, 'read', (r: { templateId: string }) => b.templateGet(r.templateId)),
-    route(TemplatesListChannel, 'read', () => b.templateList()),
+    route(TemplatesGetChannel, 'read', 'read', (r: { templateId: string }) =>
+      b.templateGet(r.templateId),
+    ),
+    route(TemplatesListChannel, 'read', 'read', () => b.templateList()),
     // B-038 Phase 2 — retain the browser-produced self-contained HTML alongside
     // the TemplateInfo (held, not served yet).
     route(
       TemplatesImportChannel,
       'operator-unless-redelivery',
+      'operator',
       (r: { template: never; html: string; redelivery?: boolean }) =>
         b.templateImport(r.template, r.html, r.redelivery ?? false),
     ),
     // R-005 — the bridge is authoritative for the refusal (refuse-while-referenced).
-    route(TemplatesRemoveChannel, 'operator', (r: { templateId: string }) =>
+    route(TemplatesRemoveChannel, 'operator', 'operator', (r: { templateId: string }) =>
       b.templateRemove(r.templateId),
     ),
 
-    route(AuditRecentChannel, 'read', (r: { limit?: number; action?: never; actor?: string }) =>
-      b.auditRecent(r.limit, r.action, r.actor),
+    route(
+      AuditRecentChannel,
+      'read',
+      'read',
+      (r: { limit?: number; action?: never; actor?: string }) =>
+        b.auditRecent(r.limit, r.action, r.actor),
     ),
     // B-141 — the POSITIVE CONTROL for the panel's empty state. Without it "no
     // entries" and "no writer" and "the writer is failing" are one indistinguishable
     // sentence, and the operator reads the third as the first.
-    route(AuditHealthChannel, 'read', () => b.auditHealth()),
+    route(AuditHealthChannel, 'read', 'read', () => b.auditHealth()),
 
-    route(UpdateRequestChannel, 'operator', (r: { version: string; notes?: string }) =>
+    route(UpdateRequestChannel, 'operator', 'operator', (r: { version: string; notes?: string }) =>
       b.updateRequest(r.version, r.notes),
     ),
-    route(UpdateStateChannel, 'read', () => b.updateState()),
-    route(UpdateCancelChannel, 'operator', () => b.updateCancel()),
+    route(UpdateStateChannel, 'read', 'read', () => b.updateState()),
+    route(UpdateCancelChannel, 'operator', 'operator', () => b.updateCancel()),
 
     // R-034 — the station's delimiter list, bridge-owned so every browser sees one list.
-    route(DelimitersListChannel, 'read', () => b.delimitersList()),
-    route(DelimitersSetChannel, 'operator', (r: { delimiters: never[] }) =>
+    route(DelimitersListChannel, 'read', 'read', () => b.delimitersList()),
+    route(DelimitersSetChannel, 'operator', 'station-admin', (r: { delimiters: never[] }) =>
       b.delimitersSet(r.delimiters),
     ),
 
     // R-030 — the per-channel output raster, bridge-owned for the same reasons
     // the template catalogue is: several browsers must not disagree about where
     // graphics land, and it has to survive a bridge restart.
-    route(ChannelSettingsGetChannel, 'read', () => b.channelSettingsState()),
-    route(ChannelSettingsSetChannel, 'operator', (r: ChannelSettings) => b.setChannelSettings(r)),
+    route(ChannelSettingsGetChannel, 'read', 'read', () => b.channelSettingsState()),
+    route(ChannelSettingsSetChannel, 'operator', 'station-admin', (r: ChannelSettings) =>
+      b.setChannelSettings(r),
+    ),
 
     // D-137 / C-015 — the installation's SOURCE CATALOG. The order on an applied
     // change is the fixed-bank one: validate → apply → persist (non-fatal) →
     // publish (the runtime publishes from `setSourceCatalog` itself, after the
     // apply).
-    route(SourcesConfigChannel, 'read', () => b.sourceCatalog()),
-    route(SourcesSetConfigChannel, 'operator', (r: SourceCatalog) => {
+    route(SourcesConfigChannel, 'read', 'read', () => b.sourceCatalog()),
+    route(SourcesSetConfigChannel, 'operator', 'station-admin', (r: SourceCatalog) => {
       const result = b.setSourceCatalog(r);
       if (result.ok) {
         persistCatalog(sourceCatalogPath, r);
@@ -1815,8 +2108,8 @@ export function buildRoutes(
       }
       return result;
     }),
-    route(SourcesAssignmentsChannel, 'read', () => b.sourceAssignments()),
-    route(SourcesSetAssignmentsChannel, 'operator', (r: SourceAssignments) => {
+    route(SourcesAssignmentsChannel, 'read', 'read', () => b.sourceAssignments()),
+    route(SourcesSetAssignmentsChannel, 'operator', 'station-admin', (r: SourceAssignments) => {
       const result = b.setSourceAssignments(r);
       if (result.ok) persistAssignments(sourceAssignmentsPath, r);
       return result;
@@ -1825,9 +2118,13 @@ export function buildRoutes(
     // R-022 — REHEARSE. Bridge-owned so several browsers agree about which rows
     // are interlocked, and every guard (on-air, not-loaded, mute-failed) lives
     // bridge-side where no UI state can bypass it.
-    route(RehearseStateChannel, 'read', () => b.rehearseState()),
-    route(RehearseEnterChannel, 'operator', (r: { itemId: string }) => b.enterRehearse(r.itemId)),
-    route(RehearseExitChannel, 'operator', (r: { itemId: string }) => b.exitRehearse(r.itemId)),
+    route(RehearseStateChannel, 'read', 'read', () => b.rehearseState()),
+    route(RehearseEnterChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.enterRehearse(r.itemId),
+    ),
+    route(RehearseExitChannel, 'operator', 'operator', (r: { itemId: string }) =>
+      b.exitRehearse(r.itemId),
+    ),
   ];
 
   const routes = new Map(entries.map((e) => [e.channel.name, e]));
@@ -1844,7 +2141,7 @@ export function buildRoutes(
     It includes ITSELF, which is correct: a bridge that can answer this question can, in
     fact, answer this question.
   */
-  const capabilities = route(BridgeCapabilitiesChannel, 'read', () => ({
+  const capabilities = route(BridgeCapabilitiesChannel, 'read', 'read', () => ({
     channels: [...routes.keys()].sort(),
     /*
       🔴 `C-037` / ADR 0010 rule 9 — the auth MODE and the SIGN-IN ADDRESS, answered to a

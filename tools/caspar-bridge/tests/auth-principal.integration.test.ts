@@ -10,7 +10,7 @@ import { createBridge, type BridgeHandle } from '../src/index.js';
 import {
   FAKE_LONG_NAME_USER,
   FAKE_OPERATOR,
-  FAKE_VIEWER,
+  FAKE_ADMIN,
   type FakePlayout,
   type IssueTokenOptions,
 } from './support/fake-playout.js';
@@ -158,6 +158,11 @@ describe("C-037 — a verified token seats a principal, in the operator's own na
       // The gate's own verdict, carried beside the principal so that a surface reading this
       // cannot reach a different answer from the same facts (golden rule 6).
       status: 'signed-in',
+      /*
+        `C-038` — the channels this operator may drive on THIS station: their `cg_channels`
+        grant for `127.0.0.1` channel 1, intersected with what the station declares.
+      */
+      permittedChannels: [1],
     });
 
     /*
@@ -374,10 +379,10 @@ describe('C-037 — THE ALS SEAM: two sockets, two tokens, no crossing', () => {
   it('🔴 two signed-in sockets each drive a verb — sequentially and INTERLEAVED — and neither row wears the other name', async () => {
     const { bridge, playout } = await authedBridge();
     const operator = await openClient(bridge);
-    const viewer = await openClient(bridge);
+    const second = await openClient(bridge);
 
     await signIn(operator, 'auth-op', playout);
-    await signIn(viewer, 'auth-view', playout, { user: 'viewer' });
+    await signIn(second, 'auth-admin', playout, { user: 'admin' });
 
     /*
       🔴 **WHY A MUTABLE "CURRENT PRINCIPAL" FIELD WOULD FAIL THIS AND `AsyncLocalStorage`
@@ -396,21 +401,30 @@ describe('C-037 — THE ALS SEAM: two sockets, two tokens, no crossing', () => {
       that happened to share a display name would make every assertion here pass while the
       seam was broken.
     */
-    expect(FAKE_OPERATOR.name).not.toBe(FAKE_VIEWER.name);
+    expect(FAKE_OPERATOR.name).not.toBe(FAKE_ADMIN.name);
+
+    /*
+      ⚠ **THE SECOND PRINCIPAL IS A STATION-ADMIN, AND IT USED TO BE A VIEWER.** `C-038`
+      gave every route a permission class, and a viewer may not drive `stack.take` — so the
+      old fixture would now be refused at the gate and this spec would be measuring the
+      refusal rather than the seam. The subject here is that two principals' names never
+      cross, which needs two principals who can both ACT and whose names DIFFER; any two such
+      users serve, and the admin is the one that also exercises the top rung.
+    */
 
     // ── Phase 1: sequential. Each verb completes before the next begins.
     const seqOp = await operator.ask('s-op', 'stack.take', { itemId: 'seq-op' });
-    const seqView = await viewer.ask('s-view', 'stack.take', { itemId: 'seq-view' });
+    const seqAdmin = await second.ask('s-admin', 'stack.take', { itemId: 'seq-admin' });
     expect(seqOp.error, 'phase 1: the operator verb was refused').toBeUndefined();
-    expect(seqView.error, 'phase 1: the viewer verb was refused').toBeUndefined();
+    expect(seqAdmin.error, 'phase 1: the second verb was refused').toBeUndefined();
 
     const seqRows = await bridge.runtime.auditRecent(200);
     const seqOpRow = seqRows.find((r) => r.action === 'take' && r.itemId === 'seq-op');
-    const seqViewRow = seqRows.find((r) => r.action === 'take' && r.itemId === 'seq-view');
+    const seqAdminRow = seqRows.find((r) => r.action === 'take' && r.itemId === 'seq-admin');
     expect(seqOpRow, 'phase 1: no row for the operator verb').toBeDefined();
-    expect(seqViewRow, 'phase 1: no row for the viewer verb').toBeDefined();
+    expect(seqAdminRow, 'phase 1: no row for the second verb').toBeDefined();
     expect(seqOpRow?.actor, 'phase 1: the operator row').toBe(FAKE_OPERATOR.name);
-    expect(seqViewRow?.actor, 'phase 1: the viewer row').toBe(FAKE_VIEWER.name);
+    expect(seqAdminRow?.actor, 'phase 1: the second row').toBe(FAKE_ADMIN.name);
 
     /*
       The two `sign-in` rows are where the verified `sub` DOES live (see the note in the audit
@@ -419,12 +433,12 @@ describe('C-037 — THE ALS SEAM: two sockets, two tokens, no crossing', () => {
     */
     const signIns = seqRows.filter((r) => r.action === 'sign-in');
     expect(signIns.map((r) => r.actorSub).sort()).toEqual(
-      [FAKE_OPERATOR.sub, FAKE_VIEWER.sub].sort(),
+      [FAKE_OPERATOR.sub, FAKE_ADMIN.sub].sort(),
     );
 
     // ── Phase 2: INTERLEAVED. Both in flight; neither awaited before the other is sent.
     const opInFlight = operator.ask('i-op', 'stack.take', { itemId: 'int-op' });
-    const viewInFlight = viewer.ask('i-view', 'stack.take', { itemId: 'int-view' });
+    const adminInFlight = second.ask('i-admin', 'stack.take', { itemId: 'int-admin' });
     /*
       THE PRECONDITION, CHECKED RATHER THAN ASSUMED. Both frames are on the wire and neither
       reply can have arrived — a socket message is an I/O event and cannot land inside this
@@ -433,25 +447,25 @@ describe('C-037 — THE ALS SEAM: two sockets, two tokens, no crossing', () => {
     */
     expect(
       operator.frames.some((f) => f.type === 'response' && f.id === 'i-op'),
-      'the operator request completed before the viewer request was sent — nothing overlapped',
+      'the operator request completed before the second request was sent — nothing overlapped',
     ).toBe(false);
-    const [intOp, intView] = await Promise.all([opInFlight, viewInFlight]);
+    const [intOp, intAdmin] = await Promise.all([opInFlight, adminInFlight]);
     expect(intOp.error, 'phase 2: the operator verb was refused').toBeUndefined();
-    expect(intView.error, 'phase 2: the viewer verb was refused').toBeUndefined();
+    expect(intAdmin.error, 'phase 2: the second verb was refused').toBeUndefined();
 
     const intRows = await bridge.runtime.auditRecent(200);
     const intOpRow = intRows.find((r) => r.action === 'take' && r.itemId === 'int-op');
-    const intViewRow = intRows.find((r) => r.action === 'take' && r.itemId === 'int-view');
+    const intAdminRow = intRows.find((r) => r.action === 'take' && r.itemId === 'int-admin');
     expect(intOpRow, 'phase 2: no row for the operator verb').toBeDefined();
-    expect(intViewRow, 'phase 2: no row for the viewer verb').toBeDefined();
+    expect(intAdminRow, 'phase 2: no row for the second verb').toBeDefined();
     expect(
       intOpRow?.actor,
       'phase 2: the operator row wears the wrong name — the seam CROSSED',
     ).toBe(FAKE_OPERATOR.name);
     expect(
-      intViewRow?.actor,
-      'phase 2: the viewer row wears the wrong name — the seam CROSSED',
-    ).toBe(FAKE_VIEWER.name);
+      intAdminRow?.actor,
+      'phase 2: the second row wears the wrong name — the seam CROSSED',
+    ).toBe(FAKE_ADMIN.name);
   });
 });
 

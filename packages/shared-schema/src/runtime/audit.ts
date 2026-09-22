@@ -51,6 +51,25 @@ export const AuditEntrySchema = z.object({
     */
     'sign-in',
     'sign-out',
+    /*
+      🔴 `C-038` — **A COMMAND WAS REFUSED BECAUSE OF WHO ASKED.**
+
+      Its own action rather than an `outcome: 'failed'` on the verb, and the distinction is
+      the reason it exists: every other row records something that was ATTEMPTED against air,
+      and this one records something that never reached the runtime at all. Writing it as a
+      failed `take` would put a take in the log that nobody performed — the log's worst
+      failure mode, since the log is what a dispute is settled from.
+
+      It carries the verified `actor`/`actorSub`, the channel name in `detail.channel`, and
+      the CasparCG channel in `detail.casparChannel` when the refusal was about one. It never
+      carries the token, the `jti` or the grant list.
+
+      ⚠ **Only the AUTHORISATION gate writes it.** A refusal for the lock, for an expired
+      session or for an unknown channel is a different fact with a different remedy, and
+      `C-037` deliberately left those unrecorded; widening this to "every refusal" would be a
+      separate decision, not a rider on this one.
+    */
+    'refused',
   ]),
   /**
    * 🔴 `C-037` / ADR 0010 rule 3 — the token's `sub`: an opaque, stable user id, kept
@@ -83,6 +102,26 @@ export const AuditEntrySchema = z.object({
   oscConfirmMs: z.number().nonnegative().optional(),
   outcome: z.enum(['ok', 'failed', 'timeout']),
   errorCode: z.string().optional(),
+  /**
+   * 🔴 `C-038` — WHAT a `refused` row was refused. Present on that action and absent on
+   * every other.
+   *
+   * `channel` is the IPC channel name (`stack.take`, `layers.clear`) — the request that was
+   * turned away. `casparChannel` is the CasparCG channel the refusal was ABOUT, and is absent
+   * when the refusal was about the ROLE rather than a channel: the two are different facts and
+   * a row that could not tell them apart would be useless in exactly the dispute it exists for.
+   *
+   * ⚠ It carries no token, no `jti` and no grant list. The record keeps who was refused and
+   * what they asked for — never the credential, which could be replayed, and never the whole
+   * permission set, which is the Playout's to state and would be a stale copy the moment it
+   * was written.
+   */
+  refused: z
+    .object({
+      channel: z.string().min(1),
+      casparChannel: z.number().int().positive().optional(),
+    })
+    .optional(),
   /**
    * `B-209` — the AMCP line CasparCG answered with the code above, payload elided.
    *

@@ -10232,6 +10232,34 @@ export class CasparRuntime {
   }
 
   /**
+   * 🔴 `C-038` — **A COMMAND WAS REFUSED BECAUSE OF WHO ASKED.** The one writer.
+   *
+   * `outcome: 'failed'` because that is what happened to the request; the ACTION says why.
+   * The channel that was refused rides `detail` so a dispute can be settled from the log
+   * without a second source — `R-028`'s rule that the real number stays visible, one surface
+   * over.
+   *
+   * ⚠ Called from the gate, which runs OUTSIDE `runAsActor`, so the actor is passed
+   * explicitly rather than read from the ALS store. `#recordAudit` stamps `actorSub` from the
+   * context when it can and the caller's value wins — here the caller always has one.
+   */
+  recordAuthzRefusal(entry: {
+    actor: string;
+    actorSub: string;
+    channel: string;
+    casparChannel?: number;
+  }): void {
+    const { actor, actorSub, channel, casparChannel } = entry;
+    this.#recordAudit({
+      action: 'refused',
+      actor,
+      actorSub,
+      outcome: 'failed',
+      refused: { channel, ...(casparChannel !== undefined ? { casparChannel } : {}) },
+    });
+  }
+
+  /**
    * B-141 — record ONE auditable action. Fire-and-forget, by contract.
    *
    * Never awaited by a caller and never able to refuse one: see the note on
@@ -11435,6 +11463,44 @@ export class CasparRuntime {
       if (s.channel === slot.channel && s.layer === slot.layer) return itemId;
     }
     return undefined;
+  }
+
+  /**
+   * 🔴 `C-038` — **WHICH CHANNELS THIS ITEM TOUCHES. The ONE resolver.**
+   *
+   * The permission gate asks THIS and nothing else, so "which channel is that command on"
+   * has a single answer that cannot drift from what the verb then does (golden rule 6).
+   *
+   * ⚠ **BOTH LEDGERS, UNIONED — `#slots` alone is not the answer.** `#slots` says where the
+   * item's TEMPLATE lives; `#liveLayers` says where its live-source PLATES were seated, and
+   * the doc on `#liveLayers` is explicit that it is a separate ownership class kept
+   * deliberately BESIDE `#slots`. A plate can sit on a coordinate the template does not, and
+   * several of them can. A gate reading only `#slots` would authorise a volume change
+   * against a channel the producer is not on — the shape of golden rule 8, one map over.
+   *
+   * ⭐ **AN EMPTY RESULT MEANS "NOTHING HERE TO AUTHORISE", NOT "REFUSE".** `slot` is
+   * optional and the state is deliberately reachable: `restore` brings a row back with no
+   * layer at all, and eleven of the fourteen item verbs already refuse such a row
+   * `unknown-item` on their own. The three that do not — `remove`, `set-position` and the
+   * plate-volume pair before anything is seated — touch no channel and nothing on air, so
+   * refusing them would take away behaviour that works today and call it safety. The caller
+   * applies the ROLE check and stops; see the change's `design.md` §4 for the per-verb table.
+   */
+  channelsForItem(itemId: string): readonly number[] {
+    const channels = new Set<number>();
+    const slot = this.#slots.get(itemId);
+    if (slot !== undefined) channels.add(slot.channel);
+    for (const record of this.#liveLayers.get(itemId) ?? []) channels.add(record.slot.channel);
+    return [...channels];
+  }
+
+  /**
+   * `R-030` — the channels this install declares, for the permission gate and for the
+   * console's permitted-channel strip. The public face of `#declaredChannels`, which stays
+   * the ONE place the answer is derived.
+   */
+  declaredChannels(): readonly number[] {
+    return this.#declaredChannels();
   }
 
   /**

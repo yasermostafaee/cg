@@ -114,6 +114,27 @@ export const AuthStateSchema = z.object({
   principal: PlayoutPrincipalSchema.nullable(),
   /** The bridge's own verdict, from the one predicate every gate asks. */
   status: AuthStatusSchema,
+  /**
+   * 🔴 `C-038` — **WHICH OF THIS STATION'S CHANNELS THIS PRINCIPAL MAY OPERATE.** The
+   * permitted-channel strip's one source.
+   *
+   * ⚠ **THE BRIDGE COMPUTES IT; THE CONSOLE DOES NOT RE-DERIVE IT — and that IS golden rule
+   * 6 rather than an exception to it.** {@link grantsChannel} stays the one implementation;
+   * what changes is that it has ONE caller, on the side that holds the facts. The alternative
+   * — shipping the connection config to the console and running the predicate there too —
+   * needs `configuredCasparHosts` in two packages, which is `B-162`'s hole re-opened, and it
+   * lets a stale config read make the strip and the gate disagree about a security verdict.
+   * A control the console offers and a command the bridge accepts must be the same judgement,
+   * and the only way to guarantee that is for there to be one judgement.
+   *
+   * ⭐ It is a list of THIS STATION's channels, intersected with the grants — never the raw
+   * `cg_channels` claim. A grant naming a channel this station does not own contributes
+   * nothing, so the strip can never offer a channel that is not there.
+   *
+   * EMPTY when auth is off (there is no principal to scope to, and every control is reachable
+   * — the byte-identical path), and empty for a viewer, who is granted none.
+   */
+  permittedChannels: z.array(z.number().int().positive()),
 });
 export type AuthState = z.infer<typeof AuthStateSchema>;
 
@@ -201,3 +222,158 @@ export const AUTH_TOKEN_INVALID = 'That sign-in could not be verified.';
  * cannot read "no answer" as "accepted".
  */
 export const AUTH_NO_TOKEN = 'No sign-in was presented.';
+
+/**
+ * 🔴 `C-038` — **THE PERMISSION CLASS: WHICH RUNG OF THE PRINCIPAL HIERARCHY A ROUTE SITS ON.**
+ *
+ * Three classes, and they are **rungs of a hierarchy, not statements about what a route
+ * does**. A principal at a rung may reach every route at that rung and below.
+ *
+ * ⚠ **`read` names the BOTTOM RUNG, not a promise that the route does not write.**
+ * `auth.sign-out` is its one member that writes, and what it writes is the principal's own
+ * session, never the station. ADR 0010 rule 2 defines `read` as _"any signed-in principal, a
+ * viewer included"_ — a statement about WHO, which is exactly what a viewer signing out
+ * needs. A future reader who classifies by VERB rather than by PRINCIPAL will put
+ * `auth.sign-out` in `operator` and strand every viewer signed in at a console; this
+ * paragraph exists because that is the one mistake the name invites.
+ *
+ * There is deliberately no fourth `any-principal` class. It would ship with one member and
+ * then attract everything that feels session-ish from a reader who never saw this note.
+ */
+export const PermissionClassSchema = z.enum(['read', 'operator', 'station-admin']);
+export type PermissionClass = z.infer<typeof PermissionClassSchema>;
+
+/**
+ * The hierarchy, lowest rung first. Exported so the census can assert the LIST rather than
+ * sampling it — `R-028` (6.5)'s lesson one axis over: the danger is never that one rung is
+ * implemented wrongly, it is that nothing enumerated the set.
+ */
+export const PERMISSION_CLASSES: readonly PermissionClass[] = ['read', 'operator', 'station-admin'];
+
+/**
+ * 🔴 **DOES THIS PRINCIPAL HOLD THIS CLASS? The ONE answer.** Golden rule 6 — the bridge's
+ * request gate and the console's read-only state both call THIS, so they cannot come to
+ * disagree about what a viewer may press.
+ *
+ * ⚠ **The hierarchy is applied EXPLICITLY, not inferred from the claim being cumulative.**
+ * The contract says `roles` arrives cumulative (`station-admin ⊇ operator ⊇ viewer`) and the
+ * Playout issues it that way today — but a Playout that ever sent a bare `['station-admin']`
+ * would, under a membership test, be refused every `operator` route while holding strictly
+ * more authority than an operator. That is a refusal nobody could explain and it would look
+ * like a bridge defect. Widening here is not a widening at all: it grants a station-admin
+ * exactly what the hierarchy already says they have.
+ *
+ * Everything else fails CLOSED: an unrecognised role grants nothing, and `[]` grants nothing
+ * above `read`.
+ */
+export function holdsPermissionClass(roles: readonly string[], required: PermissionClass): boolean {
+  if (required === 'read') return true;
+  const admin = roles.includes('station-admin');
+  if (required === 'station-admin') return admin;
+  return admin || roles.includes('operator');
+}
+
+/**
+ * 🔴 `C-038` — **MAY THIS PRINCIPAL OPERATE THIS CHANNEL ON THIS STATION? The ONE predicate.**
+ *
+ * Called by the bridge's request gate AND by the console's permitted-channel strip, so a
+ * control the console offers and a command the bridge accepts are the same judgement
+ * (golden rule 6). It is also the predicate `R-062`'s discovery will read — written to BE
+ * that now, rather than so it could become it later.
+ *
+ * ── THE HOST RULE, AND WHY IT IS THE SET ────────────────────────────────────
+ *
+ * A grant authorises channel `channel` iff `grant.channel === channel` **and** `grant.host`
+ * is one of the hosts this bridge is configured to drive.
+ *
+ * `hosts` is `configuredCasparHosts(config)` — **never `servers.A.host` read directly.**
+ * ADR 0010 §8 pins the contract's spelling to A's host, but A and B are MIRRORS of one
+ * channel set rather than a partition, and `B-162` is the hole that opened the last time a
+ * caller reached for the primary instead of the set.
+ *
+ * Two alternatives were rejected, and the reasons are worth keeping:
+ *
+ * - **require EVERY configured host to be granted** — refuses every operator on any
+ *   redundant station, against the contract as written and against every fixture user;
+ * - **match the CURRENT PRIMARY** — the verdict would then move under a failover the
+ *   operator did not cause, which is golden rule 8's shape exactly.
+ *
+ * What survives is the only property that matters: **a grant naming another station's host
+ * does not authorise this station's channel 1.**
+ *
+ * ⚠ **It reads config at EVALUATION time**, so a `station-admin` editing the server list
+ * changes who is authorised. That is INTENDED, and it is not the failover case above: a
+ * deliberate act by a principal holding authority is a different thing from an event the
+ * operator did not cause. Stated because the next reader will otherwise see a verdict that
+ * moves and think it is the bug this design avoided.
+ *
+ * ⚠ **It accepts B's host as well as A's**, where the contract as written names A's. That is
+ * a TOLERANCE, not a widening — the Playout issues A's host today, so nothing changes in
+ * practice, and a grant naming a host that is not ours still authorises nothing. It belongs
+ * in the `iss`-addendum owed to the Playout team, so their side reads our interpretation
+ * rather than discovering it.
+ *
+ * `'*'` authorises every channel. `[]` authorises none — and an empty list is NOT
+ * `no_cg_access`: a viewer signs in successfully and reads everything (contract §5).
+ */
+export function grantsChannel(
+  channels: PlayoutChannels,
+  hosts: readonly string[],
+  channel: number,
+): boolean {
+  if (channels === '*') return true;
+  return channels.some((g) => g.channel === channel && hosts.includes(g.host));
+}
+
+/**
+ * Which of THIS STATION's channels the principal may operate — the permitted-channel strip's
+ * one source, and `grantsChannel` applied over a set rather than a second reading of it.
+ *
+ * `stationChannels` is what the station actually has (from `channelSettings`), so a grant
+ * naming a channel this station does not own contributes nothing, and the strip can never
+ * offer a channel that is not there.
+ */
+export function grantedChannels(
+  channels: PlayoutChannels,
+  hosts: readonly string[],
+  stationChannels: readonly number[],
+): readonly number[] {
+  return stationChannels.filter((c) => grantsChannel(channels, hosts, c));
+}
+
+/**
+ * 🔴 `C-038` — **WHAT A PRINCIPAL IS TOLD WHEN THEIR ROLE IS NOT ENOUGH.**
+ *
+ * ⚠ **Not the same sentence as {@link AUTH_REQUIRED_REFUSAL}, and the difference is the
+ * REMEDY.** That one answers _"I pressed TAKE and nothing happened"_ on a console that is
+ * not signed in, and its remedy is to sign in. This one is read by somebody who IS signed
+ * in, correctly, as themselves — signing in again would change nothing, and telling them to
+ * would send them round a loop. The remedy here is a person, not an action.
+ *
+ * ⭐ It names the STATE, the REMEDY and the fact that nothing was sent — `R-006`'s rule for a
+ * pre-send refusal, because an operator who believes a command is queued will not reissue it.
+ * No channel name, no code, no role name: the roles are the Playout's vocabulary, not the
+ * operator's (golden rule 11).
+ */
+export const AUTHZ_ROLE_REFUSAL =
+  'This sign-in does not allow that command, so it was refused — nothing was sent to ' +
+  'CasparCG. Ask whoever manages Playout accounts for access.';
+
+/**
+ * 🔴 `C-038` — **WHAT A PRINCIPAL IS TOLD WHEN THE CHANNEL IS NOT THEIRS.**
+ *
+ * ⭐ **It NAMES THE CHANNEL**, and that is golden rule 11's ⭐ clause rather than a nicety:
+ * an operator with two channels granted and one refused cannot act on _"that channel"_. The
+ * number is the one fact that makes the sentence usable, exactly as `R-028` keeps the real
+ * layer number in a notice.
+ *
+ * ⚠ One sentence, built HERE, so the bridge and any surface that pre-empts it cannot drift
+ * (`R-017`). Never concatenate prose after it — `DELTA A` §A3 is the measured instance of
+ * what that produces.
+ */
+export function authzChannelRefusal(channel: number): string {
+  return (
+    `This sign-in does not cover channel ${String(channel)}, so that command was refused — ` +
+    `nothing was sent to CasparCG. Ask whoever manages Playout accounts for access.`
+  );
+}

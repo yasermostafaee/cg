@@ -75,7 +75,13 @@ describe('C-037 §1 — an unauthenticated socket gets two answers, not every an
 
     const state = await client.ask('s', 'auth.state', undefined);
     expect(state.error, 'auth.state must answer an unsigned socket').toBeUndefined();
-    expect(state.payload).toEqual({ mode: 'playout', principal: null, status: 'absent' });
+    expect(state.payload).toEqual({
+      mode: 'playout',
+      principal: null,
+      status: 'absent',
+      // `C-038` — nothing is signed in, so no channel is permitted.
+      permittedChannels: [],
+    });
 
     const out = await client.ask('o', 'auth.sign-out', undefined);
     expect(out.error, 'auth.sign-out must answer an unsigned socket').toBeUndefined();
@@ -378,6 +384,8 @@ describe('C-037 — `auth.state` answers with THE GATE VERDICT, never a second o
       mode: 'off',
       principal: null,
       status: 'off',
+      // `C-038` — auth off scopes nothing; every control stays reachable.
+      permittedChannels: [],
     });
   });
 });

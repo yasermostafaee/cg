@@ -97,7 +97,7 @@ export interface FakePlayoutUser {
 }
 
 /** Which fixture user a mint is for. */
-export type FakeUserKey = 'operator' | 'viewer' | 'longName';
+export type FakeUserKey = 'operator' | 'viewer' | 'longName' | 'admin' | 'otherStation';
 
 /** `cg-op1` — one channel, Persian display name. The ordinary operator. */
 export const FAKE_OPERATOR: FakePlayoutUser = {
@@ -150,11 +150,51 @@ export const FAKE_LONG_NAME_USER: FakePlayoutUser = {
   cgChannels: [{ host: '127.0.0.1', channel: 1 }],
 };
 
-/** The three fixture users, by key. */
+/**
+ * `cg-admin` — `C-038`'s station-admin, and the ONLY user who may reach the six
+ * configuration routes.
+ *
+ * ⚠ **Its `roles` are CUMULATIVE, as the contract says the Playout issues them**
+ * (`station-admin ⊇ operator ⊇ viewer`). `holdsPermissionClass` does not depend on that —
+ * it applies the hierarchy explicitly, so a bare `['station-admin']` would be granted the
+ * operator rungs too — but the fixture spells what the real Playout sends, so a spec written
+ * against it is a spec about the contract rather than about our tolerance for breaking it.
+ */
+export const FAKE_ADMIN: FakePlayoutUser = {
+  username: 'cg-admin',
+  sub: 'u-5501',
+  name: 'زهرا موسوی',
+  roles: ['station-admin', 'operator', 'viewer'],
+  cgChannels: [{ host: '127.0.0.1', channel: 1 }],
+};
+
+/**
+ * 🔴 `C-038` — **AN OPERATOR OF ANOTHER STATION.** Full operator role, a grant for channel 1,
+ * and a HOST that is not one this bridge drives.
+ *
+ * This is the user that proves the host half of `grantsChannel` does anything at all. Without
+ * it a spec could assert "channel 1 is permitted" all day while the host were ignored, and
+ * the one property the rule exists for — _a grant naming another station's host does not
+ * authorise this station's channel 1_ — would be untested.
+ *
+ * ⚠ The host is a documentation IP (`192.0.2.x`, RFC 5737 TEST-NET-1) and NOT a real station
+ * address. Nothing in this suite connects to it; it is compared as a string and never dialled.
+ */
+export const FAKE_OTHER_STATION_USER: FakePlayoutUser = {
+  username: 'cg-op-elsewhere',
+  sub: 'u-6604',
+  name: 'حسن قادری',
+  roles: ['operator', 'viewer'],
+  cgChannels: [{ host: '192.0.2.10', channel: 1 }],
+};
+
+/** The five fixture users, by key. */
 export const FAKE_USERS: Readonly<Record<FakeUserKey, FakePlayoutUser>> = {
   operator: FAKE_OPERATOR,
   viewer: FAKE_VIEWER,
   longName: FAKE_LONG_NAME_USER,
+  admin: FAKE_ADMIN,
+  otherStation: FAKE_OTHER_STATION_USER,
 };
 
 /**

@@ -192,7 +192,12 @@ class FakeBridge {
     socket.deliver({
       type: 'response',
       id: frame.id,
-      payload: { mode: 'playout', principal, status: 'signed-in' } satisfies ipc.AuthState,
+      payload: {
+        mode: 'playout',
+        principal,
+        status: 'signed-in',
+        permittedChannels: [1],
+      } satisfies ipc.AuthState,
     });
   }
 
@@ -231,6 +236,7 @@ class FakeBridge {
         mode: 'playout',
         principal: this.authAnswer.principal,
         status: 'signed-in',
+        permittedChannels: [1],
       };
       return { type: 'response', id: frame.id, payload: state };
     }
@@ -410,7 +416,7 @@ describe('R-066 — the `auth` frame is the FIRST thing on a connected socket', 
       `request ${ipc.BridgeCapabilitiesChannel.name}`,
     );
     expect(authTokensOn(bridge.socket())).toEqual(['jwt-held-by-this-console']);
-    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal });
+    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
   });
 
   it('with NO session in storage writes no `auth` frame — and still asks the handshake', async () => {
@@ -494,7 +500,7 @@ describe("R-066 — the bridge's answer is what the console shows", () => {
     bridge.socket().open();
     await settle();
 
-    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal });
+    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
   });
 
   it("🔴 a D1 `principal` echo NEVER wins — the bridge's name is displayed, not the Playout's", async () => {
@@ -534,7 +540,7 @@ describe("R-066 — the bridge's answer is what the console shows", () => {
     // The token the Playout issued reached the ALREADY-OPEN socket — no reconnect needed.
     expect(authTokensOn(bridge.socket())).toEqual(['jwt-from-playout']);
     const state = runtime.auth.state();
-    expect(state).toEqual({ kind: 'signed-in', principal });
+    expect(state).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
     expect(JSON.stringify(state), 'the echo reached the surface').not.toContain(ECHO_NAME);
     expect(JSON.stringify(state)).toContain(VERIFIED_NAME);
     // …and it is held per console, so a reload finds it (the other half of the acceptance).
@@ -579,7 +585,7 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       refreshUrl: caps.refreshUrl,
       contractVersion: caps.authContractVersion,
     });
-    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal });
+    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
   });
 
   it('a bridge that answers with NO `auth` field at all reads `off` — the absent case', async () => {
@@ -748,7 +754,7 @@ describe('DELTA A — NOTHING is written before the bridge has answered the `aut
     expect(wireOf(bridge), 'the held request was dropped rather than sent on').toContain(
       ipc.FixedLayersStateChannel.name,
     );
-    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal });
+    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
   });
 
   it('…and with NO token held, nothing waits — the control for that hold', async () => {
@@ -798,7 +804,7 @@ describe('R-066 — the console NOTICES when the bridge stops accepting it', () 
     await settle();
 
     // The positive control: the console really does believe it is signed in first.
-    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal });
+    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
 
     /*
       Any intent. ⚠ `settle()` between the call and the refusal because `#invoke` is now
@@ -841,7 +847,7 @@ describe('R-066 — the console NOTICES when the bridge stops accepting it', () 
     await expect(runtime.lock.state()).rejects.toThrow();
     await settle();
 
-    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal });
+    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
   });
 });
 

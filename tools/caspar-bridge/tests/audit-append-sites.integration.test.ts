@@ -77,6 +77,19 @@ const NON_VERB_ACTIONS = [
   */
   'sign-in',
   'sign-out',
+  /*
+    🔴 `C-038` — the AUTHORISATION refusal, and it belongs here for the same reason the two
+    identity rows do: the BRIDGE writes it directly, at the gate, and it never reaches air.
+
+    ⭐ It is in fact the one action that is written precisely BECAUSE nothing reached air — a
+    command turned away before the runtime saw it. Filing it under `PLAYOUT_VERBS` would put it
+    under assertions about `slot` and one-row-per-take that cannot be true of it.
+
+    Driven by `tests/authz-gate.integration.test.ts`, which asserts the row carries the verified
+    actor, the IPC channel, and the CasparCG channel when (and only when) the refusal was about
+    one.
+  */
+  'refused',
 ] as const;
 
 it('the "every playout verb" list is COMPLETE — each schema action is driven or named non-verb', () => {
