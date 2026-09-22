@@ -2783,6 +2783,50 @@ export class CasparRuntime {
    */
   #slotForRestore(item: RetainedStackItem): RestorePlacement {
     if (item.slot !== undefined) {
+      /*
+        🔴 `CHANNEL-RESOLUTION-01` — **A RETAINED COORDINATE ON ANOTHER CHANNEL IS NOT
+        THIS STATION'S TO HONOUR.**
+
+        Measured 2026-09-22: a bridge configured for channel 2 seated six template
+        producers onto channel 1 of a PARTNER'S LIVE PROGRAMME OUTPUT — six
+        `MIXER 1-L VOLUME 0` and six `CG 1-L ADD`, layers 59 and 95–99, one timestamp.
+        On the same connection the connect-time unity sweep went correctly to channel 2.
+        Two paths, two answers, and the difference is where each one LOOKS:
+        `#reassertDeclaredVolumes` reads the STATION (`fixedBankSlots(this.#fixedBank)`
+        → `{ channel: bank.channel, layer }`), while this method read the CLIENT
+        (`item.slot.channel`) and compared it to nothing at all.
+
+        The client was a console tab left open from a session against a different
+        station, whose bank was channel 1. It reconnected to the bridge's WebSocket
+        port, replayed its retained stack, and was believed.
+
+        ⚠ **THE FENCE THAT EXISTED DID NOT FAIL — IT WAS STEPPED AROUND, and that is the
+        part worth keeping in mind.** `this.#layers.isFixed(slot)` is keyed on the FULL
+        coordinate, so an off-bank channel does not fail that door, it MISSES it: the
+        row falls through to `reserve()`, which checks fixed, reserved-layer and
+        occupancy — and never the channel. So the safety property was inverted. The
+        closer a client's coordinate was to the declared bank the more checks it met,
+        and a coordinate naming somebody else's output met the fewest. `reserve()`'s own
+        docstring is where the trust was granted, on a premise nothing enforces: "the
+        coordinate came from this allocator in a previous process". It came from a
+        browser (that comment is corrected in place).
+
+        ⚠ **Gated on the BANK, which is the only thing that knows what this station is,
+        and skipped as `not-declared`, which is the reason whose doctrine already says
+        exactly this** — "the coordinate this row remembers is not a row at all", with
+        the remedy "declare a row for it and load it there", and whose own note names
+        this very hazard: re-homing such a row "would have meant putting a graphic on
+        somebody else's output". A new reason code would have said the same thing in a
+        second vocabulary.
+
+        ⚠ **`#fixedBank === null` keeps today's behaviour deliberately.** A runtime with
+        no declared bank has no configured channel, so there is nothing to compare
+        against and inventing one would refuse restores on a bridge that never had the
+        defect. Every CLI boot has a bank (an absent file yields the built-in default),
+        so the null case is programmatic callers only.
+      */
+      const bank = this.#fixedBank;
+      if (bank !== null && item.slot.channel !== bank.channel) return { skip: 'not-declared' };
       // R-028 / C-015 — a retained coordinate now inside the RESERVED playout
       // range is SKIPPED, never re-homed. Falling through to `#allocate()`
       // would consult a DIFFERENT layer's occupancy (the exact

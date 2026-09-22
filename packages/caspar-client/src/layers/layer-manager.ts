@@ -282,8 +282,21 @@ export class LayerManager extends EventEmitter<LayerManagerEvents> {
    * actually ON, so it is the layer whose occupancy decides adopt-vs-re-ADD.
    * Re-allocating "some free layer" would consult the wrong layer's occupancy
    * and could ADD a second producer beside a live one. The range policy is
-   * deliberately NOT re-checked — the coordinate came from this allocator in a
-   * previous process, and honouring it is the whole point.
+   * deliberately NOT re-checked, and honouring the coordinate is the point.
+   *
+   * 🔴 **BUT NOT ON THE STRENGTH OF WHERE IT CAME FROM.** This said "the coordinate
+   * came from this allocator in a previous process" — a premise nothing here enforces
+   * and which was false when it mattered. `CHANNEL-RESOLUTION-01`: the coordinate came
+   * from a CONSOLE TAB that had been talking to a DIFFERENT STATION, and a bridge
+   * configured for channel 2 seated six producers onto channel 1 of a partner's live
+   * programme output because this method checks `fixed`, `reservedLayers` and
+   * occupancy — and never the CHANNEL.
+   *
+   * The channel fence lives at the caller (`CasparRuntime.#slotForRestore`, where the
+   * declared bank is known; a `LayerManager` is constructed with a fixed-slot SET and
+   * has no notion of "the station's channel" to compare against). It is named here
+   * because this docstring is what licensed the trust, and a sentence that grants trust
+   * on unverifiable provenance will license it again.
    *
    * R-021 — a FIXED slot always returns false here: exact-slot binding to a
    * fixed slot goes through {@link bindFixed}, never `reserve()` (a fixed slot
