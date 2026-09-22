@@ -58,9 +58,13 @@
 - [x] `design.md` — the classes, the host rule with (a) and (b), the per-verb unbound table, the
       exemption table, the guard paths
 - [x] `proposal.md` + the two spec deltas
-- [ ] `docs/prd/runtime.md` — `C-038` and `R-066` bullets 3 and 4
-- [ ] ADR 0010 / integration README — `192.168.21.114` relabelled a **stock test CasparCG**
-- [ ] Operator guide — one paragraph on what a read-only console looks like
+- [x] `docs/prd/runtime.md` — `R-066` bullets 3 and 4 `[x]`; `docs/prd/caspar.md` — `C-038` `[~]`,
+      with a status note correcting two of its own notes the census overtook
+- [x] ADR 0010 — `192.168.21.114` relabelled a **stock test CasparCG** in its two build-identity
+      lines, plus a terminology note pinning the three addresses. The integration README gains
+      the host-rule interpretation as an open item for the next addendum
+- [x] Operator guide — _"When the console is read-only"_, including why the verbs are missing
+      rather than greyed, and that the ACCESS is the thing to change
 
 ## 6. Gate and discharge
 
