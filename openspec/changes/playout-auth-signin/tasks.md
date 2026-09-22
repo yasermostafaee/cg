@@ -114,6 +114,14 @@
       <https://github.com/yasermostafaee/cg/actions/runs/35745278125>, `conclusion: success`, and
       the **`E2E (Playwright)` job RAN** (not skipped). That is the follow-up fix commit
       (`design.md` §11).
+- [x] 6.7 **Linux `e2e` DISCHARGED for `ec4f682e`** (`DELTA A` + `DELTA B`) —
+      <https://github.com/yasermostafaee/cg/actions/runs/35751024298>, `conclusion: success`, and
+      the **`E2E (Playwright)` job RAN** (not skipped).
+- [ ] 6.8 **Linux `e2e` for `7871c8cc`** (`DELTA C` — the reload e2e itself) —
+      <https://github.com/yasermostafaee/cg/actions/runs/35754582905>, IN FLIGHT at the time of
+      writing. ⚠ Unticked deliberately: a run that exists is not a run that passed, and this is
+      the commit that ADDS the authoritative e2e, so its own first CI result is the one that
+      matters most. Tick it only against a COMPLETED `success` whose `e2e` job RAN.
 - [x] 6.6 **`DELTA C` — the AUTHORITATIVE reload assertion is an e2e**, not a bridge loop:
       `apps/runtime/tests/e2e/playout-auth-reload.spec.ts` loads the real page against a real
       bridge and a fake Playout, signs in once through the UI, reloads five times, and asserts
