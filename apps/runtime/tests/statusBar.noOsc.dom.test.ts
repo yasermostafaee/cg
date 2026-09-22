@@ -60,6 +60,21 @@ function stubBridge(link: Link, primary: ServerHealth, backup?: ServerHealth): v
       health: () => Promise.resolve(health),
       onHealthChanged: () => () => undefined,
     },
+    /*
+      `R-066` — the status bar now carries the sign-in state, so a stub that claims to be a
+      bridge has to answer for it. `off` is what this stub means: these specs are about the
+      LINK and the servers, and a console that does not authenticate is the state in which
+      every assertion below was written.
+
+      ⚠ Added rather than defended against in `useAuthSession`. A hook that read an absent
+      `auth` member as "off" would also read a PRODUCTION bridge missing it as "off" — and
+      `B-153`'s doctrine is that a bridge which cannot answer is the LOUDEST match, never a
+      quiet default.
+    */
+    auth: {
+      state: () => ({ kind: 'off' as const }),
+      onStateChanged: () => () => undefined,
+    },
     lock: {
       state: () => Promise.resolve({ engaged: false }),
       onStateChanged: () => () => undefined,

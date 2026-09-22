@@ -11,6 +11,8 @@ import { AsyncButton } from '../../ui/AsyncButton.js';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { LinkIndicator } from './LinkIndicator.js';
+import { IdentityIndicator } from './IdentityIndicator.js';
+import { SignOutButton } from '../auth/SignOutButton.js';
 import { Tag } from '../../ui/Tag.js';
 
 /**
@@ -314,6 +316,7 @@ export function StatusBar(): JSX.Element {
     return (
       <footer style={styles.bar} aria-label="Status bar">
         <LinkIndicator reach={casparReach} />
+        <IdentityIndicator />
         {/* Nothing has answered yet. While the link is down that is not "loading" — there
             is nobody to load from (B-080/B-081). */}
         <Tag className="cg-pill" style={stale ? styles.stale : undefined}>
@@ -395,6 +398,7 @@ export function StatusBar(): JSX.Element {
   return (
     <footer style={styles.bar} aria-label="Status bar">
       <LinkIndicator reach={casparReach} />
+      <IdentityIndicator />
       {simulated ? (
         // R-006 — in test mode there is no server to describe. The per-server pills used to
         // read "PRIMARY A HEALTHY" in green here, straight from the mock's seed, which is
@@ -589,6 +593,12 @@ export function StatusBar(): JSX.Element {
         <Icon icon={ArrowLeftRight} />
         FAILOVER
       </AsyncButton>
+      {/*
+        `R-066` — the way out, beside the other manual actions and NOT beside the pill that
+        names the state. It renders nothing unless there is a session to leave; see its own
+        header for why a disabled SIGN OUT would be the wrong thing to draw.
+      */}
+      <SignOutButton />
       {/*
         🔴 `AUDIT-CLOSE-01` B1 — SETTINGS AND LOG MOVED TO THE APP HEADER.
 

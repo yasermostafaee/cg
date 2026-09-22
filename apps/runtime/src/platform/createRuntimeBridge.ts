@@ -162,6 +162,34 @@ export function createMockBridge(): RuntimeBridge {
       onSkewChanged: () => () => undefined,
     },
 
+    /*
+      🔴 `C-037` — TEST MODE DOES NOT AUTHENTICATE, and `off` is the honest answer rather
+      than a stub. There is no bridge PROCESS here to hold a principal and no Playout to sign
+      in to, so `off` is literally true: this backend has no gate. Reporting `unknown` would
+      make the console withhold controls waiting for an answer that will never come, and
+      reporting `playout` would put a sign-in in front of a simulation.
+
+      ⚠ `signIn` REJECTS rather than pretending. A mock that resolved would let a spec pass
+      against a sign-in path that was never exercised — the vacuous-green shape this repo has
+      been bitten by more than once.
+    */
+    auth: {
+      capabilities: () => ({
+        mode: 'off' as const,
+        signInUrl: null,
+        refreshUrl: null,
+        contractVersion: null,
+      }),
+      onCapabilitiesChanged: () => () => undefined,
+      state: () => ({ kind: 'off' as const }),
+      onStateChanged: () => () => undefined,
+      signIn: () =>
+        Promise.reject(
+          new Error('Test mode does not authenticate — there is no Playout to sign in to.'),
+        ),
+      signOut: () => Promise.resolve(),
+    },
+
     stack: {
       load: (req) => Promise.resolve(mock.load(req.itemId, req.templateId, req.fields)),
       take: (req) => Promise.resolve(mock.take(req.itemId)),

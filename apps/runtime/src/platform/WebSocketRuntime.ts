@@ -110,6 +110,8 @@ import {
 import { MemoryWorkspace } from '@cg/storage';
 import type {
   AppInfo,
+  AuthCapabilities,
+  AuthSessionState,
   BridgeLinkStatus,
   RuntimeBridge,
   Unsubscribe,
@@ -118,6 +120,16 @@ import * as ipcChannels from '@cg/shared-ipc';
 import { bridgeErrorFrom, BridgeSkewError } from '../shared/bridgeSkew.js';
 import { LibraryStore } from './library/LibraryStore.js';
 import { getOperatorName, operatorActorForWire, setOperatorName } from './operatorName.js';
+import {
+  loadPlayoutSession,
+  PlayoutSignInError,
+  refreshDelayMs,
+  refreshPlayoutToken,
+  savePlayoutSession,
+  sessionExpired,
+  signInToPlayout,
+  type StoredSession,
+} from './playoutSession.js';
 import { StackRetentionStore } from './stack/StackRetentionStore.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
@@ -276,6 +288,21 @@ export class WebSocketRuntime implements RuntimeBridge {
   #resyncing = false;
   /** B-153 — channels this page needs that the connected bridge does not route. */
   #skew: readonly string[] | null = null;
+  /*
+    🔴 `R-066` — THE PLAYOUT SESSION, three fields and no fourth.
+
+    `#authCaps` is what the BRIDGE said (mode + addresses); `#principal` is what the bridge
+    VERIFIED about this socket; `#session` is the token this console holds. They are kept
+    apart because each can be true without the others: a bridge can advertise `playout` with
+    nothing held, a token can be held while the socket has not yet presented it, and a
+    principal can lapse while the token is still in storage.
+  */
+  #authCaps: AuthCapabilities | null = null;
+  #principal: ipcChannels.PlayoutPrincipal | null = null;
+  #session: StoredSession | null = loadPlayoutSession();
+  #refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  readonly #authCapsSubs = new Subs<AuthCapabilities | null>();
+  readonly #authStateSubs = new Subs<AuthSessionState>();
   /** Subscribers to {@link #resyncing}, so the renderer can stop guessing. */
   readonly #resyncSubs = new Subs<boolean>();
   readonly #skewSubs = new Subs<readonly string[] | null>();
@@ -355,6 +382,10 @@ export class WebSocketRuntime implements RuntimeBridge {
   dispose(): void {
     this.#disposed = true;
     if (this.#reconnectTimer !== null) clearTimeout(this.#reconnectTimer);
+    // `R-066` — the refresh timer outlives the socket otherwise, and a disposed runtime that
+    // still wakes up in ten minutes to POST at a Playout is a leak with a network hop in it.
+    if (this.#refreshTimer !== null) clearTimeout(this.#refreshTimer);
+    this.#refreshTimer = null;
     this.#ws?.close();
   }
 
@@ -380,6 +411,26 @@ export class WebSocketRuntime implements RuntimeBridge {
         On EVERY connect, not only the first: the bridge is a separate process and the
         common way skew arises is that IT restarted, not this page.
       */
+      /*
+        🔴 `R-066` — **THE `auth` FRAME, ON EVERY (RE)CONNECT, FROM THE ONE SITE A
+        CONNECTION IS ESTABLISHED.**
+
+        Here and not beside `signIn`, because a reconnect is the common case and the rare
+        one: the bridge is a separate process that restarts, the LAN blinks, the laptop
+        sleeps. A token presented only at sign-in would leave every reconnected console
+        signed out with nothing having happened that an operator could see.
+
+        ⚠ **BEFORE `#checkSkew`, and that ordering is the point.** With auth ON the bridge
+        answers `bridge.capabilities` either way (it is half the door ADR 0010 rule 4 leaves
+        open), but the resync below is a stream of ordinary channels and every one of them
+        would be refused on a socket with no principal. Single-socket FIFO means the frame
+        written first is processed first, so seating the principal ahead of the resync is
+        what makes a reconnect come back with its stack rather than with sixty refusals.
+
+        ⚠ Not awaited, for `B-153`'s reason quoted below: a guard that can delay or break
+        the connect path is a guard that takes the station off air.
+      */
+      void this.#presentToken();
       void this.#checkSkew();
       // B-085 — reconcile the browser-local library to the bridge on EVERY connect:
       // deliver the retained templates so the bridge can serve them. On the FIRST
@@ -438,6 +489,93 @@ export class WebSocketRuntime implements RuntimeBridge {
     this.#skewSubs.emit(value);
   }
 
+  #setAuthCaps(value: AuthCapabilities): void {
+    this.#authCaps = value;
+    this.#authCapsSubs.emit(value);
+    this.#authStateSubs.emit(this.#authState());
+  }
+
+  #setPrincipal(value: ipcChannels.PlayoutPrincipal | null): void {
+    this.#principal = value;
+    this.#authStateSubs.emit(this.#authState());
+  }
+
+  /**
+   * ⭐ **THE ONE PLACE THE CONSOLE'S AUTH STATE IS DERIVED.** Golden rule 6: the sign-in
+   * gate, the identity pill and any future reader ask THIS, rather than each combining three
+   * fields into its own answer that agrees today.
+   *
+   * ⚠ `unknown` is not `off`, and the order of these branches is why. A console that has
+   * not heard from the bridge must show no verdict at all — presenting every control as live
+   * on a bridge that refuses them all is the defect `B-153` exists to close, and presenting a
+   * sign-in on a bridge that does not authenticate is the same mistake mirrored.
+   */
+  #authState(): AuthSessionState {
+    const caps = this.#authCaps;
+    if (caps === null) return { kind: 'unknown' };
+    if (caps.mode === 'off') return { kind: 'off' };
+    const principal = this.#principal;
+    if (principal === null) return { kind: 'signed-out' };
+    /*
+      The BROWSER's view of expiry, which is deliberately not the bridge's. The bridge decides
+      for itself per request and refuses with its own sentence; this exists so the surface can
+      say "your session ended" the moment it ends rather than only after the operator has
+      pressed something and been refused.
+    */
+    const session = this.#session;
+    if (session !== null && sessionExpired(session, Date.now())) {
+      return { kind: 'expired', name: principal.name };
+    }
+    return { kind: 'signed-in', principal };
+  }
+
+  /**
+   * 🔴 `R-066` — refresh about ten minutes before `exp`, while the page is open.
+   *
+   * ⚠ **A FAILED REFRESH DOES NOT SIGN THE OPERATOR OUT.** The access token is still valid
+   * until `exp` — twelve hours from issue, one shift — and dropping a working session because
+   * the Playout was briefly unreachable is precisely the coupling ADR 0010 refused when it
+   * kept the token lifetime long. The state simply stays `signed-in` until `exp`, and the
+   * surface says when that is.
+   */
+  #scheduleRefresh(): void {
+    if (this.#refreshTimer !== null) clearTimeout(this.#refreshTimer);
+    this.#refreshTimer = null;
+    const session = this.#session;
+    const refreshUrl = this.#authCaps?.refreshUrl ?? null;
+    if (session === null || session.refreshToken === null || refreshUrl === null) return;
+    this.#refreshTimer = setTimeout(
+      () => {
+        this.#refreshTimer = null;
+        void this.#refreshNow();
+      },
+      refreshDelayMs(session.expiresAtMs, Date.now()),
+    );
+  }
+
+  async #refreshNow(): Promise<void> {
+    const session = this.#session;
+    const refreshUrl = this.#authCaps?.refreshUrl ?? null;
+    if (session === null || session.refreshToken === null || refreshUrl === null) return;
+    try {
+      // A rotated `refresh_token` replaces the old one — the contract SHOULDs rotation, and a
+      // console that kept the spent one would be refused at the next refresh with
+      // `invalid_refresh_token` and no way to tell that from a revocation.
+      const next = await refreshPlayoutToken(refreshUrl, session.refreshToken);
+      this.#session = next;
+      savePlayoutSession(next);
+      await this.#presentToken();
+      this.#scheduleRefresh();
+    } catch {
+      /*
+        Deliberately silent here and LOUD on the surface. There is nothing for this layer to
+        do: the current token is still valid, and the state the operator needs — "this session
+        ends at ⟨time⟩" — is already derivable from `principal.expiresAt`.
+      */
+      this.#authStateSubs.emit(this.#authState());
+    }
+  }
+
   /**
    * 🔴 **`B-153` — ASK THE BRIDGE WHAT IT CAN DO, AT CONNECT.**
    *
@@ -461,7 +599,19 @@ export class WebSocketRuntime implements RuntimeBridge {
    */
   async #checkSkew(): Promise<void> {
     try {
-      const { channels } = await this.#invoke(ipcChannels.BridgeCapabilitiesChannel, {});
+      const caps = await this.#invoke(ipcChannels.BridgeCapabilitiesChannel, {});
+      const { channels } = caps;
+      /*
+        `C-037` — the auth MODE rides the answer this call already makes. A second round trip
+        would be a second thing that can fail on the connect path, and `B-153` put this
+        question here precisely because it is asked before the operator can press anything.
+      */
+      this.#setAuthCaps({
+        mode: ipcChannels.capabilitiesAuthMode(caps),
+        signInUrl: caps.signInUrl ?? null,
+        refreshUrl: caps.refreshUrl ?? null,
+        contractVersion: caps.authContractVersion ?? null,
+      });
       const routed = new Set(channels);
       const missing = ipcChannels
         .runtimeRequestChannelNames(ipcChannels)
@@ -479,6 +629,72 @@ export class WebSocketRuntime implements RuntimeBridge {
       // and claiming one would be its own false alarm on a healthy station.
       this.#setSkew(null);
     }
+  }
+
+  /**
+   * 🔴 `R-066` — present the held token on this socket. Never throws.
+   *
+   * ⚠ A FAILURE HERE IS NOT A SIGN-OUT. The bridge's answer says why the token was refused;
+   * the console keeps the stored session and lets the state machine decide what to show
+   * — except for a token the bridge could not verify at all, which is dead weight and is
+   * dropped so the operator is shown a sign-in rather than a console that silently retries a
+   * token that will never work.
+   */
+  async #presentToken(): Promise<void> {
+    const session = this.#session;
+    if (session === null) {
+      this.#setPrincipal(null);
+      return;
+    }
+    try {
+      const state = await this.#sendAuthFrame(session.accessToken);
+      this.#setPrincipal(state.principal);
+      if (state.principal !== null) this.#scheduleRefresh();
+    } catch {
+      /*
+        The bridge refused it, or the socket went away mid-frame. Either way this console has
+        no principal on this socket, which is what {@link #setPrincipal} records. The stored
+        token stays: a socket that dropped mid-frame will retry on the next connect, and
+        throwing a valid token away over a network blink would sign an operator out for a
+        reason that had nothing to do with them.
+      */
+      this.#setPrincipal(null);
+    }
+  }
+
+  /**
+   * Write the `auth` frame and resolve the bridge's answer.
+   *
+   * ⚠ It does NOT go through `#invoke`: that helper writes a `request` frame with a channel
+   * name, and this is the one frame type that is not a channel — deliberately, so the gate
+   * that refuses every channel can run before a principal exists. The reply IS an ordinary
+   * `response` correlated by `id`, so the pending-request machinery is reused verbatim and
+   * there is no second correlation scheme to keep in step.
+   */
+  #sendAuthFrame(token: string): Promise<ipcChannels.AuthState> {
+    if (this.#status !== 'live' || this.#ws === null || this.#ws.readyState !== WS_OPEN) {
+      return Promise.reject(new BridgeDisconnectedError());
+    }
+    const id = String(++this.#nextId);
+    const ws = this.#ws;
+    return new Promise<ipcChannels.AuthState>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.#pending.delete(id);
+        reject(new Error('Bridge request timed out: auth'));
+      }, REQUEST_TIMEOUT_MS);
+      this.#pending.set(id, {
+        resolve: (value) => {
+          try {
+            resolve(ipcChannels.AuthStateSchema.parse(value));
+          } catch {
+            reject(bridgeErrorFrom('invalid response for auth'));
+          }
+        },
+        reject,
+        timer,
+      });
+      ws.send(serializeWsFrame({ type: 'auth', id, token }));
+    });
   }
 
   #setStatus(status: BridgeLinkStatus): void {
@@ -883,6 +1099,73 @@ export class WebSocketRuntime implements RuntimeBridge {
     skew: (): readonly string[] | null => this.#skew,
     onSkewChanged: (handler: (missing: readonly string[] | null) => void): Unsubscribe =>
       this.#skewSubs.add(handler),
+  };
+
+  /**
+   * 🔴 `R-066` — the Playout sign-in. See the contract note on `runtime-bridge.ts`.
+   */
+  readonly auth = {
+    capabilities: (): AuthCapabilities | null => this.#authCaps,
+    onCapabilitiesChanged: (handler: (caps: AuthCapabilities | null) => void): Unsubscribe =>
+      this.#authCapsSubs.add(handler),
+    state: (): AuthSessionState => this.#authState(),
+    onStateChanged: (handler: (state: AuthSessionState) => void): Unsubscribe =>
+      this.#authStateSubs.add(handler),
+    signIn: async (username: string, password: string): Promise<void> => {
+      const signInUrl = this.#authCaps?.signInUrl ?? null;
+      if (signInUrl === null) {
+        /*
+          There is nowhere to sign in to. It is not a credential failure and must not be
+          worded as one — the bridge either does not authenticate or has not said yet, and
+          sending the operator to re-type a password would be the wrong remedy for both.
+        */
+        throw new PlayoutSignInError('unexpected');
+      }
+      // ADR 0010 rule 9 — browser → Playout, DIRECTLY. The bridge never sees the password.
+      const { session } = await signInToPlayout(signInUrl, username, password);
+      this.#session = session;
+      savePlayoutSession(session);
+      /*
+        ⚠ The D1 `principal` echo is NOT adopted as the answer. The bridge trusts only the
+        JWT, so what this console displays comes from the bridge's reply to the `auth` frame
+        — one round trip later and authoritative. Adopting the echo would mean a console
+        showing a name nothing had verified.
+      */
+      await this.#presentToken();
+      /*
+        ⚠ A RESYNC AFTER SIGN-IN, and this is not belt-and-braces. With auth ON the bridge
+        withholds PUBLISHES from a socket with no principal (ADR 0010 rule 4: "nothing
+        else"), so a console that signs in on an already-open socket has missed every state
+        change since it connected. This is the SAME machinery a reconnect runs; signing in is
+        the same event from the bridge's point of view.
+      */
+      await this.#resync(true);
+      this.#scheduleRefresh();
+    },
+    signOut: async (): Promise<void> => {
+      if (this.#refreshTimer !== null) clearTimeout(this.#refreshTimer);
+      this.#refreshTimer = null;
+      this.#session = null;
+      savePlayoutSession(null);
+      /*
+        ⚠ The BRIDGE's principal is dropped too, and by asking rather than by reconnecting.
+        A fresh socket would also work — a new socket has no principal by construction — but
+        it would take this console's live state down with it and make signing out look like a
+        link failure. `auth.sign-out` is the one route that says exactly what happened, and
+        the bridge records it.
+
+        A failure here still clears THIS console: the token is gone from storage either way,
+        and a bridge that did not hear the sign-out refuses the next intent anyway once the
+        token stops verifying. What must not happen is a console that looks signed in because
+        a round trip failed.
+      */
+      try {
+        await this.#invoke(ipcChannels.AuthSignOutChannel, undefined);
+      } catch {
+        // See above.
+      }
+      this.#setPrincipal(null);
+    },
   };
 
   readonly stack = {

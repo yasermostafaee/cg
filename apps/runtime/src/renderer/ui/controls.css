@@ -1530,6 +1530,47 @@
 .cg-field.is-dirty {
   border-color: var(--r-dirty);
 }
+/*
+ * INVALID — the field wears the danger ink on its own edge, where the operator's focus
+ * already is. The SENTENCE saying what is wrong stays the caller's, beside the control.
+ *
+ * APP-WIDE, because until now this state was declared ONLY inside `[data-modal-size='fixed']`
+ * and `[data-modal-size='record']` (both further down this file). A field on any other
+ * surface — a full-screen overlay, a panel, the shell — could be handed `aria-invalid` and
+ * paint exactly like a valid one: a refusal the operator cannot see. `TextInput` exposes
+ * `invalid`, so the state needs a declaration that does not depend on which dialog, if any,
+ * the field happens to be inside.
+ *
+ * ⚠ THE TWO SCOPED COPIES ARE NOT REDUNDANT — DO NOT DELETE THEM AS DUPLICATES OF THIS. They
+ * tie with this rule on specificity (0,2,0), and so do their own
+ * `[data-modal-size='…'] .cg-field { border-color: … }` declarations, which sit LATER in the
+ * file and would otherwise repaint the edge over this one. A scoped ground needs a scoped
+ * answer.
+ *
+ * ⚠ AFTER `.is-dirty` deliberately. Those two also tie on specificity, so the later wins when
+ * a field is both, and "this value is wrong" outranks "this value is unapplied".
+ */
+.cg-field[aria-invalid='true'] {
+  border-color: var(--r-danger-text);
+}
+
+/*
+ * THE ONE CONTROL ON A FULL-WINDOW GATE — `SignInOverlay`'s submit.
+ *
+ * A gate's card has exactly one way through and it spans the ruled foot, so the button is
+ * full width and taller than a row button. Declared HERE rather than as a `style` prop on
+ * `Button`, which `cg/raw-control` refuses: a treatment spelled at a call site is a second
+ * copy of a rule, and `renderer/ui`'s primitives are styled by this stylesheet or not at all.
+ *
+ * ⚠ `--r-lock-submit-h` is the lock screen's token and is reused deliberately — the two
+ * gates are the same kind of stop and an operator meeting either should meet the same control.
+ * Renaming it to something gate-neutral is a worthwhile tidy and is NOT done here: the token
+ * is read by `LockOverlay` and named in the redesign's design.md, and a rename is a sweep.
+ */
+.cg-gate-submit {
+  width: 100%;
+  min-height: var(--r-lock-submit-h);
+}
 
 /*
  * 🔴 **A NUMERIC FIELD THAT CARRIES ITS UNIT — owner, 2026-09-15.**

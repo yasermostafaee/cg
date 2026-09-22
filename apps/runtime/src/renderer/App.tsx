@@ -28,6 +28,7 @@ import { Inspector } from './features/inspector/Inspector.js';
 import { applyDraft } from './features/inspector/applyDraft.js';
 import { clearDraft } from './features/inspector/draftStore.js';
 import { LockOverlay } from './features/lock/LockOverlay.js';
+import { SignInOverlay } from './features/auth/SignInOverlay.js';
 import { CommandToast } from './features/status/CommandToast.js';
 import { RefusalBanner } from './features/status/RefusalBanner.js';
 import { StatusBar } from './features/status/StatusBar.js';
@@ -498,6 +499,12 @@ export function App(): JSX.Element {
           requestId={stationSetup.requestId}
           onClose={closeStationSetup}
         />
+        {/*
+          `R-066` — ABOVE the lock, because the bridge refuses `lock.release` to a socket with
+          no principal too: signing in is the outer gate and the PIN is the inner one, and the
+          screen shows them in the order the bridge enforces. Renders nothing when auth is off.
+        */}
+        <SignInOverlay />
         <LockOverlay
           engaged={lock.engaged}
           {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}

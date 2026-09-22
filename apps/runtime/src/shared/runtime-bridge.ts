@@ -9,6 +9,8 @@
 import type {
   AuditHealthChannel,
   AuditRecentChannel,
+  AuthMode,
+  PlayoutPrincipal,
   ChannelRequest,
   ChannelResponse,
   ConnectionConfig,
@@ -97,6 +99,49 @@ export interface AppInfo {
 }
 
 export type Unsubscribe = () => void;
+
+/**
+ * 🔴 `R-066` / `C-037` — **WHAT THE BRIDGE SAID ABOUT AUTHENTICATION AT CONNECT.**
+ *
+ * `null` while the answer is unknown — before the first `bridge.capabilities` lands, or when a
+ * bridge too old to be asked refused the channel. `null` is NOT "off": a console that treated
+ * unknown as off would present every control as live on a bridge that refuses them all, which
+ * is the defect class `B-153` exists to close one level up.
+ */
+export interface AuthCapabilities {
+  readonly mode: AuthMode;
+  /** D1, absolute, as the bridge advertises it. `null` when the mode is `off`. */
+  readonly signInUrl: string | null;
+  /** D2, absolute. `null` when the mode is `off`. */
+  readonly refreshUrl: string | null;
+  /** The Playout integration contract the bridge implements (`1.1`), or `null`. */
+  readonly contractVersion: string | null;
+}
+
+/**
+ * 🔴 `R-066` — **WHAT THE CONSOLE SAYS ABOUT ITSELF, in the operator's words, as ONE state.**
+ *
+ * Five names rather than a principal-or-null, because the surfaces that read this — the
+ * sign-in gate and the identity pill — have to tell apart three cases that a nullable
+ * principal flattens into one: a bridge that has not answered yet, a console that has never
+ * signed in, and a session that LAPSED. The third is the one an operator most needs named:
+ * _"signed out"_ and _"your session ended"_ send them to the same control by two different
+ * routes, and only the second explains why the console stopped working mid-shift.
+ */
+export type AuthSessionState =
+  /** The bridge does not authenticate. No sign-in exists, and nothing on screen changes. */
+  | { readonly kind: 'off' }
+  /** The bridge has not answered `bridge.capabilities` yet. Show no verdict. */
+  | { readonly kind: 'unknown' }
+  /** Auth is on and this console holds no valid token. */
+  | { readonly kind: 'signed-out' }
+  /** A verified principal is on this socket. `principal` is the BRIDGE's answer, never the echo. */
+  | { readonly kind: 'signed-in'; readonly principal: PlayoutPrincipal }
+  /**
+   * A principal was held and its token has passed `exp`. The NAME is kept so the pill can say
+   * whose session ended — an expired session is still an answer to "who is at this console".
+   */
+  | { readonly kind: 'expired'; readonly name: string };
 
 /**
  * Tri-state link to the local CasparCG bridge (C-001 Phase 1).
@@ -538,6 +583,37 @@ export interface RuntimeBridge {
      * the rehearsal panel says so instead of showing a blank box.
      */
     html(templateId: string): Promise<string | null>;
+  };
+
+  /**
+   * 🔴 `R-066` / `C-037` — **THE PLAYOUT SIGN-IN.**
+   *
+   * ADR 0010 rule 9: the BROWSER obtains the token and the bridge only verifies it, so
+   * {@link signIn} posts to the Playout directly and the bridge never sees a password. The
+   * token is held per console, survives a reload, is presented on every (re)connect, and is
+   * refreshed about ten minutes before it expires while the page is open.
+   *
+   * ⚠ Everything here is INERT when the bridge's mode is `off`: {@link state} reads
+   * `{ kind: 'off' }`, no key is written, and no surface appears. That is what "byte-identical
+   * to today" means for this contract.
+   */
+  auth: {
+    /** What the bridge advertised at connect, or `null` while unknown. */
+    capabilities(): AuthCapabilities | null;
+    onCapabilitiesChanged(handler: (caps: AuthCapabilities | null) => void): Unsubscribe;
+    /** The one state every auth surface reads. See {@link AuthSessionState}. */
+    state(): AuthSessionState;
+    onStateChanged(handler: (state: AuthSessionState) => void): Unsubscribe;
+    /**
+     * Sign in against the PLAYOUT (not the bridge), then present the token on this socket.
+     *
+     * Rejects with a `PlayoutSignInError` carrying the contract's `error` code, which the
+     * surface maps to its own sentence — the contract says the Playout's free-text `message`
+     * is never shown verbatim.
+     */
+    signIn(username: string, password: string): Promise<void>;
+    /** Drop the token here and the principal on the bridge. Never closes the socket. */
+    signOut(): Promise<void>;
   };
 
   audit: {

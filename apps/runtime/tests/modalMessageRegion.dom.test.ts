@@ -406,6 +406,22 @@ describe('the census is DERIVED from the tree, not from a list somebody maintain
       // inherit the primitive's ✕ / Escape / backdrop. It DOES share the focus trap
       // (`B-229`), which is the half that was wrongly withheld with them.
       'lock/LockOverlay.tsx',
+      /*
+        🔴 `R-066` — **THE SIGN-IN GATE, and it is here for the SAME REASON as the lock
+        screen rather than for a new one.** This census is what asked the question, by going
+        red on the commit that added it.
+
+        A `Modal` has three ways out — ✕, Escape and the backdrop — and a gate with a way out
+        is not a gate. Until the operator signs in, the bridge refuses every intent (PANIC
+        included) with one sentence and nothing reaches CasparCG; a console that let the
+        scrim be dismissed would put them in front of a surface whose controls all refuse,
+        with nothing on screen saying why. It shares the focus trap, which is the half
+        `B-229` proved must NOT travel with the exits.
+
+        ⚠ Two hand-rolled scrims is the most this app may have, and they are the two GATES.
+        A third would need an argument of its own, which is what this list exists to force.
+      */
+      'auth/SignInOverlay.tsx',
     ]);
 
     const offenders = walk(featuresDir)

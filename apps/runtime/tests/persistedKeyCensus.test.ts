@@ -86,7 +86,25 @@ function inventory(): {
  * here is a persisted-key change and needs its own migration story, not a settings move.
  */
 const BEFORE_AND_AFTER = {
-  realLocalStorage: ['cg.runtime.operatorName', 'cg.runtime.shell-layout.v1'],
+  realLocalStorage: [
+    'cg.runtime.operatorName',
+    /*
+      🔴 `R-066` — the Playout session this console holds: the access token, the opaque
+      refresh token and the expiry. ONE key, per browser profile, so that "survives a reload"
+      is true and so that signing out has exactly one thing to remove.
+
+      ⚠ It is a CREDENTIAL and it is in `localStorage`, which is the trade this item makes
+      deliberately: the alternative is re-typing a password after every refresh, and that is
+      what gets a password written on the desk. It is per BROWSER PROFILE and not per person —
+      two operators sharing a console share it, exactly as they share the chair, and the
+      `sign-in` / `sign-out` audit rows are what make that legible rather than invisible.
+
+      ⚠ Written ONLY when auth is on. A station with auth off never touches this key, which
+      is what "byte-identical to today" means for the browser's storage.
+    */
+    'cg.runtime.playoutSession',
+    'cg.runtime.shell-layout.v1',
+  ],
   realSessionStorage: ['CG_RUNTIME_SESSION', 'cg.runtime.testMode'],
   mockLocalStorage: [
     'cg-runtime:channel-settings',

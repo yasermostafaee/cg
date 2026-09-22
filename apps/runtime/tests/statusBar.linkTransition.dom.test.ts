@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ConnectionHealth, LockState } from '@cg/shared-ipc';
-import type { BridgeLinkStatus } from '../src/shared/runtime-bridge.js';
+import type { AuthSessionState, BridgeLinkStatus } from '../src/shared/runtime-bridge.js';
 import { StatusBar } from '../src/renderer/features/status/StatusBar.js';
 import { colors, cssVars } from '../src/renderer/theme.js';
 
@@ -57,6 +57,15 @@ interface Bridge {
     onStatusChanged: (h: (next: BridgeLinkStatus) => void) => () => void;
     resyncing: () => boolean;
     onResyncingChanged: (h: (v: boolean) => void) => () => void;
+  };
+  /*
+    `R-066` — the bar now reads the sign-in state too. Declared on this file's OWN `Bridge`
+    shape, which is what caught the omission: the stub literal is typed, so a member the
+    status bar needs cannot be forgotten silently here the way it can in the untyped stubs.
+  */
+  auth: {
+    state: () => AuthSessionState;
+    onStateChanged: (h: (next: AuthSessionState) => void) => () => void;
   };
 }
 
@@ -120,6 +129,21 @@ function stubBridge(initial: BridgeLinkStatus): Harness {
         return () => healthSubs.delete(h);
       },
       failover: () => Promise.resolve({ ok: false, newPrimary: 'A' as const }),
+    },
+    /*
+      `R-066` — the status bar now carries the sign-in state, so a stub that claims to be a
+      bridge has to answer for it. `off` is what this stub means: these specs are about the
+      LINK and the servers, and a console that does not authenticate is the state in which
+      every assertion below was written.
+
+      ⚠ Added rather than defended against in `useAuthSession`. A hook that read an absent
+      `auth` member as "off" would also read a PRODUCTION bridge missing it as "off" — and
+      `B-153`'s doctrine is that a bridge which cannot answer is the LOUDEST match, never a
+      quiet default.
+    */
+    auth: {
+      state: () => ({ kind: 'off' as const }),
+      onStateChanged: () => () => undefined,
     },
     lock: {
       state: () => (status === 'disconnected' ? refused() : Promise.resolve({ engaged: false })),
