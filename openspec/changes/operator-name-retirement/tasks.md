@@ -74,10 +74,19 @@
 
 ## 6. Gate and discharge (§6)
 
-- [ ] `pnpm gate` green
-- [ ] Commits + push to `dev`, remote head verified
-- [ ] 🔴 **Linux `e2e` run URL, with the `E2E (Playwright)` job confirmed to have RAN** — this
-      renders, so a green gate is no evidence about it (golden rule 12)
+- [x] Gate green — ⚠ recorded by `BRIDGE-TRUTH-01` from CI, not from a local `pnpm gate` it
+      witnessed: the whole-tree `Lint • Typecheck • Test • Build` job is `success` on both runs
+      below
+- [x] Commits + push to `dev` (`9a64d5db` · `95e09ce3` · `65e2ad0f` · `f07ddf10`), remote head
+      verified — `git ls-remote origin dev` = `f07ddf10` at the start of `BRIDGE-TRUTH-01`
+- [x] 🔴 **Linux `e2e` discharged for `65e2ad0f`, which carries `9a64d5db` and `95e09ce3`** —
+      https://github.com/yasermostafaee/cg/actions/runs/35787066436 · `conclusion: success`,
+      and the `E2E (Playwright)` job **RAN**: read back from the API at step level, the `E2E`
+      step itself `completed · success` (not skipped). Neither code commit got a run of its own —
+      a burst of pushes — and the jobs are whole-tree, so the later HEAD discharges them.
+- [x] 🔴 **And for `f07ddf10`, the HEAD** —
+      https://github.com/yasermostafaee/cg/actions/runs/35787683141 · `conclusion: success`, the
+      `E2E (Playwright)` job's `E2E` step `completed · success`, read back the same way.
 
 ## 7. 🔴 Named, not done
 
