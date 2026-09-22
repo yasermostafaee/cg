@@ -116,10 +116,26 @@ the build to name in the recon record**. apasai-core, which is what `C-040` actu
    singular `role`; and **D9 has no home in `PLAYOUT-INTEGRATION-CONTRACT-v1.md`** — it is
    specified across Reply A and Response B and accepted as v1.1, so a reader of the contract file
    alone will not find it.
-   ⚠ And one thing that is NOT done, so nobody reads the sign-in as finished: **`C-038` —
-   per-channel authorisation — has not landed.** With auth ON today, any verified principal, a
-   `viewer` included, can command any channel. The plant does not run auth ON until it does.
-10. 🔴 **2026-09-22 — UNDER AUTH ON, THE AUDIT PANEL'S SELF-DECLARED-LABEL CAVEAT IS DISPLAYED AND
+   ⚠ ~~And one thing that is NOT done…~~ **`C-038` LANDED 2026-09-22** — see item 11.
+10. 🔴 **2026-09-22 — `C-038` IS BUILT, AND ONE READING OF `cg_channels` IS OURS AND NOT YOURS.**
+    Per-channel authorisation landed (`openspec/changes/playout-authz-channels`): a permission
+    class on every route, and the request's channels checked against the principal's grants.
+    ⚠ **Our host rule is WIDER than the contract's wording, and we are telling you rather than
+    letting you find it.** §3.2 says `host` is _"the CasparCG server address exactly as the bridge
+    connects to it"_, and a station with a redundant pair has TWO such addresses — servers A and B
+    are MIRRORS of one channel set, not a partition of it. So we accept a grant whose `host`
+    matches **either** configured server, not only the primary. In practice nothing changes: you
+    issue A's address today, and a grant naming a host that is not ours still authorises nothing.
+    Two consequences worth stating: a redundant station does not need its grants reissued after a
+    failover, and a grant naming ANOTHER station's host does not authorise this station's
+    channel 1 — the channel number matching is not enough. **This belongs in the next addendum;
+    if you would rather we matched only `servers.A.host`, say so and it is a one-line change.**
+    ⚠ We also carry `cg-admin` and a new `cg-op-elsewhere` as local fixtures. The latter is not a
+    request for a user on your side — it exists only to prove the host half of the rule above
+    actually does something, and its address is `192.0.2.10` (RFC 5737 documentation range),
+    never dialled.
+
+11. 🔴 **2026-09-22 — UNDER AUTH ON, THE AUDIT PANEL'S SELF-DECLARED-LABEL CAVEAT IS DISPLAYED AND
     FALSE.** Directly above rows carrying a VERIFIED name, the panel still reads _"It is a LABEL
     you typed, not a verified sign-in — it says which console, not which person."_ That sentence
     was true for every build before this one and is untrue the moment a bridge runs `auth:
@@ -127,7 +143,7 @@ the build to name in the recon record**. apasai-core, which is what `C-040` actu
     retirement sweep, which is OUT of this change. ⚠ It is recorded rather than hidden — a
     conditional that showed the caveat only when auth is off would create a THIRD state for that
     sweep to find, which is how a sweep comes to miss one.
-11. ⚠ **THE CORS ORIGIN IS THE PORT THE CONSOLE ACTUALLY SERVES ON, and the dev server's
+12. ⚠ **THE CORS ORIGIN IS THE PORT THE CONSOLE ACTUALLY SERVES ON, and the dev server's
     fallback is not it.** Their CORS list names `http://192.168.21.93:5174` and
     `http://127.0.0.1:5174`. Measured 2026-09-22: with something already holding 5174 the
     Runtime dev server bound **5175** instead, silently, and the console then ran on an origin

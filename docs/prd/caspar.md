@@ -2421,7 +2421,7 @@ half), [[R-066]] (the console surface), [[R-010]], [[B-141]], [[B-153]], [[B-229
   control on the same regex for `C-036` which returned `caspar.md:2321`. The registry's dated
   pointer independently reads `C-037`.
 
-## [ ] C-038 — per-channel authorisation at the one chokepoint ⟨priority: high⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+## [~] C-038 — per-channel authorisation at the one chokepoint ⟨priority: high⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
 
 **What:** Every route carries a permission class — `read` / `operator` / `station-admin` — as a
 REQUIRED argument of `route(…)`, exactly as `lock` is today, and the gate at `handleMessage`
@@ -2449,6 +2449,12 @@ anywhere but that one chokepoint is how the site nobody looked at gets missed.
   intent, PANIC included, is refused with the sentence
 - WHEN [[R-062]]'s discovery call lands THEN the permission check reads the same channel set
   (golden rule 6 — one predicate, not two that agree)
+
+**Status 2026-09-22 —** implemented in `openspec/changes/playout-authz-channels`. ⚠ Two notes
+below were overtaken by the census and are corrected here rather than edited in place: the per-item
+resolver is NOT `item.slot.channel` alone — `slot` is OPTIONAL and a live plate can sit on a
+coordinate the template does not, so it unions `#slots` and `#liveLayers` (`design.md` §3); and
+`snapshot` is a `read`, so it takes no channel check. `[~]` until the Linux `e2e` discharges.
 
 **Notes:** The per-item channel resolver is `item.slot.channel` (`StackItemStateSchema.slot`,
 `{ channel, layer, server }`), which is already globally unique per operator row. — The

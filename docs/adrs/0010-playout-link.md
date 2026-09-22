@@ -56,8 +56,14 @@ team, Q7, 2026-09-16) — per-channel operator grants.
 **The question this ADR answers:** does CG Control's control path go **through** the Playout's API,
 stay **direct** to CasparCG, or take a third shape?
 
+⚠ **TERMINOLOGY, because this document used to blur it.** `192.168.21.114` is a **stock test
+CasparCG** and `192.168.21.111` is the **test Playout**. Neither is "the plant": the real on-air
+installation **has no address yet**. Where "the plant" appears below it means that future
+installation, never one of these two boxes.
+
 **The build-identity question, ANSWERED by the Playout team (2026-09-16, Q3 — stated by the Playout
-team, not measured by this repo):** the plant's `2.5.0 69e8ad5 Stable` is **stock CasparCG**;
+team, not measured by this repo):** the stock test CasparCG at `192.168.21.114` reports
+`2.5.0 69e8ad5 Stable` and is **stock CasparCG**;
 apasai-core reports **`2.5.0 6b29237 Dev`** and runs on the test Playout at `192.168.21.111`. A
 sweep of `docs/recon/**`, `docs/prd/caspar.md`, `docs/prd/bugs-runtime.md`, `docs/handoff/**` and
 `tools/caspar-amcp-probe/**` for `apasai`, `fork`, `6b29237`, `69e8ad5` and `ciab` **finds no
@@ -248,7 +254,8 @@ measured by this repo.**
   TCP 9250 + index − 1, WAV on 9350 + index − 1 — noted as the cheapest future path to a console PGM
   picture, and out of scope here), and a `webrtc` module. Flash is disabled in their generated
   config; HTML templates are unaffected, which is all we serve.
-- **Q3** — the plant is stock `69e8ad5`; apasai-core is `6b29237 Dev`.
+- **Q3** — the stock test CasparCG (`192.168.21.114`) is stock `69e8ad5`; apasai-core is
+  `6b29237 Dev`.
 - **Q4** — different hosts; UDP 6250 is taken on the engine host; 5280 and 7911 are free there.
 - **Q5** — ES256 with JWKS; `aud = cg-control` accepted; `iss` is the base URL, set explicitly.
 - **Q6** — new `/api/cg/*` endpoints against the same user store.

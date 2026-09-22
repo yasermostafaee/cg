@@ -3902,10 +3902,10 @@ being honest and becomes wrong: it would be telling the operator the record is w
 - [x] WHEN signed in THEN the token is held per console, survives a reload, is presented on every
       (re)connect, and is refreshed about 10 minutes before expiry while the page is open; sign-out
       clears it
-- [ ] WHEN the principal's channel set is known THEN the strip lists ONLY those channels (`channelIds`
+- [x] WHEN the principal's channel set is known THEN the strip lists ONLY those channels (`channelIds`
       in `features/channels/channelList.ts` gains the principal as an input), and a channel the bank
       names but the principal may not operate is shown READ-ONLY, not hidden
-- [ ] WHEN the principal is a `viewer` THEN every surface is read-only and says so once, in the
+- [x] WHEN the principal is a `viewer` THEN every surface is read-only and says so once, in the
       operator's words — the controls are ABSENT as facts, not greyed out (golden rule 13)
 - [ ] WHEN identity is verified THEN the Audit panel's _"self-declared label, not a verified sign-in"_
       copy and the operator-name field are RETIRED, and a two-axis `git grep` sweep — by the SENTENCE

@@ -129,6 +129,22 @@ console says whose session ended and asks you to sign in again. Nothing goes off
 `SIGN OUT` clears this console's session. On a station that does not require a sign-in, none of
 this appears.
 
+### When the console is read-only
+
+Your sign-in says which channels are yours. The channel strip shows **every** channel this station
+has: the ones you may drive are named plainly, and one that is not yours reads
+`CHANNEL 2 · READ ONLY`. You can still open it and watch it — you simply have no verbs on it.
+
+On a read-only channel, and for a sign-in that does not operate at all, **the controls are not
+there** rather than greyed out. That is deliberate: a greyed-out STOP would tell you the row is
+not ready, when the truth is that this console is not yours to press. The status bar says which it
+is, once, beside your name — `READ ONLY — THIS SIGN-IN DOES NOT OPERATE` — and the channel strip
+says the rest.
+
+If you expected verbs and there are none, you are signed in correctly and the access is the
+thing to change: ask whoever manages Playout accounts. Nothing you can do at the console will
+add them, and nothing is wrong with the bridge.
+
 ## Lock mode
 
 The 🔒 LOCK button in the StatusBar engages a PIN-gated overlay. While locked, the operator cannot accidentally take or out anything — useful when stepping away from the desk during a long segment. Wrong-PIN attempts surface a counter but never lock you out; the lock is for accidents, not adversaries.
