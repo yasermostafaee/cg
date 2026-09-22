@@ -247,6 +247,50 @@ ages out at the contract's own hour, but it is not word-for-word what ADR 0010 r
 
 ---
 
+## 12. `DELTA C` — a green test over a live fault, and what replaced it
+
+`DELTA B` shipped with a BRIDGE-level spec: present one token five times in a loop, assert one
+`sign-in` row. Red-before, green-after, reported as the evidence. The owner then reloaded a real
+browser and watched the count climb anyway.
+
+**The spec was not wrong about what it measured; it measured the wrong thing.** A loop over one
+socket is not a page load. A load re-runs `main.tsx`, re-reads `localStorage`, re-creates
+`WebSocketRuntime`, opens a NEW socket and re-runs the connect sequence — four places the
+property could break, none of them in the loop.
+
+**Measured, on a real browser against a real bridge, five reloads, the SAME `jti` throughout:**
+
+| bridge built from         | `sign-in` rows | D1 calls |
+| ------------------------- | -------------- | -------- |
+| the commit before the fix | **6**          | 1        |
+| the fix                   | **1**          | 1        |
+
+Nothing differed between those runs but which source had been compiled. `pnpm dev:playout-auth`
+spawns `bin/caspar-bridge.mjs`, which imports `../dist/index.js`, and the script did not build —
+so the owner, having pulled the fix, ran yesterday's bridge and reported the fix as not working.
+It was working; it was not running.
+
+**So the `jti` was STABLE and neither branch of `DELTA C`'s question held.** The console holds
+its token and calls D1 exactly once across five reloads, which is `R-066` bullet 2 behaving as
+specified — its tick is correct and stays. The bridge's "have I seen this token" memory lives on
+`PlayoutAuth`, one per process, and survives every socket — also correct.
+
+**Two fixes, neither of them to the audit code:**
+
+1. `dev-playout.ts` builds before it starts, and refuses to start if the build fails. Not a
+   staleness WARNING: a warning is a thing to read and ignore at 19:00, and the failure it
+   prevents is a demo that silently contradicts the code.
+2. `apps/runtime/tests/e2e/playout-auth-reload.spec.ts` is now the AUTHORITATIVE assertion for
+   both "one sign-in per sign-in" and `DELTA A`'s "nothing is refused on a reconnect". The
+   bridge-level specs stay as the unit-level control — they localise a failure to the gate
+   rather than to the page — but a green from them is not a statement about what a reload does.
+
+⭐ The e2e path already had a staleness guard (`tools/gate-hook/src/e2e-staleness.mjs`, which
+refused this very spec until the workspace was rebuilt). The gap was the DEV script, which is
+the one an operator actually runs.
+
+---
+
 ## 10. The non-loopback warning that `C-037` calls "existing"
 
 `C-037`'s acceptance says _"the existing warning prints"_. **Measured: there was no such warning.**

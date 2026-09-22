@@ -114,6 +114,11 @@
       <https://github.com/yasermostafaee/cg/actions/runs/35745278125>, `conclusion: success`, and
       the **`E2E (Playwright)` job RAN** (not skipped). That is the follow-up fix commit
       (`design.md` §11).
+- [x] 6.6 **`DELTA C` — the AUTHORITATIVE reload assertion is an e2e**, not a bridge loop:
+      `apps/runtime/tests/e2e/playout-auth-reload.spec.ts` loads the real page against a real
+      bridge and a fake Playout, signs in once through the UI, reloads five times, and asserts
+      ONE `sign-in` row and ZERO "not signed in" refusals. Red-before on the pre-fix build
+      (**6** rows); green after (**1**). The bridge-level specs stay as the unit-level control.
 - [x] 6.5 **The §8 walkthrough, exercised without a browser** — 15/15 checks, against the real
       D1 endpoint over a real WebSocket to a real bridge on loopback: capabilities answer an
       unsigned socket and advertise the sign-in address; a take AND `clear-all` are refused with

@@ -41,7 +41,7 @@
  * Usage:  pnpm dev:playout-auth
  *         pnpm dev:playout-auth -- --port 5280        (extra bridge flags pass through)
  */
-import { spawn } from 'node:child_process';
+import { spawnSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -55,7 +55,40 @@ import {
 } from '../tests/support/fake-playout.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const bridgeCli = path.join(here, '..', 'bin', 'caspar-bridge.mjs');
+const pkgRoot = path.join(here, '..');
+const bridgeCli = path.join(pkgRoot, 'bin', 'caspar-bridge.mjs');
+
+/*
+  🔴 `DELTA C` — **BUILD FIRST. THIS SCRIPT RAN A STALE BRIDGE AND NOTHING SAID SO.**
+
+  `bin/caspar-bridge.mjs` imports `../dist/index.js`. This script did not build, so it ran
+  whatever was last compiled — and the owner, having pulled a commit that fixed the audit's
+  sign-in rows, watched the OLD bridge keep writing one row per reload and reported the fix as
+  not working. It was working; it was not running.
+
+  Measured both ways on the same rig (a real browser, five real reloads, the same `jti`):
+  pre-fix `dist` → 6 `sign-in` rows; post-fix `dist` → 1. Nothing about the source differed
+  between those runs except which one had been compiled.
+
+  ⚠ It is a BUILD and not a staleness WARNING. A warning is a thing to read and ignore at
+  19:00, and the failure it prevents is silent: a demo that contradicts the code, which costs
+  far more than the four seconds `tsc -b` takes.
+*/
+const built = spawnSync(
+  process.execPath,
+  [path.join(pkgRoot, 'node_modules/typescript/bin/tsc'), '-b'],
+  {
+    cwd: pkgRoot,
+    stdio: 'inherit',
+  },
+);
+if (built.status !== 0) {
+  console.error(
+    '[dev-playout] the bridge did not compile — refusing to start, because the alternative is ' +
+      'running yesterday’s bridge against today’s console and believing the result.',
+  );
+  process.exit(built.status ?? 1);
+}
 
 /** A scratch station, so nothing here can read or write the real one. */
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-dev-playout-'));

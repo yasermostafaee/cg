@@ -36,6 +36,7 @@
         "tests/**",
         "types/**",
         "bin/**",
+        "scripts/**",
         ".eslintrc*",
         "eslint.config.*",
         "package.json"
