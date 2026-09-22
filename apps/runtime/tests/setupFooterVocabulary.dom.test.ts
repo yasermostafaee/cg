@@ -118,12 +118,12 @@ describe('B-240 — one job, one control, one name', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('🔴 that `Close` is the DIALOG’s dismissal — it asks before dropping another tab’s draft', async () => {
+  it('🔴 that `Close` is the DIALOG’s dismissal — ONE path, and it closes', async () => {
     /*
-      The amendment's load-bearing claim. A per-section `Close` that dismissed without the
-      guard would be a second dismissal path, which is exactly the defect `B-240` closed; this
-      one routes through the SAME `dismiss` the ✕ calls, so the question is asked once, in one
-      place, whichever affordance is pressed.
+      The amendment's load-bearing claim, and it survives `MODAL-TRUTH-01 · DELTA A` intact:
+      a per-section `Close` that dismissed by its own route would be a SECOND dismissal path,
+      which is the defect `B-240` closed. It routes through the same `dismiss` the ✕ calls.
+      What changed is what that one path DOES — it closes, rather than asking first.
     */
     const onClose = vi.fn();
     stationSetupStub({ slots: boundSlots, bank: SETUP_BANK });
@@ -140,12 +140,11 @@ describe('B-240 — one job, one control, one name', () => {
       close?.click();
       await Promise.resolve();
     });
-    expect(onClose, 'it dropped a draft without a word').not.toHaveBeenCalled();
-    const confirm = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
+    expect(onClose, 'the one dismissal path must dismiss').toHaveBeenCalledTimes(1);
     expect(
-      confirm?.textContent,
-      'the question names the section that would lose its edits',
-    ).toContain('Servers');
+      document.querySelectorAll('[role="dialog"]'),
+      'no second dialog stood in the way',
+    ).toHaveLength(1);
   });
 
   it('🔴 discard is called REVERT on every tab that has one, and only when there is something to revert', async () => {
@@ -174,34 +173,63 @@ describe('B-240 — one job, one control, one name', () => {
   });
 });
 
-describe('🔴 B-240 — dismissing with unapplied edits asks, and names what would be lost', () => {
-  it('the ✕ CONFIRMS when a section holds unapplied changes, naming that section', async () => {
+/**
+ * 🔴 `MODAL-TRUTH-01 · DELTA A` (owner, 2026-09-22) — **DISMISSING CLOSES. IT DOES NOT ASK.**
+ *
+ * This suite pinned the OPPOSITE until today: `B-240` raised a question before leaving, and
+ * three specs here held it. They are replaced rather than deleted, because the behaviour they
+ * described is exactly what has to stay gone.
+ *
+ * ── WHY IT WENT, MEASURED IN THE REAL APP ───────────────────────────────────
+ *
+ * With the close-discard landed, the owner reported that Station setup STILL kept his edit
+ * across a close. Driven through Chromium, every pane and both dismissal paths discard
+ * correctly — and the confirm is why he saw otherwise:
+ *
+ *   type a host → press ✕ → the question opens → press Escape (or `Cancel`) →
+ *   **Station setup is still open, with the edit still in it.**
+ *
+ * Which is indistinguishable, from the operator's seat, from the defect the question was
+ * guarding. A guard whose own cancel path reproduces the symptom is not a guard.
+ *
+ * ⭐ `B-240`'s own argument is what settles it. It held — citing `R-017` — that a
+ * confirmation met on every exit is one an operator learns to dismiss without reading. The
+ * premise was that leaving LOST something silently; it no longer does. Closing discards,
+ * always, and `Revert` is the named visible discard for a draft the operator wants gone
+ * without leaving.
+ *
+ * ⚠ **Everything else in `B-240` is untouched and is still pinned above**: one name for
+ * discard, one name for commit, and ONE dismissal path that the ✕, Escape, the backdrop and
+ * the per-section `Close` all route through.
+ */
+describe('🔴 MODAL-TRUTH-01 · DELTA A — dismissing with unapplied edits CLOSES, without asking', () => {
+  it('the ✕ closes even when a section holds unapplied changes, and nothing stands in the way', async () => {
     const onClose = vi.fn();
     stationSetupStub({ slots: boundSlots, bank: SETUP_BANK });
     const dialog = await renderStationSetup({ section: 'servers', onClose });
 
     await setSetupInput(dialog, 'Primary host', '192.168.21.114');
+    // POSITIVE CONTROL: the draft is real — the rail is marking it — so this is the case the
+    // question used to fire on, not a clean dialog that would close either way.
+    expect(
+      dialog.querySelector('[role="tab"]#station-servers [data-tab-badge="edited"]'),
+      'the rail is not reporting the draft this spec is about',
+    ).not.toBeNull();
+
     const x = dialog.querySelector<HTMLButtonElement>('button[aria-label="Close"]');
     await act(async () => {
       x?.click();
       await Promise.resolve();
     });
 
-    // It did NOT close yet — it asked.
-    expect(onClose, 'a draft must not be dropped without a word').not.toHaveBeenCalled();
-    const confirm = [...document.querySelectorAll<HTMLElement>('[role="dialog"]')].at(-1);
+    expect(onClose, 'the ✕ asked instead of closing').toHaveBeenCalledTimes(1);
     expect(
-      confirm?.textContent,
-      'the question names the section, in the rail’s own words',
-    ).toContain('Servers');
+      document.querySelectorAll('[role="dialog"]'),
+      'a second dialog opened over Station setup',
+    ).toHaveLength(1);
   });
 
-  it('…and with NOTHING unapplied it just closes — the question is not asked for nothing', async () => {
-    /*
-      The negative control, and the one that keeps this from becoming a nuisance gate. A
-      confirmation an operator sees every time he leaves a dialog is one he learns to dismiss
-      without reading, which is how a real warning stops working.
-    */
+  it('…and with NOTHING unapplied it closes the same way — one behaviour, not two', async () => {
     const onClose = vi.fn();
     stationSetupStub({ slots: boundSlots, bank: SETUP_BANK });
     const dialog = await renderStationSetup({ section: 'channel', onClose });
@@ -214,11 +242,12 @@ describe('🔴 B-240 — dismissing with unapplied edits asks, and names what wo
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
   });
 
-  it('the guard reads the SAME dirty condition the rail does, for every section', async () => {
+  it('the RAIL is now the whole of the warning, and it reads the same dirty condition it always did', async () => {
     /*
       ⚠ Not "the two agree" — the two are ONE READ. A second derivation of "does this section
       hold a draft" is the `B-228` shape again: it would look right, and drift on the day
-      either side gained a section.
+      either side gained a section. What changed is only who consults it: the rail's dot and
+      count, on every tab, instead of a modal in the operator's way on the way out.
     */
     stationSetupStub({ slots: boundSlots, bank: SETUP_BANK });
     const dialog = await renderStationSetup({ section: 'servers' });

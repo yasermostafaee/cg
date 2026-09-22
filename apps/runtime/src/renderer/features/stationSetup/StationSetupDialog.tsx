@@ -34,7 +34,6 @@ import { hostError, hostValue, portError } from '../../ui/fieldValue.js';
 import { Modal, ModalAction, modalActionVariant, type ModalMessage } from '../../ui/Modal.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { RailStationCard, TabPanel, TabStrip, type TabSpec } from '../../ui/Tabs.js';
-import { useConfirm } from '../../ui/useDialog.js';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import {
   CandidateLayersHelper,
@@ -449,9 +448,6 @@ export function StationSetupDialog({
   const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
   /** §6 — the backup server's own small second dialog. */
   const [addingBackup, setAddingBackup] = useState(false);
-  /** `B-240` — the question asked before an unapplied draft is dropped. */
-  const { confirm: confirmDismiss, confirmDialog: dismissDialog } = useConfirm();
-
   /** Stable reporters, one per section, so a section's effect deps do not churn. */
   const reporters = useMemo(() => {
     const make =
@@ -763,27 +759,6 @@ export function StationSetupDialog({
   const footerBlocked = isBlocked(active);
 
   /**
-   * 🔴 `B-240` — **DISMISSING WITH UNAPPLIED EDITS ASKS, AND NAMES WHAT WOULD BE LOST.**
-   *
-   * This is the thing the footer's three names were hiding. `Close` dismissed and discarded
-   * nothing it warned about; `Cancel`, one tab along, dismissed AND dropped the Servers draft
-   * while being named for the drop. Neither said what was about to be lost, and an operator
-   * could not tell from the button which of the two he was pressing.
-   *
-   * With dismissal now living only in the ✕, Escape and the backdrop — one path, three
-   * affordances, all routed here — the question is asked once, in one place.
-   *
-   * ⭐ **`isDirty` is the SAME read the rail's blue dot makes.** Not "the two agree": one
-   * read, consulted twice. A second derivation of "does this section hold a draft" is the
-   * `B-228` shape, and it would look right until the day either side gained a section.
-   *
-   * ⚠ It asks ONLY when there is something to lose. A confirmation an operator meets every
-   * time he leaves a dialog is one he learns to dismiss without reading, which is how a real
-   * warning stops working — the same argument `R-017` makes against confirming an on-air act.
-   */
-  const dirtySections = STATION_SETUP_SECTIONS.filter((s) => isDirty(s.id));
-
-  /**
    * `B-240` — DISCARD THIS SECTION'S DRAFT, and nothing else. The Layers tab's `Revert` has
    * always meant exactly this; the Servers tab's control was called `Cancel` and dismissed the
    * whole dialog instead. Same name, same act, same scope, on both tabs now.
@@ -798,30 +773,45 @@ export function StationSetupDialog({
     setStatus(null);
   };
 
-  const dismiss = (): void => {
-    if (dirtySections.length === 0) {
-      onClose();
-      return;
-    }
-    const names = dirtySections.map((s) => s.title).join(', ');
-    void confirmDismiss({
-      title: `Leave Station setup without applying ${names}?`,
-      /*
-        `SETTINGS-MATCH-02` §8 — this question is raised OVER Station setup, so it belongs to
-        that dialog's sub-family: its 480 frame, and the lighter scrim that keeps the draft it
-        is about visible behind it. It is NOT `destructive`: the reference draws no emblem on
-        a question asked in words, and this one asks rather than removes.
-      */
-      layer: 'sub',
-      body:
-        `${names} ${dirtySections.length === 1 ? 'holds' : 'hold'} changes that have not been ` +
-        `applied, and leaving drops them. Nothing that saves as you go is affected — the ` +
-        `catalogue and the delimiters are already stored.`,
-      confirmLabel: 'Leave and discard',
-    }).then((confirmed) => {
-      if (confirmed) onClose();
-    });
-  };
+  /**
+   * 🔴 `MODAL-TRUTH-01 · DELTA A` (owner, 2026-09-22) — **DISMISSING CLOSES. IT DOES NOT ASK.**
+   *
+   * ── WHAT `B-240` DECIDED, AND WHICH HALF OF IT SURVIVES ─────────────────────
+   *
+   * `B-240` found three answers for one job and two names for one act: `Close` dismissed and
+   * discarded nothing it warned about, and `Cancel` one tab along dismissed AND dropped the
+   * Servers draft while being named for the drop. **That diagnosis was right and its fix is
+   * untouched** — there is still ONE name for discard (`Revert`), ONE name for commit
+   * (`Apply <section>`), and dismissal still lives in the ✕, Escape and the backdrop, one
+   * path routed here. What `B-240` ALSO did was raise a question before leaving, and that
+   * half is withdrawn.
+   *
+   * ── WHY, MEASURED IN THE REAL APP ───────────────────────────────────────────
+   *
+   * The owner reported, after the close-discard landed, that Station setup STILL kept his
+   * edit across a close. Driven through Chromium, every pane and both dismissal paths
+   * discard correctly — and the reason he saw otherwise is the question itself:
+   *
+   *   type a host → press ✕ → the confirm opens → press Escape (or `Cancel`) →
+   *   **Station setup is still open, with the edit still in it.**
+   *
+   * From the operator's seat that is indistinguishable from "I closed it without saving and
+   * my edit survived". The confirm turned a dismissal into a two-step act whose first step
+   * looks exactly like the defect it was guarding.
+   *
+   * ⭐ And `B-240`'s own reasoning is what settles it rather than overrules it. It argued —
+   * citing `R-017` — that a confirmation an operator meets every time he leaves a dialog is
+   * one he learns to dismiss without reading. The premise underneath was that leaving LOST
+   * something silently. It no longer does: closing discards, always, which is the
+   * conventional contract for a modal with an explicit Save, and `Revert` is the named,
+   * visible discard for a draft the operator wants gone without leaving. There is nothing
+   * left for the question to protect.
+   *
+   * ⚠ The rail's dirty dot and count are UNCHANGED and are now the whole of the warning:
+   * every section holding an unapplied draft marks itself, on every tab, before the operator
+   * reaches for the ✕. That is a signal he can act on; a modal in his way is not.
+   */
+  const dismiss = onClose;
 
   /**
    * `SETTINGS-DIALOG-01` §3 — ONE ENDPOINT AS A FIELD GRID, label ABOVE control.
@@ -934,7 +924,8 @@ export function StationSetupDialog({
       */
       size="fixed"
       /*
-        🔴 `B-240` — the ✕, Escape and the backdrop all route here, and all three now ask
+        🔴 `B-240`, AMENDED by `MODAL-TRUTH-01 · DELTA A` — the ✕, Escape and the backdrop
+        all route here, and all three now CLOSE
         before dropping an unapplied draft. One path, so the guard cannot be reachable by one
         affordance and not another.
       */
@@ -1503,9 +1494,6 @@ export function StationSetupDialog({
         §6 — THE SAME SMALL SECOND DIALOG. It adds the record to the Servers DRAFT; APPLY
         SERVERS is still what reaches the bridge, and the dialog says so.
       */}
-      {/* `B-240` — the dismissal question, portalled above this dialog like every other
-          second-level one. */}
-      {dismissDialog}
       {addingBackup && (
         <BackupServerDialog
           onCancel={() => setAddingBackup(false)}

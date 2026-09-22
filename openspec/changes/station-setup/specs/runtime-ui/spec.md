@@ -209,12 +209,42 @@ A section's footer SHALL carry that section's own actions and no others. Discard
 >
 > **What `B-240` was protecting is unchanged, and that is why the amendment is safe rather than a
 > reversal.** Its defect was THREE answers for one job and TWO names for one act. The `Close` that
-> returns is neither: it routes through the dialog's own dismissal, so it asks the same question
-> before dropping a draft in another tab; it never sits beside an `Apply`, which was the
+> returns is neither: it routes through the dialog's own dismissal, on the same one path (which
+> `MODAL-TRUTH-01 · DELTA A` later made CLOSE rather than ask — see the supersession below);
+> it never sits beside an `Apply`, which was the
 > configuration that made "which of these am I pressing?" a real question; and discard is still
 > `Revert` and only `Revert`. `sections.ts`'s `commits` column is where the rule is written down.
 
-Dismissing the dialog while any section holds unapplied changes SHALL ask first, naming those sections.
+Dismissing the dialog SHALL close it and discard every unapplied draft, without asking.
+
+> 🔴 **SUPERSEDED by `MODAL-TRUTH-01 · DELTA A` (2026-09-22), owner.** This requirement read
+> _"Dismissing the dialog while any section holds unapplied changes SHALL ask first, naming
+> those sections."_ — `B-240`'s question. It is replaced rather than qualified, and the
+> measurement is why.
+>
+> After the close-discard landed (Station setup now drops an unapplied draft at the moment of
+> closing, so a reopen reads the APPLIED configuration), the owner reported that his edit
+> still survived a close. Driven through Chromium, every pane and both dismissal paths
+> discard correctly — and the question itself is what he was seeing:
+>
+> > type a host → press the close affordance → the question opens → press Escape or its
+> > `Cancel` → **the dialog is still open, with the edit still in it.**
+>
+> From the operator's seat that is indistinguishable from the defect the question was
+> guarding. A guard whose own cancel path reproduces the symptom is not a guard.
+>
+> ⭐ **`B-240`'s own argument settles it rather than being overruled.** It held — citing
+> `R-017` — that a confirmation met on every exit is one an operator learns to dismiss
+> without reading. The premise underneath was that leaving LOST something silently; it no
+> longer does. Closing discards, always, which is the conventional contract for a modal with
+> an explicit Save, and `Revert` remains the named visible discard for a draft the operator
+> wants gone without leaving. The rail's dirty dot and count are now the whole of the
+> warning, and they are on screen before he reaches for the close affordance.
+>
+> ⚠ **Everything else in `B-240` stands**: ONE name for discard (`Revert`), ONE name for
+> commit (`Apply <section>`), never a `Close` beside an `Apply`, and ONE dismissal path that
+> the close affordance, Escape, the backdrop and the per-section `Close` all route through.
+> What changed is what that one path does when it gets there.
 
 The footer's standing sentence SHALL state that section's commit contract and SHALL be presented as a LABEL, distinguishable by treatment from an event message, which appears in the pinned region and is absent at rest.
 
@@ -223,13 +253,14 @@ The footer's standing sentence SHALL state that section's commit contract and SH
 - **WHEN** any tab is shown **THEN** its footer carries no control named `Cancel`
 - **WHEN** a read-only or save-as-you-go tab is shown **THEN** its footer carries a single `Close` beside its contract, and no commit
 - **WHEN** a tab WITH a commit is shown **THEN** its footer carries no `Close`
-- **WHEN** the operator presses that `Close` while another section holds unapplied changes **THEN** the same question is asked as for the close affordance
+- **WHEN** the operator presses that `Close` while another section holds unapplied changes **THEN** it dismisses on the same path the close affordance uses, and no question is asked
 - **WHEN** a section holds unapplied changes **THEN** its footer offers `Revert`, and the rail marks the same section
 
-#### Scenario: Leaving with unapplied changes asks
+#### Scenario: Leaving with unapplied changes closes and discards
 
-- **WHEN** the operator dismisses the dialog while a section holds unapplied changes **THEN** a confirmation names that section and the dialog stays open until it is answered
-- **WHEN** nothing is unapplied **THEN** the dialog closes without a question
+- **WHEN** the operator dismisses the dialog while a section holds unapplied changes **THEN** the dialog closes, no confirmation appears, and reopening shows the applied configuration
+- **WHEN** nothing is unapplied **THEN** the dialog closes the same way — one behaviour, not two
+- **WHEN** a section holds unapplied changes **THEN** the rail marks it, on every tab, which is the whole of the warning
 
 #### Scenario: The contract stands and the event appears
 

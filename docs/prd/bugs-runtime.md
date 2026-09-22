@@ -12041,9 +12041,23 @@ field assignments the load, `Revert` and the close-discard each need are now one
 third came to be absent. A stale Servers `status`/`refusal` is cleared with them, as
 `sectionMessages` already was.
 
-⚠ **`B-240` is untouched.** The ✕, Escape and the backdrop still ASK before dropping a draft and
-still name what would be lost. This is what happens once the operator has answered
-`Leave and discard` — which until now was a button that discarded nothing.
+⚠ **`B-240`'s question is GONE — and this paragraph said the opposite for a few hours, which
+is worth leaving visible.** It read: _"`B-240` is untouched. The ✕, Escape and the backdrop
+still ASK before dropping a draft … this is what happens once the operator has answered
+`Leave and discard`."_ The owner then reported the defect as STILL PRESENT, and driving the
+real app found why: the question's own cancel path (Escape, or its `Cancel`) leaves Station
+setup open with the edit in it, which from the operator's seat is the defect it was guarding.
+The confirm was removed under `MODAL-TRUTH-01 · DELTA A`; the rail's dirty dot is now the
+whole of the warning and `Revert` is still the named discard. See the supersession block in
+`openspec/changes/station-setup/specs/runtime-ui/spec.md` for the full argument.
+
+⚠ **And the lesson that outlives it:** the dom spec that shipped with this fix toggled the
+dialog's `open` prop — the mechanism `App` uses, red before the change, green after — and
+was still blind to what the owner saw, because it never pressed the ✕. A model of the
+operator's sequence is not the sequence. The surface-level e2e
+(`apps/runtime/tests/e2e/station-setup-draft-discard.spec.ts`) is the one that can fail on
+this class, and it does: it went red on the shipped build with
+_"a confirmation dialog appeared on the way out"_.
 
 **Acceptance:**
 
