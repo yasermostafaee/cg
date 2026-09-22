@@ -523,7 +523,9 @@ try {
     }
   }
 } finally {
-  // Always leave the plant as it was found, and SAY whether it is clean.
+  // Always leave the plant as it was found, and SAY whether any producer is left. `INFO` can
+  // establish "no producer" and nothing more — it does not export the mixer state a CLEAR
+  // leaves behind, so it never licenses "clean" (BRIDGE-TRUTH-01 §3).
   for (const l of [LAYER, LAYER + 1, LAYER + 2]) {
     try {
       await command(`MIXER ${CH}-${l} OPACITY 1`, { expectOk: false });
@@ -542,7 +544,7 @@ try {
     );
     out('any html producer left', /producer>html</.test(xml));
   } catch {
-    say('\n⚠ could not verify the channel is clean');
+    say('\n⚠ could not verify the channel has no producers left');
   }
   await close();
   await harness.stop();

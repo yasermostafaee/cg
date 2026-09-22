@@ -38,7 +38,15 @@ const MAX_ENTRIES = 2048;
  * `<stage>` block naming every occupied layer, its producer kind and that producer's own
  * parameters, and a layer DISAPPEARS from the reply as soon as it is cleared (controls run
  * in both directions: empty channel → no `<stage>` at all; two producers seated → both
- * listed; `CLEAR` one → it is gone). `INFO <ch>-<layer>` answers `201` for one layer.
+ * listed; `CLEAR` one → it is gone).
+ *
+ * 🔴 **CORRECTED 2026-09-23 (`BRIDGE-TRUTH-01` §3): `INFO <ch>-<layer>` does NOT answer for one
+ * layer.** This paragraph used to end _"`INFO <ch>-<layer>` answers `201` for one layer"_. It
+ * answers `201` — for the whole CHANNEL: the layer argument is accepted and silently ignored
+ * (`info_channel_command` never reads it), measured by the Playout team as two byte-identical
+ * 1173-byte replies. Address `INFO` by channel only. And a reading built on `INFO` establishes
+ * that a layer has NO PRODUCER — never that it is clean: the mixer state a `CLEAR` leaves behind
+ * is not exported by `INFO` at any verbosity.
  *
  * The tap's own justification is unaffected — passive beats polling for a sweep that runs
  * every few seconds — but the false half mattered: it says AMCP cannot answer a question

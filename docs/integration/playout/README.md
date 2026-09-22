@@ -155,6 +155,25 @@ the build to name in the recon record**. apasai-core, which is what `C-040` actu
     console is actually served on and make sure that exact origin is on their list — the
     symptom otherwise is a sign-in that fails with no HTTP answer at all, which this console
     reports as "پلی‌اوت پاسخ نمی‌دهد" and reads as the Playout being down.
+13. 🔴 **2026-09-23 — `BRIDGE-TRUTH-01` §2 and §3: what changed on OUR side for the joint run.**
+    All of it inside our own band; nothing of yours is addressed.
+    - **Our clear now resets the layer's mixer.** After a `CLEAR` of a declared bank row that
+      landed on the primary, the bridge sends `MIXER <ch>-<layer> CLEAR` (your Q4 word order;
+      the reversed spelling is your measured `400`). Never on a layer outside our declared bank,
+      never after a `CLEAR` that did not land, and never on a playout layer. So a layer we
+      empty no longer keeps the `VOLUME 0` our load leaves behind.
+    - ⚠ **The severity we told you in Reply P §3 was overstated.** Our own take re-asserts
+      `MIXER … VOLUME 1` on every take, so our next take on such a layer was always audible;
+      the residue silenced only a producer that did NOT come through our take. The correction
+      belongs in our next letter.
+    - **The band reader** (`@cg/caspar-client` `readBandVolumes`) is how we will take the
+      before/after readings: one burst of `MIXER <ch>-<layer> VOLUME` queries and one read,
+      matched by order. Measured 2.7 ms for fifty layers against our loopback fake — not against
+      a real server; your 182 ms is the real-server figure. Reading a layer inserts an identity
+      transform entry (`tweens_[index]`); we treat a read as not side-effect free.
+    - **Wording, as agreed:** an `INFO`-based reading establishes **no producer**, never
+      **clean**. Our docs and our one probe that said otherwise have been corrected; we never
+      address `INFO` by layer and never read a layer volume from `INFO`'s `<volume>` nodes.
 
 **The test Playout.** Base URL `http://192.168.21.111:8080` — which is also `iss`, byte-for-byte,
 and never derived. `aud` contains `cg-control`. Signing is ES256 and **the JWKS is read LIVE**;

@@ -4140,6 +4140,8 @@ export class CasparRuntime {
     // — and provably resolves any B-056 owned-slot warning; a backup-only out
     // leaves the warning standing (the primary's orphan may still be live).
     if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
+    // `B-253` — and the mixer residue goes with the producer. See the method.
+    await this.#resetEmptiedLayerMixer(slot, { ok, onPrimary });
     // §8 — CLEAR is the escape hatch, so it is the verb where "the command never
     // left" versus "CasparCG refused it" matters MOST: the first is fixed by
     // waiting for the link, the second means the graphic is still on air and
@@ -9095,6 +9097,8 @@ export class CasparRuntime {
     // primary is an adoption, so the bookkeeping stays consistent with the other two
     // clear paths. It is bookkeeping ONLY — it is never a precondition above.
     if (onPrimary) this.#markAdoptedOnPrimary(slot);
+    // `B-253` — and the mixer residue goes with the producer (see out()).
+    await this.#resetEmptiedLayerMixer(slot, { ok, onPrimary });
     // B-125 — AFTER the clear landed, never before it. See `#reconcileClearedSlot`.
     this.#reconcileClearedSlot(slot);
     return { ok: true };
@@ -9231,6 +9235,8 @@ export class CasparRuntime {
     const slot: CommandSlot = { channel, layer };
     const { ok, onPrimary } = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
     if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
+    // `B-253` — within our band only; an orphan outside it is somebody else's mixer.
+    await this.#resetEmptiedLayerMixer(slot, { ok, onPrimary });
     return ok ? { ok: true } : { ok: false, reason: 'amcp-error' };
   }
 
@@ -9545,6 +9551,8 @@ export class CasparRuntime {
       );
       // A CLEAR executed on the CURRENT PRIMARY counts as adoption (see out()).
       if (ok && onPrimary) this.#markAdoptedOnPrimary(slot);
+      // `B-253` — and the mixer residue goes with the producer (see out()).
+      await this.#resetEmptiedLayerMixer(slot, { ok, onPrimary });
       /*
         🔴 B-141 — THE ONE VERB WHOSE RESPONSE CANNOT CARRY ITS OWN OUTCOME.
 
@@ -10726,7 +10734,7 @@ export class CasparRuntime {
       // return the BACKUP's reply as the winner. That would attribute B's video
       // mode to the live channel, which is the wrong machine's answer to the
       // question actually being asked.
-      const result = await this.#adapter.send(`INFO ${String(channel)}`, {
+      const result = await this.#adapter.send(this.#builder.info(channel), {
         priority: 'low',
         target: 'primary',
       });
@@ -10817,7 +10825,7 @@ export class CasparRuntime {
    */
   async #readChannelOutputs(channel: number): Promise<void> {
     try {
-      const result = await this.#adapter.send(`INFO ${String(channel)}`, {
+      const result = await this.#adapter.send(this.#builder.info(channel), {
         priority: 'low',
         target: 'primary',
       });
@@ -11101,10 +11109,49 @@ export class CasparRuntime {
   }
 
   /**
+   * 🔴 `BRIDGE-TRUTH-01` §2 / `B-253` — **RESET THE MIXER OF A LAYER THIS BRIDGE HAS JUST
+   * EMPTIED: `MIXER <ch>-<layer> CLEAR`.**
+   *
+   * `CLEAR` destroys the PRODUCER and leaves the MIXER: CasparCG's `clear_command` erases the
+   * layer, `mixer_clear_command` erases its transform, and a layer's state export iterates the
+   * layers alone, so `INFO` cannot show what is left. A load stops after its muted `CG ADD`
+   * (`#sendAdd`), so a cleared row's layer keeps `VOLUME 0` — and the next producer on it that
+   * does not come through our take (which re-asserts `VOLUME 1`) plays silent. Measured by the
+   * Playout team on a 2.5.0-based core, `stage.cpp` unmodified: `VOLUME 0` → `CLEAR` → still `0`
+   * → `MIXER CLEAR` → `1`.
+   *
+   * ── TWO GUARDS, BOTH REQUIRED — the reset discards the WHOLE transform ────────
+   *
+   *   1. **Only a layer we have just EMPTIED** — the `CLEAR` must have landed on the current
+   *      primary, the same test `#markAdoptedOnPrimary` uses for "provably cleared". On an
+   *      occupied layer the reset would discard a deliberate volume, fill, clip or blend under a
+   *      live producer. ⚠ Under mirror-sync the reset fans out to the backup too, and the adapter
+   *      reports one winner rather than a per-server outcome — so a backup whose own `CLEAR`
+   *      failed would have its producer's mixer reset. The same exposure the plate teardown's
+   *      `MIXER CLEAR` has always had; named, not closed.
+   *   2. **Never past our own band** — the declared bank (`#layers.isFixed`). An orphan cleared
+   *      through `layers.clear` outside it is somebody else's layer, and so is a playout layer
+   *      (`playoutClear` does not call this).
+   *
+   * The adopt-`CLEAR` in `#adoptLayer` does not call this either: its layer is re-occupied at
+   * once by our own muted `CG ADD`, so the residue this removes cannot outlive it there.
+   * Safe on an already-reset layer — `tweens_.erase` of an absent key removes nothing.
+   */
+  async #resetEmptiedLayerMixer(
+    slot: CommandSlot,
+    cleared: { ok: boolean; onPrimary: boolean },
+  ): Promise<void> {
+    if (!cleared.ok || !cleared.onPrimary) return;
+    if (!this.#layers.isFixed(slot)) return;
+    await this.#send(this.#builder.mixerClear(slot), this.#nextSeq(), 'urgent');
+  }
+
+  /**
    * B-056 — a CLEAR for this layer executed on the CURRENT PRIMARY: mark it
    * adopted (reconnect-reconciliation bookkeeping, unchanged) AND resolve any
-   * owned-slot occupancy warning — the primary's layer state is now provably
-   * clean. Shared by every adoption-marking site (adopt / out / remove /
+   * owned-slot occupancy warning — the primary's layer provably has NO PRODUCER
+   * (`BRIDGE-TRUTH-01` §3: not "clean" — a `CLEAR` leaves the mixer, which is
+   * `#resetEmptiedLayerMixer`'s subject). Shared by every adoption-marking site (adopt / out / remove /
    * operator clearLayer) so "adopted" and "provably cleared" can never drift.
    */
   #markAdoptedOnPrimary(slot: CommandSlot): void {

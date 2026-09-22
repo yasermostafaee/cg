@@ -12130,7 +12130,40 @@ and reads the same on a broken build as on a fixed one. It fired on the fixed bu
 measures the body's SLACK instead. Cross-refs [[B-141]] (the three empty states this joins),
 [[B-251]] (the same failure class, one dialog along).
 
-## [ ] B-253 — a muted empty layer is indistinguishable from a clean one: `CLEAR` does not reset a layer’s mixer state, so anything seated on it later is silently muted with nothing in the observed state to explain it ⟨priority: high — the failure is SILENT and it is on AIR: a guest’s audio, or a bed’s, simply is not there, and every surface the operator can reach says the layer is fine⟩ — FILED 2026-09-22 by `MODAL-TRUTH-01` §6, NOT worked
+## [~] B-253 — a muted empty layer is indistinguishable from a clean one: `CLEAR` does not reset a layer’s mixer state, so anything seated on it later is silently muted with nothing in the observed state to explain it ⟨priority: high — the failure is SILENT and it is on AIR: a guest’s audio, or a bed’s, simply is not there, and every surface the operator can reach says the layer is fine⟩ — FILED 2026-09-22 by `MODAL-TRUTH-01` §6 · FIXED IN CODE by `BRIDGE-TRUTH-01` §2 (`openspec/changes/bridge-truth`)
+
+⚠ **SEVERITY CORRECTED 2026-09-23 (`BRIDGE-TRUTH-01 · REPLY 1` R3a) — the heading is kept as
+filed.** Our own take re-asserts `MIXER … VOLUME 1` on every take (R-022,
+`caspar-runtime.ts:3515`), so OUR next take on a cleared layer was always audible. The residue
+silenced only a producer that did not come through our take — a hand-typed `PLAY`, the Playout's
+own automation, a layer returned to them by a bank re-cut. Wrong, and invisible to `INFO`, but not
+the "plays, looks right, and is silent" take the prompt described. The Playout team was told the
+overstated version (Reply P §3); that correction goes in our next letter.
+
+**Confirmed in our code.** The operator's LOAD sends nothing on the wire. The paths that stop after
+the muted `CG ADD` are the deferred restore's re-ADD (a restored row whose layer was empty) and
+`setPosition`'s re-ADD of a loaded row; then `CLEAR` removes the producer and keeps `VOLUME 0`.
+
+**The fix:** `#resetEmptiedLayerMixer` sends `MIXER <ch>-<layer> CLEAR` after our `CLEAR` on
+`out`, `remove`, the bank clear and the orphan clear — only when the `CLEAR` landed on the primary,
+and only inside the declared bank. The test is the discriminating one: after our clear, a raw
+`PLAY` from another client, then `MIXER … VOLUME` read over the wire — `0` before the fix
+(measured, red first), `1` after (`clear-resets-mixer.integration.test.ts`).
+
+**`#reassertDeclaredVolumes` is NOT this fix's predecessor, and it stays.** It is `8248c7ee`
+(2026-07-30, R-022) and was written for a bridge that died mid-rehearse; the mute-before-`CG ADD`
+it now also covers arrived later (`6336af29`, 2026-08-14). It is not dead: a bridge that DIES with a
+muted layer — mid-rehearse, or between a re-ADD and a take — never gets to clear anything, and the
+boot-time blanket is still the only recovery.
+
+**The mock and a docstring said `MIXER CLEAR` left volume alone "on the real one".** No measurement
+backed that — the commit that wrote it measured `FILL`/`CLIP` only. Both now model the Playout
+team's live measurement (a 2.5.0-based core, `stage.cpp` unmodified): `MIXER CLEAR` → volume `1`.
+⭐ So the Live Source teardown, which has sent `MIXER … CLEAR` all along, already resets each plate
+layer's volume to unity. ⚠ Named, not measured: a plate seat sends `PLAY` and then its muting
+`MIXER … VOLUME 0` inside a `DEFER`/`COMMIT` batch, so a plate seated on a unity layer — a cold one,
+or one a teardown reset — may be audible from its `PLAY` until the `COMMIT`. That window was
+believed to start muted; it deserves a wire measurement of its own.
 
 **Measured 2026-09-22** on the Playout team's fork, during the same recon week that produced
 [[C-040]]. `CLEAR` removes the PRODUCER on a layer; it does not reset that layer's MIXER. A layer

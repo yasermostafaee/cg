@@ -3,6 +3,10 @@ export type { AmcpTransportEvents, ParsedAmcpResponse } from './amcp/transport.j
 export { AmcpResponseParser } from './amcp/response-parser.js';
 export { escape, quote } from './amcp/escape.js';
 
+// `BRIDGE-TRUTH-01` §3 — a band's layer volumes, one write burst and one read.
+export { bandVolumeQuery, parseBandVolumeReplies, readBandVolumes } from './mixer/band-volumes.js';
+export type { BandVolume } from './mixer/band-volumes.js';
+
 export { OscTransport } from './osc/transport.js';
 export type { OscTransportEvents, OscTransportOptions } from './osc/transport.js';
 export { OscInterestFilter } from './osc/interest.js';

@@ -247,6 +247,21 @@ export class CommandBuilder {
     return `CG ${target(slot)} NEXT ${String(FLASH_LAYER)}`;
   }
 
+  /**
+   * 🔴 `BRIDGE-TRUTH-01` §3 — `INFO <channel>`, and it takes a CHANNEL, never a slot.
+   *
+   * `INFO <ch>-<layer>` is accepted and the layer is silently IGNORED — `info_channel_command`
+   * never reads it; the Playout team measured both forms at 1173 bytes, identical content. A
+   * reader that addressed one layer would get the whole channel back and could not tell. So the
+   * only spelling this builder can produce is the channel form, and the type is what keeps it so.
+   *
+   * ⚠ And `INFO`'s `<volume>` nodes are the output bus's meters, not layer volumes: a layer's
+   * volume is read with `MIXER <ch>-<layer> VOLUME` (`@cg/caspar-client`'s `readBandVolumes`).
+   */
+  info(channel: number): string {
+    return `INFO ${String(channel)}`;
+  }
+
   /** Hard-out: clear the slot. DESTROYS the producer — contrast `stop()`. */
   out(slot: CommandSlot): string {
     return `CLEAR ${target(slot)}`;
@@ -431,9 +446,20 @@ export class CommandBuilder {
    * the wrong PLACE, which someone sees and reports, while a stale `CLIP` makes an
    * otherwise-correct graphic **invisible**, with nothing on the wire explaining why.
    *
-   * It resets geometry only. `VOLUME` is deliberately left alone by the mock's model
-   * of this verb and by the real one, so R-022's rehearse restore keeps being tested
-   * on its own terms rather than being silently repaired by a teardown.
+   * ⚠ **It resets the WHOLE transform, `VOLUME` included** — opacity, fill, clip, rotation,
+   * blend, volume and the audio routing. `mixer_clear_command` → `stage::clear_transforms`
+   * → `tweens_.erase(index)`. MEASURED by the Playout team on a 2.5.0-based core with
+   * `stage.cpp` unmodified from upstream (their Response O): `VOLUME 0` → `CLEAR` → still `0`
+   * → `MIXER CLEAR` → `1`. So a plate teardown resets that plate layer's volume to unity.
+   *
+   * 🔴 This line used to say the verb left `VOLUME` alone "by the mock's model of this verb
+   * and by the real one". Nothing measured the second half — the commit that wrote it
+   * measured `FILL`/`CLIP` and cited nothing for volume — and it was the one wrong. An
+   * unsourced premise in a docstring is the shape `reserve()`'s "the coordinate came from
+   * this allocator" had before the 2026-09-22 incident; it is gone, not reworded.
+   *
+   * Word order: `MIXER <ch>-<layer> CLEAR`. `MIXER CLEAR <ch>-<layer>` answers `400 ERROR`.
+   * Safe on an empty layer — `tweens_.erase` of an absent key removes nothing.
    */
   mixerClear(slot: CommandSlot): string {
     return `MIXER ${target(slot)} CLEAR`;

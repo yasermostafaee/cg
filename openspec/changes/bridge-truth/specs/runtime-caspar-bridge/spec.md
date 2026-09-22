@@ -72,3 +72,33 @@ The permission gate SHALL refuse a `stack.restore`, or a `templates.import` mark
 
 - **WHEN** a signed-in viewer's console restores its stack and re-delivers a template, then presses TAKE
 - **THEN** all three are refused, and the only `refused` row is the TAKE's
+
+### Requirement: The bridge resets the mixer of a layer it has just emptied
+
+The bridge SHALL send `MIXER <ch>-<layer> CLEAR` after its own `CLEAR` of a layer when, and only when, the `CLEAR` landed on the current primary and the layer is inside the declared bank. It SHALL NOT send it after a `CLEAR` that did not land, on a layer outside the declared bank, or on a declared playout layer.
+
+#### Scenario: A producer that does not come through our take is audible after our clear
+
+- **GIVEN** a restored row whose layer the bridge re-added muted, then cleared
+- **WHEN** another client plays a producer on that layer
+- **THEN** reading `MIXER <ch>-<layer> VOLUME` answers `1`
+
+#### Scenario: The reset follows our clear, inside our band only
+
+- **WHEN** the bridge clears a row on a declared bank layer
+- **THEN** `MIXER <ch>-<layer> CLEAR` follows the `CLEAR` on the wire
+- **AND WHEN** it clears an orphan outside the declared bank, or a `CLEAR` is refused **THEN** no mixer reset is sent
+
+### Requirement: INFO is read by channel, and never as a source of layer volume
+
+The bridge SHALL address `INFO` by channel only, SHALL NOT read a layer's volume from `INFO`'s `<volume>` nodes, and its `INFO` parsers SHALL tolerate nodes they do not know under `<mixer><audio>`. A band of layer volumes SHALL be read with one burst of `MIXER <ch>-<layer> VOLUME` queries and one read, matched by order. A reading built on `INFO` SHALL be described as establishing that a layer has no producer, never that it is clean.
+
+#### Scenario: The fork's additive audio nodes change no reading
+
+- **WHEN** an `INFO <channel>` reply carries `<limiter>` and `<lufs>` under `<mixer><audio>`
+- **THEN** the channel's mode and running consumers read exactly as without them
+
+#### Scenario: A band is read in one burst
+
+- **WHEN** fifty layers' volumes are read
+- **THEN** fifty queries are written at once, fifty replies are matched to their layers in order, and a refusal is that layer's error without shifting the others

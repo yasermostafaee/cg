@@ -99,7 +99,16 @@ function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
 
   if (sub === 'VOLUME') {
     const raw = args[2];
-    if (raw === undefined) return { kind: 'err', code: 402, verb: 'MIXER' };
+    /*
+      `BRIDGE-TRUTH-01` §3 — the QUERY form: `MIXER <ch>-<layer> VOLUME` with no value answers
+      `201 MIXER OK` and the layer's current transform volume. It is the ONLY read-out of a
+      layer's volume — `INFO`'s `<volume>` nodes are the output bus's meters — and it is per
+      layer, which is why the band reader pipelines it. ⚠ The real reply's number spelling is
+      not modelled; a reader parses it as a number.
+    */
+    if (raw === undefined) {
+      return { kind: 'ok-line', code: 201, verb: 'MIXER', data: String(ctx.getLayer(slot).volume) };
+    }
     const volume = Number(raw);
     // A non-numeric or negative volume is a REFUSAL, not a clamp: silently
     // coercing it would let a malformed mute read as a successful one.
@@ -117,11 +126,19 @@ function handleMixer(req: AmcpRequest, ctx: HandlerContext): AmcpResponse {
   }
 
   if (sub === 'CLEAR') {
-    // Resets the layer's GEOMETRY, not its volume: `MIXER CLEAR` on real
-    // CasparCG resets the mixer for the layer, and this mock models the two
-    // geometry terms it carries. Volume is deliberately left alone here so the
-    // R-022 restore path keeps being tested on its own terms.
-    ctx.setLayer(slot, { fill: FULL_FRAME, clip: FULL_FRAME });
+    /*
+      🔴 `BRIDGE-TRUTH-01` R3(c) — resets the WHOLE transform, VOLUME INCLUDED, which is what
+      the real verb does: `stage::clear_transforms` → `tweens_.erase(index)`. Measured by the
+      Playout team on a 2.5.0-based core with `stage.cpp` unmodified from upstream:
+      `VOLUME 0` → `CLEAR` → still `0` → `MIXER CLEAR` → `1`.
+
+      This used to reset the two geometry terms and leave volume alone, "so the R-022 restore
+      path keeps being tested on its own terms" — a modelling choice nobody had measured, and it
+      made a teardown's volume residue invisible offline. A mock that agrees with the code only
+      proves the code agrees with itself (`B-189`). The three terms this mock carries go back
+      to a fresh layer's values.
+    */
+    ctx.setLayer(slot, { fill: FULL_FRAME, clip: FULL_FRAME, volume: 1 });
     return { kind: 'ok', code: 202, verb: 'MIXER' };
   }
 
