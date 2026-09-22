@@ -114,6 +114,21 @@ Until you do this, an old item shows on the list on its original layer and works
 There is no deadline and nothing expires; the only thing you lose by waiting is that the
 graphic has no row of its own.
 
+## Signing in
+
+Some stations require a sign-in before the console will do anything. On those, a sign-in sits over
+the stack when you open the console: type your Apasai username and password, in Persian, and press
+ورود. Until you do, nothing you press reaches CasparCG — including PANIC — and the console says so
+rather than letting you find out by pressing something.
+
+Once you are in, the status bar names you beside the link pill, and the audit log records every
+action under your name instead of the console's label. A session lasts one shift; when it ends the
+console says whose session ended and asks you to sign in again. Nothing goes off air while you do
+— what is on air stays on air, and the sign-in is about who may CHANGE it.
+
+`SIGN OUT` clears this console's session. On a station that does not require a sign-in, none of
+this appears.
+
 ## Lock mode
 
 The 🔒 LOCK button in the StatusBar engages a PIN-gated overlay. While locked, the operator cannot accidentally take or out anything — useful when stepping away from the desk during a long segment. Wrong-PIN attempts surface a counter but never lock you out; the lock is for accidents, not adversaries.

@@ -102,6 +102,23 @@ the build to name in the recon record**. apasai-core, which is what `C-040` actu
    the dated snapshot is not here.
 8. **The test fixtures are still ours to release** — `cg-op1`, `cg-op2`, `cg-admin`, `cg-view`,
    `cg-noch` and channel `cg-test2` — after the plant deployment, and we say when.
+9. 🔴 **2026-09-22 — OUR SIGN-IN HALF IS BUILT, AND IT HAS NOT MET YOUR BOX.**
+   `C-037` and the sign-in half of `R-066` are implemented (`openspec/changes/playout-auth-signin`):
+   the `auth` frame, offline ES256 verification against a cached JWKS, the gate at the one
+   chokepoint, D9 revocation polling, the `playout.*` configuration group, and a console sign-in.
+   ⚠ **Every one of those is exercised against a FAKE Playout on loopback** — a test server that
+   generates its own ES256 key in memory at test start and writes nothing to disk — and **not one
+   byte has been sent to `192.168.21.111`**. That is why `C-040` stays `[~]`: the AMCP half is
+   measured, the SIGN-IN half has not run. The real run is a separate, announced event, and we
+   still tell you before we connect.
+   ⚠ Two things the build measured that the contract does not state, recorded so the first joint
+   run is not spent discovering them: the claim is **`roles` (plural, `string[]`)** and there is no
+   singular `role`; and **D9 has no home in `PLAYOUT-INTEGRATION-CONTRACT-v1.md`** — it is
+   specified across Reply A and Response B and accepted as v1.1, so a reader of the contract file
+   alone will not find it.
+   ⚠ And one thing that is NOT done, so nobody reads the sign-in as finished: **`C-038` —
+   per-channel authorisation — has not landed.** With auth ON today, any verified principal, a
+   `viewer` included, can command any channel. The plant does not run auth ON until it does.
 
 **The test Playout.** Base URL `http://192.168.21.111:8080` — which is also `iss`, byte-for-byte,
 and never derived. `aud` contains `cg-control`. Signing is ES256 and **the JWKS is read LIVE**;

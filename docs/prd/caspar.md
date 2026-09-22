@@ -2359,7 +2359,9 @@ per template. — Cross-refs [[R-064]], [[C-034]], [[C-035]].
   control on the same regex for `C-035` which returned `caspar.md:2282`. The registry's dated
   pointer independently reads `C-036`.
 
-## [ ] C-037 — bridge authentication: a Playout-issued JWT establishes the socket's principal ⟨priority: high⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+## [~] C-037 — bridge authentication: a Playout-issued JWT establishes the socket's principal ⟨priority: high⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+
+<!-- change: openspec/changes/playout-auth-signin/ -->
 
 **What:** Give the control WebSocket a principal. A socket sends an `auth` frame carrying a
 Playout-issued JWT; the bridge verifies it OFFLINE (ES256 against the Playout's JWKS) and holds
@@ -2377,29 +2379,29 @@ identity becomes provable, this function is the only thing that changes."_
 
 **Acceptance:**
 
-- WHEN auth is ON and a socket sends no `auth` frame THEN only `bridge.capabilities` and the
-  `auth.*` channels answer; everything else is refused with the one sentence and nothing is sent
-  to CasparCG
-- WHEN a valid ES256 token arrives (its `kid` in the cached JWKS, `iss` byte-equal to config,
-  `aud` containing `cg-control`, within ±60 s) THEN the principal is set, `operatorActor()` yields
-  the token's `name`, the audit record carries `sub` beside it, and two browsers with two tokens
-  interleave without crossing (the ALS seam)
-- WHEN the `kid` is unknown THEN the JWKS is re-fetched at most once per 60 s before refusing
-- WHEN the token expires mid-session THEN intents are refused with the sentence, `read` keeps
-  answering, the socket stays open, nothing on air changes; and a fresh `auth` frame on the SAME
-  socket restores every control with no reload
-- WHEN the Playout is unreachable THEN already-verified tokens keep working to expiry and a new
-  sign-in fails with a sentence naming the Playout
-- WHEN a `jti` appears on `GET /api/cg/revoked` (D9, live) THEN within 60 s NEW intents from that
-  token are refused with the sentence, reads keep answering, and an unreachable Playout leaves the
-  bridge holding the last list it saw
-- WHEN auth is OFF THEN behaviour is byte-identical to today — every existing integration test
-  green and unchanged — and `bridge.capabilities` says so
-- WHEN the bridge binds a non-loopback host with auth OFF THEN the existing warning prints (owner
-  default; see ADR 0010 rule 11)
-- WHEN the template HTTP server's route set is listed THEN it carries no `auth`, identity or
-  control route — only the template files and `POST /complete` (ADR 0010 rule 13, pinned by
-  `tools/caspar-bridge/tests/template-server-route-set.test.ts`)
+- [x] WHEN auth is ON and a socket sends no `auth` frame THEN only `bridge.capabilities` and the
+      `auth.*` channels answer; everything else is refused with the one sentence and nothing is sent
+      to CasparCG
+- [x] WHEN a valid ES256 token arrives (its `kid` in the cached JWKS, `iss` byte-equal to config,
+      `aud` containing `cg-control`, within ±60 s) THEN the principal is set, `operatorActor()` yields
+      the token's `name`, the audit record carries `sub` beside it, and two browsers with two tokens
+      interleave without crossing (the ALS seam)
+- [x] WHEN the `kid` is unknown THEN the JWKS is re-fetched at most once per 60 s before refusing
+- [x] WHEN the token expires mid-session THEN intents are refused with the sentence, `read` keeps
+      answering, the socket stays open, nothing on air changes; and a fresh `auth` frame on the SAME
+      socket restores every control with no reload
+- [x] WHEN the Playout is unreachable THEN already-verified tokens keep working to expiry and a new
+      sign-in fails with a sentence naming the Playout
+- [x] WHEN a `jti` appears on `GET /api/cg/revoked` (D9, live) THEN within 60 s NEW intents from that
+      token are refused with the sentence, reads keep answering, and an unreachable Playout leaves the
+      bridge holding the last list it saw
+- [x] WHEN auth is OFF THEN behaviour is byte-identical to today — every existing integration test
+      green and unchanged — and `bridge.capabilities` says so
+- [x] WHEN the bridge binds a non-loopback host with auth OFF THEN the existing warning prints (owner
+      default; see ADR 0010 rule 11)
+- [x] WHEN the template HTTP server's route set is listed THEN it carries no `auth`, identity or
+      control route — only the template files and `POST /complete` (ADR 0010 rule 13, pinned by
+      `tools/caspar-bridge/tests/template-server-route-set.test.ts`)
 
 **Notes:** `auth` is a FOURTH frame type in `ws-frame.ts`, which today is a three-member
 discriminated union (`request` / `response` / `publish`). — The refusal string lives in

@@ -3878,7 +3878,10 @@ this reuses), [[B-151]] (the same door, the look member), [[R-022]] (PVW reaches
   `git grep -n --untracked -E "^## \[.\] R-065" -- docs` returned nothing, against a positive
   control on the same regex for `R-064` which returned this file.
 
-## [ ] R-066 — sign-in surface, permitted-channel strip, viewer state, and retiring the self-declared console name ⟨priority: high⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+## [~] R-066 — sign-in surface, permitted-channel strip, viewer state, and retiring the self-declared console name ⟨priority: high⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+
+<!-- change: openspec/changes/playout-auth-signin/ — the SIGN-IN half only; see the
+     unticked bullets below for what remains -->
 
 **What:** The console half of the Playout link. A sign-in surface when the bridge advertises
 `auth: 'playout'`; the token held per console and presented on every reconnect; a channel strip
@@ -3893,21 +3896,21 @@ being honest and becomes wrong: it would be telling the operator the record is w
 
 **Acceptance:**
 
-- WHEN the bridge advertises `auth: 'playout'` THEN the console shows a sign-in (Persian/RTL,
-  shared primitives, no raw controls) over the live stack; PANIC and every intent are refused
-  underneath until signed in; and the link indicator names the state in the operator's words
-- WHEN signed in THEN the token is held per console, survives a reload, is presented on every
-  (re)connect, and is refreshed about 10 minutes before expiry while the page is open; sign-out
-  clears it
-- WHEN the principal's channel set is known THEN the strip lists ONLY those channels (`channelIds`
-  in `features/channels/channelList.ts` gains the principal as an input), and a channel the bank
-  names but the principal may not operate is shown READ-ONLY, not hidden
-- WHEN the principal is a `viewer` THEN every surface is read-only and says so once, in the
-  operator's words — the controls are ABSENT as facts, not greyed out (golden rule 13)
-- WHEN identity is verified THEN the Audit panel's _"self-declared label, not a verified sign-in"_
-  copy and the operator-name field are RETIRED, and a two-axis `git grep` sweep — by the SENTENCE
-  and by the `operatorName` SYMBOL — finds no stale copy in tests, docs or task lists
-- WHEN auth is OFF THEN every surface is byte-identical to today
+- [x] WHEN the bridge advertises `auth: 'playout'` THEN the console shows a sign-in (Persian/RTL,
+      shared primitives, no raw controls) over the live stack; PANIC and every intent are refused
+      underneath until signed in; and the link indicator names the state in the operator's words
+- [x] WHEN signed in THEN the token is held per console, survives a reload, is presented on every
+      (re)connect, and is refreshed about 10 minutes before expiry while the page is open; sign-out
+      clears it
+- [ ] WHEN the principal's channel set is known THEN the strip lists ONLY those channels (`channelIds`
+      in `features/channels/channelList.ts` gains the principal as an input), and a channel the bank
+      names but the principal may not operate is shown READ-ONLY, not hidden
+- [ ] WHEN the principal is a `viewer` THEN every surface is read-only and says so once, in the
+      operator's words — the controls are ABSENT as facts, not greyed out (golden rule 13)
+- [ ] WHEN identity is verified THEN the Audit panel's _"self-declared label, not a verified sign-in"_
+      copy and the operator-name field are RETIRED, and a two-axis `git grep` sweep — by the SENTENCE
+      and by the `operatorName` SYMBOL — finds no stale copy in tests, docs or task lists
+- [x] WHEN auth is OFF THEN every surface is byte-identical to today
 
 **Notes:** 🔴 THE SWEEP IS THE HARD PART, and it is a golden-rule-9 sweep on two axes because one
 axis provably misses. Measured at `546258d3`: the STRING pass (`self-declared`, case-insensitive)

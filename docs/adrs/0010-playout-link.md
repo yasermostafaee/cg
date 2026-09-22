@@ -273,8 +273,15 @@ snapshot is dated evidence only; and the firewall allow rule prepared, awaiting 
 
 ## Still open
 
-1. The **TCP 5250 allow rule** on the Playout host — theirs, needs an administrator.
-2. **Inbound UDP 6250** on the bridge host `192.168.21.93` — ours, right after (1).
+1. ✅ **CLOSED (2026-09-22)** — the **TCP 5250 allow rule** on the Playout host. Authorised in
+   writing and EXERCISED: a bridge from `192.168.21.93` connected and `VERSION` answered
+   `2.5.0 6b29237 Dev` on the first attempt. Recorded in
+   [`docs/integration/playout/README.md`](../integration/playout/README.md) open item 1.
+2. ✅ **CLOSED (2026-09-22)** — **inbound UDP 6250** on the bridge host `192.168.21.93`, and
+   WIDENED: three inbound rules now admit both `192.168.21.111` and `172.27.36.46`, because a rule
+   scoped to `.111` alone would have dropped OSC **and** the template fetch, manufacturing a
+   `degraded` reading and a take-404 shape that both look like faults in apasai-core. Recorded in
+   the same README, open item 2.
 3. The **recon re-run** against apasai-core — ours (`C-040`).
 4. The **plant's `iss` and `casparHost` strings**, and the final console origins — both, later.
 5. **TLS** on the bridge and the Playout together — a separate item, deliberately not a gate here.
