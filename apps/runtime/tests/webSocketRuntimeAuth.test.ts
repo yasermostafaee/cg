@@ -611,6 +611,57 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
   });
 });
 
+// ── § 3(a) — the console ADOPTS a fresh auth state ────────────────────────────────────────────
+
+describe('OPERATOR-NAME-SWEEP-01 § 3(a) — the console adopts a pushed auth state', () => {
+  /**
+   * 🔴 **THE OTHER HALF OF THE LOOP.** `authz-strip-freshness.integration.test.ts` proves the
+   * BRIDGE pushes `auth.state-changed` when the server list moves. That says nothing about
+   * whether this console does anything with it — and a publish nobody routes is exactly the
+   * silent failure `B-247`'s coverage guard exists for, one layer down.
+   *
+   * ⭐ The positive control is the first assertion: the console is shown HOLDING channel 1
+   * before the push. Without it, a final `permittedChannels: []` would also be what a console
+   * that ignored the frame entirely looks like.
+   */
+  it('a pushed auth state replaces the permitted channels, keeping the principal', async () => {
+    const bridge = new FakeBridge();
+    seedSession(storage, 'jwt-held-by-this-console');
+    bridge.capabilities = playoutCapabilities();
+    bridge.authAnswer = { kind: 'accept', principal: principalNamed('مریم قاسمی') };
+    const runtime = start(bridge);
+    bridge.socket().open();
+    await settle();
+
+    const before = runtime.auth.state();
+    expect(before.kind).toBe('signed-in');
+    expect(
+      before.kind === 'signed-in' ? before.permittedChannels : null,
+      'the console never held channel 1 — the assertion below would be vacuous',
+    ).toEqual([1]);
+
+    // The bridge says the configuration moved and this principal has lost the channel.
+    bridge.socket().deliver({
+      type: 'publish',
+      channel: 'auth.state-changed',
+      payload: {
+        mode: 'playout',
+        principal: (before as { principal: unknown }).principal,
+        status: 'signed-in',
+        permittedChannels: [],
+      },
+    });
+    await settle();
+
+    const after = runtime.auth.state();
+    expect(after.kind, 'the push signed the operator out — it must not').toBe('signed-in');
+    expect(
+      after.kind === 'signed-in' ? after.permittedChannels : null,
+      'the console ignored the pushed channel list',
+    ).toEqual([]);
+  });
+});
+
 // ── 6 + 7 — sign-out ─────────────────────────────────────────────────────────────────────────
 
 describe('R-066 — sign-out clears it, and does NOT take the link down with it', () => {
