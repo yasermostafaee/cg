@@ -2886,3 +2886,37 @@ and the reason a missing pointer costs nothing.
 **`P-050`** — `R-065` was taken by the same session for `PASSES-CYCLE-ONLY-26` Part B (PVW plays
 the operator count, [runtime.md](runtime.md)), measured free against a positive control on
 `R-064`.
+
+### 2026-09-22 — `B-251`, `B-252`, `B-253`, `P-050` and `C-041` taken by `MODAL-TRUTH-01`
+
+- `B-251` — Station setup kept an unapplied draft across a dismissal, [bugs-runtime.md](bugs-runtime.md).
+- `B-252` — the audit log's count, its missing failure state and its floating footer,
+  [bugs-runtime.md](bugs-runtime.md).
+- `B-253` — a muted empty layer is indistinguishable from a clean one (`CLEAR` leaves the
+  mixer), [bugs-runtime.md](bugs-runtime.md). Filed, not worked.
+- `P-050` — the Stop hook's E2E reminder gives a false reason, [platform.md](platform.md).
+  Filed, not worked.
+- `C-041` — the bridge has no audit-path flag, [caspar.md](caspar.md). Filed, not worked.
+
+Each allocated by MEASURING with a positive control on the same regex, at the moment of
+commit rather than of planning: `git grep -n --untracked -E "^## \[.\] X-NNN" -- docs`
+returned nothing for all five, while `B-250`, `P-049` and `C-040` each returned exactly one
+hit.
+
+⚠ **The `C-` half of the pointer below was stale by FOUR.** It read `C-037`, and `C-038`,
+`C-039` and `C-040` were already filed by `PLAYOUT-LINK-01` on 2026-09-16. That is the same
+failure the 2026-09-14 entry records for `B-`, met again six days later on a different prefix —
+which is why the rule is MEASURE, and why a pointer is a convenience and never an authority.
+
+⇒ **Next free after this session is `B-254`**, **`D-161`**, **`C-042`**, **`R-067`** and
+**`P-051`**.
+
+⚠ **And the `R-` half of the pointer above was stale too — by one, and this session copied it
+before measuring.** The line first written here read `R-066`, taken straight from the
+2026-09-16 block, and `R-066` already had a heading at `runtime.md:3881` (`PLAYOUT-LINK-01`'s
+sign-in surface). It is corrected in place, and the mistake is left recorded rather than
+quietly fixed: it is the third prefix in three entries to be stale, made by a session that had
+just written a warning about exactly that two paragraphs above. **A pointer is read for
+convenience and MEASURED before use — every prefix, every time**, which is what the audit
+command at the head of this file is for. Measured here: `R-067` returned nothing against a
+positive control on `R-066` which returned one hit.

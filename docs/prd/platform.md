@@ -3319,3 +3319,53 @@ concurrent writer at all. — Cross-refs [[P-047]] (the same cost, a different m
 - **Number:** `P-049`. Verified free at the moment of commit, not of planning:
   `git grep -n --untracked -E "^## \[.\] P-049" -- docs` returned nothing, against a positive
   control on the same regex for `P-048` which returned `platform.md:3186`.
+
+## [ ] P-050 — the Stop hook's E2E reminder gives a FALSE REASON: it says "this turn changed UI/render paths" on turns that changed only docs ⟨priority: medium — it is the reminder's own failure mode, and a reminder that is wrong on a docs commit is one the next session learns to skip on a render one⟩ — FILED 2026-09-22 by `MODAL-TRUTH-01` §6, NOT worked
+
+**Observed:** three firings across recent sessions, **at least two provably on docs-only
+commits**, every one of them printing the same sentence — _"this turn changed UI/render
+paths"_. The 2026-09-22 recon week's commits (`08a0c5ab`, `eddf9794`, `1df84986`, `7a4e77d5`)
+touched `docs/**` and nothing else, and the hook said it anyway.
+
+**Why it is this session's family.** It is [[B-251]]/[[B-252]]'s defect in the tooling: a
+statement asserting a state that is not in force. The hook's own classification is a
+_category_ — `kind=code needsE2e=true` — and the message reports the category as though it
+were an observation about the diff. When the classifier is right the sentence is right by
+coincidence; when it is wrong there is nothing in the output to notice it by, because the
+message never names what it saw.
+
+**Fix, stated as the shape rather than the patch:** the message NAMES THE FILE that triggered
+it. _"`apps/runtime/src/renderer/ui/Modal.tsx` changed"_ is checkable by the reader in one
+glance and self-correcting when the classifier over-matches; _"this turn changed UI/render
+paths"_ is neither. A reminder that cites its evidence cannot lie about its evidence.
+
+**Secondary, and it bit this session:** the hook's discharge instruction assumes an OpenSpec
+`tasks.md` exists to hold the run URL. A plain owner-reported bugfix has no change dir, so
+there is nowhere the instruction points to. `MODAL-TRUTH-01` recorded its run URL on the PRD
+bug entries instead ([[B-251]], [[B-252]]) — the convention [[B-111]] already used — but the
+hook does not say so, and the next session will ask the same question. Either the instruction
+names the PRD entry as the fallback home, or a bugfix is expected to open a change dir; it is
+one or the other and currently it is neither.
+
+**Acceptance:**
+
+- WHEN the hook prints the E2E reminder THEN it names at least one changed path that caused
+  the classification
+- WHEN the diff is docs-only THEN the reminder does not fire at all
+- AND the discharge instruction names a home for the run URL that exists for a change with no
+  OpenSpec change dir
+- ⚠ NOT answered by softening the sentence to "may have changed": a hedge in place of evidence
+  is the same defect wearing a qualifier, and it makes the true firings weaker too
+
+**Notes:** the hook is `.claude/hooks/gate-stop.mjs` with its logic under `tools/gate-hook/`;
+the classifier it shares with CI is [[P-029]]'s. ⚠ **The CI side is NOT in scope and must not
+be relaxed to fix this** — `P-029`'s skip is load-bearing for the merge backstop, and
+[[P-030]]'s guard reuses a prior run only on a positive, complete match precisely because a
+green-but-skipped `e2e` proves nothing. This item is about what the LOCAL hook SAYS, not about
+what either side decides. Cross-refs [[P-028]] (why the hook stopped running the suite),
+[[P-029]] (the classifier), [[P-030]] (the merge-run guard), [[B-111]] (a bugfix that recorded
+its run URL on its PRD entry).
+
+- **Number:** `P-050`. Verified free at the moment of commit, not of planning:
+  `git grep -n --untracked -E "^## \[.\] P-050" -- docs` returned nothing, against a positive
+  control on the same regex for `P-049` which returned `platform.md`.

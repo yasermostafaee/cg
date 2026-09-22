@@ -2619,3 +2619,31 @@ the chokepoint and its caller list, not from the behaviour you expect.
 - **Number:** `C-040`. Verified free at the moment of commit, not of planning:
   `git grep -n --untracked -E "^## \[.\] C-040" -- docs` returned nothing, against a positive
   control on the same regex for `C-036` which returned `caspar.md:2321`.
+
+## [ ] C-041 — the bridge has no audit-path flag, so a recon or test run writes into the OPERATIONAL record ⟨priority: low — nothing is lost and nothing is wrong on air, but the forensic record gains rows no operator produced and no filter can separate⟩ — FILED 2026-09-22 by `MODAL-TRUTH-01` §6, NOT worked
+
+**Found 2026-09-22**, during the recon run that produced [[C-040]]: five `actor: recon` lines
+are now interleaved with operational entries in `~/.cg-runtime/bridge-audit.ndjson` on the dev
+host, which is also the bridge host. The bridge takes `--audit-log-path` at boot, so a
+DIFFERENT path is reachable by starting a second bridge — which is exactly what the dev host
+must not do against a live plant, so in practice the flag does not help the case that needs it.
+
+**Why it matters at all.** The audit log is the surface an operator reads when something went
+wrong at a take, and [[B-141]] spent a whole item making it honest about what it does and does
+not know. A record that silently mixes test traffic with operational traffic is a smaller
+version of the same problem: the rows are true individually and the FILE no longer answers the
+question it exists to answer.
+
+**Acceptance (sketch):**
+
+- WHEN a run is not operational THEN its entries are distinguishable from operational ones —
+  by a separate path, or by a field the reader can filter on
+- AND the audit panel can express that filter, or can state that it cannot
+- ⚠ NOT answered by telling recon sessions to remember: this is the third time a
+  remember-to-do-it rule has been the thing that failed in this repo
+
+**Notes:** `actor` is already on every entry and the panel already filters by it, so the
+cheapest honest shape may be a declared NON-OPERATIONAL actor prefix rather than a second file
+— to be decided when it is worked, not here. Cross-refs [[C-040]] (the recon run that found
+it), [[B-141]] (the audit panel's honesty rules), [[B-253]] (the other finding from the same
+run).

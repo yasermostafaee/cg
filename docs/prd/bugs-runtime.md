@@ -12005,3 +12005,134 @@ reason, and `LayersPanel.tsx` carries that reason at the call site.
 _"Next free after this session is `B-248`"_ and is stale by two. Verified free before filing:
 `git grep B-250` across `docs`, `apps`, `packages`, `tools` and `openspec` returned exactly one
 hit — the `LayersPanel.tsx` call-site comment written by this same item.
+
+## [~] B-251 — Station setup kept an unapplied draft across a dismissal, so a typed value read exactly like an applied one ⟨priority: medium — the pane governs the connection host, the template-serve address and the failover strategy, and an operator reading a value that is not in force is `R-063` violated by the surface that configures the thing⟩ — FILED AND CLOSED IN CODE 2026-09-22 by `MODAL-TRUTH-01` Part A
+
+**Repro (owner, 2026-09-22):** open Station setup ▸ Servers, change a field, dismiss without
+applying, open it again. The typed value is still in the field.
+
+**What it is, measured.** `App` keeps `StationSetupDialog` MOUNTED and toggles its `open` prop
+(it returns `null`), so every section BELOW it unmounts on close and drops its draft for free —
+the bank's aliases and the Live sources band both reset, measured, before anything changed. The
+SERVERS fields are the exception: they live in the dialog's own `useState`, which survives, and
+the only thing that used to correct them was the asynchronous `connections.config()` the reopen
+fires. Three jsdom measurements:
+
+```
+bridge answers          -> the field resets, but only AFTER the round trip
+config() REJECTS        -> the field never resets (and the rejection was unhandled)
+config() never answers  -> the field never resets
+```
+
+So the stale draft was on screen for the whole of every reopen, and permanently on a station
+whose bridge is down — which is when an operator opens this dialog.
+
+**It is DISPLAY-ONLY — the draft reaches no store.** Swept on two axes: by module import (only
+`App.tsx` imports `features/stationSetup/`, and only `open` / `section` / `requestId` cross that
+boundary) and by persistence (no `localStorage` or `sessionStorage` under `stationSetup/`,
+`fixedLayers/` or `sources/`; `sourceStore` and `delimiterStore` are caches of what the bridge
+has ACCEPTED, never of a draft). The one path from unsaved to applied is a press of
+`Apply servers` by an operator who believes the value is already in force — a perception defect
+with a one-press consequence, not a leak.
+
+**Fix:** the discard is a LOCAL act, done at the moment of closing, waiting on nothing. The seven
+field assignments the load, `Revert` and the close-discard each need are now one
+`restoreServersDraft`; they were written out twice and missing a third time, which is how the
+third came to be absent. A stale Servers `status`/`refusal` is cleared with them, as
+`sectionMessages` already was.
+
+⚠ **`B-240` is untouched.** The ✕, Escape and the backdrop still ASK before dropping a draft and
+still name what would be lost. This is what happens once the operator has answered
+`Leave and discard` — which until now was a button that discarded nothing.
+
+**Acceptance:**
+
+- WHEN Station setup is dismissed with an unapplied Servers draft THEN reopening shows the
+  APPLIED configuration
+- AND it does so before any reopen read has answered, and on a bridge that never answers at all
+- AND a Servers outcome or refusal from a previous opening is gone
+
+**Notes:** pinned by `apps/runtime/tests/stationSetupDraftDiscard.dom.test.ts` — three Servers
+assertions red before the change, plus the Layers and Live sources panes, which were already
+green and are held anyway: the contract is "closing discards", not "closing happens to unmount".
+No pane qualified for a confirm-on-close escape; none holds work that is expensive to reproduce,
+and `B-240`'s question already covers the warning. Cross-refs [[B-240]] (the dismissal question
+this completes), [[B-252]] (the same failure class, one dialog along).
+
+## [~] B-252 — the audit log asserted a count it had not read, sat on “Reading…” forever with no bridge, and floated its footer 276 px above the frame’s bottom edge ⟨priority: medium — three statements on one forensic surface, each of them a claim the dialog could not support⟩ — FILED AND CLOSED IN CODE 2026-09-22 by `MODAL-TRUTH-01` Part B
+
+**Repro (owner, 2026-09-22, screenshot):** open the audit log with no bridge running.
+
+**Three defects, measured.**
+
+1. **THE FOOTER.** In Chromium at 1280×800 with an empty record: a 736 px shell, a body with
+   36 px of slack, and **276 px of dead region UNDER the footer**. The rule already existed and
+   already named this exact failure — `PLATES-AUDIO-11` DELTA §2, in `Modal.tsx`'s
+   `styles.bodyFlush`: _"A declared height alone does not put the footer at the bottom … with
+   fewer rows than the frame holds it is CONTENT-sized: the footer floats up under the last row
+   and the frame's lower third is dead space."_ The audit log never got it because that same
+   note scoped the fix to the `frame="fixed"` opt-in rather than to every framed size, to avoid
+   re-tuning two signed-off surfaces for a third. Taking the opt-in invents nothing: same
+   `bodyFlush`, same `--r-modal-h-frame`, the template picker untouched. After: 1 px under the
+   footer, 311 px of slack inside the scroll region where it belongs.
+2. **THE COUNTER.** `Reading the audit record…` in the body and `0 of 0 events` in the footer,
+   at the same moment. The BODY was the truthful half — `health === null` genuinely means "not
+   asked yet" — and the counter was the stale one: it rendered `entries.length`
+   unconditionally over an `entries` initialised to `[]`, so every read was preceded by a
+   footer stating a total of the record it had not opened.
+3. **THE MISSING FAILURE STATE.** `refresh()`'s `Promise.all` rejected into `void refresh()` as
+   an unhandled rejection, `health` stayed `null`, and the dialog showed `Reading…` for as long
+   as it was open. Silence where an error belongs.
+
+**Why 2 and 3 are one defect:** both come from deciding whether the READ happened by looking at
+`health`, which answers a different question — is the WRITER live. That is golden rule 8's axis
+error and [[B-141]]'s own rule one layer up: a negative observation is not a result until a
+positive control proves the instrument is live. The fetch's condition is now the fetch's own
+value, and `B-141`'s three empty states gain a fourth reading — the one where nothing was read
+at all.
+
+**Acceptance:**
+
+- WHEN the read has not answered THEN the footer states no count
+- WHEN it completes THEN the body has stopped saying it is reading
+- WHEN the record cannot be read THEN the dialog says so, with the bridge's own words, and
+  Refresh reports not-accepted rather than flashing success
+- AND the footer sits on the frame's bottom edge whatever the body's height
+
+**Notes:** pinned by `apps/runtime/tests/auditPanel.readState.dom.test.ts` (five specs on what
+the surface SAYS; three red before) and, for the geometry, by
+`apps/runtime/tests/e2e/library-audit-geometry.spec.ts` in Chromium — jsdom has no layout, so a
+box asserted there passes against a surface of any shape (golden rule 12c). ⚠ That spec's first
+positive control used `scrollHeight` and was WRONG: `scrollHeight` is
+`max(content, clientHeight)`, so it equals the box height for any content shorter than the box
+and reads the same on a broken build as on a fixed one. It fired on the fixed build; the control
+measures the body's SLACK instead. Cross-refs [[B-141]] (the three empty states this joins),
+[[B-251]] (the same failure class, one dialog along).
+
+## [ ] B-253 — a muted empty layer is indistinguishable from a clean one: `CLEAR` does not reset a layer’s mixer state, so anything seated on it later is silently muted with nothing in the observed state to explain it ⟨priority: high — the failure is SILENT and it is on AIR: a guest’s audio, or a bed’s, simply is not there, and every surface the operator can reach says the layer is fine⟩ — FILED 2026-09-22 by `MODAL-TRUTH-01` §6, NOT worked
+
+**Measured 2026-09-22** on the Playout team's fork, during the same recon week that produced
+[[C-040]]. `CLEAR` removes the PRODUCER on a layer; it does not reset that layer's MIXER. A layer
+left at `MIXER VOLUME 0` by a previous seat therefore reads, in every observed-state channel this
+app has, exactly like a layer that was never touched — and the next producer seated on it plays
+muted.
+
+**Why it is this session's family and is filed here rather than fixed.** It is the bridge-side
+spelling of _a surface asserting a state that is not in force_: the observed state says "empty",
+which is true of the producer and false of the mixer, and nothing the operator can see carries
+the difference. `MODAL-TRUTH-01` was authorised for two renderer dialogs; this is the wire, and
+a wire change does not ride a renderer bugfix commit.
+
+**Acceptance (sketch, to be settled when it is worked):**
+
+- WHEN a layer is cleared THEN its mixer state is reset with it, OR
+- WHEN a producer is seated on a layer whose mixer is not at unity THEN the ledger and the
+  console SAY so before it goes to air
+- ⚠ NOT answered by un-muting on every seat without saying so: a deliberate mute that a seat
+  silently undoes is the same defect with the sign flipped, and `silenceAllLivePlates` stays
+  unscoped either way
+
+**Notes:** the measurement is the Playout fork's, so the first step when this is worked is to
+re-measure against the CasparCG version the install actually runs — `2.5.0-stable` behaviour is
+not assumed from a fork's. Cross-refs [[C-040]] (the same recon), [[C-041]] (the audit-path flag
+found in the same run).
