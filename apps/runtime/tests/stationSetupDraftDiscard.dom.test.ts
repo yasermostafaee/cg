@@ -119,6 +119,38 @@ describe('MODAL-TRUTH-01 — Station setup discards an unapplied draft on close'
     expect(el.textContent).not.toContain('The bridge refused that host.');
   });
 
+  it('🔴 SERVERS — a bridge that NEVER answered: there is no `loaded`, and the draft must still go', async () => {
+    /*
+      🔴 The owner’s own station, and the case the spec above does NOT cover.
+
+      That one lets the FIRST read land and then takes the bridge away, so `loaded` holds a
+      config and the discard has something to restore to. On a console whose bridge has never
+      answered at all — the console whose operator is most likely to be in this dialog —
+      `loaded` is `null` from boot to close, and a discard written as
+      `if (loaded !== null) restore(loaded)` does nothing whatsoever.
+
+      Live sources and Layers were unaffected and that is what made it legible: they unmount
+      with the dialog and reset for free, so the owner saw ONE pane keep its edit
+      («هنوز تب servers ایراد داره ولی live sources درسته الان»).
+
+      What the field must return to is what a FIRST open shows — the suggestion — because
+      that is the honest answer when nothing is in force.
+    */
+    stationSetupStub();
+    (window.cg as unknown as { connections: { config: () => Promise<never> } }).connections.config =
+      () => new Promise<never>(() => undefined);
+
+    let el = await renderStationSetup({ section: 'servers' });
+    const suggested = valueOf(el, 'Primary host');
+    await setSetupInput(el, 'Primary host', '10.0.0.9');
+    await setSetupInput(el, 'Primary OSC port', '7777');
+    expect(valueOf(el, 'Primary host')).toBe('10.0.0.9');
+
+    el = await reopenStationSetup();
+    expect(valueOf(el, 'Primary host')).toBe(suggested);
+    expect(valueOf(el, 'Primary OSC port')).toBe('6250');
+  });
+
   it('LAYERS — a typed row name is gone on reopen (already held; pinned)', async () => {
     stationSetupStub();
     let el = await renderStationSetup({ section: 'candidate-layers' });

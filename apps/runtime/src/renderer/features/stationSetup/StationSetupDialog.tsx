@@ -266,17 +266,49 @@ function toDraft(ep: { host: string; amcpPort: number; oscPort: number }): Endpo
 }
 
 /**
- * The two endpoints a station with NO stored config is offered, and the backup a station
- * with no `servers.B` is offered when the operator presses Add backup.
+ * 🔴 **THE SERVERS PANE BEFORE ANYTHING HAS BEEN READ — declared ONCE, and read in three
+ * places: the initial state, the close-discard, and the backup draft a station with no
+ * `servers.B` is offered.**
  *
- * ⚠ These are SUGGESTIONS for a field that has nothing behind it, never a claim about what
+ * ⚠ These are SUGGESTIONS for fields that have nothing behind them, never a claim about what
  * is in force: the pane reads `No backup declared` while `backupEnabled` is false, and a
- * backup draft is only ever shown once the operator has opened that door himself. Hoisted
- * out of `useState` so the close-discard below has exactly one thing to restore to when the
- * bridge declares no backup — a second literal is how the two come to disagree.
+ * backup draft is only ever shown once the operator has opened that door himself.
+ *
+ * 🔴 `MODAL-TRUTH-01 · DELTA A` — **hoisting this out of `useState` is the fix, not tidiness.**
+ * The close-discard restores from `loaded` — what the bridge last stated — and was written
+ * `if (loaded !== null) restore(loaded)`. On a console whose bridge has NEVER answered,
+ * `loaded` is `null` from boot to close and that branch does nothing at all, so the typed
+ * value survived every close. The owner met it on exactly that station, and it was legible to
+ * him because it was this pane ALONE: Live sources and Layers unmount with the dialog and
+ * reset for free, so one tab kept its edit while the others did not. With the state named,
+ * "no reading" has something to restore TO — what a first open shows — and the null branch
+ * cannot be forgotten, because it is the same object the initial state is built from.
  */
 const PRIMARY_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '5250', oscPort: '6250' };
 const BACKUP_SUGGESTION: EndpointDraft = { host: '127.0.0.1', amcpPort: '5251', oscPort: '6251' };
+/*
+  ⚠ TYPED, never `as const`. The first spelling was, and the literal types it produced
+  (`false`, `true`, `''`) flowed into `useState` as `useState<false>` and friends — nine
+  typecheck errors, and every one of them at a SETTER rather than here. The widths are what
+  this object is for.
+*/
+const UNREAD_SERVERS: {
+  readonly primary: EndpointDraft;
+  readonly backupEnabled: boolean;
+  readonly backup: EndpointDraft;
+  readonly strategy: ConnectionConfig['strategy'];
+  readonly autoFailover: boolean;
+  readonly serveHost: string;
+  readonly servePort: string;
+} = {
+  primary: PRIMARY_SUGGESTION,
+  backupEnabled: false,
+  backup: BACKUP_SUGGESTION,
+  strategy: 'mirror-sync',
+  autoFailover: true,
+  serveHost: '',
+  servePort: '',
+};
 
 /**
  * 🔴 `SETTINGS-MATCH-02` §10.6 — **ONE LABELLED FIELD, WITH ITS OWN REFUSAL UNDER IT.**
@@ -401,20 +433,20 @@ export function StationSetupDialog({
   */
   const { selected: channel } = useSelectedChannel();
   const [active, setActive] = useState<StationSetupSection>(section);
-  const [primary, setPrimary] = useState<EndpointDraft>(PRIMARY_SUGGESTION);
-  const [backupEnabled, setBackupEnabled] = useState(false);
-  const [backup, setBackup] = useState<EndpointDraft>(BACKUP_SUGGESTION);
+  const [primary, setPrimary] = useState<EndpointDraft>(UNREAD_SERVERS.primary);
+  const [backupEnabled, setBackupEnabled] = useState(UNREAD_SERVERS.backupEnabled);
+  const [backup, setBackup] = useState<EndpointDraft>(UNREAD_SERVERS.backup);
   /*
     `C-024` — THE STORED SERVE ADDRESS, AS DRAFT STRINGS. Strings because this is a form: the
     empty field is a real state the operator can reach by clearing it, and it MEANS "derive it".
     The absent-vs-empty distinction the schema keeps is resolved by the bridge's one normalizer.
   */
-  const [serveHost, setServeHost] = useState('');
-  const [servePort, setServePort] = useState('');
+  const [serveHost, setServeHost] = useState(UNREAD_SERVERS.serveHost);
+  const [servePort, setServePort] = useState(UNREAD_SERVERS.servePort);
   /** What is actually IN FORCE, and why — the read that makes the masking possible. */
   const [serveInfo, setServeInfo] = useState<TemplateServeInfo | null>(null);
-  const [strategy, setStrategy] = useState<ConnectionConfig['strategy']>('mirror-sync');
-  const [autoFailover, setAutoFailover] = useState(true);
+  const [strategy, setStrategy] = useState<ConnectionConfig['strategy']>(UNREAD_SERVERS.strategy);
+  const [autoFailover, setAutoFailover] = useState(UNREAD_SERVERS.autoFailover);
   const [status, setStatus] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   /**
@@ -502,11 +534,28 @@ export function StationSetupDialog({
    * ⚠ And an absent `servers.B` restores the backup draft to its SUGGESTION rather than
    * leaving it. A stale host under a closed `Add backup` door is the same defect this
    * change is about, one door further in.
+   *
+   * 🔴 `MODAL-TRUTH-01 · DELTA A` — **`null` IS AN ANSWER HERE, NOT A REASON TO DO NOTHING.**
+   * It means the bridge has never told this console anything, so nothing is in force, and the
+   * honest state is the one a first open shows. The caller used to decide this with
+   * `if (loaded !== null) restore(loaded)` — which on a bridge-less station is a discard that
+   * discards nothing, and is the defect the owner met. Moving the decision INSIDE the one
+   * restore is what makes it impossible to forget at a call site.
    */
-  const restoreServersDraft = useCallback((config: ConnectionConfig): void => {
+  const restoreServersDraft = useCallback((config: ConnectionConfig | null): void => {
+    if (config === null) {
+      setPrimary(UNREAD_SERVERS.primary);
+      setBackupEnabled(UNREAD_SERVERS.backupEnabled);
+      setBackup(UNREAD_SERVERS.backup);
+      setStrategy(UNREAD_SERVERS.strategy);
+      setAutoFailover(UNREAD_SERVERS.autoFailover);
+      setServeHost(UNREAD_SERVERS.serveHost);
+      setServePort(UNREAD_SERVERS.servePort);
+      return;
+    }
     setPrimary(toDraft(config.servers.A));
     setBackupEnabled(config.servers.B !== undefined);
-    setBackup(config.servers.B === undefined ? BACKUP_SUGGESTION : toDraft(config.servers.B));
+    setBackup(config.servers.B === undefined ? UNREAD_SERVERS.backup : toDraft(config.servers.B));
     setStrategy(config.strategy);
     setAutoFailover(config.autoFailoverEnabled);
     setServeHost(config.templateServeHost ?? '');
@@ -587,7 +636,7 @@ export function StationSetupDialog({
     setStatus(null);
     setRefusal(null);
     setAddingBackup(false);
-    if (loaded !== null) restoreServersDraft(loaded);
+    restoreServersDraft(loaded);
   }, [open, loaded, restoreServersDraft]);
 
   /*
@@ -767,7 +816,13 @@ export function StationSetupDialog({
    * baseline `serversDirty` measures against, so pressing it necessarily clears the dot.
    */
   const revertServers = (): void => {
-    if (loaded === null) return;
+    /*
+      ⚠ `MODAL-TRUTH-01 · DELTA A` — NO `if (loaded === null) return` HERE EITHER. It is
+      unreachable today (`serversDirty` is false without a `loaded`, so this button is not
+      drawn), and it is deleted anyway: it is the second copy of the early return that made
+      the close-discard do nothing on a bridge-less station, and a dormant copy of a defect is
+      how the defect comes back. `restoreServersDraft` answers `null` itself now.
+    */
     restoreServersDraft(loaded);
     setRefusal(null);
     setStatus(null);
