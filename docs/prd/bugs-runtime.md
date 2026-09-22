@@ -12150,3 +12150,120 @@ a wire change does not ride a renderer bugfix commit.
 re-measure against the CasparCG version the install actually runs — `2.5.0-stable` behaviour is
 not assumed from a fork's. Cross-refs [[C-040]] (the same recon), [[C-041]] (the audit-path flag
 found in the same run).
+
+## [~] B-254 — the Station setup dismissal question turned leaving into a two-step act whose first step looked exactly like the defect it guarded ⟨priority: medium — it made a FIXED defect read as unfixed to the owner, which is worse than the original: it spends the operator's trust in the surface and in the fix⟩ — FILED AND CLOSED IN CODE 2026-09-22 by `MODAL-TRUTH-01 · DELTA A`
+
+**Repro (owner, 2026-09-22, after [[B-251]] shipped):** open Station setup ▸ Servers, change a
+field, close without saving, reopen — the edit is still there.
+
+**What it actually was, measured in Chromium before anything changed.** [[B-251]]'s
+close-discard is sound: every pane and both dismissal paths discard correctly, reopening at
+the applied value — Servers host, the serve host, the strategy select, the Layers row name and
+the Live sources band, via the ✕ and via Escape. The question was `B-240`'s confirm:
+
+```
+type a host → press ✕ → the question opens → press Escape (or its `Cancel`)
+           → Station setup is STILL OPEN, with the edit still in it
+```
+
+From the operator's seat that is indistinguishable from "I closed it without saving and my
+edit survived". **A guard whose own cancel path reproduces the symptom it guards is not a
+guard**, and this one had the additional cost that it made a landed fix look like a live
+defect.
+
+**Why removing it is `B-240`'s own argument rather than an overrule.** `B-240` held — citing
+`R-017` — that a confirmation met on every exit is one an operator learns to dismiss without
+reading. Its premise was that leaving LOST something silently. After [[B-251]] it does not:
+closing discards, always, which is the conventional contract for a modal with an explicit
+Save, and `Revert` is still the named visible discard for a draft the operator wants gone
+without leaving. The rail's dirty dot and count are now the whole of the warning, and they are
+on every tab before he reaches for the ✕. **Everything else in `B-240` stands** — one name for
+discard, one for commit, never a `Close` beside an `Apply`, and ONE dismissal path.
+
+**Acceptance:**
+
+- WHEN the dialog is dismissed with an unapplied draft THEN it closes, no confirmation
+  appears, and reopening shows the applied configuration
+- WHEN nothing is unapplied THEN it closes the same way — one behaviour, not two
+- AND the rail marks every section holding a draft, on every tab
+
+**Notes:** the supersession argument lives in
+`openspec/changes/station-setup/specs/runtime-ui/spec.md`, replacing the requirement rather
+than sitting beside it. Cross-refs [[B-251]] (the fix this was hiding), [[B-255]] (the test
+lesson it taught), `B-240` (the decision amended).
+
+## [x] B-255 — a green test over a live defect: Part A's dom spec modelled the operator's sequence instead of driving it ⟨priority: medium — it is the failure the prompt that found it was named for, and it is a rule about how this repo writes tests rather than a defect in one⟩ — FILED AND CLOSED IN PROCESS 2026-09-22 by `MODAL-TRUTH-01 · DELTA A`
+
+**What happened.** [[B-251]]'s fix shipped with a dom spec that toggled the dialog's `open`
+prop on one mounted instance. That is genuinely the mechanism `App` uses — it keeps
+`StationSetupDialog` mounted and flips `open` — and the spec was red before the change and
+green after. It was still blind to what the owner saw, because **it never pressed the ✕**: the
+dismissal raised a question ([[B-254]]), and backing out of that question left the dialog open
+with the edit in it. The spec asserted the right thing about the wrong path.
+
+**The rule, stated so it outlives this instance.** A test that reproduces the MECHANISM a
+change touches is not the same as a test that drives the SEQUENCE an operator performs. Where
+a defect is reported as a lifecycle — _open, do this, close, reopen_ — the spec that can fail
+on it drives that lifecycle end to end, through the affordances the operator actually presses,
+and asserts on what the surface SAYS. Golden rule 12 already says a green gate is no evidence
+about anything that renders; this is the same argument one notch finer: **a green
+component-level test is no evidence about a path the component is not the only thing on.**
+
+**What closed it.** `apps/runtime/tests/e2e/station-setup-draft-discard.spec.ts` — open, edit,
+close via the ✕, reopen, read the field, on two panes, asserting additionally that no
+confirmation dialog appears at any dismissal. It went RED on the shipped build with _"a
+confirmation dialog appeared on the way out"_, which is precisely the evidence the dom spec
+could not produce. The dom spec is KEPT beside it: it still pins the state-level discard, and
+its own header now says which half each one owns.
+
+**Notes:** the owner's `DELTA A3` named this before it was found — _"a harness that cannot
+express the bug must not be copied"_. Recorded as a bug rather than a note because it cost a
+round trip and a false "done". Cross-refs [[B-251]], [[B-254]], and golden rule 12 in
+`CLAUDE.md`.
+
+## [~] B-256 — the Station setup discard did nothing on a console whose bridge had NEVER answered, because `loaded` was null and the discard was guarded on it ⟨priority: high — it is a FIXED defect that stayed live on exactly the stations most likely to have it: a console whose bridge is down is the one an operator opens Station setup to diagnose⟩ — FILED AND CLOSED IN CODE 2026-09-22 by `MODAL-TRUTH-01 · DELTA A`
+
+**Repro (owner, 2026-09-22, after [[B-254]] shipped):** «هنوز تب servers ایراد داره ولی live
+sources درسته الان» — Live sources reverts to the stored values on close and reopen; Servers
+still shows the temporary ones.
+
+**The split he noticed IS the diagnosis.** Live sources and Layers unmount with the dialog and
+reset for free. The Servers fields live in the dialog's own `useState` and are restored from
+`loaded` — what the bridge last stated — and the close-discard read
+`if (loaded !== null) restoreServersDraft(loaded)`. On a console whose bridge has never
+answered, `loaded` is `null` from boot to close, so that branch does **nothing at all**. His
+own screenshot two messages earlier is that station: `not read yet`, `not configured`, `No
+health reading from the bridge yet`.
+
+**🔴 Why the test written for exactly this missed it, which is the half worth keeping.**
+[[B-251]] shipped with a spec named _"the discard does NOT wait on the bridge: a `config()`
+that never answers"_. It lets the FIRST read land and only then takes the bridge away — so
+`loaded` holds a config and the discard has something to restore to. **A bridge that goes away
+and a bridge that was never there are different states of the same variable**, and the spec
+covered the wrong one while being named for the right one. The same shape as [[B-255]] one
+layer down: the test asserted the right thing about the wrong condition.
+
+**The fix.** `null` is an ANSWER, not a reason to do nothing: nothing is in force, so the
+honest state is the one a first open shows. That state is declared once (`UNREAD_SERVERS`) and
+read in three places — the initial `useState`, the close-discard, and the backup draft a
+station with no `servers.B` is offered — and the decision moved INSIDE `restoreServersDraft`,
+which is what makes it impossible to forget at a call site. `revertServers` carried the same
+early return; it is unreachable today (`serversDirty` is false without a `loaded`, so the
+button is not drawn) and was deleted anyway, because a dormant copy of a defect is how the
+defect comes back.
+
+**Acceptance:**
+
+- WHEN the bridge has never answered AND the operator edits a Servers field, closes and
+  reopens THEN the field shows what a first open shows, not the edit
+- AND the same holds when the bridge answered once and then went away
+- AND no call site decides what `null` means — the restore does
+
+**Notes:** the object is TYPED, not `as const`: the first spelling's literal types flowed into
+`useState` as `useState<false>` and friends, nine errors, every one of them reported at a
+SETTER rather than at the declaration. Caught by the uncached gate, which is what it is for.
+⚠ A residual, NOT fixed here and deliberately: with no `loaded`, `serversDirty` is false, so
+the rail shows no dirty dot for Servers on a bridge-less station — the operator gets no mark
+that he holds unapplied edits there. It is arguably correct (there is no baseline to be dirty
+against) and changing it would re-open the dirty semantics [[B-254]] just made load-bearing.
+Cross-refs [[B-251]], [[B-254]], [[B-255]].

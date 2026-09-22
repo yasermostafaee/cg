@@ -2920,3 +2920,18 @@ just written a warning about exactly that two paragraphs above. **A pointer is r
 convenience and MEASURED before use — every prefix, every time**, which is what the audit
 command at the head of this file is for. Measured here: `R-067` returned nothing against a
 positive control on `R-066` which returned one hit.
+
+### 2026-09-22 (second entry) — `B-254`, `B-255` and `B-256` taken by `MODAL-TRUTH-01 · DELTA A`
+
+- `B-254` — the Station setup dismissal question made a landed fix read as a live defect,
+  [bugs-runtime.md](bugs-runtime.md).
+- `B-255` — a green test over a live defect: a dom spec that modelled the operator's sequence
+  instead of driving it, [bugs-runtime.md](bugs-runtime.md).
+- `B-256` — the discard did nothing with a null `loaded` on a bridge-less console,
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free at the moment of commit against a positive control on `B-253`, which returned
+one hit.
+
+⇒ **Next free after this session is `B-257`**, **`D-161`**, **`C-042`**, **`R-067`** and
+**`P-051`**.
