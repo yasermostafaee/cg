@@ -74,7 +74,7 @@ describe('C-037 §1 — an unauthenticated socket gets two answers, not every an
 
     const state = await client.ask('s', 'auth.state', undefined);
     expect(state.error, 'auth.state must answer an unsigned socket').toBeUndefined();
-    expect(state.payload).toEqual({ mode: 'playout', principal: null });
+    expect(state.payload).toEqual({ mode: 'playout', principal: null, status: 'absent' });
 
     const out = await client.ask('o', 'auth.sign-out', undefined);
     expect(out.error, 'auth.sign-out must answer an unsigned socket').toBeUndefined();
@@ -228,6 +228,69 @@ describe('C-037 §1 — THE CENSUS: every route, not a sample', () => {
     // The two shapes that must NOT be mistaken for the door.
     expect(openToUnauthenticated('stack.take')).toBe(false);
     expect(openToUnauthenticated('authoring.something')).toBe(false);
+  });
+});
+
+describe('C-037 — `auth.state` answers with THE GATE VERDICT, never a second one', () => {
+  /**
+   * 🔴 **THE DEFECT THIS PINS WAS MEASURED, NOT IMAGINED.**
+   *
+   * `auth.state` first reported `session.token.principal` directly. With intents already
+   * refused for an expired token, the same socket's read still answered a FULL PRINCIPAL — so
+   * a console would have said _signed in as ‹name›_ while every verb said _you are not signed
+   * in_. A surface claiming a state the system does not hold is the defect class this whole
+   * change exists to remove, and a second derivation of "signed in" is how it got in.
+   *
+   * Golden rule 6, in one spec: the request gate and this read ask ONE predicate.
+   */
+  it('🔴 an EXPIRED session reads `invalid` here, while still naming WHOSE it was', async () => {
+    let clock = Date.now();
+    const started = await startAuthedBridge({ playoutAuthOptions: { now: () => clock } });
+    handle = started.handle;
+    playout = started.playout;
+    const client = await openClient(handle);
+
+    const issued = await playout.issueToken({ expEpochSec: Math.floor(clock / 1000) + 3600 });
+    const signedIn = await client.authenticate('a', issued.token);
+    expect(signedIn.error).toBeUndefined();
+
+    // The positive control: while it holds, the read says so.
+    const live = (await client.ask('s1', 'auth.state', undefined)).payload as {
+      status: string;
+      principal: { name: string } | null;
+    };
+    expect(live.status).toBe('signed-in');
+    expect(live.principal?.name).toBeTruthy();
+
+    // Past `exp` AND past the ±60 s tolerance.
+    clock += 3600_000 + 120_000;
+
+    const refused = await client.ask('t', 'stack.take', { itemId: 'nope' });
+    expectRefusedWith(refused.error, AUTH_REQUIRED_REFUSAL, 'an expired session drove a verb');
+
+    const after = (await client.ask('s2', 'auth.state', undefined)).payload as {
+      status: string;
+      principal: { name: string } | null;
+    };
+    expect(after.status, 'the read disagreed with the gate that refused the verb').toBe('invalid');
+    /*
+      ⭐ …and the principal is STILL reported. The surface has to be able to say WHOSE session
+      ended — "signed out" and "your session ended" send the operator to the same control by
+      two different routes, and only the second explains why the console stopped working.
+    */
+    expect(after.principal?.name, 'an expired session forgot whose it was').toBe(
+      live.principal?.name,
+    );
+  });
+
+  it('a bridge with auth OFF reads `off`, and holds no principal to report', async () => {
+    handle = await createBridge({ port: 0, connection: deadConnection() });
+    const client = await openClient(handle);
+    expect((await client.ask('s', 'auth.state', undefined)).payload).toEqual({
+      mode: 'off',
+      principal: null,
+      status: 'off',
+    });
   });
 });
 

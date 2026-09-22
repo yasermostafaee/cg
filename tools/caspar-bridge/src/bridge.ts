@@ -8,6 +8,7 @@ import {
   AuthSignOutChannel,
   AuthStateChannel,
   type AuthState,
+  type AuthStatus,
   type WsAuthFrame,
   ConnectionsConfigChangedChannel,
   ConnectionsConfigChannel,
@@ -134,6 +135,7 @@ import {
 } from './source-assignments-store.js';
 import {
   hostsUnableToFetchTemplates,
+  isLoopbackHost,
   templateServeUnreachableWarning,
   type TemplateServeOverride,
 } from './template-http-server.js';
@@ -531,16 +533,12 @@ export function refusedWhileLocked(route: Route, req: unknown): boolean {
  * ADR 0010 rule 4 spells both — _"a never-authenticated socket gets `bridge.capabilities`
  * and the `auth.*` door, nothing else"_, while an expired one _"refuses NEW operator intents
  * … `read` routes keep answering"_.
+ *
+ * ⚠ It IS `@cg/shared-ipc`'s `AuthStatus`, aliased rather than redeclared: the same four
+ * names travel on `auth.state`, and two spellings of one verdict is how a surface comes to
+ * claim a state the gate does not hold.
  */
-export type AuthGateState =
-  /** This bridge does not authenticate. Today, byte for byte. */
-  | 'off'
-  /** A verified, unexpired, unrevoked principal is on this socket. */
-  | 'signed-in'
-  /** A principal WAS established and no longer holds — expired, or its `jti` revoked. */
-  | 'invalid'
-  /** No `auth` frame has ever been accepted on this socket. */
-  | 'absent';
+export type AuthGateState = AuthStatus;
 
 /**
  * ⭐ **THE DOOR ADR 0010 RULE 4 LEAVES OPEN, spelled once.**
@@ -593,15 +591,25 @@ export function refusedByAuth(route: Route, state: AuthGateState): boolean {
  * change.
  */
 export function authGateState(
-  session: AuthSession,
+  session: AuthSession | null,
   playoutAuth: PlayoutAuth | null,
 ): AuthGateState {
   if (playoutAuth === null) return 'off';
-  const held = session.token;
+  // No session at all is a request outside a socket — `auth.state` reached from a bare route
+  // table in a census, for instance. It has presented nothing, which is `absent`.
+  const held = session?.token ?? null;
   if (held === null) return 'absent';
   if (playoutAuth.isExpired(held.expEpochSec)) return 'invalid';
-  if (playoutAuth.isRevoked(held.jti)) return 'invalid';
+  /*
+    ⚠ **BEFORE the revocation check, and that order is load-bearing.** Written the other way
+    round it was a trap door: the poller is kicked only from here, so the moment a station's
+    last signed-in socket went REVOKED nothing would ever poll again — the list would freeze
+    at the verdict that froze it, and an operator un-revoked on the Playout could not be let
+    back in by any token they already held. Refreshing the bearer for any token that VERIFIED
+    and has not expired keeps the bridge able to learn it was wrong.
+  */
   playoutAuth.noteLiveToken(held.rawToken);
+  if (playoutAuth.isRevoked(held.jti)) return 'invalid';
   return 'signed-in';
 }
 
@@ -880,6 +888,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       ? { sourceAssignmentsPath: options.sourceAssignmentsPath }
       : {}),
     auth,
+    authState: (session) => authGateState(session, playoutAuth),
   });
 
   const wss = new WebSocketServer({
@@ -914,7 +923,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     in the ADR as NOT adopted now and as a candidate golden rule once auth ships; this line is
     what makes the interim state visible rather than assumed.
   */
-  if (playoutAuth === null && host !== '127.0.0.1' && host !== 'localhost' && host !== '::1') {
+  if (playoutAuth === null && !isLoopbackHost(host)) {
     process.stderr.write(
       `[caspar-bridge] ⚠ control WebSocket is LAN-EXPOSED on ${host}:${String(port)} with ` +
         `auth OFF — any machine that can reach this port can drive this station. Permitted ` +
@@ -1045,6 +1054,9 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     },
     async close() {
       for (const client of wss.clients) client.terminate();
+      // `C-037` — stop the D9 tick with the bridge. It is `unref`'d, so it never held the
+      // process open; clearing it is what keeps a test suite from leaving one per bridge.
+      playoutAuth?.dispose();
       await runtime.stop();
       await new Promise<void>((resolve, reject) => {
         wss.close((err) => (err ? reject(err) : resolve()));
@@ -1209,7 +1221,7 @@ async function handleAuthFrame(
     send(socket, {
       type: 'response',
       id: frame.id,
-      payload: { mode: 'off', principal: null } satisfies AuthState,
+      payload: { mode: 'off', principal: null, status: 'off' } satisfies AuthState,
     });
     return;
   }
@@ -1254,7 +1266,11 @@ async function handleAuthFrame(
   send(socket, {
     type: 'response',
     id: frame.id,
-    payload: { mode: 'playout', principal: result.token.principal } satisfies AuthState,
+    payload: {
+      mode: 'playout',
+      principal: result.token.principal,
+      status: 'signed-in',
+    } satisfies AuthState,
   });
 }
 
@@ -1383,6 +1399,12 @@ export function buildRoutes(
      * socket's answer.
      */
     auth?: PlayoutSettings;
+    /**
+     * `C-037` — THE ONE PREDICATE, injected so `auth.state` answers with the same verdict the
+     * gate uses rather than deriving a second one. Defaults to `off`, which is what a bridge
+     * built with no Playout link is.
+     */
+    authState?: (session: AuthSession | null) => AuthGateState;
   } = {},
 ): Map<string, Route> {
   // NAMED, not positional. Four optional string paths in a row is a signature
@@ -1390,6 +1412,7 @@ export function buildRoutes(
   // other's file.
   const { persistPath, fixedLayersPath, sourceCatalogPath, sourceAssignmentsPath } = paths;
   const { mode: authMode, playout: playoutUrls } = paths.auth ?? AUTH_OFF;
+  const authState = paths.authState ?? ((): AuthGateState => 'off');
   /*
     `B-229` — `lock` is the THIRD ARGUMENT AND IT IS REQUIRED. A new channel cannot be
     routed without classifying it, which is what keeps "the lock refuses everything"
@@ -1450,10 +1473,20 @@ export function buildRoutes(
       intent: the lock refuses everything (the owner's no-carve-out answer) and signing out is
       something the operator does, not something they read.
     */
-    route(AuthStateChannel, 'read', () => ({
-      mode: authMode,
-      principal: currentAuthSession()?.token?.principal ?? null,
-    })),
+    route(AuthStateChannel, 'read', () => {
+      /*
+        🔴 IT ASKS THE ONE PREDICATE. It used to report `token?.principal` directly, and
+        that was a lie a spec MEASURED: with intents already refused for a revoked `jti`, this
+        read still answered a full principal. The principal is still reported — a surface has
+        to be able to say WHOSE session ended — but the verdict beside it is the gate's own.
+      */
+      const session = currentAuthSession();
+      return {
+        mode: authMode,
+        principal: session?.token?.principal ?? null,
+        status: authState(session),
+      };
+    }),
     route(AuthSignOutChannel, 'operator', () => {
       const session = currentAuthSession();
       const leaving = session?.token?.principal ?? null;

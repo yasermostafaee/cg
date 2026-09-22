@@ -130,6 +130,8 @@ export class PlayoutAuth {
   #polling = false;
   /** Any live compact token, used solely as the D9 bearer. */
   #bearer: string | null = null;
+  /** The background tick. Armed by the first live token, cleared by {@link dispose}. */
+  #ticker: ReturnType<typeof setInterval> | null = null;
   /** Count of D9 requests actually issued — the positive control a cadence test needs. */
   #pollCount = 0;
 
@@ -247,7 +249,36 @@ export class PlayoutAuth {
    */
   noteLiveToken(rawToken: string): void {
     this.#bearer = rawToken;
+    this.#armTicker();
     this.#maybePoll();
+  }
+
+  /**
+   * 🔴 **THE BACKGROUND TICK, and why a request-driven poll was not enough.**
+   *
+   * `C-037`'s acceptance says a revoked `jti` is refused _"within 60 s"_. Kicking the poller
+   * only from the request path delivers something weaker and easy to mistake for it: an upper
+   * bound on FREQUENCY, not a bound on LATENCY. An idle console sends nothing, so nothing
+   * polls — and the first intent after a quiet spell is then decided against a stale list and
+   * ALLOWED, with the refresh arriving just behind it. One command by a revoked operator is
+   * exactly the thing the bullet promises will not happen.
+   *
+   * ⚠ `unref()`d, so it never holds the process open, and armed only once a principal exists
+   * — with nobody signed in there is no verdict a revocation could change, and a bridge with
+   * auth off never arms it at all.
+   */
+  #armTicker(): void {
+    if (this.#ticker !== null) return;
+    this.#ticker = setInterval(() => {
+      this.#maybePoll();
+    }, REVOCATION_POLL_MS);
+    this.#ticker.unref();
+  }
+
+  /** Stop the background tick. Called from the bridge's own `close()`. */
+  dispose(): void {
+    if (this.#ticker !== null) clearInterval(this.#ticker);
+    this.#ticker = null;
   }
 
   /**

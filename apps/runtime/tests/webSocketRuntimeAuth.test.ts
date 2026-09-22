@@ -190,7 +190,17 @@ class FakeBridge {
       if (this.authAnswer.kind === 'refuse') {
         return { type: 'response', id: frame.id, error: { message: this.authAnswer.message } };
       }
-      const state: ipc.AuthState = { mode: 'playout', principal: this.authAnswer.principal };
+      /*
+        `status` is the BRIDGE's own verdict, carried on `auth.state` so that a surface cannot
+        derive a second one (golden rule 6). A reply the bridge really sends always has it, so
+        a stub that omitted it would be testing a frame the bridge never writes — and the
+        schema, correctly, refuses it.
+      */
+      const state: ipc.AuthState = {
+        mode: 'playout',
+        principal: this.authAnswer.principal,
+        status: 'signed-in',
+      };
       return { type: 'response', id: frame.id, payload: state };
     }
     if (frame.type !== 'request') return null;

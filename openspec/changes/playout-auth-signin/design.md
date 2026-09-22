@@ -209,6 +209,44 @@ on success and a sentence on refusal — so the console needs no second correlat
 
 ---
 
+## 11. What the acceptance bullets promised that the first implementation did not deliver
+
+Four things the specs MEASURED after the first pass, recorded because each is a shape rather
+than a slip.
+
+**`auth.state` reported a principal the gate had already stopped accepting.** It read
+`session.token.principal` directly, so with intents already refused for an expired or revoked
+token the same socket's read still answered a full principal — a console would have said
+_signed in as ⟨name⟩_ while every verb said _you are not signed in_. It now carries `status`,
+the gate's own verdict from the one predicate, beside the principal. The principal is still
+reported, because a surface has to be able to say WHOSE session ended.
+
+**The revocation poll was an upper bound on FREQUENCY, not a bound on LATENCY.** Kicked only
+from the request path, it never ran on an idle console — so the first intent after a quiet
+spell was decided against a stale list and ALLOWED. One command by a revoked operator is
+exactly what the bullet promises will not happen, so there is now an `unref`'d background tick
+armed by the first live principal.
+
+**A revoked socket froze the list it was revoked by.** `authGateState` returned `invalid`
+before refreshing the D9 bearer, so on a single-console station nothing would ever poll again
+and an operator un-revoked on the Playout could not be let back in. The bearer is now
+refreshed for any token that verified and has not expired.
+
+**`operatorSub()` was exported with zero call sites.** The verified id reached the record on
+the identity rows alone, while the bullet says the audit record carries `sub` beside the name.
+Fixed at `#recordAudit` — the one place a row becomes an entry — not at the seven sites that
+name the actor.
+
+⚠ **Two things that are NOT defects and are recorded so they are not "fixed" later.**
+Publishes keep flowing to an EXPIRED or REVOKED socket: ADR 0010 says both refuse new intents
+while _"reads keep answering"_, and a stream of state the operator was already entitled to is a
+read. And `jose`'s JWKS cooldown is anchored to the last FETCH rather than to the last unknown
+`kid`, so on a busy bridge an unknown-`kid` re-fetch may be deferred behind ordinary cache
+refreshes — safe, because the contract publishes a key before signing with it and the cache
+ages out at the contract's own hour, but it is not word-for-word what ADR 0010 rule 1 says.
+
+---
+
 ## 10. The non-loopback warning that `C-037` calls "existing"
 
 `C-037`'s acceptance says _"the existing warning prints"_. **Measured: there was no such warning.**

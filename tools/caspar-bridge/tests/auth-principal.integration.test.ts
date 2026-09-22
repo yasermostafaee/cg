@@ -155,6 +155,9 @@ describe("C-037 — a verified token seats a principal, in the operator's own na
         expiresAt: new Date(expSecOf(issued.claims) * 1000).toISOString(),
         nameTruncated: false,
       },
+      // The gate's own verdict, carried beside the principal so that a surface reading this
+      // cannot reach a different answer from the same facts (golden rule 6).
+      status: 'signed-in',
     });
 
     /*

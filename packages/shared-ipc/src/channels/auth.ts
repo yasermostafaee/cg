@@ -75,11 +75,45 @@ export type PlayoutPrincipal = z.infer<typeof PlayoutPrincipalSchema>;
 export const AuthModeSchema = z.enum(['off', 'playout']);
 export type AuthMode = z.infer<typeof AuthModeSchema>;
 
+/**
+ * 🔴 **WHAT THE BRIDGE'S ONE AUTH PREDICATE SAYS ABOUT THIS SOCKET.**
+ *
+ * The same four names the gate decides with, carried on the wire so that a surface cannot
+ * reach a different answer from the same facts. Golden rule 6: the request gate, the publish
+ * gate and this read ask ONE predicate, and it is the bridge's.
+ */
+export const AuthStatusSchema = z.enum([
+  /** This bridge does not authenticate. */
+  'off',
+  /** Auth is on and a verified, unexpired, unrevoked principal is on this socket. */
+  'signed-in',
+  /** A principal WAS established and no longer holds — expired, or its `jti` revoked. */
+  'invalid',
+  /** No token has ever been accepted on this socket. */
+  'absent',
+]);
+export type AuthStatus = z.infer<typeof AuthStatusSchema>;
+
 /** What the bridge holds for THIS socket right now. */
 export const AuthStateSchema = z.object({
   mode: AuthModeSchema,
-  /** `null` when auth is off, or on but this socket has not presented a valid token. */
+  /**
+   * 🔴 **WHAT THIS SOCKET PRESENTED — WHICH IS NOT THE SAME AS "IS IT GOOD".**
+   *
+   * It survives expiry and revocation on purpose, so a surface can say WHOSE session ended
+   * rather than only that one did. `null` when auth is off, or when nothing was ever accepted.
+   *
+   * ⚠ **A reader must consult {@link AuthStateSchema.shape.status} before treating this as
+   * "signed in".** It was briefly the only field, and that was a defect found by measurement:
+   * with intents already refused for a revoked `jti`, this read still answered a full
+   * principal, so the console would have said _signed in as ‹name›_ while every verb said
+   * _you are not signed in_. A surface claiming a state the system does not hold is the defect
+   * class this whole change exists to remove; a second derivation of "signed in" is how it got
+   * in.
+   */
   principal: PlayoutPrincipalSchema.nullable(),
+  /** The bridge's own verdict, from the one predicate every gate asks. */
+  status: AuthStatusSchema,
 });
 export type AuthState = z.infer<typeof AuthStateSchema>;
 
