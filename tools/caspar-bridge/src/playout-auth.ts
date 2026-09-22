@@ -1,0 +1,324 @@
+import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
+import { z } from 'zod';
+import {
+  AUTH_TOKEN_EXPIRED,
+  AUTH_TOKEN_INVALID,
+  AUTH_TOKEN_WRONG_STATION,
+  MAX_ACTOR_LENGTH,
+  normalizeActor,
+  PlayoutChannelsSchema,
+  type PlayoutChannels,
+  type PlayoutPrincipal,
+} from '@cg/shared-ipc';
+import type { PlayoutAuthConfig } from './playout-config.js';
+
+/**
+ * 🔴 `C-037` / ADR 0010 rule 1 — **OFFLINE VERIFICATION OF A PLAYOUT-ISSUED TOKEN.**
+ *
+ * ES256 against the Playout's JWKS, `iss` byte-equal to the configured issuer, `aud`
+ * containing the configured audience, ±60 s clock tolerance. Nothing here ever contacts the
+ * Playout to ask whether a token is good — the signature answers that — which is the whole
+ * reason a Playout outage cannot take the station off air.
+ *
+ * ── THE TWO NETWORK READS, AND WHY NEITHER IS IN THE PATH TO AIR ────────────
+ *
+ * 1. **The JWKS** (D3), fetched by `jose`'s remote key set: on first use, when the cache ages
+ *    past the contract's `max-age`, and on an unknown `kid` — the last at most once per 60 s
+ *    ({@link RemoteJWKSetOptions.cooldownDuration}). It happens while VERIFYING a sign-in,
+ *    which is a person typing a password, not a take.
+ * 2. **The revocation list** (D9): polled in the BACKGROUND, at most once per 60 s, and read
+ *    SYNCHRONOUSLY from the last answer at gate time. 🔴 The gate never awaits it. A gate that
+ *    did would put the Playout's reachability in the path to air, which is the coupling this
+ *    entire design exists to avoid — and golden rule 8's rule, one axis out: a Playout outage
+ *    never changes a verdict, it only stops the verdict being updated.
+ *
+ * ⚠ **Raw tokens live in memory and nowhere else.** They are never written to the audit log,
+ * never to a config file, never to stderr. The one thing held beyond verification is the
+ * compact token itself, because D9 takes `Authorization: Bearer <CG token>` and the bridge has
+ * no credential of its own — see {@link PlayoutAuth.noteLiveToken}.
+ */
+
+/** The claims the contract requires, validated AFTER `jose` has checked the signature. */
+const ClaimsSchema = z.object({
+  sub: z.string().min(1),
+  name: z.string().min(1),
+  roles: z.array(z.string()).min(1),
+  cg_channels: PlayoutChannelsSchema,
+  exp: z.number().int(),
+  jti: z.string().min(1).optional(),
+});
+
+/** What a socket holds once a token has been accepted. */
+export interface VerifiedToken {
+  /** What the CONSOLE is told — no `jti`, no raw token, no credential of any kind. */
+  readonly principal: PlayoutPrincipal;
+  /** `jti`, for the D9 revocation check. Internal: never leaves the bridge. */
+  readonly jti: string | null;
+  /** `exp` in epoch seconds, re-checked per request so a mid-session expiry is caught. */
+  readonly expEpochSec: number;
+  /** The compact token, held solely as the D9 bearer. Never logged, never persisted. */
+  readonly rawToken: string;
+}
+
+/** Either an accepted token or the sentence the console should show. */
+export type VerifyResult = { ok: true; token: VerifiedToken } | { ok: false; refusal: string };
+
+/** How many seconds of clock skew the contract allows on `exp` / `nbf` / `iat`. */
+const CLOCK_TOLERANCE_SEC = 60;
+
+/** The contract's `Cache-Control: public, max-age=3600` on the JWKS, mirrored as the cache age. */
+const JWKS_CACHE_MAX_AGE_MS = 3_600_000;
+
+/** ADR 0010 rule 1 — an unknown `kid` re-fetches the JWKS at most once per 60 s. */
+export const JWKS_COOLDOWN_MS = 60_000;
+
+/** ADR 0010 rule 5 — D9 is polled at most once per 60 s. */
+export const REVOCATION_POLL_MS = 60_000;
+
+/** A short bound on both reads: neither may hang a sign-in or a background tick. */
+const HTTP_TIMEOUT_MS = 5000;
+
+const RevokedSchema = z.object({
+  revoked: z.array(z.object({ jti: z.string(), exp: z.number().int() })),
+});
+
+/**
+ * ⭐ **THE ONE PLACE A NAME BECOMES THE NAME THE RECORD WILL CARRY.**
+ *
+ * `MAX_ACTOR_LENGTH` is what the contract's `name ≤ 64` was cut to match, and ADR 0010 records
+ * as still open that a longer Playout display name would be SILENTLY shortened. It is not
+ * silent here: the flag travels with the principal, the bridge writes it once on the `sign-in`
+ * row, and the console can say so. Trimmed on both sides of the cut for the same reason
+ * `normalizeActor` does — a cut that lands mid-space leaves a name ending in whitespace.
+ */
+export function truncateActorName(raw: string): { name: string; truncated: boolean } {
+  const trimmed = raw.trim();
+  if (trimmed.length <= MAX_ACTOR_LENGTH) return { name: trimmed, truncated: false };
+  return { name: trimmed.slice(0, MAX_ACTOR_LENGTH).trim(), truncated: true };
+}
+
+/** `aud` may be a string or an array; the contract says it must EQUAL or CONTAIN the audience. */
+function audienceMatches(aud: unknown, expected: string): boolean {
+  if (typeof aud === 'string') return aud === expected;
+  if (Array.isArray(aud)) return aud.some((a) => a === expected);
+  return false;
+}
+
+export interface PlayoutAuthOptions {
+  /** Injected in tests so a suite never reaches a real network. Defaults to global `fetch`. */
+  readonly fetchImpl?: typeof fetch;
+  /** Injected in tests to drive expiry and the poll cadence. Defaults to `Date.now`. */
+  readonly now?: () => number;
+}
+
+/**
+ * The bridge's Playout-facing authority: verify tokens, and know which `jti`s are revoked.
+ *
+ * One per bridge process, shared by every socket. Sockets hold their own {@link VerifiedToken};
+ * this object holds only what is common — the key set and the revocation list.
+ */
+export class PlayoutAuth {
+  readonly #config: PlayoutAuthConfig;
+  readonly #now: () => number;
+  readonly #fetch: typeof fetch;
+  readonly #jwks: ReturnType<typeof createRemoteJWKSet>;
+
+  /** The LAST list the bridge saw. Never cleared by a failure — ADR 0010 rule 5. */
+  #revoked: ReadonlySet<string> = new Set();
+  #revokedEtag: string | null = null;
+  #lastPollMs = Number.NEGATIVE_INFINITY;
+  #polling = false;
+  /** Any live compact token, used solely as the D9 bearer. */
+  #bearer: string | null = null;
+  /** Count of D9 requests actually issued — the positive control a cadence test needs. */
+  #pollCount = 0;
+
+  constructor(config: PlayoutAuthConfig, options: PlayoutAuthOptions = {}) {
+    this.#config = config;
+    this.#now = options.now ?? ((): number => Date.now());
+    this.#fetch = options.fetchImpl ?? ((...args) => fetch(...args));
+    this.#jwks = createRemoteJWKSet(new URL(config.jwksUrl), {
+      cooldownDuration: JWKS_COOLDOWN_MS,
+      cacheMaxAge: JWKS_CACHE_MAX_AGE_MS,
+      timeoutDuration: HTTP_TIMEOUT_MS,
+    });
+  }
+
+  /** D9 requests issued since boot. Exported for the cadence test's positive control. */
+  get pollCount(): number {
+    return this.#pollCount;
+  }
+
+  /**
+   * Verify a compact JWT and reduce it to a principal, or to the sentence to show.
+   *
+   * The order is the contract's own (§3.5): `kid` known → signature → `iss` equal → `aud`
+   * contains → `exp`/`nbf` within tolerance → `name` non-empty → `roles` non-empty →
+   * `cg_channels` well-formed. The first five are `jose`'s; the last three are this side's,
+   * because a signature says the Playout wrote the token and says nothing about whether the
+   * token says what the contract requires.
+   */
+  async verify(token: string): Promise<VerifyResult> {
+    let payload: Record<string, unknown>;
+    try {
+      const verified = await jwtVerify(token, this.#jwks, {
+        issuer: this.#config.issuer,
+        clockTolerance: CLOCK_TOLERANCE_SEC,
+        algorithms: ['ES256'],
+        currentDate: new Date(this.#now()),
+      });
+      payload = verified.payload as Record<string, unknown>;
+    } catch (err) {
+      return { ok: false, refusal: refusalForVerifyError(err) };
+    }
+
+    /*
+      ⚠ `aud` is checked HERE rather than through `jwtVerify`'s `audience` option, and the
+      difference is the sentence the operator gets. `jose` raises the same
+      `JWTClaimValidationFailed` for `aud` as for a dozen other claims, and telling them apart
+      by a string field is exactly the kind of brittle read this file should not contain. A
+      wrong `aud` means the token was minted for something other than CG Control — the same
+      fact as a wrong `iss` — so it gets the same sentence, decided here where the claim is
+      named in code.
+    */
+    if (!audienceMatches(payload['aud'], this.#config.audience)) {
+      return { ok: false, refusal: AUTH_TOKEN_WRONG_STATION };
+    }
+
+    const claims = ClaimsSchema.safeParse(payload);
+    if (!claims.success) return { ok: false, refusal: AUTH_TOKEN_INVALID };
+
+    const jti = claims.data.jti ?? null;
+    if (jti !== null && this.#revoked.has(jti)) {
+      return { ok: false, refusal: AUTH_TOKEN_INVALID };
+    }
+
+    /*
+      ⭐ **REDUCED ONCE, HERE, BY THE CANONICAL REDUCER.**
+
+      `normalizeActor` is what every other name entering this process goes through, and golden
+      rule 6 says to reuse the one predicate rather than derive a second that agrees today. The
+      Playout is outside this process exactly as a browser is. Doing it HERE and not at the ALS
+      means the name the console is shown and the name the record writes are the SAME STRING,
+      not two reductions of one claim that could differ after an edit to either.
+
+      ⚠ {@link truncateActorName} is still called, and only for its FLAG: `normalizeActor`
+      truncates silently and ADR 0010's open note is precisely that silence.
+    */
+    const { truncated } = truncateActorName(claims.data.name);
+    const name = normalizeActor(claims.data.name);
+    if (name === '') return { ok: false, refusal: AUTH_TOKEN_INVALID };
+
+    return {
+      ok: true,
+      token: {
+        principal: {
+          name,
+          sub: claims.data.sub,
+          roles: claims.data.roles,
+          channels: claims.data.cg_channels satisfies PlayoutChannels,
+          expiresAt: new Date(claims.data.exp * 1000).toISOString(),
+          nameTruncated: truncated,
+        },
+        jti,
+        expEpochSec: claims.data.exp,
+        rawToken: token,
+      },
+    };
+  }
+
+  /** Has this token's `jti` been revoked, per the LAST list the bridge saw? Synchronous. */
+  isRevoked(jti: string | null): boolean {
+    return jti !== null && this.#revoked.has(jti);
+  }
+
+  /** Is this token past `exp`, allowing the contract's clock tolerance? Synchronous. */
+  isExpired(expEpochSec: number): boolean {
+    return this.#now() / 1000 > expEpochSec + CLOCK_TOLERANCE_SEC;
+  }
+
+  /**
+   * Offer a live token as the D9 bearer, and kick the poller if it is due.
+   *
+   * ⚠ Called on every successful verify AND on every gate check that finds a valid principal,
+   * so the list keeps updating for as long as anybody is signed in — and stops the moment
+   * nobody is, which is correct: with no principal there is no verdict for a revocation to
+   * change.
+   */
+  noteLiveToken(rawToken: string): void {
+    this.#bearer = rawToken;
+    this.#maybePoll();
+  }
+
+  /**
+   * 🔴 FIRE-AND-FORGET, NEVER AWAITED BY A CALLER ON THE REQUEST PATH.
+   *
+   * Every failure path leaves {@link #revoked} exactly as it was. That is ADR 0010 rule 5 in
+   * one line — _"on a Playout outage the bridge keeps the LAST list it saw"_ — and it is the
+   * reason this method returns `void` and swallows: a caller able to see the error would be a
+   * caller tempted to act on it, and the only correct action is none.
+   */
+  #maybePoll(): void {
+    if (this.#polling) return;
+    if (this.#bearer === null) return;
+    if (this.#now() - this.#lastPollMs < REVOCATION_POLL_MS) return;
+    this.#polling = true;
+    this.#lastPollMs = this.#now();
+    this.#pollCount += 1;
+    void this.#pollRevoked().finally(() => {
+      this.#polling = false;
+    });
+  }
+
+  /** Force a poll now, bypassing the cadence. Tests only — never called on the request path. */
+  async pollRevokedNow(): Promise<void> {
+    if (this.#bearer === null) return;
+    this.#lastPollMs = this.#now();
+    this.#pollCount += 1;
+    await this.#pollRevoked();
+  }
+
+  async #pollRevoked(): Promise<void> {
+    const bearer = this.#bearer;
+    if (bearer === null) return;
+    try {
+      const headers: Record<string, string> = { Authorization: `Bearer ${bearer}` };
+      if (this.#revokedEtag !== null) headers['If-None-Match'] = this.#revokedEtag;
+      const res = await this.#fetch(this.#config.revokedUrl, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+      });
+      // 304 — the list has not changed. Keeping what we have IS the answer.
+      if (res.status === 304) return;
+      if (!res.ok) return;
+      const parsed = RevokedSchema.safeParse(await res.json());
+      if (!parsed.success) return;
+      const etag = res.headers.get('etag');
+      this.#revokedEtag = etag;
+      // Entries prune themselves by `exp` on the Playout; drop stale ones here too so a
+      // bridge that has been up for a week is not carrying last Tuesday's revocations.
+      const nowSec = this.#now() / 1000;
+      this.#revoked = new Set(
+        parsed.data.revoked.filter((r) => r.exp + CLOCK_TOLERANCE_SEC >= nowSec).map((r) => r.jti),
+      );
+    } catch {
+      // Unreachable, timed out, malformed: the last list stands. See the docblock.
+    }
+  }
+}
+
+/**
+ * Map a `jose` failure onto one of the three reason CLASSES the contract's §3.5 names.
+ *
+ * ⚠ Exported so the mapping is testable without a socket, and so there is ONE of it. Three
+ * sentences and not one, because unlike an intent refusal these have three different remedies:
+ * sign in again · check which Playout this console signed in to · nothing the operator can do.
+ */
+export function refusalForVerifyError(err: unknown): string {
+  if (err instanceof joseErrors.JWTExpired) return AUTH_TOKEN_EXPIRED;
+  if (err instanceof joseErrors.JWTClaimValidationFailed) {
+    return err.claim === 'iss' ? AUTH_TOKEN_WRONG_STATION : AUTH_TOKEN_INVALID;
+  }
+  return AUTH_TOKEN_INVALID;
+}

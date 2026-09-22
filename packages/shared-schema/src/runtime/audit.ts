@@ -36,7 +36,43 @@ export const AuditEntrySchema = z.object({
     'set-pass-timing',
     'update-deferred',
     'update-installed',
+    /*
+      🔴 `C-037` — the operator PROVED who they are, or gave it up.
+
+      Two rows the log could not previously hold, and the reason they are worth their own
+      actions rather than a `detail` on something else: every other row answers "what was
+      done to air", and these two answer "who was at the console, from when to when". A
+      next-day question about a take reads the take's `actor`; a next-day question about
+      WHY that name appears at all reads these.
+
+      `sign-in` carries the verified `actorSub`; `sign-out` carries the name that is
+      ending. Neither ever carries a token, a `jti` or a password — the record keeps who
+      and when, and nothing that could be replayed.
+    */
+    'sign-in',
+    'sign-out',
   ]),
+  /**
+   * 🔴 `C-037` / ADR 0010 rule 3 — the token's `sub`: an opaque, stable user id, kept
+   * BESIDE the display name rather than instead of it.
+   *
+   * `B-211`'s settled rule, one level out: a name can be renamed or repeated and an id
+   * cannot, so the record keeps both — the name because that is what a human reads, the id
+   * because that is what survives a rename. Golden rule 11 decides which of the two is in
+   * the SENTENCE an operator reads; this field is the one that is not.
+   *
+   * Absent on every row written while auth is OFF, which is every row written today.
+   */
+  actorSub: z.string().min(1).optional(),
+  /**
+   * ⚠ ADR 0010's open note, recorded rather than assumed: `true` when the Playout's display
+   * name was LONGER than `MAX_ACTOR_LENGTH` and the bridge shortened it, so the record says
+   * that the name above is not the whole name.
+   *
+   * Written ONCE, on the `sign-in` row, and never on the rows that follow — a flag repeated
+   * on every take would be noise about a fact that does not change during a session.
+   */
+  actorNameTruncated: z.literal(true).optional(),
   itemId: IdSchema.optional(),
   templateId: IdSchema.optional(),
   templateHash: Sha256Schema.optional(),

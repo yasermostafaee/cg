@@ -65,6 +65,18 @@ const NON_VERB_ACTIONS = [
   'lock-release',
   'update-deferred',
   'update-installed',
+  /*
+    🔴 `C-037` — the two IDENTITY rows, named here because they are the only audit actions
+    the BRIDGE writes directly rather than through a playout verb.
+
+    They are driven by `tests/auth-principal.integration.test.ts`, which asserts the `sign-in`
+    row carries the verified name and `actorSub`, and that `actorNameTruncated` appears once
+    and only once. Filing them here rather than in `PLAYOUT_VERBS` is the same distinction
+    `CONFIG_VERBS` records: the suite above asserts things — a `slot` on every row, one row per
+    verb after a TAKE — that are properties of PLAYOUT verbs, and neither of these reaches air.
+  */
+  'sign-in',
+  'sign-out',
 ] as const;
 
 it('the "every playout verb" list is COMPLETE — each schema action is driven or named non-verb', () => {

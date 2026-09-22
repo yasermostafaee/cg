@@ -3,6 +3,12 @@ import {
   AppInfoChannel,
   AuditHealthChannel,
   AuditRecentChannel,
+  AUTH_NO_TOKEN,
+  AUTH_REQUIRED_REFUSAL,
+  AuthSignOutChannel,
+  AuthStateChannel,
+  type AuthState,
+  type WsAuthFrame,
   ConnectionsConfigChangedChannel,
   ConnectionsConfigChannel,
   ConnectionsFailoverChannel,
@@ -101,7 +107,7 @@ import {
   type WsResponseFrame,
 } from '@cg/shared-ipc';
 import { DEFAULT_LAYER_POLICY, type LayerPolicy, type LayerSlot } from '@cg/caspar-client';
-import { runAsActor } from './actor-context.js';
+import { currentAuthSession, runAsActor } from './actor-context.js';
 import { CasparRuntime, configuredCasparHosts } from './caspar-runtime.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
 import {
@@ -132,6 +138,16 @@ import {
   type TemplateServeOverride,
 } from './template-http-server.js';
 import { normalizeServeHost } from './serve-host-config.js';
+import { AuthSession } from './auth-session.js';
+import { PlayoutAuth, type PlayoutAuthOptions } from './playout-auth.js';
+import {
+  AUTH_OFF,
+  loadPlayoutFile,
+  PLAYOUT_CONTRACT_VERSION,
+  resolvePlayoutSettings,
+  type PlayoutFlags,
+  type PlayoutSettings,
+} from './playout-config.js';
 
 export interface BridgeOptions {
   /** Bind host. Defaults to loopback (`127.0.0.1`) — enforced at the socket bind. */
@@ -291,6 +307,29 @@ export interface BridgeOptions {
    */
   createMissingConsumers?: boolean;
   /**
+   * 🔴 `C-037` — the Playout link's CLI/explicit layer: the auth MODE and the
+   * `playout.*` addresses. Highest precedence, exactly as `connection` is for `R-010`
+   * — flags are session overrides and win without clobbering the file.
+   *
+   * ⚠ Deliberately NOT part of `ConnectionConfig`: that schema is the
+   * `connections.set-config` REQUEST body, so auth configuration living there would be
+   * rewritable over the very socket this gate exists to protect. See `playout-config.ts`.
+   */
+  playout?: PlayoutFlags;
+  /**
+   * `C-037` — where the `playout.*` group persists (JSON,
+   * `~/.cg-runtime/bridge-playout.json` by default in the CLI). ABSENT is normal: a station
+   * that does not authenticate has no file. PRESENT-but-unusable is a HARD boot failure
+   * (`PlayoutConfigError`) rather than the connection file's warn-and-ignore — a bridge
+   * told to authenticate must never fall back to not authenticating.
+   */
+  playoutConfigPath?: string;
+  /**
+   * TEST-ONLY seam — clock and `fetch` for the Playout reads, so a suite can drive expiry
+   * and the D9 cadence without sleeping for a minute.
+   */
+  playoutAuthOptions?: PlayoutAuthOptions;
+  /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
    */
@@ -301,6 +340,14 @@ export interface BridgeHandle {
   readonly host: string;
   readonly port: number;
   readonly url: string;
+  /**
+   * `C-037` — the RESOLVED auth mode and Playout addresses, so the CLI can say at boot
+   * which Playout this bridge trusts and a test can assert the precedence without
+   * re-deriving it.
+   */
+  readonly auth: PlayoutSettings;
+  /** The verifier, or `null` when auth is off. Exposed for the D9 cadence test's control. */
+  readonly playoutAuth: PlayoutAuth | null;
   /**
    * B-038 Phase 3 — the template HTTP serve address: the base URL CasparCG fetches
    * `/template/<id>` from, plus whether the bind is LAN-exposed (non-loopback).
@@ -477,6 +524,88 @@ export function refusedWhileLocked(route: Route, req: unknown): boolean {
 }
 
 /**
+ * 🔴 `C-037` — **WHAT THE AUTH GATE IS LOOKING AT, as four names.**
+ *
+ * A boolean would collapse the two that matter most: a socket that has never signed in and a
+ * socket whose session stopped holding are different situations with different answers, and
+ * ADR 0010 rule 4 spells both — _"a never-authenticated socket gets `bridge.capabilities`
+ * and the `auth.*` door, nothing else"_, while an expired one _"refuses NEW operator intents
+ * … `read` routes keep answering"_.
+ */
+export type AuthGateState =
+  /** This bridge does not authenticate. Today, byte for byte. */
+  | 'off'
+  /** A verified, unexpired, unrevoked principal is on this socket. */
+  | 'signed-in'
+  /** A principal WAS established and no longer holds — expired, or its `jti` revoked. */
+  | 'invalid'
+  /** No `auth` frame has ever been accepted on this socket. */
+  | 'absent';
+
+/**
+ * ⭐ **THE DOOR ADR 0010 RULE 4 LEAVES OPEN, spelled once.**
+ *
+ * `bridge.capabilities` because it is asked at CONNECT and is how a console DISCOVERS that it
+ * must sign in (`B-153`); `auth.*` because it is the sign-in itself. Both are open in every
+ * not-signed-in state, EXPIRED included — the way back in must not need the thing that
+ * expired, which is the inverse half `B-229` insisted on for the lock.
+ */
+export function openToUnauthenticated(channelName: string): boolean {
+  return channelName === BridgeCapabilitiesChannel.name || channelName.startsWith('auth.');
+}
+
+/**
+ * The single decision. Exported for the auth census in
+ * `tests/auth-gate.integration.test.ts`, which walks every route rather than sampling —
+ * exactly as `refusedWhileLocked` is, and for the same reason: "everything else is refused"
+ * is a claim about each channel, and no sample can make it.
+ *
+ * ⚠ **It reads `route.lock` for the EXPIRED case and that is not a re-derivation.**
+ * `LockPolicy` already classifies every route as answering-a-question versus acting, which is
+ * the same question the expiry carve-out asks; `C-038` is the item that adds a permission
+ * class of its own, and adding a second required argument here would be doing its work with
+ * none of its design. What this function does NOT do is treat the two policies as
+ * interchangeable: `unlock` is reachable while LOCKED and refused while EXPIRED, because the
+ * lock's way out is a PIN and an expired session's way out is signing in — neither strands
+ * the operator, and each is answered by its own gate.
+ */
+export function refusedByAuth(route: Route, state: AuthGateState): boolean {
+  if (state === 'off' || state === 'signed-in') return false;
+  if (openToUnauthenticated(route.channel.name)) return false;
+  if (state === 'absent') return true;
+  return route.lock !== 'read' && route.lock !== 'resync';
+}
+
+/**
+ * ⭐ **THE ONE PLACE A SOCKET'S AUTH STATE IS DECIDED.** Golden rule 6: every door — the
+ * request gate, the publish gate and `auth.state` — asks THIS, so they cannot come to
+ * disagree about what "signed in" means. A second local derivation is how a name comes to lie
+ * about what it tests.
+ *
+ * Read PER REQUEST and never latched, for `B-229`'s reason one axis over: a state captured at
+ * connect would leave a console refused for the life of its socket after it signed in, and the
+ * inverse half — that a fresh `auth` frame restores every control with no reload — matters as
+ * much as the refusal.
+ *
+ * ⚠ It has a side effect, named rather than hidden: a live principal keeps the D9 bearer
+ * fresh and the revocation poller ticking. The poller therefore runs exactly while somebody is
+ * signed in, which is correct — with no principal there is no verdict a revocation could
+ * change.
+ */
+export function authGateState(
+  session: AuthSession,
+  playoutAuth: PlayoutAuth | null,
+): AuthGateState {
+  if (playoutAuth === null) return 'off';
+  const held = session.token;
+  if (held === null) return 'absent';
+  if (playoutAuth.isExpired(held.expEpochSec)) return 'invalid';
+  if (playoutAuth.isRevoked(held.jti)) return 'invalid';
+  playoutAuth.noteLiveToken(held.rawToken);
+  return 'signed-in';
+}
+
+/**
  * B-038 Phase 2 — generous inbound WS frame cap. A `templates.import` frame
  * carries the rendered self-contained HTML (inlined runtime + scene + base64
  * images) — hundreds of KB to a couple of MB, once per import (not a hot path).
@@ -589,6 +718,23 @@ function validateDeclaredBank(
 export async function createBridge(options: BridgeOptions = {}): Promise<BridgeHandle> {
   const host = options.host ?? DEFAULT_BRIDGE_HOST;
   const requestedPort = options.port ?? DEFAULT_BRIDGE_PORT;
+  /*
+    🔴 `C-037` — THE PLAYOUT LINK, RESOLVED BEFORE ANYTHING BINDS.
+
+    First, so that a bridge told to authenticate and told nothing else fails with a sentence
+    naming the key rather than binding a socket and then discovering it cannot verify
+    anything. Same doctrine as the fixed bank and the source catalog: present-but-unusable
+    throws BEFORE the port is listening, so a failed boot leaves nothing serving.
+  */
+  const auth = resolvePlayoutSettings(
+    options.playout ?? {},
+    options.playoutConfigPath !== undefined ? loadPlayoutFile(options.playoutConfigPath) : null,
+    (message) =>
+      process.stderr.write(`${message}
+`),
+  );
+  const playoutAuth =
+    auth.playout === null ? null : new PlayoutAuth(auth.playout, options.playoutAuthOptions ?? {});
   // R-010 boot precedence: explicit connection (CLI flags) > persisted file >
   // the single-server default. Flags are session overrides — they win without
   // clobbering the persisted file.
@@ -733,6 +879,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     ...(options.sourceAssignmentsPath !== undefined
       ? { sourceAssignmentsPath: options.sourceAssignmentsPath }
       : {}),
+    auth,
   });
 
   const wss = new WebSocketServer({
@@ -749,11 +896,74 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const address = wss.address();
   const port = typeof address === 'object' && address !== null ? address.port : requestedPort;
 
+  /*
+    🔴 `C-037` / ADR 0010 rule 11 — **AN UNAUTHENTICATED CONTROL SOCKET THAT IS NOT ON
+    LOOPBACK SAYS SO.**
+
+    ⚠ Written NEW, and the acceptance bullet that asks for it says "the existing warning
+    prints" — so state plainly what was measured: there was no such warning. The two that
+    exist (`bridge.ts` at boot and `caspar-runtime.ts` on reconfigure) are about the TEMPLATE
+    HTTP server, a different socket on a different port, and the second of them even ends
+    _"Control WebSocket remains loopback-bound"_ — a sentence `--host 0.0.0.0` makes false.
+    `--host 0.0.0.0` has been permitted for development since the beginning and nothing
+    anywhere announced it.
+
+    The owner's default is unchanged: auth OFF + loopback is today and stays, auth OFF +
+    `--host 0.0.0.0` stays PERMITTED. What changes is that it is no longer silent. The
+    stricter rule — "an unauthenticated control socket never leaves loopback" — is recorded
+    in the ADR as NOT adopted now and as a candidate golden rule once auth ships; this line is
+    what makes the interim state visible rather than assumed.
+  */
+  if (playoutAuth === null && host !== '127.0.0.1' && host !== 'localhost' && host !== '::1') {
+    process.stderr.write(
+      `[caspar-bridge] ⚠ control WebSocket is LAN-EXPOSED on ${host}:${String(port)} with ` +
+        `auth OFF — any machine that can reach this port can drive this station. Permitted ` +
+        `for development (ADR 0010 rule 11); the plant runs with auth ON.
+`,
+    );
+  }
+
   wss.on('connection', (socket) => {
-    const unsubscribers = wirePublishes(socket, runtime);
+    /*
+      🔴 `C-037` — ONE PRINCIPAL HOLDER PER SOCKET, created here because here is where a
+      connection begins. Two browsers are two people; see `auth-session.ts` for why this is
+      not a field on the bridge.
+    */
+    const session = new AuthSession();
+    /*
+      🔴 **THE PUBLISH GATE — the SECOND door, and it used to be wide open.**
+
+      `wirePublishes` subscribed every socket to stack state, health, the lock, the live-layer
+      ledger and the emptied-air notice the instant it connected, before a single frame was
+      read. A request-level gate does not touch that path: an unauthenticated socket would be
+      refused every command and still be told everything. ADR 0010 rule 4 says a
+      never-authenticated socket gets `bridge.capabilities` and the `auth.*` door and
+      **nothing else**, and a stream of state is something else.
+
+      ⚠ Spelled as a DELIVERY predicate rather than by deferring the subscription, because
+      sign-out has to close it again on the same socket — and a wire/unwire pair is two
+      operations that must stay in step, where one predicate read at push time cannot fall out
+      of step with itself. The console's own `#resync` re-delivers on sign-in, which is the
+      same machinery it already runs on every (re)connect.
+
+      ⚠ Auth OFF returns `true` always, so not one byte of today's behaviour moves.
+    */
+    const unsubscribers = wirePublishes(
+      socket,
+      runtime,
+      () => authGateState(session, playoutAuth) !== 'absent',
+    );
     socket.on('message', (data) => {
       // `B-229` — the lock is read PER REQUEST from the live runtime, never captured.
-      void handleMessage(socket, routes, data.toString(), () => runtime.lockState().engaged);
+      void handleMessage(
+        socket,
+        routes,
+        data.toString(),
+        () => runtime.lockState().engaged,
+        session,
+        playoutAuth,
+        runtime,
+      );
     });
     socket.on('close', () => {
       for (const off of unsubscribers) off();
@@ -817,6 +1027,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     host,
     port,
     url: `ws://${host}:${port}`,
+    auth,
+    playoutAuth,
     templateServe,
     runtime,
     fixedBankSource: { bank: fixedBank, source: fixedBankSource },
@@ -846,10 +1058,32 @@ async function handleMessage(
   routes: Map<string, Route>,
   raw: string,
   isLocked: () => boolean,
+  session: AuthSession,
+  playoutAuth: PlayoutAuth | null,
+  runtime: CasparRuntime,
 ): Promise<void> {
   const frame = parseWsFrame(raw);
-  // Only `request` frames are inbound to the bridge; ignore anything else.
-  if (frame === null || frame.type !== 'request') return;
+  if (frame === null) return;
+
+  /*
+    🔴 `C-037` — THE `auth` FRAME, HANDLED BEFORE THE ROUTE TABLE IS EVEN CONSULTED.
+
+    It is not a channel and it deliberately has no route: the gate that refuses every channel
+    has to be able to run BEFORE a principal exists, and a door spelled as one of the things
+    behind the door is a carve-out somebody has to remember. As a frame type it is outside the
+    route table by construction, so the census that walks every route cannot miss it.
+
+    ⚠ The SCHEMA already refused anything but a non-empty string `token` (`parseWsFrame`), so
+    the verifier never sees a malformed input — cryptographic code should not be the first
+    thing to meet one.
+  */
+  if (frame.type === 'auth') {
+    await handleAuthFrame(socket, frame, session, playoutAuth, runtime);
+    return;
+  }
+
+  // Only `request` frames are otherwise inbound to the bridge; ignore anything else.
+  if (frame.type !== 'request') return;
 
   const route = routes.get(frame.channel);
   if (route === undefined) {
@@ -891,6 +1125,33 @@ async function handleMessage(
     return;
   }
 
+  /*
+    🔴 `C-037` / ADR 0010 rule 1 — **THE AUTHORISATION GATE, BESIDE THE LOCK GATE, AT THE
+    ONE CHOKEPOINT EVERY REQUEST PASSES.**
+
+    Here for the reason the lock gate is here, quoted in the ADR as the whole argument: _"a
+    rule spelled per call site is a rule that is already broken at the site nobody looked
+    at."_ Sixty routes would be sixty chances to forget, and the sixty-first arrives next
+    month.
+
+    ⚠ **AFTER the lock gate and not before**, deliberately. A locked console is a fact the
+    operator already knows and can act on in four keystrokes; being told to sign in when the
+    real obstacle is the lock would send them to the wrong remedy. The ORDER is the message.
+
+    ⚠ It reads the state PER REQUEST, never latched at connect — which is what makes a fresh
+    `auth` frame on the SAME socket restore every control with no reload.
+
+    🔴 Nothing below this line changes any refusal CONDITION on the path to air: the lock is
+    untouched, PANIC is untouched, and golden rule 10's gate has not moved. What changed is
+    that a socket without a principal now gets two answers instead of every answer — when,
+    and only when, auth is ON.
+  */
+  const gate = authGateState(session, playoutAuth);
+  if (refusedByAuth(route, gate)) {
+    send(socket, errorResponse(frame.id, AUTH_REQUIRED_REFUSAL));
+    return;
+  }
+
   try {
     /*
       Stack ops are async (they await their AMCP ack); await every handler.
@@ -902,7 +1163,12 @@ async function handleMessage(
       that rules out a mutable "current actor" field, and for what the value is worth
       (self-declared, unverified — which console, not which person).
     */
-    const result = await runAsActor(frame.actor, () => route.handle(parsedReq.data));
+    /*
+      `C-037` — the session travels into the actor context so a VERIFIED name wins over the
+      self-declared `actor` field, `sub` rides beside it into the record, and the `auth.*`
+      routes can reach their own socket's principal. One decision, in `actor-context.ts`.
+    */
+    const result = await runAsActor(frame.actor, session, () => route.handle(parsedReq.data));
     const parsedRes = route.channel.response.safeParse(result);
     if (!parsedRes.success) {
       send(socket, errorResponse(frame.id, `invalid response for ${frame.channel}`));
@@ -913,6 +1179,83 @@ async function handleMessage(
   } catch (err) {
     send(socket, errorResponse(frame.id, err instanceof Error ? err.message : 'handler error'));
   }
+}
+
+/**
+ * 🔴 `C-037` — **VERIFY A PRESENTED TOKEN AND SEAT (OR DROP) THIS SOCKET'S PRINCIPAL.**
+ *
+ * The reply is an ordinary `response` frame correlated by the frame's own `id`, carrying the
+ * `auth.state` payload on success and a sentence on refusal — so a console needs no second
+ * mechanism to learn the answer, and `bridgeErrorFrom` (`B-152`) carries the sentence to the
+ * surface verbatim.
+ *
+ * ⚠ **A bridge with auth OFF answers, and answers honestly.** A console that presents a
+ * token to a bridge that does not authenticate is not an error: it is a console that has been
+ * pointed at a development bridge. It is told `mode: 'off'`, which is exactly what
+ * `bridge.capabilities` told it, and it stops offering a sign-in.
+ *
+ * ⚠ Every failure leaves the PREVIOUS principal in place. A bad second `auth` frame must not
+ * sign an operator out mid-shift — that would make a stray frame a way to take a console off
+ * the air, which is the shape of defect this whole change exists to remove.
+ */
+async function handleAuthFrame(
+  socket: WebSocket,
+  frame: WsAuthFrame,
+  session: AuthSession,
+  playoutAuth: PlayoutAuth | null,
+  runtime: CasparRuntime,
+): Promise<void> {
+  if (playoutAuth === null) {
+    send(socket, {
+      type: 'response',
+      id: frame.id,
+      payload: { mode: 'off', principal: null } satisfies AuthState,
+    });
+    return;
+  }
+  if (frame.token.trim() === '') {
+    send(socket, errorResponse(frame.id, AUTH_NO_TOKEN));
+    return;
+  }
+  const result = await playoutAuth.verify(frame.token);
+  if (!result.ok) {
+    send(socket, errorResponse(frame.id, result.refusal));
+    return;
+  }
+  /*
+    🔴 A ROW WHEN THE PRINCIPAL CHANGES, NOT WHEN A TOKEN ARRIVES.
+
+    The obvious spelling records on every accepted `auth` frame, and it over-counts: the console
+    re-presents a REFRESHED token on this same socket about ten minutes before expiry (D2), and
+    a reader counting sign-ins would see two people where there was one. A refresh changes
+    nobody — same `sub`, same person, same session — so it is silent.
+
+    ⚠ A RECONNECT still records one, and that is correct rather than an inconsistency: a
+    reconnect is a new socket, so it is a new connection establishing an identity, which is
+    exactly what this row exists to answer.
+
+    Computed BEFORE `adopt`, because after it the previous principal is gone.
+  */
+  const previousSub = session.token?.principal.sub ?? null;
+  session.adopt(result.token);
+  playoutAuth.noteLiveToken(result.token.rawToken);
+  if (previousSub !== result.token.principal.sub) {
+    /*
+      `actorNameTruncated` rides here and nowhere else: it is a fact about this session, and a
+      flag repeated on every take would be noise about something that does not change.
+    */
+    runtime.recordIdentityEvent({
+      action: 'sign-in',
+      actor: result.token.principal.name,
+      actorSub: result.token.principal.sub,
+      ...(result.token.principal.nameTruncated ? { actorNameTruncated: true as const } : {}),
+    });
+  }
+  send(socket, {
+    type: 'response',
+    id: frame.id,
+    payload: { mode: 'playout', principal: result.token.principal } satisfies AuthState,
+  });
 }
 
 function errorResponse(id: string, message: string): WsResponseFrame {
@@ -934,8 +1277,21 @@ function send(socket: WebSocket, frame: WsResponseFrame | WsPublishFrame): void 
  * `multibox-layout-switch`. `tests/publish-coverage.test.ts` calls this and asserts every
  * emitter got a subscriber; do not make it private again.
  */
-export function wirePublishes(socket: WebSocket, backing: CasparRuntime): (() => void)[] {
+export function wirePublishes(
+  socket: WebSocket,
+  backing: CasparRuntime,
+  /**
+   * 🔴 `C-037` — **MAY THIS SOCKET BE TOLD ANYTHING RIGHT NOW?** Read at PUSH time, so
+   * signing in opens the stream and signing out closes it on the same socket, with no
+   * subscribe/unsubscribe pair that could fall out of step.
+   *
+   * Defaults to `true`, which is auth OFF and is also what the `B-247` publish-coverage guard
+   * calls with — so not one byte of today's behaviour moves and the guard needs no edit.
+   */
+  deliver: () => boolean = () => true,
+): (() => void)[] {
   const push = (channel: AnyPublishChannel, payload: unknown): void => {
+    if (!deliver()) return;
     const parsed = channel.payload.safeParse(payload);
     if (parsed.success)
       send(socket, { type: 'publish', channel: channel.name, payload: parsed.data });
@@ -1015,12 +1371,25 @@ export function buildRoutes(
     fixedLayersPath?: string;
     sourceCatalogPath?: string;
     sourceAssignmentsPath?: string;
+    /**
+     * `C-037` — the RESOLVED Playout link: what `auth.state` reports as the MODE, and the
+     * addresses `bridge.capabilities` advertises. ONE input rather than a mode beside a
+     * config, because {@link PlayoutSettings} already makes "mode is `playout`" and "there
+     * is a config" the same fact — two inputs would be two things that must agree.
+     *
+     * ⚠ The PRINCIPAL is per socket and comes from the actor context, never from here: a
+     * mode is a property of the bridge, an identity is a property of a connection, and a
+     * route reading both from one place would answer one socket's question with another
+     * socket's answer.
+     */
+    auth?: PlayoutSettings;
   } = {},
 ): Map<string, Route> {
   // NAMED, not positional. Four optional string paths in a row is a signature
   // where transposing two of them type-checks and writes each config into the
   // other's file.
   const { persistPath, fixedLayersPath, sourceCatalogPath, sourceAssignmentsPath } = paths;
+  const { mode: authMode, playout: playoutUrls } = paths.auth ?? AUTH_OFF;
   /*
     `B-229` — `lock` is the THIRD ARGUMENT AND IT IS REQUIRED. A new channel cannot be
     routed without classifying it, which is what keeps "the lock refuses everything"
@@ -1068,6 +1437,36 @@ export function buildRoutes(
   };
 
   const entries: Route[] = [
+    /*
+      🔴 `C-037` — the `auth.*` door, as ORDINARY ROUTES.
+
+      They could have been special-cased in `handleMessage` beside the frame, and were not, so
+      that the route census walks them like everything else and `B-074`'s coverage guard
+      requires them to exist. They reach their own socket's principal through the actor
+      context, which is what lets a per-connection answer come out of a process-wide table.
+
+      ⚠ `auth.state` is a `read` — it changes nothing and a console reconnecting to a bridge
+      it is not signed in to must still be able to ASK. `auth.sign-out` is an `operator`
+      intent: the lock refuses everything (the owner's no-carve-out answer) and signing out is
+      something the operator does, not something they read.
+    */
+    route(AuthStateChannel, 'read', () => ({
+      mode: authMode,
+      principal: currentAuthSession()?.token?.principal ?? null,
+    })),
+    route(AuthSignOutChannel, 'operator', () => {
+      const session = currentAuthSession();
+      const leaving = session?.token?.principal ?? null;
+      if (leaving !== null) {
+        b.recordIdentityEvent({
+          action: 'sign-out',
+          actor: leaving.name,
+          actorSub: leaving.sub,
+        });
+      }
+      session?.clear();
+      return { ok: true as const };
+    }),
     route(AppInfoChannel, 'read', () => ({
       name: 'cg Bridge',
       version: '0.0.0',
@@ -1347,6 +1746,25 @@ export function buildRoutes(
   */
   const capabilities = route(BridgeCapabilitiesChannel, 'read', () => ({
     channels: [...routes.keys()].sort(),
+    /*
+      🔴 `C-037` / ADR 0010 rule 9 — the auth MODE and the SIGN-IN ADDRESS, answered to a
+      socket that has not signed in, because that is the socket that needs them. `B-153`'s own
+      reason, quoted: it is asked at connect, "before the operator can press anything".
+
+      ⚠ The addresses are the PLAYOUT's, and the browser calls them DIRECTLY (rule 9: the
+      bridge never sees a password; rule 13: never via the template origin). Advertised rather
+      than guessed by the console, because the console has no other way to know WHICH Playout
+      this bridge trusts — and one that signed in to a different one would be refused here
+      with "not for this station" and never find out why.
+    */
+    auth: authMode,
+    ...(playoutUrls !== null
+      ? {
+          signInUrl: playoutUrls.tokenUrl,
+          refreshUrl: playoutUrls.refreshUrl,
+          authContractVersion: PLAYOUT_CONTRACT_VERSION,
+        }
+      : {}),
   }));
   routes.set(capabilities.channel.name, capabilities);
   return routes;

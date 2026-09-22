@@ -23,6 +23,7 @@ export {
   WsRequestFrameSchema,
   WsResponseFrameSchema,
   WsPublishFrameSchema,
+  WsAuthFrameSchema,
   parseWsFrame,
   serializeWsFrame,
   DEFAULT_BRIDGE_HOST,
@@ -33,8 +34,17 @@ export {
   MAX_ACTOR_LENGTH,
   normalizeActor,
 } from './ws-frame.js';
-export type { WsFrame, WsRequestFrame, WsResponseFrame, WsPublishFrame } from './ws-frame.js';
+export type {
+  WsFrame,
+  WsRequestFrame,
+  WsResponseFrame,
+  WsPublishFrame,
+  WsAuthFrame,
+} from './ws-frame.js';
 
+// `C-037` — the socket's principal and the ONE refusal. Exported BEFORE capabilities,
+// which reads `AuthMode` off it to advertise the bridge's auth MODE at connect.
+export * from './channels/auth.js';
 export * from './channels/capabilities.js';
 export * from './channels/common.js';
 export * from './channels/stack.js';

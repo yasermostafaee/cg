@@ -21,6 +21,7 @@
     "gate:e2e": "node tools/gate-hook/src/gate-lock-cli.mjs pnpm run gate:e2e:run",
     "package": "turbo run package",
     "dev": "turbo run dev --parallel",
+    "dev:playout-auth": "node tools/caspar-bridge/scripts/dev-playout.ts",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\"",
     "changeset": "changeset",

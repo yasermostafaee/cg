@@ -56,6 +56,13 @@ const BEFORE_AND_AFTER = {
     'bridge-connection.json',
     'bridge-fixed-layers.json',
     'bridge-live-layers.json',
+    /*
+      🔴 `C-037` — the Playout link's config: the auth MODE and the `playout.*` addresses.
+      Its OWN file, deliberately not part of `bridge-connection.json`, because that file is
+      the `connections.set-config` REQUEST body — auth configuration living there would be
+      rewritable over the very socket the gate exists to protect. See `playout-config.ts`.
+    */
+    'bridge-playout.json',
     'bridge-reserved-layers.json',
     'bridge-source-assignments.json',
     'bridge-source-catalog.json',

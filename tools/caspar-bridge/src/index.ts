@@ -2,7 +2,39 @@ export { createBridge } from './bridge.js';
 // `B-229` — the route table and its lock decision, for the lock-policy census. A test that
 // SAMPLED channels could never assert "the lock refuses everything"; it has to walk the table.
 export { buildRoutes, refusedWhileLocked } from './bridge.js';
-export type { BridgeHandle, BridgeOptions } from './bridge.js';
+// `C-037` — the AUTH decision, exported for the auth census exactly as `refusedWhileLocked` is
+// for the lock's. "Everything else is refused" is a claim about every channel, and a spec that
+// SAMPLED them could not make it.
+export { authGateState, openToUnauthenticated, refusedByAuth, wirePublishes } from './bridge.js';
+export type { AuthGateState, BridgeHandle, BridgeOptions } from './bridge.js';
+// `C-037` — the Playout link: its config precedence (CLI > file > default), the boot failure
+// that names a missing key, and the verifier. The CLI resolves the default file path through
+// `defaultPlayoutConfigPath` for `live-layers-store`'s reason — a default buried in a `.mjs`
+// script is a default no test can reach.
+export {
+  AUTH_OFF,
+  DEFAULT_PLAYOUT_AUDIENCE,
+  PLAYOUT_CONTRACT_VERSION,
+  PlayoutConfigError,
+  PlayoutFileSchema,
+  defaultPlayoutConfigPath,
+  loadPlayoutFile,
+  resolvePlayoutSettings,
+} from './playout-config.js';
+export type {
+  PlayoutAuthConfig,
+  PlayoutFile,
+  PlayoutFlags,
+  PlayoutSettings,
+} from './playout-config.js';
+export {
+  JWKS_COOLDOWN_MS,
+  PlayoutAuth,
+  REVOCATION_POLL_MS,
+  truncateActorName,
+} from './playout-auth.js';
+export type { VerifiedToken, VerifyResult } from './playout-auth.js';
+export { AuthSession } from './auth-session.js';
 export {
   loadReservedLayers,
   parseReservedLayersFlag,

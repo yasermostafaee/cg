@@ -22,6 +22,11 @@
 //                                                     #   channel frame of the observed mode; 0 disables)
 //   caspar-bridge --create-missing-consumers          # C-029: ADD a consumer casparcg.config declares that
 //                                                     #   is not running (default OFF: reported, never created)
+//   caspar-bridge --auth playout --playout-issuer http://playout.local:8080
+//                 --playout-jwks-url http://playout.local:8080/.well-known/jwks.json
+//                                                     # C-037: require a Playout-issued JWT on the control
+//                                                     #   socket. Default --auth off = today, byte for byte.
+//   caspar-bridge --playout-config-path C:\cg\playout.json  # C-037: where the playout.* group persists
 //
 // R-010 boot precedence: explicit --caspar-*/--backup-* flags > the persisted
 // config file (~/.cg-runtime/bridge-connection.json by default) > built-in
@@ -82,6 +87,7 @@ import {
 } from '@cg/shared-ipc';
 import {
   createBridge,
+  defaultPlayoutConfigPath,
   parseReservedLayersFlag,
   resolveCreateMissingConsumers,
   resolveLiveLayersPath,
@@ -328,7 +334,67 @@ const connection =
       }
     : undefined;
 
-const handle = await createBridge({
+/*
+  🔴 `C-037` — THE PLAYOUT LINK. Same precedence as every other group: flags > file >
+  default, and the default is `off` — today, byte for byte.
+
+  ⚠ Its file is NOT `bridge-connection.json`. That file is the `connections.set-config`
+  request body, so auth configuration living in it would be rewritable over the very socket
+  this gate exists to protect; and its doctrine is warn-and-ignore, which for a key group like
+  this would mean a typo boots the bridge with no auth at all. See `playout-config.ts`.
+*/
+const playoutConfigPath =
+  typeof args['playout-config-path'] === 'string'
+    ? args['playout-config-path']
+    : defaultPlayoutConfigPath(os.homedir());
+
+// A valueless flag is a hard boot error, never silently ignored — the same fail-closed
+// doctrine as `--reserved-layers`, and for a stronger reason: the operator believes the
+// station authenticates.
+for (const flag of [
+  'auth',
+  'playout-issuer',
+  'playout-jwks-url',
+  'playout-token-url',
+  'playout-refresh-url',
+  'playout-channels-url',
+  'playout-revoked-url',
+  'playout-audience',
+  'playout-config-path',
+]) {
+  if (args[flag] === true) {
+    console.error(
+      `[caspar-bridge] --${flag} needs a value. ` +
+        'Refusing to boot without it rather than silently falling back.',
+    );
+    process.exit(1);
+  }
+}
+if (typeof args.auth === 'string' && args.auth !== 'off' && args.auth !== 'playout') {
+  console.error(
+    `[caspar-bridge] --auth must be 'off' or 'playout' — got ${JSON.stringify(args.auth)}. ` +
+      'Refusing to boot rather than guessing which one was meant.',
+  );
+  process.exit(1);
+}
+const playoutFlags = {
+  ...(typeof args.auth === 'string' ? { auth: args.auth } : {}),
+  ...(typeof args['playout-issuer'] === 'string' ? { issuer: args['playout-issuer'] } : {}),
+  ...(typeof args['playout-jwks-url'] === 'string' ? { jwksUrl: args['playout-jwks-url'] } : {}),
+  ...(typeof args['playout-token-url'] === 'string' ? { tokenUrl: args['playout-token-url'] } : {}),
+  ...(typeof args['playout-refresh-url'] === 'string'
+    ? { refreshUrl: args['playout-refresh-url'] }
+    : {}),
+  ...(typeof args['playout-channels-url'] === 'string'
+    ? { channelsUrl: args['playout-channels-url'] }
+    : {}),
+  ...(typeof args['playout-revoked-url'] === 'string'
+    ? { revokedUrl: args['playout-revoked-url'] }
+    : {}),
+  ...(typeof args['playout-audience'] === 'string' ? { audience: args['playout-audience'] } : {}),
+};
+
+const handle = await createBridgeOrRefuse({
   host: args.host,
   port: args.port !== undefined ? Number(args.port) : undefined,
   connection,
@@ -344,9 +410,24 @@ const handle = await createBridge({
   templateServe,
   ...(lookMixerHoldMs !== undefined ? { lookMixerHoldMs } : {}),
   createMissingConsumers,
+  playout: playoutFlags,
+  playoutConfigPath,
 });
 
 console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);
+/*
+  C-037 — READ BACK on the boot line, both ways, exactly as C-029's missing-consumer line is,
+  and for the same reason: a station can see which state it is in without knowing the flag
+  exists. The OFF line is the one a test holds the default to.
+*/
+console.error(
+  handle.auth.mode === 'playout'
+    ? `[caspar-bridge] auth: PLAYOUT — the control socket requires a token issued by ` +
+        `${handle.auth.playout.issuer} (aud ${handle.auth.playout.audience}); keys read from ` +
+        `${handle.auth.playout.jwksUrl}; consoles sign in at ${handle.auth.playout.tokenUrl}`
+    : '[caspar-bridge] auth: OFF (default) - the control socket has no principal and every ' +
+        'connected client can drive this station; --auth playout requires a Playout-issued token',
+);
 console.error(`[caspar-bridge] candidate layers: ${describeFixedBank(handle.fixedBankSource)}`);
 console.error(`[caspar-bridge] live sources: ${describeSourceCatalog(handle.sourceCatalog)}`);
 console.error(
@@ -404,6 +485,33 @@ if (handle.templateServe.unreachable.length > 0) {
       '- those servers will show live sources with NO TEMPLATE. Set the serve host in the ' +
       'Runtime server settings panel (applies without a restart), or pass --template-serve-host.',
   );
+}
+
+/**
+ * 🔴 `C-037` — start the bridge, and turn a PLAYOUT CONFIG failure into the CLI's own
+ * one-line refusal instead of an unhandled top-level rejection with a stack trace.
+ *
+ * ⚠ **It re-throws everything else, deliberately.** This file has never had a try/catch
+ * around `createBridge`, so a fixed-bank or source-catalog failure surfaces as a stack
+ * trace today; swallowing those here would be a behaviour change riding along on an auth
+ * commit, and a broad catch is how a boot failure becomes a boot that looks fine. The
+ * narrowing is by NAME rather than `instanceof`, because this is a `.mjs` reading a class
+ * out of `dist/` and a name is the identity that survives that boundary.
+ *
+ * The sentence itself is built in `playout-config.ts` and already names the KEY — at 03:00
+ * the difference between "the bridge will not start" and "the bridge will not start,
+ * `playout.jwksUrl` is missing" is the whole night.
+ */
+async function createBridgeOrRefuse(options) {
+  try {
+    return await createBridge(options);
+  } catch (err) {
+    if (err instanceof Error && err.name === 'PlayoutConfigError') {
+      console.error(`[caspar-bridge] ${err.message}`);
+      process.exit(1);
+    }
+    throw err;
+  }
 }
 
 const shutdown = async () => {

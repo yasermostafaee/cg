@@ -269,6 +269,21 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'app.info',
         'audit.health',
         'audit.recent',
+        /*
+          🔴 `C-037` — **`auth.state` IS A READ, AND IT IS REACHABLE WHILE LOCKED. This spec
+          is what said so, by going red on the commit that added the route.**
+
+          It answers "who is signed in at this console" and changes nothing — the same shape as
+          `lock.state` three lines down, and for the same reason: the overlay drawn ON TOP of a
+          locked console is itself drawn FROM a read, so a lock that refused the read would
+          leave the operator looking at a surface that cannot describe its own state.
+
+          ⚠ `auth.sign-out` is deliberately NOT here. It is an operator ACT, the lock refuses
+          everything (the owner's no-carve-out answer), and signing out while locked would
+          leave a console needing two keys with only one way in. The way out of the lock is the
+          PIN; the way out of a session is a button that is behind it.
+        */
+        'auth.state',
         'bridge.capabilities',
         'channelSettings.get',
         'connections.config',

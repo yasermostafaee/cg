@@ -120,11 +120,48 @@ export const WsPublishFrameSchema = z.object({
 });
 export type WsPublishFrame = z.infer<typeof WsPublishFrameSchema>;
 
+/**
+ * 🔴 `C-037` / ADR 0010 rule 1 — **Browser → bridge: ESTABLISH THIS SOCKET'S PRINCIPAL.**
+ *
+ * The fourth member, and the first one that is not a channel call. It carries a
+ * Playout-issued JWT; the bridge verifies it OFFLINE (ES256 against the Playout's cached
+ * JWKS) and holds the resulting principal for the life of THIS socket. The reply is an
+ * ordinary {@link WsResponseFrameSchema} correlated by `id`, carrying the `auth.state`
+ * payload on success and an error sentence on refusal — so a console needs no second
+ * mechanism to learn the answer.
+ *
+ * ── WHY A FRAME AND NOT A CHANNEL ───────────────────────────────────────────
+ *
+ * Because the gate that will refuse every channel has to be able to run BEFORE this arrives,
+ * and a door spelled as one of the things behind the door is a carve-out somebody has to
+ * remember. As a frame type it is outside the route table by construction: the census that
+ * walks every route cannot miss it, because it is not a route. `auth.state` and
+ * `auth.sign-out` ARE channels, because they are reads and writes of a principal that by
+ * then exists.
+ *
+ * 🔴 **The SCHEMA is the boundary.** `token` is a non-empty string here, so a frame carrying
+ * a number, an object, or nothing at all is refused by {@link parseWsFrame} before a single
+ * byte of it reaches a verifier. Cryptographic code should never be the first thing to see a
+ * malformed input.
+ *
+ * ⚠ It replaces nothing. `actor` on a request frame stays exactly what it was — self-declared
+ * and unverified — and when a principal exists the bridge simply stops consulting it.
+ */
+export const WsAuthFrameSchema = z.object({
+  type: z.literal('auth'),
+  /** Correlation id for the reply, exactly as a `request` frame's. */
+  id: z.string().min(1),
+  /** The compact-serialized JWT. Never logged, never persisted bridge-side. */
+  token: z.string().min(1),
+});
+export type WsAuthFrame = z.infer<typeof WsAuthFrameSchema>;
+
 /** Any frame on the wire. */
 export const WsFrameSchema = z.discriminatedUnion('type', [
   WsRequestFrameSchema,
   WsResponseFrameSchema,
   WsPublishFrameSchema,
+  WsAuthFrameSchema,
 ]);
 export type WsFrame = z.infer<typeof WsFrameSchema>;
 

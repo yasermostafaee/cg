@@ -107,7 +107,7 @@ import {
 } from '@cg/shared-ipc';
 import { randomBytes } from 'node:crypto';
 import { templateAdmitsPassTiming } from '@cg/shared-ipc';
-import { operatorActor, runAsTemplate } from './actor-context.js';
+import { operatorActor, operatorSub, runAsTemplate } from './actor-context.js';
 import {
   ChannelSettingsStore,
   adoptionNotice,
@@ -10209,6 +10209,29 @@ export class CasparRuntime {
   }
 
   /**
+   * 🔴 `C-037` — **RECORD A SIGN-IN OR A SIGN-OUT.** The one audit append the BRIDGE makes
+   * directly rather than through a playout verb.
+   *
+   * It exists because these two rows answer a question none of the others can: every other row
+   * says what was done to air, and these say who was at the console and from when. A next-day
+   * question about a take reads that take's `actor`; a question about why that name appears at
+   * all reads these.
+   *
+   * ⚠ **The parameter type is NARROW on purpose.** It cannot express a slot, an item or an
+   * outcome other than `ok`, so this cannot quietly become a second general-purpose append
+   * beside `#recordOutcome` — which is how one rule comes to have two spellings. It carries no
+   * token, no `jti` and no credential: the record keeps who and when, and nothing replayable.
+   */
+  recordIdentityEvent(entry: {
+    action: 'sign-in' | 'sign-out';
+    actor: string;
+    actorSub: string;
+    actorNameTruncated?: true;
+  }): void {
+    this.#recordAudit({ ...entry, outcome: 'ok' });
+  }
+
+  /**
    * B-141 — record ONE auditable action. Fire-and-forget, by contract.
    *
    * Never awaited by a caller and never able to refuse one: see the note on
@@ -10217,7 +10240,26 @@ export class CasparRuntime {
    * "No audit entries yet." could not make.
    */
   #recordAudit(entry: Omit<AuditEntry, 'ts'> & { ts?: string }): void {
-    const row: AuditEntry = { ...entry, ts: entry.ts ?? new Date().toISOString() } as AuditEntry;
+    /*
+      🔴 `C-037` / ADR 0010 rule 3 — **THE VERIFIED `sub` IS STAMPED HERE, AT THE ONE PLACE A
+      ROW BECOMES AN `AuditEntry`, and not at the seven call sites that name the actor.**
+
+      Seven sites would be seven chances to forget, and the eighth arrives next month — which is
+      the same argument `actor-context.ts` gives for ALS over a threaded parameter, one level
+      down. Stamped BEFORE the spread, so a caller that states its own `actorSub`
+      (`recordIdentityEvent` does) wins and this is only the default.
+
+      ⚠ Absent, never `undefined`-valued, when there is no proven identity — auth off, or an
+      append the bridge made outside a request. `exactOptionalPropertyTypes` would refuse the
+      other spelling, which is the type system saying the same thing: "no id" and "an id that is
+      nothing" are not the same fact.
+    */
+    const verifiedSub = operatorSub();
+    const row: AuditEntry = {
+      ...(verifiedSub !== null ? { actorSub: verifiedSub } : {}),
+      ...entry,
+      ts: entry.ts ?? new Date().toISOString(),
+    } as AuditEntry;
     // The in-memory tail is kept in BOTH modes: with no writer it is the only
     // record, and with one it keeps `auditRecent` answering during the window
     // before the first flush.

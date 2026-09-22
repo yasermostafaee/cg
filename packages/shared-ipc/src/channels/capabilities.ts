@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineChannel } from '../channel.js';
+import { AuthModeSchema, type AuthMode } from './auth.js';
 
 /**
  * 🔴 **`B-153` — WHAT THIS BRIDGE PROCESS CAN DO, asked at CONNECT, before the operator can
@@ -43,8 +44,60 @@ export const BridgeCapabilitiesChannel = defineChannel(
      * construction — nothing has to remember to update a list.
      */
     channels: z.array(z.string()),
+    /**
+     * 🔴 `C-037` — **DOES THIS BRIDGE AUTHENTICATE, and where does the browser sign in?**
+     *
+     * Here rather than anywhere else for the reason this channel exists at all: it is asked
+     * at CONNECT, _"before the operator can press anything"_ — and a console that learned
+     * only by pressing a button and being refused would learn it in exactly the moment
+     * `B-153` was filed about. It is answered to an UNAUTHENTICATED socket, because it is
+     * the question such a socket exists to ask.
+     *
+     * ⚠ **OPTIONAL, and read as `off` when absent.** A bridge that predates auth cannot say,
+     * and "cannot say" and "does not authenticate" are the same fact about that process — it
+     * has no gate. Making it required would turn every old bridge into an
+     * `invalid response for bridge.capabilities`, i.e. it would break the channel-list skew
+     * report this same call exists to produce. There is no security cost: the gate is the
+     * BRIDGE's, never the console's, so a console that guesses `off` against a bridge that
+     * authenticates is simply refused with {@link AUTH_REQUIRED_REFUSAL} and shown the
+     * sign-in by the refusal itself.
+     */
+    auth: AuthModeSchema.optional(),
+    /**
+     * Where the BROWSER posts its credentials — the Playout's D1 endpoint
+     * (`POST /api/cg/auth/token`), absolute, as configured on this bridge.
+     *
+     * ADR 0010 rule 9: the browser obtains the token and the bridge only verifies, so the
+     * bridge never sees a password. It advertises the address rather than the console
+     * guessing one, because the console has no other way to know which Playout this bridge
+     * trusts — and a console signing in to a DIFFERENT Playout would be refused here with
+     * "not for this station" and never find out why.
+     *
+     * Absent when `auth` is `off`. Never carries a credential.
+     */
+    signInUrl: z.string().optional(),
+    /** Where the browser refreshes (D2, `POST /api/cg/auth/refresh`). Absent when auth is off. */
+    refreshUrl: z.string().optional(),
+    /**
+     * The Playout integration contract this bridge implements (`1.1` today — v1 plus D9).
+     * A string, not a number: the contract's own versions are `1` and `1.1`.
+     */
+    authContractVersion: z.string().optional(),
   }),
 );
+
+/**
+ * ⭐ **THE ONE PLACE `auth` IS READ OFF A CAPABILITIES ANSWER.**
+ *
+ * Golden rule 6: the absent case has a meaning (a bridge that predates auth — no gate), and a
+ * second site deciding what `undefined` means is how the two come to disagree. Everything
+ * that asks "does this bridge authenticate" asks here.
+ */
+export function capabilitiesAuthMode(
+  caps: { readonly auth?: AuthMode | undefined } | null,
+): AuthMode {
+  return caps?.auth ?? 'off';
+}
 
 /**
  * The namespaces the DESIGNER owns. `@cg/shared-ipc` is shared by both SPAs, so these

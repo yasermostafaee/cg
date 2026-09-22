@@ -81,6 +81,25 @@ describe('REPLY 1 §R3 — the template server hosts exactly two routes', () => 
     ]);
   });
 
+  it('🔴 the table carries exactly TWO KINDS — a route class cannot be added silently', () => {
+    /*
+      🔴 `C-037` / ADR 0010 rule 13 — THE AXIS THE FORBIDDEN-PATH LIST CANNOT COVER.
+
+      That list is a list of GUESSED addresses. A route added at a path nobody guessed —
+      `/v1/sign-in`, `/keys`, `/whoami` — passes every probe in it and passes the name pin only
+      until somebody reads the diff. The `kind` discriminant is the other axis: it is
+      `'template' | 'complete'` in the TYPE, so an identity handler is already a type change;
+      pinning the two values makes it a TEST change as well, and a test that names what is
+      missing is what stops it being a decision nobody took.
+
+      Two independent passes over one boundary — the rule golden rule 9 states for a sweep,
+      applied to a guard.
+    */
+    expect([...TEMPLATE_SERVER_ROUTES.map((r) => r.kind)].sort()).toEqual(['complete', 'template']);
+    // The positive control: the table is not empty, so the equality above is a real comparison.
+    expect(TEMPLATE_SERVER_ROUTES.length).toBe(2);
+  });
+
   it('each table entry declares one method, and no entry is a wildcard', () => {
     for (const route of TEMPLATE_SERVER_ROUTES) {
       expect(['GET', 'POST'], `${route.name} declares an unexpected method`).toContain(
@@ -117,6 +136,22 @@ describe('REPLY 1 §R3 — the template server hosts exactly two routes', () => 
       '/template/t1/extra',
       '/complete/anything',
       '/.env',
+      /*
+        🔴 `C-037` / ADR 0010 rule 13 — THE PATHS THE PLAYOUT ERA ACTUALLY LANDS ON.
+
+        The list above was written before there was any identity work; these four are the
+        addresses a JWT-era mistake takes. `/.well-known/jwks.json` is the one to watch: it is
+        where a well-meaning change would put a key set "so the browser can check tokens too",
+        and publishing anything on THIS origin publishes it to every template on every playout
+        server.
+
+        ⚠ They are GUESSED paths, which is why the `kind` pin below exists as well — a route
+        at a path nobody guessed would pass every assertion in this list.
+      */
+      '/.well-known/jwks.json',
+      '/.well-known/openid-configuration',
+      '/api/cg/auth/token',
+      '/signin',
     ];
     for (const path of forbidden) {
       expect(await probe(port, 'GET', path), `GET ${path} is served by the template origin`).toBe(

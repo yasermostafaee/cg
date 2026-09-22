@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { normalizeActor, TEMPLATE_ACTOR, UNATTRIBUTED_ACTOR } from '@cg/shared-ipc';
+import type { AuthSession } from './auth-session.js';
 
 /**
  * B-141 follow-up — WHO the bridge records as having acted, for the duration of one
@@ -34,7 +35,27 @@ import { normalizeActor, TEMPLATE_ACTOR, UNATTRIBUTED_ACTOR } from '@cg/shared-i
  * the second would overwrite the first's actor mid-flight. ALS is the primitive that
  * does not have that bug.
  */
-const actorStore = new AsyncLocalStorage<string>();
+/**
+ * 🔴 `C-037` — **WHAT ONE CONTROL REQUEST IS RUNNING AS.**
+ *
+ * The docblock above ends _"the day identity becomes provable, this function is the only
+ * thing that changes"_. That day is `C-037`, and this is the change: the store holds a
+ * CONTEXT rather than a bare name, so a request carries the verified `sub` beside the display
+ * name and can reach its own socket's principal.
+ *
+ * ⭐ **`operatorActor()` still returns a string, and every one of its readers is untouched.**
+ * That was the promise; the seam kept it.
+ */
+export interface ActorContext {
+  /** The value the audit record writes — verified when there is a principal, self-declared when not. */
+  readonly actor: string;
+  /** The token's `sub`, kept beside the name (ADR 0010 rule 3). `null` while auth is off. */
+  readonly sub: string | null;
+  /** The acting socket's principal holder, so `auth.*` routes can read and clear it. */
+  readonly session: AuthSession | null;
+}
+
+const actorStore = new AsyncLocalStorage<ActorContext>();
 
 /**
  * Run `fn` with `raw` as the acting console for everything it awaits.
@@ -44,8 +65,26 @@ const actorStore = new AsyncLocalStorage<string>();
  * append site as an empty string. The bridge does not trust the wire — a client is free
  * to send anything, and `actor` is the one field a client controls outright.
  */
-export function runAsActor<T>(raw: unknown, fn: () => T): T {
-  return actorStore.run(normalizeActor(raw), fn);
+export function runAsActor<T>(raw: unknown, session: AuthSession | null, fn: () => T): T {
+  /*
+    🔴 `C-037` — **ONE DECISION, NOT TWO PATHS THAT AGREE.**
+
+    A verified principal WINS over the self-declared field; with no principal the wire's value
+    is normalised exactly as before. Written as one expression rather than an auth-on branch
+    and an auth-off branch, for golden rule 10's reason: two paths that must agree are two
+    paths that eventually do not, and the one that drifts is the one nobody exercises.
+
+    ⚠ The verified name has ALREADY been through {@link normalizeActor}, at verification
+    time, so that the name the console shows and the name the record writes are the same
+    string rather than two reductions of one claim. It is not re-normalised here.
+  */
+  const verified = session?.token?.principal ?? null;
+  return actorStore.run(
+    verified === null
+      ? { actor: normalizeActor(raw), sub: null, session }
+      : { actor: verified.name, sub: verified.sub, session },
+    fn,
+  );
 }
 
 /**
@@ -62,7 +101,7 @@ export function runAsActor<T>(raw: unknown, fn: () => T): T {
  * wire's normaliser would mean the bridge could not name the one actor the constant exists for.
  */
 export function runAsTemplate<T>(fn: () => T): T {
-  return actorStore.run(TEMPLATE_ACTOR, fn);
+  return actorStore.run({ actor: TEMPLATE_ACTOR, sub: null, session: null }, fn);
 }
 
 /**
@@ -75,5 +114,25 @@ export function runAsTemplate<T>(fn: () => T): T {
  * honest answer rather than a fallback: nobody at a console caused it.
  */
 export function operatorActor(): string {
-  return actorStore.getStore() ?? UNATTRIBUTED_ACTOR;
+  return actorStore.getStore()?.actor ?? UNATTRIBUTED_ACTOR;
+}
+
+/**
+ * 🔴 `C-037` / ADR 0010 rule 3 — the VERIFIED `sub` behind {@link operatorActor}'s name,
+ * or `null` when there is no proven identity (auth off, or a request outside one).
+ *
+ * `B-211`'s rule: the name is what a human reads and the id is what survives a rename, so the
+ * record keeps both. This is the half that never appears in a sentence (golden rule 11).
+ */
+export function operatorSub(): string | null {
+  return actorStore.getStore()?.sub ?? null;
+}
+
+/**
+ * The acting socket's principal holder — `null` outside a request, or on a bridge with no
+ * auth. The `auth.*` routes read and clear through it, which is what lets them be ordinary
+ * routes (censused like every other) instead of a carve-out in the message handler.
+ */
+export function currentAuthSession(): AuthSession | null {
+  return actorStore.getStore()?.session ?? null;
 }
