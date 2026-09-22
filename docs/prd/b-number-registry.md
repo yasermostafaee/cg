@@ -2935,3 +2935,20 @@ one hit.
 
 ⇒ **Next free after this session is `B-257`**, **`D-161`**, **`C-042`**, **`R-067`** and
 **`P-051`**.
+
+### 2026-09-23 — `B-257`, `B-258`, `B-259` and `B-260` taken by `BRIDGE-TRUTH-01` §1
+
+- `B-257` — one principal's lock strands another principal's channels (the lock audit's stop
+  finding, and the audit table itself), [bugs-runtime.md](bugs-runtime.md).
+- `B-258` — a signed-in viewer's reconnect is recorded as refused presses,
+  [bugs-runtime.md](bugs-runtime.md).
+- `B-259` — an `auth` frame replaces the principal on a locked console,
+  [bugs-runtime.md](bugs-runtime.md).
+- `B-260` — a locked console replaces a template's HTML by marking the import a re-delivery,
+  [bugs-runtime.md](bugs-runtime.md).
+
+The pointer above was MEASURED rather than read: `B-257` … `B-260` returned no heading, against
+a positive control on `B-256`, which returned one.
+
+⇒ **Next free after this session is `B-261`**, **`D-161`**, **`C-042`**, **`R-067`** and
+**`P-051`** — the four non-`B` prefixes carried forward unmeasured, and to be measured before use.

@@ -12274,3 +12274,168 @@ the rail shows no dirty dot for Servers on a bridge-less station — the operato
 that he holds unapplied edits there. It is arguably correct (there is no baseline to be dirty
 against) and changing it would re-open the dirty semantics [[B-254]] just made load-bearing.
 Cross-refs [[B-251]], [[B-254]], [[B-255]].
+
+## [ ] B-257 — one principal's lock strands another principal's channels: the lock is bridge-wide, its PIN is known only to whoever engaged it, and the permission gate exempts it from channel scope on the premise that it is "console-wide" ⟨priority: high — the channel-2 operator loses CLEAR, CLEAR ALL and PANIC on their own channel to a principal with no grant there, and the only ways out are that principal's PIN or a bridge restart⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1, NOT worked
+
+**What.** `CasparRuntime` holds ONE `#lock` per bridge (`engage` / `release`,
+`caspar-runtime.ts:9890`). While it is engaged, `refusedWhileLocked` refuses every `operator`
+route on every socket, whoever is signed in there — `CLEAR`, `CLEAR ALL` and PANIC included, which
+is [[B-229]]'s owner answer. The PIN is set fresh at every engage and held only in memory
+(`StatusBar.tsx:628`). The permission gate resolves `lock.engage` to NO channel, so any principal
+holding the `operator` class may engage it, for the reason `playout-authz-channels/design.md` §5
+gives: _"It has no channel to scope to. The lock is console-wide."_
+
+**Why it is wrong.** [[B-229]]'s no-carve-out answer rests on one sentence: _"the operator who
+engaged it ends it in the time it takes to type four digits, so an emergency verb behind the lock
+is two seconds away and not unreachable."_ That was true while a bridge had one operator.
+Per-channel grants ([[C-038]]) made a bridge shareable by principals who operate different
+channels, and the sentence does not survive the move: the principal facing the lock need not be
+the one who engaged it, holds no PIN, and may hold no grant on the engager's channels while the
+engager holds none on theirs. The lock is not console-wide. It is bridge-wide, which makes it
+every-channel-wide.
+
+**Measured 2026-09-23** — a scratch spec against the shipped gate, run and deleted (§1 of that
+prompt changes nothing). One bridge, auth ON, the fake Playout on loopback, AMCP dead. A is
+`cg-op1` re-minted with channel 1 only; B is `cg-op2` re-minted with channel 2 only.
+
+- Control 1 — A's `layers.clear` on channel 2 is refused with the channel sentence. The grants
+  really are disjoint, and the channel gate is live.
+- Control 2 — B's `layers.clear` on channel 2, before the lock, is not refused.
+- A's `lock.engage` answers `ok: true`.
+- B's `layers.clear` on channel 2, `stack.silence-all-live-plates` and `stack.clear-all` are all
+  three refused with `LOCK_ENGAGED_REFUSAL`. B's `lock.release` with any other PIN answers
+  `pin-mismatch`.
+
+**Reachable where.** In the shipped code, on any auth-ON bridge where two principals holding
+different grants are signed in. Not yet on an on-air plant, because none runs auth ON — the real
+installation has no address yet. The five fixture users all hold channel 1, which is why no
+existing suite meets it.
+
+**Acceptance (sketch — every shape of the fix changes a refusal CONDITION, so the choice is the
+owner's):**
+
+- WHEN a principal engages the lock THEN no principal loses an emergency verb on a channel the
+  engager holds no grant for — by one of: the lock scoped to the engager's granted channels;
+  `lock.engage` requiring a grant on every declared channel (all-or-nothing, the bulk verbs'
+  rule); or the lock scoped to the engaging console rather than to the bridge
+- AND [[B-229]]'s no-carve-out answer still holds for the principal who engaged it
+- AND auth OFF is byte-identical
+
+**Notes:** `silenceAllLivePlates` stays unscoped whatever is chosen — this is about who can
+REFUSE it, not about its scope. Cross-refs [[B-229]], [[C-038]], [[B-258]], [[B-259]],
+[[B-260]].
+
+**The audit this was found by** — `BRIDGE-TRUTH-01` §1, the re-run of the table
+`PLAYOUT-AUTHZ-01` lost to compaction. Every exemption the lock has, and every place the auth or
+permission gate reuses a lock-era condition, each answering one question: _does this
+justification transfer to the permission axis?_ Every handler named was read at `5c07fc09`; the
+four lines marked MEASURED were driven through a socket.
+
+| #   | Exemption (allowed past, or never meeting, the lock gate)                                                                                       | The lock's justification                                                         | Transfers to the permission axis?                                                                                                                                                                                                                                                                                          |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1  | `LockPolicy` `read` — every read route, `bridge.capabilities` included                                                                          | answers a question and changes nothing                                           | **Yes.** Every `read` handler is a pure getter; `auth.state` alone has a side effect (it arms the D9 poller), named in `authGateState` and off the wire. `refusedByAuth` reuses it for an EXPIRED session on purpose, and NOT for a never-authenticated one, where only `bridge.capabilities` and `auth.*` answer.         |
+| A2  | `unlock` — `lock.release`                                                                                                                       | it IS the way out of the lock                                                    | **No — and it was not copied.** Refused for an invalid session; class `operator`.                                                                                                                                                                                                                                          |
+| A3  | `resync` — `stack.restore`                                                                                                                      | the client's reconnect machinery, not a press; grants the operator nothing       | **The ALLOW: no — and it was not copied** (refused when invalid since `PLAYOUT-AUTH-01`; class `operator`; channel-checked per retained slot and fenced to the bank's channel). **The "not a press" half: yes — and it was NOT carried** to the refusal record. MEASURED: [[B-258]].                                       |
+| A4  | `operator-unless-redelivery` — `templates.import` with `redelivery: true`                                                                       | the same machinery, told apart by a flag the wire already carries                | As A3 on the permission axis, with the same record defect. ⚠ **On the lock's OWN axis the justification is false**: the flag is client-asserted, and a redelivery of a held id replaces its HTML, so a locked console DOES accept a catalogue change. MEASURED: [[B-260]].                                                 |
+| A5  | the `auth` frame — outside the route table, so the lock gate never sees it                                                                      | none from the lock; it exists so the auth gate can run before a principal exists | **Not a lock exemption copied — a permission-axis path that bypasses the lock.** A token refresh must pass it; a CHANGE of principal on a locked console has no written reason, while `auth.sign-out` is refused there. MEASURED: [[B-259]].                                                                               |
+| A6  | a malformed request, or an unknown channel — answered before the lock gate                                                                      | a skewed page must be told its real problem, not sent to type a PIN              | **Yes.** The auth gate sits after the parse for the same reason, and a shape error reveals nothing `bridge.capabilities` does not already publish.                                                                                                                                                                         |
+| A7  | publishes (`wirePublishes`) — the lock never gated delivery                                                                                     | a locked console must still SEE what it may not touch                            | **Yes** for an expired session (ADR 0010 rule 4: reads keep answering); **deliberately not** for a never-authenticated one. Not channel-scoped — `R-062`'s decision, per `playout-authz-channels` §5.                                                                                                                      |
+| A8  | bridge machinery with no socket — boot adoption, the occupancy reconcile, `#reassertDeclaredVolumes`, the rehearse abort, emptied-air detection | not a press; there is nobody to lock                                             | **Yes** — none of them acts with a principal's authority.                                                                                                                                                                                                                                                                  |
+| A9  | the deferred restore — `#decidePendingRestores`, when CasparCG becomes reachable                                                                | the restore was already exempt; nothing is sent until occupancy is known         | **Yes, with the time-shift named.** Authorised when asked (class and channel); once accepted a restored row is STATION state, like any row whose author has signed out. It reaches `MIXER VOLUME 0` + `CG ADD` on the bank's channel with no `PLAY`, possibly after that principal expired or was revoked. Not re-checked. |
+| A10 | the template completion stop — `SELF-STOP-24`, over HTTP, as `runAsTemplate`                                                                    | the template's own authored contract (golden rule 13)                            | **Yes** — it acts only on a take the gates authorised, with a per-take 128-bit token spent on first use.                                                                                                                                                                                                                   |
+
+| #   | Where the auth or permission gate reuses a lock-era condition                                              | The lock-era reason                                                                         | Transfers?                                                                                                                                                                                                                            |
+| --- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B1  | `refusedByAuth` reads `route.lock !== 'read'` for an invalid session                                       | A1–A4                                                                                       | Yes for `read`; deliberately not for `resync`, `unlock` or a redelivery. Pinned by the `auth-gate` census.                                                                                                                            |
+| B2  | the gate ORDER — lock, then auth, then authz                                                               | _"a locked console is a fact the operator already knows and can act on in four keystrokes"_ | **Partly.** True for the principal who engaged it. A never-authenticated socket, or any OTHER principal, is told to use a PIN it does not hold. Both answers refuse and nothing reaches the wire, so it misdirects rather than leaks. |
+| B3  | `DELTA B`: a resumed token writes no `sign-in` row                                                         | resync's "not a press"                                                                      | Yes — and the one place that half WAS carried.                                                                                                                                                                                        |
+| B4  | 🔴 `playout-authz-channels` §5: `lock.engage` / `lock.release` have no channel scope — "console-wide"      | [[B-229]]: the operator who engaged it ends it in four digits                               | **NO, AND IT IS LIVE** — this entry.                                                                                                                                                                                                  |
+| B5  | `auth.sign-out` is `lock: 'operator'`, `perm: 'read'`                                                      | the no-carve-out answer                                                                     | Settled at `lock-refuses-intents.integration.test.ts:281`; listed so nobody re-opens it.                                                                                                                                              |
+| B6  | the class of every lock-exempt route — `stack.restore`, `templates.import`, `lock.release` — is `operator` | —                                                                                           | Correct: the permission gate inherits none of the lock's allows.                                                                                                                                                                      |
+
+## [ ] B-258 — a signed-in viewer's reconnect is written into the audit log as refused presses the viewer never made ⟨priority: medium — the record is the product ([[B-141]]), and these rows are false statements about a named person⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1, NOT worked
+
+**What.** `WebSocketRuntime.#resync` stands down only for a signed-out or expired console
+(`WebSocketRuntime.ts:939`). A signed-in principal without the `operator` class — a viewer —
+re-delivers its template library (`templates.import`, `redelivery: true`) and its retained stack
+(`stack.restore`) on every (re)connect, exactly as an operator's console does. The permission gate
+refuses each frame, correctly: a viewer must not restore. It then writes a `refused` row for each
+one, naming the viewer (`bridge.ts:1476`).
+
+**Why it is wrong.** The lock exempted those two frames as _"the client's own reconnect machinery,
+not a press"_. The permission gate was right not to copy the ALLOW. It did not carry the other
+half of the reason either, and that half does transfer: the refusal is recorded as a press.
+`DELTA B` applied it to `sign-in` rows (_"a resume is not a sign-in"_), and a successful
+re-delivery already writes no row (`caspar-runtime.ts:9965`) — so a refused one is the only
+re-delivery the log records, and the row blames a person.
+
+**Measured 2026-09-23** (scratch spec, run and deleted): `cg-view` signs in and sends
+`stack.restore` with an empty list; the answer is `AUTHZ_ROLE_REFUSAL`, and `audit.recent` then
+holds `action: refused`, `refused.channel: stack.restore`, under her name and `sub`, directly
+above her `sign-in`. ⚠ **Read from code, NOT measured:** each refused template re-delivery also
+reaches the console as a resync error — _"Re-delivery of template … failed on reconnect —
+re-import it manually."_ plus the role sentence — one per template.
+
+**Acceptance (sketch):**
+
+- WHEN a principal without the `operator` class reconnects THEN no `refused` row is written for
+  its reconnect machinery AND the console surfaces nothing about it
+- AND a real refused press by the same principal still writes its row
+
+**Notes:** two ends could own it — the console withholding a re-delivery its principal cannot be
+granted, or the bridge declining to record a refusal of a frame marked as machinery — and the
+second trusts a client-asserted flag ([[B-260]]). Cross-refs [[B-257]], [[C-038]].
+
+## [ ] B-259 — an `auth` frame replaces the principal on a LOCKED console, while `auth.sign-out` is refused there ⟨priority: medium — nothing reaches the wire, but the lock's no-carve-out answer is kept on one door and not on its sibling, and the record shows a sign-in with no end to the session it displaced⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1, NOT worked
+
+**What.** The `auth` frame is handled before the route table (`bridge.ts:1352`), so the lock gate
+never sees it. That is deliberate for the AUTH gate — it has to run before a principal exists —
+and nothing written says what it should mean for the LOCK.
+
+**Measured 2026-09-23** (scratch spec, run and deleted): `cg-op1` signs in and engages the lock.
+Their `auth.sign-out` is refused with `LOCK_ENGAGED_REFUSAL` (the settled answer,
+`lock-refuses-intents.integration.test.ts:281`). An `auth` frame on the same socket carrying
+`cg-admin`'s token is ACCEPTED; `auth.state` then names `cg-admin`; the audit shows her `sign-in`
+after `cg-op1`'s `lock-engage`, and no row ends `cg-op1`'s session.
+
+**Why it matters.** A token REFRESH — same `sub`, about ten minutes before expiry — must pass the
+lock, or a lock held across a token's lifetime lapses the session behind it. A CHANGE of
+principal has no written reason to pass: it is sign-out and sign-in in one frame, and sign-out is
+the act [[B-229]] and `playout-authz-channels` §7 keep behind the PIN. The console still cannot
+act (the new principal is locked out too), so this is about the lock's integrity and the record,
+not about air.
+
+**Acceptance (sketch — the owner's call):**
+
+- EITHER a different `sub` is refused while the lock is engaged, and the refresh still passes
+- OR it passes, and the record says which principal was displaced
+- AND `auth.sign-out`'s settled answer is re-opened by neither
+
+**Notes:** Cross-refs [[B-229]], [[B-257]], [[C-037]].
+
+## [ ] B-260 — a locked console replaces a template's HTML, with no audit row, by marking the import `redelivery: true` ⟨priority: medium — what the next take puts on air changes behind the lock, and nothing records who changed it⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1, NOT worked
+
+**What.** `refusedWhileLocked` passes `templates.import` whenever `redelivery === true`
+(`bridge.ts:549`), and the client sets that flag. `#templateImportImpl` deliberately does NOT keep
+the bridge's copy of an id it already holds (`caspar-runtime.ts:9998` — [[B-085]]'s local-wins
+repair), and a re-delivery writes no audit row (`caspar-runtime.ts:9965`).
+
+**Measured 2026-09-23** (scratch spec, auth OFF, run and deleted): import `tpl-lock` as `v1`;
+engage the lock. Control — a plain import of `v2` is refused with `LOCK_ENGAGED_REFUSAL` and the
+held HTML is still `v1`. The SAME frame with `redelivery: true` answers `registered: true`, and the
+held HTML is now `v2`. The audit holds `import` and `lock-engage`, and nothing after them.
+
+**Why it is wrong.** `LockPolicy`'s own reason for splitting the channel on the flag is _"rather
+than exempting the channel outright and letting a locked console accept a catalogue change"_ — and
+a locked console accepts one. On the permission axis the flag buys nothing (class `operator`), but
+a principal holding that class can replace a template on air on a channel it holds no grant for,
+and the record does not say so: `templates.*` is station-wide by the authz design's §5.
+
+**Acceptance (sketch):**
+
+- WHEN the lock is engaged THEN a re-delivery registers only an id the bridge does not hold —
+  restore what was LOST, never overwrite — or it is refused
+- AND a re-delivery that changes held HTML writes a row
+- AND [[B-085]]'s offline-repair case is answered explicitly rather than lost
+
+**Notes:** Cross-refs [[B-229]], [[B-257]], [[B-258]].
