@@ -357,11 +357,27 @@ function parsePort(raw: string, min: number): number | null {
   return Number.isInteger(n) && n >= min && n <= 65535 ? n : null;
 }
 
+/**
+ * 🔴 `MODAL-TRUTH-01` (owner, 2026-09-22) — **THE FIELD'S REFUSAL AND `Apply servers`' GATE
+ * ARE ONE PREDICATE, CONSULTED TWICE.**
+ *
+ * They were two, and they disagreed. `hostError` has always decided what the sentence UNDER
+ * the field says; this function decided whether the BUTTON is live, and all it asked was
+ * whether the host was non-empty. So `127.0.6110.121151515` — the owner's own measurement —
+ * put a refusal under the field while `Apply servers` stayed enabled beside it: the surface
+ * contradicting itself about the same value, which is this whole session's subject.
+ *
+ * Routing the gate through `hostError` is the `B-228`/golden-rule-6 shape: one reader, so a
+ * rule added to the field cannot fail to reach the button. It costs the bespoke
+ * `Host must not be empty.` string, which said less than `hostError`'s own required-sentence
+ * and was pinned by nothing (swept by string and by component before it went).
+ */
 function parseEndpoint(
   d: EndpointDraft,
 ): { host: string; amcpPort: number; oscPort: number } | string {
+  const hostProblem = hostError(d.host, { label: 'Host' });
+  if (hostProblem !== null) return hostProblem;
   const host = d.host.trim();
-  if (host.length === 0) return 'Host must not be empty.';
   const amcpPort = parsePort(d.amcpPort, 1);
   if (amcpPort === null) return 'AMCP port must be an integer between 1 and 65535.';
   // OSC port 0 is a valid ephemeral-bind request (matches the schema).
@@ -603,6 +619,13 @@ export function StationSetupDialog({
       The host field must be CLEARABLE, and a cleared field has to round-trip through the
       store as `''`; the port has no such problem and `0` already means something specific.
     */
+    /*
+      `MODAL-TRUTH-01` — the SERVE host goes through the same door. Its field has rendered
+      `hostError` since `C-024`; the gate never read it, so the second address on this pane
+      had the identical split the primary one did. Blank is legal here and means "derive it".
+    */
+    const serveProblem = hostError(serveHost, { label: 'Serve host', blankAllowed: true });
+    if (serveProblem !== null) return serveProblem;
     const port = servePort.trim();
     if (port.length > 0) {
       if (!/^\d+$/.test(port)) return 'Template serve port must be an integer between 0 and 65535.';

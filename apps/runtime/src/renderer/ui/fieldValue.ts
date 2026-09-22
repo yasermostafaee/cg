@@ -126,11 +126,62 @@ export function indexError(
 }
 
 /**
+ * 🔴 `MODAL-TRUTH-01` (owner, 2026-09-22) — **A DOTTED-NUMERIC HOST IS AN IPv4 ATTEMPT, AND
+ * ONE THAT CAN NEVER BECOME A VALID ADDRESS IS ALREADY WRONG.**
+ *
+ * The owner typed `127.0.6110.121151515` into Primary host. Nothing said a word: the charset
+ * rule below passes it (digits and dots are legal), `parseEndpoint` asks only that the host
+ * be non-empty, and `Apply servers` stayed enabled. A field that holds an impossible address
+ * and reports it as fine is the same defect as the two dialogs this session repaired — a
+ * surface asserting a state that is not in force — with the operator's own typing as the
+ * state.
+ *
+ * ── WHAT IT DOES **NOT** DO, WHICH IS THE HALF §10.1 EXISTS TO PROTECT ──────
+ *
+ * It does NOT infer "host = IP". §10.1's table is unchanged and the reason it gives still
+ * decides this: `host` is an ADDRESS by contract, `isLoopbackHost` accepts `localhost` and
+ * `::1`, and installations name their servers. So the rule fires ONLY on text written
+ * entirely in digits and dots — a string that cannot be a useful server name and is, in
+ * practice, always a half-typed or mistyped IP. `caspar-a.local`, `playout01`, `localhost`,
+ * `::1` and `[::1]` contain something that is not a digit or a dot and are never examined.
+ *
+ * ── AND IT REFUSES ONLY THE IMPOSSIBLE, NEVER THE INCOMPLETE ────────────────
+ *
+ * The sentence renders live, under the field, on every keystroke. `127`, `127.`, `127.0.0`
+ * are all PREFIXES of a valid address and raise nothing — refusing them would put a red
+ * sentence under the field for the whole of typing a correct IP, which is how an operator
+ * learns to read past it. What is refused is text that no further keystroke can rescue: a
+ * fifth group, a group of more than three digits, or a group above 255. `6110` is refused at
+ * the `1` that made it four digits, which is exactly "you should not be able to type that".
+ *
+ * ⚠ It is a REFUSAL, never a rewrite — `hostValue`'s note says why an address field may not
+ * edit the operator's text, and that holds here: the impossible value stays on screen, in
+ * full, with the sentence saying what is wrong with it.
+ *
+ * ⚠ And it never replaces the bridge's own validation (this file's header): whether the
+ * address RESOLVES and whether CasparCG answers on it are not questions a browser can ask.
+ */
+const DOTTED_NUMERIC = /^[0-9.]+$/;
+
+/**
+ * Can this dotted-numeric text still become a valid IPv4 address by typing more?
+ *
+ * Named for what it tests (golden rule 6): it is NOT "is this a valid IPv4". `127.0.0` is not
+ * a valid address and is a perfectly good prefix of one, so it answers `true` here.
+ */
+function canStillBecomeIpv4(value: string): boolean {
+  const groups = value.split('.');
+  if (groups.length > 4) return false;
+  return groups.every((g) => g === '' || (g.length <= 3 && Number(g) <= 255));
+}
+
+/**
  * §10.4 — is this host text acceptable, and if not, the sentence to show beside it.
  *
- * It answers only the two questions the renderer can answer: is there anything there, and is
- * what is there shaped like a host at all. Whether it RESOLVES, and whether CasparCG can be
- * reached on it, belongs to the bridge.
+ * It answers only the questions the renderer can answer: is there anything there, is what is
+ * there shaped like a host at all, and — for an all-numeric value — can it still become an
+ * address. Whether it RESOLVES, and whether CasparCG can be reached on it, belongs to the
+ * bridge.
  */
 export function hostError(
   raw: string,
@@ -151,6 +202,9 @@ export function hostError(
   */
   if (!/^[A-Za-z0-9._:[\]-]+$/.test(value)) {
     return `${label} is a name or an address, not a URL — letters, digits, dots and hyphens.`;
+  }
+  if (DOTTED_NUMERIC.test(value) && !canStillBecomeIpv4(value)) {
+    return `${label} is not an address — an IP has four parts, each between 0 and 255.`;
   }
   return null;
 }

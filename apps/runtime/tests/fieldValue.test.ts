@@ -153,3 +153,69 @@ describe('§10.4 — an address field is NOT numeric, and letters are legal in i
     expect(hostError('no-such-server.invalid', { label: 'Host' })).toBeNull();
   });
 });
+
+describe('MODAL-TRUTH-01 §10.5 — a dotted-numeric host is an IPv4 attempt', () => {
+  /*
+    🔴 The owner typed `127.0.6110.121151515` into Primary host and nothing said a word: the
+    charset rule passes digits and dots, so the field reported an impossible address as fine
+    while `Apply servers` stayed enabled beside it. «همچین ip نباید بشه تایپ کرد!!»
+  */
+  it('🔴 the owner’s own value is refused, and the sentence says what an IP is', () => {
+    const said = hostError('127.0.6110.121151515', { label: 'Host' });
+    expect(said).toContain('four parts');
+    expect(said).toContain('0 and 255');
+  });
+
+  it('every way an all-numeric value can become impossible', () => {
+    // A group above 255.
+    expect(hostError('192.168.1.256', { label: 'Host' })).toContain('four parts');
+    // A group of more than three digits — refused at the keystroke that made it four.
+    expect(hostError('127.0.6110', { label: 'Host' })).toContain('four parts');
+    // A fifth group.
+    expect(hostError('1.2.3.4.5', { label: 'Host' })).toContain('four parts');
+    // A trailing dot after four groups is a fifth, empty group.
+    expect(hostError('1.2.3.4.', { label: 'Host' })).toContain('four parts');
+  });
+
+  it('🔴 it refuses the IMPOSSIBLE and never the INCOMPLETE — typing a good IP stays silent', () => {
+    /*
+      The sentence renders live under the field on every keystroke. Refusing a prefix would
+      put a refusal there for the whole of typing a correct address, which is how an operator
+      learns to read past one. Each of these is a real intermediate state of typing
+      `127.0.0.1`.
+    */
+    for (const partial of ['1', '12', '127', '127.', '127.0', '127.0.', '127.0.0', '127.0.0.']) {
+      expect(hostError(partial, { label: 'Host' }), partial).toBeNull();
+    }
+    expect(hostError('127.0.0.1', { label: 'Host' })).toBeNull();
+    expect(hostError('255.255.255.255', { label: 'Host' })).toBeNull();
+    expect(hostError('0.0.0.0', { label: 'Host' })).toBeNull();
+  });
+
+  it('🔴 POSITIVE CONTROL for §10.1 — it does NOT infer “host = IP”', () => {
+    /*
+      This is the inference the whole of §10.1 exists to forbid, and the rule above is only
+      safe because it fires on text written in NOTHING but digits and dots. Every value the
+      product already treats as correct contains something else, so none of them is examined.
+      If this case ever reds, the rule has widened into the thing §10.1 refused.
+    */
+    for (const name of [
+      'localhost',
+      '::1',
+      '[::1]',
+      'caspar-a.local',
+      'playout01',
+      'CASPAR-A',
+      '10gateway.local',
+      'no-such-server.invalid',
+    ]) {
+      expect(hostError(name, { label: 'Host' }), name).toBeNull();
+    }
+  });
+
+  it('a Persian-typed impossible IP is refused too — normalise first, then judge', () => {
+    // §10.2: the digits reach the field as ASCII, so the rule sees the same string we do.
+    expect(hostError(hostValue('۱۲۷.۰.۶۱۱۰.۱'), { label: 'Host' })).toContain('four parts');
+    expect(hostError(hostValue('۱۲۷.۰.۰.۱'), { label: 'Host' })).toBeNull();
+  });
+});
