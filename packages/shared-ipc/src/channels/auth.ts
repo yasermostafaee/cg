@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineChannel } from '../channel.js';
+import { definePublishChannel } from '../publish.js';
 
 /**
  * 🔴 `C-037` / [ADR 0010](../../../../docs/adrs/0010-playout-link.md) — **WHO IS ON THIS
@@ -146,6 +147,39 @@ export type AuthState = z.infer<typeof AuthStateSchema>;
  * would leave a console unable to discover that it needs to sign in.
  */
 export const AuthStateChannel = defineChannel('auth.state', z.void(), AuthStateSchema);
+
+/**
+ * 🔴 `OPERATOR-NAME-SWEEP-01` § 3(a) — **THIS SOCKET'S AUTH STATE CHANGED UNDER IT.**
+ *
+ * ── THE DEFECT THIS CLOSES ──────────────────────────────────────────────
+ *
+ * `C-038` gave the console a `permittedChannels` list and it arrived ONCE, on the socket's
+ * `auth` reply. The gate, meanwhile, reads the connection config on every request. So a
+ * `station-admin` editing the server list moved the GATE immediately and left the STRIP as it
+ * was until the console reconnected — a window in which the console could offer a channel the
+ * bridge had begun refusing, or mark read-only one it had begun allowing.
+ *
+ * ⚠ **The refusal was never wrong** — the bridge is the guarantee and it is never stale. What
+ * was wrong is the courtesy half, and a control the console offers disagreeing with a command
+ * the bridge accepts is precisely what `C-038` was built to prevent.
+ *
+ * ── WHY A PUBLISH RATHER THAN A POLL ────────────────────────────────────
+ *
+ * The same reason every other state on this socket is pushed: a poll is a second reader on a
+ * different clock, and two readers of one fact are how the two come to disagree (golden
+ * rule 6). The bridge already decides this per socket; it now says so.
+ *
+ * ⭐ **The payload is the WHOLE `AuthState`, not just the channel list.** It is computed by
+ * the same call that answers `auth.state`, so a reader cannot assemble a state the bridge
+ * never held — and a future field on `AuthState` travels here for free rather than needing a
+ * second channel nobody remembers to add.
+ *
+ * ⚠ **It is PER SOCKET.** `wirePublishes` runs once per connection with that connection’s own
+ * `AuthSession` in scope, so each socket is told its OWN principal’s answer. An earlier
+ * reading of this codebase called that a new mechanism; it is not, and the correction matters
+ * because it is the difference between one `subscribe` line and a redesign.
+ */
+export const AuthStateChangedChannel = definePublishChannel('auth.state-changed', AuthStateSchema);
 
 /**
  * Drop this socket's principal without closing the socket.

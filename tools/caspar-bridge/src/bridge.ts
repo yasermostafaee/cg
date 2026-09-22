@@ -5,6 +5,8 @@ import {
   AuditRecentChannel,
   AUTH_NO_TOKEN,
   AUTH_REQUIRED_REFUSAL,
+  AuthStateChangedChannel,
+  type AuthMode,
   AUTHZ_ROLE_REFUSAL,
   authzChannelRefusal,
   type PermissionClass,
@@ -659,6 +661,62 @@ export function authGateState(
 }
 
 /**
+ * 🔴 `OPERATOR-NAME-SWEEP-01` § 3(a) — **THIS SOCKET'S WHOLE AUTH STATE. The ONE composition.**
+ *
+ * Extracted so that the `auth.state` READ and the `auth.state-changed` PUBLISH cannot answer
+ * differently. They did not, yet — the publish is new — and that is exactly when to make it
+ * impossible: two spellings of one verdict is how a surface comes to claim a state the gate
+ * does not hold, which `C-037` already had to fix once on this very field.
+ *
+ * ⚠ It reads the configuration at CALL time, through `configuredCasparHosts`. That is what
+ * makes the publish meaningful: the event says "the server list moved", and this recomputes
+ * the answer against the list as it now is.
+ */
+export function authStateFor(
+  session: AuthSession | null,
+  /**
+   * The gate's verdict for this socket, supplied by whichever caller can compute it.
+   *
+   * ⚠ Taken rather than derived, because the two callers reach `authGateState` by different
+   * routes: the publish holds the `PlayoutAuth` directly, while `buildRoutes` is given the
+   * verdict as an injected function so a census can build the table with no verifier at all.
+   * Passing the ANSWER keeps one predicate with one implementation and lets both in.
+   */
+  status: AuthGateState,
+  mode: AuthMode,
+  runtime: CasparRuntime,
+): AuthState {
+  const principal = session?.token?.principal ?? null;
+  return {
+    mode,
+    principal,
+    status,
+    /*
+      🔴 `C-038` — **THE PERMITTED-CHANNEL LIST, COMPUTED HERE AND NOWHERE ELSE.**
+
+      `grantsChannel` stays the ONE implementation and this is its one caller, because this is
+      the side that holds the connection config. A console re-deriving the same verdict would
+      need `configuredCasparHosts` in a second package (`B-162`'s hole) and could disagree with
+      the gate whenever its config read were stale — a control offered that the bridge refuses.
+
+      ⚠ Gated on `signed-in` rather than on the principal being non-null: a principal survives
+      expiry and revocation on purpose (see `AuthStateSchema.principal`), and a session that
+      has stopped holding must not go on advertising channels.
+    */
+    permittedChannels:
+      principal === null || status !== 'signed-in'
+        ? []
+        : [
+            ...grantedChannels(
+              principal.channels,
+              configuredCasparHosts(runtime.config()),
+              runtime.declaredChannels(),
+            ),
+          ],
+  };
+}
+
+/**
  * 🔴 `C-038` — **WHICH CHANNELS A REQUEST TOUCHES. The ONE resolver.**
  *
  * Exported for the census in `tests/authz-classes.integration.test.ts`, which walks every
@@ -1155,6 +1213,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       socket,
       runtime,
       () => authGateState(session, playoutAuth) !== 'absent',
+      // § 3(a) — THIS socket's principal, through the one composition `auth.state` answers with.
+      () => authStateFor(session, authGateState(session, playoutAuth), auth.mode, runtime),
     );
     socket.on('message', (data) => {
       // `B-229` — the lock is read PER REQUEST from the live runtime, never captured.
@@ -1432,8 +1492,11 @@ async function handleMessage(
       so every audit append it reaches records WHO asked, at any depth and across
       every await, without a single call site taking an actor parameter. Two browsers
       interleaving their requests each keep their own; see `actor-context.ts` for why
-      that rules out a mutable "current actor" field, and for what the value is worth
-      (self-declared, unverified — which console, not which person).
+      that rules out a mutable "current actor" field.
+
+      ⭐ `OPERATOR-NAME-SWEEP-01` — the wire's `actor` is no longer sent by any console, so
+      with auth OFF this records `unattributed` and with auth ON the verified principal wins.
+      The old parenthetical describing what a typed value was worth is gone with the value.
     */
     /*
       `C-037` — the session travels into the actor context so a VERIFIED name wins over the
@@ -1595,6 +1658,19 @@ export function wirePublishes(
    * calls with — so not one byte of today's behaviour moves and the guard needs no edit.
    */
   deliver: () => boolean = () => true,
+  /**
+   * 🔴 `OPERATOR-NAME-SWEEP-01` § 3(a) — **THIS SOCKET'S OWN AUTH STATE, recomputed on
+   * demand.**
+   *
+   * Optional and defaulting to `null`, so the `B-247` publish-coverage guard — which calls
+   * this function with two arguments to prove every emitter is forwarded — needs no edit, and
+   * so a caller that has no session (a census, a test) simply pushes nothing.
+   *
+   * ⚠ A FUNCTION, not a value. The point is that it is read at PUSH time, exactly as
+   * `deliver` is: the configuration that decides the answer changes underneath, which is the
+   * whole reason this channel exists.
+   */
+  authState: (() => AuthState) | null = null,
 ): (() => void)[] {
   const push = (channel: AnyPublishChannel, payload: unknown): void => {
     if (!deliver()) return;
@@ -1606,6 +1682,37 @@ export function wirePublishes(
     backing.stackChanged.subscribe((s) => push(StackStateChangedChannel, s)),
     backing.healthChanged.subscribe((h) => push(ConnectionsHealthChangedChannel, h)),
     backing.configChanged.subscribe((c) => push(ConnectionsConfigChangedChannel, c)),
+    /*
+      🔴 `OPERATOR-NAME-SWEEP-01` § 3(a) — **THE PERMITTED CHANNELS FOLLOW THE CONFIG.**
+
+      A second subscription to the SAME emitter, deliberately, rather than folding this into
+      the push above. The two say different things to different readers: one is "the server
+      list changed", which every console shows; the other is "what YOU may drive changed",
+      which is per principal. Merging them would make one channel carry two facts and would
+      force every reader of the config to know about permissions.
+
+      ⚠ **Why the config event is the right trigger.** `grantsChannel` resolves a grant's
+      host against `configuredCasparHosts(config)`, so the server list is the only input to
+      the verdict that can move without the principal changing — a token change already
+      re-pushes through `#setPrincipal` on the console side.
+    */
+    backing.configChanged.subscribe(() => {
+      if (authState === null) return;
+      const next = authState();
+      /*
+        🔴 **AUTH OFF PUSHES NOTHING HERE.** A station that does not federate identity must
+        gain no traffic it did not have — "byte-identical" is a claim about the wire, not only
+        about behaviour, and a spec measured this one: the first spelling pushed
+        `{ mode: 'off', permittedChannels: [] }` on every config change, to every console, for
+        a station with no principal to scope to.
+
+        ⚠ The check is on the MODE rather than on the list being empty. An empty list is a real
+        answer for a signed-in viewer, and suppressing that would leave a strip asserting
+        channels the viewer had just lost.
+      */
+      if (next.mode === 'off') return;
+      push(AuthStateChangedChannel, next);
+    }),
     backing.orphansChanged.subscribe((o) => push(LayersOrphansChangedChannel, o)),
     backing.ownedOccupancyChanged.subscribe((w) => push(LayersOwnedOccupancyChangedChannel, w)),
     // B-225 — air was emptied under us (or the notice was acted on / dismissed).
@@ -1775,40 +1882,17 @@ export function buildRoutes(
     */
     route(AuthStateChannel, 'read', 'read', () => {
       /*
-        🔴 IT ASKS THE ONE PREDICATE. It used to report `token?.principal` directly, and
-        that was a lie a spec MEASURED: with intents already refused for a revoked `jti`, this
-        read still answered a full principal. The principal is still reported — a surface has
-        to be able to say WHOSE session ended — but the verdict beside it is the gate's own.
+        🔴 IT ASKS THE ONE PREDICATE. It used to report `token?.principal` directly, and that
+        was a lie a spec MEASURED: with intents already refused for a revoked `jti`, this read
+        still answered a full principal. The principal is still reported — a surface has to be
+        able to say WHOSE session ended — but the verdict beside it is the gate's own.
+
+        ⭐ `OPERATOR-NAME-SWEEP-01` § 3(a) — and the composition now lives in `authStateFor`,
+        which the `auth.state-changed` PUBLISH also calls. A read and a push that answered the
+        same question from two places is the drift this file has already paid for once.
       */
       const session = currentAuthSession();
-      const principal = session?.token?.principal ?? null;
-      const status = authState(session);
-      return {
-        mode: authMode,
-        principal,
-        status,
-        /*
-          🔴 `C-038` — **THE PERMITTED-CHANNEL LIST, COMPUTED HERE AND NOWHERE ELSE.**
-
-          `grantsChannel` stays the ONE implementation and this is its one caller, because
-          this is the side that holds the connection config. A console re-deriving the same
-          verdict would need `configuredCasparHosts` in a second package (`B-162`'s hole) and
-          could disagree with the gate whenever its config read were stale — a control offered
-          that the bridge then refuses.
-
-          ⚠ Gated on `signed-in` rather than on the principal being non-null: a principal
-          survives expiry and revocation on purpose (see `AuthStateSchema.principal`), and a
-          session that has stopped holding must not go on advertising channels.
-        */
-        permittedChannels:
-          principal === null || status !== 'signed-in'
-            ? []
-            : grantedChannels(
-                principal.channels,
-                configuredCasparHosts(b.config()),
-                b.declaredChannels(),
-              ),
-      };
+      return authStateFor(session, authState(session), authMode, b);
     }),
     route(AuthSignOutChannel, 'operator', 'read', () => {
       const session = currentAuthSession();
