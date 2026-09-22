@@ -135,14 +135,17 @@ the build to name in the recon record**. apasai-core, which is what `C-040` actu
     actually does something, and its address is `192.0.2.10` (RFC 5737 documentation range),
     never dialled.
 
-11. 🔴 **2026-09-22 — UNDER AUTH ON, THE AUDIT PANEL'S SELF-DECLARED-LABEL CAVEAT IS DISPLAYED AND
-    FALSE.** Directly above rows carrying a VERIFIED name, the panel still reads _"It is a LABEL
-    you typed, not a verified sign-in — it says which console, not which person."_ That sentence
-    was true for every build before this one and is untrue the moment a bridge runs `auth:
-'playout'`. The remedy is named and owned: `R-066` bullet 5, the two-axis `operatorName`
-    retirement sweep, which is OUT of this change. ⚠ It is recorded rather than hidden — a
-    conditional that showed the caveat only when auth is off would create a THIRD state for that
-    sweep to find, which is how a sweep comes to miss one.
+11. ✅ **CLOSED 2026-09-23 — the false caveat is gone.** It read, directly above rows carrying a
+    VERIFIED name, that the actor was merely a label somebody had typed rather than a proven
+    sign-in — true for every build before `C-037` and untrue the moment a bridge runs
+    `auth: 'playout'`. `OPERATOR-NAME-SWEEP-01` retired the sentence, the field behind it, its
+    persisted key and the bridge-contract members it hung from, and left a permanent two-axis
+    guard (`operatorNameRetired.test.ts`) that fails if either the symbol or the sentence
+    returns to source.
+    ⚠ **One thing changed for stations running `auth: 'off'`, and it is not a regression:** the
+    console now sends no `actor` at all, so those rows record `unattributed`. The label it
+    replaced was a claim nobody checked; the remedy for a station that wants attribution in the
+    log is federating identity, which is what this integration is for.
 12. ⚠ **THE CORS ORIGIN IS THE PORT THE CONSOLE ACTUALLY SERVES ON, and the dev server's
     fallback is not it.** Their CORS list names `http://192.168.21.93:5174` and
     `http://127.0.0.1:5174`. Measured 2026-09-22: with something already holding 5174 the

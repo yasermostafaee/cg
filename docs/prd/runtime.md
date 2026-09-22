@@ -2906,12 +2906,16 @@ validationError` with both reasons spelled out in the pinned region
   to absorb. It therefore sits in the **Audit panel**, which is the least-bad existing home: that
   is the only surface where `actor` appears at all (the column and the filter), so the value, its
   caveat and its consequence are read in one glance.
-  **What must happen here:** move the control into the Settings shell — and ⚠ **the honesty caveat
-  travels with it** ("a LABEL you typed, not a verified sign-in — which console, not which
-  person"), because that caveat is a requirement of the change, not decoration. Consider leaving a
-  READ-ONLY restatement in the Audit panel: the limits of `actor` are most needed where `actor` is
-  read. It is recorded here rather than as its own item because R-054 is the work that resolves it,
-  and an unregistered "temporary" home is how a temporary home becomes permanent.
+  **What must happen here: NOTHING — RESOLVED 2026-09-23 by `OPERATOR-NAME-SWEEP-01`, and not
+  the way this bullet expected.** It ordered the control MOVED into the Settings shell with its
+  honesty caveat travelling alongside. Both were retired instead: [[C-037]] made identity
+  provable and [[C-038]] gated on it, so a browser-held label answers a question the Playout token
+  answers properly, and the caveat that qualified it had become a false sentence displayed above
+  verified names. There is no control left to move and no caveat left to carry.
+  ⚠ Updated rather than left standing, because [[R-066]]'s Notes required exactly that: a live
+  bullet ordering work on a retired feature is a contradiction the next reader would try to
+  discharge. Under auth OFF the console now sends no `actor` at all and the bridge records
+  `unattributed`.
 - **Cross-refs:** [[R-052]] (the message region contract every pane inherits), [[R-055]] (the red
   budget, the FAILOVER miscolour, and the wire-name follow-on above), [[R-056]] (the same space
   discipline, applied to the position section), [[B-139]] (the dirty predicate a tab switch will
@@ -3907,7 +3911,7 @@ being honest and becomes wrong: it would be telling the operator the record is w
       names but the principal may not operate is shown READ-ONLY, not hidden
 - [x] WHEN the principal is a `viewer` THEN every surface is read-only and says so once, in the
       operator's words — the controls are ABSENT as facts, not greyed out (golden rule 13)
-- [ ] WHEN identity is verified THEN the Audit panel's _"self-declared label, not a verified sign-in"_
+- [x] WHEN identity is verified THEN the Audit panel's _"self-declared label, not a verified sign-in"_
       copy and the operator-name field are RETIRED, and a two-axis `git grep` sweep — by the SENTENCE
       and by the `operatorName` SYMBOL — finds no stale copy in tests, docs or task lists
 - [x] WHEN auth is OFF THEN every surface is byte-identical to today

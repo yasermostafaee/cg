@@ -58,35 +58,51 @@ somebody chose to name `operator`.
 - **WHEN** an operator empties this console's name
 - **THEN** subsequent actions record `unattributed` again
 
-### Requirement: The operator is told what the recorded name is worth
+### Requirement: The audit surface states what the recorded actor is worth
 
-The surface on which the operator sets and reads the name SHALL state, in the operator's own
-terms, that the name is self-declared and unverified — that it identifies the CONSOLE as
-labelled and not the PERSON, and that it does not change when somebody else takes the chair.
+The audit surface SHALL NOT qualify the recorded actor as self-declared or unverified, because
+under a federated identity it is neither.
 
-This statement SHALL appear where the audit record is READ, not only in design
-documentation. A limit that only the implementer can see is the same defect as not knowing
-it: the operator is the one who acts on the record.
+🔴 **SUPERSEDED 2026-09-23 by `OPERATOR-NAME-SWEEP-01`, and rewritten HERE rather than removed
+by a later change, because this delta has not been archived yet.** Left as it was, archiving it
+would fold the retired caveat into the living spec — the living spec gaining a requirement on
+the same day the product lost it, and no guard would catch that.
 
-The surface SHALL also state what an empty name records, so that leaving it blank is an
-informed choice rather than an unnoticed default.
+What it replaces mandated a surface stating that the recorded name was self-declared and
+unverified. That was correct while the control socket was unauthenticated loopback. It is not
+correct now: `C-037` establishes a principal from a Playout-issued token the bridge verifies
+offline, and `C-038` gates every route on it, so the recorded actor came out of a signature
+check and a surface calling it otherwise would be false.
 
-#### Scenario: The caveat is beside the record it qualifies
+The console SHALL NOT offer a control for setting a browser-held actor name, and SHALL NOT send
+one on the wire. Where no principal exists — a station running with authentication off — the
+bridge SHALL record `unattributed`, which is the state the system is actually in rather than a
+name nobody checked.
 
-- **WHEN** the operator opens the audit surface
-- **THEN** the name control and its unverified-identity caveat are visible together with the
-  actor column they describe
+#### Scenario: A verified name is not qualified
 
-#### Scenario: The empty case is stated on the surface
+- **WHEN** an operator signs in and opens the audit surface
+- **THEN** the rows carry the verified name and no statement on that surface describes it as
+  self-declared, unverified, or typed
 
-- **WHEN** the operator reads the name control
-- **THEN** it says what is recorded when the field is left empty
+#### Scenario: No console-name control exists
+
+- **WHEN** an operator opens the audit surface
+- **THEN** there is no control for setting a name recorded as the actor
+
+#### Scenario: With authentication off the record says so
+
+- **WHEN** a bridge runs with authentication off and an operator acts
+- **THEN** the entry records `unattributed`
 
 ### Requirement: The per-console name is stored per console
 
-The operator name SHALL be stored locally to the console that set it, and SHALL NOT be
-shared with other consoles connected to the same bridge. A value shared across the gallery
-would answer nothing that a single constant did not already answer.
+No browser-local actor name SHALL be persisted by the console.
+
+🔴 **SUPERSEDED 2026-09-23 by `OPERATOR-NAME-SWEEP-01`**, for the same reason as the requirement
+above and recorded the same way. There is no per-console name to store: the persisted key was
+retired with the field, and identity now arrives as a token the bridge verifies rather than a
+string a browser keeps.
 
 The name SHALL be read at the moment each request is sent, so that renaming a console takes
 effect on its next action without a reload.

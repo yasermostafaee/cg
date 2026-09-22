@@ -554,6 +554,11 @@ red-first matrix (§15.5), guard item 27 discharged (§15.6), and what was not d
       tests (`9.3`) for items 1–26, Phase 10's end-to-end pass. Nothing of 27.
       ✅ **A16 done (the small part):** `SILENCE ALL BOXES · EVERY CHANNEL` — label, accessible
       name and tooltip name the scope; `silenceAllLivePlates` untouched; recorded on `R-062`.
+      ⚠ **SUPERSEDED 2026-09-23 by `OPERATOR-NAME-SWEEP-01`.** A1 kept the picker and its
+      caveat; both are now retired outright. Identity is proven (`C-037`/`C-038`), so the
+      picker answered a question the Playout token answers properly and the caveat had become
+      false above verified rows. The ACTOR COLUMN — the half A1 was really protecting —
+      survives untouched. Recorded rather than re-ticked: what was done on that day was done.
 - [x] 8.4 `pnpm gate` — **`93 successful, 93 total · 0 cached, 93 total`**, foreground, prettier
       clean, OpenSpec `78 passed, 0 failed`. `pnpm --filter @cg/runtime test:e2e` — **143 passed
       (1.9 m)**, Windows, against the gate's fresh build, after one geometry correction the first

@@ -605,26 +605,27 @@ VOLUME 0` for that plate and records `0` as its intent, exactly what MUTE sent a
 The audit log SHALL render an ACTOR column — headed `Actor`, second, between `Time` and `Action`
 — carrying each record's actor verbatim in its own bidi isolate, whatever the approved reference
 draws; a log that names nobody is the `B-143` failure with the sign flipped. The actor SHALL be
-determined exactly as it is today: the console name typed into the audit panel's `This console`
-field (`audit.setOperatorName`, browser-local), sent with every control request and recorded by
-the bridge, `unattributed` when empty. That field SHALL stay in the audit panel — made small and
-kept beside the column it qualifies, never in Station setup — in ONE strip with `B-143`'s caveat
-(_"It is a LABEL you typed, not a verified sign-in — it says which console, not which person"_),
-and that strip SHALL sit above the table. The caveat's wording SHALL NOT change. The actor FILTER
-SHALL keep narrowing the tail on the bridge by the same column.
+the principal the bridge verified for that socket, or `unattributed` where none exists. The
+actor FILTER SHALL keep narrowing the tail on the bridge by the same column.
 
-#### Scenario: The column and the strip are on the surface
+⚠ **This requirement used to fix the actor as a browser-held console name, typed into a
+`This console` field kept in one strip with its caveat above the table.
+`OPERATOR-NAME-SWEEP-01` retired the field, the strip and the caveat: `C-037` establishes a
+principal from a verified Playout token and `C-038` gates on it, so the value is no longer
+self-declared and the sentence qualifying it had become false above the rows it sat on. Rewritten
+here rather than contradicted by a later change, because this delta has not archived yet and
+would otherwise write the retired strip into the living spec.**
 
-- **WHEN** the audit log is opened with records from two consoles and an unattributed one **THEN**
-  the table's head reads `Time · Actor · Action · Item / detail · Outcome`, each row's actor cell
-  reads that record's actor in a `<bdi>`, and the `This console` field and the caveat are one strip
-  rendered before the table, outside it
+#### Scenario: The column is on the surface
 
-#### Scenario: The field is still the one writer
+- **WHEN** the audit log is opened with records from two principals and an unattributed one
+  **THEN** the table's head reads `Time · Actor · Action · Item / detail · Outcome` and each
+  row's actor cell reads that record's actor in a `<bdi>`
 
-- **WHEN** the operator types a console name into the field **THEN** `audit.setOperatorName` is
-  called with that value, the field is bounded by the wire's actor limit, and nothing in Station
-  setup offers the same field
+#### Scenario: No console-name control is offered
+
+- **WHEN** the audit log is opened **THEN** there is no field for typing an actor name, and no
+  statement on the surface describes the recorded actor as self-declared or unverified
 
 ### Requirement: The template picker and the audit log take their geometry from the token home, and the import path is untouched
 

@@ -157,7 +157,7 @@ Manual failover: click `FAILOVER` in the StatusBar. The journal is replayed to t
 
 ## Audit
 
-The `AUDIT` button in the StatusBar opens a tail of the NDJSON log. Filter by action (load / take / lock-engage / failover / …) or actor. The log is append-only and forensic — a clean exit is recorded; a crash leaves the file partially written but the next boot picks up where it left off.
+The `AUDIT` button in the StatusBar opens a tail of the NDJSON log. Filter by action (load / take / lock-engage / failover / …) or actor. On a station that signs in, the actor is the person the bridge verified; on one that does not, every row reads `unattributed` — there is no name to type and nothing is hidden by that. The log is append-only and forensic — a clean exit is recorded; a crash leaves the file partially written but the next boot picks up where it left off.
 
 ## Telemetry
 

@@ -11,9 +11,13 @@ layer an entry concerns as the Layers table names that row (the configured alias
 default `Layer N` / `Bed N`), or — for a layer outside the declared bank — as CasparCG names it
 with the fact that it is not a row stated, and SHALL name the template as the picker names it.
 The item id and the template id SHALL remain on the row: shortened for display, complete in the
-element's title, and copyable to the clipboard. The record on disk SHALL be unchanged, and the
-sentence qualifying the console name ("a LABEL you typed, not a verified sign-in") SHALL be
-unchanged.
+element's title, and copyable to the clipboard. The record on disk SHALL be unchanged.
+
+⚠ **This requirement used to also pin the sentence qualifying the console name as unchanged.
+`OPERATOR-NAME-SWEEP-01` retired that sentence and the field behind it (identity is proven —
+`C-037`/`C-038`), so the clause is removed here rather than left to fold into the living spec
+on archive. Nothing else in this requirement moves: naming the ROW and the TEMPLATE better was
+always a separate question from naming the PERSON.**
 
 #### Scenario: The incident stamp reads as the control room clock
 

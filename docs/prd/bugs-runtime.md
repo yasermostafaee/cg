@@ -3682,7 +3682,14 @@ update-deferred update-installed`. `ACTION_OPTIONS` in
   id (identifies a browser; nobody disputes which browser).
   🔴 **The name is SELF-DECLARED and UNVERIFIED** — "which console, as labelled", never "which
   person, proven" — and that caveat is on the operator-facing surface, not only in the design, for
-  the reason [[B-143]] records. An unconfigured console records `unattributed`, a word for a state,
+  the reason [[B-143]] records.
+  ⭐ **SUPERSEDED 2026-09-23 — the field and its caveat are RETIRED** (`OPERATOR-NAME-SWEEP-01`,
+  [[R-066]] bullet 5). This paragraph stands as the record of what shipped on 2026-08-18 and why;
+  what changed is the premise. [[C-037]] made identity provable and [[C-038]] gated on it, so the
+  recorded actor is a verified principal and a surface calling it a typed label would be false.
+  The `OPERATOR_ACTOR` seam this bug created is what made that swap a one-site change — exactly
+  the property it was built for. Under auth OFF the console sends no actor and the bridge records
+  `unattributed`. An unconfigured console records `unattributed`, a word for a state,
   never the old `operator`, which could not be told apart from a console somebody chose to name
   that. ⚠ The control lives in the Audit panel because the Runtime has no settings shell;
   [[R-054]] records that it must move.
