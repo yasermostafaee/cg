@@ -160,6 +160,12 @@ export function loadPlayoutFile(configPath: string): PlayoutFile | null {
   return result.data;
 }
 
+/** A value that is present and not blank, or `undefined` — so `??` can do what it reads as. */
+function nonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed === undefined || trimmed === '' ? undefined : trimmed;
+}
+
 /** `http(s)://host[:port][/path]`, no trailing slash expected. Anything else is refused. */
 function requireAbsoluteUrl(key: string, value: string): string {
   let url: URL;
@@ -259,7 +265,14 @@ export function resolvePlayoutSettings(
       refreshUrl: derived('refreshUrl'),
       channelsUrl: derived('channelsUrl'),
       revokedUrl: derived('revokedUrl'),
-      audience: pick('audience')?.trim() ?? DEFAULT_PLAYOUT_AUDIENCE,
+      /*
+        ⚠ An EMPTY value falls back to the default, and `??` alone would not do it: `''` is not
+        nullish, so a blank `--playout-audience` or `"audience": ""` in the file resolved to the
+        empty string — and every real token was then refused as "not for this station", which
+        is true, unhelpful, and points at the wrong end of the link. Same shape as the two
+        required keys above, which is why it reads the same way.
+      */
+      audience: nonEmpty(pick('audience')) ?? DEFAULT_PLAYOUT_AUDIENCE,
     },
   };
 }

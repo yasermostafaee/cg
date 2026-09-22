@@ -317,6 +317,59 @@ describe('C-037 — the record learns who arrived, and keeps saying so', () => {
   });
 });
 
+describe('DELTA B — a RESUME is not a sign-in, and the record does not say it is', () => {
+  /**
+   * 🔴 **WHAT THE OWNER SAW, 2026-09-22.** 37 audit events, almost all
+   * `sign-in · علی رضایی · ok`, growing on every browser reload — in pairs, one second
+   * apart. He signed in ONCE, with a password.
+   *
+   * Every reconnect re-presents the token the console already holds (`R-066` bullet 2), and
+   * each was recorded as an act of the operator. The audit answers WHAT OPERATORS DID, so a
+   * record that turns one password into dozens of sign-ins is worse than a quiet one: it is
+   * `B-141`'s failure with the sign flipped — not a log that cannot answer, a log that answers
+   * wrongly.
+   */
+  it('🔴 ONE sign-in row for one token, however many times it is presented', async () => {
+    const { bridge, playout } = await authedBridge();
+    const issued = await playout.issueToken();
+
+    // Five connects, each presenting the SAME held token — five reloads.
+    for (let i = 0; i < 5; i += 1) {
+      const client = await openClient(bridge);
+      const reply = await client.authenticate(`a${String(i)}`, issued.token);
+      expect(reply.error, `presentation ${String(i)} was refused`).toBeUndefined();
+      client.ws.close();
+    }
+
+    const rows = await bridge.runtime.auditRecent(200);
+    const signIns = rows.filter((r) => r.action === 'sign-in');
+    expect(signIns.length, 'a reconnect was recorded as an act of the operator').toBe(1);
+    expect(signIns[0]?.actor).toBe(FAKE_OPERATOR.name);
+    // …and no invented substitute row either: the reconnect is recorded as nothing at all.
+    expect(rows.filter((r) => r.action === 'sign-out').length).toBe(0);
+  });
+
+  it('…and a DIFFERENT token IS a sign-in — the control for that silence', async () => {
+    /*
+      Without this, "one row" would be satisfied by a bridge that stopped recording sign-ins
+      altogether — which is the same record failure pointing the other way. A refreshed token
+      and a fresh password are both NEW tokens, and both are the first time this bridge has
+      seen that one.
+    */
+    const { bridge, playout } = await authedBridge();
+    const first = await playout.issueToken();
+    const second = await playout.issueToken();
+    expect(first.jti, 'the fixture issued one token twice').not.toBe(second.jti);
+
+    const client = await openClient(bridge);
+    await client.authenticate('a', first.token);
+    await client.authenticate('b', second.token);
+
+    const rows = await bridge.runtime.auditRecent(200);
+    expect(rows.filter((r) => r.action === 'sign-in').length).toBe(2);
+  });
+});
+
 describe('C-037 — THE ALS SEAM: two sockets, two tokens, no crossing', () => {
   it('🔴 two signed-in sockets each drive a verb — sequentially and INTERLEAVED — and neither row wears the other name', async () => {
     const { bridge, playout } = await authedBridge();

@@ -106,6 +106,19 @@
 - [x] 6.1 `pnpm openspec validate playout-auth-signin --strict`.
 - [x] 6.2 `pnpm exec prettier --write` on everything touched; `pnpm gate` green (plain, never
       `--force` — it is already inside the script).
-- [ ] 6.3 **Linux `e2e` DISCHARGED** — run URL to be written here beside this box once the
-      GitHub Actions run for the pushed commit COMPLETES green with the `e2e` job actually RAN
-      (not skipped). A ticked box with no URL is a claim, not a discharge.
+- [x] 6.3 **Linux `e2e` DISCHARGED for `3add5032`** —
+      <https://github.com/yasermostafaee/cg/actions/runs/35742892616>, `conclusion: success`, and
+      the **`E2E (Playwright)` job RAN** (`conclusion: success`, not skipped — `P-029`). That
+      commit carries the whole of `C-037` and `R-066`'s sign-in half.
+- [x] 6.4 **Linux `e2e` DISCHARGED for `9a4ca4f4`** —
+      <https://github.com/yasermostafaee/cg/actions/runs/35745278125>, `conclusion: success`, and
+      the **`E2E (Playwright)` job RAN** (not skipped). That is the follow-up fix commit
+      (`design.md` §11).
+- [x] 6.5 **The §8 walkthrough, exercised without a browser** — 15/15 checks, against the real
+      D1 endpoint over a real WebSocket to a real bridge on loopback: capabilities answer an
+      unsigned socket and advertise the sign-in address; a take AND `clear-all` are refused with
+      the one sentence; D1 mints a token the bridge accepts; the same socket then drives a verb
+      with no reload; the `sign-in` row and the VERB row both carry the verified Persian name and
+      `sub`; sign-out is recorded and the socket stays open; a wrong password is
+      `401 invalid_credentials` in the contract's shape; and 🔴 the `C-038` gap is VISIBLE —
+      a viewer with NO channels signs in and commands.

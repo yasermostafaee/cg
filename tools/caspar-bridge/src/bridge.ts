@@ -571,7 +571,21 @@ export function refusedByAuth(route: Route, state: AuthGateState): boolean {
   if (state === 'off' || state === 'signed-in') return false;
   if (openToUnauthenticated(route.channel.name)) return false;
   if (state === 'absent') return true;
-  return route.lock !== 'read' && route.lock !== 'resync';
+  /*
+    🔴 **ONLY `read` SURVIVES AN INVALID SESSION — `resync` DOES NOT, and that is a
+    deliberate divergence from `LockPolicy`, not an oversight.**
+
+    The lock exempts `resync` because `StackRestoreChannel` is "unreachable from any operator
+    control", which is true and is an argument about WHO can trigger it. Auth asks a different
+    question: `stack.restore` is not a read. It seeds the reconciler, publishes a new stack to
+    every console and parks items that can reach `CG ADD` on the wire. A principal the bridge
+    has stopped accepting must not put anything on air, however it got there — so the carve-out
+    that is right for a PIN is wrong for an expired token.
+
+    Nobody is stranded: a console whose token lapsed is refused its restore, shows its sign-in,
+    signs in, and restores on the next connect.
+  */
+  return route.lock !== 'read';
 }
 
 /**
@@ -601,15 +615,22 @@ export function authGateState(
   if (held === null) return 'absent';
   if (playoutAuth.isExpired(held.expEpochSec)) return 'invalid';
   /*
-    ⚠ **BEFORE the revocation check, and that order is load-bearing.** Written the other way
-    round it was a trap door: the poller is kicked only from here, so the moment a station's
-    last signed-in socket went REVOKED nothing would ever poll again — the list would freeze
-    at the verdict that froze it, and an operator un-revoked on the Playout could not be let
-    back in by any token they already held. Refreshing the bearer for any token that VERIFIED
-    and has not expired keeps the bridge able to learn it was wrong.
+    🔴 **THE CLOCK KEEPS RUNNING; THE CREDENTIAL DOES NOT CHANGE HANDS.**
+
+    Two failures were possible here and the first two spellings each hit one of them. Checking
+    revocation first and returning left nothing to kick the poller, so a station whose last
+    signed-in socket went revoked would never poll again and could not learn it was wrong.
+    Calling `noteLiveToken` first installed the REVOKED token as the process-wide D9 bearer,
+    and the Playout answers `401` to that — which `#pollRevoked` correctly swallows, freezing
+    the list for the whole bridge.
+
+    So: a revoked token arms the tick and is never adopted as the credential.
   */
+  if (playoutAuth.isRevoked(held.jti)) {
+    playoutAuth.noteVerifiedButRevoked();
+    return 'invalid';
+  }
   playoutAuth.noteLiveToken(held.rawToken);
-  if (playoutAuth.isRevoked(held.jti)) return 'invalid';
   return 'signed-in';
 }
 
@@ -889,6 +910,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       : {}),
     auth,
     authState: (session) => authGateState(session, playoutAuth),
+    releaseBearer: (rawToken) => playoutAuth?.releaseBearer(rawToken),
   });
 
   const wss = new WebSocketServer({
@@ -974,12 +996,18 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         runtime,
       );
     });
-    socket.on('close', () => {
+    const dropSocket = (): void => {
       for (const off of unsubscribers) off();
-    });
-    socket.on('error', () => {
-      for (const off of unsubscribers) off();
-    });
+      /*
+        ⚠ A CLOSED TAB IS A SIGN-OUT THE OPERATOR NEVER PRESSED. Without this the bridge keeps
+        calling the Playout with that console's token until `exp` — twelve hours — and nothing
+        anywhere reports it, because the token is still perfectly valid.
+      */
+      const raw = session.token?.rawToken;
+      if (raw !== undefined) playoutAuth?.releaseBearer(raw);
+    };
+    socket.on('close', dropSocket);
+    socket.on('error', dropSocket);
   });
 
   runtime.start();
@@ -1090,7 +1118,14 @@ async function handleMessage(
     thing to meet one.
   */
   if (frame.type === 'auth') {
-    await handleAuthFrame(socket, frame, session, playoutAuth, runtime);
+    /*
+      ⚠ REGISTERED BEFORE IT IS AWAITED, so a frame dispatched on the very next message event
+      already sees it. Registering after the await would be registering after the window it
+      exists to cover.
+    */
+    const verification = handleAuthFrame(socket, frame, session, playoutAuth, runtime);
+    session.trackVerification(verification);
+    await verification;
     return;
   }
 
@@ -1158,6 +1193,20 @@ async function handleMessage(
     that a socket without a principal now gets two answers instead of every answer — when,
     and only when, auth is ON.
   */
+  /*
+    🔴 **WAIT FOR A SIGN-IN THAT IS STILL LANDING, BEFORE JUDGING THIS FRAME.**
+
+    Frames are dispatched concurrently — `socket.on('message')` calls `void handleMessage(…)`
+    and nothing serializes them — so a console that writes its `auth` frame and then, in the
+    same tick, its whole resync would have every one of those frames gated while the token was
+    still being verified. All of them would be refused and the console would come back with an
+    empty library and no stack. See `AuthSession.whenSettled`.
+
+    ⚠ AFTER the lock gate and the request parse, and BEFORE the auth gate: a malformed frame
+    still gets its shape error without waiting on a network fetch, and a locked console is
+    still told it is locked.
+  */
+  await session.whenSettled();
   const gate = authGateState(session, playoutAuth);
   if (refusedByAuth(route, gate)) {
     send(socket, errorResponse(frame.id, AUTH_REQUIRED_REFUSAL));
@@ -1248,10 +1297,22 @@ async function handleAuthFrame(
 
     Computed BEFORE `adopt`, because after it the previous principal is gone.
   */
-  const previousSub = session.token?.principal.sub ?? null;
   session.adopt(result.token);
   playoutAuth.noteLiveToken(result.token.rawToken);
-  if (previousSub !== result.token.principal.sub) {
+  /*
+    🔴 `DELTA B` — **A RESUME IS NOT A SIGN-IN, AND THE RECORD MUST NOT SAY IT IS.**
+
+    Keyed on the TOKEN, not on the socket and not on the person. The previous spelling compared
+    `sub` against the socket's previous principal, which is `null` on every new socket — so
+    every reconnect wrote a row, and the owner's record showed 37 sign-ins for one password.
+
+    The audit answers WHAT OPERATORS DID. A reconnect is the console's own machinery, the same
+    class `LockPolicy`'s `resync` exists to name — _"the client's own reconnect machinery, not a
+    press"_ — so it is recorded as nothing at all. There is no `session-resumed` row either:
+    one per reconnect over a twelve-hour shift is the network's diary, not the operator's, and
+    it would bury the rows that are.
+  */
+  if (playoutAuth.markAccepted(result.token)) {
     /*
       `actorNameTruncated` rides here and nowhere else: it is a fact about this session, and a
       flag repeated on every take would be noise about something that does not change.
@@ -1405,6 +1466,8 @@ export function buildRoutes(
      * built with no Playout link is.
      */
     authState?: (session: AuthSession | null) => AuthGateState;
+    /** `C-037` — give up the D9 bearer when the socket that supplied it signs out. */
+    releaseBearer?: (rawToken: string) => void;
   } = {},
 ): Map<string, Route> {
   // NAMED, not positional. Four optional string paths in a row is a signature
@@ -1413,6 +1476,7 @@ export function buildRoutes(
   const { persistPath, fixedLayersPath, sourceCatalogPath, sourceAssignmentsPath } = paths;
   const { mode: authMode, playout: playoutUrls } = paths.auth ?? AUTH_OFF;
   const authState = paths.authState ?? ((): AuthGateState => 'off');
+  const releaseBearer = paths.releaseBearer ?? ((): void => undefined);
   /*
     `B-229` — `lock` is the THIRD ARGUMENT AND IT IS REQUIRED. A new channel cannot be
     routed without classifying it, which is what keeps "the lock refuses everything"
@@ -1490,6 +1554,9 @@ export function buildRoutes(
     route(AuthSignOutChannel, 'operator', () => {
       const session = currentAuthSession();
       const leaving = session?.token?.principal ?? null;
+      // The bridge must stop calling the Playout with a token whose operator has left.
+      const raw = session?.token?.rawToken;
+      if (raw !== undefined) releaseBearer(raw);
       if (leaving !== null) {
         b.recordIdentityEvent({
           action: 'sign-out',

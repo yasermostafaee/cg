@@ -154,6 +154,15 @@ type SignOutAnswer =
 class FakeBridge {
   capabilities: Capabilities | null = null;
   authAnswer: AuthAnswer = { kind: 'silent' };
+  /**
+   * Answer THIS channel with a frame error instead of the fallback.
+   *
+   * ⚠ Needed because the fallback below answers every unrecognised channel immediately with
+   * `unknown channel:` — so a spec that wanted to refuse one after the fact found the request
+   * already settled, and its `deliver` was a silent no-op that read as the product not
+   * reacting. This makes the refusal the bridge's ANSWER rather than a second one.
+   */
+  refuseChannel: { channel: string; message: string } | null = null;
   signOutAnswer: SignOutAnswer = { kind: 'ok' };
   readonly sockets: FakeSocket[] = [];
 
@@ -175,6 +184,28 @@ class FakeBridge {
    * It is what lets one runtime be driven through "no answer yet" → "answered" without a
    * second construction.
    */
+  /** Answer the pending `auth` frame, after the fact — the window `DELTA A` is about. */
+  answerAuthLate(principal: ipc.PlayoutPrincipal): void {
+    const socket = this.socket();
+    const frame = [...socket.sent].reverse().find((f): f is ipc.WsAuthFrame => f.type === 'auth');
+    if (frame === undefined) throw new Error('the runtime never presented a token');
+    socket.deliver({
+      type: 'response',
+      id: frame.id,
+      payload: { mode: 'playout', principal, status: 'signed-in' } satisfies ipc.AuthState,
+    });
+  }
+
+  /** Answer the newest pending request for `channel` with a frame ERROR instead of a payload. */
+  refuseLate(channel: string, message: string): void {
+    const socket = this.socket();
+    const request = [...socket.sent]
+      .reverse()
+      .find((f): f is ipc.WsRequestFrame => f.type === 'request' && f.channel === channel);
+    if (request === undefined) throw new Error(`the runtime never asked for ${channel}`);
+    socket.deliver({ type: 'response', id: request.id, error: { message } });
+  }
+
   answerLate(channel: string, payload: unknown): void {
     const socket = this.socket();
     const request = [...socket.sent]
@@ -214,6 +245,9 @@ class FakeBridge {
         return { type: 'response', id: frame.id, error: { message: this.signOutAnswer.message } };
       }
       return { type: 'response', id: frame.id, payload: { ok: true } };
+    }
+    if (this.refuseChannel !== null && frame.channel === this.refuseChannel.channel) {
+      return { type: 'response', id: frame.id, error: { message: this.refuseChannel.message } };
     }
     return {
       type: 'response',
@@ -299,6 +333,13 @@ function requestedChannelsOn(socket: FakeSocket): string[] {
  * answer → `#setPrincipal`, and `#resync` yields again beneath it. Under-flushing here would
  * read as "the runtime never sent it", which is the most misleading failure this file could have.
  */
+/** Every frame this socket has WRITTEN, in order, as channel names (`auth` for the frame). */
+function wireOf(bridge: FakeBridge): string[] {
+  return bridge
+    .socket()
+    .sent.map((f) => (f.type === 'auth' ? 'auth' : f.type === 'request' ? f.channel : f.type));
+}
+
 async function settle(): Promise<void> {
   for (let i = 0; i < 4; i += 1) await vi.advanceTimersByTimeAsync(0);
 }
@@ -658,6 +699,152 @@ describe('R-066 — sign-out clears it, and does NOT take the link down with it'
 
 // ── 8 — a refused token ──────────────────────────────────────────────────────────────────────
 
+describe('DELTA A — NOTHING is written before the bridge has answered the `auth` frame', () => {
+  /**
+   * 🔴 **THE RECONNECT THE OWNER SAW, 2026-09-22.**
+   *
+   * After a reload the footer read `SIGNED IN AS علی رضایی` — the token was valid and the
+   * name was verified — and on the same screen, at the same moment: a banner saying the
+   * re-delivery of a template failed because _"This console is not signed in"_, and a layer
+   * list stuck on _"Loading the layer list…"_ that never resolved.
+   *
+   * The `auth` frame WAS first. First is not enough: verifying a token suspends, so every
+   * frame written in the same tick reached the gate while the socket still had no principal
+   * and was refused — correctly. Nothing held them and nothing retried them.
+   *
+   * ⚠ This asserts the property the previous spec could not: that one only checked the WRITE
+   * ORDER (`frameAt(socket, 0) === 'auth'`), which was true the whole time the defect was
+   * live. Order is not the property; **nothing else on the wire before the answer** is.
+   */
+  it('🔴 a request issued in the same tick as the connect is HELD until `auth` is answered', async () => {
+    seedSession(storage, 'jwt-held-by-this-console');
+    const bridge = new FakeBridge();
+    bridge.capabilities = playoutCapabilities();
+    // The bridge does NOT answer the `auth` frame yet — exactly the window the defect lived in.
+    bridge.authAnswer = { kind: 'silent' };
+
+    const runtime = start(bridge);
+    bridge.socket().open();
+
+    // What the renderer's hooks do the instant the link goes live, knowing nothing of a
+    // handshake: they ask. This is the owner's layer-list pull.
+    const pull = runtime.fixedLayers.state();
+    pull.catch(() => undefined);
+    await settle();
+
+    const beforeAnswer = wireOf(bridge);
+    expect(beforeAnswer[0], 'the auth frame must still be first').toBe('auth');
+    expect(
+      beforeAnswer.slice(1),
+      'a frame was written before the bridge answered the sign-in — the gate will refuse it',
+    ).toEqual([]);
+
+    // Now the bridge answers, and everything held goes.
+    const principal = principalNamed('علی رضایی');
+    bridge.authAnswer = { kind: 'accept', principal };
+    bridge.answerAuthLate(principal);
+    await settle();
+
+    expect(wireOf(bridge), 'the held request was dropped rather than sent on').toContain(
+      ipc.FixedLayersStateChannel.name,
+    );
+    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal });
+  });
+
+  it('…and with NO token held, nothing waits — the control for that hold', async () => {
+    /*
+      Without this, "nothing is written before the answer" would be satisfied by a console that
+      never writes anything at all, and an auth-OFF station would hang on every request waiting
+      for a handshake that is never created.
+    */
+    const bridge = new FakeBridge();
+    bridge.capabilities = { channels: ipc.runtimeRequestChannelNames(ipc) };
+
+    const runtime = start(bridge);
+    bridge.socket().open();
+    const pull = runtime.fixedLayers.state();
+    pull.catch(() => undefined);
+    await settle();
+
+    expect(wireOf(bridge), 'an auth-off console must not wait for a handshake').toContain(
+      ipc.FixedLayersStateChannel.name,
+    );
+  });
+});
+
+describe('R-066 — the console NOTICES when the bridge stops accepting it', () => {
+  /**
+   * 🔴 **THE REVOCATION THE CONSOLE COULD NOT SEE.** Found by review, covered by nothing.
+   *
+   * An operator signs in at 08:00; at 09:00 an admin revokes the `jti` on the Playout. Within
+   * 60 s the bridge's D9 poll lands and every intent is refused — and the console changed
+   * NOTHING, because the token is still unexpired here, the socket is still up, and this side
+   * polls nobody. The pill read SIGNED IN AS ‹name› for the rest of the shift while every verb
+   * said "you are not signed in".
+   *
+   * The fix is the one thing that does arrive: the refusal itself. `R-017`'s one-string
+   * discipline is what makes it recognisable — a comparison against the shared constant rather
+   * than a guess at a message.
+   */
+  it('🔴 one AUTH_REQUIRED_REFUSAL flips the state, on a live socket with an unexpired token', async () => {
+    seedSession(storage, 'jwt-revoked-while-we-held-it');
+    const bridge = new FakeBridge();
+    bridge.capabilities = playoutCapabilities();
+    const principal = principalNamed('مریم قاسمی');
+    bridge.authAnswer = { kind: 'accept', principal };
+
+    const runtime = start(bridge);
+    bridge.socket().open();
+    await settle();
+
+    // The positive control: the console really does believe it is signed in first.
+    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal });
+
+    /*
+      Any intent. ⚠ `settle()` between the call and the refusal because `#invoke` is now
+      ASYNC — it waits for the connect-time handshake before writing — so the frame is not on
+      the wire in the same tick the call is made.
+    */
+    bridge.refuseChannel = {
+      channel: ipc.LockStateChannel.name,
+      message: ipc.AUTH_REQUIRED_REFUSAL,
+    };
+    await expect(runtime.lock.state()).rejects.toThrow();
+    await settle();
+
+    expect(
+      runtime.auth.state(),
+      'the console kept claiming a state the bridge had stopped holding',
+    ).toEqual({ kind: 'expired', name: principal.name });
+  });
+
+  it('…and an ORDINARY refusal changes nothing — the control for that flip', async () => {
+    /*
+      Without this, "the state flipped" would be satisfied by a console that signs itself out on
+      any error at all — which would be far worse than the defect, because every unrelated
+      refusal would throw the operator back to a sign-in.
+    */
+    seedSession(storage, 'jwt-still-good');
+    const bridge = new FakeBridge();
+    bridge.capabilities = playoutCapabilities();
+    const principal = principalNamed('نگار احمدی');
+    bridge.authAnswer = { kind: 'accept', principal };
+
+    const runtime = start(bridge);
+    bridge.socket().open();
+    await settle();
+
+    bridge.refuseChannel = {
+      channel: ipc.LockStateChannel.name,
+      message: ipc.LOCK_ENGAGED_REFUSAL,
+    };
+    await expect(runtime.lock.state()).rejects.toThrow();
+    await settle();
+
+    expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal });
+  });
+});
+
 describe('R-066 — a token the bridge refuses leaves the console signed out, not broken', () => {
   it('🔴 an error answer to the `auth` frame reports signed-out and never crashes the pump', async () => {
     seedSession(storage, 'jwt-the-bridge-will-not-verify');
@@ -669,7 +856,18 @@ describe('R-066 — a token the bridge refuses leaves the console signed out, no
     bridge.socket().open();
     await settle();
 
-    expect(runtime.auth.state()).toEqual({ kind: 'signed-out' });
+    /*
+      🔴 **AND IT CARRIES WHAT THE BRIDGE SAID.** This assertion used to be a bare
+      `{ kind: 'signed-out' }`, and the sentence was being thrown away — so a console whose
+      bridge refuses its token showed a sign-in form that silently did nothing: the operator
+      types the right credentials, D1 succeeds, the bridge answers "that sign-in is not for
+      this station", and the card comes back blank. `R-017`'s whole point is that the bridge's
+      sentence is the one the operator reads.
+    */
+    expect(runtime.auth.state()).toEqual({
+      kind: 'signed-out',
+      reason: ipc.AUTH_TOKEN_INVALID,
+    });
     expect(runtime.link.status(), 'a refused sign-in is not a dropped link').toBe('live');
     /*
       `B-152` — a throw inside the socket's `message` listener does not reject a promise, it

@@ -138,6 +138,7 @@ export function SignInOverlay(): JSX.Element | null {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
 
   /*
     `off` and `unknown` show NOTHING. `unknown` is the connect window before
@@ -145,6 +146,20 @@ export function SignInOverlay(): JSX.Element | null {
     gate reporting its own latency — the state is "we have not asked yet", not "you are out".
   */
   const gated = auth.kind === 'signed-out' || auth.kind === 'expired';
+  /*
+    🔴 **WHAT THE BRIDGE SAID, WHEN THIS SURFACE DID NOT ASK.**
+
+    A token can be refused by the bridge without anyone pressing anything — on a reload, on a
+    reconnect. Without this the operator met a form that silently did nothing: on a bridge whose
+    `playout.issuer` carries a typo, the credentials are right, the Playout mints a token, the
+    bridge answers "that sign-in is not for this station", and the card came back blank.
+
+    ⚠ This attempt's own error WINS. The operator has just pressed the button; answering them
+    with a sentence about a token they presented ten seconds ago would be answering the wrong
+    question.
+  */
+  const bridgeReason = auth.kind === 'signed-out' ? auth.reason : undefined;
+  const message = error ?? bridgeReason ?? null;
 
   /*
     The trap arms and disarms WITH the gate, exactly as `LockOverlay`'s does with the lock:
@@ -177,6 +192,14 @@ export function SignInOverlay(): JSX.Element | null {
       setPassword('');
     } finally {
       setBusy(false);
+      /*
+        ⚠ **PUT THE CURSOR BACK.** Both fields carry `disabled={busy}`, and a disabled element
+        loses focus to `document.body` in every browser — so after a failed attempt the retry
+        keystrokes went nowhere and the operator had to reach for the mouse to answer a wrong
+        password. The focus trap does not re-run: its dependency is `enabled`, which has not
+        changed. Deferred one frame because the field is still disabled in this tick.
+      */
+      requestAnimationFrame(() => passwordRef.current?.focus());
     }
   };
 
@@ -236,7 +259,8 @@ export function SignInOverlay(): JSX.Element | null {
               autoComplete="current-password"
               dir="ltr"
               disabled={busy}
-              invalid={error !== null}
+              ref={passwordRef}
+              invalid={message !== null}
               aria-label="گذرواژه"
               aria-describedby="cg-signin-error"
               onKeyDown={(e) => {
@@ -252,7 +276,7 @@ export function SignInOverlay(): JSX.Element | null {
             does not jump under the pointer as the message arrives.
           */}
           <div id="cg-signin-error" style={styles.error} role="status">
-            {error}
+            {message}
           </div>
         </div>
         {/* ONE control. No ✕, no Cancel — there is nothing behind this to go back to. */}

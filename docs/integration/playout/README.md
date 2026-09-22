@@ -119,6 +119,23 @@ the build to name in the recon record**. apasai-core, which is what `C-040` actu
    ⚠ And one thing that is NOT done, so nobody reads the sign-in as finished: **`C-038` —
    per-channel authorisation — has not landed.** With auth ON today, any verified principal, a
    `viewer` included, can command any channel. The plant does not run auth ON until it does.
+10. 🔴 **2026-09-22 — UNDER AUTH ON, THE AUDIT PANEL'S SELF-DECLARED-LABEL CAVEAT IS DISPLAYED AND
+    FALSE.** Directly above rows carrying a VERIFIED name, the panel still reads _"It is a LABEL
+    you typed, not a verified sign-in — it says which console, not which person."_ That sentence
+    was true for every build before this one and is untrue the moment a bridge runs `auth:
+'playout'`. The remedy is named and owned: `R-066` bullet 5, the two-axis `operatorName`
+    retirement sweep, which is OUT of this change. ⚠ It is recorded rather than hidden — a
+    conditional that showed the caveat only when auth is off would create a THIRD state for that
+    sweep to find, which is how a sweep comes to miss one.
+11. ⚠ **THE CORS ORIGIN IS THE PORT THE CONSOLE ACTUALLY SERVES ON, and the dev server's
+    fallback is not it.** Their CORS list names `http://192.168.21.93:5174` and
+    `http://127.0.0.1:5174`. Measured 2026-09-22: with something already holding 5174 the
+    Runtime dev server bound **5175** instead, silently, and the console then ran on an origin
+    the Playout would not answer a preflight for. Nothing broke in the local test only because
+    the fake Playout serves permissive CORS. Before the joint sign-in run, confirm the port the
+    console is actually served on and make sure that exact origin is on their list — the
+    symptom otherwise is a sign-in that fails with no HTTP answer at all, which this console
+    reports as "پلی‌اوت پاسخ نمی‌دهد" and reads as the Playout being down.
 
 **The test Playout.** Base URL `http://192.168.21.111:8080` — which is also `iss`, byte-for-byte,
 and never derived. `aud` contains `cg-control`. Signing is ES256 and **the JWKS is read LIVE**;

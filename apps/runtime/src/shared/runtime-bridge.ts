@@ -133,13 +133,27 @@ export type AuthSessionState =
   | { readonly kind: 'off' }
   /** The bridge has not answered `bridge.capabilities` yet. Show no verdict. */
   | { readonly kind: 'unknown' }
-  /** Auth is on and this console holds no valid token. */
-  | { readonly kind: 'signed-out' }
+  /**
+   * Auth is on and this console holds no valid token.
+   *
+   * `reason` is the BRIDGE's own sentence when it refused a token this console presented —
+   * "that sign-in has expired", "not for this station", "could not be verified". It exists
+   * because without it a console whose bridge refuses its token shows a sign-in form that
+   * silently does nothing: the operator types the right credentials, D1 succeeds, the bridge
+   * refuses the token, and the form clears with no message. Absent when nothing was presented.
+   */
+  | { readonly kind: 'signed-out'; readonly reason?: string }
   /** A verified principal is on this socket. `principal` is the BRIDGE's answer, never the echo. */
   | { readonly kind: 'signed-in'; readonly principal: PlayoutPrincipal }
   /**
-   * A principal was held and its token has passed `exp`. The NAME is kept so the pill can say
-   * whose session ended — an expired session is still an answer to "who is at this console".
+   * A principal was held and the bridge has stopped accepting it. The NAME is kept so the pill
+   * can say whose session ended — a lapsed session is still an answer to "who is at this
+   * console".
+   *
+   * ⚠ It covers REVOCATION as well as expiry, and is named for the common case deliberately.
+   * The console cannot tell the two apart (the bridge answers both with one sentence, by
+   * design — see the change's `design.md` §2), and the operator's remedy is identical: sign in
+   * again. Drawing a distinction here would ask them to act on one they cannot verify.
    */
   | { readonly kind: 'expired'; readonly name: string };
 

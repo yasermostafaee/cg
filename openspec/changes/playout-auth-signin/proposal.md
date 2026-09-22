@@ -50,6 +50,24 @@ This change makes that day. It implements `C-037` in full and the sign-in half o
 - The path to air is unchanged: bridge → AMCP/OSC → apasai-core, on the bridge's own session.
 - The template origin keeps exactly its file routes plus `POST /complete` (ADR 0010 rule 13).
 
+## A client-driven write path the gate now covers
+
+🔴 **The retained-library RE-DELIVERY on reconnect is a client-driven write path fired from
+retained state** — the console replays its whole template library at the bridge whenever a socket
+opens, without an operator pressing anything. It is the same mechanism that seated six templates
+on channel 1 on 2026-09-22 (`CHANNEL-RESOLUTION-01`).
+
+This change puts it behind the gate: with auth ON and no principal, those frames are refused for
+want of one, which is the gate working. `C-038`'s channel predicate is what will cover it for
+AUTHORISATION — whether this principal may write to THAT channel — and that is not done here.
+
+⚠ The **bank** half of `CHANNEL-RESOLUTION-01` remains its own separate item and is untouched by
+this change.
+
+## A surface that is stale the moment auth is ON
+
+🔴 **2026-09-22 — UNDER AUTH ON, THE AUDIT PANEL'S SELF-DECLARED-LABEL CAVEAT IS DISPLAYED AND FALSE.** Directly above rows carrying a VERIFIED name, the panel still reads _"It is a LABEL you typed, not a verified sign-in — it says which console, not which person."_ That sentence was true for every build before this one and is untrue the moment a bridge runs `auth: 'playout'`. The remedy is named and owned: `R-066` bullet 5, the two-axis `operatorName` retirement sweep, which is OUT of this change. ⚠ It is recorded rather than hidden — a conditional that showed the caveat only when auth is off would create a THIRD state for that sweep to find, which is how a sweep comes to miss one.
+
 ## Out of scope — named so nobody mistakes it for done
 
 - **`C-038`** — permission classes as a required `route(…)` argument, the route census,

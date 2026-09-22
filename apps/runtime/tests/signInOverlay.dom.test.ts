@@ -324,6 +324,42 @@ describe('R-066 §1 — every failure has its own sentence, and it is this conso
   });
 });
 
+describe('R-066 §1 — a token the BRIDGE refused is said out loud, not swallowed', () => {
+  /**
+   * 🔴 **THE SILENT FORM.** A review found this and nothing covered it.
+   *
+   * A token can be refused by the bridge with nobody having pressed anything — on a reload, on
+   * a reconnect. The console caught that refusal and threw the sentence away, so on a bridge
+   * whose `playout.issuer` carries a typo the operator met a form that did nothing: the
+   * credentials are right, the Playout mints a token, the bridge answers "that sign-in is not
+   * for this station", and the card comes back blank. Every retry behaves identically.
+   */
+  it('🔴 the BRIDGE sentence is shown when no attempt was made here', async () => {
+    const h = await mount({ kind: 'signed-out', reason: 'That sign-in is not for this station.' });
+    expect(h.text()).toContain('That sign-in is not for this station.');
+  });
+
+  it('…and a plain signed-out gate shows NO message — the control for it', async () => {
+    const h = await mount(SIGNED_OUT);
+    expect(h.el.querySelector('#cg-signin-error')?.textContent).toBe('');
+  });
+
+  it('THIS attempt beats the carried one — the operator just pressed the button', async () => {
+    const h = await mount({ kind: 'signed-out', reason: 'That sign-in has expired.' });
+    expect(h.text()).toContain('That sign-in has expired.');
+
+    h.setSignInResult(new PlayoutSignInError('invalid_credentials'));
+    await h.type('#cg-signin-user', 'cg-op1');
+    await h.type('#cg-signin-pass', 'wrong');
+    await h.click('button');
+
+    expect(h.text(), 'a stale sentence answered a question nobody asked').not.toContain(
+      'That sign-in has expired.',
+    );
+    expect(h.text()).toContain(signInMessage('invalid_credentials'));
+  });
+});
+
 describe('R-066 §1 — an EXPIRED session says whose, and says it here', () => {
   it('🔴 names the operator whose session ended, on the gate they now face', async () => {
     const h = await mount(SIGNED_OUT);

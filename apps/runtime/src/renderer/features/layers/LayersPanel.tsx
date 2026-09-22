@@ -324,8 +324,15 @@ export function LayersPanel({
    * over unready slots renders the declared range as a list with nothing on it,
    * which is the same lie one snapshot along.
    */
-  const { bank, ready: bankReady } = useFixedBankState();
-  const { slots, ready: slotsReady } = useFixedSlotsState();
+  const { bank, ready: bankReady, failed: bankFailed } = useFixedBankState();
+  const { slots, ready: slotsReady, failed: slotsFailed } = useFixedSlotsState();
+  /*
+    🔴 `DELTA A` §A2 — the bridge ANSWERED and the answer was a refusal. Kept apart from
+    `listReady` because they are different facts: not-ready is "we are waiting", failed is "we
+    asked and were told no", and saying the first while the second is true is a surface
+    asserting a state that is not in force.
+  */
+  const listFailed = bankFailed || slotsFailed;
   /*
     The installation's source catalogue and its template assignments, for the LIVE PLATES
     table's `Plate / source` column. Subscribed HERE rather than in the tab for
@@ -1349,11 +1356,34 @@ export function LayersPanel({
               said on one.
             */
             <div style={styles.empty} role="status" data-layers-loading="">
-              <strong style={{ color: colors.text }}>Loading the layer list…</strong>
-              <span>
-                Waiting for the bridge to send the declared rows. This is not an empty list — the
-                rows appear as soon as it answers.
-              </span>
+              {listFailed ? (
+                /*
+                  🔴 `DELTA A` §A2 — IT WAS ANSWERED, AND THE ANSWER WAS NO.
+
+                  The owner saw the other branch survive a refused read forever: a console that
+                  was signed in, with a live link, sitting on "Loading the layer list…" with
+                  nothing coming. "Waiting" was not true — the bridge had already answered.
+
+                  It states what happened and stops. No advice and no mechanism: the read
+                  re-runs by itself when the sign-in state changes (`useBridgeSnapshot`), so
+                  there is nothing for the operator to do and nothing to tell them to press.
+                */
+                <>
+                  <strong style={{ color: colors.text }}>The layer list was refused.</strong>
+                  <span>
+                    The bridge answered and did not send the declared rows. This is not an empty
+                    list — the rows appear if it answers.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <strong style={{ color: colors.text }}>Loading the layer list…</strong>
+                  <span>
+                    Waiting for the bridge to send the declared rows. This is not an empty list —
+                    the rows appear as soon as it answers.
+                  </span>
+                </>
+              )}
             </div>
           ) : bank === null ? (
             <div style={styles.empty}>

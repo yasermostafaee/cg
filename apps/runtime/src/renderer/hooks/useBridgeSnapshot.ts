@@ -47,6 +47,25 @@ import { useLink } from './useLink.js';
 export interface BridgeSnapshot<T> {
   readonly value: T;
   readonly ready: boolean;
+  /**
+   * 🔴 `DELTA A` §A2 — **THE FIRST PULL WAS ANSWERED, AND THE ANSWER WAS A REFUSAL.**
+   *
+   * `ready` alone cannot tell "the bridge has not answered yet" from "the bridge said no", and
+   * a surface that renders only `!ready` says _Loading…_ for both — which is a surface
+   * asserting a state that is not in force, the `MODAL-TRUTH-01` Part B class. The owner met
+   * it: a refused read left the layer list on "Loading the layer list… Waiting for the bridge
+   * to send the declared rows." permanently, on a console that was signed in.
+   *
+   * Cleared the moment anything arrives, so a retry that succeeds simply stops saying it.
+   *
+   * ⚠ **The RE-REQUEST is not here, and that is deliberate.** An earlier spelling added the
+   * sign-in state to this effect's dependencies, which put `window.cg.auth` in the path of
+   * every snapshot in the app — the one hook nearly every panel uses. The re-request belongs
+   * where the principal is ESTABLISHED, which is one place (`WebSocketRuntime`'s resync on a
+   * newly-seated principal), not in a dependency list repeated across a dozen hooks. This flag
+   * is only about what the SURFACE may say.
+   */
+  readonly failed: boolean;
 }
 
 export function useBridgeSnapshot<T>(
@@ -81,6 +100,7 @@ export function useBridgeSnapshotState<T>(
   // stack, a later disconnect does not make that knowledge un-arrive, and clearing
   // it would re-open the bootstrap window on every blip.
   const [ready, setReady] = useState(false);
+  const [failed, setFailed] = useState(false);
   const link = useLink();
   // Bumped by every push. A pull that resolves with a stale generation lost the race
   // against a publish and is dropped.
@@ -92,6 +112,7 @@ export function useBridgeSnapshotState<T>(
         generation.current += 1;
         setValue(next);
         setReady(true);
+        setFailed(false);
       }),
     [subscribe],
   );
@@ -108,11 +129,20 @@ export function useBridgeSnapshotState<T>(
         if (!cancelled && generation.current === pulledAt) {
           setValue(next);
           setReady(true);
+          setFailed(false);
         }
       },
       () => {
-        // The link dropped between the check above and the round-trip landing. Nothing to
-        // report and nothing to retry here — reconnecting re-runs this effect.
+        /*
+          🔴 `DELTA A` §A2 — SAY THAT IT WAS ANSWERED, even though the answer was no.
+
+          This used to be silent, on the reasoning that a dropped link re-runs the effect. That
+          covers a DROP and not a REFUSAL: a read refused for want of a principal leaves the
+          link perfectly live, so nothing re-ran and the surface sat on "Loading…" forever.
+          The flag is what lets the surface say what happened; `auth` in the dependency list is
+          what makes the retry happen when the principal arrives.
+        */
+        if (!cancelled && generation.current === pulledAt) setFailed(true);
       },
     );
     return () => {
@@ -120,5 +150,5 @@ export function useBridgeSnapshotState<T>(
     };
   }, [fetchSnapshot, link, pullWhileDisconnected]);
 
-  return { value, ready };
+  return { value, ready, failed };
 }

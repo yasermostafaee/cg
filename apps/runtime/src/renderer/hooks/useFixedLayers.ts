@@ -37,9 +37,14 @@ export function useFixedBank(): FixedLayerBank | null {
  * Same doctrine as `useStackSnapshot`, one snapshot along: `unknown` is not
  * `empty` (B-094) applied to DATA rather than to occupancy.
  */
-export function useFixedBankState(): { bank: FixedLayerBank | null; ready: boolean } {
-  const { value, ready } = useBridgeSnapshotState(fetchBank, subscribeBank, NO_BANK);
-  return { bank: value, ready };
+export function useFixedBankState(): {
+  bank: FixedLayerBank | null;
+  ready: boolean;
+  /** `DELTA A` §A2 — the bridge ANSWERED the first pull, and the answer was a refusal. */
+  failed: boolean;
+} {
+  const { value, ready, failed } = useBridgeSnapshotState(fetchBank, subscribeBank, NO_BANK);
+  return { bank: value, ready, failed };
 }
 
 const NO_SLOTS: FixedSlotState[] = [];
@@ -73,7 +78,12 @@ export function useFixedSlots(): FixedSlotState[] {
  * bridge has told us what the rows are, a later disconnect does not un-tell us —
  * the rows stay, masked to unverifiable by the row's own display rules.
  */
-export function useFixedSlotsState(): { slots: FixedSlotState[]; ready: boolean } {
-  const { value, ready } = useBridgeSnapshotState(fetchSlots, subscribeSlots, NO_SLOTS);
-  return { slots: value, ready };
+export function useFixedSlotsState(): {
+  slots: FixedSlotState[];
+  ready: boolean;
+  /** `DELTA A` §A2 — the bridge ANSWERED the first pull, and the answer was a refusal. */
+  failed: boolean;
+} {
+  const { value, ready, failed } = useBridgeSnapshotState(fetchSlots, subscribeSlots, NO_SLOTS);
+  return { slots: value, ready, failed };
 }

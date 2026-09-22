@@ -44,7 +44,18 @@ const ClaimsSchema = z.object({
   name: z.string().min(1),
   roles: z.array(z.string()).min(1),
   cg_channels: PlayoutChannelsSchema,
-  exp: z.number().int(),
+  /*
+    🔴 BOUNDED, and the bound is the point rather than tidiness. `new Date(exp * 1000)` sits
+    outside the `jwtVerify` try, so an out-of-range value throws a `RangeError` that escapes
+    `verify()`, escapes `handleAuthFrame`, and lands as an UNHANDLED REJECTION in a `void`
+    dispatch — a well-signed token from a misconfigured issuer (microseconds instead of
+    seconds) could take the bridge process down. A claim that cannot be a real instant is a
+    malformed claim, and it is refused here as one.
+
+    The ceiling is ECMAScript's own maximum time value in SECONDS (8.64e15 ms), so nothing a
+    `Date` can represent is excluded; the floor refuses a negative epoch.
+  */
+  exp: z.number().int().min(0).max(8.64e12),
   jti: z.string().min(1).optional(),
 });
 
@@ -134,6 +145,20 @@ export class PlayoutAuth {
   #ticker: ReturnType<typeof setInterval> | null = null;
   /** Count of D9 requests actually issued — the positive control a cadence test needs. */
   #pollCount = 0;
+  /**
+   * 🔴 `DELTA B` — **TOKENS THIS BRIDGE HAS ALREADY ACCEPTED, so a resume is not a sign-in.**
+   *
+   * Keyed by `jti` where the contract supplies one, and by `sub`+`exp` where it does not — both
+   * identify ONE issued token rather than one person, which is the distinction that matters: a
+   * REFRESHED token is a new token and a new sign-in is a new token, while a reconnect
+   * re-presents the same one.
+   *
+   * ⚠ Pruned by `exp`, so a bridge up for a week is not carrying last Tuesday's ids. The set
+   * is per PROCESS: a bridge restart forgets, and the first presentation after it is recorded
+   * as a sign-in — which is honest, because from that process's point of view it is the first
+   * time it has seen anybody.
+   */
+  #accepted = new Map<string, number>();
 
   constructor(config: PlayoutAuthConfig, options: PlayoutAuthOptions = {}) {
     this.#config = config;
@@ -229,6 +254,35 @@ export class PlayoutAuth {
     };
   }
 
+  /**
+   * 🔴 `DELTA B` — **IS THIS THE FIRST TIME THIS BRIDGE HAS ACCEPTED THIS TOKEN?**
+   *
+   * Returns `true` once per token and `false` every time after. The audit's `sign-in` row hangs
+   * off it, because a `sign-in` means a human typed a password — and the bridge cannot see that
+   * exchange at all: it happens between the browser and the Playout (ADR 0010 rule 9). What the
+   * bridge CAN see is the first time a token it has never seen is accepted, which is the nearest
+   * true thing.
+   *
+   * ── WHAT THE OWNER SAW ──────────────────────────────────────────────────
+   *
+   * 37 audit events, almost all `sign-in · علی رضایی · ok`, growing on every browser
+   * reload. He signed in ONCE, with a password. Every reconnect re-presents the held token
+   * (`R-066` bullet 2 — held per console, survives a reload, presented on every reconnect), and
+   * each was recorded as an act of the operator. A record that misstates what the operator did
+   * is the `B-141` failure with the sign flipped: not a log that cannot answer, a log that
+   * answers wrongly.
+   */
+  markAccepted(token: VerifiedToken): boolean {
+    const nowSec = this.#now() / 1000;
+    for (const [key, exp] of this.#accepted) {
+      if (exp + CLOCK_TOLERANCE_SEC < nowSec) this.#accepted.delete(key);
+    }
+    const key = token.jti ?? `${token.principal.sub}:${String(token.expEpochSec)}`;
+    if (this.#accepted.has(key)) return false;
+    this.#accepted.set(key, token.expEpochSec);
+    return true;
+  }
+
   /** Has this token's `jti` been revoked, per the LAST list the bridge saw? Synchronous. */
   isRevoked(jti: string | null): boolean {
     return jti !== null && this.#revoked.has(jti);
@@ -251,6 +305,38 @@ export class PlayoutAuth {
     this.#bearer = rawToken;
     this.#armTicker();
     this.#maybePoll();
+  }
+
+  /**
+   * 🔴 **ARM THE TICK WITHOUT ADOPTING A BEARER.**
+   *
+   * Called for a token that VERIFIED but is revoked. The first spelling of the revocation fix
+   * called {@link noteLiveToken} for it instead, and that was worse than the problem it
+   * solved: a revoked token became the process-wide D9 bearer, the Playout answers
+   * `401 invalid_token` to it, `#pollRevoked` swallows a non-ok response — correctly, because
+   * an outage must not change a verdict — and the revocation list then freezes for the WHOLE
+   * bridge, not just that socket.
+   *
+   * So a revoked token keeps the CLOCK running and never becomes the credential. Polling
+   * continues with whatever bearer was last good.
+   *
+   * ⚠ The residual, stated rather than hidden: on a station where the ONLY principal is
+   * revoked there is no usable bearer, so the list cannot be refreshed until somebody signs in
+   * with a token that is not revoked. That is a strictly smaller hole than a bridge that has
+   * stopped polling entirely, and it resolves the moment anyone signs in.
+   */
+  noteVerifiedButRevoked(): void {
+    this.#armTicker();
+  }
+
+  /**
+   * Give up the bearer, when the socket that supplied it has signed out or gone away.
+   *
+   * ⚠ Without this the bridge keeps calling the Playout with a token belonging to an operator
+   * who left hours ago — it stays valid until `exp`, so nothing fails and nothing says so.
+   */
+  releaseBearer(rawToken: string): void {
+    if (this.#bearer === rawToken) this.#bearer = null;
   }
 
   /**
