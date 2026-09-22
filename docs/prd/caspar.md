@@ -2576,15 +2576,21 @@ server.
 
 ⚠ **Three things the run turned up that outlive it**, each argued in the record:
 
-- 🔴 **`stack.remove-all` is NOT "channel 2 only by construction" on a bridge that has adopted
-  foreign producers**, and the plan that said so was wrong. Connecting adopted six producers from
-  the Playout's programme channel 1 (layers 59, 95–99); `removeAll` iterates the whole snapshot,
-  so it would have cleared six of THEIR layers. The trap is the name: `removeExempt: true` reads
-  as "protected" and means exempt from the on-air REFUSAL — i.e. removable without being refused.
-  Use the per-item `stack.remove` on a visited box (record §9).
-- ⚠ **The bridge has no audit-path flag**, so a recon run cannot isolate its audit trail: this run
-  wrote five `actor: recon` entries into the owner's real `~/.cg-runtime/bridge-audit.ndjson`.
-  Everything else under `~/.cg-runtime/` was byte-identical afterwards (record §9).
+- 🔴 **`stack.remove-all` is NOT "channel 2 only by construction" on a bridge holding rows on
+  another channel**, and the plan that said so was wrong. On connecting the bridge held six stack
+  items on the Playout's programme channel 1 (layers 59, 95–99); `removeAll` iterates the whole
+  snapshot, so it would have cleared six of THEIR layers. The trap is the name: `removeExempt:
+true` reads as "protected" and means exempt from the on-air REFUSAL — i.e. removable without
+  being refused. Use the per-item `stack.remove` on a visited box (record §9).
+  🔴 **CORRECTED by `CHANNEL-RESOLUTION-01`: those six were not "adopted foreign producers", they
+  were OURS** — this bridge created them on their channel 1 and cleared them at 12:49:21 (record
+  §9.1). The bullet's advice is unchanged and the refusal was still right; what was wrong is the
+  picture of whose graphics were at risk.
+- ⚠ ~~**The bridge has no audit-path flag**~~ **— FALSE, corrected 2026-09-22.**
+  `--audit-log-path` exists and has since `B-141`. The run wrote five `actor: recon` entries into
+  the owner's real `~/.cg-runtime/bridge-audit.ndjson` because it did not pass the flag, not
+  because there was none to pass. Everything else under `~/.cg-runtime/` was byte-identical
+  afterwards (record §9). **Do not add a flag that is already there.**
 - ⚠ **The source-address question is OPEN.** They report their plant NIC down and predict they
   present `172.27.36.46`; every TCP connection they made to our template server arrived from
   `192.168.21.111`. Our three inbound rules admit both, so the run was correct either way — but
@@ -2594,10 +2600,21 @@ server.
 observed** (`§1`'s safety check, and it passed): with the channel-2 bank the bridge emits
 **30 × `MIXER VOLUME 2-<L> 1`** on layers **50–59 and 80–99** — `#reassertDeclaredVolumes`
 (`caspar-runtime.ts:3805`, `R-022`/`B-204`) walks `fixedBankSlots`, which is BOTH halves of the
-bank — plus `INFO CONFIG` read once per connection (`C-029`). **Nothing below layer 50, nothing on
-channel 1, and no `CLEAR`.** Consumer creation is off unless `--create-missing-consumers` is passed
-(`=== true`, absent is OFF). The Playout team was told beforehand (Reply C §3, Reply D §4), and the
-run behaved as announced.
+bank — plus `INFO CONFIG` read once per connection (`C-029`). Consumer creation is off unless
+`--create-missing-consumers` is passed (`=== true`, absent is OFF). The Playout team was told
+beforehand (Reply C §3, Reply D §4).
+
+🔴 **THE LIST WAS INCOMPLETE, AND THAT IS THE LESSON — not the channel.** It ended "**Nothing
+below layer 50, nothing on channel 1, and no `CLEAR`**", and the run did **not** behave as
+announced: it also sent six `MIXER 1-L VOLUME 0` and six `CG 1-L ADD` to the Playout's channel 1,
+and six `CLEAR`s later (`CHANNEL-RESOLUTION-01`, record §9.1). The verification was real — it read
+`#reassertDeclaredVolumes` at the source and quoted it correctly — and it was still wrong, because
+it enumerated **one** unprompted emitter and there are **four**. `#sendAdd` is the single `CG ADD`
+chokepoint and its own docstring names all four callers: `#loadOnto`, `setPosition`'s re-ADD,
+`take()`'s `B-039` pre-roll, and **`#decidePendingRestores`** — the boot/reconnect path that fired
+here. ⭐ **An "unprompted on connect" list is only as good as its enumeration of EMITTERS; a list
+built by reading the one emitter you already had in mind will always come back clean.** Start from
+the chokepoint and its caller list, not from the behaviour you expect.
 
 - **Number:** `C-040`. Verified free at the moment of commit, not of planning:
   `git grep -n --untracked -E "^## \[.\] C-040" -- docs` returned nothing, against a positive

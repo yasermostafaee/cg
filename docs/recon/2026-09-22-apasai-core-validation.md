@@ -25,6 +25,27 @@ AMCP surface `C-040` depends on differs from stock 2.5.0.**
 
 ---
 
+> 🔴 **CORRECTION — 2026-09-22, `CHANNEL-RESOLUTION-01`. THIS RUN WROTE TO THE PARTNER'S
+> PROGRAMME CHANNEL, AND THIS RECORD SAID IT DID NOT.**
+>
+> §9 below concluded _"their channel 1 is exactly as found"_ and §12 item 6 concluded _"air was
+> not disturbed"_. **Both were false.** This bridge **created** six template producers on the
+> Playout's channel 1 — layers 59 and 95–99 — at 11:13:36, and cleared them at 12:49:21. The
+> six `html` producers §9 describes as ones the bridge _"adopted"_ and _"found"_ on their
+> channel were **ours**. The conclusion that their channel was untouched was drawn from a
+> baseline sampled **after** our own writes, which is the method failure it was: an `INFO` taken
+> after the fact cannot tell a producer we made from one that was already there.
+>
+> The cause is found, measured and fixed — the restore path took its channel from a console tab
+> replaying a stack it remembered from a **different station**, and compared it to nothing. The
+> full correction is §9.1; the finding and its fix are `CHANNEL-RESOLUTION-01`.
+>
+> **Everything in §§1–8 stands.** Those are AMCP behaviour measurements on channel 2 and the
+> defect does not touch them. What is retracted is this record's account of what happened to
+> channel 1, and nothing else.
+
+---
+
 ## 0. Environment — located and verified, not assumed
 
 ### 0.1 Our side: no tunnel, one route
@@ -361,15 +382,24 @@ recorded in §2 from the live config; neither was exercised.
 ## 9. Teardown — and the one instruction this run REFUSED
 
 Bridge stopped; no listener left on 5280 / 7911 / 7900 / 7901 and nothing on UDP 6250. Channel 2
-carries **no layer entries at all**. Their channel 1 is exactly as found: `layer_5` (`ffmpeg`,
-mid-`transition`) plus six `html` producers on layers 59 and 95–99.
+carries **no layer entries at all**.
+
+~~Their channel 1 is exactly as found: `layer_5` (`ffmpeg`, mid-`transition`) plus six `html`
+producers on layers 59 and 95–99.~~ **RETRACTED — see §9.1. The six `html` producers were OURS.**
 
 🔴 **`stack.remove-all` was NOT run, and running it would have been an incident.** The session
-plan described it as "channel 2 only by construction". It is not. On connecting, the bridge
-**adopted six producers it found on their programme channel 1** (layers 59, 95–99) as stack items.
-`removeAll` iterates the whole snapshot and removes every item
-(`caspar-runtime.ts` `removeAll`, the `R-017` all-or-nothing block), so it would have cleared six
-layers of **their** channel 1.
+plan described it as "channel 2 only by construction". It is not. On connecting, the bridge held
+six stack items on their programme channel 1 (layers 59, 95–99) — ~~adopted from producers it
+found there~~ **seated there by this bridge itself, §9.1**. `removeAll` iterates the whole
+snapshot and removes every item (`caspar-runtime.ts` `removeAll`, the `R-017` all-or-nothing
+block), so it would have cleared six layers of **their** channel 1.
+
+⚠ **The refusal was right for a reason the session did not have.** It declined because those
+rows pointed at somebody else's channel — which was true, and enough. It did not know the rows
+were ours, so it read the situation as "the bulk verb would clear THEIR graphics" when it was
+also "this bridge has already put six producers on their air". The correct instinct, the wrong
+model; recorded because a good call made on a wrong picture is not a control that can be relied
+on twice.
 
 ⚠ **The trap is the name `removeExempt`.** All six published `removeExempt: true`, which reads like
 "protected". It means the opposite: exempt from the on-air REFUSAL, i.e. removable _without_ being
@@ -390,6 +420,128 @@ ones.
 snapshot method: `ConvertTo-Json` → `ConvertFrom-Json` dropped the `+03:30` offset, shifting every
 timestamp by exactly 3.5 hours with byte lengths unchanged. Re-compared on size and it is one file.
 A whole-directory "everything changed" reading that is uniform is a bug in the instrument.
+
+⚠ **AND THE REASON GIVEN FOR IT IS WRONG.** "There is no audit-path flag among the bridge's
+twelve" is false: `--audit-log-path` exists (`bin/caspar-bridge.mjs`, beside `--live-layers-path`)
+and has since B-141. The run could have isolated its audit trail and did not, because the session
+did not look for the flag before concluding there was none. The observation stands — the owner's
+`bridge-audit.ndjson` did grow by 1,047 bytes — but it is a run that missed a flag, not a gap in
+the flag set, and the next reader must not go and add one.
+
+## 9.1 — 🔴 CORRECTION: WE WROTE TO THEIR PROGRAMME CHANNEL
+
+_Added 2026-09-22 by `CHANNEL-RESOLUTION-01`, after the Playout team's core log (their Response K
+§§3–4) was read against our own. Nothing in this section was known to the run that produced the
+rest of this record._
+
+**What happened.** This bridge, configured for channel 2, seated **six template producers on the
+Playout's channel 1** — their live programme output — and did it at boot, in one batch, without
+an operator intent.
+
+| time (local) | on their wire                                                              |
+| ------------ | -------------------------------------------------------------------------- |
+| 11:13:36     | `MIXER 1-59 VOLUME 0` + `MIXER 1-95..99 VOLUME 0` — 6 lines, ONE timestamp |
+| 11:13:36     | `CG 1-59 ADD 0 "http://192.168.21.93:7911/template/<uuid>" 0 "{…}"`, ×6    |
+| 12:49:21     | `CLEAR 1-59` … `CLEAR 1-99` — our clean-up                                 |
+
+That is 12 lines plus 6 clears = the **18** channel-1 references their log counts, and it is all
+of them. The six `<uuid>`s are every record in the owner's template library.
+
+**Five corrections to what this record said, each one narrower than the retraction above:**
+
+1. **Six producers were seated on their channel 1 and cleared by us at 12:49:21.** They were not
+   adopted, not found and not theirs.
+2. **NOT "roughly thirty `MIXER VOLUME 1` lines to their programme channel"** — an overstatement
+   this record made about its own traffic. It was **six lines, all `VOLUME 0`**, the load path's
+   mute-before-ADD step. The ~30-line unity sweep (`#reassertDeclaredVolumes`) went to **channel
+   2**, correctly, on the same connection.
+3. **Their empty bank layers on channel 1 reading `1` is the DEFAULT for an untouched layer, not
+   evidence of a write.** The Playout team's own controls settle it: `MIXER 1-70`, `3-70` and
+   `4-70` all read `1` and none was ever addressed.
+4. **No `CG PLAY` reached channel 1, and the `CG ADD` play-on-load flag was `0`** — two
+   independent safeguards, which is why six producers existed on their programme channel for 96
+   minutes and nothing rendered. Two, and it took both: the flag alone would have been undone by
+   any later take on those rows.
+5. **The "their channel 1 is exactly as found" conclusion was drawn from a baseline taken AFTER
+   our own writes.** The bridge booted and seated at 11:13:36; every `INFO 1` in this record is
+   later than that. A baseline sampled after the instrument has acted measures the instrument.
+   It is the method failure that let a write look like a pre-existing condition, and no amount of
+   care in reading that `INFO` could have caught it.
+
+⭐ **`CLEAR` DOES NOT RESET A LAYER'S MIXER STATE — record this beside the verb matrix.** After
+our six clears, `1-59` and `1-95`…`1-99` still read `MIXER VOLUME 0` with no producer behind them.
+Our July validation never measured this. **The consequence is the part that matters: a muted empty
+layer is indistinguishable in `INFO` from a clean one.** So a `CLEAR` is not a full undo of a
+`CG ADD` — cleaning up after this class of defect has to restore the volume explicitly, and an
+`INFO` sweep looking for damage will not find the half that is left. `command-builder.ts` already
+records that mixer state is channel state surviving `CLEAR` and `CG REMOVE` — measured on
+hardware, and relied upon by the mute-before-ADD ordering. What was missing was anyone connecting
+that to what a clean-up leaves behind.
+
+**START-UP, NOT SOMETHING LATER IN THE SESSION — settled by measurement, not by waiting.** The two
+candidates are different bugs with different fixes: a connection accepted seconds before
+`11:13:36` means a start-up emitter, one accepted well earlier means something later in the session
+triggered it. The loopback reproduction answers it directly, since it reproduces the batch exactly:
+
+| event on the reproduction's wire                | offset from the AMCP connection |
+| ----------------------------------------------- | ------------------------------- |
+| AMCP connection accepted                        | 0.00 s                          |
+| **the six `MIXER 1-L VOLUME 0` + `CG 1-L ADD`** | **+3.77 s**                     |
+| the channel-2 unity sweep (30 lines)            | +5.00 s                         |
+
+**It is a start-up emitter**, and the run's other probes are not in the frame: they ran on `2-80`
+between `11:07:13` and `11:12:06` **with no bridge running at all**, and the bridge started after
+them. So the prediction for the Playout team's `11:12:00`–`11:16:00` transcript is specific and
+falsifiable: `Accepted connection from 192.168.21.93` at roughly **`11:13:32`–`11:13:33`**. A
+connection well earlier than that would contradict this reproduction and would have to be
+explained rather than explained away.
+
+⭐ **And note the ORDER, which is the opposite of what this record's own "unprompted on connect"
+list would lead you to expect: the channel-1 batch lands BEFORE the connect sweep.** The sweep
+waits on `INFO CONFIG`; the restore waits only on the session reading healthy. Anyone reading a
+wire capture and looking for the announced 30 `MIXER VOLUME 1` lines as the marker for "the
+bridge has finished connecting" will have already missed this.
+
+**The cause, in one sentence.** The restore path took its channel from a console tab that replayed
+a retained stack remembered from a **different station** — one whose bank is channel 1 — and
+compared it to nothing; `#slotForRestore` read `item.slot.channel` verbatim while, on the same
+connection, `#reassertDeclaredVolumes` read the configured bank and correctly said channel 2.
+
+**How a recon run reached a stale console at all.** The bridge binds `ws://127.0.0.1:5280` by
+default. A Runtime tab left open from the owner's 2026-09-21 session reconnects to that port the
+moment anything binds it, and on connect it re-delivers its template library and replays its
+stack. That is also why `recon-templates/` held **six** records at teardown when the run placed
+**one**: `--templates-dir` worked exactly as intended — the other five arrived over the WebSocket
+seconds after boot and the registry persisted them. Both halves of this incident come through a
+door the session did not know was open.
+
+⚠ **For the next recon run: move the WebSocket port.** `--port` is the whole remedy and it is one
+flag. Pointing every persisted path at scratch — which this run did, carefully — isolates the
+FILES and does nothing about the SOCKET, and the socket is where the other station's state came
+in. Verified by measurement: with `--port 5281` and everything else identical, channel 1 receives
+nothing at all.
+
+### 9.1.1 — OPEN: the layer band is a CONVENTION on our side, not a rule
+
+_Recorded here, not actioned. It is not `CHANNEL-RESOLUTION-01`'s work._
+
+The Playout team audited their own half after our question and found their output layer
+(`PrimaryOutput.LayerNumber`) **completely unbounded**: an operator could have typed
+`layerNumber="80"` and seated their live programme item on a layer our bank owns. ⭐ **With this
+incident's residue on those layers it would have gone to air SILENT** — because `CLEAR` does not
+reset mixer state (above), so `1-95`…`1-99` still carry `VOLUME 0` — **with nothing in `INFO` or
+in any log to explain why.** Two independently harmless facts meeting: our leftover mute, and
+their unbounded layer.
+
+**They have made it a rule in build `2.8.49`** — refused at the API and at the file-write choke
+point, with **reads left permissive**, on the principle that a validation rule must never be the
+reason a channel fails to come up. That read/write asymmetry is the part worth carrying across:
+it refuses the creation of a bad state without making an existing one unbootable.
+
+**Ours is still opt-in.** The bank accepts any layer and `--reserved-layers` is optional, so
+nothing on our side refuses a bank declared over somebody else's band — the `CHANNEL-RESOLUTION-01`
+fix fences the CHANNEL a restore may name and says nothing about which LAYERS a bank may claim.
+Open; no owner assigned here.
 
 ## 10. What this run did NOT measure
 
@@ -443,6 +595,14 @@ reading is what licensed them to run at all.
    their `Find-NetRoute` predicted. Our rules admit both, so nothing is blocked either way.
 5. **The `pgm` port formula** is not uniform across channels (§2) — worth stating in the contract
    if anyone derives a preview channel's port from it.
-6. Air was not disturbed: every write landed on channel 2 layers 50–99, channel 1 received `INFO`
-   only, no channel-wide `CLEAR` was sent, and connecting re-asserted `MIXER VOLUME 1` on channel 2
-   layers 50–59 and 80–99 (30 lines) exactly as announced beforehand.
+6. 🔴 **RETRACTED AND REPLACED — §9.1.** This said _"air was not disturbed: every write landed on
+   channel 2 layers 50–99, channel 1 received `INFO` only"_. **It is false, and it is the one
+   thing in this record they must hear from us rather than find themselves.** Six template
+   producers were seated on **their channel 1**, layers 59 and 95–99, at 11:13:36, and cleared by
+   us at 12:49:21. Nothing rendered — no `CG PLAY` ever reached channel 1 and the `CG ADD`
+   play-on-load flag was `0` — but that is why it was harmless, not a reason it was acceptable.
+   What IS true of the rest: no channel-wide `CLEAR` was sent, and connecting re-asserted
+   `MIXER VOLUME 1` on channel 2 layers 50–59 and 80–99 (30 lines) exactly as announced. The
+   cause is found, reproduced on a loopback fixture and fixed (`CHANNEL-RESOLUTION-01`); their
+   channel 1 still carries `MIXER VOLUME 0` on those six layers, because `CLEAR` does not reset
+   mixer state, and we should say so rather than leave them to discover it.

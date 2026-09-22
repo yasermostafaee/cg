@@ -12,7 +12,10 @@ be checked against the thing itself instead of trusted as prose.
   one template was served, fetched, rendered and removed with the fetch hop proven on our own
   socket table. **Two apparent regressions were instrument artifacts** — probe wait windows tuned
   on loopback — and both the misleading and the corrected runs are kept as evidence. The sign-in
-  half is NOT covered (see its §10).
+  half is NOT covered (see its §10). 🔴 **Carries a CORRECTION (§9.1): the run wrote six template
+  producers to the Playout's channel 1 and this record originally said it had not.** The cause is
+  found and fixed (`CHANNEL-RESOLUTION-01`); §§1–8 are unaffected. Read the banner at the top
+  before quoting anything from §9 or §12.
 - [d-086-export-scoping.md](d-086-export-scoping.md) — D-086 export-scoping recon.
 - [2026-08-22-confidence-grab-measurement.md](2026-08-22-confidence-grab-measurement.md) — the
   C-016 / C-023 confidence-grab measurement runbook (§A), the 2× discriminator (§B) and the AMCP
