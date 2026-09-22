@@ -53,6 +53,7 @@ import {
 import { SetupNotice, type SetupNoticeSpec } from './SetupNotice.js';
 import { SetupSection } from './SetupSection.js';
 import { Tag } from '../../ui/Tag.js';
+import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 
 /**
  * `STATION-SETUP-02` / `STATION-CHROME-01` §2 — **ONE HOME FOR THE STATION'S SETTINGS, IN
@@ -477,7 +478,27 @@ export function StationSetupDialog({
    * duplicated there. Held in state rather than a ref because the portal target has to
    * exist before the section renders into it, and a ref does not re-render.
    */
-  const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
+  const [footerSlotEl, setFooterSlot] = useState<HTMLElement | null>(null);
+  /*
+    🔴 `C-038` / `R-066` bullet 4 — **THE COMMIT CONTROLS ARE ABSENT FOR A PRINCIPAL WHO
+    MAY NOT CONFIGURE THE STATION.**
+
+    Every section portals its own APPLY into this slot, so withholding the slot is what makes
+    them absent rather than disabled — ONE gate, at the one place the slot is handed out, and
+    a section added later inherits it without its author having to remember.
+
+    ⚠ It asks `useHoldsStationAdmin`, NOT `useCanOperate`: these six routes are
+    `station-admin` class, so an ORDINARY OPERATOR may not commit them either. Reusing the
+    operator gate here would offer every operator a control the bridge then refuses.
+
+    ⚠ **The fields themselves stay typeable, and that half is NOT done** — recorded in the
+    change's `design.md` §9 rather than left to be discovered. What is closed here is the
+    HAZARD: no control that reaches the bridge and comes back refused. A draft that can never
+    be committed is a poor surface, not an unsafe one, and making the whole dialog read-only
+    is its own piece of work.
+  */
+  const holdsStationAdmin = useHoldsStationAdmin();
+  const footerSlot = holdsStationAdmin ? footerSlotEl : null;
   /** §6 — the backup server's own small second dialog. */
   const [addingBackup, setAddingBackup] = useState(false);
   /** Stable reporters, one per section, so a section's effect deps do not churn. */

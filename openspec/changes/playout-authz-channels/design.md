@@ -215,3 +215,40 @@ refuses it.
 ⚠ **The class is a required POSITIONAL argument, not an options-bag field with a default.**
 A default is the mechanism by which every future route silently becomes `operator`; the
 compiler refusing to build is the only version of this rule that cannot be forgotten.
+
+## 9. 🔴 What is NOT done, named rather than left to be found
+
+**Station setup's FIELDS stay typeable for a principal who may not commit them.**
+
+The six `station-admin` routes are refused at the bridge for everyone below that rung, and the
+dialog's COMMIT controls are now absent: every section portals its APPLY through `footerSlot`,
+so withholding the slot removes all of them at one gate, and a section added later inherits it.
+
+What is not done is the other half — the inputs themselves still accept typing, so a viewer or
+an ordinary operator can build a draft that has nowhere to go.
+
+**Why it is left:** the two halves are not the same risk. An APPLY that reaches the bridge and
+comes back refused is the failure `R-066` bullet 4 exists to remove — a control the console
+offered and the system rejected. A field that accepts a character is a poor surface and claims
+nothing: no value is shown as in force, nothing is sent, and the standing footer contract still
+says what the commit would do. Making the whole dialog read-only means a read-only mode for
+every section's controls, which is a piece of work with its own layout risk and its own e2e,
+not a rider on this one.
+
+⚠ **Do not "finish" this by DISABLING the fields.** That is golden rule 13's exact prohibition,
+and on this surface it would also be a lie: `ChannelSection` already uses a disabled-looking
+treatment to mean _"the designer owns this value"_ (ADR 0009), so a second, identical-looking
+treatment meaning _"your account may not change this"_ would make one appearance carry two
+unrelated facts. The read-only mode, when it is built, states which.
+
+## 10. A vocabulary overlap, checked and left alone
+
+The golden-rule-9 sweep found `Read only` already in use as a Station setup SECTION CONTRACT tag
+(`sections.ts` — `Read only` · `Apply together` · `Auto-save`), meaning _"the designer owns these
+values"_ (ADR 0009). This change adds `READ ONLY` meaning _"this channel is not yours"_.
+
+Two facts, one phrase — checked rather than assumed, and left as it is: the surfaces are far
+apart (a settings dialog's section head versus the channel strip and the status bar), the casing
+differs, and each instance carries its own context — `CHANNEL 2 · READ ONLY` and
+`READ ONLY — THIS SIGN-IN DOES NOT OPERATE` both say which they mean. Renaming either is a
+wording decision that owes its own two-axis sweep, and neither reading is wrong today.

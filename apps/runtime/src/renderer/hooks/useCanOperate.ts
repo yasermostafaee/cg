@@ -114,3 +114,31 @@ export function useHoldsOperatorRole(): boolean {
       return holdsPermissionClass(auth.principal.roles, 'operator');
   }
 }
+
+/**
+ * 🔴 `C-038` — **MAY THIS PRINCIPAL CHANGE THE STATION'S CONFIGURATION?**
+ *
+ * The third rung, asked by the surfaces that reach the six `station-admin` routes —
+ * `connections.set-config`, `fixedLayers.set-config`, `sources.set-config`,
+ * `sources.set-assignments`, `delimiters.set` and `channelSettings.set`.
+ *
+ * ⚠ **An OPERATOR answers `false` here, and that is the point.** Every other gate in this file
+ * treats "operator" as the thing being protected; this one protects against an operator too.
+ * A surface that reused {@link useCanOperate} for a configuration control would offer it to
+ * every operator on the station and have the bridge refuse each one.
+ *
+ * Permissive for `off` and `unknown`, for the reasons {@link useCanOperate} gives.
+ */
+export function useHoldsStationAdmin(): boolean {
+  const auth = useAuthSession();
+  switch (auth.kind) {
+    case 'off':
+    case 'unknown':
+      return true;
+    case 'signed-out':
+    case 'expired':
+      return false;
+    case 'signed-in':
+      return holdsPermissionClass(auth.principal.roles, 'station-admin');
+  }
+}
