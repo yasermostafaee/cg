@@ -1,0 +1,23 @@
+{"ts":"2026-09-22T07:38:57.590Z","dir":"send","line":"VERSION"}
+{"ts":"2026-09-22T07:38:57.593Z","dir":"recv","line":"201 VERSION OK"}
+{"ts":"2026-09-22T07:38:57.593Z","dir":"recv","line":"2.5.0 6b29237 Dev"}
+{"ts":"2026-09-22T07:38:57.624Z","dir":"send","line":"CLEAR 2-80"}
+{"ts":"2026-09-22T07:38:57.627Z","dir":"recv","line":"202 CLEAR OK"}
+{"ts":"2026-09-22T07:38:58.869Z","dir":"send","line":"CG 2-80 ADD 0 \"http://192.168.21.93:7901/probe.html\" 1 \"{}\""}
+{"ts":"2026-09-22T07:38:58.871Z","dir":"recv","line":"202 CG OK"}
+{"ts":"2026-09-22T07:39:01.601Z","dir":"send","line":"CG 2-80 PLAY 0"}
+{"ts":"2026-09-22T07:39:01.602Z","dir":"recv","line":"202 CG OK"}
+{"ts":"2026-09-22T07:39:02.843Z","dir":"send","line":"CG 2-80 STOP 0"}
+{"ts":"2026-09-22T07:39:02.845Z","dir":"recv","line":"202 CG OK"}
+{"ts":"2026-09-22T07:39:04.083Z","dir":"send","line":"CG 2-80 PLAY 0"}
+{"ts":"2026-09-22T07:39:04.085Z","dir":"recv","line":"202 CG OK"}
+{"ts":"2026-09-22T07:39:05.310Z","dir":"send","line":"CG 2-80 NEXT 0"}
+{"ts":"2026-09-22T07:39:05.312Z","dir":"recv","line":"202 CG OK"}
+{"ts":"2026-09-22T07:39:06.544Z","dir":"send","line":"CLEAR 2-80"}
+{"ts":"2026-09-22T07:39:06.547Z","dir":"recv","line":"202 CLEAR OK"}
+{"ts":"2026-09-22T07:39:07.789Z","dir":"send","line":"CG 2-80 ADD 0 \"http://192.168.21.93:7901/probe.html?nohandler=1\" 1 \"{}\""}
+{"ts":"2026-09-22T07:39:07.791Z","dir":"recv","line":"202 CG OK"}
+{"ts":"2026-09-22T07:39:10.523Z","dir":"send","line":"CG 2-80 NEXT 0"}
+{"ts":"2026-09-22T07:39:10.524Z","dir":"recv","line":"202 CG OK"}
+{"ts":"2026-09-22T07:39:11.763Z","dir":"send","line":"CLEAR 2-80"}
+{"ts":"2026-09-22T07:39:11.765Z","dir":"recv","line":"202 CLEAR OK"}

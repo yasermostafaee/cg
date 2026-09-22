@@ -5,6 +5,14 @@ be checked against the thing itself instead of trusted as prose.
 
 - [2026-07-28-casparcg-250-validation.md](2026-07-28-casparcg-250-validation.md) — C-018 CasparCG
   2.5.0 Stable hardware validation.
+- [2026-09-22-apasai-core-validation.md](2026-09-22-apasai-core-validation.md) — `C-040`, the
+  MEASURABLE half: apasai-core `2.5.0 6b29237 Dev` (the Playout's fork, engine 2.8.48) read from
+  the bridge host against the test Playout. The verb matrix, subset sweep and lifecycle diff are
+  identical to stock 2.5.0; OSC reaches a non-loopback AMCP client so the bridge reads `healthy`;
+  one template was served, fetched, rendered and removed with the fetch hop proven on our own
+  socket table. **Two apparent regressions were instrument artifacts** — probe wait windows tuned
+  on loopback — and both the misleading and the corrected runs are kept as evidence. The sign-in
+  half is NOT covered (see its §10).
 - [d-086-export-scoping.md](d-086-export-scoping.md) — D-086 export-scoping recon.
 - [2026-08-22-confidence-grab-measurement.md](2026-08-22-confidence-grab-measurement.md) — the
   C-016 / C-023 confidence-grab measurement runbook (§A), the 2× discriminator (§B) and the AMCP
