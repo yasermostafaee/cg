@@ -521,6 +521,28 @@ FILES and does nothing about the SOCKET, and the socket is where the other stati
 in. Verified by measurement: with `--port 5281` and everything else identical, channel 1 receives
 nothing at all.
 
+⚠ **THE FIX REMOVES NO BEHAVIOUR, AND THIS IS MEASURED RATHER THAN ARGUED.** Restoring what was
+on air across a bridge restart is deliberate (`B-145`, `B-092`); a "fix" that disabled it would
+pass the channel-isolation test in full and leave the station empty after every restart — a worse
+defect than this one, and one no test here could catch. So the fix refuses exactly one thing: a
+retained coordinate naming a channel the session did not configure. The flags were never the
+problem — `--live-layers-path`, `--templates-dir` and `--fixed-layers-path` all took effect on the
+day (the boot banner names each resolved path), so there was no ignored flag to make authoritative
+and no default to retire.
+
+**A plant-shaped configuration is byte-for-byte unchanged**, run against the loopback fixture with
+the owner's real channel-1 bank (same file by md5), everything else identical, before and after:
+
+| run                | channel-1 `CG ADD` | channel-1 `MIXER` | layers restored        |
+| ------------------ | ------------------ | ----------------- | ---------------------- |
+| **before** the fix | 6                  | 36                | 59, 95, 96, 97, 98, 99 |
+| **after** the fix  | 6                  | 36                | 59, 95, 96, 97, 98, 99 |
+
+All six rows still come back and still re-`CG ADD`, because on that bridge channel 1 **is** the
+declared channel. The fix is not "restore less"; it is "restore only onto the channel this station
+declared". ⭐ Stated from a measurement because the assumption is the dangerous part: a fence
+argued to be a no-op is how a real capability gets removed by reasoning.
+
 ### 9.1.1 — OPEN: the layer band is a CONVENTION on our side, not a rule
 
 _Recorded here, not actioned. It is not `CHANNEL-RESOLUTION-01`'s work._
