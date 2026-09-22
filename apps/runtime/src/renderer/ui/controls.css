@@ -4425,17 +4425,51 @@ input[type='checkbox']:disabled:checked {
 /*
  * THE VIDEO-FORMAT CARD — the one card the reference tints, and the only place in this dialog
  * a card is not the plain raised ground. `design.md` 14.3 ARGUED the tint away as "the
- * prototype's palette"; it is a green-GREY gradient rather than a hue, it claims nothing about
- * air, and the owner asked for the panes as drawn.
+ * prototype's palette"; it is a green-GREY gradient rather than a hue, and the owner asked for
+ * the panes as drawn.
+ *
+ * 🔴 `MODAL-TRUTH-01` (owner, 2026-09-22) — **THE TINT SAYS WHICH OF TWO STATES THE CARD IS
+ * IN, AND THE SENTENCE THAT USED TO STAND HERE — "it claims nothing about air" — IS GONE
+ * RATHER THAN QUALIFIED.**
+ *
+ * The owner opened this pane on a station with no bridge: `not read yet`, `not configured`,
+ * `nothing — this channel has no stored settings`, every one of them inside a GREEN card.
+ * Green is this console's settled ink for a thing that is up, and a card does not get to opt
+ * out of a vocabulary the whole surface shares.
+ *
+ * ⚠ **`no` is the DANGER ground, not the plain one and not amber — settled by the owner in
+ * that order on 2026-09-22.** The first spelling fell through to `.cg-card`'s plain ground;
+ * he asked for it to carry a colour, tried amber, and landed on red («نمیخواد زرد بشه اون
+ * باکس شاید قرمز بهتر باشه»). It is the right one on the merits too: a playout console that
+ * cannot say what its channel IS has a fault, not a caution — the same reading the `Check`
+ * line already gives a `mismatch` two rows below, in the same red.
+ *
+ * It is this DIALOG's danger pair (`--r-setup-danger-*`, the shadow sheet's `#352224` behind
+ * `#684044`), not the console's air-alarm fill: an alarm ground is for something happening on
+ * air now, and this is a card with nothing in it. Same family as the dialog's destructive
+ * button, one weight down.
+ *
+ * The predicate is set in `ChannelSection.tsx`, where its reasoning is; it is the SERVER's
+ * reading for this channel, never the link's health.
  */
-[data-modal-size='fixed'] .cg-card--video {
+[data-modal-size='fixed'] .cg-card--video[data-video-read='yes'] {
   background: var(--r-setup-video-bg);
   border-color: var(--r-setup-video-line);
 }
 
-[data-modal-size='fixed'] .cg-card--video .cg-video-metrics,
-[data-modal-size='fixed'] .cg-card--video .cg-video-metric {
+[data-modal-size='fixed'] .cg-card--video[data-video-read='yes'] .cg-video-metrics,
+[data-modal-size='fixed'] .cg-card--video[data-video-read='yes'] .cg-video-metric {
   border-color: var(--r-setup-video-line);
+}
+
+[data-modal-size='fixed'] .cg-card--video[data-video-read='no'] {
+  background: var(--r-setup-danger-bg);
+  border-color: var(--r-setup-danger-line);
+}
+
+[data-modal-size='fixed'] .cg-card--video[data-video-read='no'] .cg-video-metrics,
+[data-modal-size='fixed'] .cg-card--video[data-video-read='no'] .cg-video-metric {
+  border-color: var(--r-setup-danger-line);
 }
 
 .cg-card__head {

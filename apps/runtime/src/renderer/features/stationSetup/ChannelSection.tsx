@@ -145,13 +145,48 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
       {/*
         `SETTINGS-MATCH-02` — `--video` is the one card the reference TINTS, and `design.md`
         14.3 argued the tint away as "the prototype's palette". It is a green-GREY gradient
-        rather than a hue, it claims nothing about air, and the owner asked for the panes as
-        drawn: it says "this card is the channel itself" among three plain cards.
+        rather than a hue, and the owner asked for the panes as drawn: it says "this card is
+        the channel itself" among three plain cards.
+
+        🔴 **AMENDED 2026-09-22 (`MODAL-TRUTH-01`, owner): «بهتره وقتی متصل نیست سبز نباشه».**
+
+        The clause above that read _"it claims nothing about air"_ is DELETED, not softened,
+        because the owner has now looked at this card on a station with no bridge and it
+        claimed something. Every value in it read `not read yet` / `not configured` / `No
+        health reading from the bridge yet`, inside a green card. The tint's job — "this card
+        is the channel" — is perfectly true; what nobody checked is what it says when there
+        is no channel reading to be the subject of it. Green is the console's settled ink for
+        a thing that is up, and a surface does not get to opt out of a vocabulary it shares.
+
+        So the tint is CONDITIONAL on there being a reading to tint, and `data-video-read`
+        carries that one condition to the stylesheet — `yes` keeps the reference's green,
+        `no` takes this dialog's DANGER ground.
+
+        ⚠ Red was settled by the owner in three steps on 2026-09-22, and the order matters
+        because the end point is not obvious from the start: not-green first, then amber,
+        then «نمیخواد زرد بشه اون باکس شاید قرمز بهتر باشه». It is right on the merits as
+        well — a playout console that cannot say what its channel IS has a FAULT, not a
+        caution, and the `Check` line two rows down already spends the same red on a
+        `mismatch`. The two states now read as one sentence rather than as a card that
+        sometimes has a colour.
+
+        ⚠ The predicate is `observed`, and it is named for what it tests (golden rule 6): has
+        the SERVER been read for this channel. Not `health`, which answers whether the bridge
+        link is up — a different axis, and using it here would tint a card whose own reading
+        had not arrived and blank one whose had (golden rule 8). A mode that was read but
+        cannot be MAPPED (`observed.raster === null`) still counts as read: the card is
+        reporting a real answer from the server, and the mode line says so in its own words.
+
+        ⚠ The rail's selected-tab green is DELIBERATELY UNTOUCHED. It is this dialog's
+        SELECTION colour, it is on whichever tab you stand on including Servers and Layers,
+        and it makes no claim about a connection — so it is not the same defect and
+        restyling it would be a redesign nobody asked for.
       */}
       <section
         className="cg-card cg-card--video"
         aria-label="Video format"
         data-raster-channel={String(channel)}
+        data-video-read={observed === undefined ? 'no' : 'yes'}
       >
         <div className="cg-video-head">
           <span className="cg-video-eyebrow">Video format</span>
