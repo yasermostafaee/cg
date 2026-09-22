@@ -288,6 +288,20 @@ export interface LayerRowActionDeps {
    */
   plateAudio: () => Promise<AsyncResult>;
   onError: (message: string) => void;
+  /**
+   * 🔴 `C-038` / `R-066` bullet 4 — **MAY THIS PRINCIPAL ACT ON THIS CHANNEL AT ALL?**
+   *
+   * `false` makes every verb ABSENT — an empty list, not a disabled one. Golden rule 13: a
+   * greyed-out TAKE tells the operator the row is not ready, when the truth is that this
+   * console is not theirs to press. The fact is stated ONCE, in the status bar and on the
+   * channel strip; the controls simply do not exist.
+   *
+   * ⚠ **It is the LAST gate, applied after every other availability question, and never one
+   * of them.** The per-verb rules answer "can this row do this"; this answers "may this
+   * person". Folding it into `binding` or `linkDown` would put an identity fact inside a
+   * state machine that has an on-air failure behind each of its branches.
+   */
+  canOperate: boolean;
 }
 
 /**
@@ -302,6 +316,21 @@ export interface LayerRowActionDeps {
  */
 export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
   const { binding, linkDown, onError } = deps;
+  /*
+    🔴 `C-038` — **FIRST, AND IT RETURNS RATHER THAN FILTERS.**
+
+    Written at the top so no verb below can be reached by a principal who may not press it,
+    including one added later by an author who never read this file. A filter at the bottom
+    would be one `return` statement away from being bypassed.
+
+    The verb BLOCK still renders — `VERBS_GRID` is one grid child of a fixed width and the
+    sticky header's words sit on that same geometry. Emptying the list rather than removing
+    the element is what keeps `VERB_COUNT` and `gridTemplateColumns` true, which is the
+    invariant with a recorded on-air failure behind it. The cost is a blank gutter on a
+    read-only console, and that is the deliberate trade: a correct empty space beats a
+    resized table nobody measured in a browser (golden rule 12c).
+  */
+  if (!deps.canOperate) return [];
   /**
    * ── THE THREE-WAY FACT, UNPACKED ONCE ─────────────────────────────────────
    *

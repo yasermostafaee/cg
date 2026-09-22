@@ -1,4 +1,5 @@
 import { StrictMode, createElement } from 'react';
+import { fillBridgeStub } from './authStub.js';
 import { connectionsStub, type Reachability } from './reachability.js';
 export type { Reachability };
 import { createRoot, type Root } from 'react-dom/client';
@@ -84,6 +85,9 @@ export function rowDeps(over: Partial<LayerRowActionDeps> = {}): LayerRowActionD
   const binding = over.binding ?? bindingFor(itemWith('loaded'));
   return {
     binding,
+    // `C-038` — OPEN by default: this helper serves the per-verb availability specs, whose
+    // subject is the row's state and not the principal. The identity gate has its own file.
+    canOperate: true,
     // DELTA 8 — the operator words each verb toasts with.
     rowName: 'Row 1',
     layerName: '1-89',
@@ -151,7 +155,7 @@ export function stubBridge(link: Link, reach: Reachability = 'both-up'): RowStub
     },
     templates: { list: stubs.list, onChanged: () => () => undefined },
   };
-  (window as unknown as { cg: typeof cg }).cg = cg;
+  (window as unknown as { cg: typeof cg }).cg = fillBridgeStub(cg);
   return stubs;
 }
 

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { StrictMode, createElement } from 'react';
+import { fillBridgeStub } from './support/authStub.js';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -132,7 +133,7 @@ function baseStub(over: Record<string, unknown> = {}): void {
     },
     ...over,
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 async function renderEl(element: ReturnType<typeof createElement>): Promise<HTMLDivElement> {

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
+import { authStub } from './support/authStub.js';
 import { join } from 'node:path';
 import { StrictMode, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -198,6 +199,8 @@ describe('a deep link opens ONE dialog at the named section', () => {
         onChanged: () => () => undefined,
       },
     };
+    // `C-038` — the channel list is scoped to the principal, so every stub needs one.
+    (stub as { auth?: unknown }).auth = authStub();
     (window as unknown as { cg: typeof stub }).cg = stub;
     container = document.createElement('div');
     document.body.appendChild(container);

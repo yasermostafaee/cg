@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
 import { ArrowLeftRight, Lock, TriangleAlert } from 'lucide-react';
 import { stoppedChannelsOf } from '@cg/shared-ipc';
 import { useConnections } from '../../hooks/useConnections.js';
@@ -12,6 +13,7 @@ import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { LinkIndicator } from './LinkIndicator.js';
 import { IdentityIndicator } from './IdentityIndicator.js';
+import { ReadOnlyIndicator } from './ReadOnlyIndicator.js';
 import { SignOutButton } from '../auth/SignOutButton.js';
 import { Tag } from '../../ui/Tag.js';
 
@@ -296,6 +298,9 @@ function staleTitle(state: string): string {
 /** Bottom-of-window status bar (Phase 6 §2). Never hidden, never re-flows. */
 export function StatusBar(): JSX.Element {
   const health = useConnections();
+  // `C-038` — the lock and FAILOVER are both `operator` class and both UNSCOPED, so they
+  // ask the ROLE and never the channel. See `useHoldsOperatorRole`.
+  const holdsOperator = useHoldsOperatorRole();
   const lock = useLock();
   /** §7 — is the engage form open? */
   const [engaging, setEngaging] = useState(false);
@@ -317,6 +322,7 @@ export function StatusBar(): JSX.Element {
       <footer style={styles.bar} aria-label="Status bar">
         <LinkIndicator reach={casparReach} />
         <IdentityIndicator />
+        <ReadOnlyIndicator />
         {/* Nothing has answered yet. While the link is down that is not "loading" — there
             is nobody to load from (B-080/B-081). */}
         <Tag className="cg-pill" style={stale ? styles.stale : undefined}>
@@ -399,6 +405,7 @@ export function StatusBar(): JSX.Element {
     <footer style={styles.bar} aria-label="Status bar">
       <LinkIndicator reach={casparReach} />
       <IdentityIndicator />
+      <ReadOnlyIndicator />
       {simulated ? (
         // R-006 — in test mode there is no server to describe. The per-server pills used to
         // read "PRIMARY A HEALTHY" in green here, straight from the mock's seed, which is
@@ -566,8 +573,9 @@ export function StatusBar(): JSX.Element {
              comes down as a prop from the shell, which already holds it.
       */}
       <span style={styles.spacer} />
-      <AsyncButton
-        /*
+      {holdsOperator && (
+        <AsyncButton
+          /*
           R-055 — the DEFAULT variant, not `caution`.
 
           `--r-caution` is a FAULT role in this bar — the header above says "amber
@@ -579,20 +587,21 @@ export function StatusBar(): JSX.Element {
           It keeps its disabled state and its `title`, which is where "why can I not
           press this" actually belongs.
         */
-        aria-label="Manual failover"
-        disabled={health.backup === undefined}
-        title={
-          health.backup === undefined
-            ? 'No backup configured'
-            : `Switch primary to ${health.currentPrimary === 'A' ? 'B' : 'A'}`
-        }
-        run={() =>
-          window.cg.connections.failover({ reason: 'manual' }).then((r) => ({ accepted: r.ok }))
-        }
-      >
-        <Icon icon={ArrowLeftRight} />
-        FAILOVER
-      </AsyncButton>
+          aria-label="Manual failover"
+          disabled={health.backup === undefined}
+          title={
+            health.backup === undefined
+              ? 'No backup configured'
+              : `Switch primary to ${health.currentPrimary === 'A' ? 'B' : 'A'}`
+          }
+          run={() =>
+            window.cg.connections.failover({ reason: 'manual' }).then((r) => ({ accepted: r.ok }))
+          }
+        >
+          <Icon icon={ArrowLeftRight} />
+          FAILOVER
+        </AsyncButton>
+      )}
       {/*
         `R-066` — the way out, beside the other manual actions and NOT beside the pill that
         names the state. It renders nothing unless there is a session to leave; see its own
@@ -623,7 +632,17 @@ export function StatusBar(): JSX.Element {
         <span style={styles.lock}>
           <Icon icon={Lock} size={11} /> LOCKED
         </span>
-      ) : (
+      ) : !holdsOperator /*
+          🔴 `C-038` — **A VIEWER GETS NO LOCK BUTTON AT ALL.**
+
+          The lock gates station OPERATION, so it belongs to whoever may operate the station:
+          a viewer who could engage it would obstruct an operator while holding no authority
+          over the console, and the PIN is a second, independent gate that does not change
+          that (ADR 0010 rule 3 — the PIN is a safety mechanism and never becomes identity).
+
+          ABSENT rather than disabled, per golden rule 13: a greyed-out Lock reads as "the
+          console is busy", which is not the fact.
+        */ ? null : (
         /*
           🔴 `STATION-CHROME-01` §7 — ENGAGING ASKS FOR THE PIN TWICE.
 

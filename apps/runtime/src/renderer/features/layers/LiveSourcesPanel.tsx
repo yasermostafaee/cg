@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
 import { ChevronRight, Info } from 'lucide-react';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -200,6 +201,17 @@ export function LiveSourcesPanel({
   onOpenAudio,
   onPanic,
 }: Props): JSX.Element {
+  /*
+    🔴 `C-038` — **THE ROLE, NOT THE CHANNEL**, and the distinction is load-bearing here.
+
+    Both controls in this panel are ones the BRIDGE leaves unscoped: PANIC is
+    `silenceAllLivePlates` (owner answer A16 — it stays unscoped because its scope is the
+    whole ledger), and RELEASE is the remedy for a STRANDED row, whose channel may not be the
+    one this console is scoped to. Asking `useCanOperate` would hide either of them from an
+    operator the bridge would have obeyed — withholding an escape hatch for a reason that is
+    not true. See `useHoldsOperatorRole`.
+  */
+  const holdsOperator = useHoldsOperatorRole();
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
@@ -508,23 +520,24 @@ export function LiveSourcesPanel({
           change and cannot be forgotten. Golden rule 11: the scope in the operator's words.
           No behaviour change, no wire change.
         */}
-        <AsyncButton
-          variant="caution-strong"
-          run={panic}
-          onError={reportCommandError}
-          disabled={audioRefusal !== undefined}
-          title={
-            audioRefusal ??
-            'Set EVERY live plate the bridge has seated to zero, on EVERY channel this bridge ' +
-              'drives — not only the channel selected above, and including rows this ' +
-              'console does not show as on air. The pictures stay on air. There is no ' +
-              'un-panic — raise what you need again on its own fader.'
-          }
-          className="cg-plate-panic"
-          data-plate-panic=""
-          aria-label="Silence all boxes on every channel — set every live plate the bridge has seated to zero, whichever channel it is on"
-        >
-          {/*
+        {holdsOperator && (
+          <AsyncButton
+            variant="caution-strong"
+            run={panic}
+            onError={reportCommandError}
+            disabled={audioRefusal !== undefined}
+            title={
+              audioRefusal ??
+              'Set EVERY live plate the bridge has seated to zero, on EVERY channel this bridge ' +
+                'drives — not only the channel selected above, and including rows this ' +
+                'console does not show as on air. The pictures stay on air. There is no ' +
+                'un-panic — raise what you need again on its own fader.'
+            }
+            className="cg-plate-panic"
+            data-plate-panic=""
+            aria-label="Silence all boxes on every channel — set every live plate the bridge has seated to zero, whichever channel it is on"
+          >
+            {/*
             🔴 `CONSOLE-LOOK-06` DELTA 8 §0 — READ FROM THE REFERENCE, WHICH SAYS
             `Silence all plates`. Measured in Chromium at 1280 × 800 on `07-live-plates.html`:
             `.plate-panic` renders exactly that.
@@ -539,8 +552,9 @@ export function LiveSourcesPanel({
             The trade is deliberate and it is reported: the reference's word on the button, our
             sentence behind it.
           */}
-          Silence all plates
-        </AsyncButton>
+            Silence all plates
+          </AsyncButton>
+        )}
       </div>
       <div className="cg-plate-table" role="table" aria-label="Occupied live-plate layers">
         <div className="cg-plate-head" role="row">
@@ -643,7 +657,7 @@ export function LiveSourcesPanel({
                 )}
               </span>
               <span role="cell" className="cg-plate-owner">
-                {row.releasable ? (
+                {row.releasable && holdsOperator ? (
                   <AsyncButton
                     variant="caution-strong"
                     run={() => releaseStranded(row)}

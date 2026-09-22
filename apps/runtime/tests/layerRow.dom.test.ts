@@ -323,6 +323,9 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     // DELTA 8 — the words each verb toasts with.
     rowName: 'Row 1',
     layerName: '1-89',
+    // `C-038` — this file's subject is the per-verb availability rules, so the identity gate
+    // is OPEN here. The gate itself is proved in `viewerReadOnly.dom.test.ts`.
+    canOperate: true,
   });
 
   it('R-022 — REHEARSE interlocks PLAY, stays a toggle, and never disables CLEAR', () => {

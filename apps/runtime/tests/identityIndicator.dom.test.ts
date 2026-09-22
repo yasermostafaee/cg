@@ -137,6 +137,7 @@ const SIGNED_IN: AuthSessionState = {
     expiresAt: EXPIRES_AT,
     nameTruncated: false,
   },
+  permittedChannels: [1],
 };
 const EXPIRED: AuthSessionState = { kind: 'expired', name: NAME };
 const SIGNED_OUT: AuthSessionState = { kind: 'signed-out' };

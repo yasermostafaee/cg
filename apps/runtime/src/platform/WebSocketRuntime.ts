@@ -311,6 +311,17 @@ export class WebSocketRuntime implements RuntimeBridge {
   */
   #authCaps: AuthCapabilities | null = null;
   #principal: ipcChannels.PlayoutPrincipal | null = null;
+  /**
+   * 🔴 `C-038` — the channels this principal may OPERATE on this station, as the BRIDGE
+   * computed them.
+   *
+   * ⚠ **Stored beside `#principal` and written only by {@link #setPrincipal}, because the two
+   * always arrive in the same answer and a second setter is how they would come to disagree.**
+   * The console never derives this: it would need the connection config and a second copy of
+   * `configuredCasparHosts`, and a stale read would let the strip offer a channel the gate
+   * then refuses. One judgement, made where the facts are.
+   */
+  #permittedChannels: readonly number[] = [];
   #session: StoredSession | null = loadPlayoutSession();
   #refreshTimer: ReturnType<typeof setTimeout> | null = null;
   /** Fires AT `exp`, so a session that lapses on an idle page is noticed without an event. */
@@ -579,8 +590,12 @@ export class WebSocketRuntime implements RuntimeBridge {
     this.#authStateSubs.emit(this.#authState());
   }
 
-  #setPrincipal(value: ipcChannels.PlayoutPrincipal | null): void {
+  #setPrincipal(
+    value: ipcChannels.PlayoutPrincipal | null,
+    permittedChannels: readonly number[] = [],
+  ): void {
     this.#principal = value;
+    this.#permittedChannels = value === null ? [] : permittedChannels;
     if (value !== null) this.#bridgeRefusesUs = false;
     this.#armExpiryWatch();
     this.#authStateSubs.emit(this.#authState());
@@ -650,7 +665,7 @@ export class WebSocketRuntime implements RuntimeBridge {
       refusal arrives: {@link #noteAuthRefused}.
     */
     if (this.#bridgeRefusesUs) return { kind: 'expired', name: principal.name };
-    return { kind: 'signed-in', principal };
+    return { kind: 'signed-in', principal, permittedChannels: this.#permittedChannels };
   }
 
   /**
@@ -817,7 +832,7 @@ export class WebSocketRuntime implements RuntimeBridge {
       const state = await this.#sendAuthFrame(session.accessToken);
       this.#authRefusal = null;
       const wasSignedOut = this.#principal === null;
-      this.#setPrincipal(state.principal);
+      this.#setPrincipal(state.principal, state.permittedChannels);
       if (state.principal !== null) {
         this.#scheduleRefresh();
         /*

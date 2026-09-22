@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { StrictMode, createElement } from 'react';
+import { fillBridgeStub } from './support/authStub.js';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
@@ -108,7 +109,7 @@ function stubBridge(
       onRestoreMigrations: () => () => undefined,
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   return { clearAll, removeAll };
 }
 
@@ -420,7 +421,7 @@ describe('StackPanel Clear-All', () => {
         onRestoreMigrations: () => () => undefined,
       },
     };
-    (window as unknown as { cg: typeof stub }).cg = stub;
+    (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
     const el = await renderPanel();
     expect(clearAllButton(el)?.disabled).toBe(false);
     /*

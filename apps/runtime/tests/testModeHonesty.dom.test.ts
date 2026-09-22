@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { StrictMode, createElement } from 'react';
+import { fillBridgeStub } from './support/authStub.js';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -50,7 +51,7 @@ function stubLink(status: 'live' | 'disconnected' | 'offline-mock'): void {
     stack: { take: noopAsync, next: noopAsync, stop: noopAsync, out: noopAsync, remove: noopAsync },
     templates: { list: () => Promise.resolve([]), onChanged: () => () => undefined },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 async function render(el: ReturnType<typeof createElement>): Promise<HTMLDivElement> {

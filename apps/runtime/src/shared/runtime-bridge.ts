@@ -144,7 +144,21 @@ export type AuthSessionState =
    */
   | { readonly kind: 'signed-out'; readonly reason?: string }
   /** A verified principal is on this socket. `principal` is the BRIDGE's answer, never the echo. */
-  | { readonly kind: 'signed-in'; readonly principal: PlayoutPrincipal }
+  | {
+      readonly kind: 'signed-in';
+      readonly principal: PlayoutPrincipal;
+      /**
+       * 🔴 `C-038` — which of THIS STATION's channels this principal may OPERATE, as the
+       * bridge computed them. Empty for a viewer, who is granted none.
+       *
+       * ⚠ **It is not `principal.channels`, and the difference matters.** That is the raw
+       * `cg_channels` claim — `{host, channel}` grants that may name hosts this bridge does
+       * not drive and channels this station does not have. This is the ANSWER: the grants
+       * resolved against the station, by the one predicate the request gate also asks. A
+       * surface reading the claim instead would offer a channel the bridge refuses.
+       */
+      readonly permittedChannels: readonly number[];
+    }
   /**
    * A principal was held and the bridge has stopped accepting it. The NAME is kept so the pill
    * can say whose session ended — a lapsed session is still an answer to "who is at this

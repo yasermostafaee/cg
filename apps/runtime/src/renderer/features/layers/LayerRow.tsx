@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useCanOperate } from '../../hooks/useCanOperate.js';
 import type { FixedSlotState, TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState, StackItemStatus } from '@cg/shared-schema';
 import { colors, cssVars } from '../../theme.js';
@@ -447,6 +448,8 @@ export function LayerRow({
     menu item's gate, so the two can never offer different answers to "does this row have
     sound at all".
   */
+  // `C-038` — the ONE console-side permission answer; the verbs read it, nothing else does.
+  const canOperate = useCanOperate();
   const hasPlates = (template?.liveSources?.sources.length ?? 0) > 0;
 
   const openPlateAudio = (): Promise<{ accepted: true }> => {
@@ -455,6 +458,8 @@ export function LayerRow({
   };
 
   const actions = layerRowActions({
+    // `C-038` — the LAST gate: may this principal press anything on this channel at all?
+    canOperate,
     // THE UNION, not `item`. See the `binding` prop's note: this is the whole of
     // the fix, and passing `item` here again is exactly how it would come undone.
     binding,

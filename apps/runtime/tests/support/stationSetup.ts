@@ -15,6 +15,8 @@ import type {
   TemplateInfo,
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
+import type { AuthSessionState } from '../../src/shared/runtime-bridge.js';
+import { authStub } from './authStub.js';
 import { StationSetupDialog } from '../../src/renderer/features/stationSetup/StationSetupDialog.js';
 import {
   DEFAULT_STATION_SETUP_SECTION,
@@ -78,6 +80,8 @@ export const SETUP_RASTER: ChannelSettingsState = {
 };
 
 export interface StationSetupStubOptions {
+  /** `C-038` — who is signed in. Default: auth OFF, the byte-identical baseline. */
+  readonly auth?: AuthSessionState;
   items?: readonly StackItemState[];
   config?: ConnectionConfig;
   serveInfo?: typeof SETUP_SERVE_INFO;
@@ -192,6 +196,8 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
       get: () => Promise.resolve(null),
       onChanged: () => () => undefined,
     },
+    // `C-038` — the channel list is scoped to the principal, so every stub needs one.
+    auth: authStub(options.auth),
   };
   (window as unknown as { cg: typeof stub }).cg = stub;
   return {

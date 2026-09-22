@@ -178,6 +178,7 @@ describe('R-066 §1 — the sign-in appears when the bridge says so, and not oth
         expiresAt: new Date(Date.now() + 3600_000).toISOString(),
         nameTruncated: false,
       },
+      permittedChannels: [1],
     });
     expect(h.el.innerHTML, 'the gate must lift on the same instance, with no remount').toBe('');
   });

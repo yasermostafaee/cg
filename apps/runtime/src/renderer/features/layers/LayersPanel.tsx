@@ -57,6 +57,7 @@ import {
 import { OperatorNames } from '../../ui/OperatorNames.js';
 import { operatorRowName, placeName, type OperatorRowName } from '../../ui/operatorNaming.js';
 import type { ShellLayout } from '../../hooks/useShellLayout.js';
+import { useCanOperate } from '../../hooks/useCanOperate.js';
 import { useElementWidth } from '../../hooks/useElementWidth.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useLink } from '../../hooks/useLink.js';
@@ -324,6 +325,9 @@ export function LayersPanel({
    * over unready slots renders the declared range as a list with nothing on it,
    * which is the same lie one snapshot along.
    */
+  // `C-038` — may this principal act on the channel this console is scoped to? The ONE
+  // console-side answer; every operator control in this panel reads it (golden rule 6).
+  const canOperate = useCanOperate();
   const { bank, ready: bankReady, failed: bankFailed } = useFixedBankState();
   const { slots, ready: slotsReady, failed: slotsFailed } = useFixedSlotsState();
   /*
@@ -1138,6 +1142,21 @@ export function LayersPanel({
       actions={
         <>
           {/*
+            🔴 `C-038` / `R-066` bullet 4 — **THE BULK VERBS ARE ABSENT FOR A PRINCIPAL WHO
+            MAY NOT USE THEM, not disabled.** Golden rule 13: a greyed-out STOP ALL tells the
+            operator the console is busy or the stack is empty, when the truth is that this
+            channel is not theirs — a disabled control states the wrong fact. `ReadOnlyIndicator`
+            states the right one, once, in the status bar.
+
+            ⚠ **THIS DOES NOT CONTRADICT the "ALWAYS RENDERED, present-but-disabled" rule
+            below**, and the distinction is worth keeping: that rule is about TRANSIENT state —
+            `onAirCount` going to zero must not move the target under a hand already reaching,
+            because it can change between the glance and the press. A principal's permission
+            cannot. It is fixed for the session, so there is no target to move.
+          */}
+          {canOperate && (
+            <>
+              {/*
             The bulk verbs, in C-012 order: graceful first, hard second — so the
             softer option is the one nearest to hand.
 
@@ -1159,7 +1178,7 @@ export function LayersPanel({
             target under the operator's hand mid-reach. Their weight comes from
             their confirm gates, not from being hidden.
           */}
-          {/*
+              {/*
             🔴 `CONSOLE-MATCH-03` §2 — WHICH CHANNEL THESE THREE VERBS REACH, said in front
             of them rather than inferred.
 
@@ -1173,27 +1192,27 @@ export function LayersPanel({
             It is rendered only when the bank has actually answered: `CH undefined` over three
             live verbs would be worse than saying nothing.
           */}
-          {bank !== null && (
-            <span className="cg-bulk-target" data-bulk-target="">
-              CH {bank.channel}
-            </span>
-          )}
-          <Button
-            variant="neutral"
-            disabled={needsCaspar || onAirCount === 0}
-            aria-label="Stop all on-air items"
-            data-verb-tone="stop"
-            title={
-              needsCaspar
-                ? needsCasparReason
-                : 'Every on-air graphic runs its own outro and stays loaded'
-            }
-            onClick={() => void stopAll()}
-          >
-            <Icon icon={CircleArrowOutDownRight} />
-            STOP ALL
-          </Button>
-          {/*
+              {bank !== null && (
+                <span className="cg-bulk-target" data-bulk-target="">
+                  CH {bank.channel}
+                </span>
+              )}
+              <Button
+                variant="neutral"
+                disabled={needsCaspar || onAirCount === 0}
+                aria-label="Stop all on-air items"
+                data-verb-tone="stop"
+                title={
+                  needsCaspar
+                    ? needsCasparReason
+                    : 'Every on-air graphic runs its own outro and stays loaded'
+                }
+                onClick={() => void stopAll()}
+              >
+                <Icon icon={CircleArrowOutDownRight} />
+                STOP ALL
+              </Button>
+              {/*
             CLEAR ALL is ALWAYS ENABLED — the bulk twin of the row's CLEAR escape
             hatch, and that half is unchanged: refusing the remedy because the
             STATE MODEL is confused strands graphics on air, so it is never gated
@@ -1214,22 +1233,22 @@ export function LayersPanel({
             which is why the label and title no longer say "on-air" — they used to
             describe a narrower act than the one the operator was about to commit.
           */}
-          <Button
-            variant="neutral"
-            disabled={needsCaspar}
-            aria-label="Clear all rows holding a layer"
-            data-verb-tone="clear"
-            title={
-              needsCaspar
-                ? needsCasparReason
-                : 'Every row holding a layer is cut immediately, with no outro — whatever its status reads'
-            }
-            onClick={() => void clearAll()}
-          >
-            <Icon icon={XSquare} />
-            CLEAR ALL
-          </Button>
-          {/*
+              <Button
+                variant="neutral"
+                disabled={needsCaspar}
+                aria-label="Clear all rows holding a layer"
+                data-verb-tone="clear"
+                title={
+                  needsCaspar
+                    ? needsCasparReason
+                    : 'Every row holding a layer is cut immediately, with no outro — whatever its status reads'
+                }
+                onClick={() => void clearAll()}
+              >
+                <Icon icon={XSquare} />
+                CLEAR ALL
+              </Button>
+              {/*
             🔴 `R-017` — WITHHELD WHILE ANYTHING IS ON AIR, and RENDERED while it is withheld.
             The bulk action alone is withheld: individual idle rows stay removable, because
             "some rows are removable and one is not" is a true statement about the stack and
@@ -1241,7 +1260,7 @@ export function LayersPanel({
             refusing a remedy strands graphics on air. This one is the opposite kind of act —
             irreversible, and never a remedy for anything — so it is the one that waits.
           */}
-          {/*
+              {/*
             🔴 `CONSOLE-MATCH-03` §2 — THE RULE THAT SPLITS THE IRREVERSIBLE VERB OFF.
 
             The reference puts a 1 × 17 rule between CLEAR ALL and REMOVE ALL, and the
@@ -1253,22 +1272,24 @@ export function LayersPanel({
             `aria-hidden`: the grouping is already stated by every label and title beside it,
             and a separator announced to a screen reader in the middle of three verbs is noise.
           */}
-          <span className="cg-bulk-divider" aria-hidden="true" />
-          <Button
-            variant="neutral"
-            disabled={linkDown || items.length === 0 || removeBlockedCount > 0}
-            aria-label="Remove all items"
-            data-verb-tone="remove"
-            title={
-              removeBlockedCount > 0
-                ? `${String(removeBlockedCount)} row(s) are on air, and REMOVE ALL cannot be undone. Take them off air first — STOP ALL runs their outros, CLEAR ALL cuts immediately.`
-                : 'Clears anything on air and empties every row'
-            }
-            onClick={() => void removeAll()}
-          >
-            <Icon icon={Trash2} />
-            REMOVE ALL
-          </Button>
+              <span className="cg-bulk-divider" aria-hidden="true" />
+              <Button
+                variant="neutral"
+                disabled={linkDown || items.length === 0 || removeBlockedCount > 0}
+                aria-label="Remove all items"
+                data-verb-tone="remove"
+                title={
+                  removeBlockedCount > 0
+                    ? `${String(removeBlockedCount)} row(s) are on air, and REMOVE ALL cannot be undone. Take them off air first — STOP ALL runs their outros, CLEAR ALL cuts immediately.`
+                    : 'Clears anything on air and empties every row'
+                }
+                onClick={() => void removeAll()}
+              >
+                <Icon icon={Trash2} />
+                REMOVE ALL
+              </Button>
+            </>
+          )}
           {/*
             🔴 `STATION-CHROME-02` §1 — CONFIGURE IS GONE FROM THIS BAR.
 

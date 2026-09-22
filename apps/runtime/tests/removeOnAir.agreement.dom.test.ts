@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import { fillBridgeStub } from './support/authStub.js';
 import { isOnAirStatus, StackItemStatusSchema } from '@cg/shared-schema';
 import type { StackItemState } from '@cg/shared-schema';
 import { layerRowActions } from '../src/renderer/features/layers/layerRowActions.js';
@@ -81,7 +82,7 @@ async function renderPanelWith(stack: StackItemState[]): Promise<HTMLDivElement>
       onRestoreMigrations: () => () => undefined,
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 
   panelContainer?.remove();
   panelContainer = document.createElement('div');
