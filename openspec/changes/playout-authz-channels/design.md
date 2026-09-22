@@ -73,6 +73,28 @@ intended, and it is not the failover case rejected above.** A deliberate act by 
 holding authority is a different thing from an event the operator did not cause. The next
 reader will otherwise see a verdict that moves and think it is the bug we avoided.
 
+⚠ **THE GATE UPDATES IMMEDIATELY; THE CONSOLE’S STRIP DOES NOT — and an earlier draft of
+this section claimed otherwise.** Found by checking the code against the claim rather than
+the other way round.
+
+The bridge reads the configuration on every request, so the moment the server list changes
+its verdicts change with it. The console’s `permittedChannels` arrives on `auth.state`, which
+is a READ and a per-socket one — its answer depends on which principal is on that socket —
+and there is no publish channel for it. `window.cg.auth.onStateChanged` is a LOCAL
+subscription inside `WebSocketRuntime`: it fires when this console’s own principal changes,
+never when the bridge’s configuration does.
+
+So between a `station-admin` editing the servers and the affected console reconnecting, the
+strip can mark a channel that is now permitted, or offer one that is now refused. **The
+refusal is still correct — the bridge is the guarantee and it is never stale — but the
+courtesy half is, for that window, wrong.**
+
+Not fixed here, deliberately: the publish machinery sends ONE payload to every socket, and
+`auth.state` needs a different answer per socket, so this is a new per-socket publish path
+rather than one more `subscribe` line. Doing that at the end of this change would ship an
+untested mechanism on the security surface. **Filed as owed work, with the shape of the fix
+named so the next reader does not have to rediscover it.**
+
 ### (b) It accepts B's host as well as A's
 
 The contract as written names A's. This is a **tolerance, not a widening** — the Playout

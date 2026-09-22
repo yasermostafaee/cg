@@ -77,7 +77,23 @@
 - [ ] 🔴 **A second discharge is owed for the e2e commit itself**, which carries
       `playout-authz.spec.ts` and the signed-out strip fix
 
-## 7. 🔴 Owner answer owed
+## 7. 🔴 Owed work, named rather than left to be found
+
+- [ ] **The strip goes stale when a `station-admin` edits the server list.** The gate reads
+      config on every request and is never stale; `auth.state` is a per-socket READ with no
+      publish channel, and `window.cg.auth.onStateChanged` is a LOCAL subscription that fires
+      on this console's own principal changing, never on the bridge's configuration changing.
+      So a signed-in console keeps its old `permittedChannels` until it reconnects.
+      ⚠ The REFUSAL stays correct — the bridge is the guarantee — so this is the courtesy
+      half being wrong for that window, not a hole in the gate. The fix is a new per-socket
+      publish path, not one more `subscribe` line, which is why it is not a rider on this
+      change. See `design.md` §2(a), which an earlier draft of this change overstated.
+
+- [ ] **Station setup’s FIELDS stay typeable below `station-admin`** — the commit controls are
+      absent, so nothing reaches the bridge and comes back refused. `design.md` §9, including
+      why it must not be finished by DISABLING them.
+
+## 8. 🔴 Owner answer owed
 
 - [ ] **`auth.sign-out` while the console is locked.** REPLY 1 asks for it to be reachable; it is
       not, and that is deliberate — `B-229`'s recorded no-carve-out answer, pinned by an
