@@ -11,6 +11,7 @@ export { authGateState, openToUnauthenticated, refusedByAuth, wirePublishes } fr
 export { CHANNEL_DECLARING_ROUTES, stationChannelsFor, stationRefusal } from './bridge.js';
 export {
   CATALOGUE_POLL_MS,
+  CATALOGUE_TICK_MS,
   PlayoutCatalogue,
   type CatalogueRow,
   type PlayoutCatalogueOptions,

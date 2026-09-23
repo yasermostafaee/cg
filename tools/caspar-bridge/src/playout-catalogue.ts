@@ -29,6 +29,18 @@ import { z } from 'zod';
 /** `C-039` — the contract's own floor: polled at most every 30 s. */
 export const CATALOGUE_POLL_MS = 30_000;
 
+/**
+ * How often the reader LOOKS for a due read — not how often it reads (that is the floor above).
+ *
+ * ⚠ **Deliberately much shorter than the floor, and this is a measured fix.** With the two equal,
+ * a sign-in's immediate read shifted the phase: the first tick after it landed just under 30 s
+ * later, was refused by the floor, and the next read was a whole period after that — so an outage
+ * or a rename took up to a minute to reach the strip while "at most every 30 s" still held. Found
+ * by driving the §7 demo; `playout-catalogue.test.ts` pins it. A check that finds nothing due costs
+ * a clock read and makes no request.
+ */
+export const CATALOGUE_TICK_MS = 1000;
+
 /** A short bound, so a hanging Playout cannot hold a tick open. Same as the D9 read's. */
 const HTTP_TIMEOUT_MS = 5000;
 
@@ -49,8 +61,9 @@ export interface PlayoutCatalogueOptions {
   /** TEST-ONLY — `Date.now` by default; drives the 30 s floor without sleeping. */
   readonly now?: () => number;
   /**
-   * TEST-ONLY — the background tick's period; {@link CATALOGUE_POLL_MS} by default. It sets how
-   * often a read is ATTEMPTED; the 30 s floor between reads is the contract's and is not an option.
+   * TEST-ONLY — the background tick's period; {@link CATALOGUE_TICK_MS} by default. It sets how
+   * often a due read is LOOKED FOR; the 30 s floor between reads is the contract's and is not an
+   * option.
    */
   readonly tickMs?: number;
 }
@@ -76,7 +89,7 @@ export class PlayoutCatalogue {
     this.#bearer = bearer;
     this.#fetch = options.fetchImpl ?? ((...args) => fetch(...args));
     this.#now = options.now ?? ((): number => Date.now());
-    this.#tickMs = options.tickMs ?? CATALOGUE_POLL_MS;
+    this.#tickMs = options.tickMs ?? CATALOGUE_TICK_MS;
   }
 
   /** The catalogue as last read, or `null` when ABSENT. Synchronous — nothing waits on the Playout. */

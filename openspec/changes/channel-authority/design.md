@@ -163,7 +163,13 @@ sources }] }`.
 push call it; nothing re-derives it.
 
 **D4 (`playout-catalogue.ts`).** Built only with auth ON. Read at most every 30 s (a fixed floor —
-only the tick period is injectable), with `If-None-Match`; a `304` keeps what is held. On any
+only the tick period is injectable), with `If-None-Match`; a `304` keeps what is held. ⚠ The tick
+LOOKS for a due read every second (`CATALOGUE_TICK_MS`); it does not read every second. The first
+spelling ticked at the floor's own period, and a sign-in's immediate read shifted the phase so the
+next tick was refused by the floor and the next read came a whole period later — up to a minute for
+an outage or a rename to reach the strip. Found by driving the §7 demo, pinned by
+`playout-catalogue.test.ts` (fake timers); after the fix the demo's outage reached the strip 30.7 s
+after the Playout went down and the recovery 29.8 s after it came back. On any
 failure — no bearer, no answer, a non-OK status, an unparseable body — the catalogue is ABSENT
 (`null`), not the last good answer: a stale label is a label the Playout no longer says, and the
 strip's `CHANNEL <n>` is always true. Never awaited by the gate, never an alarm.
