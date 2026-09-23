@@ -6,7 +6,12 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
 import { AmcpTransport, CommandQueue } from '@cg/caspar-client';
-import type { ConnectionConfig, FixedLayerBank, TemplateInfo } from '@cg/shared-ipc';
+import {
+  fixedBankSlots,
+  type ConnectionConfig,
+  type FixedLayerBank,
+  type TemplateInfo,
+} from '@cg/shared-ipc';
 import { createBridge, type BridgeHandle } from '../src/index.js';
 import { awaitChannelModeRead, HEALTH_MS, track } from './support/harness.js';
 
@@ -249,6 +254,19 @@ describe('e — the channel may be replaced in-app while nothing of ours holds a
     await rt.loadFixed({ channel: 1, layer: 99 }, 'logo-1', 'logo', {});
     await rt.take('logo-1');
     await waitFor(async () => (await r.lines()).includes('CG 1-99 PLAY 0'), 'the take');
+    /*
+      ⚠ AND THE BOOT VOLUME BLANKET (`R-022`). It re-asserts `VOLUME 1` on every declared row at
+      `normal` priority, while the take is `urgent` — so the take landing says nothing about the
+      blanket having finished, and a straggler (`MIXER 1-58 VOLUME 1`, a bed row) once landed
+      inside the window below and read as the refused change sending something. Wait for every
+      row's line, whatever order the queue sends them in; the assertion below is unchanged.
+    */
+    await waitFor(async () => {
+      const lines = await r.lines();
+      return fixedBankSlots(bank(1)).every((s) =>
+        lines.includes(`MIXER 1-${String(s.layer)} VOLUME 1`),
+      );
+    }, 'the boot volume blanket');
     const before = (await r.lines()).length;
     expect(rt.setFixedLayers(bank(2))).toEqual({
       ok: false,
