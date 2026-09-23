@@ -563,8 +563,15 @@ test.describe('Live Source (D-137 phase 1)', () => {
     await app.selectElementById(ids[1]!);
     await app.setLiveSourceId('guest-2');
 
-    const labels = await holes(app).locator('[data-cg-live-source-label]').allTextContents();
-    expect(labels.sort()).toEqual(['guest-1', 'guest-2']);
+    // The SAME expectation, read with retry: the Enter that commits an id re-renders the canvas
+    // on a later frame, and a one-shot `allTextContents()` raced it — CI run 35850329430 read
+    // `no source` for the second plate on both attempts while the code under test was
+    // byte-identical to the last green run's.
+    await expect
+      .poll(async () =>
+        (await holes(app).locator('[data-cg-live-source-label]').allTextContents()).sort(),
+      )
+      .toEqual(['guest-1', 'guest-2']);
     await expect(errorPill(app)).toHaveCount(0);
   });
 });
