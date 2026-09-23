@@ -12130,7 +12130,7 @@ and reads the same on a broken build as on a fixed one. It fired on the fixed bu
 measures the body's SLACK instead. Cross-refs [[B-141]] (the three empty states this joins),
 [[B-251]] (the same failure class, one dialog along).
 
-## [~] B-253 — a muted empty layer is indistinguishable from a clean one: `CLEAR` does not reset a layer’s mixer state, so anything seated on it later is silently muted with nothing in the observed state to explain it ⟨priority: high — the failure is SILENT and it is on AIR: a guest’s audio, or a bed’s, simply is not there, and every surface the operator can reach says the layer is fine⟩ — FILED 2026-09-22 by `MODAL-TRUTH-01` §6 · FIXED IN CODE by `BRIDGE-TRUTH-01` §2 (`openspec/changes/bridge-truth`)
+## [x] B-253 — a muted empty layer is indistinguishable from a clean one: `CLEAR` does not reset a layer’s mixer state, so anything seated on it later is silently muted with nothing in the observed state to explain it ⟨priority: high — the failure is SILENT and it is on AIR: a guest’s audio, or a bed’s, simply is not there, and every surface the operator can reach says the layer is fine⟩ — FILED 2026-09-22 by `MODAL-TRUTH-01` §6 · FIXED IN CODE by `BRIDGE-TRUTH-01` §2 · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-bridge-truth`)
 
 ⚠ **SEVERITY CORRECTED 2026-09-23 (`BRIDGE-TRUTH-01 · REPLY 1` R3a) — the heading is kept as
 filed.** Our own take re-asserts `MIXER … VOLUME 1` on every take (R-022,
@@ -12308,7 +12308,7 @@ that he holds unapplied edits there. It is arguably correct (there is no baselin
 against) and changing it would re-open the dirty semantics [[B-254]] just made load-bearing.
 Cross-refs [[B-251]], [[B-254]], [[B-255]].
 
-## [~] B-257 — one principal's lock strands another principal's channels: the lock is bridge-wide, its PIN is known only to whoever engaged it, and the permission gate exempts it from channel scope on the premise that it is "console-wide" ⟨priority: high — the channel-2 operator loses CLEAR, CLEAR ALL and PANIC on their own channel to a principal with no grant there, and the only ways out are that principal's PIN or a bridge restart⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1 · FIXED IN CODE by `BRIDGE-TRUTH-01 · REPLY 1` (`openspec/changes/bridge-truth`)
+## [x] B-257 — one principal's lock strands another principal's channels: the lock is bridge-wide, its PIN is known only to whoever engaged it, and the permission gate exempts it from channel scope on the premise that it is "console-wide" ⟨priority: high — the channel-2 operator loses CLEAR, CLEAR ALL and PANIC on their own channel to a principal with no grant there, and the only ways out are that principal's PIN or a bridge restart⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1 · FIXED IN CODE by `BRIDGE-TRUTH-01 · REPLY 1` · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-bridge-truth`)
 
 **What.** `CasparRuntime` holds ONE `#lock` per bridge (`engage` / `release`,
 `caspar-runtime.ts:9890`). While it is engaged, `refusedWhileLocked` refuses every `operator`
@@ -12359,7 +12359,7 @@ channel set, captured at engage (`LockState.channels`, absent for auth OFF and f
 which keep the every-channel lock byte for byte). It refuses an intent only when it touches a
 covered channel the requester holds; a principal holding none is refused by PERMISSION instead,
 naming the channel. PANIC is judged by where its ledger reaches and stays unscoped in what it
-silences. The design, the PANIC check and the rendering are `openspec/changes/bridge-truth/design.md`
+silences. The design, the PANIC check and the rendering are `openspec/changes/archive/2026-09-23-bridge-truth/design.md`
 §2–§4; the test is `lock-scope.integration.test.ts`.
 
 **Notes:** `silenceAllLivePlates` stays unscoped whatever is chosen — this is about who can
@@ -12394,7 +12394,7 @@ four lines marked MEASURED were driven through a socket.
 | B5  | `auth.sign-out` is `lock: 'operator'`, `perm: 'read'`                                                      | the no-carve-out answer                                                                     | Settled at `lock-refuses-intents.integration.test.ts:281`; listed so nobody re-opens it.                                                                                                                                              |
 | B6  | the class of every lock-exempt route — `stack.restore`, `templates.import`, `lock.release` — is `operator` | —                                                                                           | Correct: the permission gate inherits none of the lock's allows.                                                                                                                                                                      |
 
-## [~] B-258 — a signed-in viewer's reconnect is written into the audit log as refused presses the viewer never made ⟨priority: medium — the record is the product ([[B-141]]), and these rows are false statements about a named person⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1 · FIXED IN CODE by `BRIDGE-TRUTH-01 · REPLY 1` (`openspec/changes/bridge-truth`)
+## [x] B-258 — a signed-in viewer's reconnect is written into the audit log as refused presses the viewer never made ⟨priority: medium — the record is the product ([[B-141]]), and these rows are false statements about a named person⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1 · FIXED IN CODE by `BRIDGE-TRUTH-01 · REPLY 1` · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-bridge-truth`)
 
 **What.** `WebSocketRuntime.#resync` stands down only for a signed-out or expired console
 (`WebSocketRuntime.ts:939`). A signed-in principal without the `operator` class — a viewer —
@@ -12427,7 +12427,7 @@ re-import it manually."_ plus the role sentence — one per template.
 granted, or the bridge declining to record a refusal of a frame marked as machinery — and the
 second trusts a client-asserted flag ([[B-260]]). Cross-refs [[B-257]], [[C-038]].
 
-## [~] B-259 — an `auth` frame replaces the principal on a LOCKED console, while `auth.sign-out` is refused there ⟨priority: medium — nothing reaches the wire, but the lock's no-carve-out answer is kept on one door and not on its sibling, and the record shows a sign-in with no end to the session it displaced⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1 · FIXED IN CODE by `BRIDGE-TRUTH-01 · REPLY 1` (`openspec/changes/bridge-truth`)
+## [x] B-259 — an `auth` frame replaces the principal on a LOCKED console, while `auth.sign-out` is refused there ⟨priority: medium — nothing reaches the wire, but the lock's no-carve-out answer is kept on one door and not on its sibling, and the record shows a sign-in with no end to the session it displaced⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1 · FIXED IN CODE by `BRIDGE-TRUTH-01 · REPLY 1` · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-bridge-truth`)
 
 **What.** The `auth` frame is handled before the route table (`bridge.ts:1352`), so the lock gate
 never sees it. That is deliberate for the AUTH gate — it has to run before a principal exists —
@@ -12454,7 +12454,7 @@ not about air.
 
 **Notes:** Cross-refs [[B-229]], [[B-257]], [[C-037]].
 
-## [~] B-260 — a locked console replaces a template's HTML, with no audit row, by marking the import `redelivery: true` ⟨priority: medium — what the next take puts on air changes behind the lock, and nothing records who changed it⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1 · FIXED IN CODE by `BRIDGE-TRUTH-01 · REPLY 1` (`openspec/changes/bridge-truth`)
+## [x] B-260 — a locked console replaces a template's HTML, with no audit row, by marking the import `redelivery: true` ⟨priority: medium — what the next take puts on air changes behind the lock, and nothing records who changed it⟩ — FILED 2026-09-23 by `BRIDGE-TRUTH-01` §1 · FIXED IN CODE by `BRIDGE-TRUTH-01 · REPLY 1` · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-bridge-truth`)
 
 **What.** `refusedWhileLocked` passes `templates.import` whenever `redelivery === true`
 (`bridge.ts:549`), and the client sets that flag. `#templateImportImpl` deliberately does NOT keep
