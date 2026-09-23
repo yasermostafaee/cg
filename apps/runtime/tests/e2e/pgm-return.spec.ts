@@ -7,7 +7,7 @@ import {
   startFakePgmFeed,
   type FakePgmFeed,
 } from '../../../../tools/caspar-bridge/tests/support/fake-pgm-feed.js';
-import { expect, test } from './fixtures/runtime.js';
+import { disableSplash, expect, test } from './fixtures/runtime.js';
 
 /**
  * 🔴 `C-016` / `PGM-RETURN-01` — **THE PROGRAM MONITOR SHOWS WHAT IS ON AIR**, end to end: a
@@ -82,14 +82,27 @@ async function openConsole(page: Page, url: string): Promise<void> {
     [ws],
   );
   await page.goto(`${url}/`);
-  await expect(page.getByRole('status', { name: 'Bridge link' })).toContainText('BRIDGE LIVE');
+  /*
+    The LINK to the bridge, not CasparCG's health: the relay and the pane depend on the first
+    alone. The station here has no CasparCG, so the pill settles on `BRIDGE ONLY — NO CASPARCG`.
+    ⚠ The first spelling waited for `BRIDGE LIVE` and passed on Windows only because a refused
+    connect takes seconds there, leaving the pill on LIVE long enough; on Linux the refusal is
+    instant and CI run 35921029508 failed at this line.
+  */
+  await expect(page.getByRole('status', { name: 'Bridge link' })).toContainText(
+    /BRIDGE (LIVE|ONLY)/,
+  );
 }
 
 const strip = (page: Page) => page.locator('[data-monitor-pgm-strip]');
 const picture = (page: Page) => page.locator('[data-pgm-picture]');
 
 test.describe('C-016 — the PROGRAM monitor shows the programme return', () => {
-  test('hidden pulls nothing; SHOW MONITORS shows the live picture; hiding releases it within 2 s', async ({
+  /*
+    The owner's path in ONE station boot — the runtime suite's CI budget is shared (P-038), so the
+    live and stall scenarios ride one page rather than paying for two.
+  */
+  test('hidden pulls nothing; SHOW MONITORS shows the live picture; a stall hides it; hiding releases it within 2 s', async ({
     page,
   }) => {
     const f = await startFeed();
@@ -116,30 +129,11 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
       'GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n',
     );
 
-    const hiddenAt = Date.now();
-    await page.getByRole('button', { name: 'Hide monitors' }).click();
-    await expect.poll(() => f.openCount(), { timeout: 6000 }).toBe(0);
-    const closedAfter = (f.connections[0]?.closedAt ?? Number.POSITIVE_INFINITY) - hiddenAt;
-    expect(closedAfter, `the feed closed ${String(closedAfter)} ms after hiding`).toBeLessThan(
-      2000,
-    );
-    expect(f.connections).toHaveLength(1);
-  });
-
-  test('a stalled feed hides the picture and says so; resumed frames bring it back', async ({
-    page,
-  }) => {
-    const f = await startFeed();
-    await openConsole(page, await startStation());
-    await page.getByRole('button', { name: 'Show monitors' }).click();
-    await expect(strip(page)).toHaveAttribute('data-pgm-signal', 'live', { timeout: 10_000 });
-    await expect(picture(page)).toBeVisible();
-
+    // A stall: the picture is hidden and the pane says so — never a frozen frame as if live.
     f.pause();
     await expect(strip(page)).toHaveAttribute('data-pgm-signal', 'stalled', { timeout: 6000 });
     await expect(strip(page)).toContainText('Return feed stalled');
     await expect(page.locator('[data-pgm-screen]')).toContainText('Return feed stalled');
-    // Never a frozen frame as if it were live.
     await expect(picture(page)).toBeHidden();
     expect(f.openCount(), 'a stall is not a reconnect').toBe(1);
 
@@ -148,6 +142,15 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     await expect(strip(page)).toHaveAttribute('data-pgm-signal', 'live', { timeout: 6000 });
     await expect(strip(page)).not.toContainText('stalled');
     await expect(picture(page)).toBeVisible();
+
+    const hiddenAt = Date.now();
+    await page.getByRole('button', { name: 'Hide monitors' }).click();
+    await expect.poll(() => f.openCount(), { timeout: 6000 }).toBe(0);
+    const closedAfter = (f.connections[0]?.closedAt ?? Number.POSITIVE_INFINITY) - hiddenAt;
+    expect(closedAfter, `the feed closed ${String(closedAfter)} ms after hiding`).toBeLessThan(
+      2000,
+    );
+    expect(f.connections).toHaveLength(1);
   });
 
   test('no feed reads "No return signal", and the picture appears when the feed comes up', async ({
@@ -180,6 +183,8 @@ test.describe('C-016 — the PROGRAM monitor shows the programme return', () => 
     await expect(strip(page)).toHaveAttribute('data-pgm-signal', 'live', { timeout: 10_000 });
 
     const second = await context.newPage();
+    // The auto `splashDisabled` fixture arms `page` only; a second page would sit out the hold.
+    await disableSplash(second);
     await openConsole(second, url);
     await second.getByRole('button', { name: 'Show monitors' }).click();
     await expect(strip(second)).toHaveAttribute('data-pgm-signal', 'live', { timeout: 10_000 });

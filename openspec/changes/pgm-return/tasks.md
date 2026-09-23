@@ -33,7 +33,11 @@ new route on the console origin.
 
 ## 4. Tests (each absence with its positive control)
 
-`tools/caspar-bridge/tests/pgm-return.test.ts` (19) and `apps/runtime/tests/e2e/pgm-return.spec.ts` (4).
+`tools/caspar-bridge/tests/pgm-return.test.ts` (19) and `apps/runtime/tests/e2e/pgm-return.spec.ts` (3).
+⚠ The e2e's first spelling failed on Linux CI (run 35921029508): it waited for `BRIDGE LIVE` on a
+station with no CasparCG, which a Windows refusal delay let pass locally. It now waits for the
+bridge LINK (`BRIDGE LIVE` or `BRIDGE ONLY`), and the suite budgets were rebalanced 8.0 + 8.0
+(P-038, the same 16 min sum).
 
 - [x] 4.1 The exact request (bytes recorded by the fake; nothing after; control: it arrived)
 - [x] 4.2 Framing (a JPEG containing the boundary arrives whole; control: ordinary frames)

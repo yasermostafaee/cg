@@ -63,10 +63,14 @@ function resolveWorkers(): number | undefined {
  * shared-cap arithmetic live once, in `apps/runtime/playwright.config.ts`; this is the
  * other half of the SAME sum and is meaningless read alone.
  *
- * 8.5 min here + 7.5 min there = 16 min, against ~17.4 min of usable room inside the job's
- * `timeout-minutes: 20`. This suite measures 6.6 min green (run 34894055817) and must also
- * cover its own 120 s `webServer` boot, so 8.5 min is ~29 % headroom over a realistic worst
- * case. **Raise this and you must lower the runtime budget by the same amount.**
+ * 8.0 min here + 8.0 min there = 16 min, against ~17.4 min of usable room inside the job's
+ * `timeout-minutes: 20`. This suite measures 5.7–6.8 min green (runs 35896106572 and
+ * 35921029508, the second on a runner ~19 % slower) and must also cover its own `webServer`
+ * boot, so 8.0 min is ~15 % headroom over the slowest measured run. **Raise this and you must
+ * lower the runtime budget by the same amount.**
+ *
+ * ⚠ **LOWERED FROM 8.5 ON 2026-09-24** for the same reason as the last time: the Runtime suite
+ * outgrew its 7.5 (`C-016`'s spec on a slow runner) and the SUM is fixed.
  *
  * ⚠ **LOWERED FROM 11 ON 2026-09-15, and nothing about this suite prompted it** — the
  * Runtime suite outgrew its 5 and the SUM is fixed, so the room had to come from the half
@@ -74,7 +78,7 @@ function resolveWorkers(): number | undefined {
  * past ~7 min, raise it here and lower the other, or raise the job cap in `pr.yml` and
  * redo the arithmetic in one place: the runtime config, which owns it.
  */
-const CI_GLOBAL_TIMEOUT_MS = 8.5 * 60_000;
+const CI_GLOBAL_TIMEOUT_MS = 8 * 60_000;
 
 export default defineConfig({
   globalTimeout: process.env.CI ? CI_GLOBAL_TIMEOUT_MS : undefined,

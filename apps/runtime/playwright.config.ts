@@ -89,11 +89,20 @@ function resolveWorkers(): number | undefined {
  * `23 did not run` tells the two apart. So do not "fix" a timeout like this by deleting or
  * skipping specs to fit — measure, and move the line.
  *
- * The numbers today: designer 6.6 min measured green against 8.5 (~29 % headroom), this
- * suite ~5.6 against 7.5 (~34 %). Neither suite is near its own cap; the designer's 11 was
- * simply holding room it has never used.
+ * The numbers on 2026-09-15: designer 6.6 min measured green against 8.5 (~29 % headroom),
+ * this suite ~5.6 against 7.5 (~34 %).
+ *
+ * 🔴 **REBALANCED AGAIN 2026-09-24 — 8.0 (designer) + 8.0 (here) = 16, the same sum.** This
+ * suite measured 6.4 min at `00911e9a` (run 35896106572), and `C-016` adds its PROGRAM-return
+ * spec (~0.5 min). Run 35921029508 then ran on a runner ~19 % slower (the designer took 6.8
+ * against its 5.7 on the same span) and this suite reached its 7.5 with `3 did not run` —
+ * inflated by that spec's own first-spelling failure and its retries, but the reading stands:
+ * ~7.2 min on a slow runner against 7.5 is no headroom. At 8.0 each suite has ~15 % over its
+ * slowest measured run. ⚠ **That is the last rebalance the fixed sum allows** — the next growth
+ * of either suite needs the job cap in `pr.yml` raised and this arithmetic redone, which is the
+ * owner's call (shared CI config), not a line to move again here.
  */
-const CI_GLOBAL_TIMEOUT_MS = 7.5 * 60_000;
+const CI_GLOBAL_TIMEOUT_MS = 8 * 60_000;
 
 export default defineConfig({
   globalTimeout: process.env.CI ? CI_GLOBAL_TIMEOUT_MS : undefined,
