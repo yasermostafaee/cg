@@ -56,6 +56,13 @@ test-results/
 Thumbs.db
 desktop.ini
 
+# DESKTOP-APPS-01 — the desktop shells' Cargo output, Tauri's generated schemas, and CG Control's
+# staged payload (the bridge bundle, the console, node.exe), rebuilt by `stage-control.mjs`.
+/target/
+apps/*/src-tauri/gen/
+apps/runtime/src-tauri/payload/
+apps/runtime/src-tauri/binaries/
+
 # Logs
 *.log
 npm-debug.log*

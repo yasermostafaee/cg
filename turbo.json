@@ -37,6 +37,9 @@
         "types/**",
         "bin/**",
         "scripts/**",
+        "src-tauri/**",
+        "!src-tauri/payload/**",
+        "!src-tauri/binaries/**",
         ".eslintrc*",
         "eslint.config.*",
         "package.json"

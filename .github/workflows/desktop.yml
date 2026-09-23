@@ -1,0 +1,155 @@
+name: Desktop
+
+# DESKTOP-APPS-01 — the two Windows installers (ADR 0011): CG Control (the console and its
+# bridge sidecar) and CG Designer (on its own). Built here, on windows-latest, so nobody needs
+# Rust locally; then installed and driven on a SECOND, fresh runner that has built nothing.
+#
+# A separate workflow from `pr.yml`: that file's jobs, its `required` aggregation and the
+# P-030 reuse guard are keyed to their job names and are untouched. This one is the record of
+# the installers — its artifacts are what the owner downloads.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, dev]
+    # A docs-only push cannot change what the installers contain.
+    paths-ignore:
+      - 'docs/**'
+      - 'openspec/**'
+      - '**/*.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Push runs are never cancelled (P-027's reasoning): a cancelled run is not a result.
+  cancel-in-progress: false
+
+jobs:
+  installers:
+    name: Installers (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 75
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      # The Node installed here is also the one the CG Control installer ships: the staging step
+      # copies this official node.exe as the bridge sidecar (`cg-bridge.exe`).
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build (workspace)
+        run: pnpm build
+
+      - name: Stage CG Control's payload (bridge bundle, console, node.exe)
+        run: node tools/caspar-bridge/scripts/stage-control.mjs
+
+      - name: Build CG Control
+        run: pnpm --filter @cg/runtime tauri build
+
+      - name: Build CG Designer
+        run: pnpm --filter @cg/designer tauri build
+
+      - name: Collect the installers
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force installers | Out-Null
+          Copy-Item target/release/bundle/nsis/*-setup.exe installers/
+          Get-ChildItem installers | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Tee-Object -FilePath installers/SHA256SUMS.txt -Append
+          }
+
+      - name: Upload CG Control
+        uses: actions/upload-artifact@v4
+        with:
+          name: CG-Control-installer
+          path: |
+            installers/CG Control_*-setup.exe
+            installers/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload CG Designer
+        uses: actions/upload-artifact@v4
+        with:
+          name: CG-Designer-installer
+          path: |
+            installers/CG Designer_*-setup.exe
+            installers/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
+      # Until Cargo.lock is committed, the lockfile this build resolved is kept so it can be.
+      - name: Upload Cargo.lock
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-lock
+          path: Cargo.lock
+          if-no-files-found: ignore
+          retention-days: 7
+
+  smoke:
+    name: Installer smoke (clean Windows)
+    needs: installers
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      # Only the smoke script is needed; nothing is installed or built from the checkout.
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          sparse-checkout: apps/runtime/tests/desktop
+          sparse-checkout-cone-mode: false
+
+      # Node runs the smoke SCRIPT only. The installed app runs its own cg-bridge.exe, and the
+      # script's health check proves that is the process that answered.
+      - name: Set up Node (test harness only)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Download the installers
+        uses: actions/download-artifact@v4
+        with:
+          pattern: CG-*-installer
+          path: installers
+          merge-multiple: true
+
+      - name: Install, launch and drive both apps
+        shell: pwsh
+        run: |
+          $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
+          node apps/runtime/tests/desktop/installer-smoke.mjs --control "$control" --designer "$designer" --out smoke
+
+      - name: Upload the smoke evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-smoke
+          path: smoke/
+          retention-days: 14

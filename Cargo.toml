@@ -1,0 +1,12 @@
+# DESKTOP-APPS-01 — the two desktop shells (ADR 0011), as ONE Cargo workspace.
+#
+# Two separate apps and two separate installers (ADR 0002's reasons stand), built from one
+# workspace so they share one lockfile and one target directory: CI compiles Tauri once and
+# links it twice, instead of compiling the same few hundred crates for each installer.
+#
+# Development stays in the browser (`pnpm dev`); nothing here is needed to run either app.
+# The shells are built in CI on windows-latest, so no one needs Rust locally.
+
+[workspace]
+resolver = "2"
+members = ["apps/runtime/src-tauri", "apps/designer/src-tauri"]

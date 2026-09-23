@@ -129,7 +129,18 @@ export default [
     },
   },
   {
-    // `*.timestamp-*.mjs` are transient Vite config-load artifacts.
-    ignores: ['dist/**', '.vite/**', '*.tsbuildinfo', '*.timestamp-*.mjs'],
+    // `*.timestamp-*.mjs` are transient Vite config-load artifacts. `src-tauri/payload/**` and
+    // `src-tauri/binaries/**` are CG Control's staged installer payload (a bundled bridge and a
+    // built console — generated, gitignored, and linted at their sources); `src-tauri/gen/**` is
+    // Tauri's generated output (DESKTOP-APPS-01).
+    ignores: [
+      'dist/**',
+      '.vite/**',
+      '*.tsbuildinfo',
+      '*.timestamp-*.mjs',
+      'src-tauri/payload/**',
+      'src-tauri/binaries/**',
+      'src-tauri/gen/**',
+    ],
   },
 ];

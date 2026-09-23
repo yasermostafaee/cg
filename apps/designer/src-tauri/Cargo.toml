@@ -1,0 +1,12 @@
+[package]
+name = "cg-designer"
+version = "0.1.0"
+description = "CG Designer: the template editor as a Windows app, with no bridge (ADR 0011)"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.6", features = [] }
+
+[dependencies]
+tauri = { version = "2.11", features = [] }
