@@ -69,5 +69,15 @@ bridge LINK (`BRIDGE LIVE` or `BRIDGE ONLY`), and the suite budgets were rebalan
 
 ## 7. Gate and discharge
 
-- [ ] 7.1 Prettier; `pnpm gate`; `pnpm openspec validate --all --strict`
-- [ ] 7.2 Pushed to `dev`; the `e2e` and installer runs RAN green — URLs here
+- [x] 7.1 Prettier; `pnpm gate` (93/93, 0 cached, on `c72837aa` and again on `3c4d04d0`);
+      `pnpm openspec validate --all --strict` (87/87)
+- [x] 7.2 Pushed to `dev`; the `e2e` and installer runs RAN green on `3c4d04d0`, the commit
+      carrying the whole change:
+  - `e2e` (Linux, the E2E step RAN: runtime 256 passed in 6.3 min, the three
+    `pgm-return.spec.ts` tests among them; designer 280 passed in 5.3 min, 1 flaky —
+    `anchor-context-menu.spec.ts:25`, passed on retry, untouched by this change):
+    https://github.com/yasermostafaee/cg/actions/runs/35924331948 (job 107395738621)
+  - installers (Windows build + clean-Windows smoke, both RAN):
+    https://github.com/yasermostafaee/cg/actions/runs/35924331967
+  - ⚠ The first push (`c72837aa`, run 35921029508) was RED in `e2e` — the spec's own defect,
+    fixed by `3c4d04d0` (see §4's note); its installers were green (run 35921029780).
