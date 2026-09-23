@@ -1,5 +1,5 @@
 /*
- * App UI font (Exo 2, loaded from fontsource in index.html). Set on body so
+ * App UI font (Exo 2, self-hosted in fonts.css — no CDN). Set on body so
  * portaled modals / tooltips / popovers inherit it too; Vazirmatn stays in the
  * stack for Persian glyph coverage.
  */

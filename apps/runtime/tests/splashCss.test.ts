@@ -488,9 +488,13 @@ describe('the splash does not wait on a webfont', () => {
     expect(code).toContain('ui-monospace');
   });
 
-  it('loads the CDN face non-render-blocking, so the first frame never waits on a network', () => {
-    // A plain `<link rel=stylesheet>` to a CDN blocks the first paint until it answers
-    // or times out — and on a LAN-only broadcast machine it never answers.
-    expect(code).toMatch(/media="print"/);
+  it('links nothing off the machine, so the first frame never waits on a network (P-001)', () => {
+    // A `<link rel=stylesheet>` to a CDN blocks the first paint until it answers or times
+    // out — and on a LAN-only broadcast machine it never answers. R-035 made the CDN face
+    // non-blocking; P-001 removed it, because the faces ship in `fonts.css`.
+    // Control: the text below is the page head, so an absence in it is a real absence.
+    expect(code).toContain('<title>');
+    expect(code).not.toMatch(/<link[^>]+href=["']https?:\/\//);
+    expect(code).not.toContain('cdn.jsdelivr.net');
   });
 });

@@ -26,29 +26,15 @@
     -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob:; font-src 'self' data: https://cdn.jsdelivr.net; media-src 'self' data:; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data:; connect-src 'self' ws: wss: http: https:; base-uri 'none'"
     />
     <!--
-      R-035 — LOADED NON-BLOCKING (`media="print"` until `onload`), and that is not a
-      micro-optimisation: a plain `<link rel="stylesheet">` to a CDN blocks the FIRST
-      PAINT until the CDN answers or the socket times out. The splash below exists to own
-      the first frame, and on a LAN-only broadcast machine — which is most of them —
-      jsdelivr never answers, so the render-blocking form would hand the operator a blank
-      screen for the whole TCP timeout. Nothing about WHICH faces load changes: the sheet
-      still applies the moment it arrives.
-
-      The face itself is a leftover: the Designer self-hosts its fonts and this app already
-      ships the same Vazirmatn faces in `src/renderer/fonts.css` — but that file is imported
-      only as `?inline` for template delivery, so the app UI still reads Persian off this
-      CDN. Moving it to the self-hosted faces is filed as item 4 in
-      `openspec/changes/runtime-splash-screen/DEBT.md`, not done here.
+      P-001 — NO FONT COMES OFF THE NETWORK. The UI's Vazirmatn faces are the ones this app
+      already ships in `src/renderer/fonts.css`, imported by `main.tsx`; the jsdelivr link
+      that used to load them is gone, and so is `cdn.jsdelivr.net` from `style-src` and
+      `font-src` above. A LAN-only broadcast machine — which is most of them — renders
+      Persian in Vazirmatn with no request leaving it. Pinned by `tests/e2e/fonts-offline.spec.ts`.
     -->
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/@fontsource/vazirmatn@5/index.min.css"
-      media="print"
-      onload="this.media = 'all'"
-    />
     <title>cg Runtime</title>
 
     <!--
