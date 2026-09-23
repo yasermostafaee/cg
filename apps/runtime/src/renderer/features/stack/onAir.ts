@@ -70,6 +70,26 @@ export interface AirTally {
   readonly inError: number;
 }
 
+/**
+ * 🔴 `DESKTOP-APPS-01-D` j — **THE OWNER'S RULE: A CHANNEL'S MESSAGES NEVER APPEAR IN ANOTHER
+ * CHANNEL'S VIEW.** The one filter every channel-scoped count and notice passes its items
+ * through: an item whose slot is on another channel is not this view's to count or mention.
+ *
+ * Measured on the owner's channel-2 view: `0 loaded · 1 on air` over rows that were all EMPTY —
+ * the one was channel 1's logo, which no row of channel 2 could show. Such an item belongs to
+ * Station setup (`strays`), where a station-admin can take it off air.
+ *
+ * An item with NO slot holds no layer anywhere and stays (it is this station's own row that has
+ * not been placed). `channel === null` means no channel is declared yet: nothing is filtered.
+ */
+export function onChannel<T extends { slot?: { channel: number } | undefined }>(
+  items: readonly T[],
+  channel: number | null,
+): readonly T[] {
+  if (channel === null) return items;
+  return items.filter((i) => i.slot === undefined || i.slot.channel === channel);
+}
+
 export function airTally(items: readonly StackItemState[]): AirTally {
   let onAir = 0;
   let inError = 0;

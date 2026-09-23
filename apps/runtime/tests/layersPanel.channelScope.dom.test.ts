@@ -15,6 +15,7 @@ import { connectionsStub } from './support/reachability.js';
  *
  * h — a row's `#` and its default name carry the REAL AMCP layer: the owner's top row read
  * `#1 · Layer 1` while the Inspector said layer 99, on a channel shared with a playout server.
+ * j — this view counts and mentions only this channel's items.
  */
 
 let container: HTMLDivElement | null = null;
@@ -156,6 +157,59 @@ it('h — the top row’s # reads 99 and its default name is `Layer 99`; a bed r
   expect(bed?.querySelector('[data-row-body]')?.textContent).toBe('Bed 59');
   // Nothing on the table still counts rows from 1.
   expect(el.textContent).not.toMatch(/\bLayer 1\b/);
+});
+
+/*
+  🔴 j — THE OWNER'S RULE: a channel's messages never appear in another channel's view. Measured
+  on the owner's channel-2 view: `0 loaded · 1 on air` over EMPTY rows, and later a notice telling
+  him to declare a row for channel 1's logo and load it again.
+*/
+const onAir = (channel: number, layer: number): StackItemState =>
+  ({
+    itemId: `item-${String(channel)}-${String(layer)}`,
+    templateId: 'logo',
+    fields: {},
+    status: 'playing',
+    pending: false,
+    slot: { channel, layer, server: 'primary' },
+  }) as unknown as StackItemState;
+
+const tallyOf = (el: HTMLElement): string | null =>
+  el.querySelector('[aria-label$="items on air"]')?.getAttribute('aria-label') ?? null;
+
+it('j — channel 1’s logo is neither counted nor mentioned in the channel-2 view', async () => {
+  stubBridge({
+    items: [onAir(1, 99)],
+    skips: [
+      {
+        itemId: 'logo-ch1',
+        reason: 'not-declared',
+        templateId: 'logo',
+        slot: { channel: 1, layer: 99, server: 'primary' },
+      },
+    ],
+  });
+  const el = await renderPanel();
+  expect(tallyOf(el)).toBe('0 items on air');
+  expect(el.querySelector('[data-restore-skips]')).toBeNull();
+  expect(el.textContent).not.toContain('1-99');
+});
+
+it('j control — an ordinary on-air row on THIS channel counts once, in its own view', async () => {
+  stubBridge({
+    items: [onAir(2, 99)],
+    skips: [
+      {
+        itemId: 'lost-2',
+        reason: 'not-declared',
+        templateId: 'logo',
+        slot: { channel: 2, layer: 61, server: 'primary' },
+      },
+    ],
+  });
+  const el = await renderPanel();
+  expect(tallyOf(el)).toBe('1 items on air');
+  expect(el.querySelector('[data-restore-skips]')).not.toBeNull();
 });
 
 it('h control — a row the admin NAMED keeps its name; only its # is the layer', async () => {

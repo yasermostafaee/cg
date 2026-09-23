@@ -77,7 +77,7 @@ import { useStackDeliveryPending } from '../../hooks/useStackDeliveryPending.js'
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { defaultLayerAlias, isLayerVisible, isLowBankLayer, isRehearsing } from '@cg/shared-ipc';
 import { useRehearse } from '../../hooks/useRehearse.js';
-import { airTally, isOnAir } from '../stack/onAir.js';
+import { airTally, isOnAir, onChannel } from '../stack/onAir.js';
 import { draftsVersion, isItemDirty, subscribeDrafts } from '../inspector/draftStore.js';
 import { appliedPlateSources } from '../inspector/livePlates.js';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
@@ -377,7 +377,13 @@ export function LayersPanel({
    * ones appearing at once, on every startup and every reconnect. Three snapshots,
    * two of them guarded.
    */
-  const { items, ready: stackReady } = useStackSnapshot();
+  const { items: stackItems, ready: stackReady } = useStackSnapshot();
+  /*
+    🔴 `DESKTOP-APPS-01-D` j — THIS CHANNEL'S ITEMS, and only them. Every count, notice and
+    bulk verb below reads `items`, so filtering it HERE is what makes the whole panel obey the
+    owner's rule (a channel's messages never appear in another channel's view) in one place.
+  */
+  const items = useMemo(() => onChannel(stackItems, bank?.channel ?? null), [stackItems, bank]);
   /*
    * B-108 — the rows the last restore could NOT bring back.
    *
@@ -392,7 +398,8 @@ export function LayersPanel({
    * honest ON the row already, through the state the row renders. Those two surfaces
    * are complementary and neither duplicates the other.)
    */
-  const restoreSkips = useRestoreSkips();
+  // `DESKTOP-APPS-01-D` j — a row remembered on ANOTHER channel is Station setup's, not this view's.
+  const restoreSkips = onChannel(useRestoreSkips(), bank?.channel ?? null);
   const [dismissedSkips, setDismissedSkips] = useState('');
   // Keyed by CONTENT, not a boolean: dismissing this report must not also dismiss the
   // NEXT one. A boolean flag would silence every future reconnect after the operator

@@ -10,7 +10,14 @@ import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { PlayoutSignInError } from '../../../platform/playoutSession.js';
 import { signInMessage } from '../auth/signInMessages.js';
 import { PlayoutConnection } from './PlayoutConnection.js';
-import { commitFirstRun, groupByHost, playoutOriginOf } from './firstRunStation.js';
+import {
+  declareFirstRunChannel,
+  groupByHost,
+  onAirWarning,
+  playoutOriginOf,
+  writeFirstRunConnection,
+  type ChannelChoice,
+} from './firstRunStation.js';
 
 /**
  * 🔴 `DESKTOP-APPS-01` §2E — **FIRST-RUN: one field, then the station sets itself up.**
@@ -79,6 +86,12 @@ const styles = {
   fact: { fontSize: cssVars['--r-text-md'] },
   note: { fontSize: cssVars['--r-text-sm'], color: colors.textMuted },
   error: { fontSize: cssVars['--r-text-sm'], color: colors.errorText, lineHeight: 1.6 },
+  // `DESKTOP-APPS-01-D` d — the on-air warning: the console's caution ink, one line.
+  warning: {
+    fontSize: cssVars['--r-text-sm'],
+    color: cssVars['--r-caution-text'],
+    lineHeight: 1.6,
+  },
   hostHead: {
     margin: '6px 0 0',
     fontSize: cssVars['--r-text-sm'],
@@ -275,20 +288,43 @@ type Catalogue =
   | { state: 'absent' }
   | { state: 'refused'; message: string };
 
-function ChannelStep({
+/**
+ * 🔴 `DESKTOP-APPS-01-D` — **THE CHANNEL CHOICE, first-run's and Station setup's alike.**
+ *
+ * a — NOTHING IS PRESELECTED: `picked` starts `null`, and "Use this channel" stays disabled until
+ *     the admin clicks a row. Each row names the Playout's channel AND its number (`… · CH 1`).
+ * d — before the channel is DECLARED, `prepare` puts in force what the reading needs (first-run:
+ *     the connection), the channel's occupancy is read, and a channel already on air with
+ *     somebody else's content earns ONE line and a second press — a warning, never a block.
+ * e — Station setup's Change channel… passes its own `prepare`/`declare` and reuses the rest.
+ */
+export function ChannelStep({
   playoutHost,
   onDone,
+  prepare = (choice) => writeFirstRunConnection(window.cg, choice),
+  declare = (choice) => declareFirstRunChannel(window.cg, choice),
+  showServeAddress = true,
+  fixedServeHost = '',
 }: {
   playoutHost: string;
   onDone: () => void;
+  /** Put in force what the occupancy read needs, before the declaration. `null` or a refusal. */
+  prepare?: (choice: ChannelChoice) => Promise<string | null>;
+  /** Declare the channel. `null` or the bridge's refusal sentence. */
+  declare?: (choice: ChannelChoice) => Promise<string | null>;
+  /** First-run asks for the serve address; Station setup keeps the station's own. */
+  showServeAddress?: boolean;
+  fixedServeHost?: string;
 }): JSX.Element {
   const [catalogue, setCatalogue] = useState<Catalogue>({ state: 'reading' });
   const [picked, setPicked] = useState<CatalogueChannel | null>(null);
   const [manualHost, setManualHost] = useState(playoutHost);
   const [manualChannel, setManualChannel] = useState('');
-  const [serveHost, setServeHost] = useState('');
+  const [serveHost, setServeHost] = useState(fixedServeHost);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // d — the warning, keyed to the choice it is about: picking another channel withdraws it.
+  const [warning, setWarning] = useState<{ key: string; layers: readonly number[] } | null>(null);
 
   // The Playout's list arrives a moment after the sign-in (the bridge reads it then).
   useEffect(() => {
@@ -323,11 +359,13 @@ function ChannelStep({
     catalogue.state === 'absent' || (catalogue.state === 'rows' && catalogue.rows.length === 0);
   const host = manual ? manualHost.trim() : (picked?.casparHost ?? '');
   const channel = manual ? Number(manualChannel) : (picked?.casparChannel ?? 0);
+  const choiceKey = `${host}:${String(channel)}`;
+  const warned = warning !== null && warning.key === choiceKey;
 
   // The serve address: this machine's address on the route to the CasparCG host, detected, then
   // the admin's to edit.
   useEffect(() => {
-    if (host === '') return;
+    if (host === '' || !showServeAddress) return;
     let cancelled = false;
     void window.cg.setup
       .routeAddress({ host })
@@ -338,15 +376,30 @@ function ChannelStep({
     return () => {
       cancelled = true;
     };
-  }, [host]);
+  }, [host, showServeAddress]);
 
   const ready = host !== '' && Number.isInteger(channel) && channel > 0 && !busy;
   const commit = async (): Promise<void> => {
     if (!ready) return;
     setBusy(true);
     setError(null);
+    const choice: ChannelChoice = { channel, casparHost: host, serveHost };
     try {
-      const refused = await commitFirstRun(window.cg, { channel, casparHost: host, serveHost });
+      if (!warned) {
+        const refused = await prepare(choice);
+        if (refused !== null) {
+          setError(refused);
+          return;
+        }
+        const occupancy = await window.cg.setup
+          .channelOccupancy({ casparChannel: channel })
+          .catch(() => ({ state: 'unknown' as const, layers: [] }));
+        if (occupancy.state === 'occupied') {
+          setWarning({ key: choiceKey, layers: occupancy.layers.map((l) => l.layer) });
+          return;
+        }
+      }
+      const refused = await declare(choice);
       if (refused === null) onDone();
       else setError(refused);
     } catch (err) {
@@ -434,7 +487,7 @@ function ChannelStep({
         )}
       </section>
 
-      {host !== '' && (
+      {host !== '' && showServeAddress && (
         <section style={styles.step} aria-label="Serve address">
           <h3 style={styles.stepHead}>Serve address</h3>
           <div style={styles.row}>
@@ -454,6 +507,12 @@ function ChannelStep({
         </section>
       )}
 
+      {warned && (
+        <div style={styles.warning} role="alert" data-channel-on-air="">
+          <IsolatedName>{picked?.name ?? `CH ${String(channel)}`}</IsolatedName>
+          {onAirWarning(channel, warning.layers)}
+        </div>
+      )}
       {error !== null && (
         <div style={styles.error} role="status">
           {error}
@@ -461,7 +520,7 @@ function ChannelStep({
       )}
       <div style={styles.row}>
         <Button variant="primary" disabled={!ready} onClick={() => void commit()}>
-          {busy ? 'Setting up…' : 'Use this channel'}
+          {busy ? 'Setting up…' : warned ? 'Use this channel anyway' : 'Use this channel'}
         </Button>
       </div>
     </>

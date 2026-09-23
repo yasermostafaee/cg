@@ -100,7 +100,17 @@ const BRIDGE_SURFACE: {
     // what this guard is for: it compares the surface, never the behaviour.
     auth: ['capabilities', 'onCapabilitiesChanged', 'state', 'onStateChanged', 'signIn', 'signOut'],
     // `DESKTOP-APPS-01` — first-run. The mock answers empty and has no desktop door.
-    setup: ['check', 'routeAddress', 'catalogue', 'canSetPlayoutAddress', 'setPlayoutAddress'],
+    setup: [
+      'check',
+      'routeAddress',
+      'catalogue',
+      // `DESKTOP-APPS-01-D` d — what is on air on a channel before it is declared.
+      'channelOccupancy',
+      'canSetPlayoutAddress',
+      'setPlayoutAddress',
+    ],
+    // `DESKTOP-APPS-01-D` j — items of ours on a channel this station does not declare.
+    strays: ['list', 'onChanged', 'takeOffAir'],
     /*
       🔴 **SESSION BR — `delimiters` AND `sources` were BOTH missing from this expected tree,
       so the one guard that exists to prove the mock shim matches the real bridge has never

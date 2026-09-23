@@ -12,6 +12,7 @@ import type {
   PlayoutLayerState,
   SourceAssignments,
   SourceCatalog,
+  StationStray,
   TemplateInfo,
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
@@ -116,6 +117,9 @@ export interface StationSetupStubOptions {
    * spec that cannot say so cannot test the case where the refusal arrives anyway.
    */
   removeResult?: { accepted: boolean; errorCode?: string; message?: string };
+  /** `DESKTOP-APPS-01-D` j — items of ours on a channel this station does not declare. */
+  strays?: readonly StationStray[];
+  takeOffAirResult?: { ok: boolean; message?: string };
 }
 
 export interface StationSetupStub {
@@ -126,6 +130,7 @@ export interface StationSetupStub {
   sourcesSetAssignments: Mock;
   delimitersSet: Mock;
   remove: Mock;
+  takeOffAir: Mock;
 }
 
 export function stationSetupStub(options: StationSetupStubOptions = {}): StationSetupStub {
@@ -136,6 +141,7 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
   const sourcesSetAssignments = vi.fn(() => Promise.resolve({ ok: true }));
   const delimitersSet = vi.fn(() => Promise.resolve(options.delimitersSetResult ?? { ok: true }));
   const remove = vi.fn(() => Promise.resolve(options.removeResult ?? { accepted: true }));
+  const takeOffAir = vi.fn(() => Promise.resolve(options.takeOffAirResult ?? { ok: true }));
   const stub = {
     link: {
       status: () => 'live' as const,
@@ -206,6 +212,12 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
     auth: authStub(options.auth),
     // `DESKTOP-APPS-01` — Servers carries the Playout card and its connection check.
     setup: setupStub(),
+    // `DESKTOP-APPS-01-D` j — the strays Station setup shows to a station-admin.
+    strays: {
+      list: () => Promise.resolve(options.strays ?? []),
+      onChanged: () => () => undefined,
+      takeOffAir,
+    },
     // `B-257` — the channel strip reads how much of the console a lock covers.
     lock: {
       state: () => Promise.resolve({ engaged: false }),
@@ -221,6 +233,7 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
     sourcesSetAssignments,
     delimitersSet,
     remove,
+    takeOffAir,
   };
 }
 

@@ -104,20 +104,56 @@ export function playoutOriginOf(signInUrl: string | null | undefined): string | 
  */
 export { normalisePlayoutAddress } from '@cg/shared-ipc';
 
+/** What a channel choice carries into the writes. */
+export interface ChannelChoice {
+  readonly channel: number;
+  readonly casparHost: string;
+  readonly serveHost: string;
+}
+
+/** First-run's first write: the CasparCG host. `null` on success, else the bridge's sentence. */
+export async function writeFirstRunConnection(
+  bridge: Pick<RuntimeBridge, 'connections'>,
+  choice: ChannelChoice,
+): Promise<string | null> {
+  const current = await bridge.connections.config();
+  const applied = await bridge.connections.setConfig(
+    firstRunConnection(current, choice.casparHost, choice.serveHost),
+  );
+  return applied.ok ? null : (applied.message ?? 'The CasparCG host was not applied.');
+}
+
+/** First-run's second write: the channel, declared. `null` on success, else the bridge's sentence. */
+export async function declareFirstRunChannel(
+  bridge: Pick<RuntimeBridge, 'fixedLayers'>,
+  choice: ChannelChoice,
+): Promise<string | null> {
+  const declared = await bridge.fixedLayers.setConfig(firstRunBank(choice.channel));
+  return declared.ok ? null : (declared.message ?? 'The channel was not declared.');
+}
+
 /**
  * Apply the choice: the CasparCG host first, then the channel. Resolves `null` on success, or the
  * bridge's own sentence for the step that was refused.
  */
 export async function commitFirstRun(
   bridge: Pick<RuntimeBridge, 'connections' | 'fixedLayers'>,
-  choice: { readonly channel: number; readonly casparHost: string; readonly serveHost: string },
+  choice: ChannelChoice,
 ): Promise<string | null> {
-  const current = await bridge.connections.config();
-  const applied = await bridge.connections.setConfig(
-    firstRunConnection(current, choice.casparHost, choice.serveHost),
+  return (
+    (await writeFirstRunConnection(bridge, choice)) ??
+    (await declareFirstRunChannel(bridge, choice))
   );
-  if (!applied.ok) return applied.message ?? 'The CasparCG host was not applied.';
-  const declared = await bridge.fixedLayers.setConfig(firstRunBank(choice.channel));
-  if (!declared.ok) return declared.message ?? 'The channel was not declared.';
-  return null;
+}
+
+/**
+ * 🔴 `DESKTOP-APPS-01-D` d — the ONE line an admin reads before declaring a channel that is
+ * already on air with somebody else's content, after the channel's name. Operator words and the
+ * real layer numbers (golden rule 11 keeps the layer visible in a sentence); a warning, never a
+ * block — at a client, CG graphics do belong on the programme channel, above the Playout's layers.
+ */
+export function onAirWarning(channel: number, layers: readonly number[]): string {
+  const where =
+    layers.length === 1 ? `layer ${String(layers[0])}` : `layers ${layers.map(String).join(', ')}`;
+  return ` · CH ${String(channel)} is already on air — another system is playing on ${where}.`;
 }

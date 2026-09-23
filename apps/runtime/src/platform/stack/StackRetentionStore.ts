@@ -75,8 +75,15 @@ export class StackRetentionStore {
    * empty one a freshly-booted bridge reports before its restore lands —
    * otherwise the bug would erase its own fix. See `WebSocketRuntime.#resync`.
    */
-  async mirror(snapshot: readonly StackItemState[]): Promise<void> {
-    this.#items = snapshot.map(toRetained);
+  async mirror(
+    snapshot: readonly StackItemState[],
+    /**
+     * `DESKTOP-APPS-01-D` j — retained items to KEEP although the snapshot does not carry them:
+     * the strays the bridge still lists (on air on a channel this station does not declare).
+     */
+    kept: readonly RetainedStackItem[] = [],
+  ): Promise<void> {
+    this.#items = [...snapshot.map(toRetained), ...kept];
     await this.#ws.writeJson(PATH, this.#items);
   }
 }

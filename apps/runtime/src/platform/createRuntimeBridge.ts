@@ -260,9 +260,22 @@ export function createMockBridge(): RuntimeBridge {
       check: () => Promise.resolve({ lines: [], localAddress: null }),
       routeAddress: () => Promise.resolve({ address: null }),
       catalogue: () => Promise.resolve({ rows: null }),
+      // `DESKTOP-APPS-01-D` d — no plant, so nothing can be read: unknown, which warns of nothing.
+      channelOccupancy: () => Promise.resolve({ state: 'unknown' as const, layers: [] }),
       canSetPlayoutAddress: () => false,
       setPlayoutAddress: () =>
         Promise.reject(new Error('Only CG Control can change the Playout address.')),
+    },
+
+    /*
+      `DESKTOP-APPS-01-D` j — test mode serves one simulated channel and has no other to leave
+      anything on, so the honest answer is an empty list, and there is nothing to take off air.
+    */
+    strays: {
+      list: () => Promise.resolve([]),
+      onChanged: () => () => undefined,
+      takeOffAir: () =>
+        Promise.resolve({ ok: false, message: 'Test mode has nothing on another channel.' }),
     },
 
     connections: {

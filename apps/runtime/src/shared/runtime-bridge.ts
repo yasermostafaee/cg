@@ -11,6 +11,10 @@ import type {
   SetupCheckChannel,
   SetupPhase,
   SetupRouteAddressChannel,
+  SetupChannelOccupancyChannel,
+  StationStray,
+  StationStraysChannel,
+  StationTakeOffAirChannel,
   AuditHealthChannel,
   AuditRecentChannel,
   AuthMode,
@@ -670,6 +674,13 @@ export interface RuntimeBridge {
     /** §2E step 3 — the Playout's channels UNJOINED, in the signed-in admin's grant. */
     catalogue(): Promise<ChannelResponse<typeof ChannelsCatalogueChannel>>;
     /**
+     * `DESKTOP-APPS-01-D` d — what is already on air on a channel, asked after the connection is
+     * written and before the channel is declared. A read.
+     */
+    channelOccupancy(
+      req: ChannelRequest<typeof SetupChannelOccupancyChannel>,
+    ): Promise<ChannelResponse<typeof SetupChannelOccupancyChannel>>;
+    /**
      * `DESKTOP-APPS-01-A` — can THIS console change the Playout address? Only inside CG Control;
      * a browser has no such door, and the control that would use it is then absent.
      */
@@ -760,6 +771,19 @@ export interface RuntimeBridge {
   stationChannels: {
     list(): Promise<StationChannels>;
     onChanged(handler: (state: StationChannels) => void): Unsubscribe;
+  };
+
+  /**
+   * 🔴 `DESKTOP-APPS-01-D` j — **ITEMS OF OURS ON A CHANNEL THIS STATION DOES NOT DECLARE.**
+   * Shown only in Station setup, to a station-admin; the one act is take-off-air (STOP then
+   * CLEAR on that exact layer). Never offered to load again.
+   */
+  strays: {
+    list(): Promise<ChannelResponse<typeof StationStraysChannel>>;
+    onChanged(handler: (strays: readonly StationStray[]) => void): Unsubscribe;
+    takeOffAir(
+      req: ChannelRequest<typeof StationTakeOffAirChannel>,
+    ): Promise<ChannelResponse<typeof StationTakeOffAirChannel>>;
   };
 
   /**

@@ -34,6 +34,12 @@ import {
  * admin signs in, turns OK after, and only then do the channels appear.
  */
 
+/*
+  `DESKTOP-APPS-01-D` i — SERIAL: two tests here take the AMCP mock onto TCP 5250 (first-run
+  writes the standard port), and the suite runs `fullyParallel`, so two workers would race for it.
+*/
+test.describe.configure({ mode: 'serial' });
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(here, '../../../..');
 const BRIDGE_CLI = path.join(REPO, 'tools/caspar-bridge/bin/caspar-bridge.mjs');

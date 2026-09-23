@@ -2,7 +2,7 @@ import { MonitorOff } from 'lucide-react';
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
 import { useFixedBankState } from '../../hooks/useFixedLayers.js';
 import { useStackSnapshot } from '../../hooks/useStack.js';
-import { airTally } from '../stack/onAir.js';
+import { airTally, onChannel } from '../stack/onAir.js';
 import { MonitorPanel } from './MonitorPanel.js';
 import { PreviewPanel } from './PreviewPanel.js';
 
@@ -37,7 +37,8 @@ export function MonitorStrip(): JSX.Element {
   */
   const { bank } = useFixedBankState();
   const { items } = useStackSnapshot();
-  const onAirRows = airTally(items).onAir;
+  // `DESKTOP-APPS-01-D` j — PROGRAM's `N rows on air` counts this channel only.
+  const onAirRows = airTally(onChannel(items, bank?.channel ?? null)).onAir;
   const showPvw = focus !== 'pgm';
   const showPgm = focus !== 'pvw';
 

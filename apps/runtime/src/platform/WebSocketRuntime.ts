@@ -422,6 +422,14 @@ export class WebSocketRuntime implements RuntimeBridge {
   /** R-030 — the bridge-owned channel raster + video-mode reading. */
   readonly #channelSettingsSubs = new Subs<ChannelSettingsState>();
   readonly #stationChannelsSubs = new Subs<StationChannels>();
+  /** `DESKTOP-APPS-01-D` j — subscribers to the strays, and the item ids the bridge lists. */
+  readonly #straySubs = new Subs<readonly ipcChannels.StationStray[]>();
+  /**
+   * The strays' item ids as the bridge last listed them. A stray is not on the stack, so a
+   * mirror of the snapshot alone would drop it from the retention — and the next restart would
+   * forget a graphic still on air. The retention KEEPS a retained item whose id is listed here.
+   */
+  #strayIds: ReadonlySet<string> = new Set();
   /** D-137 / C-015 — the bridge-owned Live Source mapping, pushed on change. */
   readonly #sourceCatalogSubs = new Subs<SourceCatalog>();
   readonly #sourceAssignmentSubs = new Subs<SourceAssignments>();
@@ -1077,6 +1085,18 @@ export class WebSocketRuntime implements RuntimeBridge {
         */
         this.#emitRestoreMigrations(result.migrated);
       }
+      /*
+        `DESKTOP-APPS-01-D` j — learn the strays BEFORE the retention is mirrored below, so a
+        remembered item on another channel is kept rather than mirrored away. A bridge too old to
+        answer leaves the set empty, which is exactly the old behaviour.
+      */
+      try {
+        const strays = await this.#invoke(ipcChannels.StationStraysChannel, undefined);
+        this.#strayIds = new Set(strays.map((s) => s.itemId));
+        this.#straySubs.emit(strays);
+      } catch (err) {
+        if (err instanceof BridgeDisconnectedError) throw err;
+      }
     } catch (err) {
       restoreOk = false;
       if (!(err instanceof BridgeDisconnectedError)) {
@@ -1140,7 +1160,17 @@ export class WebSocketRuntime implements RuntimeBridge {
    */
   #mirrorStack(snapshot: readonly StackItemState[]): void {
     if (this.#resyncing) return;
-    void this.#stackRetention.mirror(snapshot).catch(() => {
+    /*
+      🔴 `DESKTOP-APPS-01-D` j — the strays the bridge still lists are KEPT. They are on air on a
+      channel this station does not declare, so they are on no stack and a snapshot never carries
+      them; mirrored away, the next restart would forget a graphic that is still on somebody
+      else's output. Kept only while the bridge lists them: taken off air, or found empty, they go.
+    */
+    const onStack = new Set(snapshot.map((i) => i.itemId));
+    const kept = this.#stackRetention
+      .items()
+      .filter((i) => this.#strayIds.has(i.itemId) && !onStack.has(i.itemId));
+    void this.#stackRetention.mirror(snapshot, kept).catch(() => {
       /* retention is best-effort; a write failure must never break playout */
     });
   }
@@ -1282,6 +1312,16 @@ export class WebSocketRuntime implements RuntimeBridge {
       case ChannelSettingsChangedChannel.name: {
         const p = ChannelSettingsChangedChannel.payload.safeParse(payload);
         if (p.success) this.#channelSettingsSubs.emit(p.data);
+        break;
+      }
+      // `DESKTOP-APPS-01-D` j — the strays moved: publish, and keep the retention in step.
+      case ipcChannels.StationStraysChangedChannel.name: {
+        const p = ipcChannels.StationStraysChangedChannel.payload.safeParse(payload);
+        if (p.success) {
+          this.#strayIds = new Set(p.data.map((s) => s.itemId));
+          this.#straySubs.emit(p.data);
+          this.#mirrorStack(this.#lastStack);
+        }
         break;
       }
       // `R-062` gap 2 — this console's discovery answer, recomputed by the bridge for its principal.
@@ -1635,8 +1675,20 @@ export class WebSocketRuntime implements RuntimeBridge {
     routeAddress: (req: ChannelRequest<typeof ipcChannels.SetupRouteAddressChannel>) =>
       this.#invoke(ipcChannels.SetupRouteAddressChannel, req),
     catalogue: () => this.#invoke(ipcChannels.ChannelsCatalogueChannel, undefined),
+    // `DESKTOP-APPS-01-D` d — the bridge waits up to 3 s for its tap; the default wait covers it.
+    channelOccupancy: (req: ChannelRequest<typeof ipcChannels.SetupChannelOccupancyChannel>) =>
+      this.#invoke(ipcChannels.SetupChannelOccupancyChannel, req),
     canSetPlayoutAddress: (): boolean => canSetPlayoutAddress(),
     setPlayoutAddress: (address: string): Promise<string> => setPlayoutAddress(address),
+  };
+
+  /** `DESKTOP-APPS-01-D` j — items of ours on a channel this station does not declare. */
+  readonly strays = {
+    list: () => this.#invoke(ipcChannels.StationStraysChannel, undefined),
+    onChanged: (handler: (strays: readonly ipcChannels.StationStray[]) => void) =>
+      this.#straySubs.add(handler),
+    takeOffAir: (req: ChannelRequest<typeof ipcChannels.StationTakeOffAirChannel>) =>
+      this.#invoke(ipcChannels.StationTakeOffAirChannel, req),
   };
 
   readonly connections = {

@@ -1,5 +1,7 @@
 import { rasterVerdict, type ChannelSettingsState, type ConnectionHealth } from '@cg/shared-ipc';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
+import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
+import { ChangeChannelCard, StraysCard } from './ChannelScopeCards.js';
 import { colors } from '../../theme.js';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { OutputsSection } from '../connections/OutputsSection.js';
@@ -130,6 +132,7 @@ function channelToken(channel: number): string {
 export function ChannelSection({ health }: { health: ConnectionHealth | null }): JSX.Element {
   const state = useChannelSettings();
   const { selected: channel } = useSelectedChannel();
+  const stationAdmin = useHoldsStationAdmin();
   const configured = state.settings.find((s) => s.channel === channel);
   const observed = state.observed.find((o) => o.channel === channel);
   const verdict = rasterVerdict(state, channel);
@@ -250,6 +253,13 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
         for THIS channel only.
       */}
       <OutputsSection health={health} channel={channel} />
+      {/*
+        🔴 `DESKTOP-APPS-01-D` e/j — a station-admin's two channel-scope controls. ABSENT for
+        anyone else, never greyed (golden rule 13): an operator has no Change channel… and does
+        not see another channel's strays at all.
+      */}
+      {stationAdmin && <ChangeChannelCard channel={channel} />}
+      {stationAdmin && <StraysCard />}
     </>
   );
 }

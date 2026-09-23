@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  FIRST_ALLOCATABLE_LAYER,
+  LAYER_BANDS,
   defaultFixedLayerBank,
   fixedBankSlots,
   isLayerVisible,
@@ -47,6 +49,35 @@ describe('the bank first-run declares', () => {
     expect(slots.every(({ layer }) => isLayerVisible(bank, layer))).toBe(true);
     // Control: the DEFAULT bank does hide rows, so "every row shown" is a choice, not a default.
     expect([...fixedBankSlots(base)].some(({ layer }) => !isLayerVisible(base, layer))).toBe(true);
+  });
+});
+
+/*
+  🔴 `DESKTOP-APPS-01-D` b — **THE BANK FIRST-RUN WRITES SITS IN CG'S BANDS, NEVER IN 1–49.**
+
+  The owner's channel-1 station (the Playout's programme channel) had exactly this bank on disk —
+  beds 50–59 and operator rows 80–99 — and no command reached a layer below 50. The guard held; it
+  is pinned here so a change to the default bank cannot move a row into the playout server's span.
+*/
+describe('DESKTOP-APPS-01-D b — the layers first-run declares', () => {
+  it('are exactly 50–59 and 80–99 on every channel, and none is in 1–49', () => {
+    for (const channel of [1, 2, 4]) {
+      const layers = [...fixedBankSlots(firstRunBank(channel))]
+        .map((s) => s.layer)
+        .sort((a, b) => a - b);
+      expect(layers).toEqual([
+        50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92,
+        93, 94, 95, 96, 97, 98, 99,
+      ]);
+      expect(layers.filter((layer) => layer < FIRST_ALLOCATABLE_LAYER)).toEqual([]);
+    }
+  });
+
+  it('control — the three bands come out byte for byte: beds 50–59, plates 60–79, templates 80–99', () => {
+    expect(JSON.stringify(LAYER_BANDS)).toBe(
+      '{"bed":{"start":50,"end":59},"plate":{"start":60,"end":79},"template":{"start":80,"end":99}}',
+    );
+    expect(FIRST_ALLOCATABLE_LAYER).toBe(50);
   });
 });
 

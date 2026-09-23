@@ -115,6 +115,12 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     onChanged: () => () => undefined,
   };
   cg['setup'] ??= setupStub();
+  // `DESKTOP-APPS-01-D` j — no strays: the quiet answer, so a filled stub measures what it did.
+  cg['strays'] ??= {
+    list: () => Promise.resolve([]),
+    onChanged: () => () => undefined,
+    takeOffAir: () => Promise.resolve({ ok: false }),
+  };
   return stub;
 }
 
@@ -126,6 +132,7 @@ export function setupStub(): {
   check: () => Promise<{ lines: []; localAddress: null }>;
   routeAddress: () => Promise<{ address: null }>;
   catalogue: () => Promise<{ rows: null }>;
+  channelOccupancy: () => Promise<{ state: 'unknown'; layers: [] }>;
   canSetPlayoutAddress: () => boolean;
   setPlayoutAddress: () => Promise<string>;
 } {
@@ -133,6 +140,7 @@ export function setupStub(): {
     check: () => Promise.resolve({ lines: [], localAddress: null }),
     routeAddress: () => Promise.resolve({ address: null }),
     catalogue: () => Promise.resolve({ rows: null }),
+    channelOccupancy: () => Promise.resolve({ state: 'unknown', layers: [] }),
     canSetPlayoutAddress: () => false,
     setPlayoutAddress: () => Promise.reject(new Error('this stub is not CG Control')),
   };
