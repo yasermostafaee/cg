@@ -1,6 +1,7 @@
 import {
   DEVICE_ADDRESSING_RULE,
   DEVICE_NUMBER_RECIPE,
+  STOCK_CONSUMER_KINDS,
   describeDeviceAddressing,
   isAirOutputKind,
   type ChannelOutputCheck,
@@ -78,6 +79,26 @@ export function creatableMissingConsumer(check: {
     check.declared.find(
       (d) => missingKinds.has(d.kind) && missingConsumerAddCommand(1, d) !== null,
     ) ?? null
+  );
+}
+
+/**
+ * `DESKTOP-APPS-01-D` g — one line, for stderr, for a channel whose declared consumers `INFO`
+ * does not list on a build whose `INFO` is not stock: a fact for the engineer, never an alarm.
+ */
+export function describeUnknownOutput(label: string, check: ChannelOutputCheck): string {
+  const unknown = check.unknown ?? [];
+  const declared = unknown
+    .map((m) => (m.devices.length > 0 ? `${m.kind} (device ${m.devices.join(', ')})` : m.kind))
+    .join(', ');
+  const nonStock = check.running
+    .map((r) => r.kind)
+    .filter((kind, i, all) => !STOCK_CONSUMER_KINDS.includes(kind) && all.indexOf(kind) === i);
+  return (
+    `[caspar-bridge] channel ${String(check.channel)} on server ${label}: casparcg.config ` +
+    `declares ${declared} and INFO does not list it, but this CasparCG's INFO lists ` +
+    `${nonStock.join(', ')}, which stock CasparCG does not ship — so INFO cannot say whether ` +
+    `it runs. Output UNKNOWN, not alarmed (running: ${check.running.map((r) => r.kind).join(', ')}).\n`
   );
 }
 

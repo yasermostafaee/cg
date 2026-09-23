@@ -170,6 +170,61 @@ export function missingConsumers(
 }
 
 /**
+ * 🔴 `DESKTOP-APPS-01-D` g — **THE CONSUMER KINDS STOCK CASPARCG 2.5.0 SHIPS, and the one
+ * reading they license.**
+ *
+ * `missingConsumers` reads "declared, not listed in `INFO <channel>`" as "not running". That
+ * holds on stock CasparCG, whose `<output>` lists every running consumer by its own `name()`
+ * (the header of this file). It does NOT hold on the Playout's fork: its `INFO 1` on
+ * `192.168.21.111` (2026-09-22, `tools/caspar-amcp-probe/evidence/…apasai-core/b5-teardown-info
+ * .ndjson`) lists only `pgm` and `ndi`, while its `INFO CONFIG` declares `pgm`, `decklink`,
+ * `ffmpeg` and `ndi` and its operators state the SDI and RTP outputs are live. The bridge read
+ * that as a missing DeckLink and FFmpeg and put a red programme-output banner up while the
+ * owner watched the output work — an alarm that was false.
+ *
+ * A running kind outside this list is proof the build is not stock, and so that its `<output>`
+ * list is not known to be complete. Absence from such a list is evidence of nothing: the
+ * reader says UNKNOWN rather than MISSING ({@link judgeConsumers}). A channel listing NO
+ * consumer, or only stock ones, is judged exactly as before — a truly dead output still alarms.
+ */
+export const STOCK_CONSUMER_KINDS: readonly string[] = [
+  'decklink',
+  'bluefish',
+  'ffmpeg',
+  'artnet',
+  'screen',
+  'system-audio',
+  'ndi',
+];
+
+/** The running kinds a stock 2.5.0 would never report, in port order, deduplicated. */
+export function nonStockRunningKinds(running: readonly RunningConsumer[]): string[] {
+  const kinds: string[] = [];
+  for (const r of running) {
+    const kind = r.kind.toLowerCase();
+    if (!STOCK_CONSUMER_KINDS.includes(kind) && !kinds.includes(kind)) kinds.push(kind);
+  }
+  return kinds;
+}
+
+/**
+ * `DESKTOP-APPS-01-D` g — the declared-versus-running verdict, split by what `INFO` can PROVE.
+ *
+ * `missing` is the alarm and is unchanged on a stock build. `unknown` is the same absence read
+ * from a build whose output list is not stock ({@link STOCK_CONSUMER_KINDS}): reported, never
+ * alarmed. Exactly one of the two is non-empty when anything is absent.
+ */
+export function judgeConsumers(
+  declared: readonly DeclaredConsumer[],
+  running: readonly RunningConsumer[],
+): { missing: MissingConsumer[]; unknown: MissingConsumer[] } {
+  const absent = missingConsumers(declared, running);
+  if (absent.length === 0) return { missing: [], unknown: [] };
+  if (nonStockRunningKinds(running).length > 0) return { missing: [], unknown: absent };
+  return { missing: absent, unknown: [] };
+}
+
+/**
  * `B-223` — SEVERITY BY AIR-CRITICALITY, not by "declared".
  *
  * The owner's judgement (2026-09-05, the screen consumer stopped on the plant and the Runtime

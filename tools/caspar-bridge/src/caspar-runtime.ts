@@ -50,7 +50,7 @@ import {
   videoModeRaster,
   // C-029 — the program-output check's two parsers and its diff, beside the wire types
   // they read into, for the same reason as `parseVideoModeFromInfo` above.
-  missingConsumers,
+  judgeConsumers,
   parseDeclaredConsumersFromConfig,
   parseRunningConsumersFromInfo,
   type ChannelOutputCheck,
@@ -117,6 +117,7 @@ import {
   OUTPUT_RECHECK_MS,
   creatableMissingConsumer,
   describeMissingOutput,
+  describeUnknownOutput,
   missingConsumerAddCommand,
 } from './output-check.js';
 import {
@@ -10975,7 +10976,9 @@ export class CasparRuntime {
       declaredAll === null
         ? null
         : (declaredAll.find((d) => d.channel === channel)?.consumers ?? []);
-    const missing = declared === null ? [] : missingConsumers(declared, observed.running);
+    // `DESKTOP-APPS-01-D` g — an absence `INFO` cannot prove is UNKNOWN, never MISSING.
+    const { missing, unknown } =
+      declared === null ? { missing: [], unknown: [] } : judgeConsumers(declared, observed.running);
     let byChannel = this.#outputChecks.get(label);
     if (byChannel === undefined) {
       byChannel = new Map();
@@ -10987,6 +10990,7 @@ export class CasparRuntime {
       declared,
       running: observed.running,
       missing,
+      ...(unknown.length > 0 ? { unknown } : {}),
       observedAt: observed.at,
       ...(previous?.creation !== undefined ? { creation: previous.creation } : {}),
     };
@@ -10999,6 +11003,8 @@ export class CasparRuntime {
       const wasMissing = (previous?.missing.length ?? 0) > 0;
       if (missing.length > 0 && !wasMissing) {
         process.stderr.write(describeMissingOutput(label, next));
+      } else if (unknown.length > 0 && (previous?.unknown ?? []).length === 0) {
+        process.stderr.write(describeUnknownOutput(label, next));
       } else if (missing.length === 0 && wasMissing) {
         process.stderr.write(
           `[caspar-bridge] channel ${String(channel)} output on server ${label} is running again ` +

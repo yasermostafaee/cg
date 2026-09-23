@@ -117,6 +117,12 @@ const ChannelOutputCheckSchema = z.object({
   declared: z.array(DeclaredConsumerSchema).nullable(),
   running: z.array(RunningConsumerSchema),
   missing: z.array(MissingConsumerSchema),
+  /**
+   * `DESKTOP-APPS-01-D` g — declared kinds `INFO` does not list, on a build whose `INFO` lists a
+   * consumer stock CasparCG does not ship, so their absence proves nothing (`judgeConsumers`).
+   * Reported, never alarmed; absent when there is none.
+   */
+  unknown: z.array(MissingConsumerSchema).optional(),
   observedAt: z.string().datetime(),
   creation: ConsumerCreationSchema.optional(),
 });
@@ -219,7 +225,10 @@ export function outputVerdictOf(server: ServerHealth): OutputVerdict {
       : { kind: 'unknown' };
   }
   if (missing.length > 0) return { kind: 'missing', channels: missing, observedAt };
-  return checks.some((c) => c.declared !== null) ? { kind: 'ok', observedAt } : { kind: 'unknown' };
+  // `DESKTOP-APPS-01-D` g — a check whose absences are UNKNOWN is not an ok either.
+  return checks.some((c) => c.declared !== null && (c.unknown ?? []).length === 0)
+    ? { kind: 'ok', observedAt }
+    : { kind: 'unknown' };
 }
 
 /**
