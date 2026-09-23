@@ -77,19 +77,24 @@ export function MonitorHeadFact({
  * The reference's `.pgm-strip` is the same 31 px `monitor-controls` row the PVW transport
  * sits in, carrying a signal dot, its state in words, a spacer, and the air count. The two
  * facts are DELIBERATELY on one line and DELIBERATELY not merged: the left is about the
- * RETURN FEED (which does not exist — `MONITORS-01`/`C-016`) and the right is about AIR, and
+ * RETURN FEED (`C-016`'s relay of the Playout's `pgm` feed) and the right is about AIR, and
  * an operator who reads "no signal" must not conclude "nothing is on air". That is exactly
  * what the reference's own `Playout may still be active.` says on the stage below it.
+ *
+ * `tone` lights the lamp: the muted gold of "no signal" (not a fault), the healthy mint while
+ * the return is live, the caution amber while it is stalled.
  */
 export function MonitorSignalStrip({
   signal,
+  tone,
   fact,
 }: {
   signal: string;
+  tone: 'none' | 'live' | 'stalled';
   fact: ReactNode;
 }): JSX.Element {
   return (
-    <div className="cg-monitor-strip" data-monitor-pgm-strip="">
+    <div className="cg-monitor-strip" data-monitor-pgm-strip="" data-pgm-signal={tone}>
       <span className="cg-monitor-signal">
         {/*
           🔴 A LAMP, NOT AN ICON — see `.cg-monitor-signal__lamp`. A 7 px lucide `Circle` is an
@@ -97,7 +102,10 @@ export function MonitorSignalStrip({
           draws a filled 6 px disc, and a filled disc is a SHAPE with no glyph behind it, so
           there is nothing here for `Icon` to route.
         */}
-        <span className="cg-monitor-signal__lamp" aria-hidden="true" />
+        <span
+          className={`cg-monitor-signal__lamp${tone === 'none' ? '' : ` cg-monitor-signal__lamp--${tone}`}`}
+          aria-hidden="true"
+        />
         {signal}
       </span>
       <span className="cg-monitor-strip__spacer" />

@@ -1,55 +1,43 @@
-import type { CSSProperties } from 'react';
-import type { LucideIcon } from 'lucide-react';
+import { useLayoutEffect, useRef, type CSSProperties } from 'react';
+import { MonitorOff } from 'lucide-react';
 import { colors, cssVars } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
 import { Panel } from '../../ui/Panel.js';
 import { MonitorHead, MonitorHeadFact, MonitorSignalStrip } from '../../ui/MonitorHead.js';
 import type { PanelId } from '../../hooks/useShellLayout.js';
+import type { ProgramReturn, ProgramSignal } from '../../hooks/useProgramReturn.js';
 
 /**
- * One output box — PROGRAM or PREVIEW — reserved in its final position now, so the
- * layout the operator learns is the layout they keep.
+ * The PROGRAM output box — `C-016`'s programme return: what the Playout is putting on air,
+ * read by the bridge from the Playout's own `pgm` feed and relayed on this console's origin.
  *
- * WHY A BLACK BOX NEEDS WORDS ON IT. A plain black rectangle in a broadcast UI is
- * not a neutral placeholder — it is what a DEAD FEED looks like. An operator
- * glancing at a black PGM box at 2 a.m. has to decide whether transmission just
- * died, and the cost of getting that wrong is a false alarm that pulls people out
- * of bed. An empty box that says what it is costs nothing.
+ * 🔴 **A PICTURE ONLY WHILE THE BRIDGE VOUCHES FOR IT.** The picture is shown only while the
+ * bridge reports the channel `live`. A stalled feed leaves the browser holding its last frame,
+ * and a frozen frame on a PROGRAM monitor reads as "nothing is changing on air" — the worst
+ * thing this box could say falsely. So any other state HIDES the picture and says what is true,
+ * in the strip and on the screen: **No return signal** or **Return feed stalled**.
  *
- * It is equally careful NOT to read as an ERROR: nothing is broken here, the
- * feature is unbuilt. The treatment is MUTED (the offline grey, never the error
- * red or the caution amber) and the wording names the reason rather than implying
- * a fault to go and fix.
+ * WHY THE EMPTY BOX STILL NEEDS WORDS. A plain black rectangle in a broadcast UI is what a DEAD
+ * FEED looks like. An operator glancing at it at 2 a.m. has to decide whether transmission just
+ * died. The words are about the FEED, never about air — the Playout is very probably still
+ * transmitting — which is why the strip keeps the rows-on-air count beside them (`MONITORS-01`).
+ * The words are the only prose here: no sentence explains the feature (the design system's
+ * operator-surface rule; the old "This will show what is on air…" line is gone with the gap it
+ * described).
  *
- * THE TWO BOXES ARE EMPTY FOR DIFFERENT REASONS, and the copy must not blur them.
- * The first draft labelled both "NOT CONNECTED", which is a category error for
- * PREVIEW:
+ * ⚠ **THE `<img>` IS THE DEMAND.** The bridge holds the Playout feed open exactly as long as
+ * some console holds the picture open, so the element is mounted only while this pane renders
+ * (never while the monitors are hidden, the boot state), and on unmount its request is
+ * ABORTED explicitly — a detached image may otherwise go on loading until it is collected.
  *
- *   - PROGRAM is genuinely awaiting a FEED. It shows the program-channel return
- *     from the playout server, which does not exist yet — owned by `C-016`
- *     (operator PGM confidence view: periodic program-channel grabs served over
- *     the bridge's HTTP server). "Not connected" is the literal truth.
- *   - PREVIEW will never connect to anything. `R-022` specifies it as a LOCAL
- *     browser render of the loaded template through `@cg/template-runtime` — "no
- *     CasparCG involvement, no second channel", and "nothing is ever sent to
- *     CasparCG". There is no feed to be disconnected from, so a connection state
- *     is meaningless here; what it is waiting for is a graphic to render.
- *
- * Telling an operator that PREVIEW is "not connected" would send them looking for
- * a link that is not part of the design.
- *
- * Item numbers live in this comment and NEVER in the visible copy — an operator
- * has no idea what a C- or R- number is (and the retired Electron-era M0–M12
- * milestones the copy first cited do not drive work at all any more).
- *
- * Fullscreen comes from `Panel`, not from here. That is the point of the
- * primitive: these two panels were the first test of it, and they needed no code
- * to get the affordance.
+ * Item numbers live in this comment and NEVER in the visible copy. Fullscreen comes from
+ * `Panel`, not from here.
  */
 
 const styles = {
   /** The video area. Black because that is what a video area is. */
   screen: {
+    position: 'relative' as const,
     flex: 1,
     minHeight: 0,
     background: cssVars['--r-video-ground'],
@@ -66,18 +54,32 @@ const styles = {
     padding: '0.5rem',
     overflow: 'hidden',
   },
+  /** The return, letterboxed inside the screen whatever its raster (640×360, or 640×512 PAL). */
+  picture: {
+    position: 'absolute' as const,
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain' as const,
+  },
   label: {
     fontSize: '0.7rem',
     fontWeight: 700,
     letterSpacing: '0.08em',
     textTransform: 'uppercase' as const,
   },
-  detail: { fontSize: '0.68rem', color: colors.textMuted, maxWidth: '18rem', lineHeight: 1.35 },
 } as const satisfies Record<string, CSSProperties>;
+
+/** The ONE place the pane's signal is put into words — the strip and the screen both read it. */
+export const PROGRAM_SIGNAL_WORDS: Readonly<Record<ProgramSignal, string>> = {
+  live: 'Return signal',
+  stalled: 'Return feed stalled',
+  none: 'No return signal',
+};
 
 interface Props {
   id: Extract<PanelId, 'pgm' | 'pvw'>;
-  /** PROGRAM / PREVIEW — the header text and the accessible name. */
+  /** PROGRAM — the header text and the accessible name. */
   title: string;
   /** The output's word in the head — `PROGRAM`. `title` stays the accessible name. */
   word: string;
@@ -90,16 +92,8 @@ interface Props {
    * second count on a second surface is precisely how two numbers about air come to disagree.
    */
   onAirRows: number;
-  /** The mark for this box's empty state — see `emptyLabel`. */
-  icon: LucideIcon;
-  /**
-   * WHY this box is empty, in two or three words. Per-panel, not shared: PROGRAM
-   * has no feed yet, PREVIEW has nothing to render — see the header comment for
-   * why conflating those two is a category error.
-   */
-  emptyLabel: string;
-  /** What this output will show, in the operator's terms. */
-  detail: string;
+  /** The programme return for `channel` — lifted to the strip, like the air count. */
+  programReturn: ProgramReturn;
 }
 
 export function MonitorPanel({
@@ -108,10 +102,10 @@ export function MonitorPanel({
   word,
   channel,
   onAirRows,
-  icon,
-  emptyLabel,
-  detail,
+  programReturn,
 }: Props): JSX.Element {
+  const { src, signal, onError } = programReturn;
+  const words = PROGRAM_SIGNAL_WORDS[signal];
   return (
     <Panel
       id={id}
@@ -136,13 +130,12 @@ export function MonitorPanel({
       {/*
         🔴 THE STRIP, and the reason its two facts sit side by side.
 
-        `No return signal` is about the FEED and `N rows on air` is about AIR, and the whole
-        point of showing them together is that an operator must never read the first as the
-        second. `MONITORS-01` settled that this pane renders nothing because `C-016` is
-        unbuilt — the playout server is very probably still transmitting.
+        The signal is about the FEED and `N rows on air` is about AIR, and the whole point of
+        showing them together is that an operator must never read the first as the second.
       */}
       <MonitorSignalStrip
-        signal="No return signal"
+        signal={words}
+        tone={signal}
         fact={
           <MonitorHeadFact
             testId="data-monitor-air-count"
@@ -153,15 +146,57 @@ export function MonitorPanel({
         }
       />
       {/*
-        `role="img"` with a name, NOT a bare decorative box: a screen reader user
-        needs the same fact a sighted operator gets from the label — there is an
-        output here, and this is why it is blank.
+        `role="img"` with a name, NOT a bare decorative box: a screen reader user needs the same
+        fact a sighted operator gets — there is an output here, and what state its return is in.
       */}
-      <div style={styles.screen} role="img" aria-label={`${title} — ${emptyLabel}. ${detail}`}>
-        <Icon icon={icon} size={22} />
-        <span style={styles.label}>{emptyLabel}</span>
-        <span style={styles.detail}>{detail}</span>
+      <div style={styles.screen} role="img" aria-label={`${title} — ${words}`} data-pgm-screen="">
+        {src !== null && (
+          <ProgramPicture key={src} src={src} visible={signal === 'live'} onError={onError} />
+        )}
+        {signal !== 'live' && (
+          <>
+            <Icon icon={MonitorOff} size={22} />
+            <span style={styles.label}>{words}</span>
+          </>
+        )}
       </div>
     </Panel>
+  );
+}
+
+/**
+ * The relayed picture: an `<img>` on a `multipart/x-mixed-replace` stream, which the browser
+ * repaints part by part with no script involved. Mounted whenever there is a URL (its request
+ * IS the watch), VISIBLE only while `live`.
+ *
+ * ⚠ The request is aborted on unmount by removing `src` — the HTML spec's "abort the image
+ * request" path. An element React has let go of is otherwise still an image loading a stream,
+ * and the bridge would go on pulling the Playout's feed for a picture nobody can see.
+ */
+function ProgramPicture({
+  src,
+  visible,
+  onError,
+}: {
+  src: string;
+  visible: boolean;
+  onError: () => void;
+}): JSX.Element {
+  const ref = useRef<HTMLImageElement>(null);
+  useLayoutEffect(() => {
+    const img = ref.current;
+    return () => {
+      img?.removeAttribute('src');
+    };
+  }, []);
+  return (
+    <img
+      ref={ref}
+      src={src}
+      alt=""
+      data-pgm-picture=""
+      onError={onError}
+      style={{ ...styles.picture, visibility: visible ? 'visible' : 'hidden' }}
+    />
   );
 }

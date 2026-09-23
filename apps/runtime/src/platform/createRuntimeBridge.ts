@@ -309,6 +309,17 @@ export function createMockBridge(): RuntimeBridge {
       onNoticeChanged: (handler) => mock.emptiedAirChanged.subscribe(handler),
     },
 
+    /*
+      C-016 — offline parity by honest absence. Test mode has no bridge and so no relay: there is
+      no picture to request (`feedUrl` is `null`), nothing is ever watched (the status is empty),
+      and nothing will ever change it. The pane then reads "No return signal", which is true.
+    */
+    pgmReturn: {
+      feedUrl: () => null,
+      status: () => Promise.resolve([]),
+      onStatusChanged: () => () => undefined,
+    },
+
     // R-021 stage 2a — fixed-bank parity (offline: occupancy honestly unknown).
     fixedLayers: {
       config: () => Promise.resolve(mock.fixedLayersConfig()),

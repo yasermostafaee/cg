@@ -309,14 +309,15 @@ export function App(): JSX.Element {
                 when the LAYER LIST is the fullscreen panel; a fullscreen monitor is
                 still the strip, showing one box.
 
-                ⚠ CORRECTED 2026-09-07 (`STALE-CLAIMS-02` §4): this said the two were
-                "black and explicitly labelled NOT CONNECTED", and neither half is
-                true. PROGRAM reads `No program return` — it is genuinely awaiting a
-                feed (C-016) — and PREVIEW is no longer an empty box at all: R-022
-                made it `PreviewPanel`, a LOCAL browser render of every rehearsing
-                row. `MonitorPanel`'s own header calls labelling PREVIEW "not
-                connected" a category error, because it has no link to be down, so
-                this comment contradicted the module it describes. */}
+                ⚠ CORRECTED 2026-09-07 (`STALE-CLAIMS-02` §4), and again 2026-09-24
+                (`C-016`): PROGRAM shows the Playout's own return, relayed by the
+                bridge, and says "No return signal" / "Return feed stalled" whenever
+                it cannot vouch for a live picture; PREVIEW is `PreviewPanel`, a
+                LOCAL browser render of every rehearsing row (R-022), with no link
+                to be down. Neither is "black and labelled NOT CONNECTED".
+                ⚠ The strip is not rendered while hidden, and that is load-bearing
+                for PROGRAM: its picture request IS the bridge's reason to read the
+                Playout's feed, so a hidden strip pulls nothing. */}
                 {monitorsVisible && (
                   <>
                     <div

@@ -23,8 +23,7 @@ import { installMemoryStorage } from './support/localStorage.js';
  *
  * ── 🔴 `MONITORS-01`, 2026-09-09 — THE DEFAULT MOVED; THE PERSISTENCE RULE DID NOT ─────
  *
- * The boot state is now HIDDEN (`DEFAULT_MONITORS_SHOWN`), because neither box is confidence
- * monitoring — PGM is an empty placeholder for the unbuilt `C-016` and PVW is a local browser
+ * The boot state is now HIDDEN (`DEFAULT_MONITORS_SHOWN`), because neither box was confidence monitoring — PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default) and PVW is a local browser
  * render of the rehearsal (`R-022`, nothing reaches CasparCG). See `design.md` §19.
  *
  * ⚠ THE ASSERTIONS BELOW ARE WRITTEN AGAINST THE CONSTANT, NOT AGAINST `false`, and that is

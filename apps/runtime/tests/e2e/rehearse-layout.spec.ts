@@ -40,8 +40,8 @@ async function stubRetainedPage(page: Page): Promise<void> {
  * 🔴 `MONITORS-01` — THE STRIP IS FOLDED AWAY WHEN THE CONSOLE BOOTS, and this file's
  * subject lives inside it, so it is opened first.
  *
- * The default moved from SHOWN to HIDDEN because neither box is confidence monitoring:
- * PGM is a fixed empty placeholder for the unbuilt `C-016`, and PVW is a LOCAL browser
+ * The default moved from SHOWN to HIDDEN because neither box was confidence monitoring:
+ * PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default), and PVW is a LOCAL browser
  * render of the rehearsing rows (`R-022` — nothing is ever sent to CasparCG). None of
  * that changes what this file proves, so the state each test was written against is
  * established rather than its assertions being rewritten.

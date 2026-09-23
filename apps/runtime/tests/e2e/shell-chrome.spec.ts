@@ -116,8 +116,7 @@ test('§B — one bar carries the tabs and the bulk verbs, and the sub-bar is un
  * 🔴 `MONITORS-01` §B4 — THE CONSOLE BOOTS WITH THE MONITORS FOLDED AWAY, AND THE OPERATOR
  * CAN ALWAYS TELL THEY ARE THERE.
  *
- * The default moved to HIDDEN because neither box is confidence monitoring: PGM renders a
- * fixed empty placeholder for the unbuilt `C-016`, and PVW is a LOCAL browser render of the
+ * The default moved to HIDDEN because neither box was confidence monitoring: PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default), and PVW is a LOCAL browser render of the
  * rehearsing rows (`R-022` — nothing is ever sent to CasparCG). `design.md` §19 carries the
  * trace and §19.1 separates this from owner answer A13, which is about PERSISTENCE and is
  * untouched.

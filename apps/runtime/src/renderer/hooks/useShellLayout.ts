@@ -131,9 +131,11 @@ export interface ShellLayout {
    * have deleted a safety surface by default"_. That argument assumed these two boxes are
    * CONFIDENCE MONITORING. They are not, and the code says so:
    *
-   *   - PGM (`MonitorPanel`) renders a fixed empty box. There is no program return anywhere
-   *     in this app — the real one is `C-016`, still `[ ]`, and its own acceptance says the
-   *     panel would be **OFF by default and toggleable**.
+   *   - PGM (`MonitorPanel`) rendered a fixed empty box when this default was set. It now
+   *     shows the Playout's own return (`C-016`, 2026-09-24) — and `C-016`'s own acceptance
+   *     says the panel is **OFF by default and toggleable**, which is this default. Hidden
+   *     also means the bridge pulls NOTHING from the Playout's feed: the picture is requested
+   *     only while the pane renders, and the strip does not render while hidden.
    *   - PVW (`PreviewPanel` → `RehearsalStage`) is a LOCAL BROWSER RENDER of the rehearsing
    *     rows through `@cg/template-runtime` in a `srcdoc` frame — `R-022`, "nothing is ever
    *     sent to CasparCG". It is the console's BELIEF, not the channel.

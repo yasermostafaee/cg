@@ -18,6 +18,10 @@ import {
   EmptiedAirNoticeChangedChannel,
   EmptiedAirNoticeChannel,
   EmptiedAirRestoreChannel,
+  PgmReturnStatusChangedChannel,
+  PgmReturnStatusChannel,
+  pgmReturnPath,
+  type PgmReturnStatus,
   LockEngageChannel,
   LockReleaseChannel,
   AuthStateChangedChannel,
@@ -412,6 +416,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #ownedOccupancySubs = new Subs<OwnedOccupancyWarning[]>();
   // B-225 — the standing "air was emptied under us" notice (null when there is none).
   readonly #emptiedAirSubs = new Subs<EmptiedAirNotice | null>();
+  // C-016 — the programme return's state per watched channel.
+  readonly #pgmReturnSubs = new Subs<readonly PgmReturnStatus[]>();
   // R-021 stage 2a — fixed-bank config + per-slot state pushes.
   readonly #fixedConfigSubs = new Subs<FixedLayerBank | null>();
   readonly #fixedStateSubs = new Subs<FixedSlotState[]>();
@@ -1256,6 +1262,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#emptiedAirSubs.emit(p.data);
         break;
       }
+      case PgmReturnStatusChangedChannel.name: {
+        const p = PgmReturnStatusChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#pgmReturnSubs.emit(p.data);
+        break;
+      }
       case TemplatesChangedChannel.name: {
         const p = TemplatesChangedChannel.payload.safeParse(payload);
         if (p.success) this.#templatesSubs.emit(p.data);
@@ -1722,6 +1733,20 @@ export class WebSocketRuntime implements RuntimeBridge {
     dismiss: () => this.#invoke(EmptiedAirDismissChannel, undefined),
     onNoticeChanged: (handler: (notice: EmptiedAirNotice | null) => void) =>
       this.#emptiedAirSubs.add(handler),
+  };
+
+  /*
+    C-016 — the programme return. The picture is relayed on the page's OWN origin (the bridge's
+    console server, `127.0.0.1:5174` in CG Control), so the URL is the one relative path both
+    sides spell through `pgmReturnPath`. A page served by anything else (a Vite dev server) asks
+    a server with no relay, gets no picture, and the bridge reports no watched channel — so the
+    pane says "No return signal", which is the truth for that page.
+  */
+  readonly pgmReturn = {
+    feedUrl: (channel: number): string | null => pgmReturnPath(channel),
+    status: () => this.#invoke(PgmReturnStatusChannel, undefined),
+    onStatusChanged: (handler: (status: readonly PgmReturnStatus[]) => void) =>
+      this.#pgmReturnSubs.add(handler),
   };
 
   // R-021 stage 2a — the fixed-bank wire contract (facts only; verb

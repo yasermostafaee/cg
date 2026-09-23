@@ -13,13 +13,14 @@ import { installMemoryStorage } from './support/localStorage.js';
 /**
  * 🔴 `MONITORS-01` — THE BOOT STATE, AND THE ONE THING THAT MUST SURVIVE IT.
  *
- * The console now boots with the monitor strip FOLDED AWAY. The reason is what the two panes
- * actually render, traced in `design.md` §19: PGM (`MonitorPanel`) is a fixed empty
- * placeholder for `C-016`, which is unbuilt and whose own acceptance says its panel would be
- * OFF by default; PVW (`PreviewPanel` → `RehearsalStage`) is a LOCAL browser render of the
- * rehearsing rows through `@cg/template-runtime`, and `R-022` is explicit that nothing is ever
- * sent to CasparCG. Neither is a picture of the channel, so neither earns 247.2 px and three
- * rows of the only surface that says what IS on air.
+ * The console now boots with the monitor strip FOLDED AWAY. The reason was what the two panes
+ * actually rendered, traced in `design.md` §19: PGM (`MonitorPanel`) was a fixed empty
+ * placeholder for the then-unbuilt `C-016`, whose own acceptance says its panel is OFF by
+ * default; PVW (`PreviewPanel` → `RehearsalStage`) is a LOCAL browser render of the rehearsing
+ * rows through `@cg/template-runtime`, and `R-022` is explicit that nothing is ever sent to
+ * CasparCG. `C-016` has since built PGM as the Playout's own return (2026-09-24), and the default
+ * STANDS on its acceptance: off by default, and while hidden the bridge pulls nothing from the
+ * Playout's feed, because the picture is requested only while the pane renders.
  *
  * ── WHAT THIS FILE IS FOR, AND WHAT IT DELIBERATELY IS NOT ───────────────────────────
  *

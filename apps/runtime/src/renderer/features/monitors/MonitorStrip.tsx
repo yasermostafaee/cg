@@ -1,6 +1,6 @@
-import { MonitorOff } from 'lucide-react';
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
 import { useFixedBankState } from '../../hooks/useFixedLayers.js';
+import { useProgramReturn } from '../../hooks/useProgramReturn.js';
 import { useStackSnapshot } from '../../hooks/useStack.js';
 import { airTally, onChannel } from '../stack/onAir.js';
 import { MonitorPanel } from './MonitorPanel.js';
@@ -41,6 +41,12 @@ export function MonitorStrip(): JSX.Element {
   const onAirRows = airTally(onChannel(items, bank?.channel ?? null)).onAir;
   const showPvw = focus !== 'pgm';
   const showPgm = focus !== 'pvw';
+  /*
+    `C-016` — the programme return, lifted here beside the air count for the same reason. A
+    PROGRAM pane that is not rendered asks for NOTHING: the channel is `null` while it is folded
+    away, so no picture is requested and the bridge pulls nothing from the Playout for it.
+  */
+  const programReturn = useProgramReturn(showPgm ? (bank?.channel ?? null) : null);
 
   return (
     /*
@@ -58,22 +64,22 @@ export function MonitorStrip(): JSX.Element {
     */
     <div style={{ display: 'flex', gap: '0.75rem', flex: 1, minHeight: 0, minWidth: 0 }}>
       {/*
-        The copy says what each output IS and why it is blank, in the operator's
-        terms, naming no internal item number — the visible surface is not where
-        the roadmap gets tracked. The pointers live in `MonitorPanel`'s comment.
+        The copy says what each output IS, in the operator's terms, naming no
+        internal item number — the visible surface is not where the roadmap gets
+        tracked. The pointers live in `MonitorPanel`'s comment.
 
-        The two empty states are DIFFERENT ON PURPOSE. PREVIEW is a local browser
-        render with no server involvement, so it has nothing to connect to and a
-        "not connected" label would send an operator hunting for a link that is
-        not part of the design. Only PROGRAM is genuinely waiting for a feed.
+        The two panes are DIFFERENT ON PURPOSE. PREVIEW is a local browser render
+        with no server involvement, so it has nothing to connect to and a "no
+        signal" label would send an operator hunting for a link that is not part of
+        the design. Only PROGRAM has a feed — the Playout's own return (C-016).
       */}
       {/*
         R-022 — PREVIEW is no longer a reserved empty box: it renders the
         rehearsal for EVERY row the operator has put into REHEARSE, composited. It
-        gets its own component rather than props on `MonitorPanel`, because it now
-        has behaviour (the rehearsing set, the retained pages, the channel raster,
-        the operator's staged values) while PROGRAM is still genuinely awaiting a
-        feed (C-016).
+        gets its own component rather than props on `MonitorPanel`, because its
+        behaviour (the rehearsing set, the retained pages, the channel raster, the
+        operator's staged values) has nothing in common with PROGRAM's, which shows
+        the Playout's return (C-016).
 
         It takes NO `selectedId`. It used to, to pick which single rehearsal to
         show; now it shows all of them, and the selection's remaining job — which
@@ -87,9 +93,7 @@ export function MonitorStrip(): JSX.Element {
           word="PROGRAM"
           channel={bank?.channel ?? null}
           onAirRows={onAirRows}
-          icon={MonitorOff}
-          emptyLabel="No program return"
-          detail="This will show what is on air, returned from the playout server. No return feed is arriving yet."
+          programReturn={programReturn}
         />
       )}
     </div>

@@ -40,6 +40,8 @@ import type {
   EmptiedAirNotice,
   EmptiedAirNoticeChannel,
   EmptiedAirRestoreChannel,
+  PgmReturnStatus,
+  PgmReturnStatusChannel,
   LockEngageChannel,
   OrphanLayer,
   OwnedOccupancyWarning,
@@ -514,6 +516,28 @@ export interface RuntimeBridge {
     /** Clear the notice without restoring. Changes nothing on air. */
     dismiss(): Promise<ChannelResponse<typeof EmptiedAirDismissChannel>>;
     onNoticeChanged(handler: (notice: EmptiedAirNotice | null) => void): Unsubscribe;
+  };
+
+  /**
+   * 🔴 `C-016` — **THE PROGRAMME RETURN: what the Playout is putting on air, as a picture.**
+   *
+   * The bridge reads the Playout's own `pgm` feed as one well-behaved client per channel and
+   * relays it on the console's origin; the PROGRAM pane shows it in an `<img>`. The picture is
+   * requested ONLY while that `<img>` is mounted — the relay's upstream is held for exactly as
+   * long as some console holds the picture open — so the pane must not mount it while hidden.
+   *
+   * Its STATE is a statement about the FEED, never about air: `connecting` does not mean
+   * nothing is on air.
+   */
+  pgmReturn: {
+    /**
+     * Where this console reads channel `n`'s picture, or `null` when it has no relay — test mode
+     * has no bridge, so there is no picture to request and the pane says "No return signal".
+     */
+    feedUrl(channel: number): string | null;
+    /** Every WATCHED channel's state. A channel nobody watches has no entry. */
+    status(): Promise<ChannelResponse<typeof PgmReturnStatusChannel>>;
+    onStatusChanged(handler: (status: readonly PgmReturnStatus[]) => void): Unsubscribe;
   };
 
   lock: {

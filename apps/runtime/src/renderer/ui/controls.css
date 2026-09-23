@@ -521,7 +521,7 @@
   align-items: center;
   gap: var(--r-monitor-signal-gap);
   font-size: var(--r-monitor-fact-text);
-  /* MUTED, never the alarm red: nothing is broken — the return feed is unbuilt. */
+  /* MUTED, never the alarm red: a return feed's state is not a statement about air. */
   color: var(--r-monitor-strip-ink);
   white-space: nowrap;
 }
@@ -531,10 +531,10 @@
  * It was a lucide `Circle` — an OUTLINE, which on a 7 px box is a ring of hairlines that
  * reads as a rendering artefact rather than as a lamp. The reference draws a 6 px filled disc
  * in a muted gold, and the colour is the argument: "no return signal" is not a fault
- * (`MONITORS-01` — `C-016` is unbuilt and the playout server is very probably transmitting),
- * so it may not wear the alarm red; and it is not nothing, so it may not be the text grey.
- * A LAMP is a shape, not a glyph, so it is drawn rather than iconised — which is also why
- * this is not a `cg/no-unicode-icon` case: there is no icon here to route through `Icon`.
+ * (`MONITORS-01` — the playout server is very probably transmitting while the console cannot
+ * see its return), so it may not wear the alarm red; and it is not nothing, so it may not be
+ * the text grey. A LAMP is a shape, not a glyph, so it is drawn rather than iconised — which is
+ * also why this is not a `cg/no-unicode-icon` case: there is no icon here to route through `Icon`.
  */
 .cg-monitor-signal__lamp {
   inline-size: var(--r-monitor-signal-dot);
@@ -542,6 +542,17 @@
   border-radius: 50%;
   background: var(--r-monitor-signal-dot-fill);
   flex: 0 0 auto;
+}
+/*
+ * `C-016` — the lamp's other two states, each an existing ROLE rather than a new hue: the
+ * healthy mint while the return is live, the caution amber while it is stalled. A stall is a
+ * caution and not an alarm: the feed stopped, which says nothing yet about air.
+ */
+.cg-monitor-signal__lamp--live {
+  background: var(--r-success);
+}
+.cg-monitor-signal__lamp--stalled {
+  background: var(--r-caution);
 }
 
 /* ── 🔴 CONSOLE-MATCH-03 §2 — THE BULK GROUP'S SCOPE AND ITS RULE ───────────

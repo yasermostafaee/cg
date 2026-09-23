@@ -544,8 +544,7 @@ export class RuntimeApp {
 
   /**
    * 🔴 `MONITORS-01` — BRING THE MONITOR STRIP UP. The console boots with it FOLDED AWAY
-   * (`DEFAULT_MONITORS_SHOWN`; `design.md` §19), because neither box is confidence
-   * monitoring: PGM is a fixed empty placeholder for the unbuilt `C-016` and PVW is a local
+   * (`DEFAULT_MONITORS_SHOWN`; `design.md` §19), because neither box was confidence monitoring: PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default) and PVW is a local
    * browser render of the rehearsing rows (`R-022` — nothing reaches CasparCG).
    *
    * Every spec whose subject is INSIDE the strip — the rehearsal frames, the PVW stage, the

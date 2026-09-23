@@ -2798,10 +2798,12 @@ export const cssVars = {
   '--r-monitor-signal-gap': `${String(MONITOR_COMPACT_PX.signalGap)}px`,
   '--r-monitor-signal-dot': `${String(MONITOR_COMPACT_PX.signalDot)}px`,
   /*
-   * The PGM signal dot's fill. A muted GOLD, and the reference's own choice: "no return
-   * signal" is not a fault (`MONITORS-01` — `C-016` is unbuilt, the playout server is very
-   * probably transmitting), so it may not wear the alarm red; but it is not nothing either,
-   * so it may not be the text grey. This is the one hue in §2 with no existing role token.
+   * The PGM signal dot's fill for "No return signal". A muted GOLD, and the reference's own
+   * choice: no return signal is not a fault (`MONITORS-01` — the playout server is very
+   * probably transmitting while the console cannot see its return), so it may not wear the
+   * alarm red; but it is not nothing either, so it may not be the text grey. This is the one hue
+   * in §2 with no existing role token. The live and stalled lamps (`C-016`) take `--r-success`
+   * and `--r-caution` — roles, not new hues.
    */
   '--r-monitor-signal-dot-fill': '#a78c58',
   /** The PVW count rides its pane's own accent, as the reference does (`#c4b5fd`). */
