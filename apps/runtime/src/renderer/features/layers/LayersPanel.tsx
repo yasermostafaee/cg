@@ -656,19 +656,6 @@ export function LayersPanel({
     [rowBindings, filterableOf, filter],
   );
 
-  /**
-   * `#` IS THE POSITION IN THE WHOLE LIST, NOT IN THE FILTERED ONE.
-   *
-   * A search that renumbers the rows under the operator would make the one column he uses to
-   * point at a row ("clear number 4") mean something different while he is typing. So the
-   * number is resolved from the unfiltered list and carried across.
-   */
-  const displayPositionByLayer = useMemo(() => {
-    const map = new Map<number, number>();
-    rowBindings.forEach((entry, index) => map.set(entry.slot.layer, index + 1));
-    return map;
-  }, [rowBindings]);
-
   const filterTally = useMemo(
     () => layerTally(rowBindings.map(filterableOf), filter),
     [rowBindings, filterableOf, filter],
@@ -1720,12 +1707,10 @@ export function LayersPanel({
                       slot={slot}
                       binding={binding}
                       template={template}
-                      // `#` — the row's place in the WHOLE list, resolved once above so a
-                      // search cannot renumber the rows under the operator's hand.
-                      displayPosition={displayPositionByLayer.get(slot.layer) ?? index + 1}
-                      // The default alias's number — the layer's FIXED place in the
-                      // bank, which ticking and unticking must never renumber. See
-                      // `bankPosition` for why the two are deliberately separate.
+                      // 🔴 `DESKTOP-APPS-01-D` h — `#` IS THE AMCP LAYER. A search, a tick or
+                      // a filter can never renumber it, because it is not a position at all.
+                      displayPosition={slot.layer}
+                      // …and so is the default name's number (`Layer 99`, `Bed 59`).
                       defaultAlias={defaultLayerAlias(bank, slot.layer)}
                       // The SAME predicate the group break above is drawn from, and the
                       // same one the bridge refuses on — one derivation, three readers.

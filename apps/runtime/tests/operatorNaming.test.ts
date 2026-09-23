@@ -64,13 +64,13 @@ describe('operatorRowName', () => {
   });
 
   it('falls back to the default row name for a bed the operator has not aliased', () => {
-    // The plant's real state: `low.aliases` is absent, so layer 9 is `Bed 1`.
+    // The plant's real state: `low.aliases` is absent, so layer 58 is `Bed 58` (D3h: the real layer).
     const name = operatorRowName(
       { itemId: 'item-1', templateId: TEMPLATE.templateId, slot: { channel: 1, layer: 58 } },
       BANK,
       TEMPLATES,
     );
-    expect(name.names).toEqual(['Bed 1', '3ghab']);
+    expect(name.names).toEqual(['Bed 58', '3ghab']);
     expect(name.layer).toBe('1-58');
   });
 

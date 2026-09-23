@@ -182,9 +182,9 @@ describe('§8 — the reference’s filters over the tail the bridge answered', 
     expect(rows()[0]?.querySelector('[data-audit-names]')?.textContent).toContain('زیرنویس اصلی');
     await type('input[type="search"]', 'amcp-404');
     expect(rows()).toHaveLength(1);
-    await type('input[type="search"]', 'Bed 1');
+    await type('input[type="search"]', 'Bed 58');
     expect(rows()).toHaveLength(1);
-    expect(rows()[0]?.querySelector('[data-audit-names]')?.textContent).toBe('Bed 1 · 3ghab');
+    expect(rows()[0]?.querySelector('[data-audit-names]')?.textContent).toBe('Bed 58 · 3ghab');
   });
 
   it('a search that empties the list is a statement about the filter, not about the session', async () => {

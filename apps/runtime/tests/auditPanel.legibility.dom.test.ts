@@ -191,10 +191,10 @@ describe('B-211 — names first, ids beneath and never deleted', () => {
     stubBridge([REFUSED_ON_BED_1, LOGO_ON_LAYER_90], [THREE_FRAMES, LOGO], BANK);
     await render();
     const [bed, logo] = rows();
-    expect(bed?.querySelector('[data-audit-names]')?.textContent).toBe('Bed 1 · 3ghab');
+    expect(bed?.querySelector('[data-audit-names]')?.textContent).toBe('Bed 58 · 3ghab');
     // Layer 90 has no alias — the default name, from the same rule the table uses; and the
     // template's FILE name outranks its manifest name, as on the row and in the picker.
-    expect(logo?.querySelector('[data-audit-names]')?.textContent).toBe('Layer 10 · ارم روی انتن');
+    expect(logo?.querySelector('[data-audit-names]')?.textContent).toBe('Layer 90 · ارم روی انتن');
   });
 
   it('keeps BOTH ids: shortened in the text, complete in the title, and copyable', async () => {
@@ -244,7 +244,7 @@ describe('B-211 — names first, ids beneath and never deleted', () => {
     stubBridge([LOGO_ON_LAYER_90], [], BANK);
     await render();
     const row = rows()[0];
-    expect(row?.querySelector('[data-audit-names]')?.textContent).toBe('Layer 10');
+    expect(row?.querySelector('[data-audit-names]')?.textContent).toBe('Layer 90');
     expect(row?.querySelector('[data-audit-id="template"] code')?.textContent).toBe('f00a5363…');
   });
 

@@ -207,11 +207,11 @@ describe('B-238 §2 — after the press: a refusal that arrives is SHOWN', () =>
     expect(region?.querySelector('[data-notice="refusal"]')).not.toBeNull();
     /*
       …and it names the ROW and the TEMPLATE in the operator's words, never the itemId
-      (golden rule 11). `Layer 2` is this row's operator-facing name — the bank's second
-      position — because this fixture's slot carries no alias; the point is that the sentence
-      names the row the operator is looking at rather than `item-1`.
+      (golden rule 11). `Layer 70` is this row's operator-facing name — the default, which
+      carries the real layer (D3h) — because this fixture's slot carries no alias; the point is
+      that the sentence names the row the operator is looking at rather than `item-1`.
     */
-    expect(region?.textContent).toContain('Layer 2');
+    expect(region?.textContent).toContain('Layer 70');
     expect(region?.textContent).toContain('ساعت اذان');
     expect(region?.textContent).not.toContain('item-1');
   });

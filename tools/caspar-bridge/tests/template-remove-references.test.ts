@@ -71,8 +71,8 @@ describe('templateRemove — in-use names the places', () => {
     expect(await r.loadFixed({ channel: 1, layer: 73 }, 'i1', 'tpl', {})).toEqual({
       accepted: true,
     });
-    // 73 is the bank's highest operator layer — `Layer 1`.
-    expect(r.templateRemove('tpl').message).toContain('on the row “Layer 1” (layer 73)');
+    // `DESKTOP-APPS-01-D` h — an unnamed row's default name carries its real layer.
+    expect(r.templateRemove('tpl').message).toContain('on the row “Layer 73” (layer 73)');
   });
 
   it('an item on a DYNAMIC layer outside the bank is named as CasparCG names it, and said not to be a row', async () => {

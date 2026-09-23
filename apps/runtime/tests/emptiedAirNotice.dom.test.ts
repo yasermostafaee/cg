@@ -249,7 +249,7 @@ describe('EmptiedAirNotice — the rows are named in the operator’s words', ()
         ],
       }),
     );
-    expect(el.querySelector('[data-emptied-row]')?.textContent).toContain('Layer 10');
+    expect(el.querySelector('[data-emptied-row]')?.textContent).toContain('Layer 90');
   });
 
   it('isolates each name, so a Persian row name cannot displace the rest of the line', async () => {

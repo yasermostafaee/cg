@@ -61,14 +61,13 @@ interface Props {
   /** The bound item's template, for the name and the `hasNext` bit. */
   template: TemplateInfo | null;
   /**
-   * The row's position in the RENDERED list, 1 at the top — the `#` column.
-   *
-   * Plain display order, by owner decision. Deliberately NOT the layer's place in the
-   * bank: that number belongs to the default ALIAS below.
+   * The `#` column: the row's AMCP LAYER (`DESKTOP-APPS-01-D` h, the owner's decision of
+   * 2026-09-23). It used to be display order, so the top row read `#1` while the Inspector said
+   * layer 99 — on a shared channel the number an operator reads must be the one CasparCG obeys.
    */
   displayPosition: number;
   /**
-   * The row's default NAME when it has no configured alias — `Layer 3`, `Bed 1`.
+   * The row's default NAME when it has no configured alias — `Layer 99`, `Bed 59`.
    *
    * 🔴 `B-201` — THE WHOLE STRING, resolved by the PANEL through the canonical
    * `defaultLayerAlias`, not a bare position this row formats itself.
@@ -250,37 +249,24 @@ const styles = {
  * R-028 (4.1/4.2) — ONE layer row: the whole operator surface for one declared
  * layer, as a real table row under the list's sticky header.
  *
- * WHAT IDENTIFIES A ROW — two numbers that answer two different questions, settled
- * separately by the owner and normally reading the same.
+ * WHAT IDENTIFIES A ROW — ONE NUMBER, THE REAL ONE (`DESKTOP-APPS-01-D` h, the owner, 2026-09-23).
  *
- *   - `#` is PLAIN DISPLAY ORDER: 1 at the top of the rendered list, counting down.
- *   - the default ALIAS comes from `defaultLayerAlias` — `Layer N` for an operator row,
- *     `Bed N` for a bed row — the layer's FIXED place in ITS HALF of the bank
- *     counting down from its highest layer — so `Layer 1` is the top layer, the one
- *     that draws over the others and therefore the one an operator means by it.
+ *   - `#` is the row's AMCP LAYER: `99` for the top operator row.
+ *   - the default ALIAS comes from `defaultLayerAlias` — `Layer 99` for an operator row,
+ *     `Bed 59` for a bed row: the word, then the same layer.
  *
- * With the shipped bank (70–99 declared, the top five ticked) these read identically:
- * `#1` is layer 99, which is `Layer 1`. They diverge only if a NON-CONTIGUOUS set is
- * ticked — untick 97 and the third visible row is `#3` while still being `Layer 4`.
- * That is the accepted cost of the constraint below, taken knowingly.
+ * It used to be two numbers: `#` was display order and the alias counted each half of the
+ * bank down from its top, so the owner's top row read `#1 · Layer 1` while the Inspector said
+ * layer 99. On a channel shared with a playout server the number an operator reads must be
+ * the number CasparCG obeys, and a layer number cannot be renumbered by a tick, a filter or a
+ * search — it is not a position at all.
  *
- * THE ALIAS NUMBER IS BOUND TO THE BANK, not to what is displayed, and that is what
- * makes it safe to say out loud. Ticking and unticking change what is shown; neither
- * renumbers anything. `Layer 1` is always layer 99 whether or not it is ticked. If
- * unticking renumbered the rows past it, "Layer 2" would mean different rows on
- * different days — a positional handle that silently renumbers is worse than none.
- *
- * THE REAL CasparCG LAYER NUMBER IS NOT A COLUMN. The owner took it off the row —
- * it lives in the Inspector, and in this row's own tooltip and accessible name
- * (`rowTitle`), so it stays one hover or one focus away at every density without
- * spending a column. That mitigation is what made removing it safe: the layer
- * number is the vocabulary shared with the playout side (the reservation is 60–69,
- * not rows 1–4), and on a narrow screen the Inspector is an overlay behind a
- * hamburger — so it must not be reachable ONLY there.
+ * The row's tooltip and accessible name (`rowTitle`) still say `CasparCG layer N` in words,
+ * for the reader who does not know what the `#` column is.
  *
  * WHAT THE ROW SHOWS, in the column order the header declares:
  *
- *   - `#`, the display position;
+ *   - `#`, the AMCP layer;
  *   - the STATE, as icon + colour + word (`rowState`). This is where colour lives
  *     now that the verbs are neutral, and it is the one thing on the row allowed
  *     to shout;
@@ -763,7 +749,9 @@ export function LayerRow({
    * density — the same trade this surface already makes for the occupancy report
    * and, now, for the READY distinction.
    */
-  const rowTitle = `Row ${String(displayPosition)} · ${rowName} · CasparCG layer ${layerName}`;
+  // `DESKTOP-APPS-01-D` h — no `Row N` any more: `#` IS the layer, and saying it twice would be
+  // noise at best and, for a custom name, a second number to reconcile.
+  const rowTitle = `${rowName} · CasparCG layer ${layerName}`;
 
   return (
     <div

@@ -234,7 +234,7 @@ it('🔴 a retained BED held against an operator row MIGRATES to a bed row, repo
   expect(result.migrated).toEqual([
     { itemId: 'bed-1', from: OPERATOR_ROW, to: { channel: 1, layer: 51 }, demoted: true },
   ]);
-  // It is on the HIGHEST free bed row — `Bed 1`, the top of the bed group on the operator's
+  // It is on the HIGHEST free bed row — the top of the bed group on the operator's
   // surface, which is where they will look for it.
   expect(r.fixedLayersState().find((s) => s.layer === 51)?.binding?.itemId).toBe('bed-1');
   expect(r.fixedLayersState().find((s) => s.layer === 95)?.binding).toBeNull();

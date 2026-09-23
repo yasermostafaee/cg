@@ -156,18 +156,15 @@ describe('rehearsalCaption — the panel says what it is showing, always', () =>
   });
 });
 
-describe('rowNameFor — the row’s own name, never the raw layer dressed as an alias', () => {
+describe('rowNameFor — the row’s own name: its alias, else the bank’s default', () => {
   it('prefers the configured alias', () => {
     expect(rowNameFor(BANK, 99, 'CLOCK')).toBe('CLOCK');
   });
 
-  it('falls back to the bank’s default alias, which is NOT the layer number', () => {
+  it('falls back to the bank’s default alias, which carries the REAL layer (D3h)', () => {
     expect(rowNameFor(BANK, 99, undefined)).toBe(defaultLayerAlias(BANK, 99));
-    expect(rowNameFor(BANK, 99, undefined)).toBe('Layer 1');
-    // The defect this closes: the panel used to print `Layer ${rehearsal.layer}`,
-    // which reads as the alias format while carrying the real layer number — so
-    // layer 99 announced itself as "Layer 99" beside a row called "Layer 1".
-    expect(rowNameFor(BANK, 99, undefined)).not.toBe('Layer 99');
+    expect(rowNameFor(BANK, 99, undefined)).toBe('Layer 99');
+    // The row and the frame now say the SAME name, and it is the layer CasparCG obeys.
   });
 
   it('with no bank declared, says the layer number and does not invent a position', () => {

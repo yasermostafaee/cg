@@ -355,26 +355,9 @@ export function isLayerVisible(bank: FixedLayerBank, layer: number): boolean {
  * screen: the `#` column reads 1, 2, 3, 4 downwards, which is what anyone expects a
  * row number to do.
  *
- * THIS IS THE ALIAS'S NUMBER, NOT THE `#` COLUMN'S. The two are different questions
- * and the owner settled them separately:
- *
- *   - the default alias (`Layer 1`, `Layer 2`, …) uses THIS — the layer's fixed place
- *     in the bank;
- *   - the `#` column is plain DISPLAY ORDER, 1 at the top of the rendered list.
- *
- * With the shipped bank (80-99 declared, the top five ticked) they read identically,
- * because the shown rows are the top five in order: `#1` is layer 99, which is
- * `Layer 1`. They can diverge only if a NON-CONTIGUOUS set is ticked — untick 97 and
- * the third visible row is `#3` but still `Layer 4`. That is the accepted trade, and
- * it falls out of the constraint below.
- *
- * IT IS BOUND TO THE BANK, NOT TO WHAT IS DISPLAYED, and that is the property that
- * makes the alias safe to say out loud. Ticking and unticking change what is shown;
- * neither may renumber anything. `Layer 1` is always the bank's highest layer whether
- * or not it is currently ticked. If unticking a row renumbered the ones past it,
- * "Layer 2" would mean different rows on different days — a positional handle that
- * silently renumbers is worse than none at all. This matters more with twenty declared
- * and five shown than it did with four of four.
+ * 🔴 `DESKTOP-APPS-01-D` h — **NO LONGER THE ROW'S NAME OR ITS `#`.** Both now carry the real
+ * AMCP layer ({@link defaultLayerAlias}); this position survives only where a surface says where
+ * a row sits within its half of the bank.
  */
 export function bankPosition(bank: FixedLayerBank, layer: number): number {
   // ONE rule, applied to whichever half the layer belongs to — counting down from THAT
@@ -386,16 +369,22 @@ export function bankPosition(bank: FixedLayerBank, layer: number): number {
 }
 
 /**
- * The default display name for an unaliased candidate layer — `Layer 1`, `Layer 2`, … for an
- * operator row, and `Bed 1`, `Bed 2`, … for a bed row.
+ * The default display name for an unaliased candidate layer — `Layer 99`, `Layer 98`, … for an
+ * operator row, and `Bed 59`, `Bed 58`, … for a bed row: the word, then the REAL AMCP layer.
+ *
+ * 🔴 `DESKTOP-APPS-01-D` h — **THE NUMBER IS THE LAYER, never a position.** It used to be the
+ * row's place in its half of the bank, so the owner's top row read `Layer 1` while the Inspector
+ * said layer 99 — and on a channel shared with a playout server, "layer 1" is the one number an
+ * operator must never be invited to believe he is touching. The number an operator reads is the
+ * number CasparCG obeys.
  *
  * THE WORD IS PART OF THE REFUSAL. `wrong-bank`'s message tells the operator to use a bed
  * row; if the rows were all called `Layer N` there would be nothing on screen for that
- * sentence to point at, and two rows in different halves would share a name.
+ * sentence to point at.
  */
 export function defaultLayerAlias(bank: FixedLayerBank, layer: number): string {
   const word = isLowBankLayer(bank, layer) ? 'Bed' : 'Layer';
-  return `${word} ${String(bankPosition(bank, layer))}`;
+  return `${word} ${String(layer)}`;
 }
 
 /**

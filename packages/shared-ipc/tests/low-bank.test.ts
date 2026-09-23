@@ -167,16 +167,33 @@ describe('the two halves keep their OWN ticks, aliases and numbering', () => {
     expect(layerAlias(b, 58)).toBeUndefined();
   });
 
-  it('🔴 each half counts down from its OWN top, and beds are named BED', () => {
+  it('each half still counts its POSITION down from its own top', () => {
     const b = bank();
-    // Operator rows: 89 is `Layer 1`, as before the beds existed — unchanged, deliberately.
     expect(bankPosition(b, 89)).toBe(1);
-    expect(defaultLayerAlias(b, 89)).toBe('Layer 1');
-    // Beds: 59 is `Bed 1`. Numbering them ON from the operator rows would make a bed's name
-    // move whenever the operator bank's count changed.
     expect(bankPosition(b, 59)).toBe(1);
-    expect(defaultLayerAlias(b, 59)).toBe('Bed 1');
-    expect(defaultLayerAlias(b, 50)).toBe('Bed 10');
+    expect(bankPosition(b, 50)).toBe(10);
+  });
+
+  /*
+    🔴 `DESKTOP-APPS-01-D` h — the default NAME carries the real AMCP layer, never the position:
+    the owner's top row read `Layer 1` while the Inspector said layer 99.
+  */
+  it('🔴 the default name is the word and the REAL layer — Layer 89, Bed 59, Bed 50', () => {
+    const b = bank();
+    expect(defaultLayerAlias(b, 89)).toBe('Layer 89');
+    expect(defaultLayerAlias(b, 80)).toBe('Layer 80');
+    expect(defaultLayerAlias(b, 59)).toBe('Bed 59');
+    expect(defaultLayerAlias(b, 50)).toBe('Bed 50');
+  });
+
+  it('control — a configured name is kept, whatever the layer', () => {
+    const b = bank({
+      aliases: { '89': 'CLOCK' },
+      low: { start: 50, count: 10, aliases: { '59': 'BED' } },
+    });
+    expect(layerAlias(b, 89) ?? defaultLayerAlias(b, 89)).toBe('CLOCK');
+    expect(layerAlias(b, 59) ?? defaultLayerAlias(b, 59)).toBe('BED');
+    expect(layerAlias(b, 88) ?? defaultLayerAlias(b, 88)).toBe('Layer 88');
   });
 });
 

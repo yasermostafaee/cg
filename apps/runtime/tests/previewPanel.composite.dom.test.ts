@@ -201,7 +201,7 @@ describe('PreviewPanel — one frame per rehearsing row', () => {
     for (const f of frames(el)) expect(Number(f.style.zIndex)).toBeGreaterThan(checkerZ);
   });
 
-  it('names each frame by the ROW’s name, never the raw layer dressed as an alias', async () => {
+  it('names each frame by the ROW’s name — its alias, else the default `Layer <layer>`', async () => {
     const el = await render({
       rehearsals: [
         { itemId: 'a', channel: 1, layer: 99 },
@@ -213,10 +213,11 @@ describe('PreviewPanel — one frame per rehearsing row', () => {
     // `title` on an iframe doubles as a native tooltip, and the frames cover
     // most of the panel, so it popped up over the graphic being judged.
     const names = frames(el).map((f) => f.getAttribute('aria-label') ?? '');
-    // Layer 99 is the bank's HIGHEST, so its default alias is `Layer 1`.
-    expect(names).toContain('Layer 1 rehearsal preview');
+    // `DESKTOP-APPS-01-D` h — an unaliased row's default name carries its REAL layer.
+    expect(names).toContain('Layer 99 rehearsal preview');
+    // Control: a custom name is kept, and never replaced by the layer.
     expect(names).toContain('CLOCK rehearsal preview');
-    expect(names.join(' ')).not.toContain('Layer 99');
+    expect(names.join(' ')).not.toContain('Layer 97');
     // Named, but with NOTHING on hover — asserted so a later "just add a title
     // for the tooltip" puts the popup back knowingly rather than by accident.
     for (const f of frames(el)) expect(f.getAttribute('title')).toBeNull();

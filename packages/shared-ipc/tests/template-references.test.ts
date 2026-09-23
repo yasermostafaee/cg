@@ -36,7 +36,7 @@ describe('describeTemplateReferences', () => {
         BANK,
       ),
     ).toBe(
-      '2 rows still hold this template — on the row “Bed 1” (layer 9), on the row “لوگوی اصلی” (layer 99). Clear each with its own REMOVE first.',
+      '2 rows still hold this template — on the row “Bed 9” (layer 9), on the row “لوگوی اصلی” (layer 99). Clear each with its own REMOVE first.',
     );
   });
 
@@ -80,7 +80,7 @@ describe('describeTemplateReferences', () => {
 
 describe('referenceRowName', () => {
   it('is the row name for a bank layer and null for anything the surface cannot scroll to', () => {
-    expect(referenceRowName({ itemId: 'a', slot: { channel: 1, layer: 9 } }, BANK)).toBe('Bed 1');
+    expect(referenceRowName({ itemId: 'a', slot: { channel: 1, layer: 9 } }, BANK)).toBe('Bed 9');
     expect(referenceRowName({ itemId: 'a', slot: { channel: 1, layer: 60 } }, BANK)).toBeNull();
     expect(referenceRowName({ itemId: 'a' }, BANK)).toBeNull();
     expect(referenceRowName({ itemId: 'a', slot: { channel: 1, layer: 9 } }, null)).toBeNull();
