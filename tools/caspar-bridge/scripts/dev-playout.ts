@@ -47,6 +47,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  FAKE_CHANNEL_TWO_OPERATOR,
   FAKE_LONG_NAME_USER,
   FAKE_OPERATOR,
   FAKE_PLAYOUT_PASSWORD,
@@ -112,6 +113,8 @@ for (const line of [
   "               signs in. That is C-038's gap, and it is meant to be visible.",
   `    ${FAKE_LONG_NAME_USER.username.padEnd(9)} a name longer than 64 characters, so the audit`,
   '               record shows the truncation being recorded',
+  `    ${FAKE_CHANNEL_TWO_OPERATOR.username.padEnd(9)} ${FAKE_CHANNEL_TWO_OPERATOR.name}   operator, CHANNEL 2 ONLY — B-257:`,
+  "               cg-op1's lock does not lock this console",
   `    password : ${FAKE_PLAYOUT_PASSWORD}`,
   '',
   '  ── THE STATION IS EMPTY AND ISOLATED ──────────────────────────────────',

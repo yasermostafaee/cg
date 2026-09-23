@@ -31,8 +31,8 @@
 - [x] `lock-refuses-intents.integration.test.ts` unchanged and green
 - [x] `cg-op-ch2` added to the fake Playout (`FAKE_CHANNEL_TWO_OPERATOR`)
 - [x] `pnpm gate` green — 93/93 tasks, `0 cached`, control-bytes clean, 86/86 OpenSpec items
-- [ ] Commit + push; remote head verified
-- [ ] 🔴 Linux `e2e` run URL, with the `E2E (Playwright)` job confirmed to have RAN
+- [x] Commit + push — `66dfbf8b`; remote head verified
+- [x] 🔴 Linux `e2e` run URL, with the `E2E (Playwright)` job confirmed to have RAN — §5
 
 ## 3. Commit 2 — §2 + §3, with `REPLY 1` R3's corrections
 
@@ -61,7 +61,8 @@
       commit's own: R-022's boot blanket re-asserted `VOLUME 1` after the muted re-ADD under the
       gate's load. The test now waits for the blanket before building state — the race was the
       test's setup, not the product
-- [ ] Commit + push; no `e2e` owed — nothing here renders (the CI run is still read back)
+- [x] Commit + push — `34ee9ec2`; remote head verified; no `e2e` owed (nothing renders) and the
+      run executed it anyway — §5
 
 ## 4. Commit 3 — §4
 
@@ -83,11 +84,19 @@
       value axis `unattributed` across tests, e2e, docs, living and pending specs
 - [x] §6 — `R-066`'s "44 files" corrected to 21 files / 41 hits, measured at `546258d3`; the
       `LayerRow` prop rename filed as a candidate under `R-066`
+- [x] `pnpm gate` green — 93/93, `0 cached`; commit + push `06ed10bb`, remote head verified
+- [x] `pnpm dev:playout-auth` now prints `cg-op-ch2`, so `REPLY 1` R5's visual check has its
+      second principal
 
 ## 5. Discharges
 
 - [x] 🔴 **Commit 1 (`66dfbf8b`) — Linux `e2e` discharged** —
       https://github.com/yasermostafaee/cg/actions/runs/35797043689 · `conclusion: success`, and
       the `E2E (Playwright)` job's `E2E` step `completed · success`, read back from the API
-- [ ] Commit 2 (`34ee9ec2`) — renders nothing; its run is read back for the whole-tree jobs
-- [ ] Commit 3 — renders (the audit column's title and value); its `e2e` is owed
+- [x] Commit 2 (`34ee9ec2`) — renders nothing, and its run executed every job anyway —
+      https://github.com/yasermostafaee/cg/actions/runs/35799154893 · `conclusion: success`,
+      `E2E (Playwright)` `completed · success`
+- [x] 🔴 **Commit 3 (`06ed10bb`) — Linux `e2e` discharged** (it renders: the audit column's value
+      and title) — https://github.com/yasermostafaee/cg/actions/runs/35801007662 ·
+      `conclusion: success`, and the `E2E` step `completed · success`, read back from the API.
+      Whole-tree jobs, so this HEAD also covers Commits 1 and 2
