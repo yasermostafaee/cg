@@ -31,7 +31,13 @@ and an auth-OFF audit that cannot tell an operator from the machine (§4).
 - **`B-258`** — a refused reconnect frame (`stack.restore`, a re-delivery) is still refused, and
   is no longer RECORDED as a press under the principal's name.
 
-**Commit 2 — §2 + §3, with `REPLY 1` R3's corrections.** **Commit 3 — §4.** Filled in as they land.
+**Commit 2 — §2 + §3, with `REPLY 1` R3's corrections.** 🔴 On the path to air: after our own
+`CLEAR` of a declared bank row that landed on the primary, the bridge sends `MIXER <ch>-<layer>
+CLEAR`. It adds a command, removes none, changes no refusal condition. `INFO` is addressed by
+channel only and never read for a layer volume; a band's volumes are read in one pipelined burst.
+
+**Commit 3 — §4.** With auth OFF a console's act records `console` and the machine's own act
+`unattributed`; the bridge no longer reads a self-declared `actor` from the wire.
 
 ## Impact
 

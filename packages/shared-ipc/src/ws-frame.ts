@@ -46,6 +46,28 @@ export const UNATTRIBUTED_ACTOR = 'unattributed';
  */
 export const TEMPLATE_ACTOR = 'template';
 
+/**
+ * 🔴 `BRIDGE-TRUTH-01` §4 — **what the record writes when A CONSOLE did it and nobody proved who
+ * was at it**: an action that arrived on a control socket from a console with no verified
+ * principal — every console press on an auth-OFF station.
+ *
+ * `OPERATOR-NAME-SWEEP-01` retired the typed name, and every row on such a station then read
+ * {@link UNATTRIBUTED_ACTOR} — which already means "no console caused this" (boot adoption, OSC
+ * reconciliation, the bridge's own housekeeping). One string for two facts: the record could no
+ * longer tell a person at a console from the machine acting by itself, although the bridge knows
+ * which — a request either arrived on a control socket or it did not. The record is the product
+ * (`B-141`), so the two facts get two values.
+ *
+ * ⚠ **`console` is the operator's own word for the thing that acted** — "The console is locked",
+ * the lock screen's "Console locked". It names the device, never a person, so it claims no
+ * identity: "a console did this, and we do not know who". It is not a revival of the typed name
+ * in any form — nothing a client sends can change it.
+ *
+ * ⚠ **RESERVED, like {@link TEMPLATE_ACTOR}**: {@link normalizeActor} refuses it, so a verified
+ * name that happened to read `console` could not be mistaken for an unverified console.
+ */
+export const CONSOLE_ACTOR = 'console';
+
 /** Longest operator name accepted on the wire; a label, not a free-text field. */
 export const MAX_ACTOR_LENGTH = 64;
 
@@ -77,6 +99,8 @@ export function normalizeActor(raw: unknown): string {
     nobody at that console could discover.
   */
   if (trimmed.toLowerCase() === TEMPLATE_ACTOR) return UNATTRIBUTED_ACTOR;
+  // `BRIDGE-TRUTH-01` §4 — the same reservation, for the same reason, one actor over.
+  if (trimmed.toLowerCase() === CONSOLE_ACTOR) return UNATTRIBUTED_ACTOR;
   return trimmed;
 }
 

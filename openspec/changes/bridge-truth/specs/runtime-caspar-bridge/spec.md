@@ -73,6 +73,16 @@ The permission gate SHALL refuse a `stack.restore`, or a `templates.import` mark
 - **WHEN** a signed-in viewer's console restores its stack and re-delivers a template, then presses TAKE
 - **THEN** all three are refused, and the only `refused` row is the TAKE's
 
+### Requirement: The audit tells a console's act from the machine's with authentication off
+
+The bridge SHALL record `console` as the actor of an audited action that arrived on a control socket with no verified principal, and `unattributed` for an audited action that no request caused. It SHALL NOT read an actor name from the request frame.
+
+#### Scenario: A press and the machine's own act read differently
+
+- **GIVEN** a bridge with authentication off
+- **WHEN** a console engages the lock, carrying any name in the frame's `actor`, and the bridge itself releases it outside any request
+- **THEN** the engage row's actor is `console`, the release row's is `unattributed`, and the carried name appears in no row
+
 ### Requirement: The bridge resets the mixer of a layer it has just emptied
 
 The bridge SHALL send `MIXER <ch>-<layer> CLEAR` after its own `CLEAR` of a layer when, and only when, the `CLEAR` landed on the current primary and the layer is inside the declared bank. It SHALL NOT send it after a `CLEAR` that did not land, on a layer outside the declared bank, or on a declared playout layer.

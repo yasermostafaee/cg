@@ -143,9 +143,11 @@ the build to name in the recon record**. apasai-core, which is what `C-040` actu
     guard (`operatorNameRetired.test.ts`) that fails if either the symbol or the sentence
     returns to source.
     ⚠ **One thing changed for stations running `auth: 'off'`, and it is not a regression:** the
-    console now sends no `actor` at all, so those rows record `unattributed`. The label it
-    replaced was a claim nobody checked; the remedy for a station that wants attribution in the
-    log is federating identity, which is what this integration is for.
+    console now sends no `actor` at all, so a console's row records `console` and a row nothing
+    at a console caused records `unattributed` (`BRIDGE-TRUTH-01` §4, 2026-09-23 — until then both
+    read `unattributed`). The label it replaced was a claim nobody checked; the remedy for a
+    station that wants attribution in the log is federating identity, which is what this
+    integration is for.
 12. ⚠ **THE CORS ORIGIN IS THE PORT THE CONSOLE ACTUALLY SERVES ON, and the dev server's
     fallback is not it.** Their CORS list names `http://192.168.21.93:5174` and
     `http://127.0.0.1:5174`. Measured 2026-09-22: with something already holding 5174 the

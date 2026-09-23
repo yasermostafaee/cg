@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 import {
+  CONSOLE_ACTOR,
   parseWsFrame,
   serializeWsFrame,
   UNATTRIBUTED_ACTOR,
@@ -15,25 +16,23 @@ import { createBridge, type BridgeHandle } from '../src/index.js';
 import { track } from './support/harness.js';
 
 /**
- * ⭐ **B-141 follow-up — the per-console operator name, END TO END.**
+ * ⭐ **`BRIDGE-TRUTH-01` §4 — WHO THE RECORD SAYS ACTED, on a station with auth OFF, END TO END.**
  *
- * The claim under test is deliberately narrow and deliberately whole-path: a name typed
- * at ONE console reaches the NDJSON row for the action THAT console took. Everything
- * between is real — a real WS frame, the real bridge dispatch, the real audit writer,
- * and the row read back off DISK rather than out of the in-memory tail.
+ * Two values, because they are two facts the bridge can tell apart: a request that arrived on a
+ * control socket is a CONSOLE's act (`console` — a console did it, nobody proved who), and an
+ * append no request caused is the machine's own (`unattributed`). Until this change both read
+ * `unattributed`, so the record could not tell a person at a console from the station acting by
+ * itself.
  *
- * 🔴 **Read back from the FILE, for the reason B-141 already paid for.** `auditRecent()`
- * falls back to the in-memory tail when the file cannot be read, so asserting through it
- * would pass identically on a build whose writes never land. The file is the claim.
+ * ⚠ **What this suite pinned before, and why it is REWRITTEN rather than kept.** It asserted
+ * that a console's self-declared `actor` field ("Gallery 2") reached the row — the typed label
+ * `OPERATOR-NAME-SWEEP-01` retired from the console. The bridge went on honouring the wire field,
+ * so any client could still write any name into the record. §4 stops the bridge reading it at
+ * all; the first case below is that claim, and it sends the very name the old case asserted.
  *
- * The verb used throughout is `lock.engage`: it is audited, it always succeeds, and it
- * touches no CasparCG server — so the test measures attribution and nothing else. The
- * connection is deliberately dead for the same reason.
- *
- * ⚠ **What this does NOT test, because it is not true:** that the name identifies a
- * PERSON. It is self-declared over an unauthenticated loopback socket, and the third
- * case below pins the consequence that matters — two consoles, two names, no way for
- * either to be checked. See `../src/actor-context.ts`.
+ * 🔴 **Read back from the FILE**, for the reason `B-141` paid for: `auditRecent()` falls back to
+ * the in-memory tail when the file cannot be read, so asserting through it would pass
+ * identically on a build whose writes never land. The file is the claim.
  */
 
 let handle: BridgeHandle | null = null;
@@ -72,21 +71,11 @@ function connect(url: string): Promise<WebSocket> {
 }
 
 /**
- * Send one `lock.engage` carrying `actor` exactly as given, and resolve when the bridge
- * has answered it.
+ * Send one lock request carrying `actor` exactly as given, and wait for its response.
  *
- * `actor` is passed through `undefined` untouched rather than defaulted here: "a client
- * that says nothing" is one of the cases under test, and a helper that quietly filled it
- * in would test the helper.
- */
-/**
- * Send one lock request as `actor` and wait for its response.
- *
- * ⚠ `B-229` — THE CHANNEL IS A PARAMETER NOW, and that is not a tidy-up. A locked bridge
- * refuses `lock.engage` (it is a mutation, and letting a second console overwrite
- * `#lockPin` would strand the operator who set it), so the two-console spec below can no
- * longer engage twice. It engages once and RELEASES from the other console — which is the
- * same claim about the audit record, made with a pair of acts the lock actually permits.
+ * `actor` is passed through `undefined` untouched rather than defaulted here: "a client that
+ * says nothing" is one of the cases under test, and a helper that filled it in would test the
+ * helper.
  */
 async function lockRequest(
   ws: WebSocket,
@@ -115,16 +104,9 @@ async function lockRequest(
   }
 }
 
-async function engageLock(ws: WebSocket, id: string, actor: string | undefined): Promise<void> {
-  await lockRequest(ws, id, actor, 'lock.engage');
-}
-
 /**
- * The rows ON DISK, oldest first.
- *
- * Polled rather than slept on: appends are fire-and-forget by contract (an on-air path
- * must never await one), so the bytes arrive shortly after the response. A slow box must
- * fail on the assertion, never on the wait.
+ * The rows ON DISK, oldest first. Polled rather than slept on: appends are fire-and-forget by
+ * contract, so the bytes arrive shortly after the response.
  */
 async function rowsOnDisk(file: string, atLeast: number): Promise<AuditEntry[]> {
   const deadline = Date.now() + 4000;
@@ -141,98 +123,72 @@ async function rowsOnDisk(file: string, atLeast: number): Promise<AuditEntry[]> 
   }
 }
 
-describe('the audit actor is the acting console, as it labelled itself', () => {
-  it('a configured name reaches the NDJSON row', { timeout: 30_000 }, async () => {
-    const file = auditPath();
-    handle = await createBridge({ port: 0, connection: deadConnection(), auditLogPath: file });
-    const ws = await connect(handle.url);
-
-    await engageLock(ws, '1', 'Gallery 2');
-
-    const rows = await rowsOnDisk(file, 1);
-    const engage = rows.filter((r) => r.action === 'lock-engage');
-    expect(engage, 'one lock-engage row').toHaveLength(1);
-    expect(engage[0]?.actor).toBe('Gallery 2');
-  });
-
+describe('BRIDGE-TRUTH-01 §4 — a console’s act and the machine’s act are two values', () => {
   it(
-    `an unconfigured console records ${UNATTRIBUTED_ACTOR}, never a name-shaped value`,
+    'a console’s press records `console`, and the machine’s own act keeps `unattributed`',
     { timeout: 30_000 },
     async () => {
-      /*
-        The decision this pins: an unset name must not become a LIE. The previous
-        constant was `operator`, which was honest while it was the only value any row
-        could carry -- but once some rows name a console, `operator` is ambiguous
-        between "never configured" and "somebody typed operator". `unattributed` is a
-        word for a STATE, so an unconfigured console is legible as one.
-      */
       const file = auditPath();
       handle = await createBridge({ port: 0, connection: deadConnection(), auditLogPath: file });
       const ws = await connect(handle.url);
 
-      await engageLock(ws, '1', undefined);
+      // A console's press — carrying the very name the retired feature used to record.
+      await lockRequest(ws, '1', 'Gallery 2', 'lock.engage');
+      // The machine's own act: the same verb's sibling, called on the runtime OUTSIDE any
+      // request, which is exactly what a bridge-initiated append is.
+      handle.runtime.release('0000');
 
-      const rows = await rowsOnDisk(file, 1);
-      const engage = rows.filter((r) => r.action === 'lock-engage');
-      expect(engage, 'one lock-engage row').toHaveLength(1);
-      expect(engage[0]?.actor).toBe(UNATTRIBUTED_ACTOR);
-      // The value it must never silently be: the old constant reads as a role and
-      // would put unattributed rows and named rows in the same visual class.
-      expect(engage[0]?.actor).not.toBe('operator');
+      const rows = await rowsOnDisk(file, 2);
+      const actorOf = (action: string): string | undefined =>
+        rows.find((r) => r.action === action)?.actor;
+      expect(actorOf('lock-engage')).toBe(CONSOLE_ACTOR);
+      // Positive control, in the SAME file — the two values really are distinguishable, so the
+      // first assertion is not `console` everywhere.
+      expect(actorOf('lock-release')).toBe(UNATTRIBUTED_ACTOR);
+      // The self-declared name never reaches the record, in any row.
+      expect(rows.map((r) => r.actor)).not.toContain('Gallery 2');
     },
   );
 
   it.each([
+    ['no actor at all', undefined],
     ['a blank string', '   '],
     ['an empty string', ''],
-  ])('%s is unattributed, not an actor that names nobody', async (_label, actor) => {
-    // The bridge does not trust the wire. `actor` is the one field a client controls
-    // outright, and a whitespace name would otherwise satisfy the schema's `min(1)`
-    // while attributing the action to nothing at all.
+    ['the reserved template actor', 'template'],
+  ])('%s from a console is still `console`', async (_label, actor) => {
     const file = auditPath();
     handle = await createBridge({ port: 0, connection: deadConnection(), auditLogPath: file });
     const ws = await connect(handle.url);
 
-    await engageLock(ws, '1', actor);
+    await lockRequest(ws, '1', actor);
 
     const rows = await rowsOnDisk(file, 1);
-    expect(rows.filter((r) => r.action === 'lock-engage')[0]?.actor).toBe(UNATTRIBUTED_ACTOR);
+    expect(rows.filter((r) => r.action === 'lock-engage')[0]?.actor).toBe(CONSOLE_ACTOR);
   });
 
   it(
-    'two consoles on one bridge are told apart, each on its own row',
+    'two consoles on an auth-OFF station are NOT told apart — the record claims no identity',
     { timeout: 30_000 },
     async () => {
       /*
-        THE WHOLE POINT OF THE ITEM, and the thing the constant could not do: the
-        record distinguishes the gallery from the studio. It still does NOT
-        distinguish two PEOPLE at the same console, and nothing here should ever be
-        read as claiming that -- the value is self-declared and unverified.
+        What the retired feature used to assert here — that the gallery and the studio land on
+        rows naming each — was a claim about labels anybody could type. With nothing verified,
+        the honest record says a console did each, and no more. Telling two PEOPLE apart is
+        what signing in is for.
       */
       const file = auditPath();
       handle = await createBridge({ port: 0, connection: deadConnection(), auditLogPath: file });
       const gallery = await connect(handle.url);
       const studio = await connect(handle.url);
 
-      /*
-        ⚠ `B-229` — THE GALLERY LOCKS AND THE STUDIO UNLOCKS. This spec used to engage from
-        BOTH consoles, which a locked bridge now refuses: `lock.engage` is a mutation and
-        takes no exemption, or a second console could overwrite `#lockPin` and shut the
-        operator who set it out of his own desk.
-
-        The claim is untouched — two consoles on one bridge land on their OWN rows — and the
-        pair it is made with is now a real sequence rather than an impossible one. It also
-        happens to assert something worth having: the lock is the BRIDGE's, so any console
-        that knows the PIN can end it, and the record says which one did.
-      */
       await lockRequest(gallery, 'g1', 'Gallery 2', 'lock.engage');
       await lockRequest(studio, 's1', 'Studio A', 'lock.release');
 
       const rows = await rowsOnDisk(file, 2);
-      const byAction = (action: string): (string | undefined)[] =>
-        rows.filter((r) => r.action === action).map((r) => r.actor);
-      expect(byAction('lock-engage')).toContain('Gallery 2');
-      expect(byAction('lock-release')).toContain('Studio A');
+      expect(rows.map((r) => [r.action, r.actor])).toEqual([
+        ['lock-engage', CONSOLE_ACTOR],
+        ['lock-release', CONSOLE_ACTOR],
+      ]);
     },
   );
 });

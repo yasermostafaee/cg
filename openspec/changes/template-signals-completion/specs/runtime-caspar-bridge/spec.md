@@ -129,4 +129,5 @@ NOT carry explanatory prose.
 #### Scenario: A console cannot claim to be a template
 
 - **WHEN** a client sends the reserved template actor as its console name
-- **THEN** the value is refused and the request is attributed as unattributed
+- **THEN** the value is not believed and the request is attributed as `console` — amended in place
+  2026-09-23 by `BRIDGE-TRUTH-01` §4, which stopped the bridge reading a wire actor at all

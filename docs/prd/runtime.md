@@ -2915,7 +2915,8 @@ validationError` with both reasons spelled out in the pinned region
   ⚠ Updated rather than left standing, because [[R-066]]'s Notes required exactly that: a live
   bullet ordering work on a retired feature is a contradiction the next reader would try to
   discharge. Under auth OFF the console now sends no `actor` at all and the bridge records
-  `unattributed`.
+  `console` for a console's action and `unattributed` for one no console caused
+  (`BRIDGE-TRUTH-01` §4, 2026-09-23 — it read `unattributed` for both until then).
 - **Cross-refs:** [[R-052]] (the message region contract every pane inherits), [[R-055]] (the red
   budget, the FAILOVER miscolour, and the wire-name follow-on above), [[R-056]] (the same space
   discipline, applied to the position section), [[B-139]] (the dirty predicate a tab switch will
@@ -3916,9 +3917,18 @@ being honest and becomes wrong: it would be telling the operator the record is w
       and by the `operatorName` SYMBOL — finds no stale copy in tests, docs or task lists
 - [x] WHEN auth is OFF THEN every surface is byte-identical to today
 
+**Candidate, FILED not worked (`BRIDGE-TRUTH-01` §6, 2026-09-23):** rename `LayerRow`'s prop
+`operatorName`. It carries the ROW's name (golden rule 11's `operatorRowName`), not an operator's —
+which is why the retired symbol cannot be guarded case-insensitively: widening the symbol axis that
+way adds 24 files, 23 of them this row-naming meaning. A distinct name for the row's prop would let
+a future guard match the bare word and so catch more; it is a rename across the row surfaces, not a
+rider on a bridge change.
+
 **Notes:** 🔴 THE SWEEP IS THE HARD PART, and it is a golden-rule-9 sweep on two axes because one
 axis provably misses. Measured at `546258d3`: the STRING pass (`self-declared`, case-insensitive)
-returns 19 hits in 16 files; the SYMBOL pass (`operatorName`) returns 44 files, including
+returns 19 hits in 16 files; the SYMBOL pass (`operatorName`) returns **21 files / 41 hits**
+(corrected 2026-09-23 by `BRIDGE-TRUTH-01` §6 — this read "44 files", most likely hits mislabelled as
+files; measured with `git grep -c operatorName 546258d3 -- .`: 21 files, 41 hits summed), including
 `WebSocketRuntime.ts`, `createRuntimeBridge.ts` and `persistedKeyCensus.test.ts` which the string
 pass does not see. And the caveat is BUILT ACROSS LINES in `AuditPanel.tsx:322-325`, so a per-line
 grep for `LABEL you typed` finds it in ten test and doc files and MISSES the source it came from —

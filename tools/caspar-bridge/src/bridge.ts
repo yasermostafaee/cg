@@ -1658,16 +1658,16 @@ async function handleMessage(
       interleaving their requests each keep their own; see `actor-context.ts` for why
       that rules out a mutable "current actor" field.
 
-      ⭐ `OPERATOR-NAME-SWEEP-01` — the wire's `actor` is no longer sent by any console, so
-      with auth OFF this records `unattributed` and with auth ON the verified principal wins.
-      The old parenthetical describing what a typed value was worth is gone with the value.
+      ⭐ `BRIDGE-TRUTH-01` §4 — with auth OFF this records `console` (a console did it, nobody
+      proved who), with auth ON the verified principal's name. The wire's `actor` field is not
+      read: it was the self-declared name `OPERATOR-NAME-SWEEP-01` retired.
     */
     /*
-      `C-037` — the session travels into the actor context so a VERIFIED name wins over the
-      self-declared `actor` field, `sub` rides beside it into the record, and the `auth.*`
-      routes can reach their own socket's principal. One decision, in `actor-context.ts`.
+      `C-037` — the session travels into the actor context so a verified name reaches the
+      record, `sub` rides beside it, and the `auth.*` routes can reach their own socket's
+      principal. One decision, in `actor-context.ts`.
     */
-    const result = await runAsActor(frame.actor, session, () => route.handle(parsedReq.data));
+    const result = await runAsActor(session, () => route.handle(parsedReq.data));
     const parsedRes = route.channel.response.safeParse(result);
     if (!parsedRes.success) {
       send(socket, errorResponse(frame.id, `invalid response for ${frame.channel}`));

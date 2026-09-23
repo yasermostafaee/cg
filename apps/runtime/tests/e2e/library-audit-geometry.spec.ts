@@ -279,7 +279,13 @@ test('§8 — the audit log measures to `AUDIT_LOG_PX`, with the actor column an
   expect(px(cell.padTop)).toBe(tdPadY);
   expect(px(cell.padLeft)).toBe(tdPadX);
   expect(px(cell.text)).toBe(px(tokens.tdText));
-  expect(cell.actor).toBe('unattributed');
+  /*
+    `BRIDGE-TRUTH-01` §4 — this row is a TAKE pressed at this console, so it reads `console`.
+    With one principal-less value (`unattributed`) this assertion could not tell a console's press
+    from the machine's own act; with two it does: a regression that files a press as the
+    machine's — or that lets a typed name back in — reds it.
+  */
+  expect(cell.actor).toBe('console');
   const tag = take.locator('[data-audit-outcome]');
   await expect(tag).toHaveText('ok');
   expect(px(await tag.evaluate((el) => getComputedStyle(el).fontSize))).toBe(px(tokens.badgeText));

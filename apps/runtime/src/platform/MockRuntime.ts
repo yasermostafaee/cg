@@ -56,7 +56,7 @@ import {
   REMOVE_ON_AIR_CODE,
   SourceAssignmentsSchema,
   SourceCatalogSchema,
-  UNATTRIBUTED_ACTOR,
+  CONSOLE_ACTOR,
   videoModeRaster,
 } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
@@ -2055,16 +2055,16 @@ function auditEntry(action: AuditEntry['action'], extra: Partial<AuditEntry>): A
   /*
     B-141 follow-up — the mock records the SAME actor the real bridge would.
 
-    🔴 `OPERATOR-NAME-SWEEP-01` — and that is now `unattributed`, always. The self-declared
-    console name is retired: test mode has no Playout to sign in to, so there is no identity
-    to record and `unattributed` is the honest answer rather than a fallback. A mock that
-    invented a name — or kept the old `'operator'` literal — would make the offline console
-    the one place where the audit column claims something the system does not know, and
-    parity with the real bridge is the point of this mock's audit at all.
+    🔴 `BRIDGE-TRUTH-01` §4 — and that is `console`: every row this mock writes is a press at
+    THIS console, and test mode has no Playout to sign in to, so the bridge's auth-OFF answer
+    is the one to mirror — a console did it, nobody proved who. `unattributed` is kept for
+    what no console caused, and the mock has no such machinery. A mock that invented a name
+    would make the offline console the one place the audit column claims something the system
+    does not know, and parity with the real bridge is the point of this mock's audit at all.
   */
   return {
     ts: new Date().toISOString(),
-    actor: UNATTRIBUTED_ACTOR,
+    actor: CONSOLE_ACTOR,
     action,
     outcome: 'ok',
     ...extra,

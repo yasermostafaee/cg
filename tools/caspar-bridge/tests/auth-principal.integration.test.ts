@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   AUTH_TOKEN_INVALID,
   AUTH_TOKEN_WRONG_STATION,
+  CONSOLE_ACTOR,
   MAX_ACTOR_LENGTH,
+  parseWsFrame,
   serializeWsFrame,
   type PlayoutPrincipal,
 } from '@cg/shared-ipc';
@@ -536,12 +538,28 @@ describe('C-037 — the wire claim loses to the verified one', () => {
     expect(row?.actor, 'the wire beat the signature').toBe(FAKE_OPERATOR.name);
 
     /*
-      🔴 THE POSITIVE CONTROL, and it is not optional: without it this spec passes on a bridge
-      that ignores `actor` ALWAYS — including the frame never carrying it, `askAs` serialising
-      it away, or the field having been dropped from the schema. So the SAME frame, with the
-      SAME field, is sent to a bridge with auth OFF, where the self-declared name is all there
-      is and must therefore reach the record.
+      🔴 THE POSITIVE CONTROL, and it is not optional: without it this spec passes on a frame
+      that never carried `actor` at all — `askAs` serialising it away, or the field dropped from
+      the schema.
+
+      ⚠ REBUILT by `BRIDGE-TRUTH-01` §4. The control used to send the same frame to an auth-OFF
+      bridge and expect the self-declared name in the record, because auth OFF believed the wire.
+      It no longer does — no bridge believes it now — so the control proves the two things it
+      still can: the frame's schema CARRIES the field to the bridge, and an auth-OFF bridge that
+      receives it records `console`, not the claim.
     */
+    const carried = parseWsFrame(
+      serializeWsFrame({
+        type: 'request',
+        id: 'c',
+        channel: 'stack.take',
+        payload: {},
+        actor: 'someone-else',
+      }),
+    );
+    expect(carried?.type === 'request' && carried.actor, 'the frame dropped `actor`').toBe(
+      'someone-else',
+    );
     const offBridge = await unauthedBridge();
     const offClient = await openClient(offBridge);
     const offRes = await askAs(offClient, 'x', 'stack.take', { itemId: 'claimed' }, 'someone-else');
@@ -550,7 +568,7 @@ describe('C-037 — the wire claim loses to the verified one', () => {
     const offRows = await offBridge.runtime.auditRecent(200);
     const offRow = offRows.find((r) => r.action === 'take' && r.itemId === 'claimed');
     expect(offRow, 'the control wrote no audit row — the instrument is dead').toBeDefined();
-    expect(offRow?.actor, 'the `actor` field never reaches the record at all').toBe('someone-else');
+    expect(offRow?.actor, 'an auth-OFF bridge believed the wire').toBe(CONSOLE_ACTOR);
   });
 });
 

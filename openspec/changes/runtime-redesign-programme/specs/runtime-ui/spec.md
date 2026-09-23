@@ -605,8 +605,10 @@ VOLUME 0` for that plate and records `0` as its intent, exactly what MUTE sent a
 The audit log SHALL render an ACTOR column — headed `Actor`, second, between `Time` and `Action`
 — carrying each record's actor verbatim in its own bidi isolate, whatever the approved reference
 draws; a log that names nobody is the `B-143` failure with the sign flipped. The actor SHALL be
-the principal the bridge verified for that socket, or `unattributed` where none exists. The
-actor FILTER SHALL keep narrowing the tail on the bridge by the same column.
+the principal the bridge verified for that socket; where none exists, `console` for an action a
+console sent and `unattributed` for one no console caused (amended in place 2026-09-23 by
+`BRIDGE-TRUTH-01` §4). The actor FILTER SHALL keep narrowing the tail on the bridge by the same
+column.
 
 ⚠ **This requirement used to fix the actor as a browser-held console name, typed into a
 `This console` field kept in one strip with its caveat above the table.

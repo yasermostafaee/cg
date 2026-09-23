@@ -2,61 +2,32 @@
 
 ## ADDED Requirements
 
-### Requirement: The audit record names the console that acted
+### Requirement: The audit record names who acted, as far as it is known
 
-Every audited action SHALL record the operator name declared by the console that requested
-it, rather than one constant for all consoles. The name SHALL be per-console: two consoles
-driving one rundown SHALL be distinguishable in the record.
+Every audited action SHALL record, as its actor, the principal the bridge verified for the
+requesting socket; where no principal exists, `console` for an action a console sent on a control
+socket; and `unattributed` for an action no console caused. Exactly ONE site on the recording
+side SHALL resolve the actor, so that a newly added channel or audit append cannot silently lose
+attribution. The recording side SHALL NOT read an actor name from the request itself, and SHALL
+NOT record the previous constant `operator`. Requests SHALL still be served with no principal.
 
-The name SHALL travel with each control request. Exactly ONE site on the sending side SHALL
-attach it and exactly ONE site on the recording side SHALL resolve it, so that a newly added
-channel or a newly added audit append cannot silently lose attribution by omitting a
-parameter.
+🔴 **SUPERSEDED 2026-09-23 by `BRIDGE-TRUTH-01` §4, and rewritten HERE, in place, because this
+delta has not been archived.** This requirement and the one after it mandated recording "the
+operator name declared by the console" — the self-declared label `OPERATOR-NAME-SWEEP-01`
+retired. That change superseded this file's LATER requirements and left these two standing, so
+archiving it would have written a typed, unverified name into the living spec in SHALL terms, the
+day after the product removed it.
 
-The recording side SHALL NOT trust the value as received. It SHALL normalise it by the same
-rule the sender used, so that a blank or whitespace-only value cannot become an actor that
-names nobody while appearing to name somebody.
+#### Scenario: A console's action with no principal says a console did it
 
-Requests SHALL still be served when no name is declared. An unnamed request is recorded, not
-refused.
-
-#### Scenario: A configured name reaches the record
-
-- **WHEN** a console with an operator name performs an audited action
-- **THEN** the row written to the audit record carries that name
-
-#### Scenario: Two consoles are told apart
-
-- **WHEN** two consoles with different operator names each perform an audited action on the
-  same bridge
-- **THEN** each action's row carries its own console's name
-
-#### Scenario: A blank name never becomes an actor
-
-- **WHEN** a console declares a name that is empty or only whitespace
-- **THEN** the action is recorded as unattributed, not as a name-shaped value
+- **WHEN** a console on a station with authentication off performs an audited action, whatever
+  its request carries in an `actor` field
+- **THEN** the row's actor is `console`
 
 #### Scenario: An action with no console behind it is unattributed
 
 - **WHEN** an audited action occurs outside any control request
-- **THEN** it is recorded as unattributed, because no console caused it
-
-### Requirement: An unconfigured console is legible as unconfigured
-
-A console that has not been given an operator name SHALL record a value that reads as a
-STATE rather than as a role or a plausible person. It SHALL NOT record the previous constant
-`operator`, which — once some rows carry a typed name — cannot be told apart from a console
-somebody chose to name `operator`.
-
-#### Scenario: The default is a state, not a name
-
-- **WHEN** an action is performed from a console with no operator name set
-- **THEN** the row records `unattributed`, and never `operator`
-
-#### Scenario: Clearing the name returns to unattributed
-
-- **WHEN** an operator empties this console's name
-- **THEN** subsequent actions record `unattributed` again
+- **THEN** it is recorded as `unattributed`, because no console caused it
 
 ### Requirement: The audit surface states what the recorded actor is worth
 
@@ -76,8 +47,12 @@ check and a surface calling it otherwise would be false.
 
 The console SHALL NOT offer a control for setting a browser-held actor name, and SHALL NOT send
 one on the wire. Where no principal exists — a station running with authentication off — the
-bridge SHALL record `unattributed`, which is the state the system is actually in rather than a
-name nobody checked.
+bridge SHALL record `console` for an action a console sent, and `unattributed` for one no console
+caused: the states the system is actually in, rather than a name nobody checked.
+
+⚠ **AMENDED 2026-09-23 by `BRIDGE-TRUTH-01` §4, in place, for the same reason as above.** It said
+every principal-less row reads `unattributed`, which made a console's press and the machine's own
+act one string.
 
 #### Scenario: A verified name is not qualified
 
@@ -93,7 +68,7 @@ name nobody checked.
 #### Scenario: With authentication off the record says so
 
 - **WHEN** a bridge runs with authentication off and an operator acts
-- **THEN** the entry records `unattributed`
+- **THEN** the entry records `console`
 
 ### Requirement: The per-console name is stored per console
 

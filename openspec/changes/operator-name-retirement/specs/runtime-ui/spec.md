@@ -8,8 +8,13 @@ The console SHALL NOT offer any control for setting a name recorded as the audit
 SHALL NOT persist one in the browser.
 
 Where a verified principal exists, the actor SHALL be that principal, as the bridge established
-it. Where none exists, the record SHALL read `unattributed` — a word for a state rather than a
-name — and the console SHALL send no actor on the wire.
+it. Where none exists, the record SHALL read `console` for an action a console sent and
+`unattributed` for one no console caused — words for states rather than names — and the console
+SHALL send no actor on the wire.
+
+⚠ **AMENDED 2026-09-23 by `BRIDGE-TRUTH-01` §4, in place rather than left to be archived.** This
+said every principal-less row reads `unattributed`, which made a console's press and the
+machine's own act one string. The bridge knows which is which, so the record keeps them apart.
 
 No operator-facing surface SHALL describe the recorded actor as self-declared, unverified, or
 typed. That description was true of a browser-held label and is false of a verified principal,
@@ -29,7 +34,8 @@ and a surface stating it above verified rows tells the operator the record is we
 #### Scenario: With no principal the record says so
 
 - **WHEN** a bridge running with authentication off records an operator's action
-- **THEN** the entry's actor is `unattributed`
+- **THEN** the entry's actor is `console`, and an entry no console caused still reads
+  `unattributed`
 
 #### Scenario: Neither the symbol nor the sentence can return unnoticed
 

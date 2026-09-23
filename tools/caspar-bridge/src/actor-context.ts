@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { normalizeActor, TEMPLATE_ACTOR, UNATTRIBUTED_ACTOR } from '@cg/shared-ipc';
+import { CONSOLE_ACTOR, TEMPLATE_ACTOR, UNATTRIBUTED_ACTOR } from '@cg/shared-ipc';
 import type { AuthSession } from './auth-session.js';
 
 /**
@@ -8,18 +8,11 @@ import type { AuthSession } from './auth-session.js';
  *
  * ## What this is worth, stated where it is implemented
  *
- * 🔴 **SELF-DECLARED AND UNVERIFIED.** The name comes from a per-console setting typed
- * by whoever is at that console, over an unauthenticated loopback socket. So the record
- * answers **"which console, as labelled"** and NOT **"which person, proven"**. Anyone
- * can type anything, and a console shared across a shift change keeps yesterday's name
- * until somebody changes it. That limit is written into the operator-facing surface too
- * (the Audit panel), not only here — a caveat only the implementer can read is not a
- * caveat, which is the `assumed` lesson one level out.
- *
- * It is still worth having: on a gallery with three consoles, "which console" is most
- * of what a next-day question is actually asking, and it is strictly more than a
- * constant. If PROVEN identity is wanted later, a PIN-backed sign-in is ADDITIVE — it
- * would populate this same seam with a verified value and every reader stays put.
+ * ⚠ **SUPERSEDED — the self-declared console name is gone.** This header used to describe a
+ * per-console name typed by whoever sat there; `OPERATOR-NAME-SWEEP-01` retired it and
+ * `BRIDGE-TRUTH-01` §4 stopped the bridge reading the wire field at all. Three values remain:
+ * the verified principal's name, {@link CONSOLE_ACTOR} for a console's act with no principal,
+ * and {@link UNATTRIBUTED_ACTOR} for anything no console caused. See {@link runAsActor}.
  *
  * ## Why AsyncLocalStorage rather than a parameter
  *
@@ -58,30 +51,35 @@ export interface ActorContext {
 const actorStore = new AsyncLocalStorage<ActorContext>();
 
 /**
- * Run `fn` with `raw` as the acting console for everything it awaits.
+ * Run `fn` as the console that sent this request, for everything it awaits.
  *
- * Normalised on ENTRY, with the same function the browser used before sending: a blank
- * or absent value becomes {@link UNATTRIBUTED_ACTOR} here rather than reaching an
- * append site as an empty string. The bridge does not trust the wire — a client is free
- * to send anything, and `actor` is the one field a client controls outright.
+ * 🔴 `BRIDGE-TRUTH-01` §4 — **A REQUEST ON A CONTROL SOCKET IS A CONSOLE'S ACT.** With a verified
+ * principal the record names the person; without one it records {@link CONSOLE_ACTOR} — a console
+ * did this, and nobody proved who was at it. {@link UNATTRIBUTED_ACTOR} is left to what it means:
+ * nothing at a console caused this (a bridge-initiated append, outside any request).
+ *
+ * ⚠ **The wire's `actor` field is no longer read at all.** It was the self-declared console name
+ * `OPERATOR-NAME-SWEEP-01` retired; no console sends it, and a client that still did could
+ * otherwise write any name it liked into the record. The frame schema keeps the field optional
+ * so an old client's frame still parses — the bridge simply does not believe it.
  */
-export function runAsActor<T>(raw: unknown, session: AuthSession | null, fn: () => T): T {
+export function runAsActor<T>(session: AuthSession | null, fn: () => T): T {
   /*
     🔴 `C-037` — **ONE DECISION, NOT TWO PATHS THAT AGREE.**
 
-    A verified principal WINS over the self-declared field; with no principal the wire's value
-    is normalised exactly as before. Written as one expression rather than an auth-on branch
-    and an auth-off branch, for golden rule 10's reason: two paths that must agree are two
-    paths that eventually do not, and the one that drifts is the one nobody exercises.
+    A verified principal names the person; with no principal the row says a console did it.
+    Written as one expression rather than an auth-on branch and an auth-off branch, for golden
+    rule 10's reason: two paths that must agree are two paths that eventually do not, and the
+    one that drifts is the one nobody exercises.
 
-    ⚠ The verified name has ALREADY been through {@link normalizeActor}, at verification
-    time, so that the name the console shows and the name the record writes are the same
-    string rather than two reductions of one claim. It is not re-normalised here.
+    ⚠ The verified name has ALREADY been through `normalizeActor`, at verification time, so
+    that the name the console shows and the name the record writes are the same string rather
+    than two reductions of one claim. It is not re-normalised here.
   */
   const verified = session?.token?.principal ?? null;
   return actorStore.run(
     verified === null
-      ? { actor: normalizeActor(raw), sub: null, session }
+      ? { actor: CONSOLE_ACTOR, sub: null, session }
       : { actor: verified.name, sub: verified.sub, session },
     fn,
   );

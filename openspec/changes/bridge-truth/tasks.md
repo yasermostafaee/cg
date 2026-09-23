@@ -65,4 +65,29 @@
 
 ## 4. Commit 3 — §4
 
-- [ ] Not started
+- [x] `CONSOLE_ACTOR = 'console'` — the operator's word for the device ("The console is locked");
+      names no person, so it claims no identity. Reserved in `normalizeActor` like `template`
+- [x] `runAsActor` records `console` for a principal-less request and no longer reads the wire's
+      `actor` — the last live path for a self-declared label. `unattributed` stays for appends no
+      request caused. The mock writes `console` (every mock row is a press at this console)
+- [x] `audit-actor.integration.test.ts` REWRITTEN — it pinned the retired label reaching the row.
+      **RED FIRST against the old attribution: 6/6 failed.** Its first case carries its own control
+      (a machine row, `unattributed`, in the same file)
+- [x] `auth-principal`'s control REBUILT: it relied on auth OFF believing the wire
+- [x] `library-audit-geometry.spec.ts:282` → `toBe('console')`: with two reachable values it now
+      tells a console's press from the machine's act, and a typed name coming back reds it
+- [x] Four unarchived deltas amended IN PLACE — `operator-name-retirement`,
+      `runtime-redesign-programme`, `audit-actor-console-name` (two requirements still MANDATED
+      the declared name in SHALL terms — superseded here), `template-signals-completion`
+- [x] Rule-9 sweep: the old column title (0 left, control 1); class axis `data-audit-actor-head`;
+      value axis `unattributed` across tests, e2e, docs, living and pending specs
+- [x] §6 — `R-066`'s "44 files" corrected to 21 files / 41 hits, measured at `546258d3`; the
+      `LayerRow` prop rename filed as a candidate under `R-066`
+
+## 5. Discharges
+
+- [x] 🔴 **Commit 1 (`66dfbf8b`) — Linux `e2e` discharged** —
+      https://github.com/yasermostafaee/cg/actions/runs/35797043689 · `conclusion: success`, and
+      the `E2E (Playwright)` job's `E2E` step `completed · success`, read back from the API
+- [ ] Commit 2 (`34ee9ec2`) — renders nothing; its run is read back for the whole-tree jobs
+- [ ] Commit 3 — renders (the audit column's title and value); its `e2e` is owed

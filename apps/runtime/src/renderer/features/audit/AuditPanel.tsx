@@ -85,11 +85,10 @@ type AuditHealth = Awaited<ReturnType<typeof window.cg.audit.health>>;
  * Station setup. A log that names nobody is the `B-143` failure with the sign flipped.
  *
  * ⚠ `OPERATOR-NAME-SWEEP-01` — that sentence is now LITERALLY TRUE on a station running
- * `auth: 'off'`: with the self-declared label retired and no Playout to sign in to, every row
- * records `unattributed`. It is the honest answer rather than a regression — the label it
- * replaced was a claim nobody checked — and the remedy is federating identity, not typing a
- * name. Said here because the next reader will otherwise take this line for a promise the
- * panel no longer keeps.
+ * `auth: 'off'`: with the self-declared label retired and no Playout to sign in to, no row can
+ * name a person. `BRIDGE-TRUTH-01` §4 keeps the one distinction that IS knowable — a console's
+ * press records `console`, the machine's own act records `unattributed` — and the remedy for the
+ * rest is federating identity, not typing a name.
  */
 export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
   const [entries, setEntries] = useState<readonly AuditEntry[]>([]);
@@ -424,8 +423,9 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         signature check, with the operator's `sub` beside it. A sentence dismissing that as
         something somebody typed is not a caution any more — it is **false, displayed directly
         above the evidence that contradicts it**, and it tells the operator the record is
-        weaker than it is. Under auth OFF the console now sends no `actor` at all and the bridge records
-        `unattributed`, which is the state the system is actually in.
+        weaker than it is. Under auth OFF the console sends no `actor` at all, and the bridge
+        records `console` — a console did it, nobody proved who — keeping `unattributed` for what
+        no console caused (`BRIDGE-TRUTH-01` §4).
 
         ⚠ **The identity is stated elsewhere, not nowhere.** `IdentityIndicator` in the status
         bar names who is signed in, once, on the axis that measures it — this panel shows the
@@ -443,7 +443,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
           */}
           <span
             data-audit-actor-head=""
-            title="The signed-in operator, as the bridge verified them. Rows written with no principal record 'unattributed'."
+            title="The signed-in operator, as the bridge verified them. 'console': a console did it and nobody was signed in. 'unattributed': no console caused it."
           >
             Actor
           </span>

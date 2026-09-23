@@ -160,6 +160,8 @@ describe('guard item 27 — the actor COLUMN the reference does not draw', () =>
       a signature check. The COLUMN survives (guard item 27); only its qualifier moved.
     */
     expect(actorHead?.getAttribute('title')).toMatch(/as the bridge verified them/);
+    // `BRIDGE-TRUTH-01` §4 — and it names BOTH principal-less values, because they are two facts.
+    expect(actorHead?.getAttribute('title')).toMatch(/'console'.*'unattributed'/);
     expect(
       actorHead?.getAttribute('title'),
       'the retired caveat came back on the column head',
