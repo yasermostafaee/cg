@@ -89,6 +89,23 @@ function pidsOf(image) {
     .map((l) => Number(l.split(',')[1]?.replace(/"/g, '')));
 }
 function launch(exe, cdpPort) {
+  /*
+    WebView2's per-app policy for extra browser arguments, keyed by the executable's name. The
+    environment variable alone was measured to be overridden by the arguments Tauri sets itself
+    (run 35856634409: both apps' DevTools ports stayed closed while their WebView2 was running).
+    Test instrumentation only: the installed app is untouched.
+  */
+  request('reg', [
+    'add',
+    'HKCU\\Software\\Policies\\Microsoft\\Edge\\WebView2\\AdditionalBrowserArguments',
+    '/v',
+    path.basename(exe),
+    '/t',
+    'REG_SZ',
+    '/d',
+    `--remote-debugging-port=${cdpPort}`,
+    '/f',
+  ]);
   const child = spawn(exe, [], {
     detached: true,
     stdio: 'ignore',

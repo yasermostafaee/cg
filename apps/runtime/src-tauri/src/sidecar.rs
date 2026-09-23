@@ -87,6 +87,21 @@ pub fn install_panic_log() {
 
 // ── Where things are ─────────────────────────────────────────────────────────
 
+/// A path without Windows' `\\?\` verbatim prefix, which Tauri's resource dir carries and Node's
+/// module loader cannot resolve: measured on the first installer run, `node \\?\C:\…\bridge.mjs`
+/// died in `realpathSync` with `EISDIR: lstat 'C:'` before running a line. A `\\?\UNC\` share
+/// keeps its prefix — stripping that one would change the path.
+fn plain(path: PathBuf) -> PathBuf {
+    let stripped = {
+        let text = path.to_string_lossy();
+        match text.strip_prefix(r"\\?\") {
+            Some(rest) if !rest.starts_with(r"UNC\") => Some(PathBuf::from(rest)),
+            _ => None,
+        }
+    };
+    stripped.unwrap_or(path)
+}
+
 fn paths<R: Runtime>(app: &AppHandle<R>) -> Result<Paths, String> {
     let exe = std::env::current_exe().map_err(|e| format!("CG Control cannot find itself: {e}"))?;
     let dir = exe
@@ -102,6 +117,7 @@ fn paths<R: Runtime>(app: &AppHandle<R>) -> Result<Paths, String> {
         .data_dir()
         .map_err(|e| format!("CG Control cannot find the user data folder: {e}"))?
         .join("CG Control");
+    let (dir, resources, data) = (plain(dir), plain(resources), plain(data));
     Ok(Paths {
         node: dir.join("cg-bridge.exe"),
         bundle: resources.join("payload").join("bridge").join("caspar-bridge.mjs"),
