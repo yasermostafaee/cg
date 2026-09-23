@@ -15,7 +15,7 @@ import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
  * `fixedLayers.set-config` — the declaration door, which the station fence reads.
  */
 
-/** The standard AMCP / OSC ports — the ones `secure-ports.ps1` and the firewall rules name. */
+/** The standard AMCP / OSC ports — the ones the Playout's allow list and our firewall rules name. */
 export const AMCP_PORT = 5250;
 export const OSC_PORT = 6250;
 
@@ -96,17 +96,13 @@ export function playoutOriginOf(signInUrl: string | null | undefined): string | 
   }
 }
 
-/** `http://host:port` without a trailing slash — the Playout address as the bridge stores it. */
-export function normalisePlayoutAddress(typed: string): string | null {
-  const trimmed = typed.trim();
-  try {
-    const url = new URL(trimmed);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-    return trimmed.replace(/\/+$/, '');
-  } catch {
-    return null;
-  }
-}
+/**
+ * `DESKTOP-APPS-01-C` C3 — the ONE normalisation, shared with the bridge (`@cg/shared-ipc`): no
+ * scheme → `http://`, `http://` with no port → `:8080`, an explicit port byte for byte. It used to
+ * be this file's own, and refused a bare `192.168.21.111` while passing `http://192.168.21.111`
+ * on to be probed at port 80.
+ */
+export { normalisePlayoutAddress } from '@cg/shared-ipc';
 
 /**
  * Apply the choice: the CasparCG host first, then the channel. Resolves `null` on success, or the

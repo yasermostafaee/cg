@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ConnectionCheckLine } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -24,6 +24,9 @@ const styles = {
   fact: { fontSize: cssVars['--r-text-md'] },
   error: { fontSize: cssVars['--r-text-sm'], color: colors.errorText, lineHeight: 1.6 },
 } as const;
+
+/** After the sign-in, how soon a still-waiting AMCP line is asked again. */
+const JUDGE_AGAIN_MS = 2000;
 
 export function PlayoutConnection({
   origin,
@@ -54,6 +57,19 @@ export function PlayoutConnection({
   const [error, setError] = useState<string | null>(null);
 
   const typed = normalisePlayoutAddress(address);
+  /*
+    `DESKTOP-APPS-01-C` C7 — after the sign-in, an AMCP line that still WAITS (the Playout has not
+    let this machine in yet) is asked again until the bridge decides it: in, or waiting for the
+    administrator's approval. Each check is bounded (C2), so this is a short loop, not a hang.
+  */
+  const [judgeRound, setJudgeRound] = useState(0);
+  const again = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (again.current !== null) clearTimeout(again.current);
+    },
+    [],
+  );
   const check = async (): Promise<void> => {
     // After the sign-in the configured address is the one to judge, whatever the field holds.
     const target = judgeNow && origin !== null ? origin : editing ? typed : origin;
@@ -61,25 +77,34 @@ export function PlayoutConnection({
       if (judgeNow) onJudged?.();
       return;
     }
+    // C3 — the field shows the address actually checked: `192.168.21.111` → `http://…:8080`.
+    if (editing && target === typed) setAddress(target);
     setBusy('checking');
     setError(null);
+    let amcpWaits = false;
     try {
       const result = await window.cg.setup.check({
         playoutAddress: target,
         origin: window.location.origin,
       });
       setLines(result.lines);
+      amcpWaits = result.lines.some((l) => l.id === 'amcp' && l.status === 'wait');
     } catch (err) {
+      // C2 — a bridge that did not answer is said in words (`BridgeTimeoutError`'s message).
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null);
-      if (judgeNow) onJudged?.();
+      if (judgeNow && amcpWaits) {
+        again.current = setTimeout(() => setJudgeRound((n) => n + 1), JUDGE_AGAIN_MS);
+      } else if (judgeNow) {
+        onJudged?.();
+      }
     }
   };
   useEffect(() => {
     if (judgeNow) void check();
-    // Once per turn to true: the sign-in, not every render after it.
-  }, [judgeNow]);
+    // Once when the sign-in turns it true, then once per round while AMCP still waits.
+  }, [judgeNow, judgeRound]);
   const connect = async (): Promise<void> => {
     if (typed === null) return;
     setBusy('connecting');

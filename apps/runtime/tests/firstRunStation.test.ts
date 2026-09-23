@@ -105,14 +105,18 @@ describe('Connect needs the two links a sign-in needs', () => {
   });
 });
 
-describe('the Playout address as typed', () => {
+describe('the Playout address as typed (DESKTOP-APPS-01-C C3)', () => {
   it('is normalised to http(s)://host:port without a trailing slash, or refused', () => {
     expect(normalisePlayoutAddress(' http://192.168.21.111:8080/ ')).toBe(
       'http://192.168.21.111:8080',
     );
     expect(normalisePlayoutAddress('https://playout.local')).toBe('https://playout.local');
-    expect(normalisePlayoutAddress('192.168.21.111')).toBeNull();
     expect(normalisePlayoutAddress('ftp://x')).toBeNull();
+  });
+
+  it('an address typed without a scheme or a port is the Playout’s API port — the owner’s case', () => {
+    expect(normalisePlayoutAddress('192.168.21.111')).toBe('http://192.168.21.111:8080');
+    expect(normalisePlayoutAddress('http://192.168.21.111')).toBe('http://192.168.21.111:8080');
   });
 });
 

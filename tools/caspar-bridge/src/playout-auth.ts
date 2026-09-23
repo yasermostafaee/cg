@@ -503,8 +503,30 @@ export class PlayoutAuth {
     await this.#pollRevoked();
   }
 
-  async #pollRevoked(): Promise<void> {
-    const bearer = this.#bearer?.raw ?? null;
+  /**
+   * 🔴 `DESKTOP-APPS-01-C` C4 — **THE INTRODUCING READ: ONE D9 READ, NOW, WITH THIS TOKEN.**
+   *
+   * A Playout 2.8.54 lets a machine's AMCP in from exactly one kind of request: a SERVER-SIDE
+   * D9 read (no `Origin`) whose token is valid and unrevoked and whose ACCOUNT holds
+   * `station-admin`. D4 and D8 introduce nothing. So a `station-admin`'s sign-in is followed by
+   * this, at once, with THAT admin's own token — never the held bearer, which is whoever signed in
+   * last — rather than at the next tick of the 60 s cycle. The cycle itself is unchanged; it
+   * restarts from this read, so the Playout is not asked twice in a row.
+   *
+   * Human-paced: the bridge calls it once per station-admin SIGN-IN (a token's first acceptance).
+   * Swallows every failure, as every D9 read does.
+   */
+  async introduce(rawToken: string): Promise<void> {
+    // The sign-in's own `noteLiveToken` may have just started a poll with this very token (a
+    // bridge that has never polled): that read IS the introduction, and a second one is noise.
+    if (this.#polling && this.#bearer?.raw === rawToken) return;
+    this.#lastPollMs = this.#now();
+    this.#pollCount += 1;
+    await this.#pollRevoked(rawToken);
+  }
+
+  async #pollRevoked(presented?: string): Promise<void> {
+    const bearer = presented ?? this.#bearer?.raw ?? null;
     if (bearer === null) return;
     try {
       const headers: Record<string, string> = { Authorization: `Bearer ${bearer}` };

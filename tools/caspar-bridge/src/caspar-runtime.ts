@@ -1399,6 +1399,8 @@ export class CasparRuntime {
     oscDownAfterMs?: number;
     watcherIntervalMs?: number;
   };
+  /** `DESKTOP-APPS-01-C` C6 — see the option: the address a session dials, per configured host. */
+  readonly #amcpAddressFor: (host: string) => string;
 
   constructor(
     config: ConnectionConfig,
@@ -1478,6 +1480,14 @@ export class CasparRuntime {
         oscDownAfterMs?: number;
         watcherIntervalMs?: number;
       };
+      /**
+       * 🔴 `DESKTOP-APPS-01-C` C6 — **THE ADDRESS AN AMCP SESSION DIALS**, for a configured host.
+       * The bridge pins the Playout's host to the ONE IPv4 its HTTP reads use, so the Playout sees
+       * AMCP arrive from the same address that introduced this machine. The configured host is
+       * untouched everywhere else (grants, the serve-host derivation, the UI); only the dial moves.
+       * Absent: every session dials its configured host, as before.
+       */
+      amcpAddressFor?: (host: string) => string;
       /**
        * R-021 stage 1 — the VALIDATED fixed operator slots (from
        * `fixed-layers-store`'s validator) and the layer policy in force. The
@@ -1577,6 +1587,7 @@ export class CasparRuntime {
     this.#mixerLineDelayMs = options.faultInjection?.mixerLineDelayMs ?? 0;
     this.#throwAfterMixerLines = options.faultInjection?.throwAfterMixerLines ?? 0;
     this.#sessionTuning = options.sessionTuning ?? {};
+    this.#amcpAddressFor = options.amcpAddressFor ?? ((host: string): string => host);
     this.#templateServer =
       options.templateServer ??
       new TemplateHttpServer(
@@ -1623,7 +1634,8 @@ export class CasparRuntime {
     const session = (name: ServerLabel, ep: ConnectionConfig['servers']['A']): ServerSession => {
       const built = new ServerSession({
         name,
-        host: ep.host,
+        // C6 — the dial (and the OSC source filter, which compares against it) on the pinned IPv4.
+        host: this.#amcpAddressFor(ep.host),
         port: ep.amcpPort,
         oscPort: ep.oscPort,
         oscBindHost: deriveOscBindHost(ep.host),

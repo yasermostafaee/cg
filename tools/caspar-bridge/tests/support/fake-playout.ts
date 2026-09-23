@@ -41,16 +41,25 @@ import type { CryptoKey, JWK, JWTPayload } from 'jose';
  *   handle `jti: null`; if a test ever needs that shape, widen this deliberately rather than
  *   working around it with a hand-rolled `SignJWT` beside this file.
  *
- * ── `DESKTOP-APPS-01-B` — AMCP AUTO-TRUST, AS PLAYOUT 2.8.54 DOES IT ─────────
+ * ── `DESKTOP-APPS-01-C` C8 — THE PLAYOUT'S AMCP ALLOW LIST, AS 2.8.54 (REVISED) KEEPS IT ───
  *
- * A 2.8.54 Playout refuses AMCP to every machine it has not trusted, and trusts the SOURCE of a
- * SERVER-SIDE D4 / D8 / D9 request — no `Origin` header — that carries a valid, unrevoked token
- * holding `station-admin`. This fake keeps the same set ({@link FakePlayout.isTrusted}), and an
- * AMCP mock wired to it (`createMock({ admit: (ip) => playout.isTrusted(ip) })`) refuses exactly
- * as the Playout's firewall would. D8 is still not served here, so D4 and D9 are the doors.
+ * A 2.8.54 Playout refuses AMCP to every machine not on its allow list. This fake keeps the same
+ * list ({@link FakePlayout.isTrusted}); an AMCP mock wired to it
+ * (`createMock({ admit: (ip) => playout.isTrusted(ip) })`) refuses exactly as the Playout's
+ * firewall would. The revised rule (their `PLAYOUT-CG-RESPONSE-BUILTIN-ACCOUNT-v1` §2.5), modelled:
  *
- * ⚠ Unlike D4's bearer check, THIS verifies the token — signature against the published keys,
- * audience, expiry, the revocation list, the role — because trusting a machine is a Playout
+ *   - ONLY D9 introduces — a SERVER-SIDE read (no `Origin`) whose token verifies and is not
+ *     revoked, by an ACCOUNT holding `station-admin` (the role is read from the account record,
+ *     not from the token). D4 and D8 introduce nothing.
+ *   - The FIRST introduced source is trusted AUTOMATICALLY, once; the automatic path is then SEALED.
+ *   - Every later source — the same machine at a new address included — is PENDING until the
+ *     administrator approves it ({@link FakePlayout.approve}, the test's stand-in for the button).
+ *   - An `operator` as the first contact seals the path too, and is recorded pending; so does a
+ *     LOOPBACK source (unless `sealOnLoopback: false` — every suite here runs on loopback, so the
+ *     automatic path is reachable only with it).
+ *   - No expiry.
+ *
+ * ⚠ Unlike D4's bearer check, THIS verifies the token, because letting a machine in is a Playout
  * DECISION with a security meaning, and a fake that trusted any bearer would let a bridge that
  * presented a viewer's token pass a test the real Playout would fail.
  */
@@ -70,6 +79,8 @@ const PATHS = {
   refresh: '/api/cg/auth/refresh',
   revoked: '/api/cg/revoked',
   channels: '/api/cg/channels',
+  /** D8 — who the bearer is. Served so a suite can show it introduces NOTHING (`-01-C` C4). */
+  me: '/api/cg/me',
 } as const;
 
 /** One D4 catalogue row (§4, `handoff/2026-09-16/channels.json`), spelled as the contract does. */
@@ -365,7 +376,7 @@ export interface FakePlayoutRequest {
   readonly path: string;
   /** Lower-cased names, as Node delivers them. */
   readonly headers: Readonly<Record<string, string | string[] | undefined>>;
-  /** The TCP peer's address — what the Playout's auto-trust adds to its allow list. */
+  /** The TCP peer's address — what the Playout puts on its allow list (or pending). */
   readonly source: string;
 }
 
@@ -456,16 +467,18 @@ export interface FakePlayout {
   readonly requestCounts: FakePlayoutRequestCounts;
   /** `DESKTOP-APPS-01-B` — every request served, in order, `OPTIONS` included. LIVE, like the counts. */
   readonly requestLog: readonly FakePlayoutRequest[];
-  /**
-   * `DESKTOP-APPS-01-B` — has auto-trust admitted this source address to AMCP? Wire an AMCP mock's
-   * `admit` to it. Trust is granted only by a server-side (no `Origin`) D4 or D9 request whose
-   * bearer verifies here and holds `station-admin`.
-   */
+  /** D8 (`/api/cg/me`) — who the bearer is. Introduces nothing. */
+  readonly meUrl: string;
+  /** Is this source address on the AMCP allow list? Wire an AMCP mock's `admit` to it. */
   isTrusted(sourceAddress: string): boolean;
-  /** Every source address trusted so far. */
+  /** Every source on the allow list. */
   readonly trustedSources: readonly string[];
-  /** The Playout administrator's switch (default ON). OFF trusts nothing new; trust held stays. */
-  setAutoTrust(on: boolean): void;
+  /** Every source waiting for the administrator's approval. */
+  readonly pendingSources: readonly string[];
+  /** Has the automatic path been used up (one machine, once per install)? */
+  readonly sealed: boolean;
+  /** TEST-ONLY — the administrator clicks APPROVE for this source: pending → allowed. */
+  approve(sourceAddress: string): void;
 
   /** Close the listener for good. Safe to call twice. */
   stop(): Promise<void>;
@@ -538,7 +551,7 @@ async function mintSigningKey(kid: string): Promise<FakeSigningKey> {
 }
 
 /** `listen`, as a promise that rejects on the bind error instead of throwing it at the process. */
-function listen(server: http.Server, port: number): Promise<void> {
+function listen(server: http.Server, port: number, host: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const onError = (err: Error): void => {
       server.removeListener('listening', onListening);
@@ -550,7 +563,7 @@ function listen(server: http.Server, port: number): Promise<void> {
     };
     server.once('error', onError);
     server.once('listening', onListening);
-    server.listen(port, '127.0.0.1');
+    server.listen(port, host);
   });
 }
 
@@ -629,9 +642,12 @@ class FakePlayoutServer implements FakePlayout {
     channels: 0,
   };
   readonly #requestLog: FakePlayoutRequest[] = [];
-  /** `DESKTOP-APPS-01-B` — source addresses auto-trust has admitted to AMCP. */
+  /** `DESKTOP-APPS-01-C` C8 — the AMCP allow list, the pending list, and the one automatic slot. */
   readonly #trusted = new Set<string>();
-  #autoTrust = true;
+  readonly #pending = new Set<string>();
+  #sealed = false;
+  readonly #sealOnLoopback: boolean;
+  readonly #listenHost: string;
   #catalogue: readonly FakeCatalogueRow[] = FAKE_CATALOGUE;
   /** Bumped by every catalogue change, and spelled into D4's `ETag` — D9's revision rule. */
   #catalogueRevision = 0;
@@ -663,7 +679,14 @@ class FakePlayoutServer implements FakePlayout {
   #port = 0;
   #listening = false;
 
-  constructor(active: FakeSigningKey, unpublished: FakeSigningKey, keySeq: number) {
+  constructor(
+    active: FakeSigningKey,
+    unpublished: FakeSigningKey,
+    keySeq: number,
+    options: FakePlayoutOptions,
+  ) {
+    this.#sealOnLoopback = options.sealOnLoopback ?? true;
+    this.#listenHost = options.listenHost ?? '127.0.0.1';
     this.#published = [active];
     this.#active = active;
     this.#unpublished = unpublished;
@@ -689,7 +712,7 @@ class FakePlayoutServer implements FakePlayout {
 
   /** Bind an ephemeral loopback port. Called once, by {@link startFakePlayout}. */
   async start(): Promise<void> {
-    await listen(this.#server, 0);
+    await listen(this.#server, 0, this.#listenHost);
     // Flagged BEFORE the address is read, so the failure path below can actually close the
     // listener it just opened — `stop()` is a no-op while this flag is false.
     this.#listening = true;
@@ -751,6 +774,10 @@ class FakePlayoutServer implements FakePlayout {
     return this.#requestLog;
   }
 
+  get meUrl(): string {
+    return `${this.baseUrl}${PATHS.me}`;
+  }
+
   isTrusted(sourceAddress: string): boolean {
     return this.#trusted.has(sourceAddress.replace(/^::ffff:/, ''));
   }
@@ -759,20 +786,42 @@ class FakePlayoutServer implements FakePlayout {
     return [...this.#trusted];
   }
 
-  setAutoTrust(on: boolean): void {
-    this.#autoTrust = on;
+  get pendingSources(): readonly string[] {
+    return [...this.#pending];
+  }
+
+  get sealed(): boolean {
+    return this.#sealed;
+  }
+
+  approve(sourceAddress: string): void {
+    const source = sourceAddress.replace(/^::ffff:/, '');
+    this.#pending.delete(source);
+    this.#trusted.add(source);
+  }
+
+  /** The account a token speaks for — by `sub`, from the Playout's own records, never the token. */
+  #accountOf(sub: unknown): FakePlayoutUser | undefined {
+    return Object.values(FAKE_USERS).find((u) => u.sub === sub);
   }
 
   /**
-   * `DESKTOP-APPS-01-B` — the 2.8.54 rule, on one request to D4 or D9: no `Origin` (a browser
-   * always sends one), a bearer that verifies against THIS Playout's published keys with the
-   * contract's audience, not expired, not revoked, holding `station-admin` → trust its source.
-   * Anything short of all of that trusts nothing, silently, as the Playout does.
+   * 🔴 `DESKTOP-APPS-01-C` C8 — **THE INTRODUCTION, on one D9 read.** No `Origin` (a browser always
+   * sends one), a bearer that verifies against THIS Playout's keys with the contract's audience,
+   * not expired, not revoked, for a known account. Then, for a source not already allowed:
+   *
+   *   - the automatic path unsealed: it seals now, whoever this is; a `station-admin` account from a
+   *     non-loopback source (or any source, with `sealOnLoopback: false`) is ALLOWED, anyone else is
+   *     PENDING;
+   *   - sealed: a `station-admin` account's source is PENDING until approved; anyone else, nothing.
+   *
+   * Anything short of the first sentence introduces nothing, silently, as the Playout does.
    */
-  async #maybeTrust(req: http.IncomingMessage): Promise<void> {
-    if (!this.#autoTrust || req.headers.origin !== undefined) return;
+  async #introduce(req: http.IncomingMessage): Promise<void> {
+    if (req.headers.origin !== undefined) return;
     const authorization = req.headers.authorization;
     if (authorization === undefined || !authorization.startsWith('Bearer ')) return;
+    let account: FakePlayoutUser | undefined;
     try {
       const { payload } = await jwtVerify(
         authorization.slice('Bearer '.length),
@@ -780,12 +829,22 @@ class FakePlayoutServer implements FakePlayout {
         { audience: CONTRACT_AUDIENCE },
       );
       if (typeof payload.jti === 'string' && this.#revoked.has(payload.jti)) return;
-      const roles: unknown = payload['roles'];
-      if (!Array.isArray(roles) || !roles.includes('station-admin')) return;
-      this.#trusted.add((req.socket.remoteAddress ?? '').replace(/^::ffff:/, ''));
+      account = this.#accountOf(payload.sub);
     } catch {
-      // Unverifiable, expired, wrong audience: no trust, and no answer changes because of it.
+      return; // Unverifiable, expired, wrong audience: nothing, and no answer changes because of it.
     }
+    if (account === undefined) return;
+    const source = (req.socket.remoteAddress ?? '').replace(/^::ffff:/, '');
+    if (this.#trusted.has(source)) return;
+    const admin = account.roles.includes('station-admin');
+    if (!this.#sealed) {
+      this.#sealed = true;
+      const loopback = /^127\./.test(source) || source === '::1';
+      if (admin && !(loopback && this.#sealOnLoopback)) this.#trusted.add(source);
+      else this.#pending.add(source);
+      return;
+    }
+    if (admin) this.#pending.add(source);
   }
 
   async stop(): Promise<void> {
@@ -798,7 +857,7 @@ class FakePlayoutServer implements FakePlayout {
 
   async goOnline(): Promise<void> {
     if (this.#listening) return;
-    await listen(this.#server, this.#port);
+    await listen(this.#server, this.#port, this.#listenHost);
     this.#listening = true;
   }
 
@@ -928,15 +987,19 @@ class FakePlayoutServer implements FakePlayout {
     }
     if (method === 'GET' && pathname === PATHS.revoked) {
       this.#counts.revoked += 1;
-      // Judged before the answer, so a caller holding the answer can rely on the trust.
-      await this.#maybeTrust(req);
+      // C8 — D9 alone introduces; judged before the answer, so a caller holding the answer can
+      // rely on the list.
+      await this.#introduce(req);
       this.#serveRevoked(req, res);
       return;
     }
     if (method === 'GET' && pathname === PATHS.channels) {
       this.#counts.channels += 1;
-      await this.#maybeTrust(req);
       this.#serveChannels(req, res);
+      return;
+    }
+    if (method === 'GET' && pathname === PATHS.me) {
+      this.#serveMe(req, res);
       return;
     }
     sendError(res, 'not_found');
@@ -963,6 +1026,16 @@ class FakePlayoutServer implements FakePlayout {
       return;
     }
     sendJson(res, 200, { channels: this.#catalogue }, { ETag: etag });
+  }
+
+  /** D8 — the bearer's principal, as the contract echoes it. It introduces nothing (C8). */
+  #serveMe(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const authorization = req.headers.authorization;
+    if (authorization === undefined || !authorization.startsWith('Bearer ')) {
+      sendError(res, 'invalid_token');
+      return;
+    }
+    sendJson(res, 200, { ok: true });
   }
 
   /** D3 (§4.3) — public, no auth, and cacheable for an hour exactly as the contract says. */
@@ -1072,7 +1145,19 @@ class FakePlayoutServer implements FakePlayout {
  * const playout = track(await startFakePlayout(), (p) => p.stop());
  * ```
  */
-export async function startFakePlayout(): Promise<FakePlayout> {
+/** How a fake Playout is started. Both optional; the defaults are the real Playout's behaviour. */
+export interface FakePlayoutOptions {
+  /**
+   * `DESKTOP-APPS-01-C` C8 — does a LOOPBACK first contact seal the automatic path (the real
+   * Playout's rule)? Default `true`. Every suite runs on loopback, so a suite that exercises the
+   * automatic path — the FIRST machine let in without an approval — passes `false`.
+   */
+  readonly sealOnLoopback?: boolean;
+  /** Where to listen. Default `127.0.0.1`; `::` (dual-stack) lets an IPv6 client in too (C6). */
+  readonly listenHost?: string;
+}
+
+export async function startFakePlayout(options: FakePlayoutOptions = {}): Promise<FakePlayout> {
   const active = await mintSigningKey('fake-key-1');
   /*
     The never-published key. Its `kid` says so in the string itself, because it will show up in
@@ -1080,7 +1165,7 @@ export async function startFakePlayout(): Promise<FakePlayout> {
     like an ordinary retired key rather than like the point of the test.
   */
   const unpublished = await mintSigningKey('fake-key-never-published');
-  const server = new FakePlayoutServer(active, unpublished, 1);
+  const server = new FakePlayoutServer(active, unpublished, 1, options);
   await server.start();
   return server;
 }

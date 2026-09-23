@@ -182,31 +182,6 @@ export class PlayoutCatalogue {
     return this.#inFlight;
   }
 
-  /**
-   * 🔴 `DESKTOP-APPS-01-B` B1.2 — **ONE READ NOW, WITH A STATION-ADMIN'S OWN TOKEN, WHATEVER THE
-   * FLOOR.**
-   *
-   * A Playout 2.8.54 opens AMCP to this machine on a server-side D4/D8/D9 read that carries a
-   * `station-admin` token — so a station-admin's sign-in is followed by exactly that, at once,
-   * rather than whenever the 30 s floor or the D9 minute next comes round. The bearer is the one
-   * the sign-in just verified, passed IN, never `usableBearer()` — which is whoever signed in
-   * last and may be an operator, whose token trusts nothing.
-   *
-   * The bridge calls it once per station-admin SIGN-IN (a token's first acceptance), so it is
-   * human-paced; it restarts the floor, and joins behind a read already in flight.
-   */
-  readNow(bearer: string): Promise<void> {
-    const run = (): Promise<void> => {
-      this.#lastReadMs = this.#now();
-      this.#readCount += 1;
-      this.#inFlight = this.#read(bearer).finally(() => {
-        this.#inFlight = null;
-      });
-      return this.#inFlight;
-    };
-    return this.#inFlight === null ? run() : this.#inFlight.then(run);
-  }
-
   async #read(bearer: string): Promise<void> {
     try {
       const headers: Record<string, string> = { Authorization: `Bearer ${bearer}` };

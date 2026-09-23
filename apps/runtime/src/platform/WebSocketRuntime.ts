@@ -195,6 +195,24 @@ export interface WebSocketRuntimeOptions {
   stackRetention?: StackRetentionStore;
 }
 
+/**
+ * 🔴 `DESKTOP-APPS-01-C` C2 — **THE BRIDGE DID NOT ANSWER IN TIME: said in the operator's words,
+ * with the request's name kept on the object for the log.**
+ *
+ * It used to be `new Error('Bridge request timed out: setup.check')` — the owner's first installed
+ * run put exactly that under the Playout field: an internal channel name, on the operator's screen,
+ * as the check's only output. Twenty-seven renderer sites show a caught error's `message`, so the
+ * fix is HERE, where the message is made (the `BridgeSkewError` idiom): the message is the
+ * operator's sentence, and `channel` is for diagnostics only. It claims nothing about whether the
+ * request took effect — it was sent; only the answer is missing.
+ */
+export class BridgeTimeoutError extends Error {
+  constructor(readonly channel: string) {
+    super('The bridge did not answer in time.');
+    this.name = 'BridgeTimeoutError';
+  }
+}
+
 /** Thrown (as a rejected promise) when a command is issued while the link is down. */
 export class BridgeDisconnectedError extends Error {
   constructor() {
@@ -898,7 +916,7 @@ export class WebSocketRuntime implements RuntimeBridge {
     return new Promise<ipcChannels.AuthState>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
-        reject(new Error('Bridge request timed out: auth'));
+        reject(new BridgeTimeoutError('auth'));
       }, REQUEST_TIMEOUT_MS);
       this.#pending.set(id, {
         resolve: (value) => {
@@ -1296,6 +1314,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   async #invoke<C extends AnyChannel>(
     channel: C,
     request: ChannelRequest<C>,
+    /** How long to wait for the answer; the one shared default unless a channel's work is longer. */
+    timeoutMs: number = REQUEST_TIMEOUT_MS,
   ): Promise<ChannelResponse<C>> {
     /*
       🔴 `DELTA A` — **WAIT FOR THE CONNECT-TIME `auth` ANSWER BEFORE WRITING ANYTHING.**
@@ -1323,8 +1343,8 @@ export class WebSocketRuntime implements RuntimeBridge {
     return new Promise<ChannelResponse<C>>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
-        reject(new Error(`Bridge request timed out: ${channel.name}`));
-      }, REQUEST_TIMEOUT_MS);
+        reject(new BridgeTimeoutError(channel.name));
+      }, timeoutMs);
       this.#pending.set(id, {
         /*
           🔴 `B-152` — A MALFORMED RESPONSE REJECTS ITS CALLER. It used to CRASH THE MESSAGE
@@ -1609,8 +1629,9 @@ export class WebSocketRuntime implements RuntimeBridge {
   // `DESKTOP-APPS-01` — first-run and the station's own check. The Playout address goes through
   // CG Control's IPC (`desktop.ts`), never through `#invoke`: auth config is not the socket's.
   readonly setup = {
+    // `DESKTOP-APPS-01-C` C2 — waits longer than the check's slowest line, from the one constant.
     check: (req: ChannelRequest<typeof ipcChannels.SetupCheckChannel>) =>
-      this.#invoke(ipcChannels.SetupCheckChannel, req),
+      this.#invoke(ipcChannels.SetupCheckChannel, req, ipcChannels.SETUP_CHECK_WAIT_MS),
     routeAddress: (req: ChannelRequest<typeof ipcChannels.SetupRouteAddressChannel>) =>
       this.#invoke(ipcChannels.SetupRouteAddressChannel, req),
     catalogue: () => this.#invoke(ipcChannels.ChannelsCatalogueChannel, undefined),

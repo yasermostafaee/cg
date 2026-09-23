@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import type { AuthMode } from '@cg/shared-ipc';
+import { normalisePlayoutAddress, type AuthMode } from '@cg/shared-ipc';
 
 /**
  * 🔴 `C-037` — **WHICH PLAYOUT THIS BRIDGE TRUSTS, and whether it authenticates at all.**
@@ -357,7 +357,10 @@ export interface PlayoutEndpoints {
  * Throws {@link PlayoutConfigError} for anything that is not an absolute http(s) URL.
  */
 export function playoutEndpointsFor(addressRaw: string): PlayoutEndpoints {
-  const address = requireAbsoluteUrl('address', addressRaw.trim()).replace(/\/+$/, '');
+  // `DESKTOP-APPS-01-C` C3 — the console's own normalisation: no scheme → http, http with no
+  // port → the contract's API port, an explicit port byte for byte.
+  const normalised = normalisePlayoutAddress(addressRaw);
+  const address = requireAbsoluteUrl('address', normalised ?? addressRaw.trim());
   return {
     address,
     jwksUrl: `${address}${JWKS_PATH}`,

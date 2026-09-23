@@ -164,12 +164,15 @@ import {
 import { normalizeServeHost } from './serve-host-config.js';
 import { AuthSession } from './auth-session.js';
 import {
+  AMCP_PROBE_TIMEOUT_MS,
   AMCP_TRUST_WINDOW_MS,
   probeRoute,
   realProbes,
   runConnectionCheck,
+  type CheckOptions,
   type CheckProbes,
 } from './connection-check.js';
+import { pinnedIPv4 } from './playout-http.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
 import {
   PlayoutCatalogue,
@@ -385,6 +388,8 @@ export interface BridgeOptions {
   playoutAuthOptions?: PlayoutAuthOptions;
   /** TEST-ONLY seam — the connection check's probes (`realProbes()` by default). */
   connectionCheckProbes?: CheckProbes;
+  /** TEST-ONLY seam — the check's bounds and AMCP window, so a suite need not wait 30 s. */
+  connectionCheckOptions?: Pick<CheckOptions, 'amcpTrustWindowMs' | 'lineMs' | 'connectMs'>;
   /**
    * TEST-ONLY seam — clock, `fetch` and tick period for the D4 catalogue read, so a suite can
    * drive the 30 s floor and a Playout outage without sleeping.
@@ -1461,7 +1466,28 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     sourceCatalog.value,
   );
   validateSourceAssignments(prunedAssignments.value, { catalog: sourceCatalog.value });
+  /*
+    🔴 `DESKTOP-APPS-01-C` C6 — **ONE IPv4 FOR THE PLAYOUT'S READS AND FOR AMCP.** The Playout lets
+    in the ADDRESS the introducing D9 read came from, so AMCP must leave from the same one: the
+    Playout's host is resolved ONCE to an IPv4 literal (`pinnedIPv4`, the same cache every
+    `playoutFetch` uses), and a session whose configured host IS that host dials the literal. The
+    configured host itself is untouched (grants, the serve-host derivation, the console).
+  */
+  const playoutName = auth.playout === null ? undefined : playoutHostOf(auth.playout);
+  // Bounded: a slow resolver must never hold the bridge's start. Unresolved, AMCP dials the name.
+  const playoutIPv4 =
+    playoutName === undefined
+      ? null
+      : await Promise.race([
+          pinnedIPv4(playoutName).catch(() => null),
+          new Promise<null>((resolve) => {
+            setTimeout(() => resolve(null), AMCP_PROBE_TIMEOUT_MS).unref();
+          }),
+        ]);
+  const amcpAddressFor = (host: string): string =>
+    playoutIPv4 !== null && host.toLowerCase() === playoutName?.toLowerCase() ? playoutIPv4 : host;
   const runtime = new CasparRuntime(connection, options.templateServe ?? {}, {
+    amcpAddressFor,
     fixedSlots,
     layerPolicy,
     reservedLayers,
@@ -1538,34 +1564,38 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   }
 
   /*
-    🔴 `DESKTOP-APPS-01-B` B1 — **AMCP WAITS FOR A STATION-ADMIN.**
+    🔴 `DESKTOP-APPS-01-B` B1, as REVISED by `-01-C` C4 — **AMCP WAITS FOR A STATION-ADMIN.**
 
-    A Playout 2.8.54 refuses AMCP to a machine it has not trusted, and trusts the source of a
-    SERVER-SIDE D4/D8/D9 read carrying a `station-admin` token. So on a station that authenticates:
+    A Playout 2.8.54 refuses AMCP to a machine it has not let in. It lets a machine in from ONE
+    kind of request: a SERVER-SIDE D9 read (no `Origin`) by an account holding `station-admin`
+    (D4 and D8 introduce nothing) — the FIRST machine automatically, once per install; every later
+    one after its administrator approves it in the Playout's app. So on a station that
+    authenticates:
 
       1. until a `station-admin` signs in, an AMCP failure is WAITING, not an alarm — the runtime
          carries the fact on its health and the console says so (the reconnect loop runs as ever);
-      2. a `station-admin`'s sign-in reads D4 AT ONCE with that admin's own token — the read that
-         trusts this machine — rather than at the next 30 s tick or D9 minute;
+      2. a `station-admin`'s sign-in reads D9 AT ONCE with that admin's own token
+         (`PlayoutAuth.introduce`) — the introducing read — rather than at the next 60 s tick;
       3. then the ONE reconnect loop retries promptly for `AMCP_TRUST_WINDOW_MS`, so the link comes
-         up within seconds of the Playout's firewall opening;
-      4. and the connection check starts JUDGING its AMCP line (before, a refusal is "waiting").
+         up within seconds of the Playout letting this machine in;
+      4. and the connection check judges its AMCP line from that moment (C7).
 
-    Keyed on the token's FIRST acceptance: a reload or a reconnect re-presents a token already
-    seen, and is not a sign-in. Per process, like the acceptance set itself — a restarted bridge
-    waits again until a `station-admin` signs in, unless AMCP comes up first (a trust the Playout
-    still holds lasts 7 days).
+    ⚠ `-01-C` C5 — nothing but a `station-admin` ever reaches the Playout with its token before the
+    issuer is adopted: a refused sign-in is refused before `noteLiveToken`, so it is never a bearer
+    for D4, D8 or D9 (pinned by `amcp-introduction.integration.test.ts`). An operator's first
+    contact would otherwise seal the Playout's automatic path.
+
+    Keyed on the token's FIRST acceptance: a reload or a reconnect re-presents a token already seen,
+    and is not a sign-in. Per process, like the acceptance set itself.
   */
-  let stationAdminSignedIn = false;
+  let stationAdminSignedInAt: number | null = null;
   if (playoutAuth !== null) runtime.setAmcpAwaitsSignIn(true);
-  const trustFromSignIn = ({ token, first }: SeatedSignIn): boolean => {
-    if (!first || !holdsPermissionClass(token.principal.roles, 'station-admin')) return false;
-    stationAdminSignedIn = true;
+  const introduceOnSignIn = ({ token, first }: SeatedSignIn): void => {
+    if (!first || !holdsPermissionClass(token.principal.roles, 'station-admin')) return;
+    stationAdminSignedInAt = Date.now();
     runtime.setAmcpAwaitsSignIn(false);
+    void playoutAuth?.introduce(token.rawToken);
     runtime.retryAmcpPromptly(AMCP_TRUST_WINDOW_MS);
-    if (playoutCatalogue === null) return false;
-    void playoutCatalogue.readNow(token.rawToken);
-    return true;
   };
 
   /*
@@ -1594,8 +1624,24 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         { proto: 'udp', port: ports.osc },
         ...(ports.console !== null ? [{ proto: 'tcp' as const, port: ports.console }] : []),
       ]);
-    // B2 — AMCP is judged only once a station-admin has signed in; before that a refusal waits.
-    return runConnectionCheck(req, probes, { ports, amcpJudged: stationAdminSignedIn });
+    return runConnectionCheck(req, probes, {
+      ports,
+      // C7 — the AMCP line's phase: waiting for a sign-in, for the Playout, or for approval.
+      amcpSignInAt: stationAdminSignedInAt,
+      ...(options.connectionCheckOptions ?? {}),
+      /*
+        `DESKTOP-APPS-01-C` C1 — ONE log line per check: every line's time and outcome, in the
+        order they finished. The owner's first timed-out check left nothing in any log to say which
+        probe hung; this is what would have.
+      */
+      onTimed: (timings, totalMs) => {
+        process.stderr.write(
+          `[caspar-bridge] connection check ${req.playoutAddress}: ` +
+            `${timings.map((t) => `${t.id} ${String(t.ms)} ms ${t.status}`).join(' · ')}` +
+            ` — ${String(totalMs)} ms\n`,
+        );
+      },
+    });
   };
 
   const routes = buildRoutes(runtime, {
@@ -1740,10 +1786,11 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         (signIn) => {
           // A principal was just seated on this socket: its `permitted` moved, and its bearer
           // may be the first this bridge has had — read the catalogue now rather than at the
-          // next tick, so the names arrive with the sign-in. A station-admin's sign-in reads it
-          // at once with that admin's own token (B1.2), which is the read that trusts this machine.
+          // next tick, so the names arrive with the sign-in. A station-admin's sign-in also reads
+          // D9 at once with that admin's own token (C4) — the read that introduces this machine.
           pushStationChannels();
-          if (!trustFromSignIn(signIn)) void playoutCatalogue?.refresh();
+          void playoutCatalogue?.refresh();
+          introduceOnSignIn(signIn);
         },
       );
     });

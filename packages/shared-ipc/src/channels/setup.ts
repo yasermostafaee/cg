@@ -28,6 +28,73 @@ import { defineChannel } from '../channel.js';
 export const SetupPhaseSchema = z.enum(['target', 'channel']);
 export type SetupPhase = z.infer<typeof SetupPhaseSchema>;
 
+/**
+ * 🔴 `DESKTOP-APPS-01-C` C2 — **THE CHECK'S BOUNDS, AND THE CONSOLE'S WAIT, FROM ONE CONSTANT.**
+ *
+ * Measured on the owner's machine (2026-09-23): the check ran its probes ONE AFTER ANOTHER, with a
+ * black-hole Playout taking AMCP 3.0 s + the key set 5.0 s + CORS 5.0 s = 13.7 s — and the console
+ * gave every request 8 s, so the operator got `Bridge request timed out: setup.check` and no line
+ * at all. Now every probe connects within {@link CONNECTION_CHECK_CONNECT_MS}, every LINE is
+ * finished within {@link CONNECTION_CHECK_LINE_MS} (a line that is not says so in its own words),
+ * the lines run in parallel, and the console waits {@link SETUP_CHECK_WAIT_MS} — derived here, so
+ * the wait can never again be shorter than the work.
+ */
+export const CONNECTION_CHECK_CONNECT_MS = 3000;
+export const CONNECTION_CHECK_LINE_MS = 5000;
+/** How long the console waits for `setup.check`: the slowest line's bound, twice over. */
+export const SETUP_CHECK_WAIT_MS = CONNECTION_CHECK_LINE_MS * 2;
+
+/** `DESKTOP-APPS-01-C` C3 — the contract's API port: an `http://` Playout address with no port has it. */
+export const PLAYOUT_API_PORT = 8080;
+
+/**
+ * 🔴 `DESKTOP-APPS-01-C` C3 — **THE ONE NORMALISATION OF A TYPED PLAYOUT ADDRESS**, used by the
+ * console (and shown back in the field) and by the bridge (`playoutEndpointsFor`), so the address
+ * checked, the address written and the address read can never differ.
+ *
+ *   - no scheme → `http://` is assumed;
+ *   - `http://` with no port → the contract's API port, {@link PLAYOUT_API_PORT};
+ *   - an explicit port is kept byte for byte (`:80` included — the URL parser would drop it);
+ *   - trailing slashes go; anything that is not an `http(s)` address with a host is `null`.
+ *
+ * Measured: the owner typed `http://192.168.21.111` and the check probed port 80, where nothing
+ * answers — the address he meant was `:8080`.
+ */
+/**
+ * The WHATWG `URL`, present in every runtime this package runs in (browser and Node) but not in
+ * its type library — reached through a narrow local type, as `sources.ts` reaches `crypto`.
+ */
+const WhatwgUrl = (
+  globalThis as unknown as { URL: new (input: string) => { protocol: string; hostname: string } }
+).URL;
+
+export function normalisePlayoutAddress(typed: string): string | null {
+  const trimmed = typed.trim();
+  if (trimmed === '') return null;
+  const schemed = /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+  // Trailing slashes go from what follows `//` only — `http://` must not collapse to `http:`.
+  const slashes = schemed.indexOf('//') + 2;
+  const withScheme = schemed.slice(0, slashes) + schemed.slice(slashes).replace(/\/+$/, '');
+  let url: { protocol: string; hostname: string };
+  try {
+    url = new WhatwgUrl(withScheme);
+  } catch {
+    return null;
+  }
+  if ((url.protocol !== 'http:' && url.protocol !== 'https:') || url.hostname === '') return null;
+  const start = withScheme.indexOf('//') + 2;
+  const authority = withScheme.slice(start).split(/[/?#]/, 1)[0] ?? '';
+  const hostAndPort = authority.slice(authority.lastIndexOf('@') + 1);
+  // What follows the host: `:8080`, or nothing. An IPv6 host keeps its own colons in brackets.
+  const afterHost = hostAndPort.startsWith('[')
+    ? hostAndPort.slice(hostAndPort.indexOf(']') + 1)
+    : hostAndPort.slice(hostAndPort.includes(':') ? hostAndPort.indexOf(':') : hostAndPort.length);
+  if (/^:\d+$/.test(afterHost) || url.protocol !== 'http:') return withScheme;
+  // `http://host` or `http://host:` — the API port goes in right after the host.
+  const hostEnd = start + authority.length - (afterHost === ':' ? 1 : 0);
+  return `${withScheme.slice(0, hostEnd)}:${String(PLAYOUT_API_PORT)}${withScheme.slice(start + authority.length)}`;
+}
+
 /** The seven links the connection check reads, in the order it reads them. */
 export const CONNECTION_CHECK_IDS = [
   'proxy',

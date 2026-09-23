@@ -116,13 +116,16 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
   const shot = async (name: string): Promise<void> => {
     await test.info().attach(name, { body: await page.screenshot(), contentType: 'image/png' });
   };
-  playout = await startFakePlayout();
+  // `-01-C` C8 — a FRESH Playout: its automatic slot is unused, so the first station-admin's D9
+  // read lets this machine in. (Everything here is loopback, which the real Playout would treat as
+  // sealing the slot; `sealOnLoopback: false` is this suite's stand-in for a LAN address.)
+  playout = await startFakePlayout({ sealOnLoopback: false });
   const fake = playout;
   amcp = await createMock({
     amcpPort: 5250,
     oscPort: 0,
     disableOsc: true,
-    // B3 — refused until the fake Playout trusts this machine.
+    // Refused until the fake Playout's allow list holds this machine.
     admit: (ip) => fake.isTrusted(ip),
   }).catch((err: unknown) => {
     throw new Error(
@@ -156,8 +159,11 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
   // ── 1 · the one field, and the check ────────────────────────────────────────
   const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
   await expect(firstRun).toHaveAttribute('data-first-run', 'target', { timeout: 20_000 });
-  await firstRun.getByLabel('Playout address').fill(playout.baseUrl);
+  // C3 — typed as the owner typed his: no scheme. The field shows the address actually checked.
+  const addressField = firstRun.getByLabel('Playout address');
+  await addressField.fill(playout.baseUrl.replace(/^http:\/\//, ''));
   await firstRun.getByRole('button', { name: 'Check' }).click();
+  await expect(addressField).toHaveValue(playout.baseUrl);
   await expect(firstRun.locator('[data-check="api"]')).toHaveAttribute('data-status', 'pass', {
     timeout: 20_000,
   });
@@ -191,11 +197,13 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
     (stationFile('bridge-playout.json') as { playout: { issuer?: string } }).playout.issuer,
   ).toBeUndefined();
 
-  // The operator's sign-in trusted nothing: AMCP still waits.
+  // C5 — the refused operator reached no D9: nothing is allowed, nothing pending, nothing sealed.
   expect(fake.trustedSources).toEqual([]);
+  expect(fake.sealed).toBe(false);
 
   await signIn(FAKE_ADMIN.username);
-  // B2 — the station admin's sign-in trusts this machine; the check runs again and AMCP is OK…
+  // C4 — the station admin's sign-in reads D9 at once, which lets this machine in; the check
+  // runs again and AMCP is OK…
   await expect(amcpLine).toHaveAttribute('data-status', 'pass', { timeout: 30_000 });
   await expect(amcpLine).toContainText('answered VERSION: 2.3.2');
   expect(fake.trustedSources).toEqual(['127.0.0.1']);
