@@ -4,7 +4,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ConnectionHealth } from '@cg/shared-ipc';
-import { FailoverBanner } from '../src/renderer/features/connections/FailoverBanner.js';
+import {
+  AMCP_AWAITS_SIGN_IN,
+  FailoverBanner,
+} from '../src/renderer/features/connections/FailoverBanner.js';
 import { expectTagsAreNotButtons } from './support/tagShape.js';
 import { colors, cssVars } from '../src/renderer/theme.js';
 
@@ -158,6 +161,30 @@ describe('guard item 9 — the failover banner renders under its conditions, and
     expect(fillOf(s)).toBe(asRendered(colors.alarmFill));
     // Broken state is never silently hidden — there is no Dismiss for it.
     expect(el.querySelector('button[aria-label="Dismiss failover banner"]')).toBeNull();
+  });
+
+  it('🔴 DESKTOP-APPS-01-B — a link WAITING for a station admin is one sentence in the notice tone, not the alarm; control: the same link without the fact alarms', async () => {
+    const down: ConnectionHealth = {
+      ...healthy(),
+      primary: { label: 'A', state: 'disconnected', amcpAxisOk: false },
+    };
+    const { el, rerender } = await mount({ ...down, amcpAwaitsSignIn: true });
+    const s = strip(el);
+    expect(s, 'the waiting fact must still be said').not.toBeNull();
+    expect(AMCP_AWAITS_SIGN_IN).toBe('Waiting for a station admin to sign in.');
+    expect(s?.textContent).toContain(AMCP_AWAITS_SIGN_IN);
+    expect(s?.textContent).not.toContain('unhealthy');
+    expect(s?.getAttribute('role')).toBe('status');
+    expect(s?.dataset['tone']).toBe('notice');
+    expect(fillOf(s)).toBe(asRendered(cssVars['--r-notice-neutral-bg']));
+    // It resolves itself: nothing to dismiss.
+    expect(el.querySelector('button[aria-label="Dismiss failover banner"]')).toBeNull();
+
+    // CONTROL — the same disconnected link, with no waiting fact: the alarm, as ever.
+    await rerender(down);
+    expect(strip(el)?.dataset['tone']).toBe('alarm');
+    expect(strip(el)?.textContent).toContain('PRIMARY A unhealthy (disconnected)');
+    expect(strip(el)?.textContent).not.toContain(AMCP_AWAITS_SIGN_IN);
   });
 
   it('is a STRIP in the flow, not the fixed slab B-172 records', async () => {

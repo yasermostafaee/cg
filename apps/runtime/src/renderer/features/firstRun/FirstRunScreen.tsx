@@ -20,9 +20,11 @@ import { commitFirstRun, groupByHost, playoutOriginOf } from './firstRunStation.
  * screen:
  *
  *   1. the Playout's ADDRESS — the one thing typed — and the connection check's lines; CONNECT
- *      writes it through CG Control itself (`setup.setPlayoutAddress`, never the control socket);
+ *      writes it through CG Control itself (`setup.setPlayoutAddress`, never the control socket).
+ *      The AMCP line says "waiting for sign-in" here (`DESKTOP-APPS-01-B`);
  *   2. SIGN IN with a `station-admin` account — the bridge learns the Playout's issuer from it
- *      (`DESKTOP-APPS-01-A`), so no issuer is ever typed;
+ *      (`DESKTOP-APPS-01-A`), so no issuer is ever typed, and a Playout 2.8.54 opens AMCP to this
+ *      machine on it — so the check runs again and JUDGES the AMCP line (`-01-B` B2);
  *   3. the Playout's CHANNELS in that account's grant, grouped by the CasparCG host they play on;
  *   4. the SERVE ADDRESS, auto-detected and editable — then the station is written through the
  *      existing doors and first-run ends.
@@ -104,9 +106,12 @@ export function FirstRunScreen({
   const auth = useAuthSession();
   const cardRef = useRef<HTMLDivElement>(null);
   const [done, setDone] = useState(false);
+  // B2 — the AMCP line is judged after the sign-in, and the channels come after that.
+  const [amcpJudged, setAmcpJudged] = useState(false);
   useFocusTrap(cardRef, !done, { initialFocusSelector: 'input' });
   if (done) return null;
 
+  const signedIn = phase === 'channel' && auth.kind === 'signed-in';
   const origin = playoutOriginOf(signInUrl);
   return (
     <div
@@ -119,11 +124,18 @@ export function FirstRunScreen({
       <div ref={cardRef} style={styles.card}>
         <div style={styles.body}>
           <h2 style={styles.title}>Set up CG Control</h2>
-          <PlayoutStep phase={phase} origin={origin} />
+          <PlayoutStep
+            phase={phase}
+            origin={origin}
+            judgeNow={signedIn}
+            onJudged={() => {
+              setAmcpJudged(true);
+            }}
+          />
           {phase === 'channel' && auth.kind !== 'signed-in' && (
             <SignInStep reason={auth.kind === 'signed-out' ? auth.reason : undefined} />
           )}
-          {phase === 'channel' && auth.kind === 'signed-in' && (
+          {signedIn && amcpJudged && (
             <ChannelStep
               playoutHost={hostOf(origin)}
               onDone={() => {
@@ -139,11 +151,27 @@ export function FirstRunScreen({
 
 // ── 1 · The Playout, and the connection check ─────────────────────────────────
 
-function PlayoutStep({ phase, origin }: { phase: SetupPhase; origin: string | null }): JSX.Element {
+function PlayoutStep({
+  phase,
+  origin,
+  judgeNow,
+  onJudged,
+}: {
+  phase: SetupPhase;
+  origin: string | null;
+  judgeNow: boolean;
+  onJudged: () => void;
+}): JSX.Element {
   return (
     <section style={styles.step} aria-label="Playout">
       <h3 style={styles.stepHead}>Playout</h3>
-      <PlayoutConnection origin={origin} startEditing={phase === 'target'} mayChange />
+      <PlayoutConnection
+        origin={origin}
+        startEditing={phase === 'target'}
+        mayChange
+        judgeNow={judgeNow}
+        onJudged={onJudged}
+      />
     </section>
   );
 }

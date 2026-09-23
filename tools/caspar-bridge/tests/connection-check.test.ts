@@ -86,8 +86,34 @@ const line = (
   return found;
 };
 
-describe('§2F — AMCP: a reset, a timeout and an answer are three different lines', () => {
-  it('a CLOSED port is a reset: reachable, refused — no firewall command', async () => {
+/**
+ * `DESKTOP-APPS-01-B` B2 — AMCP is JUDGED only after a station admin has signed in (a Playout
+ * 2.8.54 opens it then), and judged over a window. These run judged, with a short window so a
+ * shape that never recovers is reported in a second or two rather than thirty.
+ */
+const JUDGED = { amcpJudged: true, amcpTrustWindowMs: 900, amcpRetryMs: 300 } as const;
+const SETTINGS = '\u2067تنظیمات ← اتصال به CG Control\u2069';
+
+describe('§2F / B2 — AMCP: a reset, a timeout and an answer are three different lines', () => {
+  it('a CLOSED port, still refused after a station admin signed in: not trusted — the likely reasons, then the command', async () => {
+    const port = await closedPort();
+    const api = await fakeApi({ keys: [{}], allowOrigin: ORIGIN });
+    const { lines } = await runConnectionCheck(
+      { playoutAddress: api, origin: ORIGIN },
+      probes({ amcp: (host, _p, t) => realProbes().amcp(host, port, t) }),
+      { ports: PORTS, amcpTimeoutMs: 2000, ...JUDGED },
+    );
+    const amcp = line(lines, 'amcp');
+    expect(amcp.status).toBe('fail');
+    expect(amcp.text).toBe(
+      'The Playout did not trust this machine: 127.0.0.1 still refuses port 5250 after a station admin signed in. ' +
+        `Likely: auto-trust is off in the Playout's settings (${SETTINGS}); this machine reaches the Playout through NAT, a proxy or a VPN; the Playout is older than 2.8.54; CasparCG is not running on 127.0.0.1. ` +
+        "Otherwise the Playout's administrator runs this on the Playout server:",
+    );
+    expect(amcp.command).toMatch(/^\.\\secure-ports\.ps1 -AllowAmcpFrom \S+$/);
+  });
+
+  it('BEFORE any station admin has signed in the same refusal only WAITS — neutral, never a failure', async () => {
     const port = await closedPort();
     const api = await fakeApi({ keys: [{}], allowOrigin: ORIGIN });
     const { lines } = await runConnectionCheck(
@@ -95,20 +121,39 @@ describe('§2F — AMCP: a reset, a timeout and an answer are three different li
       probes({ amcp: (host, _p, t) => realProbes().amcp(host, port, t) }),
       { ports: PORTS, amcpTimeoutMs: 2000 },
     );
-    const amcp = line(lines, 'amcp');
-    expect(amcp.status).toBe('fail');
-    expect(amcp.text).toBe(
-      '127.0.0.1 refused the connection on port 5250. CasparCG is not running there, or the port is closed.',
-    );
-    expect(amcp.command).toBeUndefined();
+    expect(line(lines, 'amcp')).toEqual({
+      id: 'amcp',
+      status: 'wait',
+      text: 'CasparCG on 127.0.0.1: waiting for sign-in.',
+    });
   });
 
-  it('192.0.2.1 (RFC 5737) is a TIMEOUT: a dropped connection, and the exact command to run', async () => {
+  it('after the sign-in, a link the Playout opens within the window PASSES — the check kept asking', async () => {
+    let open = false;
+    const port = await amcpThatAnswers();
+    const api = await fakeApi({ keys: [{}], allowOrigin: ORIGIN });
+    const closed = await closedPort();
+    setTimeout(() => {
+      open = true; // the Playout's firewall lets this machine in, a moment after the sign-in
+    }, 500);
+    const { lines } = await runConnectionCheck(
+      { playoutAddress: api, origin: ORIGIN },
+      probes({ amcp: (host, _p, t) => realProbes().amcp(host, open ? port : closed, t) }),
+      { ports: PORTS, amcpJudged: true, amcpTrustWindowMs: 5000, amcpRetryMs: 200 },
+    );
+    expect(line(lines, 'amcp')).toEqual({
+      id: 'amcp',
+      status: 'pass',
+      text: 'CasparCG on 127.0.0.1 answered VERSION: 2.5.0 fake.',
+    });
+  });
+
+  it('192.0.2.1 (RFC 5737) is a TIMEOUT: still dropped after the sign-in — not trusted, and the exact command to run', async () => {
     const api = await fakeApi({ keys: [{}], allowOrigin: ORIGIN });
     const { lines } = await runConnectionCheck(
       { playoutAddress: api, casparHost: '192.0.2.1', origin: ORIGIN },
       probes(),
-      { ports: PORTS, amcpTimeoutMs: 1500 },
+      { ports: PORTS, amcpTimeoutMs: 1500, ...JUDGED },
     );
     /*
       ⚠ A host whose traffic runs through a TUN cannot show a DROP: the tunnel's own stack accepts
@@ -124,12 +169,14 @@ describe('§2F — AMCP: a reset, a timeout and an answer are three different li
     const amcp = line(lines, 'amcp');
     expect(amcp.status).toBe('fail');
     expect(amcp.text).toBe(
-      "No answer from 192.0.2.1 on port 5250: its firewall drops this machine. The Playout's administrator runs this on the Playout server:",
+      'The Playout did not trust this machine: 192.0.2.1 still does not answer on port 5250 after a station admin signed in. ' +
+        `Likely: auto-trust is off in the Playout's settings (${SETTINGS}); this machine reaches the Playout through NAT, a proxy or a VPN; the Playout is older than 2.8.54. ` +
+        "Otherwise the Playout's administrator runs this on the Playout server:",
     );
     expect(amcp.command).toMatch(/^\.\\secure-ports\.ps1 -AllowAmcpFrom \S+$/);
   });
 
-  it('CONTROL — a server that answers VERSION passes, with the version it gave', async () => {
+  it('CONTROL — a server that answers VERSION passes, with the version it gave (before the sign-in too)', async () => {
     const port = await amcpThatAnswers();
     const api = await fakeApi({ keys: [{}], allowOrigin: ORIGIN });
     const { lines } = await runConnectionCheck(
@@ -217,17 +264,19 @@ describe('§2F — the Playout API and CORS', () => {
         await runConnectionCheck(
           { playoutAddress: api, origin: ORIGIN },
           probes({ amcp: (h, _p, t) => realProbes().amcp(h, port, t) }),
-          { ports: PORTS },
+          { ports: PORTS, ...JUDGED },
         )
       ).lines,
       'amcp',
     );
+    // A drop, whatever this host's route to TEST-NET does with it (the timeout test above
+    // measures the real one) — pinned here, because this test is about the SENTENCES differing.
     const timeout = line(
       (
         await runConnectionCheck(
           { playoutAddress: api, casparHost: '192.0.2.1', origin: ORIGIN },
-          probes(),
-          { ports: PORTS, amcpTimeoutMs: 1500 },
+          probes({ amcp: async () => ({ kind: 'timeout' }) }),
+          { ports: PORTS, ...JUDGED },
         )
       ).lines,
       'amcp',

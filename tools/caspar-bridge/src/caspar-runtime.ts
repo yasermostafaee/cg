@@ -1157,6 +1157,13 @@ export class CasparRuntime {
   readonly #restoreBlocked = new Map<string, { slot: CommandSlot; producer: string }>();
   #seq = 0;
   #lastFailover: ConnectionHealth['lastFailover'] = undefined;
+  /**
+   * `DESKTOP-APPS-01-B` B1.1 — set by the bridge while it authenticates against a Playout and no
+   * `station-admin` has signed in to it yet; see {@link setAmcpAwaitsSignIn}.
+   */
+  #amcpAwaitsSignIn = false;
+  /** Has AMCP been up on the current sessions? A link that was up has been trusted. */
+  #amcpEverUp = false;
 
   // Coalescing (Phase-2 NOTE): collapse per-itemId changes into bounded publishes.
   readonly #dirty = new Set<string>();
@@ -1612,8 +1619,9 @@ export class CasparRuntime {
    * untouched by any of this.
    */
   #buildSessions(config: ConnectionConfig): { A: ServerSession; B?: ServerSession } {
-    const session = (name: ServerLabel, ep: ConnectionConfig['servers']['A']): ServerSession =>
-      new ServerSession({
+    this.#amcpEverUp = false;
+    const session = (name: ServerLabel, ep: ConnectionConfig['servers']['A']): ServerSession => {
+      const built = new ServerSession({
         name,
         host: ep.host,
         port: ep.amcpPort,
@@ -1623,6 +1631,11 @@ export class CasparRuntime {
         // TEST-ONLY (B-100): empty in production, so ServerSession defaults hold.
         ...this.#sessionTuning,
       });
+      built.on('healthy', () => {
+        this.#noteAmcpUp();
+      });
+      return built;
+    };
     return {
       A: session('A', config.servers.A),
       ...(config.servers.B !== undefined ? { B: session('B', config.servers.B) } : {}),
@@ -9915,7 +9928,37 @@ export class CasparRuntime {
       currentPrimary: cur,
       strategy: this.#config.strategy,
       ...(this.#lastFailover !== undefined ? { lastFailover: this.#lastFailover } : {}),
+      ...(this.#amcpAwaitsSignIn && !this.#amcpEverUp ? { amcpAwaitsSignIn: true as const } : {}),
     };
+  }
+
+  /**
+   * 🔴 `DESKTOP-APPS-01-B` B1.1 — **AMCP WAITS FOR A STATION-ADMIN.** The bridge sets it at boot
+   * when it authenticates against a Playout (a 2.8.54 Playout refuses AMCP to a machine it has not
+   * trusted) and clears it on the first `station-admin` sign-in (which is what trusts it). Health
+   * then carries `amcpAwaitsSignIn` for as long as AMCP has not been up, and the console states it
+   * instead of raising the link alarm. It changes nothing on the wire: the reconnect loop runs as
+   * it always does.
+   */
+  setAmcpAwaitsSignIn(waiting: boolean): void {
+    if (this.#amcpAwaitsSignIn === waiting) return;
+    this.#amcpAwaitsSignIn = waiting;
+    this.healthChanged.emit(this.health());
+  }
+
+  /**
+   * `DESKTOP-APPS-01-B` B1.3 — every declared session retries promptly for `windowMs` (see
+   * `ServerSession.retryPromptly`): the ONE reconnect loop each already runs, told to hurry.
+   */
+  retryAmcpPromptly(windowMs: number): void {
+    this.#sessions.A.retryPromptly(windowMs);
+    this.#sessions.B?.retryPromptly(windowMs);
+  }
+
+  #noteAmcpUp(): void {
+    if (this.#amcpEverUp) return;
+    this.#amcpEverUp = true;
+    if (this.#amcpAwaitsSignIn) this.healthChanged.emit(this.health());
   }
 
   /**

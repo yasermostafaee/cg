@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ConnectionCheckLine } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -29,12 +29,22 @@ export function PlayoutConnection({
   origin,
   startEditing,
   mayChange,
+  judgeNow = false,
+  onJudged,
 }: {
   /** The configured Playout's origin, or `null` when this station has none. */
   origin: string | null;
   startEditing: boolean;
   /** May this surface write the address? The desktop door must exist as well. */
   mayChange: boolean;
+  /**
+   * `DESKTOP-APPS-01-B` B2 — check again, on its own, when this turns true: first-run sets it once
+   * the station admin has signed in, which is when the bridge starts JUDGING the AMCP line (before,
+   * it is "waiting for sign-in").
+   */
+  judgeNow?: boolean;
+  /** Told when a check that ran with {@link judgeNow} set has finished, whatever it found. */
+  onJudged?: () => void;
 }): JSX.Element {
   const canWrite = mayChange && window.cg.setup.canSetPlayoutAddress();
   const [editing, setEditing] = useState(startEditing);
@@ -45,8 +55,12 @@ export function PlayoutConnection({
 
   const typed = normalisePlayoutAddress(address);
   const check = async (): Promise<void> => {
-    const target = editing ? typed : origin;
-    if (target === null) return;
+    // After the sign-in the configured address is the one to judge, whatever the field holds.
+    const target = judgeNow && origin !== null ? origin : editing ? typed : origin;
+    if (target === null) {
+      if (judgeNow) onJudged?.();
+      return;
+    }
     setBusy('checking');
     setError(null);
     try {
@@ -59,8 +73,13 @@ export function PlayoutConnection({
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(null);
+      if (judgeNow) onJudged?.();
     }
   };
+  useEffect(() => {
+    if (judgeNow) void check();
+    // Once per turn to true: the sign-in, not every render after it.
+  }, [judgeNow]);
   const connect = async (): Promise<void> => {
     if (typed === null) return;
     setBusy('connecting');

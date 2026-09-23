@@ -280,6 +280,16 @@ const ConnectionHealthSchema = z.object({
    * since boot. Renderer uses this to drive the failover banner.
    */
   lastFailover: FailoverInfoSchema.optional(),
+  /**
+   * 🔴 `DESKTOP-APPS-01-B` B1.1 — **AMCP IS WAITING FOR A STATION-ADMIN, NOT BROKEN.** Present
+   * (`true`) only while this bridge authenticates against a Playout, no `station-admin` has signed
+   * in to it since it started, and AMCP has not been up since then: a Playout 2.8.54 refuses AMCP
+   * to a machine it has not trusted, and trusts it on that sign-in. The console says so in one
+   * sentence instead of raising the link alarm. Absent everywhere else — an auth-off station, a
+   * link that has been up once (its later failure is a real one), and every station after a
+   * `station-admin` has signed in.
+   */
+  amcpAwaitsSignIn: z.literal(true).optional(),
 });
 
 export type ConnectionHealth = z.infer<typeof ConnectionHealthSchema>;

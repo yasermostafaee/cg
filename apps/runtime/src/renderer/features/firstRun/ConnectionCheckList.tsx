@@ -1,4 +1,4 @@
-import { Check, Copy, TriangleAlert, X } from 'lucide-react';
+import { Check, Clock, Copy, TriangleAlert, X } from 'lucide-react';
 import type { ConnectionCheckLine } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -10,15 +10,18 @@ import { Icon } from '../../ui/Icon.js';
  * carries the ONE command or CORS entry they must use, shown on its own to be copied.
  *
  * ⚠ Pass is NOT the on-air green: that colour means a graphic is on the output. A passing link is
- * the quiet ink with a check mark; a failure is the error ink; the topology advice is a warning.
+ * the quiet ink with a check mark; a failure is the error ink; the topology advice is a warning;
+ * a link not judged yet (`DESKTOP-APPS-01-B`: AMCP before a station admin signs in) is the quiet
+ * ink with a clock — neutral, never a failure.
  */
 const INK: Record<ConnectionCheckLine['status'], string> = {
   pass: colors.textSecondary,
   fail: colors.errorText,
   warn: colors.pending,
+  wait: colors.textSecondary,
 };
 
-const ICON = { pass: Check, fail: X, warn: TriangleAlert } as const;
+const ICON = { pass: Check, fail: X, warn: TriangleAlert, wait: Clock } as const;
 
 const styles = {
   list: {

@@ -40,6 +40,8 @@ interface Props {
  *   | a MANUAL failover that succeeded        | notice  | status | yes     |
  *   | an AUTOMATIC failover — worth noticing  | caution | alert  | yes     |
  *   | the primary is degraded / disconnected  | alarm   | alert  | no      |
+ *   | …before any station admin has signed in | notice  | status | no      |
+ *   | and AMCP has never been up (`-01-B`)    |         |        |         |
  *
  * ── `R-006` — SILENT IN TEST MODE, and the gate lives HERE now ───────────────
  *
@@ -52,6 +54,14 @@ interface Props {
  * so `failoverBanner.dom.test.ts` can assert it with a positive control.
  */
 type Tone = 'notice' | 'caution' | 'alarm';
+
+/**
+ * 🔴 `DESKTOP-APPS-01-B` B1.1 — the one sentence for a link that is WAITING, not broken: the
+ * bridge authenticates against a Playout 2.8.54, which opens AMCP to this machine only after a
+ * station admin signs in, and none has yet (`health.amcpAwaitsSignIn`). A notice, not the alarm —
+ * and only until then: a link that has been up once alarms as it always did.
+ */
+export const AMCP_AWAITS_SIGN_IN = 'Waiting for a station admin to sign in.';
 
 const TONE_STYLE: Record<Tone, CSSProperties> = {
   notice: {
@@ -121,12 +131,15 @@ export function FailoverBanner({ health }: Props): JSX.Element | null {
   const showRecent = recent !== undefined && recent.at !== dismissedAt;
 
   if (!showRecent && !primaryUnhealthy) return null;
+  const awaitingSignIn = primaryUnhealthy && health.amcpAwaitsSignIn === true;
 
-  const tone: Tone = primaryUnhealthy
-    ? 'alarm'
-    : recent?.reason === 'manual'
-      ? 'notice'
-      : 'caution';
+  const tone: Tone = awaitingSignIn
+    ? 'notice'
+    : primaryUnhealthy
+      ? 'alarm'
+      : recent?.reason === 'manual'
+        ? 'notice'
+        : 'caution';
   const role = tone === 'notice' ? 'status' : 'alert';
 
   return (
@@ -138,7 +151,9 @@ export function FailoverBanner({ health }: Props): JSX.Element | null {
     >
       <Icon icon={tone === 'notice' ? Info : TriangleAlert} size={NOTICE_PX.icon} />
       <span style={styles.text}>
-        {message(showRecent ? recent : undefined, health, primaryUnhealthy)}
+        {awaitingSignIn
+          ? AMCP_AWAITS_SIGN_IN
+          : message(showRecent ? recent : undefined, health, primaryUnhealthy)}
       </span>
       <span style={styles.meta}>
         <Tag style={styles.chip}>primary: {health.primary.label}</Tag>

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import http from 'node:http';
 import type { AddressInfo, Socket } from 'node:net';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { createLocalJWKSet, exportJWK, generateKeyPair, jwtVerify, SignJWT } from 'jose';
 import type { CryptoKey, JWK, JWTPayload } from 'jose';
 
 /**
@@ -40,6 +40,19 @@ import type { CryptoKey, JWK, JWTPayload } from 'jose';
  *   (the contract says SHOULD, and every path we exercise carries one). `PlayoutAuth` does
  *   handle `jti: null`; if a test ever needs that shape, widen this deliberately rather than
  *   working around it with a hand-rolled `SignJWT` beside this file.
+ *
+ * ── `DESKTOP-APPS-01-B` — AMCP AUTO-TRUST, AS PLAYOUT 2.8.54 DOES IT ─────────
+ *
+ * A 2.8.54 Playout refuses AMCP to every machine it has not trusted, and trusts the SOURCE of a
+ * SERVER-SIDE D4 / D8 / D9 request — no `Origin` header — that carries a valid, unrevoked token
+ * holding `station-admin`. This fake keeps the same set ({@link FakePlayout.isTrusted}), and an
+ * AMCP mock wired to it (`createMock({ admit: (ip) => playout.isTrusted(ip) })`) refuses exactly
+ * as the Playout's firewall would. D8 is still not served here, so D4 and D9 are the doors.
+ *
+ * ⚠ Unlike D4's bearer check, THIS verifies the token — signature against the published keys,
+ * audience, expiry, the revocation list, the role — because trusting a machine is a Playout
+ * DECISION with a security meaning, and a fake that trusted any bearer would let a bridge that
+ * presented a viewer's token pass a test the real Playout would fail.
  */
 
 /**
@@ -343,6 +356,19 @@ export interface FakePlayoutRequestCounts {
   channels: number;
 }
 
+/**
+ * One request as the fake RECEIVED it — `DESKTOP-APPS-01-B` B1's instrument: what the bridge
+ * actually put on the wire (`Origin` absent, `Authorization` present) and from which address.
+ */
+export interface FakePlayoutRequest {
+  readonly method: string;
+  readonly path: string;
+  /** Lower-cased names, as Node delivers them. */
+  readonly headers: Readonly<Record<string, string | string[] | undefined>>;
+  /** The TCP peer's address — what the Playout's auto-trust adds to its allow list. */
+  readonly source: string;
+}
+
 /** Everything {@link FakePlayout.issueToken} lets a test override. All optional. */
 export interface IssueTokenOptions {
   /** Which fixture user's `sub`/`name`/`roles`/`cg_channels` to mint. Default `'operator'`. */
@@ -428,6 +454,18 @@ export interface FakePlayout {
    * them would make `token: 1` mean "one browser sign-in" on one host and "two" on another.
    */
   readonly requestCounts: FakePlayoutRequestCounts;
+  /** `DESKTOP-APPS-01-B` — every request served, in order, `OPTIONS` included. LIVE, like the counts. */
+  readonly requestLog: readonly FakePlayoutRequest[];
+  /**
+   * `DESKTOP-APPS-01-B` — has auto-trust admitted this source address to AMCP? Wire an AMCP mock's
+   * `admit` to it. Trust is granted only by a server-side (no `Origin`) D4 or D9 request whose
+   * bearer verifies here and holds `station-admin`.
+   */
+  isTrusted(sourceAddress: string): boolean;
+  /** Every source address trusted so far. */
+  readonly trustedSources: readonly string[];
+  /** The Playout administrator's switch (default ON). OFF trusts nothing new; trust held stays. */
+  setAutoTrust(on: boolean): void;
 
   /** Close the listener for good. Safe to call twice. */
   stop(): Promise<void>;
@@ -590,6 +628,10 @@ class FakePlayoutServer implements FakePlayout {
     revoked: 0,
     channels: 0,
   };
+  readonly #requestLog: FakePlayoutRequest[] = [];
+  /** `DESKTOP-APPS-01-B` — source addresses auto-trust has admitted to AMCP. */
+  readonly #trusted = new Set<string>();
+  #autoTrust = true;
   #catalogue: readonly FakeCatalogueRow[] = FAKE_CATALOGUE;
   /** Bumped by every catalogue change, and spelled into D4's `ETag` — D9's revision rule. */
   #catalogueRevision = 0;
@@ -705,6 +747,47 @@ class FakePlayoutServer implements FakePlayout {
     return this.#counts;
   }
 
+  get requestLog(): readonly FakePlayoutRequest[] {
+    return this.#requestLog;
+  }
+
+  isTrusted(sourceAddress: string): boolean {
+    return this.#trusted.has(sourceAddress.replace(/^::ffff:/, ''));
+  }
+
+  get trustedSources(): readonly string[] {
+    return [...this.#trusted];
+  }
+
+  setAutoTrust(on: boolean): void {
+    this.#autoTrust = on;
+  }
+
+  /**
+   * `DESKTOP-APPS-01-B` — the 2.8.54 rule, on one request to D4 or D9: no `Origin` (a browser
+   * always sends one), a bearer that verifies against THIS Playout's published keys with the
+   * contract's audience, not expired, not revoked, holding `station-admin` → trust its source.
+   * Anything short of all of that trusts nothing, silently, as the Playout does.
+   */
+  async #maybeTrust(req: http.IncomingMessage): Promise<void> {
+    if (!this.#autoTrust || req.headers.origin !== undefined) return;
+    const authorization = req.headers.authorization;
+    if (authorization === undefined || !authorization.startsWith('Bearer ')) return;
+    try {
+      const { payload } = await jwtVerify(
+        authorization.slice('Bearer '.length),
+        createLocalJWKSet({ keys: this.#published.map((k) => k.publicJwk) }),
+        { audience: CONTRACT_AUDIENCE },
+      );
+      if (typeof payload.jti === 'string' && this.#revoked.has(payload.jti)) return;
+      const roles: unknown = payload['roles'];
+      if (!Array.isArray(roles) || !roles.includes('station-admin')) return;
+      this.#trusted.add((req.socket.remoteAddress ?? '').replace(/^::ffff:/, ''));
+    } catch {
+      // Unverifiable, expired, wrong audience: no trust, and no answer changes because of it.
+    }
+  }
+
   async stop(): Promise<void> {
     await this.#closeListener();
   }
@@ -814,6 +897,12 @@ class FakePlayoutServer implements FakePlayout {
     // The base is a formality — `req.url` is always origin-form on a server — and it is what
     // strips a query string before the path is matched.
     const pathname = new URL(req.url ?? '/', this.baseUrl).pathname;
+    this.#requestLog.push({
+      method,
+      path: pathname,
+      headers: { ...req.headers },
+      source: (req.socket.remoteAddress ?? '').replace(/^::ffff:/, ''),
+    });
 
     if (method === 'OPTIONS') {
       // 204 and nothing else. Not counted: a preflight is not a read of the resource.
@@ -839,11 +928,14 @@ class FakePlayoutServer implements FakePlayout {
     }
     if (method === 'GET' && pathname === PATHS.revoked) {
       this.#counts.revoked += 1;
+      // Judged before the answer, so a caller holding the answer can rely on the trust.
+      await this.#maybeTrust(req);
       this.#serveRevoked(req, res);
       return;
     }
     if (method === 'GET' && pathname === PATHS.channels) {
       this.#counts.channels += 1;
+      await this.#maybeTrust(req);
       this.#serveChannels(req, res);
       return;
     }

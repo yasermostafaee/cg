@@ -28,6 +28,10 @@ import {
  *
  * ⚠ The mock takes TCP 5250 because first-run writes the standard port; a runner where 5250 is
  * taken cannot run this spec, and it says so rather than passing.
+ *
+ * `DESKTOP-APPS-01-B` — the AMCP mock admits only what the fake Playout has TRUSTED, as a Playout
+ * 2.8.54's firewall does: so the check's AMCP line says "waiting for sign-in" before the station
+ * admin signs in, turns OK after, and only then do the channels appear.
  */
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -113,13 +117,18 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
     await test.info().attach(name, { body: await page.screenshot(), contentType: 'image/png' });
   };
   playout = await startFakePlayout();
-  amcp = await createMock({ amcpPort: 5250, oscPort: 0, disableOsc: true }).catch(
-    (err: unknown) => {
-      throw new Error(
-        `the AMCP mock could not take TCP 5250 (first-run writes the standard port): ${String(err)}`,
-      );
-    },
-  );
+  const fake = playout;
+  amcp = await createMock({
+    amcpPort: 5250,
+    oscPort: 0,
+    disableOsc: true,
+    // B3 — refused until the fake Playout trusts this machine.
+    admit: (ip) => fake.isTrusted(ip),
+  }).catch((err: unknown) => {
+    throw new Error(
+      `the AMCP mock could not take TCP 5250 (first-run writes the standard port): ${String(err)}`,
+    );
+  });
   stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-first-run-'));
   const port = await freePort();
   await startBridge(port);
@@ -153,8 +162,12 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
     timeout: 20_000,
   });
   await expect(firstRun.locator('[data-check="cors"]')).toHaveAttribute('data-status', 'pass');
-  // The AMCP line sent VERSION to the mock and says what it answered.
-  await expect(firstRun.locator('[data-check="amcp"]')).toContainText('answered VERSION: 2.3.2');
+  // B2 — before any station admin has signed in, AMCP is not judged: it waits, neutral.
+  const amcpLine = firstRun.locator('[data-check="amcp"]');
+  await expect(amcpLine).toHaveAttribute('data-status', 'wait');
+  await expect(amcpLine).toHaveText('CasparCG on 127.0.0.1: waiting for sign-in.');
+  // …and it really was refused — the mock turned this machine away (the instrument is live).
+  expect(amcp?.refusedConnections ?? 0).toBeGreaterThan(0);
   await shot('1-address-and-check');
 
   await firstRun.getByRole('button', { name: 'Connect' }).click();
@@ -178,8 +191,16 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
     (stationFile('bridge-playout.json') as { playout: { issuer?: string } }).playout.issuer,
   ).toBeUndefined();
 
+  // The operator's sign-in trusted nothing: AMCP still waits.
+  expect(fake.trustedSources).toEqual([]);
+
   await signIn(FAKE_ADMIN.username);
-  // ── 3 · the Playout's channels, in this account's grant ────────────────────
+  // B2 — the station admin's sign-in trusts this machine; the check runs again and AMCP is OK…
+  await expect(amcpLine).toHaveAttribute('data-status', 'pass', { timeout: 30_000 });
+  await expect(amcpLine).toContainText('answered VERSION: 2.3.2');
+  expect(fake.trustedSources).toEqual(['127.0.0.1']);
+  await shot('2b-signed-in-amcp-ok');
+  // ── 3 · …and only then the Playout's channels, in this account's grant ─────
   const programme = firstRun.getByRole('button', { name: /آپاسای/ });
   await expect(programme).toBeVisible({ timeout: 20_000 });
   // The fake admin's grant names channel 1 only; channel 2 is in the catalogue and not offered.

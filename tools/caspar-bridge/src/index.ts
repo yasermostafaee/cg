@@ -21,6 +21,7 @@ export {
 // `DESKTOP-APPS-01` §2F — the connection check, its probes, and the Playout host (A4).
 export {
   AMCP_PROBE_TIMEOUT_MS,
+  AMCP_TRUST_WINDOW_MS,
   probeAmcp,
   probeRoute,
   realProbes,
@@ -32,6 +33,8 @@ export {
   type StationPorts,
 } from './connection-check.js';
 export { playoutHostOf } from './bridge.js';
+// `DESKTOP-APPS-01-B` B1.4 — every bridge request to the Playout: server-side, no Origin, no proxy.
+export { playoutFetch } from './playout-http.js';
 export type { AuthGateState, BridgeHandle, BridgeOptions } from './bridge.js';
 // `C-037` — the Playout link: its config precedence (CLI > file > default), the boot failure
 // that names a missing key, and the verifier. The CLI resolves the default file path through

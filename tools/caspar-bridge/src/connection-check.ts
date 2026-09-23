@@ -11,6 +11,7 @@ import type {
   ConnectionCheckResult,
 } from '@cg/shared-ipc';
 import { playoutEndpointsFor } from './playout-config.js';
+import { plainAgentFor } from './playout-http.js';
 
 /**
  * 🔴 `DESKTOP-APPS-01` §2F — **THE CONNECTION CHECK: one line per link, pass or fail, and on a
@@ -30,6 +31,23 @@ import { playoutEndpointsFor } from './playout-config.js';
 export const AMCP_PROBE_TIMEOUT_MS = 3000;
 const HTTP_TIMEOUT_MS = 5000;
 const AMCP_PORT = 5250;
+
+/**
+ * `DESKTOP-APPS-01-B` — how long AMCP is given, after a `station-admin` signs in, to be let in by
+ * a Playout 2.8.54 ("within a few seconds", their answer): the bridge's own link retries promptly
+ * for this long, and the check keeps asking for this long before it says the Playout did not trust
+ * this machine.
+ */
+export const AMCP_TRUST_WINDOW_MS = 30_000;
+/** Between two of the check's AMCP asks inside that window. */
+const AMCP_TRUST_RETRY_MS = 1000;
+
+/**
+ * Where a Playout administrator turns auto-trust on and off, in the Playout's own words — wrapped
+ * in an RTL isolate (`RLI`…`PDI`), because it sits inside an English sentence and the arrow
+ * between its Persian steps is a neutral the bidi algorithm would otherwise place for us.
+ */
+const PLAYOUT_CG_SETTINGS = '\u2067تنظیمات ← اتصال به CG Control\u2069';
 
 /** What one AMCP probe saw — the three shapes the check tells apart, and the two edges. */
 export type AmcpOutcome =
@@ -87,6 +105,16 @@ export interface StationPorts {
 export interface CheckOptions {
   readonly ports: StationPorts;
   readonly amcpTimeoutMs?: number;
+  /**
+   * `DESKTOP-APPS-01-B` B2 — has a `station-admin` signed in to this bridge? Until one has, a
+   * Playout 2.8.54 refuses AMCP to this machine by design, so a refused or dropped AMCP line is
+   * WAITING (`wait`), not a failure; once one has, the line is judged.
+   */
+  readonly amcpJudged?: boolean;
+  /** TEST-ONLY — {@link AMCP_TRUST_WINDOW_MS} by default. */
+  readonly amcpTrustWindowMs?: number;
+  /** TEST-ONLY — the pause between two AMCP asks inside the window. */
+  readonly amcpRetryMs?: number;
 }
 
 /** VPN and proxy clients recognisable by their process name, with the name an operator knows. */
@@ -174,19 +202,16 @@ export async function runConnectionCheck(
     });
   }
 
-  // 3 — AMCP: send VERSION, and tell a reset from a drop from an answer.
+  // 3 — AMCP: send VERSION, and tell a reset from a drop from an answer — judged only once a
+  // station-admin has signed in (B2).
   const casparRoute =
     casparHost === playoutHost ? route : await probes.route(casparHost).catch(() => null);
   const localAddress = casparRoute?.address ?? null;
-  lines.push(
-    amcpLine(
-      casparHost,
-      await probes
-        .amcp(casparHost, AMCP_PORT, options.amcpTimeoutMs ?? AMCP_PROBE_TIMEOUT_MS)
-        .catch((): AmcpOutcome => ({ kind: 'unreachable', code: 'error' })),
-      localAddress,
-    ),
-  );
+  const askAmcp = (): Promise<AmcpOutcome> =>
+    probes
+      .amcp(casparHost, AMCP_PORT, options.amcpTimeoutMs ?? AMCP_PROBE_TIMEOUT_MS)
+      .catch((): AmcpOutcome => ({ kind: 'unreachable', code: 'error' }));
+  lines.push(await checkAmcp(askAmcp, casparHost, localAddress, options));
 
   // 4 — the Playout API publishes its signing keys.
   lines.push(await checkJwks(probes, endpoints.jwksUrl));
@@ -237,10 +262,73 @@ async function checkInterceptors(
   return { id: 'proxy', status: 'pass', text: 'No VPN or proxy in the way.' };
 }
 
+/** A refusal or a drop: how a Playout 2.8.54 answers a machine it has not trusted. */
+type UntrustedOutcome = Extract<AmcpOutcome, { kind: 'refused' } | { kind: 'timeout' }>;
+function isUntrusted(outcome: AmcpOutcome): outcome is UntrustedOutcome {
+  return outcome.kind === 'refused' || outcome.kind === 'timeout';
+}
+
+/**
+ * 🔴 `DESKTOP-APPS-01-B` B2 — **THE AMCP LINE, IN THE ORDER A 2.8.54 PLAYOUT ALLOWS.**
+ *
+ * Before any `station-admin` has signed in, a refusal or a drop is WAITING — the Playout opens
+ * AMCP only after that sign-in — and an answer is still an answer. After one, the check keeps
+ * asking for {@link AMCP_TRUST_WINDOW_MS} (the Playout adds this machine within seconds), and only
+ * a link STILL refused or dropped at the end is judged: the Playout did not trust this machine,
+ * the likely reasons, and only then v2's manual fallback for the Playout's administrator.
+ */
+async function checkAmcp(
+  ask: () => Promise<AmcpOutcome>,
+  host: string,
+  localAddress: string | null,
+  options: CheckOptions,
+): Promise<ConnectionCheckLine> {
+  let outcome = await ask();
+  if (options.amcpJudged !== true) {
+    return isUntrusted(outcome)
+      ? { id: 'amcp', status: 'wait', text: `CasparCG on ${host}: waiting for sign-in.` }
+      : amcpLine(host, outcome);
+  }
+  const deadline = Date.now() + (options.amcpTrustWindowMs ?? AMCP_TRUST_WINDOW_MS);
+  while (isUntrusted(outcome) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, options.amcpRetryMs ?? AMCP_TRUST_RETRY_MS));
+    outcome = await ask();
+  }
+  return isUntrusted(outcome)
+    ? untrustedLine(host, outcome, localAddress)
+    : amcpLine(host, outcome);
+}
+
+function untrustedLine(
+  host: string,
+  outcome: UntrustedOutcome,
+  localAddress: string | null,
+): ConnectionCheckLine {
+  const seen =
+    outcome.kind === 'refused'
+      ? `${host} still refuses port ${String(AMCP_PORT)}`
+      : `${host} still does not answer on port ${String(AMCP_PORT)}`;
+  const likely = [
+    `auto-trust is off in the Playout's settings (${PLAYOUT_CG_SETTINGS})`,
+    'this machine reaches the Playout through NAT, a proxy or a VPN',
+    'the Playout is older than 2.8.54',
+    // A reset is also what a port with nothing listening answers.
+    ...(outcome.kind === 'refused' ? [`CasparCG is not running on ${host}`] : []),
+  ];
+  return {
+    id: 'amcp',
+    status: 'fail',
+    text:
+      `The Playout did not trust this machine: ${seen} after a station admin signed in. ` +
+      `Likely: ${likely.join('; ')}. ` +
+      "Otherwise the Playout's administrator runs this on the Playout server:",
+    command: `.\\secure-ports.ps1 -AllowAmcpFrom ${localAddress ?? '<this machine>'}`,
+  };
+}
+
 function amcpLine(
   host: string,
-  outcome: AmcpOutcome,
-  localAddress: string | null,
+  outcome: Exclude<AmcpOutcome, UntrustedOutcome>,
 ): ConnectionCheckLine {
   switch (outcome.kind) {
     case 'answered':
@@ -248,19 +336,6 @@ function amcpLine(
         id: 'amcp',
         status: 'pass',
         text: `CasparCG on ${host} answered VERSION: ${outcome.version}.`,
-      };
-    case 'refused':
-      return {
-        id: 'amcp',
-        status: 'fail',
-        text: `${host} refused the connection on port ${String(AMCP_PORT)}. CasparCG is not running there, or the port is closed.`,
-      };
-    case 'timeout':
-      return {
-        id: 'amcp',
-        status: 'fail',
-        text: `No answer from ${host} on port ${String(AMCP_PORT)}: its firewall drops this machine. The Playout's administrator runs this on the Playout server:`,
-        command: `.\\secure-ports.ps1 -AllowAmcpFrom ${localAddress ?? '<this machine>'}`,
       };
     case 'silent':
       return {
@@ -491,7 +566,9 @@ function probeRequest(
   return new Promise((resolve, reject) => {
     const target = new URL(url);
     const lib = target.protocol === 'https:' ? https : http;
-    const req = lib.request(target, { method, headers, timeout: HTTP_TIMEOUT_MS }, (res) => {
+    // The bridge's own path to the Playout (`playout-http.ts`): never a proxy the environment names.
+    const agent = plainAgentFor(target);
+    const req = lib.request(target, { method, headers, timeout: HTTP_TIMEOUT_MS, agent }, (res) => {
       let body = '';
       res.setEncoding('utf8');
       res.on('data', (chunk: string) => {

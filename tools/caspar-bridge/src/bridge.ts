@@ -164,12 +164,13 @@ import {
 import { normalizeServeHost } from './serve-host-config.js';
 import { AuthSession } from './auth-session.js';
 import {
+  AMCP_TRUST_WINDOW_MS,
   probeRoute,
   realProbes,
   runConnectionCheck,
   type CheckProbes,
 } from './connection-check.js';
-import { PlayoutAuth, type PlayoutAuthOptions } from './playout-auth.js';
+import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
 import {
   PlayoutCatalogue,
   type CatalogueRow,
@@ -1537,6 +1538,37 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   }
 
   /*
+    🔴 `DESKTOP-APPS-01-B` B1 — **AMCP WAITS FOR A STATION-ADMIN.**
+
+    A Playout 2.8.54 refuses AMCP to a machine it has not trusted, and trusts the source of a
+    SERVER-SIDE D4/D8/D9 read carrying a `station-admin` token. So on a station that authenticates:
+
+      1. until a `station-admin` signs in, an AMCP failure is WAITING, not an alarm — the runtime
+         carries the fact on its health and the console says so (the reconnect loop runs as ever);
+      2. a `station-admin`'s sign-in reads D4 AT ONCE with that admin's own token — the read that
+         trusts this machine — rather than at the next 30 s tick or D9 minute;
+      3. then the ONE reconnect loop retries promptly for `AMCP_TRUST_WINDOW_MS`, so the link comes
+         up within seconds of the Playout's firewall opening;
+      4. and the connection check starts JUDGING its AMCP line (before, a refusal is "waiting").
+
+    Keyed on the token's FIRST acceptance: a reload or a reconnect re-presents a token already
+    seen, and is not a sign-in. Per process, like the acceptance set itself — a restarted bridge
+    waits again until a `station-admin` signs in, unless AMCP comes up first (a trust the Playout
+    still holds lasts 7 days).
+  */
+  let stationAdminSignedIn = false;
+  if (playoutAuth !== null) runtime.setAmcpAwaitsSignIn(true);
+  const trustFromSignIn = ({ token, first }: SeatedSignIn): boolean => {
+    if (!first || !holdsPermissionClass(token.principal.roles, 'station-admin')) return false;
+    stationAdminSignedIn = true;
+    runtime.setAmcpAwaitsSignIn(false);
+    runtime.retryAmcpPromptly(AMCP_TRUST_WINDOW_MS);
+    if (playoutCatalogue === null) return false;
+    void playoutCatalogue.readNow(token.rawToken);
+    return true;
+  };
+
+  /*
     `DESKTOP-APPS-01` — first-run's phase, read per call: the channel is declared LIVE through
     `fixedLayers.set-config`, and the phase must end the moment it is.
   */
@@ -1562,7 +1594,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         { proto: 'udp', port: ports.osc },
         ...(ports.console !== null ? [{ proto: 'tcp' as const, port: ports.console }] : []),
       ]);
-    return runConnectionCheck(req, probes, { ports });
+    // B2 — AMCP is judged only once a station-admin has signed in; before that a refusal waits.
+    return runConnectionCheck(req, probes, { ports, amcpJudged: stationAdminSignedIn });
   };
 
   const routes = buildRoutes(runtime, {
@@ -1704,12 +1737,13 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         session,
         playoutAuth,
         runtime,
-        () => {
+        (signIn) => {
           // A principal was just seated on this socket: its `permitted` moved, and its bearer
           // may be the first this bridge has had — read the catalogue now rather than at the
-          // next tick, so the names arrive with the sign-in.
+          // next tick, so the names arrive with the sign-in. A station-admin's sign-in reads it
+          // at once with that admin's own token (B1.2), which is the read that trusts this machine.
           pushStationChannels();
-          void playoutCatalogue?.refresh();
+          if (!trustFromSignIn(signIn)) void playoutCatalogue?.refresh();
         },
       );
     });
@@ -1813,6 +1847,13 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   };
 }
 
+/** A principal just seated on a socket, and whether its token is new to this bridge process. */
+interface SeatedSignIn {
+  readonly token: VerifiedToken;
+  /** The token's FIRST acceptance by this process — a sign-in, not a reconnect or a reload. */
+  readonly first: boolean;
+}
+
 async function handleMessage(
   socket: WebSocket,
   routes: Map<string, Route>,
@@ -1822,7 +1863,7 @@ async function handleMessage(
   playoutAuth: PlayoutAuth | null,
   runtime: CasparRuntime,
   /** `R-062` gap 2 — a principal was just seated on this socket. */
-  afterSignIn: () => void = () => undefined,
+  afterSignIn: (signIn: SeatedSignIn) => void = () => undefined,
 ): Promise<void> {
   const frame = parseWsFrame(raw);
   if (frame === null) return;
@@ -2073,7 +2114,7 @@ async function handleAuthFrame(
   session: AuthSession,
   playoutAuth: PlayoutAuth | null,
   runtime: CasparRuntime,
-  afterSignIn: () => void,
+  afterSignIn: (signIn: SeatedSignIn) => void,
 ): Promise<void> {
   if (playoutAuth === null) {
     send(socket, {
@@ -2151,7 +2192,8 @@ async function handleAuthFrame(
     one per reconnect over a twelve-hour shift is the network's diary, not the operator's, and
     it would bury the rows that are.
   */
-  if (playoutAuth.markAccepted(result.token)) {
+  const first = playoutAuth.markAccepted(result.token);
+  if (first) {
     /*
       `actorNameTruncated` rides here and nowhere else: it is a fact about this session, and a
       flag repeated on every take would be noise about something that does not change.
@@ -2186,7 +2228,7 @@ async function handleAuthFrame(
   });
   // AFTER the reply, so the console holds its principal before the channel answer that is
   // computed for it arrives.
-  afterSignIn();
+  afterSignIn({ token: result.token, first });
 }
 
 function errorResponse(id: string, message: string): WsResponseFrame {

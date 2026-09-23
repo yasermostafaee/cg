@@ -46,10 +46,14 @@ export type ConnectionCheckId = z.infer<typeof ConnectionCheckIdSchema>;
  * than a blocker — warn. `text` is the operator's sentence: on a failure, what is wrong and what
  * to do. `command` is the ONE line somebody else must run or add (the AMCP allow rule, the CORS
  * origin), carried apart from the sentence so the console can show it to copy.
+ *
+ * `wait` (`DESKTOP-APPS-01-B` B2) is NEUTRAL: a link that is not judged yet because something
+ * else must happen first — AMCP before any `station-admin` has signed in, since a Playout 2.8.54
+ * opens AMCP to this machine only then. Never a failure.
  */
 export const ConnectionCheckLineSchema = z.object({
   id: ConnectionCheckIdSchema,
-  status: z.enum(['pass', 'fail', 'warn']),
+  status: z.enum(['pass', 'fail', 'warn', 'wait']),
   text: z.string(),
   command: z.string().optional(),
 });

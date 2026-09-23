@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
+import { createRemoteJWKSet, customFetch, errors as joseErrors, jwtVerify } from 'jose';
 import { z } from 'zod';
 import {
   AUTH_STATION_NOT_SET_UP,
@@ -12,6 +12,7 @@ import {
   type PlayoutPrincipal,
 } from '@cg/shared-ipc';
 import type { PlayoutAuthConfig } from './playout-config.js';
+import { playoutFetch } from './playout-http.js';
 
 /**
  * 🔴 `C-037` / ADR 0010 rule 1 — **OFFLINE VERIFICATION OF A PLAYOUT-ISSUED TOKEN.**
@@ -124,7 +125,10 @@ function audienceMatches(aud: unknown, expected: string): boolean {
 }
 
 export interface PlayoutAuthOptions {
-  /** Injected in tests so a suite never reaches a real network. Defaults to global `fetch`. */
+  /**
+   * The D9 read. Injected in tests; defaults to {@link playoutFetch} — server-side, no `Origin`,
+   * no proxy (`DESKTOP-APPS-01-B` B1.4). The JWKS read always uses `playoutFetch`.
+   */
   readonly fetchImpl?: typeof fetch;
   /** Injected in tests to drive expiry and the poll cadence. Defaults to `Date.now`. */
   readonly now?: () => number;
@@ -194,11 +198,13 @@ export class PlayoutAuth {
     this.#issuer = config.issuer;
     this.#onIssuerAdopted = options.onIssuerAdopted;
     this.#now = options.now ?? ((): number => Date.now());
-    this.#fetch = options.fetchImpl ?? ((...args) => fetch(...args));
+    this.#fetch = options.fetchImpl ?? playoutFetch;
     this.#jwks = createRemoteJWKSet(new URL(config.jwksUrl), {
       cooldownDuration: JWKS_COOLDOWN_MS,
       cacheMaxAge: JWKS_CACHE_MAX_AGE_MS,
       timeoutDuration: HTTP_TIMEOUT_MS,
+      // B1.4 — the key set too goes out server-side and never through a proxy the environment names.
+      [customFetch]: playoutFetch,
     });
   }
 
