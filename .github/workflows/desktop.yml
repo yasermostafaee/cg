@@ -100,16 +100,6 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      # Until Cargo.lock is committed, the lockfile this build resolved is kept so it can be.
-      - name: Upload Cargo.lock
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: cargo-lock
-          path: Cargo.lock
-          if-no-files-found: ignore
-          retention-days: 7
-
   smoke:
     name: Installer smoke (clean Windows)
     needs: installers
