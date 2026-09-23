@@ -49,4 +49,25 @@ and that refusal is not changed.
 
 ## 4. The Designer inside Tauri — measured by the installer smoke
 
-Recorded in `tasks.md` §6 from the smoke's `designer-facts.json` / `designer-ffmpeg.json`.
+Measured inside the INSTALLED CG Designer, launched unelevated on a clean runner (run
+https://github.com/yasermostafaee/cg/actions/runs/35864172600, `designer-facts.json` /
+`designer-ffmpeg.json`):
+
+| Fact                                        | Measured                                                                                                                           |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Origin                                      | `http://tauri.localhost` (WebView2, `Edg/152`)                                                                                     |
+| `isSecureContext`                           | `true`                                                                                                                             |
+| OPFS (`navigator.storage.getDirectory()`)   | available                                                                                                                          |
+| `showOpenFilePicker` / `showSaveFilePicker` | both functions                                                                                                                     |
+| `showDirectoryPicker`                       | function                                                                                                                           |
+| `crossOriginIsolated`                       | `false` — not needed: ffmpeg ran without it (next row)                                                                             |
+| ffmpeg under the installed CSP              | the app's own `video-convert` chunk ran `probeSource` to its own verdict — `no-stream`, `Invalid data found when processing input` |
+
+So the Designer needs no file backend inside Tauri today (`P-054` stays conditional). Not
+measurable by CI: whether a folder permission granted through the directory picker survives an app
+restart — the owner's §7 step 2.
+
+The runner is elevated and WebView2 ignores `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` in an elevated
+process (wry#1782), so the smoke installs CG Control elevated, drives both apps at MEDIUM integrity
+(gsudo, Tauri's own CI recipe) and uninstalls elevated — the integrity level read from the process
+token and checked both ways.

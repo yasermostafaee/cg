@@ -27,7 +27,9 @@ from a checkout — which assumes a developer.
    stands with them. A designer-only user installs no bridge.
    - **CG Control** — per-machine (admin): the console and its bridge.
    - **CG Designer** — per-user, no admin rights, no bridge, no firewall rule: the Designer's built
-     `dist`, bundled normally and served from `http://tauri.localhost`.
+     `dist`, bundled normally and served from `http://tauri.localhost`. Measured in the installed
+     app: a secure context, OPFS and all three file pickers present, and ffmpeg loads and runs
+     under its CSP — so it needs no file backend today (`P-054` stays conditional).
 2. **CG Control's window loads the console FROM THE BRIDGE**, at `http://127.0.0.1:5174` — a new,
    loopback-only listener on the bridge that serves the Runtime's built `dist` with an SPA fallback
    and a health identity (`GET /__cg/health`). Not bundled inside the shell, for two reasons that
@@ -91,7 +93,10 @@ from a checkout — which assumes a developer.
     needs Rust locally, and a SECOND, fresh runner installs and drives them through WebView2's
     DevTools port — the installed files, the firewall rules and their removal, the installed sidecar
     answering, the console loaded from it, the door, state under `%APPDATA%`, single instance, close
-    and kill both leaving no bridge.
+    and kill both leaving no bridge. The apps are driven at MEDIUM integrity, as an operator runs
+    them, and only the per-machine install and uninstall run elevated: WebView2 ignores its
+    DevTools variable in an elevated process (wry#1782), which is what kept both page checks dark
+    on the first two runs.
 
 ## What the client's Playout must provide (install-time dependencies)
 

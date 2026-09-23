@@ -7,8 +7,10 @@
       `await`); `node.exe` + bundle chosen; no `import.meta.url`/`__dirname` sites
 - [x] 1.3 The console served by the bridge on a new loopback listener (5174), never 7911; the
       console's address derivation unchanged (measured with the staged sidecar)
-- [ ] 1.4 The Designer in Tauri — secure context, OPFS, pickers, ffmpeg (installer smoke);
-      folder permission after a restart (owner, §7 step 2)
+- [x] 1.4 The Designer in Tauri — secure context, OPFS, all three pickers, ffmpeg under the CSP:
+      measured in the installed app (https://github.com/yasermostafaee/cg/actions/runs/35864172600,
+      again on 35866930187; `design.md` §4). Folder permission after a restart is NOT measurable in
+      CI — owed by the owner, §7 step 2 (`P-054` stays conditional on it)
 - [x] 1.5 Fonts: the Runtime's CDN link; the Designer already self-hosted (chrome stack: `B-263`)
 - [x] 1.6 Persisted paths and the serve host's home
 
@@ -31,7 +33,11 @@
 - [x] 4.3 NSIS per-machine + firewall hooks (add/remove, program-scoped); WebView2 offline installer
 - [x] 4.4 CG Designer shell; NSIS per-user; WebView2 offline installer
 - [x] 4.5 `.github/workflows/desktop.yml`: build both; smoke both on a second clean runner
-- [ ] 4.6 The installer smoke green on a run — URL:
+- [x] 4.6 The installer smoke green on a run — URL:
+      https://github.com/yasermostafaee/cg/actions/runs/35866930187 on `a309c2b2` — job
+      `Installer smoke (clean Windows)` completed/success, **35/35**, apps driven at Medium
+      integrity (control: install phase reads High), incl. first-run on a fresh install and the door
+      moving it to the sign-in without a reload
 
 ## 5. First-run (+ `DESKTOP-APPS-01-A`)
 
@@ -54,5 +60,13 @@
 - [x] 6.2 Operator guide — _Installing and connecting_
 - [x] 6.3 PRD: `P-051`…`P-054`, `R-067`, `R-068`, `B-262`, `B-263`; `P-001` → `[~]`; DEBT item 4
       closed
-- [ ] 6.4 Linux `e2e` discharged — run URL (job confirmed RAN):
-- [ ] 6.5 Both installer artifact URLs:
+- [x] 6.4 Linux `e2e` discharged — run URL (job confirmed RAN):
+      https://github.com/yasermostafaee/cg/actions/runs/35859184070 on `2a879d08` (carries every
+      code commit of this change); job `E2E (Playwright)` completed/success with its `E2E` step RUN
+      (https://github.com/yasermostafaee/cg/actions/runs/35859184070/job/107175111226) — Designer
+      281 passed, Runtime 252 passed, `first-run.spec.ts` (both tests) and `fonts-offline.spec.ts`
+      in both apps among them
+- [x] 6.5 Both installer artifact URLs (run 35866930187, the smoke-green build; kept 30 days):
+      CG Control — https://github.com/yasermostafaee/cg/actions/runs/35866930187/artifacts/10752882224 ·
+      CG Designer — https://github.com/yasermostafaee/cg/actions/runs/35866930187/artifacts/10753781790
+      (each with `SHA256SUMS.txt`)
