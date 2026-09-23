@@ -2,9 +2,10 @@
 
 Cross-cutting items: shared packages, build/hosting, tests. See `README.md`.
 
-## [~] P-001 — Bundle Vazirmatn offline ⟨priority: high⟩
+## [x] P-001 — Bundle Vazirmatn offline ⟨priority: high⟩
 
-**In progress 2026-09-23 — `DESKTOP-APPS-01` §2B, change `openspec/changes/desktop-apps/`.** The
+**Done 2026-09-23 — `DESKTOP-APPS-01` §2B, change archived as
+`openspec/changes/archive/2026-09-23-desktop-apps/`.** The
 Runtime needed no new dependency: `main.tsx` now imports the `fonts.css` it already shipped, the
 jsdelivr `<link>` is gone and `cdn.jsdelivr.net` has left `style-src` and `font-src`. Both apps are
 pinned by `tests/e2e/fonts-offline.spec.ts`: with every off-machine host unreachable, no font or
@@ -3377,7 +3378,7 @@ its run URL on its PRD entry).
   `git grep -n --untracked -E "^## \[.\] P-050" -- docs` returned nothing, against a positive
   control on the same regex for `P-049` which returned `platform.md`.
 
-## [~] P-051 — Desktop delivery: CG Control and CG Designer as two Windows installers ⟨priority: high⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01`
+## [x] P-051 — Desktop delivery: CG Control and CG Designer as two Windows installers ⟨priority: high⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01`
 
 **What.** Two Tauri installers built by CI: **CG Control** (the console, served by its bridge
 sidecar on `http://127.0.0.1:5174`, per-machine, firewall rules for UDP 6250 and TCP 7911) and
@@ -3397,7 +3398,8 @@ and addresses, with nobody from our side present and often no internet.
 - WHEN CG Control closes or is killed THEN no bridge process is left behind
 - AND no Playout target is ever written over the control socket
 
-**Notes:** change `openspec/changes/desktop-apps/`. Follow-ups filed beside it: [[P-052]] signing,
+**Notes:** change archived 2026-09-23 as `openspec/changes/archive/2026-09-23-desktop-apps/`
+(deltas A–D folded into `desktop-delivery`, `runtime-caspar-bridge`, `runtime-ui`). Follow-ups filed beside it: [[P-052]] signing,
 [[P-053]] auto-update, [[P-054]] the Designer's file backend (only if needed), [[R-067]] the
 bridge as a service, [[R-068]] one CG Control per channel.
 
