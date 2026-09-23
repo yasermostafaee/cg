@@ -27,6 +27,13 @@
 //                                                     # C-037: require a Playout-issued JWT on the control
 //                                                     #   socket. Default --auth off = today, byte for byte.
 //   caspar-bridge --playout-config-path C:\cg\playout.json  # C-037: where the playout.* group persists
+//   caspar-bridge --state-home "C:\Users\op\AppData\Roaming\CG Control"
+//                                                     # DESKTOP-APPS-01: every default below resolves under
+//                                                     #   <state-home>\.cg-runtime\ instead of ~/.cg-runtime\
+//   caspar-bridge --console-dir C:\cg\console --console-port 5174
+//                                                     # DESKTOP-APPS-01: serve the built console on its own
+//                                                     #   loopback origin (never the template port)
+//   caspar-bridge --exit-on-stdin-close               # DESKTOP-APPS-01: stop when the parent's pipe closes
 //
 // R-010 boot precedence: explicit --caspar-*/--backup-* flags > the persisted
 // config file (~/.cg-runtime/bridge-connection.json by default) > built-in
@@ -86,6 +93,8 @@ import {
   lowBankEnd,
 } from '@cg/shared-ipc';
 import {
+  CONSOLE_DEFAULT_PORT,
+  ConsoleHttpServer,
   createBridge,
   defaultPlayoutConfigPath,
   parseReservedLayersFlag,
@@ -95,17 +104,40 @@ import {
 
 const args = parseArgs(process.argv.slice(2));
 
+/*
+  🔴 `DESKTOP-APPS-01` — WHOSE `.cg-runtime` THIS STATION USES.
+
+  Every default below is `<home>/.cg-runtime/bridge-*`, and `<home>` is the user's home unless
+  `--state-home` names another directory. The desktop app passes its own data directory, so an
+  installed CG Control can NEVER fall through to `~/.cg-runtime` — which on a developer's machine
+  names a real plant (`PLAYOUT-AUTH-01` met exactly that). The file NAMES do not change, so every
+  store, the persisted-files census and every doc about `bridge-*.json` still read the same.
+
+  A valueless flag is a hard boot error, for `--reserved-layers`' reason: the operator believes
+  the station's files live somewhere, and a silent fall-through to the home directory is the
+  very thing the flag exists to rule out.
+*/
+for (const flag of ['state-home', 'console-dir', 'console-port']) {
+  if (args[flag] === true) {
+    console.error(
+      `[caspar-bridge] --${flag} needs a value. Refusing to boot rather than silently falling back.`,
+    );
+    process.exit(1);
+  }
+}
+const stateHome = typeof args['state-home'] === 'string' ? args['state-home'] : os.homedir();
+
 const persistPath =
   typeof args['persist-path'] === 'string'
     ? args['persist-path']
-    : path.join(os.homedir(), '.cg-runtime', 'bridge-connection.json');
+    : path.join(stateHome, '.cg-runtime', 'bridge-connection.json');
 
 // R-021 — mirrors --persist-path, EXCEPT for what an absent file means: here it
 // means the built-in default bank, not "no bank" (see the header).
 const fixedLayersPath =
   typeof args['fixed-layers-path'] === 'string'
     ? args['fixed-layers-path']
-    : path.join(os.homedir(), '.cg-runtime', 'bridge-fixed-layers.json');
+    : path.join(stateHome, '.cg-runtime', 'bridge-fixed-layers.json');
 
 // R-028/C-015 — the reserved playout layers: explicit flag > persisted file.
 // A flag given WITHOUT a value is a hard boot error, never silently ignored —
@@ -125,13 +157,13 @@ const reservedLayers =
 const reservedLayersPath =
   typeof args['reserved-layers-path'] === 'string'
     ? args['reserved-layers-path']
-    : path.join(os.homedir(), '.cg-runtime', 'bridge-reserved-layers.json');
+    : path.join(stateHome, '.cg-runtime', 'bridge-reserved-layers.json');
 
 // R-028 — the persisted template library (one JSON file per template).
 const templatesDir =
   typeof args['templates-dir'] === 'string'
     ? args['templates-dir']
-    : path.join(os.homedir(), '.cg-runtime', 'bridge-templates');
+    : path.join(stateHome, '.cg-runtime', 'bridge-templates');
 
 // D-137/C-015 — the Live Source catalog and the per-plate assignments. Each has
 // its own path, NEVER inside templatesDir (see the header): the registry would
@@ -139,11 +171,11 @@ const templatesDir =
 const sourceCatalogPath =
   typeof args['source-catalog-path'] === 'string'
     ? args['source-catalog-path']
-    : path.join(os.homedir(), '.cg-runtime', 'bridge-source-catalog.json');
+    : path.join(stateHome, '.cg-runtime', 'bridge-source-catalog.json');
 const sourceAssignmentsPath =
   typeof args['source-assignments-path'] === 'string'
     ? args['source-assignments-path']
-    : path.join(os.homedir(), '.cg-runtime', 'bridge-source-assignments.json');
+    : path.join(stateHome, '.cg-runtime', 'bridge-source-assignments.json');
 
 // 🔴 B-145 — the LIVE LAYER LEDGER: which layers the bridge itself has seated behind a
 // template's holes. Unlike every store above, this one is not station CONFIG — it is the
@@ -173,6 +205,7 @@ const liveLayersPath = resolveLiveLayersPath(
     : typeof args['live-layers-path'] === 'string'
       ? args['live-layers-path']
       : undefined,
+  stateHome,
 );
 
 // B-141 — the AUDIT LOG, NDJSON, append-only. Same shape as the stores above and
@@ -185,7 +218,7 @@ const liveLayersPath = resolveLiveLayersPath(
 const auditLogPath =
   typeof args['audit-log-path'] === 'string'
     ? args['audit-log-path']
-    : path.join(os.homedir(), '.cg-runtime', 'bridge-audit.ndjson');
+    : path.join(stateHome, '.cg-runtime', 'bridge-audit.ndjson');
 
 // 🔴 B-162 / C-024 — THE ADVERTISED TEMPLATE HOST, from CONFIGURATION.
 //
@@ -346,7 +379,7 @@ const connection =
 const playoutConfigPath =
   typeof args['playout-config-path'] === 'string'
     ? args['playout-config-path']
-    : defaultPlayoutConfigPath(os.homedir());
+    : defaultPlayoutConfigPath(stateHome);
 
 // A valueless flag is a hard boot error, never silently ignored — the same fail-closed
 // doctrine as `--reserved-layers`, and for a stronger reason: the operator believes the
@@ -394,9 +427,10 @@ const playoutFlags = {
   ...(typeof args['playout-audience'] === 'string' ? { audience: args['playout-audience'] } : {}),
 };
 
-const handle = await createBridgeOrRefuse({
+const bridgePort = args.port !== undefined ? Number(args.port) : undefined;
+const bridgeOptions = {
   host: args.host,
-  port: args.port !== undefined ? Number(args.port) : undefined,
+  port: bridgePort,
   connection,
   persistPath,
   fixedLayersPath,
@@ -412,79 +446,132 @@ const handle = await createBridgeOrRefuse({
   createMissingConsumers,
   playout: playoutFlags,
   playoutConfigPath,
-});
+};
 
-console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);
 /*
-  C-037 — READ BACK on the boot line, both ways, exactly as C-029's missing-consumer line is,
-  and for the same reason: a station can see which state it is in without knowing the flag
-  exists. The OFF line is the one a test holds the default to.
+  🔴 `DESKTOP-APPS-01` — the console's own origin (ADR 0011). Checked BEFORE the bridge binds, so
+  a port collision is a one-line refusal rather than a half-started station: the console must
+  never share a port with the control socket or the template origin (ADR 0010 rule 13).
 */
-console.error(
-  handle.auth.mode === 'playout'
-    ? `[caspar-bridge] auth: PLAYOUT — the control socket requires a token issued by ` +
-        `${handle.auth.playout.issuer} (aud ${handle.auth.playout.audience}); keys read from ` +
-        `${handle.auth.playout.jwksUrl}; consoles sign in at ${handle.auth.playout.tokenUrl}`
-    : '[caspar-bridge] auth: OFF (default) - the control socket has no principal and every ' +
-        'connected client can drive this station; --auth playout requires a Playout-issued token',
-);
-console.error(`[caspar-bridge] candidate layers: ${describeFixedBank(handle.fixedBankSource)}`);
-console.error(`[caspar-bridge] live sources: ${describeSourceCatalog(handle.sourceCatalog)}`);
-console.error(
-  `[caspar-bridge] plate assignments: ${describeAssignments(handle.sourceAssignments)}`,
-);
-console.error(`[caspar-bridge] live layer ledger: ${describeLiveLayers(handle.liveLayers)}`);
-// C-031 — the one number every take depends on, said at boot like the rest.
-console.error(`[caspar-bridge] templates: ${describeTemplates(handle.templates)}`);
-// Longer than any real channel frame (the slowest, 1080p2398, is ~41.7 ms; an interlaced
-// 24p-family mode ~83). Not a limit — a threshold for saying so out loud on the boot line.
-const LOOK_MIXER_HOLD_IMPLAUSIBLE_MS = 200;
-/*
-  B-174 — the hold is READ BACK, and an implausible one is called out rather than clamped.
-  It is a real playout timing knob, so the operator's number is honoured whatever it is;
-  but the value sleeps inside the row's seat lock with the page already flipped, so a
-  mistyped 4000 is four seconds of new holes over old fills on air, with every swap and
-  update on that row queued behind it. A digit slip is silent otherwise — nothing else in
-  the bridge ever mentions the number again.
-*/
-console.error(
-  `[caspar-bridge] look-switch mixer hold: ` +
-    (lookMixerHoldMs === undefined
-      ? 'one channel frame of the observed video mode (40 ms until it is read)'
-      : `${lookMixerHoldMs} ms (configured)`),
-);
-if (lookMixerHoldMs !== undefined && lookMixerHoldMs > LOOK_MIXER_HOLD_IMPLAUSIBLE_MS) {
-  console.error(
-    `[caspar-bridge] !! ${lookMixerHoldMs} ms is far longer than any channel frame (the slowest ` +
-      'is about 42) - every look switch will show the new holes over the old pictures for that ' +
-      'long, on air, with swaps and updates on that row waiting behind it.',
-  );
+const consoleDir = typeof args['console-dir'] === 'string' ? args['console-dir'] : undefined;
+const consolePort =
+  typeof args['console-port'] === 'string' ? Number(args['console-port']) : CONSOLE_DEFAULT_PORT;
+if (consoleDir !== undefined) {
+  if (!Number.isInteger(consolePort) || consolePort < 0 || consolePort > 65535) {
+    console.error('[caspar-bridge] --console-port must be an integer port (0 = ephemeral).');
+    process.exit(1);
+  }
+  if (consolePort !== 0 && (consolePort === bridgePort || consolePort === templateServePort)) {
+    console.error(
+      `[caspar-bridge] --console-port ${consolePort} is also the control or template port. ` +
+        'The console is served on its own origin and never on the template origin.',
+    );
+    process.exit(1);
+  }
 }
-// C-029 — READ BACK on the boot line, both ways, so a station can see which state it is in
-// without knowing the flag exists. The OFF line is the one a test holds the default to.
-console.error(
-  createMissingConsumers
-    ? '[caspar-bridge] missing-consumer creation: ON (--create-missing-consumers) - a consumer ' +
-        'casparcg.config declares that is not running will be ADDed once per connection with ' +
-        "the declaration's own device, never a substitute; the outcome is reported either way"
-    : '[caspar-bridge] missing-consumer creation: OFF (default) - a consumer casparcg.config ' +
-        'declares that is not running is REPORTED (banner + this log), never created; ' +
-        '--create-missing-consumers turns creation on',
-);
-console.error(
-  `[caspar-bridge] template HTTP server on ${handle.templateServe.url}/template/<id>` +
-    (handle.templateServe.exposed ? ' (LAN-exposed)' : ' (loopback)') +
-    ` - advertised host from ${describeServeHostSource(handle.templateServe.source)}`,
-);
-// B-162 — the correctness verdict, on the boot line an operator actually reads.
-// `createBridge` already wrote the full warning to stderr; this is the one-line
-// restatement beside the address it is about, so the two are never read apart.
-if (handle.templateServe.unreachable.length > 0) {
+
+const handle = await boot();
+
+/*
+  The console listener starts AFTER the control socket is listening and outlives any restart of
+  the bridge behind it, so its health answer means "the whole bridge is up" and the page a
+  window already holds is never pulled out from under it.
+*/
+const consoleServer = consoleDir !== undefined ? new ConsoleHttpServer() : null;
+if (consoleServer !== null && consoleDir !== undefined) {
+  try {
+    await consoleServer.start({ dir: consoleDir, port: consolePort });
+  } catch (err) {
+    console.error(
+      `[caspar-bridge] console could not be served on 127.0.0.1:${consolePort}: ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    );
+    await handle.close();
+    process.exit(1);
+  }
+  console.error(`[caspar-bridge] console on ${consoleServer.url} (from ${consoleDir})`);
+}
+
+/** Start the bridge and say, line by line, what it came up with. */
+async function boot() {
+  const h = await createBridgeOrRefuse(bridgeOptions);
+  describeBoot(h);
+  return h;
+}
+
+function describeBoot(handle) {
+  console.error(`[caspar-bridge] WS listening on ${handle.url} → CasparCG via @cg/caspar-client`);
+  /*
+    C-037 — READ BACK on the boot line, both ways, exactly as C-029's missing-consumer line is,
+    and for the same reason: a station can see which state it is in without knowing the flag
+    exists. The OFF line is the one a test holds the default to.
+  */
   console.error(
-    `[caspar-bridge] !! ${handle.templateServe.unreachable.join(', ')} CANNOT fetch that address ` +
-      '- those servers will show live sources with NO TEMPLATE. Set the serve host in the ' +
-      'Runtime server settings panel (applies without a restart), or pass --template-serve-host.',
+    handle.auth.mode === 'playout'
+      ? `[caspar-bridge] auth: PLAYOUT — the control socket requires a token issued by ` +
+          `${handle.auth.playout.issuer} (aud ${handle.auth.playout.audience}); keys read from ` +
+          `${handle.auth.playout.jwksUrl}; consoles sign in at ${handle.auth.playout.tokenUrl}`
+      : '[caspar-bridge] auth: OFF (default) - the control socket has no principal and every ' +
+          'connected client can drive this station; --auth playout requires a Playout-issued token',
   );
+  console.error(`[caspar-bridge] candidate layers: ${describeFixedBank(handle.fixedBankSource)}`);
+  console.error(`[caspar-bridge] live sources: ${describeSourceCatalog(handle.sourceCatalog)}`);
+  console.error(
+    `[caspar-bridge] plate assignments: ${describeAssignments(handle.sourceAssignments)}`,
+  );
+  console.error(`[caspar-bridge] live layer ledger: ${describeLiveLayers(handle.liveLayers)}`);
+  // C-031 — the one number every take depends on, said at boot like the rest.
+  console.error(`[caspar-bridge] templates: ${describeTemplates(handle.templates)}`);
+  // Longer than any real channel frame (the slowest, 1080p2398, is ~41.7 ms; an interlaced
+  // 24p-family mode ~83). Not a limit — a threshold for saying so out loud on the boot line.
+  const LOOK_MIXER_HOLD_IMPLAUSIBLE_MS = 200;
+  /*
+    B-174 — the hold is READ BACK, and an implausible one is called out rather than clamped.
+    It is a real playout timing knob, so the operator's number is honoured whatever it is;
+    but the value sleeps inside the row's seat lock with the page already flipped, so a
+    mistyped 4000 is four seconds of new holes over old fills on air, with every swap and
+    update on that row queued behind it. A digit slip is silent otherwise — nothing else in
+    the bridge ever mentions the number again.
+  */
+  console.error(
+    `[caspar-bridge] look-switch mixer hold: ` +
+      (lookMixerHoldMs === undefined
+        ? 'one channel frame of the observed video mode (40 ms until it is read)'
+        : `${lookMixerHoldMs} ms (configured)`),
+  );
+  if (lookMixerHoldMs !== undefined && lookMixerHoldMs > LOOK_MIXER_HOLD_IMPLAUSIBLE_MS) {
+    console.error(
+      `[caspar-bridge] !! ${lookMixerHoldMs} ms is far longer than any channel frame (the slowest ` +
+        'is about 42) - every look switch will show the new holes over the old pictures for that ' +
+        'long, on air, with swaps and updates on that row waiting behind it.',
+    );
+  }
+  // C-029 — READ BACK on the boot line, both ways, so a station can see which state it is in
+  // without knowing the flag exists. The OFF line is the one a test holds the default to.
+  console.error(
+    createMissingConsumers
+      ? '[caspar-bridge] missing-consumer creation: ON (--create-missing-consumers) - a consumer ' +
+          'casparcg.config declares that is not running will be ADDed once per connection with ' +
+          "the declaration's own device, never a substitute; the outcome is reported either way"
+      : '[caspar-bridge] missing-consumer creation: OFF (default) - a consumer casparcg.config ' +
+          'declares that is not running is REPORTED (banner + this log), never created; ' +
+          '--create-missing-consumers turns creation on',
+  );
+  console.error(
+    `[caspar-bridge] template HTTP server on ${handle.templateServe.url}/template/<id>` +
+      (handle.templateServe.exposed ? ' (LAN-exposed)' : ' (loopback)') +
+      ` - advertised host from ${describeServeHostSource(handle.templateServe.source)}`,
+  );
+  // B-162 — the correctness verdict, on the boot line an operator actually reads.
+  // `createBridge` already wrote the full warning to stderr; this is the one-line
+  // restatement beside the address it is about, so the two are never read apart.
+  if (handle.templateServe.unreachable.length > 0) {
+    console.error(
+      `[caspar-bridge] !! ${handle.templateServe.unreachable.join(', ')} CANNOT fetch that address ` +
+        '- those servers will show live sources with NO TEMPLATE. Set the serve host in the ' +
+        'Runtime server settings panel (applies without a restart), or pass --template-serve-host.',
+    );
+  }
 }
 
 /**
@@ -514,14 +601,31 @@ async function createBridgeOrRefuse(options) {
   }
 }
 
+let stopping = false;
 const shutdown = async () => {
+  if (stopping) return;
+  stopping = true;
   console.error('[caspar-bridge] stopping');
+  await consoleServer?.stop();
   await handle.close();
   process.exit(0);
 };
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+
+/*
+  🔴 `DESKTOP-APPS-01` — THE PARENT'S LIFELINE. The desktop shell holds the write end of this
+  process's stdin and never writes to it; when the shell exits — cleanly, or killed from Task
+  Manager — the OS closes that handle and this end reads EOF. Windows delivers no SIGTERM to a
+  child, so without this a crashed shell would leave a bridge holding every port behind it.
+  Opt-in: a bridge started in a terminal must not stop because a terminal's stdin ended.
+*/
+if (args['exit-on-stdin-close'] === true) {
+  process.stdin.on('end', shutdown);
+  process.stdin.on('close', shutdown);
+  process.stdin.resume();
+}
 
 /**
  * WHERE THE ADVERTISED TEMPLATE HOST CAME FROM (B-162 / C-024).

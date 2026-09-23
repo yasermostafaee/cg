@@ -80,3 +80,13 @@ export {
   templateServeUnreachableWarning,
 } from './template-http-server.js';
 export type { TemplateServeOptions, TemplateServeOverride } from './template-http-server.js';
+// `DESKTOP-APPS-01` — the console served on its own loopback origin (ADR 0011), and the health
+// identity the desktop shell reads. Never on the template origin (ADR 0010 rule 13).
+export {
+  CONSOLE_DEFAULT_PORT,
+  CONSOLE_HEALTH_APP,
+  CONSOLE_HEALTH_PATH,
+  ConsoleHttpServer,
+  resolveConsolePath,
+} from './console-http-server.js';
+export type { ConsoleHealth, ConsoleServeOptions } from './console-http-server.js';
