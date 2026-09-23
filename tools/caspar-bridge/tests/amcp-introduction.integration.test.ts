@@ -237,9 +237,10 @@ describe('C4 — the introducing read is D9, at once, with the station-admin’s
     // The operator's own D9 read already sealed the automatic path — as the real Playout would.
     // (It is the bridge's regular 60 s poll, with the operator as the only bearer.)
     const d9 = (): typeof p.requestLog => p.requestLog.filter((r) => r.path === '/api/cg/revoked');
-    await waitFor(() => d9().length >= 1);
+    // Wait for the Playout's DECISION, not the log line: a request is logged on arrival and
+    // judged only after its token verifies.
+    await waitFor(() => p.sealed);
     expect(d9()[0]?.headers.authorization).toBe(`Bearer ${operator.token}`);
-    expect(p.sealed).toBe(true);
 
     const admin = await p.issueToken({ user: 'admin' });
     const before = d9().length;
@@ -251,6 +252,7 @@ describe('C4 — the introducing read is D9, at once, with the station-admin’s
     expect(d9()[d9().length - 1]?.headers.origin).toBeUndefined();
     expect((await health('o3')).amcpAwaitsSignIn).toBeUndefined();
     // This machine is PENDING (the path was sealed); the administrator approves it…
+    await waitFor(() => p.pendingSources.includes('127.0.0.1'));
     expect(p.pendingSources).toEqual(['127.0.0.1']);
     p.approve('127.0.0.1');
     // …and the link comes up.
@@ -316,6 +318,8 @@ describe('C5 — before adoption, nothing but a station-admin reaches the Playou
         (r) => r.path === '/api/cg/revoked' && r.headers.authorization === `Bearer ${admin.token}`,
       ),
     );
+    // …and its decision (made after the token verifies, so waited for rather than assumed).
+    await waitFor(() => p.isTrusted('127.0.0.1'));
     expect(p.trustedSources).toEqual(['127.0.0.1']);
   });
 });
