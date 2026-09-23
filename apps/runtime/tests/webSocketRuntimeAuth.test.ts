@@ -584,6 +584,8 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       signInUrl: caps.signInUrl,
       refreshUrl: caps.refreshUrl,
       contractVersion: caps.authContractVersion,
+      // `DESKTOP-APPS-01` — not an installed station in first-run.
+      setupPhase: null,
     });
     expect(runtime.auth.state()).toEqual({ kind: 'signed-in', principal, permittedChannels: [1] });
   });
@@ -606,8 +608,18 @@ describe('R-066 — the MODE comes from `bridge.capabilities`, and `unknown` is 
       signInUrl: null,
       refreshUrl: null,
       contractVersion: null,
+      setupPhase: null,
     });
     expect(runtime.auth.state()).toEqual({ kind: 'off' });
+  });
+
+  it('`DESKTOP-APPS-01` — an installed station in first-run says so; the absent field reads null', async () => {
+    const bridge = new FakeBridge();
+    bridge.capabilities = { channels: ipc.runtimeRequestChannelNames(ipc), setup: 'target' };
+    const runtime = start(bridge);
+    bridge.socket().open();
+    await settle();
+    expect(runtime.auth.capabilities()?.setupPhase).toBe('target');
   });
 });
 

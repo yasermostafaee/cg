@@ -29,6 +29,8 @@ import { applyDraft } from './features/inspector/applyDraft.js';
 import { clearDraft } from './features/inspector/draftStore.js';
 import { LockOverlay } from './features/lock/LockOverlay.js';
 import { SignInOverlay } from './features/auth/SignInOverlay.js';
+import { FirstRunScreen } from './features/firstRun/FirstRunScreen.js';
+import { useAuthCapabilities } from './hooks/useAuthCapabilities.js';
 import { CommandToast } from './features/status/CommandToast.js';
 import { RefusalBanner } from './features/status/RefusalBanner.js';
 import { StatusBar } from './features/status/StatusBar.js';
@@ -101,6 +103,9 @@ export function App(): JSX.Element {
   // B-156 — read ONCE here and threaded to both the layer table and the Inspector.
   const rehearsals = useRehearse();
   const lock = useLock();
+  // `DESKTOP-APPS-01` — an installed station still in first-run says so at connect.
+  const capabilities = useAuthCapabilities();
+  const setupPhase = capabilities?.setupPhase ?? null;
   // `B-257` — the lock screen covers the console only when the lock covers ALL of it. A partly
   // covered console keeps its other channels; the strip names the covered ones.
   const lockCovers = useLockCoverage().kind === 'all';
@@ -506,8 +511,15 @@ export function App(): JSX.Element {
           `R-066` — ABOVE the lock, because the bridge refuses `lock.release` to a socket with
           no principal too: signing in is the outer gate and the PIN is the inner one, and the
           screen shows them in the order the bridge enforces. Renders nothing when auth is off.
+
+          `DESKTOP-APPS-01` — while an installed station is in first-run, FIRST-RUN is the gate
+          instead: its second step IS the sign-in, and two stacked gates would ask twice.
         */}
-        <SignInOverlay />
+        {setupPhase !== null ? (
+          <FirstRunScreen phase={setupPhase} signInUrl={capabilities?.signInUrl ?? null} />
+        ) : (
+          <SignInOverlay />
+        )}
         <LockOverlay
           engaged={lockCovers}
           {...(lock.engagedAt !== undefined ? { engagedAt: lock.engagedAt } : {})}

@@ -7,6 +7,10 @@
  * the contract.
  */
 import type {
+  ChannelsCatalogueChannel,
+  SetupCheckChannel,
+  SetupPhase,
+  SetupRouteAddressChannel,
   AuditHealthChannel,
   AuditRecentChannel,
   AuthMode,
@@ -117,6 +121,11 @@ export interface AuthCapabilities {
   readonly refreshUrl: string | null;
   /** The Playout integration contract the bridge implements (`1.1`), or `null`. */
   readonly contractVersion: string | null;
+  /**
+   * `DESKTOP-APPS-01` — where an installed station is in first-run (`target`, `channel`), or
+   * `null` once it is set up, and always for a bridge that is not an installed station.
+   */
+  readonly setupPhase: SetupPhase | null;
 }
 
 /**
@@ -643,6 +652,30 @@ export interface RuntimeBridge {
     signIn(username: string, password: string): Promise<void>;
     /** Drop the token here and the principal on the bridge. Never closes the socket. */
     signOut(): Promise<void>;
+  };
+
+  /**
+   * 🔴 `DESKTOP-APPS-01` — **SETTING THE STATION UP**: the connection check, the Playout's channels
+   * as first-run needs them, and — inside CG Control only — the Playout address.
+   */
+  setup: {
+    /** §2F — the connection check, one line per link. Reads; changes nothing. */
+    check(
+      req: ChannelRequest<typeof SetupCheckChannel>,
+    ): Promise<ChannelResponse<typeof SetupCheckChannel>>;
+    /** §2E — this machine's address on the route to a host: the serve-host default. */
+    routeAddress(
+      req: ChannelRequest<typeof SetupRouteAddressChannel>,
+    ): Promise<ChannelResponse<typeof SetupRouteAddressChannel>>;
+    /** §2E step 3 — the Playout's channels UNJOINED, in the signed-in admin's grant. */
+    catalogue(): Promise<ChannelResponse<typeof ChannelsCatalogueChannel>>;
+    /**
+     * `DESKTOP-APPS-01-A` — can THIS console change the Playout address? Only inside CG Control;
+     * a browser has no such door, and the control that would use it is then absent.
+     */
+    canSetPlayoutAddress(): boolean;
+    /** Write the Playout address through CG Control and restart the bridge. Never the socket. */
+    setPlayoutAddress(address: string): Promise<string>;
   };
 
   audit: {

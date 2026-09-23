@@ -99,6 +99,8 @@ const BRIDGE_SURFACE: {
     // process and no Playout), so the shapes match while the ANSWERS differ, which is exactly
     // what this guard is for: it compares the surface, never the behaviour.
     auth: ['capabilities', 'onCapabilitiesChanged', 'state', 'onStateChanged', 'signIn', 'signOut'],
+    // `DESKTOP-APPS-01` — first-run. The mock answers empty and has no desktop door.
+    setup: ['check', 'routeAddress', 'catalogue', 'canSetPlayoutAddress', 'setPlayoutAddress'],
     /*
       🔴 **SESSION BR — `delimiters` AND `sources` were BOTH missing from this expected tree,
       so the one guard that exists to prove the mock shim matches the real bridge has never

@@ -179,6 +179,8 @@ export function createMockBridge(): RuntimeBridge {
         signInUrl: null,
         refreshUrl: null,
         contractVersion: null,
+        // Test mode is never an installed station, so it is never in first-run.
+        setupPhase: null,
       }),
       onCapabilitiesChanged: () => () => undefined,
       state: () => ({ kind: 'off' as const }),
@@ -247,6 +249,20 @@ export function createMockBridge(): RuntimeBridge {
         handler([]);
         return () => undefined;
       },
+    },
+
+    /*
+      `DESKTOP-APPS-01` — test mode has no plant to check and no Playout to list, so the honest
+      answers are EMPTY ones: no lines, no route, the catalogue ABSENT. And no desktop door: the
+      simulation is not CG Control, so the Playout address cannot be changed from here.
+    */
+    setup: {
+      check: () => Promise.resolve({ lines: [], localAddress: null }),
+      routeAddress: () => Promise.resolve({ address: null }),
+      catalogue: () => Promise.resolve({ rows: null }),
+      canSetPlayoutAddress: () => false,
+      setPlayoutAddress: () =>
+        Promise.reject(new Error('Only CG Control can change the Playout address.')),
     },
 
     connections: {

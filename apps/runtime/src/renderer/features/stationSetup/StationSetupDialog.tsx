@@ -54,6 +54,9 @@ import { SetupNotice, type SetupNoticeSpec } from './SetupNotice.js';
 import { SetupSection } from './SetupSection.js';
 import { Tag } from '../../ui/Tag.js';
 import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
+import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
+import { PlayoutConnection } from '../firstRun/PlayoutConnection.js';
+import { playoutOriginOf } from '../firstRun/firstRunStation.js';
 
 /**
  * `STATION-SETUP-02` / `STATION-CHROME-01` §2 — **ONE HOME FOR THE STATION'S SETTINGS, IN
@@ -524,6 +527,8 @@ export function StationSetupDialog({
     is its own piece of work.
   */
   const holdsStationAdmin = useHoldsStationAdmin();
+  // `DESKTOP-APPS-01` — the Playout this station trusts, as the bridge advertises it.
+  const playoutOrigin = playoutOriginOf(useAuthCapabilities()?.signInUrl);
   const footerSlot = holdsStationAdmin ? footerSlotEl : null;
   /** §6 — the backup server's own small second dialog. */
   const [addingBackup, setAddingBackup] = useState(false);
@@ -1288,6 +1293,24 @@ export function StationSetupDialog({
                   the head's one title on two facts; the chip says which slot and the title says
                   what it is.
                 */}
+              {/*
+                  `DESKTOP-APPS-01` §2F — the Playout this station trusts, and the connection check,
+                  reachable after first-run. CHANGE exists only inside CG Control and only for a
+                  station admin; it writes through the app, never over the control socket.
+              */}
+              <section className="cg-card" aria-label="Playout">
+                <div className="cg-card__head">
+                  <span className="cg-card__title">Playout</span>
+                </div>
+                <div className="cg-card__body">
+                  <PlayoutConnection
+                    origin={playoutOrigin}
+                    startEditing={playoutOrigin === null}
+                    mayChange={holdsStationAdmin}
+                  />
+                </div>
+              </section>
+
               <section className="cg-card" aria-label="Primary server">
                 <div className="cg-card__head">
                   <Tag className="cg-setup-server-chip" aria-hidden="true">

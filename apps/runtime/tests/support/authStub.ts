@@ -1,4 +1,4 @@
-import type { AuthSessionState } from '../../src/shared/runtime-bridge.js';
+import type { AuthCapabilities, AuthSessionState } from '../../src/shared/runtime-bridge.js';
 
 /**
  * 🔴 `C-038` — **THE `auth` MEMBER FOR A HAND-BUILT `window.cg` STUB.**
@@ -26,12 +26,26 @@ import type { AuthSessionState } from '../../src/shared/runtime-bridge.js';
  * one.
  */
 export function authStub(state: AuthSessionState = { kind: 'off' }): {
+  capabilities: () => AuthCapabilities;
+  onCapabilitiesChanged: (handler: (next: AuthCapabilities | null) => void) => () => void;
   state: () => AuthSessionState;
   onStateChanged: (handler: (next: AuthSessionState) => void) => () => void;
   signIn: (username: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 } {
   return {
+    /*
+      `DESKTOP-APPS-01` — what the bridge advertised. The QUIET answer, like everything here: a
+      bridge that is not an installed station in first-run, in the mode the state implies.
+    */
+    capabilities: () => ({
+      mode: state.kind === 'off' ? 'off' : 'playout',
+      signInUrl: null,
+      refreshUrl: null,
+      contractVersion: null,
+      setupPhase: null,
+    }),
+    onCapabilitiesChanged: () => () => undefined,
     state: () => state,
     // Constant state — nothing to emit, so the unsubscribe is a noop.
     onStateChanged: () => () => undefined,
@@ -100,5 +114,26 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     list: () => Promise.resolve({ channels: [] }),
     onChanged: () => () => undefined,
   };
+  cg['setup'] ??= setupStub();
   return stub;
+}
+
+/**
+ * `DESKTOP-APPS-01` — the `setup` member, QUIET: nothing to check, no route, the Playout's list
+ * absent, and no desktop door (a spec is not CG Control, so the Playout address cannot be set).
+ */
+export function setupStub(): {
+  check: () => Promise<{ lines: []; localAddress: null }>;
+  routeAddress: () => Promise<{ address: null }>;
+  catalogue: () => Promise<{ rows: null }>;
+  canSetPlayoutAddress: () => boolean;
+  setPlayoutAddress: () => Promise<string>;
+} {
+  return {
+    check: () => Promise.resolve({ lines: [], localAddress: null }),
+    routeAddress: () => Promise.resolve({ address: null }),
+    catalogue: () => Promise.resolve({ rows: null }),
+    canSetPlayoutAddress: () => false,
+    setPlayoutAddress: () => Promise.reject(new Error('this stub is not CG Control')),
+  };
 }

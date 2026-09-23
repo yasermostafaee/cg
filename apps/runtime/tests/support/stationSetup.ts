@@ -16,7 +16,7 @@ import type {
 } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import type { AuthSessionState } from '../../src/shared/runtime-bridge.js';
-import { authStub } from './authStub.js';
+import { authStub, setupStub } from './authStub.js';
 import { StationSetupDialog } from '../../src/renderer/features/stationSetup/StationSetupDialog.js';
 import {
   DEFAULT_STATION_SETUP_SECTION,
@@ -204,6 +204,8 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
     },
     // `C-038` — the channel list is scoped to the principal, so every stub needs one.
     auth: authStub(options.auth),
+    // `DESKTOP-APPS-01` — Servers carries the Playout card and its connection check.
+    setup: setupStub(),
     // `B-257` — the channel strip reads how much of the console a lock covers.
     lock: {
       state: () => Promise.resolve({ engaged: false }),

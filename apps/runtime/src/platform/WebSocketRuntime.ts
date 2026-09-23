@@ -134,6 +134,7 @@ import {
   type StoredSession,
 } from './playoutSession.js';
 import { StackRetentionStore } from './stack/StackRetentionStore.js';
+import { canSetPlayoutAddress, setPlayoutAddress } from './desktop.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
 
@@ -790,6 +791,8 @@ export class WebSocketRuntime implements RuntimeBridge {
         signInUrl: caps.signInUrl ?? null,
         refreshUrl: caps.refreshUrl ?? null,
         contractVersion: caps.authContractVersion ?? null,
+        // `DESKTOP-APPS-01` — an installed station still in first-run says so here.
+        setupPhase: caps.setup ?? null,
       });
       const routed = new Set(channels);
       const missing = ipcChannels
@@ -1602,6 +1605,18 @@ export class WebSocketRuntime implements RuntimeBridge {
         ...(i.slot !== undefined && { slot: { channel: i.slot.channel, layer: i.slot.layer } }),
       }));
   }
+
+  // `DESKTOP-APPS-01` — first-run and the station's own check. The Playout address goes through
+  // CG Control's IPC (`desktop.ts`), never through `#invoke`: auth config is not the socket's.
+  readonly setup = {
+    check: (req: ChannelRequest<typeof ipcChannels.SetupCheckChannel>) =>
+      this.#invoke(ipcChannels.SetupCheckChannel, req),
+    routeAddress: (req: ChannelRequest<typeof ipcChannels.SetupRouteAddressChannel>) =>
+      this.#invoke(ipcChannels.SetupRouteAddressChannel, req),
+    catalogue: () => this.#invoke(ipcChannels.ChannelsCatalogueChannel, undefined),
+    canSetPlayoutAddress: (): boolean => canSetPlayoutAddress(),
+    setPlayoutAddress: (address: string): Promise<string> => setPlayoutAddress(address),
+  };
 
   readonly connections = {
     config: (): Promise<ConnectionConfig> => this.#invoke(ConnectionsConfigChannel, undefined),

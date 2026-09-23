@@ -422,6 +422,14 @@ describe('the census is DERIVED from the tree, not from a list somebody maintain
         A third would need an argument of its own, which is what this list exists to force.
       */
       'auth/SignInOverlay.tsx',
+      /*
+        `DESKTOP-APPS-01` — **FIRST-RUN, and its argument is that it is the SIGN-IN GATE in its
+        first-run form, not a third gate.** `App.tsx` renders one or the other, never both: while
+        an installed station is in first-run, its second step IS the sign-in. It has no way out
+        for the sign-in gate's reason, one step earlier — a station with no Playout and no channel
+        has nothing behind the scrim that works, and every control there refuses.
+      */
+      'firstRun/FirstRunScreen.tsx',
     ]);
 
     const offenders = walk(featuresDir)
