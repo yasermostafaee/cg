@@ -2477,7 +2477,7 @@ changes. — Depends on [[C-037]]. Cross-refs [[R-062]], [[R-066]], [[B-229]], [
   `git grep -n --untracked -E "^## \[.\] C-038" -- docs` returned nothing, against a positive
   control on the same regex for `C-036` which returned `caspar.md:2321`.
 
-## [~] C-039 — the Playout's channel catalogue as the FIRST channel-discovery source ⟨priority: medium⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md) · IMPLEMENTED by `CHANNEL-AUTHORITY-01` (`openspec/changes/channel-authority`)
+## [x] C-039 — the Playout's channel catalogue as the FIRST channel-discovery source ⟨priority: medium⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md) · IMPLEMENTED by `CHANNEL-AUTHORITY-01` · ARCHIVED 2026-09-23 (`openspec/changes/archive/2026-09-23-channel-authority`)
 
 **What:** Feed [[R-062]]'s channel-discovery call from the Playout's `GET /api/cg/channels`
 (`{id, name, casparHost, casparChannel}`) first, keeping the two sources the renderer unions
@@ -2518,7 +2518,8 @@ writes to — so a catalogue row names a channel and can never make one writable
 D4 at most every 30 s with `ETag`, with a bearer checked AT USE (never expired, never revoked,
 released on sign-out), and fails to ABSENT; `channels.list` returns each channel's `named` /
 `declared` / `permitted` kept apart; the strip lists the DECLARED channels under the catalogue's
-name. `[~]` until the Linux `e2e` discharges and the change is archived. ⚠ Two readings of the
+name. **`[x]` 2026-09-23** — the Linux `e2e` discharged on every commit (the run URLs are in the
+archived change's `tasks.md`) and the change is archived. ⚠ Two readings of the
 acceptance above, recorded rather than silently taken: "the strip shows the Playout's NAMES" is
 read as the names of the channels THIS STATION operates — the Playout's programme channel is
 returned by the call with `declared: false` and is not on the operating strip; and the note's

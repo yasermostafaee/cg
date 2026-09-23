@@ -3636,7 +3636,7 @@ single-channel is exactly this:
 1. **Five verbs take `z.void()`** — `stack.removeAll`, `clearAll`, `stopAll`, `snapshot` and
    `silenceAllLivePlates` — and therefore mean _"everything the bridge knows about"_. That is the
    only place on the contract where a channel cannot be named.
-2. ✅ **DONE 2026-09-23 — `CHANNEL-AUTHORITY-01` commit 2 (`openspec/changes/channel-authority`).**
+2. ✅ **DONE 2026-09-23 — `CHANNEL-AUTHORITY-01` commit 2 (`openspec/changes/archive/2026-09-23-channel-authority`).**
    ~~There is no channel-discovery call on the contract.~~ `channels.list` (+ the per-console
    `channels.changed` push) returns every channel any source names — the Playout's catalogue
    ([[C-039]]) first, then the bank, then channel settings — with `named` / `declared` /

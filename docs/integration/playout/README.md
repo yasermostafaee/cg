@@ -177,7 +177,8 @@ the build to name in the recon record**. apasai-core, which is what `C-040` actu
       **clean**. Our docs and our one probe that said otherwise have been corrected; we never
       address `INFO` by layer and never read a layer volume from `INFO`'s `<volume>` nodes.
 14. 🔴 **2026-09-23 — `CHANNEL-AUTHORITY-01`: our bridge now READS D4, and it now REFUSES your
-    channels.** Two halves, landed in that order on purpose (`openspec/changes/channel-authority`).
+    channels.** Two halves, landed in that order on purpose
+    (`openspec/changes/archive/2026-09-23-channel-authority`).
     - **The fence first.** A bridge writes only to the channels ITS OWN bank declares. Any request
       naming another channel is refused before anything is sent — with auth ON or OFF, whatever the
       principal's `cg_channels` says. Measured before the fix, on a station declaring channel 2
