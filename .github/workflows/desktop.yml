@@ -156,9 +156,13 @@ jobs:
           winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
           $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
           $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
-          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          # gsudo re-splits an argument at its spaces (run 35862184574: "…\installers\CG" ENOENT),
+          # so the installer is handed over under a name without one.
           $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
-          & $gsudo --integrity Medium node apps/runtime/tests/desktop/installer-smoke.mjs --phase drive --designer "$designer" --out smoke
+          Copy-Item $designer installers\cg-designer-setup.exe
+          $designer = (Resolve-Path installers\cg-designer-setup.exe).Path
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
+          & $gsudo --integrity Medium node apps/runtime/tests/desktop/installer-smoke.mjs --phase drive --designer $designer --out smoke
           exit $LASTEXITCODE
 
       - name: Uninstall CG Control (elevated), and sum every phase
