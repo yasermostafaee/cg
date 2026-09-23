@@ -468,10 +468,26 @@ async function controlDrive() {
       facts.offOrigin.length === 0,
       facts.offOrigin.join(', '),
     );
+    // A fresh install opens on first-run, at its first step: the Playout address.
+    const firstRunPhase = () =>
+      page.evaluate(
+        () => document.querySelector('[data-first-run]')?.getAttribute('data-first-run') ?? null,
+      );
+    const opened = await until('first-run', firstRunPhase, 30_000).catch(() => null);
+    check(
+      'a fresh install opens on first-run, at the Playout address',
+      opened === 'target',
+      String(opened),
+    );
+    await sleep(3000);
     await page.screenshot(path.join(out, 'control.png'));
 
     // DESKTOP-APPS-01-A — the one door that writes the Playout target: the app's own command,
     // callable from the console this window loaded, never over the control socket.
+    // A mark on the page: a reload would wipe it, so its survival proves the console moved on alone.
+    await page.evaluate(() => {
+      window.cgSmokeMark = 'kept';
+    });
     const before = await health().catch(() => null);
     const door = await page.evaluate(async () => {
       try {
@@ -500,6 +516,22 @@ async function controlDrive() {
       after !== null && before !== null && after.pid !== before.pid,
       `${String(before?.pid)} -> ${String(after?.pid)}`,
     );
+    const next = await until(
+      'first-run to move on',
+      async () => ((await firstRunPhase()) === 'channel' ? 'channel' : null),
+      60_000,
+    ).catch(() => null);
+    const moved = await page.evaluate(() => ({
+      mark: window.cgSmokeMark ?? null,
+      signIn: document.getElementById('cg-first-run-user') !== null,
+    }));
+    check(
+      '…and the console moves on to the sign-in by itself, without a reload',
+      next === 'channel' && moved.signIn && moved.mark === 'kept',
+      `phase ${String(next)}, sign-in ${String(moved.signIn)}, mark ${String(moved.mark)}`,
+    );
+    await sleep(2000);
+    await page.screenshot(path.join(out, 'control-sign-in.png'));
     page.close();
   }
 
