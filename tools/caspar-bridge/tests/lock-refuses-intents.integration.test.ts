@@ -304,6 +304,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'lock.state',
         'playoutLayers.state',
         'rehearse.state',
+        // `DESKTOP-APPS-01-D` d — a read of the tap before a channel is declared.
+        'setup.channel-occupancy',
         'setup.check',
         'setup.route-address',
         'sources.assignments',
@@ -311,6 +313,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         // The client's own reconnect machinery, unreachable from any operator control.
         'stack.restore',
         'stack.snapshot',
+        // `DESKTOP-APPS-01-D` j — a read; its one act, `station.take-off-air`, is refused locked.
+        'station.strays',
         'templates.get',
         'templates.list',
         'update.state',

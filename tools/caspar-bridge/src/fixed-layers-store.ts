@@ -159,6 +159,17 @@ export type SlotOccupancy = 'occupied' | 'empty' | 'unknown';
 export interface ValidateChangeOptions extends ValidateOptions {
   /** The occupancy verdict for a slot — see {@link SlotOccupancy}. */
   slotOccupancy: (slot: LayerSlot) => SlotOccupancy;
+  /**
+   * `DESKTOP-APPS-01-D` e — does anything of OURS still hold air on this channel (on air,
+   * unsettled or unverified, or a producer resident)? The one condition under which the bank's
+   * channel may NOT be replaced. Absent means "cannot tell", which refuses — fail closed.
+   */
+  channelHoldsOurAir?: (channel: number) => boolean;
+}
+
+/** `DESKTOP-APPS-01-D` e — the one sentence a refused channel change says. */
+export function channelChangeRefusal(channel: number): string {
+  return `Something of ours is still on air on channel ${String(channel)} — take it off air first.`;
 }
 
 /**
@@ -315,8 +326,8 @@ function formatRanges(layers: readonly number[]): string {
 
 /**
  * Validate a bank CHANGE against a currently-active bank (R-028): alias and
- * visibility changes are the ONLY live changes. Moving `start` or `channel`
- * mid-session is refused (unchanged from R-021), and the COUNT is now refused
+ * visibility changes are live, and so — since `DESKTOP-APPS-01-D` e — is the CHANNEL, under
+ * one condition. Moving `start` mid-session is refused (unchanged from R-021), and the COUNT is now refused
  * too (`resize-refused`) — the candidate ceiling is FIXED at install; a
  * mutable count is exactly what R-028 rejected (design.md §b3). Hiding a row
  * (`visibility` tick going false) is refused while its layer is OCCUPIED and
@@ -337,12 +348,25 @@ export function validateFixedBankChange(
         `${String(next.start)}) — the candidate ceiling is fixed at install, never renumbered`,
     );
   }
+  /*
+    🔴 `DESKTOP-APPS-01-D` e — **THE CHANNEL MAY BE REPLACED WHEN NOTHING OF OURS HOLDS AIR ON IT.**
+
+    It used to be refused outright ("fixed at install"), and the owner's installed station, set up
+    by mistake on the Playout's programme channel, had no way back that did not need a file edit.
+    The rule that allows it now: a station-admin's `fixedLayers.set-config` may REPLACE the channel
+    while no item of ours on the current channel is on air, unsettled, unverified or holding a
+    resident producer (`channelHoldsOurAir`). The refusal it keeps is the one that protects air: a
+    channel changed under a live graphic would strand that graphic on a channel no row shows.
+    The station stays single-channel — `MULTI-CHANNEL-01` widens it to a set.
+  */
   if (next.channel !== current.channel) {
-    throw new FixedLayersConfigError(
-      'channel-change-refused',
-      `fixed bank channel cannot change mid-session (${String(current.channel)} → ` +
-        `${String(next.channel)})`,
-    );
+    const holdsAir = options.channelHoldsOurAir?.(current.channel) ?? true;
+    if (holdsAir) {
+      throw new FixedLayersConfigError(
+        'channel-change-refused',
+        channelChangeRefusal(current.channel),
+      );
+    }
   }
   if (next.count !== current.count) {
     throw new FixedLayersConfigError(

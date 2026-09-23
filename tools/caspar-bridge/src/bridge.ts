@@ -15,6 +15,10 @@ import {
   ChannelsCatalogueChannel,
   SetupCheckChannel,
   SetupRouteAddressChannel,
+  SetupChannelOccupancyChannel,
+  StationStraysChannel,
+  StationStraysChangedChannel,
+  StationTakeOffAirChannel,
   type ConnectionCheckRequest,
   type ConnectionCheckResult,
   type SetupPhase,
@@ -1488,6 +1492,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     playoutIPv4 !== null && host.toLowerCase() === playoutName?.toLowerCase() ? playoutIPv4 : host;
   const runtime = new CasparRuntime(connection, options.templateServe ?? {}, {
     amcpAddressFor,
+    // `DESKTOP-APPS-01-D` j — an installed station in first-run declares nothing until its bank.
+    declaresNothingWithoutBank: options.firstRun === true,
     fixedSlots,
     layerPolicy,
     reservedLayers,
@@ -2414,6 +2420,8 @@ export function wirePublishes(
       Both inputs of the one composition re-push it; there is no third.
     */
     backing.fixedConfigChanged.subscribe(pushAuthState),
+    // `DESKTOP-APPS-01-D` j — the strays Station setup shows.
+    backing.straysChanged.subscribe((s) => push(StationStraysChangedChannel, s)),
     backing.orphansChanged.subscribe((o) => push(LayersOrphansChangedChannel, o)),
     backing.ownedOccupancyChanged.subscribe((w) => push(LayersOwnedOccupancyChangedChannel, w)),
     // B-225 — air was emptied under us (or the notice was acted on / dismissed).
@@ -2955,6 +2963,23 @@ export function buildRoutes(
     route(SetupRouteAddressChannel, 'read', 'read', async (r: { host: string }) => ({
       address: await routeAddress(r.host),
     })),
+    // `DESKTOP-APPS-01-D` d — what is on air on a channel before it is declared. A read of the tap.
+    route(SetupChannelOccupancyChannel, 'read', 'station-admin', (r: { casparChannel: number }) =>
+      b.channelOccupancy(r.casparChannel),
+    ),
+    /*
+      🔴 `DESKTOP-APPS-01-D` j — items of ours on a channel this station does not declare. The
+      READ is open to any signed-in principal (a console keeps them in its retention so they
+      survive a restart); only a `station-admin` sees them and may act, and the one act is
+      `station.take-off-air`: STOP then CLEAR on a recorded stray's exact layer.
+    */
+    route(StationStraysChannel, 'read', 'read', () => b.strays()),
+    route(
+      StationTakeOffAirChannel,
+      'operator',
+      'station-admin',
+      (r: { casparChannel: number; layer: number }) => b.takeStrayOffAir(r.casparChannel, r.layer),
+    ),
 
     // R-030 — the per-channel output raster, bridge-owned for the same reasons
     // the template catalogue is: several browsers must not disagree about where

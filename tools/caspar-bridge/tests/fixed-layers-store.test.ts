@@ -232,6 +232,29 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
     ).toBe('channel-change-refused');
   });
 
+  /*
+    `DESKTOP-APPS-01-D` e — the channel may be REPLACED while nothing of ours holds air on the
+    current one; asked through `channelHoldsOurAir`, and absent (above) still refuses, fail closed.
+  */
+  it('DESKTOP-APPS-01-D e — a channel change is allowed when nothing of ours holds air, refused in one sentence when something does', () => {
+    const options = (holds: boolean) => ({
+      policy: POLICY,
+      reservedLayers: [],
+      slotOccupancy: ALL_EMPTY,
+      channelHoldsOurAir: (channel: number) => holds && channel === bank().channel,
+    });
+    expect(() =>
+      validateFixedBankChange(bank(), bank({ channel: 2 }), options(false)),
+    ).not.toThrow();
+    const refused = codeOf(() =>
+      validateFixedBankChange(bank(), bank({ channel: 2 }), options(true)),
+    );
+    expect(refused.code).toBe('channel-change-refused');
+    expect(refused.message).toBe(
+      `Something of ours is still on air on channel ${String(bank().channel)} — take it off air first.`,
+    );
+  });
+
   it('R-028 (2.3) — unticking an OCCUPIED layer is refused, naming the layer and the remedy', () => {
     const { code, message } = codeOf(() =>
       validateFixedBankChange(bank(), bank({ visibility: { '74': false } }), {

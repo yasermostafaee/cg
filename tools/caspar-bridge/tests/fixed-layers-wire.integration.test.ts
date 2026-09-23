@@ -171,7 +171,7 @@ it('S5 — R-028: the ceiling is FIXED live — resize refuses (nothing applied)
   expect(published[published.length - 1]?.find((s) => s.layer === 71)?.alias).toBe('LOWER THIRD');
 });
 
-it('S6 — renumber and channel-change refuse with their codes; nothing applied/persisted/published', async () => {
+it('S6 — renumber refuses with its code; nothing applied/persisted/published — and an IDLE channel change is accepted (DESKTOP-APPS-01-D e)', async () => {
   const file = tmpFile('bank.json');
   const b = await boot({
     bank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 10 },
@@ -191,15 +191,6 @@ it('S6 — renumber and channel-change refuse with their codes; nothing applied/
   expect(renumber.ok).toBe(false);
   expect(renumber.reason).toBe('renumber-refused');
 
-  const channelChange = (await invokeRoute(
-    b,
-    'fixedLayers.set-config',
-    { channel: 2, low: { start: 50, count: 9 }, start: 70, count: 10 },
-    file,
-  )) as { ok: boolean; reason?: string };
-  expect(channelChange.ok).toBe(false);
-  expect(channelChange.reason).toBe('channel-change-refused');
-
   expect(b.runtime.fixedLayersConfig()).toEqual({
     channel: 1,
     low: { start: 50, count: 9 },
@@ -209,6 +200,23 @@ it('S6 — renumber and channel-change refuse with their codes; nothing applied/
   expect(fs.existsSync(file)).toBe(false); // nothing persisted (boot bank was an explicit option)
   expect(configPublishes).toBe(0);
   expect(statePublishes).toBe(0);
+
+  /*
+    `DESKTOP-APPS-01-D` e — the channel USED to be refused here unconditionally ("fixed at
+    install"). It may now be replaced while nothing of ours holds air on the current channel, and
+    this station holds nothing: accepted, persisted and published. The refusal that remains — on
+    air — is pinned in `one-channel-station.integration.test.ts`.
+  */
+  const channelChange = (await invokeRoute(
+    b,
+    'fixedLayers.set-config',
+    { channel: 2, low: { start: 50, count: 9 }, start: 70, count: 10 },
+    file,
+  )) as { ok: boolean; reason?: string };
+  expect(channelChange).toEqual({ ok: true });
+  expect(b.runtime.fixedLayersConfig()?.channel).toBe(2);
+  expect(fs.existsSync(file)).toBe(true);
+  expect(configPublishes).toBe(1);
 });
 
 it('S7 — an applied set-config persists, and a fresh boot on that path loads the new bank', async () => {

@@ -104,6 +104,8 @@ import {
   EMPTIED_AIR_REFUSALS,
   type EmptiedAirNotice,
   type EmptiedAirRefusal,
+  FIRST_ALLOCATABLE_LAYER,
+  type StationStray,
 } from '@cg/shared-ipc';
 import { randomBytes } from 'node:crypto';
 import { templateAdmitsPassTiming } from '@cg/shared-ipc';
@@ -759,6 +761,8 @@ function restoreSkipNaming(item: RetainedStackItem): Pick<RestoreSkip, 'template
 
 export class CasparRuntime {
   readonly stackChanged = new Emitter<readonly StackItemState[]>();
+  /** `DESKTOP-APPS-01-D` j — the strays Station setup shows changed. */
+  readonly straysChanged = new Emitter<readonly StationStray[]>();
   readonly healthChanged = new Emitter<ConnectionHealth>();
   readonly lockChanged = new Emitter<LockState>();
   readonly updateChanged = new Emitter<PendingUpdate | null>();
@@ -1128,6 +1132,22 @@ export class CasparRuntime {
   readonly #pendingRestore = new Map<
     string,
     { slot: CommandSlot; templateId: string; fields: FieldValues }
+  >();
+
+  /** `DESKTOP-APPS-01-D` j — a station in first-run declares no channel until its bank exists. */
+  readonly #declaresNothingWithoutBank: boolean;
+
+  /**
+   * 🔴 `DESKTOP-APPS-01-D` j — **ITEMS OF OURS ON A CHANNEL THIS STATION DOES NOT DECLARE**, keyed
+   * by `adoptionKey`. Measured: the owner moved the station from channel 1 to channel 2 with a
+   * logo still looping on 1-99; the channel-2 view counted it (`0 loaded · 1 on air`) and then,
+   * after a restart, told him to declare a row for it and load it again — which would have put
+   * it back on the Playout's programme output. Here it is kept out of every channel view, shown
+   * only in Station setup, and offered exactly one action.
+   */
+  readonly #strays = new Map<
+    string,
+    { itemId: string; templateId: string; channel: number; layer: number }
   >();
 
   /**
@@ -1530,8 +1550,16 @@ export class CasparRuntime {
        * configured, which the panel reports AS SUCH rather than as "no entries".
        */
       auditLogPath?: string;
+      /**
+       * 🔴 `DESKTOP-APPS-01-D` j — an installed station in FIRST-RUN declares NO channel until its
+       * bank is written. Without it a bank-less runtime answers channel 1 (the schema's default),
+       * and the owner's channel-2 set-up adopted channel 1's logo into its stack: a console that
+       * remembered it re-delivered it, and the bank-less bridge took it as its own.
+       */
+      declaresNothingWithoutBank?: boolean;
     } = {},
   ) {
+    this.#declaresNothingWithoutBank = options.declaresNothingWithoutBank === true;
     this.#reservedLayers = options.reservedLayers ?? [];
     this.#reservedSet = new Set(this.#reservedLayers);
     this.#layers = new LayerManager({
@@ -2477,6 +2505,21 @@ export class CasparRuntime {
       }
       const placement = this.#slotForRestore(item);
       if ('skip' in placement) {
+        // `DESKTOP-APPS-01-D` j — an on-air row on a channel this station does not declare is
+        // remembered as a stray (Station setup's, never a channel view's); `#noteStray` ignores
+        // a not-declared skip on the station's OWN channel, which is a layer that is not a row.
+        if (
+          placement.skip === 'not-declared' &&
+          item.slot !== undefined &&
+          isRetainedOnAir(item.state)
+        ) {
+          this.#noteStray({
+            itemId: item.itemId,
+            templateId: item.templateId,
+            channel: item.slot.channel,
+            layer: item.slot.layer,
+          });
+        }
         skipped.push({ itemId: item.itemId, reason: placement.skip, ...restoreSkipNaming(item) });
         continue;
       }
@@ -2745,6 +2788,197 @@ export class CasparRuntime {
       );
     }
     return { restored, skipped, migrated };
+  }
+
+  // ── DESKTOP-APPS-01-D j — items of ours on a channel this station does not declare ──
+
+  /**
+   * 🔴 Record an item of ours that is (or may be) ON AIR on a channel this station does not
+   * declare. It is never seated, updated or re-ADDed from here: the one thing it offers is
+   * {@link takeStrayOffAir}. Its layer's OSC interest is bound so the sweep can tell when nothing
+   * is left there and drop it ({@link #pruneStrays}).
+   */
+  #noteStray(stray: { itemId: string; templateId: string; channel: number; layer: number }): void {
+    if (this.#isDeclaredChannel(stray.channel)) return;
+    const key = adoptionKey({ channel: stray.channel, layer: stray.layer });
+    if (!this.#strays.has(key)) this.#addInterest({ channel: stray.channel, layer: stray.layer });
+    this.#strays.set(key, stray);
+    this.straysChanged.emit(this.strays());
+  }
+
+  /**
+   * A stack item left on a channel the station no longer declares (a bank installed or changed
+   * under it). Recorded as a stray when it holds or may hold air, then dropped from the stack
+   * WITHOUT a wire command: any command to it would be a write to somebody else's channel.
+   */
+  #strandItem(itemId: string): void {
+    const item = this.#reconciler.get(itemId);
+    const slot = this.#slots.get(itemId);
+    if (
+      item !== null &&
+      item !== undefined &&
+      slot !== undefined &&
+      (isOnAirStatus(item) || item.status === 'unverified' || this.#loaded.has(itemId))
+    ) {
+      this.#noteStray({
+        itemId,
+        templateId: item.templateId,
+        channel: slot.channel,
+        layer: slot.layer,
+      });
+    }
+    this.#forgetWithoutWire(itemId);
+  }
+
+  /** `#removeImpl`'s bookkeeping, and NOTHING on the wire. */
+  #forgetWithoutWire(itemId: string): void {
+    const slot = this.#slots.get(itemId);
+    this.#reconciler.applyIntent({ kind: 'remove', itemId }, this.#nextSeq());
+    this.#loaded.delete(itemId);
+    this.#positions.delete(itemId);
+    this.#sourceOverrides.delete(itemId);
+    this.#lookSourceBindings.delete(itemId);
+    this.#frozenAssignments.delete(itemId);
+    this.#plateVolumes.delete(itemId);
+    this.#activeLooks.delete(itemId);
+    this.#passTimings.delete(itemId);
+    this.#pendingRestore.delete(itemId);
+    this.#restoreBlocked.delete(itemId);
+    if (slot !== undefined) {
+      this.#slots.delete(itemId);
+      this.#removeInterest(slot);
+      this.#releaseSlot(slot);
+      this.#resolveOwnedOccupancy(slot);
+    }
+  }
+
+  /**
+   * Drop every stray whose layer a HEARING tap reads empty, or reads holding a producer that is
+   * not an html page (not ours). Nothing is dropped on a tap that is not hearing — unknown is
+   * never empty.
+   */
+  #pruneStrays(): void {
+    if (this.#strays.size === 0) return;
+    const session = this.#adapter.primarySession;
+    if (session.state !== 'healthy' || !session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs)) {
+      return;
+    }
+    const observed = this.#observedProducers(session);
+    let changed = false;
+    for (const [key, stray] of this.#strays) {
+      if (observed.get(key) === 'html') continue;
+      this.#strays.delete(key);
+      this.#removeInterest({ channel: stray.channel, layer: stray.layer });
+      changed = true;
+    }
+    if (changed) this.straysChanged.emit(this.strays());
+  }
+
+  /** `DESKTOP-APPS-01-D` j — the strays, as Station setup shows them. */
+  strays(): StationStray[] {
+    const session = this.#adapter.primarySession;
+    const hearing =
+      session.state === 'healthy' && session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
+    const observed = hearing ? this.#observedProducers(session) : null;
+    const out: StationStray[] = [];
+    for (const [key, stray] of this.#strays) {
+      if (observed !== null && observed.get(key) !== 'html') continue;
+      const name = this.#templates.get(stray.templateId)?.name;
+      out.push({
+        itemId: stray.itemId,
+        templateId: stray.templateId,
+        ...(name !== undefined && name !== '' ? { templateName: name } : {}),
+        casparChannel: stray.channel,
+        layer: stray.layer,
+        observed: observed === null ? 'unknown' : 'producer',
+      });
+    }
+    return out.sort((a, b) => a.casparChannel - b.casparChannel || b.layer - a.layer);
+  }
+
+  /**
+   * 🔴 `DESKTOP-APPS-01-D` j — **TAKE A STRAY OFF AIR: `CG <ch>-<layer> STOP 0`, then
+   * `CLEAR <ch>-<layer>`, on that exact layer and nothing else.**
+   *
+   * The one command this bridge sends to a channel it does not declare, and it is narrower than
+   * the fence it bypasses: the coordinate must be a stray this bridge recorded, and never a layer
+   * in 1–49 (the playout server's span, `FIRST_ALLOCATABLE_LAYER`). No `MIXER … CLEAR` follows:
+   * the mixer of a channel this station does not declare is not ours to reset. Audited as `out`.
+   */
+  async takeStrayOffAir(
+    channel: number,
+    layer: number,
+  ): Promise<{ ok: boolean; message?: string }> {
+    const key = adoptionKey({ channel, layer });
+    const stray = this.#strays.get(key);
+    if (stray === undefined || layer < FIRST_ALLOCATABLE_LAYER) {
+      return {
+        ok: false,
+        message: `Nothing of ours is recorded on ${String(channel)}-${String(layer)}.`,
+      };
+    }
+    const slot: CommandSlot = { channel, layer };
+    const verdict = await this.#audited(
+      'out',
+      { itemId: stray.itemId, templateId: stray.templateId, slot },
+      async (): Promise<{ accepted: boolean; errorCode?: string }> => {
+        if (this.#noServerReachable()) return { accepted: false, errorCode: 'disconnected' };
+        await this.#send(this.#builder.stop(slot), this.#nextSeq(), 'urgent');
+        const cleared = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+        return cleared.ok
+          ? { accepted: true }
+          : { accepted: false, errorCode: cleared.errorCode ?? 'amcp-error' };
+      },
+    );
+    if (!verdict.accepted) {
+      return {
+        ok: false,
+        message:
+          verdict.errorCode === 'disconnected'
+            ? 'CasparCG is not reachable — nothing was sent.'
+            : `CasparCG did not clear ${String(channel)}-${String(layer)}.`,
+      };
+    }
+    this.#strays.delete(key);
+    this.#removeInterest(slot);
+    this.straysChanged.emit(this.strays());
+    return { ok: true };
+  }
+
+  /**
+   * 🔴 `DESKTOP-APPS-01-D` d — **WHAT IS ALREADY ON AIR ON A CHANNEL, before this station
+   * declares it.** First-run asks this after it has written the connection and before it writes
+   * the channel, so the admin is told — once, and not blocked — that the channel carries
+   * somebody else's content.
+   *
+   * From the primary's OSC tap, waited for up to `waitMs`: a hearing tap answers `occupied` with
+   * the layers and their producer kinds, or `empty`; a tap that never hears answers `unknown`,
+   * which warns of nothing and claims nothing.
+   */
+  async channelOccupancy(
+    channel: number,
+    waitMs = 3000,
+  ): Promise<{
+    state: 'occupied' | 'empty' | 'unknown';
+    layers: { layer: number; producer: string }[];
+  }> {
+    const deadline = Date.now() + waitMs;
+    for (;;) {
+      const session = this.#adapter.primarySession;
+      if (
+        session.state === 'healthy' &&
+        session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs)
+      ) {
+        const layers = session.osc.occupancy
+          .occupied(this.#occupancyStaleMs)
+          .filter((o) => o.channel === channel)
+          .map((o) => ({ layer: o.layer, producer: o.producer }))
+          .sort((a, b) => a.layer - b.layer);
+        return { state: layers.length > 0 ? 'occupied' : 'empty', layers };
+      }
+      if (Date.now() >= deadline) return { state: 'unknown', layers: [] };
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
   }
 
   /**
@@ -3060,6 +3294,17 @@ export class CasparRuntime {
       // A remove landed between the restore and this decision — the item is
       // gone; its slot was already released by remove(). Nothing to do.
       if (this.#reconciler.get(itemId) === null) continue;
+      /*
+        🔴 `DESKTOP-APPS-01-D` j — **NEVER SEAT ON A CHANNEL THIS STATION DOES NOT DECLARE.** A
+        restore accepted before the bank moved (the owner's channel-2 set-up took channel 1's logo
+        on a bank-less bridge) must not reach this decision's re-ADD: measured against the mock,
+        a silent 1-99 got `MIXER 1-99 VOLUME 0` and `CG 1-99 ADD` — the Playout's programme
+        channel. It becomes a stray and nothing is sent.
+      */
+      if (!this.#isDeclaredChannel(slot.channel)) {
+        this.#strandItem(itemId);
+        continue;
+      }
       // We can decide now, so any earlier blind-tap doubt is resolved: drop the
       // `unverified` marker before settling the item either way. (No-op unless a
       // previous, blind pass had set it.)
@@ -4263,6 +4508,8 @@ export class CasparRuntime {
           policy: this.#layerPolicy,
           reservedLayers: this.#reservedLayers,
           slotOccupancy: (slot) => this.#fixedSlotOccupancy(slot),
+          // `DESKTOP-APPS-01-D` e — the one condition a channel change is refused on.
+          channelHoldsOurAir: (channel) => this.#holdsOurAirOn(channel),
         });
       }
     } catch (err) {
@@ -4271,6 +4518,17 @@ export class CasparRuntime {
       }
       throw err;
     }
+    /*
+      🔴 `DESKTOP-APPS-01-D` e/j — **EVERY ITEM LEFT ON ANOTHER CHANNEL LEAVES THE STACK, BEFORE
+      THE NEW ROWS ARE APPLIED** (its slot must be released while it is still a fixed slot). A
+      channel CHANGE reaches here only when nothing of ours holds air on the old channel, so what
+      leaves is list-only; a FIRST bank installed under a restored item (the owner's channel-2
+      set-up) can strand one that holds air, and that one becomes a stray. Nothing is sent.
+    */
+    for (const item of this.#reconciler.snapshot()) {
+      const slot = this.#slots.get(item.itemId);
+      if (slot !== undefined && slot.channel !== next.channel) this.#strandItem(item.itemId);
+    }
     this.#layers.applyFixed(slots);
     this.#fixedBank = next;
     this.fixedConfigChanged.emit(next);
@@ -4278,6 +4536,19 @@ export class CasparRuntime {
     // same change-compare the sweep uses (never a second derivation).
     this.#publishFixedStateIfChanged();
     return { ok: true };
+  }
+
+  /**
+   * `DESKTOP-APPS-01-D` e — does anything of OURS hold air on `channel`: an item on air or
+   * unsettled (`isOnAirStatus`), one whose air claim cannot be checked (`unverified`), or one
+   * whose producer is resident (`#loaded` — a STOPPED graphic is still on the channel's stage)?
+   */
+  #holdsOurAirOn(channel: number): boolean {
+    return this.#reconciler.snapshot().some((item) => {
+      const slot = this.#slots.get(item.itemId);
+      if (slot === undefined || slot.channel !== channel) return false;
+      return isOnAirStatus(item) || item.status === 'unverified' || this.#loaded.has(item.itemId);
+    });
   }
 
   /** The current per-slot state, computed on demand ([] when no bank). */
@@ -8811,6 +9082,9 @@ export class CasparRuntime {
       void this.#decidePendingRestores(this.#observedProducers(session), true);
     }
 
+    // `DESKTOP-APPS-01-D` j — a stray whose layer is now empty (or not ours) is dropped.
+    this.#pruneStrays();
+
     // C-014 — keep the allocation quarantine in step with what the tap sees;
     // the same tick that surfaces orphans withdraws foreign layers from the
     // allocatable pool (and returns them when the foreign producer leaves).
@@ -10679,6 +10953,8 @@ export class CasparRuntime {
    * THIS is the one function that changes.
    */
   #declaredChannels(): number[] {
+    // `DESKTOP-APPS-01-D` j — a station still in first-run has declared nothing yet.
+    if (this.#fixedBank === null && this.#declaresNothingWithoutBank) return [];
     return [this.#fixedBank?.channel ?? DEFAULT_CHANNEL];
   }
 

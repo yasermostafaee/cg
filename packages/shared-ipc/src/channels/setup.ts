@@ -164,6 +164,27 @@ export const SetupRouteAddressChannel = defineChannel(
   z.object({ address: z.string().nullable() }),
 );
 
+/**
+ * 🔴 `DESKTOP-APPS-01-D` d — **IS THIS CHANNEL ALREADY ON AIR WITH SOMEBODY ELSE'S CONTENT?**
+ *
+ * Asked by first-run (and Station setup's Change channel…) after the connection is written and
+ * BEFORE the channel is declared, so the admin is warned once — never blocked: at a client, CG
+ * graphics do belong on the programme channel, above the Playout's layers. A read of the primary's
+ * occupancy tap; `unknown` (the tap never heard) warns of nothing.
+ *
+ * `casparChannel`, not a top-level `channel`: the station fence refuses a route naming a channel
+ * the station does not declare, and asking about a channel before declaring it is this read's job.
+ */
+export const SetupChannelOccupancyChannel = defineChannel(
+  'setup.channel-occupancy',
+  z.object({ casparChannel: z.number().int().positive() }),
+  z.object({
+    state: z.enum(['occupied', 'empty', 'unknown']),
+    layers: z.array(z.object({ layer: z.number().int().positive(), producer: z.string() })),
+  }),
+);
+export type ChannelOccupancy = z.infer<typeof SetupChannelOccupancyChannel.response>;
+
 /** One row of the Playout's channel list as first-run shows it: UNJOINED, host and all. */
 export const CatalogueChannelSchema = z.object({
   id: z.string(),

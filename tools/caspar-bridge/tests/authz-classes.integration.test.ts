@@ -135,7 +135,7 @@ describe('C-038 — the census: every route, classified', () => {
    * seventh route quietly joining this class is a privilege change that should have to be
    * argued for — so it reddens here, and the argument happens in review.
    */
-  it('exactly seven routes are station-admin: the configuration verbs, and the unjoined catalogue', () => {
+  it('exactly nine routes are station-admin: the configuration verbs, the unjoined catalogue, and the two channel-scope doors', () => {
     const admin = [...routes().entries()]
       .filter(([, r]) => r.perm === 'station-admin')
       .map(([name]) => name)
@@ -151,8 +151,19 @@ describe('C-038 — the census: every route, classified', () => {
       'connections.set-config',
       'delimiters.set',
       'fixedLayers.set-config',
+      /*
+        `DESKTOP-APPS-01-D` d — what is on air on a channel before it is declared. A read, on the
+        station-admin rung for the catalogue's reason: only choosing a channel needs to ask.
+      */
+      'setup.channel-occupancy',
       'sources.set-assignments',
       'sources.set-config',
+      /*
+        `DESKTOP-APPS-01-D` j — STOP then CLEAR on a recorded stray's exact layer, a channel this
+        station does not declare. A write to somebody else's channel, argued for: it is narrower
+        than the fence it bypasses, and only a station-admin sees the strays at all.
+      */
+      'station.take-off-air',
     ]);
   });
 
@@ -207,6 +218,8 @@ describe('C-038 — the census: every route, classified', () => {
       'sources.assignments',
       'sources.config',
       'stack.snapshot',
+      // `DESKTOP-APPS-01-D` j — the strays, read by every console so its retention keeps them.
+      'station.strays',
       'templates.get',
       'templates.list',
       'update.state',
