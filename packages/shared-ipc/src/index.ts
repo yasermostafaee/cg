@@ -80,6 +80,9 @@ export * from './channels/liveLayers.js';
 // channel rather than a `connections` field: this is not link health, it is a
 // statement about AIR that outlives the reconnect that produced it.
 export * from './channels/emptiedAir.js';
+// C-016 — the programme return's STATE per watched channel; the picture itself is relayed on the
+// console's own origin, never over the control socket.
+export * from './channels/pgmReturn.js';
 export * from './channels/delimiters.js';
 // R-030 — the per-channel output raster (bridge-owned) + the configured-vs-real
 // video-mode verdict.

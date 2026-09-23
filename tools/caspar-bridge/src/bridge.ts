@@ -58,6 +58,9 @@ import {
   EmptiedAirNoticeChangedChannel,
   EmptiedAirNoticeChannel,
   EmptiedAirRestoreChannel,
+  PgmReturnStatusChangedChannel,
+  PgmReturnStatusChannel,
+  type PgmReturnStatus,
   LOCK_ENGAGED_REFUSAL,
   LockEngageChannel,
   LockReleaseChannel,
@@ -177,6 +180,7 @@ import {
   type CheckProbes,
 } from './connection-check.js';
 import { pinnedIPv4 } from './playout-http.js';
+import { PgmReturnRelay, type PgmReturnTuning } from './pgm-return.js';
 import { PlayoutAuth, type PlayoutAuthOptions, type VerifiedToken } from './playout-auth.js';
 import {
   PlayoutCatalogue,
@@ -386,6 +390,14 @@ export interface BridgeOptions {
   /** `DESKTOP-APPS-01` — the console's port when the CLI serves it, so the check can name it. */
   consolePort?: number;
   /**
+   * TEST-ONLY seam — `C-016`'s relay bounds and its feed port, so a suite need not wait seconds
+   * for a stall and need not hold the real `9250 + n − 1`. Absent = the product's rule and bounds.
+   */
+  pgmReturn?: {
+    readonly tuning?: Partial<PgmReturnTuning>;
+    readonly portFor?: (channel: number) => number;
+  };
+  /**
    * TEST-ONLY seam — clock and `fetch` for the Playout reads, so a suite can drive expiry
    * and the D9 cadence without sleeping for a minute.
    */
@@ -451,6 +463,11 @@ export interface BridgeHandle {
   };
   /** The real `@cg/caspar-client`-backed runtime (Reconciler is the truth). */
   readonly runtime: CasparRuntime;
+  /**
+   * `C-016` — the programme return relay. The CLI hands it to the console server, which serves
+   * `/pgm/<n>` from it; its state rides `pgmReturn.status` on the control socket.
+   */
+  readonly pgmReturn: PgmReturnRelay;
   /**
    * WHERE the candidate-layer bank in force came from, so the CLI can SAY it at
    * boot. Two machines ran different banks for two days and nothing anywhere
@@ -1650,9 +1667,47 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     });
   };
 
+  /*
+    🔴 `C-016` / `PGM-RETURN-01` — **THE PROGRAMME RETURN, read from the Playout's own `pgm` feed.**
+
+    The feed's server runs inside the playout core and is not hardened, so the relay is exactly one
+    well-behaved reader per watched channel (`pgm-return.ts` carries the rules). Its HOST is the
+    Playout's, reached the way every other Playout-bound read reaches it:
+
+      - a Playout is configured → its host name, through `pinnedIPv4` — the ONE IPv4 C6 pins for
+        the D9 read and the AMCP session — with the name kept in `Host`;
+      - none (auth off, development) → server A's configured host, through the same
+        `amcpAddressFor` the AMCP session dials.
+
+    Resolved at each connect attempt, so a changed connection is picked up by the next dial; a
+    change to server A's host also redials at once (below). The feed's audio (`GET /audio.wav`,
+    same port — never `935x`) and a backup Playout's return are named in `design.md` §6, not built.
+  */
+  const pgmReturn = new PgmReturnRelay({
+    resolveTarget: async () => {
+      if (playoutName !== undefined) {
+        const ip = await pinnedIPv4(playoutName).catch(() => null);
+        return ip === null ? null : { address: ip, hostHeader: playoutName };
+      }
+      const host = runtime.config().servers.A.host;
+      return { address: amcpAddressFor(host), hostHeader: host };
+    },
+    ...(options.pgmReturn?.portFor !== undefined ? { portFor: options.pgmReturn.portFor } : {}),
+    ...(options.pgmReturn?.tuning !== undefined ? { tuning: options.pgmReturn.tuning } : {}),
+  });
+  if (playoutName === undefined) {
+    let pgmHost = runtime.config().servers.A.host;
+    runtime.configChanged.subscribe((config) => {
+      if (config.servers.A.host === pgmHost) return;
+      pgmHost = config.servers.A.host;
+      pgmReturn.reconnectAll();
+    });
+  }
+
   const routes = buildRoutes(runtime, {
     setupPhase,
     catalogueRows: () => playoutCatalogue?.rows() ?? null,
+    pgmReturnStatus: () => pgmReturn.status(),
     connectionCheck,
     ...(options.persistPath !== undefined ? { persistPath: options.persistPath } : {}),
     ...(options.fixedLayersPath !== undefined ? { fixedLayersPath: options.fixedLayersPath } : {}),
@@ -1778,6 +1833,19 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       runtime.channelSettingsChanged.subscribe(pushStationChannels),
       runtime.configChanged.subscribe(pushStationChannels),
       ...(playoutCatalogue !== null ? [playoutCatalogue.onChanged(pushStationChannels)] : []),
+      /*
+        `C-016` — the programme return's state, behind the SAME delivery gate as every other push.
+        Beside `wirePublishes` rather than in it: that function forwards `CasparRuntime`'s
+        emitters (the `B-247` guard's subject), and the relay is not the runtime.
+      */
+      pgmReturn.subscribe((status) => {
+        if (authGateState(session, playoutAuth) === 'absent') return;
+        send(socket, {
+          type: 'publish',
+          channel: PgmReturnStatusChangedChannel.name,
+          payload: PgmReturnStatusChangedChannel.payload.parse(status),
+        });
+      }),
     );
     socket.on('message', (data) => {
       // `B-229` — the lock is read PER REQUEST from the live runtime, never captured.
@@ -1873,6 +1941,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     playoutCatalogue,
     templateServe,
     runtime,
+    pgmReturn,
     fixedBankSource: { bank: fixedBank, source: fixedBankSource },
     templates: runtime.templateProvenance,
     sourceCatalog,
@@ -1892,6 +1961,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       playoutAuth?.dispose();
       // `C-039` — and the D4 tick, for the same reason.
       playoutCatalogue?.dispose();
+      // `C-016` — every upstream feed socket and every relayed viewer.
+      pgmReturn.dispose();
       await runtime.stop();
       await new Promise<void>((resolve, reject) => {
         wss.close((err) => (err ? reject(err) : resolve()));
@@ -2530,6 +2601,11 @@ export function buildRoutes(
     connectionCheck?: (req: ConnectionCheckRequest) => Promise<ConnectionCheckResult>;
     /** `DESKTOP-APPS-01` §2E — this machine's address on the route to a host. */
     routeAddress?: (host: string) => Promise<string | null>;
+    /**
+     * `C-016` — every watched channel's programme-return state, from the one relay. Defaults to
+     * nothing watched — what a bridge with no relay is.
+     */
+    pgmReturnStatus?: () => PgmReturnStatus[];
   } = {},
 ): Map<string, Route> {
   // NAMED, not positional. Four optional string paths in a row is a signature
@@ -2560,6 +2636,7 @@ export function buildRoutes(
     paths.routeAddress ??
     (async (host: string): Promise<string | null> =>
       (await probeRoute(host).catch(() => null))?.address ?? null);
+  const pgmReturnStatus = paths.pgmReturnStatus ?? ((): PgmReturnStatus[] => []);
   /*
     `B-229` — `lock` is the THIRD ARGUMENT AND IT IS REQUIRED. A new channel cannot be
     routed without classifying it, which is what keeps "the lock refuses everything"
@@ -2806,6 +2883,13 @@ export function buildRoutes(
       b.restoreEmptiedAir(r.itemIds),
     ),
     route(EmptiedAirDismissChannel, 'operator', 'operator', () => b.dismissEmptiedAir()),
+
+    /*
+      `C-016` — the programme return's STATE per watched channel. A read: it says whether the
+      bridge can see the feed, and changes nothing. The picture itself is not on this socket —
+      it is relayed on the console's own origin (`/pgm/<n>`, `pgm-return.ts`).
+    */
+    route(PgmReturnStatusChannel, 'read', 'read', () => pgmReturnStatus()),
 
     // R-021 stage 2a — the fixed-bank wire contract: config read/update +
     // per-slot state. Order on an applied change: validate → apply → persist

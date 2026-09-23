@@ -520,7 +520,8 @@ const handle = await boot();
 const consoleServer = consoleDir !== undefined ? new ConsoleHttpServer() : null;
 if (consoleServer !== null && consoleDir !== undefined) {
   try {
-    await consoleServer.start({ dir: consoleDir, port: consolePort });
+    // `C-016` — the console's origin also relays the programme return (`/pgm/<n>`, loopback only).
+    await consoleServer.start({ dir: consoleDir, port: consolePort, pgmRelay: handle.pgmReturn });
   } catch (err) {
     console.error(
       `[caspar-bridge] console could not be served on 127.0.0.1:${consolePort}: ` +

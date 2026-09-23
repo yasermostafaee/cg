@@ -302,6 +302,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         // The way out. A lock that refused this would need a bridge restart to escape.
         'lock.release',
         'lock.state',
+        // `C-016` — a read: whether the programme return is live. A locked console still watches air.
+        'pgmReturn.status',
         'playoutLayers.state',
         'rehearse.state',
         // `DESKTOP-APPS-01-D` d — a read of the tap before a channel is declared.

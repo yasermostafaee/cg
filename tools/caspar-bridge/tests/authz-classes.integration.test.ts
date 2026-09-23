@@ -207,6 +207,8 @@ describe('C-038 — the census: every route, classified', () => {
       'layers.owned-occupancy',
       'liveLayers.state',
       'lock.state',
+      // `C-016` — whether the programme return is live. A viewer may watch air.
+      'pgmReturn.status',
       'playoutLayers.state',
       'rehearse.state',
       /*

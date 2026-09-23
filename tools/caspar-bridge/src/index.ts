@@ -110,6 +110,26 @@ export {
   CONSOLE_HEALTH_APP,
   CONSOLE_HEALTH_PATH,
   ConsoleHttpServer,
+  isLoopbackPeer,
   resolveConsolePath,
 } from './console-http-server.js';
-export type { ConsoleHealth, ConsoleServeOptions } from './console-http-server.js';
+export type { ConsoleHealth, ConsoleServeOptions, PgmRelayRoute } from './console-http-server.js';
+// `C-016` — the programme return: the ONE port rule, the part parser, and the relay.
+export {
+  DEFAULT_PGM_RETURN_TUNING,
+  MAX_VIEWER_BUFFERED_BYTES,
+  MjpegPartParser,
+  PGM_FIREWALL_CHANNELS,
+  PGM_PARSE_LIMITS,
+  PgmProtocolError,
+  PgmReturnRelay,
+  pgmChannelInFirewallRule,
+  pgmPort,
+} from './pgm-return.js';
+export type {
+  PgmParseEvent,
+  PgmReturnRelayOptions,
+  PgmReturnTuning,
+  PgmTarget,
+  PgmViewer,
+} from './pgm-return.js';
