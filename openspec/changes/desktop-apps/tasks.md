@@ -127,7 +127,15 @@
 - [x] 5D.8 i — the permitted channels are pushed when the bank changes (`B-266`)
 - [x] 5D.9 j — strays: kept out of every channel view, shown in Station setup, taken off air with
       STOP + CLEAR on the exact layer (`B-265`)
-- [ ] 5D.10 Linux `e2e` and installers on the commit carrying 5D — run URLs (jobs confirmed RAN):
+- [x] 5D.10 Linux `e2e` and installers on the commit carrying 5D — run URLs (jobs confirmed RAN):
+      https://github.com/yasermostafaee/cg/actions/runs/35896106572 on `00911e9a` — job
+      `E2E (Playwright)` completed/success with its `E2E` step RUN
+      (https://github.com/yasermostafaee/cg/actions/runs/35896106572/job/107300417592): Runtime 253
+      passed (all three `first-run.spec.ts` tests, the channel-2 one among them), Designer 281.
+      Installers + clean-Windows smoke green on the same commit:
+      https://github.com/yasermostafaee/cg/actions/runs/35896106586 — CG Control
+      https://github.com/yasermostafaee/cg/actions/runs/35896106586/artifacts/10767378603 · CG Designer
+      https://github.com/yasermostafaee/cg/actions/runs/35896106586/artifacts/10767565650
 
 ## 6. Records
 
