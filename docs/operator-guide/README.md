@@ -1,6 +1,39 @@
 # Operator Guide
 
-The Runtime is the on-air control surface. This guide assumes the Runtime is already installed and connected to one or both CasparCG servers — for installation see the deployment guide bundled with the installer.
+The Runtime is the on-air control surface — installed as **CG Control**. The first section below installs it and connects it to your Playout; the rest assume that is done.
+
+## Installing and connecting
+
+There are two installers. **CG Designer** is for building templates; **CG Control** is the on-air
+console. Install only the one you need on each machine. Put CG Control on a machine of its own —
+not on the Playout server.
+
+**Before you start, ask the Playout's administrator for three things:** the Playout's address
+(`http://host:port`), the `cg-admin` password, and that `http://127.0.0.1:5174` is in the Playout's
+CORS list.
+
+1. **Install.** Run `CG Designer_…-setup.exe` or `CG Control_…-setup.exe`. Windows may say
+   _"Windows protected your PC"_: press **More info**, then **Run anyway**. CG Designer installs for
+   you alone and needs no administrator; CG Control asks for one, because it opens two ports in the
+   firewall (UDP 6250 and TCP 7911) for CasparCG.
+2. **Open CG Control.** The first time, it opens on **Set up CG Control**.
+3. **Playout** — type the Playout's address and press **Check**. Each line says what it tested.
+   A red line says what is wrong; where somebody else has to act, it shows the one command or line
+   to give them — for example the command the Playout's administrator runs so CasparCG accepts this
+   machine. Press **Connect** when the Playout lines pass.
+4. **Sign in** as `cg-admin`. The first sign-in sets the station up; until it has, other accounts
+   are told the station is not set up yet.
+5. **Channel** — pick the channel this station drives. Never pick the Playout's programme channel.
+6. **Serve address** — CG Control fills in this machine's address; change it only if the Playout's
+   administrator tells you to. Press **Use this channel**.
+
+The console opens, signed in. Everything is in **SETTINGS** afterwards: the Playout and its check
+under **Servers**, the CasparCG host beside them, and the rows under **Layers**. Every layer row is
+shown after setup; hide the ones you do not use there once CasparCG is connected.
+
+**Closing CG Control stops control, not air.** What is on air stays on air, and the next start
+picks the rows up again. If CG Control will not start, it says why on its own screen; the
+**CG Control → Open bridge log** menu shows the file to send to support.
 
 ## Daily flow
 

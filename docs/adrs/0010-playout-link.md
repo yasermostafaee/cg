@@ -195,6 +195,21 @@ behind the bridge, and the browser talks to nothing but the bridge for control.
     The template origin keeps exactly its file routes plus `POST /complete`. An identity or control
     route appearing there is a defect, not a convenience.
 
+**Amendment — 2026-09-23 (`DESKTOP-APPS-01-A`): the issuer is LEARNED, never typed.** A client
+installs its own Playout on its own addresses, and the Playout may sign with a fixed, address-free
+`iss` (proposed `urn:apasai:playout`). So a station may be configured by the Playout's ADDRESS
+alone (`playout.address`): every endpoint, the JWKS included, derives from it, and `playout.issuer`
+is optional. While it is unset, the bridge ADOPTS the `iss` of the first sign-in token that
+verifies against the JWKS fetched from that address, carries `aud` `cg-control`, and holds
+`station-admin` — and persists it as `playout.issuer`. From then on rule 1 applies unchanged: the
+comparison is byte-equal, a mismatch is refused in words ("not for this station"), and nothing is
+ever re-adopted silently. Before adoption, only adoption is accepted: any other token is refused
+with one sentence ("This station is not set up yet"), and an unset issuer never means "accept any
+`iss`". The adopted value is CLEARED only when the Playout address is changed — which is written by
+CG Control itself (ADR 0011), never over the control socket, and replaces the whole Playout group;
+the next `station-admin` sign-in adopts again. An explicitly configured issuer is never adopted
+over and behaves exactly as before.
+
 ## Consequences
 
 - **No hop is added to the path to air**, and no second copy of the CG contract has to exist in

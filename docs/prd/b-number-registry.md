@@ -2964,3 +2964,19 @@ returned nothing, against a positive control on `B-260`, which returned one hit.
 
 ⇒ **Next free after this session is `B-262`**, **`D-161`**, **`C-042`**, **`R-067`** and
 **`P-051`** — the four non-`B` prefixes carried forward unmeasured, and to be measured before use.
+
+### 2026-09-23 — `DESKTOP-APPS-01` takes `P-051` … `P-054`, `R-067`, `R-068`, `B-262`, `B-263`
+
+- `P-051` — desktop delivery (this change); `P-052` signing; `P-053` auto-update; `P-054` the
+  Designer's desktop file backend, if needed — [platform.md](platform.md).
+- `R-067` — the bridge as a Windows service; `R-068` — one CG Control per channel —
+  [runtime.md](runtime.md).
+- `B-262` — the control socket accepts any Origin, [bugs-runtime.md](bugs-runtime.md).
+- `B-263` — the Designer's chrome renders Persian in Segoe UI, [bugs-designer.md](bugs-designer.md).
+
+Measured free before use: each returned no heading under `git grep -n --untracked -E
+"^## \[.\] <id>" -- docs`, against positive controls on `P-050`, `R-066` and `B-261`, which
+returned one hit each; the only other mentions were this file's own "next free" lines.
+
+⇒ **Next free after this session is `B-264`**, **`D-161`**, **`C-042`**, **`R-069`** and
+**`P-055`**.

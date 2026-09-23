@@ -12543,3 +12543,12 @@ made permanent, each case beside its declared-channel control.
 **Notes:** `BRIDGE-TRUTH-01`'s [[B-257]] spec asserted this hazard AS a fix — "B's CLEAR on channel
 2 reaches the wire", on a station declaring channel 1 — and is inverted here; see [[B-257]]'s note.
 Cross-refs [[B-257]], [[C-038]], [[C-039]], [[R-062]].
+
+## [ ] B-262 — The control socket accepts any Origin: a page in any browser on the CG Control machine can reach it ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01`
+
+**Observed:** `new WebSocketServer({ host, port })` in `bridge.ts` has no `verifyClient`; the
+connection handler never reads the upgrade's `Origin`. With auth ON a page still needs a token to
+do anything; with auth OFF — every dev bridge, and an installed station until its Playout is set —
+any page open in any browser on that machine can drive the station through `ws://127.0.0.1:5280`.
+**Expected:** only the console's own origins connect. Filed, not fixed: "no new safety mechanism"
+(`DESKTOP-APPS-01`).

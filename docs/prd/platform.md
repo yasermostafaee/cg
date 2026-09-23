@@ -2,7 +2,14 @@
 
 Cross-cutting items: shared packages, build/hosting, tests. See `README.md`.
 
-## [ ] P-001 — Bundle Vazirmatn offline ⟨priority: high⟩
+## [~] P-001 — Bundle Vazirmatn offline ⟨priority: high⟩
+
+**In progress 2026-09-23 — `DESKTOP-APPS-01` §2B, change `openspec/changes/desktop-apps/`.** The
+Runtime needed no new dependency: `main.tsx` now imports the `fonts.css` it already shipped, the
+jsdelivr `<link>` is gone and `cdn.jsdelivr.net` has left `style-src` and `font-src`. Both apps are
+pinned by `tests/e2e/fonts-offline.spec.ts`: with every off-machine host unreachable, no font or
+stylesheet request leaves the machine (control: the Arabic-range Vazirmatn face reports `loaded`,
+fetched from the page's own origin).
 
 **What:** Ship the Vazirmatn font with the apps instead of loading it from the
 jsdelivr CDN, and tighten the CSP accordingly.
@@ -3369,3 +3376,52 @@ its run URL on its PRD entry).
 - **Number:** `P-050`. Verified free at the moment of commit, not of planning:
   `git grep -n --untracked -E "^## \[.\] P-050" -- docs` returned nothing, against a positive
   control on the same regex for `P-049` which returned `platform.md`.
+
+## [~] P-051 — Desktop delivery: CG Control and CG Designer as two Windows installers ⟨priority: high⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01`
+
+**What.** Two Tauri installers built by CI: **CG Control** (the console, served by its bridge
+sidecar on `http://127.0.0.1:5174`, per-machine, firewall rules for UDP 6250 and TCP 7911) and
+**CG Designer** (per-user, no bridge). A fresh CG Control walks the station through first-run —
+the Playout's address, a `station-admin` sign-in, the channel — with a seven-line connection
+check. ADR 0011 records the decision.
+
+**Why.** The client installs the Playout, CG Control and CG Designer itself, on its own machines
+and addresses, with nobody from our side present and often no internet.
+
+**Acceptance:**
+
+- WHEN either installer runs on a clean Windows machine with no repo, Node or internet THEN the app
+  installs and opens (CG Designer without admin rights)
+- WHEN CG Control opens for the first time THEN it asks for the Playout's address and nothing else
+  is typed but a `station-admin` sign-in and the channel choice
+- WHEN CG Control closes or is killed THEN no bridge process is left behind
+- AND no Playout target is ever written over the control socket
+
+**Notes:** change `openspec/changes/desktop-apps/`. Follow-ups filed beside it: [[P-052]] signing,
+[[P-053]] auto-update, [[P-054]] the Designer's file backend (only if needed), [[R-067]] the
+bridge as a service, [[R-068]] one CG Control per channel.
+
+- **Number:** `P-051`. Verified free at the moment of commit: `git grep -n --untracked -E
+"^## \[.\] P-051" -- docs` returned nothing, against a positive control on `P-050`.
+
+## [ ] P-052 — Code-sign both installers ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4
+
+**What.** Sign `CG Control_…-setup.exe`, `CG Designer_…-setup.exe` and the executables inside
+them. **Why.** Unsigned, SmartScreen stops every install with _"Windows protected your PC"_, and
+an operator is taught to click past a warning. **Acceptance:** WHEN either installer is run on a
+clean machine THEN Windows names the publisher and shows no SmartScreen stop.
+
+## [ ] P-053 — Auto-update for the desktop apps ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §4
+
+**What.** Tauri's updater plugin, signed feeds, for both apps. **Why.** Today every update is a
+manual reinstall. **Acceptance:** WHEN a newer signed build is published THEN each app offers it,
+and CG Control never installs while anything is on air (ADR 0002's update-cadence reason).
+
+## [ ] P-054 — CG Designer: a desktop file backend behind `@cg/storage`, if the folder permission does not survive a restart ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §1.4
+
+**What.** A Tauri file backend implementing the existing `Workspace` abstraction. **Why.** It
+was REPORTED that WebView2 keeps the File System Access pickers working but drops a handle's
+permission across a restart, so the Designer would ask for the file again on each launch. Filed
+conditionally: the owner's §7 step 2 measures it on a real install; close this as not needed if
+the permission holds. **Acceptance:** WHEN CG Designer restarts THEN a project opened before
+reopens without a picker.

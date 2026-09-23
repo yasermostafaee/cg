@@ -37,6 +37,10 @@ starts tagging releases, prefix `v${version}` at the ONE render site — the com
 
 ## 4. The Runtime's UI font still comes off a CDN
 
+✅ **CLOSED (2026-09-23) by `DESKTOP-APPS-01` §2B** (folded into [[P-001]]): `main.tsx` imports the
+self-hosted `fonts.css`, the jsdelivr link is gone, and `cdn.jsdelivr.net` has left the CSP.
+Pinned by `apps/runtime/tests/e2e/fonts-offline.spec.ts`. The text below is kept as it was.
+
 `apps/runtime/index.html` links Vazirmatn from jsdelivr. The Designer self-hosts its fonts,
 and this app ALREADY ships the same Vazirmatn faces in `src/renderer/fonts.css` — but that
 file is imported only as `?inline` for template delivery, so the app UI reads Persian off

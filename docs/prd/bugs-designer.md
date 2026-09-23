@@ -4058,3 +4058,11 @@ read the ROOT (`DELTA B1`), but the bad id is still in every package.
 root IS the entry there, so the pointer has nothing to say) rather than to rewrite it. ⚠ Do not
 "fix" this by making a consumer tolerate it — `DELTA B1` already had to delete one such
 tolerance, and it is what made the defect invisible.
+
+## [ ] B-263 — The Designer's chrome renders Persian in Segoe UI, not Vazirmatn ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §2B
+
+**Observed:** `apps/designer/src/renderer/index.css` sets the body stack to
+`'Exo 2', Inter, system-ui, …, 'Segoe UI', Vazirmatn`; on Windows `system-ui` has Arabic glyphs, so
+Persian chrome text never reaches Vazirmatn (measured: every Vazirmatn face `unloaded` after
+rendering Persian in the body stack). Authored content is unaffected — it names Vazirmatn itself.
+**Expected:** Persian chrome in the app's own Persian face. A visual change, so its own item.
