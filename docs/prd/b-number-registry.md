@@ -2952,3 +2952,15 @@ a positive control on `B-256`, which returned one.
 
 ⇒ **Next free after this session is `B-261`**, **`D-161`**, **`C-042`**, **`R-067`** and
 **`P-051`** — the four non-`B` prefixes carried forward unmeasured, and to be measured before use.
+
+### 2026-09-23 — `B-261` taken by `CHANNEL-AUTHORITY-01` §1.3
+
+- `B-261` — a station writes to channels it does not operate: two explicit-channel clears, the
+  two surfaces that offered them, and the dynamic allocator's constant channel,
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free at the moment of writing: `git grep -n --untracked -E "^## \[.\] B-261" -- docs`
+returned nothing, against a positive control on `B-260`, which returned one hit.
+
+⇒ **Next free after this session is `B-262`**, **`D-161`**, **`C-042`**, **`R-067`** and
+**`P-051`** — the four non-`B` prefixes carried forward unmeasured, and to be measured before use.

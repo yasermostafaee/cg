@@ -6,6 +6,8 @@ export { buildRoutes, refusedWhileLocked } from './bridge.js';
 // for the lock's. "Everything else is refused" is a claim about every channel, and a spec that
 // SAMPLED them could not make it.
 export { authGateState, openToUnauthenticated, refusedByAuth, wirePublishes } from './bridge.js';
+// `CHANNEL-AUTHORITY-01` — the STATION fence and the routes exempt from it, for its census.
+export { CHANNEL_DECLARING_ROUTES, stationRefusal } from './bridge.js';
 export type { AuthGateState, BridgeHandle, BridgeOptions } from './bridge.js';
 // `C-037` — the Playout link: its config precedence (CLI > file > default), the boot failure
 // that names a missing key, and the verifier. The CLI resolves the default file path through

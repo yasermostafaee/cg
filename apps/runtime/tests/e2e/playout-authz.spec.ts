@@ -250,9 +250,11 @@ test('🔴 an OPERATOR on the same station keeps every verb — the positive con
 
   Two browser contexts, because the token is held per console: `cg-op1` (channel 1, the
   station's declared channel) and `cg-op-ch2` (channel 2 only). The wire half — channel 2's
-  CLEAR and PANIC passing, a second channel-1 principal still meeting the lock, and channel 2
-  refused on channel 1 by PERMISSION — is `lock-scope.integration.test.ts`. This proves what only
-  a real page can: the lock screen is up on one console and absent on the other.
+  PANIC passing the lock, its CLEAR on channel 2 refused by the STATION (channel 2 is not this
+  station's, `CHANNEL-AUTHORITY-01`) and never by the lock, a second channel-1 principal still
+  meeting the lock, and channel 2 refused on channel 1 by PERMISSION — is
+  `lock-scope.integration.test.ts`. This proves what only a real page can: the lock screen is up
+  on one console and absent on the other.
 
   ⭐ Every absence on the second page has its control on the FIRST page, with the same locator:
   the lock screen and the LOCKED chip are shown there, so the instrument was live.

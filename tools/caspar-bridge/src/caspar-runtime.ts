@@ -1543,7 +1543,8 @@ export class CasparRuntime {
     // every later one against the configured raster — the kind of difference
     // nobody would think to look for.
     this.#channelSettings = new ChannelSettingsStore(options.templatesDir);
-    this.#channelSettings.hydrate(this.#declaredChannels());
+    // `CHANNEL-AUTHORITY-01` — the PREDICATE, not a boot-time copy of its answer.
+    this.#channelSettings.hydrate(() => this.#declaredChannels());
     // D-137 / C-015 — already loaded and validated by `createBridge`; absent
     // files resolved to the EMPTY value there, never to a guessed default.
     this.#sourceCatalog = options.sourceCatalog ?? EMPTY_SOURCE_CATALOG;
@@ -2819,14 +2820,17 @@ export class CasparRuntime {
         somebody else's output". A new reason code would have said the same thing in a
         second vocabulary.
 
-        ⚠ **`#fixedBank === null` keeps today's behaviour deliberately.** A runtime with
-        no declared bank has no configured channel, so there is nothing to compare
-        against and inventing one would refuse restores on a bridge that never had the
-        defect. Every CLI boot has a bank (an absent file yields the built-in default),
-        so the null case is programmatic callers only.
+        ⚠ **`CHANNEL-AUTHORITY-01` — the fence now asks `#isDeclaredChannel`, the one
+        predicate every channel door asks.** It used to read `#fixedBank.channel` itself and
+        wave everything through when there was no bank, on the argument that a bank-less
+        runtime "has no configured channel". It has one: `#declaredChannels()` answers
+        channel 1 there — `FixedLayerBankSchema`'s own documented default, the channel the
+        settings store is seeded for and the permitted-channel strip lists — so the bank-less
+        case now refuses what every other door refuses rather than disagreeing with them.
+        Every CLI boot has a bank (an absent file yields the built-in default), so that case
+        is programmatic callers only.
       */
-      const bank = this.#fixedBank;
-      if (bank !== null && item.slot.channel !== bank.channel) return { skip: 'not-declared' };
+      if (!this.#isDeclaredChannel(item.slot.channel)) return { skip: 'not-declared' };
       // R-028 / C-015 — a retained coordinate now inside the RESERVED playout
       // range is SKIPPED, never re-homed. Falling through to `#allocate()`
       // would consult a DIFFERENT layer's occupancy (the exact
@@ -8792,8 +8796,24 @@ export class CasparRuntime {
     // healthy playout graphic as reclaimable and invite the operator to clear
     // live automation output. Exclusion, not ownership — the bridge neither
     // owns nor watches these layers; it just declares them off limits.
+    /*
+      🔴 `CHANNEL-AUTHORITY-01` — **AND ONLY ON A CHANNEL THIS STATION OPERATES.**
+
+      CasparCG's OSC reports EVERY channel the server runs — the partner Playout's programme
+      output, its preview channels, anything — and the sweep used to take all of it as
+      candidates. So on a channel-2 station, every html graphic the Playout had on channel 1
+      surfaced in the orphan strip as "on air but not on your stack", with a CLEAR beside it:
+      measured, that CLEAR reached the wire as `CLEAR 1-20`. The request gate now refuses such a
+      clear; this is the half that stops the console OFFERING it, because a control the bridge
+      then refuses is a control that should not have been drawn (absent, never greyed).
+
+      ⚠ A different rule from the reserved-layer exclusion above it, and kept beside it rather
+      than merged: that one is a layer NUMBER declared somebody else's on our channel; this is a
+      whole CHANNEL that was never ours. `#isDeclaredChannel` is the one predicate.
+    */
     const occupied = session.osc.occupancy
       .occupied(this.#occupancyStaleMs)
+      .filter((o) => this.#isDeclaredChannel(o.channel))
       .filter((o) => this.#declaredLayerClass(o.channel, o.layer) !== 'playout');
     const owned = new Set<string>();
     for (const slot of this.#slots.values()) {
@@ -8899,29 +8919,37 @@ export class CasparRuntime {
    *
    * The reserved set is channel-agnostic (a layer NUMBER is reserved), so the
    * rows are reported on the bridge's own channel — the one it drives.
+   *
+   * 🔴 `CHANNEL-AUTHORITY-01` — **"the one it drives" is `#declaredChannels()`, and it used to
+   * be the constant `DEFAULT_CHANNEL`.** On a channel-2 station this tab listed and OBSERVED
+   * channel 1 — a partner Playout's programme output — and its CLEAR sent
+   * `playoutLayers.clear { channel: 1 }`, measured at the wire as `CLEAR 1-60`. The rows are now
+   * reported on every channel the station declares, which with one bank is exactly one channel
+   * and the same number of rows as before.
    */
   playoutLayersState(): PlayoutLayerState[] {
     if (this.#reservedLayers.length === 0) return [];
     const session = this.#adapter.primarySession;
     const hearing =
       session.state === 'healthy' && session.osc.occupancy.hasFreshOsc(this.#occupancyStaleMs);
-    const producerByLayer = new Map<number, string>();
+    const producerBySlot = new Map<string, string>();
     if (hearing) {
       for (const o of session.osc.occupancy.occupied(this.#occupancyStaleMs)) {
-        if (o.channel === DEFAULT_CHANNEL) producerByLayer.set(o.layer, o.producer);
+        producerBySlot.set(`${String(o.channel)}:${String(o.layer)}`, o.producer);
       }
     }
-    return [...this.#reservedLayers]
-      .sort((a, b) => a - b)
-      .map((layer) => {
-        const producer = producerByLayer.get(layer);
+    const layers = [...this.#reservedLayers].sort((a, b) => a - b);
+    return this.#declaredChannels().flatMap((channel) =>
+      layers.map((layer) => {
+        const producer = producerBySlot.get(`${String(channel)}:${String(layer)}`);
         const observed: PlayoutLayerState['observed'] = !hearing
           ? { kind: 'unknown' }
           : producer !== undefined
             ? { kind: 'producer', producer }
             : { kind: 'empty' };
-        return { channel: DEFAULT_CHANNEL, layer, observed };
-      });
+        return { channel, layer, observed };
+      }),
+    );
   }
 
   /** Publish the playout-layer state ONLY when it differs (the orphan-tracker precedent). */
@@ -10598,6 +10626,23 @@ export class CasparRuntime {
     return [this.#fixedBank?.channel ?? DEFAULT_CHANNEL];
   }
 
+  /**
+   * 🔴 `CHANNEL-AUTHORITY-01` — **DOES THIS STATION OPERATE `channel`? The ONE answer.**
+   *
+   * Membership in {@link #declaredChannels}, and nothing else: not a grant (a principal may be
+   * permitted a channel this station does not drive — the test Playout's `cg-op2` holds the
+   * Playout's own programme channel), not a catalogue row, not a server observation. Every door
+   * that asks "may this station write to channel N" asks THIS — the request gate's `not-declared`
+   * refusal, the restore door's `not-declared` skip, the orphan sweep's candidates, the playout
+   * tab's rows and the channel-settings store — so none of them can come to hold a second copy of
+   * the list that agrees today (golden rule 6). Two of them did, before this: the restore fence
+   * read the bank directly and let everything through with no bank, and the settings store kept
+   * the list it was handed at boot.
+   */
+  #isDeclaredChannel(channel: number): boolean {
+    return this.#declaredChannels().includes(channel);
+  }
+
   /** R-030 — the configured raster(s) plus what `INFO <channel>` reported. */
   channelSettingsState(): ChannelSettingsState {
     return this.#channelSettings.state();
@@ -11062,13 +11107,27 @@ export class CasparRuntime {
     // window where a just-arrived foreign producer gets allocated over. Same
     // sample, same predicate, run synchronously before the scan.
     this.#reconcileForeignQuarantine();
+    /*
+      🔴 `CHANNEL-AUTHORITY-01` — **ON THE CHANNEL THIS STATION DECLARES, not on a constant.**
+
+      This read `DEFAULT_CHANNEL` (1) whatever the bank said. The shipped policy is empty, so a
+      stock station never reaches here; a deployment that declares its own ranges does, and on a
+      channel-2 station its take went out as `CLEAR 1-10`, `MIXER 1-10 VOLUME 0`, `CG 1-10 ADD`,
+      `CG 1-10 PLAY` — measured, and the 2026-09-22 incident's exact shape through a door that
+      names no channel at all.
+
+      ⚠ The FIRST declared channel, because a station declares one (one bank, one channel, v1). A
+      second declared channel makes "which channel does a dynamic load mean" a question the load
+      itself has to answer — `R-062` gap 1 — and must not be settled here by picking one.
+    */
+    const channel = this.#declaredChannels()[0] ?? DEFAULT_CHANNEL;
     try {
-      return this.#layers.allocate(templateId, DEFAULT_CHANNEL);
+      return this.#layers.allocate(templateId, channel);
     } catch (err) {
       // Unknown template type → fall back to the `custom` range. An exhausted
       // range (OutOfLayersError) propagates to the caller as a failed load.
       if (err instanceof UnknownTemplateTypeError) {
-        return this.#layers.allocate('custom', DEFAULT_CHANNEL);
+        return this.#layers.allocate('custom', channel);
       }
       throw err;
     }
@@ -11681,6 +11740,15 @@ export class CasparRuntime {
    */
   declaredChannels(): readonly number[] {
     return this.#declaredChannels();
+  }
+
+  /**
+   * `CHANNEL-AUTHORITY-01` — the public face of `#isDeclaredChannel`, for the request gate's
+   * station fence. Delegates rather than re-testing membership, so the gate and the restore door
+   * cannot answer "does this station operate channel N" differently.
+   */
+  isDeclaredChannel(channel: number): boolean {
+    return this.#isDeclaredChannel(channel);
   }
 
   /**

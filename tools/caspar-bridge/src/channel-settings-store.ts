@@ -89,8 +89,15 @@ export class ChannelSettingsStore {
   readonly #settings = new Map<number, ChannelSettings>();
   /** What `INFO <channel>` reported, keyed by channel. Never merged into #settings. */
   readonly #observed = new Map<number, ChannelVideoMode>();
-  /** The channels this install declares — the `unknown-channel` guard's world. */
-  #declared: readonly number[] = [];
+  /**
+   * The channels this install declares — the `unknown-channel` guard's world, READ AT CALL TIME.
+   *
+   * 🔴 `CHANNEL-AUTHORITY-01` — it used to be the LIST the runtime handed over at boot, a copy of
+   * `#declaredChannels()` that stopped following it the moment it was taken: a bank installed
+   * live on a bank-less bridge moved every other door's answer and left this one refusing the new
+   * channel and accepting the old. The runtime now passes the predicate itself.
+   */
+  #declared: () => readonly number[] = () => [];
 
   constructor(persistDir?: string) {
     this.#persistDir = persistDir ?? null;
@@ -109,8 +116,14 @@ export class ChannelSettingsStore {
    * reports the disagreement out loud. Degrading to the old behaviour plus a
    * loud warning beats refusing to boot the operator's only control surface.
    */
-  hydrate(declaredChannels: readonly number[]): { loaded: number } {
-    this.#declared = [...declaredChannels];
+  hydrate(declaredChannels: readonly number[] | (() => readonly number[])): { loaded: number } {
+    // A function is the runtime's live predicate; a list is a unit fixture's fixed world.
+    if (typeof declaredChannels === 'function') {
+      this.#declared = declaredChannels;
+    } else {
+      const fixed = [...declaredChannels];
+      this.#declared = () => fixed;
+    }
     let loaded = 0;
     if (this.#persistDir !== null) {
       const file = path.join(this.#persistDir, FILE_NAME);
@@ -130,7 +143,7 @@ export class ChannelSettingsStore {
         }
       }
     }
-    for (const channel of this.#declared) {
+    for (const channel of this.#declared()) {
       if (!this.#settings.has(channel))
         this.#settings.set(channel, defaultChannelSettings(channel));
     }
@@ -241,12 +254,13 @@ export class ChannelSettingsStore {
    * it passes.
    */
   set(settings: ChannelSettings): SetRefusal | null {
-    if (!this.#declared.includes(settings.channel)) {
+    const declared = this.#declared();
+    if (!declared.includes(settings.channel)) {
       return {
         reason: 'unknown-channel',
         message:
           `Channel ${String(settings.channel)} is not declared by this install ` +
-          `(declared: ${this.#declared.length === 0 ? 'none' : this.#declared.join(', ')}).`,
+          `(declared: ${declared.length === 0 ? 'none' : declared.join(', ')}).`,
       };
     }
     this.#settings.set(settings.channel, settings);

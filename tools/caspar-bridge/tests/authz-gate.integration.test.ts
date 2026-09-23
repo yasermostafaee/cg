@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { AUTHZ_ROLE_REFUSAL, authzChannelRefusal } from '@cg/shared-ipc';
-import type { BridgeHandle } from '../src/index.js';
+import type { BridgeHandle, BridgeOptions } from '../src/index.js';
 import { openClient, startAuthedBridge, expectRefusedWith } from './support/auth-harness.js';
 import { FAKE_OTHER_STATION_USER, FAKE_VIEWER, type FakePlayout } from './support/fake-playout.js';
 
@@ -34,10 +34,13 @@ afterEach(async () => {
 });
 
 /** A bridge with auth ON, and a client that has already presented `user`'s token. */
-async function signedInAs(user: 'operator' | 'viewer' | 'admin' | 'otherStation'): Promise<{
+async function signedInAs(
+  user: 'operator' | 'viewer' | 'admin' | 'otherStation',
+  overrides: Partial<BridgeOptions> = {},
+): Promise<{
   ask: (id: string, channel: string, payload?: unknown) => Promise<{ error?: string }>;
 }> {
-  const started = await startAuthedBridge();
+  const started = await startAuthedBridge(overrides);
   handle = started.handle;
   playout = started.playout;
   const client = await openClient(started.handle);
@@ -132,7 +135,17 @@ describe('C-038 — the CHANNEL gate', () => {
    * channels granted and one refused cannot act on "that channel".
    */
   it('the refusal names the channel that was refused, not just that one was', async () => {
-    const { ask } = await signedInAs('operator');
+    /*
+      ⚠ `CHANNEL-AUTHORITY-01` — channel 7 is DECLARED here, by a bank on it, and it has to be.
+      A channel the station does not operate is now refused one gate earlier, by the station
+      fence, with the station's own sentence: no grant makes a station operate a channel it does
+      not have, so the grant sentence would send the operator to the wrong remedy. Declaring 7
+      keeps this spec's subject — the PERMISSION sentence, naming a distinctive channel —
+      reachable, and `station-channel-fence` pins the other half of the order.
+    */
+    const { ask } = await signedInAs('operator', {
+      fixedLayers: { channel: 7, low: { start: 50, count: 9 }, start: 80, count: 4 },
+    });
     const res = await ask('c3', 'layers.clear', { channel: 7, layer: 10 });
     expectRefusedWith(res.error, authzChannelRefusal(7), 'an ungranted channel was cleared');
     expect(res.error).toContain('7');

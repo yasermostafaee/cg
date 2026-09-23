@@ -9,6 +9,7 @@ import {
   type AuthMode,
   AUTHZ_ROLE_REFUSAL,
   authzChannelRefusal,
+  channelNotDeclaredRefusal,
   type PermissionClass,
   grantsChannel,
   grantedChannels,
@@ -904,8 +905,8 @@ export function channelsForRequest(
   if (name === StackSilenceAllLivePlatesChannel.name) return [];
 
   // (a) the request carries the coordinate itself.
-  const explicit = (req as { channel?: unknown } | null)?.channel;
-  if (typeof explicit === 'number') return [explicit];
+  const explicit = explicitChannel(req);
+  if (explicit !== undefined) return [explicit];
 
   // (a′) `stack.restore` carries N items, each with its own optional slot.
   if (name === StackRestoreChannel.name) {
@@ -950,6 +951,79 @@ export function channelsForRequest(
   }
 
   return [];
+}
+
+/**
+ * The channel a request NAMES — case (a) of {@link channelsForRequest}, spelled once so the
+ * permission gate and the station fence read the coordinate the same way. `undefined` when the
+ * request carries no top-level `channel` (a restore's per-item slots are not this: see below).
+ */
+function explicitChannel(req: unknown): number | undefined {
+  const explicit = (req as { channel?: unknown } | null)?.channel;
+  return typeof explicit === 'number' ? explicit : undefined;
+}
+
+/**
+ * 🔴 `CHANNEL-AUTHORITY-01` — **THE ROUTES WHOSE `channel` DECLARES RATHER THAN ADDRESSES.**
+ *
+ * Every other route that names a channel names one to WRITE TO, and is fenced by
+ * {@link stationRefusal}. These two are `station-admin` configuration routes whose channel is the
+ * subject of the configuration, and they are exempt for two different reasons:
+ *
+ *   - `fixedLayers.set-config` — the bank's `channel` IS the declaration. Fencing it by the
+ *     declaration it writes would make the first bank uninstallable on a bank-less bridge, and a
+ *     channel CHANGE on an existing bank is already refused by `validateFixedBankChange`.
+ *   - `channelSettings.set` — NOT a declaration door, whatever it looks like: it cannot introduce
+ *     a channel. Its store refuses one the station does not declare with `unknown-channel`, on the
+ *     SAME predicate (`#isDeclaredChannel`, read at call time). A second, gate-level refusal of
+ *     the same fact would be two sentences for one condition.
+ *
+ * ⚠ **A NEW ROUTE WITH A TOP-LEVEL `channel` IS FENCED BY DEFAULT.** The exemption is the list,
+ * and the fence is everything else, so the route that forgets is the route that is refused — the
+ * failure a reader can see, rather than a clear that reaches somebody else's output. The census in
+ * `station-channel-fence.integration.test.ts` pins this set by name.
+ */
+export const CHANNEL_DECLARING_ROUTES: ReadonlySet<string> = new Set([
+  FixedLayersSetConfigChannel.name,
+  ChannelSettingsSetChannel.name,
+]);
+
+/**
+ * 🔴 `CHANNEL-AUTHORITY-01` — **DOES THIS STATION OPERATE THE CHANNEL THIS REQUEST NAMES? The
+ * station fence, and the sentence it refuses with.** `null` means it does, or the request names
+ * none.
+ *
+ * ── WHY THIS IS NOT THE PERMISSION GATE ─────────────────────────────────────
+ *
+ * The grant answers "may THIS PRINCIPAL operate channel N" and the declared bank answers "does
+ * THIS STATION operate channel N", and only the second decides what the bridge writes to. Measured
+ * before this existed, on a bank declaring channel 2 with a principal granted channels 1 and 2 —
+ * the test Playout's real `cg-op2` shape, whose channel 1 is the Playout's own programme output:
+ * `layers.clear` put `CLEAR 1-20` on the wire and `playoutLayers.clear` put `CLEAR 1-60`, with auth
+ * ON and with auth OFF. The permission gate passed them because the grant was TRUE.
+ *
+ * ── WHAT IT READS, AND WHAT IT DELIBERATELY DOES NOT ────────────────────────
+ *
+ * Only the coordinate a request NAMES (case (a) of {@link channelsForRequest}), through
+ * `CasparRuntime.isDeclaredChannel` — the one predicate the restore door, the orphan sweep and the
+ * playout tab also ask. It does not read:
+ *
+ *   - an `itemId`'s channel — the bridge's own ledger put that row there, through a door this
+ *     fence already guards, and refusing an Out or a Clear on it would strand exactly the graphic
+ *     an operator is trying to take off air;
+ *   - `stack.restore`'s per-item slots — fenced INSIDE the runtime as a `not-declared` SKIP, so
+ *     one foreign row does not cost a console the rest of its stack;
+ *   - PANIC — A16: it stays unscoped, and this does not scope it.
+ *
+ * ⚠ **AUTH OFF IS NOT EXEMPT.** This is a fact about the station, not about a principal. It is the
+ * one refusal this change adds to an auth-OFF bridge, and it only ever meets a stale or crafted
+ * client: the console never offers a channel the station does not declare.
+ */
+export function stationRefusal(route: Route, req: unknown, runtime: CasparRuntime): string | null {
+  if (CHANNEL_DECLARING_ROUTES.has(route.channel.name)) return null;
+  const channel = explicitChannel(req);
+  if (channel === undefined || runtime.isDeclaredChannel(channel)) return null;
+  return channelNotDeclaredRefusal(channel);
 }
 
 /**
@@ -1579,10 +1653,11 @@ async function handleMessage(
     ⚠ It reads the state PER REQUEST, never latched at connect — which is what makes a fresh
     `auth` frame on the SAME socket restore every control with no reload.
 
-    🔴 Nothing below this line changes any refusal CONDITION on the path to air: the lock is
-    untouched, PANIC is untouched, and golden rule 10's gate has not moved. What changed is
-    that a socket without a principal now gets two answers instead of every answer — when,
-    and only when, auth is ON.
+    🔴 `C-037` itself changed no refusal CONDITION on the path to air: the lock is untouched,
+    PANIC is untouched, and golden rule 10's gate has not moved. What it changed is that a
+    socket without a principal gets two answers instead of every answer — when, and only when,
+    auth is ON. ⚠ `CHANNEL-AUTHORITY-01`'s station fence, further down, DOES add one, and with
+    auth OFF too: a request naming a channel this station does not declare. It says so there.
   */
   /*
     🔴 **WAIT FOR A SIGN-IN THAT IS STILL LANDING, BEFORE JUDGING THIS FRAME.**
@@ -1601,6 +1676,33 @@ async function handleMessage(
   const gate = authGateState(session, playoutAuth);
   if (refusedByAuth(route, gate)) {
     send(socket, errorResponse(frame.id, AUTH_REQUIRED_REFUSAL));
+    return;
+  }
+
+  /*
+    🔴 `CHANNEL-AUTHORITY-01` — **THE STATION FENCE: AFTER AUTHENTICATION, BEFORE PERMISSION.**
+
+    Both neighbours are the order being the message, argued from each side:
+
+    ⚠ **AFTER the auth gate**, because ADR 0010 rule 4 gives a socket that has not signed in
+    `bridge.capabilities` and the `auth.*` door and NOTHING ELSE. A fence answering first would
+    tell an unauthenticated socket which channels this station drives, one probe at a time.
+    (Behind the lock gate too, as a consequence: a locked console is told it is locked, and is
+    told this on the next press — a PIN it already knows is not the wrong remedy.)
+
+    ⚠ **BEFORE the permission gate**, because this is the broader fact. An operator granted
+    channel 1 and refused because this station does not operate channel 1 must be told THAT —
+    the permission gate would have PASSED them, which is precisely how `CLEAR 1-20` reached the
+    wire. And an operator NOT granted channel 1 must not be sent to ask for a grant that would
+    change nothing: no grant makes this station operate a channel it does not declare.
+
+    Silent, like the lock and the auth gate, and unlike a permission refusal — which is recorded
+    because a dispute turns on WHO. This turns on nothing a principal did; it is a request
+    naming a channel that is not here.
+  */
+  const unoperated = stationRefusal(route, parsedReq.data, runtime);
+  if (unoperated !== null) {
+    send(socket, errorResponse(frame.id, unoperated));
     return;
   }
 

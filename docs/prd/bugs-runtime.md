@@ -12366,6 +12366,16 @@ silences. The design, the PANIC check and the rendering are `openspec/changes/ar
 REFUSE it, not about its scope. Cross-refs [[B-229]], [[C-038]], [[B-258]], [[B-259]],
 [[B-260]].
 
+⚠ **2026-09-23, `CHANNEL-AUTHORITY-01` — one line of this fix's spec asserted a hazard, and is
+inverted.** It was measured on a station that declares ONLY channel 1, so the channel-2 operator's
+"own channel" was never this station's, and `lock-scope.integration.test.ts` asserted as the fix
+that their `layers.clear` on channel 2 reached the wire as `CLEAR 2-40`. That is [[B-261]]: a write
+to a channel the station does not operate, passed by the permission gate because the grant was
+true. The line now asserts the STATION's refusal — never the lock's — and silence at the wire.
+**B-257's own property is untouched**: the lock does not reach that operator, whose PANIC passes and
+lands, proven at the wire in the same spec. The CLEAR half of this fix becomes reachable only on a
+station that declares a second channel.
+
 **The audit this was found by** — `BRIDGE-TRUTH-01` §1, the re-run of the table
 `PLAYOUT-AUTHZ-01` lost to compaction. Every exemption the lock has, and every place the auth or
 permission gate reuses a lock-era condition, each answering one question: _does this
@@ -12480,3 +12490,56 @@ and the record does not say so: `templates.*` is station-wide by the authz desig
 - AND [[B-085]]'s offline-repair case is answered explicitly rather than lost
 
 **Notes:** Cross-refs [[B-229]], [[B-257]], [[B-258]].
+
+## [~] B-261 — a station writes to channels it does not operate: `layers.clear` and `playoutLayers.clear` honour whatever channel a request names, the console's own orphan strip and playout tab OFFER them, and the dynamic allocator places on a constant ⟨priority: high — `CLEAR` on a partner Playout's live programme output, one confirm away on the operator's own screen, with auth ON and with auth OFF⟩ — FILED 2026-09-23 by `CHANNEL-AUTHORITY-01` §1.3 · FIXED IN CODE by `CHANNEL-AUTHORITY-01` commit 1 (`openspec/changes/channel-authority`)
+
+**What.** Three facts about a channel live in three places — the Playout's catalogue says it
+EXISTS, a grant says a principal MAY OPERATE it, the declared bank says THIS STATION operates it —
+and nothing made the third one decide where the bridge writes. `CHANNEL-RESOLUTION-01` fenced one
+door, `stack.restore`, and said so: every other door that takes an explicit channel read it from
+the request and compared it to nothing about the station.
+
+**Measured 2026-09-23** (loopback; a fake CasparCG serving three channels; the bank declares
+channel **2**; the principal is the test Playout's real `cg-op2` grant in shape — channels 1 AND 2
+of this host, channel 1 standing for the Playout's own programme output; "their" html graphic
+played onto both channels from a second AMCP client). Each door sent channel 1:
+
+| door                      | auth OFF — at the wire  | auth ON — at the wire   | what stopped it                                     |
+| ------------------------- | ----------------------- | ----------------------- | --------------------------------------------------- |
+| `layers.clear`            | **`CLEAR 1-20`**, `ok`  | **`CLEAR 1-20`**, `ok`  | nothing                                             |
+| `playoutLayers.clear`     | **`CLEAR 1-60`**, `ok`  | **`CLEAR 1-60`**, `ok`  | nothing                                             |
+| `fixedLayers.clear-layer` | nothing — `not-in-bank` | nothing — `not-in-bank` | `isFixed`, `caspar-runtime.ts:9084` (at `709843ce`) |
+| `fixedLayers.load` + take | nothing — `not-fixed`   | nothing — `not-fixed`   | `isFixed`, `caspar-runtime.ts:2148` (at `709843ce`) |
+
+With auth ON the permission gate PASSED both clears, because the grant was true.
+
+**The console offered both.** Neither needed a crafted client:
+
+- the orphan sweep took its candidates from every channel OSC reports — a server's whole output,
+  the partner's programme channel included — so every html graphic the Playout had on channel 1
+  sat in the orphan strip as _"on air but not on your stack"_, with a confirm-gated CLEAR;
+- `playoutLayersState()` reported its rows on `DEFAULT_CHANNEL` (the constant 1), so on a
+  channel-2 station the playout tab listed and observed channel 1, and its CLEAR sent
+  `{ channel: 1 }`.
+
+**And a door that names no channel chose one.** `#allocate` placed every dynamic row on
+`DEFAULT_CHANNEL`. The shipped policy is empty, so a stock station never reaches it; a deployment
+that declares its own ranges does, and its take on a channel-2 station went out as `CLEAR 1-10`,
+`MIXER 1-10 VOLUME 0`, `CG 1-10 ADD`, `CG 1-10 UPDATE`, `MIXER 1-10 VOLUME 1`, `CG 1-10 PLAY 0` — the
+2026-09-22 incident's shape, with a `PLAY` it did not have.
+
+**Why it is wrong.** A grant is a fact about a PERSON and a catalogue row is a fact about the
+PLAYOUT; only the declaration is a fact about this station. The test Playout's `cg-op2` really
+may operate channel 1 — from the Playout. Reading the grant as permission for THIS bridge to write
+there is how a permission gate blesses a write to somebody else's air.
+
+**Fixed (commit 1):** a station fence in the request gate — after sign-in, before permission — that
+refuses any route naming a channel `#declaredChannels()` does not contain, auth OFF included, with
+its own sentence; the orphan sweep and the playout tab read the same predicate; the allocator
+places on the declared channel; the restore fence and the channel-settings store stop keeping their
+own copies of the list. `tests/station-channel-fence.integration.test.ts` is the measurement above,
+made permanent, each case beside its declared-channel control.
+
+**Notes:** `BRIDGE-TRUTH-01`'s [[B-257]] spec asserted this hazard AS a fix — "B's CLEAR on channel
+2 reaches the wire", on a station declaring channel 1 — and is inverted here; see [[B-257]]'s note.
+Cross-refs [[B-257]], [[C-038]], [[C-039]], [[R-062]].

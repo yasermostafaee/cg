@@ -103,7 +103,8 @@ export type FakeUserKey =
   | 'longName'
   | 'admin'
   | 'otherStation'
-  | 'channelTwo';
+  | 'channelTwo'
+  | 'bothChannels';
 
 /** `cg-op1` — one channel, Persian display name. The ordinary operator. */
 export const FAKE_OPERATOR: FakePlayoutUser = {
@@ -211,7 +212,30 @@ export const FAKE_CHANNEL_TWO_OPERATOR: FakePlayoutUser = {
   cgChannels: [{ host: '127.0.0.1', channel: 2 }],
 };
 
-/** The six fixture users, by key. */
+/**
+ * 🔴 `CHANNEL-AUTHORITY-01` — `cg-op-both` — **GRANTED CHANNEL 1 AND CHANNEL 2 OF THIS HOST: the
+ * test Playout's real `cg-op2` grant, in shape.**
+ *
+ * That grant includes channel 1, which on the test Playout is the Playout's own live PROGRAMME
+ * output. A station configured for channel 2 must still write nothing to channel 1 for this user:
+ * the grant says who MAY operate a channel, never that THIS station operates it. With every other
+ * fixture user holding one channel or none, no suite could put that difference on the wire.
+ *
+ * ⚠ Not called `cg-op2` here: that username already belongs to {@link FAKE_LONG_NAME_USER},
+ * whose subject is name truncation, and moving it would edit six passing suites for a label.
+ */
+export const FAKE_BOTH_CHANNELS_OPERATOR: FakePlayoutUser = {
+  username: 'cg-op-both',
+  sub: 'u-8826',
+  name: 'نرگس کریمی',
+  roles: ['operator', 'viewer'],
+  cgChannels: [
+    { host: '127.0.0.1', channel: 1 },
+    { host: '127.0.0.1', channel: 2 },
+  ],
+};
+
+/** The seven fixture users, by key. */
 export const FAKE_USERS: Readonly<Record<FakeUserKey, FakePlayoutUser>> = {
   operator: FAKE_OPERATOR,
   viewer: FAKE_VIEWER,
@@ -219,6 +243,7 @@ export const FAKE_USERS: Readonly<Record<FakeUserKey, FakePlayoutUser>> = {
   admin: FAKE_ADMIN,
   otherStation: FAKE_OTHER_STATION_USER,
   channelTwo: FAKE_CHANNEL_TWO_OPERATOR,
+  bothChannels: FAKE_BOTH_CHANNELS_OPERATOR,
 };
 
 /**

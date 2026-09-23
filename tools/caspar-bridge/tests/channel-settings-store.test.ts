@@ -67,6 +67,28 @@ describe('ChannelSettingsStore', () => {
     expect(store.state().settings).toHaveLength(1);
   });
 
+  /*
+    🔴 `CHANNEL-AUTHORITY-01` — the guard asks the runtime's predicate AT CALL TIME. It used to
+    keep the list it was handed at boot, so a bank installed live on a bank-less bridge moved
+    every other door's answer and left this one refusing the new channel and accepting the old.
+  */
+  it('follows the declaration when it moves — the guard reads the predicate, not a boot copy', () => {
+    const store = new ChannelSettingsStore();
+    let declared: readonly number[] = [1];
+    store.hydrate(() => declared);
+    const raster = { width: 1280, height: 720 };
+
+    // Control: before the move, channel 2 is refused and channel 1 is accepted.
+    expect(store.set({ channel: 2, raster })?.reason).toBe('unknown-channel');
+    expect(store.set({ channel: 1, raster })).toBeNull();
+
+    declared = [2];
+    expect(store.set({ channel: 2, raster }), 'the new channel was refused').toBeNull();
+    expect(store.set({ channel: 1, raster })?.reason, 'the old channel still accepted').toBe(
+      'unknown-channel',
+    );
+  });
+
   it('degrades to the reference raster on an unusable file rather than refusing to boot', () => {
     const dir = tmpDir();
     fs.writeFileSync(path.join(dir, 'channel-settings.json'), '{ this is not json', 'utf8');

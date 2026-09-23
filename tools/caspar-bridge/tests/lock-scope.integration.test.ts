@@ -9,6 +9,7 @@ import type { AuditEntry } from '@cg/shared-schema';
 import {
   AUTHZ_ROLE_REFUSAL,
   authzChannelRefusal,
+  channelNotDeclaredRefusal,
   LOCK_ENGAGED_REFUSAL,
   type ConnectionConfig,
   type LockState,
@@ -39,8 +40,16 @@ import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
  * ⚠ **THE STATION HAS ONE DECLARED CHANNEL TODAY.** `#declaredChannels()` is the bank's channel
  * and nothing else, so a principal's `permittedChannels` — and therefore what a lock covers — is
  * at most that one channel. The channel-2 operator below holds a real grant for channel 2 on
- * this station's host (the PERMISSION gate honours it: `layers.clear` reaches channel 2), and
- * holds nothing the lock can cover. That is the shape B-257 was measured in.
+ * this station's host, and holds nothing the lock can cover. That is the shape B-257 was measured
+ * in.
+ *
+ * 🔴 `CHANNEL-AUTHORITY-01` — **and channel 2 is not THIS STATION's channel, so its CLEAR is
+ * refused — by the STATION fence, never by the lock.** This spec used to assert, as the fix, that
+ * the channel-2 operator's `layers.clear` on channel 2 reached the wire as `CLEAR 2-40`: the
+ * permission gate honoured the grant, and nothing asked whether this station operates channel 2.
+ * That is the hazard `CHANNEL-AUTHORITY-01` closes — a grant is a fact about a PERSON, and it put
+ * a write on a channel the station does not declare. B-257's own property is unchanged and still
+ * proven at the wire: the lock does not reach this operator, whose PANIC passes and lands.
  *
  * 🔴 **EVERY ABSENCE HERE HAS ITS POSITIVE CONTROL NAMED BESIDE IT.** A refusal that did not
  * happen proves something only when the same instrument, on the same socket, was shown to
@@ -182,9 +191,12 @@ const C: IssueTokenOptions = { user: 'longName', cgChannels: CH1 };
 
 /**
  * Put an html producer on a channel-2 layer from ANOTHER AMCP client, the way the orphan suite
- * does. `layers.clear` clears only a layer OSC observes carrying `html` (R-015 — never clear what
- * you cannot see), so without a producer there B's CLEAR would be declined for a reason that has
- * nothing to do with the lock.
+ * does — somebody else's graphic, on a channel this station does not declare.
+ *
+ * ⚠ It stays, although B's CLEAR on channel 2 no longer reaches it: this is the producer the
+ * spec's `CLEAR 2-40` used to land on before `CHANNEL-AUTHORITY-01`. With it present, a CLEAR the
+ * fence failed to stop WOULD reach the wire (`clearLayer` clears an observed html producer), so
+ * "nothing addressed channel 2" measures the fence and not an empty layer.
  */
 async function foreignHtmlOnChannelTwo(): Promise<void> {
   if (mock === null) throw new Error('no mock');
@@ -193,19 +205,9 @@ async function foreignHtmlOnChannelTwo(): Promise<void> {
   await new CommandQueue(foreign).enqueue(`PLAY 2-${String(FREE)} "foreign" HTML`);
 }
 
-/** B's CLEAR, retried until OSC has seen the producer — a `foreign` answer is not a refusal. */
-async function clearUntilObserved(b: Client): Promise<{ error?: string; payload?: unknown }> {
-  const deadline = Date.now() + 5000;
-  for (;;) {
-    const res = await b.ask(`clr-${String(Math.random())}`, 'layers.clear', {
-      channel: 2,
-      layer: FREE,
-    });
-    const ok = (res.payload as { ok?: boolean } | undefined)?.ok === true;
-    if (res.error !== undefined || ok || Date.now() > deadline) return res;
-    await new Promise((r) => setTimeout(r, 100));
-  }
-}
+/** Every line whose target is channel 2, in both spellings (`CLEAR 2-40`, `CLEAR 2`). */
+const onChannelTwo = (lines: readonly string[]): string[] =>
+  lines.filter((l) => /^[A-Z][A-Z ]*?\s2(?:-\d+)?(?:\s|$)/.test(l));
 
 /** Put a raised plate on air on channel 1, as A — so PANIC has something to reach. */
 async function onAir(a: Client): Promise<void> {
@@ -232,40 +234,45 @@ async function onAir(a: Client): Promise<void> {
 }
 
 describe('B-257 — a lock covers the ENGAGER’S channels, captured at engage', () => {
-  it('channel 1 locks; channel 2’s CLEAR and PANIC pass at the wire; B-229 holds on channel 1', async () => {
+  it('channel 1 locks; channel 2’s operator is not locked — PANIC lands, and channel 2 is not this station’s; B-229 holds on channel 1', async () => {
     await station();
     const a = await signedIn(A);
     const b = await signedIn(B);
     const c = await signedIn(C);
     await onAir(a);
 
-    // Positive control 1 — the grants are DISJOINT and the channel gate is live: A is refused
-    // channel 2 by PERMISSION, naming the channel.
+    // Positive control 1 — A on channel 2 meets the STATION fence (`CHANNEL-AUTHORITY-01`), which
+    // answers before permission: channel 2 is not this station's, whoever asks. The channel gate's
+    // own liveness is positive control 3 below, on channel 1, which this station does declare.
     const aOnTwo = await a.ask('a1', 'layers.clear', { channel: 2, layer: FREE });
-    expectRefusedWith(aOnTwo.error, authzChannelRefusal(2), 'A cleared channel 2');
+    expectRefusedWith(aOnTwo.error, channelNotDeclaredRefusal(2), 'A cleared channel 2');
 
     expect((await a.ask('a2', 'lock.engage', { pin: '4711' })).payload).toEqual({ ok: true });
     const lock = (await b.ask('s', 'lock.state')).payload as LockState;
     // The covered set is A's channels — captured, on the wire, for every console to read.
     expect(lock).toMatchObject({ engaged: true, channels: [1] });
 
-    // THE FIX — B's CLEAR on channel 2 reaches the wire.
+    // B's CLEAR on channel 2 is refused — by the STATION, NOT by the lock, and nothing reaches
+    // channel 2. `CHANNEL-AUTHORITY-01` inverted this line: it was asserted here as B-257's fix
+    // that the clear landed as `CLEAR 2-40`, a write to a channel this station does not operate.
     await foreignHtmlOnChannelTwo();
     const before = (await wire()).length;
-    const clear = await clearUntilObserved(b);
-    expect(clear.error, 'B was refused CLEAR on their own channel').toBe(undefined);
-    expect(clear.payload).toEqual({ ok: true });
-    expect((await wire()).slice(before)).toContain(`CLEAR 2-${String(FREE)}`);
+    const clear = await b.ask('b1', 'layers.clear', { channel: 2, layer: FREE });
+    expectRefusedWith(clear.error, channelNotDeclaredRefusal(2), 'B cleared channel 2');
+    expect(clear.error, 'the lock reached B').not.toBe(LOCK_ENGAGED_REFUSAL);
 
     // THE FIX — B's PANIC passes the lock and reaches the wire. ⚠ PANIC is unscoped (A16): it
     // silences the WHOLE ledger, and the ledger's seats are on channel 1 because that is where
     // this station's rows are. The lock does not re-scope it; it only no longer refuses it.
+    // ⭐ It is also the positive control for the silence above: the trace is live, and it
+    // carries B's PANIC while carrying nothing for channel 2.
     const panicFrom = (await wire()).length;
     const panic = await b.ask('b2', 'stack.silence-all-live-plates');
     expect(panic.error, 'B was refused PANIC').toBe(undefined);
     expect((await wire()).slice(panicFrom).some((l) => /^MIXER 1-6\d VOLUME 0\b/.test(l))).toBe(
       true,
     );
+    expect(onChannelTwo((await wire()).slice(before)), 'something reached channel 2').toEqual([]);
 
     // CLEAR ALL — the bulk rule decides it, all-or-nothing, and the reason is NOT the lock: the
     // stack's only row is on channel 1, which B does not hold.

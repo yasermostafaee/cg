@@ -46,6 +46,8 @@ export type {
 // `C-037` — the socket's principal and the ONE refusal. Exported BEFORE capabilities,
 // which reads `AuthMode` off it to advertise the bridge's auth MODE at connect.
 export * from './channels/auth.js';
+// `CHANNEL-AUTHORITY-01` — which channels this station writes to, and the refusal for the rest.
+export * from './channels/stationChannels.js';
 export * from './channels/capabilities.js';
 export * from './channels/common.js';
 export * from './channels/stack.js';
