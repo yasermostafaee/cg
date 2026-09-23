@@ -2992,3 +2992,17 @@ positive control on `C-041`, which returned one hit; the only other mentions wer
 
 ⇒ **Next free after this session is `B-264`**, **`D-161`**, **`C-043`**, **`R-069`** and
 **`P-055`**.
+
+### 2026-09-23 — `DESKTOP-APPS-01-C` takes `C-043` and `B-264`; `C-042` withdrawn
+
+- `C-043` — the Playout's AMCP allow list: three known limits (static IP, a backup Playout's own
+  list, the first introduction wins the automatic slot) — [caspar.md](caspar.md). It replaces
+  `C-042`, which stays allocated and is marked WITHDRAWN (numbers are never reused).
+- `B-264` — the console showed an internal request name to the operator on a bridge timeout —
+  [bugs-runtime.md](bugs-runtime.md).
+
+Measured free before use: no heading under `git grep -n -E "^## \[.\] (C-043|B-264)" -- docs`,
+against positive controls on `C-042` and `B-263`, which returned one hit each.
+
+⇒ **Next free after this session is `B-265`**, **`D-161`**, **`C-044`**, **`R-069`** and
+**`P-055`**.

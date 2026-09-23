@@ -2676,7 +2676,7 @@ cheapest honest shape may be a declared NON-OPERATIONAL actor prefix rather than
 it), [[B-141]] (the audit panel's honesty rules), [[B-253]] (the other finding from the same
 run).
 
-## [ ] C-042 — AMCP auto-trust lapses after 7 days without a station-admin sign-in from the bridge machine ⟨priority: low — a KNOWN LIMIT, not a fix; nothing to do while `cg-admin` is the only account⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01-B`
+## [x] C-042 — AMCP auto-trust lapses after 7 days without a station-admin sign-in from the bridge machine ⟨priority: low — a KNOWN LIMIT, not a fix; nothing to do while `cg-admin` is the only account⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01-B` · ⚠ WITHDRAWN 2026-09-23 by `DESKTOP-APPS-01-C`: the Playout team's REVISED 2.8.54 rule has no expiry — a machine stays allowed until its administrator rejects it. Kept, annotated, not rewritten; the limits that replace it are [[C-043]]
 
 **A known limit, recorded, not a fix.** A Playout 2.8.54 opens AMCP to the CG Control machine
 from a server-side `station-admin` read and drops it after 7 days unseen
@@ -2685,3 +2685,23 @@ has accounts that are not `station-admin`, a `station-admin` must sign in from t
 at least once every 7 days, or AMCP is refused until one does. Today only `cg-admin` exists, and it
 is used daily. **Acceptance (sketch):** WHEN the station has accounts that are not `station-admin`
 THEN the lapse is either impossible or announced before it happens.
+
+## [ ] C-043 — the Playout's AMCP allow list: three known limits ⟨priority: low — KNOWN LIMITS, recorded, not fixes⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01-C`, replacing [[C-042]]
+
+Under the Playout team's revised 2.8.54 rule
+([the 2.8.54 facts](../integration/playout/PLAYOUT-2.8.54-CG-FACTS-2026-09-23.md)) only a
+server-side `station-admin` D9 read introduces a machine; the first is let in once automatically,
+and every later one waits for the administrator's approval in the Playout's app.
+
+- **(a) The bridge machine needs a STATIC IP.** After an IP change the machine is a new one to the
+  Playout: AMCP waits for the administrator's approval (CG Control's check names this machine's
+  IPv4 and where to approve it).
+- **(b) A BACKUP Playout keeps its own list.** The lists are not mirrored, so a mirrored pair needs
+  the bridge approved on each Playout.
+- **(c) On a fresh install, whoever introduces a machine first wins the automatic slot** — an
+  operator's first contact or a loopback bridge seals it too. CG Control lets only a
+  `station-admin` reach the Playout before its issuer is adopted (`-01-C` C5), and the operator
+  guide says to install CG Control right after the Playout and sign in first as `cg-admin`.
+
+**Acceptance (sketch):** WHEN any of these bites THEN CG Control's own check says which, in the
+operator's words, and names the in-app approval.

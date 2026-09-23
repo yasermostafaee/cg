@@ -100,13 +100,15 @@ from a checkout — which assumes a developer.
 
 ## What the client's Playout must provide (install-time dependencies)
 
-1. **AMCP for the CG Control machine.** From Playout 2.8.54 this is AUTOMATIC
-   (`DESKTOP-APPS-01-B`): the Playout opens TCP 5250 to a machine when that machine's bridge makes
-   a server-side D4/D8/D9 read with a `station-admin` token — which the bridge does the moment a
-   station admin signs in — and drops it after 7 days unseen. It needs the bridge to reach the
-   Playout DIRECTLY (no NAT, proxy or VPN between them). Where auto-trust is off or the Playout is
-   older, the Playout's administrator adds an allow rule instead; the connection check prints the
-   exact command with the IP filled in (`secure-ports.ps1 -AllowAmcpFrom <ip>`).
+1. **AMCP for the CG Control machine** — Playout 2.8.54's allow list (revised; `DESKTOP-APPS-01-C`).
+   Only a server-side `station-admin` **D9** read introduces a machine — which the bridge makes the
+   moment a station admin signs in. The FIRST machine is let in automatically, once per install;
+   every later one (the same machine at a new IP included) waits until the Playout's administrator
+   approves it in the Playout's app, at تنظیمات ← اتصال به CG Control. No expiry. It needs the
+   bridge on a **static IP**, reaching the Playout **directly** (no NAT, proxy or VPN), over the
+   **same IPv4** for its reads and for AMCP. A backup Playout keeps its own list. Nothing the client
+   does happens outside an app: no CG Control surface names a script (the pre-2.8.54
+   `secure-ports.ps1` lives on only in `docs/integration/playout/`, for engineers).
 2. **`http://127.0.0.1:5174` in the Playout's CORS list** — the check prints that line when it is
    missing.
 3. **CG Control on a different machine from the Playout engine**: on the engine's host, UDP 6250

@@ -57,17 +57,17 @@
 ## 5B. `DESKTOP-APPS-01-B` — Playout 2.8.54: the built-in account and AMCP auto-trust
 
 - [x] 5B.1 B1 — AMCP waits for a station-admin: `amcpAwaitsSignIn` on health (never up since
-      start, no station-admin yet); a station-admin's first acceptance reads D4 at once with its own
-      token (`PlayoutCatalogue.readNow`) and hurries the ONE loop (`ServerSession.retryPromptly`,
-      ≤ 500 ms for 30 s); the console's banner says it in one sentence
+      start, no station-admin yet); a station-admin's first acceptance hurries the ONE loop
+      (`ServerSession.retryPromptly`, ≤ 500 ms for 30 s); the console's banner says it in one
+      sentence. ⚠ Its "reads D4 at once" (`PlayoutCatalogue.readNow`) is SUPERSEDED by 5C.4 — the
+      introducing read is D9 — and `readNow` is removed
 - [x] 5B.2 B1.4 — every Playout request through `playoutFetch`: no `Origin`, no proxy (measured:
       `NODE_USE_ENV_PROXY=1` sent Node's `fetch` and `jose` to the proxy); the check probes the same
       path
-- [x] 5B.3 B2 — the check's AMCP line: `wait` before a station-admin; judged over 30 s after; "The
-      Playout did not trust this machine" + likely reasons, then the `secure-ports.ps1` fallback;
-      first-run re-checks after the sign-in and shows the channels only then
-- [x] 5B.4 B3 — the fake Playout trusts what 2.8.54 trusts (verified token, `station-admin`, no
-      `Origin`, not revoked, auto-trust on); the AMCP mock's `admit`; tests with controls
+- [x] 5B.3 B2 — the check's AMCP line: `wait` before a station-admin; first-run re-checks after the
+      sign-in and shows the channels only then. ⚠ Its after-sign-in wording ("The Playout did not
+      trust this machine" + the `secure-ports.ps1` fallback) is SUPERSEDED by 5C.7
+- [x] 5B.4 B3 — the AMCP mock's `admit`. ⚠ The fake's auto-trust model is SUPERSEDED by 5C.8
 - [x] 5B.5 B4 — `docs/integration/playout/PLAYOUT-2.8.54-CG-FACTS-2026-09-23.md`; ADR 0010's
       amendment (the JWKS is the root of trust; `iss` a constant check); ADR 0011's dependencies;
       the operator guide's password line; `C-042`
@@ -78,6 +78,29 @@
       252 passed (`first-run.spec.ts` both tests: wait → sign-in → OK → channels), Designer 281
       passed. Installers + smoke green on the same commit:
       https://github.com/yasermostafaee/cg/actions/runs/35876684603
+
+## 5C. `DESKTOP-APPS-01-C` — the check that timed out, and the Playout's revised AMCP rule
+
+- [x] 5C.1 C1 — the owner's logs held no check request or timing (and rotation had dropped the
+      port-less run's bridge log); MEASURED on his machine against a black hole instead: probes in
+      series, AMCP 3002 ms + key set 5005 ms + CORS 5015 ms = 13.7 s vs the console's 8 s; one log
+      line per check now carries every line's time and outcome
+- [x] 5C.2 C2 — lines in parallel; every probe connects within 3 s and every line finishes within
+      5 s, as its own line; the console waits `SETUP_CHECK_WAIT_MS` (derived); `BridgeTimeoutError`
+      says "The bridge did not answer in time." (27 display sites walked; `B-264`)
+- [x] 5C.3 C3 — `normalisePlayoutAddress` in `@cg/shared-ipc` (no scheme → http, http without a
+      port → :8080, explicit port byte for byte), the console and the bridge both; the field shows it
+- [x] 5C.4 C4 — `PlayoutAuth.introduce`: D9 at once with the station-admin's token; 60 s cycle kept
+- [x] 5C.5 C5 — a refused sign-in before adoption reaches no D4/D8/D9 (tested, with control)
+- [x] 5C.6 C6 — `pinnedIPv4`: one IPv4 per Playout host for every read and for the AMCP dial; a
+      host with no IPv4 address is one line
+- [x] 5C.7 C7 — after the window, "This machine, `<IPv4>`, is waiting for approval in the Playout, at
+      تنظیمات ← اتصال به CG Control …"; no script on any operator surface
+- [x] 5C.8 C8 — the fake Playout's revised model (only D9; first once; sealed; pending until
+      `approve`; operator/loopback first contact seals; no expiry), each rule with its control
+- [x] 5C.9 C9 — the 2.8.54 addendum rewritten; `C-042` withdrawn, `C-043` the three known limits;
+      the operator guide's install order
+- [ ] 5C.10 Linux `e2e` and installers on the commit carrying 5C — run URLs (jobs confirmed RAN):
 
 ## 6. Records
 

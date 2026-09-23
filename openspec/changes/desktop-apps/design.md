@@ -47,23 +47,31 @@ because an installed station in first-run declares none. Every row shown: with n
 yet, installing a bank that already hides a row of unknown occupancy is refused (`untick-unknown`),
 and that refusal is not changed.
 
-## 3B. Playout 2.8.54's AMCP auto-trust (`DESKTOP-APPS-01-B`)
+## 3B. Playout 2.8.54's AMCP allow list (`DESKTOP-APPS-01-B`, revised by `-01-C`)
 
-A 2.8.54 Playout refuses AMCP to an untrusted machine and trusts the source IP of a server-side
-(no `Origin`) D4/D8/D9 read carrying a `station-admin` token, for 7 days since last seen. So:
+A 2.8.54 Playout refuses AMCP to a machine not on its allow list. Revised rule: only a server-side
+(no `Origin`) **D9** read by a `station-admin` ACCOUNT introduces; the first machine is let in once
+automatically, every later one after an in-app approval; no expiry; the D9 read and AMCP must come
+from the same IPv4. So:
 
 - **Waiting is a fact, not an alarm.** `CasparRuntime` carries `amcpAwaitsSignIn` on health while
   the bridge authenticates, no `station-admin` has signed in since start, and AMCP has not been up
   on the current sessions. A link that was up once was trusted, so its later failure alarms as ever.
-- **One read, at once, with the right token.** A station-admin's FIRST acceptance (a sign-in, not a
-  reload) calls `PlayoutCatalogue.readNow(thatToken)`, bypassing the 30 s floor once — never
-  `usableBearer()`, which may be an operator's token that trusts nothing.
+- **One D9 read, at once, with the right token** (C4). A station-admin's FIRST acceptance (a
+  sign-in, not a reload) calls `PlayoutAuth.introduce(thatToken)` — a D9 read past the 60 s cycle,
+  which then restarts from it — never the held bearer, which may be an operator's.
+- **One IPv4** (C6). `pinnedIPv4` resolves the Playout's host once; `playoutFetch` connects to that
+  literal (the name stays in `Host`), and `CasparRuntime`'s `amcpAddressFor` makes a session whose
+  configured host is the Playout's dial it too.
 - **The one loop, hurried.** `ServerSession.retryPromptly(30 s)` cuts the running backoff wait and
   holds each wait inside the window to 500 ms; it never cuts the resync drain and never dials.
 - **Direct to the Playout.** `playoutFetch` (node:http, our own agents) serves D4, D9 and jose's key
   set (`customFetch`): no `Origin`, and no proxy — only Node's GLOBAL agents and `fetch` follow
   `NODE_USE_ENV_PROXY`, measured on Node 26.
-- **The check** judges AMCP only after a station-admin signed in, over 30 s, 1 s apart.
+- **The check** (C2, C7) runs its lines in parallel, each bounded (3 s connect, 5 s line); its AMCP
+  line waits before a station-admin signs in, waits for the Playout for 30 s after, then names this
+  machine's IPv4 as waiting for approval in the Playout's app. First-run re-runs the check every
+  2 s while that line waits. The console waits `SETUP_CHECK_WAIT_MS`, derived from the line bound.
 
 ## 4. The Designer inside Tauri — measured by the installer smoke
 

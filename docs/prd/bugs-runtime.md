@@ -12552,3 +12552,19 @@ do anything; with auth OFF — every dev bridge, and an installed station until 
 any page open in any browser on that machine can drive the station through `ws://127.0.0.1:5280`.
 **Expected:** only the console's own origins connect. Filed, not fixed: "no new safety mechanism"
 (`DESKTOP-APPS-01`).
+
+## [x] B-264 — A bridge timeout showed the operator an internal request name: `Bridge request timed out: setup.check` ⟨priority: medium⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-C` C2
+
+**Found on the owner's first installed run.** First-run's check, against a Playout address typed
+without a port, put `Bridge request timed out: setup.check` under the field as its only output.
+**Cause:** `WebSocketRuntime` built both of its timeout errors (`auth` and every channel) as
+`new Error('Bridge request timed out: <channel>')`, and the renderer shows caught errors' messages
+at **27 sites across 16 files** (walked 2026-09-23 by `err instanceof Error ? err.message …` and
+`String(err)`). The bridge's own refusals were already clean: its three messages that embed a
+channel name are exactly the skew shapes `bridgeErrorFrom` turns into `BRIDGE_SKEW_MESSAGE`.
+**Fix, at the source:** `BridgeTimeoutError` — message _"The bridge did not answer in time."_, the
+channel kept on the object for diagnostics (the `BridgeSkewError` idiom), so all 27 sites are
+correct unchanged. `bridgeTimeoutWords.test.ts` pins the words, the absent name, and that
+`setup.check` is waited for `SETUP_CHECK_WAIT_MS` rather than the old 8 s. **Still worth knowing:**
+any FUTURE error raised in the platform layer with an internal name in its message would reach the
+same 27 sites; the walk found no other such source today.

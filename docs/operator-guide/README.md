@@ -8,26 +8,30 @@ There are two installers. **CG Designer** is for building templates; **CG Contro
 console. Install only the one you need on each machine. Put CG Control on a machine of its own —
 not on the Playout server.
 
-**Before you start, ask the Playout's administrator for three things:** the Playout's address
-(`http://host:port`), the `cg-admin` password, and that `http://127.0.0.1:5174` is in the Playout's
-CORS list.
+**In this order:**
 
-Get the password from the Playout: تنظیمات ← اتصال به CG Control ← حسابِ داخلیِ CG Control (copy
-button).
+1. Install the Playout.
+2. **Right after that**, install CG Control on a machine with a **static IP**.
+3. Sign in **first as `cg-admin`**, with the password from
+   **تنظیمات ← اتصال به CG Control ← حسابِ داخلیِ CG Control** (copy button).
+4. Once, look at the list on that same Playout page. Only this machine should be there.
+
+**Before you start, ask the Playout's administrator for** the Playout's address, the `cg-admin`
+password, and that `http://127.0.0.1:5174` is in the Playout's CORS list.
 
 1. **Install.** Run `CG Designer_…-setup.exe` or `CG Control_…-setup.exe`. Windows may say
    _"Windows protected your PC"_: press **More info**, then **Run anyway**. CG Designer installs for
    you alone and needs no administrator; CG Control asks for one, because it opens two ports in the
    firewall (UDP 6250 and TCP 7911) for CasparCG.
 2. **Open CG Control.** The first time, it opens on **Set up CG Control**.
-3. **Playout** — type the Playout's address and press **Check**. Each line says what it tested.
-   A red line says what is wrong; where somebody else has to act, it shows the one command or line
-   to give them. The CasparCG line says **waiting for sign-in** — that is expected. Press
+3. **Playout** — type the Playout's address (`192.168.21.111` is enough; the field shows
+   `http://192.168.21.111:8080`) and press **Check**. Each line says what it tested; a red line
+   says what is wrong. The CasparCG line says **waiting for sign-in** — that is expected. Press
    **Connect** when the Playout lines pass.
 4. **Sign in** as `cg-admin`. The first sign-in sets the station up; until it has, other accounts
    are told the station is not set up yet. Within seconds the CasparCG line turns OK and the
-   channels appear. If it says the Playout did not trust this machine, it shows the one command the
-   Playout's administrator runs.
+   channels appear. If it says this machine is waiting for approval, the Playout's administrator
+   approves it at **تنظیمات ← اتصال به CG Control**; the line names this machine's address.
 5. **Channel** — pick the channel this station drives. Never pick the Playout's programme channel.
 6. **Serve address** — CG Control fills in this machine's address; change it only if the Playout's
    administrator tells you to. Press **Use this channel**.

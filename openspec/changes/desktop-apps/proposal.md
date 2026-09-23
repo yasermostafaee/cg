@@ -31,9 +31,12 @@ addresses — not the Playout's issuer, not the CasparCG host — ever has to be
   Control's own door, never over the control socket.
 - **`DESKTOP-APPS-01-B`** — Playout 2.8.54 opens AMCP to a machine from a server-side
   `station-admin` read: until a station-admin signs in the bridge's AMCP WAITS (said, not
-  alarmed); the sign-in reads D4 at once with that admin's token and hurries the one reconnect
-  loop; every Playout request goes out with no `Origin` and no proxy; the connection check and
-  first-run judge AMCP only after the sign-in.
+  alarmed); the sign-in hurries the one reconnect loop; every Playout request goes out with no
+  `Origin` and no proxy; the connection check and first-run judge AMCP only after the sign-in.
+- **`DESKTOP-APPS-01-C`** — the check always returns its lines (parallel, bounded, the console's
+  wait derived); a typed address without a port is the API port; the introducing read is D9 (the
+  Playout's revised rule); one IPv4 for the reads and AMCP; after sign-in the AMCP line names the
+  in-app approval, never a script; a bridge timeout is said in words.
 - **CI** builds both installers on `windows-latest` and smoke-tests them on a second, clean runner.
 
 ## Impact

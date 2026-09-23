@@ -12,14 +12,31 @@ It SHALL carry no explanatory prose and no way out.
 
 #### Scenario: First-run end to end
 
+- **WHEN** an address is typed with no scheme or no port and checked **THEN** the field shows the
+  address actually checked — `http://`, and `:8080` when no port was typed (`DESKTOP-APPS-01-C` C3)
 - **WHEN** the address is checked **THEN** the AMCP line says "waiting for sign-in", neutral
 - **WHEN** the address is connected **THEN** only the address is written
 - **WHEN** an operator signs in before adoption **THEN** the bridge's "not set up yet" sentence shows
   **AND** AMCP still waits
-- **WHEN** a station-admin signs in **THEN** the AMCP line turns OK **AND** only then do the channels
+- **WHEN** a station-admin signs in **THEN** the check runs again, and again while the AMCP line
+  still waits, until the AMCP line turns OK or names the approval **AND** only then do the channels
   appear
 - **WHEN** the station-admin picks a channel **THEN** the station's connection and bank are written
   **AND** first-run ends
+
+### Requirement: A bridge that does not answer is said in the operator's words
+
+The console SHALL say that the bridge did not answer in time — never an internal request name —
+whenever a request to the bridge goes unanswered, and SHALL wait for `setup.check` longer than the
+check's slowest line, the wait derived from the same constant as the line bound
+(`DESKTOP-APPS-01-C` C2).
+
+#### Scenario: A silent bridge
+
+- **WHEN** a request is not answered **THEN** the error reads "The bridge did not answer in time."
+  and names no channel
+- **WHEN** `setup.check` is not answered within the old 8 s **THEN** the console is still waiting,
+  and it gives up only after the derived wait
 
 ### Requirement: A link waiting for a station admin is said, not alarmed
 
