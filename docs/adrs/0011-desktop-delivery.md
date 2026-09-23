@@ -100,17 +100,24 @@ from a checkout — which assumes a developer.
 
 ## What the client's Playout must provide (install-time dependencies)
 
-1. An **AMCP allow rule** for the CG Control machine's IP on the Playout server — the connection
-   check prints the exact command with the IP filled in (`secure-ports.ps1 -AllowAmcpFrom <ip>`).
+1. **AMCP for the CG Control machine.** From Playout 2.8.54 this is AUTOMATIC
+   (`DESKTOP-APPS-01-B`): the Playout opens TCP 5250 to a machine when that machine's bridge makes
+   a server-side D4/D8/D9 read with a `station-admin` token — which the bridge does the moment a
+   station admin signs in — and drops it after 7 days unseen. It needs the bridge to reach the
+   Playout DIRECTLY (no NAT, proxy or VPN between them). Where auto-trust is off or the Playout is
+   older, the Playout's administrator adds an allow rule instead; the connection check prints the
+   exact command with the IP filled in (`secure-ports.ps1 -AllowAmcpFrom <ip>`).
 2. **`http://127.0.0.1:5174` in the Playout's CORS list** — the check prints that line when it is
    missing.
 3. **CG Control on a different machine from the Playout engine**: on the engine's host, UDP 6250
    belongs to the engine (ADR 0010 rule 7). The check warns; it does not block.
 4. **One CG Control per channel**: two installs driving one channel run two bridges with two ledgers
    (`R-068`, recorded, not solved).
-5. The **`cg-admin` account** the Playout team builds into every install: `station-admin`, granted
-   every channel (`cg_channels: "*"`), used for setup and daily operation until the Playout has user
-   management. Its password is never written into this repository.
+5. The **`cg-admin` account** every Playout install creates on its first run (2.8.54):
+   `station-admin`, granted every channel (`cg_channels: "*"`), CG-only (the Playout's own client
+   refuses it), used for setup and daily operation until the Playout has user management. Its
+   password is random per install and read from the Playout's settings page; it is never written
+   into this repository.
 
 ## Rationale
 

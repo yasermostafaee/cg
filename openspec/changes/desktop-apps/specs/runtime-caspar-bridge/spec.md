@@ -122,11 +122,55 @@ own host, or `rows: null` when the catalogue is absent.
 ### Requirement: The bridge runs the connection check
 
 The bridge SHALL answer `setup.check` with one line per link — VPN or proxy, route, AMCP `VERSION`,
-the Playout's keys, CORS for the console's origin, the station's ports, topology — each pass, fail
-or warn with a sentence, and for a dropped AMCP connection or a missing CORS entry the one command
-or line to give the Playout's administrator.
+the Playout's keys, CORS for the console's origin, the station's ports, topology — each pass, fail,
+warn or wait with a sentence, and for a missing CORS entry or an AMCP link the Playout did not
+trust the one command or line to give the Playout's administrator. The AMCP line SHALL be judged
+only once a `station-admin` has signed in to the bridge (`DESKTOP-APPS-01-B`): before that a
+refused or dropped connection is `wait`, "waiting for sign-in"; after it, the bridge SHALL keep
+asking for 30 s and only a link still refused or dropped SHALL fail, saying the Playout did not
+trust this machine, the likely reasons (auto-trust off in the Playout's settings; NAT, a proxy or a
+VPN; a Playout older than 2.8.54; and, for a refusal, CasparCG not running), and then the
+`secure-ports.ps1 -AllowAmcpFrom <ip>` fallback.
 
 #### Scenario: Each failure shape has its own sentence
 
-- **WHEN** the AMCP port refuses, the AMCP host drops the connection, the CORS origin is wrong, or
-  the key set is empty **THEN** each prints its own sentence
+- **WHEN** after a station-admin's sign-in the AMCP port still refuses, or the AMCP host still drops
+  the connection, the CORS origin is wrong, or the key set is empty **THEN** each prints its own
+  sentence
+
+#### Scenario: AMCP before and after the sign-in
+
+- **WHEN** no station-admin has signed in and AMCP is refused **THEN** the line is `wait`, "waiting
+  for sign-in", never a failure
+- **WHEN** a station-admin has signed in and the Playout lets this machine in within the window
+  **THEN** the line passes with the version CasparCG gave
+
+### Requirement: AMCP waits for a station-admin on a station that authenticates
+
+A bridge that authenticates against a Playout SHALL treat an AMCP failure before any `station-admin`
+has signed in to it as WAITING: its health SHALL carry `amcpAwaitsSignIn` for as long as AMCP has
+not been up since it started, and its one reconnect loop SHALL keep retrying with its usual backoff.
+On a `station-admin`'s sign-in (the token's first acceptance) it SHALL read D4 at once with that
+admin's own token, whatever the 30 s floor, and SHALL then retry AMCP at most every 500 ms for 30 s.
+It SHALL add no second reconnect loop, and a link that has been up once SHALL alarm as before.
+
+#### Scenario: A Playout 2.8.54 opens AMCP on the station-admin's read
+
+- **WHEN** an operator signs in **THEN** the bridge still waits and AMCP is still refused
+- **WHEN** a station-admin signs in **THEN** a D4 read carrying that admin's token is made at once,
+  the Playout trusts this machine, and AMCP comes up
+- **WHEN** the bridge does not authenticate **THEN** its health never says it waits for a sign-in
+
+### Requirement: Every bridge request to the Playout goes out server-side
+
+Every request the bridge SHALL make to the Playout — the key set, D4 and D9 — SHALL go out
+through one function with no `Origin` header and through no proxy, whatever proxy variables the
+machine's environment sets, so the Playout sees this machine's own address.
+
+#### Scenario: The Playout's view of the bridge
+
+- **WHEN** the bridge reads the key set, D4 and D9 **THEN** no request carries an `Origin` **AND**
+  each read of D4 and D9 carries its bearer **AND** every request arrives from this machine's
+  address
+- **WHEN** the environment names a proxy that Node's own `fetch` would use **THEN** the bridge's
+  reads still reach the Playout directly

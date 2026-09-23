@@ -12,6 +12,9 @@ not on the Playout server.
 (`http://host:port`), the `cg-admin` password, and that `http://127.0.0.1:5174` is in the Playout's
 CORS list.
 
+Get the password from the Playout: تنظیمات ← اتصال به CG Control ← حسابِ داخلیِ CG Control (copy
+button).
+
 1. **Install.** Run `CG Designer_…-setup.exe` or `CG Control_…-setup.exe`. Windows may say
    _"Windows protected your PC"_: press **More info**, then **Run anyway**. CG Designer installs for
    you alone and needs no administrator; CG Control asks for one, because it opens two ports in the
@@ -19,10 +22,12 @@ CORS list.
 2. **Open CG Control.** The first time, it opens on **Set up CG Control**.
 3. **Playout** — type the Playout's address and press **Check**. Each line says what it tested.
    A red line says what is wrong; where somebody else has to act, it shows the one command or line
-   to give them — for example the command the Playout's administrator runs so CasparCG accepts this
-   machine. Press **Connect** when the Playout lines pass.
+   to give them. The CasparCG line says **waiting for sign-in** — that is expected. Press
+   **Connect** when the Playout lines pass.
 4. **Sign in** as `cg-admin`. The first sign-in sets the station up; until it has, other accounts
-   are told the station is not set up yet.
+   are told the station is not set up yet. Within seconds the CasparCG line turns OK and the
+   channels appear. If it says the Playout did not trust this machine, it shows the one command the
+   Playout's administrator runs.
 5. **Channel** — pick the channel this station drives. Never pick the Playout's programme channel.
 6. **Serve address** — CG Control fills in this machine's address; change it only if the Playout's
    administrator tells you to. Press **Use this channel**.

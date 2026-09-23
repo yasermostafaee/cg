@@ -2980,3 +2980,15 @@ returned one hit each; the only other mentions were this file's own "next free" 
 
 ⇒ **Next free after this session is `B-264`**, **`D-161`**, **`C-042`**, **`R-069`** and
 **`P-055`**.
+
+### 2026-09-23 — `DESKTOP-APPS-01-B` takes `C-042`
+
+- `C-042` — AMCP auto-trust lapses after 7 days without a station-admin sign-in from the bridge
+  machine (a known limit) — [caspar.md](caspar.md).
+
+Measured free before use: no heading under `git grep -n -E "^## \[.\] C-042" -- docs`, against a
+positive control on `C-041`, which returned one hit; the only other mentions were this file's own
+"next free" lines.
+
+⇒ **Next free after this session is `B-264`**, **`D-161`**, **`C-043`**, **`R-069`** and
+**`P-055`**.

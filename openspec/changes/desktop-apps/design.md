@@ -47,6 +47,24 @@ because an installed station in first-run declares none. Every row shown: with n
 yet, installing a bank that already hides a row of unknown occupancy is refused (`untick-unknown`),
 and that refusal is not changed.
 
+## 3B. Playout 2.8.54's AMCP auto-trust (`DESKTOP-APPS-01-B`)
+
+A 2.8.54 Playout refuses AMCP to an untrusted machine and trusts the source IP of a server-side
+(no `Origin`) D4/D8/D9 read carrying a `station-admin` token, for 7 days since last seen. So:
+
+- **Waiting is a fact, not an alarm.** `CasparRuntime` carries `amcpAwaitsSignIn` on health while
+  the bridge authenticates, no `station-admin` has signed in since start, and AMCP has not been up
+  on the current sessions. A link that was up once was trusted, so its later failure alarms as ever.
+- **One read, at once, with the right token.** A station-admin's FIRST acceptance (a sign-in, not a
+  reload) calls `PlayoutCatalogue.readNow(thatToken)`, bypassing the 30 s floor once — never
+  `usableBearer()`, which may be an operator's token that trusts nothing.
+- **The one loop, hurried.** `ServerSession.retryPromptly(30 s)` cuts the running backoff wait and
+  holds each wait inside the window to 500 ms; it never cuts the resync drain and never dials.
+- **Direct to the Playout.** `playoutFetch` (node:http, our own agents) serves D4, D9 and jose's key
+  set (`customFetch`): no `Origin`, and no proxy — only Node's GLOBAL agents and `fetch` follow
+  `NODE_USE_ENV_PROXY`, measured on Node 26.
+- **The check** judges AMCP only after a station-admin signed in, over 30 s, 1 s apart.
+
 ## 4. The Designer inside Tauri — measured by the installer smoke
 
 Measured inside the INSTALLED CG Designer, launched unelevated on a clean runner (run

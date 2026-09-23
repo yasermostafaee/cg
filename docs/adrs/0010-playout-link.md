@@ -208,7 +208,10 @@ with one sentence ("This station is not set up yet"), and an unset issuer never 
 `iss`". The adopted value is CLEARED only when the Playout address is changed — which is written by
 CG Control itself (ADR 0011), never over the control socket, and replaces the whole Playout group;
 the next `station-admin` sign-in adopts again. An explicitly configured issuer is never adopted
-over and behaves exactly as before.
+over and behaves exactly as before. **The root of trust is the JWKS at the configured Playout
+address; `iss` is a constant check, never an install identity** (`DESKTOP-APPS-01-B`): from
+Playout 2.8.54 every install signs with the same `iss`, `urn:apasai:playout`, so two installs are
+told apart only by the keys each publishes at its own address — never by `iss`.
 
 ## Consequences
 

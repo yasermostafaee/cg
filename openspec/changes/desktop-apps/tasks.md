@@ -54,6 +54,25 @@
       fallback prefill; Station setup → Servers Playout card
 - [x] 5.8 Tests: bridge A1–A4 + phases + check shapes; console unit; first-run e2e + control
 
+## 5B. `DESKTOP-APPS-01-B` — Playout 2.8.54: the built-in account and AMCP auto-trust
+
+- [x] 5B.1 B1 — AMCP waits for a station-admin: `amcpAwaitsSignIn` on health (never up since
+      start, no station-admin yet); a station-admin's first acceptance reads D4 at once with its own
+      token (`PlayoutCatalogue.readNow`) and hurries the ONE loop (`ServerSession.retryPromptly`,
+      ≤ 500 ms for 30 s); the console's banner says it in one sentence
+- [x] 5B.2 B1.4 — every Playout request through `playoutFetch`: no `Origin`, no proxy (measured:
+      `NODE_USE_ENV_PROXY=1` sent Node's `fetch` and `jose` to the proxy); the check probes the same
+      path
+- [x] 5B.3 B2 — the check's AMCP line: `wait` before a station-admin; judged over 30 s after; "The
+      Playout did not trust this machine" + likely reasons, then the `secure-ports.ps1` fallback;
+      first-run re-checks after the sign-in and shows the channels only then
+- [x] 5B.4 B3 — the fake Playout trusts what 2.8.54 trusts (verified token, `station-admin`, no
+      `Origin`, not revoked, auto-trust on); the AMCP mock's `admit`; tests with controls
+- [x] 5B.5 B4 — `docs/integration/playout/PLAYOUT-2.8.54-CG-FACTS-2026-09-23.md`; ADR 0010's
+      amendment (the JWKS is the root of trust; `iss` a constant check); ADR 0011's dependencies;
+      the operator guide's password line; `C-042`
+- [ ] 5B.6 Linux `e2e` discharged on the commit carrying 5B — run URL (job confirmed RAN):
+
 ## 6. Records
 
 - [x] 6.1 ADR 0011; ADR 0010 amendment (the issuer is learned)

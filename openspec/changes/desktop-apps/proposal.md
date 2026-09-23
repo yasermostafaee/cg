@@ -29,12 +29,21 @@ addresses — not the Playout's issuer, not the CasparCG host — ever has to be
   from the first `station-admin` sign-in and never typed; before adoption only adoption is accepted;
   a loopback `casparHost` is the Playout's own machine; the Playout target is written only by CG
   Control's own door, never over the control socket.
+- **`DESKTOP-APPS-01-B`** — Playout 2.8.54 opens AMCP to a machine from a server-side
+  `station-admin` read: until a station-admin signs in the bridge's AMCP WAITS (said, not
+  alarmed); the sign-in reads D4 at once with that admin's token and hurries the one reconnect
+  loop; every Playout request goes out with no `Origin` and no proxy; the connection check and
+  first-run judge AMCP only after the sign-in.
 - **CI** builds both installers on `windows-latest` and smoke-tests them on a second, clean runner.
 
 ## Impact
 
 - Capabilities: `runtime-caspar-bridge` (ADDED), `runtime-ui` (ADDED), `desktop-delivery` (NEW).
-- ADR 0011 (new); ADR 0010 amended (the issuer is learned).
+- ADR 0011 (new); ADR 0010 amended (the issuer is learned; the JWKS at the configured address is
+  the root of trust and `iss` a constant check).
+- The wire: the bridge's Playout reads change transport (`playoutFetch`, same requests), and a
+  station-admin's sign-in adds ONE D4 read. No AMCP verb changes; the reconnect loop only waits
+  less for 30 s after that sign-in.
 - No refusal condition on the path to air changes. Two surfaces gain a door each, both deliberate
   and both named in the route censuses: `channels.catalogue` (station-admin, read) and the
   `setup.*` reads; the lock, auth and permission gates and the station fence are unchanged.

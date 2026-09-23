@@ -2675,3 +2675,13 @@ cheapest honest shape may be a declared NON-OPERATIONAL actor prefix rather than
 — to be decided when it is worked, not here. Cross-refs [[C-040]] (the recon run that found
 it), [[B-141]] (the audit panel's honesty rules), [[B-253]] (the other finding from the same
 run).
+
+## [ ] C-042 — AMCP auto-trust lapses after 7 days without a station-admin sign-in from the bridge machine ⟨priority: low — a KNOWN LIMIT, not a fix; nothing to do while `cg-admin` is the only account⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01-B`
+
+**A known limit, recorded, not a fix.** A Playout 2.8.54 opens AMCP to the CG Control machine
+from a server-side `station-admin` read and drops it after 7 days unseen
+([the 2.8.54 facts](../integration/playout/PLAYOUT-2.8.54-CG-FACTS-2026-09-23.md)). Once the station
+has accounts that are not `station-admin`, a `station-admin` must sign in from the bridge machine
+at least once every 7 days, or AMCP is refused until one does. Today only `cg-admin` exists, and it
+is used daily. **Acceptance (sketch):** WHEN the station has accounts that are not `station-admin`
+THEN the lapse is either impossible or announced before it happens.
