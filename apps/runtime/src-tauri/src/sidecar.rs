@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::Deserialize;
 use tauri::{AppHandle, Manager, Runtime, Webview};
@@ -52,6 +52,41 @@ struct Paths {
     logs: PathBuf,
 }
 
+// ── The shell's own log ───────────────────────────────────────────────────────
+
+/// `%APPDATA%\CG Control\logs` — resolved without Tauri, so the very first line and a panic
+/// before the app is built still have somewhere to go.
+fn logs_dir() -> PathBuf {
+    let base = std::env::var_os("APPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    base.join("CG Control").join("logs")
+}
+
+/// One line in `shell.log`, beside the bridge's own log. Never fails the caller.
+pub fn log(message: &str) {
+    let dir = logs_dir();
+    let _ = fs::create_dir_all(&dir);
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(dir.join("shell.log")) {
+        let secs = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let _ = writeln!(file, "[{secs}] {message}");
+    }
+}
+
+/// A panic in a windowed app is otherwise invisible: it has no console to print to.
+pub fn install_panic_log() {
+    let default = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        log(&format!("PANIC: {info}"));
+        default(info);
+    }));
+}
+
+// ── Where things are ─────────────────────────────────────────────────────────
+
 fn paths<R: Runtime>(app: &AppHandle<R>) -> Result<Paths, String> {
     let exe = std::env::current_exe().map_err(|e| format!("CG Control cannot find itself: {e}"))?;
     let dir = exe
@@ -87,15 +122,38 @@ fn quiet(command: &mut Command) -> &mut Command {
     command
 }
 
+// ── Start, restart, stop ─────────────────────────────────────────────────────
+
 /// Start the bridge and load the console from it; on any failure, say so on the starting screen.
 pub fn start<R: Runtime>(app: &AppHandle<R>) {
-    if let Err(message) = launch(app) {
-        fail(app, &message);
+    log("starting the bridge");
+    let result = spawn_bridge(app).and_then(|()| {
+        let window = app
+            .get_webview_window("main")
+            .ok_or("The CG Control window is missing.")?;
+        window
+            .navigate(CONSOLE_URL.parse().expect("the console URL is a valid URL"))
+            .map_err(|e| format!("The console could not be opened: {e}"))
+    });
+    match result {
+        Ok(()) => log("the console is open"),
+        Err(message) => {
+            log(&format!("start failed: {message}"));
+            fail(app, &message);
+        }
     }
 }
 
-fn launch<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
+/// Spawn the sidecar and wait until it answers on the console origin.
+fn spawn_bridge<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let p = paths(app)?;
+    log(&format!(
+        "sidecar {} · bundle {} · console {} · state {}",
+        p.node.display(),
+        p.bundle.display(),
+        p.console.display(),
+        p.state_home.display()
+    ));
     fs::create_dir_all(&p.logs)
         .map_err(|e| format!("CG Control cannot create {}: {e}", p.logs.display()))?;
     let log_path = p.logs.join("bridge.log");
@@ -110,17 +168,17 @@ fn launch<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
 
     clear_leftover(&p)?;
 
-    let mut log = OpenOptions::new()
+    let mut bridge_log = OpenOptions::new()
         .create(true)
         .append(true)
         .open(&log_path)
         .map_err(|e| format!("CG Control cannot write its log at {}: {e}", log_path.display()))?;
     let _ = writeln!(
-        log,
+        bridge_log,
         "---- CG Control {} starting the bridge",
         app.package_info().version
     );
-    let log_err = log
+    let bridge_err = bridge_log
         .try_clone()
         .map_err(|e| format!("CG Control cannot write its log: {e}"))?;
 
@@ -143,23 +201,18 @@ fn launch<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
         // The lifeline: this app holds the write end and never writes. When the app exits —
         // or is killed — the pipe closes and the bridge stops itself.
         .stdin(Stdio::piped())
-        .stdout(Stdio::from(log))
-        .stderr(Stdio::from(log_err));
+        .stdout(Stdio::from(bridge_log))
+        .stderr(Stdio::from(bridge_err));
     let child = quiet(&mut command)
         .spawn()
         .map_err(|e| format!("The control service could not start: {e}"))?;
+    log(&format!("bridge spawned, pid {}", child.id()));
     {
         let state = app.state::<Bridge>();
         *state.child.lock().unwrap_or_else(|e| e.into_inner()) = Some(child);
     }
-
     wait_until_healthy(app)?;
-    let window = app
-        .get_webview_window("main")
-        .ok_or("The CG Control window is missing.")?;
-    window
-        .navigate(CONSOLE_URL.parse().expect("the console URL is a valid URL"))
-        .map_err(|e| format!("The console could not be opened: {e}"))?;
+    log("bridge healthy on 5174");
     Ok(())
 }
 
@@ -225,6 +278,7 @@ fn clear_leftover(p: &Paths) -> Result<(), String> {
             health.exec_path
         ));
     }
+    log(&format!("stopping a leftover bridge, pid {}", health.pid));
     let _ = quiet(
         Command::new("taskkill").args(["/PID", &health.pid.to_string(), "/T", "/F"]),
     )
@@ -246,6 +300,7 @@ pub fn stop<R: Runtime>(app: &AppHandle<R>) {
     let Some(mut child) = guard.take() else {
         return;
     };
+    log(&format!("stopping the bridge, pid {}", child.id()));
     drop(child.stdin.take());
     let deadline = Instant::now() + STOP_GRACE;
     loop {
@@ -259,11 +314,58 @@ pub fn stop<R: Runtime>(app: &AppHandle<R>) {
     let _ = child.wait();
 }
 
+// ── The one door that writes the Playout target ──────────────────────────────
+
+/// 🔴 `DESKTOP-APPS-01-A` — **SET THE PLAYOUT ADDRESS**, from the console in THIS window only
+/// (`capabilities/console.json`), and never over the control socket.
+///
+/// The bridge's own CLI writes the file (`--set-playout-address`, a one-shot that binds nothing),
+/// so there is ONE writer of the playout config and it lives beside the reader; it replaces the
+/// whole Playout group, which clears an adopted issuer. The running bridge is then restarted so
+/// the new target is in force; the console reconnects on its own.
+#[tauri::command]
+pub async fn set_playout_address(app: AppHandle, address: String) -> Result<String, String> {
+    match tauri::async_runtime::spawn_blocking(move || change_playout_address(&app, &address)).await {
+        Ok(result) => result,
+        Err(err) => Err(err.to_string()),
+    }
+}
+
+fn change_playout_address(app: &AppHandle, address: &str) -> Result<String, String> {
+    let p = paths(app)?;
+    log(&format!("setting the Playout address to {address}"));
+    let output = quiet(
+        Command::new(&p.node)
+            .arg(&p.bundle)
+            .arg("--state-home")
+            .arg(&p.state_home)
+            .arg("--set-playout-address")
+            .arg(address),
+    )
+    .output()
+    .map_err(|e| format!("The Playout address could not be saved: {e}"))?;
+    let said = String::from_utf8_lossy(&output.stderr)
+        .lines()
+        .last()
+        .unwrap_or("")
+        .trim_start_matches("[caspar-bridge] ")
+        .to_string();
+    if !output.status.success() {
+        log(&format!("the Playout address was refused: {said}"));
+        return Err(said);
+    }
+    stop(app);
+    spawn_bridge(app)?;
+    Ok(said)
+}
+
+// ── Saying it on the starting screen ─────────────────────────────────────────
+
 /// Open Explorer on the bridge log, selected — the file a client sends us.
 pub fn open_log<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<Bridge>();
-    let log = state.log.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    let Some(path) = log else {
+    let log_file = state.log.lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let Some(path) = log_file else {
         return;
     };
     let mut command = Command::new("explorer.exe");
@@ -323,16 +425,20 @@ fn process_name(pid: &str) -> String {
 
 fn fail<R: Runtime>(app: &AppHandle<R>, message: &str) {
     let state = app.state::<Bridge>();
-    let log = state
+    let log_file = state
         .log
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .clone()
         .map(|p| p.display().to_string());
+    let held = port_holders();
+    for line in &held {
+        log(line);
+    }
     let payload = serde_json::json!({
         "message": message,
-        "held": port_holders(),
-        "log": log,
+        "held": held,
+        "log": log_file,
     })
     .to_string();
     *state.failure.lock().unwrap_or_else(|e| e.into_inner()) = Some(payload.clone());

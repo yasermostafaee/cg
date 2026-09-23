@@ -112,6 +112,45 @@ async function health() {
   return res.ok ? res.json() : null;
 }
 
+/** What to look at when an app cannot be reached: the screen, the processes, the logs. */
+async function diagnose(tag, cdpPort) {
+  const shot = path.join(out, `${tag}-screen.png`);
+  const capture = [
+    'Add-Type -AssemblyName System.Windows.Forms,System.Drawing;',
+    '$b=[System.Windows.Forms.Screen]::PrimaryScreen.Bounds;',
+    '$bmp=New-Object System.Drawing.Bitmap $b.Width,$b.Height;',
+    '$g=[System.Drawing.Graphics]::FromImage($bmp);',
+    '$g.CopyFromScreen($b.Location,[System.Drawing.Point]::Empty,$b.Size);',
+    `$bmp.Save('${shot.replace(/'/g, "''")}')`,
+  ].join(' ');
+  request('powershell', ['-NoProfile', '-Command', capture]);
+  const lines = [`--- ${tag} diagnostics`];
+  for (const image of [
+    'cg-control.exe',
+    'cg-bridge.exe',
+    'cg-designer.exe',
+    'msedgewebview2.exe',
+  ]) {
+    lines.push(`${image}: ${String(processCount(image))} running`);
+  }
+  const devtools = await fetch(`http://127.0.0.1:${String(cdpPort)}/json/list`, {
+    signal: AbortSignal.timeout(2000),
+  })
+    .then((r) => r.text())
+    .catch((err) => `unreachable (${err instanceof Error ? err.message : String(err)})`);
+  lines.push(`DevTools ${String(cdpPort)} /json/list: ${devtools.slice(0, 600)}`);
+  const logs = path.join(APPDATA, 'CG Control', 'logs');
+  for (const file of ['shell.log', 'bridge.log']) {
+    const full = path.join(logs, file);
+    lines.push(
+      `${file}: ${fs.existsSync(full) ? `\n${fs.readFileSync(full, 'utf8').slice(-3000)}` : 'absent'}`,
+    );
+  }
+  const text = lines.join('\n');
+  fs.writeFileSync(path.join(out, `${tag}-diagnostics.txt`), text);
+  process.stdout.write(`${text}\n`);
+}
+
 /** A minimal DevTools client over Node's own WebSocket. */
 class Cdp {
   #ws;
@@ -293,7 +332,10 @@ async function designer() {
   );
 
   launch(exe, 9231);
-  const page = await Cdp.attach(9231, 'http://tauri.localhost', 90_000);
+  const page = await Cdp.attach(9231, 'http://tauri.localhost', 90_000).catch(async (err) => {
+    await diagnose('designer', 9231);
+    throw err;
+  });
   await sleep(4000);
   const facts = await page.evaluate(designerProbe);
   fs.writeFileSync(path.join(out, 'designer-facts.json'), JSON.stringify(facts, null, 2));
@@ -360,6 +402,7 @@ async function control() {
       String(h.execPath).toLowerCase() === SIDECAR_EXE.toLowerCase(),
     h === null ? 'no answer' : `${h.execPath} (pid ${h.pid})`,
   );
+  if (h === null) await diagnose('control', 9230);
   const page = await Cdp.attach(9230, CONSOLE, 90_000).catch((err) => {
     check('the window loads the console from the bridge', false, err.message);
     return null;
@@ -385,6 +428,37 @@ async function control() {
       facts.offOrigin.join(', '),
     );
     await page.screenshot(path.join(out, 'control.png'));
+
+    // DESKTOP-APPS-01-A — the one door that writes the Playout target: the app's own command,
+    // callable from the console this window loaded, never over the control socket.
+    const before = await health().catch(() => null);
+    const door = await page.evaluate(async () => {
+      try {
+        const said = await window.__TAURI_INTERNALS__.invoke('set_playout_address', {
+          address: 'http://127.0.0.1:59999/',
+        });
+        return { ok: true, said: String(said) };
+      } catch (err) {
+        return { ok: false, said: String(err) };
+      }
+    });
+    check('the console can set the Playout address through the app', door.ok, door.said);
+    const playoutFile = path.join(APPDATA, 'CG Control', '.cg-runtime', 'bridge-playout.json');
+    const written = fs.existsSync(playoutFile)
+      ? JSON.parse(fs.readFileSync(playoutFile, 'utf8'))
+      : null;
+    check(
+      '…which writes the address, normalised, with no issuer to type',
+      written?.playout?.address === 'http://127.0.0.1:59999' &&
+        written?.playout?.issuer === undefined,
+      JSON.stringify(written),
+    );
+    const after = await until('the restarted bridge', health, 60_000).catch(() => null);
+    check(
+      '…and restarts the bridge with the new target in force',
+      after !== null && before !== null && after.pid !== before.pid,
+      `${String(before?.pid)} -> ${String(after?.pid)}`,
+    );
     page.close();
   }
 

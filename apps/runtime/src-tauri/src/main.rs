@@ -15,10 +15,13 @@ use tauri::webview::PageLoadEvent;
 use tauri::{Manager, RunEvent};
 
 fn main() {
+    sidecar::install_panic_log();
+    sidecar::log("CG Control starting");
     let app = tauri::Builder::default()
         // Registered first, so a second launch is caught before anything else starts: it
         // focuses the window that is already open, and exits.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            sidecar::log("a second launch focused the open window");
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
                 let _ = window.show();
@@ -26,6 +29,7 @@ fn main() {
             }
         }))
         .manage(sidecar::Bridge::default())
+        .invoke_handler(tauri::generate_handler![sidecar::set_playout_address])
         .menu(|app| {
             let open_log =
                 MenuItem::with_id(app, "open-log", "Open bridge log", true, None::<&str>)?;
@@ -53,10 +57,12 @@ fn main() {
         // on every finished load is what makes the failure impossible to miss.
         .on_page_load(|webview, payload| {
             if payload.event() == PageLoadEvent::Finished {
+                sidecar::log(&format!("page loaded: {}", payload.url()));
                 sidecar::replay_failure(webview);
             }
         })
         .setup(|app| {
+            sidecar::log("setup: starting the bridge thread");
             let handle = app.handle().clone();
             std::thread::spawn(move || sidecar::start(&handle));
             Ok(())
@@ -66,6 +72,7 @@ fn main() {
 
     app.run(|app, event| {
         if let RunEvent::Exit = event {
+            sidecar::log("exit: stopping the bridge");
             sidecar::stop(app);
         }
     });
