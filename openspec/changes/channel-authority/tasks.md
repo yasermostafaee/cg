@@ -64,6 +64,13 @@
       the socket is already deliverable) — red-first against commit 2, which pushed one copy per
       connect; and a sign-in is ALWAYS pushed its answer (the viewer case, mutation-checked)
 
+- [x] 3.10 A due catalogue read goes when it falls due: the tick looks every second, the 30 s floor is
+      unchanged — found by driving the §7 demo (an outage took ~60 s to reach the strip), red-first
+      in `playout-catalogue.test.ts`
+- [x] 3.11 The demo takes `offline` / `online` on stdin, so §7 step 3 can stop the fake Playout
+      without stopping the bridge — driven end to end: name gone 30.7 s after `offline`, a clear on
+      channel 2 answered by its handler throughout, name back 29.8 s after `online`
+
 ## 4. Records
 
 - [x] 4.1 `B-261` filed; `B-257` noted (its spec asserted this hazard as a fix)

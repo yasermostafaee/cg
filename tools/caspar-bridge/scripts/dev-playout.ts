@@ -151,11 +151,34 @@ for (const line of [
   '  sign-in and the channel strip are what this shows.',
   '',
   '  Now open the Runtime (pnpm --filter @cg/runtime dev) and reload the console.',
+  '  Type  offline  + Enter to take the FAKE PLAYOUT down (the bridge keeps running),',
+  '  and   online   + Enter to bring it back on the same port.',
   '  Ctrl-C stops both and leaves the scratch directory for inspection.',
   '',
 ]) {
   console.error(line);
 }
+
+/*
+  `CHANNEL-AUTHORITY-01` §7 step 3 — "stop the Playout" without stopping the bridge. Ctrl-C takes
+  both down, so a Playout outage could not be shown at all. These call the fixture's own
+  `goOffline` / `goOnline`, the same pair the outage specs use: the port is kept, every open
+  connection is dropped, and nothing about any configured URL changes.
+*/
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk: string) => {
+  const command = chunk.trim().toLowerCase();
+  if (command === 'offline') {
+    void playout.goOffline().then(() => {
+      console.error('[dev-playout] fake Playout OFFLINE — the bridge keeps running');
+    });
+  } else if (command === 'online') {
+    void playout.goOnline().then(
+      () => console.error('[dev-playout] fake Playout back ONLINE'),
+      (err: unknown) => console.error(`[dev-playout] could not come back online: ${String(err)}`),
+    );
+  }
+});
 
 const bridge = spawn(
   process.execPath,
