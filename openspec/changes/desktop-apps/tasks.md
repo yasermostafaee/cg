@@ -71,7 +71,13 @@
 - [x] 5B.5 B4 — `docs/integration/playout/PLAYOUT-2.8.54-CG-FACTS-2026-09-23.md`; ADR 0010's
       amendment (the JWKS is the root of trust; `iss` a constant check); ADR 0011's dependencies;
       the operator guide's password line; `C-042`
-- [ ] 5B.6 Linux `e2e` discharged on the commit carrying 5B — run URL (job confirmed RAN):
+- [x] 5B.6 Linux `e2e` discharged on the commit carrying 5B — run URL (job confirmed RAN):
+      https://github.com/yasermostafaee/cg/actions/runs/35876684545 on `72c3199e`; job
+      `E2E (Playwright)` completed/success with its `E2E` step RUN
+      (https://github.com/yasermostafaee/cg/actions/runs/35876684545/job/107234372387) — Runtime
+      252 passed (`first-run.spec.ts` both tests: wait → sign-in → OK → channels), Designer 281
+      passed. Installers + smoke green on the same commit:
+      https://github.com/yasermostafaee/cg/actions/runs/35876684603
 
 ## 6. Records
 
