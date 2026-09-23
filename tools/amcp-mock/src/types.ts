@@ -207,9 +207,24 @@ export interface MockOptions {
   tracePath?: string;
   /** Disable the OSC emitter loop. Useful for command-only tests. */
   disableOsc?: boolean;
+  /**
+   * `DESKTOP-APPS-01-B` — **WHICH MACHINES MAY SPEAK AMCP**, as a Playout 2.8.54 firewall decides
+   * it: called with a new connection's source address, and a `false` refuses that connection
+   * before a byte is read (a reset, which the connection check reads as `refused`). Absent admits
+   * everyone — every mock before this one. {@link MockHandle.setAdmission} replaces it later.
+   */
+  admit?: (sourceAddress: string) => boolean;
 }
 
 export interface MockHandle {
+  /**
+   * `DESKTOP-APPS-01-B` — replace the admission rule ({@link MockOptions.admit}); `null` admits
+   * everyone. Applies to connections made AFTER the call; an open one is left as it is, as a
+   * firewall that changes its allow list leaves an established connection.
+   */
+  setAdmission(admit: ((sourceAddress: string) => boolean) | null): void;
+  /** Connections refused by the admission rule so far — a refusal test's positive control. */
+  readonly refusedConnections: number;
   /** Bound AMCP port. Reflects the OS-assigned port when `amcpPort: 0`. */
   readonly amcpPort: number;
   /** Bound OSC source port. */

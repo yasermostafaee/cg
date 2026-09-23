@@ -5,6 +5,9 @@ import { CommandQueue } from '../queue/command-queue.js';
 import { probeAmcpLiveness } from './amcp-probe.js';
 import { Backoff } from './backoff.js';
 
+/** The longest backoff wait inside a {@link ServerSession.retryPromptly} window. */
+export const PROMPT_RETRY_MS = 500;
+
 /**
  * Lifecycle per Phase 5 §2. Re-entering RESYNCING after every reconnect
  * is mandatory — the Reconciler cannot trust stale state.
@@ -134,6 +137,10 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
   private running = false;
   private currentDelayResolve: (() => void) | null = null;
   private currentDelayTimer: NodeJS.Timeout | null = null;
+  /** True only while the loop sleeps its BACKOFF — never the resync drain, which is not a wait to cut. */
+  private inBackoff = false;
+  /** Until when {@link retryPromptly} holds each backoff to {@link PROMPT_RETRY_MS}. */
+  private promptUntil = 0;
 
   /** Resolved by the watcher when HEALTHY exits — drives the outer loop. */
   private healthyExitResolve: (() => void) | null = null;
@@ -198,6 +205,23 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
     void this.loop();
   }
 
+  /**
+   * `DESKTOP-APPS-01-B` B1.3 — **TRY AGAIN NOW, AND OFTEN, FOR A WHILE.**
+   *
+   * For `windowMs`, every backoff wait of THIS loop is held to {@link PROMPT_RETRY_MS}, and a wait
+   * already running is cut short so the next attempt starts at once. Used when something outside
+   * the link has just changed what the peer will accept — a Playout 2.8.54 opens AMCP to this
+   * machine a few seconds after a `station-admin` signs in — so the operator sees the link come up
+   * in seconds rather than at the next 4 s step.
+   *
+   * ⚠ It is a knob on the ONE reconnect loop, never a second loop: nothing here dials. A session
+   * that is up, or stopped, is not touched, and the resync drain is never cut.
+   */
+  retryPromptly(windowMs: number): void {
+    this.promptUntil = this.now() + windowMs;
+    if (this.inBackoff) this.cancelDelay();
+  }
+
   /** Tear down — closes transports, rejects pending queue items, ends the loop. */
   async stop(): Promise<void> {
     if (!this.running && this.currentState === 'disconnected') return;
@@ -260,9 +284,13 @@ export class ServerSession extends EventEmitter<ServerSessionEvents> {
       this.stopWatcher();
       this.transitionTo('disconnected', 'cycle teardown');
 
-      const wait = this.backoff.nextDelay();
+      const backoffWait = this.backoff.nextDelay();
+      const wait =
+        this.now() < this.promptUntil ? Math.min(backoffWait, PROMPT_RETRY_MS) : backoffWait;
       this.emit('disconnected', { reason: `backoff ${String(wait)}ms` });
+      this.inBackoff = true;
       await this.delay(wait);
+      this.inBackoff = false;
       if (!this.running) break;
 
       // Fresh transport + queue for the next cycle. OSC stays bound.

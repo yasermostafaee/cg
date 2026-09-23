@@ -12,12 +12,24 @@ import type { AmcpHandler, HandlerContext } from './types.js';
 export class AmcpServer {
   private server: net.Server | null = null;
   private readonly sockets = new Set<net.Socket>();
+  /** `DESKTOP-APPS-01-B` — who may connect; `null` admits everyone. */
+  private admit: ((sourceAddress: string) => boolean) | null = null;
+  private refused = 0;
 
   constructor(
     private readonly handlers: Map<string, AmcpHandler>,
     private readonly ctx: HandlerContext,
     private readonly onTrace?: (entry: TraceEntry) => void,
   ) {}
+
+  setAdmission(admit: ((sourceAddress: string) => boolean) | null): void {
+    this.admit = admit;
+  }
+
+  /** Connections the admission rule refused. */
+  get refusedCount(): number {
+    return this.refused;
+  }
 
   async start(host: string, port: number): Promise<number> {
     return new Promise((resolve, reject) => {
@@ -65,6 +77,13 @@ export class AmcpServer {
   }
 
   private onConnection(sock: net.Socket): void {
+    // An IPv4 peer on a dual-stack socket reads `::ffff:a.b.c.d`; the rule is written in a.b.c.d.
+    const source = (sock.remoteAddress ?? '').replace(/^::ffff:/, '');
+    if (this.admit !== null && !this.admit(source)) {
+      this.refused += 1;
+      sock.resetAndDestroy();
+      return;
+    }
     this.sockets.add(sock);
     sock.setEncoding('utf-8');
 

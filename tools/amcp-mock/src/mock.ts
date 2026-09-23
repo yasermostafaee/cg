@@ -158,9 +158,16 @@ export async function createMock(opts: MockOptions = {}): Promise<MockHandle> {
     : undefined;
 
   const server = new AmcpServer(handlers, ctx, onTrace);
+  server.setAdmission(opts.admit ?? null);
   const boundAmcp = await server.start(host, amcpPort);
 
   return {
+    setAdmission(admit: ((sourceAddress: string) => boolean) | null): void {
+      server.setAdmission(admit);
+    },
+    get refusedConnections(): number {
+      return server.refusedCount;
+    },
     amcpPort: boundAmcp,
     oscPort: emitter.port,
     host,
