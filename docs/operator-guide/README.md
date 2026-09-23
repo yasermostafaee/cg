@@ -237,6 +237,10 @@ Default is `off` — the Runtime makes zero outbound network requests. Air-gappe
   this Runtime controls, confirm that client does not use `DEFER`.** Clients that send ordinary,
   undeferred `MIXER` commands are unaffected — those apply as they arrive and are never swept up.
 
+## PROGRAM monitor
+
+**SHOW MONITORS** puts what the Playout is sending to air on this channel into **PROGRAM**, live; **No return signal** or **Return feed stalled** means the console cannot see that picture right now — not that nothing is on air.
+
 ## Program output
 
 **The red `PROGRAM OUTPUT MISSING` banner means CasparCG is up, answering, and NOT sending your

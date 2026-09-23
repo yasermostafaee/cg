@@ -477,10 +477,12 @@ session, the same call as the unpersisted rehearsal flag and reset-to-idle on re
 answer A13, `R-060`).
 
 ⚠ A13 answered PERSISTENCE and did not decide which state the console boots in. That default is
-`MONITORS-01`'s and is HIDDEN, because neither monitor pane renders the channel: PGM is a fixed
-empty placeholder for the unbuilt `C-016` and PVW is a local browser render of the rehearsing
-rows (`R-022`). The rule above is unaffected by which way the default points, and the flip is
-not A13 being overturned (`design.md` §19.2).
+`MONITORS-01`'s and is HIDDEN. When it was set, neither monitor pane rendered the channel (PGM was
+an empty placeholder for `C-016`; PVW is a local browser render of the rehearsing rows,
+`R-022`); `C-016` has since built PGM as the Playout's own return (`pgm-return`), whose own
+acceptance keeps the pane OFF by default and pulls nothing from the Playout while it is hidden.
+The rule above is unaffected by which way the default points, and the flip is not A13 being
+overturned (`design.md` §19.2).
 
 #### Scenario: The monitor strip returns to the shipped default on reload
 

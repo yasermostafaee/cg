@@ -1722,6 +1722,11 @@ PROGRAM reads "No program return". Recorded because the two
 boxes look interchangeable and the next person to touch them will be tempted to share
 one placeholder again; the reasoning is in `MonitorPanel`'s header comment.
 
+⚠ **Superseded in part 2026-09-24 (`C-016`, `pgm-return`).** PROGRAM is no longer an empty
+state: it shows the Playout's own return, and says "No return signal" or "Return feed
+stalled" when it cannot vouch for a live picture. The per-panel `icon`/`emptyLabel`/`detail`
+props are gone. The PREVIEW half of this entry stands.
+
 ### The failover banner overlays the monitor strip
 
 `FailoverBanner` is `position: fixed` (per `layout.ts`, deliberately, so it is not a

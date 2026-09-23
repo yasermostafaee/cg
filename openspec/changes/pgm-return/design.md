@@ -109,7 +109,26 @@ Channels ≥ 21 map to `9270+`, outside the firewall rule the Playout writes on 
 (`9250–9269`). The relay does not dial them; the state is `unavailable`, and the bridge log names
 the port and the rule once per watching episode.
 
-## 6. Named, not this change
+## 6. Findings made while building it
+
+- **A detached `<img>` keeps loading a multipart stream.** Chrome does not abort an image's
+  request when React removes the element; the relay then sees a viewer that never leaves and never
+  releases the Playout feed. The pane removes `src` on unmount (the HTML spec's abort path).
+  Measured, not assumed: with that line planted out, `pgm-return.spec.ts`'s release test went red
+  — the feed was still open 6 s after hiding.
+- **Windows' timer makes a `setInterval(40)` fake a 21 fps fake.** The cost harness first read
+  21 fps "relayed" and the cause was the FAKE (a ~15.6 ms tick), not the relay; a deadline-scheduled
+  fake runs 24.9 fps and the relay passes all of it.
+
+## 7. Cost, measured
+
+The real bridge CLI as its own process, a healthy AMCP mock, a fake feed at 25 fps of 13,111-byte
+frames, CPU and memory read from the OS (i5-10400, 12 threads, Node 26): hidden **0.13–0.41 %** of
+one core (the bridge's own baseline — the relay holds nothing), shown **0.21–1.12 %**, memory
+**+1–2 MB** with a viewer; 24.9 fps in and relayed, 321 KB/s. The full table is in
+`docs/integration/playout/PGM-FEED-AS-USED.md`.
+
+## 8. Named, not this change
 
 - **PGM audio** — `GET /audio.wav` on the SAME port (`9250 + n − 1`): RIFF, PCM s16le, 2 ch,
   48 kHz, endless. For a later meter or listen button. **Never `935x`**, which is the preview's.

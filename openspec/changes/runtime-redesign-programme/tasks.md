@@ -98,8 +98,7 @@ no URL is not a discharge — it is a claim, and the next reader cannot check it
   - ⚠ **AMENDED 2026-09-09 (`MONITORS-01`) — THE RULE STANDS; THE DEFAULT WAS A DIFFERENT
     QUESTION AND HAS MOVED TO HIDDEN.** A13 answered `R-060`, whose subject is PERSISTENCE
     ("should 'monitors hidden' survive a reload?"). It never decided the shipped BOOT state,
-    which was Phase 5's and rested on the strip being confidence monitoring. It is not: PGM is
-    a fixed empty placeholder for the unbuilt `C-016` and PVW is a local browser render of the
+    which was Phase 5's and rested on the strip being confidence monitoring. It is not: PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default) and PVW is a local browser render of the
     rehearsing rows (`R-022` — nothing reaches CasparCG), so the strip was costing 247.2 px and
     three rows of the layer list. `DEFAULT_MONITORS_SHOWN = false`. **A13's non-persistence rule
     is UNCHANGED and still enforced** — the flag is written by nothing and read from nothing.
@@ -740,6 +739,9 @@ position (§17.6)** and the runs (§17.7).
       deliberately omits on-air rows. **Case (i): what the console BELIEVES.** `C-016` (the real
       programme-channel grab) is `[ ]`; only its recon kit exists, and its own fourth acceptance
       bullet says its panel would be **OFF by default**. Recorded in `design.md` §19.1.
+  - ⚠ **SUPERSEDED IN PART 2026-09-24 (`pgm-return`, `C-016`).** PGM is no longer an empty box:
+    it shows the Playout's own return, relayed by the bridge. The hidden DEFAULT stands, on
+    `C-016`'s own acceptance, and hiding now also means the bridge pulls nothing.
 - [x] **B — the default flipped to HIDDEN** (`DEFAULT_MONITORS_SHOWN`, one home, three readers).
       Chrome above the first data row **428.7 → 181.5 px**, rows **4 → 7**, folded figure
       unchanged from `AUDIT-CLOSE-01`'s to the tenth of a pixel. `design.md` §19.4.

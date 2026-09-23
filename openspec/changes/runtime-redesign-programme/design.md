@@ -2986,8 +2986,7 @@ a look (**A**), and `R-060` / owner answer A13 already settled the neighbouring 
 whether it persists.
 
 ⭐ **PULLED, 2026-09-09 — `MONITORS-01`, §19.** The refusal above was right to wait and its
-premise turned out to be false: neither pane is a monitoring surface. PGM is a fixed empty
-placeholder for the unbuilt `C-016` and PVW is a local browser render of the rehearsing rows
+premise turned out to be false: neither pane is a monitoring surface. PGM was then an empty placeholder for `C-016` (since built as the Playout's return, still off by default) and PVW is a local browser render of the rehearsing rows
 (`R-022`), so the default was hidden and the boot figure is now **181.5 px and seven rows**.
 A13's non-persistence rule is untouched — §19.2 separates the two questions.
 
@@ -3054,7 +3053,9 @@ decision. This section answers the question that refusal was waiting on.
 
 ### 19.1 🔴 THE FACT: NEITHER PANE IS A PICTURE OF THE CHANNEL
 
-Traced in the code, not inferred from the components' names.
+Traced in the code, not inferred from the components' names. ⚠ **As of 2026-09-09.** The PGM row
+is superseded by `pgm-return` (`C-016`, 2026-09-24): PGM now shows the Playout's own return,
+relayed by the bridge, pulled only while the pane renders.
 
 | pane    | what it renders                                                                                                                                                                                                                                                   | files                                                                                 |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
@@ -4425,7 +4426,9 @@ page's stylesheet is four waves deep and only the last one paints).
   deliberately does not (§7.5). A permanently green `PROGRAM` over a pane that renders nothing —
   `MONITORS-01` settled that `C-016` is unbuilt — would be the most misleading pixel on the
   surface. PVW _does_ take the reference's purple, because `--r-rehearsing` is already that hex and
-  PVW genuinely IS the rehearsal.
+  PVW genuinely IS the rehearsal. ⚠ **2026-09-24:** `C-016` is built (`pgm-return`); the head
+  stays un-mint on §7.5's reason alone, and the return's health is carried by the strip's lamp
+  (`--r-success` while live), which goes out the moment the feed does.
 - **(g) the transport appears with the stage.** The reference renders it always, disabled. Our own
   rule (`LayersPanel`: _"controls that come and go move the target under the operator's hand
   mid-reach"_) argues FOR the reference here, and this is the one place in §1 where we do not

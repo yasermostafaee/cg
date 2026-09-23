@@ -292,7 +292,8 @@ Wave 5. **A no-op if the owner answers (A).**
       ticking.** The RESERVATION half is real and closes: `MonitorStrip` renders both in their
       final positions, height persisted through `ShellDivider`, fullscreen via `Panel`. The LABEL
       half of `§7` — _"labelled NOT CONNECTED"_ — **was never true, in both halves**: PROGRAM
-      reads `No program return`, and PREVIEW is not an empty box at all since `R-022` made it
+      read `No program return` (superseded 2026-09-24: `C-016`'s `pgm-return` shows the Playout's
+      return, or `No return signal` / `Return feed stalled`), and PREVIEW is not an empty box at all since `R-022` made it
       `PreviewPanel`, a local browser render. `MonitorPanel`'s own header calls labelling PREVIEW
       "not connected" a CATEGORY ERROR — it has no link to be down. The stale `App.tsx` comment
       that carried the phrase is corrected in place; `§7` carries a dated closure block above the

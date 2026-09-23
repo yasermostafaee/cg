@@ -587,7 +587,59 @@ can spare a channel; if this plant cannot, the multi-box story needs a different
   encoded — build targets, polyfills, design-doc refusals — is recon owed; raising it is a
   behaviour change that ships silently and belongs on its own session with its own `gate:e2e`.
 
-## [ ] C-016 — operator PGM confidence view: periodic program-channel grabs served over the bridge's HTTP server ⟨priority: medium⟩
+## [~] C-016 — operator PGM confidence view: the programme return, from the Playout's own `pgm` feed, relayed by the bridge ⟨priority: medium⟩
+
+**🔴 BUILT 2026-09-24 — `openspec/changes/pgm-return` (`PGM-RETURN-01` v2). Read this block first;
+the text below it is the item's history.** Title until 2026-09-23: _"periodic program-channel
+grabs served over the bridge's HTTP server"_.
+
+**The mechanism changed — OWNER DECISION 2026-09-23:** build PROGRAM from the Playout's own `pgm`
+feed, not from grabs. The Playout team specified the feed from their core's source and measured it
+on 2.8.54 (`docs/integration/playout/PLAYOUT-CG-RESPONSE-PGM-FEED-v1.md`): channel _n_ is HTTP
+MJPEG on `9250 + n − 1`, on by default for every programme channel, ~25 fps of 640×360. That
+answers this item's recon question without a grab verb — the recon kit below was never needed.
+
+**What is built.**
+
+- **The bridge reads; the console displays.** `tools/caspar-bridge/src/pgm-return.ts`: one
+  upstream per WATCHED channel, to the Playout's host (the C6-pinned IPv4, or server A's host with
+  no Playout configured), on `pgmPort(n)` — the ONE place the number is written, never the `935x`
+  preview. It re-serves the JPEG bytes untouched, same-origin, at `GET /pgm/<n>` on the console's
+  origin (`127.0.0.1:5174`), loopback peers only.
+- **Pulled only when watched.** The PROGRAM pane's `<img>` IS the demand, and it exists only while
+  the pane renders; monitors are hidden by default, so a console that never shows them pulls
+  nothing. The upstream closes 1.5 s after the last viewer leaves; two consoles on a channel share
+  one upstream.
+- **Honest status.** `pgmReturn.status` / `.status-changed` carry each watched channel's state. The
+  pane shows the picture only while `live`; otherwise **"No return signal"** (connecting,
+  unreachable, unavailable) or **"Return feed stalled"** (no frame for 2 s). Never a frozen frame.
+- **A well-behaved client, because the feed's server is not hardened and an error on its thread
+  stops the whole core:** the exact request `GET / HTTP/1.1\r\nHost: <host>\r\n\r\n` and nothing
+  after it; parts read by `Content-Length`; a silent connection closed at 8 s; reconnects at
+  1-2-4-8-10 s; at most one connection per channel.
+
+**Limits.** Picture only — the audio (`GET /audio.wav`, SAME port, never `935x`) is named, not
+built. The primary Playout only; a backup Playout's return is not built. Channels ≥ 21 lie outside
+the Playout's firewall rule (9250–9269): not dialled, "No return signal", the reason in the log. The
+feed is readable by the whole LAN at the Playout (their rule, not ours). The Playout's PGM settings
+are never touched — changing them needs a Playout reset, which cuts air on every channel. A console
+served by anything but the bridge's console server (a Vite dev server) has no relay and reads "No
+return signal".
+
+**Cost, measured on this dev host** (i5-10400, 12 threads; 25 fps of 13 KB frames; two runs of
+30 s and 60 s per phase): the bridge process at 0.13–0.41 % of one core hidden (its own baseline —
+the relay holds nothing then) and 0.21–1.12 % shown, so the relay costs at most ~1 % of one core
+and 1–2 MB; 24.9 fps in, 24.9 relayed, 321 KB/s. Table: `docs/integration/playout/PGM-FEED-AS-USED.md`.
+
+**Finding for [[C-023]].** The feed is per CHANNEL (every programme channel and every preview
+channel has one). A live SOURCE is not a channel, so a per-source thumbnail cannot ride this relay
+as built — that is this item's finding, as the note below asks, and C-023 needs its own answer.
+
+**Acceptance as delivered** (the four bullets below are the grab-era wording; the first and third
+are superseded by the owner's decision): the panel shows the programme channel **live, not at
+~1 s**; a feed that stops shows a legible stalled state, never a frozen frame; the mechanism's cost
+was measured by the Playout team on 2.8.54 (per-reader cost below their measurement's resolution)
+before it was fixed; hidden or off pulls nothing, and the panel is OFF by default and toggleable.
 
 **What:** Operators need to SEE the on-air output inside the Runtime (Cinegy parity). CasparCG
 has no browser-native video return, so v1 is a CONFIDENCE MONITOR: the bridge periodically

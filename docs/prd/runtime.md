@@ -3509,7 +3509,7 @@ since been answered the other way (2026-09-09, `MONITORS-01`; `design.md` §19.2
 about PERSISTENCE, and its answer is unchanged: the flag is written by nothing and read from
 nothing. The console's shipped BOOT STATE is a different question, was never on this item's
 table, and is now **HIDDEN** (`DEFAULT_MONITORS_SHOWN = false`) — because neither monitor pane
-renders the channel. PGM is a fixed empty placeholder for the unbuilt [[C-016]] (whose own
+renders the channel. PGM was then an empty placeholder for [[C-016]] (since built as the Playout's return, still off by default) (whose own
 acceptance says its panel would be OFF by default), and PVW is a LOCAL browser render of the
 rehearsing rows through `@cg/template-runtime` ([[R-022]] — "nothing is ever sent to CasparCG"),
 so the strip was spending 247.2 px and three rows of the layer list on the least authoritative

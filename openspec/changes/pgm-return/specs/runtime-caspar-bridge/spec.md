@@ -91,3 +91,32 @@ is not loopback, and SHALL add no route to the template origin.
 - **WHEN** a client whose address is not loopback requests `/pgm/1`
 - **THEN** it is answered `403` and nothing is attached; and a loopback client is served the
   stream (the positive control)
+
+## MODIFIED Requirements
+
+### Requirement: The bridge serves the console on its own loopback origin
+
+The bridge SHALL serve the Runtime's built console, when given `--console-dir`, on a listener of
+its own bound to `127.0.0.1` (port 5174 by default): the directory's files, `index.html` for any
+path that names no file extension, a 404 for a missing asset, nothing outside the directory,
+`GET /__cg/health` answering `{ app: "cg-caspar-bridge", pid, execPath }`, and `GET /pgm/<channel>`
+relaying that channel's programme return to loopback peers only (`C-016`). It SHALL never serve
+the console on the template origin, and SHALL refuse a console port equal to the control or
+template port. The listener SHALL start only after the control socket listens.
+
+#### Scenario: The console and its fallback are served
+
+- **WHEN** `/` or a client-side route is requested **THEN** `index.html` is answered, uncached
+- **WHEN** a fingerprinted asset is requested **THEN** it is answered with its own type, immutable
+- **WHEN** a missing asset or a path outside the directory is requested **THEN** the answer is 404
+
+#### Scenario: The health route names the process
+
+- **WHEN** `GET /__cg/health` is requested **THEN** the answer carries the app identity, the pid
+  and the executable running the bridge
+
+#### Scenario: The programme return route answers only a channel path
+
+- **WHEN** `/pgm/1` is requested from loopback **THEN** the answer is a `multipart/x-mixed-replace`
+  stream; **WHEN** `/pgm/0`, `/pgm/01`, `/pgm/abc` or `/pgm/1/audio.wav` is requested **THEN** the
+  answer is 404 and nothing is attached

@@ -43,6 +43,11 @@ from a checkout — which assumes a developer.
    `template-server-route-set.test.ts` is unchanged and green, and the CLI refuses a console port
    equal to the control or template port.
 
+   ⚠ **Amended 2026-09-24 (`C-016`, `pgm-return`):** the same listener also answers
+   `GET /pgm/<channel>` — the Playout's programme return, relayed by the bridge as
+   `multipart/x-mixed-replace` for the PROGRAM monitor's `<img>` — and refuses it (`403`) to any
+   peer that is not loopback. Same-origin by design; the template origin is untouched.
+
 3. **The bridge sidecar is the official `node.exe`, installed as `cg-bridge.exe`, running the
    bridge bundled into ONE ESM file** (`tools/caspar-bridge/scripts/bundle.mjs`). A Node Single
    Executable was measured and not taken: on the Node this repo pins (22) a SEA's entry must be

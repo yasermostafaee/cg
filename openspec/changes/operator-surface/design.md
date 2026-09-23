@@ -822,8 +822,10 @@ destroys both.
 - ✅ **Reserved:** `MonitorStrip` renders both in their final positions inside the workspace,
   height persisted and keyboard-nudgeable through `ShellDivider`, fullscreen-able because
   `Panel` gives every panel that control. R-033 point 7 asked for them "now"; they are there.
-- 🔴 **"labelled NOT CONNECTED" — false, and false in BOTH halves.** PROGRAM's `emptyLabel` is
-  `No program return`. PREVIEW has no empty label at all any more: `R-022` replaced the reserved
+- 🔴 **"labelled NOT CONNECTED" — false, and false in BOTH halves.** PROGRAM's `emptyLabel` was
+  `No program return` (as of 2026-09-07; since 2026-09-24 `C-016`'s `pgm-return` shows the
+  Playout's own return there, or says `No return signal` / `Return feed stalled`, and the
+  `emptyLabel` prop is gone). PREVIEW has no empty label at all any more: `R-022` replaced the reserved
   box with `PreviewPanel`, a LOCAL browser render of every rehearsing row, with no CasparCG
   involvement and nothing ever sent. And the phrase was never right even before that —
   `MonitorPanel`'s own header records the first draft labelling both "NOT CONNECTED" as a

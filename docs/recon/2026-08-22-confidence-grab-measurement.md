@@ -3,6 +3,11 @@
 **Written:** 2026-08-22 (session BN) · **Performed by:** the owner, at the box ·
 **Scope:** MEASUREMENT ONLY — no production code, no fixes, no config changes.
 
+> ⚠ **2026-09-24 — §A is no longer needed for C-016.** C-016 was built from the Playout's own
+> `pgm` feed (owner decision 2026-09-23, `openspec/changes/pgm-return`), not from grabs, so no grab
+> verb has to be found for it. §A still stands for **C-023**: that feed is per channel, and a live
+> source is not a channel. §B and §C are untouched.
+
 > **This document is a form, not a report.** Every table below is EMPTY on purpose. Fill it in at
 > the plant; the numbers, not this page, decide what the next session does.
 >
