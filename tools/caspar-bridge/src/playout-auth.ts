@@ -1,6 +1,7 @@
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify } from 'jose';
 import { z } from 'zod';
 import {
+  AUTH_STATION_NOT_SET_UP,
   AUTH_TOKEN_EXPIRED,
   AUTH_TOKEN_INVALID,
   AUTH_TOKEN_WRONG_STATION,
@@ -71,8 +72,15 @@ export interface VerifiedToken {
   readonly rawToken: string;
 }
 
-/** Either an accepted token or the sentence the console should show. */
-export type VerifyResult = { ok: true; token: VerifiedToken } | { ok: false; refusal: string };
+/**
+ * Either an accepted token or the sentence the console should show.
+ *
+ * `adopted` is set on exactly ONE result per bridge process: the sign-in that taught an
+ * address-configured station its issuer (`DESKTOP-APPS-01-A` A2). The caller persists it.
+ */
+export type VerifyResult =
+  | { ok: true; token: VerifiedToken; adopted?: string }
+  | { ok: false; refusal: string };
 
 /** How many seconds of clock skew the contract allows on `exp` / `nbf` / `iat`. */
 const CLOCK_TOLERANCE_SEC = 60;
@@ -120,6 +128,12 @@ export interface PlayoutAuthOptions {
   readonly fetchImpl?: typeof fetch;
   /** Injected in tests to drive expiry and the poll cadence. Defaults to `Date.now`. */
   readonly now?: () => number;
+  /**
+   * `DESKTOP-APPS-01-A` A2 — told, synchronously and once, the `iss` an address-configured
+   * station just adopted, so the bridge can persist it as `playout.issuer`. A throw here is
+   * reported and never refuses the sign-in that earned the adoption.
+   */
+  readonly onIssuerAdopted?: (issuer: string) => void;
 }
 
 /**
@@ -167,9 +181,18 @@ export class PlayoutAuth {
    * time it has seen anybody.
    */
   #accepted = new Map<string, number>();
+  /**
+   * 🔴 `DESKTOP-APPS-01-A` A2 — the issuer tokens are compared to. The configured one, or — for a
+   * station configured by its Playout ADDRESS — `null` until the first `station-admin` sign-in
+   * teaches it, and then that value for the life of the process (and, persisted, after it).
+   */
+  #issuer: string | null;
+  readonly #onIssuerAdopted: ((issuer: string) => void) | undefined;
 
   constructor(config: PlayoutAuthConfig, options: PlayoutAuthOptions = {}) {
     this.#config = config;
+    this.#issuer = config.issuer;
+    this.#onIssuerAdopted = options.onIssuerAdopted;
     this.#now = options.now ?? ((): number => Date.now());
     this.#fetch = options.fetchImpl ?? ((...args) => fetch(...args));
     this.#jwks = createRemoteJWKSet(new URL(config.jwksUrl), {
@@ -184,6 +207,11 @@ export class PlayoutAuth {
     return this.#pollCount;
   }
 
+  /** The issuer in force — `null` while an address-configured station awaits adoption (A2). */
+  get issuer(): string | null {
+    return this.#issuer;
+  }
+
   /**
    * Verify a compact JWT and reduce it to a principal, or to the sentence to show.
    *
@@ -195,9 +223,16 @@ export class PlayoutAuth {
    */
   async verify(token: string): Promise<VerifyResult> {
     let payload: Record<string, unknown>;
+    /*
+      🔴 `DESKTOP-APPS-01-A` A3 — with no issuer yet, `jose` checks the signature against the
+      ADDRESS's JWKS and everything else it always checks, but not `iss`. That is NOT "accept any
+      `iss`": the token below must still carry the audience AND hold `station-admin`, or it is
+      refused before anything is adopted or accepted.
+    */
+    const issuer = this.#issuer;
     try {
       const verified = await jwtVerify(token, this.#jwks, {
-        issuer: this.#config.issuer,
+        ...(issuer !== null ? { issuer } : {}),
         clockTolerance: CLOCK_TOLERANCE_SEC,
         algorithms: ['ES256'],
         currentDate: new Date(this.#now()),
@@ -244,7 +279,42 @@ export class PlayoutAuth {
     const name = normalizeActor(claims.data.name);
     if (name === '') return { ok: false, refusal: AUTH_TOKEN_INVALID };
 
+    /*
+      🔴 `DESKTOP-APPS-01-A` A2/A3 — **ADOPTION, and the only thing accepted before it.**
+
+      Read `#issuer` AGAIN rather than trusting the value from before the await: another sign-in
+      may have adopted while this one was verifying. From here to the assignment there is no
+      await, so two concurrent sign-ins cannot both adopt.
+
+        - still unset, and this token is a `station-admin` with a string `iss` → ADOPT it;
+        - still unset, and it is not → refused as "not set up yet", nothing adopted;
+        - set meanwhile → byte-equal or refused, exactly as a configured issuer is.
+    */
+    let adopted: string | undefined;
+    const current = this.#issuer;
+    const iss = payload['iss'];
+    if (current === null) {
+      if (!claims.data.roles.includes('station-admin')) {
+        return { ok: false, refusal: AUTH_STATION_NOT_SET_UP };
+      }
+      if (typeof iss !== 'string' || iss === '') return { ok: false, refusal: AUTH_TOKEN_INVALID };
+      this.#issuer = iss;
+      adopted = iss;
+      try {
+        this.#onIssuerAdopted?.(iss);
+      } catch (err) {
+        process.stderr.write(
+          `[caspar-bridge] ⚠ the adopted Playout issuer could not be saved: ` +
+            `${err instanceof Error ? err.message : String(err)} — it holds until this bridge ` +
+            `restarts, and the next station-admin sign-in after that adopts it again\n`,
+        );
+      }
+    } else if (issuer === null && iss !== current) {
+      return { ok: false, refusal: AUTH_TOKEN_WRONG_STATION };
+    }
+
     return {
+      ...(adopted !== undefined ? { adopted } : {}),
       ok: true,
       token: {
         principal: {

@@ -100,6 +100,7 @@ import {
   parseReservedLayersFlag,
   resolveCreateMissingConsumers,
   resolveLiveLayersPath,
+  writePlayoutAddress,
 } from '../dist/index.js';
 
 const args = parseArgs(process.argv.slice(2));
@@ -322,6 +323,12 @@ if (typeof args['create-missing-consumers'] === 'string') {
   );
   process.exit(1);
 }
+for (const flag of ['first-run', 'exit-on-stdin-close']) {
+  if (typeof args[flag] === 'string') {
+    console.error(`[caspar-bridge] --${flag} takes no value. Type it bare, or omit it.`);
+    process.exit(1);
+  }
+}
 const createMissingConsumers = resolveCreateMissingConsumers(
   args['create-missing-consumers'] === true ? true : undefined,
 );
@@ -381,11 +388,37 @@ const playoutConfigPath =
     ? args['playout-config-path']
     : defaultPlayoutConfigPath(stateHome);
 
+/*
+  🔴 `DESKTOP-APPS-01-A` — `--set-playout-address <url>`: a ONE-SHOT. Write the Playout target to
+  the playout config file and exit, binding nothing. This is how the desktop app changes the
+  Playout (its IPC command runs this, then restarts the bridge) — so the auth configuration is
+  written by the app on this machine and NEVER over the control socket. The whole `playout` group
+  is replaced, which clears an adopted issuer: the next station-admin sign-in adopts again.
+*/
+if (args['set-playout-address'] !== undefined) {
+  if (args['set-playout-address'] === true) {
+    console.error('[caspar-bridge] --set-playout-address needs a value (http://host:port).');
+    process.exit(1);
+  }
+  try {
+    const written = writePlayoutAddress(playoutConfigPath, args['set-playout-address']);
+    console.error(
+      `[caspar-bridge] Playout address set to ${written} in ${playoutConfigPath} - the issuer is ` +
+        'learned again from the next station-admin sign-in',
+    );
+    process.exit(0);
+  } catch (err) {
+    console.error(`[caspar-bridge] ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+}
+
 // A valueless flag is a hard boot error, never silently ignored — the same fail-closed
 // doctrine as `--reserved-layers`, and for a stronger reason: the operator believes the
 // station authenticates.
 for (const flag of [
   'auth',
+  'playout-address',
   'playout-issuer',
   'playout-jwks-url',
   'playout-token-url',
@@ -412,6 +445,8 @@ if (typeof args.auth === 'string' && args.auth !== 'off' && args.auth !== 'playo
 }
 const playoutFlags = {
   ...(typeof args.auth === 'string' ? { auth: args.auth } : {}),
+  // DESKTOP-APPS-01-A A1 — every endpoint derives from the address; the issuer is then compared.
+  ...(typeof args['playout-address'] === 'string' ? { address: args['playout-address'] } : {}),
   ...(typeof args['playout-issuer'] === 'string' ? { issuer: args['playout-issuer'] } : {}),
   ...(typeof args['playout-jwks-url'] === 'string' ? { jwksUrl: args['playout-jwks-url'] } : {}),
   ...(typeof args['playout-token-url'] === 'string' ? { tokenUrl: args['playout-token-url'] } : {}),
@@ -446,6 +481,11 @@ const bridgeOptions = {
   createMissingConsumers,
   playout: playoutFlags,
   playoutConfigPath,
+  /*
+    `DESKTOP-APPS-01` — an installed station that may still be in first-run. Takes no value; only
+    the desktop app passes it. Absent = every dev bridge, exactly as before.
+  */
+  ...(args['first-run'] === true ? { firstRun: true } : {}),
 };
 
 /*
@@ -490,6 +530,8 @@ if (consoleServer !== null && consoleDir !== undefined) {
     process.exit(1);
   }
   console.error(`[caspar-bridge] console on ${consoleServer.url} (from ${consoleDir})`);
+  // The connection check names the console's port among the station's own; read at call time.
+  bridgeOptions.consolePort = consoleServer.port;
 }
 
 /** Start the bridge and say, line by line, what it came up with. */
@@ -509,7 +551,9 @@ function describeBoot(handle) {
   console.error(
     handle.auth.mode === 'playout'
       ? `[caspar-bridge] auth: PLAYOUT — the control socket requires a token issued by ` +
-          `${handle.auth.playout.issuer} (aud ${handle.auth.playout.audience}); keys read from ` +
+          (handle.auth.playout.issuer ??
+            'the issuer the first station-admin sign-in adopts (none yet; any other sign-in is refused)') +
+          ` (aud ${handle.auth.playout.audience}); keys read from ` +
           `${handle.auth.playout.jwksUrl}; consoles sign in at ${handle.auth.playout.tokenUrl}`
       : '[caspar-bridge] auth: OFF (default) - the control socket has no principal and every ' +
           'connected client can drive this station; --auth playout requires a Playout-issued token',
@@ -665,6 +709,9 @@ function describeServeHostSource(source) {
  * reports what governs, every boot, in the terminal the bridge starts in.
  */
 function describeFixedBank({ bank, source }) {
+  if (bank === null && source === 'first-run') {
+    return `none declared yet (--first-run, no file at ${fixedLayersPath}) - a station admin picks the channel`;
+  }
   if (bank === null) return 'none declared (no --fixed-layers-path configured)';
   // BOTH halves, from the ONE enumeration and the ONE predicates — this used to
   // rebuild the operator range by hand and read the operator half's tick record

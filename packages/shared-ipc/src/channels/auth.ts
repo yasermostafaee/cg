@@ -247,6 +247,14 @@ export const AUTH_TOKEN_WRONG_STATION =
   'That sign-in is not for this station. Check which Playout the console signed in to.';
 /** Signature, `kid`, claim shape, or a revoked `jti` — anything the bridge could not vouch for. */
 export const AUTH_TOKEN_INVALID = 'That sign-in could not be verified.';
+/**
+ * 🔴 `DESKTOP-APPS-01-A` A3 — a station configured by its Playout ADDRESS has not yet learned the
+ * Playout's `iss`, and this token cannot teach it: only a `station-admin` sign-in adopts it. A
+ * FOURTH class beside the contract's three, because its remedy is different from all of them —
+ * not "sign in again" and not "check the Playout", but "the station admin signs in first".
+ */
+export const AUTH_STATION_NOT_SET_UP =
+  'This station is not set up yet. A station admin signs in first.';
 
 /**
  * What a console is told when auth is ON and it has no token to present — the bridge is up,

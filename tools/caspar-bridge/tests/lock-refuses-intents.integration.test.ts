@@ -286,6 +286,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'auth.state',
         'bridge.capabilities',
         'channelSettings.get',
+        // `DESKTOP-APPS-01` — reads: the unjoined catalogue, the connection check, the route address.
+        'channels.catalogue',
         // `R-062` gap 2 — the channel-discovery READ: a locked console must still name its channels.
         'channels.list',
         'connections.config',
@@ -302,6 +304,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'lock.state',
         'playoutLayers.state',
         'rehearse.state',
+        'setup.check',
+        'setup.route-address',
         'sources.assignments',
         'sources.config',
         // The client's own reconnect machinery, unreachable from any operator control.

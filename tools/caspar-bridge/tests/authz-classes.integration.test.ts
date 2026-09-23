@@ -135,7 +135,7 @@ describe('C-038 — the census: every route, classified', () => {
    * seventh route quietly joining this class is a privilege change that should have to be
    * argued for — so it reddens here, and the argument happens in review.
    */
-  it('exactly six routes are station-admin, and they are the configuration verbs', () => {
+  it('exactly seven routes are station-admin: the configuration verbs, and the unjoined catalogue', () => {
     const admin = [...routes().entries()]
       .filter(([, r]) => r.perm === 'station-admin')
       .map(([name]) => name)
@@ -143,6 +143,11 @@ describe('C-038 — the census: every route, classified', () => {
 
     expect(admin).toEqual([
       'channelSettings.set',
+      /*
+        `DESKTOP-APPS-01` §2E — the Playout's channels UNJOINED, host and all. A read, on the
+        station-admin rung because only setting a station up needs channels it does not yet drive.
+      */
+      'channels.catalogue',
       'connections.set-config',
       'delimiters.set',
       'fixedLayers.set-config',
@@ -193,6 +198,12 @@ describe('C-038 — the census: every route, classified', () => {
       'lock.state',
       'playoutLayers.state',
       'rehearse.state',
+      /*
+        `DESKTOP-APPS-01` §2F — the connection check and the route address. Probes that change
+        nothing: any signed-in principal may see why the station cannot reach its plant.
+      */
+      'setup.check',
+      'setup.route-address',
       'sources.assignments',
       'sources.config',
       'stack.snapshot',

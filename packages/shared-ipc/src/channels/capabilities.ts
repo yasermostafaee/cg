@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { defineChannel } from '../channel.js';
 import { AuthModeSchema, type AuthMode } from './auth.js';
+import { SetupPhaseSchema } from './setup.js';
 
 /**
  * 🔴 **`B-153` — WHAT THIS BRIDGE PROCESS CAN DO, asked at CONNECT, before the operator can
@@ -83,6 +84,13 @@ export const BridgeCapabilitiesChannel = defineChannel(
      * A string, not a number: the contract's own versions are `1` and `1.1`.
      */
     authContractVersion: z.string().optional(),
+    /**
+     * 🔴 `DESKTOP-APPS-01` — **WHERE THIS STATION IS IN FIRST-RUN**, or absent once it is set up
+     * (and always for a bridge that is not an installed station). Here, on the one channel an
+     * unauthenticated socket may ask, because the console must know it before anybody can sign
+     * in: in the `channel` phase the sign-in IS first-run's step 2.
+     */
+    setup: SetupPhaseSchema.optional(),
   }),
 );
 

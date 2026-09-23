@@ -59,13 +59,28 @@ export const DEFAULT_PLAYOUT_AUDIENCE = 'cg-control';
 /** The integration contract version this bridge implements — v1 plus D9. */
 export const PLAYOUT_CONTRACT_VERSION = '1.1';
 
+/** The JWKS path every Playout serves (D3), for a station configured by its ADDRESS. */
+const JWKS_PATH = '/.well-known/jwks.json';
+
 /** Everything the bridge needs to verify a token and everything the console needs to get one. */
 export interface PlayoutAuthConfig {
   /**
-   * 🔴 Compared to a token's `iss` **BYTE FOR BYTE**, and never derived from anything
-   * (ADR 0010 rule 1). The Playout's configured base URL, copied verbatim.
+   * 🔴 `DESKTOP-APPS-01-A` A1 — **THE PLAYOUT'S ADDRESS**, the one field an installed station's
+   * first-run asks for (`http://host:port`, no trailing slash). When present, EVERY endpoint
+   * below — `jwksUrl` included — derives from it, and the issuer is only ever COMPARED. `null`
+   * for a station configured the older way, by an explicit issuer whose endpoints derive from it.
    */
-  readonly issuer: string;
+  readonly address: string | null;
+  /**
+   * 🔴 Compared to a token's `iss` **BYTE FOR BYTE**, and never derived from anything
+   * (ADR 0010 rule 1).
+   *
+   * `null` ONLY for an ADDRESS-configured station that has not yet learned it: the first
+   * `station-admin` sign-in whose token verifies against the address's JWKS and carries the
+   * audience ADOPTS its `iss` (`DESKTOP-APPS-01-A` A2, ADR 0010's amendment). An unset issuer
+   * never means "accept any `iss`" — before adoption, only adoption is accepted (A3).
+   */
+  readonly issuer: string | null;
   /** D3 — the JWK Set. Fetched by the BRIDGE, server-side; never proxied for a browser. */
   readonly jwksUrl: string;
   /** D1 — where the BROWSER posts credentials. Advertised in `bridge.capabilities`. */
@@ -98,6 +113,7 @@ export const PlayoutFileSchema = z.object({
   auth: z.enum(['off', 'playout']).optional(),
   playout: z
     .object({
+      address: z.string().optional(),
       issuer: z.string().optional(),
       jwksUrl: z.string().optional(),
       tokenUrl: z.string().optional(),
@@ -113,6 +129,7 @@ export type PlayoutFile = z.infer<typeof PlayoutFileSchema>;
 /** The CLI half — every field a flag can set, all optional, all session overrides. */
 export interface PlayoutFlags {
   readonly auth?: AuthMode;
+  readonly address?: string;
   readonly issuer?: string;
   readonly jwksUrl?: string;
   readonly tokenUrl?: string;
@@ -208,6 +225,9 @@ export function resolvePlayoutSettings(
   const pick = (key: keyof PlayoutAuthConfig): string | undefined =>
     flags[key] ?? file?.playout?.[key];
 
+  const address = nonEmpty(pick('address'));
+  if (address !== undefined) return resolveByAddress(address, pick);
+
   const issuerRaw = pick('issuer');
   if (issuerRaw === undefined || issuerRaw.trim() === '') {
     throw new PlayoutConfigError(
@@ -259,6 +279,7 @@ export function resolvePlayoutSettings(
   return {
     mode: 'playout',
     playout: {
+      address: null,
       issuer,
       jwksUrl: requireAbsoluteUrl('jwksUrl', jwksRaw.trim()),
       tokenUrl: derived('tokenUrl'),
@@ -275,4 +296,121 @@ export function resolvePlayoutSettings(
       audience: nonEmpty(pick('audience')) ?? DEFAULT_PLAYOUT_AUDIENCE,
     },
   };
+}
+
+/**
+ * 🔴 `DESKTOP-APPS-01-A` A1 — **A STATION CONFIGURED BY THE PLAYOUT'S ADDRESS.**
+ *
+ * The client installs the Playout on its own addresses, and a Playout may sign with a fixed,
+ * address-free `iss` (proposed `urn:apasai:playout`) from which no URL can be derived. So here
+ * the ADDRESS is the one source of every endpoint — the JWKS included — through the contract's
+ * fixed paths, and the issuer is only ever compared:
+ *
+ *   - an issuer given explicitly (flag or file) is compared byte for byte, as always;
+ *   - an issuer that is absent is LEARNED from the first `station-admin` sign-in (A2) and
+ *     persisted with {@link persistAdoptedIssuer}. It is any non-empty string — a URN is fine —
+ *     because nothing is derived from it.
+ *
+ * An endpoint given explicitly still wins over its derived value, exactly as the issuer branch
+ * lets it.
+ */
+function resolveByAddress(
+  addressRaw: string,
+  pick: (key: keyof PlayoutAuthConfig) => string | undefined,
+): PlayoutSettings {
+  const derived = playoutEndpointsFor(addressRaw);
+  const endpoint = (key: keyof typeof CONTRACT_PATHS | 'jwksUrl'): string => {
+    const given = nonEmpty(pick(key));
+    return given !== undefined ? requireAbsoluteUrl(key, given) : derived[key];
+  };
+  return {
+    mode: 'playout',
+    playout: {
+      address: derived.address,
+      issuer: nonEmpty(pick('issuer')) ?? null,
+      jwksUrl: endpoint('jwksUrl'),
+      tokenUrl: endpoint('tokenUrl'),
+      refreshUrl: endpoint('refreshUrl'),
+      channelsUrl: endpoint('channelsUrl'),
+      revokedUrl: endpoint('revokedUrl'),
+      audience: nonEmpty(pick('audience')) ?? DEFAULT_PLAYOUT_AUDIENCE,
+    },
+  };
+}
+
+/** Every endpoint the contract fixes, for one Playout address. */
+export interface PlayoutEndpoints {
+  readonly address: string;
+  readonly jwksUrl: string;
+  readonly tokenUrl: string;
+  readonly refreshUrl: string;
+  readonly channelsUrl: string;
+  readonly revokedUrl: string;
+}
+
+/**
+ * `DESKTOP-APPS-01-A` A1 — **THE ONE DERIVATION of the contract's endpoints from a Playout
+ * address**: the address normalised (no trailing slash), then its fixed paths. The resolver above
+ * uses it for the configured address; the connection check uses it for a CANDIDATE address, so a
+ * check and the bridge it vouches for can never disagree about where the Playout is.
+ *
+ * Throws {@link PlayoutConfigError} for anything that is not an absolute http(s) URL.
+ */
+export function playoutEndpointsFor(addressRaw: string): PlayoutEndpoints {
+  const address = requireAbsoluteUrl('address', addressRaw.trim()).replace(/\/+$/, '');
+  return {
+    address,
+    jwksUrl: `${address}${JWKS_PATH}`,
+    tokenUrl: `${address}${CONTRACT_PATHS.tokenUrl}`,
+    refreshUrl: `${address}${CONTRACT_PATHS.refreshUrl}`,
+    channelsUrl: `${address}${CONTRACT_PATHS.channelsUrl}`,
+    revokedUrl: `${address}${CONTRACT_PATHS.revokedUrl}`,
+  };
+}
+
+/**
+ * 🔴 `DESKTOP-APPS-01-A` A2 — **PERSIST AN ADOPTED ISSUER as `playout.issuer`**, keeping every
+ * other key the file holds.
+ *
+ * Written only by the bridge, only on the adoption a verified `station-admin` token earned — never
+ * from anything a socket SENDS. After it, the value is an ordinary configured issuer: compared
+ * byte for byte (ADR 0010 rule 1), and never re-adopted. It is cleared only when the Playout
+ * ADDRESS is changed, which rewrites this file from outside the bridge (ADR 0011).
+ *
+ * Atomic (temp file + rename), so a crash mid-write leaves the old file, never a half one — a
+ * present-but-unusable playout file is a HARD boot failure.
+ */
+export function persistAdoptedIssuer(configPath: string, issuer: string): void {
+  const current = loadPlayoutFile(configPath) ?? {};
+  writePlayoutFile(configPath, {
+    ...current,
+    auth: current.auth ?? 'playout',
+    playout: { ...current.playout, issuer },
+  });
+}
+
+/**
+ * 🔴 `DESKTOP-APPS-01-A` — **THE PLAYOUT ADDRESS, as the desktop app writes it** (ADR 0011).
+ *
+ * The ONE writer of the Playout target, and it is not reachable over the control socket: the CLI
+ * runs it as a one-shot (`--set-playout-address`, then exits), and the desktop app runs that CLI
+ * from its own IPC command before restarting the bridge. So auth configuration stays out of the
+ * socket's reach exactly as this file's header requires.
+ *
+ * It replaces the WHOLE `playout` group: a new Playout keeps nothing of the old one. That is what
+ * clears an adopted issuer (A2) — the next `station-admin` sign-in adopts again — and with it any
+ * endpoint override that named the old machine. Returns the normalised address it wrote.
+ */
+export function writePlayoutAddress(configPath: string, addressRaw: string): string {
+  const { address } = playoutEndpointsFor(addressRaw);
+  writePlayoutFile(configPath, { auth: 'playout', playout: { address } });
+  return address;
+}
+
+/** Atomic (temp file + rename): a crash mid-write leaves the old file, never a half one. */
+function writePlayoutFile(configPath: string, value: PlayoutFile): void {
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  const tmp = `${configPath}.${String(process.pid)}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`);
+  fs.renameSync(tmp, configPath);
 }

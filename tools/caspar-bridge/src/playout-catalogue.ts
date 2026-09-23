@@ -66,6 +66,34 @@ export interface PlayoutCatalogueOptions {
    * option.
    */
   readonly tickMs?: number;
+  /**
+   * 🔴 `DESKTOP-APPS-01-A` A4 — the host of the configured Playout address. A row whose
+   * `casparHost` is loopback carries the ENGINE's view of itself — the engine runs on the
+   * Playout's machine — so it is rewritten to this host HERE, inside the one reader, and every
+   * consumer (first-run, `channels.list`'s join, the host rule) sees one value.
+   */
+  readonly playoutHost?: string | undefined;
+}
+
+/** `127.0.0.0/8`, `localhost`, `::1` — the engine naming its own machine. */
+export function isLoopbackCasparHost(host: string): boolean {
+  const h = host.trim().toLowerCase();
+  return (
+    h === 'localhost' || h === '::1' || h === '[::1]' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h)
+  );
+}
+
+/**
+ * A4 — a row as a CONSUMER must see it: a loopback `casparHost` becomes the Playout's host; any
+ * other passes through byte for byte. With no Playout host, or a Playout that is itself on
+ * loopback, nothing is rewritten — loopback already names that one machine.
+ */
+export function resolveCatalogueHost(
+  row: CatalogueRow,
+  playoutHost: string | undefined,
+): CatalogueRow {
+  if (playoutHost === undefined || isLoopbackCasparHost(playoutHost)) return row;
+  return isLoopbackCasparHost(row.casparHost) ? { ...row, casparHost: playoutHost } : row;
 }
 
 export class PlayoutCatalogue {
@@ -74,6 +102,7 @@ export class PlayoutCatalogue {
   readonly #fetch: typeof fetch;
   readonly #now: () => number;
   readonly #tickMs: number;
+  readonly #playoutHost: string | undefined;
 
   /** The last answer, or `null` — ABSENT. */
   #rows: readonly CatalogueRow[] | null = null;
@@ -90,6 +119,7 @@ export class PlayoutCatalogue {
     this.#fetch = options.fetchImpl ?? ((...args) => fetch(...args));
     this.#now = options.now ?? ((): number => Date.now());
     this.#tickMs = options.tickMs ?? CATALOGUE_TICK_MS;
+    this.#playoutHost = options.playoutHost;
   }
 
   /** The catalogue as last read, or `null` when ABSENT. Synchronous — nothing waits on the Playout. */
@@ -166,7 +196,7 @@ export class PlayoutCatalogue {
       const parsed = CatalogueBodySchema.safeParse(await res.json());
       if (!parsed.success) throw new Error('D4 answered a body that is not a catalogue');
       this.#etag = res.headers.get('etag');
-      this.#set(parsed.data.channels);
+      this.#set(parsed.data.channels.map((row) => resolveCatalogueHost(row, this.#playoutHost)));
     } catch {
       // Unreachable, refused, timed out, malformed: ABSENT. No alarm — rule 1.
       this.#etag = null;

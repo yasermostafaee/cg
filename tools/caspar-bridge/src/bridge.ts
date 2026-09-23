@@ -12,6 +12,12 @@ import {
   channelNotDeclaredRefusal,
   StationChannelsChangedChannel,
   StationChannelsListChannel,
+  ChannelsCatalogueChannel,
+  SetupCheckChannel,
+  SetupRouteAddressChannel,
+  type ConnectionCheckRequest,
+  type ConnectionCheckResult,
+  type SetupPhase,
   type StationChannels,
   type StationChannelSource,
   type PermissionClass,
@@ -157,6 +163,12 @@ import {
 } from './template-http-server.js';
 import { normalizeServeHost } from './serve-host-config.js';
 import { AuthSession } from './auth-session.js';
+import {
+  probeRoute,
+  realProbes,
+  runConnectionCheck,
+  type CheckProbes,
+} from './connection-check.js';
 import { PlayoutAuth, type PlayoutAuthOptions } from './playout-auth.js';
 import {
   PlayoutCatalogue,
@@ -166,8 +178,10 @@ import {
 import {
   AUTH_OFF,
   loadPlayoutFile,
+  persistAdoptedIssuer,
   PLAYOUT_CONTRACT_VERSION,
   resolvePlayoutSettings,
+  type PlayoutAuthConfig,
   type PlayoutFlags,
   type PlayoutSettings,
 } from './playout-config.js';
@@ -348,10 +362,28 @@ export interface BridgeOptions {
    */
   playoutConfigPath?: string;
   /**
+   * 🔴 `DESKTOP-APPS-01` — **THIS BRIDGE IS AN INSTALLED STATION THAT MAY STILL BE IN FIRST-RUN**
+   * (`--first-run`, which only the desktop app passes). Two things follow, and nothing else:
+   *
+   *   - `bridge.capabilities` advertises the first-run phase (`target` while no Playout is
+   *     configured, `channel` while no channel is declared), so the console shows first-run;
+   *   - an ABSENT fixed-bank file means NO bank rather than the built-in default, so the
+   *     `station-admin`'s first `fixedLayers.set-config` takes the existing "no bank yet" path and
+   *     DECLARES the channel. The built-in default is channel 1 — on a client's Playout, its
+   *     programme channel — and a station that has not chosen must not drive it.
+   *
+   * No gate, fence or refusal changes. Absent (every dev bridge, every test) = today exactly.
+   */
+  firstRun?: boolean;
+  /** `DESKTOP-APPS-01` — the console's port when the CLI serves it, so the check can name it. */
+  consolePort?: number;
+  /**
    * TEST-ONLY seam — clock and `fetch` for the Playout reads, so a suite can drive expiry
    * and the D9 cadence without sleeping for a minute.
    */
   playoutAuthOptions?: PlayoutAuthOptions;
+  /** TEST-ONLY seam — the connection check's probes (`realProbes()` by default). */
+  connectionCheckProbes?: CheckProbes;
   /**
    * TEST-ONLY seam — clock, `fetch` and tick period for the D4 catalogue read, so a suite can
    * drive the 30 s floor and a Playout outage without sleeping.
@@ -1212,11 +1244,24 @@ function defaultConnection(): ConnectionConfig {
 }
 
 /**
+ * `DESKTOP-APPS-01-A` A4 — the host of the configured Playout address, which is where a loopback
+ * `casparHost` actually lives. An issuer-configured station has no address; its D4 URL's host is
+ * the same machine. IPv6 brackets are stripped so the value compares with a D4 host.
+ */
+export function playoutHostOf(playout: PlayoutAuthConfig): string | undefined {
+  try {
+    return new URL(playout.address ?? playout.channelsUrl).hostname.replace(/^\[|\]$/g, '');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Where the fixed bank in force came from — named in the CLI's boot line and,
  * for the default, in a boot refusal. `none` is the embedder case: no explicit
  * bank and no path, so no bank at all.
  */
-export type FixedBankSource = 'explicit' | 'file' | 'built-in default' | 'none';
+export type FixedBankSource = 'explicit' | 'file' | 'built-in default' | 'first-run' | 'none';
 
 /**
  * THE fixed-bank boot precedence, in one place and in this order:
@@ -1245,9 +1290,10 @@ function resolveFixedBank(options: BridgeOptions): {
   if (options.fixedLayers !== undefined) return { bank: options.fixedLayers, source: 'explicit' };
   if (options.fixedLayersPath === undefined) return { bank: null, source: 'none' };
   const persisted = loadFixedLayerBank(options.fixedLayersPath);
-  return persisted !== null
-    ? { bank: persisted, source: 'file' }
-    : { bank: defaultFixedLayerBank(), source: 'built-in default' };
+  if (persisted !== null) return { bank: persisted, source: 'file' };
+  // `DESKTOP-APPS-01` — an installed station that has not picked its channel declares NONE.
+  if (options.firstRun === true) return { bank: null, source: 'first-run' };
+  return { bank: defaultFixedLayerBank(), source: 'built-in default' };
 }
 
 /**
@@ -1313,8 +1359,32 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       process.stderr.write(`${message}
 `),
   );
+  const playoutConfigPath = options.playoutConfigPath;
   const playoutAuth =
-    auth.playout === null ? null : new PlayoutAuth(auth.playout, options.playoutAuthOptions ?? {});
+    auth.playout === null
+      ? null
+      : new PlayoutAuth(auth.playout, {
+          ...(options.playoutAuthOptions ?? {}),
+          /*
+            🔴 `DESKTOP-APPS-01-A` A2 — an address-configured station LEARNS its issuer from the first
+            `station-admin` sign-in, and keeps it: persisted as `playout.issuer`, after which it is an
+            ordinary configured issuer. Written from the verified token, never from a socket's payload.
+          */
+          onIssuerAdopted: (issuer) => {
+            if (playoutConfigPath === undefined) {
+              process.stderr.write(
+                `[caspar-bridge] playout issuer ADOPTED from the first station-admin sign-in: ${issuer} ` +
+                  `- held in memory only (no --playout-config-path), so a restart adopts again\n`,
+              );
+              return;
+            }
+            persistAdoptedIssuer(playoutConfigPath, issuer);
+            process.stderr.write(
+              `[caspar-bridge] playout issuer ADOPTED from the first station-admin sign-in: ${issuer} ` +
+                `- saved to ${playoutConfigPath}\n`,
+            );
+          },
+        });
   /*
     🔴 `C-039` — THE PLAYOUT'S CHANNEL CATALOGUE (D4). Built only with auth ON: with auth OFF there
     is no principal, so no bearer, so no read — and the discovery answer is exactly the two sources
@@ -1325,11 +1395,11 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const playoutCatalogue =
     playoutAuth === null || auth.playout === null
       ? null
-      : new PlayoutCatalogue(
-          auth.playout.channelsUrl,
-          () => playoutAuth.usableBearer(),
-          options.playoutCatalogueOptions ?? {},
-        );
+      : new PlayoutCatalogue(auth.playout.channelsUrl, () => playoutAuth.usableBearer(), {
+          ...(options.playoutCatalogueOptions ?? {}),
+          // `DESKTOP-APPS-01-A` A4 — a loopback `casparHost` names the Playout's own machine.
+          playoutHost: playoutHostOf(auth.playout),
+        });
   playoutCatalogue?.start();
   // R-010 boot precedence: explicit connection (CLI flags) > persisted file >
   // the single-server default. Flags are session overrides — they win without
@@ -1466,7 +1536,39 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     });
   }
 
+  /*
+    `DESKTOP-APPS-01` — first-run's phase, read per call: the channel is declared LIVE through
+    `fixedLayers.set-config`, and the phase must end the moment it is.
+  */
+  const setupPhase = (): SetupPhase | null => {
+    if (options.firstRun !== true) return null;
+    if (auth.mode === 'off') return 'target';
+    return runtime.fixedLayersConfig() === null ? 'channel' : null;
+  };
+  // The control port is known only once it has bound; the check reads it at call time.
+  const bound = { port: requestedPort };
+  const connectionCheck = (req: ConnectionCheckRequest): Promise<ConnectionCheckResult> => {
+    const ports = {
+      console: options.consolePort ?? null,
+      control: bound.port,
+      templates: runtime.templateServe?.port ?? 0,
+      osc: runtime.config().servers.A.oscPort,
+    };
+    const probes =
+      options.connectionCheckProbes ??
+      realProbes([
+        { proto: 'tcp', port: ports.control },
+        { proto: 'tcp', port: ports.templates },
+        { proto: 'udp', port: ports.osc },
+        ...(ports.console !== null ? [{ proto: 'tcp' as const, port: ports.console }] : []),
+      ]);
+    return runConnectionCheck(req, probes, { ports });
+  };
+
   const routes = buildRoutes(runtime, {
+    setupPhase,
+    catalogueRows: () => playoutCatalogue?.rows() ?? null,
+    connectionCheck,
     ...(options.persistPath !== undefined ? { persistPath: options.persistPath } : {}),
     ...(options.fixedLayersPath !== undefined ? { fixedLayersPath: options.fixedLayersPath } : {}),
     ...(options.sourceCatalogPath !== undefined
@@ -1501,6 +1603,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
 
   const address = wss.address();
   const port = typeof address === 'object' && address !== null ? address.port : requestedPort;
+  bound.port = port;
 
   /*
     🔴 `C-037` / ADR 0010 rule 11 — **AN UNAUTHENTICATED CONTROL SOCKET THAT IS NOT ON
@@ -2307,6 +2410,17 @@ export function buildRoutes(
      * auth-OFF answer with no catalogue — what a bridge built with no Playout link is.
      */
     stationChannels?: (session: AuthSession | null) => StationChannels;
+    /**
+     * `DESKTOP-APPS-01` — where this station is in first-run, read per call (the bank is declared
+     * live). Defaults to `null`: a bridge not started as an installed station is never in one.
+     */
+    setupPhase?: () => SetupPhase | null;
+    /** `DESKTOP-APPS-01` — the one D4 reader's rows as held (A4 applied); `null` when absent. */
+    catalogueRows?: () => readonly CatalogueRow[] | null;
+    /** `DESKTOP-APPS-01` §2F — the connection check, bound to this station's own ports. */
+    connectionCheck?: (req: ConnectionCheckRequest) => Promise<ConnectionCheckResult>;
+    /** `DESKTOP-APPS-01` §2E — this machine's address on the route to a host. */
+    routeAddress?: (host: string) => Promise<string | null>;
   } = {},
 ): Map<string, Route> {
   // NAMED, not positional. Four optional string paths in a row is a signature
@@ -2320,6 +2434,23 @@ export function buildRoutes(
     paths.stationChannels ??
     ((session: AuthSession | null): StationChannels =>
       stationChannelsFor(session, 'off', 'off', b, null));
+  const setupPhase = paths.setupPhase ?? ((): SetupPhase | null => null);
+  const catalogueRows = paths.catalogueRows ?? ((): readonly CatalogueRow[] | null => null);
+  const connectionCheck =
+    paths.connectionCheck ??
+    ((req: ConnectionCheckRequest): Promise<ConnectionCheckResult> =>
+      runConnectionCheck(req, realProbes(), {
+        ports: {
+          console: null,
+          control: DEFAULT_BRIDGE_PORT,
+          templates: 0,
+          osc: b.config().servers.A.oscPort,
+        },
+      }));
+  const routeAddress =
+    paths.routeAddress ??
+    (async (host: string): Promise<string | null> =>
+      (await probeRoute(host).catch(() => null))?.address ?? null);
   /*
     `B-229` — `lock` is the THIRD ARGUMENT AND IT IS REQUIRED. A new channel cannot be
     routed without classifying it, which is what keeps "the lock refuses everything"
@@ -2687,6 +2818,43 @@ export function buildRoutes(
     */
     route(StationChannelsListChannel, 'read', 'read', () => stationChannels(currentAuthSession())),
 
+    /*
+      🔴 `DESKTOP-APPS-01` §2E step 3 — THE PLAYOUT'S CHANNELS, UNJOINED, IN THE ASKER'S GRANT. The
+      same rows the one D4 reader holds — `usableBearer`, the 30 s floor, `ETag`, and A4's loopback
+      rule all already applied there — filtered by `grantsChannel` against each row's OWN host.
+      `station-admin`, because only first-run and the station's own setup need a channel this
+      station does not yet drive. A read: the choice itself goes through `fixedLayers.set-config`.
+    */
+    route(ChannelsCatalogueChannel, 'read', 'station-admin', () => {
+      const rows = catalogueRows();
+      if (rows === null) return { rows: null };
+      const principal = currentAuthSession()?.token?.principal ?? null;
+      return {
+        rows: rows
+          .filter(
+            (r) =>
+              principal !== null &&
+              grantsChannel(principal.channels, [r.casparHost], r.casparChannel),
+          )
+          .map(({ id, name, casparHost, casparChannel }) => ({
+            id,
+            name,
+            casparHost,
+            casparChannel,
+          })),
+      };
+    }),
+
+    /*
+      `DESKTOP-APPS-01` §2F — the connection check and the route address. Reads: they probe and
+      report and change nothing, so `read` on both axes — open with auth OFF (first-run's `target`
+      phase) and to any signed-in principal, never to an unauthenticated socket.
+    */
+    route(SetupCheckChannel, 'read', 'read', (r: ConnectionCheckRequest) => connectionCheck(r)),
+    route(SetupRouteAddressChannel, 'read', 'read', async (r: { host: string }) => ({
+      address: await routeAddress(r.host),
+    })),
+
     // R-030 — the per-channel output raster, bridge-owned for the same reasons
     // the template catalogue is: several browsers must not disagree about where
     // graphics land, and it has to survive a bridge restart.
@@ -2768,6 +2936,11 @@ export function buildRoutes(
           authContractVersion: PLAYOUT_CONTRACT_VERSION,
         }
       : {}),
+    // `DESKTOP-APPS-01` — absent unless this is an installed station still in first-run.
+    ...((): { setup?: SetupPhase } => {
+      const phase = setupPhase();
+      return phase === null ? {} : { setup: phase };
+    })(),
   }));
   routes.set(capabilities.channel.name, capabilities);
   return routes;

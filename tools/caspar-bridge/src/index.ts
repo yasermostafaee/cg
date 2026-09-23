@@ -12,10 +12,26 @@ export { CHANNEL_DECLARING_ROUTES, stationChannelsFor, stationRefusal } from './
 export {
   CATALOGUE_POLL_MS,
   CATALOGUE_TICK_MS,
+  isLoopbackCasparHost,
   PlayoutCatalogue,
+  resolveCatalogueHost,
   type CatalogueRow,
   type PlayoutCatalogueOptions,
 } from './playout-catalogue.js';
+// `DESKTOP-APPS-01` §2F — the connection check, its probes, and the Playout host (A4).
+export {
+  AMCP_PROBE_TIMEOUT_MS,
+  probeAmcp,
+  probeRoute,
+  realProbes,
+  runConnectionCheck,
+  type AmcpOutcome,
+  type CheckProbes,
+  type HttpAnswer,
+  type PortHolder,
+  type StationPorts,
+} from './connection-check.js';
+export { playoutHostOf } from './bridge.js';
 export type { AuthGateState, BridgeHandle, BridgeOptions } from './bridge.js';
 // `C-037` — the Playout link: its config precedence (CLI > file > default), the boot failure
 // that names a missing key, and the verifier. The CLI resolves the default file path through
@@ -29,10 +45,14 @@ export {
   PlayoutFileSchema,
   defaultPlayoutConfigPath,
   loadPlayoutFile,
+  persistAdoptedIssuer,
+  playoutEndpointsFor,
   resolvePlayoutSettings,
+  writePlayoutAddress,
 } from './playout-config.js';
 export type {
   PlayoutAuthConfig,
+  PlayoutEndpoints,
   PlayoutFile,
   PlayoutFlags,
   PlayoutSettings,

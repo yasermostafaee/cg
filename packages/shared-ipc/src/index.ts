@@ -48,6 +48,8 @@ export type {
 export * from './channels/auth.js';
 // `CHANNEL-AUTHORITY-01` — which channels this station writes to, and the refusal for the rest.
 export * from './channels/stationChannels.js';
+// `DESKTOP-APPS-01` — first-run: the phase, the connection check, the unjoined catalogue.
+export * from './channels/setup.js';
 export * from './channels/capabilities.js';
 export * from './channels/common.js';
 export * from './channels/stack.js';
