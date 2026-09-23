@@ -139,12 +139,32 @@ jobs:
           path: installers
           merge-multiple: true
 
-      - name: Install, launch and drive both apps
+      - name: Install CG Control (elevated)
         shell: pwsh
         run: |
           $control = (Get-ChildItem installers -Filter 'CG Control_*-setup.exe').FullName
+          node apps/runtime/tests/desktop/installer-smoke.mjs --phase install --control "$control" --out smoke
+
+      # WebView2 ignores WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS in an elevated process (wry#1782),
+      # and the runner is elevated — so the apps are driven at medium integrity, as an operator
+      # runs them. gsudo is Tauri's own recipe for this (tauri-apps/tauri test-api-e2e.yml); the
+      # workspace is opened up so the de-elevated process can write its evidence.
+      - name: Install CG Designer, launch and drive both apps (unelevated)
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: |
+          winget install --id gerardog.gsudo --exact --accept-source-agreements --accept-package-agreements --disable-interactivity
+          $env:Path += ';' + [Environment]::GetEnvironmentVariable('Path', 'Machine') + ';' + [Environment]::GetEnvironmentVariable('Path', 'User')
+          $gsudo = (Get-Command gsudo -ErrorAction Stop).Source
+          icacls "$env:GITHUB_WORKSPACE" /grant "Everyone:(OI)(CI)F" /T /Q | Out-Null
           $designer = (Get-ChildItem installers -Filter 'CG Designer_*-setup.exe').FullName
-          node apps/runtime/tests/desktop/installer-smoke.mjs --control "$control" --designer "$designer" --out smoke
+          & $gsudo --integrity Medium node apps/runtime/tests/desktop/installer-smoke.mjs --phase drive --designer "$designer" --out smoke
+          exit $LASTEXITCODE
+
+      - name: Uninstall CG Control (elevated), and sum every phase
+        if: ${{ !cancelled() }}
+        shell: pwsh
+        run: node apps/runtime/tests/desktop/installer-smoke.mjs --phase uninstall --out smoke
 
       - name: Upload the smoke evidence
         if: ${{ !cancelled() }}

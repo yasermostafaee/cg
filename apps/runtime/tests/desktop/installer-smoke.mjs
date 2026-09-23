@@ -14,7 +14,18 @@
  *
  * Every absence below is paired with the positive control that makes it mean something.
  *
- * Usage: node installer-smoke.mjs --control <setup.exe> --designer <setup.exe> --out <dir>
+ * THREE PHASES, because the runner is elevated and an operator is not. WebView2 ignores
+ * `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` in an elevated process (wry#1782; measured on runs
+ * 35856634409 and 35859184149 — both apps' WebView2 running, neither DevTools port open), so the
+ * apps are driven at MEDIUM integrity, as an operator runs them, and only what needs admin runs
+ * elevated:
+ *   install   (elevated) — CG Control's per-machine install, its files and firewall rules
+ *   drive     (medium)   — CG Designer's per-user install, then both apps launched and driven
+ *   uninstall (elevated) — CG Control's uninstall, then every phase's results summed
+ * A phase that never ran leaves no results file, and the summary counts that as a failure.
+ *
+ * Usage: node installer-smoke.mjs --phase <install|drive|uninstall> --out <dir>
+ *          [--control <setup.exe>] [--designer <setup.exe>]
  */
 /* global process, fetch, WebSocket, AbortSignal, Buffer, setTimeout */
 // The page probes below run INSIDE the installed apps (serialised through CDP), not in Node.
@@ -88,24 +99,17 @@ function pidsOf(image) {
     .filter((l) => l.toLowerCase().startsWith(`"${image.toLowerCase()}"`))
     .map((l) => Number(l.split(',')[1]?.replace(/"/g, '')));
 }
+/** This process's mandatory integrity level, read from its own token: `High` or `Medium`. */
+function integrityLevel() {
+  const groups = run('whoami', ['/groups', '/fo', 'csv', '/nh']);
+  return /Mandatory Label\\(\w+) Mandatory Level/.exec(groups)?.[1] ?? 'unknown';
+}
+/**
+ * Launch an app the way an operator does, with DevTools opened by the environment variable —
+ * which WebView2 honours only in an unelevated process, hence the `drive` phase's integrity check.
+ * Test instrumentation only: the installed app is untouched.
+ */
 function launch(exe, cdpPort) {
-  /*
-    WebView2's per-app policy for extra browser arguments, keyed by the executable's name. The
-    environment variable alone was measured to be overridden by the arguments Tauri sets itself
-    (run 35856634409: both apps' DevTools ports stayed closed while their WebView2 was running).
-    Test instrumentation only: the installed app is untouched.
-  */
-  request('reg', [
-    'add',
-    'HKCU\\Software\\Policies\\Microsoft\\Edge\\WebView2\\AdditionalBrowserArguments',
-    '/v',
-    path.basename(exe),
-    '/t',
-    'REG_SZ',
-    '/d',
-    `--remote-debugging-port=${cdpPort}`,
-    '/f',
-  ]);
   const child = spawn(exe, [], {
     detached: true,
     stdio: 'ignore',
@@ -149,6 +153,18 @@ async function diagnose(tag, cdpPort) {
     'msedgewebview2.exe',
   ]) {
     lines.push(`${image}: ${String(processCount(image))} running`);
+  }
+  lines.push(`this process: ${integrityLevel()} integrity`);
+  try {
+    // Whether the DevTools flag reached WebView2's browser process at all.
+    const flagged = run('powershell', [
+      '-NoProfile',
+      '-Command',
+      '(Get-CimInstance Win32_Process -Filter "Name=\'msedgewebview2.exe\'" | Where-Object { $_.CommandLine -notmatch \'--type=\' } | ForEach-Object { $_.CommandLine }) -join "`n"',
+    ]);
+    lines.push(`WebView2 browser process: ${flagged.trim().slice(0, 1200) || 'none'}`);
+  } catch (err) {
+    lines.push(`WebView2 browser process: unread (${err instanceof Error ? err.message : ''})`);
   }
   const devtools = await fetch(`http://127.0.0.1:${String(cdpPort)}/json/list`, {
     signal: AbortSignal.timeout(2000),
@@ -331,7 +347,13 @@ async function ffmpegProbe() {
 // ── CG Designer ──────────────────────────────────────────────────────────────
 
 async function designer() {
-  run(args.designer, ['/S']);
+  // Installed from THIS phase's medium-integrity process: "without admin" is exercised, not read.
+  try {
+    run(args.designer, ['/S']);
+  } catch (err) {
+    check('CG Designer installs without admin', false, err instanceof Error ? err.message : '');
+    return;
+  }
   const candidates = [
     path.join(process.env.LOCALAPPDATA ?? '', 'CG Designer', 'cg-designer.exe'),
     path.join(process.env.LOCALAPPDATA ?? '', 'Programs', 'CG Designer', 'cg-designer.exe'),
@@ -386,7 +408,7 @@ async function designer() {
 
 // ── CG Control ───────────────────────────────────────────────────────────────
 
-async function control() {
+function controlInstall() {
   run(args.control, ['/S']);
   for (const file of [
     CONTROL_EXE,
@@ -408,7 +430,9 @@ async function control() {
         text.toLowerCase().includes(SIDECAR_EXE.toLowerCase()),
     );
   }
+}
 
+async function controlDrive() {
   // Start → the bridge is the INSTALLED sidecar, and the window loads the console from it.
   launch(CONTROL_EXE, 9230);
   const h = await until('the bridge to answer on 5174', health, 90_000).catch(() => null);
@@ -537,8 +561,10 @@ async function control() {
     'killing CG Control still stops the bridge — its lifeline closed',
     processCount('cg-bridge.exe') === 0,
   );
+}
 
-  // Uninstall removes exactly the rules the install added (their presence above is the control).
+async function controlUninstall() {
+  // Uninstall removes exactly the rules the install added (their presence is the install phase's).
   run(path.join(CONTROL_DIR, 'uninstall.exe'), ['/S']);
   await until('the uninstaller to finish', () => !fs.existsSync(CONTROL_EXE), 60_000).catch(
     () => undefined,
@@ -549,20 +575,47 @@ async function control() {
   );
 }
 
-try {
-  await designer();
-} catch (err) {
-  check(
-    'CG Designer smoke ran to the end',
-    false,
-    err instanceof Error ? err.message : String(err),
-  );
+const PHASES = ['install', 'drive', 'uninstall'];
+const phase = args.phase;
+if (!PHASES.includes(phase)) throw new Error(`--phase must be one of ${PHASES.join(', ')}`);
+
+async function step(name, fn) {
+  try {
+    await fn();
+  } catch (err) {
+    check(`${name} ran to the end`, false, err instanceof Error ? err.message : String(err));
+  }
 }
-try {
-  await control();
-} catch (err) {
-  check('CG Control smoke ran to the end', false, err instanceof Error ? err.message : String(err));
+
+const level = integrityLevel();
+if (phase === 'install') {
+  // The control for the drive phase's reading: the same instrument must read High here.
+  check('the install phase runs elevated (control)', level === 'High', level);
+  await step('CG Control install', controlInstall);
+} else if (phase === 'drive') {
+  check('the apps are driven unelevated, as an operator runs them', level === 'Medium', level);
+  await step('CG Designer smoke', designer);
+  await step('CG Control smoke', controlDrive);
+} else {
+  await step('CG Control uninstall', controlUninstall);
 }
-fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify(results, null, 2));
-process.stdout.write(`\n${results.filter((r) => r.ok).length}/${results.length} checks passed\n`);
+fs.writeFileSync(path.join(out, `results-${phase}.json`), JSON.stringify(results, null, 2));
+
+if (phase === 'uninstall') {
+  const all = PHASES.flatMap((p) => {
+    const file = path.join(out, `results-${p}.json`);
+    return fs.existsSync(file)
+      ? JSON.parse(fs.readFileSync(file, 'utf8'))
+      : [{ name: `the ${p} phase ran`, ok: false, detail: 'no results file' }];
+  });
+  fs.writeFileSync(path.join(out, 'results.json'), JSON.stringify(all, null, 2));
+  process.stdout.write('\n');
+  for (const r of all) {
+    process.stdout.write(
+      `${r.ok ? 'PASS' : 'FAIL'}  ${r.name}${r.detail === '' ? '' : `  — ${r.detail}`}\n`,
+    );
+  }
+  process.stdout.write(`\n${all.filter((r) => r.ok).length}/${all.length} checks passed\n`);
+  process.exit(all.every((r) => r.ok) ? 0 : 1);
+}
 process.exit(failed ? 1 : 0);
