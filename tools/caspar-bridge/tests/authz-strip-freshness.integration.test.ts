@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { AuthStateChangedChannel, type AuthState } from '@cg/shared-ipc';
+import {
+  AuthStateChangedChannel,
+  defaultFixedLayerBank,
+  type AuthState,
+  type FixedLayerBank,
+} from '@cg/shared-ipc';
 import type { BridgeHandle } from '../src/index.js';
 import { openClient, startAuthedBridge } from './support/auth-harness.js';
 import type { FakePlayout } from './support/fake-playout.js';
@@ -27,6 +32,19 @@ import type { FakePlayout } from './support/fake-playout.js';
  * 🔴 Nothing here reaches a real CasparCG: the harness points AMCP at `127.0.0.1:1`, which
  * nothing answers, and the fake Playout generates its ES256 key in memory.
  */
+
+/** The bank first-run declares (`firstRunStation.ts`): the default bands, EVERY row shown. */
+function firstRunBank(channel: number): FixedLayerBank {
+  const base = defaultFixedLayerBank();
+  const shown = (v: Record<string, boolean> | undefined): Record<string, boolean> =>
+    Object.fromEntries(Object.keys(v ?? {}).map((layer) => [layer, true]));
+  return {
+    ...base,
+    channel,
+    visibility: shown(base.visibility),
+    low: { ...base.low, visibility: shown(base.low.visibility) },
+  };
+}
 
 let handle: BridgeHandle | null = null;
 let playout: FakePlayout | null = null;
@@ -144,6 +162,80 @@ describe('§3(a) — the strip is told when the config moves under it', () => {
       authPushes(operator.frames).at(-1)?.permittedChannels,
       'a harmless config change took the channel away',
     ).toEqual([1]);
+  });
+
+  /**
+   * 🔴 `DESKTOP-APPS-01-D` i — **AND THE STRIP IS TOLD WHEN THE BANK MOVES UNDER IT.**
+   *
+   * The owner's first-run on channel 2, measured on the installed build: first-run writes the
+   * connection and then the bank, the one push the console got carried the bank-less answer
+   * (channel 1), and the channel-2 tab read `· READ ONLY` with no controls until a reload. The
+   * station-admin below holds both channels, as the real `cg-admin` does, so only the DECLARED
+   * channel decides what is permitted — which is the input the push used to ignore.
+   */
+  it('first-run: declaring channel 2 pushes channel 2 to the admin who signed in before it', async () => {
+    const started = await startAuthedBridge();
+    handle = started.handle;
+    playout = started.playout;
+
+    const admin = await openClient(started.handle);
+    const accepted = await admin.authenticate(
+      'a-admin',
+      (
+        await started.playout.issueToken({
+          user: 'admin',
+          cgChannels: [
+            { host: '127.0.0.1', channel: 1 },
+            { host: '127.0.0.1', channel: 2 },
+          ],
+        })
+      ).token,
+    );
+    // 🔴 THE POSITIVE CONTROL: before the declaration, the bank-less answer is channel 1.
+    expect((accepted.payload as AuthState).permittedChannels).toEqual([1]);
+
+    const declared = await admin.ask('set', 'fixedLayers.set-config', firstRunBank(2));
+    expect(declared.error, 'the admin could not declare channel 2').toBeUndefined();
+    expect(declared.payload).toEqual({ ok: true });
+
+    await expect
+      .poll(() => authPushes(admin.frames).at(-1)?.permittedChannels, { timeout: 4000 })
+      .toEqual([2]);
+  });
+
+  it('control — an operator granted channel 1 only is told the declared channel is not theirs', async () => {
+    const started = await startAuthedBridge();
+    handle = started.handle;
+    playout = started.playout;
+
+    const admin = await openClient(started.handle);
+    await admin.authenticate(
+      'a-admin',
+      (
+        await started.playout.issueToken({
+          user: 'admin',
+          cgChannels: [
+            { host: '127.0.0.1', channel: 1 },
+            { host: '127.0.0.1', channel: 2 },
+          ],
+        })
+      ).token,
+    );
+    const operator = await openClient(started.handle);
+    const accepted = await operator.authenticate(
+      'a-op',
+      (await started.playout.issueToken({ user: 'operator' })).token,
+    );
+    expect((accepted.payload as AuthState).permittedChannels).toEqual([1]);
+
+    expect((await admin.ask('set', 'fixedLayers.set-config', firstRunBank(2))).payload).toEqual({
+      ok: true,
+    });
+
+    await expect
+      .poll(() => authPushes(operator.frames).length, { timeout: 4000 })
+      .toBeGreaterThan(0);
+    expect(authPushes(operator.frames).at(-1)?.permittedChannels).toEqual([]);
   });
 
   /**

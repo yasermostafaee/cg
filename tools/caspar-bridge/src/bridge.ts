@@ -2367,6 +2367,23 @@ export function wirePublishes(
     if (parsed.success)
       send(socket, { type: 'publish', channel: channel.name, payload: parsed.data });
   };
+  const pushAuthState = (): void => {
+    if (authState === null) return;
+    const next = authState();
+    /*
+      🔴 **AUTH OFF PUSHES NOTHING HERE.** A station that does not federate identity must
+      gain no traffic it did not have — "byte-identical" is a claim about the wire, not only
+      about behaviour, and a spec measured this one: the first spelling pushed
+      `{ mode: 'off', permittedChannels: [] }` on every config change, to every console, for
+      a station with no principal to scope to.
+
+      ⚠ The check is on the MODE rather than on the list being empty. An empty list is a real
+      answer for a signed-in viewer, and suppressing that would leave a strip asserting
+      channels the viewer had just lost.
+    */
+    if (next.mode === 'off') return;
+    push(AuthStateChangedChannel, next);
+  };
   return [
     backing.stackChanged.subscribe((s) => push(StackStateChangedChannel, s)),
     backing.healthChanged.subscribe((h) => push(ConnectionsHealthChangedChannel, h)),
@@ -2385,23 +2402,18 @@ export function wirePublishes(
       the verdict that can move without the principal changing — a token change already
       re-pushes through `#setPrincipal` on the console side.
     */
-    backing.configChanged.subscribe(() => {
-      if (authState === null) return;
-      const next = authState();
-      /*
-        🔴 **AUTH OFF PUSHES NOTHING HERE.** A station that does not federate identity must
-        gain no traffic it did not have — "byte-identical" is a claim about the wire, not only
-        about behaviour, and a spec measured this one: the first spelling pushed
-        `{ mode: 'off', permittedChannels: [] }` on every config change, to every console, for
-        a station with no principal to scope to.
+    backing.configChanged.subscribe(pushAuthState),
+    /*
+      🔴 `DESKTOP-APPS-01-D` i — **AND THEY FOLLOW THE BANK, the verdict's OTHER input.**
 
-        ⚠ The check is on the MODE rather than on the list being empty. An empty list is a real
-        answer for a signed-in viewer, and suppressing that would leave a strip asserting
-        channels the viewer had just lost.
-      */
-      if (next.mode === 'off') return;
-      push(AuthStateChangedChannel, next);
-    }),
+      `authStateFor` composes the grants with `runtime.declaredChannels()` as well as with the
+      server list, and the note above named only the server list. First-run writes the
+      connection and THEN the bank, so the one push this socket got carried the bank-less
+      answer (channel 1) and the declaration of channel 2 re-pushed nothing: the console showed
+      `کانال دوم (تست CG) · READ ONLY` with no controls until a reload re-pulled `auth.state`.
+      Both inputs of the one composition re-push it; there is no third.
+    */
+    backing.fixedConfigChanged.subscribe(pushAuthState),
     backing.orphansChanged.subscribe((o) => push(LayersOrphansChangedChannel, o)),
     backing.ownedOccupancyChanged.subscribe((w) => push(LayersOwnedOccupancyChangedChannel, w)),
     // B-225 — air was emptied under us (or the notice was acted on / dismissed).

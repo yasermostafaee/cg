@@ -648,6 +648,8 @@ class FakePlayoutServer implements FakePlayout {
   #sealed = false;
   readonly #sealOnLoopback: boolean;
   readonly #listenHost: string;
+  /** `DESKTOP-APPS-01-D` i — a per-user grant override, for D1, D2 and minted tokens alike. */
+  readonly #grants: Partial<Record<FakeUserKey, FakeCgChannels>>;
   #catalogue: readonly FakeCatalogueRow[] = FAKE_CATALOGUE;
   /** Bumped by every catalogue change, and spelled into D4's `ETag` — D9's revision rule. */
   #catalogueRevision = 0;
@@ -687,6 +689,7 @@ class FakePlayoutServer implements FakePlayout {
   ) {
     this.#sealOnLoopback = options.sealOnLoopback ?? true;
     this.#listenHost = options.listenHost ?? '127.0.0.1';
+    this.#grants = options.grants ?? {};
     this.#published = [active];
     this.#active = active;
     this.#unpublished = unpublished;
@@ -910,7 +913,8 @@ class FakePlayoutServer implements FakePlayout {
   }
 
   async issueToken(options: IssueTokenOptions = {}): Promise<IssuedToken> {
-    const user = FAKE_USERS[options.user ?? 'operator'];
+    const userKey = options.user ?? 'operator';
+    const user = FAKE_USERS[userKey];
     const nowSec = Math.floor(Date.now() / 1000);
     const jti = options.jti ?? randomUUID();
     const claims: JWTPayload = {
@@ -919,7 +923,7 @@ class FakePlayoutServer implements FakePlayout {
       sub: user.sub,
       name: options.name ?? user.name,
       roles: [...(options.roles ?? user.roles)],
-      cg_channels: options.cgChannels ?? user.cgChannels,
+      cg_channels: options.cgChannels ?? this.#grants[userKey] ?? user.cgChannels,
       iat: options.iatEpochSec ?? nowSec,
       exp: options.expEpochSec ?? nowSec + ACCESS_TOKEN_TTL_SEC,
       jti,
@@ -1107,7 +1111,7 @@ class FakePlayoutServer implements FakePlayout {
         sub: user.sub,
         name: user.name,
         roles: [...user.roles],
-        cg_channels: user.cgChannels,
+        cg_channels: this.#grants[key] ?? user.cgChannels,
       },
     });
   }
@@ -1155,6 +1159,11 @@ export interface FakePlayoutOptions {
   readonly sealOnLoopback?: boolean;
   /** Where to listen. Default `127.0.0.1`; `::` (dual-stack) lets an IPv6 client in too (C6). */
   readonly listenHost?: string;
+  /**
+   * `DESKTOP-APPS-01-D` i — a fixture user's `cg_channels`, overridden for this Playout: the
+   * real `cg-admin` holds channels 1 AND 2 of the test Playout, which `FAKE_ADMIN` does not.
+   */
+  readonly grants?: Partial<Record<FakeUserKey, FakeCgChannels>>;
 }
 
 export async function startFakePlayout(options: FakePlayoutOptions = {}): Promise<FakePlayout> {

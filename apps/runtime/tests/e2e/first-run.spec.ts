@@ -235,6 +235,119 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
   });
 });
 
+/*
+  🔴 `DESKTOP-APPS-01-D` i — **RIGHT AFTER FIRST-RUN THE CONTROLS ARE THERE, WITH NO RELOAD.**
+
+  The owner's channel-2 set-up on the installed build: the tab read `کانال دوم (تست CG) · READ
+  ONLY` and the Layers tab had no controls until a reload. First-run writes the connection and then
+  the bank; the permitted channels were pushed on the first and not on the second, so the console
+  kept the bank-less answer (channel 1). The station admin here holds channels 1 AND 2 — the real
+  `cg-admin`'s grant — so only the DECLARED channel decides, which is the case that failed.
+*/
+test('first-run on channel 2: the Layers tab is operable at once, with no reload — control: an operator without the grant is READ ONLY', async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(120_000);
+  playout = await startFakePlayout({
+    sealOnLoopback: false,
+    grants: {
+      admin: [
+        { host: '127.0.0.1', channel: 1 },
+        { host: '127.0.0.1', channel: 2 },
+      ],
+    },
+  });
+  const fake = playout;
+  amcp = await createMock({
+    amcpPort: 5250,
+    oscPort: 0,
+    disableOsc: true,
+    admit: (ip) => fake.isTrusted(ip),
+  }).catch((err: unknown) => {
+    throw new Error(`the AMCP mock could not take TCP 5250: ${String(err)}`);
+  });
+  stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-first-run-'));
+  const port = await freePort();
+  await startBridge(port);
+  await page.exposeFunction('__cgSetPlayoutAddress', async (address: string): Promise<string> => {
+    const written = spawnSync(
+      process.execPath,
+      [BRIDGE_CLI, '--state-home', stateHome as string, '--set-playout-address', address],
+      { encoding: 'utf8' },
+    );
+    if (written.status !== 0) throw new Error(written.stderr);
+    await stopBridge();
+    await startBridge(port);
+    return written.stderr.trim();
+  });
+  const bridgeUrl = `window.__CG_BRIDGE_URL__ = ${JSON.stringify(`ws://127.0.0.1:${String(port)}`)};`;
+  await page.addInitScript(
+    bridgeUrl +
+      'window.__CG_SPLASH_DISABLED__ = true;' +
+      'window.__TAURI_INTERNALS__ = { invoke: (command, args) => command === "set_playout_address"' +
+      ' ? window.__cgSetPlayoutAddress(args.address) : Promise.reject(new Error("unknown command")) };',
+  );
+  await page.goto('/');
+
+  const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
+  await expect(firstRun).toHaveAttribute('data-first-run', 'target', { timeout: 20_000 });
+  await firstRun.getByLabel('Playout address').fill(playout.baseUrl);
+  await firstRun.getByRole('button', { name: 'Check' }).click();
+  await expect(firstRun.locator('[data-check="cors"]')).toHaveAttribute('data-status', 'pass', {
+    timeout: 20_000,
+  });
+  await firstRun.getByRole('button', { name: 'Connect' }).click();
+  await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 30_000 });
+
+  // The page from here on must be the SAME page: a mark that a reload would wipe.
+  await page.evaluate(() => {
+    (window as unknown as { cgNoReload?: number }).cgNoReload = 1;
+  });
+  await firstRun.locator('#cg-first-run-user').fill(FAKE_ADMIN.username);
+  await firstRun.locator('#cg-first-run-pass').fill(FAKE_PLAYOUT_PASSWORD);
+  await firstRun.getByRole('button', { name: 'Sign in' }).click();
+  const channelTwo = firstRun.getByRole('button', { name: /کانال دوم/ });
+  await expect(channelTwo).toBeVisible({ timeout: 30_000 });
+  await channelTwo.click();
+  await expect(firstRun.locator('#cg-first-run-serve')).not.toHaveValue('', { timeout: 20_000 });
+  await firstRun.getByRole('button', { name: 'Use this channel' }).click();
+  await expect(firstRun).toHaveCount(0, { timeout: 20_000 });
+  expect(stationFile('bridge-fixed-layers.json')).toMatchObject({ channel: 2 });
+
+  // 🔴 The property: operable NOW — no READ ONLY, the rows and their verbs — and no reload.
+  const strip = page.getByRole('tablist', { name: 'Channels' });
+  await expect(strip.getByRole('tab').first()).toContainText('کانال دوم', { timeout: 20_000 });
+  await expect(strip.getByRole('tab').first()).not.toContainText('READ ONLY');
+  await expect(page.getByLabel('Operating state')).toHaveCount(0);
+  const row = page.locator('[data-layer="99"]').first();
+  await expect(row).toBeVisible({ timeout: 20_000 });
+  await expect(row.getByRole('button', { name: 'LOAD' })).toBeEnabled();
+  expect(await page.evaluate(() => (window as unknown as { cgNoReload?: number }).cgNoReload)).toBe(
+    1,
+  );
+
+  // CONTROL — the same station, an operator whose grant is channel 1 only: READ ONLY, once.
+  // A fresh context shares nothing with the admin's page — no stored session, no retained stack.
+  const other = await browser.newContext({ baseURL: new URL(page.url()).origin });
+  try {
+    const view = await other.newPage();
+    await view.addInitScript(bridgeUrl + 'window.__CG_SPLASH_DISABLED__ = true;');
+    await view.goto('/');
+    const user = view.locator('#cg-signin-user');
+    await expect(user).toBeVisible({ timeout: 20_000 });
+    await user.fill(FAKE_OPERATOR.username);
+    await view.locator('#cg-signin-pass').fill(FAKE_PLAYOUT_PASSWORD);
+    await view.getByRole('button', { name: 'ورود' }).click();
+    await expect(user).toHaveCount(0, { timeout: 20_000 });
+    await expect(
+      view.getByRole('tablist', { name: 'Channels' }).getByRole('tab').first(),
+    ).toContainText('READ ONLY', { timeout: 20_000 });
+  } finally {
+    await other.close();
+  }
+});
+
 test('CONTROL — a bridge that is not an installed station never shows first-run', async ({
   page,
 }) => {
