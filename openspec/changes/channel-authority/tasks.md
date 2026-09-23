@@ -87,4 +87,16 @@
       by https://github.com/yasermostafaee/cg/actions/runs/35837546906 — `conclusion: success`,
       and the `E2E (Playwright)` job RAN: its `E2E` step concluded `success` (08:31 → 08:45 UTC),
       read back from the API; only the browser-install step skipped, on a cache hit
-- [ ] 5.2 Commit 2: `pnpm gate` green; pushed; `e2e` run URL recorded with the job confirmed RAN
+- [x] 5.2 Commit 2 (`328a3396`): `pnpm gate` green (93/93, 0 cached); pushed; Linux `e2e` discharged
+      by https://github.com/yasermostafaee/cg/actions/runs/35840363471 — `conclusion: success`,
+      and the `E2E (Playwright)` job RAN: its `E2E` step concluded `success` (09:00:31 → 09:16:07
+      UTC), read back from the API
+- [x] 5.3 The auth-OFF push fix (`39e804ea`): gate green; Linux `e2e` discharged by
+      https://github.com/yasermostafaee/cg/actions/runs/35841243469 — `success`, `E2E` step RAN
+      and concluded `success` (09:16:33 → 09:31:22 UTC)
+- [x] 5.4 The catalogue tick fix (`8aa9924f`) and the demo's `offline` / `online` (`8b31ed41`, the
+      HEAD carrying every commit above): gate green; Linux `e2e` discharged by
+      https://github.com/yasermostafaee/cg/actions/runs/35842352399 — `success`, `E2E` step RAN
+      and concluded `success` (09:31:42 → 09:47:56 UTC)
+
+⚠ Archive is the owner's call (`C-039` → `[x]`, `B-261` → `[x]` on archive).
