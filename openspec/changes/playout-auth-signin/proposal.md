@@ -62,7 +62,10 @@ want of one, which is the gate working. `C-038`'s channel predicate is what will
 AUTHORISATION — whether this principal may write to THAT channel — and that is not done here.
 
 ⚠ The **bank** half of `CHANNEL-RESOLUTION-01` remains its own separate item and is untouched by
-this change.
+this change. ✅ **CLOSED 2026-09-23 by `CHANNEL-AUTHORITY-01` commit 1 (`9d114657`)**: every
+operating door that names a channel now refuses one the station's bank does not declare, auth
+OFF included, before anything reaches CasparCG — `CHANNEL-RESOLUTION-01` had fenced the restore
+door alone (`openspec/changes/channel-authority`, `B-261`).
 
 ## A surface that is stale the moment auth is ON
 

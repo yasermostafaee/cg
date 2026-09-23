@@ -12491,7 +12491,7 @@ and the record does not say so: `templates.*` is station-wide by the authz desig
 
 **Notes:** Cross-refs [[B-229]], [[B-257]], [[B-258]].
 
-## [~] B-261 — a station writes to channels it does not operate: `layers.clear` and `playoutLayers.clear` honour whatever channel a request names, the console's own orphan strip and playout tab OFFER them, and the dynamic allocator places on a constant ⟨priority: high — `CLEAR` on a partner Playout's live programme output, one confirm away on the operator's own screen, with auth ON and with auth OFF⟩ — FILED 2026-09-23 by `CHANNEL-AUTHORITY-01` §1.3 · FIXED IN CODE by `CHANNEL-AUTHORITY-01` commit 1 (`openspec/changes/channel-authority`)
+## [~] B-261 — a station writes to channels it does not operate: `layers.clear` and `playoutLayers.clear` honour whatever channel a request names, the console's own orphan strip and playout tab OFFER them, and the dynamic allocator places on a constant ⟨priority: high — `CLEAR` on a partner Playout's live programme output, one confirm away on the operator's own screen, with auth ON and with auth OFF⟩ — FILED 2026-09-23 by `CHANNEL-AUTHORITY-01` §1.3 · FIXED IN CODE by `CHANNEL-AUTHORITY-01` commit 1, `9d114657` (`openspec/changes/channel-authority`)
 
 **What.** Three facts about a channel live in three places — the Playout's catalogue says it
 EXISTS, a grant says a principal MAY OPERATE it, the declared bank says THIS STATION operates it —

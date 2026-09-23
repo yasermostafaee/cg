@@ -21,11 +21,12 @@ import { useSelectedChannel } from './useSelectedChannel.js';
  *
  * This used to read `bank?.channel ?? 1` into a ONE-element array and keep its selection in
  * component state: _"ONE CHANNEL FOR NOW. The bank declares exactly one, and no channel
- * discovery is invented here."_ The second sentence still holds — no discovery call exists
- * and none is invented (owner answer A3; the gap is `R-062`) — but the strip is now shaped
- * for one: its tabs are `channelIds(bank, settings)`, every channel the bridge already
- * publishes, and the selection is a channel ID in `channelStore`, readable by Station setup's
- * per-channel tab. With one declared channel it renders exactly what it did before.
+ * discovery is invented here."_ Nothing was invented (owner answer A3), and the strip was
+ * shaped for a discovery call instead: its tabs are `channelIds(…)`, and the selection is a
+ * channel ID in `channelStore`, readable by Station setup's per-channel tab. With one declared
+ * channel it renders exactly what it did before. ⭐ The call now exists (`R-062` gap 2,
+ * `CHANNEL-AUTHORITY-01`): `channelIds` reads its `declared` channels first, with the bank and
+ * channel settings as the fallback.
  */
 /**
  * 🔴 `AUDIT-CLOSE-01` B1 — THE STRIP MOVED TO THE APP HEADER; THE SCOPE DID NOT.

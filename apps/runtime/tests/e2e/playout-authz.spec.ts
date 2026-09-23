@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
 import {
   startFakePlayout,
+  FAKE_BOTH_CHANNELS_OPERATOR,
+  FAKE_CATALOGUE,
   FAKE_CHANNEL_TWO_OPERATOR,
   FAKE_OPERATOR,
   FAKE_VIEWER,
@@ -46,7 +48,7 @@ let playout: FakePlayout | null = null;
 let bridge: ChildProcess | null = null;
 let stateDir: string | null = null;
 
-async function startStation(): Promise<{ bridgeUrl: string }> {
+async function startStation(bankChannel = 1): Promise<{ bridgeUrl: string }> {
   playout = await startFakePlayout();
   stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-authz-'));
   const scratch = (name: string): string => path.join(stateDir as string, name);
@@ -66,7 +68,7 @@ async function startStation(): Promise<{ bridgeUrl: string }> {
   */
   fs.writeFileSync(
     scratch('fixed.json'),
-    JSON.stringify({ channel: 1, start: 80, count: 4 }),
+    JSON.stringify({ channel: bankChannel, start: 80, count: 4 }),
     'utf8',
   );
 
@@ -303,6 +305,57 @@ test('🔴 B-257 — channel 1 locks its own console, and channel 2’s console 
   } finally {
     await otherContext.close();
   }
+});
+
+/*
+  🔴 `C-039` / `CHANNEL-AUTHORITY-01` — **THE STRIP NAMES THE STATION'S CHANNEL FROM THE PLAYOUT'S
+  CATALOGUE, AND NEVER OFFERS THE PLAYOUT'S PROGRAMME CHANNEL.**
+
+  The station is on CHANNEL 2 here, the shape of the test Playout: its catalogue (the fake's D4,
+  `FAKE_CATALOGUE`) names channel 2 for CG and channel 1 as its own programme output. The bridge
+  reads the catalogue with the signed-in console's bearer the moment it signs in, and pushes the
+  answer; the strip is read off a real page served from `dist/`.
+
+  ⭐ Each absence is read beside its control on the same page: the strip that has no programme
+  channel is shown to carry the declared channel, under the catalogue's name.
+*/
+const PROGRAMME_NAME = FAKE_CATALOGUE.find((r) => r.casparChannel === 1)?.name ?? '';
+const OURS_NAME = FAKE_CATALOGUE.find((r) => r.casparChannel === 2)?.name ?? '';
+
+test('🔴 C-039 — channel 2 is shown under the Playout’s catalogue name, not CHANNEL 2', async ({
+  page,
+}) => {
+  const station = await startStation(2);
+  await page.addInitScript(`window.__CG_BRIDGE_URL__ = ${JSON.stringify(station.bridgeUrl)};`);
+  await page.goto('/');
+  await signIn(page, FAKE_CHANNEL_TWO_OPERATOR.username);
+
+  const strip = page.getByRole('tablist', { name: 'Channels' });
+  const tab = strip.getByRole('tab');
+  await expect(tab).toHaveCount(1, { timeout: 20_000 });
+  await expect(tab.first()).toHaveText(OURS_NAME, { timeout: 20_000 });
+  // The name is isolated, and the number it replaced is on the title (golden rule 11).
+  await expect(tab.first().locator('bdi')).toHaveText(OURS_NAME);
+  await expect(tab.first()).toHaveAttribute('title', 'Channel 2');
+  await expect(tab.first()).not.toContainText('CHANNEL');
+});
+
+test('🔴 C-039 — a principal granted channels 1 AND 2 is offered channel 2 only', async ({
+  page,
+}) => {
+  const station = await startStation(2);
+  await page.addInitScript(`window.__CG_BRIDGE_URL__ = ${JSON.stringify(station.bridgeUrl)};`);
+  await page.goto('/');
+  await signIn(page, FAKE_BOTH_CHANNELS_OPERATOR.username);
+  await expect(page.getByLabel('Sign-in state')).toContainText(FAKE_BOTH_CHANNELS_OPERATOR.name);
+
+  const strip = page.getByRole('tablist', { name: 'Channels' });
+  // Control FIRST — the catalogue arrived: the declared channel carries its name.
+  await expect(strip.getByRole('tab').first()).toHaveText(OURS_NAME, { timeout: 20_000 });
+  // …and the Playout's programme channel, which this principal IS granted, has no tab.
+  await expect(strip.getByRole('tab')).toHaveCount(1);
+  await expect(strip).not.toContainText(PROGRAMME_NAME);
+  await expect(strip).not.toContainText('CHANNEL 1');
 });
 
 test('🔴 the channel strip survives a RELOAD still scoped to the principal', async ({ page }) => {

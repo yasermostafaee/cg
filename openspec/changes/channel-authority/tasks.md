@@ -38,29 +38,42 @@
 
 ## 3. Commit 2 — the discovery call (`R-062` gap 2, `C-039`)
 
-- [ ] 3.1 The discovery channel on the contract: per channel `named` / `declared` / `permitted`,
-      kept separate
-- [ ] 3.2 Sources in order: D4, then the bank, then channel settings
-- [ ] 3.3 D4's read: ≤ every 30 s, `ETag`; a bearer never revoked or expired, released on sign-out;
-      any failure ABSENT, no alarm; auth OFF → no read
-- [ ] 3.4 The join: `casparHost` + `casparChannel` against `configuredCasparHosts` and the declared
-      channel
-- [ ] 3.5 The strip: declared channels only, under the catalogue's name when the join matches
-- [ ] 3.6 Preview channels `N+1..2N` never addressed or probed
-- [ ] 3.7 The fake Playout serves D4: channel 2 named, channel 1 as the Playout's programme channel;
-      `cg-op-both` holds both
-- [ ] 3.8 Tests, each absence beside its control; E2E for the strip
+- [x] 3.1 `channels.list` + `channels.changed` (`@cg/shared-ipc` `stationChannels.ts`): per channel
+      `named` / `declared` / `permitted?` / `sources`, kept separate; one composition,
+      `stationChannelsFor`
+- [x] 3.2 Sources in order: D4, then the bank, then channel settings
+- [x] 3.3 D4's read (`playout-catalogue.ts`): a fixed 30 s floor, `If-None-Match` / `304`; the
+      bearer is `PlayoutAuth.usableBearer()` — checked AT USE, never expired or revoked, gone on
+      sign-out; any failure ABSENT, no alarm; auth OFF builds no reader
+- [x] 3.4 The join: `casparHost` in `configuredCasparHosts` + `casparChannel`; another host's row
+      joins nothing
+- [x] 3.5 The strip: declared channels only, the name in its own `<bdi>`, the number on `title`
+      (`TabSpec.label` takes markup; `TabSpec.title` added)
+- [x] 3.6 Preview channels `N+1..2N` never addressed or probed — pinned at the wire
+- [x] 3.7 The fake Playout serves D4 (`FAKE_CATALOGUE`: channel 1 the Playout's programme, channel 2
+      ours), records every bearer presented; `cg-op-both` holds both; the demo station is on
+      channel 2
+- [x] 3.8 Tests — `station-channels-discovery.integration.test.ts` (the answer; the join; auth OFF;
+      the 30 s floor + `304`; ABSENT on an outage, verbs unchanged; revoked and expired bearers
+      never presented, mutation-checked; sign-out; the push; nothing past the lists probed);
+      `channelList.test.ts` + `channelStripNames.dom.test.ts` (catalogue-only channel absent, each
+      beside the declared control; the isolate; the fallback); `playout-authz.spec.ts` E2E (the
+      name on a real page; `cg-op-both` offered channel 2 only). Every absence names its control
 
 ## 4. Records
 
 - [x] 4.1 `B-261` filed; `B-257` noted (its spec asserted this hazard as a fix)
-- [ ] 4.2 The bank half closed where it was filed open, citing commit 1
-- [ ] 4.3 `R-062` gap 2 → done; gaps 1 and 3 and A16 untouched
-- [ ] 4.4 `C-039` → `[~]`
-- [ ] 4.5 `docs/integration/playout/README.md` — what we read from D4, how often, with whose bearer,
-      and that it can never widen what we write to
+- [x] 4.2 The bank half closed where it was filed open, citing commit 1 (`9d114657`): `C-038`'s
+      status, `playout-auth-signin/proposal.md`, `B-261`
+- [x] 4.3 `R-062` gap 2 → done; gaps 1 and 3 and A16 untouched
+- [x] 4.4 `C-039` → `[~]`
+- [x] 4.5 `docs/integration/playout/README.md` item 14 — what we read from D4, how often, with whose
+      bearer, and that it can never widen what we write to
 
 ## 5. Gate and discharge
 
-- [ ] 5.1 Commit 1: `pnpm gate` green; pushed; `e2e` run URL recorded with the job confirmed RAN
+- [x] 5.1 Commit 1 (`9d114657`): `pnpm gate` green (93/93, 0 cached); pushed; Linux `e2e` discharged
+      by https://github.com/yasermostafaee/cg/actions/runs/35837546906 — `conclusion: success`,
+      and the `E2E (Playwright)` job RAN: its `E2E` step concluded `success` (08:31 → 08:45 UTC),
+      read back from the API; only the browser-install step skipped, on a cache hit
 - [ ] 5.2 Commit 2: `pnpm gate` green; pushed; `e2e` run URL recorded with the job confirmed RAN

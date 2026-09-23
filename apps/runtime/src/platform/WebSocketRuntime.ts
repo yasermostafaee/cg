@@ -58,6 +58,9 @@ import {
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
   type ChannelSettingsState,
+  StationChannelsChangedChannel,
+  StationChannelsListChannel,
+  type StationChannels,
   SourcesAssignmentsChangedChannel,
   SourcesAssignmentsChannel,
   SourcesConfigChangedChannel,
@@ -399,6 +402,7 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #delimiterSubs = new Subs<DelimiterOption[]>();
   /** R-030 — the bridge-owned channel raster + video-mode reading. */
   readonly #channelSettingsSubs = new Subs<ChannelSettingsState>();
+  readonly #stationChannelsSubs = new Subs<StationChannels>();
   /** D-137 / C-015 — the bridge-owned Live Source mapping, pushed on change. */
   readonly #sourceCatalogSubs = new Subs<SourceCatalog>();
   readonly #sourceAssignmentSubs = new Subs<SourceAssignments>();
@@ -1259,6 +1263,12 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#channelSettingsSubs.emit(p.data);
         break;
       }
+      // `R-062` gap 2 — this console's discovery answer, recomputed by the bridge for its principal.
+      case StationChannelsChangedChannel.name: {
+        const p = StationChannelsChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#stationChannelsSubs.emit(p.data);
+        break;
+      }
       case SourcesConfigChangedChannel.name: {
         const p = SourcesConfigChangedChannel.payload.safeParse(payload);
         if (p.success) this.#sourceCatalogSubs.emit(p.data);
@@ -1769,6 +1779,13 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(ChannelSettingsSetChannel, req),
     onChanged: (handler: (state: ChannelSettingsState) => void) =>
       this.#channelSettingsSubs.add(handler),
+  };
+
+  /** `R-062` gap 2 — the channel-discovery call, and the bridge's per-console push of it. */
+  readonly stationChannels = {
+    list: () => this.#invoke(StationChannelsListChannel, undefined),
+    onChanged: (handler: (state: StationChannels) => void) =>
+      this.#stationChannelsSubs.add(handler),
   };
 
   /** R-022 — REHEARSE. Bridge-owned; the PLAY interlock is enforced bridge-side. */

@@ -20,7 +20,7 @@ import { useSelectedChannel } from './useSelectedChannel.js';
  * layer list, PROGRAM, PREVIEW and the Inspector, which is why the PANEL wraps all four.
  */
 export function ChannelStrip(): JSX.Element {
-  const { channels, selected, operable } = useSelectedChannel();
+  const { channels, selected, operable, names } = useSelectedChannel();
   const coverage = useLockCoverage();
   const locked = coverage.kind === 'partial' ? coverage.channels : [];
 
@@ -55,14 +55,40 @@ export function ChannelStrip(): JSX.Element {
     can say it does, and the verbs on such a channel stay offered: the bridge refuses them with
     the lock sentence. Withdrawing them belongs with a second declared channel (`R-062`).
   */
-  const tabs: TabSpec[] = channels.map((channel) => ({
-    id: String(channel),
-    label: locked.includes(channel)
-      ? `CHANNEL ${String(channel)} · LOCKED`
+  /*
+    🔴 `C-039` — **A CHANNEL THE PLAYOUT'S CATALOGUE NAMES IS LABELLED WITH THAT NAME.** `CHANNEL 2`
+    is a coordinate; `کانال دوم (تست CG)` is what the people on both ends of the link call it.
+
+    ⚠ **The name is operator data and gets its own `<bdi>`** — Persian beside the LTR chrome
+    ` · READ ONLY`, which stays OUTSIDE the isolate so the bidi algorithm cannot carry it to the
+    wrong side (golden rule 11, `OperatorNames`' reason). The channel NUMBER is not dropped: it
+    moves to the tab's `title` (golden rule 11's relocation).
+
+    ⚠ Only channels on this strip are named, and only `declared` channels are on it
+    (`channelIds`): the partner Playout's programme channel, which its catalogue also names, is
+    not a channel this console operates and has no tab. With no catalogue (auth OFF, the Playout
+    unreachable) every label is exactly what it was.
+  */
+  const tabs: TabSpec[] = channels.map((channel) => {
+    const suffix = locked.includes(channel)
+      ? ' · LOCKED'
       : operable.includes(channel)
-        ? `CHANNEL ${String(channel)}`
-        : `CHANNEL ${String(channel)} · READ ONLY`,
-  }));
+        ? ''
+        : ' · READ ONLY';
+    const name = names.get(channel);
+    return name === undefined
+      ? { id: String(channel), label: `CHANNEL ${String(channel)}${suffix}` }
+      : {
+          id: String(channel),
+          label: (
+            <>
+              <bdi>{name}</bdi>
+              {suffix}
+            </>
+          ),
+          title: `Channel ${String(channel)}`,
+        };
+  });
 
   return (
     <TabStrip

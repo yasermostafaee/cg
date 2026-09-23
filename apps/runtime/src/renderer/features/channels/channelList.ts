@@ -1,5 +1,5 @@
 import type { AuthSessionState } from '../../../shared/runtime-bridge.js';
-import type { ChannelSettingsState, FixedLayerBank } from '@cg/shared-ipc';
+import type { ChannelSettingsState, FixedLayerBank, StationChannels } from '@cg/shared-ipc';
 
 /**
  * `RUNTIME-REDESIGN-01` Phase 7 (`PROMPT.md` §7) — **THE CHANNEL LIST IS A LIST.**
@@ -7,9 +7,9 @@ import type { ChannelSettingsState, FixedLayerBank } from '@cg/shared-ipc';
  * The reference's console carries a channel switcher whose options come from a catalogue
  * (`CH 1 · News`, `CH 2 · Sports`, …), and §7 asks that the app's list be _"shaped to be filled
  * from an API"_ — a UI shape, not a schema migration. This is the shape: ONE function that
- * answers "which channels does this station have", from every source the bridge already
- * publishes, so a channel-discovery call — when one exists — is one more input here and nothing
- * downstream changes.
+ * answers "which channels does this station have", from every source the bridge publishes, so
+ * that a channel-discovery call was one more input here and nothing downstream changed — which
+ * is how it landed (`R-062` gap 2; see the ⭐ note below).
  *
  * ── THE TWO SOURCES, AND WHY NEITHER IS INVENTED ─────────────────────────────
  *
@@ -25,16 +25,37 @@ import type { ChannelSettingsState, FixedLayerBank } from '@cg/shared-ipc';
  * tab. The list is what is DECLARED.
  *
  * 🔴 **No multi-channel contract is invented here** (owner answer A3, `design.md` §4). The three
- * real gaps — the five `z.void()` bulk verbs, no channel-discovery call, and the bank as the one
- * channel authority — are filed as `R-062`; this function is what a discovery call would feed.
+ * real gaps — the five `z.void()` bulk verbs, the channel-discovery call, and the bank as the one
+ * channel authority — were filed as `R-062`; gap 2, the discovery call, is closed and feeds this
+ * function. Gaps 1 and 3 stay open.
+ *
+ * ⭐ **`CHANNEL-AUTHORITY-01` — the discovery call exists (`R-062` gap 2), and it is read FIRST.**
+ * When the bridge's answer has arrived, the list is its `declared` channels — the channels THIS
+ * STATION operates, which is also the only set the bridge's station fence lets a verb address. A
+ * channel the answer names but the station does not declare — the partner Playout's programme
+ * channel, from its catalogue — is NOT on this list: it is somebody else's output, and a strip
+ * that offered it would be offering a tab whose every verb the bridge refuses. Until an answer
+ * arrives (an older bridge, a refused read, the first frame), the two sources above are the
+ * fallback, exactly as before.
  */
 export function channelIds(
   bank: FixedLayerBank | null,
   settings: ChannelSettingsState,
   auth: AuthSessionState = { kind: 'off' },
+  discovered: StationChannels | null = null,
 ): number[] {
-  const declared = new Set<number>(settings.settings.map((s) => s.channel));
-  if (bank !== null) declared.add(bank.channel);
+  const fromDiscovery = (discovered?.channels ?? [])
+    .filter((c) => c.declared)
+    .map((c) => c.channel);
+  /*
+    ⚠ An answer that declares NOTHING is not trusted as "no channels": a bridge always declares
+    one (`#declaredChannels()` falls back to channel 1), so an empty set can only be a stub or a
+    malformed answer, and falling back is the honest reading of it.
+  */
+  const declared = new Set<number>(
+    fromDiscovery.length > 0 ? fromDiscovery : settings.settings.map((s) => s.channel),
+  );
+  if (fromDiscovery.length === 0 && bank !== null) declared.add(bank.channel);
   // The documented default (`FixedLayerBankSchema`): before any snapshot arrives, and when no
   // bank is declared at all, the surface still belongs to SOME channel.
   if (declared.size === 0) declared.add(1);
@@ -91,6 +112,24 @@ export function channelIds(
  */
 function permittedSet(auth: AuthSessionState): ReadonlySet<number> | null {
   return auth.kind === 'signed-in' ? new Set(auth.permittedChannels) : null;
+}
+
+/**
+ * 🔴 `C-039` — **THE PLAYOUT'S NAME FOR EACH CHANNEL THIS STATION OPERATES**, from the discovery
+ * answer's `named` — a catalogue row joined on this station's host. A LABEL and nothing else.
+ *
+ * Only `declared` channels are named here, for the same reason only they are listed: a name is
+ * shown on a tab this console operates, and a catalogue row for a channel the station does not
+ * declare has no tab to sit on. Empty when the catalogue is ABSENT (auth OFF, the Playout
+ * unreachable, no answer yet) — and the strip's own `CHANNEL <n>` is then the label, which is
+ * always true.
+ */
+export function channelNames(discovered: StationChannels | null): ReadonlyMap<number, string> {
+  const names = new Map<number, string>();
+  for (const c of discovered?.channels ?? []) {
+    if (c.declared && c.named !== null) names.set(c.channel, c.named.name);
+  }
+  return names;
 }
 
 /**

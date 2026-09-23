@@ -140,4 +140,60 @@ label is `CHANNEL <n>`, with ` · READ ONLY` or ` · LOCKED` appended.
 casparChannel }] }` — on the test Playout, `apasai` = `192.168.21.111` channel 1 (their programme
 output) and `cg-test2` = channel 2. No preview channels are published.
 
-_The call's own design is added by commit 2._
+## §10 — The discovery call (commit 2)
+
+**The catalogue cannot widen what the bridge writes to, and commit 1 is what guarantees it.** The
+station fence reads `isDeclaredChannel` — the bank — and never this call's answer or the catalogue.
+A future reader must not treat a LISTED channel as an OPERABLE one: `declared` is the only field of
+the three that speaks about writing, and it is not derived from the catalogue.
+
+**The contract (`@cg/shared-ipc` `stationChannels.ts`).** `channels.list` (a `read`, both axes) and
+the `channels.changed` publish, one shape: `{ channels: [{ channel, named, declared, permitted?,
+sources }] }`.
+
+- `named` — `{ id, name }` from a D4 row whose `casparHost` is in `configuredCasparHosts` (the SAME
+  host rule `grantsChannel` applies — a row naming another station's host joins nothing) and whose
+  `casparChannel` is the channel; `null` otherwise.
+- `declared` — `isDeclaredChannel`, the fence's own predicate.
+- `permitted` — `grantsChannel` for a SIGNED-IN principal, `false` for a session that has stopped
+  holding, ABSENT with auth OFF.
+- `sources` — `catalogue` / `bank` / `channel-settings`, in that order; the list is in source order.
+
+**One composition** (`stationChannelsFor`, beside `authStateFor`, for its reason): the read and the
+push call it; nothing re-derives it.
+
+**D4 (`playout-catalogue.ts`).** Built only with auth ON. Read at most every 30 s (a fixed floor —
+only the tick period is injectable), with `If-None-Match`; a `304` keeps what is held. On any
+failure — no bearer, no answer, a non-OK status, an unparseable body — the catalogue is ABSENT
+(`null`), not the last good answer: a stale label is a label the Playout no longer says, and the
+strip's `CHANNEL <n>` is always true. Never awaited by the gate, never an alarm.
+
+**The bearer.** §9's finding, answered: D4 reads `PlayoutAuth.usableBearer()`, which returns the held
+token only while it is neither past `exp` (with the contract's 60 s tolerance) nor on the revocation
+list as last seen — checked at USE. Release on sign-out and on socket close is the existing
+mechanism. D9's own polling is deliberately unchanged (its cadence rules are pinned by the
+revocation suite); the residual that D9 presents a lapsed bearer until another replaces it is
+recorded, not fixed here.
+
+**The push.** Per socket (`permitted` is per principal), deduplicated, and only once delivered —
+the publish gate withholds everything from a socket that has not signed in, and recording an
+undelivered answer would suppress the push its sign-in needs. Inputs: the catalogue, the bank,
+channel settings, the server list, and that socket's own sign-in (the console's sign-in resync
+re-pulls the stack, health and lock only). With auth OFF the answer cannot move short of a bank
+installed live on a bank-less bridge, so an auth-OFF console receives nothing new in practice.
+
+**The console.** `channelIds` reads the answer's `declared` channels first once it has ARRIVED, with
+the bank and settings as the fallback (and an answer declaring nothing is read as "fall back" — a
+bridge always declares one). `channelNames` names declared channels only. The strip labels a named
+channel with the name in its own `<bdi>` (golden rule 11), the chrome suffix outside it, and the
+channel number on the tab's `title`; `TabSpec.label` takes markup for exactly that.
+
+**Preview channels.** Nothing derives or iterates a channel index: the mode read and the output check
+walk `#declaredChannels()`, and the discovery list is read by the strip alone. Pinned at the wire
+with a four-channel server: channels 1, 3 and 4 receive nothing while `INFO 2` does.
+
+**Auth OFF, stated plainly.** No catalogue, no `permitted`, the strip's labels unchanged. One
+difference is reachable in principle: a channel present ONLY in a stale channel-settings entry — one
+the bank does not declare, which commit 1 already refuses every verb on — is no longer a tab. The
+settings store seeds and accepts declared channels only, so the entry exists only if the bank's
+channel was moved between boots.

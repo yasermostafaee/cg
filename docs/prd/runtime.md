@@ -3636,10 +3636,17 @@ single-channel is exactly this:
 1. **Five verbs take `z.void()`** — `stack.removeAll`, `clearAll`, `stopAll`, `snapshot` and
    `silenceAllLivePlates` — and therefore mean _"everything the bridge knows about"_. That is the
    only place on the contract where a channel cannot be named.
-2. **There is no channel-discovery call on the contract.** Nothing asks the bridge which channels
-   exist. The renderer's list today (`features/channels/channelList.ts`, Phase 7) is the union of
-   the two channel sources the bridge already publishes — `fixedLayers.config.channel` and
-   `channelSettings.settings[].channel` — and is the one function a discovery call would feed.
+2. ✅ **DONE 2026-09-23 — `CHANNEL-AUTHORITY-01` commit 2 (`openspec/changes/channel-authority`).**
+   ~~There is no channel-discovery call on the contract.~~ `channels.list` (+ the per-console
+   `channels.changed` push) returns every channel any source names — the Playout's catalogue
+   ([[C-039]]) first, then the bank, then channel settings — with `named` / `declared` /
+   `permitted` KEPT APART, and `channelIds` reads its `declared` channels first with the two
+   sources above as the fallback. ⚠ What it does NOT do, and why it could land at all: commit 1
+   (`9d114657`) made the declared bank the only thing that decides what the bridge writes to, so a
+   discovered channel is never a writable one. The pre-change text was: _"Nothing asks the bridge
+   which channels exist. The renderer's list today is the union of `fixedLayers.config.channel`
+   and `channelSettings.settings[].channel` — and is the one function a discovery call would
+   feed."_
 3. **`fixedLayers` declares ONE bank on ONE channel** (`FixedLayerBankSchema.channel`, documented
    _"one channel per bank, v1"_), and the bank is the app's channel authority: the strip defaults to
    it and the Layers section edits it.
@@ -3688,9 +3695,12 @@ is done.
 
 **Acceptance (when this is taken):**
 
-- A channel-discovery channel on the contract (`channels.list` or the settings list carrying it),
-  with `channelIds` reading it FIRST and the two existing sources kept as fallbacks; the strip and
-  Station setup unchanged in shape.
+- [x] A channel-discovery channel on the contract (`channels.list` or the settings list carrying
+      it), with `channelIds` reading it FIRST and the two existing sources kept as fallbacks; the
+      strip and Station setup unchanged in shape. — **gap 2, done 2026-09-23**
+      (`CHANNEL-AUTHORITY-01`). Gaps 1 and 3 below are untouched and still open, and so is
+      A16's precondition: PANIC's scope is decided before real multi-channel ships, never in
+      passing.
 - `removeAll`, `clearAll`, `stopAll` and `snapshot` accept an OPTIONAL channel; a bare call keeps
   its meaning byte for byte (every existing test green unchanged).
 - `silenceAllLivePlates` is NOT re-scoped by this item; if the owner wants a per-channel silence it

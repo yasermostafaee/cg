@@ -261,6 +261,11 @@ describe('the Live sources section of Station setup defines sources and binds no
         onChanged: () => () => undefined,
         set: () => Promise.resolve({ ok: true }),
       },
+      // `R-062` gap 2 — the discovery answer; empty means the channel list falls back.
+      stationChannels: {
+        list: () => Promise.resolve({ channels: [] }),
+        onChanged: () => () => undefined,
+      },
       playoutLayers: { state: () => Promise.resolve([]), onStateChanged: () => () => undefined },
       liveLayers: {
         state: () => Promise.resolve([]),

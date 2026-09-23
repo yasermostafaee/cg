@@ -73,6 +73,7 @@ import type {
   ChannelSettingsGetChannel,
   ChannelSettingsSetChannel,
   ChannelSettingsState,
+  StationChannels,
   Rehearsal,
   RestoreMigration,
   RestoreSkip,
@@ -712,6 +713,20 @@ export interface RuntimeBridge {
       req: ChannelRequest<typeof ChannelSettingsSetChannel>,
     ): Promise<ChannelResponse<typeof ChannelSettingsSetChannel>>;
     onChanged(handler: (state: ChannelSettingsState) => void): Unsubscribe;
+  };
+
+  /**
+   * 🔴 `R-062` gap 2 / `C-039` — **THE CHANNEL-DISCOVERY CALL.**
+   *
+   * Every channel any source knows of — the Playout's catalogue first, then the bank, then channel
+   * settings — each with its three facts kept apart: `named` (a label), `declared` (this station
+   * operates it) and `permitted` (this principal may). The strip lists the `declared` ones, under
+   * the catalogue's name where one joined. A `named` channel that is not `declared` is somebody
+   * else's output and is never offered as a channel this console operates.
+   */
+  stationChannels: {
+    list(): Promise<StationChannels>;
+    onChanged(handler: (state: StationChannels) => void): Unsubscribe;
   };
 
   /**

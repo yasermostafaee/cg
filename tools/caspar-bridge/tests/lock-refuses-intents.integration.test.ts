@@ -286,6 +286,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'auth.state',
         'bridge.capabilities',
         'channelSettings.get',
+        // `R-062` gap 2 — the channel-discovery READ: a locked console must still name its channels.
+        'channels.list',
         'connections.config',
         'connections.health',
         'connections.template-serve',

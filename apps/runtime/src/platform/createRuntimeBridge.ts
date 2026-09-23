@@ -1,3 +1,4 @@
+import type { StationChannel, StationChannels } from '@cg/shared-ipc';
 import type { AppInfo, BridgeLinkStatus, RuntimeBridge } from '../shared/runtime-bridge.js';
 import { MockRuntime } from './MockRuntime.js';
 import { resolveBridgeUrl } from './bridgeUrl.js';
@@ -391,5 +392,44 @@ export function createMockBridge(): RuntimeBridge {
       set: (req) => Promise.resolve(mock.setChannelSettings(req)),
       onChanged: (handler) => mock.channelSettingsChanged.subscribe(handler),
     },
+
+    // `R-062` gap 2 — offline parity: the answer an auth-OFF bridge gives (no catalogue, no
+    // principal), recomputed from the mock's bank and settings whenever either changes.
+    stationChannels: {
+      list: () => Promise.resolve(mockStationChannels()),
+      onChanged: (handler) => {
+        const emit = (): void => handler(mockStationChannels());
+        const offBank = mock.fixedConfigChanged.subscribe(emit);
+        const offSettings = mock.channelSettingsChanged.subscribe(emit);
+        return () => {
+          offBank();
+          offSettings();
+        };
+      },
+    },
   };
+
+  /**
+   * The bridge's `stationChannelsFor` with auth OFF, over the mock's two sources. The declared
+   * channel is the bank's, or channel 1 without one — `#declaredChannels()`'s own rule.
+   */
+  function mockStationChannels(): StationChannels {
+    const bank = mock.fixedLayersConfig();
+    const declared = bank?.channel ?? 1;
+    const entries = new Map<number, StationChannel['sources']>();
+    if (bank !== null) entries.set(bank.channel, ['bank']);
+    for (const s of mock.channelSettingsState().settings) {
+      const sources = entries.get(s.channel);
+      if (sources === undefined) entries.set(s.channel, ['channel-settings']);
+      else sources.push('channel-settings');
+    }
+    return {
+      channels: [...entries.entries()].map(([channel, sources]) => ({
+        channel,
+        named: null,
+        declared: channel === declared,
+        sources,
+      })),
+    };
+  }
 }

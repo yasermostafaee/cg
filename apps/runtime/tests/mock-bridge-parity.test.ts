@@ -260,6 +260,9 @@ const BRIDGE_SURFACE: {
      * refuses would let the UI be built against the wrong gate.
      */
     channelSettings: ['get', 'set', 'onChanged'],
+    // `R-062` gap 2 — the channel-discovery call. The mock answers as an auth-OFF bridge does:
+    // the bank and settings, no catalogue names and no `permitted`.
+    stationChannels: ['list', 'onChanged'],
   },
 };
 

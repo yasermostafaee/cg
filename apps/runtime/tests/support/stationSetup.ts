@@ -168,6 +168,12 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
       onChanged: () => () => undefined,
       set: rasterSet,
     },
+    // `R-062` gap 2 — the discovery answer. Empty: the channel list falls back to the bank and
+    // settings above, which is what every spec written against this stub measures.
+    stationChannels: {
+      list: () => Promise.resolve({ channels: [] }),
+      onChanged: () => () => undefined,
+    },
     playoutLayers: {
       state: () => Promise.resolve(options.stationLayers ?? []),
       onStateChanged: () => () => undefined,

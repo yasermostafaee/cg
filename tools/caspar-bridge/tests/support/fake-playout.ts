@@ -8,9 +8,10 @@ import type { CryptoKey, JWK, JWTPayload } from 'jose';
  * 🔴 `C-037` — **A FAKE APASAI PLAYOUT, on loopback, for the bridge's auth integration suite.**
  *
  * It implements the Playout half of `PLAYOUT-INTEGRATION-CONTRACT-v1` (§4) plus v1.1's D9:
- * D1 sign-in, D2 refresh, D3 JWKS, D9 revocation list. Nothing else — D4 (the channel
- * catalogue) and D8 (`/me`) are not reached by this change and a fixture that pretended to
- * serve them would be four untested lines claiming to be a contract.
+ * D1 sign-in, D2 refresh, D3 JWKS, D9 revocation list — and, since `CHANNEL-AUTHORITY-01`, D4,
+ * the channel catalogue, which the bridge now reads (`C-039`). D8 (`/me`) is still not reached
+ * by anything, and a fixture that pretended to serve it would be untested lines claiming to be a
+ * contract.
  *
  * ── WHY A REAL SOCKET AND NOT A `fetchImpl` STUB ────────────────────────────
  *
@@ -55,7 +56,33 @@ const PATHS = {
   token: '/api/cg/auth/token',
   refresh: '/api/cg/auth/refresh',
   revoked: '/api/cg/revoked',
+  channels: '/api/cg/channels',
 } as const;
+
+/** One D4 catalogue row (§4, `handoff/2026-09-16/channels.json`), spelled as the contract does. */
+export interface FakeCatalogueRow {
+  readonly id: string;
+  readonly name: string;
+  readonly casparHost: string;
+  readonly casparChannel: number;
+}
+
+/**
+ * 🔴 `CHANNEL-AUTHORITY-01` — **THE CATALOGUE THE TEST PLAYOUT PUBLISHES, IN SHAPE.**
+ *
+ * Two rows on this fake station's host, exactly as the recorded handoff has them on
+ * `192.168.21.111`: channel 1 is the PLAYOUT'S OWN PROGRAMME output (`apasai` there), channel 2 is
+ * the one set aside for CG (`cg-test2`). A station declaring channel 2 therefore meets both a row
+ * that names its channel and a row it must never treat as its own — and `cg-op-both` holds a
+ * grant for each.
+ *
+ * ⚠ The names are Persian, as the Playout's are, so the strip's bidi isolation is exercised by
+ * every spec that reads a label, not only by one that remembers to.
+ */
+export const FAKE_CATALOGUE: readonly FakeCatalogueRow[] = [
+  { id: 'fake-programme', name: 'آپاسای', casparHost: '127.0.0.1', casparChannel: 1 },
+  { id: 'fake-cg', name: 'کانال دوم (تست CG)', casparHost: '127.0.0.1', casparChannel: 2 },
+];
 
 /** The `aud` the contract fixes (§3.2, Playout Q5 accepted). A literal, for the reason above. */
 const CONTRACT_AUDIENCE = 'cg-control';
@@ -312,6 +339,8 @@ export interface FakePlayoutRequestCounts {
   token: number;
   refresh: number;
   revoked: number;
+  /** D4 reads, `304`s included — a cadence test's positive control. */
+  channels: number;
 }
 
 /** Everything {@link FakePlayout.issueToken} lets a test override. All optional. */
@@ -366,6 +395,15 @@ export interface FakePlayout {
   readonly tokenUrl: string;
   readonly refreshUrl: string;
   readonly revokedUrl: string;
+  /** D4 — the channel catalogue. Bearer-gated, `ETag`'d. */
+  readonly channelsUrl: string;
+  /**
+   * 🔴 Every bearer presented to D4, in order — so a spec can say WHOSE credential a catalogue
+   * read carried, and that a revoked or expired one never was.
+   */
+  readonly channelsBearers: readonly string[];
+  /** Replace the catalogue (and change its `ETag`, so a polling bridge sees the change). */
+  setChannels(rows: readonly FakeCatalogueRow[]): void;
   /**
    * The `kid` new tokens are currently signed with.
    *
@@ -545,7 +583,17 @@ class FakePlayoutServer implements FakePlayout {
   readonly #server = http.createServer();
   /** Every open connection, so an outage can be made to happen NOW rather than eventually. */
   readonly #sockets = new Set<Socket>();
-  readonly #counts: FakePlayoutRequestCounts = { jwks: 0, token: 0, refresh: 0, revoked: 0 };
+  readonly #counts: FakePlayoutRequestCounts = {
+    jwks: 0,
+    token: 0,
+    refresh: 0,
+    revoked: 0,
+    channels: 0,
+  };
+  #catalogue: readonly FakeCatalogueRow[] = FAKE_CATALOGUE;
+  /** Bumped by every catalogue change, and spelled into D4's `ETag` — D9's revision rule. */
+  #catalogueRevision = 0;
+  readonly #channelsBearers: string[] = [];
 
   /** Published public keys, newest first. The JWKS is exactly this list. */
   #published: FakeSigningKey[];
@@ -634,6 +682,19 @@ class FakePlayoutServer implements FakePlayout {
 
   get revokedUrl(): string {
     return `${this.baseUrl}${PATHS.revoked}`;
+  }
+
+  get channelsUrl(): string {
+    return `${this.baseUrl}${PATHS.channels}`;
+  }
+
+  get channelsBearers(): readonly string[] {
+    return this.#channelsBearers;
+  }
+
+  setChannels(rows: readonly FakeCatalogueRow[]): void {
+    this.#catalogue = rows;
+    this.#catalogueRevision += 1;
   }
 
   get activeKid(): string {
@@ -781,7 +842,35 @@ class FakePlayoutServer implements FakePlayout {
       this.#serveRevoked(req, res);
       return;
     }
+    if (method === 'GET' && pathname === PATHS.channels) {
+      this.#counts.channels += 1;
+      this.#serveChannels(req, res);
+      return;
+    }
     sendError(res, 'not_found');
+  }
+
+  /**
+   * D4 (§4) — the channel catalogue, bearer-gated like D9 and with the same `ETag` round trip.
+   *
+   * ⚠ It refuses a missing bearer and records every presented one; it does NOT itself verify the
+   * token, because the property worth testing is the BRIDGE's — that it never presents a revoked
+   * or expired credential — and a fake that refused one would hide a bridge that tried.
+   */
+  #serveChannels(req: http.IncomingMessage, res: http.ServerResponse): void {
+    const authorization = req.headers.authorization;
+    if (authorization === undefined || !authorization.startsWith('Bearer ')) {
+      sendError(res, 'invalid_token');
+      return;
+    }
+    this.#channelsBearers.push(authorization.slice('Bearer '.length));
+    const etag = `"channels-${String(this.#catalogueRevision)}"`;
+    if (req.headers['if-none-match'] === etag) {
+      res.writeHead(304, { ...CORS_HEADERS, ETag: etag });
+      res.end();
+      return;
+    }
+    sendJson(res, 200, { channels: this.#catalogue }, { ETag: etag });
   }
 
   /** D3 (§4.3) — public, no auth, and cacheable for an hour exactly as the contract says. */

@@ -139,8 +139,16 @@ export class PlayoutAuth {
   #revokedEtag: string | null = null;
   #lastPollMs = Number.NEGATIVE_INFINITY;
   #polling = false;
-  /** Any live compact token, used solely as the D9 bearer. */
-  #bearer: string | null = null;
+  /**
+   * Any live compact token, used solely as the Playout-read bearer — with the two facts that
+   * decide whether it may still be PRESENTED.
+   *
+   * ⚠ `CHANNEL-AUTHORITY-01` — `jti` and `exp` ride beside the raw token so D4 can refuse, at the
+   * moment of USE, a bearer that has expired or been revoked since it was adopted (see
+   * {@link usableBearer}). The adoption-time guard alone let a bearer outlive both.
+   */
+  #bearer: { readonly raw: string; readonly jti: string | null; readonly exp: number } | null =
+    null;
   /** The background tick. Armed by the first live token, cleared by {@link dispose}. */
   #ticker: ReturnType<typeof setInterval> | null = null;
   /** Count of D9 requests actually issued — the positive control a cadence test needs. */
@@ -301,10 +309,34 @@ export class PlayoutAuth {
    * nobody is, which is correct: with no principal there is no verdict for a revocation to
    * change.
    */
-  noteLiveToken(rawToken: string): void {
-    this.#bearer = rawToken;
+  noteLiveToken(token: Pick<VerifiedToken, 'rawToken' | 'jti' | 'expEpochSec'>): void {
+    this.#bearer = { raw: token.rawToken, jti: token.jti, exp: token.expEpochSec };
     this.#armTicker();
     this.#maybePoll();
+  }
+
+  /**
+   * 🔴 `CHANNEL-AUTHORITY-01` — **THE BEARER FOR A PLAYOUT READ OTHER THAN D9, CHECKED AT USE.**
+   *
+   * The held token, only while it is neither past `exp` (with the contract's tolerance) nor on the
+   * revocation list as last seen; otherwise `null`, and the caller does not read at all.
+   *
+   * ⚠ **Why D4 does not simply take the D9 bearer as it is.** What guards that bearer is the
+   * moment it is ADOPTED: `authGateState` never adopts a revoked token (the `PLAYOUT-AUTH-01`
+   * review found one frozen as the bearer). But a token adopted while good is kept after it
+   * expires, and after its `jti` lands on the list, until another principal's token replaces it —
+   * so D9 goes on presenting it, is answered `401`, and swallows that by design (an outage must
+   * never change a verdict). D4 must not present a credential the Playout has withdrawn, so its
+   * check is here, at use.
+   *
+   * ⚠ D9's own reads are deliberately left as they were: their cadence and their "the last list
+   * stands" rules are pinned by the revocation suite, and this change is about D4.
+   */
+  usableBearer(): string | null {
+    const held = this.#bearer;
+    if (held === null) return null;
+    if (this.isExpired(held.exp) || this.isRevoked(held.jti)) return null;
+    return held.raw;
   }
 
   /**
@@ -336,7 +368,7 @@ export class PlayoutAuth {
    * who left hours ago — it stays valid until `exp`, so nothing fails and nothing says so.
    */
   releaseBearer(rawToken: string): void {
-    if (this.#bearer === rawToken) this.#bearer = null;
+    if (this.#bearer?.raw === rawToken) this.#bearer = null;
   }
 
   /**
@@ -396,7 +428,7 @@ export class PlayoutAuth {
   }
 
   async #pollRevoked(): Promise<void> {
-    const bearer = this.#bearer;
+    const bearer = this.#bearer?.raw ?? null;
     if (bearer === null) return;
     try {
       const headers: Record<string, string> = { Authorization: `Bearer ${bearer}` };

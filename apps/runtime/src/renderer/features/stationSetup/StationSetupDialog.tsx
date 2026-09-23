@@ -1013,7 +1013,10 @@ export function StationSetupDialog({
       /*
         `RUNTIME-REDESIGN-01` Phase 7 — the reference's `.settings-subtitle` (`Channel 1 · News ·
         Primary A`): the channel this dialog's per-channel tab reports, and which server is
-        primary. No channel NAME — the bridge publishes none, and none is invented (A3).
+        primary. No channel NAME here yet: when this was built the bridge published none and none
+        was invented (A3). ⚠ `CHANNEL-AUTHORITY-01` — the discovery call now carries the Playout's
+        catalogue name (`useSelectedChannel().names`, what the channel strip shows); this subtitle
+        does not read it, and adding it is a separate, visual item rather than a silent one here.
       */
       subtitle={
         <>

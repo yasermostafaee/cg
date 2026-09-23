@@ -91,5 +91,14 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     get: () => Promise.resolve({ settings: [], observed: [] }),
     onChanged: () => () => undefined,
   };
+  /*
+    `R-062` gap 2 — the discovery answer. EMPTY is the quiet default for the same reason as the
+    rest: an answer that declares nothing is read by `channelIds` as "fall back to the bank and
+    settings", so a filled stub measures exactly what it measured before the call existed.
+  */
+  cg['stationChannels'] ??= {
+    list: () => Promise.resolve({ channels: [] }),
+    onChanged: () => () => undefined,
+  };
   return stub;
 }

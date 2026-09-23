@@ -198,6 +198,11 @@ describe('a deep link opens ONE dialog at the named section', () => {
         get: () => Promise.resolve({ settings: [], observed: [] }),
         onChanged: () => () => undefined,
       },
+      // `R-062` gap 2 — the discovery answer; empty means the channel list falls back.
+      stationChannels: {
+        list: () => Promise.resolve({ channels: [] }),
+        onChanged: () => () => undefined,
+      },
       // `B-257` — the channel strip reads how much of the console a lock covers.
       lock: {
         state: () => Promise.resolve({ engaged: false }),

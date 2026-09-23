@@ -1,7 +1,13 @@
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
 import { useFixedBank } from '../../hooks/useFixedLayers.js';
-import { channelIds, operableChannels, resolveSelectedChannel } from './channelList.js';
+import { useStationChannels } from '../../hooks/useStationChannels.js';
+import {
+  channelIds,
+  channelNames,
+  operableChannels,
+  resolveSelectedChannel,
+} from './channelList.js';
 import { useChannelChoice } from './channelStore.js';
 
 /**
@@ -25,15 +31,29 @@ export function useSelectedChannel(): {
   operable: readonly number[];
   /** Whether the CURRENTLY SELECTED channel is one this principal may act on. */
   canOperateSelected: boolean;
+  /**
+   * `C-039` — the Playout's catalogue name for a listed channel, where one joined. A LABEL: no
+   * decision anywhere reads it.
+   */
+  names: ReadonlyMap<number, string>;
 } {
   const bank = useFixedBank();
   const settings = useChannelSettings();
   const choice = useChannelChoice();
   const auth = useAuthSession();
+  // `R-062` gap 2 — read FIRST once it has arrived; until then the two sources above stand.
+  const discovery = useStationChannels();
+  const discovered = discovery.ready ? discovery.value : null;
 
-  const channels = channelIds(bank, settings, auth);
+  const channels = channelIds(bank, settings, auth, discovered);
   const operable = operableChannels(channels, auth);
   const selected = resolveSelectedChannel(channels, choice, bank?.channel ?? null);
 
-  return { channels, selected, operable, canOperateSelected: operable.includes(selected) };
+  return {
+    channels,
+    selected,
+    operable,
+    canOperateSelected: operable.includes(selected),
+    names: channelNames(discovered),
+  };
 }

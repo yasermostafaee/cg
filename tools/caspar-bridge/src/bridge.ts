@@ -10,6 +10,10 @@ import {
   AUTHZ_ROLE_REFUSAL,
   authzChannelRefusal,
   channelNotDeclaredRefusal,
+  StationChannelsChangedChannel,
+  StationChannelsListChannel,
+  type StationChannels,
+  type StationChannelSource,
   type PermissionClass,
   grantsChannel,
   grantedChannels,
@@ -154,6 +158,11 @@ import {
 import { normalizeServeHost } from './serve-host-config.js';
 import { AuthSession } from './auth-session.js';
 import { PlayoutAuth, type PlayoutAuthOptions } from './playout-auth.js';
+import {
+  PlayoutCatalogue,
+  type CatalogueRow,
+  type PlayoutCatalogueOptions,
+} from './playout-catalogue.js';
 import {
   AUTH_OFF,
   loadPlayoutFile,
@@ -344,6 +353,11 @@ export interface BridgeOptions {
    */
   playoutAuthOptions?: PlayoutAuthOptions;
   /**
+   * TEST-ONLY seam — clock, `fetch` and tick period for the D4 catalogue read, so a suite can
+   * drive the 30 s floor and a Playout outage without sleeping.
+   */
+  playoutCatalogueOptions?: PlayoutCatalogueOptions;
+  /**
    * TEST-ONLY seam — pass-through to `CasparRuntime`'s sweep/staleness tuning
    * so integration tests can run fast sweeps. Empty in production.
    */
@@ -362,6 +376,11 @@ export interface BridgeHandle {
   readonly auth: PlayoutSettings;
   /** The verifier, or `null` when auth is off. Exposed for the D9 cadence test's control. */
   readonly playoutAuth: PlayoutAuth | null;
+  /**
+   * `C-039` — the Playout's channel catalogue (D4) reader, or `null` when auth is off. Exposed for
+   * the cadence test's positive control (`readCount`) and to drive a read without a 30 s wait.
+   */
+  readonly playoutCatalogue: PlayoutCatalogue | null;
   /**
    * B-038 Phase 3 — the template HTTP serve address: the base URL CasparCG fetches
    * `/template/<id>` from, plus whether the bind is LAN-exposed (non-loopback).
@@ -805,7 +824,7 @@ export function authGateState(
     playoutAuth.noteVerifiedButRevoked();
     return 'invalid';
   }
-  playoutAuth.noteLiveToken(held.rawToken);
+  playoutAuth.noteLiveToken(held);
   return 'signed-in';
 }
 
@@ -862,6 +881,86 @@ export function authStateFor(
               runtime.declaredChannels(),
             ),
           ],
+  };
+}
+
+/**
+ * 🔴 `R-062` gap 2 / `C-039` — **THE CHANNEL-DISCOVERY ANSWER FOR ONE SOCKET. The ONE
+ * composition** — the `channels.list` read and the `channels.changed` publish both call it, for
+ * `authStateFor`'s reason: a read and a push answering the same question from two places is the
+ * drift this file has already paid for once.
+ *
+ * ── THE THREE FACTS, KEPT APART ─────────────────────────────────────────────
+ *
+ *   - `named`    — a D4 row whose `casparHost` is one this bridge drives (`configuredCasparHosts`,
+ *                  the SAME host rule `grantsChannel` applies, so a row naming another station's
+ *                  host joins nothing) and whose `casparChannel` is the channel. A LABEL.
+ *   - `declared` — `isDeclaredChannel`, the predicate the station fence refuses on. The only one
+ *                  of the three that says what this bridge writes to.
+ *   - `permitted`— `grantsChannel` for a signed-in principal; `false` for a session that has
+ *                  stopped holding; ABSENT with auth OFF.
+ *
+ * ── THE SOURCES, IN ORDER ───────────────────────────────────────────────────
+ *
+ * The Playout's catalogue when it answered, then the bank, then channel settings — the two the
+ * console unioned before this call existed, kept as fallbacks. With auth OFF there is no bearer,
+ * so no catalogue, and the answer is exactly those two.
+ *
+ * ⚠ **Only indices a source NAMES are returned.** Nothing here derives or iterates channel numbers
+ * — CasparCG's preview channels `N+1..2N` are published by no source and so can never appear, and
+ * nothing that reads this list probes a channel it contains (the mode read and the output check
+ * walk `#declaredChannels()`, never this list).
+ */
+export function stationChannelsFor(
+  session: AuthSession | null,
+  status: AuthGateState,
+  mode: AuthMode,
+  runtime: CasparRuntime,
+  catalogue: readonly CatalogueRow[] | null,
+): StationChannels {
+  const hosts = configuredCasparHosts(runtime.config());
+  const principal = session?.token?.principal ?? null;
+  const entries = new Map<
+    number,
+    { named: { id: string; name: string } | null; sources: StationChannelSource[] }
+  >();
+  const note = (
+    channel: number,
+    source: StationChannelSource,
+    named: { id: string; name: string } | null = null,
+  ): void => {
+    const entry = entries.get(channel);
+    if (entry === undefined) {
+      entries.set(channel, { named, sources: [source] });
+      return;
+    }
+    if (!entry.sources.includes(source)) entry.sources.push(source);
+  };
+
+  for (const row of catalogue ?? []) {
+    // The join: this station's host, or nothing. The first row naming a channel wins.
+    if (!hosts.includes(row.casparHost)) continue;
+    note(row.casparChannel, 'catalogue', { id: row.id, name: row.name });
+  }
+  const bank = runtime.fixedLayersConfig();
+  if (bank !== null) note(bank.channel, 'bank');
+  for (const s of runtime.channelSettingsState().settings) note(s.channel, 'channel-settings');
+
+  return {
+    channels: [...entries.entries()].map(([channel, entry]) => ({
+      channel,
+      named: entry.named,
+      declared: runtime.isDeclaredChannel(channel),
+      ...(mode === 'off'
+        ? {}
+        : {
+            permitted:
+              principal !== null &&
+              status === 'signed-in' &&
+              grantsChannel(principal.channels, hosts, channel),
+          }),
+      sources: entry.sources,
+    })),
   };
 }
 
@@ -1216,6 +1315,22 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   );
   const playoutAuth =
     auth.playout === null ? null : new PlayoutAuth(auth.playout, options.playoutAuthOptions ?? {});
+  /*
+    🔴 `C-039` — THE PLAYOUT'S CHANNEL CATALOGUE (D4). Built only with auth ON: with auth OFF there
+    is no principal, so no bearer, so no read — and the discovery answer is exactly the two sources
+    the console unioned before. Its bearer is `usableBearer`, checked at USE (never expired, never
+    revoked, gone once its principal signs out). It names channels; it never makes one writable —
+    the station fence reads the bank alone.
+  */
+  const playoutCatalogue =
+    playoutAuth === null || auth.playout === null
+      ? null
+      : new PlayoutCatalogue(
+          auth.playout.channelsUrl,
+          () => playoutAuth.usableBearer(),
+          options.playoutCatalogueOptions ?? {},
+        );
+  playoutCatalogue?.start();
   // R-010 boot precedence: explicit connection (CLI flags) > persisted file >
   // the single-server default. Flags are session overrides — they win without
   // clobbering the persisted file.
@@ -1363,6 +1478,14 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     auth,
     authState: (session) => authGateState(session, playoutAuth),
     releaseBearer: (rawToken) => playoutAuth?.releaseBearer(rawToken),
+    stationChannels: (session) =>
+      stationChannelsFor(
+        session,
+        authGateState(session, playoutAuth),
+        auth.mode,
+        runtime,
+        playoutCatalogue?.rows() ?? null,
+      ),
   });
 
   const wss = new WebSocketServer({
@@ -1438,6 +1561,36 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       // § 3(a) — THIS socket's principal, through the one composition `auth.state` answers with.
       () => authStateFor(session, authGateState(session, playoutAuth), auth.mode, runtime),
     );
+    /*
+      🔴 `R-062` gap 2 — THIS socket's discovery answer, pushed when an input to it moves: the
+      Playout's catalogue, the bank, channel settings, the server list (the host join) — and this
+      socket's own sign-in, because `permitted` is per principal and the console's sign-in resync
+      re-pulls the stack, health and lock and nothing else.
+
+      ⚠ Beside `wirePublishes` rather than inside it: every emitter it subscribes is already
+      forwarded there (the `B-247` guard's subject), and this one's payload is per socket.
+      Deduplicated, so a settings publish that does not move the answer sends nothing — with auth
+      OFF the answer cannot move short of a bank installed live on a bank-less bridge, so an
+      auth-OFF console receives no traffic it did not have.
+    */
+    const pushStationChannels = stationChannelsPusher(
+      socket,
+      () => authGateState(session, playoutAuth) !== 'absent',
+      () =>
+        stationChannelsFor(
+          session,
+          authGateState(session, playoutAuth),
+          auth.mode,
+          runtime,
+          playoutCatalogue?.rows() ?? null,
+        ),
+    );
+    unsubscribers.push(
+      runtime.fixedConfigChanged.subscribe(pushStationChannels),
+      runtime.channelSettingsChanged.subscribe(pushStationChannels),
+      runtime.configChanged.subscribe(pushStationChannels),
+      ...(playoutCatalogue !== null ? [playoutCatalogue.onChanged(pushStationChannels)] : []),
+    );
     socket.on('message', (data) => {
       // `B-229` — the lock is read PER REQUEST from the live runtime, never captured.
       void handleMessage(
@@ -1448,6 +1601,13 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         session,
         playoutAuth,
         runtime,
+        () => {
+          // A principal was just seated on this socket: its `permitted` moved, and its bearer
+          // may be the first this bridge has had — read the catalogue now rather than at the
+          // next tick, so the names arrive with the sign-in.
+          pushStationChannels();
+          void playoutCatalogue?.refresh();
+        },
       );
     });
     const dropSocket = (): void => {
@@ -1520,6 +1680,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     url: `ws://${host}:${port}`,
     auth,
     playoutAuth,
+    playoutCatalogue,
     templateServe,
     runtime,
     fixedBankSource: { bank: fixedBank, source: fixedBankSource },
@@ -1539,6 +1700,8 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       // `C-037` — stop the D9 tick with the bridge. It is `unref`'d, so it never held the
       // process open; clearing it is what keeps a test suite from leaving one per bridge.
       playoutAuth?.dispose();
+      // `C-039` — and the D4 tick, for the same reason.
+      playoutCatalogue?.dispose();
       await runtime.stop();
       await new Promise<void>((resolve, reject) => {
         wss.close((err) => (err ? reject(err) : resolve()));
@@ -1555,6 +1718,8 @@ async function handleMessage(
   session: AuthSession,
   playoutAuth: PlayoutAuth | null,
   runtime: CasparRuntime,
+  /** `R-062` gap 2 — a principal was just seated on this socket. */
+  afterSignIn: () => void = () => undefined,
 ): Promise<void> {
   const frame = parseWsFrame(raw);
   if (frame === null) return;
@@ -1577,7 +1742,7 @@ async function handleMessage(
       already sees it. Registering after the await would be registering after the window it
       exists to cover.
     */
-    const verification = handleAuthFrame(socket, frame, session, playoutAuth, runtime);
+    const verification = handleAuthFrame(socket, frame, session, playoutAuth, runtime, afterSignIn);
     session.trackVerification(verification);
     await verification;
     return;
@@ -1805,6 +1970,7 @@ async function handleAuthFrame(
   session: AuthSession,
   playoutAuth: PlayoutAuth | null,
   runtime: CasparRuntime,
+  afterSignIn: () => void,
 ): Promise<void> {
   if (playoutAuth === null) {
     send(socket, {
@@ -1868,7 +2034,7 @@ async function handleAuthFrame(
     return;
   }
   session.adopt(result.token);
-  playoutAuth.noteLiveToken(result.token.rawToken);
+  playoutAuth.noteLiveToken(result.token);
   /*
     🔴 `DELTA B` — **A RESUME IS NOT A SIGN-IN, AND THE RECORD MUST NOT SAY IT IS.**
 
@@ -1915,6 +2081,9 @@ async function handleAuthFrame(
       ],
     } satisfies AuthState,
   });
+  // AFTER the reply, so the console holds its principal before the channel answer that is
+  // computed for it arrives.
+  afterSignIn();
 }
 
 function errorResponse(id: string, message: string): WsResponseFrame {
@@ -1923,6 +2092,35 @@ function errorResponse(id: string, message: string): WsResponseFrame {
 
 function send(socket: WebSocket, frame: WsResponseFrame | WsPublishFrame): void {
   if (socket.readyState === socket.OPEN) socket.send(serializeWsFrame(frame));
+}
+
+/**
+ * `R-062` gap 2 — a per-socket `channels.changed` pusher: computes THIS socket's discovery answer
+ * and sends it only when it differs from the last one this socket was actually sent.
+ *
+ * ⚠ The last-sent answer is recorded only when it is DELIVERED. A socket that has not signed in
+ * receives nothing (ADR 0010 rule 4), and recording an answer it never got would suppress the
+ * very push its sign-in needs.
+ */
+function stationChannelsPusher(
+  socket: WebSocket,
+  deliver: () => boolean,
+  compute: () => StationChannels,
+): () => void {
+  let lastSent: string | null = null;
+  return () => {
+    if (!deliver()) return;
+    const next = StationChannelsChangedChannel.payload.safeParse(compute());
+    if (!next.success) return;
+    const json = JSON.stringify(next.data);
+    if (json === lastSent) return;
+    lastSent = json;
+    send(socket, {
+      type: 'publish',
+      channel: StationChannelsChangedChannel.name,
+      payload: next.data,
+    });
+  };
 }
 
 /**
@@ -2094,6 +2292,12 @@ export function buildRoutes(
     authState?: (session: AuthSession | null) => AuthGateState;
     /** `C-037` — give up the D9 bearer when the socket that supplied it signs out. */
     releaseBearer?: (rawToken: string) => void;
+    /**
+     * `R-062` gap 2 — THE ONE COMPOSITION, injected for `authState`'s reason: `channels.list`
+     * answers with the same function the `channels.changed` publish uses. Defaults to the
+     * auth-OFF answer with no catalogue — what a bridge built with no Playout link is.
+     */
+    stationChannels?: (session: AuthSession | null) => StationChannels;
   } = {},
 ): Map<string, Route> {
   // NAMED, not positional. Four optional string paths in a row is a signature
@@ -2103,6 +2307,10 @@ export function buildRoutes(
   const { mode: authMode, playout: playoutUrls } = paths.auth ?? AUTH_OFF;
   const authState = paths.authState ?? ((): AuthGateState => 'off');
   const releaseBearer = paths.releaseBearer ?? ((): void => undefined);
+  const stationChannels =
+    paths.stationChannels ??
+    ((session: AuthSession | null): StationChannels =>
+      stationChannelsFor(session, 'off', 'off', b, null));
   /*
     `B-229` — `lock` is the THIRD ARGUMENT AND IT IS REQUIRED. A new channel cannot be
     routed without classifying it, which is what keeps "the lock refuses everything"
@@ -2461,6 +2669,14 @@ export function buildRoutes(
     route(DelimitersSetChannel, 'operator', 'station-admin', (r: { delimiters: never[] }) =>
       b.delimitersSet(r.delimiters),
     ),
+
+    /*
+      🔴 `R-062` gap 2 / `C-039` — THE CHANNEL-DISCOVERY CALL. A read: it answers for the asking
+      socket's principal and changes nothing. It NAMES channels and says which this station
+      operates; it decides nothing — the station fence reads `isDeclaredChannel` directly, so no
+      catalogue row can make a channel writable.
+    */
+    route(StationChannelsListChannel, 'read', 'read', () => stationChannels(currentAuthSession())),
 
     // R-030 — the per-channel output raster, bridge-owned for the same reasons
     // the template catalogue is: several browsers must not disagree about where

@@ -20,8 +20,9 @@
  *     unreadable from here;
  *  2. forces `--caspar-host 127.0.0.1`, so the only CasparCG it can address is one on this
  *     machine;
- *  3. starts with an EMPTY station, deliberately. There is nothing to put on air because there
- *     is nothing configured to put anywhere.
+ *  3. starts with an EMPTY station, deliberately — a bank declared on channel 2 (the test
+ *     Playout's shape, `CHANNEL-AUTHORITY-01`) and nothing else. There is nothing to put on air
+ *     because there is no template to put anywhere.
  *
  * ⚠ An explicit `--caspar-host` passed through by the caller still wins — it is their machine
  * and their choice — but the DEFAULT can no longer be "whatever this host was last pointed at".
@@ -47,6 +48,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  FAKE_BOTH_CHANNELS_OPERATOR,
+  FAKE_CATALOGUE,
   FAKE_CHANNEL_TWO_OPERATOR,
   FAKE_LONG_NAME_USER,
   FAKE_OPERATOR,
@@ -94,6 +97,22 @@ if (built.status !== 0) {
 /** A scratch station, so nothing here can read or write the real one. */
 const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-dev-playout-'));
 
+/*
+  🔴 `CHANNEL-AUTHORITY-01` — **THE DEMO STATION IS ON CHANNEL 2, the test Playout's shape.** There
+  the Playout's own programme output is channel 1 and CG's channel is 2, and the fake's catalogue
+  (D4) names both. A station on channel 1 would show the catalogue naming our own channel after
+  the Playout's programme — a demo of the wrong thing. The bank is the built-in default's shape
+  (`start` 80, as the re-cut has it), moved to channel 2, and written into the SCRATCH directory
+  like every other path.
+*/
+fs.writeFileSync(
+  path.join(stateDir, 'bridge-fixed-layers.json'),
+  JSON.stringify({ channel: 2, start: 80, count: 20 }),
+  'utf8',
+);
+const OURS = FAKE_CATALOGUE.find((r) => r.casparChannel === 2)?.name ?? '';
+const PROGRAMME = FAKE_CATALOGUE.find((r) => r.casparChannel === 1)?.name ?? '';
+
 const passthrough = process.argv.slice(2);
 const caller = (flag: string): boolean => passthrough.includes(flag);
 
@@ -107,21 +126,29 @@ for (const line of [
   `  sign-in (D1)   : ${playout.tokenUrl}`,
   `  revoked (D9)   : ${playout.revokedUrl}`,
   '',
+  `  catalogue (D4) : ${playout.channelsUrl}`,
+  `                   channel 1 = ${PROGRAMME} (the Playout's programme — NOT this station's)`,
+  `                   channel 2 = ${OURS} (this station's channel)`,
+  '',
   '  Sign in as one of these. The password is a CONSTANT, not a secret:',
-  `    ${FAKE_OPERATOR.username.padEnd(9)} ${FAKE_OPERATOR.name}   operator, ONE channel`,
-  `    ${FAKE_VIEWER.username.padEnd(9)} ${FAKE_VIEWER.name}   viewer, NO channels — and it STILL`,
-  "               signs in. That is C-038's gap, and it is meant to be visible.",
-  `    ${FAKE_LONG_NAME_USER.username.padEnd(9)} a name longer than 64 characters, so the audit`,
-  '               record shows the truncation being recorded',
-  `    ${FAKE_CHANNEL_TWO_OPERATOR.username.padEnd(9)} ${FAKE_CHANNEL_TWO_OPERATOR.name}   operator, CHANNEL 2 ONLY — B-257:`,
-  "               cg-op1's lock does not lock this console",
+  `    ${FAKE_CHANNEL_TWO_OPERATOR.username.padEnd(10)} ${FAKE_CHANNEL_TWO_OPERATOR.name}   operator of THIS station's channel 2 —`,
+  "                the strip shows it under the catalogue's name",
+  `    ${FAKE_BOTH_CHANNELS_OPERATOR.username.padEnd(10)} ${FAKE_BOTH_CHANNELS_OPERATOR.name}   granted channels 1 AND 2 (the test`,
+  "                Playout's cg-op2 shape) — channel 1 is NOT on the strip",
+  `    ${FAKE_OPERATOR.username.padEnd(10)} ${FAKE_OPERATOR.name}   operator of channel 1 only — the Playout's`,
+  '                programme channel, so here it operates NOTHING (read-only)',
+  `    ${FAKE_VIEWER.username.padEnd(10)} ${FAKE_VIEWER.name}   viewer, NO channels — and it STILL`,
+  "                signs in. That is C-038's gap, and it is meant to be visible.",
+  `    ${FAKE_LONG_NAME_USER.username.padEnd(10)} a name longer than 64 characters, so the audit`,
+  '                record shows the truncation being recorded',
   `    password : ${FAKE_PLAYOUT_PASSWORD}`,
   '',
-  '  ── THE STATION IS EMPTY AND ISOLATED ──────────────────────────────────',
+  '  ── THE STATION IS ON CHANNEL 2, AND ISOLATED ──────────────────────────',
   `  scratch state  : ${stateDir}`,
   '  CasparCG       : 127.0.0.1 (forced — the real connection config is NOT read)',
-  '  Nothing here can reach the plant. There is no bank, no template library and no',
-  '  ledger, so there is nothing to put on air — the sign-in is what this shows.',
+  '  Nothing here can reach the plant. The bank is declared on channel 2 and there is',
+  '  no template library and no ledger, so there is nothing to put on air — the',
+  '  sign-in and the channel strip are what this shows.',
   '',
   '  Now open the Runtime (pnpm --filter @cg/runtime dev) and reload the console.',
   '  Ctrl-C stops both and leaves the scratch directory for inspection.',

@@ -176,6 +176,33 @@ the build to name in the recon record**. apasai-core, which is what `C-040` actu
     - **Wording, as agreed:** an `INFO`-based reading establishes **no producer**, never
       **clean**. Our docs and our one probe that said otherwise have been corrected; we never
       address `INFO` by layer and never read a layer volume from `INFO`'s `<volume>` nodes.
+14. 🔴 **2026-09-23 — `CHANNEL-AUTHORITY-01`: our bridge now READS D4, and it now REFUSES your
+    channels.** Two halves, landed in that order on purpose (`openspec/changes/channel-authority`).
+    - **The fence first.** A bridge writes only to the channels ITS OWN bank declares. Any request
+      naming another channel is refused before anything is sent — with auth ON or OFF, whatever the
+      principal's `cg_channels` says. Measured before the fix, on a station declaring channel 2
+      with a user granted channels 1 AND 2 (your `cg-op2`'s shape): our `layers.clear` and our
+      playout-layer clear each put a `CLEAR 1-<layer>` on channel 1, and our console OFFERED both
+      (`B-261`). A grant says who may operate a channel; it never made channel 1 ours, and nothing
+      but our bank does now.
+    - **What we read from D4.** `GET /api/cg/channels`, **at most once per 30 s**, with
+      `If-None-Match` (a `304` keeps what we hold), and immediately when a console signs in so its
+      names arrive with it. The bearer is the signed-in operator's own token — the same credential
+      D9 uses, because the bridge has none of its own — **checked at the moment of use**: never a
+      token past `exp`, never one on your revocation list, and none at all once that operator has
+      signed out or closed the tab. No bearer means no read. Any failure — no answer, a `401`, a
+      body we cannot parse — means we hold **no catalogue at all** (not the last one): no alarm, no
+      verdict, and never a gate on a command. With auth OFF we do not read it.
+    - **What we use it for: NAMES.** A row joins one of our channels only when its `casparHost` is
+      a server we are configured to drive (the same host rule as item 10) and its `casparChannel`
+      is a channel our bank declares. The console's channel tab then carries your name for it —
+      `کانال دوم (تست CG)` rather than `CHANNEL 2`. Your programme channel is listed by our
+      discovery call as a channel that EXISTS, and it is **never** on our operating strip and never
+      written to.
+    - 🔴 **The catalogue cannot widen what we write to**, and the fence is why: it reads our bank,
+      never your catalogue. A row you add for a channel we do not declare names nothing we
+      operate. We also never derive a channel index — your preview channels `N+1..2N` are in no list
+      we read, so they are neither addressed nor probed.
 
 **The test Playout.** Base URL `http://192.168.21.111:8080` — which is also `iss`, byte-for-byte,
 and never derived. `aud` contains `cg-control`. Signing is ES256 and **the JWKS is read LIVE**;

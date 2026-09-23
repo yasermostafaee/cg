@@ -179,6 +179,8 @@ describe('C-038 — the census: every route, classified', () => {
       'auth.state',
       'bridge.capabilities',
       'channelSettings.get',
+      // `R-062` gap 2 — the channel-discovery call. A read: it NAMES channels and decides nothing.
+      'channels.list',
       'connections.config',
       'connections.health',
       'connections.template-serve',

@@ -2450,6 +2450,13 @@ anywhere but that one chokepoint is how the site nobody looked at gets missed.
 - WHEN [[R-062]]'s discovery call lands THEN the permission check reads the same channel set
   (golden rule 6 — one predicate, not two that agree)
 
+🔴 **2026-09-23 — THE BANK HALF IS CLOSED, by `CHANNEL-AUTHORITY-01` commit 1 (`9d114657`).**
+This item authorises a PRINCIPAL; nothing asked whether THIS STATION operates the channel a request
+names, and with a grant for a channel the station does not declare, the permission gate passed it
+to the wire — `CLEAR 1-20` and `CLEAR 1-60` on a channel-2 station, measured (`B-261`). A station
+fence now sits before this gate (after sign-in) and refuses any channel `#declaredChannels()` does
+not contain, auth OFF included. The grant check below is unchanged.
+
 **Status 2026-09-22 —** implemented in `openspec/changes/playout-authz-channels`. ⚠ Two notes
 below were overtaken by the census and are corrected here rather than edited in place: the per-item
 resolver is NOT `item.slot.channel` alone — `slot` is OPTIONAL and a live plate can sit on a
@@ -2470,7 +2477,7 @@ changes. — Depends on [[C-037]]. Cross-refs [[R-062]], [[R-066]], [[B-229]], [
   `git grep -n --untracked -E "^## \[.\] C-038" -- docs` returned nothing, against a positive
   control on the same regex for `C-036` which returned `caspar.md:2321`.
 
-## [ ] C-039 — the Playout's channel catalogue as the FIRST channel-discovery source ⟨priority: medium⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
+## [~] C-039 — the Playout's channel catalogue as the FIRST channel-discovery source ⟨priority: medium⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md) · IMPLEMENTED by `CHANNEL-AUTHORITY-01` (`openspec/changes/channel-authority`)
 
 **What:** Feed [[R-062]]'s channel-discovery call from the Playout's `GET /api/cg/channels`
 (`{id, name, casparHost, casparChannel}`) first, keeping the two sources the renderer unions
@@ -2504,6 +2511,18 @@ Playout degrades to ABSENT and never gates a verb (ADR 0010 rule 8). — Depends
 - **Number:** `C-039`. Verified free at the moment of commit, not of planning:
   `git grep -n --untracked -E "^## \[.\] C-039" -- docs` returned nothing, against a positive
   control on the same regex for `C-036` which returned `caspar.md:2321`.
+
+**Status 2026-09-23 — implemented by `CHANNEL-AUTHORITY-01` commit 2**, behind that change's
+commit 1 (`9d114657`), which made the declared bank the ONLY thing that decides what the bridge
+writes to — so a catalogue row names a channel and can never make one writable. The bridge reads
+D4 at most every 30 s with `ETag`, with a bearer checked AT USE (never expired, never revoked,
+released on sign-out), and fails to ABSENT; `channels.list` returns each channel's `named` /
+`declared` / `permitted` kept apart; the strip lists the DECLARED channels under the catalogue's
+name. `[~]` until the Linux `e2e` discharges and the change is archived. ⚠ Two readings of the
+acceptance above, recorded rather than silently taken: "the strip shows the Playout's NAMES" is
+read as the names of the channels THIS STATION operates — the Playout's programme channel is
+returned by the call with `declared: false` and is not on the operating strip; and the note's
+`servers.A.host` join is the host SET (`configuredCasparHosts`), `C-038`'s rule.
 
 ## [~] C-040 — validate the bridge against apasai-core on the test Playout ⟨priority: high — the AMCP half is MEASURED; the sign-in half remains⟩ — FILED 2026-09-16 by `PLAYOUT-LINK-01` from [ADR 0010](../adrs/0010-playout-link.md)
 

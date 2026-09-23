@@ -18,7 +18,18 @@ import { Icon } from './Icon.js';
  */
 export interface TabSpec {
   id: string;
-  label: string;
+  /**
+   * The tab's text. Markup is allowed for ONE reason: a piece of OPERATOR DATA inside it — a
+   * Persian channel name from the Playout's catalogue — has to sit in its own `<bdi>`, with the
+   * chrome around it (` · READ ONLY`) outside the isolate (golden rule 11). Plain chrome is a
+   * string, as it always was.
+   */
+  label: ReactNode;
+  /**
+   * The long form, on hover — golden rule 11's RELOCATION: when a label shows a name, the id it
+   * replaced (the channel number) lives here rather than disappearing.
+   */
+  title?: string | undefined;
   /**
    * Optional attention marker, rendered after the label.
    *
@@ -264,6 +275,7 @@ export function TabStrip({
               id={`${idPrefix}-${tab.id}`}
               aria-selected={active}
               aria-controls={`${idPrefix}panel-${tab.id}`}
+              {...(tab.title !== undefined ? { title: tab.title } : {})}
               {...(vertical
                 ? { className: 'cg-rail-tab' }
                 : outer
