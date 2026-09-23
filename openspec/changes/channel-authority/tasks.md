@@ -60,6 +60,10 @@
       beside the declared control; the isolate; the fallback); `playout-authz.spec.ts` E2E (the
       name on a real page; `cg-op-both` offered channel 2 only). Every absence names its control
 
+- [x] 3.9 An auth-OFF console is pushed nothing its answer did not change (the dedupe is seeded when
+      the socket is already deliverable) — red-first against commit 2, which pushed one copy per
+      connect; and a sign-in is ALWAYS pushed its answer (the viewer case, mutation-checked)
+
 ## 4. Records
 
 - [x] 4.1 `B-261` filed; `B-257` noted (its spec asserted this hazard as a fix)

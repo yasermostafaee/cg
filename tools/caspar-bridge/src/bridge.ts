@@ -2107,7 +2107,16 @@ function stationChannelsPusher(
   deliver: () => boolean,
   compute: () => StationChannels,
 ): () => void {
-  let lastSent: string | null = null;
+  /*
+    ⚠ SEEDED with the answer the socket's own `channels.list` pull returns — when, and only when,
+    the socket can already be delivered to. That is auth OFF, where the answer cannot move short
+    of a bank installed live on a bank-less bridge: without the seed, the first input event after
+    connect (the mode read's settings publish) pushed an unchanged copy, one frame of traffic an
+    auth-OFF console never had. With auth ON a socket connects signed out, the seed stays empty,
+    and its sign-in push always goes — which it must: a viewer's answer can be identical before
+    and after sign-in, and its pre-sign-in pull was refused, so that push is the only copy it gets.
+  */
+  let lastSent: string | null = deliver() ? JSON.stringify(compute()) : null;
   return () => {
     if (!deliver()) return;
     const next = StationChannelsChangedChannel.payload.safeParse(compute());

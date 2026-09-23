@@ -274,6 +274,70 @@ describe('the bearer — never revoked, never expired, gone at sign-out', () => 
   }, 20_000);
 });
 
+/*
+  ⚠ AUTH OFF GAINS NO PUSH. The console reads `channels.list` once on connect; after that an
+  auth-OFF socket is pushed a `channels.changed` only when its answer actually moves — which,
+  short of a bank installed live on a bank-less bridge, it never does. The first spelling pushed
+  one redundant copy after every connect, on the mode read's settings publish.
+*/
+describe('an auth-OFF console is pushed nothing its answer did not change', () => {
+  it('no channels.changed after connect — control: the same socket DID hear the settings publish', async () => {
+    const oscPort = await freeUdpPort();
+    const mock = track(
+      await createMock({ amcpPort: 0, oscPort, oscHost: '127.0.0.1', oscHz: 40, channels: 2 }),
+      (m) => m.stop(),
+    );
+    const handle = track(
+      await createBridge({
+        port: 0,
+        connection: {
+          servers: { A: { host: '127.0.0.1', amcpPort: mock.amcpPort, oscPort } },
+          strategy: 'mirror-sync',
+          autoFailoverEnabled: true,
+        },
+        fixedLayers: BANK,
+      }),
+      (h) => h.close(),
+    );
+    // Connect BEFORE the mode read, so its settings publish lands on this socket.
+    const client = await openClient(handle);
+    await handle.runtime.whenServerHealthy(HEALTH_MS);
+    await awaitChannelModeRead(handle.runtime);
+    const heard = (channel: string): number =>
+      client.publishes().filter((f) => f.type === 'publish' && f.channel === channel).length;
+
+    // Control FIRST: the capture is live — the mode read's settings publish reached this socket.
+    await waitFor(() => heard('channelSettings.changed') > 0, 8000);
+    expect(heard(StationChannelsChangedChannel.name), 'an unchanged answer was pushed').toBe(0);
+  }, 40_000);
+});
+
+describe('a sign-in is always pushed its answer', () => {
+  it('a viewer signing in after the catalogue is held gets the names — control: the first console did', async () => {
+    const s = await station();
+    const pushedName = (c: Client): (string | undefined)[] =>
+      c
+        .publishes()
+        .filter((f) => f.type === 'publish' && f.channel === StationChannelsChangedChannel.name)
+        .map((f) =>
+          f.type === 'publish'
+            ? (f.payload as StationChannels).channels.find((ch) => ch.channel === 2)?.named?.name
+            : undefined,
+        );
+    // The first console's bearer read the catalogue — control: its socket heard the name.
+    const first = await s.signIn('bothChannels');
+    await waitFor(() => pushedName(first.client).includes(OURS?.name));
+
+    /*
+      A viewer's answer is the same signed out as signed in (`permitted` false everywhere), and its
+      console's pull before sign-in was refused — so the sign-in push is the only copy it gets. A
+      dedupe seeded on connect would swallow it.
+    */
+    const viewer = await s.signIn('viewer');
+    await waitFor(() => pushedName(viewer.client).includes(OURS?.name));
+  }, 20_000);
+});
+
 describe('the console hears it', () => {
   it('a renamed channel is pushed as channels.changed — control: the sign-in push carried the first name', async () => {
     const s = await station();

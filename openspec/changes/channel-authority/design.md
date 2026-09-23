@@ -179,8 +179,15 @@ recorded, not fixed here.
 the publish gate withholds everything from a socket that has not signed in, and recording an
 undelivered answer would suppress the push its sign-in needs. Inputs: the catalogue, the bank,
 channel settings, the server list, and that socket's own sign-in (the console's sign-in resync
-re-pulls the stack, health and lock only). With auth OFF the answer cannot move short of a bank
-installed live on a bank-less bridge, so an auth-OFF console receives nothing new in practice.
+re-pulls the stack, health and lock only). The dedupe is SEEDED with the socket's current answer
+when it can already be delivered to — auth OFF — so an auth-OFF console is pushed nothing unless its
+answer moves (it cannot, short of a bank installed live on a bank-less bridge); its one new frame is
+its own `channels.list` read on connect. The first spelling pushed one unchanged copy after every
+connect, on the mode read's settings publish, and a test now pins its absence beside the settings
+publish that proves the capture live. ⚠ With auth ON the seed stays EMPTY and the sign-in push
+always goes: a viewer's answer is identical signed out and signed in, and its pre-sign-in pull was
+refused, so that push is the only copy it gets (pinned, and mutation-checked against an
+unconditional seed).
 
 **The console.** `channelIds` reads the answer's `declared` channels first once it has ARRIVED, with
 the bank and settings as the fallback (and an answer declaring nothing is read as "fall back" — a
