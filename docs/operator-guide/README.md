@@ -32,13 +32,29 @@ password, and that `http://127.0.0.1:5174` is in the Playout's CORS list.
    are told the station is not set up yet. Within seconds the CasparCG line turns OK and the
    channels appear. If it says this machine is waiting for approval, the Playout's administrator
    approves it at **تنظیمات ← اتصال به CG Control**; the line names this machine's address.
-5. **Channel** — pick the channel this station drives. Never pick the Playout's programme channel.
+5. **Channel** — pick the channel this station drives; nothing is picked for you. Each channel shows
+   its name and its number (`· CH 2`). If the channel is already on air with another system's
+   content, CG Control says so in one line (for example _"آپاسای · CH 1 is already on air — another
+   system is playing on layer 5."_) and asks you to press **Use this channel anyway**. That is a
+   warning, not a refusal: at a client, CG graphics do go on the programme channel, above the
+   Playout's layers. On the test Playout, use `cg-test2` (channel 2).
 6. **Serve address** — CG Control fills in this machine's address; change it only if the Playout's
    administrator tells you to. Press **Use this channel**.
 
-The console opens, signed in. Everything is in **SETTINGS** afterwards: the Playout and its check
-under **Servers**, the CasparCG host beside them, and the rows under **Layers**. Every layer row is
-shown after setup; hide the ones you do not use there once CasparCG is connected.
+**Chose the wrong channel?** **SETTINGS → Channel → Change channel…** (a station admin only) shows the
+same list and the same warning. It is refused while anything of ours is still on air on the current
+channel — take it off air first. No file needs editing.
+
+**On air on another channel.** If something of ours is still on air on a channel this station no
+longer drives, it is not shown in the channel's own view. It is listed under **SETTINGS → Channel →
+On air on another channel**, with its channel, layer and template, for a station admin. **Take off
+air** stops and clears that one layer and nothing else on that channel.
+
+The console opens, signed in, with its controls — no reload. Everything is in **SETTINGS**
+afterwards: the Playout and its check under **Servers**, the CasparCG host beside them, and the rows
+under **Layers**. Every layer row is shown after setup; hide the ones you do not use there once
+CasparCG is connected. **A row's `#` and its default name are its real CasparCG layer** — the top
+row is `99`, _Layer 99_; beds read _Bed 59_ … _Bed 50_. A name you give a row replaces the default.
 
 **Closing CG Control stops control, not air.** What is on air stays on air, and the next start
 picks the rows up again. If CG Control will not start, it says why on its own screen; the

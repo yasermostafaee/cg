@@ -3975,3 +3975,15 @@ running AND the next window attaches to it rather than starting a second one.
 ledgers, and neither knows of the other. **Why.** Recorded, not solved: the install-time rule
 (ADR 0011) is one CG Control per channel. **Acceptance:** WHEN a second station declares a channel
 another already drives THEN the second is told so before it can take.
+
+## [x] R-069 — Choosing a channel that is already on air warns first ⟨priority: high⟩ — FILED AND DONE 2026-09-23 by `DESKTOP-APPS-01-D` d
+
+**What.** First-run and Station setup's Change channel… read the chosen channel's occupancy after the
+connection is written and before the channel is declared; a channel already on air with somebody
+else's content earns one line — the channel's name, its number and the layers in use — and a second
+press ("Use this channel anyway"). **Why.** The owner declared the Playout's programme channel with
+nothing to tell him it was on air. It is not a block: at a client, CG graphics do belong on the
+programme channel, above the Playout's layers. **Acceptance:** WHEN the admin picks a channel
+carrying another system's producer THEN one warning line appears and the channel is declared only
+on a second press; WHEN the channel is empty THEN no warning. Tests: `firstRunChannelStep.dom.test.ts`,
+`one-channel-station.integration.test.ts` (d).

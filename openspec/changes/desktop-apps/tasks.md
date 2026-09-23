@@ -100,7 +100,34 @@
       `approve`; operator/loopback first contact seals; no expiry), each rule with its control
 - [x] 5C.9 C9 — the 2.8.54 addendum rewritten; `C-042` withdrawn, `C-043` the three known limits;
       the operator guide's install order
-- [ ] 5C.10 Linux `e2e` and installers on the commit carrying 5C — run URLs (jobs confirmed RAN):
+- [x] 5C.10 Linux `e2e` and installers on the commit carrying 5C — run URLs (jobs confirmed RAN):
+      https://github.com/yasermostafaee/cg/actions/runs/35886405428 on `0a1cdf00` — job
+      `E2E (Playwright)` completed/success with its `E2E` step RUN
+      (https://github.com/yasermostafaee/cg/actions/runs/35886405428/job/107267609329). Installers +
+      smoke green on the same commit: https://github.com/yasermostafaee/cg/actions/runs/35886405555 —
+      CG Control https://github.com/yasermostafaee/cg/actions/runs/35886405555/artifacts/10763735647 ·
+      CG Designer https://github.com/yasermostafaee/cg/actions/runs/35886405555/artifacts/10763176951
+
+## 5D. `DESKTOP-APPS-01-D` — the station set up on the Playout's programme channel
+
+- [x] 5D.1 D1 — the channel-1 AMCP record established from the station's logs and state and a
+      replay against the mock (no command addressed 1–49; the logo's channel-1 writes listed; the
+      channel-2 set-up adopted the still-playing logo without a command); the Playout team's copy
+      is `Claude outputs/CG-AMCP-LOG-CH1-2026-09-23.md` (not committed). The channel-1 declaration
+      was an explicit pick; no sign-in succeeded without the Playout's D1 accepting a password
+- [x] 5D.2 D2 — the owner's channel-1 state was already `.cg-runtime.bak-0923`; the channel-2 state
+      moved to `.cg-runtime.bak-2026-09-23-ch2`; the next launch opens first-run
+- [x] 5D.3 a/b/c — pinned (they held): no preselected channel, name and number on every row; the
+      first-run bank is 50–59 + 80–99; no clear path reaches 1-5 or 1–49
+- [x] 5D.4 d — the on-air warning before a channel is declared (`R-069`)
+- [x] 5D.5 e — Station setup → Change channel…; the channel may be replaced while nothing of ours
+      holds air on it (`B-269`)
+- [x] 5D.6 g — the output alarm reads UNKNOWN on a non-stock `INFO` (`B-267`)
+- [x] 5D.7 h — `#` and the default row name are the AMCP layer (`B-268`)
+- [x] 5D.8 i — the permitted channels are pushed when the bank changes (`B-266`)
+- [x] 5D.9 j — strays: kept out of every channel view, shown in Station setup, taken off air with
+      STOP + CLEAR on the exact layer (`B-265`)
+- [ ] 5D.10 Linux `e2e` and installers on the commit carrying 5D — run URLs (jobs confirmed RAN):
 
 ## 6. Records
 

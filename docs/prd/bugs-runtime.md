@@ -12568,3 +12568,63 @@ correct unchanged. `bridgeTimeoutWords.test.ts` pins the words, the absent name,
 `setup.check` is waited for `SETUP_CHECK_WAIT_MS` rather than the old 8 s. **Still worth knowing:**
 any FUTURE error raised in the platform layer with an internal name in its message would reach the
 same 27 sites; the walk found no other such source today.
+
+## [x] B-265 — A bank-less first-run bridge took the console's remembered channel-1 logo as its own: the channel-2 view counted it on air, and a restart told the operator to load it again ⟨priority: high⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-D` j
+
+**Found on the owner's installed station**, moved by hand from channel 1 (the Playout's programme
+channel) to channel 2 with our logo still looping on `1-99`. The channel-2 view read `0 loaded ·
+1 on air` over empty rows, and after a restart showed _"1 row did not come back … layer 1-99 (not
+a row) … declare a row for it … then load it onto that row"_ — advice that would have put the logo
+back on the programme output. **Cause:** the console re-delivers its retained stack on every
+connect; the fresh bridge had no bank, so `#declaredChannels()` answered channel 1 (the schema
+default) and the restore accepted the item. Replayed against the mock with the owner's bank and
+template: with the logo still on `1-99` it was adopted (no command); with `1-99` silent the same
+path sent `MIXER 1-99 VOLUME 0` and `CG 1-99 ADD` to channel 1. **Fix:** a first-run station
+declares no channel until its bank is written; a restored on-air item on an undeclared channel, or
+a stack item left on one by a bank change, becomes a STRAY — never seated, never re-ADDed, shown only
+in Station setup to a station-admin with one action (take it off air: `CG STOP` then `CLEAR` on that
+exact layer); a stray whose layer a hearing tap reads empty is dropped. Every channel view counts
+and mentions only its own channel (`onChannel`). Tests: `one-channel-station.integration.test.ts`
+(j, at the mock's wire), `layersPanel.channelScope.dom.test.ts`, `stationSetupChannelScope.dom.test.ts`.
+
+## [x] B-266 — Right after first-run the channel read `· READ ONLY` with no controls, until a reload ⟨priority: high⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-D` i
+
+**Cause, at its one source:** `authStateFor` composes the principal's grants with the server list
+AND the declared channels, but `auth.state-changed` was pushed only on the connection-config event.
+First-run writes the connection and then the bank, so the console kept the bank-less answer
+(channel 1) after channel 2 was declared. The push now follows `fixedConfigChanged` too. Tests:
+`authz-strip-freshness.integration.test.ts` (red without the fix), `first-run.spec.ts` (channel 2 is
+operable at once, no reload; control: an operator without the grant reads READ ONLY).
+
+## [x] B-267 — The programme-output alarm was false on the Playout's fork: "CHANNEL 1 HAS NO DECKLINK/FFMPEG OUTPUT" while the output carried our logo ⟨priority: high⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-D` g
+
+The fork's `INFO 1` (its own reply, `tools/caspar-amcp-probe/evidence/casparcg-2.5.0-6b29237-apasai-core/`)
+lists only `pgm` and `ndi` while its `INFO CONFIG` declares `pgm`, `decklink` device 1, an RTP
+`ffmpeg` and `ndi`, which its operators state are live. **Fix:** a running kind stock CasparCG does
+not ship (`pgm`) proves the output list is not stock, so a declared kind absent from it is reported
+UNKNOWN (`ChannelOutputCheck.unknown`), never MISSING; a list of no consumers or only stock ones is
+judged as before. Tests: `output-fork.test.ts` (the fork's replies; controls: a consumer-less
+channel and a stock list still alarm), `output-unknown.test.ts`.
+
+## [x] B-268 — A row's `#` and default name counted rows from 1: "Layer 1" on the row that is layer 99 ⟨priority: high⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-D` h
+
+`defaultLayerAlias` now names the word and the REAL layer (`Layer 99`, `Bed 59`); the Layers
+table's `#` is the layer. Custom names are kept. Test: `layersPanel.channelScope.dom.test.ts`
+(control: a named row keeps its name).
+
+## [x] B-269 — A station declared on the wrong channel had no way back without a file edit ⟨priority: high⟩ — FILED AND FIXED 2026-09-23 by `DESKTOP-APPS-01-D` e
+
+`validateFixedBankChange` refused any channel change ("fixed at install"). It now allows the bank's
+channel to be REPLACED while nothing of ours holds air on the current channel (on air, unsettled,
+unverified or a resident producer), and otherwise refuses with one sentence: _"Something of ours is
+still on air on channel N — take it off air first."_ Station setup → Channel → **Change channel…**
+(station-admin only; absent for anyone else) reuses first-run's list and its on-air warning. The
+station stays single-channel; `MULTI-CHANNEL-01` widens it. Tests: `one-channel-station` (e),
+`stationSetupChannelScope.dom.test.ts`, `fixed-layers-store.test.ts`.
+
+## [ ] B-270 — A row CLEAR on a row that holds no item of ours writes no audit row ⟨priority: medium⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01-D` D1
+
+Found establishing the channel-1 AMCP record for the Playout team: `clearBankLayer`
+(`fixedLayers.clear-layer`) sends `CLEAR <ch>-<l>` then `MIXER <ch>-<l> CLEAR` and records nothing,
+so whether the owner's CLEAR of `1-99` in the 16:01 run happened cannot be read from the station's
+records. Every other verb that reaches air is audited (`out`, `stop`, `take`, …). Not fixed here.

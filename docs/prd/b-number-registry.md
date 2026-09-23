@@ -3006,3 +3006,19 @@ against positive controls on `C-042` and `B-263`, which returned one hit each.
 
 ⇒ **Next free after this session is `B-265`**, **`D-161`**, **`C-044`**, **`R-069`** and
 **`P-055`**.
+
+### 2026-09-23 — `DESKTOP-APPS-01-D` takes `B-265`…`B-270` and `R-069`
+
+- `B-265` — a bank-less first-run bridge adopted the console's remembered channel-1 logo (strays).
+- `B-266` — READ ONLY right after first-run until a reload (the permitted-channel push).
+- `B-267` — the programme-output alarm was false on the Playout's fork (unknown, not missing).
+- `B-268` — a row's `#` and default name counted rows, not layers.
+- `B-269` — no in-app way back from a wrongly declared channel (Change channel…).
+- `B-270` — a row CLEAR on a row with no item of ours writes no audit row (OPEN).
+- `R-069` — choosing a channel already on air warns first.
+
+All in [bugs-runtime.md](bugs-runtime.md) and [runtime.md](runtime.md). Measured free before use:
+the highest `B` heading under `docs/prd/` was `B-264` and the highest `R` was `R-068`; no stash.
+
+⇒ **Next free after this session is `B-271`**, **`D-161`**, **`C-044`**, **`R-070`** and
+**`P-055`**.

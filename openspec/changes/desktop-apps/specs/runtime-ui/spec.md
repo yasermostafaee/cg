@@ -68,3 +68,59 @@ to any other host.
 
 - **WHEN** every other host is unreachable **THEN** no font request leaves the machine **AND** the
   Arabic-range Vazirmatn face is loaded
+
+### Requirement: A channel's view shows only that channel
+
+Every count, notice and bulk verb of a channel's view SHALL read only the items whose slot is on
+that channel (the owner's rule: a channel's messages never appear in another channel's view), and a
+restore report about another channel SHALL not be shown there.
+
+#### Scenario: Channel 1's logo in the channel-2 view
+
+- **WHEN** a channel-1 item is on air and a channel-1 row did not come back **THEN** the channel-2
+  view reads `0` on air and shows no notice about `1-99` **AND** an on-air row on channel 2 counts
+  once
+
+### Requirement: Station setup offers a station-admin the channel-scope controls
+
+The Channel section SHALL offer a station-admin **Change channel…**, first-run's own channel list
+and warning declaring through `fixedLayers.set-config`, and **On air on another channel**, each
+stray's template, channel and layer with one action, **Take off air**, after a one-line
+confirmation. For any other principal both SHALL be absent, never disabled.
+
+#### Scenario: An idle change, and a refused one
+
+- **WHEN** a station-admin picks channel 2 **THEN** the bank is declared on channel 2 **AND WHEN** the
+  bridge refuses **THEN** its sentence is shown
+
+#### Scenario: Taking a stray off air
+
+- **WHEN** a station-admin confirms Take off air on `ارم روی انتن · CH 1 · layer 99` **THEN** exactly
+  `{ casparChannel: 1, layer: 99 }` is sent
+
+#### Scenario: Absent for an operator
+
+- **WHEN** an operator opens the Channel section **THEN** neither control is present
+
+### Requirement: Choosing a channel warns before declaring one already on air
+
+First-run's channel step SHALL preselect nothing, SHALL name each channel and its number, and,
+after putting the connection in force, SHALL read the chosen channel's occupancy; a channel already
+on air SHALL earn one line — its name, `CH n` and the layers — and be declared only on a second
+press. An empty channel SHALL get no warning.
+
+#### Scenario: The programme channel
+
+- **WHEN** the admin picks channel 1 carrying `1-5` **THEN** "آپاسای · CH 1 is already on air —
+  another system is playing on layer 5." is shown and nothing is declared until "Use this channel
+  anyway" is pressed
+
+### Requirement: A row's number and default name are its AMCP layer
+
+The Layers table's `#` and a row's default name SHALL carry the row's real CasparCG layer
+(`Layer 99`, `Bed 59`); a configured name SHALL be kept.
+
+#### Scenario: The top row
+
+- **WHEN** the bank is 80–99 with beds 50–59 **THEN** the top row reads `99` and `Layer 99` **AND** a
+  row named `CLOCK` keeps its name

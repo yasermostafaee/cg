@@ -101,13 +101,21 @@ byte.
 The bridge SHALL, when started with `--first-run`, advertise `setup: target` on
 `bridge.capabilities` while no Playout is configured and `setup: channel` while no channel is
 declared, and SHALL start with no fixed bank rather than the built-in default when no bank file
-exists. Without `--first-run` it SHALL behave as before.
+exists. Until that bank is written it SHALL declare NO channel (`DESKTOP-APPS-01-D` j): the
+station fence, the restore door and the permitted channels all answer none. Without `--first-run`
+it SHALL behave as before.
 
 #### Scenario: The phases
 
 - **WHEN** an installed station has no Playout **THEN** it advertises `target` **AND WHEN** it has a
   Playout and no bank **THEN** it advertises `channel` **AND WHEN** a bank is declared **THEN** it
   advertises nothing
+
+#### Scenario: A remembered item is not adopted before the channel is declared
+
+- **WHEN** a console re-delivers a retained on-air item on channel 1 to a first-run bridge with no
+  bank **THEN** the restore skips it as `not-declared`, records it as a stray, and sends nothing to
+  channel 1
 
 ### Requirement: The bridge answers the Playout's channels unjoined for a station-admin
 
@@ -200,3 +208,91 @@ SHALL both use it (`DESKTOP-APPS-01-C` C6).
   reads still reach the Playout directly
 - **WHEN** the Playout is named by a host that resolves to IPv6 and IPv4 **THEN** its reads and the
   AMCP connection come from the same IPv4 address **AND** an IPv4 literal passes through unchanged
+
+### Requirement: An item of ours on a channel the station does not declare is a stray
+
+The bridge SHALL keep an item of ours that is, or may be, on air on a channel this station does not
+declare out of the stack as a STRAY: recorded from a restore of a retained on-air item on an
+undeclared channel, and from a stack item left on another channel by a bank installed or changed
+under it. A stray SHALL never be seated, updated or re-ADDed; a pending restore SHALL never seat on
+an undeclared channel; a stray whose layer a hearing tap reads empty, or holding a producer that is
+not an html page, SHALL be dropped. `station.strays` SHALL list the strays and
+`station.take-off-air` (station-admin) SHALL send exactly `CG <ch>-<layer> STOP 0` then
+`CLEAR <ch>-<layer>` for a recorded stray's exact coordinate on a layer at or above 50, and nothing
+else, audited as `out`.
+
+#### Scenario: Taking the logo off channel 1 from a channel-2 station
+
+- **WHEN** a stray is recorded on `1-99` and a station-admin takes it off air **THEN** the wire
+  carries exactly `CG 1-99 STOP 0` and `CLEAR 1-99` on channel 1 **AND** the stray is gone
+
+#### Scenario: A coordinate that is not a stray is refused
+
+- **WHEN** take-off-air names `1-5` (the Playout's own video) **THEN** it is refused and nothing is
+  sent
+
+#### Scenario: A bank installed under a restored channel-1 item never re-ADDs it
+
+- **WHEN** a restored channel-1 item is pending, `1-99` is silent, and the connection and a
+  channel-2 bank are written **THEN** no command other than a read addresses channel 1
+
+#### Scenario: A stale entry is dropped
+
+- **WHEN** a restored stray's layer reads empty on a hearing tap **THEN** it is not listed and
+  nothing is sent
+
+### Requirement: The bank's channel may be replaced while nothing of ours holds air on it
+
+`validateFixedBankChange` SHALL allow a live bank change to replace the CHANNEL when nothing of ours
+on the current channel is on air, unsettled, unverified or holding a resident producer, and SHALL
+otherwise refuse with `channel-change-refused` and the one sentence "Something of ours is still on
+air on channel N — take it off air first." Absent the predicate it SHALL refuse (fail closed). Items
+left on the old channel SHALL leave the stack with no wire command.
+
+#### Scenario: An idle station changes channel
+
+- **WHEN** a station with nothing on air on channel 1 declares channel 2 **THEN** the change is
+  accepted and the declared channel is 2
+
+#### Scenario: Refused while our logo is on air
+
+- **WHEN** our logo is on air on `1-99` and channel 2 is declared **THEN** it is refused with the
+  sentence and nothing is sent **AND WHEN** the logo is cleared **THEN** the same change is accepted
+
+### Requirement: The bridge reports a channel's occupancy before it is declared
+
+`setup.channel-occupancy` (station-admin) SHALL answer, from the primary's occupancy tap waited for
+up to 3 s, `occupied` with each layer and producer kind on the named channel, `empty`, or `unknown`
+when the tap does not hear.
+
+#### Scenario: The programme channel reads occupied
+
+- **WHEN** another system plays video on `1-5` **THEN** channel 1 reads `occupied` with layer 5
+  (`ffmpeg`) **AND** an empty channel 2 reads `empty`
+
+### Requirement: The permitted channels follow the declared bank
+
+The bridge SHALL push `auth.state-changed` to a signed-in socket when the fixed bank changes, as it
+does when the server list changes, because the permitted channels are composed from both.
+
+#### Scenario: First-run on channel 2 is operable at once
+
+- **WHEN** a station-admin holding channels 1 and 2 signs in on a bank-less bridge and then declares
+  channel 2 **THEN** the socket is pushed `permittedChannels: [2]` **AND** an operator granted
+  channel 1 only is pushed `[]`
+
+### Requirement: An output absence INFO cannot prove is unknown, never missing
+
+The output check SHALL report a declared consumer kind absent from `INFO <channel>` as UNKNOWN when
+the running list contains a kind stock CasparCG 2.5.0 does not ship, and SHALL raise no alarm for
+it; a list of no consumers, or of stock kinds only, SHALL be judged as before.
+
+#### Scenario: The Playout's fork
+
+- **WHEN** `INFO 1` lists `pgm` and `ndi` and `INFO CONFIG` declares `pgm`, `decklink`, `ffmpeg` and
+  `ndi` **THEN** `decklink` and `ffmpeg` are unknown and the verdict is `unknown`
+
+#### Scenario: A truly consumer-less channel still alarms
+
+- **WHEN** the same channel's `INFO` lists no consumer **THEN** every declared kind is missing and
+  the verdict is `missing`
