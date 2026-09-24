@@ -469,7 +469,7 @@ export function StationSetupDialog({
     same read the channel strip makes (`useSelectedChannel`), so the subtitle, the strip and
     the Channel tab cannot name three different channels. Station-wide tabs never read it.
   */
-  const { selected: channel } = useSelectedChannel();
+  const { selected: channel, names: channelNames } = useSelectedChannel();
   const [active, setActive] = useState<StationSetupSection>(section);
   const [primary, setPrimary] = useState<EndpointDraft>(UNREAD_SERVERS.primary);
   const [backupEnabled, setBackupEnabled] = useState(UNREAD_SERVERS.backupEnabled);
@@ -1036,10 +1036,22 @@ export function StationSetupDialog({
         was invented (A3). ⚠ `CHANNEL-AUTHORITY-01` — the discovery call now carries the Playout's
         catalogue name (`useSelectedChannel().names`, what the channel strip shows); this subtitle
         does not read it, and adding it is a separate, visual item rather than a silent one here.
+
+        ⭐ `MULTI-CHANNEL-01` §2 H — IT READS IT NOW: `Channel 2 · کانال دوم (تست CG) · Primary A`,
+        the reference's own shape. The name is the SAME one the strip shows for the selected channel
+        (one map, `names`), it is operator data in its own `<bdi>` with the separators outside it
+        (golden rule 11), and with no catalogue — auth OFF, the Playout unreachable — the line is
+        exactly what it was.
       */
       subtitle={
         <>
           Channel {String(channel)}
+          {channelNames.get(channel) !== undefined && (
+            <>
+              {' · '}
+              <bdi data-setup-channel-name="">{channelNames.get(channel)}</bdi>
+            </>
+          )}
           {health !== null && <> · Primary {health.currentPrimary}</>}
         </>
       }

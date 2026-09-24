@@ -200,6 +200,43 @@ describe('M — the Channel pane says what is true for the principal reading it'
   });
 });
 
+describe('H — the subtitle names the channel as the Playout does (`MULTI-CHANNEL-01` §2 H)', () => {
+  function discovered(name: string | null): void {
+    (window.cg as unknown as { stationChannels: unknown }).stationChannels = {
+      list: () =>
+        Promise.resolve({
+          channels: [
+            {
+              channel: 1,
+              named: name === null ? null : { id: 'news', name },
+              declared: true,
+              sources: ['bank'],
+            },
+          ],
+        }),
+      onChanged: () => () => undefined,
+    };
+  }
+
+  it('the catalogue’s name follows the number, in its own isolate', async () => {
+    stub({ auth: ADMIN });
+    discovered('خبر سراسری');
+    const dialog = await renderStationSetup({ section: 'channel' });
+    const name = dialog.querySelector('[data-setup-channel-name]');
+    expect(name?.tagName).toBe('BDI');
+    expect(name?.textContent).toBe('خبر سراسری');
+    expect(name?.parentElement?.textContent).toMatch(/^Channel 1 · خبر سراسری/);
+  });
+
+  it('control — with no catalogue name the line is exactly what it was', async () => {
+    stub({ auth: ADMIN });
+    discovered(null);
+    const dialog = await renderStationSetup({ section: 'channel' });
+    expect(dialog.querySelector('[data-setup-channel-name]')).toBeNull();
+    expect(dialog.textContent).toContain('Channel 1');
+  });
+});
+
 describe('j — On air on another channel', () => {
   it('shows the logo left on channel 1 — template, channel, layer — and takes exactly that layer off air after one confirmation', async () => {
     const s = stub({ auth: ADMIN, strays: [LOGO] });
