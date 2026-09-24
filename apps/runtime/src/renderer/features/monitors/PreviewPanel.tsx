@@ -120,7 +120,7 @@ export function PreviewPanel(): JSX.Element {
   const items = useStack();
   const channelSettings = useChannelSettings();
   // `MULTI-CHANNEL-01` — the SELECTED channel's bank: PREVIEW is the channel on screen.
-  const { bank } = useChannelBankState();
+  const { bank, viewChannel } = useChannelBankState();
   const slots = useFixedSlots();
   const [htmlByItem, setHtmlByItem] = useState<ReadonlyMap<string, string | null>>(
     () => new Map<string, string | null>(),
@@ -158,7 +158,7 @@ export function PreviewPanel(): JSX.Element {
       subjectsFor(
         // `MULTI-CHANNEL-01` — only the rows rehearsing on THIS channel; another channel's
         // rehearsal belongs to that channel's PREVIEW, as its rows belong to its table.
-        rehearsals.filter((r) => bank === null || r.channel === bank.channel),
+        rehearsals.filter((r) => viewChannel === null || r.channel === viewChannel),
         (r): RehearsalSubject | null => {
           const item = items.find((i) => i.itemId === r.itemId);
           if (item === undefined) return null;
@@ -310,7 +310,18 @@ export function PreviewPanel(): JSX.Element {
     // box's audio glyph reads it, and a look switch changes it without touching anything else
     // in this list — so without it the glyph would keep saying NOT IN THIS LOOK after the look
     // that hides the box has been left.
-    [rehearsals, items, slots, bank, draftVersion, templates, sourceVersion, catalog, liveLayers],
+    [
+      rehearsals,
+      items,
+      slots,
+      bank,
+      viewChannel,
+      draftVersion,
+      templates,
+      sourceVersion,
+      catalog,
+      liveLayers,
+    ],
   );
 
   // Which page each rehearsing row needs. Kept as a SERIALISED key rather than
@@ -348,9 +359,10 @@ export function PreviewPanel(): JSX.Element {
   // R-030 — the CHANNEL's real raster, so the rehearsals place themselves in the
   // frame that will actually air. Falls back to the reference raster before the
   // settings snapshot arrives, which is the same fallback the on-air page uses.
-  // Read from the FIRST rehearsing row's channel: the bank is one channel, and
-  // one raster is what makes a single shared fit box and one checker correct.
-  const channel = subjects[0]?.channel ?? bank?.channel ?? 1;
+  // Read from the FIRST rehearsing row's channel: every subject is the channel on screen's
+  // (`MULTI-CHANNEL-01`), and one raster is what makes a single shared fit box and one checker
+  // correct.
+  const channel = subjects[0]?.channel ?? viewChannel ?? 1;
   const raster =
     channelSettings.settings.find((s) => s.channel === channel)?.raster ?? REFERENCE_RASTER;
 
@@ -385,7 +397,7 @@ export function PreviewPanel(): JSX.Element {
       id="pvw"
       title="PREVIEW (PVW)"
       compactHead
-      heading={<MonitorHead word="PREVIEW" channel={bank?.channel ?? null} tone="pvw" />}
+      heading={<MonitorHead word="PREVIEW" channel={viewChannel} tone="pvw" />}
       /*
         🔴 `CONSOLE-MATCH-03` §1 — HOW MANY LAYERS ARE ON PVW, in the head.
 

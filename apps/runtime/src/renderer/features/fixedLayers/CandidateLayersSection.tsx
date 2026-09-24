@@ -155,7 +155,7 @@ export function CandidateLayersSection({
   footerSlot = null,
 }: CandidateLayersSectionProps): JSX.Element {
   // `MULTI-CHANNEL-01` — the SELECTED channel's bank: this section edits the channel on screen.
-  const { bank, banks, banksReady: ready } = useSelectedChannel();
+  const { bank, banks, banksReady: ready, multiChannel } = useSelectedChannel();
   const { slots } = useFixedSlotsState();
   if (!ready) {
     return (
@@ -172,6 +172,7 @@ export function CandidateLayersSection({
       key={bankKey(bank)}
       bank={bank}
       banks={banks}
+      multiChannel={multiChannel}
       slots={slots.filter((s) => s.channel === bank.channel)}
       report={report}
       onDirtyChange={onDirtyChange}
@@ -305,10 +306,13 @@ function BankEditor({
   onDirtyCountChange,
   footerSlot,
   banks,
+  multiChannel,
 }: {
   bank: FixedLayerBank;
   /** `MULTI-CHANNEL-01` — every declared bank, so an apply replaces this channel's alone. */
   banks: readonly FixedLayerBank[];
+  /** `MULTI-CHANNEL-01` — `channelView`'s one reading of "two or more banks are declared". */
+  multiChannel: boolean;
   slots: FixedSlotState[];
   report: (message: ModalMessage | null) => void;
   onDirtyChange: ((dirty: boolean) => void) | undefined;
@@ -437,7 +441,7 @@ function BankEditor({
       was; with two or more, `set-config` would make the SET this one bank, so the plural door
       carries the whole set with only this channel's entry replaced.
     */
-    (banks.length > 1
+    (multiChannel
       ? window.cg.fixedLayers.setBanks({
           banks: banks.map((b) => (b.channel === next.channel ? next : b)),
         })

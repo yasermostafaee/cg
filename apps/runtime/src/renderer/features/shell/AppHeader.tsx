@@ -2,6 +2,7 @@ import { Layers, Monitor, MonitorOff, ScrollText, Settings } from 'lucide-react'
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { ChannelStrip } from '../channels/ChannelStrip.js';
+import { EveryChannelPanic } from '../layers/EveryChannelPanic.js';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import type { ShellLayout } from '../../hooks/useShellLayout.js';
 
@@ -72,6 +73,12 @@ export function AppHeader({ layout, onOpenSettings, onOpenAudit }: Props): JSX.E
         renders the tab PANEL: the two halves address each other by `idPrefix` + `activeId`.
       */}
       <ChannelStrip />
+      {/*
+        🔴 `MULTI-CHANNEL-01` §2 C — THE EVERY-CHANNEL SILENCE sits WITH the channels, because its
+        scope is all of them; each channel's own PANIC is in that channel's plates toolbar. Absent
+        on a one-channel station, where that one PANIC already is this verb.
+      */}
+      <EveryChannelPanic />
       <span className="cg-app-header__spacer" />
       {/*
         `PVW · N` — the reference's own badge, and it is NOT a second claim about air (A12):

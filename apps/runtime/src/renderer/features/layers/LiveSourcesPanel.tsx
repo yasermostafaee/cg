@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
+import { useCanOperate, useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
 import { ChevronRight, Info } from 'lucide-react';
 import { colors } from '../../theme.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -20,21 +20,7 @@ import {
   type LiveLayerRowView,
 } from './liveLayerRows.js';
 import { PlateAudioStrip } from './PlateAudioStrip.js';
-
-/**
- * What PANIC actually did, as the BRIDGE reports it.
- *
- * ⚠ The shape is the bridge's, carried through unchanged. `silenced` (reached the wire) and
- * `recorded` (intent written, including HELD plates that were already silent) are different
- * numbers on purpose — see the channel's own note.
- */
-export interface PanicReport {
-  ok: boolean;
-  silenced: number;
-  recorded: number;
-  rows: readonly { itemId: string; plates: number }[];
-  failed: readonly { itemId: string; plateId: string; reason: string }[];
-}
+import { readPanicReport, type PanicReport } from './panicReport.js';
 
 interface Props {
   /**
@@ -88,6 +74,17 @@ interface Props {
    * answer out loud.
    */
   onPanic: () => Promise<PanicReport>;
+  /**
+   * 🔴 `MULTI-CHANNEL-01` §2 C — **THE CHANNEL THIS VIEW'S PANIC SILENCES**, or `null` on a
+   * station that declares one channel.
+   *
+   * The owner's decision (2026-09-23, A16's follow-up): PANIC on a channel's view silences that
+   * channel, and a separate control beside the channel strip silences every channel. With ONE
+   * declared channel the two scopes are the same set, so the one PANIC stays the every-channel
+   * verb it always was — same door, same words — and `null` says so. The number is the channel
+   * on screen; it is not a narrowing of the every-channel door, which still takes nothing.
+   */
+  panicChannel: number | null;
 }
 
 const styles = {
@@ -137,6 +134,42 @@ const SCOPE_NOTE =
   'rows declare that nothing is seated on yet. Repoint and off-air are the owning row’s ' +
   'verbs. Audio is requested gain, not a measured signal. ON sets 100%; SOLO affects one ' +
   'row’s plates, hidden frames included, with no restore.';
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 C — **THE TOOLBAR PANIC'S THREE CARRIERS**: the visible text, the
+ * accessible name and the `title`, for the scope the control has.
+ *
+ * `null` is the station that declares ONE channel, whose PANIC is the every-channel verb — the
+ * strings are exactly what shipped, and the A16 test pins them. A channel is the per-channel
+ * verb for the channel on screen, and all three carriers name it, in A16's form: the verb phrase,
+ * a `·`, the scope.
+ */
+function toolbarPanicLabel(channel: number | null): { text: string; name: string; title: string } {
+  if (channel === null) {
+    return {
+      text: 'Silence all plates',
+      name:
+        'Silence all boxes on every channel — set every live plate the bridge has seated to ' +
+        'zero, whichever channel it is on',
+      title:
+        'Set EVERY live plate the bridge has seated to zero, on EVERY channel this bridge ' +
+        'drives — not only the channel selected above, and including rows this ' +
+        'console does not show as on air. The pictures stay on air. There is no ' +
+        'un-panic — raise what you need again on its own fader.',
+    };
+  }
+  const ch = String(channel);
+  return {
+    text: `Silence all plates · CH ${ch}`,
+    name:
+      `Silence all boxes on channel ${ch} — set every live plate the bridge has seated on ` +
+      `channel ${ch} to zero`,
+    title:
+      `Set every live plate the bridge has seated on channel ${ch} to zero, including rows ` +
+      'this console does not show as on air. No other channel is touched. The pictures stay ' +
+      'on air. There is no un-panic — raise what you need again on its own fader.',
+  };
+}
 
 /**
  * `B-145` acceptance 1, display half (`tasks.md` 2.8) — **the LIVE PLATES tab: the
@@ -200,6 +233,7 @@ export function LiveSourcesPanel({
   onApplyVolumes,
   onOpenAudio,
   onPanic,
+  panicChannel,
 }: Props): JSX.Element {
   /*
     🔴 `C-038` — **THE ROLE, NOT THE CHANNEL**, and the distinction is load-bearing here.
@@ -210,8 +244,17 @@ export function LiveSourcesPanel({
     one this console is scoped to. Asking `useCanOperate` would hide either of them from an
     operator the bridge would have obeyed — withholding an escape hatch for a reason that is
     not true. See `useHoldsOperatorRole`.
+
+    🔴 `MULTI-CHANNEL-01` §2 C — **EXCEPT A CHANNEL'S OWN PANIC, which IS channel-scoped.** Once
+    two channels are declared this view's PANIC is `silenceChannelLivePlates` for the channel on
+    screen, and the bridge refuses it to a principal who does not hold that channel — so the
+    control asks `useCanOperate`, the ONE console-side answer for that channel, and is ABSENT
+    where the answer is no (golden rule 13). RELEASE keeps the role question for its own reason.
   */
   const holdsOperator = useHoldsOperatorRole();
+  const canOperateChannel = useCanOperate();
+  const offersPanic = panicChannel === null ? holdsOperator : canOperateChannel;
+  const panicLabel = toolbarPanicLabel(panicChannel);
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
   const { confirm, confirmDialog } = useConfirm();
@@ -268,7 +311,8 @@ export function LiveSourcesPanel({
   };
 
   /**
-   * PANIC — silence every plate the BRIDGE holds a seat for, from one press.
+   * PANIC — silence every plate the BRIDGE holds a seat for, from one press: on the channel on
+   * screen once two or more are declared (`panicChannel`), on every channel otherwise.
    *
    * ⚠ **NO CONFIRM, deliberately.** An emergency control behind a dialog is one that does not
    * happen; the dialog next door makes the same argument for its own OFF button. Silencing is
@@ -280,38 +324,14 @@ export function LiveSourcesPanel({
    * ledger snapshot had not arrived would have silenced nothing and said it worked. Both are
    * `B-122`'s shape. The bridge answers from its ledger; this reads the answer out.
    *
-   * The wording says what ACTUALLY went, and it distinguishes the two numbers the bridge
-   * distinguishes: `silenced` reached the wire, while a HELD plate was already silent and only
-   * had its intent recorded — so that when its look comes back it stays silent instead of
-   * returning at whatever it was before.
+   * The wording says what ACTUALLY went — `readPanicReport`, the one reader every PANIC control
+   * shares, so this toolbar and the every-channel control cannot drift into two grammars.
    */
-  const panic = async (): Promise<{ accepted: boolean; cancelled?: boolean }> => {
-    const res = await onPanic();
-    if (res.failed.length > 0) {
-      const names = res.failed.map((f) => f.plateId).join(', ');
-      reportCommandError(
-        `Silenced ${String(res.silenced)} plate(s), but ${names} did not take — those may ` +
-          `still be audible.`,
-      );
-      return { accepted: false, cancelled: true };
-    }
-    if (!res.ok || res.recorded === 0) {
-      // A no-op is NEVER a success. `B-122`: an operator told the escape hatch worked while
-      // the thing is still on air is worse off than one told nothing happened.
-      reportCommandError(
-        'Nothing was sent — the bridge holds no live plates, so there was nothing to silence.',
-      );
-      return { accepted: false, cancelled: true };
-    }
-    const held = res.recorded - res.silenced;
-    reportCommandSuccess(
-      `Silenced · ${String(res.silenced)} plate(s) on ${String(res.rows.length)} row(s)` +
-        (held > 0
-          ? ` · ${String(held)} already silent in the current look, now armed silent too`
-          : ''),
+  const panic = async (): Promise<{ accepted: boolean; cancelled?: boolean }> =>
+    readPanicReport(
+      await onPanic(),
+      panicChannel === null ? { kind: 'station' } : { kind: 'channel', channel: panicChannel },
     );
-    return { accepted: true };
-  };
 
   /**
    * 🔴 **THE ROWS AS OF NOW, not as of the render that drew the button.**
@@ -519,23 +539,26 @@ export function LiveSourcesPanel({
           reads it, so that when multi-channel arrives THIS LABEL is the thing that has to
           change and cannot be forgotten. Golden rule 11: the scope in the operator's words.
           No behaviour change, no wire change.
+
+          ⭐ `MULTI-CHANNEL-01` §2 C — MULTI-CHANNEL ARRIVED, AND THE LABEL CHANGED AS BUILT TO.
+          The owner answered the precondition on 2026-09-23: PANIC on a channel's view silences
+          THAT channel. Once two channels are declared this control is the per-channel verb and
+          every carrier names its channel (`Silence all plates · CH 2`); the every-channel
+          control is a separate one beside the channel strip, which is where a control whose
+          scope is every channel belongs. With one channel the two scopes coincide and this
+          control is exactly what it was.
         */}
-        {holdsOperator && (
+        {offersPanic && (
           <AsyncButton
             variant="caution-strong"
             run={panic}
             onError={reportCommandError}
             disabled={audioRefusal !== undefined}
-            title={
-              audioRefusal ??
-              'Set EVERY live plate the bridge has seated to zero, on EVERY channel this bridge ' +
-                'drives — not only the channel selected above, and including rows this ' +
-                'console does not show as on air. The pictures stay on air. There is no ' +
-                'un-panic — raise what you need again on its own fader.'
-            }
+            title={audioRefusal ?? panicLabel.title}
             className="cg-plate-panic"
             data-plate-panic=""
-            aria-label="Silence all boxes on every channel — set every live plate the bridge has seated to zero, whichever channel it is on"
+            data-plate-panic-channel={panicChannel === null ? undefined : String(panicChannel)}
+            aria-label={panicLabel.name}
           >
             {/*
             🔴 `CONSOLE-LOOK-06` DELTA 8 §0 — READ FROM THE REFERENCE, WHICH SAYS
@@ -552,7 +575,7 @@ export function LiveSourcesPanel({
             The trade is deliberate and it is reported: the reference's word on the button, our
             sentence behind it.
           */}
-            Silence all plates
+            {panicLabel.text}
           </AsyncButton>
         )}
       </div>

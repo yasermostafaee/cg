@@ -51,7 +51,7 @@ export function useSelectedChannel(): {
   banksReady: boolean;
   /** `DELTA A` §A2 — the bridge answered the banks pull, and the answer was a refusal. */
   banksFailed: boolean;
-} {
+} & ChannelView {
   const { banks, ready: banksReady, failed: banksFailed } = useFixedBanksState();
   const settings = useChannelSettings();
   const choice = useChannelChoice();
@@ -76,19 +76,60 @@ export function useSelectedChannel(): {
     bank: bankForChannel(banks, selected),
     banksReady,
     banksFailed,
+    ...channelView(banks, selected),
+  };
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **WHICH CHANNEL A PER-CHANNEL SURFACE SHOWS, AND WHICH ONE A SCOPED VERB
+ * NAMES.** One reading of both (golden rule 6), for every surface that filters by channel and every
+ * verb that can be scoped to one.
+ */
+export interface ChannelView {
+  /** The station declares two or more banks — the ONE reading of "multi-channel". */
+  multiChannel: boolean;
+  /**
+   * The channel the per-channel surfaces filter by. On a multi-channel station it is the
+   * SELECTED channel whether or not its bank has arrived, so a view of one channel of several
+   * never falls back to showing — or counting — all of them. With one bank it is that bank's
+   * channel, or `null` when the selected channel declares none: nothing filtered, as before.
+   */
+  viewChannel: number | null;
+  /**
+   * The channel a scoped verb names: the selected one on a multi-channel station, `null`
+   * otherwise — where the verb goes out BARE, byte-identical to what it always sent.
+   */
+  verbScope: number | null;
+}
+
+export function channelView(banks: readonly FixedLayerBank[], selected: number): ChannelView {
+  const multiChannel = banks.length > 1;
+  return {
+    multiChannel,
+    viewChannel: multiChannel ? selected : (bankForChannel(banks, selected)?.channel ?? null),
+    verbScope: multiChannel ? selected : null,
   };
 }
 
 /**
  * 🔴 `MULTI-CHANNEL-01` — **THE SELECTED CHANNEL'S BANK, WITH ITS READINESS.** What every
  * per-channel surface reads, in the shape the single-bank `useFixedBankState` had, so the layer
- * table's "not arrived is not empty" rule carries over unchanged.
+ * table's "not arrived is not empty" rule carries over unchanged — and the {@link ChannelView}
+ * beside it, so a surface that filters or scopes reads the same answer the bank came from.
  */
 export function useChannelBankState(): {
   bank: FixedLayerBank | null;
   ready: boolean;
   failed: boolean;
-} {
-  const { bank, banksReady, banksFailed } = useSelectedChannel();
-  return { bank, ready: banksReady, failed: banksFailed };
+} & ChannelView {
+  const { bank, banksReady, banksFailed, multiChannel, viewChannel, verbScope } =
+    useSelectedChannel();
+  return {
+    bank,
+    ready: banksReady,
+    failed: banksFailed,
+    multiChannel,
+    viewChannel,
+    verbScope,
+  };
 }

@@ -129,11 +129,10 @@ export function App(): JSX.Element {
     table's own `onChannel` rule. The choice itself is kept: coming back to channel 1 finds it
     as it was, because a switch is a scope change and never a mutation.
   */
-  const { bank: channelBank } = useChannelBankState();
+  const { viewChannel } = useChannelBankState();
   const selected = useMemo(
-    () =>
-      onChannel(items, channelBank?.channel ?? null).find((i) => i.itemId === selectedId) ?? null,
-    [items, channelBank, selectedId],
+    () => onChannel(items, viewChannel).find((i) => i.itemId === selectedId) ?? null,
+    [items, viewChannel, selectedId],
   );
 
   // Suppress the browser's own context menu app-wide. On a playout machine its entries are

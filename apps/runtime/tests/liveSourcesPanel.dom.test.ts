@@ -147,6 +147,11 @@ async function render(
     rows: { itemId: string; plates: number }[];
     failed: { itemId: string; plateId: string; reason: string }[];
   } = { ok: false, silenced: 0, recorded: 0, rows: [], failed: [] },
+  /**
+   * `MULTI-CHANNEL-01` §2 C — the channel this view's PANIC silences, or `null` for a station
+   * that declares one channel (the every-channel verb, exactly as before).
+   */
+  panicChannel: number | null = null,
 ): Promise<{
   el: HTMLDivElement;
   remove: ReturnType<typeof vi.fn>;
@@ -193,6 +198,7 @@ async function render(
           onOpenAudio: (itemId, plateId) => {
             opened.push({ itemId, plateId });
           },
+          panicChannel,
         }),
       ),
     );
@@ -227,6 +233,7 @@ async function renderGiven(rows: readonly LiveLayerRowView[]): Promise<{ el: HTM
             Promise.resolve({ ok: true, silenced: 0, recorded: 0, rows: [], failed: [] }),
           onApplyVolumes: () => Promise.resolve({ ok: true, refused: [] }),
           onOpenAudio: () => undefined,
+          panicChannel: null,
         }),
       ),
     );
@@ -1697,6 +1704,7 @@ describe('PLATES-AUDIO-11 — the LIVE PLATES tab', () => {
               Promise.resolve({ ok: true, silenced: 0, recorded: 0, rows: [], failed: [] }),
             onApplyVolumes: () => Promise.resolve({ ok: true, refused: [] }),
             onOpenAudio: () => undefined,
+            panicChannel: null,
           }),
         ),
       );
@@ -1772,6 +1780,7 @@ describe('PLATES-AUDIO-11 — the LIVE PLATES tab', () => {
               Promise.resolve({ ok: true, silenced: 0, recorded: 0, rows: [], failed: [] }),
             onApplyVolumes: () => Promise.resolve({ ok: true, refused: [] }),
             onOpenAudio: () => undefined,
+            panicChannel: null,
           }),
         ),
       );
@@ -1856,6 +1865,7 @@ describe('the LIVE PLATES table keeps its columns', () => {
               Promise.resolve({ ok: true, silenced: 0, recorded: 0, rows: [], failed: [] }),
             onApplyVolumes: () => Promise.resolve({ ok: true, refused: [] }),
             onOpenAudio: () => undefined,
+            panicChannel: null,
           }),
         ),
       );

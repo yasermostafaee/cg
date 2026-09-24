@@ -7238,6 +7238,15 @@ input[type='checkbox']:disabled:checked {
   color: var(--r-ink-on-caution);
 }
 
+/*
+ * `MULTI-CHANNEL-01` §2 C — the EVERY-CHANNEL panic beside the channel strip wears the same
+ * chip, at the header's button height: the bar keeps one line, and the chip keeps its colours.
+ */
+.cg-app-header .cg-plate-panic.cg-btn {
+  min-height: var(--r-app-head-btn-h);
+  height: var(--r-app-head-btn-h);
+}
+
 /* The reference's fader takes the blue; ours was letting the UA pick. */
 .cg-plate-gain input[type='range'],
 .cg-audio-slider input[type='range'] {

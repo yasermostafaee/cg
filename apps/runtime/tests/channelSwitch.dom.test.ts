@@ -298,6 +298,74 @@ describe('two declared channels (`MULTI-CHANNEL-01` §2 D)', () => {
   });
 });
 
+describe('PANIC on a two-channel station (`MULTI-CHANNEL-01` §2 C)', () => {
+  beforeEach(async () => {
+    await boot([1, 2]);
+    // One seated plate per channel, each owned by that channel's row — the ledger the bridge
+    // would publish, stated here because the mock seeds plates on channel 1 only.
+    const ledger = [1, 2].map((channel) => ({
+      channel,
+      layer: 60,
+      itemId: `item-ch${String(channel)}`,
+      sourceId: 'guest-1',
+      role: 'fill' as const,
+      producer: `route://${String(channel)}-1`,
+      held: false,
+      unverified: false,
+    }));
+    vi.spyOn(cg.liveLayers, 'state').mockResolvedValue(ledger);
+    await mount();
+  });
+
+  async function openPlates(): Promise<void> {
+    const tab = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="tablist"][aria-label="Layer surfaces"] [role="tab"]',
+      ),
+    ].find((t) => t.textContent?.includes('Live plates') === true);
+    await click(tab ?? null);
+  }
+
+  const plateCoordinates = (): string[] =>
+    [...document.querySelectorAll('[data-live-layer]')].map(
+      (r) => r.getAttribute('data-live-layer') ?? '',
+    );
+
+  it('🔴 channel 2’s plates tab lists channel 2’s plate, and its PANIC silences channel 2 only', async () => {
+    await selectChannelTab(2);
+    await openPlates();
+    expect(plateCoordinates(), 'channel 2’s plate, and not channel 1’s').toEqual(['2-60']);
+    const silenceChannel = vi.spyOn(cg.stack, 'silenceChannelLivePlates');
+    const silenceAll = vi.spyOn(cg.stack, 'silenceAllLivePlates');
+
+    const panic = document.querySelector('[data-plate-toolbar] [data-plate-panic]');
+    expect(panic?.textContent).toBe('Silence all plates · CH 2');
+    await click(panic);
+
+    expect(silenceChannel.mock.calls).toEqual([[{ channel: 2 }]]);
+    expect(silenceAll).not.toHaveBeenCalled();
+  });
+
+  it('🔴 the every-channel control sits WITH THE CHANNELS, never beside the per-channel one — and goes bare', async () => {
+    await openPlates();
+    const every = document.querySelector('[data-every-channel-panic]');
+    expect(every, 'the every-channel control is on screen').not.toBeNull();
+    expect(every?.closest('[data-app-header]'), 'beside the channel strip').not.toBeNull();
+    expect(every?.closest('[data-plate-toolbar]'), 'and not in the plates toolbar').toBeNull();
+    // THE CONTROL for the absence above — the toolbar is there, and carries ITS channel's PANIC.
+    expect(document.querySelector('[data-plate-toolbar] [data-plate-panic]')?.textContent).toBe(
+      'Silence all plates · CH 1',
+    );
+
+    const silenceAll = vi.spyOn(cg.stack, 'silenceAllLivePlates');
+    const silenceChannel = vi.spyOn(cg.stack, 'silenceChannelLivePlates');
+    await click(every);
+    expect(silenceAll).toHaveBeenCalledTimes(1);
+    expect(silenceAll.mock.calls[0]?.length, 'no argument — nothing narrows it').toBe(0);
+    expect(silenceChannel).not.toHaveBeenCalled();
+  });
+});
+
 describe('the first declared channel is the lowest DECLARED, not channel 1', () => {
   it('a station on channels 2 and 3 opens on 2', async () => {
     await boot([2, 3], false);
@@ -321,5 +389,13 @@ describe('ONE declared channel — the verb is sent exactly as it always was', (
     // an equality matcher may read `[undefined]` as `[]`.
     expect(clearAll.mock.calls).toHaveLength(1);
     expect(clearAll.mock.calls[0]?.length).toBe(0);
+  });
+
+  it('🔴 no every-channel control on a one-channel station — its one PANIC already is that verb', async () => {
+    await boot([1]);
+    await mount();
+    // The instrument: the header is on screen, so its missing control is a real absence.
+    expect(document.querySelector('[data-app-header]')).not.toBeNull();
+    expect(document.querySelector('[data-every-channel-panic]')).toBeNull();
   });
 });

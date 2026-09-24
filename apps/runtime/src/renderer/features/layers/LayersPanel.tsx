@@ -70,7 +70,7 @@ import {
   useRestoreSkips,
 } from '../../hooks/useRestoreSkips.js';
 import { useFixedSlotsState } from '../../hooks/useFixedLayers.js';
-import { useChannelBankState, useSelectedChannel } from '../channels/useSelectedChannel.js';
+import { useChannelBankState } from '../channels/useSelectedChannel.js';
 import { useStationLayers } from '../../hooks/useStationLayers.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { usePlateReleases } from '../../hooks/usePlateReleases.js';
@@ -329,16 +329,22 @@ export function LayersPanel({
   // `C-038` — may this principal act on the channel this console is scoped to? The ONE
   // console-side answer; every operator control in this panel reads it (golden rule 6).
   const canOperate = useCanOperate();
-  // `MULTI-CHANNEL-01` — the SELECTED channel's bank: the table is that channel's rows.
-  const { bank, ready: bankReady, failed: bankFailed } = useChannelBankState();
   /*
-    🔴 `MULTI-CHANNEL-01` §2 B — **THE BULK VERBS ACT ON THE CHANNEL ON SCREEN**, the principle the
-    owner chose for PANIC. On a station that declares ONE channel "this channel" and "every
-    channel" are the same set, and the verb is sent BARE — its meaning and its frame exactly what
-    they always were; with two or more it names the channel this table shows.
+    `MULTI-CHANNEL-01` — the SELECTED channel's bank: the table is that channel's rows.
+
+    🔴 §2 B — **THE BULK VERBS ACT ON THE CHANNEL ON SCREEN**, the principle the owner chose for
+    PANIC. On a station that declares ONE channel "this channel" and "every channel" are the same
+    set, and the verb is sent BARE — its meaning and its frame exactly what they always were; with
+    two or more it names the channel this table shows (`verbScope`), even before that channel's
+    bank has arrived, so a scoped verb can never fall back to a bare one on a multi-channel view.
   */
-  const { banks } = useSelectedChannel();
-  const scopeChannel = banks.length > 1 && bank !== null ? bank.channel : null;
+  const {
+    bank,
+    ready: bankReady,
+    failed: bankFailed,
+    viewChannel,
+    verbScope: scopeChannel,
+  } = useChannelBankState();
   const bulkScope = useMemo(
     () => (scopeChannel === null ? undefined : { channel: scopeChannel }),
     [scopeChannel],
@@ -397,7 +403,7 @@ export function LayersPanel({
     bulk verb below reads `items`, so filtering it HERE is what makes the whole panel obey the
     owner's rule (a channel's messages never appear in another channel's view) in one place.
   */
-  const items = useMemo(() => onChannel(stackItems, bank?.channel ?? null), [stackItems, bank]);
+  const items = useMemo(() => onChannel(stackItems, viewChannel), [stackItems, viewChannel]);
   /*
    * B-108 — the rows the last restore could NOT bring back.
    *
@@ -413,7 +419,7 @@ export function LayersPanel({
    * are complementary and neither duplicates the other.)
    */
   // `DESKTOP-APPS-01-D` j — a row remembered on ANOTHER channel is Station setup's, not this view's.
-  const restoreSkips = onChannel(useRestoreSkips(), bank?.channel ?? null);
+  const restoreSkips = onChannel(useRestoreSkips(), viewChannel);
   const [dismissedSkips, setDismissedSkips] = useState('');
   // Keyed by CONTENT, not a boolean: dismissing this report must not also dismiss the
   // NEXT one. A boolean flag would silence every future reconnect after the operator
@@ -959,7 +965,13 @@ export function LayersPanel({
       : placeName({ channel: slot.channel, layer: slot.layer }, bank);
   };
   const liveRows = liveLayerRows(
-    live,
+    /*
+      🔴 `MULTI-CHANNEL-01` — THE PLATES TAB IS THE CHANNEL'S TOO. The ledger holds every
+      channel's seats; the tab lists the channel on screen's, so its counts, its dot and its PANIC
+      all speak for that channel and agree with each other. With one declared channel nothing is
+      filtered — the tab is exactly what it was.
+    */
+    scopeChannel === null ? live : live.filter((l) => l.channel === scopeChannel),
     ownerLabelFor(items, (id) => templates.get(id)?.name, liveRowName),
     /*
       🔴 BOTH facts, through the ONE precedence helper. `stackReady` is not optional
@@ -1075,8 +1087,22 @@ export function LayersPanel({
    * The BRIDGE scopes it from its own ledger now. ⚠ Do not reintroduce a status filter here,
    * or a scope prop, under any name — the whole reason the door takes no arguments is that the
    * caller must not be able to narrow it.
+   *
+   * 🔴 `MULTI-CHANNEL-01` §2 C — **AND THE PER-CHANNEL PANIC IS A DIFFERENT DOOR, not a narrowed
+   * one.** The owner decided (2026-09-23) that PANIC on a channel's view silences that channel,
+   * so once two or more channels are declared this calls `silenceChannelLivePlates` for the
+   * channel on screen — a separate verb whose channel is REQUIRED, scoped by the bridge from its
+   * ledger exactly as the every-channel one is. The every-channel door is untouched and still
+   * takes nothing; it has its own control beside the channel strip. With one declared channel the
+   * two scopes are the same set and this is the every-channel call it always was.
    */
-  const panic = useCallback(() => window.cg.stack.silenceAllLivePlates(), []);
+  const panic = useCallback(
+    () =>
+      scopeChannel === null
+        ? window.cg.stack.silenceAllLivePlates()
+        : window.cg.stack.silenceChannelLivePlates({ channel: scopeChannel }),
+    [scopeChannel],
+  );
   const tabs: TabSpec[] = [
     { id: 'layers', label: 'Layers' },
     {
@@ -1905,6 +1931,7 @@ export function LayersPanel({
               setPlateAudioFor({ itemId, plateId });
             }}
             onPanic={panic}
+            panicChannel={scopeChannel}
           />
         ) : (
           <StationLayersPanel layers={playout} orphans={orphans} />

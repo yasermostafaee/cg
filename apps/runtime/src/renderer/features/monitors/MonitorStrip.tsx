@@ -35,11 +35,11 @@ export function MonitorStrip(): JSX.Element {
     inside `MonitorPanel` so that the panel stays a presentation component and so there is
     exactly one place the two panes' channel can come from.
   */
-  // `MULTI-CHANNEL-01` — the SELECTED channel's bank: PROGRAM is the channel on screen.
-  const { bank } = useChannelBankState();
+  // `MULTI-CHANNEL-01` — the SELECTED channel: PROGRAM is the channel on screen.
+  const { viewChannel } = useChannelBankState();
   const { items } = useStackSnapshot();
   // `DESKTOP-APPS-01-D` j — PROGRAM's `N rows on air` counts this channel only.
-  const onAirRows = airTally(onChannel(items, bank?.channel ?? null)).onAir;
+  const onAirRows = airTally(onChannel(items, viewChannel)).onAir;
   const showPvw = focus !== 'pgm';
   const showPgm = focus !== 'pvw';
   /*
@@ -47,7 +47,7 @@ export function MonitorStrip(): JSX.Element {
     PROGRAM pane that is not rendered asks for NOTHING: the channel is `null` while it is folded
     away, so no picture is requested and the bridge pulls nothing from the Playout for it.
   */
-  const programReturn = useProgramReturn(showPgm ? (bank?.channel ?? null) : null);
+  const programReturn = useProgramReturn(showPgm ? viewChannel : null);
 
   return (
     /*
@@ -92,7 +92,7 @@ export function MonitorStrip(): JSX.Element {
           id="pgm"
           title="PROGRAM (PGM)"
           word="PROGRAM"
-          channel={bank?.channel ?? null}
+          channel={viewChannel}
           onAirRows={onAirRows}
           programReturn={programReturn}
         />
