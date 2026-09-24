@@ -27,7 +27,9 @@ password, and that `http://127.0.0.1:5174` is in the Playout's CORS list.
 3. **Playout** — type the Playout's address (`192.168.21.111` is enough; the field shows
    `http://192.168.21.111:8080`) and press **Check**. Each line says what it tested; a red line
    says what is wrong. The CasparCG line says **waiting for sign-in** — that is expected. Press
-   **Connect** when the Playout lines pass.
+   **Connect** when the Playout lines pass. If the Playout does not answer, only its own line says
+   so: the sign-in line reads **not checked**, and the CasparCG line says what it found. Pressing
+   **Check** again clears every line until the new results arrive.
 4. **Sign in** as `cg-admin`. The first sign-in sets the station up; until it has, other accounts
    are told the station is not set up yet. Within seconds the CasparCG line turns OK and the
    channels appear. If it says this machine is waiting for approval, the Playout's administrator

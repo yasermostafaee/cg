@@ -100,7 +100,9 @@ approval is a button in the Playout's app, and no CG Control surface names the s
    signed in; "waiting for the Playout to let this machine in" for 30 s after; then _"This machine,
    `<its IPv4>`, is waiting for approval in the Playout, at تنظیمات ← اتصال به CG Control, where
    the Playout's administrator approves it. If it is not listed there, this machine reaches the
-   Playout through NAT, a proxy or a VPN."_ No script is named.
+   Playout through NAT, a proxy or a VPN."_ No script is named. (Since `CHECK-RERUN-01`, the
+   sign-in wait holds only while the Playout's API can sign someone in: with the API silent or
+   keyless, the AMCP line is its own result and the CORS line is not checked.)
 
 **Known limits, not fixes (`C-043`).** (a) The bridge machine needs a **static IP**: after an IP
 change, AMCP waits for the administrator's approval. (b) A **backup Playout** keeps its own list,
