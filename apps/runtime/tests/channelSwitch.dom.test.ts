@@ -9,6 +9,7 @@ import { createMockBridge } from '../src/platform/createRuntimeBridge.js';
 import { __resetChannelChoiceForTest } from '../src/renderer/features/channels/channelStore.js';
 import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
 import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
+import { clearRefusal, raiseRefusal } from '../src/renderer/features/status/refusalStore.js';
 import { authStub, signedInStub } from './support/authStub.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 import { installMemoryStorage } from './support/localStorage.js';
@@ -484,6 +485,84 @@ describe('the playout tab, split by channel (`MULTI-CHANNEL-01` §2 G)', () => {
     await selectChannelTab(2);
     await openPlayoutTab();
     expect(playoutRows()).toEqual(['20']);
+  });
+});
+
+describe('a channel’s messages stay in its view (`MULTI-CHANNEL-01` §2 L)', () => {
+  const since = new Date().toISOString();
+  const ORPHAN_ON_2 = { channel: 2, layer: 40, producer: 'html', since };
+
+  afterEach(() => {
+    clearRefusal();
+  });
+
+  const markOn = (channel: number): string | null | undefined =>
+    document
+      .getElementById(`channel-${String(channel)}`)
+      ?.querySelector('[data-tab-signal]')
+      ?.getAttribute('data-tab-signal');
+
+  const orphanBanner = (): Element | null =>
+    document.querySelector('[role="alert"][aria-label="Orphaned on-air layers"]');
+
+  it('🔴 foreign content on channel 2 is absent from channel 1’s view; channel 2’s tab carries the amber mark — control: it is in channel 2’s view', async () => {
+    await boot([1, 2]);
+    vi.spyOn(cg.layers, 'orphans').mockResolvedValue([ORPHAN_ON_2]);
+    await mount();
+    expect(selectedTab()).toBe('channel-1');
+    expect(orphanBanner(), 'no text about channel 2 in channel 1’s view').toBeNull();
+    expect(markOn(2)).toBe('warning');
+    expect(markOn(1), 'and channel 1 is not marked for it').toBeUndefined();
+
+    await selectChannelTab(2);
+    expect(orphanBanner(), 'the notice is in its own channel’s view').not.toBeNull();
+  });
+
+  it('🔴 an ALARM on channel 2 marks its tab RED, and its banner is only in channel 2’s view', async () => {
+    await boot([1, 2]);
+    vi.spyOn(cg.channelSettings, 'get').mockResolvedValue({
+      settings: [
+        { channel: 1, raster: { width: 1920, height: 1080 } },
+        { channel: 2, raster: { width: 1920, height: 1080 } },
+      ],
+      observed: [
+        { channel: 1, mode: '1080p5000', raster: { width: 1920, height: 1080 } },
+        { channel: 2, mode: '720p5000', raster: { width: 1280, height: 720 } },
+      ],
+    });
+    await mount();
+    const rasterBanner = (): Element | null =>
+      document.querySelector('[role="alert"][aria-label="Channel raster mismatch"]');
+    expect(rasterBanner()).toBeNull();
+    expect(markOn(2)).toBe('alarm');
+    await selectChannelTab(2);
+    expect(rasterBanner()?.textContent).toContain('Channel 2');
+  });
+
+  it('🔴 a refusal raised on channel 2 stays in channel 2’s view — control: it is there when the operator comes back', async () => {
+    await boot([1, 2]);
+    await mount();
+    await selectChannelTab(2);
+    await act(async () => {
+      raiseRefusal('The bridge refused that on channel 2.');
+      await flush();
+    });
+    expect(document.querySelector('[data-refusal]')?.textContent).toContain('channel 2');
+
+    await selectChannelTab(1);
+    expect(document.querySelector('[data-refusal]'), 'not in channel 1’s view').toBeNull();
+    expect(markOn(2)).toBe('warning');
+
+    await selectChannelTab(2);
+    expect(document.querySelector('[data-refusal]')).not.toBeNull();
+  });
+
+  it('CONTROL — one declared channel: the notice shows and no tab is marked, exactly as before', async () => {
+    await boot([1]);
+    vi.spyOn(cg.layers, 'orphans').mockResolvedValue([{ ...ORPHAN_ON_2, channel: 1 }]);
+    await mount();
+    expect(orphanBanner()).not.toBeNull();
+    expect(document.querySelector('[data-tab-signal]')).toBeNull();
   });
 });
 

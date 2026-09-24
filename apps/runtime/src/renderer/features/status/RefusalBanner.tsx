@@ -64,10 +64,20 @@ function armE2ESeam(): void {
   };
 }
 
-export function RefusalBanner(): JSX.Element | null {
+export function RefusalBanner({
+  scope = null,
+}: {
+  /**
+   * 🔴 `MULTI-CHANNEL-01` §2 L — the channel on screen (`verbScope`), or `null` on a station with
+   * one channel. A refusal raised on another channel stays in THAT channel's view; this one's tab
+   * on the strip carries its mark instead. `null` shows every refusal, as before.
+   */
+  scope?: number | null;
+}): JSX.Element | null {
   const refusal = useSyncExternalStore(onRefusal, getRefusal, getRefusal);
   useEffect(armE2ESeam, []);
   if (refusal === null) return null;
+  if (scope !== null && refusal.channel !== null && refusal.channel !== scope) return null;
 
   /*
     The count rides the SENTENCE, not a badge: "(3 times)" after the text is read in the same

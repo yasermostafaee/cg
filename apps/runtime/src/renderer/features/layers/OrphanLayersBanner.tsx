@@ -13,10 +13,34 @@ import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import { runCommand } from '../status/commandFeedback.js';
 
+/** R-015 — an orphaned GRAPHIC (an html producer): the alert strip, with its Clear. */
+function isOrphanedGraphic(o: OrphanLayer): boolean {
+  return o.producer === 'html';
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 L — the channels whose view this banner WARNS in: an orphaned graphic
+ * or an owned-slot occupancy, both the amber alert strip. A layer another system is using is the
+ * NEUTRAL status strip — "a warning colour here would permanently imply something is wrong" — so
+ * it marks no tab. One predicate with the strips below (`isOrphanedGraphic`), never a second copy.
+ */
+export function orphanWarningChannels(
+  orphans: readonly OrphanLayer[],
+  ownedOccupancy: readonly OwnedOccupancyWarning[],
+): number[] {
+  return [
+    ...new Set([
+      ...orphans.filter(isOrphanedGraphic).map((o) => o.channel),
+      ...ownedOccupancy.map((w) => w.channel),
+    ]),
+  ];
+}
+
 interface Props {
-  orphans: OrphanLayer[];
+  /** `MULTI-CHANNEL-01` §2 L — the channel on screen's only, on a multi-channel station (`App`). */
+  orphans: readonly OrphanLayer[];
   /** B-056 — owned-slot occupancy warnings (distinct variant, no Clear). */
-  ownedOccupancy: OwnedOccupancyWarning[];
+  ownedOccupancy: readonly OwnedOccupancyWarning[];
 }
 
 const styles = {
@@ -171,8 +195,8 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
   if (orphans.length === 0 && ownedOccupancy.length === 0) return null;
 
   // R-015 — the discriminator is the OBSERVED kind, never a layer number.
-  const htmlOrphans = orphans.filter((o) => o.producer === 'html');
-  const foreignLayers = orphans.filter((o) => o.producer !== 'html');
+  const htmlOrphans = orphans.filter(isOrphanedGraphic);
+  const foreignLayers = orphans.filter((o) => !isOrphanedGraphic(o));
 
   return (
     <>

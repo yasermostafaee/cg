@@ -1,6 +1,7 @@
 import { mismatchedChannels, rasterVerdict } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
+import { inScope } from '../channels/channelSignals.js';
 
 /**
  * R-030 — the LOUD half of the configured-vs-real raster check.
@@ -60,9 +61,17 @@ const styles = {
   },
 } as const;
 
-export function RasterMismatchBanner(): JSX.Element | null {
+export function RasterMismatchBanner({
+  scope = null,
+}: {
+  /**
+   * 🔴 `MULTI-CHANNEL-01` §2 L — the channel on screen, or `null` (one channel: all). Another
+   * channel's mismatch is the red mark on its strip tab, from the same `mismatchedChannels`.
+   */
+  scope?: number | null;
+}): JSX.Element | null {
   const state = useChannelSettings();
-  const mismatched = mismatchedChannels(state);
+  const mismatched = inScope(mismatchedChannels(state), (entry) => entry.channel, scope);
   if (mismatched.length === 0) return null;
 
   // One line per offending channel, naming BOTH rasters. "Raster mismatch on

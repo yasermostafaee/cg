@@ -29,6 +29,8 @@
  * surface is for.
  */
 
+import { readMessageScope } from '../channels/messageScope.js';
+
 /** A refusal that is currently standing. */
 export interface Refusal {
   /** The operator's sentence. Never carries an id — see `asyncResultMessage`. */
@@ -44,6 +46,12 @@ export interface Refusal {
   readonly count: number;
   /** When it was first raised, so the surface can say "still standing" honestly. */
   readonly firstSeen: number;
+  /**
+   * 🔴 `MULTI-CHANNEL-01` §2 L — the channel on screen when it was raised (`messageScope`), so it
+   * stays in THAT channel's view; `null` on a station with one channel, where it is shown
+   * wherever the operator is, as it always was.
+   */
+  readonly channel: number | null;
 }
 
 type Listener = (refusal: Refusal | null) => void;
@@ -81,10 +89,12 @@ export function raiseRefusal(
 ): void {
   const detail = opts.detail ?? null;
   const code = opts.code ?? null;
+  // `MULTI-CHANNEL-01` §2 L — the same sentence on ANOTHER channel is another refusal.
+  const channel = readMessageScope();
   current =
-    current !== null && current.message === message
+    current !== null && current.message === message && current.channel === channel
       ? { ...current, count: current.count + 1, detail, code }
-      : { message, detail, code, count: 1, firstSeen: Date.now() };
+      : { message, detail, code, count: 1, firstSeen: Date.now(), channel };
   emit();
 }
 

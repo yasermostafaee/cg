@@ -1,5 +1,5 @@
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
-import { Lock, type LucideIcon } from 'lucide-react';
+import { Lock, OctagonAlert, TriangleAlert, type LucideIcon } from 'lucide-react';
 import { STATION_SETUP_PX, colors, cssVars } from '../theme.js';
 import { Icon } from './Icon.js';
 
@@ -50,6 +50,14 @@ export interface TabSpec {
    * never the weak half, and colour was never the only channel.
    */
   badge?: { tone: 'warn' | 'edited'; label: string; count?: number } | undefined;
+  /**
+   * 🔴 `MULTI-CHANNEL-01` §2 L — **THIS TAB'S VIEW HOLDS A WARNING OR AN ALARM.** Only the channel
+   * strip sets it: a channel's messages stay in that channel's view, and this small mark is the one
+   * thing another channel's view says about them. AMBER for a warning, RED for an alarm — the
+   * colour the message wears in its own view (`design.md` §29). Kept apart from `badge`, whose two
+   * tones already mean "blocked" and "unapplied" in the settings rail.
+   */
+  signal?: { tone: 'warning' | 'alarm'; label: string } | undefined;
   /**
    * Rail heading this tab sits under (vertical orientation only). Consecutive tabs sharing a
    * group render one heading; a tab with no group renders none.
@@ -311,6 +319,21 @@ export function TabStrip({
                     </span>
                   )}
                   <span className="cg-visually-hidden">{tab.badge.label}</span>
+                </>
+              )}
+              {tab.signal !== undefined && (
+                <>
+                  <span
+                    className={`cg-tab-signal cg-tab-signal--${tab.signal.tone}`}
+                    aria-hidden="true"
+                    data-tab-signal={tab.signal.tone}
+                  >
+                    <Icon
+                      icon={tab.signal.tone === 'alarm' ? OctagonAlert : TriangleAlert}
+                      size={12}
+                    />
+                  </span>
+                  <span className="cg-visually-hidden">{tab.signal.label}</span>
                 </>
               )}
             </button>

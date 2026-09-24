@@ -7239,6 +7239,26 @@ input[type='checkbox']:disabled:checked {
 }
 
 /*
+ * `MULTI-CHANNEL-01` §2 L — the small mark on a channel's strip tab: that channel's view holds a
+ * warning (amber, the attention ink) or an alarm (red, the error MARK — a glyph takes the 3.0
+ * floor's red, never the 2.08:1 fill). The message itself is only in that channel's view.
+ */
+.cg-tab-signal {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 6px;
+  vertical-align: middle;
+}
+
+.cg-tab-signal--warning {
+  color: var(--r-caution-text);
+}
+
+.cg-tab-signal--alarm {
+  color: var(--r-error-mark);
+}
+
+/*
  * `MULTI-CHANNEL-01` §2 F — a channel a covered-set lock covers: its view IS the lock card, centred
  * where the workspace was. The channels the lock does not cover keep their live views.
  */

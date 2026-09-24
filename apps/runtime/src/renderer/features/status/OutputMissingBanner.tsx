@@ -8,6 +8,7 @@ import { colors, cssVars } from '../../theme.js';
 import { useConnections } from '../../hooks/useConnections.js';
 import { useLink } from '../../hooks/useLink.js';
 import { missingWords } from '../connections/outputWords.js';
+import { inScope } from '../channels/channelSignals.js';
 
 /**
  * `C-029` — the LOUD half of the declared-versus-running output check: **program output is
@@ -96,21 +97,44 @@ const styles = {
 /** Where the engineering detail lives — named on the one line, so the operator can hand it on. */
 export const OUTPUT_DETAIL_POINTER = 'Details: Station setup ▸ Outputs.';
 
-export function OutputMissingBanner(): JSX.Element | null {
+export function OutputMissingBanner({
+  scope = null,
+}: {
+  /** 🔴 `MULTI-CHANNEL-01` §2 L — the channel on screen, or `null` (one channel: all). */
+  scope?: number | null;
+}): JSX.Element | null {
   const health = useConnections();
   const link = useLink();
   if (health === null || link !== 'live') return null;
-  return <OutputMissingStrip server={health.primary} />;
+  return <OutputMissingStrip server={health.primary} scope={scope} />;
+}
+
+/**
+ * B-223 — the checks that take a channel OFF AIR, the only ones that reach the operator. A
+ * local-only loss leaves the verdict `missing` and this surface empty. ONE reading, for the strip
+ * below and for the channel strip's mark (`MULTI-CHANNEL-01` §2 L), so the two cannot disagree
+ * about which channel is off air.
+ */
+export function losingAirChecks(server: ServerHealth): ReturnType<typeof checksLosingAir> {
+  const verdict = outputVerdictOf(server);
+  if (verdict.kind === 'ok' || verdict.kind === 'unknown') return [];
+  return checksLosingAir(verdict.channels);
 }
 
 /** The strip for ONE server's verdict — exported so a test can drive it without the hooks. */
-export function OutputMissingStrip({ server }: { server: ServerHealth }): JSX.Element | null {
+export function OutputMissingStrip({
+  server,
+  scope = null,
+}: {
+  server: ServerHealth;
+  scope?: number | null;
+}): JSX.Element | null {
   const verdict = outputVerdictOf(server);
   if (verdict.kind === 'ok' || verdict.kind === 'unknown') return null;
 
-  // B-223 — only the checks that take a channel OFF AIR reach the operator. A local-only
-  // loss leaves the verdict `missing` and this surface empty.
-  const losing = checksLosingAir(verdict.channels);
+  // `MULTI-CHANNEL-01` §2 L — only the channel on screen's; another channel's alarm is the red
+  // mark on its strip tab.
+  const losing = inScope(losingAirChecks(server), (c) => c.channel, scope);
   if (losing.length === 0) return null;
   const channels = losing.map((c) => String(c.channel)).join(', ');
   const kinds = losing

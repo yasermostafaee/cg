@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { useLockCoverage } from '../../hooks/useLock.js';
+import { setMessageScope } from './messageScope.js';
 import { TabPanel } from '../../ui/Tabs.js';
 import { ChannelLockPanel } from '../lock/ChannelLockPanel.js';
 import { useSelectedChannel } from './useSelectedChannel.js';
@@ -47,7 +48,16 @@ import { useSelectedChannel } from './useSelectedChannel.js';
  * selected however far apart they are rendered.
  */
 export function ChannelScope({ children }: { children: ReactNode }): JSX.Element {
-  const { selected } = useSelectedChannel();
+  const { selected, verbScope } = useSelectedChannel();
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 L — a refusal raised by a press is stamped with the channel on screen
+    (`messageScope`), so it stays in that channel's view. Kept current here, where the selection
+    is read for the whole workspace, and cleared when the workspace goes.
+  */
+  useEffect(() => {
+    setMessageScope(verbScope);
+    return () => setMessageScope(null);
+  }, [verbScope]);
   /*
     🔴 `MULTI-CHANNEL-01` §2 F — a channel a covered-set lock covers presents as LOCKED: its view
     is the lock card, and the workspace — every verb in it — is not rendered at all (golden rule

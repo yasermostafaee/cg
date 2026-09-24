@@ -2,6 +2,7 @@ import { Layers, Monitor, MonitorOff, ScrollText, Settings } from 'lucide-react'
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { ChannelStrip } from '../channels/ChannelStrip.js';
+import type { ChannelSignal } from '../channels/channelSignals.js';
 import { EveryChannelPanic } from '../layers/EveryChannelPanic.js';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import type { ShellLayout } from '../../hooks/useShellLayout.js';
@@ -50,9 +51,16 @@ interface Props {
   layout: ShellLayout;
   onOpenSettings: () => void;
   onOpenAudit: () => void;
+  /** `MULTI-CHANNEL-01` §2 L — the strip's marks (`channelSignals`); none by default. */
+  channelSignals?: ReadonlyMap<number, ChannelSignal>;
 }
 
-export function AppHeader({ layout, onOpenSettings, onOpenAudit }: Props): JSX.Element {
+export function AppHeader({
+  layout,
+  onOpenSettings,
+  onOpenAudit,
+  channelSignals,
+}: Props): JSX.Element {
   const rehearsals = useRehearse();
 
   return (
@@ -72,7 +80,7 @@ export function AppHeader({ layout, onOpenSettings, onOpenAudit }: Props): JSX.E
         same store, the same ids. Only its PLACE changed, which is why `ChannelScope` still
         renders the tab PANEL: the two halves address each other by `idPrefix` + `activeId`.
       */}
-      <ChannelStrip />
+      <ChannelStrip {...(channelSignals !== undefined ? { signals: channelSignals } : {})} />
       {/*
         🔴 `MULTI-CHANNEL-01` §2 C — THE EVERY-CHANNEL SILENCE sits WITH the channels, because its
         scope is all of them; each channel's own PANIC is in that channel's plates toolbar. Absent

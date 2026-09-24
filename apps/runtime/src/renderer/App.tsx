@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { TemplateInfo } from '@cg/shared-ipc';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { mismatchedChannels, type TemplateInfo } from '@cg/shared-ipc';
 import type { StackItemState } from '@cg/shared-schema';
 import { useTemplateIndex } from './hooks/useTemplateIndex.js';
 import type { RuntimeBridge } from '../shared/runtime-bridge.js';
@@ -8,15 +8,19 @@ import { FailoverBanner } from './features/connections/FailoverBanner.js';
 import { ConnectionBanner } from './features/status/ConnectionBanner.js';
 import { BridgeSkewBanner } from './features/status/BridgeSkewBanner.js';
 import { RasterMismatchBanner } from './features/status/RasterMismatchBanner.js';
-import { OutputMissingBanner } from './features/status/OutputMissingBanner.js';
+import { losingAirChecks, OutputMissingBanner } from './features/status/OutputMissingBanner.js';
+import { getRefusal, onRefusal } from './features/status/refusalStore.js';
+import { channelSignals, inScope } from './features/channels/channelSignals.js';
+import { useChannelSettings } from './hooks/useChannelSettings.js';
+import { useLink } from './hooks/useLink.js';
 import { StationSetupDialog } from './features/stationSetup/StationSetupDialog.js';
 import {
   closeStationSetup,
   openStationSetup,
   useStationSetupRequest,
 } from './features/stationSetup/stationSetupStore.js';
-import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
-import { EmptiedAirNotice } from './features/layers/EmptiedAirNotice.js';
+import { OrphanLayersBanner, orphanWarningChannels } from './features/layers/OrphanLayersBanner.js';
+import { EmptiedAirNotice, emptiedAirChannels } from './features/layers/EmptiedAirNotice.js';
 import { LayersPanel } from './features/layers/LayersPanel.js';
 import { ChannelScope } from './features/channels/ChannelScope.js';
 import { useChannelBankState } from './features/channels/useSelectedChannel.js';
@@ -129,10 +133,51 @@ export function App(): JSX.Element {
     table's own `onChannel` rule. The choice itself is kept: coming back to channel 1 finds it
     as it was, because a switch is a scope change and never a mutation.
   */
-  const { viewChannel } = useChannelBankState();
+  const { viewChannel, verbScope, multiChannel } = useChannelBankState();
   const selected = useMemo(
     () => onChannel(items, viewChannel).find((i) => i.itemId === selectedId) ?? null,
     [items, viewChannel, selectedId],
+  );
+
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 L — A CHANNEL'S MESSAGES STAY IN THAT CHANNEL'S VIEW (the owner's
+    rule, 2026-09-23; the classification is in `channelSignals.ts`). The five channel-scoped
+    surfaces below take `verbScope` — the channel on screen on a multi-channel station, `null` with
+    one, where nothing is filtered — and every OTHER channel whose view holds one of them carries a
+    mark on its strip tab, computed here from the SAME readings the surfaces filter, so the mark and
+    the view cannot disagree. The station-wide surfaces (the bridge link, its version, the servers,
+    the status bar, sign-in, the station lock) take no scope at all.
+  */
+  const channelSettingsState = useChannelSettings();
+  const standingRefusal = useSyncExternalStore(onRefusal, getRefusal, getRefusal);
+  const linkLive = useLink() === 'live';
+  const signals = useMemo(
+    () =>
+      multiChannel
+        ? channelSignals({
+            alarms: [
+              ...(linkLive && health !== null
+                ? losingAirChecks(health.primary).map((c) => c.channel)
+                : []),
+              ...mismatchedChannels(channelSettingsState).map((e) => e.channel),
+            ],
+            warnings: [
+              ...emptiedAirChannels(emptiedAir),
+              ...orphanWarningChannels(orphans, ownedOccupancy),
+              ...(standingRefusal?.channel != null ? [standingRefusal.channel] : []),
+            ],
+          })
+        : undefined,
+    [
+      multiChannel,
+      linkLive,
+      health,
+      channelSettingsState,
+      emptiedAir,
+      orphans,
+      ownedOccupancy,
+      standingRefusal,
+    ],
   );
 
   // Suppress the browser's own context menu app-wide. On a playout machine its entries are
@@ -256,6 +301,7 @@ export function App(): JSX.Element {
           layout={layout}
           onOpenSettings={() => openStationSetup()}
           onOpenAudit={() => setAuditOpen(true)}
+          {...(signals !== undefined ? { channelSignals: signals } : {})}
         />
         {/* R-006 — a not-live link means NOTHING can reach air. That is a full-width alert,
           not a pill: the pill lost to the green HEALTHY pill beside it, and the operator
@@ -273,12 +319,12 @@ export function App(): JSX.Element {
           in the app would notice, and it only looks wrong on air where nobody here can
           see it. Renders nothing unless the two genuinely disagree — an UNREADABLE mode
           is a gap in the check, not an alarm (see RasterMismatchBanner). */}
-        <RasterMismatchBanner />
+        <RasterMismatchBanner scope={verbScope} />
         {/* C-029 — a consumer casparcg.config declares that CasparCG is not running means the
           channel has no program output, and nothing else in the console would say so: AMCP
           answers, OSC ticks, every pill reads HEALTHY. Renders nothing unless a declared
           consumer is genuinely missing — or was, the last time the bridge could look. */}
-        <OutputMissingBanner />
+        <OutputMissingBanner scope={verbScope} />
         {/*
           🔴 `CONSOLE-LOOK-06` DELTA R — THE REFUSAL SURFACE, and it is IN FLOW on purpose.
 
@@ -290,7 +336,7 @@ export function App(): JSX.Element {
 
           It renders NOTHING when no refusal stands, like every banner around it.
         */}
-        <RefusalBanner />
+        <RefusalBanner scope={verbScope} />
         {/*
         R-028 part B — a RESIZABLE shell. The Inspector is a real column whose
         width the operator owns (dragged or nudged, clamped so neither side can
@@ -389,8 +435,11 @@ export function App(): JSX.Element {
                         names ROWS in the list below and offers to act on them; see the
                         component's own header for the full argument. Renders nothing unless
                         a reconnect actually took air away. */}
-                      <EmptiedAirNotice notice={emptiedAir} />
-                      <OrphanLayersBanner orphans={orphans} ownedOccupancy={ownedOccupancy} />
+                      <EmptiedAirNotice notice={emptiedAir} scope={verbScope} />
+                      <OrphanLayersBanner
+                        orphans={inScope(orphans, (o) => o.channel, verbScope)}
+                        ownedOccupancy={inScope(ownedOccupancy, (w) => w.channel, verbScope)}
+                      />
                     </div>
                     {/* R-028 (4.1) — ONE layer list, replacing the Stack and Fixed
                     Layers panels, with the playout system's layers on their own tab. */}

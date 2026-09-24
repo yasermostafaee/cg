@@ -8,9 +8,22 @@ import { useOperatorNames } from '../../hooks/useOperatorNames.js';
 import { OperatorNames } from '../../ui/OperatorNames.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import { runCommand } from '../status/commandFeedback.js';
+import { inScope } from '../channels/channelSignals.js';
 
 interface Props {
   notice: Notice | null;
+  /**
+   * 🔴 `MULTI-CHANNEL-01` §2 L — the channel on screen, or `null` (one channel: every row). The
+   * owner's case was this notice: channel 2's view read "1 row did not come back… layer 1-99".
+   * Another channel's rows are the amber mark on its strip tab (`emptiedAirChannels`).
+   */
+  scope?: number | null;
+}
+
+/** The channels this notice's rows were on — the strip's mark reads the same rows the strip does. */
+export function emptiedAirChannels(notice: Notice | null): number[] {
+  if (notice === null) return [];
+  return [...new Set(notice.rows.flatMap((r) => (r.slot === undefined ? [] : [r.slot.channel])))];
 }
 
 const styles = {
@@ -111,9 +124,15 @@ const REFUSAL_TEXT: Record<EmptiedAirRefusal, string> = {
  * ⚠ **Not translated.** Multi-language is deferred for both apps, so this is English beside
  * the rest of the console's chrome rather than a lone half-localised surface.
  */
-export function EmptiedAirNotice({ notice }: Props): JSX.Element | null {
+export function EmptiedAirNotice({ notice, scope = null }: Props): JSX.Element | null {
   // Above the idle-quiet early return: hooks cannot be called conditionally.
   const { confirm, confirmDialog } = useConfirm();
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 L — THE ROWS OF THE CHANNEL ON SCREEN. Everything below reads these:
+    the count, the list, and PUT BACK ON AIR, which re-takes exactly these rows and so touches
+    nothing on another channel. A row with no layer belongs to every view (`inScope`).
+  */
+  const rows = notice === null ? [] : inScope(notice.rows, (r) => r.slot?.channel, scope);
   /*
     THE RESTORE EMITS AMCP — a `CG ADD` and a `PLAY` per row — so it is gated on BOTH hops
     exactly like the orphan Clear beside it. An enabled-but-dead button is costliest on a
@@ -125,11 +144,18 @@ export function EmptiedAirNotice({ notice }: Props): JSX.Element | null {
   const refusal = casparRefusalReason(linkDown, casparReach);
   // `B-232` — above the early return with the rest of the hooks; an empty list when there
   // is no notice, which is what the strip is doing every second it is not needed.
-  const nameOf = useOperatorNames(notice?.rows ?? []);
+  const nameOf = useOperatorNames(rows);
 
-  if (notice === null) return null;
+  if (notice === null || rows.length === 0) return null;
 
-  const count = notice.rows.length;
+  /*
+    DISMISS is the bridge's, for the WHOLE notice. Offered only when the whole notice is in this
+    view — otherwise it would hide another channel's rows the operator has not seen. When a notice
+    spans channels each view keeps its own PUT BACK ON AIR, and the notice still ends when its rows
+    are put back or leave by themselves.
+  */
+  const wholeNotice = rows.length === notice.rows.length;
+  const count = rows.length;
   const rowWord = count === 1 ? 'row' : 'rows';
   /*
     🔴 THE CLAIM IS EXACTLY WHAT WAS MEASURED, AND NO MORE.
@@ -196,7 +222,7 @@ export function EmptiedAirNotice({ notice }: Props): JSX.Element | null {
                   runCommand(
                     `Put ${String(count)} ${rowWord} back on air`,
                     window.cg.emptiedAir
-                      .restore({ itemIds: notice.rows.map((r) => r.itemId) })
+                      .restore({ itemIds: rows.map((r) => r.itemId) })
                       // Anything short of ALL of them is reported, and the strip stays up
                       // carrying each remaining row's reason.
                       .then((r) => ({ accepted: r.restored === count })),
@@ -206,20 +232,22 @@ export function EmptiedAirNotice({ notice }: Props): JSX.Element | null {
             >
               PUT BACK ON AIR
             </Button>
-            <Button
-              variant="ghost"
-              aria-label="Dismiss the emptied-air notice"
-              title="Hide this notice. Nothing is sent and nothing changes on air."
-              onClick={() => {
-                void window.cg.emptiedAir.dismiss();
-              }}
-            >
-              DISMISS
-            </Button>
+            {wholeNotice && (
+              <Button
+                variant="ghost"
+                aria-label="Dismiss the emptied-air notice"
+                title="Hide this notice. Nothing is sent and nothing changes on air."
+                onClick={() => {
+                  void window.cg.emptiedAir.dismiss();
+                }}
+              >
+                DISMISS
+              </Button>
+            )}
           </span>
         </div>
         <ul style={styles.rows}>
-          {notice.rows.map((row) => {
+          {rows.map((row) => {
             const name = nameOf(row);
             return (
               /*

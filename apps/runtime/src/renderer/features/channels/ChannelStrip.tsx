@@ -1,7 +1,10 @@
 import { useLockCoverage } from '../../hooks/useLock.js';
 import { TabStrip, type TabSpec } from '../../ui/Tabs.js';
+import { signalLabel, type ChannelSignal } from './channelSignals.js';
 import { selectChannel } from './channelStore.js';
 import { useSelectedChannel } from './useSelectedChannel.js';
+
+const NO_SIGNALS: ReadonlyMap<number, ChannelSignal> = new Map();
 
 /**
  * THE CHANNEL AXIS'S TABLIST — the half of `ChannelScope` that the app header carries.
@@ -19,7 +22,16 @@ import { useSelectedChannel } from './useSelectedChannel.js';
  * The scope argument itself is unchanged and lives on `ChannelScope`: the channel owns the
  * layer list, PROGRAM, PREVIEW and the Inspector, which is why the PANEL wraps all four.
  */
-export function ChannelStrip(): JSX.Element {
+export function ChannelStrip({
+  signals = NO_SIGNALS,
+}: {
+  /**
+   * 🔴 `MULTI-CHANNEL-01` §2 L — which channels' views hold a warning or an alarm
+   * (`channelSignals`). Computed where the messages are read (`App`) and handed in, so this
+   * strip marks exactly what those views show. Empty on a station with one channel.
+   */
+  signals?: ReadonlyMap<number, ChannelSignal>;
+} = {}): JSX.Element {
   const { channels, selected, operable, names } = useSelectedChannel();
   const coverage = useLockCoverage();
   const locked = coverage.kind === 'partial' ? coverage.channels : [];
@@ -75,8 +87,11 @@ export function ChannelStrip(): JSX.Element {
         ? ''
         : ' · READ ONLY';
     const name = names.get(channel);
+    const signal = signals.get(channel);
+    const mark =
+      signal === undefined ? {} : { signal: { tone: signal, label: signalLabel(signal) } };
     return name === undefined
-      ? { id: String(channel), label: `CHANNEL ${String(channel)}${suffix}` }
+      ? { id: String(channel), label: `CHANNEL ${String(channel)}${suffix}`, ...mark }
       : {
           id: String(channel),
           label: (
@@ -86,6 +101,7 @@ export function ChannelStrip(): JSX.Element {
             </>
           ),
           title: `Channel ${String(channel)}`,
+          ...mark,
         };
   });
 
