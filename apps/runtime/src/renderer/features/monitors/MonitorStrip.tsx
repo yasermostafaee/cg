@@ -1,5 +1,5 @@
 import { useShellLayoutContext } from '../../hooks/shellLayoutContext.js';
-import { useFixedBankState } from '../../hooks/useFixedLayers.js';
+import { useChannelBankState } from '../channels/useSelectedChannel.js';
 import { useProgramReturn } from '../../hooks/useProgramReturn.js';
 import { useStackSnapshot } from '../../hooks/useStack.js';
 import { airTally, onChannel } from '../stack/onAir.js';
@@ -35,7 +35,8 @@ export function MonitorStrip(): JSX.Element {
     inside `MonitorPanel` so that the panel stays a presentation component and so there is
     exactly one place the two panes' channel can come from.
   */
-  const { bank } = useFixedBankState();
+  // `MULTI-CHANNEL-01` — the SELECTED channel's bank: PROGRAM is the channel on screen.
+  const { bank } = useChannelBankState();
   const { items } = useStackSnapshot();
   // `DESKTOP-APPS-01-D` j — PROGRAM's `N rows on air` counts this channel only.
   const onAirRows = airTally(onChannel(items, bank?.channel ?? null)).onAir;

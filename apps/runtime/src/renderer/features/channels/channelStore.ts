@@ -22,6 +22,10 @@ import { useSyncExternalStore } from 'react';
  * channel would be a second thing to check after a restart, and the reset-to-known-state
  * doctrine (owner answer A13) prefers the bank's channel, which is the one the console has
  * always opened on.
+ *
+ * `MULTI-CHANNEL-01` — with one bank per declared channel, "the bank's channel" is the FIRST
+ * declared: the lowest-numbered, the order every bank list is in. A reload opens there whatever
+ * was chosen before it (`channelSwitch.dom.test.ts`).
  */
 
 let choice: number | null = null;

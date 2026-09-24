@@ -27,7 +27,8 @@ import { IsolatedName } from '../../ui/OperatorNames.js';
 // ONE refusal sentence, which `errorCodeMessage` already maps `REMOVE_ON_AIR_CODE` to.
 import { removeIsRefused } from '../layers/removeGate.js';
 import { REMOVE_ON_AIR_REASON } from '../layers/layerRowActions.js';
-import { useFixedBankState, useFixedSlotsState } from '../../hooks/useFixedLayers.js';
+import { useFixedSlotsState } from '../../hooks/useFixedLayers.js';
+import { useChannelBankState, useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { useStack } from '../../hooks/useStack.js';
 import { useLink } from '../../hooks/useLink.js';
 import { Tag } from '../../ui/Tag.js';
@@ -153,7 +154,8 @@ export function CandidateLayersSection({
   onDirtyCountChange,
   footerSlot = null,
 }: CandidateLayersSectionProps): JSX.Element {
-  const { bank, ready } = useFixedBankState();
+  // `MULTI-CHANNEL-01` — the SELECTED channel's bank: this section edits the channel on screen.
+  const { bank, banks, banksReady: ready } = useSelectedChannel();
   const { slots } = useFixedSlotsState();
   if (!ready) {
     return (
@@ -169,7 +171,8 @@ export function CandidateLayersSection({
     <BankEditor
       key={bankKey(bank)}
       bank={bank}
-      slots={slots}
+      banks={banks}
+      slots={slots.filter((s) => s.channel === bank.channel)}
       report={report}
       onDirtyChange={onDirtyChange}
       onDirtyCountChange={onDirtyCountChange}
@@ -226,11 +229,11 @@ function NoBank(): JSX.Element {
  * facts this section cannot change, as tags under the description.
  *
  * Exported so `StationSetupDialog` can hand it to `SetupSection`, which owns the head. It
- * reads the SAME `useFixedBankState` the editor does rather than being passed a copy — one
+ * reads the SAME selected-channel bank the editor does rather than being passed a copy — one
  * read, so the tags and the table cannot name different ranges.
  */
 export function CandidateLayersSummary(): JSX.Element | null {
-  const { bank } = useFixedBankState();
+  const { bank } = useChannelBankState();
   if (bank === null) return null;
   return (
     <div className="cg-setup-summary" data-layer-summary="">
@@ -301,8 +304,11 @@ function BankEditor({
   onDirtyChange,
   onDirtyCountChange,
   footerSlot,
+  banks,
 }: {
   bank: FixedLayerBank;
+  /** `MULTI-CHANNEL-01` — every declared bank, so an apply replaces this channel's alone. */
+  banks: readonly FixedLayerBank[];
   slots: FixedSlotState[];
   report: (message: ModalMessage | null) => void;
   onDirtyChange: ((dirty: boolean) => void) | undefined;
@@ -412,43 +418,53 @@ function BankEditor({
       if (isLowBankLayer(bank, Number(key)) && !isVisible) bedHidden[key] = false;
     }
     setBusy(true);
-    window.cg.fixedLayers
-      .setConfig({
-        channel: bank.channel,
-        start: bank.start,
-        count: bank.count,
-        ...(Object.keys(cleaned).length > 0 ? { aliases: cleaned } : {}),
-        ...(Object.keys(hidden).length > 0 ? { visibility: hidden } : {}),
-        low: {
-          start: bank.low.start,
-          count: bank.low.count,
-          ...(Object.keys(bedAliases).length > 0 ? { aliases: bedAliases } : {}),
-          ...(Object.keys(bedHidden).length > 0 ? { visibility: bedHidden } : {}),
-        },
-      })
-      .then(
-        (res) => {
-          setBusy(false);
-          if (res.ok) {
-            // The bridge publishes `config-changed` + `state-changed` itself; the editor
-            // re-keys on the published bank. Say it landed — there is no closing to say it.
-            report({ role: 'notice', text: 'Candidate layers applied.' });
-            return;
-          }
-          report({
-            role: 'refusal',
-            text: fixedLayersReasonMessage(res.reason) ?? 'Not accepted.',
-            ...(res.message !== undefined ? { detail: res.message } : {}),
-          });
-        },
-        (err: unknown) => {
-          setBusy(false);
-          report({
-            role: 'refusal',
-            text: err instanceof Error ? err.message : 'Request failed.',
-          });
-        },
-      );
+    const next: FixedLayerBank = {
+      channel: bank.channel,
+      start: bank.start,
+      count: bank.count,
+      ...(Object.keys(cleaned).length > 0 ? { aliases: cleaned } : {}),
+      ...(Object.keys(hidden).length > 0 ? { visibility: hidden } : {}),
+      low: {
+        start: bank.low.start,
+        count: bank.low.count,
+        ...(Object.keys(bedAliases).length > 0 ? { aliases: bedAliases } : {}),
+        ...(Object.keys(bedHidden).length > 0 ? { visibility: bedHidden } : {}),
+      },
+    };
+    /*
+      🔴 `MULTI-CHANNEL-01` — THIS channel's bank, and every other channel's left exactly as it
+      is. On a one-channel station that is the one bank, sent through `set-config` as it always
+      was; with two or more, `set-config` would make the SET this one bank, so the plural door
+      carries the whole set with only this channel's entry replaced.
+    */
+    (banks.length > 1
+      ? window.cg.fixedLayers.setBanks({
+          banks: banks.map((b) => (b.channel === next.channel ? next : b)),
+        })
+      : window.cg.fixedLayers.setConfig(next)
+    ).then(
+      (res) => {
+        setBusy(false);
+        if (res.ok) {
+          // The bridge publishes `config-changed` + `state-changed` itself; the editor
+          // re-keys on the published bank. Say it landed — there is no closing to say it.
+          report({ role: 'notice', text: 'Candidate layers applied.' });
+          return;
+        }
+        report({
+          role: 'refusal',
+          text: fixedLayersReasonMessage(res.reason) ?? 'Not accepted.',
+          ...(res.message !== undefined ? { detail: res.message } : {}),
+        });
+      },
+      (err: unknown) => {
+        setBusy(false);
+        report({
+          role: 'refusal',
+          text: err instanceof Error ? err.message : 'Request failed.',
+        });
+      },
+    );
   }
 
   /** This section's own commit controls — rendered into the dialog's footer, see below. */

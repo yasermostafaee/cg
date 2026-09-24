@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { StrictMode, createElement } from 'react';
-import { authStub } from './support/authStub.js';
+import { authStub, fillBridgeStub } from './support/authStub.js';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -142,7 +142,7 @@ function bridgeStub(templates: readonly TemplateInfo[], info: TemplateInfo | nul
   };
   // `C-038` — the channel list is scoped to the principal, so every stub needs one.
   (stub as { auth?: unknown }).auth = authStub();
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   return stub;
 }
 
@@ -301,6 +301,9 @@ describe('the Live sources section of Station setup defines sources and binds no
       snapshot: () => Promise.resolve([]),
       onStateChanged: () => () => undefined,
     });
+    // `MULTI-CHANNEL-01` — the `fixedLayers` swapped in above states its bank singly; derive the
+    // plural read from it again, as the install did for the one it replaced.
+    fillBridgeStub(stub);
     container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);

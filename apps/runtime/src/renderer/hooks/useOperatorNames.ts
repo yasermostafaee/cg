@@ -1,6 +1,6 @@
 import type { FixedLayerBank, TemplateInfo } from '@cg/shared-ipc';
 import { operatorRowName, type NameableRef, type OperatorRowName } from '../ui/operatorNaming.js';
-import { useFixedBank } from './useFixedLayers.js';
+import { useFixedBanks } from './useFixedLayers.js';
 import { useTemplateIndex } from './useTemplateIndex.js';
 
 /**
@@ -13,6 +13,9 @@ import { useTemplateIndex } from './useTemplateIndex.js';
  * re-renders when the rest lands — never a blank line and never a placeholder that could
  * be mistaken for a real name.
  *
+ * `MULTI-CHANNEL-01` — EVERY declared bank: a row is named from the bank of ITS channel, so a
+ * record about channel 2 reads channel 2's aliases whichever channel is on screen.
+ *
  * ⚠ **The rule itself is NOT here.** It is `ui/operatorNaming.ts`, which is React-free and
  * unit-tested; this hook only feeds it. A surface that already holds the bank and the
  * template index — `LayersPanel` does, for the table it renders — calls `operatorRowName`
@@ -21,9 +24,9 @@ import { useTemplateIndex } from './useTemplateIndex.js';
 export function useOperatorNames(
   refs: readonly NameableRef[],
 ): (ref: NameableRef) => OperatorRowName {
-  const bank: FixedLayerBank | null = useFixedBank();
+  const banks: readonly FixedLayerBank[] = useFixedBanks();
   const templates: ReadonlyMap<string, TemplateInfo> = useTemplateIndex(
     refs.map((r) => r.templateId ?? '').filter((id) => id !== ''),
   );
-  return (ref) => operatorRowName(ref, bank, templates);
+  return (ref) => operatorRowName(ref, banks, templates);
 }

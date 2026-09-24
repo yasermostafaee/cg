@@ -20,6 +20,7 @@ import {
   initSources,
   __resetSourcesForTest,
 } from '../src/renderer/features/sources/sourceStore.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * R-049 — PVW draws a labelled placeholder over every live plate, in TWO states
@@ -178,7 +179,7 @@ function stubBridge(f: Fixture): void {
       onPlateReleased: () => () => undefined,
     },
   };
-  (window as unknown as { cg: unknown }).cg = stub;
+  (window as unknown as { cg: unknown }).cg = fillBridgeStub(stub);
 }
 
 async function render(f: Fixture): Promise<HTMLDivElement> {

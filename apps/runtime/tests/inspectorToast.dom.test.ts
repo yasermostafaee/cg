@@ -12,6 +12,7 @@ import {
   reportCommandError,
 } from '../src/renderer/features/status/commandFeedback.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * #334 finished the migration to toast-only feedback for the Library and Stack rows, but the
@@ -86,7 +87,7 @@ function stubBridge(over: Record<string, unknown> = {}): void {
       ...over,
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 async function render(element: ReturnType<typeof createElement>): Promise<void> {

@@ -12,6 +12,7 @@ import {
   valueAt,
 } from '../src/renderer/features/inspector/draftStore.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * B-067 — the operator-visible half. A D-119 starter's fields live in a NESTED
@@ -91,7 +92,7 @@ async function render(info: TemplateInfo): Promise<HTMLDivElement> {
     },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 
   container = document.createElement('div');
   document.body.appendChild(container);

@@ -7,6 +7,7 @@ import type { FixedLayerBank, FixedSlotState, Rehearsal, TemplateInfo } from '@c
 import type { StackItemState } from '@cg/shared-schema';
 import { PreviewPanel } from '../src/renderer/features/monitors/PreviewPanel.js';
 import { ShellLayoutProvider } from '../src/renderer/hooks/shellLayoutContext.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * R-022 — PVW COMPOSITES EVERY REHEARSING ROW.
@@ -126,7 +127,7 @@ function stubBridge(f: Fixture): void {
     // rehearsing row with nothing seated is not held.
     liveLayers: { state: () => Promise.resolve([]), onStateChanged: noop, onPlateReleased: noop },
   };
-  (window as unknown as { cg: unknown }).cg = stub;
+  (window as unknown as { cg: unknown }).cg = fillBridgeStub(stub);
 }
 
 async function render(f: Fixture): Promise<HTMLDivElement> {

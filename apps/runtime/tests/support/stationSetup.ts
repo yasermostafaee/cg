@@ -94,8 +94,15 @@ export interface StationSetupStubOptions {
     templateServe?: { serveHost: string; port: number; exposed: boolean; unreachable?: string[] };
   };
   bank?: FixedLayerBank | null;
+  /**
+   * `MULTI-CHANNEL-01` — the station's banks, when a spec declares more than one. Absent, the
+   * station's banks are `[bank]` (or `[]` for a `null` bank): the one bank the spec states.
+   */
+  banks?: readonly FixedLayerBank[];
   slots?: FixedSlotState[];
   fixedSetConfigResult?: { ok: boolean; reason?: string; message?: string };
+  /** `MULTI-CHANNEL-01` — what `fixedLayers.set-banks` resolves with. */
+  fixedSetBanksResult?: { ok: boolean; reason?: string; message?: string };
   raster?: ChannelSettingsState;
   rasterSetResult?: { ok: boolean; reason?: string; message?: string };
   stationLayers?: PlayoutLayerState[];
@@ -125,6 +132,8 @@ export interface StationSetupStubOptions {
 export interface StationSetupStub {
   setConfig: Mock;
   fixedSetConfig: Mock;
+  /** `MULTI-CHANNEL-01` — the plural door's mock. */
+  fixedSetBanks: Mock;
   rasterSet: Mock;
   sourcesSetConfig: Mock;
   sourcesSetAssignments: Mock;
@@ -136,6 +145,9 @@ export interface StationSetupStub {
 export function stationSetupStub(options: StationSetupStubOptions = {}): StationSetupStub {
   const setConfig = vi.fn(() => Promise.resolve(options.setConfigResult ?? { ok: true }));
   const fixedSetConfig = vi.fn(() => Promise.resolve(options.fixedSetConfigResult ?? { ok: true }));
+  const fixedSetBanks = vi.fn(() => Promise.resolve(options.fixedSetBanksResult ?? { ok: true }));
+  const bank = options.bank === undefined ? SETUP_BANK : options.bank;
+  const banks: readonly FixedLayerBank[] = options.banks ?? (bank === null ? [] : [bank]);
   const rasterSet = vi.fn(() => Promise.resolve(options.rasterSetResult ?? { ok: true }));
   const sourcesSetConfig = vi.fn(options.sourcesSetConfig ?? (() => Promise.resolve({ ok: true })));
   const sourcesSetAssignments = vi.fn(() => Promise.resolve({ ok: true }));
@@ -163,8 +175,13 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
       remove,
     },
     fixedLayers: {
-      config: () => Promise.resolve(options.bank === undefined ? SETUP_BANK : options.bank),
+      config: () =>
+        Promise.resolve(options.banks !== undefined ? (options.banks[0] ?? null) : bank),
       onConfigChanged: () => () => undefined,
+      // `MULTI-CHANNEL-01` — the station's banks, which the console reads for every channel.
+      banks: () => Promise.resolve([...banks]),
+      onBanksChanged: () => () => undefined,
+      setBanks: fixedSetBanks,
       state: () => Promise.resolve(options.slots ?? [setupSlot(70), setupSlot(71)]),
       onStateChanged: () => () => undefined,
       setConfig: fixedSetConfig,
@@ -228,6 +245,7 @@ export function stationSetupStub(options: StationSetupStubOptions = {}): Station
   return {
     setConfig,
     fixedSetConfig,
+    fixedSetBanks,
     rasterSet,
     sourcesSetConfig,
     sourcesSetAssignments,

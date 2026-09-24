@@ -19,6 +19,8 @@ import { OrphanLayersBanner } from './features/layers/OrphanLayersBanner.js';
 import { EmptiedAirNotice } from './features/layers/EmptiedAirNotice.js';
 import { LayersPanel } from './features/layers/LayersPanel.js';
 import { ChannelScope } from './features/channels/ChannelScope.js';
+import { useChannelBankState } from './features/channels/useSelectedChannel.js';
+import { onChannel } from './features/stack/onAir.js';
 import { AppHeader } from './features/shell/AppHeader.js';
 import { MonitorStrip } from './features/monitors/MonitorStrip.js';
 import { ShellDivider } from './ui/ShellDivider.js';
@@ -120,9 +122,18 @@ export function App(): JSX.Element {
   // `STATION-SETUP-02` — ONE settings dialog, opened at a section from five surfaces; the
   // request lives in a module store so the Inspector and the Layers panel can raise it too.
   const stationSetup = useStationSetupRequest();
+  /*
+    🔴 `MULTI-CHANNEL-01` — THE INSPECTOR IS THE SELECTED CHANNEL'S, like the table and both
+    monitors it sits beside (`ChannelScope` wraps all four). A row chosen on channel 1 is not
+    edited under channel 2's tab, so the selection resolves among THIS channel's items — the
+    table's own `onChannel` rule. The choice itself is kept: coming back to channel 1 finds it
+    as it was, because a switch is a scope change and never a mutation.
+  */
+  const { bank: channelBank } = useChannelBankState();
   const selected = useMemo(
-    () => items.find((i) => i.itemId === selectedId) ?? null,
-    [items, selectedId],
+    () =>
+      onChannel(items, channelBank?.channel ?? null).find((i) => i.itemId === selectedId) ?? null,
+    [items, channelBank, selectedId],
   );
 
   // Suppress the browser's own context menu app-wide. On a playout machine its entries are

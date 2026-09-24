@@ -6,7 +6,7 @@ import { OperatorNames } from '../../ui/OperatorNames.js';
 import { operatorRowName } from '../../ui/operatorNaming.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
-import { useFixedBankState } from '../../hooks/useFixedLayers.js';
+import { useFixedBanks } from '../../hooks/useFixedLayers.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useStack } from '../../hooks/useStack.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
@@ -133,7 +133,9 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
     needed `RestoreSkipSchema` widened and this one does not.
   */
   const items = useStack();
-  const { bank } = useFixedBankState();
+  // `MULTI-CHANNEL-01` — every declared bank: an owner is named from ITS channel's bank, which
+  // needs the list and not the selection.
+  const bank = useFixedBanks();
   const templateIds = useMemo(() => items.map((i) => i.templateId), [items]);
   const templates = useTemplateIndex(templateIds);
   /*

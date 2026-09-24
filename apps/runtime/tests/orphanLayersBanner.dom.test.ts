@@ -7,6 +7,7 @@ import type { OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
 import { OrphanLayersBanner } from '../src/renderer/features/layers/OrphanLayersBanner.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 import { connectionsStub, type Reachability } from './support/reachability.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * R-009 — the orphan-layer warning surface: renders NOTHING when the set is
@@ -88,7 +89,7 @@ function stubBridge(
       onChanged: () => () => undefined,
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   return { clear };
 }
 

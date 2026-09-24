@@ -132,7 +132,8 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
     dropped.
   */
   const [templates, setTemplates] = useState<ReadonlyMap<string, TemplateInfo>>(new Map());
-  const [bank, setBank] = useState<FixedLayerBank | null>(null);
+  // `MULTI-CHANNEL-01` — every declared bank: an entry is named from its own channel's bank.
+  const [bank, setBank] = useState<readonly FixedLayerBank[] | null>(null);
 
   async function refresh(): Promise<{ accepted: boolean; message?: string }> {
     const req: { limit: number; action?: AuditEntry['action']; actor?: string } = { limit: 200 };
@@ -147,7 +148,7 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         window.cg.audit.recent(req),
         window.cg.audit.health(),
         window.cg.templates.list(),
-        window.cg.fixedLayers.config(),
+        window.cg.fixedLayers.banks(),
       ]);
       setEntries(next);
       setHealth(nextHealth);
@@ -594,7 +595,7 @@ function Row({
   entry: AuditEntry;
   time: ReturnType<typeof auditTimeParts>;
   templates: ReadonlyMap<string, TemplateInfo>;
-  bank: FixedLayerBank | null;
+  bank: readonly FixedLayerBank[] | null;
 }): JSX.Element {
   /*
     `B-211` — NAME PRIMARY, ID SECONDARY. The place (the row, or the layer with the

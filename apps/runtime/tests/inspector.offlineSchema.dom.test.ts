@@ -7,6 +7,7 @@ import type { StackItemState } from '@cg/shared-schema';
 import { Inspector } from '../src/renderer/features/inspector/Inspector.js';
 import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * B-085 — the Inspector's `templates.get` is browser-local now and resolves offline. As a
@@ -69,7 +70,7 @@ async function renderWithGet(get: () => Promise<unknown>): Promise<HTMLDivElemen
     },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   container = document.createElement('div');
   document.body.appendChild(container);
   const root = createRoot(container);

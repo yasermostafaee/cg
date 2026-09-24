@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuditEntry } from '@cg/shared-schema';
 import { AuditPanel } from '../src/renderer/features/audit/AuditPanel.js';
 import { clearPortals, openDialog } from './support/dialog.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * 🔴 `RUNTIME-REDESIGN-01` — DELETION GUARD ITEM 27: THE AUDIT LOG'S WHO.
@@ -100,7 +101,7 @@ function stubBridge(entries: AuditEntry[]): {
     templates: { list: () => Promise.resolve([]) },
     fixedLayers: { config: () => Promise.resolve(null) },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   return { recentCalls, written };
 }
 

@@ -5,6 +5,7 @@ import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuditPanel } from '../src/renderer/features/audit/AuditPanel.js';
 import { clearPortals, openDialog } from './support/dialog.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * 🔴 `MODAL-TRUTH-01` §3.2/§3.3 — **THE AUDIT LOG DOES NOT ASSERT A COUNT IT CANNOT KNOW,
@@ -73,7 +74,7 @@ function stubBridge(audit: {
     templates: { list: () => Promise.resolve([]) },
     fixedLayers: { config: () => Promise.resolve(null) },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 async function renderAt(open: boolean): Promise<void> {

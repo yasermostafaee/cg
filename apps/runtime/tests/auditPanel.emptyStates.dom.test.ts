@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { StrictMode, createElement } from 'react';
-import { authStub } from './support/authStub.js';
+import { authStub, fillBridgeStub } from './support/authStub.js';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -87,7 +87,7 @@ function stubBridge(health: Health, entries: AuditEntry[] = []): void {
   };
   // `C-038` — the channel list is scoped to the principal, so every stub needs one.
   (stub as { auth?: unknown }).auth = authStub();
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 async function render(): Promise<void> {

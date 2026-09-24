@@ -1,8 +1,10 @@
 import {
+  bankInSet,
+  bankSetSize,
   defaultLayerAlias,
   isFixedBankLayer,
   layerAlias,
-  type FixedLayerBank,
+  type BankSet,
   type TemplateInfo,
 } from '@cg/shared-ipc';
 import { templateDisplayName } from '../features/library/templateName.js';
@@ -84,13 +86,19 @@ export function placeName<S extends NameableSlot>(
     nothing here reads a field beyond the two named above.
   */
   slot: S | undefined,
-  bank: FixedLayerBank | null,
+  /**
+   * `MULTI-CHANNEL-01` — one bank, the station's list, or none. A row is named from the bank
+   * of ITS channel (`bankInSet`); with one bank the answer is exactly what it was.
+   */
+  bank: BankSet,
 ): string | null {
   if (slot === undefined) return null;
-  if (bank !== null && isFixedBankLayer(bank, slot.channel, slot.layer)) {
-    return layerAlias(bank, slot.layer) ?? defaultLayerAlias(bank, slot.layer);
+  const own = bankInSet(bank, slot.channel);
+  if (own !== null && isFixedBankLayer(own, slot.channel, slot.layer)) {
+    return layerAlias(own, slot.layer) ?? defaultLayerAlias(own, slot.layer);
   }
-  const channel = bank === null || bank.channel !== slot.channel ? `${String(slot.channel)}-` : '';
+  // The channel is left out only where it cannot be mistaken: ONE declared bank, on this channel.
+  const channel = bankSetSize(bank) <= 1 && own !== null ? '' : `${String(slot.channel)}-`;
   return `layer ${channel}${String(slot.layer)} (not a row)`;
 }
 
@@ -155,7 +163,8 @@ export interface OperatorRowName {
  */
 export function operatorRowName(
   ref: NameableRef,
-  bank: FixedLayerBank | null,
+  /** `MULTI-CHANNEL-01` — one bank, the station's list, or none (see {@link placeName}). */
+  bank: BankSet,
   templates: ReadonlyMap<string, TemplateInfo>,
 ): OperatorRowName {
   const place = placeName(ref.slot, bank);
@@ -168,10 +177,11 @@ export function operatorRowName(
     `placeName` itself branches on, rather than by sniffing its output for the word
     "layer". A second derivation of that answer is how the two would drift apart.
   */
+  const own = ref.slot !== undefined ? bankInSet(bank, ref.slot.channel) : null;
   const inBank =
     ref.slot !== undefined &&
-    bank !== null &&
-    isFixedBankLayer(bank, ref.slot.channel, ref.slot.layer);
+    own !== null &&
+    isFixedBankLayer(own, ref.slot.channel, ref.slot.layer);
   const layer =
     inBank && ref.slot !== undefined
       ? `${String(ref.slot.channel)}-${String(ref.slot.layer)}`

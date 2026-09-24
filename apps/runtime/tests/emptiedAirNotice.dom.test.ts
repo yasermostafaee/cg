@@ -7,6 +7,7 @@ import type { FixedLayerBank, EmptiedAirNotice as Notice, TemplateInfo } from '@
 import { EmptiedAirNotice } from '../src/renderer/features/layers/EmptiedAirNotice.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 import { connectionsStub, type Reachability } from './support/reachability.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * 🔴 **`B-225` — the operator surface for "the playout server stopped carrying what you put
@@ -94,7 +95,7 @@ function stubBridge(
       onChanged: () => () => undefined,
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   return { restore, dismiss };
 }
 

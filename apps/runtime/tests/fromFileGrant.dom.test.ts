@@ -15,6 +15,7 @@ import {
 import type * as PersistenceModule from '../src/renderer/features/inspector/fromFilePersistence.js';
 import type { PersistedAttachment } from '../src/renderer/features/inspector/fromFilePersistence.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * TEXT-FILE-OPT-01 — the FROM FILE affordance is an AUTHORED per-field grant.
@@ -165,7 +166,7 @@ async function render(get: () => Promise<TemplateInfo | null>): Promise<HTMLDivE
     },
     stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 
   container = document.createElement('div');
   document.body.appendChild(container);

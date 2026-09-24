@@ -17,6 +17,7 @@ import {
   initSources,
 } from '../src/renderer/features/sources/sourceStore.js';
 import { clearPortals } from './support/dialog.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * A9 — REMOVING A TEMPLATE FROM THE LIBRARY.
@@ -129,7 +130,7 @@ function installBridge(): void {
       },
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 /** Mount the picker hook behind a trivial host, and open it. */

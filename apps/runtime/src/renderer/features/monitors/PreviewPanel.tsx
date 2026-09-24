@@ -17,7 +17,8 @@ import { colors, cssVars } from '../../theme.js';
 import { useRehearse } from '../../hooks/useRehearse.js';
 import { useStack } from '../../hooks/useStack.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
-import { useFixedBank, useFixedSlots } from '../../hooks/useFixedLayers.js';
+import { useFixedSlots } from '../../hooks/useFixedLayers.js';
+import { useChannelBankState } from '../channels/useSelectedChannel.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { plateAudioState } from '../layers/plateAudio.js';
@@ -118,7 +119,8 @@ export function PreviewPanel(): JSX.Element {
   const rehearsals = useRehearse();
   const items = useStack();
   const channelSettings = useChannelSettings();
-  const bank = useFixedBank();
+  // `MULTI-CHANNEL-01` — the SELECTED channel's bank: PREVIEW is the channel on screen.
+  const { bank } = useChannelBankState();
   const slots = useFixedSlots();
   const [htmlByItem, setHtmlByItem] = useState<ReadonlyMap<string, string | null>>(
     () => new Map<string, string | null>(),
@@ -153,18 +155,22 @@ export function PreviewPanel(): JSX.Element {
 
   const subjects = useMemo(
     () =>
-      subjectsFor(rehearsals, (r): RehearsalSubject | null => {
-        const item = items.find((i) => i.itemId === r.itemId);
-        if (item === undefined) return null;
-        const alias = slots.find((s) => s.layer === r.layer && s.channel === r.channel)?.alias;
-        const info = templates.get(item.templateId) ?? null;
-        const live = info?.liveSources;
-        return {
-          itemId: r.itemId,
-          layer: r.layer,
-          channel: r.channel,
-          rowName: rowNameFor(bank, r.layer, alias),
-          /*
+      subjectsFor(
+        // `MULTI-CHANNEL-01` — only the rows rehearsing on THIS channel; another channel's
+        // rehearsal belongs to that channel's PREVIEW, as its rows belong to its table.
+        rehearsals.filter((r) => bank === null || r.channel === bank.channel),
+        (r): RehearsalSubject | null => {
+          const item = items.find((i) => i.itemId === r.itemId);
+          if (item === undefined) return null;
+          const alias = slots.find((s) => s.layer === r.layer && s.channel === r.channel)?.alias;
+          const info = templates.get(item.templateId) ?? null;
+          const live = info?.liveSources;
+          return {
+            itemId: r.itemId,
+            layer: r.layer,
+            channel: r.channel,
+            rowName: rowNameFor(bank, r.layer, alias),
+            /*
             🔴 THE STAGED PLACEMENT, LIVE — owner, 2026-09-14: «فقط در حالت pvw نیازه که
             با تغییر پوزیشن بدون اپدیت هم موقعیت در pvw تغییر کنه بصورت لحظه‌ای و realtime، در
             حقیقت با onchange اینپوتها.»
@@ -191,16 +197,16 @@ export function PreviewPanel(): JSX.Element {
             moved every correctly-placed graphic's preview to the middle. `rehearse-composite`
             caught it on the full suite; `effectivePosition`'s signature now carries the rule.
           */
-          position: effectivePosition(item.itemId, item.position),
-          // The operator's EFFECTIVE values: applied fields with any staged
-          // edits layered on, through the same `buildApplyPayload` the
-          // Inspector's Apply uses — so what is rehearsed is exactly what Apply
-          // would send.
-          fields: buildApplyPayload(item.itemId, item.fields),
-          liveSources: live,
-          // `B-151` — the bridge's published look drives BOTH halves of the preview.
-          activeLookId: item.activeLookId,
-          /*
+            position: effectivePosition(item.itemId, item.position),
+            // The operator's EFFECTIVE values: applied fields with any staged
+            // edits layered on, through the same `buildApplyPayload` the
+            // Inspector's Apply uses — so what is rehearsed is exactly what Apply
+            // would send.
+            fields: buildApplyPayload(item.itemId, item.fields),
+            liveSources: live,
+            // `B-151` — the bridge's published look drives BOTH halves of the preview.
+            activeLookId: item.activeLookId,
+            /*
             🔴 `PASSES-CYCLE-ONLY-26` Part B (`R-065`) — **THE OPERATOR'S PASS TIMING, through
             the SAME builder a press uses.**
 
@@ -213,58 +219,58 @@ export function PreviewPanel(): JSX.Element {
             layers the staged draft over the stored value, which is the rule `buildApplyPayload`
             already gives the fields: what is rehearsed is exactly what Apply would send.
           */
-          timing: effectiveTimingFor(info?.playout, item),
-          /**
-           * 🔴 **SESSION BQ — THE RESOLUTION INPUTS, all four levels, not a pre-joined
-           * name map.**
-           *
-           * This built `plateSourceNames` from `appliedPlateSources` alone — LEVEL 2 ONLY,
-           * keyed by plate, with no look in it. So a per-look binding (level 3) and an
-           * `R-048` patch (level 4) were both invisible to the preview: the overlay named
-           * the template's default while air showed the bound source. The owner met it on a
-           * rehearsing row after pressing UPDATE.
-           *
-           * The panel now hands over the INPUTS and `platePlacements` resolves them with
-           * the look it already holds, through `resolvePlateSourcesForLook` — the same
-           * function the bridge delegates to. **The rule it makes true: the overlay names
-           * exactly what a TAKE of this row, in this look, would put on air.**
-           *
-           * ⚠ The id→name join stays here (`nameOf`), because only this panel can see the
-           * sources store; the stage below stays presentational.
-           *
-           * 🔴 THE APPLIED BINDING, NOT THE DRAFT — and this is the ONE place
-           * this panel deliberately diverges from the "show what the operator
-           * has typed" rule the field values above follow.
-           *
-           * Fields are shown as drafted because rehearse exists to preview an
-           * edit before it reaches air. A plate binding is different in kind:
-           * an unassigned plate REFUSES the take (C-015's empty-mapping
-           * acceptance), and a binding that has been staged but not applied is
-           * still unassigned as far as the take is concerned. Painting a staged
-           * pick as bound would tell the operator the take will work at the
-           * exact moment it will not — which is the failure PVW is their last
-           * chance to catch.
-           *
-           * ⚠ That rule is unchanged and is why the store is read here rather than the
-           * draft: `currentSourceAssignments()` is the APPLIED level 2, and levels 3 and 4
-           * come off the item as the BRIDGE published them. Nothing staged reaches this.
-           *
-           * A binding whose catalog entry has gone reads as UNASSIGNED (`nameOf` answers
-           * `null`), matching `pruneAssignmentsForCatalog`'s own reading of a dangling
-           * reference — and it is the safe direction anyway, since that plate will refuse.
-           */
-          plateSources: {
-            templateId: item.templateId,
-            assignments: currentSourceAssignments(),
-            ...(item.frozenAssignment !== undefined && {
-              frozenAssignment: item.frozenAssignment,
-            }),
-            ...(item.lookSourceOverride !== undefined && {
-              lookBindings: item.lookSourceOverride,
-            }),
-            ...(item.sourceOverride !== undefined && { overrides: item.sourceOverride }),
-            nameOf: (catalogId) => catalog.sources.find((s) => s.id === catalogId)?.name ?? null,
-            /*
+            timing: effectiveTimingFor(info?.playout, item),
+            /**
+             * 🔴 **SESSION BQ — THE RESOLUTION INPUTS, all four levels, not a pre-joined
+             * name map.**
+             *
+             * This built `plateSourceNames` from `appliedPlateSources` alone — LEVEL 2 ONLY,
+             * keyed by plate, with no look in it. So a per-look binding (level 3) and an
+             * `R-048` patch (level 4) were both invisible to the preview: the overlay named
+             * the template's default while air showed the bound source. The owner met it on a
+             * rehearsing row after pressing UPDATE.
+             *
+             * The panel now hands over the INPUTS and `platePlacements` resolves them with
+             * the look it already holds, through `resolvePlateSourcesForLook` — the same
+             * function the bridge delegates to. **The rule it makes true: the overlay names
+             * exactly what a TAKE of this row, in this look, would put on air.**
+             *
+             * ⚠ The id→name join stays here (`nameOf`), because only this panel can see the
+             * sources store; the stage below stays presentational.
+             *
+             * 🔴 THE APPLIED BINDING, NOT THE DRAFT — and this is the ONE place
+             * this panel deliberately diverges from the "show what the operator
+             * has typed" rule the field values above follow.
+             *
+             * Fields are shown as drafted because rehearse exists to preview an
+             * edit before it reaches air. A plate binding is different in kind:
+             * an unassigned plate REFUSES the take (C-015's empty-mapping
+             * acceptance), and a binding that has been staged but not applied is
+             * still unassigned as far as the take is concerned. Painting a staged
+             * pick as bound would tell the operator the take will work at the
+             * exact moment it will not — which is the failure PVW is their last
+             * chance to catch.
+             *
+             * ⚠ That rule is unchanged and is why the store is read here rather than the
+             * draft: `currentSourceAssignments()` is the APPLIED level 2, and levels 3 and 4
+             * come off the item as the BRIDGE published them. Nothing staged reaches this.
+             *
+             * A binding whose catalog entry has gone reads as UNASSIGNED (`nameOf` answers
+             * `null`), matching `pruneAssignmentsForCatalog`'s own reading of a dangling
+             * reference — and it is the safe direction anyway, since that plate will refuse.
+             */
+            plateSources: {
+              templateId: item.templateId,
+              assignments: currentSourceAssignments(),
+              ...(item.frozenAssignment !== undefined && {
+                frozenAssignment: item.frozenAssignment,
+              }),
+              ...(item.lookSourceOverride !== undefined && {
+                lookBindings: item.lookSourceOverride,
+              }),
+              ...(item.sourceOverride !== undefined && { overrides: item.sourceOverride }),
+              nameOf: (catalogId) => catalog.sources.find((s) => s.id === catalogId)?.name ?? null,
+              /*
               `add-multibox-audio` — what each box's audio is doing, joined HERE for `nameOf`'s
               reason: it needs the stack (the recorded intent) AND the bridge's ledger (the
               hold), and the geometry module owns neither.
@@ -279,16 +285,17 @@ export function PreviewPanel(): JSX.Element {
               is what an un-seated rehearsing plate actually is: it will be muted-on-create when
               it is seated, and its intent is what this same map already says.
             */
-            audioOf: (plateId) =>
-              plateAudioState(
-                item.plateVolumes?.[plateId],
-                liveLayers.some(
-                  (l) => l.itemId === item.itemId && l.sourceId === plateId && l.held,
+              audioOf: (plateId) =>
+                plateAudioState(
+                  item.plateVolumes?.[plateId],
+                  liveLayers.some(
+                    (l) => l.itemId === item.itemId && l.sourceId === plateId && l.held,
+                  ),
                 ),
-              ),
-          },
-        };
-      }),
+            },
+          };
+        },
+      ),
     // `draftVersion` is a real dependency even though nothing in the body names
     // it: `buildApplyPayload` reads the draft store, which is external mutable
     // state React cannot see. Without it a staged edit would not reach the

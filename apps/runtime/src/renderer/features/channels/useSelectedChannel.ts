@@ -1,6 +1,7 @@
+import { bankForChannel, firstBank, type FixedLayerBank } from '@cg/shared-ipc';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { useChannelSettings } from '../../hooks/useChannelSettings.js';
-import { useFixedBank } from '../../hooks/useFixedLayers.js';
+import { useFixedBanksState } from '../../hooks/useFixedLayers.js';
 import { useStationChannels } from '../../hooks/useStationChannels.js';
 import {
   channelIds,
@@ -19,6 +20,12 @@ import { useChannelChoice } from './channelStore.js';
  * HERE, at the one place the channel list is derived, so no surface downstream has to remember
  * to ask. A control that forgot would be a control the bridge then refuses — which is the whole
  * failure mode `R-066` bullet 4 exists to remove.
+ *
+ * 🔴 `MULTI-CHANNEL-01` — **AND OF "WHICH BANK IS THE SELECTED CHANNEL'S".** A station declares
+ * one bank per channel; this hook holds the list, picks the selected channel's bank out of it, and
+ * is the only place that does — every per-channel surface (the layer table, the monitors, the
+ * Layers section of Station setup) reads `bank` from here, so switching channels switches every
+ * one of them together, and none can show one channel's rows under another channel's tab.
  */
 export function useSelectedChannel(): {
   channels: number[];
@@ -36,18 +43,28 @@ export function useSelectedChannel(): {
    * decision anywhere reads it.
    */
   names: ReadonlyMap<number, string>;
+  /** `MULTI-CHANNEL-01` — every declared bank, in channel order. */
+  banks: readonly FixedLayerBank[];
+  /** `MULTI-CHANNEL-01` — the SELECTED channel's bank, or `null` when it declares none. */
+  bank: FixedLayerBank | null;
+  /** Whether the banks have ARRIVED (an empty list before that is not an answer). */
+  banksReady: boolean;
+  /** `DELTA A` §A2 — the bridge answered the banks pull, and the answer was a refusal. */
+  banksFailed: boolean;
 } {
-  const bank = useFixedBank();
+  const { banks, ready: banksReady, failed: banksFailed } = useFixedBanksState();
   const settings = useChannelSettings();
   const choice = useChannelChoice();
   const auth = useAuthSession();
-  // `R-062` gap 2 — read FIRST once it has arrived; until then the two sources above stand.
+  // `R-062` gap 2 — read FIRST once it has arrived; until then the banks and settings stand.
   const discovery = useStationChannels();
   const discovered = discovery.ready ? discovery.value : null;
 
-  const channels = channelIds(bank, settings, auth, discovered);
+  const channels = channelIds(banks, settings, auth, discovered);
   const operable = operableChannels(channels, auth);
-  const selected = resolveSelectedChannel(channels, choice, bank?.channel ?? null);
+  // The first declared channel is where the console opens (`channelStore`: A13, known over
+  // remembered) — the lowest-numbered, the order every bank list is in.
+  const selected = resolveSelectedChannel(channels, choice, firstBank(banks)?.channel ?? null);
 
   return {
     channels,
@@ -55,5 +72,23 @@ export function useSelectedChannel(): {
     operable,
     canOperateSelected: operable.includes(selected),
     names: channelNames(discovered),
+    banks,
+    bank: bankForChannel(banks, selected),
+    banksReady,
+    banksFailed,
   };
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **THE SELECTED CHANNEL'S BANK, WITH ITS READINESS.** What every
+ * per-channel surface reads, in the shape the single-bank `useFixedBankState` had, so the layer
+ * table's "not arrived is not empty" rule carries over unchanged.
+ */
+export function useChannelBankState(): {
+  bank: FixedLayerBank | null;
+  ready: boolean;
+  failed: boolean;
+} {
+  const { bank, banksReady, banksFailed } = useSelectedChannel();
+  return { bank, ready: banksReady, failed: banksFailed };
 }

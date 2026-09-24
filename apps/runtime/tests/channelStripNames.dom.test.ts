@@ -122,6 +122,34 @@ describe('the channel strip, fed by the discovery call', () => {
     expect(tab?.querySelector('bdi')?.textContent).toBe('کانال دوم (تست CG)');
   });
 
+  it('`MULTI-CHANNEL-01` — two declared channels, each tab under ITS OWN catalogue name', async () => {
+    const el = await render({
+      channels: [
+        {
+          channel: 1,
+          named: { id: 'news', name: 'خبر سراسری' },
+          declared: true,
+          permitted: true,
+          sources: ['catalogue', 'bank'],
+        },
+        {
+          channel: 2,
+          named: { id: 'cg-test2', name: 'کانال دوم (تست CG)' },
+          declared: true,
+          permitted: true,
+          sources: ['catalogue', 'bank', 'channel-settings'],
+        },
+      ],
+    });
+    expect(tabs(el).map((t) => t.id)).toEqual(['channel-1', 'channel-2']);
+    expect(tabs(el).map((t) => t.querySelector('bdi')?.textContent)).toEqual([
+      'خبر سراسری',
+      'کانال دوم (تست CG)',
+    ]);
+    // Each number relocated to its own tab — a name is never borrowed across channels.
+    expect(tabs(el).map((t) => t.title)).toEqual(['Channel 1', 'Channel 2']);
+  });
+
   it('with no catalogue name the label is exactly what it was — CHANNEL 2', async () => {
     const el = await render({
       channels: [

@@ -1613,7 +1613,7 @@ export function StationSetupDialog({
                 `SETTINGS-MATCH-02` DEFECT 3 — the head's SUMMARY TAGS and its `<details>` are
                 the section's, not the dialog's: `SetupSection` owns the head, so the pane
                 hands them in rather than drawing a second head of its own. Both read the same
-                `useFixedBankState` the table does.
+                selected-channel bank (`useChannelBankState`) the table does.
               */
             <SetupSection
               id="candidate-layers"

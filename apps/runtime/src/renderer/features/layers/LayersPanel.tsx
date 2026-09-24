@@ -69,7 +69,8 @@ import {
   useRestoreMigrations,
   useRestoreSkips,
 } from '../../hooks/useRestoreSkips.js';
-import { useFixedBankState, useFixedSlotsState } from '../../hooks/useFixedLayers.js';
+import { useFixedSlotsState } from '../../hooks/useFixedLayers.js';
+import { useChannelBankState, useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { useStationLayers } from '../../hooks/useStationLayers.js';
 import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { usePlateReleases } from '../../hooks/usePlateReleases.js';
@@ -328,7 +329,20 @@ export function LayersPanel({
   // `C-038` — may this principal act on the channel this console is scoped to? The ONE
   // console-side answer; every operator control in this panel reads it (golden rule 6).
   const canOperate = useCanOperate();
-  const { bank, ready: bankReady, failed: bankFailed } = useFixedBankState();
+  // `MULTI-CHANNEL-01` — the SELECTED channel's bank: the table is that channel's rows.
+  const { bank, ready: bankReady, failed: bankFailed } = useChannelBankState();
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 B — **THE BULK VERBS ACT ON THE CHANNEL ON SCREEN**, the principle the
+    owner chose for PANIC. On a station that declares ONE channel "this channel" and "every
+    channel" are the same set, and the verb is sent BARE — its meaning and its frame exactly what
+    they always were; with two or more it names the channel this table shows.
+  */
+  const { banks } = useSelectedChannel();
+  const scopeChannel = banks.length > 1 && bank !== null ? bank.channel : null;
+  const bulkScope = useMemo(
+    () => (scopeChannel === null ? undefined : { channel: scopeChannel }),
+    [scopeChannel],
+  );
   const { slots, ready: slotsReady, failed: slotsFailed } = useFixedSlotsState();
   /*
     🔴 `DELTA A` §A2 — the bridge ANSWERED and the answer was a refusal. Kept apart from
@@ -455,10 +469,13 @@ export function LayersPanel({
         if (row === null) return;
         if (typeof row.scrollIntoView === 'function') row.scrollIntoView({ block: 'center' });
         row.focus();
-        const bound = slots.find((s) => s.layer === layer)?.binding;
+        // `MULTI-CHANNEL-01` — the row of THIS table's channel: layer 99 exists on every channel.
+        const bound = slots.find(
+          (s) => s.layer === layer && (bank === null || s.channel === bank.channel),
+        )?.binding;
         if (bound !== null && bound !== undefined) onSelectionChange(bound.itemId);
       }),
-    [slots, onSelectionChange],
+    [slots, bank, onSelectionChange],
   );
 
   // Template identity for every bound row, joined once for the whole list.
@@ -563,14 +580,19 @@ export function LayersPanel({
   // live graphic can never lose its only surface.
   const rows = useMemo(() => {
     if (bank === null) return [];
-    return [...slots]
-      .filter(
-        (slot) =>
-          isLayerVisible(bank, slot.layer) ||
-          slot.binding !== null ||
-          slot.observed.kind === 'producer',
-      )
-      .sort((a, b) => b.layer - a.layer);
+    return (
+      [...slots]
+        // `MULTI-CHANNEL-01` — the per-slot state carries EVERY declared channel's rows; this
+        // table is the selected channel's, so its rows are that channel's and no other's.
+        .filter((slot) => slot.channel === bank.channel)
+        .filter(
+          (slot) =>
+            isLayerVisible(bank, slot.layer) ||
+            slot.binding !== null ||
+            slot.observed.kind === 'producer',
+        )
+        .sort((a, b) => b.layer - a.layer)
+    );
   }, [bank, slots]);
 
   /**
@@ -768,7 +790,10 @@ export function LayersPanel({
         refusal is not a failure — a Live Source layer is not the operator's to clear,
         and saying "failed" about it would send them looking for a fault.
       */
-      const res = await window.cg.stack.clearAll();
+      const res =
+        bulkScope === undefined
+          ? await window.cg.stack.clearAll()
+          : await window.cg.stack.clearAll(bulkScope);
       const stuck = res.attempted - res.cleared;
       const refusedNote =
         res.refused.length > 0
@@ -790,7 +815,7 @@ export function LayersPanel({
     } catch (err) {
       reportCommandError(err instanceof Error ? err.message : 'Clear all failed.');
     }
-  }, [confirm, boundCount]);
+  }, [confirm, boundCount, bulkScope]);
 
   /**
    * C-012 — STOP All: every on-air graphic runs its OWN outro and stays
@@ -811,7 +836,8 @@ export function LayersPanel({
     });
     if (!ok) return;
     try {
-      await window.cg.stack.stopAll();
+      if (bulkScope === undefined) await window.cg.stack.stopAll();
+      else await window.cg.stack.stopAll(bulkScope);
       /*
         🔴 DELTA 8 §4(b) — ONE toast that states its SCOPE, never one per row. And §4(c): with
         nothing on air there was nothing to stop, so the confirm is the whole interaction and
@@ -828,7 +854,7 @@ export function LayersPanel({
     } catch (err) {
       reportCommandError(err instanceof Error ? err.message : 'Stop all failed.');
     }
-  }, [confirm, onAirCount]);
+  }, [confirm, onAirCount, bulkScope]);
 
   /**
    * R-010 — Remove All empties every row. It is not merely a convenience: it is
@@ -846,7 +872,8 @@ export function LayersPanel({
     if (!ok) return;
     const emptied = items.length;
     try {
-      await window.cg.stack.removeAll();
+      if (bulkScope === undefined) await window.cg.stack.removeAll();
+      else await window.cg.stack.removeAll(bulkScope);
       /*
         🔴 DELTA 8 §4(b) + §2's consequence rule. REMOVE ALL is the one bulk verb that is never
         a remedy and cannot be undone, so its line carries that clause — and it must not be
@@ -860,7 +887,7 @@ export function LayersPanel({
     } catch (err) {
       reportCommandError(err instanceof Error ? err.message : 'Remove all failed.');
     }
-  }, [confirm, items.length]);
+  }, [confirm, items.length, bulkScope]);
 
   const playoutOccupied = hasStationLayerOccupant(playout);
   /*
@@ -1178,10 +1205,10 @@ export function LayersPanel({
 
             The reference draws `CH 1` at the head of the bulk group and it is not decoration:
             STOP ALL, CLEAR ALL and REMOVE ALL are the widest presses on this console, and the
-            operator is entitled to read their SCOPE in the same glance as their names. The
-            bank is one channel today (`design.md` §4's single-channel gap), so this is one
-            number — which is exactly why it is cheap to state and expensive to omit the day
-            it becomes two.
+            operator is entitled to read their SCOPE in the same glance as their names. It was
+            one number while the bank was one channel — cheap to state and expensive to omit
+            the day it became two. `MULTI-CHANNEL-01` is that day: it is the SELECTED channel's
+            number, and the channel the three verbs are scoped to.
 
             It is rendered only when the bank has actually answered: `CH undefined` over three
             live verbs would be worse than saying nothing.

@@ -7,6 +7,7 @@ import type { AuditEntry } from '@cg/shared-schema';
 import type { FixedLayerBank, TemplateInfo } from '@cg/shared-ipc';
 import { AuditPanel } from '../src/renderer/features/audit/AuditPanel.js';
 import { clearPortals, openDialog } from './support/dialog.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * `RUNTIME-REDESIGN-01` Phase 8 — what the audit log took from `03-audit-log.html` beyond
@@ -89,7 +90,7 @@ function stubBridge(entries: AuditEntry[]): void {
     templates: { list: () => Promise.resolve([THREE_FRAMES]) },
     fixedLayers: { config: () => Promise.resolve(BANK) },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 async function render(): Promise<void> {

@@ -7,6 +7,7 @@ import type { AuditEntry } from '@cg/shared-schema';
 import { TEMPLATE_ACTOR } from '@cg/shared-ipc';
 import { AuditPanel } from '../src/renderer/features/audit/AuditPanel.js';
 import { clearPortals, openDialog } from './support/dialog.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * 🔴 `SELF-STOP-24 · REPLY 1` §R5 — **WHAT THE OWNER WILL READ IN THE LOG WHEN A TEMPLATE
@@ -94,7 +95,7 @@ function stubBridge(entries: AuditEntry[], bank: unknown = BANK): void {
     templates: { list: () => Promise.resolve([TEMPLATE_INFO]) },
     fixedLayers: { config: () => Promise.resolve(bank) },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 async function render(): Promise<void> {

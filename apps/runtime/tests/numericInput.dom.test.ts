@@ -19,6 +19,7 @@ import { StatusBar } from '../src/renderer/features/status/StatusBar.js';
 import { NumericInput, normalizeDigits } from '../src/renderer/ui/NumericInput.js';
 import { connectionsStub, linkFor } from './support/reachability.js';
 import { clearPortals, openDialog } from './support/dialog.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * R-020 — Persian-keyboard digits accepted in numeric inputs, normalized to
@@ -197,7 +198,7 @@ describe('Inspector fields — R-020', () => {
       },
       stack: { setPosition: vi.fn(() => Promise.resolve({ ok: true })) },
     };
-    (window as unknown as { cg: typeof stub }).cg = stub;
+    (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   }
 
   function item(): StackItemState {
@@ -244,7 +245,7 @@ describe('PositionPicker offsets — R-020', () => {
     // half (the documented `B-048` re-send). See `positionPicker.dom.test.ts`'s stub note.
     const update = vi.fn(() => Promise.resolve({ accepted: true }));
     const stub = { stack: { setPosition, update } };
-    (window as unknown as { cg: typeof stub }).cg = stub;
+    (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
     const subject: StackItemState = {
       itemId: 'item-1',
       templateId: 'tpl-pos',
@@ -367,7 +368,7 @@ describe('Lock PIN — R-020 (both ends of the comparison normalize)', () => {
         onResyncingChanged: () => () => undefined,
       },
     };
-    (window as unknown as { cg: typeof stub }).cg = stub;
+    (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
     const el = await render(createElement(StatusBar));
 
     // Open the lock prompt, type a Persian PIN, submit. The prompt dialog is
@@ -437,7 +438,7 @@ describe('Lock PIN — R-020 (both ends of the comparison normalize)', () => {
         onResyncingChanged: () => () => undefined,
       },
     };
-    (window as unknown as { cg: typeof stub }).cg = stub;
+    (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
     const el = await render(createElement(StatusBar));
     const lockButton = [...el.querySelectorAll('button')].find((b) =>
       (b.textContent ?? '').includes('Lock'),
@@ -506,7 +507,7 @@ describe('Lock PIN — R-020 (both ends of the comparison normalize)', () => {
         onResyncingChanged: () => () => undefined,
       },
     };
-    (window as unknown as { cg: typeof stub }).cg = stub;
+    (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
     const el = await render(createElement(StatusBar));
     const lockButton = [...el.querySelectorAll('button')].find((b) =>
       (b.textContent ?? '').includes('Lock'),

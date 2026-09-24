@@ -388,7 +388,8 @@ export function useTemplatePicker(): {
     is refused (R-006) and resolves to `null`: the places are then named as CasparCG
     names them, which is still somewhere the operator can find.
   */
-  const [bank, setBank] = useState<FixedLayerBank | null>(null);
+  // `MULTI-CHANNEL-01` — every declared bank: a reference is named from its own channel's bank.
+  const [bank, setBank] = useState<readonly FixedLayerBank[] | null>(null);
   /*
     Phase 8 — the reference's search and kind filter. Session state of the dialog: both
     reset when it opens, because a filter left over from the last row's pick would hide
@@ -582,7 +583,7 @@ export function useTemplatePicker(): {
           });
           // `B-212` — and the places, each with its remedy, under the list. The bank is
           // read now, for these names; see the note at `bank`.
-          setBank(await window.cg.fixedLayers.config().catch(() => null));
+          setBank(await window.cg.fixedLayers.banks().catch(() => null));
           setReferences(res.references ?? []);
           return;
         }

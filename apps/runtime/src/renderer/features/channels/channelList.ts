@@ -1,5 +1,16 @@
 import type { AuthSessionState } from '../../../shared/runtime-bridge.js';
-import type { ChannelSettingsState, FixedLayerBank, StationChannels } from '@cg/shared-ipc';
+import type {
+  BankSet,
+  ChannelSettingsState,
+  FixedLayerBank,
+  StationChannels,
+} from '@cg/shared-ipc';
+
+/** A {@link BankSet} as a list — none, one, or every declared bank. */
+function banksOf(set: BankSet): readonly FixedLayerBank[] {
+  if (set === null) return [];
+  return Array.isArray(set) ? (set as readonly FixedLayerBank[]) : [set as FixedLayerBank];
+}
 
 /**
  * `RUNTIME-REDESIGN-01` Phase 7 (`PROMPT.md` §7) — **THE CHANNEL LIST IS A LIST.**
@@ -13,8 +24,8 @@ import type { ChannelSettingsState, FixedLayerBank, StationChannels } from '@cg/
  *
  * ── THE TWO SOURCES, AND WHY NEITHER IS INVENTED ─────────────────────────────
  *
- * 1. The fixed bank's `channel` (`FixedLayerBankSchema`, one bank, one channel, documented
- *    _"one channel per bank, v1"_). Until this phase it was the app's ONLY channel authority
+ * 1. Every declared bank's `channel` — one bank per channel (`MULTI-CHANNEL-01`; the v1 file
+ *    declared one). Until this phase the one bank was the app's ONLY channel authority
  *    (`ChannelScope` read `bank?.channel ?? 1` into a one-element array).
  * 2. `channelSettings.settings` — _"one entry per declared channel"_, whose own header says the
  *    list is channel-keyed precisely so that _"when the channel list arrives from an API, these
@@ -26,8 +37,9 @@ import type { ChannelSettingsState, FixedLayerBank, StationChannels } from '@cg/
  *
  * 🔴 **No multi-channel contract is invented here** (owner answer A3, `design.md` §4). The three
  * real gaps — the five `z.void()` bulk verbs, the channel-discovery call, and the bank as the one
- * channel authority — were filed as `R-062`; gap 2, the discovery call, is closed and feeds this
- * function. Gaps 1 and 3 stay open.
+ * channel authority — were filed as `R-062`. Gap 2, the discovery call, closed first and feeds
+ * this function; `MULTI-CHANNEL-01` closed gaps 1 and 3 — the housekeeping verbs take a channel,
+ * and the station declares one bank per channel, every one of which is a source here.
  *
  * ⭐ **`CHANNEL-AUTHORITY-01` — the discovery call exists (`R-062` gap 2), and it is read FIRST.**
  * When the bridge's answer has arrived, the list is its `declared` channels — the channels THIS
@@ -39,11 +51,16 @@ import type { ChannelSettingsState, FixedLayerBank, StationChannels } from '@cg/
  * fallback, exactly as before.
  */
 export function channelIds(
-  bank: FixedLayerBank | null,
+  /**
+   * `MULTI-CHANNEL-01` — the station's banks: one bank, the list, or none. Every bank's channel
+   * is a fallback source and every bank's channel survives the principal's narrowing below.
+   */
+  bank: BankSet,
   settings: ChannelSettingsState,
   auth: AuthSessionState = { kind: 'off' },
   discovered: StationChannels | null = null,
 ): number[] {
+  const bankChannels = banksOf(bank).map((b) => b.channel);
   const fromDiscovery = (discovered?.channels ?? [])
     .filter((c) => c.declared)
     .map((c) => c.channel);
@@ -55,7 +72,7 @@ export function channelIds(
   const declared = new Set<number>(
     fromDiscovery.length > 0 ? fromDiscovery : settings.settings.map((s) => s.channel),
   );
-  if (fromDiscovery.length === 0 && bank !== null) declared.add(bank.channel);
+  if (fromDiscovery.length === 0) for (const channel of bankChannels) declared.add(channel);
   // The documented default (`FixedLayerBankSchema`): before any snapshot arrives, and when no
   // bank is declared at all, the surface still belongs to SOME channel.
   if (declared.size === 0) declared.add(1);
@@ -82,7 +99,8 @@ export function channelIds(
   if (permitted === null) return [...declared].sort((a, b) => a - b);
 
   const visible = new Set<number>([...declared].filter((c) => permitted.has(c)));
-  if (bank !== null && declared.has(bank.channel)) visible.add(bank.channel);
+  // `MULTI-CHANNEL-01` — EVERY bank's channel survives, each for the reason the one bank's did.
+  for (const channel of bankChannels) if (declared.has(channel)) visible.add(channel);
   /*
     A principal granted nothing on a station with no bank still needs a surface to stand on.
     The channel is shown READ-ONLY (`operableChannels` returns none of it), which is a console
@@ -140,6 +158,7 @@ export function channelNames(discovered: StationChannels | null): ReadonlyMap<nu
  * longer carries falls back rather than stranding the surface on a stale id. The bank comes
  * before the first entry because it is the channel the console has always shown by default,
  * and a station that gains a second channel must not silently move the operator off the first.
+ * With a bank per channel it is the FIRST declared bank's channel (`useSelectedChannel`).
  */
 export function resolveSelectedChannel(
   channels: readonly number[],

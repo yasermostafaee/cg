@@ -8,6 +8,7 @@ import type { FixedLayerBank, TemplateInfo } from '@cg/shared-ipc';
 import { AuditPanel } from '../src/renderer/features/audit/AuditPanel.js';
 import { auditTimeParts } from '../src/renderer/features/audit/auditFormat.js';
 import { clearPortals, openDialog } from './support/dialog.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * ⭐ **`B-210` / `B-211` / `B-209` — THE AUDIT LOG IS LEGIBLE TO THE PERSON WHO HAS TO
@@ -129,7 +130,7 @@ function stubBridge(
     templates: { list: () => Promise.resolve(templates) },
     fixedLayers: { config: () => Promise.resolve(bank) },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 async function render(): Promise<void> {

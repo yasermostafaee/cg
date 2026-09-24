@@ -1,3 +1,4 @@
+import type { FixedLayerBank } from '@cg/shared-ipc';
 import type { AuthCapabilities, AuthSessionState } from '../../src/shared/runtime-bridge.js';
 
 /**
@@ -101,6 +102,7 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     state: () => Promise.resolve([]),
     onStateChanged: () => () => undefined,
   };
+  fillBankList(cg['fixedLayers'] as Record<string, unknown>);
   cg['channelSettings'] ??= {
     get: () => Promise.resolve({ settings: [], observed: [] }),
     onChanged: () => () => undefined,
@@ -122,6 +124,36 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     takeOffAir: () => Promise.resolve({ ok: false }),
   };
   return stub;
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **THE STATION'S BANKS, FOR A STUB THAT STATES ONE BANK.**
+ *
+ * The console reads every declared bank (`fixedLayers.banks`) where it read the one
+ * (`fixedLayers.config`). A spec written against the single-bank read states its bank through
+ * `config` / `onConfigChanged`, and that statement is what it means: a station with THAT bank. So
+ * the plural members are DERIVED from the spec's own singular ones — `banks()` answers `[bank]`
+ * (or `[]` for `null`), `onBanksChanged` relays `onConfigChanged` the same way — and a filled
+ * stub measures exactly what it measured before, on the station it already described.
+ *
+ * ⚠ **It fills only what is ABSENT**, like everything here: a spec that states its banks keeps
+ * them. And it completes the stub rather than making the hook tolerate a missing member — this
+ * file's own rule, for this file's own reason.
+ */
+export function fillBankList(fixedLayers: Record<string, unknown>): void {
+  const config = fixedLayers['config'] as (() => Promise<FixedLayerBank | null>) | undefined;
+  const onConfigChanged = fixedLayers['onConfigChanged'] as
+    | ((handler: (bank: FixedLayerBank | null) => void) => () => void)
+    | undefined;
+  fixedLayers['banks'] ??= (): Promise<FixedLayerBank[]> =>
+    config === undefined
+      ? Promise.resolve([])
+      : config().then((bank) => (bank === null ? [] : [bank]));
+  fixedLayers['onBanksChanged'] ??= (handler: (banks: FixedLayerBank[]) => void): (() => void) =>
+    onConfigChanged === undefined
+      ? () => undefined
+      : onConfigChanged((bank) => handler(bank === null ? [] : [bank]));
+  fixedLayers['setBanks'] ??= (): Promise<{ ok: boolean }> => Promise.resolve({ ok: true });
 }
 
 /**

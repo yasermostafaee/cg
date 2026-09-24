@@ -11,40 +11,48 @@ import { useBridgeSnapshot, useBridgeSnapshotState } from './useBridgeSnapshot.j
  * functions because the hook takes them as effect dependencies.
  */
 
-const NO_BANK = null;
+const NO_BANKS: FixedLayerBank[] = [];
 
-const fetchBank = (): Promise<FixedLayerBank | null> => window.cg.fixedLayers.config();
+const fetchBanks = (): Promise<FixedLayerBank[]> => window.cg.fixedLayers.banks();
 
-const subscribeBank = (handler: (next: FixedLayerBank | null) => void): Unsubscribe =>
-  window.cg.fixedLayers.onConfigChanged(handler);
+const subscribeBanks = (handler: (next: FixedLayerBank[]) => void): Unsubscribe =>
+  window.cg.fixedLayers.onBanksChanged(handler);
 
-/** The declared fixed bank, or null when none is configured (panel renders nothing). */
-export function useFixedBank(): FixedLayerBank | null {
-  return useBridgeSnapshot(fetchBank, subscribeBank, NO_BANK);
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **EVERY DECLARED BANK, in channel order** (`[]` when none is declared).
+ *
+ * The console's ONE bank read. It used to read the single bank (`fixedLayers.config`); a station
+ * now declares one bank per channel, and every per-channel surface takes THE SELECTED CHANNEL'S
+ * bank from this list (`useChannelBankState`, beside the selection it depends on), while every
+ * surface that NAMES a row takes the whole list, so a row on channel 2 is named from channel 2's
+ * bank wherever it is named.
+ */
+export function useFixedBanks(): FixedLayerBank[] {
+  return useBridgeSnapshot(fetchBanks, subscribeBanks, NO_BANKS);
 }
 
 /**
- * The bank WITH its readiness — for the panel, which must not read `null` as an
+ * The banks WITH their readiness — for the panel, which must not read an empty list as an
  * ANSWER.
  *
- * `null` means two opposite things and the plain hook cannot tell them apart:
- * "this station has declared no candidate layers" (a fact, worth a paragraph
- * explaining where to declare them) and "the bridge has not told us yet" (no fact
- * at all). Until the link is usable, `useBridgeSnapshot` does not even ASK — so a
- * Runtime opened before the bridge is up sat on the first reading, telling the
- * operator his bank did not exist, and then filled in silently seconds later.
+ * `[]` means two opposite things and the plain hook cannot tell them apart: "this station has
+ * declared no candidate layers" (a fact, worth a paragraph explaining where to declare them) and
+ * "the bridge has not told us yet" (no fact at all). Until the link is usable,
+ * `useBridgeSnapshot` does not even ASK — so a Runtime opened before the bridge is up sat on the
+ * first reading, telling the operator his bank did not exist, and then filled in silently
+ * seconds later.
  *
- * Same doctrine as `useStackSnapshot`, one snapshot along: `unknown` is not
- * `empty` (B-094) applied to DATA rather than to occupancy.
+ * Same doctrine as `useStackSnapshot`, one snapshot along: `unknown` is not `empty` (B-094)
+ * applied to DATA rather than to occupancy.
  */
-export function useFixedBankState(): {
-  bank: FixedLayerBank | null;
+export function useFixedBanksState(): {
+  banks: FixedLayerBank[];
   ready: boolean;
   /** `DELTA A` §A2 — the bridge ANSWERED the first pull, and the answer was a refusal. */
   failed: boolean;
 } {
-  const { value, ready, failed } = useBridgeSnapshotState(fetchBank, subscribeBank, NO_BANK);
-  return { bank: value, ready, failed };
+  const { value, ready, failed } = useBridgeSnapshotState(fetchBanks, subscribeBanks, NO_BANKS);
+  return { banks: value, ready, failed };
 }
 
 const NO_SLOTS: FixedSlotState[] = [];
