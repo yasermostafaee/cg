@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ConnectionCheckLine } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { ConnectionCheckList } from './ConnectionCheckList.js';
-import { checkAllowsConnect, normalisePlayoutAddress } from './firstRunStation.js';
+import {
+  checkAllowsConnect,
+  checkingLines,
+  normalisePlayoutAddress,
+  type ShownCheckLine,
+} from './firstRunStation.js';
 
 /**
  * `DESKTOP-APPS-01` §2E step 1 / §2F — **THE PLAYOUT, AND THE CONNECTION CHECK**, one component in
@@ -52,7 +56,7 @@ export function PlayoutConnection({
   const canWrite = mayChange && window.cg.setup.canSetPlayoutAddress();
   const [editing, setEditing] = useState(startEditing);
   const [address, setAddress] = useState(origin ?? '');
-  const [lines, setLines] = useState<readonly ConnectionCheckLine[] | null>(null);
+  const [lines, setLines] = useState<readonly ShownCheckLine[] | null>(null);
   const [busy, setBusy] = useState<'checking' | 'connecting' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,6 +74,12 @@ export function PlayoutConnection({
     },
     [],
   );
+  /*
+    `CHECK-RERUN-01` A — every run is TAGGED, and only the latest one may write. A check is started
+    by a press AND by the sign-in (`judgeNow`), so two can be in flight at once; a slow reply from
+    an earlier one must never overwrite the lines, the busy state or the judging of the current.
+  */
+  const latestRun = useRef(0);
   const check = async (): Promise<void> => {
     // After the sign-in the configured address is the one to judge, whatever the field holds.
     const target = judgeNow && origin !== null ? origin : editing ? typed : origin;
@@ -77,8 +87,11 @@ export function PlayoutConnection({
       if (judgeNow) onJudged?.();
       return;
     }
+    const run = ++latestRun.current;
     // C3 — the field shows the address actually checked: `192.168.21.111` → `http://…:8080`.
     if (editing && target === typed) setAddress(target);
+    // A — the last run's verdicts go at once: every line is its subject, checking.
+    setLines(checkingLines(target));
     setBusy('checking');
     setError(null);
     let amcpWaits = false;
@@ -87,17 +100,23 @@ export function PlayoutConnection({
         playoutAddress: target,
         origin: window.location.origin,
       });
+      if (run !== latestRun.current) return;
       setLines(result.lines);
       amcpWaits = result.lines.some((l) => l.id === 'amcp' && l.status === 'wait');
     } catch (err) {
-      // C2 — a bridge that did not answer is said in words (`BridgeTimeoutError`'s message).
+      if (run !== latestRun.current) return;
+      // C2 — a bridge that did not answer is said in words (`BridgeTimeoutError`'s message), and
+      // no line is left checking under it.
+      setLines(null);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(null);
-      if (judgeNow && amcpWaits) {
-        again.current = setTimeout(() => setJudgeRound((n) => n + 1), JUDGE_AGAIN_MS);
-      } else if (judgeNow) {
-        onJudged?.();
+      if (run === latestRun.current) {
+        setBusy(null);
+        if (judgeNow && amcpWaits) {
+          again.current = setTimeout(() => setJudgeRound((n) => n + 1), JUDGE_AGAIN_MS);
+        } else if (judgeNow) {
+          onJudged?.();
+        }
       }
     }
   };

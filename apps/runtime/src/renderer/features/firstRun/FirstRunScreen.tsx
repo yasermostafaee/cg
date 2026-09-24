@@ -28,7 +28,8 @@ import {
  *
  *   1. the Playout's ADDRESS — the one thing typed — and the connection check's lines; CONNECT
  *      writes it through CG Control itself (`setup.setPlayoutAddress`, never the control socket).
- *      The AMCP line says "waiting for sign-in" here (`DESKTOP-APPS-01-B`);
+ *      The AMCP line says "waiting for sign-in" here (`DESKTOP-APPS-01-B`) — while the Playout
+ *      answers; while it does not, only the Playout's line says so (`CHECK-RERUN-01`);
  *   2. SIGN IN with a `station-admin` account — the bridge learns the Playout's issuer from it
  *      (`DESKTOP-APPS-01-A`), so no issuer is ever typed, and a Playout 2.8.54 opens AMCP to this
  *      machine on it — so the check runs again and JUDGES the AMCP line (`-01-B` B2);

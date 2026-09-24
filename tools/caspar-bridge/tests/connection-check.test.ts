@@ -7,7 +7,13 @@ import {
   SETUP_CHECK_WAIT_MS,
   type ConnectionCheckLine,
 } from '@cg/shared-ipc';
-import { realProbes, runConnectionCheck, type CheckProbes } from '../src/index.js';
+import { ProbeError } from '../src/connection-check.js';
+import {
+  realProbes,
+  runConnectionCheck,
+  type AmcpOutcome,
+  type CheckProbes,
+} from '../src/index.js';
 
 /**
  * 🔴 `DESKTOP-APPS-01` §2F / §5 — **THE CONNECTION CHECK: every failure shape prints its own
@@ -201,9 +207,15 @@ describe('C2 — every probe bounded, the lines in parallel, each line its own w
     const noAnswer =
       /^No answer from 192\.0\.2\.1 on port 8080\.$|^192\.0\.2\.1 accepted the connection on port 8080 but did not reply in time\.$/;
     expect(line(lines, 'api').text).toMatch(noAnswer);
-    expect(line(lines, 'cors').text).toMatch(noAnswer);
-    // AMCP, before any station admin has signed in, waits — a drop is not judged yet.
-    expect(line(lines, 'amcp').status).toMatch(/^(wait|fail)$/);
+    // `CHECK-RERUN-01` B — said ONCE: CORS needs the API, so it is not checked, not a repeat.
+    expect(line(lines, 'cors')).toEqual({
+      id: 'cors',
+      status: 'skip',
+      text: 'Sign-in from this console: not checked — the Playout does not answer.',
+    });
+    // …and AMCP does not wait for a sign-in no Playout can take: it is its own result, a failure.
+    expect(line(lines, 'amcp').status).toBe('fail');
+    expect(line(lines, 'amcp').text).not.toMatch(/sign-in/);
   });
 
   it('CONTROL — against the fakes every network line comes back OK', async () => {
@@ -315,6 +327,8 @@ describe('§2F — the Playout API and CORS', () => {
   });
 
   it('the four failure shapes print four DIFFERENT sentences — a closed port, a black hole, a wrong CORS origin, an empty key set', async () => {
+    // (Since `CHECK-RERUN-01` B the wrong origin is read off a Playout WITH keys: behind an empty
+    // key set the CORS line is not checked, so it cannot fail on its own there.)
     const port = await closedPort();
     const refused = line(
       (
@@ -337,17 +351,146 @@ describe('§2F — the Playout API and CORS', () => {
       ).lines,
       'api',
     );
-    const api = await fakeApi({ keys: [], allowOrigin: 'http://elsewhere.example' });
-    const all = (
-      await runConnectionCheck({ playoutAddress: api, origin: ORIGIN }, probes(), {
-        ports: PORTS,
-        amcpTimeoutMs: 300,
-      })
-    ).lines;
-    const texts = [refused.text, dropped.text, line(all, 'api').text, line(all, 'cors').text];
+    const keyless = await fakeApi({ keys: [], allowOrigin: ORIGIN });
+    const empty = line(
+      (
+        await runConnectionCheck({ playoutAddress: keyless, origin: ORIGIN }, probes(), {
+          ports: PORTS,
+          amcpTimeoutMs: 300,
+        })
+      ).lines,
+      'api',
+    );
+    const elsewhere = await fakeApi({ keys: [{}], allowOrigin: 'http://elsewhere.example' });
+    const wrongOrigin = line(
+      (
+        await runConnectionCheck({ playoutAddress: elsewhere, origin: ORIGIN }, probes(), {
+          ports: PORTS,
+          amcpTimeoutMs: 300,
+        })
+      ).lines,
+      'cors',
+    );
+    const texts = [refused.text, dropped.text, empty.text, wrongOrigin.text];
     expect(new Set(texts).size).toBe(4);
-    for (const l of [refused, dropped, line(all, 'api'), line(all, 'cors')])
-      expect(l.status).toBe('fail');
+    for (const l of [refused, dropped, empty, wrongOrigin]) expect(l.status).toBe('fail');
+  });
+});
+
+/**
+ * 🔴 `CHECK-RERUN-01` B — **ONE FAULT IS SAID ONCE.** The owner's dialog, 2026-09-24, with the
+ * Playout off: "No answer from 192.168.21.111 on port 8080." on the API line AND on the CORS line,
+ * and AMCP "waiting for sign-in" when no sign-in could work. Each absence has its control.
+ */
+describe('CHECK-RERUN-01 B — a line that needs the API line says so, once', () => {
+  /** The Playout's API as the owner met it: nothing answers the connection. */
+  const silentApi: Partial<CheckProbes> = {
+    request: () => Promise.reject(new ProbeError('CONNECT_TIMEOUT')),
+  };
+  const amcpSays = (outcome: AmcpOutcome): Partial<CheckProbes> => ({
+    amcp: () => Promise.resolve(outcome),
+  });
+  const PLAYOUT_OFF = { playoutAddress: 'http://127.0.0.1:8080', origin: ORIGIN } as const;
+
+  it('API DOWN — CORS reads "not checked" with the reason, and the no-answer is said ONCE', async () => {
+    const { lines } = await runConnectionCheck(
+      PLAYOUT_OFF,
+      probes({ ...silentApi, ...amcpSays({ kind: 'refused' }) }),
+      { ports: PORTS },
+    );
+    expect(line(lines, 'api')).toEqual({
+      id: 'api',
+      status: 'fail',
+      text: 'No answer from 127.0.0.1 on port 8080.',
+    });
+    expect(line(lines, 'cors')).toEqual({
+      id: 'cors',
+      status: 'skip',
+      text: 'Sign-in from this console: not checked — the Playout does not answer.',
+    });
+    expect(lines.filter((l) => l.text.includes('on port 8080'))).toHaveLength(1);
+  });
+
+  it('CONTROL — with the API up, CORS is evaluated, and fails on its own', async () => {
+    const api = await fakeApi({ keys: [{}], allowOrigin: 'http://elsewhere.example' });
+    const { lines } = await runConnectionCheck(
+      { playoutAddress: api, origin: ORIGIN },
+      probes(amcpSays({ kind: 'refused' })),
+      { ports: PORTS },
+    );
+    expect(line(lines, 'api').status).toBe('pass');
+    expect(line(lines, 'cors')).toMatchObject({ status: 'fail', command: ORIGIN });
+  });
+
+  it('an API that answers with NO signing keys — CORS is not checked, and says that is why', async () => {
+    const api = await fakeApi({ keys: [], allowOrigin: ORIGIN });
+    const { lines } = await runConnectionCheck(
+      { playoutAddress: api, origin: ORIGIN },
+      probes(amcpSays({ kind: 'refused' })),
+      { ports: PORTS },
+    );
+    expect(line(lines, 'api').status).toBe('fail');
+    expect(line(lines, 'cors')).toEqual({
+      id: 'cors',
+      status: 'skip',
+      text: 'Sign-in from this console: not checked — the Playout publishes no signing keys.',
+    });
+  });
+
+  it('API DOWN — AMCP before any sign-in is its OWN result, said plainly, never "waiting for sign-in"', async () => {
+    const cases: readonly [AmcpOutcome, string][] = [
+      [{ kind: 'refused' }, '127.0.0.1 refused the connection on port 5250.'],
+      [{ kind: 'timeout' }, 'No answer from 127.0.0.1 on port 5250.'],
+    ];
+    for (const [outcome, text] of cases) {
+      const { lines } = await runConnectionCheck(
+        PLAYOUT_OFF,
+        probes({ ...silentApi, ...amcpSays(outcome) }),
+        { ports: PORTS },
+      );
+      expect(line(lines, 'amcp'), outcome.kind).toEqual({ id: 'amcp', status: 'fail', text });
+    }
+  });
+
+  it('CONTROL — with the API up and AMCP refused, it waits for sign-in', async () => {
+    const api = await fakeApi({ keys: [{}], allowOrigin: ORIGIN });
+    const { lines } = await runConnectionCheck(
+      { playoutAddress: api, origin: ORIGIN },
+      probes(amcpSays({ kind: 'refused' })),
+      { ports: PORTS },
+    );
+    expect(line(lines, 'amcp')).toEqual({
+      id: 'amcp',
+      status: 'wait',
+      text: 'CasparCG on 127.0.0.1: waiting for sign-in.',
+    });
+  });
+
+  it('API DOWN and an AMCP probe held past its bound — the bound says it plainly too', async () => {
+    const { lines } = await runConnectionCheck(
+      PLAYOUT_OFF,
+      probes({ ...silentApi, amcp: () => new Promise<AmcpOutcome>(() => undefined) }),
+      { ports: PORTS, lineMs: 300, connectMs: 200 },
+    );
+    expect(line(lines, 'amcp')).toEqual({
+      id: 'amcp',
+      status: 'fail',
+      text: 'No answer from 127.0.0.1 on port 5250.',
+    });
+    expect(line(lines, 'cors').status).toBe('skip');
+  });
+
+  it('CONTROL — an AMCP that ANSWERS passes, whatever the API line says', async () => {
+    const { lines } = await runConnectionCheck(
+      PLAYOUT_OFF,
+      probes({ ...silentApi, ...amcpSays({ kind: 'answered', version: '2.3.2' }) }),
+      { ports: PORTS },
+    );
+    expect(line(lines, 'amcp')).toEqual({
+      id: 'amcp',
+      status: 'pass',
+      text: 'CasparCG on 127.0.0.1 answered VERSION: 2.3.2.',
+    });
   });
 });
 

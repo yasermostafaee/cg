@@ -8,6 +8,7 @@ import os from 'node:os';
 import {
   CONNECTION_CHECK_CONNECT_MS,
   CONNECTION_CHECK_LINE_MS,
+  connectionCheckSubject,
   type ConnectionCheckId,
   type ConnectionCheckLine,
   type ConnectionCheckRequest,
@@ -139,8 +140,9 @@ export interface CheckOptions {
   /**
    * `DESKTOP-APPS-01-B`/`-C` — when a `station-admin` last signed in to this bridge (epoch ms), or
    * `null`/absent: none yet. Until one has, a Playout 2.8.54 refuses AMCP to this machine by design,
-   * so a refused or dropped AMCP line WAITS; for {@link AMCP_TRUST_WINDOW_MS} after, it still waits
-   * (the Playout lets this machine in, or records it pending); after that it names the approval.
+   * so a refused or dropped AMCP line WAITS — while the Playout's API can sign someone in
+   * (`CHECK-RERUN-01` B); for {@link AMCP_TRUST_WINDOW_MS} after, it still waits (the Playout lets
+   * this machine in, or records it pending); after that it names the approval.
    */
   readonly amcpSignInAt?: number | null;
   /** TEST-ONLY — {@link AMCP_TRUST_WINDOW_MS} by default. */
@@ -239,6 +241,9 @@ function noAnswer(err: unknown, host: string, port: string, url: string): string
  * uses it — as the bridge's own reads and AMCP session do. A host with no IPv4 address is ONE
  * line, and the three probes that need an address are not run.
  *
+ * And (`CHECK-RERUN-01` B) one fault is said once: the lines that need a sign-in are settled on
+ * the API line by {@link byTheApiLine}, after every line is in.
+ *
  * Never throws: a probe that fails is a line that fails.
  */
 export async function runConnectionCheck(
@@ -278,18 +283,16 @@ export async function runConnectionCheck(
   const playoutRoute = routeTo(playoutIp);
   const casparRoute = casparHost === playoutHost ? playoutRoute : routeTo(casparIp);
 
-  const timings: LineTiming[] = [];
-  const line = (
-    id: ConnectionCheckId,
-    work: () => Promise<ConnectionCheckLine>,
-    onBound: () => ConnectionCheckLine,
-  ): Promise<ConnectionCheckLine> => {
+  const apiPort = portOf(endpoints.jwksUrl);
+  // C1 — when each line finished, and whether its bound did it; its outcome is read once worded.
+  const finished = new Map<ConnectionCheckId, { ms: number; bound: boolean }>();
+  const line = <T>(id: ConnectionCheckId, work: () => Promise<T>, onBound: () => T): Promise<T> => {
     let bound = false;
     return within(work(), lineMs, () => {
       bound = true;
       return onBound();
     }).then((result) => {
-      timings.push({ id, ms: now() - started, status: bound ? 'bound' : result.status });
+      finished.set(id, { ms: now() - started, bound });
       return result;
     });
   };
@@ -299,7 +302,7 @@ export async function runConnectionCheck(
     line(
       'proxy',
       () => checkInterceptors(probes, playoutHost),
-      () => ({
+      (): ConnectionCheckLine => ({
         id: 'proxy',
         status: 'warn',
         text: 'The VPN and proxy check did not finish in time.',
@@ -309,43 +312,41 @@ export async function runConnectionCheck(
     line(
       'route',
       async () => routeLine(playoutHost, await playoutIp, await playoutRoute),
-      () => ({
+      (): ConnectionCheckLine => ({
         id: 'route',
         status: 'fail',
         text: `No route to ${playoutHost} was found in time.`,
       }),
     ),
-    // 3 — AMCP: send VERSION on the ONE IPv4, and word what came back in its phase (C7).
+    // 3 — AMCP: send VERSION on the ONE IPv4. Worded below, in its phase (C7), once the API line
+    // is known (`CHECK-RERUN-01` B); `null` — the CasparCG host has no IPv4 address.
     line(
       'amcp',
-      async () => {
+      async (): Promise<AmcpReading | null> => {
         const ip = await casparIp;
-        if (ip === null) return noIpv4Line('amcp', casparHost);
+        if (ip === null) return null;
         const outcome = await probes
           .amcp(ip, AMCP_PORT, options.amcpTimeoutMs ?? AMCP_PROBE_TIMEOUT_MS)
           .catch((): AmcpOutcome => ({ kind: 'unreachable', code: 'error' }));
-        return amcpLineFor(
-          casparHost,
-          outcome,
-          (await casparRoute)?.address ?? null,
-          options,
-          now(),
-        );
+        return { outcome, localAddress: (await casparRoute)?.address ?? null, at: now() };
       },
-      () => amcpLineFor(casparHost, { kind: 'timeout' }, null, options, now()),
+      (): AmcpReading => ({ outcome: { kind: 'timeout' }, localAddress: null, at: now() }),
     ),
-    // 4 — the Playout API publishes its signing keys.
+    // 4 — the Playout API publishes its signing keys — and so can sign someone in, or cannot.
     line(
       'api',
-      async () => {
+      async (): Promise<ApiReading> => {
         const ip = await playoutIp;
-        if (ip === null) return noIpv4Line('api', playoutHost);
+        if (ip === null) return { line: noIpv4Line('api', playoutHost), noSignIn: PLAYOUT_SILENT };
         return checkJwks(probes, endpoints.jwksUrl, ip, bounds);
       },
-      () => ({
-        id: 'api',
-        status: 'fail',
-        text: `No answer from ${playoutHost} on port ${portOf(endpoints.jwksUrl)}.`,
+      (): ApiReading => ({
+        line: {
+          id: 'api',
+          status: 'fail',
+          text: `No answer from ${playoutHost} on port ${apiPort}.`,
+        },
+        noSignIn: PLAYOUT_SILENT,
       }),
     ),
     // 5 — CORS: the token endpoint accepts this console's origin.
@@ -356,7 +357,7 @@ export async function runConnectionCheck(
         if (ip === null) return noIpv4Line('cors', playoutHost);
         return checkCors(probes, endpoints.tokenUrl, req.origin, ip, bounds);
       },
-      () => ({
+      (): ConnectionCheckLine => ({
         id: 'cors',
         status: 'fail',
         text: `No answer from ${playoutHost} on port ${portOf(endpoints.tokenUrl)}.`,
@@ -366,23 +367,105 @@ export async function runConnectionCheck(
     line(
       'ports',
       () => checkPorts(probes, options.ports),
-      () => ({ id: 'ports', status: 'warn', text: 'The port check did not finish in time.' }),
+      (): ConnectionCheckLine => ({
+        id: 'ports',
+        status: 'warn',
+        text: 'The port check did not finish in time.',
+      }),
     ),
     // 7 — topology: the Playout or CasparCG on THIS machine.
     line(
       'topology',
       () => checkTopology(probes, playoutHost, casparHost),
-      () => ({ id: 'topology', status: 'warn', text: 'The machine check did not finish in time.' }),
+      (): ConnectionCheckLine => ({
+        id: 'topology',
+        status: 'warn',
+        text: 'The machine check did not finish in time.',
+      }),
     ),
   ]);
 
+  // `CHECK-RERUN-01` B — the lines that need a sign-in, settled on the API line in ONE place.
+  const needing = byTheApiLine(api, cors, amcp, {
+    subject: (id) => connectionCheckSubject(id, id === 'amcp' ? casparHost : playoutHost, apiPort),
+    casparHost,
+    options,
+  });
+  const all = [proxy, route, needing.amcp, api.line, needing.cors, ports, topology];
+  // C1 — every line's time and its outcome as worded, in the order the lines finished.
+  const timings = all
+    .map((l): LineTiming => {
+      const done = finished.get(l.id);
+      return { id: l.id, ms: done?.ms ?? 0, status: done?.bound === true ? 'bound' : l.status };
+    })
+    .sort((a, b) => a.ms - b.ms);
   options.onTimed?.(timings, now() - started);
   // C6 — a host with no IPv4 address is ONE line (the route's); the address-bound lines go.
   const noIpv4 = (await playoutIp) === null;
-  const lines = [proxy, route, amcp, api, cors, ports, topology].filter(
+  const lines = all.filter(
     (l) => !(noIpv4 && (l.id === 'amcp' || l.id === 'api' || l.id === 'cors')),
   );
   return { lines, localAddress: (await casparRoute)?.address ?? null };
+}
+
+/**
+ * 🔴 `CHECK-RERUN-01` B — what the Playout's API line read, as the lines that NEED it read it:
+ * `noSignIn` is `null` when a sign-in can work here (the key set answered, with a key), else why
+ * not, in a few words. Carried beside the line's sentence and never read back out of it.
+ */
+interface ApiReading {
+  readonly line: ConnectionCheckLine;
+  readonly noSignIn: string | null;
+}
+
+const PLAYOUT_SILENT = 'the Playout does not answer';
+const PLAYOUT_KEYLESS = 'the Playout publishes no signing keys';
+
+/** What the AMCP probe read, before it is worded. */
+interface AmcpReading {
+  readonly outcome: AmcpOutcome;
+  /** This machine's address on the route to the CasparCG host, for the approval sentence. */
+  readonly localAddress: string | null;
+  /** When the probe finished: the trust window is measured to here. */
+  readonly at: number;
+}
+
+/**
+ * 🔴 `CHECK-RERUN-01` B — **A VERDICT ABOUT SIGN-IN NEEDS A PLAYOUT THAT CAN SIGN SOMEONE IN.** The
+ * check's one dependency rule, in one place. Whether a sign-in can work is exactly what the API
+ * line reads, so while it cannot:
+ *
+ *   - the CORS line — sign-in from this console — is NOT CHECKED, and names the reason. Its probe
+ *     goes to the same server, on the same port, and could only say the API line's failure again:
+ *     the owner's dialog, 2026-09-24, read "No answer from 192.168.21.111 on port 8080." twice;
+ *   - the AMCP line does not wait for a sign-in that cannot happen. It takes its own result — an
+ *     answer, a refusal, no answer — and says a failure plainly, rather than asking the operator
+ *     for a sign-in the dialog above it shows cannot work.
+ *
+ * Applied once every line has settled, never inside a line: a line's bound firing cannot bring the
+ * repeat back. It reads the API line's `noSignIn`, never the words of any line.
+ */
+function byTheApiLine(
+  api: ApiReading,
+  cors: ConnectionCheckLine,
+  amcp: AmcpReading | null,
+  ctx: {
+    readonly subject: (id: ConnectionCheckId) => string;
+    readonly casparHost: string;
+    readonly options: CheckOptions;
+  },
+): { cors: ConnectionCheckLine; amcp: ConnectionCheckLine } {
+  const why = api.noSignIn;
+  return {
+    cors:
+      why === null
+        ? cors
+        : { id: 'cors', status: 'skip', text: `${ctx.subject('cors')}: not checked — ${why}.` },
+    amcp:
+      amcp === null
+        ? noIpv4Line('amcp', ctx.casparHost)
+        : amcpLineFor(ctx.casparHost, ctx.subject('amcp'), amcp, ctx.options, why === null),
+  };
 }
 
 function portOf(url: string): string {
@@ -472,7 +555,9 @@ function isUntrusted(outcome: AmcpOutcome): outcome is UntrustedOutcome {
  * An answer is an answer, whenever it comes. A refusal or a drop is:
  *
  *   - before any `station-admin` has signed in — WAITING for the sign-in (the Playout lets a
- *     machine in only on a `station-admin`'s server-side D9 read);
+ *     machine in only on a `station-admin`'s server-side D9 read) — but only while a sign-in CAN
+ *     happen (`CHECK-RERUN-01` B, {@link byTheApiLine}); otherwise it is only what it is, a
+ *     refusal or no answer, said plainly;
  *   - for {@link AMCP_TRUST_WINDOW_MS} after one — still WAITING, for the Playout (the first
  *     machine is let in within seconds; the console asks again while it waits);
  *   - after that — this machine, by its IPv4 address, waiting for APPROVAL in the Playout's own
@@ -481,21 +566,23 @@ function isUntrusted(outcome: AmcpOutcome): outcome is UntrustedOutcome {
  */
 function amcpLineFor(
   host: string,
-  outcome: AmcpOutcome,
-  localAddress: string | null,
+  subject: string,
+  { outcome, localAddress, at }: AmcpReading,
   options: CheckOptions,
-  at: number,
+  signInCanHappen: boolean,
 ): ConnectionCheckLine {
   if (!isUntrusted(outcome)) return amcpLine(host, outcome);
   const signedInAt = options.amcpSignInAt ?? null;
   if (signedInAt === null) {
-    return { id: 'amcp', status: 'wait', text: `CasparCG on ${host}: waiting for sign-in.` };
+    return signInCanHappen
+      ? { id: 'amcp', status: 'wait', text: `${subject}: waiting for sign-in.` }
+      : amcpLine(host, outcome);
   }
   if (at - signedInAt < (options.amcpTrustWindowMs ?? AMCP_TRUST_WINDOW_MS)) {
     return {
       id: 'amcp',
       status: 'wait',
-      text: `CasparCG on ${host}: waiting for the Playout to let this machine in.`,
+      text: `${subject}: waiting for the Playout to let this machine in.`,
     };
   }
   const machine = localAddress === null ? 'This machine' : `This machine, ${localAddress},`;
@@ -509,10 +596,9 @@ function amcpLineFor(
   };
 }
 
-function amcpLine(
-  host: string,
-  outcome: Exclude<AmcpOutcome, UntrustedOutcome>,
-): ConnectionCheckLine {
+/** What AMCP did, said plainly — an answer passes, and anything else is a failure in its words. */
+function amcpLine(host: string, outcome: AmcpOutcome): ConnectionCheckLine {
+  const port = String(AMCP_PORT);
   switch (outcome.kind) {
     case 'answered':
       return {
@@ -520,17 +606,25 @@ function amcpLine(
         status: 'pass',
         text: `CasparCG on ${host} answered VERSION: ${outcome.version}.`,
       };
+    case 'refused':
+      return {
+        id: 'amcp',
+        status: 'fail',
+        text: `${host} refused the connection on port ${port}.`,
+      };
+    case 'timeout':
+      return { id: 'amcp', status: 'fail', text: `No answer from ${host} on port ${port}.` };
     case 'silent':
       return {
         id: 'amcp',
         status: 'fail',
-        text: `${host} accepted the connection on port ${String(AMCP_PORT)} but did not answer VERSION. It is not CasparCG, or CasparCG is stuck.`,
+        text: `${host} accepted the connection on port ${port} but did not answer VERSION. It is not CasparCG, or CasparCG is stuck.`,
       };
     case 'unreachable':
       return {
         id: 'amcp',
         status: 'fail',
-        text: `${host} cannot be reached on port ${String(AMCP_PORT)} (${outcome.code}).`,
+        text: `${host} cannot be reached on port ${port} (${outcome.code}).`,
       };
   }
 }
@@ -540,8 +634,12 @@ async function checkJwks(
   url: string,
   ip: string,
   bounds: RequestBounds,
-): Promise<ConnectionCheckLine> {
+): Promise<ApiReading> {
   const target = onAddress(url, ip);
+  const failed = (text: string, noSignIn: string): ApiReading => ({
+    line: { id: 'api', status: 'fail', text },
+    noSignIn,
+  });
   let answer: HttpAnswer;
   try {
     answer = await probes.request(
@@ -551,33 +649,31 @@ async function checkJwks(
       bounds,
     );
   } catch (err) {
-    return { id: 'api', status: 'fail', text: noAnswer(err, hostOf(url), target.port, url) };
+    return failed(noAnswer(err, hostOf(url), target.port, url), PLAYOUT_SILENT);
   }
   if (answer.status !== 200) {
-    return {
-      id: 'api',
-      status: 'fail',
-      text: `The Playout answered ${String(answer.status)} at ${url}.`,
-    };
+    return failed(`The Playout answered ${String(answer.status)} at ${url}.`, PLAYOUT_KEYLESS);
   }
   let keys = 0;
   try {
     const body = JSON.parse(answer.body) as { keys?: unknown };
     keys = Array.isArray(body.keys) ? body.keys.length : 0;
   } catch {
-    return { id: 'api', status: 'fail', text: `The Playout's answer at ${url} is not a key set.` };
+    return failed(`The Playout's answer at ${url} is not a key set.`, PLAYOUT_KEYLESS);
   }
   if (keys === 0) {
-    return {
-      id: 'api',
-      status: 'fail',
-      text: "The Playout answers but publishes no signing keys, so no sign-in can be verified. Its administrator checks the Playout's signing setup.",
-    };
+    return failed(
+      "The Playout answers but publishes no signing keys, so no sign-in can be verified. Its administrator checks the Playout's signing setup.",
+      PLAYOUT_KEYLESS,
+    );
   }
   return {
-    id: 'api',
-    status: 'pass',
-    text: `The Playout answers and publishes ${String(keys)} signing key${keys === 1 ? '' : 's'}.`,
+    line: {
+      id: 'api',
+      status: 'pass',
+      text: `The Playout answers and publishes ${String(keys)} signing key${keys === 1 ? '' : 's'}.`,
+    },
+    noSignIn: null,
   };
 }
 

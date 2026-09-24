@@ -117,14 +117,43 @@ export type ConnectionCheckId = z.infer<typeof ConnectionCheckIdSchema>;
  * `wait` (`DESKTOP-APPS-01-B` B2) is NEUTRAL: a link that is not judged yet because something
  * else must happen first — AMCP before any `station-admin` has signed in, since a Playout 2.8.54
  * opens AMCP to this machine only then. Never a failure.
+ *
+ * `skip` (`CHECK-RERUN-01` B) is NEUTRAL too: a link NOT CHECKED because a link it needs failed —
+ * CORS while the Playout's API cannot sign anyone in. The failure is said once, on the line that
+ * failed; this line names only the reason, after its {@link connectionCheckSubject}.
  */
 export const ConnectionCheckLineSchema = z.object({
   id: ConnectionCheckIdSchema,
-  status: z.enum(['pass', 'fail', 'warn', 'wait']),
+  status: z.enum(['pass', 'fail', 'warn', 'wait', 'skip']),
   text: z.string(),
   command: z.string().optional(),
 });
 export type ConnectionCheckLine = z.infer<typeof ConnectionCheckLineSchema>;
+
+/**
+ * 🔴 `CHECK-RERUN-01` — **EACH LINE'S SUBJECT: what it checks, with no verdict.** The console shows
+ * it beside the pending mark while a check runs, and a line that is not checked opens with it — one
+ * spelling for both, so the line the operator watched is the line that fills in. `host` is the host
+ * the line probes (CasparCG's for `amcp`, the Playout's otherwise); `port` is the Playout API's.
+ */
+export function connectionCheckSubject(id: ConnectionCheckId, host: string, port: string): string {
+  switch (id) {
+    case 'proxy':
+      return 'VPN or proxy';
+    case 'route':
+      return `Route to ${host}`;
+    case 'amcp':
+      return `CasparCG on ${host}`;
+    case 'api':
+      return `The Playout on port ${port}`;
+    case 'cors':
+      return 'Sign-in from this console';
+    case 'ports':
+      return "This station's ports";
+    case 'topology':
+      return 'Where the Playout and CasparCG run';
+  }
+}
 
 export const ConnectionCheckRequestSchema = z.object({
   /** The Playout's address as typed (`http://host:port`) — a CANDIDATE, not configuration. */

@@ -48,6 +48,7 @@ let playout: FakePlayout | null = null;
 let amcp: MockHandle | null = null;
 let bridge: ChildProcess | null = null;
 let stateHome: string | null = null;
+let silent: (() => Promise<void>) | null = null;
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -108,8 +109,10 @@ test.afterEach(async () => {
   await stopBridge();
   await playout?.stop();
   await amcp?.stop();
+  await silent?.();
   playout = null;
   amcp = null;
+  silent = null;
   if (stateHome !== null) fs.rmSync(stateHome, { recursive: true, force: true });
   stateHome = null;
 });
@@ -239,6 +242,94 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
   expect(stationFile('bridge-connection.json')).toMatchObject({
     servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
   });
+});
+
+/**
+ * A Playout that is OFF as the owner met it: the connection opens and nothing ever replies. Each
+ * check against it lasts the full line bound, which is the window a re-check is watched in.
+ */
+async function startSilentPlayout(): Promise<number> {
+  const sockets = new Set<net.Socket>();
+  const server = net.createServer((socket) => {
+    sockets.add(socket);
+    socket.on('close', () => sockets.delete(socket));
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  silent = async () => {
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  };
+  return (server.address() as net.AddressInfo).port;
+}
+
+/*
+  🔴 `CHECK-RERUN-01` — **A RE-CHECK STARTS CLEAN, AND ONE FAULT IS SAID ONCE.** The owner's dialog,
+  2026-09-24, with the Playout off: pressed Check twice, and under "Checking…" the last run's ticks
+  and crosses stayed as though current; "No answer from … on port 8080." twice (the API line and
+  CORS); and AMCP "waiting for sign-in" when no sign-in could work. The control for the AMCP half is
+  the first test above: with the Playout ON and AMCP refused, the line DOES wait for sign-in.
+*/
+test('CHECK-RERUN-01: the Playout off — said once, CORS not checked, AMCP its own result; a re-check starts clean', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const apiPort = await startSilentPlayout();
+  stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-first-run-'));
+  const port = await freePort();
+  await startBridge(port);
+  await page.addInitScript(
+    `window.__CG_BRIDGE_URL__ = ${JSON.stringify(`ws://127.0.0.1:${String(port)}`)};` +
+      'window.__CG_SPLASH_DISABLED__ = true;',
+  );
+  await page.goto('/');
+
+  const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
+  await expect(firstRun).toHaveAttribute('data-first-run', 'target', { timeout: 20_000 });
+  await firstRun.getByLabel('Playout address').fill(`127.0.0.1:${String(apiPort)}`);
+  const checkButton = firstRun.getByRole('button', { name: /^Check/ });
+  await checkButton.click();
+
+  const lines = firstRun.locator('[data-check]');
+  const apiLine = firstRun.locator('[data-check="api"]');
+  const corsLine = firstRun.locator('[data-check="cors"]');
+  const amcpLine = firstRun.locator('[data-check="amcp"]');
+  await expect(apiLine).toHaveAttribute('data-status', 'fail', { timeout: 20_000 });
+  // B — the no-answer is said ONCE, on the API line; CORS is not checked, and names why.
+  await expect(apiLine).toContainText(`on port ${String(apiPort)}`);
+  await expect(corsLine).toHaveAttribute('data-status', 'skip');
+  await expect(corsLine).toHaveText(
+    'Sign-in from this console: not checked — the Playout does not answer.',
+  );
+  await expect(lines.filter({ hasText: `on port ${String(apiPort)}` })).toHaveCount(1);
+  // B — AMCP is what it found, never a wait for a sign-in that cannot happen.
+  await expect(amcpLine).not.toHaveAttribute('data-status', 'wait');
+  await expect(amcpLine).not.toContainText('sign-in');
+  await test.info().attach('check-rerun-1-playout-off', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+
+  // A — pressed again: every line at once to its subject, checking; no verdict of the last run.
+  await checkButton.click();
+  await expect(lines).toHaveCount(7);
+  for (const id of ['proxy', 'route', 'amcp', 'api', 'cors', 'ports', 'topology']) {
+    await expect(firstRun.locator(`[data-check="${id}"]`)).toHaveAttribute(
+      'data-status',
+      'checking',
+    );
+  }
+  await expect(firstRun.locator('[data-check]:not([data-status="checking"])')).toHaveCount(0);
+  await expect(apiLine).toHaveText(`The Playout on port ${String(apiPort)}`);
+  await expect(checkButton).toHaveText('Checking…');
+  await expect(checkButton).toBeDisabled();
+  await test.info().attach('check-rerun-2-checking', {
+    body: await page.screenshot(),
+    contentType: 'image/png',
+  });
+  // CONTROL — the new run's own results then fill the lines in.
+  await expect(apiLine).toHaveAttribute('data-status', 'fail', { timeout: 20_000 });
+  await expect(corsLine).toHaveAttribute('data-status', 'skip');
+  await expect(checkButton).toHaveText('Check');
 });
 
 /*

@@ -1,4 +1,6 @@
 import {
+  CONNECTION_CHECK_IDS,
+  connectionCheckSubject,
   defaultFixedLayerBank,
   type CatalogueChannel,
   type ConnectionCheckLine,
@@ -77,10 +79,43 @@ export function groupByHost(
  * CORS list — must pass. AMCP and the rest are reported, never gating: they are CasparCG's links,
  * and a station can be set up while an engine firewall is still being opened.
  */
-export function checkAllowsConnect(lines: readonly ConnectionCheckLine[]): boolean {
+export function checkAllowsConnect(
+  lines: readonly Pick<ShownCheckLine, 'id' | 'status'>[],
+): boolean {
   const passed = (id: ConnectionCheckLine['id']): boolean =>
     lines.some((l) => l.id === id && l.status === 'pass');
   return passed('api') && passed('cors');
+}
+
+/**
+ * A line of the connection check as the console shows it: the bridge's line, or — while a check
+ * runs — `checking`, which is the console's own and never on the wire.
+ */
+export type ShownCheckLine = Omit<ConnectionCheckLine, 'status'> & {
+  readonly status: ConnectionCheckLine['status'] | 'checking';
+};
+
+/**
+ * 🔴 `CHECK-RERUN-01` A — **A CHECK STARTS CLEAN.** The lines the moment Check is pressed: every
+ * link's subject, with no verdict, so nothing from the last run reads as a current result while
+ * the new one runs (the owner's dialog, 2026-09-24, kept its ticks and crosses under "Checking…").
+ * `address` is the normalised address being checked; the subjects are the bridge's own spelling.
+ */
+export function checkingLines(address: string): readonly ShownCheckLine[] {
+  let host = address;
+  let port = '';
+  try {
+    const url = new URL(address);
+    host = url.hostname.replace(/^\[|\]$/g, '');
+    port = url.port !== '' ? url.port : url.protocol === 'https:' ? '443' : '80';
+  } catch {
+    // Not a URL: the subjects name what was typed.
+  }
+  return CONNECTION_CHECK_IDS.map((id) => ({
+    id,
+    status: 'checking',
+    text: connectionCheckSubject(id, host, port),
+  }));
 }
 
 /**
