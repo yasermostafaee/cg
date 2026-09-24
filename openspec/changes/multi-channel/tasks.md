@@ -39,7 +39,8 @@ discharged by the later one's run, which carries it.
 - [x] 4.5 A load that names no channel is refused on a two-channel station, with its one-channel control (`multi-channel-banks`, `7cca994a`)
 - [x] 4.6 Auth OFF with one declared channel: the existing suites green and unchanged apart from the forcing functions of §1.5; the one-channel controls in `channelSwitch.dom.test.ts`
 - [x] 4.7 Every absence assertion names its positive control; each new behaviour red under a planted defect first
-- [ ] 4.8 The e2e spec `multi-channel.spec.ts` — `e7740f76`; e2e job RAN: (pending)
+- [x] 4.8 The e2e spec `multi-channel.spec.ts` — `e7740f76`; e2e https://github.com/yasermostafaee/cg/actions/runs/36049446822 (job log: its three tests ✓ on Linux; Runtime 261 passed in 7.7 min, Designer 282 in 6.5 min)
+- [x] 4.9 The final head `230dd27f`, carrying every commit above — e2e https://github.com/yasermostafaee/cg/actions/runs/36054476711
 
 ## 5. Records (§5)
 
@@ -49,4 +50,6 @@ discharged by the later one's run, which carries it.
 - [x] 5.4 The bank schema change and its producer/consumer list — `design.md` §1–§2
 - [x] 5.5 `docs/operator-guide/README.md`: switching channels, and which PANIC does what
 - [x] 5.6 The superseded pending claims rewritten in place (`runtime-redesign-programme`, `add-multibox-audio`, `operator-surface`, `playout-authz-channels`, `station-setup`)
-- [ ] 5.7 The installer artifact URLs of the final push (CI builds a fresh pair): (pending)
+- [x] 5.7 The installer pair of the final head `230dd27f` — Desktop run https://github.com/yasermostafaee/cg/actions/runs/36054476598 (`Installers (Windows)` and `Installer smoke (clean Windows)` both `completed/success`):
+  - CG Control — https://github.com/yasermostafaee/cg/actions/runs/36054476598/artifacts/10832367585
+  - CG Designer — https://github.com/yasermostafaee/cg/actions/runs/36054476598/artifacts/10832047884
