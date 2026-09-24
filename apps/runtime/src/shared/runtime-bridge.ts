@@ -366,15 +366,30 @@ export interface RuntimeBridge {
      * the whole remedy and this one is refused in the very state a reconfiguration is blocked
      * in (`operator-surface` §6).
      */
-    removeAll(): Promise<ChannelResponse<typeof StackRemoveAllChannel>>;
+    removeAll(
+      req?: ChannelRequest<typeof StackRemoveAllChannel>,
+    ): Promise<ChannelResponse<typeof StackRemoveAllChannel>>;
     /**
      * Take every ON-AIR item off air, and KEEP them all on the stack (they go idle).
      * Reuses the per-item `out()` CLEAR — no new AMCP verb. The counterpart to `removeAll`:
      * that one empties the list, this one only clears the screen.
+     *
+     * `MULTI-CHANNEL-01` §2 B — `removeAll`, `clearAll` and `stopAll` take an OPTIONAL
+     * `{ channel }`: bare is every item, exactly as before; with a channel, that channel's items
+     * alone. The console passes the channel on screen when the station declares more than one.
      */
-    clearAll(): Promise<ChannelResponse<typeof StackClearAllChannel>>;
+    clearAll(
+      req?: ChannelRequest<typeof StackClearAllChannel>,
+    ): Promise<ChannelResponse<typeof StackClearAllChannel>>;
     /** C-012 — STOP every on-air item (outros run, producers stay resident). */
-    stopAll(): Promise<ChannelResponse<typeof StackStopAllChannel>>;
+    stopAll(
+      req?: ChannelRequest<typeof StackStopAllChannel>,
+    ): Promise<ChannelResponse<typeof StackStopAllChannel>>;
+    /**
+     * The WHOLE stack, always: the console filters per channel itself (`onChannel`), and this
+     * read also feeds the browser-local retention (`B-092`), which a per-channel pull would
+     * silently narrow to one channel's rows. The contract's optional channel is not used here.
+     */
     snapshot(): Promise<ChannelResponse<typeof StackSnapshotChannel>>;
     onStateChanged(handler: (snapshot: readonly StackItemState[]) => void): Unsubscribe;
     /**

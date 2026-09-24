@@ -220,9 +220,10 @@ export function createMockBridge(): RuntimeBridge {
         Promise.resolve(
           mock.setPassTiming(req.itemId, { passes: req.passes, delayMs: req.delayMs }),
         ),
-      removeAll: () => Promise.resolve(mock.removeAll()),
-      clearAll: () => Promise.resolve(mock.clearAll()),
-      stopAll: () => Promise.resolve(mock.stopAll()),
+      // `MULTI-CHANNEL-01` §2 B — the optional channel, modelled by the mock's own scope.
+      removeAll: (req) => Promise.resolve(mock.removeAll(req?.channel)),
+      clearAll: (req) => Promise.resolve(mock.clearAll(req?.channel)),
+      stopAll: (req) => Promise.resolve(mock.stopAll(req?.channel)),
       snapshot: () => Promise.resolve(mock.stackSnapshot()),
       onStateChanged: (handler) => mock.stackChanged.subscribe(handler),
       /*

@@ -605,7 +605,7 @@ describe('the census: every route that names a channel, classified', () => {
       { fixedBank: BANK },
     );
 
-  it('nine routes carry a channel key; six carry it at the top level, where the fence reads', () => {
+  it('thirteen routes carry a channel key; ten carry it at the top level, where the fence reads', () => {
     const table = buildRoutes(runtime());
     expect(table.size, 'the census is looking at the real table').toBeGreaterThan(50);
     const found = Object.fromEntries(
@@ -629,8 +629,16 @@ describe('the census: every route that names a channel, classified', () => {
       'playoutLayers.clear': ['req.channel'],
       // A `route` SOURCE's channel is read FROM — never a write target.
       'sources.set-config': ['req.sources[].producer.channel'],
+      /*
+        `MULTI-CHANNEL-01` §2 B — the four housekeeping verbs' OPTIONAL channel, at the top level:
+        a bulk verb scoped to a channel this station does not declare is refused by the fence.
+      */
+      'stack.clear-all': ['req.channel'],
+      'stack.remove-all': ['req.channel'],
       // Fenced per item inside the runtime, as a `not-declared` SKIP.
       'stack.restore': ['req.items[].slot.channel'],
+      'stack.snapshot': ['req.channel'],
+      'stack.stop-all': ['req.channel'],
     });
   });
 
@@ -654,6 +662,11 @@ describe('the census: every route that names a channel, classified', () => {
       'fixedLayers.load',
       'layers.clear',
       'playoutLayers.clear',
+      // `MULTI-CHANNEL-01` §2 B — the housekeeping verbs, when they name a channel.
+      'stack.clear-all',
+      'stack.remove-all',
+      'stack.snapshot',
+      'stack.stop-all',
     ]);
     for (const [name, route] of fenced) {
       expect(stationRefusal(route, { channel: 1, layer: 72 }, r), name).toBe(

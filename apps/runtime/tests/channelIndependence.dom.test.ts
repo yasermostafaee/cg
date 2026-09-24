@@ -36,18 +36,20 @@ import { itemWith, slotWith, stubBridge, type RowStubs } from './support/layerRo
  * asserting that, this file states what it is and is not able to observe, because a
  * verification that overstates its own evidence is worse than one that finds a gap.
  *
- * ── WHAT CANNOT BE PROVED HERE, AND WHY ─────────────────────────────────────
+ * ── WHAT CANNOT BE PROVED HERE, AND WHERE IT IS PROVED NOW ──────────────────
  *
- * **Not at the wire.** The bridge is single-channel in exactly three places (`R-062`, filed
- * by Phase 7 under owner answer A3): five verbs take `z.void()`, there is no
- * channel-discovery call, and `fixedLayers` declares ONE bank on ONE channel. So no harness
- * in this repo can put a second channel's rows on a real bridge and then fail to disturb
- * them — **there is no second channel to disturb.** A wire test asserting channel
- * independence today would be asserting something about a configuration that cannot exist,
- * and would pass for that reason rather than for the property's.
+ * **Not at the wire — here.** When this file was written the bridge was single-channel in
+ * exactly three places (`R-062`): five verbs took `z.void()`, there was no channel-discovery
+ * call, and `fixedLayers` declared ONE bank on ONE channel, so no harness could put a second
+ * channel's rows on a bridge and then fail to disturb them. ⭐ `MULTI-CHANNEL-01` closed all
+ * three: the bridge holds one bank per declared channel, and channel independence is now
+ * measured AT THE WIRE, with two declared channels on the fake AMCP, in
+ * `tools/caspar-bridge/tests/multi-channel-banks.integration.test.ts` and
+ * `channel-independence.integration.test.ts` — each negative with its positive control.
  *
- * **Not in the app's mock either.** `MockRuntime.load()` writes no `item.slot`, so the
- * mock cannot express two rows on two channels at all.
+ * **The app's mock** now carries every row-bound item's slot and keys its bindings by
+ * `(channel, layer)` (`mockSlotParity.test.ts`), so two rows on two channels are expressible
+ * offline too.
  *
  * ── WHAT IS PROVED HERE, AND AT WHICH LEVEL ─────────────────────────────────
  *
@@ -62,11 +64,10 @@ import { itemWith, slotWith, stubBridge, type RowStubs } from './support/layerRo
  *   rows sharing the SAME LAYER NUMBER on different channels, which is the discriminating
  *   case: a console keyed by layer alone would collide there and pass everywhere else.
  *
- *   **§3 — THE BOUND, ASSERTED SO IT CANNOT ROT.** The five bulk verbs are pinned as taking
- *   `z.void()`. They are station-wide BY CONTRACT, so for them the §10 sentence is FALSE by
- *   design, not by defect — and for `silenceAllLivePlates` that is owner answer A16, decided
- *   rather than deferred. Pinning it means the day someone adds a channel to one of these,
- *   this test reddens and `R-062` has to be read before the change lands.
+ *   **§3 — THE BOUND, ASSERTED SO IT CANNOT ROT.** The four housekeeping verbs take an
+ *   OPTIONAL channel (`MULTI-CHANNEL-01` §2 B — this pin went red on purpose, and `R-062` was
+ *   read first); `silenceAllLivePlates` still takes `z.void()` — owner answer A16, decided rather
+ *   than deferred — and the per-channel silence is a separate verb beside it.
  *
  *   **§4 — THE SELECTION.** The console's only channel-scoped ACTION today is choosing which
  *   channel the per-channel surfaces report on: every per-channel surface is read-only
@@ -78,7 +79,8 @@ import { itemWith, slotWith, stubBridge, type RowStubs } from './support/layerRo
  *
  * ⚠ **None of the four is a wire test, and this file does not dress one as one.** Together
  * they say: the addressing is channel-safe by construction, the surface honours it, the
- * bulk verbs deliberately do not, and the selection changes nothing that is held.
+ * housekeeping verbs can be scoped to a channel while PANIC deliberately cannot, and the
+ * selection changes nothing that is held. The wire half lives in the bridge's suites (above).
  */
 
 // React's own act() gate — without it every `act` here warns and the flush is not guaranteed.
@@ -285,36 +287,54 @@ describe('§2 — a verb pressed on one channel’s row dispatches that row and 
   });
 });
 
-// ───────────────────── §3 — THE BOUND: FIVE VERBS CANNOT NAME A CHANNEL ───────────────────
+// ─────── §3 — THE BOUND: FOUR VERBS TAKE AN OPTIONAL CHANNEL, AND PANIC STILL CANNOT ───────
 
-describe('§3 — the five bulk verbs are station-wide BY CONTRACT (`R-062` gap 1)', () => {
+describe('§3 — the bulk verbs, after `R-062` gap 1 closed (`MULTI-CHANNEL-01` §2 B)', () => {
   /**
-   * 🔴 This is not a complaint, it is a PIN. Four of the five are ordinary housekeeping that
-   * `R-062` says may one day take an OPTIONAL channel; the fifth is PANIC and owner answer
-   * A16 settled that it stays unscoped — *the scope of a panic is not the caller's to
-   * choose*. Either way, the day one of them gains a channel this test goes red and
-   * `R-062` has to be read before the change lands. That is the only thing keeping the
-   * ledger and the contract from drifting apart quietly.
+   * 🔴 THIS WAS A PIN, AND IT WENT RED ON PURPOSE. It asserted that all five bulk verbs took
+   * `z.void()`, so that the day one of them gained a channel `R-062` would have to be read
+   * first. `MULTI-CHANNEL-01` is that day, and it read it: the four HOUSEKEEPING verbs take an
+   * OPTIONAL channel (a bare call keeps its meaning byte for byte), and PANIC does not — owner
+   * answer A16, confirmed 2026-09-23: *the scope of a panic is not the caller's to choose*, and a
+   * per-channel silence is a NEW verb beside it, never a parameter on it.
+   *
+   * The pin now holds that split in place, both halves: the four accept a channel, the fifth
+   * still refuses one. Loosening PANIC here would redden the half below that stayed exactly as it
+   * was.
    */
-  const BULK = [
+  const HOUSEKEEPING = [
     StackRemoveAllChannel,
     StackClearAllChannel,
     StackStopAllChannel,
     StackSnapshotChannel,
-    StackSilenceAllLivePlatesChannel,
   ];
 
-  it('🔴 each takes `z.void()` — so an action through one necessarily reaches every channel', () => {
-    expect(BULK, 'exactly the five `R-062` names').toHaveLength(5);
-    for (const channel of BULK) {
+  it('🔴 each housekeeping verb takes a bare call AND `{ channel }` — the bare call keeps its meaning', () => {
+    expect(HOUSEKEEPING, 'exactly the four housekeeping names').toHaveLength(4);
+    for (const channel of HOUSEKEEPING) {
       expect(channel.request.safeParse(undefined).success, `${channel.name} takes nothing`).toBe(
         true,
       );
       expect(
-        channel.request.safeParse({ channel: 1 }).success,
-        `${channel.name} cannot be scoped to a channel`,
-      ).toBe(false);
+        channel.request.safeParse({ channel: 2 }).success,
+        `${channel.name} can be scoped to a channel`,
+      ).toBe(true);
+      // A channel that is not one is still refused — the scope is a channel NUMBER, nothing else.
+      expect(channel.request.safeParse({ channel: 0 }).success, `${channel.name} channel 0`).toBe(
+        false,
+      );
     }
+  });
+
+  it('🔴 `silenceAllLivePlates` still takes `z.void()` — it cannot be scoped to a channel (A16)', () => {
+    const channel = StackSilenceAllLivePlatesChannel;
+    expect(channel.request.safeParse(undefined).success, `${channel.name} takes nothing`).toBe(
+      true,
+    );
+    expect(
+      channel.request.safeParse({ channel: 1 }).success,
+      `${channel.name} cannot be scoped to a channel`,
+    ).toBe(false);
   });
 
   it('THE POSITIVE CONTROL — a verb that DOES take an argument rejects `undefined`', () => {

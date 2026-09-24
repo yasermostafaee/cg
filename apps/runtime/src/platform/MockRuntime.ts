@@ -533,10 +533,26 @@ export class MockRuntime {
   }
 
   /** C-012 parity — STOP every on-air item; producers stay resident. */
-  stopAll(): { ok: boolean; stopped: number } {
-    const onAir = this.#stack.filter((i) => i.status !== 'idle' && i.status !== 'loaded');
+  stopAll(channel?: number): { ok: boolean; stopped: number } {
+    const onAir = this.#stack.filter(
+      (i) => i.status !== 'idle' && i.status !== 'loaded' && this.#withinChannel(i.itemId, channel),
+    );
     for (const item of onAir) this.stop(item.itemId);
     return { ok: true, stopped: onAir.length };
+  }
+
+  /**
+   * `MULTI-CHANNEL-01` §2 B parity — the bridge's `#withinChannel`: every channel the item touches
+   * (its published slot, its seated plates) is `channel`; an item touching none is in every
+   * channel's scope. `undefined` is the bare call's scope — everything.
+   */
+  #withinChannel(itemId: string, channel: number | undefined): boolean {
+    if (channel === undefined) return true;
+    const slot = this.#slotFor(itemId) ?? this.#find(itemId)?.slot;
+    if (slot !== undefined && slot !== null && slot.channel !== channel) return false;
+    return this.liveLayersState()
+      .filter((l) => l.itemId === itemId)
+      .every((l) => l.channel === channel);
   }
 
   out(itemId: string): { accepted: boolean } {
@@ -902,23 +918,27 @@ export class MockRuntime {
     return this.#plateVolumes.get(itemId);
   }
 
-  /** R-010 — OUT + REMOVE everything: clears (simulated) air, empties the list. */
-  removeAll(): { ok: boolean; removed: number; errorCode?: string } {
+  /**
+   * R-010 — OUT + REMOVE everything: clears (simulated) air, empties the list.
+   * `MULTI-CHANNEL-01` §2 B parity — with a `channel`, that channel's items alone.
+   */
+  removeAll(channel?: number): { ok: boolean; removed: number; errorCode?: string } {
+    const scope = this.#stack.filter((i) => this.#withinChannel(i.itemId, channel));
     // `R-017` parity — all-or-nothing, decided before the first removal (see the bridge's
     // `removeAll` for why a per-item refusal inside the loop would half-empty the stack and
     // then report that nothing happened).
-    if (this.#stack.some(isOnAirStatus)) {
+    if (scope.some(isOnAirStatus)) {
       return { ok: false, removed: 0, errorCode: REMOVE_ON_AIR_CODE };
     }
-    const removed = this.#stack.length;
-    for (const item of this.#stack) {
+    for (const item of scope) {
       this.#audit.unshift(auditEntry('remove', this.#auditItem(item.itemId, item.templateId)));
       // B-056 parity — every item's removal resolves its warning.
       this.#resolveOwnedOccupancy(item.itemId);
     }
-    this.#stack = [];
+    const leaving = new Set(scope.map((i) => i.itemId));
+    this.#stack = this.#stack.filter((i) => !leaving.has(i.itemId));
     this.#emitStack();
-    return { ok: true, removed };
+    return { ok: true, removed: scope.length };
   }
 
   /**
@@ -949,13 +969,14 @@ export class MockRuntime {
    * `refused` is always empty: the Live Source ledger is a bridge-side structure and the mock
    * has none. The field is reported rather than omitted so the shape is identical either way.
    */
-  clearAll(): {
+  clearAll(channel?: number): {
     ok: boolean;
     cleared: number;
     attempted: number;
     refused: { itemId: string; reason: LayerClearReason }[];
   } {
-    const addressable = [...this.#stack];
+    // `MULTI-CHANNEL-01` §2 B parity — with a `channel`, that channel's rows alone.
+    const addressable = this.#stack.filter((i) => this.#withinChannel(i.itemId, channel));
     for (const item of addressable) {
       this.out(item.itemId);
     }

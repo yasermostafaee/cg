@@ -2896,11 +2896,25 @@ export function buildRoutes(
     // control gated on bookkeeping that may not have arrived).
     route(StackSilenceAllLivePlatesChannel, 'operator', 'operator', () => b.silenceAllLivePlates()),
     // R-010 — the sanctioned clear-everything path (unblocks set-config).
-    route(StackRemoveAllChannel, 'operator', 'operator', () => b.removeAll()),
-    route(StackClearAllChannel, 'operator', 'operator', () => b.clearAll()),
+    /*
+      🔴 `MULTI-CHANNEL-01` §2 B — the four housekeeping verbs take an OPTIONAL channel. Bare, every
+      item, byte for byte as before; with `{ channel }`, that channel's items alone — and because
+      the request NAMES the channel, the station fence, the permission gate and a covered-set lock
+      all judge that channel alone (`channelsForRequest` case (a)).
+    */
+    route(StackRemoveAllChannel, 'operator', 'operator', (r?: { channel: number }) =>
+      b.removeAll(r?.channel),
+    ),
+    route(StackClearAllChannel, 'operator', 'operator', (r?: { channel: number }) =>
+      b.clearAll(r?.channel),
+    ),
     // C-012 / R-028 — the GRACEFUL bulk: every on-air item runs its own outro.
-    route(StackStopAllChannel, 'operator', 'operator', () => b.stopAll()),
-    route(StackSnapshotChannel, 'read', 'read', () => b.stackSnapshot()),
+    route(StackStopAllChannel, 'operator', 'operator', (r?: { channel: number }) =>
+      b.stopAll(r?.channel),
+    ),
+    route(StackSnapshotChannel, 'read', 'read', (r?: { channel: number }) =>
+      b.stackSnapshot(r?.channel),
+    ),
     // B-092 — the browser re-delivers its RETAINED stack intent on every
     // (re)connect, so the stack survives a restart of this process. Seeds state
     // and publishes; sends nothing to CasparCG until occupancy is knowable.

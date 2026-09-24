@@ -2118,8 +2118,30 @@ export class CasparRuntime {
     });
   }
 
-  stackSnapshot(): readonly StackItemState[] {
-    return this.#published();
+  /**
+   * The published stack — every item, or (`MULTI-CHANNEL-01` §2 B) with a `channel`, the items
+   * wholly on it ({@link #withinChannel}). Bare, exactly what it always was.
+   */
+  stackSnapshot(channel?: number): readonly StackItemState[] {
+    const all = this.#published();
+    return channel === undefined ? all : all.filter((i) => this.#withinChannel(i.itemId, channel));
+  }
+
+  /**
+   * 🔴 `MULTI-CHANNEL-01` §2 B — **IS THIS ITEM WHOLLY ON `channel`?** Every channel it touches is
+   * `channel` — its template's slot and its seated plates, the union {@link channelsForItem}
+   * answers and the permission gate reads. An item that touches NO channel (no layer, no plate) is
+   * inside every channel's scope, as it is inside every channel's view, and a verb on it writes to
+   * no channel at all.
+   *
+   * The ONE membership rule the four housekeeping verbs share, so "the items on channel 2" cannot
+   * mean one set to REMOVE ALL and another to CLEAR ALL. A plate is seated on its template's own
+   * channel (`#seatLivePlates` takes `slot.channel`), so an item never straddles two; were one
+   * ever to, it would be in NEITHER channel's scope — reached only by the bare, station-wide verb,
+   * never by a per-channel one that would write to the other channel.
+   */
+  #withinChannel(itemId: string, channel: number): boolean {
+    return this.channelsForItem(itemId).every((c) => c === channel);
   }
 
   async load(
@@ -9642,9 +9664,15 @@ export class CasparRuntime {
    * semantics): layer-ordered, no command burst, and a per-item failure
    * doesn't abort the rest (`remove` drops the item regardless). The
    * sanctioned path to unblock a server reconfiguration.
+   *
+   * `MULTI-CHANNEL-01` §2 B — with a `channel`, the items wholly on it and nothing else
+   * ({@link #withinChannel}); the all-or-nothing refusal below is decided over THAT set. Bare,
+   * every item, exactly as before.
    */
-  async removeAll(): Promise<{ ok: boolean; removed: number; errorCode?: string }> {
-    const items = this.#reconciler.snapshot();
+  async removeAll(channel?: number): Promise<{ ok: boolean; removed: number; errorCode?: string }> {
+    const items = this.#reconciler
+      .snapshot()
+      .filter((item) => channel === undefined || this.#withinChannel(item.itemId, channel));
     /*
       🔴 `R-017` — REFUSED ALL-OR-NOTHING, decided BEFORE the first removal.
 
@@ -9716,8 +9744,12 @@ export class CasparRuntime {
    *
    * The report distinguishes what was SENT from what LANDED from what was never addressed,
    * so no shape of no-op can come back as a success (B-122's acceptance).
+   *
+   * `MULTI-CHANNEL-01` §2 B — with a `channel`, the bound items wholly on it and nothing else
+   * ({@link #withinChannel}): still every one of them, whatever it believes (B-122 is untouched —
+   * the scope narrows by CHANNEL, never by status). Bare, every bound item, exactly as before.
    */
-  async clearAll(): Promise<{
+  async clearAll(channel?: number): Promise<{
     ok: boolean;
     cleared: number;
     attempted: number;
@@ -9725,6 +9757,7 @@ export class CasparRuntime {
   }> {
     const bound = this.#reconciler
       .snapshot()
+      .filter((item) => channel === undefined || this.#withinChannel(item.itemId, channel))
       .map((item) => ({ itemId: item.itemId, slot: this.#slots.get(item.itemId) }))
       .filter((c): c is { itemId: string; slot: CommandSlot } => c.slot !== undefined);
     const refused: { itemId: string; reason: LayerClearReason }[] = [];
@@ -9776,13 +9809,19 @@ export class CasparRuntime {
    *     graphic, and CLEAR ALL sits beside it as the remedy that ignores it.
    *
    * ⚠ Do not "restore consistency" by copying either predicate onto the other.
+   *
+   * `MULTI-CHANNEL-01` §2 B — with a `channel`, the same candidates wholly on it
+   * ({@link #withinChannel}). Bare, exactly as before.
    */
-  async stopAll(): Promise<{ ok: boolean; stopped: number }> {
+  async stopAll(channel?: number): Promise<{ ok: boolean; stopped: number }> {
     const stoppable = this.#reconciler
       .snapshot()
       .filter(
         (i) =>
-          i.status !== 'idle' && i.status !== 'loaded' && this.#slots.get(i.itemId) !== undefined,
+          i.status !== 'idle' &&
+          i.status !== 'loaded' &&
+          this.#slots.get(i.itemId) !== undefined &&
+          (channel === undefined || this.#withinChannel(i.itemId, channel)),
       );
     for (const item of stoppable) {
       await this.stopItem(item.itemId);

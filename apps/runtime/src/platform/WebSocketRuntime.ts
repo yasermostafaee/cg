@@ -1580,10 +1580,14 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(StackSetPlateVolumesChannel, req),
     // PANIC — no arguments: the bridge scopes it from its own LEDGER, not the browser's copy.
     silenceAllLivePlates: () => this.#invoke(StackSilenceAllLivePlatesChannel, undefined),
-    removeAll: () => this.#invoke(StackRemoveAllChannel, undefined),
-    clearAll: () => this.#invoke(StackClearAllChannel, undefined),
+    // `MULTI-CHANNEL-01` §2 B — bare is every item; `{ channel }` is that channel's items.
+    removeAll: (req?: ChannelRequest<typeof StackRemoveAllChannel>) =>
+      this.#invoke(StackRemoveAllChannel, req),
+    clearAll: (req?: ChannelRequest<typeof StackClearAllChannel>) =>
+      this.#invoke(StackClearAllChannel, req),
     // C-012 / R-028 — the graceful bulk beside the hard one.
-    stopAll: () => this.#invoke(StackStopAllChannel, undefined),
+    stopAll: (req?: ChannelRequest<typeof StackStopAllChannel>) =>
+      this.#invoke(StackStopAllChannel, req),
     snapshot: async () => {
       // B-092 — with the bridge unreachable, answer from the browser-local
       // retention instead of REFUSING. A cold page load against a dead bridge

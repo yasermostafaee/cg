@@ -460,6 +460,28 @@ export const StackSetPlateVolumesChannel = defineChannel(
 );
 
 /**
+ * 🔴 `MULTI-CHANNEL-01` §2 B (`R-062` gap 1) — **THE FOUR HOUSEKEEPING VERBS TAKE AN OPTIONAL
+ * CHANNEL.** `stack.remove-all`, `stack.clear-all`, `stack.stop-all` and `stack.snapshot`.
+ *
+ *   - **BARE** (`undefined`) — every item the bridge knows about, exactly as before: a bare call
+ *     keeps its meaning byte for byte, and so does its wire output.
+ *   - **`{ channel }`** — the items on that channel and nothing else: every channel the item
+ *     touches (its template's slot, its seated plates) is that one. An item with no layer touches
+ *     none, so it is in every channel's scope, as it is in every channel's view.
+ *
+ * With a channel the request NAMES it, so the station fence, `C-038`'s all-or-nothing permission
+ * check and a covered-set lock all judge THAT channel alone. The console passes the channel on
+ * screen.
+ *
+ * ⚠ **NOT `stack.silence-all-live-plates`.** PANIC stays `z.void()`: its scope is not the caller's
+ * to choose (owner answer A16). The per-channel silence is a NEW verb beside it
+ * (`stack.silence-channel-live-plates`), never a parameter on it.
+ */
+export const HousekeepingScopeSchema = z
+  .object({ channel: z.number().int().positive() })
+  .optional();
+
+/**
  * Clear EVERYTHING in one operation: every stack item is OUTed and REMOVEd (per-item
  * CLEAR-destroys semantics, in sequence), clearing air and emptying the list.
  *
@@ -480,7 +502,7 @@ export const StackSetPlateVolumesChannel = defineChannel(
  */
 export const StackRemoveAllChannel = defineChannel(
   'stack.remove-all',
-  z.void(),
+  HousekeepingScopeSchema,
   z.object({
     ok: z.boolean(),
     removed: z.number().int().nonnegative(),
@@ -536,7 +558,7 @@ export const StackRemoveAllChannel = defineChannel(
  */
 export const StackClearAllChannel = defineChannel(
   'stack.clear-all',
-  z.void(),
+  HousekeepingScopeSchema,
   z.object({
     ok: z.boolean(),
     /** Clears CasparCG ACCEPTED — what actually went. Never a candidate count. */
@@ -565,13 +587,13 @@ export const StackClearAllChannel = defineChannel(
  */
 export const StackStopAllChannel = defineChannel(
   'stack.stop-all',
-  z.void(),
+  HousekeepingScopeSchema,
   z.object({ ok: z.boolean(), stopped: z.number().int().nonnegative() }),
 );
 
 export const StackSnapshotChannel = defineChannel(
   'stack.snapshot',
-  z.void(),
+  HousekeepingScopeSchema,
   z.array(StackItemStateSchema),
 );
 
