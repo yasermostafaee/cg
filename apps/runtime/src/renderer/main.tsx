@@ -2,6 +2,8 @@ import '@cg/ui/theme.css';
 // P-001 — the UI's Persian face, self-hosted (the same faces template delivery inlines via
 // `fonts.css?inline`). No font request leaves the machine; a LAN-only station renders Vazirmatn.
 import './fonts.css';
+// `B-263` — the chrome's Persian face; chrome-only, so never inlined into an export.
+import './chromeFonts.css';
 import './ui/controls.css';
 import { StrictMode, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';

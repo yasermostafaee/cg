@@ -12,9 +12,10 @@ import {
  * Every number below was rendered in Chrome on 2026-09-05 at the exact font the cell uses
  * (root 16 px; the alias at `600 1.05rem`, the row state label at `700 0.72rem` with
  * `0.05em` tracking, the head at `700 0.62rem` uppercase with `0.06em`), through the app's
- * own stack (`Inter, system-ui, …, Vazirmatn, …` — Persian resolves to Segoe UI on Windows
+ * own stack (`Inter, system-ui, …, Vazirmatn, …` — Persian then resolved to Segoe UI on Windows
  * and to the bundled Vazirmatn elsewhere; both measured, the wider kept). The script is in
- * the session record; the numbers are the fixture.
+ * the session record; the numbers are the fixture. ⭐ Since `B-263` Persian resolves to Vazirmatn
+ * on every platform (`chromeFonts.css`); the wider of the two was kept, so the numbers still hold.
  *
  * Red-first: written against `stateFull: 132` / `aliasMin: 132`, where the old head
  * (`STATE (12 on air) (12 in error)`, 175 px) and the row's own `NOT CONNECTED` (136 px)

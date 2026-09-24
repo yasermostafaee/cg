@@ -30,8 +30,10 @@ import { colors, cssVars } from './theme.js';
 export const appShell = {
   /** The page: exactly one viewport tall, and it never scrolls. */
   page: {
+    // `B-263` — the chrome-only Persian face leads (`chromeFonts.css`): Persian from Vazirmatn,
+    // and every other character falls through to the stack exactly as before.
     fontFamily:
-      'Inter, system-ui, -apple-system, "Segoe UI", Vazirmatn, "Noto Sans Arabic", sans-serif',
+      '"Vazirmatn Arabic", Inter, system-ui, -apple-system, "Segoe UI", Vazirmatn, "Noto Sans Arabic", sans-serif',
     color: colors.text,
     background: colors.background,
     height: '100vh',

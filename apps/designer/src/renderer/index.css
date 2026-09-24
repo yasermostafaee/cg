@@ -2,10 +2,23 @@
  * App UI font (Exo 2, self-hosted in fonts.css — no CDN). Set on body so
  * portaled modals / tooltips / popovers inherit it too; Vazirmatn stays in the
  * stack for Persian glyph coverage.
+ *
+ * `B-263` — 'Vazirmatn Arabic' LEADS: a chrome-only family of Vazirmatn's Arabic faces, each
+ * limited to the Arabic ranges (`chromeFonts.css`). Persian glyphs come from it; every other
+ * character matches none of its faces and falls through to the stack exactly as before, so Latin
+ * keeps Exo 2. Without it `system-ui` (Segoe UI on Windows) reached Persian first.
  */
 body {
   font-family:
-    'Exo 2', Inter, system-ui, -apple-system, 'Segoe UI', Vazirmatn, 'Noto Sans Arabic', sans-serif;
+    'Vazirmatn Arabic',
+    'Exo 2',
+    Inter,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Vazirmatn,
+    'Noto Sans Arabic',
+    sans-serif;
 }
 
 /*

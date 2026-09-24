@@ -1,5 +1,7 @@
 import '@cg/ui/theme.css';
 import './fonts.css';
+// `B-263` — the chrome's Persian face; chrome-only, so never inlined into an export.
+import './chromeFonts.css';
 import './index.css';
 import { StrictMode, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';

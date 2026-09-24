@@ -12,10 +12,12 @@ import { expect, test } from '@playwright/test';
  *   - Its CONTROL: Persian set in Vazirmatn — the family authored text uses — loads the
  *     Arabic-range face from the page's own origin and reports it `loaded`.
  *
- * ⚠ The probe names Vazirmatn itself rather than inheriting the body stack, and that is a
- * measured choice: the Designer's CHROME stack puts `system-ui` / `'Segoe UI'` before Vazirmatn
- * (`index.css`), so on Windows Persian chrome text renders in Segoe UI and never requests
- * Vazirmatn at all. That is the Designer's existing look and not this item's to change.
+ * ⚠ The probe names Vazirmatn itself rather than inheriting the body stack, and that was a
+ * measured choice: the Designer's CHROME stack put `system-ui` / `'Segoe UI'` before Vazirmatn
+ * (`index.css`), so on Windows Persian chrome text rendered in Segoe UI and never requested
+ * Vazirmatn at all. ⭐ `B-263` (`MULTI-CHANNEL-01` §2 K) fixed the chrome stack; that fix is
+ * measured by `chrome-persian-font.spec.ts`, and this spec keeps asking its own question — the
+ * AUTHORED family — unchanged.
  */
 
 test('P-001 — Persian renders in the self-hosted Vazirmatn, and no font request leaves the machine', async ({
