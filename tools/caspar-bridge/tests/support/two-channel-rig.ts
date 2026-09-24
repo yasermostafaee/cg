@@ -86,7 +86,10 @@ export interface TwoChannelRig {
  */
 export async function twoChannelRig(
   opts: {
+    /** The banks the bridge boots with — explicitly, or (with {@link fromFile}) as the file says. */
     banks?: readonly FixedLayerBank[];
+    /** Boot from this persisted fixed-layers file instead of an explicit bank list. */
+    fromFile?: string;
     channels?: number;
     bridge?: Partial<BridgeOptions>;
     awaitBlanket?: boolean;
@@ -121,7 +124,9 @@ export async function twoChannelRig(
     await createBridge({
       port: 0,
       connection,
-      fixedLayers: banks,
+      ...(opts.fromFile !== undefined
+        ? { fixedLayersPath: opts.fromFile }
+        : { fixedLayers: banks }),
       runtimeTuning: { sweepMs: SWEEP_MS, occupancyStaleMs: STALE_MS },
       ...(opts.bridge ?? {}),
     }),

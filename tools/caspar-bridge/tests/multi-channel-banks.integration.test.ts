@@ -137,7 +137,7 @@ describe('§2 A — the plural door and the v1 door', () => {
     fs.writeFileSync(file, `${JSON.stringify(standardBank(1), null, 2)}\n`, 'utf8');
     const r = await twoChannelRig({
       banks: [standardBank(1)],
-      bridge: { fixedLayers: undefined, fixedLayersPath: file },
+      fromFile: file,
       awaitBlanket: false,
     });
     expect(r.handle.runtime.declaredChannels()).toEqual([1]);
