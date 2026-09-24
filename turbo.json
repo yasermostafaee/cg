@@ -82,6 +82,23 @@
         "VITEST_MIN_THREADS"
       ]
     },
+    "@cg/dev-station#test": {
+      "dependsOn": ["^build", "build"],
+      "outputs": ["coverage/**"],
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "vitest.config.*",
+        "package.json",
+        "$TURBO_ROOT$/tools/caspar-bridge/bin/**"
+      ],
+      "passThroughEnv": [
+        "VITEST_MAX_FORKS",
+        "VITEST_MIN_FORKS",
+        "VITEST_MAX_THREADS",
+        "VITEST_MIN_THREADS"
+      ]
+    },
     "test:integration": {
       "dependsOn": ["^build", "@cg/amcp-mock#build"],
       "outputs": ["coverage/**"],

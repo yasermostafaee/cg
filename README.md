@@ -69,6 +69,17 @@ otherwise.
 > Access API (Chromium: Chrome/Edge/Brave). Other browsers fall back to OPFS
 > (sandboxed real files). See the storage ADR for details.
 
+The Designer's dev server runs beside an installed CG Designer: the installed one opens no port and
+keeps its storage under its own origin (`http://tauri.localhost`). Open the dev one at
+`http://127.0.0.1:4000` — a LAN address is not a secure context, so its folder store would be
+session-only there.
+
+### Checking a change in the browser
+
+`pnpm dev:station` builds, then runs the current source as CG Control does — same ports, its own state in `%LOCALAPPDATA%\CG Control Dev`.
+The console opens at **http://127.0.0.1:5174** (`--playout <url>` changes the Playout; `--fake` needs none).
+Close CG Control first — the launcher offers to, and asks before it does.
+
 ### The CasparCG bridge
 
 The Runtime SPA drives real CasparCG through a small local process (browsers
