@@ -239,6 +239,54 @@ describe('§3(a) — the strip is told when the config moves under it', () => {
   });
 
   /**
+   * 🔴 `MULTI-CHANNEL-01` §2 E — **FIRST-RUN PICKS TWO CHANNELS THROUGH THE PLURAL DOOR, AND THE
+   * STRIP IS TOLD ABOUT BOTH.** The owner's check signs in on first-run and picks two channels;
+   * the console declares them with `fixedLayers.set-banks`, and each signed-in socket must be
+   * pushed what IT may now drive. The operator beside the admin is the control: pushed, and pushed
+   * only the channel their grant names — the push is per principal, not "every declared channel".
+   */
+  it('first-run with two channels: set-banks pushes both to the admin — control: a channel-1 operator is pushed channel 1 alone', async () => {
+    const started = await startAuthedBridge();
+    handle = started.handle;
+    playout = started.playout;
+
+    const admin = await openClient(started.handle);
+    const accepted = await admin.authenticate(
+      'a-admin',
+      (
+        await started.playout.issueToken({
+          user: 'admin',
+          cgChannels: [
+            { host: '127.0.0.1', channel: 1 },
+            { host: '127.0.0.1', channel: 2 },
+          ],
+        })
+      ).token,
+    );
+    expect((accepted.payload as AuthState).permittedChannels).toEqual([1]);
+    const operator = await openClient(started.handle);
+    const opAccepted = await operator.authenticate(
+      'a-op',
+      (await started.playout.issueToken({ user: 'operator' })).token,
+    );
+    expect((opAccepted.payload as AuthState).permittedChannels).toEqual([1]);
+
+    const declared = await admin.ask('set', 'fixedLayers.set-banks', {
+      banks: [firstRunBank(1), firstRunBank(2)],
+    });
+    expect(declared.error, 'the admin could not declare two channels').toBeUndefined();
+    expect(declared.payload).toEqual({ ok: true });
+
+    await expect
+      .poll(() => authPushes(admin.frames).at(-1)?.permittedChannels, { timeout: 4000 })
+      .toEqual([1, 2]);
+    await expect
+      .poll(() => authPushes(operator.frames).length, { timeout: 4000 })
+      .toBeGreaterThan(0);
+    expect(authPushes(operator.frames).at(-1)?.permittedChannels).toEqual([1]);
+  });
+
+  /**
    * 🔴 **AUTH OFF PUSHES NOTHING ON THIS CHANNEL**, so a station that does not federate identity
    * gains no traffic it did not have.
    *
