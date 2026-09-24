@@ -258,7 +258,24 @@ const CHANNEL_FOR_STATION_ADMIN: Partial<StationSetupSectionSpec> = {
 };
 
 /**
- * 🔴 `MULTI-CHANNEL-01` §2 M — **A SECTION AS IT IS FOR THIS PRINCIPAL.** The one read of the
+ * 🔴 `MULTI-CHANNEL-01` §2 I — **EVERY COMMIT IN STATION SETUP IS A `station-admin` ROUTE**, walked
+ * against the route classes rather than a list: `connections.set-config` (Servers),
+ * `sources.set-config` (Live sources, the catalogue AND the band), `delimiters.set` (Text file
+ * delimiters), `fixedLayers.set-config` / `set-banks` (Layers, and the Channel pane's Change
+ * channel…). So for any other principal every pane that commits shows its values as VALUES — no
+ * Apply, no Revert, no inputs (golden rule 13: absent, never offered-then-refused) — and its head
+ * and footer say that, in place of a contract that is not theirs.
+ */
+const READ_ONLY_FOR_THIS_SIGN_IN = {
+  commit: 'read-only',
+  commits: false,
+  legend: 'Read-only — this sign-in does not change station settings.',
+  footerRest: 'Nothing to apply — this sign-in does not change station settings.',
+  footerIcon: 'info',
+} as const;
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 M / I — **A SECTION AS IT IS FOR THIS PRINCIPAL.** The one read of the
  * table every surface that states a section's contract makes (its head, its tag, its footer), so
  * the three cannot tell one principal two different things.
  */
@@ -267,8 +284,12 @@ export function sectionSpecFor(
   stationAdmin: boolean,
 ): StationSetupSectionSpec {
   const spec = sectionSpec(id);
-  if (stationAdmin && id === 'channel') return { ...spec, ...CHANNEL_FOR_STATION_ADMIN };
-  return spec;
+  if (stationAdmin) return id === 'channel' ? { ...spec, ...CHANNEL_FOR_STATION_ADMIN } : spec;
+  // Channel is read-only for this principal already — its one control is a station-admin's.
+  if (spec.commit === 'read-only') return spec;
+  // The blocked clause is about a commit this principal does not have, so it goes with it.
+  const { footerBlocked: _notTheirs, ...rest } = spec;
+  return { ...rest, ...READ_ONLY_FOR_THIS_SIGN_IN };
 }
 
 /** The rail's groups, in order, each with its sections. */

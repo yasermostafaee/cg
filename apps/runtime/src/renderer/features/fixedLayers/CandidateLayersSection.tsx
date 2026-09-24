@@ -28,6 +28,7 @@ import { IsolatedName } from '../../ui/OperatorNames.js';
 import { removeIsRefused } from '../layers/removeGate.js';
 import { REMOVE_ON_AIR_REASON } from '../layers/layerRowActions.js';
 import { useFixedSlotsState } from '../../hooks/useFixedLayers.js';
+import { useCanOperate, useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { useChannelBankState, useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { useStack } from '../../hooks/useStack.js';
 import { useLink } from '../../hooks/useLink.js';
@@ -342,6 +343,21 @@ function BankEditor({
   /** `SETTINGS-MATCH-02` — the filter bar's two controls. Draft-local; nothing is persisted. */
   const [query, setQuery] = useState('');
   const [shownOnly, setShownOnly] = useState(false);
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 I — THE OWNER'S CASE. Signed in as an operator he opened this tab, saw
+    live switches, editable names and `Apply layers`, pressed it, and the bridge refused:
+    `fixedLayers.set-config` is `station-admin`. The refusal was right and the SURFACE was wrong —
+    it offered a control and refused it afterwards. For anyone but a station-admin the rows are
+    VALUES (shown or hidden, and the name) with no Apply and no Revert. The filter bar stays: it
+    changes what is LISTED, not the station.
+  */
+  const admin = useHoldsStationAdmin();
+  /*
+    The row's REMOVE is a different verb — `stack.remove`, operator class, on this channel — so it
+    asks the operator question, and is absent for a principal the bridge would refuse (a viewer,
+    a channel not theirs, a channel the lock covers).
+  */
+  const canOperate = useCanOperate();
 
   /*
     `STATION-CHROME-01` §2 — WHETHER THIS SECTION HOLDS AN UNAPPLIED DRAFT, reported up so the
@@ -665,38 +681,50 @@ function BankEditor({
                     refused; showing one never was, so a hidden occupied row keeps a live
                     switch.
                   */}
-                  <span className="cg-switch">
-                    <input
-                      type="checkbox"
-                      role="switch"
-                      aria-label={`Show layer ${String(row.layer)}`}
-                      checked={row.visible}
-                      disabled={row.occupied && row.visible}
-                      title={
-                        row.occupied && row.visible
-                          ? 'Remove the template before hiding this row'
-                          : 'Show in the Layers panel'
-                      }
-                      onChange={(e) => {
-                        setVisible({ ...visible, [String(row.layer)]: e.target.checked });
-                      }}
-                    />
-                    <span className="cg-switch__track" aria-hidden="true" />
-                  </span>
+                  {admin ? (
+                    <span className="cg-switch">
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        aria-label={`Show layer ${String(row.layer)}`}
+                        checked={row.visible}
+                        disabled={row.occupied && row.visible}
+                        title={
+                          row.occupied && row.visible
+                            ? 'Remove the template before hiding this row'
+                            : 'Show in the Layers panel'
+                        }
+                        onChange={(e) => {
+                          setVisible({ ...visible, [String(row.layer)]: e.target.checked });
+                        }}
+                      />
+                      <span className="cg-switch__track" aria-hidden="true" />
+                    </span>
+                  ) : (
+                    // §2 I — the fact, not a switch: `Tag` cannot become a control.
+                    <Tag data-layer-shown={row.visible ? 'yes' : 'no'}>
+                      {row.visible ? 'Shown' : 'Hidden'}
+                    </Tag>
+                  )}
                 </td>
                 <td>
-                  <input
-                    className="cg-field"
-                    type="text"
-                    dir="auto"
-                    maxLength={ROW_NAME_MAX}
-                    aria-label={`Name for layer ${String(row.layer)} (row ${String(row.position)})`}
-                    placeholder={row.placeholder}
-                    value={row.name}
-                    onChange={(e) => {
-                      setAliases({ ...aliases, [String(row.layer)]: e.target.value });
-                    }}
-                  />
+                  {admin ? (
+                    <input
+                      className="cg-field"
+                      type="text"
+                      dir="auto"
+                      maxLength={ROW_NAME_MAX}
+                      aria-label={`Name for layer ${String(row.layer)} (row ${String(row.position)})`}
+                      placeholder={row.placeholder}
+                      value={row.name}
+                      onChange={(e) => {
+                        setAliases({ ...aliases, [String(row.layer)]: e.target.value });
+                      }}
+                    />
+                  ) : (
+                    // §2 I — the row's name as the console shows it: its alias, else its real layer.
+                    <IsolatedName>{row.name === '' ? row.placeholder : row.name}</IsolatedName>
+                  )}
                 </td>
                 <td>
                   {row.template === null ? (
@@ -748,7 +776,7 @@ function BankEditor({
                   )}
                 </td>
                 <td className="cg-table__actions">
-                  {row.template !== null && (
+                  {row.template !== null && canOperate && (
                     /*
                       🔴 `B-238` / `R-017` — ON AIR IS A REFUSAL, NOT A QUESTION.
 
@@ -857,11 +885,13 @@ function BankEditor({
         `footerSlot === null` — no host, e.g. a unit test rendering this section on its own —
         falls back to the body, so the section is never left with no way to apply.
       */}
-      {footerSlot === null ? (
-        <div style={styles.actions}>{actions}</div>
-      ) : (
-        createPortal(actions, footerSlot)
-      )}
+      {/* §2 I — a station-admin's commit, and nobody else's: absent, not greyed. */}
+      {admin &&
+        (footerSlot === null ? (
+          <div style={styles.actions}>{actions}</div>
+        ) : (
+          createPortal(actions, footerSlot)
+        ))}
       {confirmDialog}
     </>
   );

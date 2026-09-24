@@ -6,6 +6,7 @@ import { Icon } from '../../ui/Icon.js';
 import type { ModalMessage } from '../../ui/Modal.js';
 import { DialogField, RecordDialog } from '../../ui/RecordDialog.js';
 import { useConfirm } from '../../ui/useDialog.js';
+import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import { parseDelimiter, splitContent } from './fromFileContent.js';
 import {
   addDelimiter,
@@ -107,6 +108,11 @@ export function DelimitersSection({
   const [adding, setAdding] = useState(false);
   /** `SETTINGS-MATCH-02` §8d — the question asked before a delimiter is dropped. */
   const { confirm, confirmDialog } = useConfirm();
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 I — the list is `delimiters.set`, a `station-admin` route. For anyone
+    else it is the list IN FORCE, as values: no Add, no Remove, no Reset — absent, not greyed.
+  */
+  const admin = useHoldsStationAdmin();
 
   const say = (refusal: string | null): void => {
     report(refusal === null ? null : { role: 'refusal', text: refusal });
@@ -163,10 +169,12 @@ export function DelimitersSection({
         <h3>
           Delimiters <span className="cg-setup-count">{String(delimiters.length)}</span>
         </h3>
-        <Button variant="add" aria-label="Add delimiter" onClick={() => setAdding(true)}>
-          <Icon icon={Plus} size={STATION_SETUP_PX.btnIcon} />
-          Add delimiter
-        </Button>
+        {admin && (
+          <Button variant="add" aria-label="Add delimiter" onClick={() => setAdding(true)}>
+            <Icon icon={Plus} size={STATION_SETUP_PX.btnIcon} />
+            Add delimiter
+          </Button>
+        )}
       </div>
       <section className="cg-card" aria-label="Delimiters">
         <div className="cg-table-scroll">
@@ -182,9 +190,11 @@ export function DelimitersSection({
                   read as the name of a rule rather than of a value.
                 */}
                 <th scope="col">Split character</th>
-                <th scope="col" className="cg-table__actions">
-                  <span className="cg-visually-hidden">Actions</span>
-                </th>
+                {admin && (
+                  <th scope="col" className="cg-table__actions">
+                    <span className="cg-visually-hidden">Actions</span>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -208,19 +218,21 @@ export function DelimitersSection({
                     </bdi>
                     <span className="cg-delimiter-meaning">{splitMeaning(d.value)}</span>
                   </td>
-                  <td className="cg-table__actions">
-                    {/* §3 — QUIET at rest, red on intent. It was a permanently
-                        red-bordered bin on every row. */}
-                    <Button
-                      variant="quiet"
-                      className="cg-list-remove"
-                      aria-label={`Remove delimiter ${d.label}`}
-                      title="Remove this delimiter — asks first"
-                      onClick={() => void removeOne(d.id, d.label)}
-                    >
-                      <Icon icon={Trash2} size={15} />
-                    </Button>
-                  </td>
+                  {admin && (
+                    <td className="cg-table__actions">
+                      {/* §3 — QUIET at rest, red on intent. It was a permanently
+                          red-bordered bin on every row. */}
+                      <Button
+                        variant="quiet"
+                        className="cg-list-remove"
+                        aria-label={`Remove delimiter ${d.label}`}
+                        title="Remove this delimiter — asks first"
+                        onClick={() => void removeOne(d.id, d.label)}
+                      >
+                        <Icon icon={Trash2} size={15} />
+                      </Button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -233,25 +245,27 @@ export function DelimitersSection({
         🔴 §3's argument for the reset being QUIET rather than `danger` is unchanged and is why
         it is a link here: it restores the SHIPPED set, loses no file and takes nothing off air.
       */}
-      <div className="cg-setup-list-bottom">
-        <p>Removing a delimiter does not change any field already using it.</p>
-        {/*
+      {admin && (
+        <div className="cg-setup-list-bottom">
+          <p>Removing a delimiter does not change any field already using it.</p>
+          {/*
           ⚠ A `ghost` with the reset's own class, NOT a raw `<button>`: every control in the
           renderer comes from the shared primitive (the lint rule enforces it, and the states
           come with it). `ghost`'s own warning — "neutral is not invisible" — is answered here
           rather than ignored: the UNDERLINE is the affordance, and the class adds a hover and
           a focus ring on top of it.
         */}
-        <Button
-          variant="ghost"
-          className="cg-setup-reset"
-          aria-label="Reset delimiters to defaults"
-          title="Puts the shipped delimiters back"
-          onClick={() => void resetDelimiters().then(say)}
-        >
-          Reset to defaults
-        </Button>
-      </div>
+          <Button
+            variant="ghost"
+            className="cg-setup-reset"
+            aria-label="Reset delimiters to defaults"
+            title="Puts the shipped delimiters back"
+            onClick={() => void resetDelimiters().then(say)}
+          >
+            Reset to defaults
+          </Button>
+        </div>
+      )}
 
       {adding && <AddDelimiterDialog onClose={() => setAdding(false)} onReport={say} />}
       {/* §8d — the question, portalled above this dialog like every other second-level one. */}

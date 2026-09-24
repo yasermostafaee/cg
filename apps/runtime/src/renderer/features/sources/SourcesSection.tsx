@@ -23,6 +23,7 @@ import { NumericInput } from '../../ui/NumericInput.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { Tag } from '../../ui/Tag.js';
+import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
 import {
   commitSourceCatalog,
   currentSourceAssignments,
@@ -135,6 +136,12 @@ export function SourcesSection({
   const [templates, setTemplates] = useState<readonly TemplateInfo[]>([]);
   /** `B-237` — the question asked before a catalogue entry is dropped or re-pointed. */
   const { confirm, confirmDialog } = useConfirm();
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 I — the catalogue AND the band are `sources.set-config`, a
+    `station-admin` route. For anyone else this pane is the catalogue and the band IN FORCE, as
+    values: no Add, no Edit, no Remove, no band fields and no Apply band — absent, not greyed.
+  */
+  const admin = useHoldsStationAdmin();
 
   // Pulled at OPEN, not subscribed: the catalogue is browser-local (B-085) and
   // the dialog is short-lived. It is read for ONE purpose — turning the
@@ -351,14 +358,16 @@ export function SourcesSection({
         <h3>
           Source catalogue <span className="cg-setup-count">{String(catalog.sources.length)}</span>
         </h3>
-        <Button
-          variant="add"
-          aria-label="Add live source"
-          onClick={() => setEditing({ source: null })}
-        >
-          <Icon icon={Plus} size={STATION_SETUP_PX.btnIcon} />
-          Add source
-        </Button>
+        {admin && (
+          <Button
+            variant="add"
+            aria-label="Add live source"
+            onClick={() => setEditing({ source: null })}
+          >
+            <Icon icon={Plus} size={STATION_SETUP_PX.btnIcon} />
+            Add source
+          </Button>
+        )}
       </div>
       <section className="cg-card cg-resource-list" aria-label="Catalogue">
         {catalog.sources.length === 0 ? (
@@ -407,27 +416,29 @@ export function SourcesSection({
                   <span>{describeAspect(source)}</span>
                 </div>
               </div>
-              <span className="cg-resource__actions">
-                {/* §3 — the two row actions are QUIET icons in a fixed column;
-                    only the destructive one reddens, and only on intent. */}
-                <Button
-                  variant="quiet"
-                  aria-label={`Edit ${source.name}`}
-                  title="Edit this source"
-                  onClick={() => setEditing({ source })}
-                >
-                  <Icon icon={Pencil} size={15} />
-                </Button>
-                <Button
-                  variant="quiet"
-                  className="cg-list-remove"
-                  aria-label={`Remove ${source.name}`}
-                  title="Remove this source"
-                  onClick={() => void removeSource(source, index)}
-                >
-                  <Icon icon={Trash2} size={15} />
-                </Button>
-              </span>
+              {admin && (
+                <span className="cg-resource__actions">
+                  {/* §3 — the two row actions are QUIET icons in a fixed column;
+                      only the destructive one reddens, and only on intent. */}
+                  <Button
+                    variant="quiet"
+                    aria-label={`Edit ${source.name}`}
+                    title="Edit this source"
+                    onClick={() => setEditing({ source })}
+                  >
+                    <Icon icon={Pencil} size={15} />
+                  </Button>
+                  <Button
+                    variant="quiet"
+                    className="cg-list-remove"
+                    aria-label={`Remove ${source.name}`}
+                    title="Remove this source"
+                    onClick={() => void removeSource(source, index)}
+                  >
+                    <Icon icon={Trash2} size={15} />
+                  </Button>
+                </span>
+              )}
             </div>
           ))
         )}
@@ -463,58 +474,63 @@ export function SourcesSection({
             saves as you go and this does not. The footer already says so in words; the tag
             says it where the control is.
           */}
-          <Tag className="cg-setup-card-tag">Apply separately</Tag>
+          {admin && <Tag className="cg-setup-card-tag">Apply separately</Tag>}
         </div>
         <div className="cg-card__body">
-          <p className="cg-setup-lede">
-            Reserve the layer range live inputs use, below the graphic templates.
-          </p>
+          {admin && (
+            <p className="cg-setup-lede">
+              Reserve the layer range live inputs use, below the graphic templates.
+            </p>
+          )}
           {/*
             `SETTINGS-MATCH-02` — the reference's `.band-fields`: two labelled fields with a
             range dash between them and the Apply at the row's end, capped so the pair reads
             as ONE range rather than as two unrelated numbers across an 806 px card.
           */}
-          <div className="cg-setup-band-fields">
-            {/*
+          {admin && (
+            <div className="cg-setup-band-fields">
+              {/*
               🔴 `SETTINGS-MATCH-02` §10.3/§10.5 — both are whole numbers, both are `ltr`, and
               Persian digits normalise before anything asks whether the character is a digit.
               ⚠ The band's OVERLAP refusal is untouched: the beds, the candidate bank and the
               playout system's reserved range are the bridge's to judge and it still does, on
               apply, naming both ranges. This only stops nonsense reaching that check.
             */}
-            <div className="cg-setup-field">
-              <span className="cg-setup-field__label">First layer</span>
-              <NumericInput
-                className="cg-field cg-field--mono"
-                dir="ltr"
-                allow="digits"
-                aria-label="Live source band start layer"
-                placeholder={String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}
-                value={bandStartText}
-                onValueChange={setBandStart}
-              />
+              <div className="cg-setup-field">
+                <span className="cg-setup-field__label">First layer</span>
+                <NumericInput
+                  className="cg-field cg-field--mono"
+                  dir="ltr"
+                  allow="digits"
+                  aria-label="Live source band start layer"
+                  placeholder={String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}
+                  value={bandStartText}
+                  onValueChange={setBandStart}
+                />
+              </div>
+              <span className="cg-setup-band-dash" aria-hidden="true">
+                —
+              </span>
+              <div className="cg-setup-field">
+                <span className="cg-setup-field__label">Last layer</span>
+                <NumericInput
+                  className="cg-field cg-field--mono"
+                  dir="ltr"
+                  allow="digits"
+                  aria-label="Live source band end layer"
+                  placeholder={String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)}
+                  value={bandEndText}
+                  onValueChange={setBandEnd}
+                />
+              </div>
+              <Button variant="primary" onClick={applyBand}>
+                Apply band
+              </Button>
             </div>
-            <span className="cg-setup-band-dash" aria-hidden="true">
-              —
-            </span>
-            <div className="cg-setup-field">
-              <span className="cg-setup-field__label">Last layer</span>
-              <NumericInput
-                className="cg-field cg-field--mono"
-                dir="ltr"
-                allow="digits"
-                aria-label="Live source band end layer"
-                placeholder={String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)}
-                value={bandEndText}
-                onValueChange={setBandEnd}
-              />
-            </div>
-            <Button variant="primary" onClick={applyBand}>
-              Apply band
-            </Button>
-          </div>
+          )}
           {/* What is IN FORCE right now, under the two draft fields — the reference's
-              `.band-summary`. Without it the fields show a draft that looks like a fact. */}
+              `.band-summary`. Without it the fields show a draft that looks like a fact.
+              `MULTI-CHANNEL-01` §2 I — for a principal who cannot apply a band, it is the band. */}
           <p className="cg-setup-band-summary">
             {band === undefined
               ? `Nothing is declared yet; ${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.start)}–${String(SUGGESTED_LIVE_SOURCE_LAYER_RANGE.end)} is the usual choice.`
@@ -523,12 +539,15 @@ export function SourcesSection({
         </div>
         {/* The rule an operator needs BEFORE typing two numbers — that the band must
             clear the candidate bank and the playout range — stays. The bridge names both
-            ranges on a clash, and that refusal is legible in the pinned region. */}
-        <p className="cg-card__note">
-          Placed below the template&rsquo;s own layer; must not overlap the candidate layer bank or
-          the playout system&rsquo;s range. The bridge validates it and names both ranges on a
-          clash.
-        </p>
+            ranges on a clash, and that refusal is legible in the pinned region.
+            `MULTI-CHANNEL-01` §2 I — a rule for TYPING, so it goes with the fields. */}
+        {admin && (
+          <p className="cg-card__note">
+            Placed below the template&rsquo;s own layer; must not overlap the candidate layer bank
+            or the playout system&rsquo;s range. The bridge validates it and names both ranges on a
+            clash.
+          </p>
+        )}
       </section>
 
       {/*

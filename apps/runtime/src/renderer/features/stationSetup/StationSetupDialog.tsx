@@ -401,9 +401,17 @@ function SetupField({
       ) : (
         children
       )}
-      {after}
-      {hint !== undefined && <p className="cg-setup-field__hint">{hint}</p>}
-      {error !== null && (
+      {/*
+        🔴 `MULTI-CHANNEL-01` §2 I — A VALUE IS ONLY A VALUE. What sits around a field is about
+        CHANGING it — the serve-host chips are buttons that type into it, the hint says what to
+        type, the error says what is wrong with what was typed — so none of it belongs beside a
+        value its reader cannot change.
+      */}
+      {readOnlyValue === undefined && after}
+      {readOnlyValue === undefined && hint !== undefined && (
+        <p className="cg-setup-field__hint">{hint}</p>
+      )}
+      {readOnlyValue === undefined && error !== null && (
         <p className="cg-setup-field__error" id={errorId} data-field-error="">
           {error}
         </p>
@@ -776,8 +784,13 @@ export function StationSetupDialog({
    * element it renders in, not a word of it. The `Notice`/`ModalMessage` pair that used to
    * carry them is `SetupNotice`'s `title` + `body`, both still strings (§9d).
    */
+  /*
+    `MULTI-CHANNEL-01` §2 I — the block is about APPLYING, so it is a station-admin's: for any
+    other principal there is no Apply to pause, and "you can prepare edits now" would be untrue.
+    The bridge's refusal condition is untouched — this is only who is told about it.
+  */
   const serversOnAirBlock: SetupNoticeSpec | null =
-    onAirCount > 0
+    holdsStationAdmin && onAirCount > 0
       ? {
           icon: Lock,
           title: 'Server changes are paused while on air',
@@ -1138,7 +1151,8 @@ export function StationSetupDialog({
             its own property rather than something it inherits by being a direct child.
           */}
           <span ref={setFooterSlot} className="cg-setup-foot-actions" data-station-footer-slot="" />
-          {active === 'servers' ? (
+          {/* `MULTI-CHANNEL-01` §2 I — Servers' commit is a station-admin's (`sectionSpecFor`). */}
+          {active === 'servers' && activeSpec.commits ? (
             <>
               {/*
                 🔴 `B-240` — REVERT, NOT CANCEL, AND ONLY WHEN THERE IS A DRAFT.
@@ -1343,7 +1357,8 @@ export function StationSetupDialog({
                     */}
                   <Tag className="cg-setup-card-tag">Optional</Tag>
                   <span className="cg-card__spacer" />
-                  {backupEnabled && (
+                  {/* `MULTI-CHANNEL-01` §2 I — adding or removing a server is a Servers commit. */}
+                  {holdsStationAdmin && backupEnabled && (
                     <Button aria-label="Remove backup" onClick={() => setBackupEnabled(false)}>
                       Remove backup
                     </Button>
@@ -1368,13 +1383,15 @@ export function StationSetupDialog({
                         Single-server operation (B-046: quiet by design).
                       </p>
                     </div>
-                    <Button
-                      variant="add"
-                      aria-label="Add backup"
-                      onClick={() => setAddingBackup(true)}
-                    >
-                      Add backup
-                    </Button>
+                    {holdsStationAdmin && (
+                      <Button
+                        variant="add"
+                        aria-label="Add backup"
+                        onClick={() => setAddingBackup(true)}
+                      >
+                        Add backup
+                      </Button>
+                    )}
                   </div>
                 )}
               </section>

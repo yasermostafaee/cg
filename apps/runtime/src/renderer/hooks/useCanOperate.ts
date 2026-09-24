@@ -130,9 +130,11 @@ export function useHoldsOperatorRole(): boolean {
 /**
  * 🔴 `C-038` — **MAY THIS PRINCIPAL CHANGE THE STATION'S CONFIGURATION?**
  *
- * The third rung, asked by the surfaces that reach the six `station-admin` routes —
- * `connections.set-config`, `fixedLayers.set-config`, `sources.set-config`,
- * `sources.set-assignments`, `delimiters.set` and `channelSettings.set`.
+ * The third rung, asked by the surfaces that reach the `station-admin` routes —
+ * `connections.set-config`, `fixedLayers.set-config`, `fixedLayers.set-banks`
+ * (`MULTI-CHANNEL-01`), `sources.set-config`, `sources.set-assignments`, `delimiters.set`,
+ * `channelSettings.set` and `station.take-off-air`. Every Station setup pane that commits reads
+ * it, and for anyone it answers `false` for shows its values as values (§2 I, `sectionSpecFor`).
  *
  * ⚠ **An OPERATOR answers `false` here, and that is the point.** Every other gate in this file
  * treats "operator" as the thing being protected; this one protects against an operator too.
