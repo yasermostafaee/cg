@@ -15,6 +15,7 @@ import type { UserConfig } from 'vite';
  */
 
 const saved = process.env.HOST;
+const savedBridgeConsole = process.env.CG_BRIDGE_CONSOLE;
 
 async function loadConfig(): Promise<UserConfig> {
   vi.resetModules();
@@ -24,11 +25,34 @@ async function loadConfig(): Promise<UserConfig> {
 
 beforeEach(() => {
   delete process.env.HOST;
+  delete process.env.CG_BRIDGE_CONSOLE;
 });
 
 afterEach(() => {
   if (saved === undefined) delete process.env.HOST;
   else process.env.HOST = saved;
+  if (savedBridgeConsole === undefined) delete process.env.CG_BRIDGE_CONSOLE;
+  else process.env.CG_BRIDGE_CONSOLE = savedBridgeConsole;
+});
+
+/**
+ * `DEV-STATION-01` — the bridge's own console routes are relayed ONLY when the dev station names
+ * its listener; a plain `pnpm --filter @cg/runtime dev` relays nothing, as before.
+ */
+describe('vite.config — the dev station relay', () => {
+  it('no relay by default', async () => {
+    const config = await loadConfig();
+    expect(config.server?.proxy).toBeUndefined();
+  });
+
+  it('CG_BRIDGE_CONSOLE relays /pgm/ and /__cg/ — and nothing else — to the named listener', async () => {
+    process.env.CG_BRIDGE_CONSOLE = 'http://127.0.0.1:5175';
+    const config = await loadConfig();
+    expect(config.server?.proxy).toEqual({
+      '/pgm/': 'http://127.0.0.1:5175',
+      '/__cg/': 'http://127.0.0.1:5175',
+    });
+  });
 });
 
 describe('vite.config — dev server bind (P-041)', () => {

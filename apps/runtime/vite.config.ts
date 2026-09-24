@@ -25,6 +25,21 @@ import { createBuildStamp } from '@cg/splash-kit/build-stamp';
 const { plugin: buildStampPlugin, stamp: buildStamp } = createBuildStamp(
   fileURLToPath(new URL('.', import.meta.url)),
 );
+
+/**
+ * `DEV-STATION-01` — the two routes only the BRIDGE's console listener answers, relayed when
+ * `pnpm dev:station` serves the console here in its place: `/pgm/<n>` (the PROGRAM monitor's
+ * picture, `C-016`) and `/__cg/health` (the identity the installed CG Control reads before it
+ * starts, so it refuses by name while the dev station runs). Absent unless the launcher names the
+ * listener in `CG_BRIDGE_CONSOLE` — and the launcher binds this server to 127.0.0.1, so the relay
+ * reaches no browser on another machine.
+ */
+const bridgeConsole = process.env.CG_BRIDGE_CONSOLE;
+const bridgeConsoleProxy =
+  bridgeConsole !== undefined && bridgeConsole !== ''
+    ? { proxy: { '/pgm/': bridgeConsole, '/__cg/': bridgeConsole } }
+    : {};
+
 export default defineConfig({
   plugins: [vanillaExtractPlugin(), react(), buildStampPlugin],
   define: {
@@ -52,6 +67,7 @@ export default defineConfig({
     // Override the port with PORT (e.g. PORT=80 for a bare http://<ip>/ URL).
     host: process.env.HOST ?? true,
     port: process.env.PORT !== undefined ? Number(process.env.PORT) : 5174,
+    ...bridgeConsoleProxy,
   },
   preview: {
     // Loopback by default, unchanged by P-041: `preview` serves the BUILT app, which is the
