@@ -45,6 +45,10 @@ IPC response enum (`skip`).
 
 ## 6. Verify
 
-- [ ] 6.1 Prettier; plain `pnpm gate`; `pnpm openspec validate --all --strict`
-- [ ] 6.2 The Linux `e2e` on the pushed commit — a COMPLETED, GREEN run whose `e2e` job RAN
-- [ ] 6.3 The installers on the pushed commit
+- [x] 6.1 Prettier; plain `pnpm gate` (the pre-push run: 93/93 tasks, 0 cached, control-bytes
+      clean, 88/88 specs valid); `pnpm openspec validate --all --strict`
+- [x] 6.2 The Linux `e2e` on `f979e29b` — completed, green, the `E2E` step RAN (Runtime 257 passed,
+      `CHECK-RERUN-01` among them at 11.3 s):
+      https://github.com/yasermostafaee/cg/actions/runs/35971191141 (job 107541132991)
+- [x] 6.3 The installers on `f979e29b` — completed, green, both jobs ran every step (19/19, smoke
+      11/11): https://github.com/yasermostafaee/cg/actions/runs/35971191078
