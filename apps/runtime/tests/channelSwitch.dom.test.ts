@@ -3,12 +3,13 @@ import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { defaultFixedLayerBank, type FixedLayerBank } from '@cg/shared-ipc';
+import { defaultFixedLayerBank, type FixedLayerBank, type LockState } from '@cg/shared-ipc';
 import { App } from '../src/renderer/App.js';
 import { createMockBridge } from '../src/platform/createRuntimeBridge.js';
 import { __resetChannelChoiceForTest } from '../src/renderer/features/channels/channelStore.js';
 import { __resetDraftsForTest } from '../src/renderer/features/inspector/draftStore.js';
 import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
+import { authStub, signedInStub } from './support/authStub.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 import { installMemoryStorage } from './support/localStorage.js';
 
@@ -363,6 +364,88 @@ describe('PANIC on a two-channel station (`MULTI-CHANNEL-01` §2 C)', () => {
     expect(silenceAll).toHaveBeenCalledTimes(1);
     expect(silenceAll.mock.calls[0]?.length, 'no argument — nothing narrows it').toBe(0);
     expect(silenceChannel).not.toHaveBeenCalled();
+  });
+});
+
+describe('a lock covering ONE of this console’s channels (`MULTI-CHANNEL-01` §2 F)', () => {
+  let lockHandlers: ((next: LockState) => void)[] = [];
+  const COVERING_CHANNEL_1: LockState = {
+    engaged: true,
+    channels: [1],
+    reason: 'operator',
+    engagedAt: new Date().toISOString(),
+  };
+
+  beforeEach(async () => {
+    await boot([1, 2]);
+    // A principal holding BOTH channels, and a lock engaged by someone holding channel 1 only.
+    (cg as unknown as { auth: unknown }).auth = authStub(signedInStub('نرگس کریمی', [1, 2]));
+    lockHandlers = [];
+    vi.spyOn(cg.lock, 'state').mockResolvedValue(COVERING_CHANNEL_1);
+    vi.spyOn(cg.lock, 'onStateChanged').mockImplementation((handler) => {
+      lockHandlers.push(handler);
+      return () => undefined;
+    });
+    await mount();
+  });
+
+  const lockCard = (channel: number): HTMLElement | null =>
+    document.querySelector(`[data-channel-lock="${String(channel)}"]`);
+
+  const clearAllButton = (): HTMLElement | null =>
+    document.querySelector('button[aria-label="Clear all rows holding a layer"]');
+
+  it('🔴 the covered channel’s view IS the lock card, and none of its verbs is on screen', () => {
+    expect(selectedTab(), 'the console opened on the covered channel').toBe('channel-1');
+    expect(lockCard(1), 'its view presents as locked').not.toBeNull();
+    expect(lockCard(1)?.textContent).toContain('Channel 1 locked');
+    // ABSENT, not greyed and not under a scrim: the workspace is not rendered at all.
+    expect(boundItems(), 'no row of the covered channel').toEqual([]);
+    expect(clearAllButton(), 'no bulk verb').toBeNull();
+    expect(inspector(), 'no Inspector').toBeNull();
+    // The console as a whole is NOT locked — the console's lock screen is not up.
+    expect(document.querySelector('[role="dialog"][aria-label="Lock screen"]')).toBeNull();
+    // …and the strip says which channel is covered.
+    expect(document.getElementById('channel-1')?.textContent).toContain('LOCKED');
+    expect(document.getElementById('channel-2')?.textContent).not.toContain('LOCKED');
+  });
+
+  it('THE CONTROL — the uncovered channel stays live: its rows and its verbs are there', async () => {
+    await selectChannelTab(2);
+    expect(lockCard(2)).toBeNull();
+    expect(lockCard(1), 'and no card leaks across').toBeNull();
+    expect(boundItems()).toEqual(['item-ch2']);
+    expect(clearAllButton()).not.toBeNull();
+  });
+
+  it('the every-channel silence is withdrawn while the lock reaches this console — it returns on release', async () => {
+    expect(document.querySelector('[data-app-header]'), 'the header is up').not.toBeNull();
+    expect(document.querySelector('[data-every-channel-panic]')).toBeNull();
+
+    await act(async () => {
+      for (const handler of lockHandlers) handler({ engaged: false });
+      await flush();
+    });
+    expect(document.querySelector('[data-every-channel-panic]')).not.toBeNull();
+    expect(lockCard(1), 'and the channel’s view is live again').toBeNull();
+    expect(boundItems()).toEqual(['item-ch1']);
+  });
+
+  it('the card releases the lock with the PIN typed into it — Persian digits too (R-020)', async () => {
+    const release = vi.spyOn(cg.lock, 'release').mockResolvedValue({ ok: true });
+    const pin = lockCard(1)?.querySelector<HTMLInputElement>('input[aria-label="PIN"]') ?? null;
+    if (pin === null) throw new Error('no PIN field on the channel’s lock card');
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      setValue?.call(pin, '۱۲۳۴');
+      pin.dispatchEvent(new Event('input', { bubbles: true }));
+      await flush();
+    });
+    const unlock = [...(lockCard(1)?.querySelectorAll('button') ?? [])].find(
+      (b) => b.textContent === 'Unlock',
+    );
+    await click(unlock ?? null);
+    expect(release.mock.calls).toEqual([[{ pin: '1234' }]]);
   });
 });
 

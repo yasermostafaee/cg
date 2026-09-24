@@ -49,11 +49,10 @@ export function ChannelStrip(): JSX.Element {
     channel is. It is neither READ ONLY (the principal does hold it) nor plain (its intents are
     refused while the lock holds).
 
-    ⚠ UNREACHABLE while the station declares one channel — `#declaredChannels()` is the bank's
-    channel alone, so a principal holds at most one channel here and a lock covers all of a
-    console or none of it. Read HERE rather than in `useSelectedChannel`, so the one surface that
-    can say it does, and the verbs on such a channel stay offered: the bridge refuses them with
-    the lock sentence. Withdrawing them belongs with a second declared channel (`R-062`).
+    ⭐ `MULTI-CHANNEL-01` §2 F — REACHABLE NOW, and the deferred half has landed. With a bank per
+    declared channel a lock can cover one of this console's channels and not another; the covered
+    channel's VIEW is the lock card with every verb absent (`ChannelScope`), and `useCanOperate`
+    answers no for it. The strip keeps saying which channels are covered, from here.
   */
   /*
     🔴 `C-039` — **A CHANNEL THE PLAYOUT'S CATALOGUE NAMES IS LABELLED WITH THAT NAME.** `CHANNEL 2`

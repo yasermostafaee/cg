@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { Lock } from 'lucide-react';
 import { colors, cssVars, LOCK_PX } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
@@ -153,12 +153,7 @@ const styles = {
  * LAN, a dialog left open over the scrim, a stale render).
  */
 export function LockOverlay({ engaged, engagedAt, reason, onRelease }: Props): JSX.Element | null {
-  const [pin, setPin] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [wrongAttempts, setWrongAttempts] = useState(0);
-  const [elapsed, setElapsed] = useState<string>(formatElapsed(engagedAt));
   const cardRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   /*
     The trap arms with the lock and disarms with it — `enabled` IS `engaged`, so releasing
@@ -172,23 +167,66 @@ export function LockOverlay({ engaged, engagedAt, reason, onRelease }: Props): J
   */
   useFocusTrap(cardRef, engaged, { initialFocusSelector: 'input' });
 
-  useEffect(() => {
-    if (engaged) {
-      setPin('');
-      setError(null);
-      setWrongAttempts(0);
-    }
-  }, [engaged]);
+  if (!engaged) return null;
 
-  // Refresh the elapsed-time chip every second while engaged.
+  return (
+    <div style={styles.scrim} role="dialog" aria-label="Lock screen" aria-modal="true">
+      <LockCard
+        cardRef={cardRef}
+        {...(engagedAt !== undefined ? { engagedAt } : {})}
+        {...(reason !== undefined ? { reason } : {})}
+        onRelease={onRelease}
+        title="Console locked"
+        sub="Playout continues. Enter your PIN to use the console."
+        submitLabel="Unlock console"
+      />
+    </div>
+  );
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 F — **THE LOCK CARD, for the console and for one channel's view.**
+ *
+ * The body the lock screen always had — the icon, the title and sentence, the reason and the
+ * elapsed clock, the PIN field and the one release control — lifted out so that a channel a
+ * covered-set lock covers presents the SAME card inside its own view (`ChannelLockPanel`),
+ * rather than a second lock surface with its own PIN handling that could drift from this one.
+ *
+ * Only the WORDS differ between the two, and the frame: the console's card sits on the fixed
+ * scrim with the focus trap (`B-229`); a channel's sits in that channel's view, which holds no
+ * verb to trap focus away from — they are absent — and the other channels stay live.
+ */
+export function LockCard({
+  cardRef,
+  engagedAt,
+  reason,
+  onRelease,
+  title,
+  sub,
+  submitLabel,
+}: {
+  cardRef?: RefObject<HTMLDivElement>;
+  engagedAt?: string;
+  reason?: 'operator' | 'auto-idle' | 'system';
+  onRelease: Props['onRelease'];
+  title: string;
+  sub: string;
+  submitLabel: string;
+}): JSX.Element {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [wrongAttempts, setWrongAttempts] = useState(0);
+  const [elapsed, setElapsed] = useState<string>(formatElapsed(engagedAt));
+  const inputRef = useRef<HTMLInputElement>(null);
+  const pinId = useId();
+
+  // Refresh the elapsed-time chip every second while the card is up. The card is mounted only
+  // while a lock holds, so a fresh engagement is a fresh card — PIN, error and count reset.
   useEffect(() => {
-    if (!engaged) return;
     setElapsed(formatElapsed(engagedAt));
     const t = setInterval(() => setElapsed(formatElapsed(engagedAt)), 1000);
     return () => clearInterval(t);
-  }, [engaged, engagedAt]);
-
-  if (!engaged) return null;
+  }, [engagedAt]);
 
   const submit = async (): Promise<void> => {
     // R-020 — digits in the PIN normalize to Latin, and StatusBar normalizes
@@ -213,56 +251,54 @@ export function LockOverlay({ engaged, engagedAt, reason, onRelease }: Props): J
   };
 
   return (
-    <div style={styles.scrim} role="dialog" aria-label="Lock screen" aria-modal="true">
-      <div ref={cardRef} style={styles.card}>
-        <div style={styles.body}>
-          <div style={styles.iconBox}>
-            <Icon icon={Lock} size={LOCK_PX.iconGlyph} />
-          </div>
-          {/* The reference's own words (`design.md` §16.3). True here as there: the bridge
+    <div ref={cardRef} style={styles.card}>
+      <div style={styles.body}>
+        <div style={styles.iconBox}>
+          <Icon icon={Lock} size={LOCK_PX.iconGlyph} />
+        </div>
+        {/* The reference's own words (`design.md` §16.3). True here as there: the bridge
               refuses every console verb while locked, and air is untouched. */}
-          <h2 style={styles.title}>Console locked</h2>
-          <p style={styles.sub}>Playout continues. Enter your PIN to use the console.</p>
-          {/* Kept, and not drawn by the reference: an auto-idle lock and one an operator set
+        <h2 style={styles.title}>{title}</h2>
+        <p style={styles.sub}>{sub}</p>
+        {/* Kept, and not drawn by the reference: an auto-idle lock and one an operator set
               are different facts, and the clock says how long the console has been unattended. */}
-          {(reason !== undefined || elapsed !== '') && (
-            <div style={styles.metaRow}>
-              {reason !== undefined && <span style={styles.chip}>{reason.toUpperCase()}</span>}
-              {elapsed !== '' && (
-                <span style={styles.chip} aria-label="Locked for">
-                  {elapsed}
-                </span>
-              )}
-            </div>
-          )}
-          <label htmlFor="lock-pin" style={styles.label}>
-            PIN
-          </label>
-          <input
-            id="lock-pin"
-            ref={inputRef}
-            className="cg-field"
-            style={styles.input}
-            type="password"
-            inputMode="numeric"
-            autoComplete="off"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void submit();
-            }}
-            aria-label="PIN"
-          />
-          <div style={styles.error} role="status">
-            {error}
+        {(reason !== undefined || elapsed !== '') && (
+          <div style={styles.metaRow}>
+            {reason !== undefined && <span style={styles.chip}>{reason.toUpperCase()}</span>}
+            {elapsed !== '' && (
+              <span style={styles.chip} aria-label="Locked for">
+                {elapsed}
+              </span>
+            )}
           </div>
+        )}
+        <label htmlFor={pinId} style={styles.label}>
+          PIN
+        </label>
+        <input
+          id={pinId}
+          ref={inputRef}
+          className="cg-field"
+          style={styles.input}
+          type="password"
+          inputMode="numeric"
+          autoComplete="off"
+          value={pin}
+          onChange={(e) => setPin(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void submit();
+          }}
+          aria-label="PIN"
+        />
+        <div style={styles.error} role="status">
+          {error}
         </div>
-        {/* ONE control, and it is the release path. No ✕, no Cancel, nothing that closes. */}
-        <div style={styles.foot}>
-          <Button variant="primary" style={styles.submit} onClick={() => void submit()}>
-            Unlock console
-          </Button>
-        </div>
+      </div>
+      {/* ONE control, and it is the release path. No ✕, no Cancel, nothing that closes. */}
+      <div style={styles.foot}>
+        <Button variant="primary" style={styles.submit} onClick={() => void submit()}>
+          {submitLabel}
+        </Button>
       </div>
     </div>
   );

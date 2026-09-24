@@ -117,6 +117,15 @@ export function fillBridgeStub<T extends object>(stub: T): T {
     onChanged: () => () => undefined,
   };
   cg['setup'] ??= setupStub();
+  /*
+    `MULTI-CHANNEL-01` §2 F — `useCanOperate` now asks whether a covered-set lock covers the
+    selected channel, so every surface with an operator control reads the lock. RELEASED is the
+    quiet answer: a filled stub measures exactly what it measured before the question existed.
+  */
+  cg['lock'] ??= {
+    state: () => Promise.resolve({ engaged: false }),
+    onStateChanged: () => () => undefined,
+  };
   // `DESKTOP-APPS-01-D` j — no strays: the quiet answer, so a filled stub measures what it did.
   cg['strays'] ??= {
     list: () => Promise.resolve([]),

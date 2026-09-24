@@ -1,5 +1,6 @@
 import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
 import { useLink } from '../../hooks/useLink.js';
+import { useLockCoverage } from '../../hooks/useLock.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { BRIDGE_DOWN_REASON } from '../../ui/reachWording.js';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
@@ -41,7 +42,15 @@ export function EveryChannelPanic(): JSX.Element | null {
   const { multiChannel } = useSelectedChannel();
   const holdsOperator = useHoldsOperatorRole();
   const linkDown = useLink() === 'disconnected';
-  if (!multiChannel || !holdsOperator) return null;
+  /*
+    🔴 §2 F — a lock that reaches this console covers at least one of its channels, and the
+    every-channel silence reaches that channel's plates as well: the bridge refuses it whenever
+    its ledger holds a seat on a covered channel this principal holds (`lockRefuses`). So under
+    such a lock it is WITHDRAWN rather than offered and refused; each uncovered channel's own
+    PANIC stays in that channel's view. (`all` coverage is the console's lock screen anyway.)
+  */
+  const locked = useLockCoverage().kind !== 'none';
+  if (!multiChannel || !holdsOperator || locked) return null;
   return (
     <AsyncButton
       variant="caution-strong"

@@ -7239,6 +7239,19 @@ input[type='checkbox']:disabled:checked {
 }
 
 /*
+ * `MULTI-CHANNEL-01` §2 F — a channel a covered-set lock covers: its view IS the lock card, centred
+ * where the workspace was. The channels the lock does not cover keep their live views.
+ */
+.cg-channel-lock {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--r-space-4);
+}
+
+/*
  * `MULTI-CHANNEL-01` §2 C — the EVERY-CHANNEL panic beside the channel strip wears the same
  * chip, at the header's button height: the bar keeps one line, and the chip keeps its colours.
  */

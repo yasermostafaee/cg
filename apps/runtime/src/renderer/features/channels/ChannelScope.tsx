@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
+import { useLockCoverage } from '../../hooks/useLock.js';
 import { TabPanel } from '../../ui/Tabs.js';
+import { ChannelLockPanel } from '../lock/ChannelLockPanel.js';
 import { useSelectedChannel } from './useSelectedChannel.js';
 
 /**
@@ -46,10 +48,18 @@ import { useSelectedChannel } from './useSelectedChannel.js';
  */
 export function ChannelScope({ children }: { children: ReactNode }): JSX.Element {
   const { selected } = useSelectedChannel();
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 F — a channel a covered-set lock covers presents as LOCKED: its view
+    is the lock card, and the workspace — every verb in it — is not rendered at all (golden rule
+    13). `partial` is the only coverage that reaches here: `all` is the console's lock screen, as
+    it always was, and `none` leaves every channel live.
+  */
+  const coverage = useLockCoverage();
+  const lockedHere = coverage.kind === 'partial' && coverage.channels.includes(selected);
 
   return (
     <TabPanel activeId={String(selected)} idPrefix="channel">
-      {children}
+      {lockedHere ? <ChannelLockPanel channel={selected} /> : children}
     </TabPanel>
   );
 }

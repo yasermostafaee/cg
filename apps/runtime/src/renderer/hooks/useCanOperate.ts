@@ -1,6 +1,7 @@
 import { holdsPermissionClass } from '@cg/shared-ipc';
 import { useSelectedChannel } from '../features/channels/useSelectedChannel.js';
 import { useAuthSession } from './useAuthSession.js';
+import { useLockCoverage } from './useLock.js';
 
 /**
  * 🔴 `C-038` / `R-066` bullet 4 — **MAY THIS PRINCIPAL ACT ON THE CHANNEL THE CONSOLE IS
@@ -33,10 +34,19 @@ import { useAuthSession } from './useAuthSession.js';
  * `signed-out` and `expired` answer FALSE, though in practice the sign-in overlay is already
  * covering the screen. They are answered rather than left to the overlay because a surface
  * outside it must not be the thing that decides.
+ *
+ * 🔴 `MULTI-CHANNEL-01` §2 F — **AND A CHANNEL A COVERED-SET LOCK COVERS IS NOT ONE TO ACT ON.**
+ * The bridge refuses every intent on it while the lock holds (`lockRefuses`), so the answer here
+ * is no — the name says "may act on the selected channel", and the lock is part of that. Its view
+ * is the lock card (`ChannelScope`), so the controls inside it are absent already; this keeps the
+ * one answer true for any surface outside it. Only `partial` coverage reaches a signed-in console
+ * this way: `all` is the console's lock screen, and it is unchanged.
  */
 export function useCanOperate(): boolean {
   const auth = useAuthSession();
-  const { canOperateSelected } = useSelectedChannel();
+  const { canOperateSelected, selected } = useSelectedChannel();
+  const coverage = useLockCoverage();
+  const lockedHere = coverage.kind === 'partial' && coverage.channels.includes(selected);
 
   switch (auth.kind) {
     case 'off':
@@ -46,7 +56,9 @@ export function useCanOperate(): boolean {
     case 'expired':
       return false;
     case 'signed-in':
-      return holdsPermissionClass(auth.principal.roles, 'operator') && canOperateSelected;
+      return (
+        holdsPermissionClass(auth.principal.roles, 'operator') && canOperateSelected && !lockedHere
+      );
   }
 }
 
