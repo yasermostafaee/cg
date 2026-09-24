@@ -90,6 +90,38 @@ describe('§2 A — two declared banks', () => {
   });
 });
 
+/*
+  🔴 `R-062` gap 1's last question — WHICH CHANNEL DOES A LOAD THAT NAMES NONE MEAN? `stack.load`
+  carries no coordinate, and picking the first declared channel would put a graphic on a channel
+  the operator may not be looking at: the 2026-09-22 incident's shape, one channel along. On a
+  station declaring two channels it is refused and nothing is sent; a row's own load names its
+  coordinate and is unaffected (the take tests below).
+*/
+describe('§2 A — a load that names no channel', () => {
+  // A deployment's own dynamic ranges, disjoint from the standard bands (50–99).
+  const layerPolicy = { custom: [30, 39] as [number, number] };
+
+  it('is refused on a two-channel station and sends nothing — control: the same load on a one-channel station places there', async () => {
+    const r = await twoChannelRig({ bridge: { layerPolicy } });
+    const before = (await r.lines()).length;
+    expect(await r.handle.runtime.load('dyn-1', 'logo', {})).toEqual({
+      accepted: false,
+      errorCode: 'no-layer',
+    });
+    expect(writes((await r.lines()).slice(before))).toEqual([]);
+
+    // CONTROL — one declared channel: the same policy, the same load, placed and taken there.
+    const one = await twoChannelRig({ banks: [standardBank(2)], bridge: { layerPolicy } });
+    const mark = (await one.lines()).length;
+    expect(await one.handle.runtime.load('dyn-2', 'logo', {})).toEqual({ accepted: true });
+    expect((await one.handle.runtime.take('dyn-2')).accepted).toBe(true);
+    await waitUntil(
+      async () => (await one.lines()).slice(mark).some((l) => /^CG 2-3\d ADD\b/.test(l)),
+      'the dynamic row seated on the declared channel',
+    );
+  });
+});
+
 describe('§4 — a take and a clear on one channel touch nothing on the other', () => {
   it('a TAKE on channel 1 writes nothing to channel 2 — control: the same take on channel 2 writes there', async () => {
     const r = await twoChannelRig();
