@@ -9,6 +9,7 @@ import {
   StackOutChannel,
   StackRemoveAllChannel,
   StackSilenceAllLivePlatesChannel,
+  StackSilenceChannelLivePlatesChannel,
   StackSnapshotChannel,
   StackStopAllChannel,
   StackStopChannel,
@@ -335,6 +336,17 @@ describe('§3 — the bulk verbs, after `R-062` gap 1 closed (`MULTI-CHANNEL-01`
       channel.request.safeParse({ channel: 1 }).success,
       `${channel.name} cannot be scoped to a channel`,
     ).toBe(false);
+  });
+
+  it('🔴 PANIC FOR ONE CHANNEL is a NEW verb beside it, and it REQUIRES a channel', () => {
+    const channel = StackSilenceChannelLivePlatesChannel;
+    expect(channel.name).toBe('stack.silence-channel-live-plates');
+    expect(channel.name, 'never a parameter on the unscoped one').not.toBe(
+      StackSilenceAllLivePlatesChannel.name,
+    );
+    expect(channel.request.safeParse({ channel: 2 }).success, 'it takes a channel').toBe(true);
+    expect(channel.request.safeParse(undefined).success, 'and cannot be sent bare').toBe(false);
+    expect(channel.request.safeParse({}).success, 'nor without a channel').toBe(false);
   });
 
   it('THE POSITIVE CONTROL — a verb that DOES take an argument rejects `undefined`', () => {

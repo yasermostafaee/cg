@@ -45,6 +45,7 @@ import {
   StackSetPlateVolumeChannel,
   StackSetPlateVolumesChannel,
   StackSilenceAllLivePlatesChannel,
+  StackSilenceChannelLivePlatesChannel,
   StackSetPositionChannel,
   StackSetActiveLookChannel,
   StackSetPassTimingChannel,
@@ -1580,6 +1581,9 @@ export class WebSocketRuntime implements RuntimeBridge {
       this.#invoke(StackSetPlateVolumesChannel, req),
     // PANIC — no arguments: the bridge scopes it from its own LEDGER, not the browser's copy.
     silenceAllLivePlates: () => this.#invoke(StackSilenceAllLivePlatesChannel, undefined),
+    // `MULTI-CHANNEL-01` §2 C — PANIC for the channel on screen; the one above silences them all.
+    silenceChannelLivePlates: (req: ChannelRequest<typeof StackSilenceChannelLivePlatesChannel>) =>
+      this.#invoke(StackSilenceChannelLivePlatesChannel, req),
     // `MULTI-CHANNEL-01` §2 B — bare is every item; `{ channel }` is that channel's items.
     removeAll: (req?: ChannelRequest<typeof StackRemoveAllChannel>) =>
       this.#invoke(StackRemoveAllChannel, req),

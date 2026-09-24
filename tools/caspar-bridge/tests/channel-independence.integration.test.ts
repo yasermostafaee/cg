@@ -3,6 +3,9 @@ import {
   authzChannelRefusal,
   channelNotDeclaredRefusal,
   type FixedLayerBank,
+  type SourceAssignments,
+  type SourceCatalog,
+  type TemplateInfo,
 } from '@cg/shared-ipc';
 import { openClient, startAuthedBridge } from './support/auth-harness.js';
 import { track } from './support/harness.js';
@@ -176,5 +179,148 @@ describe('§2 B — over the socket, the named channel is what every gate judges
     // The bare verb reaches every row, channel 1's included — refused all-or-nothing.
     const bare = await client.ask(id(), 'stack.clear-all');
     expect(bare.error).toBe(authzChannelRefusal(1));
+  });
+});
+
+// ── §2 C — PANIC for one channel ───────────────────────────────────────────────────────────
+
+const SCENE = { width: 1920, height: 1080 };
+const CENTRED = { anchor: 'center' as const, offset: { x: 0, y: 0 } };
+const RECT = { x: 0, y: 100, width: 400, height: 225 };
+const plate = (
+  elementId: string,
+  sourceId: string,
+  x: number,
+): { elementId: string; sourceId: string; rect: typeof RECT; dynamic: false } => ({
+  elementId,
+  sourceId,
+  rect: { ...RECT, x },
+  dynamic: false,
+});
+
+/** A graphics BED with two plates — it loads onto a bed row, and its plates onto the plate band. */
+const TWO_BOX: TemplateInfo = {
+  templateId: 'two-box',
+  templateType: 'two-box',
+  fields: [],
+  liveSources: {
+    resolution: SCENE,
+    defaultPosition: CENTRED,
+    sources: [plate('el-1', 'guest-1', 100), plate('el-2', 'guest-2', 600)],
+  },
+};
+
+/** Two routed inputs, read FROM channels 3 and 4 of the fake — never a write target. */
+const CATALOG: SourceCatalog = {
+  sources: [
+    { id: 'src-a', name: 'Studio A', format: '1080i5000', producer: { kind: 'route', channel: 3 } },
+    { id: 'src-b', name: 'Baku', format: '1080i5000', producer: { kind: 'route', channel: 4 } },
+  ],
+  layerRange: { start: 60, end: 79 },
+};
+
+const ASSIGNMENTS: SourceAssignments = {
+  assignments: [
+    { templateId: 'two-box', plateId: 'guest-1', sourceId: 'src-a' },
+    { templateId: 'two-box', plateId: 'guest-2', sourceId: 'src-b' },
+  ],
+};
+
+/** A plate-bearing bed on air on each channel's row 59, both plates raised, both audible. */
+async function audibleOnBoth(r: TwoChannelRig): Promise<void> {
+  const rt = r.handle.runtime;
+  rt.templateImport(TWO_BOX, '<!doctype html><html><body>bed</body></html>');
+  for (const channel of [1, 2]) {
+    const itemId = `bed-${String(channel)}`;
+    expect(await rt.loadFixed({ channel, layer: 59 }, itemId, 'two-box', {})).toEqual({
+      accepted: true,
+    });
+    expect((await rt.take(itemId)).accepted).toBe(true);
+    await waitUntil(
+      () => (rt.liveLayers().get(itemId) ?? []).length === 2,
+      `channel ${String(channel)}'s plates seated`,
+    );
+    await rt.setLivePlateVolumes(itemId, { 'guest-1': 1, 'guest-2': 1 });
+  }
+  for (const channel of [1, 2]) {
+    expect(volumesOn(r, channel), `channel ${String(channel)} is audible`).toEqual([1, 1]);
+  }
+}
+
+/** The fake's own mixer volume on every plate the ledger seated on `channel`. */
+function volumesOn(r: TwoChannelRig, channel: number): (number | undefined)[] {
+  const records = r.handle.runtime.liveLayers().get(`bed-${String(channel)}`) ?? [];
+  return records.map((rec) => r.mock.layerState(rec.slot)?.volume);
+}
+
+async function panicRig(): Promise<TwoChannelRig> {
+  return twoChannelRig({
+    channels: 4,
+    bridge: { sourceCatalog: CATALOG, sourceAssignments: ASSIGNMENTS },
+  });
+}
+
+describe('§2 C — PANIC for one channel', () => {
+  it('silences channel 1’s plates and writes NOTHING to channel 2 — control: channel 2’s own PANIC silences it', async () => {
+    const r = await panicRig();
+    await audibleOnBoth(r);
+    const before = (await r.lines()).length;
+
+    const verdict = await r.handle.runtime.silenceChannelLivePlates(1);
+    expect(verdict).toMatchObject({ ok: true, silenced: 2, recorded: 2 });
+    expect(verdict.rows).toEqual([{ itemId: 'bed-1', plates: 2 }]);
+    expect(volumesOn(r, 1), 'channel 1 is silent').toEqual([0, 0]);
+    expect(volumesOn(r, 2), 'channel 2 is untouched').toEqual([1, 1]);
+    const after = (await r.lines()).slice(before);
+    expect(writes(addressing(after, 2))).toEqual([]);
+    // Golden rule 10, measured: the only thing sent is VOLUME 0.
+    expect(writes(after).every((l) => / VOLUME 0$/.test(l))).toBe(true);
+
+    const verdict2 = await r.handle.runtime.silenceChannelLivePlates(2);
+    expect(verdict2.rows).toEqual([{ itemId: 'bed-2', plates: 2 }]);
+    expect(volumesOn(r, 2), 'channel 2 is silent').toEqual([0, 0]);
+  });
+
+  it('the EVERY-CHANNEL silence still reaches both, from the same ledger (A16, unscoped)', async () => {
+    const r = await panicRig();
+    await audibleOnBoth(r);
+    const verdict = await r.handle.runtime.silenceAllLivePlates();
+    expect(verdict.rows.map((x) => x.itemId).sort()).toEqual(['bed-1', 'bed-2']);
+    expect(verdict.silenced).toBe(4);
+    expect(volumesOn(r, 1)).toEqual([0, 0]);
+    expect(volumesOn(r, 2)).toEqual([0, 0]);
+  });
+
+  it('over the socket it names its channel: the fence refuses an undeclared one — control: the declared one silences', async () => {
+    const r = await panicRig();
+    await audibleOnBoth(r);
+    const client = await openClient(r.handle);
+    const refused = await client.ask(id(), 'stack.silence-channel-live-plates', { channel: 3 });
+    expect(refused.error).toBe(channelNotDeclaredRefusal(3));
+    expect(volumesOn(r, 1)).toEqual([1, 1]);
+    const ok = await client.ask(id(), 'stack.silence-channel-live-plates', { channel: 1 });
+    expect(ok.error).toBeUndefined();
+    expect(ok.payload).toMatchObject({ ok: true, silenced: 2 });
+    expect(volumesOn(r, 2), 'the other channel is still audible').toEqual([1, 1]);
+  });
+});
+
+describe('§2 C — auth ON, the per-channel PANIC is scoped to the principal’s channel', () => {
+  it('a principal holding channel 2 may silence channel 2 — control: channel 1 is refused for permission; the unscoped PANIC is not channel-checked', async () => {
+    const banks: FixedLayerBank[] = [standardBank(1), standardBank(2)];
+    const { handle, playout } = await startAuthedBridge({ fixedLayers: banks });
+    track(playout, (p) => p.stop());
+    track(handle, (h) => h.close());
+    const client = await openClient(handle);
+    const issued = await playout.issueToken({ user: 'channelTwo' });
+    expect((await client.authenticate(id(), issued.token)).error).toBeUndefined();
+
+    const theirs = await client.ask(id(), 'stack.silence-channel-live-plates', { channel: 1 });
+    expect(theirs.error).toBe(authzChannelRefusal(1));
+    const mine = await client.ask(id(), 'stack.silence-channel-live-plates', { channel: 2 });
+    expect(mine.error, 'channel 2 is held, so the gate passes').toBeUndefined();
+    // A16: the every-channel PANIC takes no channel and is judged by the role alone.
+    const all = await client.ask(id(), 'stack.silence-all-live-plates');
+    expect(all.error).toBeUndefined();
   });
 });

@@ -188,6 +188,21 @@ import {
 type SetConfigResult = ChannelResponse<typeof ConnectionsSetConfigChannel>;
 
 /**
+ * PANIC's report — `silenceAllLivePlates` and (`MULTI-CHANNEL-01` §2 C) its per-channel sibling
+ * `silenceChannelLivePlates` return this one shape, from one loop.
+ */
+interface PanicReport {
+  ok: boolean;
+  /** Plates whose `MIXER … VOLUME 0` LANDED on the wire — what actually left air. */
+  silenced: number;
+  /** Plates whose intent was set to `0`, including the held (already silent) ones. */
+  recorded: number;
+  /** WHICH rows it addressed, and how many plates each owns. */
+  rows: { itemId: string; plates: number }[];
+  failed: { itemId: string; plateId: string; reason: string }[];
+}
+
+/**
  * R-021 stage 4 (task 3.1) — where a restored item is put, or WHY it is not.
  *
  * A bare `CommandSlot | null` could not carry the second answer, and B-108's rule
@@ -8415,21 +8430,36 @@ export class CasparRuntime {
    * turns on `recorded`, not on `silenced`: a ledger of entirely HELD plates is a complete
    * success with zero sends.
    */
-  async silenceAllLivePlates(): Promise<{
-    ok: boolean;
-    /** Plates whose `MIXER … VOLUME 0` LANDED on the wire — what actually left air. */
-    silenced: number;
-    /** Plates whose intent was set to `0`, including the held (already silent) ones. */
-    recorded: number;
-    /** WHICH rows it addressed, and how many plates each owns. */
-    rows: { itemId: string; plates: number }[];
-    failed: { itemId: string; plateId: string; reason: string }[];
-  }> {
+  async silenceAllLivePlates(): Promise<PanicReport> {
+    // 🔴 A16 — UNSCOPED: every row the ledger holds a seat for, on every channel.
+    return this.#silenceLedger(() => true);
+  }
+
+  /**
+   * 🔴 `MULTI-CHANNEL-01` §2 C — **PANIC FOR ONE CHANNEL**: every plate the ledger holds a seat for
+   * on the rows wholly on `channel` ({@link #withinChannel}), and nothing on any other channel.
+   *
+   * A NEW verb beside {@link silenceAllLivePlates}, never a parameter on it (`R-062`): the owner's
+   * 2026-09-23 decision is that the operator's PANIC silences the channel on screen and a
+   * separate, explicit control silences every channel. The same loop, the same writer, the same
+   * ledger scope and the same report — only the SCOPE differs, so the two cannot come to disagree
+   * about what a silence is (`B-122` and golden rule 10 hold here exactly as they do there).
+   */
+  async silenceChannelLivePlates(channel: number): Promise<PanicReport> {
+    return this.#silenceLedger((itemId) => this.#withinChannel(itemId, channel));
+  }
+
+  /**
+   * THE ONE PANIC LOOP, for both scopes. Everything the note on {@link silenceAllLivePlates}
+   * argues — the ledger scope, the directional writer, intent-before-wire, the report — lives
+   * here once; the two verbs supply WHICH ledger rows are in scope and nothing else.
+   */
+  async #silenceLedger(inScope: (itemId: string) => boolean): Promise<PanicReport> {
     // A SNAPSHOT of the ledger's keys first: `setLivePlateVolume` calls `registerLiveLayers`,
     // which mutates the map we would otherwise be iterating.
-    const entries = [...this.#liveLayers.entries()].map(
-      ([itemId, records]) => [itemId, [...records]] as const,
-    );
+    const entries = [...this.#liveLayers.entries()]
+      .filter(([itemId]) => inScope(itemId))
+      .map(([itemId, records]) => [itemId, [...records]] as const);
     const rows: { itemId: string; plates: number }[] = [];
     const failed: { itemId: string; plateId: string; reason: string }[] = [];
     let silenced = 0;

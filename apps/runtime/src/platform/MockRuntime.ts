@@ -146,6 +146,15 @@ function coordinateKey(channel: number, layer: number): string {
   return `${String(channel)}:${String(layer)}`;
 }
 
+/** PANIC's report, the bridge's shape — both PANIC verbs return it. */
+interface MockPanicReport {
+  ok: boolean;
+  silenced: number;
+  recorded: number;
+  rows: { itemId: string; plates: number }[];
+  failed: { itemId: string; plateId: string; reason: string }[];
+}
+
 /** R-034 parity — the same shipped list the bridge starts a station with. */
 const DEFAULT_DELIMITERS: readonly DelimiterOption[] = [
   { id: 'newline', label: 'new line', value: '\\n' },
@@ -886,15 +895,24 @@ export class MockRuntime {
    * here — the mock's seed carries a HELD row, but modelling a send it cannot make would be a
    * fiction, and the wire behaviour is integration-tested bridge-side where it can be observed.
    */
-  silenceAllLivePlates(): {
-    ok: boolean;
-    silenced: number;
-    recorded: number;
-    rows: { itemId: string; plates: number }[];
-    failed: { itemId: string; plateId: string; reason: string }[];
-  } {
+  silenceAllLivePlates(): MockPanicReport {
+    return this.#silenceLedger(undefined);
+  }
+
+  /**
+   * `MULTI-CHANNEL-01` §2 C parity — PANIC for ONE channel: the same mock ledger, the rows wholly
+   * on `channel` (the bridge's `#withinChannel`). A new verb beside {@link silenceAllLivePlates},
+   * never a parameter on it.
+   */
+  silenceChannelLivePlates(channel: number): MockPanicReport {
+    return this.#silenceLedger(channel);
+  }
+
+  /** The one PANIC loop for both scopes; `undefined` is every channel (A16). */
+  #silenceLedger(channel: number | undefined): MockPanicReport {
     const byItem = new Map<string, Set<string>>();
     for (const layer of this.liveLayersState()) {
+      if (!this.#withinChannel(layer.itemId, channel)) continue;
       const plates = byItem.get(layer.itemId) ?? new Set<string>();
       plates.add(layer.sourceId);
       byItem.set(layer.itemId, plates);

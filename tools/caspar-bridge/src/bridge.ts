@@ -90,6 +90,7 @@ import {
   StackSetPlateVolumeChannel,
   StackSetPlateVolumesChannel,
   StackSilenceAllLivePlatesChannel,
+  StackSilenceChannelLivePlatesChannel,
   StackSetPositionChannel,
   StackSwapLiveSourceChannel,
   StackSnapshotChannel,
@@ -2895,6 +2896,14 @@ export function buildRoutes(
     // scope is not the caller's to choose (B-122 — a browser-resolved scope is an emergency
     // control gated on bookkeeping that may not have arrived).
     route(StackSilenceAllLivePlatesChannel, 'operator', 'operator', () => b.silenceAllLivePlates()),
+    /*
+      🔴 `MULTI-CHANNEL-01` §2 C — PANIC FOR ONE CHANNEL: a NEW verb beside the one above, never a
+      parameter on it (`R-062`). It NAMES its channel, so it is scoped like every verb that does:
+      the station fence, the principal's grant and a lock covering that channel all judge it.
+    */
+    route(StackSilenceChannelLivePlatesChannel, 'operator', 'operator', (r: { channel: number }) =>
+      b.silenceChannelLivePlates(r.channel),
+    ),
     // R-010 — the sanctioned clear-everything path (unblocks set-config).
     /*
       🔴 `MULTI-CHANNEL-01` §2 B — the four housekeeping verbs take an OPTIONAL channel. Bare, every

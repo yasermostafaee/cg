@@ -210,6 +210,9 @@ export function createMockBridge(): RuntimeBridge {
       setPlateVolumes: (req) => Promise.resolve(mock.setPlateVolumes(req.itemId, req.volumes)),
       // PANIC — no arguments: the scope is the LEDGER's, not the caller's.
       silenceAllLivePlates: () => Promise.resolve(mock.silenceAllLivePlates()),
+      // `MULTI-CHANNEL-01` §2 C — PANIC for one channel, from the same mock ledger.
+      silenceChannelLivePlates: (req) =>
+        Promise.resolve(mock.silenceChannelLivePlates(req.channel)),
       // R-048 — the per-plate live-source swap.
       swapLiveSource: (req) =>
         // Session BM: `lookId` absent is R-048 (every look); present is one look’s binding.

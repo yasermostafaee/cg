@@ -59,6 +59,7 @@ import type {
   StackSetPlateVolumeChannel,
   StackSetPlateVolumesChannel,
   StackSilenceAllLivePlatesChannel,
+  StackSilenceChannelLivePlatesChannel,
   StackSetPositionChannel,
   StackSetActiveLookChannel,
   StackSetPassTimingChannel,
@@ -358,6 +359,15 @@ export interface RuntimeBridge {
      * layer that already exists.
      */
     silenceAllLivePlates(): Promise<ChannelResponse<typeof StackSilenceAllLivePlatesChannel>>;
+    /**
+     * 🔴 `MULTI-CHANNEL-01` §2 C — **PANIC FOR ONE CHANNEL**: every live plate the bridge holds a
+     * seat for on `channel`, and nothing on any other. A NEW verb beside
+     * {@link silenceAllLivePlates} (which stays unscoped, A16), scoped like every verb that names
+     * a channel. The PANIC control on a channel's view calls THIS, for that channel.
+     */
+    silenceChannelLivePlates(
+      req: ChannelRequest<typeof StackSilenceChannelLivePlatesChannel>,
+    ): Promise<ChannelResponse<typeof StackSilenceChannelLivePlatesChannel>>;
     /**
      * OUT + REMOVE every stack item (clears air, empties the list).
      *

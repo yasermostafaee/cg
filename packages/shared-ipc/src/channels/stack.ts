@@ -434,6 +434,31 @@ export const StackSilenceAllLivePlatesChannel = defineChannel(
   }),
 );
 
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 C — **PANIC FOR ONE CHANNEL: silence every live plate the bridge holds
+ * a seat for ON THAT CHANNEL.** A NEW verb beside {@link StackSilenceAllLivePlatesChannel}, never a
+ * parameter on it — `R-062`, verbatim: *"if the owner wants a per-channel silence it is a NEW verb
+ * beside PANIC, never a parameter on it."*
+ *
+ * The owner's decision (2026-09-23, A16's follow-up): when the operator presses PANIC, only the
+ * channel on screen goes silent; a separate, explicit control silences every channel. This is the
+ * first; `stack.silence-all-live-plates` — unchanged, unscoped, `z.void()` — is the second.
+ *
+ * Everything else is PANIC's own rule, inherited rather than restated: the scope is the LEDGER,
+ * and status is never asked (`B-122`); it only ever LOWERS a volume, so golden rule 10 is intact;
+ * a HELD plate's intent is recorded and nothing is sent for it. The one difference is the scope:
+ * the rows wholly on `channel`.
+ *
+ * `operator` class and CHANNEL-SCOPED like any other verb that names one: the station must
+ * declare the channel (the fence), the principal must hold it (`C-038`), and a lock covering it
+ * refuses the press (`B-257`).
+ */
+export const StackSilenceChannelLivePlatesChannel = defineChannel(
+  'stack.silence-channel-live-plates',
+  z.object({ channel: z.number().int().positive() }),
+  StackSilenceAllLivePlatesChannel.response,
+);
+
 export const StackSetPlateVolumesChannel = defineChannel(
   'stack.set-plate-volumes',
   z.object({

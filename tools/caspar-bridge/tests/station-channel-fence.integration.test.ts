@@ -605,7 +605,7 @@ describe('the census: every route that names a channel, classified', () => {
       { fixedBank: BANK },
     );
 
-  it('thirteen routes carry a channel key; ten carry it at the top level, where the fence reads', () => {
+  it('fourteen routes carry a channel key; eleven carry it at the top level, where the fence reads', () => {
     const table = buildRoutes(runtime());
     expect(table.size, 'the census is looking at the real table').toBeGreaterThan(50);
     const found = Object.fromEntries(
@@ -637,6 +637,8 @@ describe('the census: every route that names a channel, classified', () => {
       'stack.remove-all': ['req.channel'],
       // Fenced per item inside the runtime, as a `not-declared` SKIP.
       'stack.restore': ['req.items[].slot.channel'],
+      // `MULTI-CHANNEL-01` §2 C — PANIC for one channel names it, so the fence judges it.
+      'stack.silence-channel-live-plates': ['req.channel'],
       'stack.snapshot': ['req.channel'],
       'stack.stop-all': ['req.channel'],
     });
@@ -665,6 +667,8 @@ describe('the census: every route that names a channel, classified', () => {
       // `MULTI-CHANNEL-01` §2 B — the housekeeping verbs, when they name a channel.
       'stack.clear-all',
       'stack.remove-all',
+      // `MULTI-CHANNEL-01` §2 C — PANIC for one channel.
+      'stack.silence-channel-live-plates',
       'stack.snapshot',
       'stack.stop-all',
     ]);

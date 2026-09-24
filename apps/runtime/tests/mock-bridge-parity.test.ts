@@ -166,6 +166,8 @@ const BRIDGE_SURFACE: {
       // that reason, rather than from `isOnAir` (which would teach the UI a model the bridge
       // does not have — the B-070 / B-072 class).
       'silenceAllLivePlates',
+      // `MULTI-CHANNEL-01` §2 C — PANIC for one channel, a new verb beside the one above.
+      'silenceChannelLivePlates',
       'removeAll',
       'clearAll',
       'stopAll',
