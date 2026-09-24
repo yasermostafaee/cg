@@ -10,6 +10,7 @@ import {
   bridgeArgs,
   devStateDir,
   installedStateDir,
+  isInside,
   setAddressArgs,
   stationPaths,
 } from '../src/station-plan.mjs';
@@ -155,6 +156,10 @@ describe('isolation — the dev station keeps to its own state folder', () => {
       playout: { address: PLAYOUT },
     });
     expect(said).toContain(dev);
-    expect(said).not.toContain(installed);
+    // "Under the installed folder" is the folder AND a separator: on Linux the two are siblings,
+    // `…/CG Control` and `…/CG Control Dev`, so the bare string is a prefix of every dev path
+    // (measured: CI run 35975399174 failed on exactly that, with nothing written there).
+    expect(said).not.toContain(installed + path.sep);
+    expect(isInside(dev, installed, process.platform)).toBe(false);
   });
 });

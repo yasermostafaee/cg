@@ -63,8 +63,9 @@ export function installedStateDir(env, platform, home) {
       'CG Control',
     );
   }
-  if (platform === 'darwin') return path.join(home, 'Library', 'Application Support', 'CG Control');
-  return path.join(env.XDG_DATA_HOME ?? path.join(home, '.local', 'share'), 'CG Control');
+  const p = path.posix;
+  if (platform === 'darwin') return p.join(home, 'Library', 'Application Support', 'CG Control');
+  return p.join(env.XDG_DATA_HOME ?? p.join(home, '.local', 'share'), 'CG Control');
 }
 
 /**
@@ -81,7 +82,8 @@ export function devStateDir(env, platform, home) {
       'CG Control Dev',
     );
   }
-  return path.join(env.XDG_DATA_HOME ?? path.join(home, '.local', 'share'), 'CG Control Dev');
+  const p = path.posix;
+  return p.join(env.XDG_DATA_HOME ?? p.join(home, '.local', 'share'), 'CG Control Dev');
 }
 
 /** Is `child` the folder `parent` or inside it? Case-insensitively on Windows. */

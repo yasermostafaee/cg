@@ -82,6 +82,19 @@ describe('isolation — its own state folder, every path named', () => {
     );
   });
 
+  it('elsewhere the two are SIBLINGS, one name a prefix of the other — and still neither holds the other', () => {
+    const env = { XDG_DATA_HOME: '/h/.local/share' };
+    const dev = devStateDir(env, 'linux', '/h');
+    const installed = installedStateDir(env, 'linux', '/h');
+    expect([dev, installed]).toEqual([
+      '/h/.local/share/CG Control Dev',
+      '/h/.local/share/CG Control',
+    ]);
+    expect(dev.startsWith(installed)).toBe(true); // the trap CI run 35975399174 met
+    expect(isInside(dev, installed, 'linux')).toBe(false);
+    expect(isInside(`${installed}/.cg-runtime`, installed, 'linux')).toBe(true);
+  });
+
   it('EVERY path flag the bridge CLI reads is passed, each inside the dev state folder', () => {
     // Read from the bridge's own CLI, so a path flag added there later fails HERE until it is named.
     const cli = fs.readFileSync(BRIDGE_CLI, 'utf8');
