@@ -453,6 +453,40 @@ describe('a lock covering ONE of this console’s channels (`MULTI-CHANNEL-01` �
   });
 });
 
+describe('the playout tab, split by channel (`MULTI-CHANNEL-01` §2 G)', () => {
+  beforeEach(async () => {
+    await boot([1, 2]);
+    // One reserved playout layer per channel, as the bridge publishes them for a two-bank station.
+    vi.spyOn(cg.playoutLayers, 'state').mockResolvedValue([
+      { channel: 1, layer: 10, observed: { kind: 'empty' } },
+      { channel: 2, layer: 20, observed: { kind: 'empty' } },
+    ]);
+    await mount();
+  });
+
+  async function openPlayoutTab(): Promise<void> {
+    const tab = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[role="tablist"][aria-label="Layer surfaces"] [role="tab"]',
+      ),
+    ].find((t) => t.textContent?.includes('Station layers') === true);
+    await click(tab ?? null);
+  }
+
+  const playoutRows = (): string[] =>
+    [...document.querySelectorAll('[data-playout-layer]')].map(
+      (r) => r.getAttribute('data-playout-layer') ?? '',
+    );
+
+  it('🔴 each channel’s playout rows are under that channel, and only there — control: the other channel', async () => {
+    await openPlayoutTab();
+    expect(playoutRows(), 'channel 1’s reserved layer, not channel 2’s').toEqual(['10']);
+    await selectChannelTab(2);
+    await openPlayoutTab();
+    expect(playoutRows()).toEqual(['20']);
+  });
+});
+
 describe('the first declared channel is the lowest DECLARED, not channel 1', () => {
   it('a station on channels 2 and 3 opens on 2', async () => {
     await boot([2, 3], false);

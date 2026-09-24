@@ -895,7 +895,23 @@ export function LayersPanel({
     }
   }, [confirm, items.length, bulkScope]);
 
-  const playoutOccupied = hasStationLayerOccupant(playout);
+  /*
+    🔴 `MULTI-CHANNEL-01` §2 G — THE PLAYOUT TAB IS SPLIT BY CHANNEL. `CHANNEL-AUTHORITY-01` fixed
+    its hard-coded channel 1 and noted it "isn't split by channel, which will matter once a
+    station declares a second channel". Now it does: each channel's playout rows, and the foreign
+    content on its layers, are under THAT channel — the tab, its dot and its lists all read the
+    channel on screen, so the dot's own note below ("scoped to the channel whose tab is open")
+    is true. With one declared channel nothing is filtered.
+  */
+  const playoutOnScreen = useMemo(
+    () => (scopeChannel === null ? playout : playout.filter((l) => l.channel === scopeChannel)),
+    [playout, scopeChannel],
+  );
+  const orphansOnScreen = useMemo(
+    () => (scopeChannel === null ? orphans : orphans.filter((o) => o.channel === scopeChannel)),
+    [orphans, scopeChannel],
+  );
+  const playoutOccupied = hasStationLayerOccupant(playoutOnScreen);
   /*
     B-145 (2.8) — the live rows, resolved ONCE here and handed to the tab.
 
@@ -1934,7 +1950,7 @@ export function LayersPanel({
             panicChannel={scopeChannel}
           />
         ) : (
-          <StationLayersPanel layers={playout} orphans={orphans} />
+          <StationLayersPanel layers={playoutOnScreen} orphans={orphansOnScreen} />
         )}
       </TabPanel>
       {confirmDialog}
