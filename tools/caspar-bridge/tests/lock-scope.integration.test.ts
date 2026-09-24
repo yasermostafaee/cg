@@ -27,6 +27,7 @@ import {
 } from './support/auth-harness.js';
 import type { FakePlayout, IssueTokenOptions } from './support/fake-playout.js';
 import { awaitChannelModeRead, HEALTH_MS } from './support/harness.js';
+import { standardBank } from './support/two-channel-rig.js';
 
 /**
  * 🔴 `B-257` / `B-258` / `B-259` / `B-260` — **THE LOCK COVERS THE ENGAGER'S CHANNELS, AND THE
@@ -326,6 +327,48 @@ describe('B-257 — a lock covers the ENGAGER’S channels, captured at engage',
     // Positive control — the same socket CAN engage an ordinary lock once it holds channel 1.
     const a = await signedIn(A);
     expect((await a.ask('e2', 'lock.engage', { pin: '4711' })).payload).toEqual({ ok: true });
+  });
+});
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 C / F — **THE PARTIAL OVERLAP B-257 COULD NOT BUILD, NOW BUILT.** Two
+ * declared channels; the engager holds channel 1, so the lock covers channel 1 alone. A principal
+ * holding BOTH channels meets the lock on channel 1's scoped verbs and not on channel 2's — the
+ * named channel is the footprint the lock judges (`channelsForRequest` (a)), exactly as for any
+ * other channel-scoped intent.
+ */
+describe('MULTI-CHANNEL-01 — a lock covering one of two declared channels', () => {
+  it('refuses the covered channel’s PANIC and bulk verbs — control: the same principal’s same verbs on the uncovered channel pass', async () => {
+    const started = await startAuthedBridge({
+      fixedLayers: [standardBank(1), standardBank(2)],
+    });
+    handle = started.handle;
+    playout = started.playout;
+    const a = await signedIn(A);
+    const both = await signedIn({
+      user: 'longName',
+      cgChannels: [
+        { host: HOST, channel: 1 },
+        { host: HOST, channel: 2 },
+      ],
+    });
+    expect((await a.ask('e', 'lock.engage', { pin: '4711' })).payload).toEqual({ ok: true });
+    const lock = (await both.ask('s', 'lock.state')).payload as LockState;
+    expect(lock).toMatchObject({ engaged: true, channels: [1] });
+
+    const verbs = [
+      'stack.silence-channel-live-plates',
+      'stack.clear-all',
+      'stack.stop-all',
+      'stack.remove-all',
+    ] as const;
+    for (const [i, verb] of verbs.entries()) {
+      const covered = await both.ask(`c${String(i)}`, verb, { channel: 1 });
+      expectRefusedWith(covered.error, LOCK_ENGAGED_REFUSAL, `${verb} on the covered channel`);
+      // CONTROL — the same principal, the same verb, on the channel the lock does not cover.
+      const free = await both.ask(`f${String(i)}`, verb, { channel: 2 });
+      expect(free.error, `${verb} on the uncovered channel was refused`).toBeUndefined();
+    }
   });
 });
 
