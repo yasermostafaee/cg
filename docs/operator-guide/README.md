@@ -34,18 +34,20 @@ password, and that `http://127.0.0.1:5174` is in the Playout's CORS list.
    are told the station is not set up yet. Within seconds the CasparCG line turns OK and the
    channels appear. If it says this machine is waiting for approval, the Playout's administrator
    approves it at **تنظیمات ← اتصال به CG Control**; the line names this machine's address.
-5. **Channel** — pick the channel this station drives; nothing is picked for you. Each channel shows
-   its name and its number (`· CH 2`). If the channel is already on air with another system's
+5. **Channel** — pick the channel, or channels, this station drives; nothing is picked for you. Each
+   press adds a channel or takes it back out; the channels must be on one CasparCG. Each channel
+   shows its name and its number (`· CH 2`). If a channel is already on air with another system's
    content, CG Control says so in one line (for example _"آپاسای · CH 1 is already on air — another
    system is playing on layer 5."_) and asks you to press **Use this channel anyway**. That is a
    warning, not a refusal: at a client, CG graphics do go on the programme channel, above the
    Playout's layers. On the test Playout, use `cg-test2` (channel 2).
 6. **Serve address** — CG Control fills in this machine's address; change it only if the Playout's
-   administrator tells you to. Press **Use this channel**.
+   administrator tells you to. Press **Use this channel** (or **Use these 2 channels**).
 
-**Chose the wrong channel?** **SETTINGS → Channel → Change channel…** (a station admin only) shows the
-same list and the same warning. It is refused while anything of ours is still on air on the current
-channel — take it off air first. No file needs editing.
+**Wrong channels, or one more?** **SETTINGS → Channel → Change channel…** (a station admin only) shows
+the same list and the same warning, with the station's channels already picked: add one, take one
+out, or swap one for another. Taking out or swapping away a channel is refused while anything of
+ours is still on air on it — take it off air first. No file needs editing.
 
 **On air on another channel.** If something of ours is still on air on a channel this station no
 longer drives, it is not shown in the channel's own view. It is listed under **SETTINGS → Channel →
@@ -68,6 +70,33 @@ picks the rows up again. If CG Control will not start, it says why on its own sc
 2. **Pre-show check.** Drop tonight's `.vcg` templates into the watched folder. They appear in the Library once verified. A failed verify shows a red pill in the Library — the file is rejected, never auto-corrected.
 3. **Load + Take.** Single-click a Library item to load it onto a row; the row goes `LOADED`. Click `TAKE` to put it on air. The row turns `ON-AIR`. The Inspector on the right exposes any declared fields — edit a value and the change goes live without a re-take.
 4. **Out + Remove.** `OUT` plays the template's exit animation, then `REMOVE` frees the slot.
+
+## Several channels
+
+A station can drive more than one channel. The channel strip shows each one under the Playout's
+name for it; press a channel to switch to it. **Everything below the strip is that channel's**: its
+rows and their names, the Inspector, both monitors, LIVE PLATES and the PLAYOUT tab. **REMOVE ALL,
+CLEAR ALL and STOP ALL act on the channel on screen only.** The console always opens on the lowest
+channel; it does not remember the last one.
+
+**Which PANIC does what:**
+
+- **Silence all plates · CH 2** — at the head of LIVE PLATES. Every live box on the channel on
+  screen goes silent. No other channel is touched.
+- **SILENCE ALL PLATES · EVERY CHANNEL** — in the top bar, beside the channels. Every live box on
+  every channel goes silent.
+
+Both leave the pictures on air; raise what you need again on its own fader. On a station with one
+channel there is one PANIC, **Silence all plates**, and it silences everything.
+
+**A problem on another channel is not shown on this one.** That channel's name on the strip
+carries a small mark — amber for a warning, red for an alarm. Switch to it to read it. Problems
+with the whole station — the bridge, the servers, the Playout link, sign-in — show whichever
+channel is on screen.
+
+**A lock that covers one of your channels** turns that channel's view into **Channel 2 locked**
+with its PIN field, and nothing on it can be pressed; your other channels stay live. While any of
+your channels is locked, the every-channel PANIC is not there.
 
 ## Fixed layers
 
@@ -132,7 +161,8 @@ layer, one station's Clear can destroy a layer another system owns and must imme
 re-establish — on air. The Runtime cannot detect a divergent bank on another station
 (stations share only the CasparCG wire, which carries no config), so this is an
 **installation requirement**, the same class of contract as pointing the server's OSC at
-the bridge: check it when you set up or change any station's config.
+the bridge: check it when you set up or change any station's config. With several channels
+it holds per channel: every station that drives channel 2 declares the same bank on channel 2.
 
 ### Artwork over the live picture is its own row
 

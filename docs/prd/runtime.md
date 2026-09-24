@@ -3621,7 +3621,7 @@ Neither is in `PROMPT.md` §5, and Phase 9 re-dresses the Inspector's chrome any
 - **Number verification:** as for `R-060` — `R-061` returned no headings anywhere, only the
   registry's prose. **Nothing is implemented by this item.**
 
-## [ ] R-062 — the bridge is single-channel in exactly three places: five bulk verbs take `z.void()`, there is no channel-discovery call, and the fixed bank is the app's only channel authority ⟨priority: medium⟩
+## [~] R-062 — the bridge is single-channel in exactly three places: five bulk verbs take `z.void()`, there is no channel-discovery call, and the fixed bank is the app's only channel authority ⟨priority: medium⟩ — ALL THREE GAPS DONE: gap 2 2026-09-23 (`CHANNEL-AUTHORITY-01`), gaps 1 and 3 2026-09-24 (`MULTI-CHANNEL-01`, `openspec/changes/multi-channel`)
 
 **Filed by `RUNTIME-REDESIGN-01` Phase 7 (2026-09-08), from `design.md` §4 as corrected by owner
 answer A3 — a GAP FILED, not a design.** The earlier finding that _"a second channel's rows cannot
@@ -3633,9 +3633,15 @@ single-channel is exactly this:
 
 **What (the three gaps):**
 
-1. **Five verbs take `z.void()`** — `stack.removeAll`, `clearAll`, `stopAll`, `snapshot` and
-   `silenceAllLivePlates` — and therefore mean _"everything the bridge knows about"_. That is the
-   only place on the contract where a channel cannot be named.
+1. ✅ **DONE 2026-09-24 — `MULTI-CHANNEL-01` §2 B and C (`openspec/changes/multi-channel`).**
+   ~~Five verbs take `z.void()` — `stack.removeAll`, `clearAll`, `stopAll`, `snapshot` and
+   `silenceAllLivePlates` — and therefore mean "everything the bridge knows about".~~ The four
+   housekeeping verbs take an OPTIONAL `{ channel }` — a bare call is byte-identical, and with a
+   channel each acts on that channel alone, fenced, permission-checked and lock-judged on that
+   channel. `silenceAllLivePlates` is UNTOUCHED (`z.void()`, unscoped, A16) and is the every-channel
+   control; per-channel PANIC is the NEW verb `stack.silence-channel-live-plates`, as the trap below
+   required. Independence is proven at the fake's wire with two declared channels
+   (`channel-independence.integration.test.ts`, `multi-channel-banks.integration.test.ts`).
 2. ✅ **DONE 2026-09-23 — `CHANNEL-AUTHORITY-01` commit 2 (`openspec/changes/archive/2026-09-23-channel-authority`).**
    ~~There is no channel-discovery call on the contract.~~ `channels.list` (+ the per-console
    `channels.changed` push) returns every channel any source names — the Playout's catalogue
@@ -3647,9 +3653,14 @@ single-channel is exactly this:
    which channels exist. The renderer's list today is the union of `fixedLayers.config.channel`
    and `channelSettings.settings[].channel` — and is the one function a discovery call would
    feed."_
-3. **`fixedLayers` declares ONE bank on ONE channel** (`FixedLayerBankSchema.channel`, documented
-   _"one channel per bank, v1"_), and the bank is the app's channel authority: the strip defaults to
-   it and the Layers section edits it.
+3. ✅ **DONE 2026-09-24 — `MULTI-CHANNEL-01` §2 A (`openspec/changes/multi-channel`).**
+   ~~`fixedLayers` declares ONE bank on ONE channel (`FixedLayerBankSchema.channel`, documented "one
+   channel per bank, v1"), and the bank is the app's channel authority.~~ The station declares ONE
+   BANK PER CHANNEL (`FixedLayerBanksSchema`; `fixedLayers.banks` / `set-banks` / `banks-changed`,
+   with `config` / `set-config` kept as the one-bank view), and `#declaredChannels()` answers every
+   bank's channel through the one predicate. Every producer and consumer was named first
+   (`design.md` §1), as the acceptance below required. The bank file keeps a one-channel station's
+   v1 object byte for byte; `MockRuntime.load()` writes `item.slot` (the fourth finding).
 
 **Why it is an item and not a Phase 7 edit:** each is a CONTRACT change (a request shape, a new
 channel, a schema's cardinality) with producers and consumers on both tiers — precisely what
@@ -3674,6 +3685,16 @@ CHANNEL`, its accessible name and tooltip say the same (golden rule 11), so that
 multi-channel arrives the LABEL is the thing that has to change and cannot be forgotten. One
 control, its label and its tooltip — no behaviour change, no wire change
 (`apps/runtime/tests/liveSourcesPanel.dom.test.ts`, "A16 — the panic label names its scope").
+
+✅ **A16 FOLLOW-UP — ANSWERED by the owner, 2026-09-23 (the precondition above, decided when real
+multi-channel arrived — `MULTI-CHANNEL-01`).** When the operator presses PANIC, **only the channel
+on screen goes silent.** A **separate, explicit** control silences every channel. Built as the trap
+and A16 required: `silenceAllLivePlates` is untouched and IS the every-channel control, placed in
+the header beside the channel strip (`SILENCE ALL PLATES · EVERY CHANNEL`), never beside the
+per-channel one; PANIC on a channel's view is the NEW verb `stack.silence-channel-live-plates`
+(`operator` class, channel-scoped), labelled in A16's form — `Silence all plates · CH n`, accessible
+name `Silence all boxes on channel n — …`. The label changed, as A16 built it to. With ONE declared
+channel nothing changes: there is no second control, and the toolbar's PANIC is A16's, bare.
 
 ⭐ **GAP 1 IS NOW PINNED BY A TEST, and this is the half that makes the item self-defending**
 (`RUNTIME-REDESIGN-01` Phase 10, 2026-09-08; `design.md` §17.2).
@@ -3701,12 +3722,16 @@ is done.
       (`CHANNEL-AUTHORITY-01`). Gaps 1 and 3 below are untouched and still open, and so is
       A16's precondition: PANIC's scope is decided before real multi-channel ships, never in
       passing.
-- `removeAll`, `clearAll`, `stopAll` and `snapshot` accept an OPTIONAL channel; a bare call keeps
-  its meaning byte for byte (every existing test green unchanged).
-- `silenceAllLivePlates` is NOT re-scoped by this item; if the owner wants a per-channel silence it
-  is a NEW verb beside PANIC, never a parameter on it.
-- The bank's cardinality (one bank, one channel) is either kept and stated as the v1 constraint, or
-  changed by its own item naming every producer and consumer of `FixedLayerBankSchema` first.
+- [x] `removeAll`, `clearAll`, `stopAll` and `snapshot` accept an OPTIONAL channel; a bare call keeps
+      its meaning byte for byte (every existing test green unchanged). — **gap 1, done 2026-09-24**
+      (`MULTI-CHANNEL-01` §2 B).
+- [x] `silenceAllLivePlates` is NOT re-scoped by this item; if the owner wants a per-channel silence it
+      is a NEW verb beside PANIC, never a parameter on it. — **the owner wanted it (A16 follow-up,
+      2026-09-23): `stack.silence-channel-live-plates`, a NEW verb** (`MULTI-CHANNEL-01` §2 C).
+- [x] The bank's cardinality (one bank, one channel) is either kept and stated as the v1 constraint, or
+      changed by its own item naming every producer and consumer of `FixedLayerBankSchema` first.
+      — **gap 3, changed 2026-09-24 by `MULTI-CHANNEL-01`, which named them first**
+      (`openspec/changes/multi-channel/design.md` §1).
 
 - **Cross-refs:** `openspec/changes/runtime-redesign-programme/design.md` §4 (the corrected
   finding, per namespace) and §14 (Phase 7's UI shape); golden rule 10 (a configuration verb is
