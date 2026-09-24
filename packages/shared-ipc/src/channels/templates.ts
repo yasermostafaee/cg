@@ -15,10 +15,12 @@ import type { LiveFitMode, LiveSourceRect } from '@cg/shared-schema';
 import { defineChannel } from '../channel.js';
 import { definePublishChannel } from '../publish.js';
 import {
+  bankInSet,
+  bankSetSize,
   defaultLayerAlias,
   isFixedBankLayer,
   layerAlias,
-  type FixedLayerBank,
+  type BankSet,
 } from './fixedLayers.js';
 
 /**
@@ -556,7 +558,7 @@ export type TemplateReference = z.infer<typeof TemplateReferenceSchema>;
  */
 export function describeTemplateReferences(
   references: readonly TemplateReference[],
-  bank: FixedLayerBank | null,
+  bank: BankSet,
 ): string {
   const count = references.length;
   const places = references.map((ref) => describeReferencePlace(ref, bank));
@@ -577,21 +579,29 @@ export function describeTemplateReferences(
   return `${head} — ${places.join(', ')}. ${remedy}`;
 }
 
-/** One reference's place, in the operator's words. Exported for the surface's per-row line. */
-export function describeReferencePlace(
-  reference: TemplateReference,
-  bank: FixedLayerBank | null,
-): string {
+/**
+ * One reference's place, in the operator's words. Exported for the surface's per-row line.
+ *
+ * `MULTI-CHANNEL-01` — the bank is the one that declares the reference's CHANNEL
+ * ({@link bankInSet}), and on a station that declares more than one channel the layer is written
+ * WITH its channel (`2-99`): "the row `Layer 99`" names a row on every channel at once there. A
+ * one-channel station reads exactly as before.
+ */
+export function describeReferencePlace(reference: TemplateReference, bank: BankSet): string {
   const slot = reference.slot;
   // ADDENDUM C §C4(c) — "on the stack" was the same developer vocabulary the count sentence
   // carried. The operator has no stack; what is true is that the station holds it and nothing
   // has put it on a layer.
   if (slot === undefined) return 'on this station, not yet on a layer';
-  if (bank !== null && isFixedBankLayer(bank, slot.channel, slot.layer)) {
-    const name = layerAlias(bank, slot.layer) ?? defaultLayerAlias(bank, slot.layer);
-    return `on the row “${name}” (layer ${String(slot.layer)})`;
+  const own = bankInSet(bank, slot.channel);
+  const several = bankSetSize(bank) > 1;
+  if (own !== null && isFixedBankLayer(own, slot.channel, slot.layer)) {
+    const name = layerAlias(own, slot.layer) ?? defaultLayerAlias(own, slot.layer);
+    const where = several ? `${String(slot.channel)}-${String(slot.layer)}` : String(slot.layer);
+    return `on the row “${name}” (layer ${where})`;
   }
-  const channel = bank === null || bank.channel !== slot.channel ? `${String(slot.channel)}-` : '';
+  // The channel is left out only where it cannot be mistaken: ONE declared bank, on this channel.
+  const channel = !several && own !== null ? '' : `${String(slot.channel)}-`;
   return `on CasparCG layer ${channel}${String(slot.layer)}, which is not one of this station's rows`;
 }
 
@@ -599,14 +609,12 @@ export function describeReferencePlace(
  * `B-212` — is this reference one of the station's ROWS (something the surface can
  * scroll to), or somewhere no row shows? The same predicate the wording above uses.
  */
-export function referenceRowName(
-  reference: TemplateReference,
-  bank: FixedLayerBank | null,
-): string | null {
+export function referenceRowName(reference: TemplateReference, bank: BankSet): string | null {
   const slot = reference.slot;
-  if (slot === undefined || bank === null) return null;
-  if (!isFixedBankLayer(bank, slot.channel, slot.layer)) return null;
-  return layerAlias(bank, slot.layer) ?? defaultLayerAlias(bank, slot.layer);
+  if (slot === undefined) return null;
+  const own = bankInSet(bank, slot.channel);
+  if (own === null || !isFixedBankLayer(own, slot.channel, slot.layer)) return null;
+  return layerAlias(own, slot.layer) ?? defaultLayerAlias(own, slot.layer);
 }
 
 export const TemplatesRemoveChannel = defineChannel(

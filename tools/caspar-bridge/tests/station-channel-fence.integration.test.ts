@@ -605,7 +605,7 @@ describe('the census: every route that names a channel, classified', () => {
       { fixedBank: BANK },
     );
 
-  it('eight routes carry a channel key; six carry it at the top level, where the fence reads', () => {
+  it('nine routes carry a channel key; six carry it at the top level, where the fence reads', () => {
     const table = buildRoutes(runtime());
     expect(table.size, 'the census is looking at the real table').toBeGreaterThan(50);
     const found = Object.fromEntries(
@@ -617,6 +617,13 @@ describe('the census: every route that names a channel, classified', () => {
       'channelSettings.set': ['req.channel'],
       'fixedLayers.clear-layer': ['req.channel'],
       'fixedLayers.load': ['req.channel'],
+      /*
+        `MULTI-CHANNEL-01` — the plural declaration door. Its channels are INSIDE the list, so the
+        fence (which reads a top-level `channel`) does not stand in its way — a declaration is not
+        fenced by the declaration it writes — while the permission gate and the lock judge the
+        channels it adds, edits or removes.
+      */
+      'fixedLayers.set-banks': ['req.banks[].channel'],
       'fixedLayers.set-config': ['req.channel'],
       'layers.clear': ['req.channel'],
       'playoutLayers.clear': ['req.channel'],

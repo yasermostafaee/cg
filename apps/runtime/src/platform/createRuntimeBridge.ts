@@ -324,6 +324,10 @@ export function createMockBridge(): RuntimeBridge {
     fixedLayers: {
       config: () => Promise.resolve(mock.fixedLayersConfig()),
       setConfig: (req) => Promise.resolve(mock.setFixedLayers(req)),
+      // `MULTI-CHANNEL-01` — every declared bank, the plural door, and its push.
+      banks: () => Promise.resolve(mock.fixedLayerBanks()),
+      setBanks: (req) => Promise.resolve(mock.setFixedLayerBanks(req.banks)),
+      onBanksChanged: (handler) => mock.fixedBanksChanged.subscribe(handler),
       // R-021 stage 3 — the exact-slot load (mock models the bridge's refusals).
       load: (req) =>
         Promise.resolve(
@@ -451,13 +455,14 @@ export function createMockBridge(): RuntimeBridge {
 
   /**
    * The bridge's `stationChannelsFor` with auth OFF, over the mock's two sources. The declared
-   * channel is the bank's, or channel 1 without one — `#declaredChannels()`'s own rule.
+   * channels are the banks', or channel 1 without one — `#declaredChannels()`'s own rule.
    */
   function mockStationChannels(): StationChannels {
-    const bank = mock.fixedLayersConfig();
-    const declared = bank?.channel ?? 1;
+    const banks = mock.fixedLayerBanks();
+    const declared = new Set(banks.length > 0 ? banks.map((b) => b.channel) : [1]);
     const entries = new Map<number, StationChannel['sources']>();
-    if (bank !== null) entries.set(bank.channel, ['bank']);
+    // `MULTI-CHANNEL-01` — every declared bank's channel, in channel order.
+    for (const bank of banks) entries.set(bank.channel, ['bank']);
     for (const s of mock.channelSettingsState().settings) {
       const sources = entries.get(s.channel);
       if (sources === undefined) entries.set(s.channel, ['channel-settings']);
@@ -467,7 +472,7 @@ export function createMockBridge(): RuntimeBridge {
       channels: [...entries.entries()].map(([channel, sources]) => ({
         channel,
         named: null,
-        declared: channel === declared,
+        declared: declared.has(channel),
         sources,
       })),
     };

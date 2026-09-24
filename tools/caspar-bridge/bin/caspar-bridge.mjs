@@ -559,7 +559,12 @@ function describeBoot(handle) {
       : '[caspar-bridge] auth: OFF (default) - the control socket has no principal and every ' +
           'connected client can drive this station; --auth playout requires a Playout-issued token',
   );
-  console.error(`[caspar-bridge] candidate layers: ${describeFixedBank(handle.fixedBankSource)}`);
+  console.error(
+    `[caspar-bridge] candidate layers: ${describeFixedBank(
+      handle.fixedBankSource,
+      handle.runtime.fixedLayerBanks(),
+    )}`,
+  );
   console.error(`[caspar-bridge] live sources: ${describeSourceCatalog(handle.sourceCatalog)}`);
   console.error(
     `[caspar-bridge] plate assignments: ${describeAssignments(handle.sourceAssignments)}`,
@@ -709,11 +714,26 @@ function describeServeHostSource(source) {
  * that actually cost the morning. This does not DETECT a stale file; it
  * reports what governs, every boot, in the terminal the bridge starts in.
  */
-function describeFixedBank({ bank, source }) {
-  if (bank === null && source === 'first-run') {
+function describeFixedBank({ source }, banks) {
+  if (banks.length === 0 && source === 'first-run') {
     return `none declared yet (--first-run, no file at ${fixedLayersPath}) - a station admin picks the channel`;
   }
-  if (bank === null) return 'none declared (no --fixed-layers-path configured)';
+  if (banks.length === 0) return 'none declared (no --fixed-layers-path configured)';
+  // ASCII only, deliberately: the Windows console this prints to renders an
+  // en-dash as mojibake, and a line whose whole job is to be READ must not
+  // arrive with garbage in the middle of the layer range.
+  const where =
+    source === 'file'
+      ? fixedLayersPath
+      : source === 'built-in default'
+        ? `built-in default (no file at ${fixedLayersPath})`
+        : source;
+  // `MULTI-CHANNEL-01` — EVERY declared bank, in channel order; one bank reads exactly as before.
+  return `${banks.map(describeOneBank).join('; ')} - from ${where}`;
+}
+
+/** One bank's rows, both halves. */
+function describeOneBank(bank) {
   // BOTH halves, from the ONE enumeration and the ONE predicates — this used to
   // rebuild the operator range by hand and read the operator half's tick record
   // directly, so it printed twenty rows as the whole bank and never mentioned
@@ -728,20 +748,11 @@ function describeFixedBank({ bank, source }) {
   }
   const operatorEnd = fixedBankEnd(bank);
   const bedEnd = lowBankEnd(bank);
-  // ASCII only, deliberately: the Windows console this prints to renders an
-  // en-dash as mojibake, and a line whose whole job is to be READ must not
-  // arrive with garbage in the middle of the layer range.
-  const where =
-    source === 'file'
-      ? fixedLayersPath
-      : source === 'built-in default'
-        ? `built-in default (no file at ${fixedLayersPath})`
-        : source;
   return (
     `channel ${bank.channel}, layers ${bank.start}-${operatorEnd} ` +
     `(${halves.operator.count} declared, ${halves.operator.shown} shown), ` +
     `beds ${bank.low.start}-${bedEnd} ` +
-    `(${halves.bed.count} declared, ${halves.bed.shown} shown) - from ${where}`
+    `(${halves.bed.count} declared, ${halves.bed.shown} shown)`
   );
 }
 

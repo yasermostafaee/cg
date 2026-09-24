@@ -86,10 +86,13 @@ import {
   UpdateRequestChannel,
   UpdateStateChangedChannel,
   UpdateStateChannel,
+  FixedLayersBanksChangedChannel,
+  FixedLayersBanksChannel,
   FixedLayersConfigChangedChannel,
   FixedLayersClearLayerChannel,
   FixedLayersConfigChannel,
   FixedLayersLoadChannel,
+  FixedLayersSetBanksChannel,
   FixedLayersSetConfigChannel,
   FixedLayersStateChangedChannel,
   FixedLayersStateChannel,
@@ -420,6 +423,8 @@ export class WebSocketRuntime implements RuntimeBridge {
   readonly #pgmReturnSubs = new Subs<readonly PgmReturnStatus[]>();
   // R-021 stage 2a — fixed-bank config + per-slot state pushes.
   readonly #fixedConfigSubs = new Subs<FixedLayerBank | null>();
+  // `MULTI-CHANNEL-01` — the whole set of banks, which the per-channel views read.
+  readonly #fixedBanksSubs = new Subs<FixedLayerBank[]>();
   readonly #fixedStateSubs = new Subs<FixedSlotState[]>();
   readonly #lockSubs = new Subs<LockState>();
   readonly #updateSubs = new Subs<PendingUpdate | null>();
@@ -1247,6 +1252,11 @@ export class WebSocketRuntime implements RuntimeBridge {
         if (p.success) this.#fixedConfigSubs.emit(p.data);
         break;
       }
+      case FixedLayersBanksChangedChannel.name: {
+        const p = FixedLayersBanksChangedChannel.payload.safeParse(payload);
+        if (p.success) this.#fixedBanksSubs.emit(p.data);
+        break;
+      }
       case FixedLayersStateChangedChannel.name: {
         const p = FixedLayersStateChangedChannel.payload.safeParse(payload);
         if (p.success) this.#fixedStateSubs.emit(p.data);
@@ -1755,6 +1765,12 @@ export class WebSocketRuntime implements RuntimeBridge {
     config: () => this.#invoke(FixedLayersConfigChannel, undefined),
     setConfig: (req: ChannelRequest<typeof FixedLayersSetConfigChannel>) =>
       this.#invoke(FixedLayersSetConfigChannel, req),
+    // `MULTI-CHANNEL-01` — every declared bank, and the plural door that sets them.
+    banks: () => this.#invoke(FixedLayersBanksChannel, undefined),
+    setBanks: (req: ChannelRequest<typeof FixedLayersSetBanksChannel>) =>
+      this.#invoke(FixedLayersSetBanksChannel, req),
+    onBanksChanged: (handler: (banks: FixedLayerBank[]) => void) =>
+      this.#fixedBanksSubs.add(handler),
     // R-021 stage 3 — the exact-slot load. Bridge-owned like `stack.load`: it
     // commands CasparCG, so it round-trips and is refused while the link is
     // down (the browser-local library is the only surface that works offline).

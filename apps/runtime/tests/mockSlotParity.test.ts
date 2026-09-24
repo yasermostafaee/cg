@@ -77,6 +77,56 @@ describe('§1.3 — a row-bound item publishes its slot, exactly as the bridge d
     expect(after?.slot).toBeUndefined();
   });
 
+  it('🔴 two banks: row 97 of channel 1 and row 97 of channel 2 are TWO rows — each item carries its own channel', async () => {
+    const { bridge, templateId } = await bridgeWithBank();
+    const second = { ...BANK, channel: 2 };
+    expect((await bridge.fixedLayers.setBanks({ banks: [BANK, second] })).ok).toBe(true);
+    expect((await bridge.fixedLayers.banks()).map((b) => b.channel)).toEqual([1, 2]);
+    for (const channel of [1, 2]) {
+      const res = await bridge.fixedLayers.load({
+        channel,
+        layer: 97,
+        itemId: `item-${String(channel)}`,
+        templateId,
+        fields: {},
+      });
+      expect(res.accepted, `channel ${String(channel)} loads its own row 97`).toBe(true);
+    }
+    const snapshot = await bridge.stack.snapshot();
+    expect(snapshot.find((i) => i.itemId === 'item-1')?.slot?.channel).toBe(1);
+    expect(snapshot.find((i) => i.itemId === 'item-2')?.slot?.channel).toBe(2);
+    const state = await bridge.fixedLayers.state();
+    expect(state.find((s) => s.channel === 1 && s.layer === 97)?.binding?.itemId).toBe('item-1');
+    expect(state.find((s) => s.channel === 2 && s.layer === 97)?.binding?.itemId).toBe('item-2');
+    // …and the discovery answer declares both, as the bridge's does.
+    const listed = await bridge.stationChannels.list();
+    expect(listed.channels.filter((c) => c.declared).map((c) => c.channel)).toEqual([1, 2]);
+  });
+
+  it('removing a channel is refused while ours is on air there — control: removing the idle one is accepted', async () => {
+    const { bridge, templateId } = await bridgeWithBank();
+    const second = { ...BANK, channel: 2 };
+    await bridge.fixedLayers.setBanks({ banks: [BANK, second] });
+    await bridge.fixedLayers.load({
+      channel: 2,
+      layer: 99,
+      itemId: 'on-2',
+      templateId,
+      fields: {},
+    });
+    await bridge.stack.take({ itemId: 'on-2' });
+    const refused = await bridge.fixedLayers.setBanks({ banks: [BANK] });
+    expect(refused).toEqual({
+      ok: false,
+      reason: 'channel-change-refused',
+      message: 'Something of ours is still on air on channel 2 — take it off air first.',
+    });
+    expect((await bridge.fixedLayers.banks()).map((b) => b.channel)).toEqual([1, 2]);
+    // CONTROL: channel 1 holds nothing of ours, so it may go.
+    expect((await bridge.fixedLayers.setBanks({ banks: [second] })).ok).toBe(true);
+    expect((await bridge.fixedLayers.banks()).map((b) => b.channel)).toEqual([2]);
+  });
+
   it('the audit record and the published item name the SAME coordinate', async () => {
     const { bridge, templateId } = await bridgeWithBank();
     await bridge.fixedLayers.load({

@@ -164,7 +164,11 @@ export const LowFixedLayerBankSchema = z.object({
 export type LowFixedLayerBank = z.infer<typeof LowFixedLayerBankSchema>;
 
 export const FixedLayerBankSchema = z.object({
-  /** CasparCG channel the bank lives on (one channel per bank, v1). */
+  /**
+   * CasparCG channel the bank lives on — one channel per bank. A station holds ONE BANK PER
+   * DECLARED CHANNEL (`MULTI-CHANNEL-01`, {@link FixedLayerBanksSchema}); it held exactly one bank
+   * in v1.
+   */
   channel: z.number().int().positive(),
   /** First layer of the bank. Immutable mid-session (validator-enforced). */
   start: z.number().int().positive().default(DEFAULT_FIXED_BANK_START),
@@ -281,6 +285,95 @@ export function fixedBankSlots(bank: FixedLayerBank): { channel: number; layer: 
     out.push({ channel: bank.channel, layer });
   }
   return out;
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **THE STATION'S BANKS: ONE PER DECLARED CHANNEL, KEYED BY CHANNEL.**
+ *
+ * A station that operates two channels declares two banks, each the standard shape (beds 50–59,
+ * templates 80–99) on its own channel. The list IS the station's channel declaration: the
+ * bridge's `#declaredChannels()` is its channels, and nothing else declares one.
+ *
+ * ⚠ **ONE BANK PER CHANNEL is the schema's rule, not a caller's.** Two banks on one channel would
+ * be two answers to "is `2-99` a row, and whose" — the `(channel, layer)` coordinate every fixed-
+ * slot consumer keys on would name two rows. Refused here, so neither the persisted file nor the
+ * wire can carry it.
+ */
+export const FixedLayerBanksSchema = z.array(FixedLayerBankSchema).superRefine(oneBankPerChannel);
+
+/** The refinement both list schemas share — one spelling of "one bank per channel". */
+function oneBankPerChannel(banks: readonly FixedLayerBank[], ctx: z.RefinementCtx): void {
+  const seen = new Set<number>();
+  banks.forEach((bank, index) => {
+    if (seen.has(bank.channel)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [index, 'channel'],
+        message: `channel ${String(bank.channel)} is declared twice — a station holds one bank per channel`,
+      });
+    }
+    seen.add(bank.channel);
+  });
+}
+
+/**
+ * The station's banks in the ONE order everything reads them in: ascending channel. The strip
+ * lists channels that way, `#declaredChannels()` answers that way, and the first entry is the
+ * v1 single-bank view ({@link firstBank}).
+ */
+export function sortBanks(banks: readonly FixedLayerBank[]): FixedLayerBank[] {
+  return [...banks].sort((a, b) => a.channel - b.channel);
+}
+
+/**
+ * 🔴 **THE BANK THAT DECLARES `channel`, or `null`.** Every per-channel reader asks THIS rather
+ * than scanning the list itself — a second local `find` is how "which bank owns this coordinate"
+ * would come to have two answers (golden rule 6).
+ */
+export function bankForChannel(
+  banks: readonly FixedLayerBank[],
+  channel: number,
+): FixedLayerBank | null {
+  return banks.find((bank) => bank.channel === channel) ?? null;
+}
+
+/**
+ * THE v1 SINGLE-BANK VIEW: the lowest-numbered channel's bank, or `null` when none is declared.
+ * What `fixedLayers.config` answers — on a one-channel station, the bank itself, exactly as
+ * before. A console that operates a second channel reads `fixedLayers.banks` instead.
+ */
+export function firstBank(banks: readonly FixedLayerBank[]): FixedLayerBank | null {
+  return sortBanks(banks)[0] ?? null;
+}
+
+/** Every slot of every bank — what the LayerManager is fenced with on a multi-channel station. */
+export function fixedBanksSlots(
+  banks: readonly FixedLayerBank[],
+): { channel: number; layer: number }[] {
+  return sortBanks(banks).flatMap((bank) => fixedBankSlots(bank));
+}
+
+/**
+ * One bank, a station's list of them, or nothing — what a NAMING helper accepts, so a caller that
+ * holds the whole list and a caller that holds one bank ask the same function.
+ */
+export type BankSet = FixedLayerBank | readonly FixedLayerBank[] | null;
+
+/**
+ * The bank a {@link BankSet} holds for `channel`: from a list, the one that declares it; from a
+ * single bank, that bank when it is on `channel` and otherwise none.
+ */
+export function bankInSet(set: BankSet, channel: number): FixedLayerBank | null {
+  if (set === null) return null;
+  if (Array.isArray(set)) return bankForChannel(set as readonly FixedLayerBank[], channel);
+  const bank = set as FixedLayerBank;
+  return bank.channel === channel ? bank : null;
+}
+
+/** How many channels a {@link BankSet} declares. */
+export function bankSetSize(set: BankSet): number {
+  if (set === null) return 0;
+  return Array.isArray(set) ? (set as readonly FixedLayerBank[]).length : 1;
 }
 
 /**
@@ -583,6 +676,55 @@ export const FixedLayersSetConfigChannel = defineChannel(
 export const FixedLayersConfigChangedChannel = definePublishChannel(
   'fixedLayers.config-changed',
   z.union([FixedLayerBankSchema, z.null()]),
+);
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **EVERY DECLARED BANK**, in channel order; `[]` while none is declared.
+ *
+ * The console's per-channel views read THIS: channel 2's rows come from channel 2's bank. The
+ * three single-bank channels above stay, each the v1 view of the same list — `config` answers
+ * {@link firstBank}, `config-changed` pushes it, and `set-config` makes the set that one bank —
+ * so a one-channel station, and a console older than this change, see exactly what they saw.
+ */
+export const FixedLayersBanksChannel = defineChannel(
+  'fixedLayers.banks',
+  z.void(),
+  FixedLayerBanksSchema,
+);
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **SET THE STATION'S BANKS: add, remove, replace and edit channels, as
+ * one request.** `station-admin`, like every declaration door.
+ *
+ * Validated per channel against the set in force:
+ *
+ *   - a channel in both — `validateFixedBankChange`, unchanged: `start` and `count` are fixed at
+ *     install, and a row may be hidden only while it is provably empty;
+ *   - a channel only in the request — a NEW declaration, validated as a bank installed on a
+ *     bank-less bridge is;
+ *   - a channel only in force — REMOVED, refused while anything of ours holds air on it
+ *     (`channel-change-refused`, the `B-269` sentence), exactly as a replaced channel is.
+ *
+ * At least one bank: a station that declared none would fall back to channel 1 by default, and
+ * channel 1 may be somebody else's programme output — so emptying the set is not expressible.
+ * On success the set is applied, persisted and pushed; on refusal nothing is.
+ */
+export const FixedLayersSetBanksChannel = defineChannel(
+  'fixedLayers.set-banks',
+  z.object({
+    banks: z.array(FixedLayerBankSchema).min(1).superRefine(oneBankPerChannel),
+  }),
+  z.object({
+    ok: z.boolean(),
+    reason: z.enum(FIXED_LAYERS_SET_CONFIG_REASONS).optional(),
+    message: z.string().optional(),
+  }),
+);
+
+/** `MULTI-CHANNEL-01` — pushed with the whole list whenever the set is applied. */
+export const FixedLayersBanksChangedChannel = definePublishChannel(
+  'fixedLayers.banks-changed',
+  FixedLayerBanksSchema,
 );
 
 /** Pull the current per-slot state ([] when no bank is declared). */

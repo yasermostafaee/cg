@@ -36,10 +36,13 @@ import type {
 // bridge about what `1080i5000` means would show a mismatch that does not exist
 // on air.
 import {
+  bankForChannel,
   ChannelRasterSchema,
   checkSourceAssignments,
-  checkSourceCatalog,
+  checkSourceCatalogAgainstBanks,
   defaultFixedLayerBank,
+  firstBank,
+  sortBanks,
   DEFAULT_FIXED_BANK_START,
   SUGGESTED_LIVE_SOURCE_LAYER_RANGE,
   DelimiterOptionSchema,
@@ -174,6 +177,8 @@ export class MockRuntime {
   readonly updateChanged = new Emitter<PendingUpdate | null>();
   // R-021 stage 2a — fixed-bank parity.
   readonly fixedConfigChanged = new Emitter<FixedLayerBank | null>();
+  // `MULTI-CHANNEL-01` parity — the whole set, as the bridge pushes it.
+  readonly fixedBanksChanged = new Emitter<FixedLayerBank[]>();
   readonly fixedStateChanged = new Emitter<FixedSlotState[]>();
   // R-028 (o1) parity — the bridge pushes the full catalogue on every change.
   readonly templatesChanged = new Emitter<TemplateInfo[]>();
@@ -963,7 +968,8 @@ export class MockRuntime {
   // Mirrors the bridge's fidelity level for `connections.set-config`: the
   // mock APPLIES and publishes; it does NOT re-implement the store's
   // validators (the bridge is the authority; this is explicit test mode).
-  #fixedBank: FixedLayerBank | null = seedFixedBank();
+  // `MULTI-CHANNEL-01` parity — ONE BANK PER DECLARED CHANNEL, in channel order.
+  #fixedBanks: FixedLayerBank[] = seedFixedBanks();
   // R-021 stage 2b — per-layer observations, test-seed only (see seedFixedObservations):
   // the offline mock has no OSC, so outside the seed this map stays EMPTY and
   // every slot honestly reads `unknown`.
@@ -991,8 +997,19 @@ export class MockRuntime {
    */
   #liveSeatedItems = new Set(seedLiveLayers().map((r) => r.itemId));
 
+  /** The v1 view — the lowest-numbered declared channel's bank, as the bridge answers it. */
   fixedLayersConfig(): FixedLayerBank | null {
-    return this.#fixedBank;
+    return firstBank(this.#fixedBanks);
+  }
+
+  /** `MULTI-CHANNEL-01` parity — every declared bank, in channel order. */
+  fixedLayerBanks(): FixedLayerBank[] {
+    return [...this.#fixedBanks];
+  }
+
+  /** The bank that declares `channel`, or null — the bridge's `#bankFor`. */
+  #bankFor(channel: number): FixedLayerBank | null {
+    return bankForChannel(this.#fixedBanks, channel);
   }
 
   /** R-028 part B — the declared playout layers and what is observed on them. */
@@ -1091,9 +1108,43 @@ export class MockRuntime {
     return { ok: true };
   }
 
+  /** The v1 door — "the station's bank is this one", as on the bridge. */
   setFixedLayers(next: FixedLayerBank): { ok: boolean; message?: string } {
-    this.#fixedBank = next;
-    this.fixedConfigChanged.emit(next);
+    return this.setFixedLayerBanks([next]);
+  }
+
+  /**
+   * `MULTI-CHANNEL-01` parity — set the station's banks. The mock applies and publishes; it does
+   * NOT re-implement the store's validators, the same fidelity `setFixedLayers` always had. What
+   * it DOES model is the one refusal the operator's channel editor is built against: a removed
+   * channel is refused while anything of ours is on air on it — the `B-269` sentence, verbatim —
+   * because a mock that let the channel go would teach the editor a model air does not have.
+   */
+  setFixedLayerBanks(next: readonly FixedLayerBank[]): {
+    ok: boolean;
+    reason?: 'channel-change-refused';
+    message?: string;
+  } {
+    for (const before of this.#fixedBanks) {
+      if (bankForChannel(next, before.channel) !== null) continue;
+      // The bridge's `#holdsOurAirOn`, clause for clause: on air or unsettled, unverified, or a
+      // producer still resident (a STOPPED graphic is still on the channel's stage).
+      const onAir = this.stackSnapshot().some(
+        (item) =>
+          item.slot?.channel === before.channel &&
+          (isOnAirStatus(item) || item.status === 'unverified' || this.#loaded.has(item.itemId)),
+      );
+      if (onAir) {
+        return {
+          ok: false,
+          reason: 'channel-change-refused',
+          message: `Something of ours is still on air on channel ${String(before.channel)} — take it off air first.`,
+        };
+      }
+    }
+    this.#fixedBanks = sortBanks(next);
+    this.fixedConfigChanged.emit(firstBank(this.#fixedBanks));
+    this.fixedBanksChanged.emit(this.fixedLayerBanks());
     this.fixedStateChanged.emit(this.fixedLayersState());
     return { ok: true };
   }
@@ -1128,7 +1179,8 @@ export class MockRuntime {
   ): { accepted: boolean; errorCode?: string } {
     const template = this.#templates.get(templateId);
     if (template === undefined) return { accepted: false, errorCode: 'unknown-template' };
-    const bank = this.#fixedBank;
+    // `MULTI-CHANNEL-01` — the bank of THIS channel; a coordinate on an undeclared channel has none.
+    const bank = this.#bankFor(channel);
     // `B-201` — BOTH halves. This read `layer < bank.start + bank.count`, the operator half
     // alone, so every bed row answered `not-fixed` — and a bed row is exactly where a
     // plate-declaring package is the ONLY thing the picker will let an operator put.
@@ -1191,7 +1243,7 @@ export class MockRuntime {
         message: `layer ${String(layer)} is inside the reserved playout range`,
       };
     }
-    const bank = this.#fixedBank;
+    const bank = this.#bankFor(channel);
     // `B-201` — BOTH halves (see `loadFixed`). A bed row is a declared row of the bank, so
     // the bank-scoped clear must reach it or a bed becomes the one row nothing can clear.
     const inBank = bank !== null && isFixedBankLayer(bank, channel, layer);
@@ -1223,8 +1275,15 @@ export class MockRuntime {
    * the row can never keep naming an item that is gone.
    */
   fixedLayersState(): FixedSlotState[] {
-    if (this.#fixedBank === null) return [];
-    const bank = this.#fixedBank;
+    const out: FixedSlotState[] = [];
+    // `MULTI-CHANNEL-01` — EVERY declared bank's rows, in channel order, each named from its own
+    // bank: the bridge publishes every coordinate its LayerManager is fenced with.
+    for (const bank of this.#fixedBanks) out.push(...this.#bankState(bank));
+    return out;
+  }
+
+  /** One bank's rows, both halves — see {@link fixedLayersState}. */
+  #bankState(bank: FixedLayerBank): FixedSlotState[] {
     const out: FixedSlotState[] = [];
     /*
       🔴 `B-201` — THE UNION, because that is what the bridge publishes.
@@ -1460,7 +1519,7 @@ export class MockRuntime {
     channel: number,
     layer: number,
   ): { ok: boolean; reason?: 'owned' | 'foreign' | 'amcp-error' } {
-    const bank = this.#fixedBank;
+    const bank = this.#bankFor(channel);
     // `B-201` — BOTH halves (see `loadFixed`). Ours-vs-foreign is decided the same way on a
     // bed row as on an operator row; the half a layer sits in is not part of that question.
     if (bank !== null && isFixedBankLayer(bank, channel, layer)) {
@@ -1652,7 +1711,7 @@ export class MockRuntime {
       return {
         ok: false,
         reason: 'in-use',
-        message: describeTemplateReferences(references, this.#fixedBank),
+        message: describeTemplateReferences(references, this.fixedLayerBanks()),
         references,
       };
     }
@@ -1738,12 +1797,9 @@ export class MockRuntime {
     message?: string;
     droppedAssignments?: TemplateSourceAssignment[];
   } {
-    const verdict = checkSourceCatalog(next, {
-      fixedBank: this.#fixedBank,
-      // The mock declares no playout reservation — there is no playout system
-      // behind it to fence off.
-      reservedLayers: [],
-    });
+    // Every declared bank, through the bridge's own plural check. The mock declares no playout
+    // reservation — there is no playout system behind it to fence off.
+    const verdict = checkSourceCatalogAgainstBanks(next, this.#fixedBanks, []);
     if (!verdict.ok) return verdict;
     // ⚠ READ THE ASSIGNMENTS FIRST. `sourceAssignments()` prunes against the
     // catalog IN FORCE, so reading it after the write would return the already-
@@ -2197,6 +2253,14 @@ export function seedLayer(offset: number): number {
 /** The same row as a record KEY. See {@link seedLayer}. */
 export function seedRow(offset: number): string {
   return String(seedLayer(offset));
+}
+
+/**
+ * `MULTI-CHANNEL-01` — the seeded set: the e2e bank on {@link MOCK_CHANNEL}, or nothing unarmed.
+ */
+function seedFixedBanks(): FixedLayerBank[] {
+  const bank = seedFixedBank();
+  return bank === null ? [] : [bank];
 }
 
 function seedFixedBank(): FixedLayerBank | null {

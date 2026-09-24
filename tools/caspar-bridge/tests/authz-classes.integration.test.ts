@@ -135,7 +135,7 @@ describe('C-038 — the census: every route, classified', () => {
    * seventh route quietly joining this class is a privilege change that should have to be
    * argued for — so it reddens here, and the argument happens in review.
    */
-  it('exactly nine routes are station-admin: the configuration verbs, the unjoined catalogue, and the two channel-scope doors', () => {
+  it('exactly ten routes are station-admin: the configuration verbs, the unjoined catalogue, and the two channel-scope doors', () => {
     const admin = [...routes().entries()]
       .filter(([, r]) => r.perm === 'station-admin')
       .map(([name]) => name)
@@ -150,6 +150,12 @@ describe('C-038 — the census: every route, classified', () => {
       'channels.catalogue',
       'connections.set-config',
       'delimiters.set',
+      /*
+        `MULTI-CHANNEL-01` — the station's banks, set as one list: add, remove, replace and edit
+        channels. A declaration door like `set-config` beside it, on the same rung for the same
+        reason; its permission footprint is the channels it changes (`bankChangeFootprint`).
+      */
+      'fixedLayers.set-banks',
       'fixedLayers.set-config',
       /*
         `DESKTOP-APPS-01-D` d — what is on air on a channel before it is declared. A read, on the
@@ -201,6 +207,8 @@ describe('C-038 — the census: every route, classified', () => {
       'connections.health',
       'connections.template-serve',
       'delimiters.list',
+      // `MULTI-CHANNEL-01` — every declared bank. A read, like `fixedLayers.config` beside it.
+      'fixedLayers.banks',
       'fixedLayers.config',
       'fixedLayers.state',
       'layers.orphans',

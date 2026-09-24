@@ -729,6 +729,40 @@ export function checkSourceCatalog(
 }
 
 /**
+ * 🔴 `MULTI-CHANNEL-01` — **THE CATALOG AGAINST EVERY DECLARED BANK.** The band carries no
+ * channel (a Live Source lands on whatever channel its template is on), so it must stay clear of
+ * EVERY bank's rows and above EVERY bank's beds — each bank checked by the one validator above,
+ * in channel order, the first refusal winning. With no bank it is checked against none, exactly
+ * as a bank-less station always was. The bridge, its boot and the offline mock all call THIS, so
+ * none of them can check the band against fewer banks than the others.
+ */
+export function validateSourceCatalogAgainstBanks(
+  value: SourceCatalog,
+  banks: readonly FixedLayerBank[],
+  reservedLayers: readonly number[],
+): void {
+  const each: readonly (FixedLayerBank | null)[] = banks.length > 0 ? banks : [null];
+  for (const fixedBank of each) validateSourceCatalog(value, { fixedBank, reservedLayers });
+}
+
+/** {@link validateSourceCatalogAgainstBanks} as a verdict, the {@link checkSourceCatalog} shape. */
+export function checkSourceCatalogAgainstBanks(
+  value: SourceCatalog,
+  banks: readonly FixedLayerBank[],
+  reservedLayers: readonly number[],
+): { ok: true } | { ok: false; reason: SourcesSetConfigReason; message: string } {
+  try {
+    validateSourceCatalogAgainstBanks(value, banks, reservedLayers);
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof SourceCatalogConfigError) {
+      return { ok: false, reason: err.code, message: err.message };
+    }
+    throw err;
+  }
+}
+
+/**
  * Validate an assignment set against itself and against the catalog IN FORCE.
  *
  * Same split as the catalog's validator and for the same reason: the bridge and

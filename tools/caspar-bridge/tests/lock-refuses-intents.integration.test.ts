@@ -294,6 +294,8 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'connections.health',
         'connections.template-serve',
         'delimiters.list',
+        // `MULTI-CHANNEL-01` — every declared bank; a read like the one below it.
+        'fixedLayers.banks',
         'fixedLayers.config',
         'fixedLayers.state',
         'layers.orphans',

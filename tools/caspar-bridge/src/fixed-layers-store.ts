@@ -2,13 +2,16 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {
   type FIXED_LAYERS_SET_CONFIG_REASONS,
+  bankForChannel,
   FixedLayerBankSchema,
+  FixedLayerBanksSchema,
   fixedBankEnd,
   fixedBankSlots,
   isLayerVisible,
   lowBankEnd,
   LAYER_BANDS,
   bandText,
+  sortBanks,
   type FixedLayerBank,
 } from '@cg/shared-ipc';
 import type { LayerPolicy, LayerSlot } from '@cg/caspar-client';
@@ -388,20 +391,105 @@ export function validateFixedBankChange(
   // derivation here is how the gate came to cover half of what its name claims.
   for (const { layer } of fixedBankSlots(next)) {
     if (!isLayerVisible(current, layer) || isLayerVisible(next, layer)) continue;
-    const occupancy = options.slotOccupancy({ channel: next.channel, layer });
-    if (occupancy === 'occupied') {
+    assertMayHide(layer, options.slotOccupancy({ channel: next.channel, layer }));
+  }
+  return slots;
+}
+
+/**
+ * R-028 (2.3) — **MAY THIS ROW BE HIDDEN?** Only while its layer is provably EMPTY. The ONE
+ * spelling of both refusals, asked by a change ({@link validateFixedBankChange}) and by a bank
+ * installed live ({@link validateFixedBankInstall}) — the second lived in the runtime as its own
+ * copy of the same two sentences until `MULTI-CHANNEL-01` needed it for every added channel.
+ */
+function assertMayHide(layer: number, occupancy: SlotOccupancy): void {
+  if (occupancy === 'occupied') {
+    throw new FixedLayersConfigError(
+      'untick-occupied',
+      `cannot hide layer ${String(layer)}: it is OCCUPIED (an item or producer is on it) — ` +
+        `remove its template first (removal implies clear), then untick`,
+    );
+  }
+  if (occupancy === 'unknown') {
+    throw new FixedLayersConfigError(
+      'untick-unknown',
+      `cannot hide layer ${String(layer)}: its occupancy is UNKNOWN (no healthy CasparCG ` +
+        `link or no fresh OSC), and unknown is never treated as empty — a hidden row may ` +
+        `be on air. Restore the link/OSC so the layer reads empty, then untick`,
+    );
+  }
+}
+
+/**
+ * A bank INSTALLED LIVE — on a bridge that declared nothing on its channel. Validated like a
+ * load (`validateFixedBank`), PLUS the fail-closed untick rule, which `validateFixedBank` alone
+ * cannot carry: the BOOT path shares it, and at boot occupancy is always unknown (the persisted
+ * ticks were adjudicated when applied). A live install that arrives with rows already hidden must
+ * not slip an occupied or unverifiable layer out of sight in one step.
+ *
+ * 🔴 `B-205` — BOTH halves, through `fixedBankSlots`, the one enumeration of a bank's range.
+ */
+export function validateFixedBankInstall(
+  bank: FixedLayerBank,
+  options: ValidateChangeOptions,
+): readonly LayerSlot[] {
+  const slots = validateFixedBank(bank, options);
+  for (const { layer } of fixedBankSlots(bank)) {
+    if (isLayerVisible(bank, layer)) continue;
+    assertMayHide(layer, options.slotOccupancy({ channel: bank.channel, layer }));
+  }
+  return slots;
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **THE STATION'S SET OF BANKS, validated at boot:** every bank against
+ * everything {@link validateFixedBank} checks. One bank per channel is the schema's rule
+ * (`FixedLayerBanksSchema`), and two banks on different channels cannot collide on a coordinate,
+ * so there is no cross-bank rule beyond it. Returns every bank's slots, in channel order.
+ */
+export function validateFixedBanks(
+  banks: readonly FixedLayerBank[],
+  options: ValidateOptions,
+): readonly LayerSlot[] {
+  return sortBanks(banks).flatMap((bank) => [...validateFixedBank(bank, options)]);
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **A CHANGE TO THE STATION'S SET OF BANKS, validated per channel.**
+ *
+ *   - a channel in BOTH sets — {@link validateFixedBankChange}, unchanged: `start` and `count` are
+ *     fixed at install, and a row may be hidden only while it is provably empty;
+ *   - a channel only in `next` — ADDED: {@link validateFixedBankInstall}, as a bank installed on a
+ *     bank-less bridge is;
+ *   - a channel only in `current` — REMOVED: refused while anything of ours holds air on it
+ *     (`channel-change-refused`, `B-269`'s own sentence). The refusal a replaced channel has
+ *     always had, and for the same reason: a declaration withdrawn under a live graphic would
+ *     strand that graphic on a channel no row shows. Absent `channelHoldsOurAir` refuses — fail
+ *     closed, as the single-bank rule does.
+ *
+ * Nothing about the SET is re-derived from a bank: which channels it declares is exactly the list
+ * of their `channel` fields. Returns the next set's slots.
+ */
+export function validateFixedBanksChange(
+  current: readonly FixedLayerBank[],
+  next: readonly FixedLayerBank[],
+  options: ValidateChangeOptions,
+): readonly LayerSlot[] {
+  const slots: LayerSlot[] = [];
+  for (const bank of sortBanks(next)) {
+    const before = bankForChannel(current, bank.channel);
+    slots.push(
+      ...(before !== null
+        ? validateFixedBankChange(before, bank, options)
+        : validateFixedBankInstall(bank, options)),
+    );
+  }
+  for (const before of sortBanks(current)) {
+    if (bankForChannel(next, before.channel) !== null) continue;
+    if (options.channelHoldsOurAir?.(before.channel) ?? true) {
       throw new FixedLayersConfigError(
-        'untick-occupied',
-        `cannot hide layer ${String(layer)}: it is OCCUPIED (an item or producer is on it) — ` +
-          `remove its template first (removal implies clear), then untick`,
-      );
-    }
-    if (occupancy === 'unknown') {
-      throw new FixedLayersConfigError(
-        'untick-unknown',
-        `cannot hide layer ${String(layer)}: its occupancy is UNKNOWN (no healthy CasparCG ` +
-          `link or no fresh OSC), and unknown is never treated as empty — a hidden row may ` +
-          `be on air. Restore the link/OSC so the layer reads empty, then untick`,
+        'channel-change-refused',
+        channelChangeRefusal(before.channel),
       );
     }
   }
@@ -415,22 +503,34 @@ export function validateFixedBankChange(
  * diverges from connection-store's warn-and-ignore).
  */
 export function loadFixedLayerBank(filePath: string): FixedLayerBank | null {
+  const parsed = readFixedLayersJson(filePath);
+  return parsed === ABSENT ? null : parseBankRecord(filePath, parsed);
+}
+
+/** A file that is not there — the normal no-bank case. */
+const ABSENT = Symbol('absent');
+
+/** Read and JSON-parse the file, or {@link ABSENT}; present-but-unusable throws. */
+function readFixedLayersJson(filePath: string): unknown {
   let raw: string;
   try {
     raw = fs.readFileSync(filePath, 'utf8');
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return ABSENT;
     throw new FixedLayersFileError(filePath, err instanceof Error ? err.message : String(err));
   }
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    return JSON.parse(raw) as unknown;
   } catch (err) {
     throw new FixedLayersFileError(
       filePath,
       `invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
+}
+
+/** ONE bank record, through the old-map sentence and the schema. */
+function parseBankRecord(filePath: string, parsed: unknown): FixedLayerBank {
   // `LAYER-BANDS-16` — the OLD-MAP check runs BEFORE the schema and again after it, and
   // both doors are needed. A pre-2026-09-14 file usually trips the schema first (thirty
   // operator rows exceed the template band's twenty, a bed at layer 1 is below the band's
@@ -448,10 +548,75 @@ export function loadFixedLayerBank(filePath: string): FixedLayerBank | null {
   return result.data;
 }
 
+/**
+ * 🔴 `MULTI-CHANNEL-01` — **THE STATION'S BANKS FROM THE PERSISTED FILE**, in channel order.
+ * ABSENT → `null`, exactly as {@link loadFixedLayerBank}.
+ *
+ * Two shapes, both read:
+ *
+ *   - **v1 — ONE bank object.** Every file written before this change, and every file a
+ *     one-channel station still writes. It is a SHIPPED format — the owner's `~/.cg-runtime` and
+ *     CG Control's own state are v1 — so it reads as a one-entry list rather than failing:
+ *     `P-031`'s floor owes nothing to unshipped formats, and this one shipped.
+ *   - **`{ "banks": [ … ] }`** — two or more channels.
+ *
+ * Every entry passes the same old-map sentence and the same schema a v1 file does, and the list
+ * passes `FixedLayerBanksSchema` (one bank per channel). Anything else is the existing HARD boot
+ * failure: a declared bank silently ignored would leave the operator believing a layer is fenced
+ * when it is not.
+ */
+export function loadFixedLayerBanks(filePath: string): FixedLayerBank[] | null {
+  const parsed = readFixedLayersJson(filePath);
+  if (parsed === ABSENT) return null;
+  if (!isBanksEnvelope(parsed)) return [parseBankRecord(filePath, parsed)];
+  const banks = parsed.banks.map((entry) => parseBankRecord(filePath, entry));
+  const listed = FixedLayerBanksSchema.safeParse(banks);
+  if (!listed.success) {
+    throw new FixedLayersFileError(filePath, `schema-invalid: ${listed.error.message}`);
+  }
+  if (listed.data.length === 0) {
+    throw new FixedLayersFileError(
+      filePath,
+      'it declares no channel — a station with a fixed-layers file declares at least one',
+    );
+  }
+  return sortBanks(listed.data);
+}
+
+/** The plural file's shape: an object carrying `banks` and no bank of its own. */
+function isBanksEnvelope(parsed: unknown): parsed is { banks: unknown[] } {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return false;
+  const record = parsed as Record<string, unknown>;
+  return Array.isArray(record['banks']) && !('channel' in record);
+}
+
 /** Atomically persist the bank (mkdir -p + tmp + rename), the connection-store pattern. */
 export function saveFixedLayerBank(filePath: string, bank: FixedLayerBank): void {
+  writeFixedLayersFile(filePath, bank);
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` — persist the station's banks. **ONE bank is written as the v1 object,
+ * byte for byte** — a one-channel station's file is exactly what it was, and an older build can
+ * still read it. Two or more are written as `{ "banks": [ … ] }`, in channel order.
+ *
+ * An EMPTY set is refused rather than written: no door can produce one (`set-banks` requires a
+ * bank, `set-config` carries one), and a file declaring nothing would boot as channel 1 by
+ * default — which may be somebody else's programme output.
+ */
+export function saveFixedLayerBanks(filePath: string, banks: readonly FixedLayerBank[]): void {
+  const sorted = sortBanks(banks);
+  const only = sorted.length === 1 ? sorted[0] : undefined;
+  if (sorted.length === 0) {
+    throw new Error('refusing to persist a fixed-layers file that declares no channel');
+  }
+  writeFixedLayersFile(filePath, only ?? { banks: sorted });
+}
+
+/** mkdir -p + tmp + rename — the connection-store pattern, for either shape. */
+function writeFixedLayersFile(filePath: string, value: unknown): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   const tmp = `${filePath}.tmp`;
-  fs.writeFileSync(tmp, `${JSON.stringify(bank, null, 2)}\n`, 'utf8');
+  fs.writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
   fs.renameSync(tmp, filePath);
 }

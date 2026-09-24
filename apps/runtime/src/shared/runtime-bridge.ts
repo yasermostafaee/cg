@@ -27,9 +27,11 @@ import type {
   ConnectionsSetConfigChannel,
   ConnectionsTemplateServeChannel,
   FixedLayerBank,
+  FixedLayersBanksChannel,
   FixedLayersClearLayerChannel,
   FixedLayersConfigChannel,
   FixedLayersLoadChannel,
+  FixedLayersSetBanksChannel,
   FixedLayersSetConfigChannel,
   FixedLayersStateChannel,
   FixedSlotState,
@@ -441,16 +443,32 @@ export interface RuntimeBridge {
    * derivation happens renderer-side, once, per design (f)/(g)).
    */
   fixedLayers: {
-    /** The declared bank, or null when none is configured. */
+    /**
+     * The declared bank, or null when none is configured — the v1 view: on a station that
+     * declares several channels, the lowest-numbered one's bank. The console reads
+     * {@link banks} for per-channel work.
+     */
     config(): Promise<ChannelResponse<typeof FixedLayersConfigChannel>>;
     /**
      * Apply a bank change LIVE (design (e)): grow-at-end and alias changes
      * apply immediately; renumber/channel-change and shrink-with-residents
-     * refuse with the validator's code in `reason`.
+     * refuse with the validator's code in `reason`. `MULTI-CHANNEL-01` — "the station's bank is
+     * this one": on a station declaring several channels, the set becomes this one bank.
      */
     setConfig(
       req: ChannelRequest<typeof FixedLayersSetConfigChannel>,
     ): Promise<ChannelResponse<typeof FixedLayersSetConfigChannel>>;
+    /** `MULTI-CHANNEL-01` — every declared bank, in channel order ([] when none is declared). */
+    banks(): Promise<ChannelResponse<typeof FixedLayersBanksChannel>>;
+    /**
+     * `MULTI-CHANNEL-01` — set the station's banks: add, remove, replace and edit channels as one
+     * request. A removed channel is refused while anything of ours holds air on it.
+     */
+    setBanks(
+      req: ChannelRequest<typeof FixedLayersSetBanksChannel>,
+    ): Promise<ChannelResponse<typeof FixedLayersSetBanksChannel>>;
+    /** `MULTI-CHANNEL-01` — the whole set, pushed whenever it is applied. */
+    onBanksChanged(handler: (banks: FixedLayerBank[]) => void): Unsubscribe;
     /**
      * R-021 stage 3 — create an item bound to an EXACT fixed slot and pre-roll
      * it. Resolves the layer through `LayerManager.bindFixed` — never the

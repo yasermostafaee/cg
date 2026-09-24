@@ -42,10 +42,13 @@ import {
   ConnectionsTemplateServeChannel,
   DEFAULT_BRIDGE_HOST,
   DEFAULT_BRIDGE_PORT,
+  FixedLayersBanksChangedChannel,
+  FixedLayersBanksChannel,
   FixedLayersConfigChangedChannel,
   FixedLayersClearLayerChannel,
   FixedLayersConfigChannel,
   FixedLayersLoadChannel,
+  FixedLayersSetBanksChannel,
   FixedLayersSetConfigChannel,
   FixedLayersStateChangedChannel,
   FixedLayersStateChannel,
@@ -121,7 +124,10 @@ import {
   parseWsFrame,
   serializeWsFrame,
   defaultFixedLayerBank,
+  firstBank,
   reservedLayerNumbers,
+  sortBanks,
+  validateSourceCatalogAgainstBanks,
   type AnyChannel,
   type AnyPublishChannel,
   type ChannelSettings,
@@ -142,8 +148,8 @@ import { CasparRuntime, configuredCasparHosts } from './caspar-runtime.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
 import {
   FixedLayersConfigError,
-  loadFixedLayerBank,
-  saveFixedLayerBank,
+  loadFixedLayerBanks,
+  saveFixedLayerBanks,
   validateFixedBank,
 } from './fixed-layers-store.js';
 import { loadReservedLayers } from './reserved-layers-store.js';
@@ -152,7 +158,6 @@ import { resolveCreateMissingConsumers } from './output-check.js';
 import {
   resolveSourceCatalog,
   saveSourceCatalog,
-  validateSourceCatalog,
   type SourceCatalogSource,
 } from './source-catalog-store.js';
 import {
@@ -231,8 +236,11 @@ export interface BridgeOptions {
    * precedence; see {@link resolveFixedBank} for the full order. The bank is
    * VALIDATED at boot (`validateFixedBank`) and a violation throws BEFORE the
    * WebSocket binds — conflicts resolve loudly at startup.
+   *
+   * `MULTI-CHANNEL-01` — ONE bank, or the station's LIST of them (one per declared channel,
+   * `FixedLayerBanksSchema`'s rule).
    */
-  fixedLayers?: FixedLayerBank;
+  fixedLayers?: FixedLayerBank | readonly FixedLayerBank[];
   /**
    * R-021 stage 1 — where the fixed bank persists (JSON). An ABSENT file at a
    * CONFIGURED path means the BUILT-IN DEFAULT bank (70–99, top five ticked) —
@@ -473,6 +481,9 @@ export interface BridgeHandle {
    * boot. Two machines ran different banks for two days and nothing anywhere
    * announced the difference; the bank alone does not answer "why this one?",
    * and the source is the half that does.
+   *
+   * `MULTI-CHANNEL-01` — `bank` is the v1 view (the first declared channel's bank); the CLI's
+   * boot line reads every bank from the runtime, and `source` is the station's, not a bank's.
    */
   readonly fixedBankSource: { bank: FixedLayerBank | null; source: FixedBankSource };
   /**
@@ -1001,8 +1012,8 @@ export function stationChannelsFor(
     if (!hosts.includes(row.casparHost)) continue;
     note(row.casparChannel, 'catalogue', { id: row.id, name: row.name });
   }
-  const bank = runtime.fixedLayersConfig();
-  if (bank !== null) note(bank.channel, 'bank');
+  // `MULTI-CHANNEL-01` — every declared bank's channel, in channel order.
+  for (const bank of runtime.fixedLayerBanks()) note(bank.channel, 'bank');
   for (const s of runtime.channelSettingsState().settings) note(s.channel, 'channel-settings');
 
   return {
@@ -1065,6 +1076,19 @@ export function channelsForRequest(
   // (a) the request carries the coordinate itself.
   const explicit = explicitChannel(req);
   if (explicit !== undefined) return [explicit];
+
+  /*
+    (a″) 🔴 `MULTI-CHANNEL-01` — `fixedLayers.set-banks` names its channels INSIDE the list, and
+    the ones it TOUCHES are the ones whose declaration it changes: added, edited or removed
+    (`bankChangeFootprint`). A bank sent back unchanged is not an act on its channel, so a
+    station-admin granted channel 2 may edit channel 2's rows on a station that also declares
+    channel 1; removing a channel IS an act on it, so they may not take channel 1 away. Decided
+    all-or-nothing by the caller, like every other multi-channel footprint.
+  */
+  if (name === FixedLayersSetBanksChannel.name) {
+    const banks = (req as { banks?: readonly FixedLayerBank[] } | null)?.banks ?? [];
+    return runtime.bankChangeFootprint(banks);
+  }
 
   // (a′) `stack.restore` carries N items, each with its own optional slot.
   if (name === StackRestoreChannel.name) {
@@ -1310,17 +1334,39 @@ export type FixedBankSource = 'explicit' | 'file' | 'built-in default' | 'first-
  * is what `fixed-layers-boot` T18 pins and what every integration test that
  * declares its own layers relies on.
  */
-function resolveFixedBank(options: BridgeOptions): {
-  bank: FixedLayerBank | null;
+function resolveFixedBanks(options: BridgeOptions): {
+  banks: FixedLayerBank[];
   source: FixedBankSource;
 } {
-  if (options.fixedLayers !== undefined) return { bank: options.fixedLayers, source: 'explicit' };
-  if (options.fixedLayersPath === undefined) return { bank: null, source: 'none' };
-  const persisted = loadFixedLayerBank(options.fixedLayersPath);
-  if (persisted !== null) return { bank: persisted, source: 'file' };
+  // `MULTI-CHANNEL-01` — the explicit option is one bank or the list; the file is v1 (one bank)
+  // or `{ banks }` (`loadFixedLayerBanks`). Same precedence, same sources, plural answer.
+  if (options.fixedLayers !== undefined) {
+    const explicit = options.fixedLayers;
+    // Passed through as given (the embedder's objects, exactly as the one-bank option always
+    // was); only the list's one rule is checked here — one bank per channel.
+    const banks = isBankList(explicit) ? [...explicit] : [explicit];
+    const channels = banks.map((bank) => bank.channel);
+    const twice = channels.find((channel, index) => channels.indexOf(channel) !== index);
+    if (twice !== undefined) {
+      throw new Error(
+        `fixedLayers declares channel ${String(twice)} twice — a station holds one bank per channel`,
+      );
+    }
+    return { banks: sortBanks(banks), source: 'explicit' };
+  }
+  if (options.fixedLayersPath === undefined) return { banks: [], source: 'none' };
+  const persisted = loadFixedLayerBanks(options.fixedLayersPath);
+  if (persisted !== null) return { banks: persisted, source: 'file' };
   // `DESKTOP-APPS-01` — an installed station that has not picked its channel declares NONE.
-  if (options.firstRun === true) return { bank: null, source: 'first-run' };
-  return { bank: defaultFixedLayerBank(), source: 'built-in default' };
+  if (options.firstRun === true) return { banks: [], source: 'first-run' };
+  return { banks: [defaultFixedLayerBank()], source: 'built-in default' };
+}
+
+/** The explicit option's plural spelling. */
+function isBankList(
+  value: FixedLayerBank | readonly FixedLayerBank[],
+): value is readonly FixedLayerBank[] {
+  return Array.isArray(value);
 }
 
 /**
@@ -1452,26 +1498,25 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
       : null);
   const reservedLayers =
     reserved !== null && reserved !== undefined ? reservedLayerNumbers(reserved) : [];
-  const { bank: fixedBank, source: fixedBankSource } = resolveFixedBank(options);
-  const fixedSlots =
-    fixedBank !== null
-      ? // R-028 (2.5) — the candidate ceiling must never intersect the
-        // reserved playout range: refused HERE at load, and again at every
-        // change (`setFixedLayers` reads the same list). A violation throws
-        // BEFORE the WebSocket binds — conflicts resolve loudly at startup.
-        validateDeclaredBank(fixedBank, fixedBankSource, options.fixedLayersPath, {
-          policy: layerPolicy,
-          reservedLayers,
-        })
-      : [];
+  const { banks: fixedBanks, source: fixedBankSource } = resolveFixedBanks(options);
+  // R-028 (2.5) — the candidate ceiling must never intersect the reserved playout range:
+  // refused HERE at load, and again at every change (`setFixedLayers` reads the same list).
+  // A violation throws BEFORE the WebSocket binds — conflicts resolve loudly at startup.
+  // `MULTI-CHANNEL-01` — EVERY declared bank, each through the same validator.
+  const fixedSlots = fixedBanks.flatMap((bank) => [
+    ...validateDeclaredBank(bank, fixedBankSource, options.fixedLayersPath, {
+      policy: layerPolicy,
+      reservedLayers,
+    }),
+  ]);
   // D-137 / C-015 — the installation's Live Source mapping, loaded and
-  // VALIDATED here, BEFORE the WebSocket binds and against the SAME bank and
+  // VALIDATED here, BEFORE the WebSocket binds and against the SAME banks and
   // reserved list the fixed-bank validator just saw. Both halves are deliberate:
   // an unusable file must stop the boot rather than serve a station that
-  // resolves three of its four ids, and a band overlapping the bank or the
+  // resolves three of its four ids, and a band overlapping a bank or the
   // reservation must resolve loudly at startup rather than at a take.
   const sourceCatalog = resolveSourceCatalog(options);
-  validateSourceCatalog(sourceCatalog.value, { fixedBank, reservedLayers });
+  validateSourceCatalogAgainstBanks(sourceCatalog.value, fixedBanks, reservedLayers);
   // The ASSIGNMENTS half, loaded against the catalog just resolved. A dangling
   // reference is PRUNED rather than fatal — see `source-assignments-store.ts`'s
   // header — but a duplicated plate is still a refusal, because two answers for
@@ -1514,7 +1559,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     fixedSlots,
     layerPolicy,
     reservedLayers,
-    ...(fixedBank !== null ? { fixedBank } : {}),
+    fixedBanks,
     ...(options.templatesDir !== undefined ? { templatesDir: options.templatesDir } : {}),
     sourceCatalog: sourceCatalog.value,
     sourceAssignments: prunedAssignments.value,
@@ -1628,7 +1673,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
   const setupPhase = (): SetupPhase | null => {
     if (options.firstRun !== true) return null;
     if (auth.mode === 'off') return 'target';
-    return runtime.fixedLayersConfig() === null ? 'channel' : null;
+    return runtime.fixedLayerBanks().length === 0 ? 'channel' : null;
   };
   // The control port is known only once it has bound; the check reads it at call time.
   const bound = { port: requestedPort };
@@ -1942,7 +1987,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     templateServe,
     runtime,
     pgmReturn,
-    fixedBankSource: { bank: fixedBank, source: fixedBankSource },
+    fixedBankSource: { bank: firstBank(fixedBanks), source: fixedBankSource },
     templates: runtime.templateProvenance,
     sourceCatalog,
     sourceAssignments: {
@@ -2501,6 +2546,8 @@ export function wirePublishes(
     backing.updateChanged.subscribe((u) => push(UpdateStateChangedChannel, u)),
     // R-021 stage 2a — fixed-bank config + per-slot state.
     backing.fixedConfigChanged.subscribe((c) => push(FixedLayersConfigChangedChannel, c)),
+    // `MULTI-CHANNEL-01` — the whole set, which the console's per-channel views read.
+    backing.fixedBanksChanged.subscribe((b) => push(FixedLayersBanksChangedChannel, b)),
     backing.fixedStateChanged.subscribe((s) => push(FixedLayersStateChangedChannel, s)),
     // R-028 (o1) — the bridge-owned template catalogue.
     backing.templatesChanged.subscribe((t) => push(TemplatesChangedChannel, t)),
@@ -2687,6 +2734,22 @@ export function buildRoutes(
       saveSourceAssignments(filePath, value);
     } catch (err) {
       persistFailed('the source assignments', filePath, err);
+    }
+  };
+  /**
+   * `MULTI-CHANNEL-01` — persist the set IN FORCE after either door applied it. One bank is written
+   * as the v1 object, byte for byte (`saveFixedLayerBanks`), so a one-channel station's file is
+   * exactly what `set-config` always wrote.
+   */
+  const persistBanks = (): void => {
+    if (fixedLayersPath === undefined) return;
+    try {
+      saveFixedLayerBanks(fixedLayersPath, b.fixedLayerBanks());
+    } catch (err) {
+      process.stderr.write(
+        `[caspar-bridge] ⚠ failed to persist fixed layers to ${fixedLayersPath}: ` +
+          `${err instanceof Error ? err.message : String(err)}\n`,
+      );
     }
   };
 
@@ -2898,18 +2961,28 @@ export function buildRoutes(
     route(FixedLayersConfigChannel, 'read', 'read', () => b.fixedLayersConfig()),
     route(FixedLayersSetConfigChannel, 'operator', 'station-admin', (r: FixedLayerBank) => {
       const result = b.setFixedLayers(r);
-      if (result.ok && fixedLayersPath !== undefined) {
-        try {
-          saveFixedLayerBank(fixedLayersPath, r);
-        } catch (err) {
-          process.stderr.write(
-            `[caspar-bridge] ⚠ failed to persist fixed layers to ${fixedLayersPath}: ` +
-              `${err instanceof Error ? err.message : String(err)}\n`,
-          );
-        }
-      }
+      if (result.ok) persistBanks();
       return result;
     }),
+    /*
+      🔴 `MULTI-CHANNEL-01` — the station's banks: every one of them, and the plural door that sets
+      them. `station-admin`, like every declaration door; it names its channels inside the list
+      (`req.banks[].channel`), so the station fence — which reads a top-level `channel` — does not
+      stand in its way (a declaration cannot be fenced by the declaration it writes), while the
+      permission gate and the lock judge the channels it ADDS, EDITS or REMOVES
+      (`CasparRuntime.bankChangeFootprint`).
+    */
+    route(FixedLayersBanksChannel, 'read', 'read', () => b.fixedLayerBanks()),
+    route(
+      FixedLayersSetBanksChannel,
+      'operator',
+      'station-admin',
+      (r: { banks: FixedLayerBank[] }) => {
+        const result = b.setFixedLayerBanks(r.banks);
+        if (result.ok) persistBanks();
+        return result;
+      },
+    ),
     route(FixedLayersStateChannel, 'read', 'read', () => b.fixedLayersState()),
     // R-021 stage 3 — the EXACT-SLOT load: `bindFixed`, never `reserve`/allocate.
     route(

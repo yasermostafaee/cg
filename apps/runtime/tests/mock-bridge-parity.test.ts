@@ -217,6 +217,10 @@ const BRIDGE_SURFACE: {
     fixedLayers: [
       'config',
       'setConfig',
+      // `MULTI-CHANNEL-01` — every declared bank, the plural door, and its push.
+      'banks',
+      'setBanks',
+      'onBanksChanged',
       'load',
       'clearLayer',
       'state',

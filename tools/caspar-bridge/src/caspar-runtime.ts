@@ -36,12 +36,14 @@ import type {
 } from '@cg/shared-schema';
 import { isOnAirStatus, isRetainedOnAir, withCgControl } from '@cg/shared-schema';
 import {
-  fixedBankSlots,
-  isLayerVisible,
+  bankForChannel,
+  firstBank,
+  fixedBanksSlots,
   isLowBankLayer,
   layerAlias,
   lowBankEnd,
   requiredBankFor,
+  sortBanks,
   // R-030 — the video-mode token map lives in shared-ipc, not caspar-client, so
   // the browser's MockRuntime can read the SAME map without dragging `node:net`
   // into the SPA bundle (see channelSettings.ts for the full reasoning).
@@ -82,7 +84,7 @@ import {
   EMPTY_SOURCE_ASSIGNMENTS,
   EMPTY_SOURCE_CATALOG,
   checkSourceAssignments,
-  checkSourceCatalog,
+  checkSourceCatalogAgainstBanks,
   describeTemplateReferences,
   type TemplateReference,
   activeLookOf,
@@ -123,11 +125,13 @@ import {
   missingConsumerAddCommand,
 } from './output-check.js';
 import {
-  validateFixedBank,
   validateFixedBankChange,
+  validateFixedBankInstall,
+  validateFixedBanksChange,
   FixedLayersConfigError,
   type FixedLayersErrorCode,
   type SlotOccupancy,
+  type ValidateChangeOptions,
 } from './fixed-layers-store.js';
 import { CommandBuilder, summarizeWireLine, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
@@ -772,8 +776,16 @@ export class CasparRuntime {
   readonly orphansChanged = new Emitter<OrphanLayer[]>();
   /** B-056 — emitted ONLY when the owned-slot warning set changes. */
   readonly ownedOccupancyChanged = new Emitter<OwnedOccupancyWarning[]>();
-  /** R-021 stage 2a — emitted after every applied fixed-bank change. */
+  /**
+   * R-021 stage 2a — emitted after every applied fixed-bank change, with the v1 view of the set
+   * ({@link firstBank}): on a one-channel station, the bank itself, exactly as before.
+   */
   readonly fixedConfigChanged = new Emitter<FixedLayerBank | null>();
+  /**
+   * `MULTI-CHANNEL-01` — emitted after every applied change with the WHOLE set, in channel order.
+   * The console's per-channel views read this; `fixedConfigChanged` above is the v1 view of it.
+   */
+  readonly fixedBanksChanged = new Emitter<FixedLayerBank[]>();
   /** R-021 stage 2a — emitted ONLY when the per-slot fixed state changes. */
   readonly fixedStateChanged = new Emitter<FixedSlotState[]>();
   /**
@@ -850,9 +862,15 @@ export class CasparRuntime {
   // R-021 stage 1 — constructed in the constructor so the resolved fixed bank
   // (and the ONE policy object the validator saw) reach the allocator.
   readonly #layers: LayerManager;
-  // R-021 stage 2a — the declared bank (null = none), the policy in force, and
-  // the last PUBLISHED per-slot state (JSON, for the publish-on-change compare).
-  #fixedBank: FixedLayerBank | null;
+  // R-021 stage 2a — the declared banks, the policy in force, and the last PUBLISHED
+  // per-slot state (JSON, for the publish-on-change compare).
+  /**
+   * 🔴 `MULTI-CHANNEL-01` — **ONE BANK PER DECLARED CHANNEL, in channel order.** Empty = none
+   * declared. It was a single `#fixedBank` while a station operated one channel; every reader of
+   * a bank now asks {@link #bankFor} for the bank of the coordinate in front of it, and every
+   * reader of "which channels" asks {@link #declaredChannels} — never this list directly.
+   */
+  #fixedBanks: FixedLayerBank[];
   readonly #layerPolicy: LayerPolicy;
   /**
    * R-028 — the reserved playout layer numbers, from real config. The SAME list
@@ -1519,9 +1537,15 @@ export class CasparRuntime {
       layerPolicy?: LayerPolicy;
       /**
        * R-021 stage 2a — the bank the slots came from (aliases + the CURRENT
-       * side of live change validation). Absent = no bank declared.
+       * side of live change validation). Absent = no bank declared. The ONE-bank
+       * spelling of {@link fixedBanks}; a caller passes one or the other.
        */
       fixedBank?: FixedLayerBank;
+      /**
+       * `MULTI-CHANNEL-01` — the station's banks, one per declared channel (`createBridge`
+       * resolves and validates them). Absent, with no {@link fixedBank} either = none declared.
+       */
+      fixedBanks?: readonly FixedLayerBank[];
       /**
        * R-028 / C-015 — the reserved playout layer numbers, from real config
        * (resolved once in `createBridge`; the SAME list the boot validator
@@ -1568,7 +1592,9 @@ export class CasparRuntime {
       reservedLayers: this.#reservedLayers,
     });
     this.#layerPolicy = options.layerPolicy ?? DEFAULT_LAYER_POLICY;
-    this.#fixedBank = options.fixedBank ?? null;
+    this.#fixedBanks = sortBanks(
+      options.fixedBanks ?? (options.fixedBank !== undefined ? [options.fixedBank] : []),
+    );
     // R-028 (o1) — hydrate the persisted catalogue BEFORE anything can ask
     // for it; a bridge restart must not empty the library.
     this.#templates = new TemplateRegistry(options.templatesDir);
@@ -2219,11 +2245,14 @@ export class CasparRuntime {
       offer a placement this refuses, and this can never refuse one the surface offered.
       A second local `sources.length > 0` is how that agreement would end (golden rule 6).
 
-      FAIL-OPEN WITH NO DECLARED BANK, deliberately: `#fixedBank` is null only when slots were
-      fenced without a bank being declared (the harnesses and the unit fixtures do this), and
-      with no bank there are no two groups to be on the wrong side of.
+      FAIL-OPEN WITH NO DECLARED BANK, deliberately: the slot's channel has no bank only when
+      slots were fenced without a bank being declared (the harnesses and the unit fixtures do
+      this), and with no bank there are no two groups to be on the wrong side of.
+
+      `MULTI-CHANNEL-01` — the bank of the SLOT'S channel: a bed on channel 2 is judged by
+      channel 2's bed rows, never by whichever bank happens to be first.
     */
-    const declaredBank = this.#fixedBank;
+    const declaredBank = this.#bankFor(slot.channel);
     if (declaredBank !== null) {
       const info = this.#templates.get(templateId);
       const wanted = info === null ? 'high' : requiredBankFor(info);
@@ -3053,7 +3082,7 @@ export class CasparRuntime {
         `MIXER 1-L VOLUME 0` and six `CG 1-L ADD`, layers 59 and 95–99, one timestamp.
         On the same connection the connect-time unity sweep went correctly to channel 2.
         Two paths, two answers, and the difference is where each one LOOKS:
-        `#reassertDeclaredVolumes` reads the STATION (`fixedBankSlots(this.#fixedBank)`
+        `#reassertDeclaredVolumes` reads the STATION (every declared bank's `fixedBankSlots`
         → `{ channel: bank.channel, layer }`), while this method read the CLIENT
         (`item.slot.channel`) and compared it to nothing at all.
 
@@ -3081,7 +3110,7 @@ export class CasparRuntime {
         second vocabulary.
 
         ⚠ **`CHANNEL-AUTHORITY-01` — the fence now asks `#isDeclaredChannel`, the one
-        predicate every channel door asks.** It used to read `#fixedBank.channel` itself and
+        predicate every channel door asks.** It used to read the bank's channel itself and
         wave everything through when there was no bank, on the argument that a bank-less
         runtime "has no configured channel". It has one: `#declaredChannels()` answers
         channel 1 there — `FixedLayerBankSchema`'s own documented default, the channel the
@@ -3190,7 +3219,8 @@ export class CasparRuntime {
    * surface — so the row lands where they will look for it.
    */
   #migrateRetainedBed(item: RetainedStackItem, slot: CommandSlot): RestorePlacement | null {
-    const bank = this.#fixedBank;
+    // `MULTI-CHANNEL-01` — the bed rows of the retained coordinate's OWN channel.
+    const bank = this.#bankFor(slot.channel);
     if (bank === null) return null;
     if (!this.#layers.isFixed(slot)) return null;
     if (isLowBankLayer(bank, slot.layer)) return null;
@@ -4120,11 +4150,14 @@ export class CasparRuntime {
    * which sits outside both halves for exactly this reason). Widening to the bed
    * half keeps that property: beds lie BELOW the Live Source band by the
    * `low-bank-not-below-band` rule, so no live box can be un-muted here.
+   *
+   * 🔴 `MULTI-CHANNEL-01` — EVERY DECLARED ROW means every declared BANK's rows, in channel
+   * order. A second channel's muted row is the same stranded mute on another channel, and a
+   * sweep that covered the first bank alone would leave it silent at its next take. With one
+   * bank the walk is the same slots in the same order as before, so the wire is unchanged.
    */
   async #reassertDeclaredVolumes(): Promise<void> {
-    const bank = this.#fixedBank;
-    if (bank === null) return;
-    for (const slot of fixedBankSlots(bank)) {
+    for (const slot of fixedBanksSlots(this.#fixedBanks)) {
       // `normal`, not `urgent`: this is startup housekeeping across the whole
       // bank, and it must never sit ahead of an operator's take in the queue.
       await this.#send(this.#builder.mixerVolume(slot, INTENDED_VOLUME), this.#nextSeq(), 'normal');
@@ -4445,9 +4478,26 @@ export class CasparRuntime {
 
   // ── R-021 stage 2a: fixed-bank wire contract (config + per-slot state) ──
 
-  /** The declared fixed bank, or null when none is configured. */
+  /**
+   * The v1 SINGLE-BANK VIEW: the lowest-numbered declared channel's bank, or null when none is
+   * declared ({@link firstBank}). On a one-channel station it IS the bank, exactly as before.
+   */
   fixedLayersConfig(): FixedLayerBank | null {
-    return this.#fixedBank;
+    return firstBank(this.#fixedBanks);
+  }
+
+  /** `MULTI-CHANNEL-01` — every declared bank, in channel order (empty when none is declared). */
+  fixedLayerBanks(): FixedLayerBank[] {
+    return [...this.#fixedBanks];
+  }
+
+  /**
+   * 🔴 `MULTI-CHANNEL-01` — **THE BANK THAT DECLARES `channel`, or null.** Every per-coordinate
+   * reader in this class asks THIS — the wrong-bank refusal, the bed migration, the alias on the
+   * per-slot publish — so "which bank owns this coordinate" has one answer (golden rule 6).
+   */
+  #bankFor(channel: number): FixedLayerBank | null {
+    return bankForChannel(this.#fixedBanks, channel);
   }
 
   /**
@@ -4458,80 +4508,95 @@ export class CasparRuntime {
    * are renumber/channel-change and shrink-with-residents). On refusal
    * NOTHING is applied or published; persistence is the caller's step
    * (`bridge.ts` persists on ok, non-fatally, after this returns).
+   *
+   * 🔴 `MULTI-CHANNEL-01` — **THE v1 DOOR: "the station's bank is THIS one."** On a station that
+   * declares at most one bank it validates exactly as it always has — an install on a bank-less
+   * bridge, or `validateFixedBankChange` against the one bank in force, channel replace
+   * (`B-269`) included — so a one-channel station is byte-identical. On a station that declares
+   * more than one, "the bank is this one" means the SET becomes this one bank, and it is the
+   * plural door's rule that judges that: every other channel is REMOVED, refused while ours holds
+   * air there.
    */
   setFixedLayers(next: FixedLayerBank): {
     ok: boolean;
     reason?: FixedLayersErrorCode;
     message?: string;
   } {
+    const current = this.#fixedBanks;
+    if (current.length > 1) return this.setFixedLayerBanks([next]);
+    const options = this.#bankChangeOptions();
+    const only = current[0];
+    return this.#applyBanks([next], () =>
+      only === undefined
+        ? // No current bank: installing one live is validated like a load, PLUS the
+          // fail-closed untick rule (`validateFixedBankInstall`, the store's one copy of it).
+          validateFixedBankInstall(next, options)
+        : validateFixedBankChange(only, next, options),
+    );
+  }
+
+  /**
+   * 🔴 `MULTI-CHANNEL-01` — **THE PLURAL DOOR: set the station's banks** — add, remove, replace
+   * and edit channels in one request (`validateFixedBanksChange`: an edit keeps every single-bank
+   * rule, an added channel is validated as a fresh install, a removed one is refused while ours
+   * holds air on it). All or nothing: on refusal nothing is applied or published.
+   */
+  setFixedLayerBanks(next: readonly FixedLayerBank[]): {
+    ok: boolean;
+    reason?: FixedLayersErrorCode;
+    message?: string;
+  } {
+    const current = this.#fixedBanks;
+    const options = this.#bankChangeOptions();
+    return this.#applyBanks(next, () => validateFixedBanksChange(current, next, options));
+  }
+
+  /** The store's validators, with THIS runtime's policy, reservation and two air facts. */
+  #bankChangeOptions(): ValidateChangeOptions {
+    return {
+      policy: this.#layerPolicy,
+      reservedLayers: this.#reservedLayers,
+      slotOccupancy: (slot) => this.#fixedSlotOccupancy(slot),
+      // `DESKTOP-APPS-01-D` e — the one condition a channel change is refused on.
+      channelHoldsOurAir: (channel) => this.#holdsOurAirOn(channel),
+    };
+  }
+
+  /**
+   * The ONE apply step both doors share: validate, then strand what the set no longer declares,
+   * fence the LayerManager with every bank's slots, and publish — the v1 view and the whole set.
+   */
+  #applyBanks(
+    next: readonly FixedLayerBank[],
+    validate: () => readonly LayerSlot[],
+  ): { ok: boolean; reason?: FixedLayersErrorCode; message?: string } {
     let slots: readonly LayerSlot[];
     try {
-      if (this.#fixedBank === null) {
-        // No current bank: installing one live is validated like a load…
-        slots = validateFixedBank(next, {
-          policy: this.#layerPolicy,
-          reservedLayers: this.#reservedLayers,
-        });
-        // …PLUS the fail-closed untick rule, which validateFixedBank alone
-        // cannot carry (the BOOT path shares it, and at boot occupancy is
-        // always unknown — the persisted ticks were adjudicated when applied).
-        // A LIVE install that arrives with layers already hidden must not
-        // slip an occupied or unverifiable layer out of sight in one step.
-        //
-        // 🔴 `B-205` — BOTH halves. This walked `next.start … next.start+count`,
-        // the operator half, so a bank arriving with a bed row pre-hidden was
-        // installed with nothing adjudicating that row. `fixedBankSlots` is the
-        // ONE enumeration of the bank's range; the change path in
-        // `validateFixedBankChange` walks the same set for the same reason.
-        for (const { layer } of fixedBankSlots(next)) {
-          if (isLayerVisible(next, layer)) continue;
-          const occupancy = this.#fixedSlotOccupancy({ channel: next.channel, layer });
-          if (occupancy === 'occupied') {
-            throw new FixedLayersConfigError(
-              'untick-occupied',
-              `cannot hide layer ${String(layer)}: it is OCCUPIED (an item or producer is on ` +
-                `it) — remove its template first (removal implies clear), then untick`,
-            );
-          }
-          if (occupancy === 'unknown') {
-            throw new FixedLayersConfigError(
-              'untick-unknown',
-              `cannot hide layer ${String(layer)}: its occupancy is UNKNOWN (no healthy ` +
-                `CasparCG link or no fresh OSC), and unknown is never treated as empty — a ` +
-                `hidden row may be on air. Restore the link/OSC so the layer reads empty, ` +
-                `then untick`,
-            );
-          }
-        }
-      } else {
-        slots = validateFixedBankChange(this.#fixedBank, next, {
-          policy: this.#layerPolicy,
-          reservedLayers: this.#reservedLayers,
-          slotOccupancy: (slot) => this.#fixedSlotOccupancy(slot),
-          // `DESKTOP-APPS-01-D` e — the one condition a channel change is refused on.
-          channelHoldsOurAir: (channel) => this.#holdsOurAirOn(channel),
-        });
-      }
+      slots = validate();
     } catch (err) {
       if (err instanceof FixedLayersConfigError) {
         return { ok: false, reason: err.code, message: err.message };
       }
       throw err;
     }
+    const channels = new Set(next.map((bank) => bank.channel));
     /*
-      🔴 `DESKTOP-APPS-01-D` e/j — **EVERY ITEM LEFT ON ANOTHER CHANNEL LEAVES THE STACK, BEFORE
-      THE NEW ROWS ARE APPLIED** (its slot must be released while it is still a fixed slot). A
-      channel CHANGE reaches here only when nothing of ours holds air on the old channel, so what
-      leaves is list-only; a FIRST bank installed under a restored item (the owner's channel-2
-      set-up) can strand one that holds air, and that one becomes a stray. Nothing is sent.
+      🔴 `DESKTOP-APPS-01-D` e/j — **EVERY ITEM LEFT ON A CHANNEL THE SET NO LONGER DECLARES LEAVES
+      THE STACK, BEFORE THE NEW ROWS ARE APPLIED** (its slot must be released while it is still a
+      fixed slot). A channel REMOVED or REPLACED reaches here only when nothing of ours holds air
+      on it, so what leaves is list-only; a FIRST bank installed under a restored item (the
+      owner's channel-2 set-up) can strand one that holds air, and that one becomes a stray.
+      Nothing is sent. `MULTI-CHANNEL-01` — "another channel" is now "a channel not in the set":
+      an item on a channel that stays declared stays exactly where it is.
     */
     for (const item of this.#reconciler.snapshot()) {
       const slot = this.#slots.get(item.itemId);
-      if (slot !== undefined && slot.channel !== next.channel) this.#strandItem(item.itemId);
+      if (slot !== undefined && !channels.has(slot.channel)) this.#strandItem(item.itemId);
     }
     this.#layers.applyFixed(slots);
-    this.#fixedBank = next;
-    this.fixedConfigChanged.emit(next);
+    this.#fixedBanks = sortBanks(next);
+    this.fixedConfigChanged.emit(firstBank(this.#fixedBanks));
+    this.fixedBanksChanged.emit(this.fixedLayerBanks());
     // The bank changed, so the per-slot state did too — publish through the
     // same change-compare the sweep uses (never a second derivation).
     this.#publishFixedStateIfChanged();
@@ -4622,7 +4687,8 @@ export class CasparRuntime {
     // `single-clock-look-switch` — read through `layerAlias`, the ONE helper that knows
     // which half of the bank a layer belongs to. `bank.aliases` alone would silently drop
     // every bed row's alias, since those live in `bank.low.aliases`.
-    const bank = this.#fixedBank;
+    // `MULTI-CHANNEL-01` — and from the bank of the SLOT'S channel (`#bankFor`, per slot below):
+    // channel 2's row 98 carries channel 2's alias, never channel 1's.
     const itemBySlot = new Map<string, string>();
     for (const [itemId, s] of this.#slots) {
       itemBySlot.set(`${String(s.channel)}:${String(s.layer)}`, itemId);
@@ -4640,6 +4706,7 @@ export class CasparRuntime {
       .sort((a, b) => a.channel - b.channel || a.layer - b.layer)
       .map((slot) => {
         const key = `${String(slot.channel)}:${String(slot.layer)}`;
+        const bank = this.#bankFor(slot.channel);
         const alias = bank === null ? undefined : layerAlias(bank, slot.layer);
         const producer = occupiedBy.get(key);
         const observed: FixedSlotState['observed'] = !hearing
@@ -4710,7 +4777,7 @@ export class CasparRuntime {
    * bank change. With no bank declared it never publishes anything.
    */
   #publishFixedStateIfChanged(): void {
-    if (this.#layers.fixedSlots().length === 0 && this.#fixedBank === null) return;
+    if (this.#layers.fixedSlots().length === 0 && this.#fixedBanks.length === 0) return;
     const state = this.#computeFixedState();
     const json = JSON.stringify(state);
     if (json === this.#lastFixedStateJson) return;
@@ -10584,7 +10651,8 @@ export class CasparRuntime {
       return {
         ok: false,
         reason: 'in-use',
-        message: describeTemplateReferences(references, this.#fixedBank),
+        // `MULTI-CHANNEL-01` — the whole set: each reference is named from its own channel's bank.
+        message: describeTemplateReferences(references, this.fixedLayerBanks()),
         references,
       };
     }
@@ -10904,10 +10972,7 @@ export class CasparRuntime {
     message?: string;
     droppedAssignments?: TemplateSourceAssignment[];
   } {
-    const verdict = checkSourceCatalog(next, {
-      fixedBank: this.#fixedBank,
-      reservedLayers: this.#reservedLayers,
-    });
+    const verdict = checkSourceCatalogAgainstBanks(next, this.#fixedBanks, this.#reservedLayers);
     if (!verdict.ok) return verdict;
     this.#sourceCatalog = next;
     this.sourceCatalogChanged.emit(next);
@@ -10946,16 +11011,23 @@ export class CasparRuntime {
   /**
    * R-030 — the channels this install DECLARES.
    *
-   * The fixed bank is the only channel authority the install has (the SPA's
+   * The fixed banks are the only channel authority the install has (the SPA's
    * `ChannelScope` reads the same fact), and channel 1 is the documented default
    * when no bank is declared — `FixedLayerBankSchema`'s own default, not a second
-   * guess invented here. When the channel list eventually arrives from an API,
-   * THIS is the one function that changes.
+   * guess invented here.
+   *
+   * 🔴 `MULTI-CHANNEL-01` — **EVERY BANK'S CHANNEL, in channel order.** It returned only the one
+   * bank's channel; it now returns the channel of each declared bank, and every door that asks
+   * "does this station operate channel N" — the station fence, the restore fence, the orphan
+   * sweep, the playout rows, the lock scope, the permitted strip, the mode and output reads, the
+   * settings store — reads the plural through THIS function and {@link #isDeclaredChannel}, never
+   * a second copy of the list (golden rule 6). With one bank the answer is exactly what it was.
    */
   #declaredChannels(): number[] {
+    if (this.#fixedBanks.length > 0) return this.#fixedBanks.map((bank) => bank.channel);
     // `DESKTOP-APPS-01-D` j — a station still in first-run has declared nothing yet.
-    if (this.#fixedBank === null && this.#declaresNothingWithoutBank) return [];
-    return [this.#fixedBank?.channel ?? DEFAULT_CHANNEL];
+    if (this.#declaresNothingWithoutBank) return [];
+    return [DEFAULT_CHANNEL];
   }
 
   /**
@@ -11456,8 +11528,22 @@ export class CasparRuntime {
       ⚠ The FIRST declared channel, because a station declares one (one bank, one channel, v1). A
       second declared channel makes "which channel does a dynamic load mean" a question the load
       itself has to answer — `R-062` gap 1 — and must not be settled here by picking one.
+
+      🔴 `MULTI-CHANNEL-01` — **SO IT IS NOT: A STATION THAT DECLARES TWO CHANNELS REFUSES A LOAD
+      THAT NAMES NONE.** `stack.load` carries no coordinate, and picking the first declared
+      channel would put a graphic on a channel the operator may not be looking at — the same
+      shape as the incident above, one channel along. The load is refused (`load()` reports
+      `no-layer`) and nothing is sent; a row's own load (`fixedLayers.load`) names its coordinate
+      and is unaffected. With one declared channel this is exactly what it was.
     */
-    const channel = this.#declaredChannels()[0] ?? DEFAULT_CHANNEL;
+    const declared = this.#declaredChannels();
+    if (declared.length > 1) {
+      throw new Error(
+        `a load that names no channel cannot be placed on a station that declares ` +
+          `${String(declared.length)} channels`,
+      );
+    }
+    const channel = declared[0] ?? DEFAULT_CHANNEL;
     try {
       return this.#layers.allocate(templateId, channel);
     } catch (err) {
@@ -11525,9 +11611,10 @@ export class CasparRuntime {
    *      reports one winner rather than a per-server outcome — so a backup whose own `CLEAR`
    *      failed would have its producer's mixer reset. The same exposure the plate teardown's
    *      `MIXER CLEAR` has always had; named, not closed.
-   *   2. **Never past our own band** — the declared bank (`#layers.isFixed`). An orphan cleared
-   *      through `layers.clear` outside it is somebody else's layer, and so is a playout layer
-   *      (`playoutClear` does not call this).
+   *   2. **Never past our own band** — inside A declared bank (`#layers.isFixed`, keyed on the
+   *      whole coordinate, so `MULTI-CHANNEL-01`'s second bank is inside and an undeclared
+   *      channel's layer 99 is not). An orphan cleared through `layers.clear` outside every bank
+   *      is somebody else's layer, and so is a playout layer (`playoutClear` does not call this).
    *
    * The adopt-`CLEAR` in `#adoptLayer` does not call this either: its layer is re-occupied at
    * once by our own muted `CG ADD`, so the residue this removes cannot outlive it there.
@@ -12086,6 +12173,27 @@ export class CasparRuntime {
    */
   isDeclaredChannel(channel: number): boolean {
     return this.#isDeclaredChannel(channel);
+  }
+
+  /**
+   * 🔴 `MULTI-CHANNEL-01` — **WHICH CHANNELS A NEW SET OF BANKS WOULD CHANGE**: every channel
+   * ADDED, EDITED or REMOVED against the set in force, in channel order. The permission gate and
+   * the lock read this for `fixedLayers.set-banks` (`channelsForRequest`), so a bank sent back
+   * exactly as it is costs its channel nothing, and a channel taken away is judged as an act on
+   * that channel. Compared by the canonical JSON of each bank — the same bytes the file holds.
+   */
+  bankChangeFootprint(next: readonly FixedLayerBank[]): readonly number[] {
+    const touched = new Set<number>();
+    for (const bank of next) {
+      const before = this.#bankFor(bank.channel);
+      if (before === null || JSON.stringify(before) !== JSON.stringify(bank)) {
+        touched.add(bank.channel);
+      }
+    }
+    for (const before of this.#fixedBanks) {
+      if (bankForChannel(next, before.channel) === null) touched.add(before.channel);
+    }
+    return [...touched].sort((a, b) => a - b);
   }
 
   /**
