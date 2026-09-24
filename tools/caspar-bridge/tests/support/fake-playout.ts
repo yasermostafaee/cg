@@ -153,6 +153,7 @@ export type FakeUserKey =
   | 'viewer'
   | 'longName'
   | 'admin'
+  | 'adminChannelTwo'
   | 'otherStation'
   | 'channelTwo'
   | 'bothChannels';
@@ -286,12 +287,31 @@ export const FAKE_BOTH_CHANNELS_OPERATOR: FakePlayoutUser = {
   ],
 };
 
-/** The seven fixture users, by key. */
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 J — `cg-admin-ch2` — **A STATION-ADMIN OF THIS HOST'S CHANNEL 2: the
+ * one fixture user who can apply Station setup on the demo station.**
+ *
+ * The demo (`pnpm dev:playout-auth`) declares its bank on channel 2, and the only station-admin
+ * was {@link FAKE_ADMIN}, granted channel 1: its `fixedLayers.set-config` passed the ROLE check
+ * and was then refused by the CHANNEL check (`authzChannelRefusal(2)`). So nobody in the demo
+ * could apply Station setup — the owner met it. Same cumulative roles as `FAKE_ADMIN`, channel 2
+ * of `127.0.0.1`. `FAKE_ADMIN` itself is untouched: suites pin its channel-1 shape.
+ */
+export const FAKE_CHANNEL_TWO_ADMIN: FakePlayoutUser = {
+  username: 'cg-admin-ch2',
+  sub: 'u-9937',
+  name: 'مینا رحیمی',
+  roles: ['station-admin', 'operator', 'viewer'],
+  cgChannels: [{ host: '127.0.0.1', channel: 2 }],
+};
+
+/** The eight fixture users, by key. */
 export const FAKE_USERS: Readonly<Record<FakeUserKey, FakePlayoutUser>> = {
   operator: FAKE_OPERATOR,
   viewer: FAKE_VIEWER,
   longName: FAKE_LONG_NAME_USER,
   admin: FAKE_ADMIN,
+  adminChannelTwo: FAKE_CHANNEL_TWO_ADMIN,
   otherStation: FAKE_OTHER_STATION_USER,
   channelTwo: FAKE_CHANNEL_TWO_OPERATOR,
   bothChannels: FAKE_BOTH_CHANNELS_OPERATOR,

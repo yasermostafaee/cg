@@ -50,6 +50,7 @@ import { fileURLToPath } from 'node:url';
 import {
   FAKE_BOTH_CHANNELS_OPERATOR,
   FAKE_CATALOGUE,
+  FAKE_CHANNEL_TWO_ADMIN,
   FAKE_CHANNEL_TWO_OPERATOR,
   FAKE_LONG_NAME_USER,
   FAKE_OPERATOR,
@@ -131,6 +132,7 @@ for (const line of [
   `                   channel 2 = ${OURS} (this station's channel)`,
   '',
   '  Sign in as one of these. The password is a CONSTANT, not a secret:',
+  `    ${FAKE_CHANNEL_TWO_ADMIN.username.padEnd(12)} ${FAKE_CHANNEL_TWO_ADMIN.name}   the one user who can apply Station setup on this demo station`,
   `    ${FAKE_CHANNEL_TWO_OPERATOR.username.padEnd(10)} ${FAKE_CHANNEL_TWO_OPERATOR.name}   operator of THIS station's channel 2 —`,
   "                the strip shows it under the catalogue's name",
   `    ${FAKE_BOTH_CHANNELS_OPERATOR.username.padEnd(10)} ${FAKE_BOTH_CHANNELS_OPERATOR.name}   granted channels 1 AND 2 (the test`,
