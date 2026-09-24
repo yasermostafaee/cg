@@ -51,6 +51,12 @@ REMOVEd with the per-item CLEAR-destroys semantics, in sequence, clearing air an
 list. **`stack.remove-all` SHALL itself be refused while anything is on air**, so it is NOT the
 path that unblocks reconfiguration.
 
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` (2026-09-24).** `stack.remove-all` (and `clear-all`,
+> `stop-all`, `snapshot`) now take an OPTIONAL channel. Bare, everything here holds byte for byte.
+> With a channel, the verb acts on that channel's items alone and its on-air refusal is decided
+> over that channel alone — air on another channel does not refuse it. The reconfiguration gate
+> is unchanged: it counts air on every channel.
+
 **CLEAR-ALL SHALL be the sanctioned path to unblock reconfiguration.** It takes every on-air item
 off air and leaves every row on the stack, which is what a blocked Apply actually needs: the gate
 counts what is ON AIR, not what is on the list. Every place that names the remedy — the settings

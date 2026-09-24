@@ -7,9 +7,14 @@
 The console's channel list SHALL take the signed-in principal as an input at the one place the
 list is derived, so that no surface downstream applies its own filter.
 
-The strip SHALL list the channels the principal may operate. A channel the fixed bank declares
+The strip SHALL list the channels the principal may operate. A channel the station declares
 but the principal may NOT operate SHALL be shown READ-ONLY rather than hidden, because a channel
 missing from the strip cannot be told apart from a station that does not have it.
+
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` (2026-09-24).** This read _"A channel the fixed bank
+> declares"_: the station now declares one bank per channel, so every declared bank's channel is
+> such a channel. And since `CHANNEL-AUTHORITY-01` a channel the principal is granted but the
+> station does NOT declare is not on the strip at all — the scenario below says so.
 
 A read-only channel SHALL remain selectable, because `read` is a real permission and a principal
 is entitled to watch a channel they may not drive.
@@ -21,10 +26,9 @@ the console offers and a command the bridge accepts are one judgement.
 When authentication is off, or the bridge has not answered yet, the list SHALL NOT be narrowed
 and no channel SHALL be marked read-only.
 
-#### Scenario: The bank's channel survives the narrowing, marked read-only
+#### Scenario: A declared channel survives the narrowing, marked read-only
 
-- **WHEN** the station declares channels 1, 2 and 3, the bank is channel 1, and the principal is
-  granted channel 2 only
+- **WHEN** the station declares channels 1 and 2, and the principal is granted channels 2 and 3
 - **THEN** the strip lists channels 1 and 2, channel 3 is absent, and channel 1 is labelled
   read-only while channel 2 is not
 

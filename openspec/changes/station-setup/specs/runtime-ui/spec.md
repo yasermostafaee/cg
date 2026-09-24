@@ -64,8 +64,13 @@ The on-air refusal that pre-disables `Apply servers` SHALL name its scope, and n
 
 #### Scenario: Each tab's footer carries its own commit, in sentence case
 
-- **WHEN** the Servers tab is shown **THEN** its footer holds a `primary`-role `Apply servers`, and no other tab's action
-- **WHEN** the Layers tab is shown **THEN** its footer holds `Apply layers`, and no other tab's action
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` §2 I (2026-09-24).** A commit is a station-admin's: every pane
+> whose apply route is `station-admin` shows any other principal its values, with no Apply and no
+> Revert, and reads as read-only for this sign-in — the read-only case below. The two lines naming
+> a commit hold for a station-admin.
+
+- **WHEN** the Servers tab is shown to a station-admin **THEN** its footer holds a `primary`-role `Apply servers`, and no other tab's action
+- **WHEN** the Layers tab is shown to a station-admin **THEN** its footer holds `Apply layers`, and no other tab's action
 - **WHEN** a read-only or save-as-you-go tab is shown **THEN** its footer holds its commit contract and a single `Close` (amended by `SETTINGS-MATCH-02`, 2026-09-11 — see **One job, one control, one name in the dialog's footer** below)
 
 #### Scenario: The Live sources footer tells the truth about the layer band

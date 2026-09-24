@@ -182,7 +182,8 @@ bridge, refresh when any client applies a new config, validate its inputs
 `connections.set-config`.
 
 Apply SHALL be pre-disabled with a visible reason while the stack indicates
-anything on air or unsettled (mirroring the bridge's authoritative gate), and
+anything on air or unsettled on any channel (mirroring the bridge's
+authoritative gate — a server change reaches every channel), and
 the panel SHALL surface the bridge's refusal reason when a race slips
 through. WHEN any entered host is non-loopback the panel SHALL show a warning
 that template serving and OSC listening will use a LAN address while control
@@ -191,6 +192,12 @@ response.
 
 The layers panel SHALL provide a Remove-All control in its header that, after an explicit
 confirm, OUTs and REMOVEs every item — clearing air and emptying every row.
+
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` (2026-09-24).** On a station that declares two or more
+> channels, "every item" and "on air" below are the channel ON SCREEN's: Remove-All sends
+> `stack.remove-all` carrying that channel, and it is withheld only while that channel holds air.
+> With one declared channel it is sent bare and reads exactly as written here. Apply above stays
+> station-wide, because a server change reaches every channel.
 
 **Remove-All SHALL be DISABLED while anything is on air**, visible and titled with the remedy,
 and `stack.remove-all` SHALL be refused bridge-side in that case with nothing on the wire. Only

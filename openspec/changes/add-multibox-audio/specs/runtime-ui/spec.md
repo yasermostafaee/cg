@@ -65,10 +65,18 @@ Neither SHALL present an undo, an "un-solo", or any wording that implies the pre
 are remembered.
 
 🔴 **PANIC's scope SHALL NOT be resolved by the console.** The panel SHALL call a bridge verb
-that takes no scope argument, and SHALL NOT filter, narrow or select the rows it applies to.
-Gating an emergency control on the console's believed status is `B-122`'s defect, and a scope
-computed from a snapshot the browser may not yet have received is the same defect by another
-route.
+whose reach the BRIDGE resolves from its own ledger, and SHALL NOT filter, narrow or select the
+rows or plates it applies to. On a station that declares one channel that verb takes no scope
+argument; on a station that declares two or more it carries only the channel on screen, and the
+bridge still finds every seat on that channel itself. Gating an emergency control on the console's
+believed status is `B-122`'s defect, and a scope computed from a snapshot the browser may not yet
+have received is the same defect by another route.
+
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` (2026-09-24), the owner's decision of 2026-09-23.** This
+> paragraph read _"The panel SHALL call a bridge verb that takes no scope argument"_. PANIC on a
+> channel's view now silences that channel (`stack.silence-channel-live-plates`), and a separate
+> control silences every channel (`stack.silence-all-live-plates`, still argument-free). A channel
+> is not a list of rows: it names where to act, never what — the ledger still decides every plate.
 
 PANIC SHALL report what it addressed — how many plates reached the wire, how many had their
 intent recorded, and which rows — so that a press that reached nothing cannot read as a
@@ -89,10 +97,11 @@ on air, so the wider scope cannot surprise an operator.
   that is not
 - **THEN** both rows' plates are silenced, and the report names both rows
 
-#### Scenario: PANIC is one call, with no scope of the panel's choosing
+#### Scenario: PANIC is one call, carrying no list of rows or plates
 
 - **WHEN** PANIC is pressed
-- **THEN** exactly one bridge call is made, carrying no list of rows or plates
+- **THEN** exactly one bridge call is made, carrying no list of rows or plates — at most the
+  channel on screen, on a station that declares two or more
 
 #### Scenario: A bridge holding no live plates is not reported as a success
 

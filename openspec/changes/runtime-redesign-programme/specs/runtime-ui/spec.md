@@ -521,15 +521,22 @@ rule quoted from the file; every claim about a box SHALL be measured in Chromium
 
 ### Requirement: The channel list is a list of the channels the bridge names, and the selection is keyed by channel id
 
-The console's channel strip SHALL render one tab per channel the bridge already publishes — the
-union of the fixed bank's channel and every declared entry of the channel settings — and SHALL keep
-the operator's selection as a channel id, session-only, readable by every per-channel surface. It
-SHALL NOT invent a channel-discovery call, a channel name, or any persisted key to do so; where the
-bridge is single-channel the gap is filed (`R-062`), not closed.
+The console's channel strip SHALL render one tab per channel the station declares — the bridge's
+discovery answer, falling back to the declared banks and channel settings until it arrives — and
+SHALL keep the operator's selection as a channel id, session-only, readable by every per-channel
+surface. It SHALL NOT persist the selection.
+
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` (2026-09-24).** This requirement read _"the union of the fixed
+> bank's channel and every declared entry of the channel settings … It SHALL NOT invent a
+> channel-discovery call, a channel name, or any persisted key to do so; where the bridge is
+> single-channel the gap is filed (`R-062`), not closed."_ `R-062` is closed: gap 2 by
+> `CHANNEL-AUTHORITY-01`'s discovery call and the catalogue's names, gaps 1 and 3 by
+> `MULTI-CHANNEL-01`, which declares one bank per channel. What stands is the keyed, session-only
+> selection; no persisted key was ever added.
 
 #### Scenario: Two declared channels are two tabs
 
-- **WHEN** the bridge's channel settings declare channels 1 and 2 **THEN** the strip renders
+- **WHEN** the station declares banks on channels 1 and 2 **THEN** the strip renders
   `CHANNEL 1` and `CHANNEL 2` in that order, and selecting the second records the choice `2`
   where Station setup can read it
 
@@ -540,11 +547,19 @@ bridge is single-channel the gap is filed (`R-062`), not closed.
 
 ### Requirement: Station setup reports the selected channel and keeps station-wide sections station-wide
 
-Station setup's Channel tab SHALL report exactly one channel — the console's selected channel — its
-raster verdict and its outputs, and SHALL show nothing of any other channel's; the dialog SHALL
-name that channel under its title. The Servers, Live sources, Text file delimiters and Layers
-sections SHALL NOT read the selection: they are the station's, and render the same whatever
-channel is selected.
+Station setup's Channel tab SHALL report the console's selected channel — its raster verdict and
+its outputs — and SHALL show nothing of any other channel's report; the dialog SHALL name that
+channel under its title. The Servers, Live sources and Text file delimiters sections SHALL NOT
+read the selection: they are the station's, and render the same whatever channel is selected. The
+Layers section SHALL edit the selected channel's bank, because each declared channel has its own;
+with one declared channel that is the one bank, as before.
+
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` (2026-09-24).** This requirement read _"SHALL report exactly
+> one channel … The Servers, Live sources, Text file delimiters and Layers sections SHALL NOT read
+> the selection"_. With one bank per declared channel, Layers edits the bank of the channel on
+> screen. The Channel tab's two station-wide cards — the channel SET (Change channel…) and the
+> strays (On air on another channel) — name the channels they concern; they are the station's,
+> not a report about another channel.
 
 #### Scenario: Channel 2's verdict and outputs, and none of channel 1's
 
@@ -789,18 +804,31 @@ The `.vcg` validation and import path SHALL be preserved exactly: `importVcgFile
 ### Requirement: The plates toolbar's panic names its scope in the operator's words
 
 The LIVE PLATES toolbar's panic control SHALL name its scope on its label, its accessible name and
-its tooltip — every live plate the bridge has seated, on EVERY channel this bridge drives, not the
-channel selected above — so that when a multi-channel plant arrives the label is the thing that
-must change and cannot be forgotten. `stack.silenceAllLivePlates` SHALL stay unscoped (owner
-answer A16, `R-062`): the scope question is a precondition of ever shipping real multi-channel and
-is decided then, never in passing. No behaviour and no wire changes.
+its tooltip. On a station that declares one channel its scope is every live plate the bridge has
+seated — `stack.silenceAllLivePlates`, unscoped (owner answer A16) — and its accessible name and
+tooltip say every channel. On a station that declares two or more it is the channel on screen —
+`stack.silenceChannelLivePlates` (owner decision, 2026-09-23) — and all three carriers name that
+channel, while a separate control in the header, beside the channel strip, silences every channel.
 
-#### Scenario: The label says every channel
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` (2026-09-24) — the label changed as it was built to.** This
+> requirement said that when a multi-channel plant arrived the label would be the thing that must
+> change; the owner answered A16's scope question on 2026-09-23, and it did. The one-channel
+> control's FACE reads `Silence all plates` since `CONSOLE-LOOK-06` DELTA 8, which read it from the
+> reference; its accessible name and tooltip still say every channel, exactly as A16 shipped them.
 
-- **WHEN** the Live plates tab is shown with a seated plate **THEN** the panic control reads
-  `SILENCE ALL BOXES · EVERY CHANNEL`, its accessible name begins `Silence all boxes on every
-channel`, its tooltip names every channel this bridge drives and not only the selected one, and
-  one press still makes exactly one unscoped call to the bridge
+#### Scenario: One declared channel says every channel
+
+- **WHEN** the Live plates tab is shown with a seated plate on a one-channel station **THEN** the
+  panic control reads `Silence all plates`, its accessible name begins
+  `Silence all boxes on every channel`, its tooltip names every channel this bridge drives and not
+  only the selected one, and one press still makes exactly one unscoped call to the bridge
+
+#### Scenario: Two declared channels name the channel on screen
+
+- **WHEN** the tab is shown for channel 2 of a two-channel station **THEN** the control reads
+  `Silence all plates · CH 2`, its accessible name begins `Silence all boxes on channel 2`, one
+  press makes exactly one `stack.silenceChannelLivePlates` call carrying channel 2, and the
+  header's `SILENCE ALL PLATES · EVERY CHANNEL` is the every-channel control
 
 ### Requirement: The programme's phase state is recorded where the next session reads it
 
@@ -832,17 +860,23 @@ a layer coordinate. The channel a row belongs to is a fact carried inside the it
 distinct addresses; a surface that dispatched by layer would collide there and behave correctly
 everywhere else, which is why the property is asserted on exactly that case.
 
-The five bulk verbs — `stack.removeAll`, `stack.clearAll`, `stack.stopAll`, `stack.snapshot` and
-`stack.silenceAllLivePlates` — take no argument and are therefore station-wide BY CONTRACT. That is
-recorded as a bound rather than a defect: for `silenceAllLivePlates` it is the owner's decision
-(A16 — the scope of a panic is not the caller's to choose), and for the other four it is the state
-`R-062` describes. A test SHALL pin their request shape so that adding a channel to one of them
-cannot land without that ledger being read.
+The every-channel PANIC, `stack.silenceAllLivePlates`, takes no argument and is station-wide BY
+CONTRACT — the owner's decision (A16: the scope of a panic is not the caller's to choose). The four
+housekeeping verbs — `stack.removeAll`, `stack.clearAll`, `stack.stopAll` and `stack.snapshot` —
+take an OPTIONAL channel: bare, they are station-wide exactly as before; with a channel, they act
+on that channel alone. The per-channel PANIC is its own verb, `stack.silenceChannelLivePlates`, and
+requires a channel. A test SHALL pin these request shapes so that a change to any of them cannot
+land without this ledger being read.
 
-Channel independence beyond this is NOT claimed. The bridge is single-channel in three places, so
-no test in this repository can drive two channels and observe one leaving the other alone; a
-verification SHALL state that bound rather than asserting the property from a surface that cannot
-see it.
+Channel independence SHALL be claimed only where it is measured: with two declared channels on the
+fake CasparCG, a take, a clear, each housekeeping verb with a channel and the per-channel PANIC
+write nothing to the other channel (`multi-channel-banks`, `channel-independence`).
+
+> 🔴 **AMENDED by `MULTI-CHANNEL-01` (2026-09-24).** This requirement read _"The five bulk verbs …
+> take no argument … for the other four it is the state `R-062` describes"_ and _"Channel
+> independence beyond this is NOT claimed. The bridge is single-channel in three places…"_. `R-062`
+> gaps 1 and 3 are closed — one bank per declared channel, and an optional channel on the four
+> housekeeping verbs — so the property is now measured at the wire rather than disclaimed.
 
 #### Scenario: Two rows on the same layer number, different channels
 
@@ -850,7 +884,9 @@ see it.
   different channel declares the same layer number **THEN** exactly one dispatch is made, carrying
   that row's item id in the verb channel's own request shape, and the other row is unchanged
 
-#### Scenario: A bulk verb cannot be pointed at a channel
+#### Scenario: The bulk verbs' request shapes are pinned
 
-- **WHEN** a bulk verb's request shape is read **THEN** it accepts no argument and rejects a
-  channel, and the ledger entry that explains why is cited beside the assertion
+- **WHEN** the bulk verbs' request shapes are read **THEN** the four housekeeping verbs accept no
+  argument and a `{ channel }`, `stack.silenceAllLivePlates` accepts no argument and rejects a
+  channel, the per-channel PANIC requires one, and the ledger entry that explains each is cited
+  beside the assertion
