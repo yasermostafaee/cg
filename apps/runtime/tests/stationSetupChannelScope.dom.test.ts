@@ -2,6 +2,7 @@
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CatalogueChannel, StationStray } from '@cg/shared-ipc';
+import { firstRunBank } from '../src/renderer/features/firstRun/firstRunStation.js';
 import { signedInStub, setupStub } from './support/authStub.js';
 import { clearPortals } from './support/dialog.js';
 import {
@@ -71,24 +72,72 @@ const buttonNamed = (root: ParentNode, name: RegExp): HTMLButtonElement | undefi
     name.test(b.textContent ?? ''),
   );
 
-describe('e — Change channel…', () => {
-  it('a station-admin changes an idle station’s channel through first-run’s own list', async () => {
-    const s = stub({ auth: ADMIN });
-    const dialog = await renderStationSetup({ section: 'channel' });
-    const section = sectionOf(dialog, 'channel');
+const rowOf = (section: HTMLElement, channel: number): HTMLButtonElement | null =>
+  section.querySelector<HTMLButtonElement>(`button[data-channel="${String(channel)}"]`);
+
+describe('e / M — Change channel… edits the station’s channel SET', () => {
+  it('it opens on the station’s own set — channel 1 pressed, channel 2 not', async () => {
+    stub({ auth: ADMIN });
+    const section = sectionOf(await renderStationSetup({ section: 'channel' }), 'channel');
     await press(buttonNamed(section, /^Change channel…$/));
-    // First-run's list, with nothing picked.
-    const two = section.querySelector<HTMLButtonElement>('button[data-channel="2"]');
-    expect(two?.getAttribute('aria-pressed')).toBe('false');
-    await press(two);
+    expect(rowOf(section, 1)?.getAttribute('aria-pressed')).toBe('true');
+    expect(rowOf(section, 2)?.getAttribute('aria-pressed')).toBe('false');
+    // The set as it stands changes nothing, so there is nothing to press yet.
+    expect(buttonNamed(section, /^Use this channel$/)?.disabled).toBe(true);
+  });
+
+  it('REPLACE — one channel for another carries the station’s bank to it, through the door it always used', async () => {
+    const s = stub({ auth: ADMIN });
+    const section = sectionOf(await renderStationSetup({ section: 'channel' }), 'channel');
+    await press(buttonNamed(section, /^Change channel…$/));
+    await press(rowOf(section, 1));
+    await press(rowOf(section, 2));
     await press(buttonNamed(section, /^Use this channel$/));
     expect(s.fixedSetConfig).toHaveBeenCalledTimes(1);
     expect(s.fixedSetConfig.mock.calls[0]?.[0]).toEqual({ ...SETUP_BANK, channel: 2 });
+    expect(s.fixedSetBanks).not.toHaveBeenCalled();
     // Same host: nothing about the connection moves.
     expect(s.setConfig).not.toHaveBeenCalled();
   });
 
-  it('refused while ours is on air on the current channel — the bridge’s one sentence, shown as it comes', async () => {
+  it('ADD — the station keeps channel 1 as it is and gains channel 2, in one write', async () => {
+    const s = stub({ auth: ADMIN });
+    const section = sectionOf(await renderStationSetup({ section: 'channel' }), 'channel');
+    await press(buttonNamed(section, /^Change channel…$/));
+    await press(rowOf(section, 2));
+    await press(buttonNamed(section, /^Use these 2 channels$/));
+    expect(s.fixedSetBanks).toHaveBeenCalledTimes(1);
+    expect(s.fixedSetBanks.mock.calls[0]?.[0]).toEqual({
+      banks: [SETUP_BANK, firstRunBank(2)],
+    });
+    expect(s.fixedSetConfig).not.toHaveBeenCalled();
+  });
+
+  it('REMOVE — leaving one channel of two keeps that channel’s own bank, untouched', async () => {
+    const two = { ...SETUP_BANK, channel: 2, aliases: { '70': 'ساعت' } };
+    const s = stub({ auth: ADMIN, banks: [SETUP_BANK, two] });
+    const section = sectionOf(await renderStationSetup({ section: 'channel' }), 'channel');
+    await press(buttonNamed(section, /^Change channel…$/));
+    expect(rowOf(section, 2)?.getAttribute('aria-pressed')).toBe('true');
+    await press(rowOf(section, 1));
+    await press(buttonNamed(section, /^Use this channel$/));
+    expect(s.fixedSetConfig.mock.calls).toEqual([[two]]);
+  });
+
+  it('a declared channel the Playout’s list does not name is still on screen, as its number — and can leave the set', async () => {
+    const three = { ...SETUP_BANK, channel: 3 };
+    const s = stub({ auth: ADMIN, banks: [SETUP_BANK, three] });
+    const section = sectionOf(await renderStationSetup({ section: 'channel' }), 'channel');
+    await press(buttonNamed(section, /^Change channel…$/));
+    const row = rowOf(section, 3);
+    expect(row?.textContent).toBe('CH 3');
+    expect(row?.getAttribute('aria-pressed')).toBe('true');
+    await press(row);
+    await press(buttonNamed(section, /^Use this channel$/));
+    expect(s.fixedSetConfig.mock.calls).toEqual([[SETUP_BANK]]);
+  });
+
+  it('refused while ours is on air on a channel leaving the set — the bridge’s one sentence, shown as it comes', async () => {
     const sentence = 'Something of ours is still on air on channel 1 — take it off air first.';
     const s = stub({
       auth: ADMIN,
@@ -97,10 +146,17 @@ describe('e — Change channel…', () => {
     const dialog = await renderStationSetup({ section: 'channel' });
     const section = sectionOf(dialog, 'channel');
     await press(buttonNamed(section, /^Change channel…$/));
-    await press(section.querySelector<HTMLButtonElement>('button[data-channel="2"]'));
+    await press(rowOf(section, 1));
+    await press(rowOf(section, 2));
     await press(buttonNamed(section, /^Use this channel$/));
     expect(s.fixedSetConfig).toHaveBeenCalledTimes(1);
     expect(section.textContent).toContain(sentence);
+  });
+
+  it('the card states the station’s set', async () => {
+    stub({ auth: ADMIN, banks: [SETUP_BANK, { ...SETUP_BANK, channel: 2 }] });
+    const section = sectionOf(await renderStationSetup({ section: 'channel' }), 'channel');
+    expect(section.querySelector('[data-change-channel]')?.textContent).toContain('CH 1 · CH 2');
   });
 
   it('absent for an operator — control: present for the station-admin', async () => {
@@ -116,6 +172,31 @@ describe('e — Change channel…', () => {
     const again = sectionOf(await renderStationSetup({ section: 'channel' }), 'channel');
     expect(again.querySelector('[data-change-channel]')).not.toBeNull();
     expect(again.querySelector('[data-strays]')).not.toBeNull();
+  });
+});
+
+describe('M — the Channel pane says what is true for the principal reading it', () => {
+  const head = (dialog: HTMLElement): { legend: string; tag: string } => {
+    const section = sectionOf(dialog, 'channel');
+    return {
+      legend: section.querySelector('.cg-setup-description')?.textContent ?? '',
+      tag: section.querySelector('[data-section-commit]')?.textContent ?? '',
+    };
+  };
+
+  it('a station-admin reads that Change channel… sets the channels — not "read-only"', async () => {
+    stub({ auth: ADMIN });
+    const { legend, tag } = head(await renderStationSetup({ section: 'channel' }));
+    expect(legend).toBe('Reported by the server. Change channel… sets the channels.');
+    expect(tag).toBe('Apply separately');
+    expect(legend).not.toMatch(/read-only/i);
+  });
+
+  it('control — anyone else reads the pane as read-only, which for them it is', async () => {
+    stub({ auth: OPERATOR });
+    const { legend, tag } = head(await renderStationSetup({ section: 'channel' }));
+    expect(legend).toBe('Read-only — reported by the server, not set here.');
+    expect(tag).toBe('Read only');
   });
 });
 

@@ -741,7 +741,8 @@ test('§9 — the banner sits in the pane’s column, clear of the footer, and n
 
   // …and every OTHER pane's footer is one short clause too (§9c, checked beyond Servers).
   for (const [tab, clause] of [
-    ['Channel', 'Nothing to apply — this section reports, it does not set.'],
+    // `MULTI-CHANNEL-01` §2 M — auth OFF is a station-admin's console: Change channel… is here.
+    ['Channel', 'Nothing to apply here — Change channel… applies on its own.'],
     ['Text file delimiters', 'Saved as you go — there is nothing waiting to be applied.'],
   ] as const) {
     await dialog

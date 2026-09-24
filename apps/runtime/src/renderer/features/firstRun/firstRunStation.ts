@@ -1,4 +1,5 @@
 import {
+  bankForChannel,
   CONNECTION_CHECK_IDS,
   connectionCheckSubject,
   defaultFixedLayerBank,
@@ -15,6 +16,8 @@ import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
  * First-run writes through the EXISTING station-admin doors and nothing else: the CasparCG host
  * and the serve host through `connections.set-config`, then the channel through
  * `fixedLayers.set-config` — the declaration door, which the station fence reads.
+ * `MULTI-CHANNEL-01` §2 E — two or more channels are declared through `fixedLayers.set-banks`,
+ * the same door's plural, in ONE write.
  */
 
 /** The standard AMCP / OSC ports — the ones the Playout's allow list and our firewall rules name. */
@@ -165,6 +168,76 @@ export async function declareFirstRunChannel(
 ): Promise<string | null> {
   const declared = await bridge.fixedLayers.setConfig(firstRunBank(choice.channel));
   return declared.ok ? null : (declared.message ?? 'The channel was not declared.');
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 E — **FIRST-RUN'S SECOND WRITE, FOR ONE OR MORE CHANNELS.** One bank per
+ * chosen channel, each first-run's own (`firstRunBank`), declared in ONE write so the station never
+ * sits half-declared between two.
+ *
+ * ONE channel goes through `fixedLayers.set-config` exactly as it always did — the same door, the
+ * same frame — so a single-channel first-run is byte-identical; two or more go through
+ * `fixedLayers.set-banks`, the plural door. Either way the bridge's own sentence comes back on a
+ * refusal (a channel the principal holds no grant for is refused there, by name).
+ */
+export async function declareFirstRunChannels(
+  bridge: Pick<RuntimeBridge, 'fixedLayers'>,
+  choices: readonly ChannelChoice[],
+): Promise<string | null> {
+  const [only, ...rest] = choices;
+  if (only === undefined) return 'No channel was chosen.';
+  if (rest.length === 0) return declareFirstRunChannel(bridge, only);
+  const declared = await bridge.fixedLayers.setBanks({
+    banks: choices.map((c) => firstRunBank(c.channel)),
+  });
+  return declared.ok ? null : (declared.message ?? 'The channels were not declared.');
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 M — **THE STATION'S NEXT CHANNEL SET**, from the banks it declares now
+ * and the channels Station setup's Change channel… was left holding.
+ *
+ * - a channel KEPT keeps its own bank — its names, its shown rows — untouched;
+ * - a channel ADDED gets first-run's bank (every row shown: its occupancy is not known yet, and a
+ *   bank that hides a row of unknown occupancy is refused, `firstRunBank`'s own reason);
+ * - a ONE-FOR-ONE SWAP carries the station's bank to the new channel, which is what Change
+ *   channel… did before the set could hold more than one (`DESKTOP-APPS-01-D` e) — the operator
+ *   moved the station, and its layer names moved with it.
+ */
+export function nextChannelSet(
+  banks: readonly FixedLayerBank[],
+  channels: readonly number[],
+): FixedLayerBank[] {
+  const [only, ...others] = banks;
+  const [target, ...more] = channels;
+  if (only !== undefined && others.length === 0 && target !== undefined && more.length === 0) {
+    return [{ ...only, channel: target }];
+  }
+  return channels.map((c) => bankForChannel(banks, c) ?? firstRunBank(c));
+}
+
+/**
+ * Apply Station setup's channel set. ONE bank goes through `fixedLayers.set-config`, the door a
+ * single-channel station has always used; two or more through `fixedLayers.set-banks`. The
+ * bridge keeps its refusal either way — nothing of ours may be on air on a channel leaving the
+ * set — and its sentence comes back as it is.
+ */
+export async function declareChannelSet(
+  bridge: Pick<RuntimeBridge, 'fixedLayers'>,
+  banks: readonly FixedLayerBank[],
+  choices: readonly ChannelChoice[],
+): Promise<string | null> {
+  const next = nextChannelSet(
+    banks,
+    choices.map((c) => c.channel),
+  );
+  const [only, ...rest] = next;
+  if (only === undefined) return 'No channel was chosen.';
+  const applied =
+    rest.length === 0
+      ? await bridge.fixedLayers.setConfig(only)
+      : await bridge.fixedLayers.setBanks({ banks: next });
+  return applied.ok ? null : (applied.message ?? 'The channels were not changed.');
 }
 
 /**

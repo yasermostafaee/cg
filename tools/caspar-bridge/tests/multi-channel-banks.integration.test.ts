@@ -182,7 +182,16 @@ describe('§2 A — the plural door and the v1 door', () => {
     // CONTROL: once channel 1 is clear, the same request leaves channel 2 alone declared.
     expect((await rt.out('logo-1')).accepted).toBe(true);
     await waitUntil(async () => (await r.lines()).includes('CLEAR 1-99'), 'the clear');
+    const mark = (await r.lines()).length;
     expect(rt.setFixedLayers(standardBank(2))).toEqual({ ok: true });
     expect(rt.declaredChannels()).toEqual([2]);
+    /*
+      §2 M — A CHANNEL REMOVED FROM THE SET WHILE CLEAN LEAVES NO STRAY: nothing of ours holds air
+      there, so Station setup's "On air on another channel" has nothing to show — and the removal
+      wrote nothing to the channel it dropped. The instrument's positive control (`strays()`
+      naming a real stray) is `one-channel-station.integration.test.ts` j.
+    */
+    expect(rt.strays()).toEqual([]);
+    expect(writes(addressing((await r.lines()).slice(mark), 1))).toEqual([]);
   });
 });

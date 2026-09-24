@@ -258,7 +258,7 @@ export function ChannelSection({ health }: { health: ConnectionHealth | null }):
         anyone else, never greyed (golden rule 13): an operator has no Change channel… and does
         not see another channel's strays at all.
       */}
-      {stationAdmin && <ChangeChannelCard channel={channel} />}
+      {stationAdmin && <ChangeChannelCard />}
       {stationAdmin && <StraysCard />}
     </>
   );

@@ -2,7 +2,8 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { Check, Lock, Layers3, type LucideIcon } from 'lucide-react';
 import { STATION_SETUP_PX } from '../../theme.js';
 import { Icon } from '../../ui/Icon.js';
-import { contractTag, sectionSpec, type SectionCommit } from './sections.js';
+import { useHoldsStationAdmin } from '../../hooks/useCanOperate.js';
+import { contractTag, sectionSpecFor, type SectionCommit } from './sections.js';
 import type { StationSetupSection } from './sections.js';
 import { Tag } from '../../ui/Tag.js';
 
@@ -16,6 +17,7 @@ const CONTRACT_ICON: Record<SectionCommit, LucideIcon> = {
   immediate: Check,
   'apply-servers': Layers3,
   section: Layers3,
+  separate: Layers3,
 };
 
 /**
@@ -73,7 +75,8 @@ export function SetupSection({
   notice?: ReactNode;
   children: ReactNode;
 }): JSX.Element {
-  const spec = sectionSpec(id);
+  // `MULTI-CHANNEL-01` §2 M — the section as it is for THIS principal (`sectionSpecFor`).
+  const spec = sectionSpecFor(id, useHoldsStationAdmin());
   const ref = useRef<HTMLElement>(null);
 
   /*

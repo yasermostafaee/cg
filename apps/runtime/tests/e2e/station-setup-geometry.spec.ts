@@ -107,7 +107,9 @@ test('§7 — the frame, the rail, the pane and the footer measure to the token 
   expect(px(await title.evaluate((el) => getComputedStyle(el).fontSize))).toBe(
     px(tokens.titleText),
   );
-  await expect(dialog.locator('[data-section-commit="read-only"]')).toHaveText('Read only');
+  // `MULTI-CHANNEL-01` §2 M — auth OFF is a station-admin's console, whose Channel pane carries
+  // Change channel…: its contract is `Apply separately`, not `Read only`.
+  await expect(dialog.locator('[data-section-commit="separate"]')).toHaveText('Apply separately');
 
   // THE FOOTER — a 74 px FLOOR, `15px 32px`, on the Channel tab (which puts no button in it).
   const foot = await dialog.locator('.cg-modal-footer').evaluate((el) => {

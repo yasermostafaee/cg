@@ -47,8 +47,10 @@ export type StationSetupSection =
  * - `immediate` — every control commits on its own (the delimiter list, the source catalog).
  * - `section` — a draft applied by this section's own footer action (the bank).
  * - `read-only` — nothing here is a control, so the footer carries no commit at all.
+ * - `separate` — `MULTI-CHANNEL-01` §2 M: the footer carries no commit, and the section's one
+ *   control applies itself (the Channel pane's Change channel…, for a station-admin).
  */
-export type SectionCommit = 'apply-servers' | 'immediate' | 'section' | 'read-only';
+export type SectionCommit = 'apply-servers' | 'immediate' | 'section' | 'read-only' | 'separate';
 
 /**
  * The rail's headings. Three groups, in the order the owner set.
@@ -237,7 +239,36 @@ export function contractTag(commit: SectionCommit): string {
     case 'apply-servers':
     case 'section':
       return 'Apply together';
+    case 'separate':
+      return 'Apply separately';
   }
+}
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 M — **THE CHANNEL PANE, FOR A STATION-ADMIN.** The table's row says
+ * `Read-only — reported by the server, not set here`, which stays true for everyone else: they see
+ * the channel and nothing to change it with. A station-admin's pane carries Change channel…,
+ * which sets the station's channels — so for them the row would be false, beside the very control
+ * it denies. Same tab, same place; the words are the ones true for the principal reading them.
+ */
+const CHANNEL_FOR_STATION_ADMIN: Partial<StationSetupSectionSpec> = {
+  commit: 'separate',
+  legend: 'Reported by the server. Change channel… sets the channels.',
+  footerRest: 'Nothing to apply here — Change channel… applies on its own.',
+};
+
+/**
+ * 🔴 `MULTI-CHANNEL-01` §2 M — **A SECTION AS IT IS FOR THIS PRINCIPAL.** The one read of the
+ * table every surface that states a section's contract makes (its head, its tag, its footer), so
+ * the three cannot tell one principal two different things.
+ */
+export function sectionSpecFor(
+  id: StationSetupSection,
+  stationAdmin: boolean,
+): StationSetupSectionSpec {
+  const spec = sectionSpec(id);
+  if (stationAdmin && id === 'channel') return { ...spec, ...CHANNEL_FOR_STATION_ADMIN };
+  return spec;
 }
 
 /** The rail's groups, in order, each with its sections. */

@@ -47,7 +47,7 @@ import { ChannelSection } from './ChannelSection.js';
 import {
   DEFAULT_STATION_SETUP_SECTION,
   STATION_SETUP_SECTIONS,
-  sectionSpec,
+  sectionSpecFor,
   type StationSetupSection,
 } from './sections.js';
 import { SetupNotice, type SetupNoticeSpec } from './SetupNotice.js';
@@ -854,7 +854,8 @@ export function StationSetupDialog({
         : {}),
   }));
 
-  const activeSpec = sectionSpec(active);
+  // `MULTI-CHANNEL-01` §2 M — the footer states the contract as it is for THIS principal.
+  const activeSpec = sectionSpecFor(active, holdsStationAdmin);
   const activeMessages = messagesFor(active);
   /** The footer's standing sentence goes amber when THIS section's commit is refused. */
   const footerBlocked = isBlocked(active);

@@ -4,8 +4,9 @@ import { Button } from '../../ui/Button.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { useConfirm } from '../../ui/useDialog.js';
 import { colors, cssVars } from '../../theme.js';
+import { useFixedBanks } from '../../hooks/useFixedLayers.js';
 import { ChannelStep } from '../firstRun/FirstRunScreen.js';
-import { firstRunBank, writeFirstRunConnection } from '../firstRun/firstRunStation.js';
+import { declareChannelSet, writeFirstRunConnection } from '../firstRun/firstRunStation.js';
 
 /**
  * 🔴 `DESKTOP-APPS-01-D` — **THE TWO CHANNEL-SCOPE CONTROLS OF STATION SETUP**, a station-admin's
@@ -15,6 +16,9 @@ import { firstRunBank, writeFirstRunConnection } from '../firstRun/firstRunStati
  * e — **Change channel…**: first-run's own channel list and its on-air warning, declaring the new
  *     channel through the same door. The bridge refuses while anything of ours is on air on the
  *     current channel, in one sentence, and that sentence is shown as it comes.
+ *     ⭐ `MULTI-CHANNEL-01` §2 M — it is now the editor of the station's channel SET: the list opens
+ *     on the channels the station declares, and a toggle adds, removes or replaces one. The refusal
+ *     is kept: nothing of ours may be on air on a channel leaving the set (`declareChannelSet`).
  * j — **On air on another channel**: an item of ours on a channel this station does not declare,
  *     with its channel, layer and template, and ONE action — take it off air (STOP then CLEAR on
  *     that exact layer), after a one-line confirmation. Nothing here offers to load it again.
@@ -28,9 +32,12 @@ const styles = {
 } as const;
 
 /** e — Change channel…, reusing first-run's channel step with this station's own writes. */
-export function ChangeChannelCard({ channel }: { channel: number }): JSX.Element {
+export function ChangeChannelCard(): JSX.Element {
   const [open, setOpen] = useState(false);
   const [config, setConfig] = useState<ConnectionConfig | null>(null);
+  // `MULTI-CHANNEL-01` §2 M — the station's set, read where it is edited.
+  const banks = useFixedBanks();
+  const channels = banks.map((b) => b.channel);
 
   useEffect(() => {
     if (!open) return;
@@ -66,12 +73,15 @@ export function ChangeChannelCard({ channel }: { channel: number }): JSX.Element
         )}
       </div>
       <div className="cg-card__body">
-        <div style={styles.fact}>{`CH ${String(channel)}`}</div>
+        <div style={styles.fact}>
+          {channels.length === 0 ? '—' : channels.map((c) => `CH ${String(c)}`).join(' · ')}
+        </div>
         {open && config !== null && (
           <ChannelStep
             playoutHost={currentHost}
             showServeAddress={false}
             fixedServeHost={serveHost}
+            initial={channels.map((c) => ({ casparHost: currentHost, casparChannel: c }))}
             // Only a channel on ANOTHER CasparCG host moves the connection; on this host there is
             // nothing to put in force before the occupancy read.
             prepare={(choice) =>
@@ -79,13 +89,7 @@ export function ChangeChannelCard({ channel }: { channel: number }): JSX.Element
                 ? Promise.resolve(null)
                 : writeFirstRunConnection(window.cg, { ...choice, serveHost })
             }
-            declare={async (choice) => {
-              const bank = await window.cg.fixedLayers.config();
-              const next =
-                bank === null ? firstRunBank(choice.channel) : { ...bank, channel: choice.channel };
-              const declared = await window.cg.fixedLayers.setConfig(next);
-              return declared.ok ? null : (declared.message ?? 'The channel was not changed.');
-            }}
+            declare={(choices) => declareChannelSet(window.cg, banks, choices)}
             onDone={() => {
               setOpen(false);
             }}

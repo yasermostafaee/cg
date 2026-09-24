@@ -83,7 +83,7 @@ const rowButton = (el: HTMLElement, channel: number): HTMLButtonElement | null =
   el.querySelector<HTMLButtonElement>(`button[data-channel="${String(channel)}"]`);
 const useButton = (el: HTMLElement): HTMLButtonElement | undefined =>
   [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
-    /^Use this channel/.test(b.textContent ?? ''),
+    /^Use (this channel|these \d+ channels)/.test(b.textContent ?? ''),
   );
 
 async function press(button: HTMLButtonElement | null | undefined): Promise<void> {
@@ -119,8 +119,74 @@ describe('a — first-run never picks a channel for the admin', () => {
     expect(rowButton(el, 1)?.getAttribute('aria-pressed')).toBe('false');
     await press(useButton(el));
     expect(declare).toHaveBeenCalledTimes(1);
-    expect(declare.mock.calls[0]?.[0]).toMatchObject({ channel: 2, casparHost: '127.0.0.1' });
+    // `MULTI-CHANNEL-01` §2 E — the step declares a SET; here it holds the one channel clicked.
+    expect(declare.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({ channel: 2, casparHost: '127.0.0.1' }),
+    ]);
     expect(done).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('E — first-run picks ONE OR MORE channels (`MULTI-CHANNEL-01` §2 E)', () => {
+  it('two clicks pick two channels, and one press declares both', async () => {
+    stub(() => ({ state: 'empty', layers: [] }));
+    const { el, declare, done } = await render();
+    await press(rowButton(el, 1));
+    await press(rowButton(el, 2));
+    expect(rowButton(el, 1)?.getAttribute('aria-pressed')).toBe('true');
+    expect(rowButton(el, 2)?.getAttribute('aria-pressed')).toBe('true');
+    expect(useButton(el)?.textContent).toBe('Use these 2 channels');
+    await press(useButton(el));
+    expect(declare.mock.calls).toEqual([
+      [
+        [
+          expect.objectContaining({ channel: 1, casparHost: '127.0.0.1' }),
+          expect.objectContaining({ channel: 2, casparHost: '127.0.0.1' }),
+        ],
+      ],
+    ]);
+    expect(done).toHaveBeenCalledTimes(1);
+  });
+
+  it('a second click takes a channel back out — the control for "each click adds"', async () => {
+    stub(() => ({ state: 'empty', layers: [] }));
+    const { el, declare } = await render();
+    await press(rowButton(el, 1));
+    await press(rowButton(el, 2));
+    await press(rowButton(el, 1));
+    expect(rowButton(el, 1)?.getAttribute('aria-pressed')).toBe('false');
+    expect(useButton(el)?.textContent).toBe('Use this channel');
+    await press(useButton(el));
+    expect(declare.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ channel: 2 })]);
+  });
+
+  it('the set is on ONE CasparCG host: a row on another host starts the set again there', async () => {
+    const TWO_HOSTS: CatalogueChannel[] = [
+      ...ROWS,
+      { id: 'news', name: 'خبر', casparHost: '10.0.0.9', casparChannel: 1 },
+    ];
+    (window as unknown as { cg: unknown }).cg = fillBridgeStub({
+      setup: {
+        ...setupStub(),
+        catalogue: () => Promise.resolve({ rows: TWO_HOSTS }),
+        routeAddress: () => Promise.resolve({ address: '127.0.0.1' }),
+        channelOccupancy: () => Promise.resolve({ state: 'empty', layers: [] }),
+      },
+    });
+    const { el, declare } = await render();
+    await press(rowButton(el, 2));
+    const other = el.querySelector<HTMLButtonElement>(
+      '[data-caspar-host="10.0.0.9"] button[data-channel="1"]',
+    );
+    await press(other);
+    expect(other?.getAttribute('aria-pressed')).toBe('true');
+    expect(rowButton(el, 2)?.getAttribute('aria-pressed'), 'the first host’s pick left').toBe(
+      'false',
+    );
+    await press(useButton(el));
+    expect(declare.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({ channel: 1, casparHost: '10.0.0.9' }),
+    ]);
   });
 });
 
@@ -148,7 +214,21 @@ describe('d — a channel already on air is declared only after one line and a s
     // Not a block: the second press declares it.
     await press(useButton(el));
     expect(declare).toHaveBeenCalledTimes(1);
-    expect(declare.mock.calls[0]?.[0]).toMatchObject({ channel: 1 });
+    expect(declare.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ channel: 1 })]);
+  });
+
+  it('`MULTI-CHANNEL-01` — two picked, one on air: ONE line, about that channel alone', async () => {
+    stub(programme);
+    const { el, declare } = await render();
+    await press(rowButton(el, 1));
+    await press(rowButton(el, 2));
+    await press(useButton(el));
+    const lines = [...el.querySelectorAll('[data-channel-on-air]')];
+    expect(lines.map((l) => l.getAttribute('data-channel-on-air'))).toEqual(['1']);
+    expect(declare).not.toHaveBeenCalled();
+    expect(useButton(el)?.textContent).toBe('Use these 2 channels anyway');
+    await press(useButton(el));
+    expect(declare).toHaveBeenCalledTimes(1);
   });
 
   it('control — an EMPTY channel gets no warning and is declared on the first press', async () => {
@@ -160,12 +240,14 @@ describe('d — a channel already on air is declared only after one line and a s
     expect(declare).toHaveBeenCalledTimes(1);
   });
 
-  it('picking another channel withdraws the warning — it was about the programme channel', async () => {
+  it('changing the choice withdraws the warning — it was about the programme channel', async () => {
     stub(programme);
     const { el } = await render();
     await press(rowButton(el, 1));
     await press(useButton(el));
     expect(el.querySelector('[data-channel-on-air]')).not.toBeNull();
+    // `MULTI-CHANNEL-01` — each row is a toggle: the programme channel out, channel 2 in.
+    await press(rowButton(el, 1));
     await press(rowButton(el, 2));
     expect(el.querySelector('[data-channel-on-air]')).toBeNull();
     expect(useButton(el)?.textContent).toBe('Use this channel');

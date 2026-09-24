@@ -11,7 +11,7 @@ import { PlayoutSignInError } from '../../../platform/playoutSession.js';
 import { signInMessage } from '../auth/signInMessages.js';
 import { PlayoutConnection } from './PlayoutConnection.js';
 import {
-  declareFirstRunChannel,
+  declareFirstRunChannels,
   groupByHost,
   onAirWarning,
   playoutOriginOf,
@@ -33,7 +33,8 @@ import {
  *   2. SIGN IN with a `station-admin` account — the bridge learns the Playout's issuer from it
  *      (`DESKTOP-APPS-01-A`), so no issuer is ever typed, and a Playout 2.8.54 opens AMCP to this
  *      machine on it — so the check runs again and JUDGES the AMCP line (`-01-B` B2);
- *   3. the Playout's CHANNELS in that account's grant, grouped by the CasparCG host they play on;
+ *   3. the Playout's CHANNELS in that account's grant, grouped by the CasparCG host they play on —
+ *      ONE OR MORE of them, on one host (`MULTI-CHANNEL-01` §2 E);
  *   4. the SERVE ADDRESS, auto-detected and editable — then the station is written through the
  *      existing doors and first-run ends.
  *
@@ -278,7 +279,7 @@ function SignInStep({ reason }: { reason: string | undefined }): JSX.Element {
   );
 }
 
-// ── 3 · The channel, 4 · the serve address ───────────────────────────────────
+// ── 3 · The channels, 4 · the serve address ──────────────────────────────────
 
 /** How long first-run waits for the Playout's list before offering the two fields instead. */
 const CATALOGUE_TRIES = 12;
@@ -289,43 +290,85 @@ type Catalogue =
   | { state: 'absent' }
   | { state: 'refused'; message: string };
 
+/** A channel as a declaration names it: the CasparCG host, and the channel on it. */
+export interface ChannelCoordinate {
+  readonly casparHost: string;
+  readonly casparChannel: number;
+}
+
+/**
+ * A row the step shows: a row of the Playout's list, or — `unnamed` — a channel the station
+ * already declares that the list does not name, shown as its number so it is never left out of the
+ * set on screen.
+ */
+type ShownRow = CatalogueChannel & { readonly unnamed?: true };
+
+const sameCoordinate = (a: ChannelCoordinate, b: ChannelCoordinate): boolean =>
+  a.casparHost === b.casparHost && a.casparChannel === b.casparChannel;
+
+/** The commit's label: one channel reads as it always did; a set says its size. */
+function commitLabel(count: number, warned: boolean): string {
+  const what = count > 1 ? `Use these ${String(count)} channels` : 'Use this channel';
+  return warned ? `${what} anyway` : what;
+}
+
+/** One occupied channel's line of the on-air warning (d). */
+interface OnAirLine {
+  readonly channel: number;
+  readonly name: string;
+  readonly layers: readonly number[];
+}
+
 /**
  * 🔴 `DESKTOP-APPS-01-D` — **THE CHANNEL CHOICE, first-run's and Station setup's alike.**
  *
- * a — NOTHING IS PRESELECTED: `picked` starts `null`, and "Use this channel" stays disabled until
- *     the admin clicks a row. Each row names the Playout's channel AND its number (`… · CH 1`).
- * d — before the channel is DECLARED, `prepare` puts in force what the reading needs (first-run:
- *     the connection), the channel's occupancy is read, and a channel already on air with
+ * a — NOTHING IS PRESELECTED in first-run: `initial` is empty there, and "Use this channel" stays
+ *     disabled until the admin clicks a row. Each row names the Playout's channel AND its number
+ *     (`… · CH 1`).
+ * d — before the channels are DECLARED, `prepare` puts in force what the reading needs (first-run:
+ *     the connection), each ADDED channel's occupancy is read, and a channel already on air with
  *     somebody else's content earns ONE line and a second press — a warning, never a block.
  * e — Station setup's Change channel… passes its own `prepare`/`declare` and reuses the rest.
+ *
+ * ⭐ `MULTI-CHANNEL-01` §2 E / M — **ONE OR MORE.** Every row is a toggle, and the choice is a SET
+ * of channels on ONE CasparCG host — a station drives one server — so a row on another host starts
+ * the set again there. First-run declares the set it is given. Station setup opens on the
+ * station's own set (`initial`) and applies the edit — add, remove, replace — through the same
+ * doors, whose refusal is kept: nothing of ours may be on air on a channel leaving the set. A
+ * declared channel the Playout's list does not name is still shown, as its number, so the set on
+ * screen is the whole set and nothing leaves it unseen. The fallback fields (no list) name ONE
+ * channel, as they always did.
  */
 export function ChannelStep({
   playoutHost,
   onDone,
   prepare = (choice) => writeFirstRunConnection(window.cg, choice),
-  declare = (choice) => declareFirstRunChannel(window.cg, choice),
+  declare = (choices) => declareFirstRunChannels(window.cg, choices),
   showServeAddress = true,
   fixedServeHost = '',
+  initial = [],
 }: {
   playoutHost: string;
   onDone: () => void;
   /** Put in force what the occupancy read needs, before the declaration. `null` or a refusal. */
   prepare?: (choice: ChannelChoice) => Promise<string | null>;
-  /** Declare the channel. `null` or the bridge's refusal sentence. */
-  declare?: (choice: ChannelChoice) => Promise<string | null>;
+  /** Declare the chosen channels. `null` or the bridge's refusal sentence. */
+  declare?: (choices: readonly ChannelChoice[]) => Promise<string | null>;
   /** First-run asks for the serve address; Station setup keeps the station's own. */
   showServeAddress?: boolean;
   fixedServeHost?: string;
+  /** `MULTI-CHANNEL-01` §2 M — the set the step opens on: the station's own, or none (a). */
+  initial?: readonly ChannelCoordinate[];
 }): JSX.Element {
   const [catalogue, setCatalogue] = useState<Catalogue>({ state: 'reading' });
-  const [picked, setPicked] = useState<CatalogueChannel | null>(null);
+  const [picked, setPicked] = useState<readonly ChannelCoordinate[]>(initial);
   const [manualHost, setManualHost] = useState(playoutHost);
   const [manualChannel, setManualChannel] = useState('');
   const [serveHost, setServeHost] = useState(fixedServeHost);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // d — the warning, keyed to the choice it is about: picking another channel withdraws it.
-  const [warning, setWarning] = useState<{ key: string; layers: readonly number[] } | null>(null);
+  // d — the warning, keyed to the choice it is about: changing the set withdraws it.
+  const [warning, setWarning] = useState<{ key: string; lines: readonly OnAirLine[] } | null>(null);
 
   // The Playout's list arrives a moment after the sign-in (the bridge reads it then).
   useEffect(() => {
@@ -358,10 +401,49 @@ export function ChannelStep({
 
   const manual =
     catalogue.state === 'absent' || (catalogue.state === 'rows' && catalogue.rows.length === 0);
-  const host = manual ? manualHost.trim() : (picked?.casparHost ?? '');
-  const channel = manual ? Number(manualChannel) : (picked?.casparChannel ?? 0);
-  const choiceKey = `${host}:${String(channel)}`;
+  /*
+    The rows on screen: the Playout's, then every channel of the station's own set the list does
+    not name (§2 M), so a deselect is the only way anything leaves the set.
+  */
+  const listed: readonly CatalogueChannel[] = catalogue.state === 'rows' ? catalogue.rows : [];
+  const rows: readonly ShownRow[] = [
+    ...listed,
+    ...initial
+      .filter((d) => !listed.some((r) => sameCoordinate(r, d)))
+      .map((d) => ({
+        id: `declared-${d.casparHost}-${String(d.casparChannel)}`,
+        name: '',
+        casparHost: d.casparHost,
+        casparChannel: d.casparChannel,
+        unnamed: true as const,
+      })),
+  ];
+  const isPicked = (row: ChannelCoordinate): boolean => picked.some((p) => sameCoordinate(p, row));
+  const toggle = (row: ShownRow): void => {
+    setPicked((current) => {
+      // One CasparCG host per station: a row on another host starts the set again there.
+      if (current.some((p) => p.casparHost !== row.casparHost)) return [row];
+      return current.some((p) => sameCoordinate(p, row))
+        ? current.filter((p) => !sameCoordinate(p, row))
+        : [...current, row];
+    });
+  };
+  const host = manual ? manualHost.trim() : (picked[0]?.casparHost ?? '');
+  const channels = manual
+    ? [Number(manualChannel)]
+    : [...picked].map((p) => p.casparChannel).sort((a, b) => a - b);
+  const choiceKey = `${host}:${channels.map(String).join(',')}`;
   const warned = warning !== null && warning.key === choiceKey;
+  // Station setup opens on the station's set; pressing Use on the SAME set would change nothing.
+  const unchanged =
+    initial.length > 0 &&
+    !manual &&
+    picked.length === initial.length &&
+    initial.every((d) => isPicked(d));
+  const nameOf = (channel: number): string => {
+    const row = rows.find((r) => r.casparHost === host && r.casparChannel === channel);
+    return row === undefined || row.unnamed === true ? `CH ${String(channel)}` : row.name;
+  };
 
   // The serve address: this machine's address on the route to the CasparCG host, detected, then
   // the admin's to edit.
@@ -379,28 +461,50 @@ export function ChannelStep({
     };
   }, [host, showServeAddress]);
 
-  const ready = host !== '' && Number.isInteger(channel) && channel > 0 && !busy;
+  const ready =
+    host !== '' &&
+    channels.length > 0 &&
+    channels.every((c) => Number.isInteger(c) && c > 0) &&
+    !unchanged &&
+    !busy;
   const commit = async (): Promise<void> => {
-    if (!ready) return;
+    const [first] = channels;
+    if (!ready || first === undefined) return;
     setBusy(true);
     setError(null);
-    const choice: ChannelChoice = { channel, casparHost: host, serveHost };
+    const choices: ChannelChoice[] = channels.map((channel) => ({
+      channel,
+      casparHost: host,
+      serveHost,
+    }));
     try {
       if (!warned) {
-        const refused = await prepare(choice);
+        const refused = await prepare({ channel: first, casparHost: host, serveHost });
         if (refused !== null) {
           setError(refused);
           return;
         }
-        const occupancy = await window.cg.setup
-          .channelOccupancy({ casparChannel: channel })
-          .catch(() => ({ state: 'unknown' as const, layers: [] }));
-        if (occupancy.state === 'occupied') {
-          setWarning({ key: choiceKey, layers: occupancy.layers.map((l) => l.layer) });
+        // d — only a channel JOINING the set is read: one already in it carries our own content.
+        const lines: OnAirLine[] = [];
+        for (const channel of channels) {
+          if (initial.some((d) => d.casparHost === host && d.casparChannel === channel)) continue;
+          const occupancy = await window.cg.setup
+            .channelOccupancy({ casparChannel: channel })
+            .catch(() => ({ state: 'unknown' as const, layers: [] }));
+          if (occupancy.state === 'occupied') {
+            lines.push({
+              channel,
+              name: nameOf(channel),
+              layers: occupancy.layers.map((l) => l.layer),
+            });
+          }
+        }
+        if (lines.length > 0) {
+          setWarning({ key: choiceKey, lines });
           return;
         }
       }
-      const refused = await declare(choice);
+      const refused = await declare(choices);
       if (refused === null) onDone();
       else setError(refused);
     } catch (err) {
@@ -425,8 +529,8 @@ export function ChannelStep({
         {catalogue.state === 'rows' && catalogue.rows.length === 0 && (
           <div style={styles.note}>The Playout lists no channel for this account.</div>
         )}
-        {catalogue.state === 'rows' &&
-          groupByHost(catalogue.rows).map((group, _i, all) => (
+        {!manual &&
+          groupByHost(rows).map((group, _i, all) => (
             <div key={group.host} data-caspar-host={group.host}>
               {all.length > 1 && (
                 <h4 style={styles.hostHead} dir="ltr">
@@ -434,8 +538,8 @@ export function ChannelStep({
                 </h4>
               )}
               <div style={styles.channels}>
-                {group.rows.map((row) => {
-                  const on = picked?.id === row.id && picked.casparHost === row.casparHost;
+                {(group.rows as readonly ShownRow[]).map((row) => {
+                  const on = isPicked(row);
                   return (
                     <Button
                       key={`${row.casparHost}-${row.id}`}
@@ -444,11 +548,17 @@ export function ChannelStep({
                       aria-pressed={on}
                       data-channel={row.casparChannel}
                       onClick={() => {
-                        setPicked(row);
+                        toggle(row);
                       }}
                     >
-                      <IsolatedName>{row.name}</IsolatedName>
-                      {` · CH ${String(row.casparChannel)}`}
+                      {row.unnamed === true ? (
+                        `CH ${String(row.casparChannel)}`
+                      ) : (
+                        <>
+                          <IsolatedName>{row.name}</IsolatedName>
+                          {` · CH ${String(row.casparChannel)}`}
+                        </>
+                      )}
                     </Button>
                   );
                 })}
@@ -508,12 +618,18 @@ export function ChannelStep({
         </section>
       )}
 
-      {warned && (
-        <div style={styles.warning} role="alert" data-channel-on-air="">
-          <IsolatedName>{picked?.name ?? `CH ${String(channel)}`}</IsolatedName>
-          {onAirWarning(channel, warning.layers)}
-        </div>
-      )}
+      {warned &&
+        warning.lines.map((line) => (
+          <div
+            key={line.channel}
+            style={styles.warning}
+            role="alert"
+            data-channel-on-air={String(line.channel)}
+          >
+            <IsolatedName>{line.name}</IsolatedName>
+            {onAirWarning(line.channel, line.layers)}
+          </div>
+        ))}
       {error !== null && (
         <div style={styles.error} role="status">
           {error}
@@ -521,7 +637,7 @@ export function ChannelStep({
       )}
       <div style={styles.row}>
         <Button variant="primary" disabled={!ready} onClick={() => void commit()}>
-          {busy ? 'Setting up…' : warned ? 'Use this channel anyway' : 'Use this channel'}
+          {busy ? 'Setting up…' : commitLabel(channels.length, warned)}
         </Button>
       </div>
     </>

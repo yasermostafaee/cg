@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   FIRST_ALLOCATABLE_LAYER,
   LAYER_BANDS,
@@ -12,11 +12,16 @@ import {
 import {
   checkAllowsConnect,
   commitFirstRun,
+  declareChannelSet,
+  declareFirstRunChannels,
   firstRunBank,
   firstRunConnection,
   groupByHost,
+  nextChannelSet,
   normalisePlayoutAddress,
+  type ChannelChoice,
 } from '../src/renderer/features/firstRun/firstRunStation.js';
+import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
 
 /**
  * `DESKTOP-APPS-01` §2E — what first-run writes, through the existing doors only.
@@ -193,5 +198,83 @@ describe('commit — the CasparCG host first, then the channel, each through its
       await commitFirstRun(bridge as never, { channel: 2, casparHost: 'caspar', serveHost: '' }),
     ).toBe('on air');
     expect(calls).toEqual(['connections:caspar']);
+  });
+});
+
+/** A bridge recording which bank door was called, with what. */
+function bankDoors(refusal?: string): {
+  bridge: Pick<RuntimeBridge, 'fixedLayers'>;
+  setConfig: ReturnType<typeof vi.fn>;
+  setBanks: ReturnType<typeof vi.fn>;
+} {
+  const answer = (): Promise<{ ok: boolean; message?: string }> =>
+    Promise.resolve(refusal === undefined ? { ok: true } : { ok: false, message: refusal });
+  const setConfig = vi.fn(answer);
+  const setBanks = vi.fn(answer);
+  return {
+    bridge: { fixedLayers: { setConfig, setBanks } } as unknown as Pick<
+      RuntimeBridge,
+      'fixedLayers'
+    >,
+    setConfig,
+    setBanks,
+  };
+}
+
+const choice = (channel: number): ChannelChoice => ({
+  channel,
+  casparHost: '127.0.0.1',
+  serveHost: '',
+});
+
+describe('`MULTI-CHANNEL-01` §2 E — first-run declares one or more channels', () => {
+  it('🔴 ONE channel goes through set-config, exactly as before — the single-channel first-run is byte-identical', async () => {
+    const doors = bankDoors();
+    expect(await declareFirstRunChannels(doors.bridge, [choice(2)])).toBeNull();
+    expect(doors.setConfig.mock.calls).toEqual([[firstRunBank(2)]]);
+    expect(doors.setBanks).not.toHaveBeenCalled();
+  });
+
+  it('two or more go through set-banks in ONE write, each channel with first-run’s own bank', async () => {
+    const doors = bankDoors();
+    expect(await declareFirstRunChannels(doors.bridge, [choice(1), choice(2)])).toBeNull();
+    expect(doors.setBanks.mock.calls).toEqual([[{ banks: [firstRunBank(1), firstRunBank(2)] }]]);
+    expect(doors.setConfig).not.toHaveBeenCalled();
+  });
+
+  it('a refusal comes back as the bridge’s own sentence', async () => {
+    const doors = bankDoors('channel 2 is not yours');
+    expect(await declareFirstRunChannels(doors.bridge, [choice(1), choice(2)])).toBe(
+      'channel 2 is not yours',
+    );
+  });
+});
+
+describe('`MULTI-CHANNEL-01` §2 M — Station setup’s next channel set', () => {
+  const one: FixedLayerBank = { ...firstRunBank(1), aliases: { '99': 'ارم' } };
+  const two: FixedLayerBank = { ...firstRunBank(2), aliases: { '99': 'زیرنویس' } };
+
+  it('a KEPT channel keeps its own bank, and an ADDED one gets first-run’s', () => {
+    expect(nextChannelSet([one], [1, 3])).toEqual([one, firstRunBank(3)]);
+  });
+
+  it('a one-for-one SWAP carries the station’s bank to the new channel (D-e’s replacement)', () => {
+    expect(nextChannelSet([one], [2])).toEqual([{ ...one, channel: 2 }]);
+  });
+
+  it('control — a removal from two leaves the kept channel’s bank exactly as it was', () => {
+    expect(nextChannelSet([one, two], [2])).toEqual([two]);
+  });
+
+  it('one bank left is written through set-config; two or more through set-banks', async () => {
+    const single = bankDoors();
+    await declareChannelSet(single.bridge, [one, two], [choice(2)]);
+    expect(single.setConfig.mock.calls).toEqual([[two]]);
+    expect(single.setBanks).not.toHaveBeenCalled();
+
+    const plural = bankDoors();
+    await declareChannelSet(plural.bridge, [one], [choice(1), choice(2)]);
+    expect(plural.setBanks.mock.calls).toEqual([[{ banks: [one, firstRunBank(2)] }]]);
+    expect(plural.setConfig).not.toHaveBeenCalled();
   });
 });
