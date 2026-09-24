@@ -119,6 +119,30 @@ function writeStored(key: string, value: unknown): void {
 const MOCK_CHANNEL = 1;
 const MOCK_VIDEO_MODE = '1080i5000';
 
+/**
+ * 🔴 `MULTI-CHANNEL-01` §1.3 — **A FIXED BINDING IS KEYED BY THE WHOLE COORDINATE, AND IT
+ * CARRIES THE CHANNEL.**
+ *
+ * `R-062`'s fourth finding: the mock keyed its bindings and observations by LAYER alone and
+ * `load()` wrote no `item.slot`, so it could not express two rows on two channels at all — row
+ * 99 of channel 1 and row 99 of channel 2 were one key. The bridge keys every fixed-slot fact
+ * on `(channel, layer)` (`LayerManager.isFixed`), and its published `StackItemState.slot` is
+ * what the console's per-channel views filter on; a mock without either could prove nothing
+ * about a second channel.
+ */
+interface MockFixedBinding {
+  readonly channel: number;
+  readonly layer: number;
+  readonly itemId: string;
+  readonly templateType: string;
+  readonly templateId: string;
+}
+
+/** The ONE spelling of a coordinate as a map key in this file. */
+function coordinateKey(channel: number, layer: number): string {
+  return `${String(channel)}:${String(layer)}`;
+}
+
 /** R-034 parity — the same shipped list the bridge starts a station with. */
 const DEFAULT_DELIMITERS: readonly DelimiterOption[] = [
   { id: 'newline', label: 'new line', value: '\\n' },
@@ -274,8 +298,17 @@ export class MockRuntime {
       const activeLookId = this.resolvedActiveLook(i.itemId);
       // Session BP parity — the FROZEN level 2, so the Inspector can name it offline too.
       const frozenAssignment = this.#frozenAssignments.get(i.itemId);
+      /*
+        🔴 `MULTI-CHANNEL-01` §1.3 — THE SLOT, as the bridge publishes it: the coordinate the
+        item is bound to. Read from the binding at publish time rather than written once at
+        load, so it comes and goes with the binding exactly as the bridge's `#slots` entry
+        does. An item bound to nothing keeps whatever its own record says (the two e2e seeds
+        that name a slot), and otherwise carries none — as a dynamic item does on air.
+      */
+      const bound = this.#slotFor(i.itemId);
       return {
         ...i,
+        ...(bound !== null && { slot: { ...bound, server: 'primary' as const } }),
         ...(position !== undefined && { position }),
         ...(sourceOverride !== undefined && { sourceOverride }),
         ...(lookSourceOverride !== undefined && { lookSourceOverride }),
@@ -564,9 +597,9 @@ export class MockRuntime {
 
   /** Drop `itemId`'s fixed binding, if it holds one, and republish. */
   #releaseFixedBinding(itemId: string): void {
-    for (const [layer, bound] of this.#fixedBindings) {
+    for (const [key, bound] of this.#fixedBindings) {
       if (bound.itemId !== itemId) continue;
-      this.#fixedBindings.delete(layer);
+      this.#fixedBindings.delete(key);
       this.fixedStateChanged.emit(this.fixedLayersState());
       return;
     }
@@ -588,10 +621,10 @@ export class MockRuntime {
    * observation must keep coming from the seed alone.
    */
   #settleSlotObservation(itemId: string, kind: 'producer' | 'empty'): void {
-    for (const [layer, bound] of this.#fixedBindings) {
+    for (const [key, bound] of this.#fixedBindings) {
       if (bound.itemId !== itemId) continue;
       this.#fixedObservations.set(
-        layer,
+        key,
         kind === 'empty' ? { kind: 'empty' } : { kind: 'producer', producer: 'html' },
       );
       this.fixedStateChanged.emit(this.fixedLayersState());
@@ -902,6 +935,12 @@ export class MockRuntime {
    * stack length. Applying the bridge's slot filter here would make Clear-All a permanent
    * no-op in the one mode where it needs to be exercisable.
    *
+   * ⚠ `MULTI-CHANNEL-01` §1.3 — **STILL TRUE now that a ROW-BOUND item publishes its slot**, and
+   * the reason is the DYNAMIC item: on the bridge a `stack.load` ALLOCATES a layer, so its item
+   * holds a slot there and Clear-All reaches it; here it holds none, because nothing is
+   * allocated. Filtering on the published slot would therefore make the mock spare exactly the
+   * rows the bridge clears — the narrower-than-air Clear-All this note already forbids.
+   *
    * `refused` is always empty: the Live Source ledger is a bridge-side structure and the mock
    * has none. The field is reported rather than omitted so the shape is identical either way.
    */
@@ -929,15 +968,15 @@ export class MockRuntime {
   // the offline mock has no OSC, so outside the seed this map stays EMPTY and
   // every slot honestly reads `unknown`.
   readonly #fixedObservations = seedFixedObservations();
-  // R-021 stage 3 — the bridge's LayerManager fixed BINDING, modelled: layer →
-  // the item bound to it. The mock allocates no real layers, so this map IS its
-  // `fixedBinding`, and `loadFixed` is the only thing that writes to it.
+  // R-021 stage 3 — the bridge's LayerManager fixed BINDING, modelled: coordinate →
+  // the item bound to it (`MULTI-CHANNEL-01` §1.3: the COORDINATE, never the layer
+  // alone). The mock allocates no real layers, so this map IS its `fixedBinding`, and
+  // `loadFixed` is the only thing that writes to it.
   // R-028 (3.1) — `templateId` rides along so the published binding carries
   // identity, exactly like the bridge's registry join.
-  readonly #fixedBindings = new Map<
-    number,
-    { itemId: string; templateType: string; templateId: string }
-  >(seedFixedBindings());
+  readonly #fixedBindings = new Map<string, MockFixedBinding>(
+    seedFixedBindings().map((b) => [coordinateKey(b.channel, b.layer), b]),
+  );
 
   // R-028 part B — the declared playout layers, test-seeded like the bank.
   readonly #playoutObservations = seedPlayoutLayers();
@@ -1095,7 +1134,8 @@ export class MockRuntime {
     // plate-declaring package is the ONLY thing the picker will let an operator put.
     const inBank = bank !== null && isFixedBankLayer(bank, channel, layer);
     if (!inBank) return { accepted: false, errorCode: 'not-fixed' };
-    const bound = this.#fixedBindings.get(layer);
+    const key = coordinateKey(channel, layer);
+    const bound = this.#fixedBindings.get(key);
     // R-022 parity — the LOAD interlock, and the mock must hold it for the same
     // reason it holds `take`'s: if test mode allowed a load the real bridge
     // refuses, the interlock would be exercised nowhere in the suite and the UI
@@ -1112,7 +1152,13 @@ export class MockRuntime {
       return { accepted: false, errorCode: 'slot-bound' };
     }
 
-    this.#fixedBindings.set(layer, { itemId, templateType: template.templateType, templateId });
+    this.#fixedBindings.set(key, {
+      channel,
+      layer,
+      itemId,
+      templateType: template.templateType,
+      templateId,
+    });
     this.load(itemId, templateId, fields);
     this.fixedStateChanged.emit(this.fixedLayersState());
     return { accepted: true };
@@ -1159,8 +1205,9 @@ export class MockRuntime {
     // A CLEAR destroys whatever was there. Offline that means: the observation
     // becomes empty, and any binding on the layer is gone — the producer it named
     // no longer exists, so keeping the binding would make the row lie.
-    this.#fixedObservations.set(layer, { kind: 'empty' });
-    this.#fixedBindings.delete(layer);
+    const key = coordinateKey(channel, layer);
+    this.#fixedObservations.set(key, { kind: 'empty' });
+    this.#fixedBindings.delete(key);
     this.fixedStateChanged.emit(this.fixedLayersState());
     return { ok: true };
   }
@@ -1201,7 +1248,8 @@ export class MockRuntime {
       // two halves keep their own alias records and a merged lookup would make bed 9's key
       // collide with an operator row's on a bank whose numbering happened to overlap.
       const alias = layerAlias(bank, layer);
-      const bound = this.#fixedBindings.get(layer);
+      const key = coordinateKey(channel, layer);
+      const bound = this.#fixedBindings.get(key);
       // R-028 (3.1) parity — the binding carries WHICH template is on the row
       // as RAW naming facts (id + name + file name), the same join the bridge
       // does with its registry; the renderer resolves the label canonically.
@@ -1210,7 +1258,7 @@ export class MockRuntime {
         channel,
         layer,
         ...(alias !== undefined ? { alias } : {}),
-        observed: this.#fixedObservations.get(layer) ?? { kind: 'unknown' },
+        observed: this.#fixedObservations.get(key) ?? { kind: 'unknown' },
         binding:
           bound !== undefined
             ? {
@@ -1228,7 +1276,7 @@ export class MockRuntime {
                 // runs no restore, so the SEED stands in for the decision; what
                 // matters for parity is that the FIELD exists on this wire and is
                 // absent (never `false`) on every other row.
-                ...(isSeededBlockedLayer(layer) ? { restoreBlocked: true as const } : {}),
+                ...(isSeededBlockedSlot(channel, layer) ? { restoreBlocked: true as const } : {}),
               }
             : null,
       });
@@ -1416,11 +1464,12 @@ export class MockRuntime {
     // `B-201` — BOTH halves (see `loadFixed`). Ours-vs-foreign is decided the same way on a
     // bed row as on an operator row; the half a layer sits in is not part of that question.
     if (bank !== null && isFixedBankLayer(bank, channel, layer)) {
-      const observed = this.#fixedObservations.get(layer);
+      const key = coordinateKey(channel, layer);
+      const observed = this.#fixedObservations.get(key);
       if (observed?.kind !== 'producer' || observed.producer !== 'html') {
         return { ok: false, reason: 'foreign' };
       }
-      this.#fixedObservations.set(layer, { kind: 'empty' });
+      this.#fixedObservations.set(key, { kind: 'empty' });
       this.fixedStateChanged.emit(this.fixedLayersState());
       return { ok: true };
     }
@@ -1939,10 +1988,14 @@ export class MockRuntime {
     };
   }
 
-  /** The fixed layer this item is bound to, or null when the mock knows of none. */
+  /**
+   * The fixed layer this item is bound to, or null when the mock knows of none. The channel is
+   * the BINDING's own (`MULTI-CHANNEL-01` §1.3) — it used to be read off the bank, which made
+   * every bound item look as if it were on the bank's channel whatever row it was on.
+   */
   #slotFor(itemId: string): { channel: number; layer: number } | null {
-    for (const [layer, bound] of this.#fixedBindings) {
-      if (bound.itemId === itemId) return { channel: this.#fixedBank?.channel ?? 1, layer };
+    for (const bound of this.#fixedBindings.values()) {
+      if (bound.itemId === itemId) return { channel: bound.channel, layer: bound.layer };
     }
     return null;
   }
@@ -2177,7 +2230,8 @@ function seedFixedBank(): FixedLayerBank | null {
     if (isLowBankLayer(defaults, layer)) lowVisibility[String(layer)] = true;
   }
   return {
-    channel: 1,
+    // The SAME constant the seeded bindings and observations are keyed on.
+    channel: MOCK_CHANNEL,
     low: { start: low.start, count: low.count, visibility: lowVisibility },
     start: defaults.start,
     // R-028 — EIGHTEEN rows, not four. The first four (`start`…`start + 3`) keep the four
@@ -2224,7 +2278,16 @@ function seedFixedBank(): FixedLayerBank | null {
  * bridge-side truth (real tap + sweep) is integration-tested in
  * tools/caspar-bridge.
  */
-function seedFixedObservations(): Map<number, FixedSlotObservation> {
+function seedFixedObservations(): Map<string, FixedSlotObservation> {
+  return new Map(
+    [...seedFixedObservationsByLayer()].map(
+      ([layer, observed]) => [coordinateKey(MOCK_CHANNEL, layer), observed] as const,
+    ),
+  );
+}
+
+/** The seed as the rows of ONE bank read it — on {@link MOCK_CHANNEL}, keyed there above. */
+function seedFixedObservationsByLayer(): Map<number, FixedSlotObservation> {
   return fixedBankSeedArmed()
     ? new Map<number, FixedSlotObservation>([
         // `LAYER-BANDS-16` — OFFSETS off the template band's start, never absolute layer
@@ -2566,10 +2629,7 @@ export function seedLooksStackItem(): StackItemState[] {
   ];
 }
 
-function seedFixedBindings(): [
-  number,
-  { itemId: string; templateType: string; templateId: string },
-][] {
+function seedFixedBindings(): MockFixedBinding[] {
   if (!fixedBankSeedArmed()) return [];
   const types = ['clock', 'ticker', 'logo-bug'];
   // Offset 0 takes the seed's LOADED item, because that is the row observed as an html
@@ -2578,37 +2638,37 @@ function seedFixedBindings(): [
   // 1–3 stay UNBOUND so they keep modelling the foreign-producer / empty / unknown
   // display cases cleanly.
   const layers = [seedLayer(0), seedLayer(16), seedLayer(17)];
-  const bindings: [number, { itemId: string; templateType: string; templateId: string }][] =
-    seedStack().map((item, i) => [
-      layers[i] ?? seedLayer(19 + i),
-      { itemId: item.itemId, templateType: types[i] ?? 'custom', templateId: item.templateId },
-    ]);
+  const bindings: MockFixedBinding[] = seedStack().map((item, i) => ({
+    channel: MOCK_CHANNEL,
+    layer: layers[i] ?? seedLayer(19 + i),
+    itemId: item.itemId,
+    templateType: types[i] ?? 'custom',
+    templateId: item.templateId,
+  }));
   // §14.5 Stage E — and the look-bearing row, so the picker has somewhere to render.
   for (const item of seedLooksStackItem()) {
-    bindings.push([
-      LOOKS_SEED.layer,
-      {
-        itemId: item.itemId,
-        templateType: LOOKS_SEED.templateType,
-        templateId: item.templateId,
-      },
-    ]);
+    bindings.push({
+      channel: MOCK_CHANNEL,
+      layer: LOOKS_SEED.layer,
+      itemId: item.itemId,
+      templateType: LOOKS_SEED.templateType,
+      templateId: item.templateId,
+    });
   }
   // R-021 stage 4 — and the blocked row, bound over a foreign producer.
   for (const item of seedBlockedStackItem()) {
-    bindings.push([
-      BLOCKED_SEED.layer,
-      {
-        itemId: item.itemId,
-        templateType: BLOCKED_SEED.templateType,
-        templateId: item.templateId,
-      },
-    ]);
+    bindings.push({
+      channel: MOCK_CHANNEL,
+      layer: BLOCKED_SEED.layer,
+      itemId: item.itemId,
+      templateType: BLOCKED_SEED.templateType,
+      templateId: item.templateId,
+    });
   }
   return bindings;
 }
 
-/** Is this seeded layer the e2e `restore-blocked` row? */
-function isSeededBlockedLayer(layer: number): boolean {
-  return fixedBankSeedArmed() && layer === BLOCKED_SEED.layer;
+/** Is this seeded coordinate the e2e `restore-blocked` row? */
+function isSeededBlockedSlot(channel: number, layer: number): boolean {
+  return fixedBankSeedArmed() && channel === MOCK_CHANNEL && layer === BLOCKED_SEED.layer;
 }
