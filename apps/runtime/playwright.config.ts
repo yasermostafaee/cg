@@ -101,8 +101,19 @@ function resolveWorkers(): number | undefined {
  * slowest measured run. ⚠ **That is the last rebalance the fixed sum allows** — the next growth
  * of either suite needs the job cap in `pr.yml` raised and this arithmetic redone, which is the
  * owner's call (shared CI config), not a line to move again here.
+ *
+ * 🔴 **THE CAP WAS RAISED 2026-09-24 (`MULTI-CHANNEL-01`), AS THE NOTE ABOVE SAYS IT MUST BE — and
+ * flagged to the owner as shared CI config, in its own commit so it reverts alone.** This suite
+ * measured 7.7 / 7.7 / 7.9 min green against its 8.0 (runs 36033228077, 36035770252,
+ * 36037329126: under 4 % headroom), and run 36039737205 went red having failed nothing —
+ * `246 passed`, `10 did not run`, _"Timed out waiting 480s for the test suite to run"_ — one
+ * flaky retry (`pgm-output-missing` §B-223's 15 s boot wait) was enough to cross it. The change
+ * that caused the measurement owes its own specs on top. So: the job cap `20 → 24` min, this
+ * budget `8 → 10`, the Designer's unchanged at 8.0. 8 + 10 = 18 min against 24 − ~1.6 setup
+ * − ~1 build = ~21.4 usable — 3.4 min of margin, more than the old sum ever had. The next
+ * growth redoes this arithmetic again, here.
  */
-const CI_GLOBAL_TIMEOUT_MS = 8 * 60_000;
+const CI_GLOBAL_TIMEOUT_MS = 10 * 60_000;
 
 export default defineConfig({
   globalTimeout: process.env.CI ? CI_GLOBAL_TIMEOUT_MS : undefined,

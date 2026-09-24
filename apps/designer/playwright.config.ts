@@ -63,8 +63,9 @@ function resolveWorkers(): number | undefined {
  * shared-cap arithmetic live once, in `apps/runtime/playwright.config.ts`; this is the
  * other half of the SAME sum and is meaningless read alone.
  *
- * 8.0 min here + 8.0 min there = 16 min, against ~17.4 min of usable room inside the job's
- * `timeout-minutes: 20`. This suite measures 5.7–6.8 min green (runs 35896106572 and
+ * 8.0 min here + 10.0 min there = 18 min, against ~21.4 min of usable room inside the job's
+ * `timeout-minutes: 24` (raised from 20 on 2026-09-24, `MULTI-CHANNEL-01`; the arithmetic is
+ * in the runtime config). This suite measures 5.7–6.8 min green (runs 35896106572 and
  * 35921029508, the second on a runner ~19 % slower) and must also cover its own `webServer`
  * boot, so 8.0 min is ~15 % headroom over the slowest measured run. **Raise this and you must
  * lower the runtime budget by the same amount.**

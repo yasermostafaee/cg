@@ -412,7 +412,10 @@ jobs:
     # P-030 — and skip when this exact SHA already has a completed run that RAN it.
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.needs_e2e == 'true' && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # P-038 — the two suites' `globalTimeout`s must SUM under this with room for setup and the
+    # build; the arithmetic lives in `apps/runtime/playwright.config.ts`. 20 → 24 on 2026-09-24
+    # (`MULTI-CHANNEL-01`): the Runtime suite measured 7.9 of its 8.0.
+    timeout-minutes: 24
 
     steps:
       - name: Checkout
