@@ -23,10 +23,11 @@ import { renderLayerRow, slotWith } from './support/layerRow.js';
  *   - `01`: a search and three KIND chips over the list, a footer sentence that is true of
  *     this product (a fixed-row LOAD is list-only; PLAY is the first wire contact), and a
  *     meta line per row from the carrier — never from the prototype's `t.looks`.
- *   - `02`: the DROP ZONE, and only that. A package dropped on the dialog resolves the pick
- *     with the File; the row then runs THE SAME chain the OS chooser feeds. 🔴 The last test
- *     proves it by the sentence the chain's own `verify` produces on bytes that are not a
- *     package — the prototype's "Review" step is theatre, and the product's is not.
+ *   - `02`: the DROP, and only that. A package dropped on the dialog IMPORTS through THE SAME
+ *     chain the OS chooser feeds — no dialog in between (`UI-POLISH-01` D retired the Import
+ *     dialog). 🔴 The drop tests prove it by the sentence the chain's own `verify` produces on
+ *     bytes that are not a package — the prototype's "Review" step is theatre, and the
+ *     product's is not.
  */
 
 const PLAIN: TemplateInfo = {
@@ -261,9 +262,8 @@ describe('§8 — the picker follows `01`: search, kind chips, the meta line and
     /*
       …and the action row is Cancel then ONE primary, which is what it has always been — but
       the primary is the LOAD now, not the import. `RUNTIME-REPAIR-05`: the owner split the
-      picker in two, so `Import a .vcg…` moved to the tools row beside `Manage` (both are
-      station-level and neither is about the row this dialog was opened from), and the footer
-      carries the act this dialog exists to perform.
+      picker in two, so `Import a .vcg` moved to the tools row (station-level, not about the row
+      this dialog was opened from), and the footer carries the act this dialog exists to perform.
     */
     const actions = [...dialog.querySelectorAll('[data-modal-role]')].map((b) => b.textContent);
     expect(actions).toEqual(['Cancel', 'Load onto Bed 1']);
@@ -281,29 +281,37 @@ describe('§8 — a dropped package feeds the SAME import chain', () => {
     target.dispatchEvent(event);
   }
 
-  it('🔴 a dropped package OPENS IMPORT with it staged, and resolves no pick', async () => {
+  it('🔴 a dropped package IMPORTS at once — no dialog in between — and resolves no pick', async () => {
     /*
-      `RUNTIME-REPAIR-05` — the gesture changed and the claim did not. A drop used to
-      resolve the pick with the file, so the ROW imported it and bound itself in one act.
-      Importing is a station act now: the drop stages the package in the Import dialog, the
-      operator confirms it, and the load stays a separate press. What is asserted here is
-      the same thing it always was — that the dropped file reaches the import path — plus
-      the new invariant that it does NOT reach a row on its own.
+      `UI-POLISH-01` D (the owner, 2026-09-26) — the Import dialog is retired, so a drop IMPORTS:
+      the dropped bytes go straight into the chain the OS chooser feeds. What is asserted is the
+      same claim this case has always made — the dropped file reaches the import path — plus
+      that nothing stands between them, and that the drop still reaches no row on its own.
     */
     const { dialog, choice } = await openPicker();
     const body = dialog.querySelector('[data-template-body]');
     expect(body).not.toBeNull();
 
-    const file = new File([new Uint8Array([1, 2, 3])], 'dropped.vcg');
+    // Not a package: three bytes, handed over the way the chain reads them.
+    const bytes = new Uint8Array([1, 2, 3]);
+    const file = new File([bytes], 'dropped.vcg');
+    Object.defineProperty(file, 'arrayBuffer', { value: () => Promise.resolve(bytes.buffer) });
     await act(async () => {
       dropFileOn(body as Element, file);
       await Promise.resolve();
     });
 
-    // The Import dialog is up, and it names the package it is holding.
-    const staged = document.querySelector('[data-import-drop]');
-    expect(staged, 'the drop opened the Import dialog').not.toBeNull();
-    expect(staged?.textContent).toContain('dropped.vcg');
+    // No second dialog: the Import dialog and its drop zone are gone.
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(document.querySelector('[data-import-drop]')).toBeNull();
+    // The chain RAN on the dropped bytes — its own verify names the file, in the picker's line.
+    const refusal = (): string => dialog.querySelector('[data-modal-message]')?.textContent ?? '';
+    for (let i = 0; i < 20 && refusal() === ''; i++) {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      });
+    }
+    expect(refusal()).toMatch(/“dropped\.vcg” failed verification/);
     // …and the picker has NOT resolved: no row has been asked to load anything.
     let settled = false;
     void choice.then(() => (settled = true));
@@ -311,13 +319,12 @@ describe('§8 — a dropped package feeds the SAME import chain', () => {
       await Promise.resolve();
     });
     expect(settled, 'a drop is not a load').toBe(false);
-    expect(openDialog(), 'the Templates dialog is still open behind it').not.toBeNull();
   });
 
   it('🔴 through the row, the dropped bytes meet the chain’s own verify — the refusal names the file', async () => {
-    // `RUNTIME-REPAIR-05` — one press further along (confirm the staged import), and the
-    // refusal lands in the IMPORT dialog rather than the command toast. Same bytes, same
-    // `verify`, same sentence: only where the operator reads it moved.
+    // `UI-POLISH-01` D — the drop itself runs the chain (no Import dialog to confirm in), and
+    // the refusal lands in the PICKER's own pinned line rather than the command toast. Same
+    // bytes, same `verify`, same sentence: only where the operator reads it moved.
     const errors: string[] = [];
     const off = onCommandError((m) => errors.push(m));
     const rendered = await renderLayerRow({
@@ -346,16 +353,6 @@ describe('§8 — a dropped package feeds the SAME import chain', () => {
         await Promise.resolve();
       });
 
-      // Confirm the staged import — the press that actually runs the chain.
-      const go = [...document.querySelectorAll('button')].find((b) =>
-        /^Import “garbage\.vcg”$/.test(b.textContent ?? ''),
-      );
-      expect(go, 'the Import dialog offers the staged package').not.toBeUndefined();
-      await act(async () => {
-        go?.click();
-        await Promise.resolve();
-      });
-
       // The chain is asynchronous (read → verify → refuse → the dialog's message region).
       const refusal = (): string =>
         document.querySelector('[data-modal-message]')?.textContent ?? '';
@@ -366,8 +363,8 @@ describe('§8 — a dropped package feeds the SAME import chain', () => {
       }
       /*
         🔴 THE REFUSAL IS UNCHANGED, AND IT IS NOW WHERE IT CAN BE READ. `importVcgFile`'s
-        own sentence — the FILE the operator dropped, then `verify`'s verdict — in the Import
-        dialog's pinned region. It used to go to the command toast, which is `zIndex: 50`
+        own sentence — the FILE the operator dropped, then `verify`'s verdict — in the picker's
+        pinned region. It used to go to the command toast, which is `zIndex: 50`
         under a modal backdrop at 1000: the A9 defect, one surface over.
       */
       expect(refusal()).toMatch(/“garbage\.vcg” failed verification/);

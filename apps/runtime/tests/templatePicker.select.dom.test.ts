@@ -304,20 +304,23 @@ describe('§3 — the ONE refusal, unchanged, said where there is room for it', 
 });
 
 describe('§2B — importing is reachable, and it is not the load', () => {
-  it('the tools row offers Import beside Manage, and it opens a dialog of its own', async () => {
+  it('🔴 `Import a .vcg` opens the OS chooser DIRECTLY — no dialog of its own (`UI-POLISH-01` D)', async () => {
     await openPicker();
     const importOpen = document.querySelector<HTMLButtonElement>('[data-template-import-open]');
-    expect(importOpen, 'Import moved out of the footer to the tools row').not.toBeNull();
-    expect(document.querySelector('[data-import-drop]')).toBeNull();
+    expect(importOpen, 'Import is in the tools row').not.toBeNull();
+    expect(importOpen?.textContent).toBe('Import a .vcg');
+    const input = document.querySelector<HTMLInputElement>('input[data-template-file-input]');
+    if (input === null) throw new Error('no file input');
+    let chooserOpened = 0;
+    input.addEventListener('click', (e) => {
+      chooserOpened += 1;
+      e.preventDefault();
+    });
 
     await click(importOpen);
-    const zone = document.querySelector('[data-import-drop]');
-    expect(zone, 'a dialog of its own, with the drop zone in it').not.toBeNull();
-    // Audit row 111: `Choose file…` is INSIDE the zone, as the reference paints it.
-    expect(zone?.querySelector('button')?.textContent).toContain('Choose file');
-    // And it says what it does not do.
-    expect(document.querySelector('[data-import-foot-info]')?.textContent).toContain(
-      'does not load a row',
-    );
+    // The chooser was asked for — and nothing else opened: one dialog, no drop zone.
+    expect(chooserOpened).toBe(1);
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(document.querySelector('[data-import-drop]')).toBeNull();
   });
 });

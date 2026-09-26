@@ -124,7 +124,8 @@ const styles = {
       — the head band, the footer band, Station setup's full-bleed rail — painted its own
       SQUARE corner over the frame's arc and the dialog read as a rectangle with four small
       notches. Measured in Chromium at 1400 x 900 by hit-testing 2 px in from each corner
-      (inside the frame's box, outside its radius): the picker, the import dialog and the
+      (inside the frame's box, outside its radius): the picker, the import dialog (since
+      retired, `UI-POLISH-01` D) and the
       audit log returned the head band at the top and `.cg-modal-footer` at the bottom, and
       Station setup returned `.cg-rail` bottom-left and the footer bottom-right. Four
       modals, one cause.
@@ -738,9 +739,8 @@ interface ModalProps {
    * `.modal` width (`--r-modal-w-library`, 1120 at 1280) rather than a width invented for
    * it. It is not `wide`: `wide` IS the audio dialog's 860 and two other dialogs wear it.
    *
-   * ⭐ `import` is the sixth, added by `RUNTIME-REPAIR-05`: the reference's own
-   * `#import-dialog`, 750 px, a dialog that does ONE station-level thing and needs
-   * room for a drop target rather than for a list. Measured by opening it.
+   * ⭐ `import` was the sixth (`RUNTIME-REPAIR-05`, the reference's 750 px `#import-dialog`); it
+   * went with that dialog (`UI-POLISH-01` D — `Import a .vcg` opens the OS chooser directly).
    */
   /**
    * ⭐ `record` is the seventh, added by `SETTINGS-MATCH-02` §8: the SUB-DIALOG every add,
@@ -749,7 +749,7 @@ interface ModalProps {
    * own frame rather than a near-miss of one, because that family also has its own head, body
    * and footer paddings and its own footer ground.
    */
-  size?: 'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'import' | 'record';
+  size?: 'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'record';
   /**
    * 🔴 `PLATES-AUDIO-11` §5 — **TAKE THE FRAMED HEIGHT, on a size that does not imply it.**
    *
@@ -800,16 +800,12 @@ interface ModalProps {
 }
 
 /** `STATION-CHROME-02` §2 — the frames, resolved from the token home and never spelled here. */
-const WIDTHS: Record<
-  'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'import' | 'record',
-  string
-> = {
+const WIDTHS: Record<'prose' | 'wide' | 'fixed' | 'ledger' | 'library' | 'record', string> = {
   prose: cssVars['--r-modal-w-prose'],
   wide: cssVars['--r-modal-w-wide'],
   fixed: cssVars['--r-modal-w-fixed'],
   ledger: cssVars['--r-modal-w-ledger'],
   library: cssVars['--r-modal-w-library'],
-  import: cssVars['--r-modal-w-import'],
   record: cssVars['--r-modal-w-record'],
 };
 

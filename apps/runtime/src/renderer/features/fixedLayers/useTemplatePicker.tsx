@@ -15,7 +15,6 @@ import {
   Rows3,
   Search,
   Trash2,
-  Upload,
 } from 'lucide-react';
 import {
   describeReferencePlace,
@@ -96,7 +95,9 @@ import { Tag } from '../../ui/Tag.js';
  *   - ⭐ ~~its SELECT-THEN-`Load into` flow~~ — **REVERSED BY THE OWNER, 2026-09-09,
  *     `RUNTIME-REPAIR-05`.** This note argued that the row's one press IS the load and that
  *     the aside therefore had nothing to describe. The owner saw the built picker and decided
- *     otherwise: the picker is TWO dialogs, a row is SELECTED, and the footer commits it. The
+ *     otherwise: the picker is TWO dialogs, a row is SELECTED, and the footer commits it
+ *     (🔴 `UI-POLISH-01` D, 2026-09-26: the second dialog, Import, is retired — `Import a .vcg`
+ *     opens the OS chooser directly; the select-then-commit contract stands). The
  *     count that argument leaned on was wrong too — nine spec files reach `app.loadTemplate`,
  *     not twenty, and all nine go through ONE fixture method (§22.1).
  *   - its `Into` destination select: this dialog's door is the row, so the destination is
@@ -129,10 +130,10 @@ import { Tag } from '../../ui/Tag.js';
  * `02-template-import.html`'s import dialog is theatre by its own disclaimer ("Simulated
  * checks"); the product's import is `importVcgFile` → `verify → unpack → runtimeShortfall →
  * render`, and it is untouched. The one honest interaction `02` has — DROP A PACKAGE — is
- * adopted: a `.vcg` dropped anywhere on this dialog resolves the pick with the File and the
- * caller runs THE SAME chain the OS chooser feeds. Nothing is checked here first, not even
- * the extension: the chain's own `verify` is the one gate, and a second one in front of it
- * would be a place for the two to disagree.
+ * adopted: a `.vcg` dropped anywhere on this dialog IMPORTS through THE SAME chain the OS chooser
+ * feeds (`UI-POLISH-01` D — no dialog in between, nothing loaded). Nothing is checked here first,
+ * not even the extension: the chain's own `verify` is the one gate, and a second one in front of
+ * it would be a place for the two to disagree.
  *
  * ── 🔴 A9 — TWO THINGS THIS SURFACE GOT WRONG, BOTH MEASURED ────────────────
  *
@@ -390,7 +391,7 @@ export function useTemplatePicker(): {
   */
   const [query, setQuery] = useState('');
   const [kind, setKind] = useState<KindFilter>('all');
-  /** Phase 8 — a package is being dragged over the dialog; lights the drop zone. */
+  /** Phase 8 — a package is being dragged over the dialog; lights the body, the drop target. */
   const [dragging, setDragging] = useState(false);
   /*
     HOW MANY ROWS hold each template — read out in the aside for the SELECTED template.
@@ -424,16 +425,21 @@ export function useTemplatePicker(): {
   */
   const [selected, setSelected] = useState<TemplateInfo | null>(null);
   /*
-    The station-level IMPORT dialog. It registers a package and loads nothing; on success the
-    operator lands back here with the new template selected, one press from the row.
+    IMPORTING — a station act that registers a package and loads nothing; on success the operator
+    is on this list with the new template selected, one press from the row.
+
+    🔴 `UI-POLISH-01` D (the owner, 2026-09-26): there is no Import DIALOG any more. It was kept
+    for a checking-and-validating step (`design.md` §21.9, "the import wizard") that was never
+    built, so it was one extra click. `Import a .vcg` opens the OS chooser directly, and a `.vcg`
+    dropped on the list imports the same way. `importBusy` holds the door while one runs.
   */
-  const [importOpen, setImportOpen] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
-  const [importMessage, setImportMessage] = useState<ModalMessage | null>(null);
-  /** A package DROPPED on either dialog, waiting for the operator to confirm the import. */
-  const [staged, setStaged] = useState<File | null>(null);
   /** This dialog's OWN hidden `.vcg` input — the row's is no longer in the import path. */
   const fileRef = useRef<HTMLInputElement | null>(null);
+  /** The latest `runImport`, for the drop handler declared before it. */
+  const runImportRef = useRef<(pick: () => Promise<File | null>) => Promise<void>>(() =>
+    Promise.resolve(),
+  );
   // D-137 / C-015 — SUBSCRIBED, unlike the template list beside it, because the
   // assignments are bridge-owned and a second console can bind a plate while
   // this dialog is open. The list is browser-local, so a snapshot is right for
@@ -488,9 +494,6 @@ export function useTemplatePicker(): {
         setUsage(new Map());
         // A selection is per-opening: the row that asked last time is not this row.
         setSelected(null);
-        setImportOpen(false);
-        setImportMessage(null);
-        setStaged(null);
         setRequest({ title, templates, accepts, destination: destination ?? null });
         void readUsage();
       });
@@ -608,9 +611,6 @@ export function useTemplatePicker(): {
     setReferences([]);
     setDragging(false);
     setSelected(null);
-    setImportOpen(false);
-    setImportMessage(null);
-    setStaged(null);
     const resolve = resolver.current;
     resolver.current = null;
     resolve?.(choice);
@@ -673,8 +673,8 @@ export function useTemplatePicker(): {
   );
 
   /*
-    Phase 8 — `02`'s drop zone, on the WHOLE dialog body. `dragover` must be cancelled or the
-    browser refuses the drop; the file, whatever it is, goes to the caller's chain untouched
+    Phase 8 — `02`'s drop target, on the WHOLE dialog body. `dragover` must be cancelled or the
+    browser refuses the drop; the file, whatever it is, goes to the import chain untouched
     (see the module note — the chain's `verify` is the one gate).
   */
   const onDragOver = useCallback((e: DragEvent<HTMLDivElement>): void => {
@@ -689,20 +689,19 @@ export function useTemplatePicker(): {
   /*
     ⭐ `RUNTIME-REPAIR-05` — A DROP NO LONGER RESOLVES THE PICK. It used to hand the file back
     to `LayerRow`, which imported it and bound it to the row in one gesture. Importing is a
-    STATION act now, so a dropped package opens the Import dialog with the file already staged:
-    the operator confirms the import, lands back on the list with the new template selected, and
-    the load is a separate press. The bytes take the identical path either way —
-    `importVcgToStation` → `importVcgFile` → `verify → unpack → B-196 → render` — so nothing
-    about what is refused changed with the gesture that starts it.
+    STATION act, and 🔴 `UI-POLISH-01` D made it a DIRECT one: a dropped package IMPORTS, exactly
+    as a file from `Import a .vcg`'s chooser does, and the operator lands on the list with the new
+    template selected; the load is still a separate press. The bytes take the identical path
+    either way — `importVcgToStation` → `importVcgFile` → `verify → unpack → B-196 → render` — so
+    nothing about what is refused changed with the gesture that starts it. It depends on the
+    installed app letting an OS drag reach the page (`dragDropEnabled: false`, `FIELD-FIXES-01` F).
   */
   const onDrop = useCallback((e: DragEvent<HTMLDivElement>): void => {
     e.preventDefault();
     setDragging(false);
     const file = e.dataTransfer.files[0];
     if (file === undefined) return;
-    setStaged(file);
-    setImportMessage(null);
-    setImportOpen(true);
+    void runImportRef.current(() => Promise.resolve(file));
   }, []);
 
   /**
@@ -747,13 +746,13 @@ export function useTemplatePicker(): {
   /**
    * Import a package into the STATION. Registers; loads nothing.
    *
-   * On success the operator is returned to the list with the new template SELECTED, so the
-   * next press is the load — which is the whole reason the two dialogs are worth splitting:
-   * the import is over, and what happens to a row is still the operator's separate decision.
+   * On success the new template is SELECTED on the list, so the next press is the load: the
+   * import is over, and what happens to a row is still the operator's separate decision.
    */
   const runImport = useCallback(async (pick: () => Promise<File | null>): Promise<void> => {
     setImportBusy(true);
-    setImportMessage(null);
+    setMessage(null);
+    setReferences([]);
     try {
       const template = await importVcgToStation(pick);
       // The operator dismissed the OS dialog: their own "no", not a failure.
@@ -761,16 +760,14 @@ export function useTemplatePicker(): {
       const templates = await window.cg.templates.list();
       setRequest((current) => (current === null ? null : { ...current, templates }));
       setSelected(template);
-      setStaged(null);
-      setImportOpen(false);
     } catch (err) {
       /*
-          IN THE IMPORT DIALOG'S OWN MESSAGE REGION. `importVcgFile` throws the operator-facing
-          sentence naming the file (`“x.vcg” failed verification…`); reporting it to the command
-          toast would render it UNDER this dialog's backdrop, which is the A9 defect one surface
-          over. The package registered nothing, so the list behind is still true.
-        */
-      setImportMessage({
+        IN THE PICKER'S OWN MESSAGE REGION — one line. `importVcgFile` throws the operator-facing
+        sentence naming the file (`“x.vcg” failed verification…`); reporting it to the command
+        toast would render it UNDER this dialog's backdrop, which is the A9 defect one surface
+        over. The package registered nothing, so the list is still true.
+      */
+      setMessage({
         role: 'refusal',
         text: err instanceof Error ? err.message : 'The package could not be imported.',
       });
@@ -779,12 +776,13 @@ export function useTemplatePicker(): {
     }
   }, []);
 
-  /** Open the Import dialog on an empty slate — the `Import a .vcg` control's own press. */
+  /** `Import a .vcg`'s own press: the OS file chooser, directly — no dialog of ours between. */
   const openImport = useCallback((): void => {
-    setStaged(null);
-    setImportMessage(null);
-    setImportOpen(true);
-  }, []);
+    const input = fileRef.current;
+    if (input !== null) void runImport(() => pickFile(input));
+  }, [runImport]);
+  // The drop handler is declared above `runImport`; it reads the latest one through this ref.
+  runImportRef.current = runImport;
 
   /*
     🔴 `MODAL-CHROME-10` ADDENDUM C §C4 — **ONE REFUSAL, ONE SURFACE.**
@@ -933,7 +931,7 @@ export function useTemplatePicker(): {
           className="cg-tpl-body"
           data-template-body=""
           /*
-            A package dropped ANYWHERE on this dialog opens Import with it staged, which is
+            A package dropped ANYWHERE on this dialog is IMPORTED (`UI-POLISH-01` D), which is
             why the handlers are on the body and not on a zone. `data-template-dragging` is
             what says so while the file is in the air — without it the whole dialog is a drop
             target that gives no sign of being one.
@@ -984,7 +982,7 @@ export function useTemplatePicker(): {
               opened from — which is why it belongs to the chrome rather than to a view.
               (`UI-POLISH-01` C — `Manage` itself is retired; delete is on each row.)
             */}
-            <ImportDoor onImport={openImport} />
+            <ImportDoor onImport={openImport} busy={importBusy} />
           </div>
           {
             /*
@@ -1003,7 +1001,7 @@ export function useTemplatePicker(): {
                   <div className="cg-tpl-empty" data-template-empty="">
                     <h3>Nothing on this station yet</h3>
                     <p>Import a .vcg package to begin.</p>
-                    <Button variant="primary" onClick={openImport}>
+                    <Button variant="primary" disabled={importBusy} onClick={openImport}>
                       <Icon icon={FileUp} size={14} />
                       Import a .vcg
                     </Button>
@@ -1127,29 +1125,6 @@ export function useTemplatePicker(): {
           data-template-file-input=""
           aria-hidden="true"
         />
-        <ImportDialog
-          open={importOpen}
-          busy={importBusy}
-          staged={staged}
-          message={importMessage}
-          onChooseFile={() => {
-            const input = fileRef.current;
-            if (input !== null) void runImport(() => pickFile(input));
-          }}
-          onImportStaged={() => {
-            const file = staged;
-            if (file !== null) void runImport(() => Promise.resolve(file));
-          }}
-          onStage={(file) => {
-            setStaged(file);
-            setImportMessage(null);
-          }}
-          onClose={() => {
-            setImportOpen(false);
-            setStaged(null);
-            setImportMessage(null);
-          }}
-        />
         {confirmDialog}
       </Modal>
     );
@@ -1158,136 +1133,21 @@ export function useTemplatePicker(): {
 }
 
 /**
- * 🔴 `RUNTIME-REPAIR-05` §2B — THE IMPORT DIALOG, WHICH REGISTERS AND LOADS NOTHING.
+ * THE IMPORT DOOR — `Import a .vcg`, at the end of the tools row. It opens the OS file chooser
+ * DIRECTLY (`UI-POLISH-01` D): the separate Import dialog is retired. Held while an import runs.
  *
- * The reference ships this as a `<dialog>` of its own — `#import-dialog`, 750 px wide, a head
- * band, a drop zone with `Choose file…` as a PRIMARY inside it, and a footer carrying only
- * `Cancel`. Measured at 1280 × 800 by opening it (`02-template-import.html`,
- * `data-start="import"`); it is a separate dialog ELEMENT, not a mode of the picker, which is
- * what the owner asked for.
- *
- * ⚠ WHAT IS NOT TAKEN, and it is the same refusal `§15.3` recorded. The reference's three-step
- * rail (`Choose package · Review · Complete`) is THEATRE by its own disclaimer — _"Files
- * selected here are not uploaded or imported"_, and its Review step lists `Simulated checks`.
- * This one runs the product's real chain, whose verdict is a refusal sentence naming the file.
- * A rail with two steps this product resolves in one call would be furniture that lies.
- *
- * ⭐ AND ITS FOOTER SENTENCE IS NOW TRUE HERE. The reference writes _"Importing does not load a
- * row or take it on air."_ — `§15.1` recorded that as FALSE of this product, because the
- * picker's import WAS the row's load. It is false no longer: this dialog registers to the
- * station and binds nothing, so the drawing's own sentence is adopted, verbatim, at last.
+ * ⚠ The label is the owner's own words for it (`UI-POLISH-01` D names it `Import a .vcg`).
+ * `MODAL-CHROME-10` A §A2's ellipsis rule gives a control that opens a BROWSE WINDOW its dots,
+ * and this one now does — that is an open point for the owner, recorded in the report, not a
+ * change made overnight.
  */
-function ImportDialog({
-  open,
-  busy,
-  staged,
-  message,
-  onChooseFile,
-  onImportStaged,
-  onStage,
-  onClose,
-}: {
-  open: boolean;
-  busy: boolean;
-  staged: File | null;
-  message: ModalMessage | null;
-  onChooseFile: () => void;
-  onImportStaged: () => void;
-  onStage: (file: File) => void;
-  onClose: () => void;
-}): JSX.Element | null {
-  const [over, setOver] = useState(false);
-  if (!open) return null;
-  return (
-    <Modal
-      title="Import a template"
-      subtitle="Add a .vcg package to this station."
-      emblem={FileUp}
-      size="import"
-      layer="sub"
-      onClose={onClose}
-      {...(message !== null ? { message } : {})}
-      footer={
-        <>
-          <span className="cg-tpl-foot-info" data-import-foot-info="">
-            Importing does not load a row or put anything on air.
-          </span>
-          <ModalAction actionRole="cancel" onClick={onClose}>
-            Cancel
-          </ModalAction>
-          {staged !== null && (
-            <ModalAction actionRole="primary" disabled={busy} onClick={onImportStaged}>
-              Import “{staged.name}”
-            </ModalAction>
-          )}
-        </>
-      }
-    >
-      <div
-        className="cg-tpl-drop"
-        data-import-drop=""
-        data-template-drop-active={over ? 'true' : 'false'}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setOver(true);
-        }}
-        onDragLeave={(e) => {
-          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-          setOver(false);
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          setOver(false);
-          const file = e.dataTransfer.files[0];
-          if (file !== undefined) onStage(file);
-        }}
-      >
-        <span className="cg-tpl-drop__icon">
-          <Icon icon={Upload} size={22} />
-        </span>
-        <h3>Choose a .vcg package</h3>
-        <p>
-          {staged === null
-            ? 'Drop it here, or browse your files.'
-            : `Ready to import “${staged.name}”.`}
-        </p>
-        {/*
-          `Choose file…` INSIDE the zone — audit row 111, which `§15.3` argued away while
-          `Import a .vcg` was the only import control and a second one would have been a second
-          door to one act. With import in its own dialog this IS that dialog's act, and the
-          reference paints it exactly here, as a primary.
-        */}
-        <Button variant="primary" disabled={busy} onClick={onChooseFile}>
-          <Icon icon={FileUp} size={14} />
-          {/* 🔴 THE DOTS BELONG HERE — `MODAL-CHROME-10` A §A2. This is the one control in the
-              chain that opens a real BROWSE WINDOW (`pickFile` → the file input). The button
-              that opens THIS dialog lost its dots for the mirror reason: it opens a dialog. */}
-          Choose file…
-        </Button>
-      </div>
-    </Modal>
-  );
-}
-
-/**
- * 🔴 `MODAL-CHROME-10` ADDENDUM C §C2 — **THE IMPORT DOOR, DEFINED ONCE.**
- *
- * Import was reachable only from the selection view, and the operator who has just deleted a
- * stale template is exactly the operator who wants to import its replacement — with the list
- * he is maintaining still in front of him.
- *
- * ⚠ **ONE DEFINITION, NOT TWO COPIES.** The two views have different tool rows, so the control
- * is MOUNTED twice and WRITTEN once. That distinction is the whole instruction: two copies of
- * the markup drift, and the first thing to drift would be the ellipsis rule — one copy would
- * keep `Import a .vcg` and the other would grow its dots back (§32.1). The handler is the
- * same `openImport` either way; nothing about what it does depends on which view called it.
- */
-function ImportDoor({ onImport }: { onImport: () => void }): JSX.Element {
+function ImportDoor({ onImport, busy }: { onImport: () => void; busy: boolean }): JSX.Element {
   return (
     <Button
       variant="neutral"
       className="cg-tpl-manage-btn"
       data-template-import-open=""
+      disabled={busy}
       onClick={onImport}
     >
       Import a .vcg

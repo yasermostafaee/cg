@@ -901,7 +901,8 @@ delimiter` and `Add source` already pass `variant="add"`** and every dialog conf
 - [x] **Templates**: a row SELECTS (`aria-pressed`), the aside reads the selection out with a
       verdict, the footer's primary commits it onto the named row; `Enter` and double-click
       route through the same `commit`. `templatePicker.select.dom.test.ts` (8).
-- [x] **Import**: its own 750 px dialog (the reference's `#import-dialog`), the drop zone and
+- [x] **Import** (🔴 retired by the owner 2026-09-26, `UI-POLISH-01` D — `Import a .vcg` now
+      opens the OS chooser directly and a drop on the list imports; recorded in the spec): its own 750 px dialog (the reference's `#import-dialog`), the drop zone and
       **`Choose file` inside it — audit row 111 CLOSED**. It registers to the station and binds
       no row; `fixedSlotLoad.test.ts` asserts that as a flat invariant.
 - [x] 🔴 **No refusal condition changed** (§22.4). `requiredBankFor` is still the only thing

@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { buildValidVcg, cssColour, test, expect } from './fixtures/runtime.js';
+import { buildInvalidVcg, buildValidVcg, cssColour, test, expect } from './fixtures/runtime.js';
 
 /**
  * 🔴 `UI-POLISH-01` — the owner's first-run check of 2026-09-26, measured in a real engine. Every
@@ -184,6 +184,113 @@ test.describe('C — delete is on the row; `Manage` is retired', () => {
     await picker.getByRole('button', { name: 'Select Zzdbl 1' }).dblclick();
     await expect(picker).toHaveCount(0);
     expect(await app.templateCount()).toBe(before - 1);
+  });
+});
+
+test.describe('D — importing is one step: the OS chooser, or a drop on the list', () => {
+  test('`Import a .vcg` IS the OS chooser; the package lands selected and loads onto no row', async ({
+    app,
+  }) => {
+    const { page } = app;
+    await app.openTemplatePicker();
+    const picker = app.templatePicker;
+    const before = await app.templateCount();
+
+    const chooser = page.waitForEvent('filechooser');
+    await picker.getByRole('button', { name: 'Import a .vcg' }).click();
+    const opened = await chooser;
+    // The press opened the chooser — and no dialog of ours stands in front of it.
+    await expect(page.getByRole('dialog')).toHaveCount(1);
+    await expect(page.locator('[data-import-drop]')).toHaveCount(0);
+    await opened.setFiles({
+      name: 'direct.vcg',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(await buildValidVcg('tpl-direct')),
+    });
+
+    await expect.poll(() => app.templateCount()).toBe(before + 1);
+    // Lands SELECTED on the list, one press from the load — which has not happened.
+    await expect(app.templateRow('tpl-direct')).toHaveAttribute('data-template-selected', 'true');
+    await expect(picker.locator('[data-template-selected="tpl-direct"]')).toBeVisible();
+    await app.closeTemplatePicker();
+    await expect(app.stackRow('tpl-direct'), 'an import is not a load').toHaveCount(0);
+
+    // THE CONTROL — the instrument sees a load when one happens.
+    await app.loadTemplate('tpl-direct');
+    await expect(app.stackRow('tpl-direct')).toHaveCount(1);
+  });
+
+  test('a package the chain refuses is one line in the picker, and registers nothing', async ({
+    app,
+  }) => {
+    const { page } = app;
+    await app.openTemplatePicker();
+    const picker = app.templatePicker;
+    const before = await app.templateCount();
+    const chooser = page.waitForEvent('filechooser');
+    await picker.getByRole('button', { name: 'Import a .vcg' }).click();
+    await (
+      await chooser
+    ).setFiles({
+      name: 'broken.vcg',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from(buildInvalidVcg()),
+    });
+    const line = picker.locator('[data-modal-message]');
+    await expect(line).toContainText('“broken.vcg” failed verification');
+    await expect(line).toHaveCount(1);
+    /*
+      ONE LINE — counted from the TEXT's own line boxes. A range over the element also returns
+      the notice's box, whose top is not a line's, so only text nodes are read. The control: the
+      same count, with the notice squeezed to 240 px, must see the wrap it forces.
+    */
+    const lines = await line.evaluate((el) => {
+      const count = (): number => {
+        const tops = new Set<number>();
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n !== null; n = walker.nextNode()) {
+          const range = document.createRange();
+          range.selectNodeContents(n);
+          for (const r of range.getClientRects()) tops.add(Math.round(r.top));
+        }
+        return tops.size;
+      };
+      const notice = el.firstElementChild as HTMLElement;
+      const asShown = count();
+      notice.style.maxWidth = '240px';
+      const squeezed = count();
+      notice.style.maxWidth = '';
+      return { asShown, squeezed };
+    });
+    expect(lines.squeezed, 'the instrument cannot see a wrap').toBeGreaterThan(1);
+    expect(lines.asShown, 'the refusal wraps').toBe(1);
+    await expect(page.getByRole('dialog')).toHaveCount(1);
+    expect(await app.templateCount()).toBe(before);
+    await expect(app.error, 'the refusal is in the picker, not under its backdrop').toHaveCount(0);
+  });
+
+  test('a `.vcg` dropped on the list imports it — selected, nothing loaded', async ({ app }) => {
+    const { page } = app;
+    await registerTemplates(page, 'Zzlisted', 1);
+    await app.openTemplatePicker();
+    const picker = app.templatePicker;
+    const before = await app.templateCount();
+    const bytes = Array.from(await buildValidVcg('tpl-dropped'));
+    const transfer = await page.evaluateHandle((b) => {
+      const dt = new DataTransfer();
+      dt.items.add(new File([new Uint8Array(b)], 'dropped.vcg'));
+      return dt;
+    }, bytes);
+    const list = picker.locator('[data-template-list]');
+    await list.dispatchEvent('dragenter', { dataTransfer: transfer });
+    await list.dispatchEvent('dragover', { dataTransfer: transfer });
+    await list.dispatchEvent('drop', { dataTransfer: transfer });
+
+    await expect.poll(() => app.templateCount()).toBe(before + 1);
+    await expect(app.templateRow('tpl-dropped')).toHaveAttribute('data-template-selected', 'true');
+    await expect(page.getByRole('dialog')).toHaveCount(1);
+    await app.closeTemplatePicker();
+    await expect(app.stackRow('tpl-dropped'), 'a drop is not a load').toHaveCount(0);
   });
 });
 

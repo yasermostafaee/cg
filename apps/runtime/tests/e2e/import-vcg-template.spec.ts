@@ -70,8 +70,9 @@ test('a .vcg that fails verification shows a clear error and registers nothing',
   await app.importVcg('broken.vcg', buildInvalidVcg(), 84);
 
   /*
-    🔴 A CLEAR ERROR IS SHOWN — IN THE IMPORT DIALOG, which is `RUNTIME-REPAIR-05`'s one
-    change to this case. The sentence is `importVcgFile`'s own and the CONDITION that produced
+    🔴 A CLEAR ERROR IS SHOWN — IN THE PICKER'S OWN MESSAGE REGION (`RUNTIME-REPAIR-05` put
+    it in a separate Import dialog; `UI-POLISH-01` D retired that dialog, and the line stayed in
+    the dialog the operator is looking at). The sentence is `importVcgFile`'s own and the CONDITION that produced
     it is untouched (`verify → unpack → B-196 → render`); what moved is where the operator
     reads it. It used to go to the command toast, which renders UNDER a modal backdrop — the
     A9 defect this console has already fixed once, on the deletion path.
@@ -87,9 +88,8 @@ test('a .vcg that fails verification shows a clear error and registers nothing',
   /*
     …and the row it was aimed at is untouched: a rejected package must never leave a
     half-bound layer behind. Stronger than before, and cheaply so: importing no longer touches
-    a row in ANY outcome, so the dialogs are simply dismissed and the row is asked.
+    a row in ANY outcome, so the picker is simply dismissed and the row is asked.
   */
-  await app.page.getByRole('button', { name: 'Cancel' }).last().click();
   await app.closeTemplatePicker();
   await expect(app.layerRow(84).getByRole('button', { name: 'LOAD' })).toBeEnabled();
 });

@@ -1412,9 +1412,6 @@ export const LIBRARY_PX = {
    */
   frameW: 1120,
   frameInset: 56,
-  /** The reference's SECOND dialog — `#import-dialog{width:min(750px,calc(100vw - 48px))}`. */
-  importW: 750,
-  importInset: 48,
   /**
    * `RUNTIME-REPAIR-05` — the VERDICT card in the aside, from the reference's `.notice`
    * pair: `padding:13px 15px`, `border-radius:8px`. It says "ready for this row" or it says
@@ -1495,15 +1492,11 @@ export const LIBRARY_PX = {
   emptyTitleText: 15,
   /** The footer sentence — `.foot-info` 13 px muted. */
   footText: 13,
-  /** `02`'s drop zone — `32px 20px`, a dashed rule, radius 11; the glyph box 51, radius 13, a 22 px glyph; title 18 px / 600; sentence 13 px. */
-  dropPadY: 32,
-  dropPadX: 20,
-  dropRadius: 11,
-  dropIconBox: 51,
-  dropIconRadius: 13,
-  dropIcon: 22,
-  dropTitleText: 18,
-  dropText: 13,
+  /**
+   * The SELECTED template's name in the aside, 18 px / 600 — it shared `02`'s drop-zone title
+   * size. The drop zone went with the Import dialog (`UI-POLISH-01` D); the size stays here.
+   */
+  pickNameText: 18,
 } as const;
 /**
  * `RUNTIME-REDESIGN-01` PHASE 8 — the audit log (`03-audit-log.html`) as RENDERED, same method
@@ -2249,13 +2242,6 @@ export const cssVars = {
    * the live plate audio dialog and the live-source swap, neither of which wants 1120.
    */
   '--r-modal-w-library': `min(${String(LIBRARY_PX.frameW)}px, calc(100vw - ${String(LIBRARY_PX.frameInset)}px))`,
-  /**
-   * `RUNTIME-REPAIR-05` — the IMPORT frame. The reference's `#import-dialog`
-   * (`min(750px, 100vw - 48px)`, `LIBRARY_PX.importW`), measured by opening it at
-   * 1280 × 800 rather than read off the sheet. A dialog that registers one package
-   * and loads nothing: it needs a drop target, not a list.
-   */
-  '--r-modal-w-import': `min(${String(LIBRARY_PX.importW)}px, calc(100vw - ${String(LIBRARY_PX.importInset)}px))`,
   '--r-modal-w-fixed': `min(${String(STATION_SETUP_PX.frameW)}px, calc(100vw - ${String(STATION_SETUP_PX.frameInset)}px))`,
   /**
    * 🔴 `MODAL-CHROME-10` §4 — **THE FRAMED HEIGHT, AND IT IS ONE DECISION FOR THREE DIALOGS.**
@@ -3588,13 +3574,7 @@ export const cssVars = {
   '--r-tpl-empty-pad': `${String(LIBRARY_PX.emptyPadY)}px ${String(LIBRARY_PX.emptyPadX)}px`,
   '--r-tpl-empty-title-text': `${String(LIBRARY_PX.emptyTitleText)}px`,
   '--r-tpl-foot-text': `${String(LIBRARY_PX.footText)}px`,
-  '--r-tpl-drop-pad': `${String(LIBRARY_PX.dropPadY)}px ${String(LIBRARY_PX.dropPadX)}px`,
-  '--r-tpl-drop-radius': `${String(LIBRARY_PX.dropRadius)}px`,
-  '--r-tpl-drop-icon-box': `${String(LIBRARY_PX.dropIconBox)}px`,
-  '--r-tpl-drop-icon-radius': `${String(LIBRARY_PX.dropIconRadius)}px`,
-  '--r-tpl-drop-icon': `${String(LIBRARY_PX.dropIcon)}px`,
-  '--r-tpl-drop-title-text': `${String(LIBRARY_PX.dropTitleText)}px`,
-  '--r-tpl-drop-text': `${String(LIBRARY_PX.dropText)}px`,
+  '--r-tpl-pick-name-text': `${String(LIBRARY_PX.pickNameText)}px`,
   '--r-audit-tools-gap': `${String(AUDIT_LOG_PX.toolsGap)}px`,
   '--r-audit-search-h': `${String(AUDIT_LOG_PX.searchH)}px`,
   '--r-audit-search-pad': `${String(AUDIT_LOG_PX.searchPadY)}px ${String(AUDIT_LOG_PX.searchPadX)}px ${String(AUDIT_LOG_PX.searchPadY)}px ${String(AUDIT_LOG_PX.searchPadStart)}px`,

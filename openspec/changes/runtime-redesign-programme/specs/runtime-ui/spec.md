@@ -664,9 +664,10 @@ below. A search SHALL narrow by the name the operator sees; the
 kind chips SHALL split beds from graphics by the same predicate the bridge refuses on; a search that
 finds nothing SHALL say so and never claim the browser holds no templates.
 
-`unpack` → the runtime-contract guard → the render, registering nothing on refusal, proved by the
-existing import tests unchanged. A package DROPPED on the picker SHALL resolve the pick with that
-file and run the SAME chain; the picker SHALL check nothing itself, not even the extension — the
+The import path SHALL remain `verify` → `unpack` → the runtime-contract guard → the render,
+registering nothing on refusal, proved by the existing import tests unchanged. A package DROPPED on
+the picker SHALL import through that SAME chain (`UI-POLISH-01` D — it used to resolve the pick,
+then to stage an Import dialog); the picker SHALL check nothing itself, not even the extension — the
 chain's `verify` is the one gate.
 
 #### Scenario: The picker and the log measure to their tokens
@@ -679,7 +680,7 @@ chain's `verify` is the one gate.
 #### Scenario: A dropped package meets the chain's own verify
 
 - **WHEN** bytes that are not a package are dropped on the picker opened from a row **THEN** the
-  row reports `“<file>” failed verification…` through its error channel, exactly as the OS chooser's
+  picker's own message region reports `“<file>” failed verification…`, exactly as the OS chooser's
   path would, and nothing is registered
 
 ### Requirement: A template is selected, then committed
@@ -721,29 +722,45 @@ still be selectable, so its reason can be read; the commit SHALL be refused inst
 
 ### Requirement: Importing registers a package to the station and loads nothing
 
-Importing SHALL be a dialog of its own, opened from the Templates dialog rather than from a
-row's footer, and SHALL be reachable both beside the template list and from the management
-view. It SHALL offer a drop target with a control to browse for a file inside it. On success it
-SHALL register the package to the station, SHALL NOT bind or load any row, and SHALL return the
-operator to the Templates dialog with the imported template selected.
+The Templates dialog SHALL offer `Import a .vcg` in its tools row, and pressing it SHALL open the
+operating system's file chooser directly, with no dialog of the console's own in between. A `.vcg`
+dropped on the Templates dialog's list SHALL import through the same chain as a file from that
+chooser. On success the import SHALL register the package to the station, SHALL NOT bind or load
+any row, and SHALL leave the imported template selected on the list, so the load is still the
+operator's separate press.
 
-Every refusal of the import path SHALL be unchanged in its conditions, and SHALL be shown inside
-the import dialog rather than in a surface rendered beneath it.
+Every refusal of the import path SHALL be unchanged in its conditions, and SHALL be shown as one
+line in the Templates dialog's own message region rather than in a surface rendered beneath it.
+
+🔴 **REVERSED BY THE OWNER, 2026-09-26 (`UI-POLISH-01` D).** This requirement used to read
+_"Importing SHALL be a dialog of its own, opened from the Templates dialog … It SHALL offer a drop
+target with a control to browse for a file inside it"_ — the owner's own "Templates and Import as
+two dialogs" decision of 2026-09-09 (`RUNTIME-REPAIR-05`, `design.md` §22). The owner wanted the
+second dialog for CHECKING a file before it came in; the product's checks run inside the import
+chain itself (verify, unpack, the runtime-contract guard, the render), and the dialog in front of
+them checked nothing, so it was one extra press on every import. Those checks are unchanged — only
+the dialog in front of them is gone. The drop moved from that dialog's drop zone onto the list, and
+it depends on the installed app letting an OS drag reach the page (`FIELD-FIXES-01` F).
+
+#### Scenario: Import opens the file chooser directly
+
+- **WHEN** the operator presses `Import a .vcg` **THEN** the operating system's file chooser opens
+  and no other dialog opens in front of it
 
 #### Scenario: A package is registered and no row is bound
 
-- **WHEN** a valid package is imported **THEN** it appears in the station's template list, no
-  row is loaded, and the operator is returned to the Templates dialog with it selected
+- **WHEN** a valid package is imported **THEN** it appears in the station's template list, it is
+  the selected template, the Templates dialog is still open, and no row is loaded
 
-#### Scenario: A refused package registers nothing and says why, in the dialog
+#### Scenario: A refused package registers nothing and says why, in one line
 
-- **WHEN** a package fails verification **THEN** the reason names the file, is shown in the
-  import dialog's own message region, nothing is registered, and no row is touched
+- **WHEN** a package fails verification **THEN** the reason names the file on one line in the
+  Templates dialog's own message region, nothing is registered, and no row is touched
 
-#### Scenario: A dropped package is staged for import, not loaded
+#### Scenario: A dropped package is imported, not loaded
 
-- **WHEN** the operator drops a `.vcg` on the Templates dialog **THEN** the import dialog opens
-  holding that package, and nothing is loaded until the import and then the load are each
+- **WHEN** the operator drops a `.vcg` on the Templates dialog's list **THEN** it is imported
+  through the same chain as a chosen file and selected, and nothing is loaded until the load is
   pressed
 
 ### Requirement: A station-wide deletion is offered on each row of the picker, behind the same gate

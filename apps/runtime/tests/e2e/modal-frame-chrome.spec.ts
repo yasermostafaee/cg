@@ -105,9 +105,7 @@ test('§2(b) — every modal in the family clips its children to its own rounded
 
   await app.openTemplatePicker();
   expectClipped(await frame(page), 'the template picker');
-  await page.getByRole('button', { name: 'Import a .vcg' }).click();
-  expectClipped(await frame(page), 'the import dialog');
-  await page.getByRole('button', { name: 'Cancel' }).last().click();
+  // The import dialog is retired (`UI-POLISH-01` D): `Import a .vcg` opens the OS chooser.
   await app.closeTemplatePicker();
 
   await page.getByRole('button', { name: 'Open audit log' }).click();

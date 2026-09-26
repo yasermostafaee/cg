@@ -337,11 +337,10 @@ export class RuntimeApp {
   /**
    * R-028 — import a `.vcg` and load it onto a row, as the operator now performs it.
    *
-   * 🔴 `RUNTIME-REPAIR-05` — THIS IS TWO STEPS NOW, BECAUSE THE PRODUCT IS. The owner
-   * split the picker into a Templates dialog and a station-level Import dialog: importing
-   * REGISTERS a package and binds no row, and the operator lands back on the list with the
-   * new template selected, one press from the load. So this drives
-   * LOAD → `Import a .vcg` → `Choose file…` → the file chooser → `Load onto <row>`.
+   * 🔴 `RUNTIME-REPAIR-05` — THIS IS TWO STEPS, BECAUSE THE PRODUCT IS. Importing REGISTERS a
+   * package and binds no row, and the new template lands selected on the list, one press from
+   * the load. `UI-POLISH-01` D retired the separate Import dialog, so `Import a .vcg` opens the
+   * OS chooser itself. This drives LOAD → `Import a .vcg` → the file chooser → `Load onto <row>`.
    *
    * ⚠ THE SECOND PRESS IS NOT CEREMONY, AND A HELPER THAT SKIPPED IT WOULD HIDE THE ONE
    * THING THIS SESSION CHANGED. Nine specs call this to get a bound row; if it committed the
@@ -355,10 +354,10 @@ export class RuntimeApp {
     const before = await this.templateCount();
     await this.layerRow(target).getByRole('button', { name: 'LOAD' }).click();
     await expect(this.templatePicker).toBeVisible();
-    // The tools row's door, not the footer's: the footer's primary is the LOAD now.
-    await this.page.getByRole('button', { name: 'Import a .vcg' }).click();
+    // The tools row's door, not the footer's: the footer's primary is the LOAD now. Its press
+    // IS the OS chooser, so the wait for it starts first.
     const chooser = this.page.waitForEvent('filechooser');
-    await this.page.getByRole('button', { name: 'Choose file…' }).click();
+    await this.page.getByRole('button', { name: 'Import a .vcg' }).click();
     await (
       await chooser
     ).setFiles({
@@ -375,7 +374,7 @@ export class RuntimeApp {
     // earlier action in the same spec would satisfy a naive wait instantly.
     /*
       🔴 `RUNTIME-REPAIR-05` — THE REFUSAL MOVED, SO THE WAIT HAD TO. It used to settle on
-      "the registry grew, or the command TOAST said something"; the Import dialog now pins its
+      "the registry grew, or the command TOAST said something"; the picker now pins its
       own refusal (the A9 rule — a toast raised under a modal backdrop is a refusal nobody
       reads), so the toast never fires for this path and the poll waited out its timeout on a
       correctly-refused package. Same two real outcomes, read where they now appear.
@@ -391,8 +390,8 @@ export class RuntimeApp {
 
     /*
       The import is over and NOTHING is loaded — that is the new invariant. If the package
-      registered, the Import dialog has closed and the Templates list has it selected, so the
-      load is the commit control's press. If it was REFUSED the registry did not grow and the
+      registered, the Templates list has it selected, so the load is the commit control's
+      press. If it was REFUSED the registry did not grow and the
       caller is asserting the refusal, so there is nothing to commit and the dialog is left as
       it is for them to read.
     */

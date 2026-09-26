@@ -90,7 +90,7 @@ test('§8 — the picker measures to `LIBRARY_PX` at 1280 × 800', async ({ app 
 
   /*
     🔴 `RUNTIME-REPAIR-05` — THE ASIDE READS THE SELECTION OUT, and the drop zone has left
-    it for the Import dialog. Before anything is chosen the column still says something, which
+    it (for the Import dialog, which `UI-POLISH-01` D then retired: a drop on the list imports). Before anything is chosen the column still says something, which
     is the property worth holding: a 342 px column that is blank until you click is furniture.
   */
   await expect(aside.locator('[data-template-drop]'), 'the drop zone left with import').toHaveCount(
@@ -165,16 +165,11 @@ test('§8 — the picker measures to `LIBRARY_PX` at 1280 × 800', async ({ app 
   );
   expect(px(await foot.evaluate((el) => getComputedStyle(el).fontSize))).toBe(px(tokens.footText));
   /*
-    `02`'s drop zone — in the IMPORT dialog since `RUNTIME-REPAIR-05`, which is its own
-    surface now. Its shape is the reference's either way: dashed, and its `Choose file…`
-    primary INSIDE it (audit row 111).
+    `02`'s drop zone (audit row 111) is GONE: it lived in the Import dialog, which
+    `UI-POLISH-01` D retired — `Import a .vcg` opens the OS chooser and a drop on the list
+    imports. `ui-polish.spec.ts` §D measures both; here only its absence is held.
   */
-  await dialog.getByRole('button', { name: 'Import a .vcg' }).click();
-  const drop = page.locator('[data-import-drop]');
-  await expect(drop).toBeVisible();
-  expect(await drop.evaluate((el) => getComputedStyle(el).borderTopStyle)).toBe('dashed');
-  await expect(drop.getByRole('button', { name: 'Choose file…' })).toBeVisible();
-  await page.getByRole('button', { name: 'Cancel' }).last().click();
+  await expect(page.locator('[data-import-drop]')).toHaveCount(0);
   await app.closeTemplatePicker();
 });
 

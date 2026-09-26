@@ -3771,6 +3771,17 @@ every size but `fixed` and is untouched by this.
 programme's own answers: the modals are to be two, the messages shorter, importing is not a
 load, and the library — if it must exist at all — should be like the reference's.
 
+🔴 **THE SECOND DIALOG IS REVERSED BY THE OWNER, 2026-09-26 (`UI-POLISH-01` D).** The Import
+dialog is RETIRED: `Import a .vcg` opens the OS file chooser directly, a `.vcg` dropped on the
+Templates list imports through the same chain, success lands the template selected, and a refusal is
+one line in the Templates dialog's own message region. The owner wanted the separate dialog for
+CHECKING a file before it came in; the checks are the chain's own (verify, unpack, the
+runtime-contract guard, the render) and run unchanged, while the dialog in front of them checked
+nothing and cost a press on every import. The rest of this section stands — select-then-commit,
+import-is-not-a-load, the one refusal — and §22.3's Import rows (the 750 frame, the drop zone,
+`Choose file` inside it, the import footer) are the record of what was built and then retired;
+`--r-modal-w-import` and the `--r-tpl-drop-*` tokens went with it.
+
 ### 22.0 🔴 IS THE LIBRARY LOAD-BEARING? Four falsifiable questions, four answers
 
 The owner authorised REMOVING the Templates library if it is genuinely free to remove. It is
