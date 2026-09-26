@@ -12628,3 +12628,34 @@ Found establishing the channel-1 AMCP record for the Playout team: `clearBankLay
 (`fixedLayers.clear-layer`) sends `CLEAR <ch>-<l>` then `MIXER <ch>-<l> CLEAR` and records nothing,
 so whether the owner's CLEAR of `1-99` in the 16:01 run happened cannot be read from the station's
 records. Every other verb that reaches air is audited (`out`, `stop`, `take`, …). Not fixed here.
+
+## [~] B-271 — A refused fresh take left its graphic ADDed on the layer, and a graphic refused after its plates left them on air unframed ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 1)
+
+`FIELD-FIXES-01` §0 replayed the owner's Bed 59 take (2026-09-26 09:40Z, `amcp-403`) on the mock: the
+take `CG ADD`ed its graphic, the first plate's `PLAY 2-60 DECKLINK DEVICE 1` was refused, the plate
+was rolled back, and the graphic was left ADDed and unplayed on 2-59. A graphic whose own `CG PLAY`
+failed after its plates were seated left the plates on air with no graphic around them. **Owner's
+decision:** a fresh take airs everything or nothing. **Fix:** the take stops at the first refused
+plate, never plays the graphic, undoes what it seated through the one rule (`B-272`) and removes the
+graphic it added the way `out()` does; the graphic's refused `CG PLAY` undoes the same way; the row
+ends in ERROR carrying `takeRefusal`. The success wire is pinned byte for byte. Change:
+`openspec/changes/field-fixes` §1. Test: `take-all-or-nothing.integration.test.ts`.
+
+## [~] B-272 — The take's rollback cleared the layer whose PLAY had just been refused — on a re-take of a row on air, a working picture ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (the Rule)
+
+The take's rollback cleared every layer it had touched, including the one whose `PLAY` the server had
+refused — a layer CasparCG leaves exactly as it was. On a re-take of a row already on air that `CLEAR`
+took a working studio picture off air (replayed in `FIELD-FIXES-01` §0.5; on a DeckLink the re-`PLAY`
+fails by construction, `B-177`). Three sites cleaned up after a refusal, each its own way. **Fix:** one
+rule, `refusal-cleanup.ts` — cleared only if the refused operation put a producer there, never if one
+of ours was there before — called by all of them through `#clearAfterRefusal`. The re-take itself is
+now refused by the bridge (`B-274`). Test: `take-all-or-nothing.integration.test.ts` ("THE RULE").
+
+## [ ] B-273 — A look switch whose new look needs a refused plate shows a hole on air until the page is put back ⟨priority: medium⟩ — FILED 2026-09-26 by `FIELD-FIXES-01-A` (reported, not fixed)
+
+Established from `setActiveLook`: the page is told the NEW look before the fills move; a plate the new
+look needs that is refused (a preset dropped at the take) commits the fills that landed, puts every
+plate back, and only then re-tells the page the previous look. For that window the page shows the new
+look's boxes with nothing in the refused plate's box — a few frames. If the re-tell is refused too, the
+page stays on the new look over the old geometry. What a switch should do is the owner's decision
+(`openspec/changes/field-fixes/design.md` §3).

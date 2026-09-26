@@ -62,6 +62,34 @@ export const StackItemTimingOverrideSchema = z.object({
 });
 export type StackItemTimingOverride = z.infer<typeof StackItemTimingOverrideSchema>;
 
+/**
+ * 🔴 `FIELD-FIXES-01` B — **WHY THIS ROW'S LAST TAKE WAS REFUSED, IN THE TERMS ITS ONE LINE NEEDS.**
+ *
+ * The row that failed carries its own reason, so every console shows the same line on that row and
+ * in its Inspector — and no console needs a banner to say it. It stands until the row is next
+ * taken successfully, or cleared, or removed.
+ *
+ * Facts only; the WORDS are the console's (golden rule 11): the row's name is composed there, and
+ * the sentence for the server's refusal comes from the one mapping that reads {@link code} and
+ * {@link command} (`amcpRefusal.ts`). The raw reply stays in the bridge's AMCP log.
+ */
+export const TakeRefusalSchema = z.object({
+  /** The refusal's code: `amcp-403` for a server refusal, or the bridge's own code. */
+  code: z.string().min(1),
+  /** The refused AMCP command, payload elided (`summarizeWireLine`) — what the mapping reads. */
+  command: z.string().max(256).optional(),
+  /**
+   * The PLATE the take stopped on, when a plate was refused. ABSENT when the refusal was the
+   * graphic's own command. Only the plate that was refused is ever named here: plates the take
+   * never reached were not tried, and are never said to have failed.
+   */
+  plateId: z.string().min(1).optional(),
+  /** The catalog entry that plate resolved to at the take — its stable id and its NAME. */
+  sourceId: z.string().min(1).optional(),
+  sourceName: z.string().min(1).optional(),
+});
+export type TakeRefusal = z.infer<typeof TakeRefusalSchema>;
+
 /** Reconciled view of one item on the operator's stack. */
 export const StackItemStateSchema = z.object({
   itemId: IdSchema,
@@ -193,6 +221,14 @@ export const StackItemStateSchema = z.object({
    * ⚠ ABSENT MEANS INHERITING the template's authored values, not "zero" and not "one".
    */
   timingOverride: StackItemTimingOverrideSchema.optional(),
+  /**
+   * `FIELD-FIXES-01` B — why this row's last take was refused (see {@link TakeRefusalSchema}).
+   * ABSENT on every row whose last take landed, or that has been cleared since.
+   *
+   * ⚠ DELIBERATELY NOT IN {@link RetainedStackItemSchema}, for `removeExempt`'s reason: it is a
+   * statement about the plant as the bridge last heard it.
+   */
+  takeRefusal: TakeRefusalSchema.optional(),
 });
 export type StackItemState = z.infer<typeof StackItemStateSchema>;
 

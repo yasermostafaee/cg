@@ -33,6 +33,7 @@ import type {
   RetainedStackItem,
   StackItemState,
   StackItemTimingOverride,
+  TakeRefusal,
 } from '@cg/shared-schema';
 import { isOnAirStatus, isRetainedOnAir, withCgControl } from '@cg/shared-schema';
 import {
@@ -135,6 +136,12 @@ import {
 } from './fixed-layers-store.js';
 import { CommandBuilder, summarizeWireLine, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
+import {
+  mayClearAfterRefusal,
+  outcomeOf,
+  type RefusalSeat,
+  type SeatOutcome,
+} from './refusal-cleanup.js';
 import {
   projectLiveLayers,
   reconcileLiveLayers,
@@ -294,6 +301,13 @@ interface LivePlatePlacement {
   readonly producerArg: string;
   /** The assigned catalog entry's producer, still as a parsed union. */
   readonly producer: SourceProducer;
+  /**
+   * `FIELD-FIXES-01` B — the catalog entry this seat resolved to: its stable id, and the NAME the
+   * operator gave it. Carried so a refused seat is named in the operator's words (`studio1`) from
+   * the resolution the wire was built from, never from a later read of a catalog that may have
+   * been edited since.
+   */
+  readonly source: { readonly id: string; readonly name: string };
   /** `FILL` and `CLIP`, from ONE computation — never assembled separately. */
   readonly fit: { readonly fill: NormalizedRect; readonly clip: NormalizedRect };
   /**
@@ -302,6 +316,36 @@ interface LivePlatePlacement {
    * Its {@link fit} is the parked one (`B-154`), so it renders nothing.
    */
   readonly held: boolean;
+}
+
+/** What one live-plate apply answered — and, when refused, the seat it stopped on. */
+interface LivePlateApplyResult {
+  readonly ok: boolean;
+  readonly errorCode?: string;
+  readonly message?: string;
+  /** The refused AMCP line, as `#send` summarised it (`B-209`) — for the record, not the sentence. */
+  readonly command?: string;
+  /**
+   * `FIELD-FIXES-01` B — the plate the apply stopped on and the catalog entry behind it. Only the
+   * plate that was REFUSED: plates after it were never tried and are never named.
+   */
+  readonly refused?: {
+    readonly plateId: string;
+    readonly source: { readonly id: string; readonly name: string };
+  };
+}
+
+/** The refused seat of a failed apply, in the shape {@link LivePlateApplyResult} carries it. */
+function refusalOf(
+  failed:
+    | { readonly placement: LivePlatePlacement; readonly command: string | undefined }
+    | undefined,
+): Pick<LivePlateApplyResult, 'command' | 'refused'> {
+  if (failed === undefined) return {};
+  return {
+    ...(failed.command !== undefined && { command: failed.command }),
+    refused: { plateId: failed.placement.plateId, source: failed.placement.source },
+  };
 }
 
 /** The decision half of the assembly: what to seat, or why the take is refused. */
@@ -1209,6 +1253,13 @@ export class CasparRuntime {
    * exits d1 forbids.
    */
   readonly #restoreBlocked = new Map<string, { slot: CommandSlot; producer: string }>();
+  /**
+   * `FIELD-FIXES-01` B — why each row's last take was refused, published on the row
+   * (`StackItemState.takeRefusal`) so every console shows the same one line there and none needs
+   * a banner. Written by {@link #recordTakeRefusal}; retired by the row's next successful take,
+   * its CLEAR, or its removal ({@link #retireTakeRefusal}).
+   */
+  readonly #takeRefusals = new Map<string, TakeRefusal>();
   #seq = 0;
   #lastFailover: ConnectionHealth['lastFailover'] = undefined;
   /**
@@ -2093,6 +2144,8 @@ export class CasparRuntime {
         to since.
       */
       const removeExempt = this.#removeExempt(item.itemId);
+      // `FIELD-FIXES-01` B — why this row's last take was refused (see `#takeRefusals`).
+      const takeRefusal = this.#takeRefusals.get(item.itemId);
       /*
         ⚠ **EVERY OPTIONAL FIELD BELOW MUST BE NAMED IN THIS GUARD.** It is the
         "nothing to join, return the identical object" fast path, and a field it does not
@@ -2116,7 +2169,8 @@ export class CasparRuntime {
         // The comment above names `lookSourceOverride` as having been missed here on the day it
         // was added; this is that list, one entry longer, added on the day of.
         timingOverride === undefined &&
-        !removeExempt
+        !removeExempt &&
+        takeRefusal === undefined
       )
         return item;
       return {
@@ -2129,6 +2183,20 @@ export class CasparRuntime {
         ...(activeLookId !== undefined && { activeLookId }),
         ...(timingOverride !== undefined && { timingOverride }),
         ...(removeExempt && { removeExempt: true }),
+        /*
+          `FIELD-FIXES-01` B / Decision 1 — a row whose last take was REFUSED reads ERROR, whatever
+          the wire now says about its layer. The refused take took its own graphic back off that
+          layer, so OSC reads it `idle`, and the row would drop the one line that says why. Only a
+          row with nothing on air is re-labelled: a status that claims, or may claim, air is never
+          overwritten by a refusal.
+        */
+        ...(takeRefusal !== undefined && {
+          takeRefusal,
+          ...((item.status === 'idle' || item.status === 'loaded') && {
+            status: 'error' as const,
+            errorCode: takeRefusal.code,
+          }),
+        }),
       };
     });
   }
@@ -2910,6 +2978,7 @@ export class CasparRuntime {
     this.#passTimings.delete(itemId);
     this.#pendingRestore.delete(itemId);
     this.#restoreBlocked.delete(itemId);
+    this.#takeRefusals.delete(itemId);
     if (slot !== undefined) {
       this.#slots.delete(itemId);
       this.#removeInterest(slot);
@@ -3591,8 +3660,41 @@ export class CasparRuntime {
       back on air would be a surface describing a plant that has moved on. One narrowing
       point ({@link #retireFromEmptiedAir}), reached by every door.
     */
-    if (verdict.accepted) this.#retireFromEmptiedAir(itemId);
+    if (verdict.accepted) {
+      this.#retireFromEmptiedAir(itemId);
+      // `FIELD-FIXES-01` B — and the row's refusal line goes with the take that landed.
+      this.#retireTakeRefusal(itemId);
+    }
     return verdict;
+  }
+
+  /**
+   * `FIELD-FIXES-01` B — the row's refusal, recorded where it is published. A new refusal
+   * replaces the previous one: the row says why its LAST take was refused.
+   */
+  #recordTakeRefusal(itemId: string, refusal: TakeRefusal): void {
+    this.#takeRefusals.set(itemId, refusal);
+    this.#markDirty(itemId);
+  }
+
+  /** `FIELD-FIXES-01` B — the row's refusal line is withdrawn (taken, cleared or removed). */
+  #retireTakeRefusal(itemId: string): void {
+    if (this.#takeRefusals.delete(itemId)) this.#markDirty(itemId);
+  }
+
+  /**
+   * 🔴 `FIELD-FIXES-01-A` DECISION 1 — **the graphic a refused take ADDED comes off its layer
+   * unplayed**, so nothing of the take is left behind: the layer carries nothing of ours, and the
+   * next take re-ADDs it (`B-039` — `#loaded` is the producer record every take reads).
+   *
+   * Through the one rule: this take's `CG ADD` landed and no page of ours was on the layer before
+   * it (that is why the take added one), so the `CLEAR` is permitted — and it is sent the way
+   * `out()` sends it.
+   */
+  async #removeUnplayedPage(itemId: string, slot: CommandSlot): Promise<void> {
+    await this.#clearAfterRefusal(slot, { outcome: 'landed', heldBefore: false }, 'page');
+    this.#loaded.delete(itemId);
+    this.#markDirty(itemId);
   }
 
   async #takeImpl(
@@ -3748,6 +3850,15 @@ export class CasparRuntime {
 
     /** `B-191` — the look whose tell was refused, so the landed take can SAY so. */
     let lookTellFailed: string | undefined;
+    /*
+      🔴 `FIELD-FIXES-01-A` DECISION 1 — WHAT THIS TAKE PUTS THERE, known before it puts anything.
+
+      A fresh take airs everything or nothing, and undoing it takes back exactly what it put there
+      and nothing else: the graphic it `CG ADD`s (`addedPage`) and the plates it seats — never a
+      layer one of ours held before it began (`oursBeforeTake`, read once, before the wire).
+    */
+    let addedPage = false;
+    const oursBeforeTake = this.#liveLayerKeys();
     // B-039 — PRESCRIPTIVE: `CG PLAY` only renders if a live producer exists on the
     // slot. If a prior out destroyed it, re-issue `CG ADD` (a fresh load) FIRST so
     // the take re-renders instead of playing an empty layer. The re-ADD recovers the
@@ -3782,6 +3893,11 @@ export class CasparRuntime {
           did fail at the wire with no code to quote.
         */
         const code = added.errorCode ?? 'amcp-error';
+        // `FIELD-FIXES-01` B — the row carries its own reason (no plate: the graphic's own command).
+        this.#recordTakeRefusal(itemId, {
+          code,
+          ...(added.command !== undefined && { command: added.command }),
+        });
         this.#reconciler.applyAck(seq, false, code);
         // `B-209` — WHICH line was refused. On 2026-09-04 this was the exit every
         // take left by, and the record could not say so.
@@ -3791,6 +3907,7 @@ export class CasparRuntime {
           ...(added.command !== undefined && { command: added.command }),
         };
       }
+      addedPage = true;
     } else {
       /*
         🔴 **`B-191` — THE OTHER HALF OF THE RE-ADD, AND THE ONLY PLACE BOTH ROUTES INTO AIR
@@ -3895,17 +4012,34 @@ export class CasparRuntime {
         pictures with no frame around them for one command — which is bounded by
         the very next line on the same connection.
 
-      A seating failure REFUSES THE TAKE and the graphic never plays: the plates
-      have already been rolled back, so refusing leaves nothing half-placed
-      anywhere. An item that was already on air keeps its template layer and
-      loses its boxes, and the row is told why — which is honest, and is the
-      whole reason this returns a code rather than a boolean.
+      🔴 `FIELD-FIXES-01-A` DECISION 1 — A SEATING FAILURE REFUSES THE TAKE, ALL OR NOTHING.
+      The applier stopped at the first refused plate (no later plate is tried) and undid the
+      plates this take seated, through the one rule; the graphic's `CG PLAY` is never sent; and
+      the graphic THIS take added comes off its layer unplayed, so nothing of the take is left
+      behind anywhere. The row ends in its error state, naming the plate that was refused — and
+      only that plate. (This comment used to say an item already on air "keeps its template layer
+      and loses its boxes". That was the re-take `FIELD-FIXES-01` §0.5 measured, and an on-air row
+      is no longer taken at all — see the refusal at the top of this method.)
     */
     const seated = await this.#applyLivePlates(itemId, plan, 'take');
     if (!seated.ok) {
       const code = seated.errorCode ?? 'amcp-error';
+      if (addedPage) await this.#removeUnplayedPage(itemId, slot);
+      this.#recordTakeRefusal(itemId, {
+        code,
+        ...(seated.command !== undefined && { command: seated.command }),
+        ...(seated.refused !== undefined && {
+          plateId: seated.refused.plateId,
+          sourceId: seated.refused.source.id,
+          sourceName: seated.refused.source.name,
+        }),
+      });
       this.#reconciler.applyAck(seq, false, code);
-      return { accepted: false, errorCode: code };
+      return {
+        accepted: false,
+        errorCode: code,
+        ...(seated.command !== undefined && { command: seated.command }),
+      };
     }
 
     // B-079 — bounded completion for a take, which it never had: #armExpiry was called for
@@ -3918,9 +4052,31 @@ export class CasparRuntime {
     // operator neither.
     const { ok, errorCode, command } = await this.#send(this.#builder.take(slot), seq, 'normal');
     if (!ok) {
+      /*
+        🔴 `FIELD-FIXES-01-A` DECISION 1, THE OTHER HALF — the graphic's own `CG PLAY` failed
+        AFTER its plates were seated, which left live pictures on air with no graphic around
+        them. All or nothing: the plates this take seated come down and the graphic it added
+        comes off its layer, each through the one rule (a layer one of ours held before the take
+        is never cleared).
+      */
+      // The ledger keeps naming every layer whose producer is still ours: one held before the
+      // take (never cleared), and one whose `CLEAR` did not land.
+      const stillOurs: LiveLayerRecord[] = [];
+      for (const record of this.#liveLayers.get(itemId) ?? []) {
+        const cleared = await this.#clearAfterRefusal(
+          record.slot,
+          { outcome: 'landed', heldBefore: oursBeforeTake.has(adoptionKey(record.slot)) },
+          'plate',
+        );
+        if (!cleared) stillOurs.push(record);
+      }
+      this.registerLiveLayers(itemId, stillOurs);
+      if (addedPage) await this.#removeUnplayedPage(itemId, slot);
+      const code = errorCode ?? 'amcp-error';
+      this.#recordTakeRefusal(itemId, { code, ...(command !== undefined && { command }) });
       return {
         accepted: false,
-        errorCode: errorCode ?? 'amcp-error',
+        errorCode: code,
         ...(command !== undefined && { command }),
       };
     }
@@ -4476,6 +4632,8 @@ export class CasparRuntime {
     // The slot stays RESERVED (the item is still on the stack, idle) until remove —
     // retake re-ADDs onto the same slot; OSC interest stays put so idle confirms.
     this.#loaded.delete(itemId);
+    // `FIELD-FIXES-01` B — a row the operator has CLEARED no longer carries its refusal line.
+    if (ok) this.#retireTakeRefusal(itemId);
     // SESSION BP — and the row's level 2 thaws with it: off air, so an assignment edit lands
     // at the next take exactly as the Inspector has always promised. See `#thawAssignment`
     // for why a FAILED clear deliberately keeps the pin.
@@ -5323,6 +5481,7 @@ export class CasparRuntime {
       plateId: string;
       producerArg: string;
       producer: SourceProducer;
+      source: LivePlatePlacement['source'];
       fit: LivePlatePlacement['fit'];
       held: boolean;
     }[] = [];
@@ -5420,6 +5579,7 @@ export class CasparRuntime {
           plateId: frame.plateId,
           producerArg: seat.producerArg,
           producer: seat.source.producer,
+          source: { id: seat.source.id, name: seat.source.name },
           fit: parkedFit(this.#parkedSize(itemId, slot, carrier, frame, aspect.aspect)),
           held: true,
         });
@@ -5466,6 +5626,7 @@ export class CasparRuntime {
           plateId: frame.plateId,
           producerArg: seat.producerArg,
           producer: seat.source.producer,
+          source: { id: seat.source.id, name: seat.source.name },
           fit: parkedFit({ width: fit.fill.width, height: fit.fill.height }),
           held: true,
         });
@@ -5475,6 +5636,7 @@ export class CasparRuntime {
         plateId: frame.plateId,
         producerArg: seat.producerArg,
         producer: seat.source.producer,
+        source: { id: seat.source.id, name: seat.source.name },
         fit: { fill: fit.fill, clip: fit.clip },
         held: false,
       });
@@ -5591,6 +5753,7 @@ export class CasparRuntime {
       plateId: s.plateId,
       producerArg: s.producerArg,
       producer: s.producer,
+      source: s.source,
       fit: s.fit,
       held: s.held,
     }));
@@ -7017,7 +7180,7 @@ export class CasparRuntime {
     itemId: string,
     plan: LivePlateApplyPlan,
     mode: 'take' | 'live' | 'switch',
-  ): Promise<{ ok: boolean; errorCode?: string }> {
+  ): Promise<LivePlateApplyResult> {
     try {
       return await this.#applyLivePlatesUnguarded(itemId, plan, mode);
     } finally {
@@ -7132,15 +7295,52 @@ export class CasparRuntime {
     }
   }
 
+  /**
+   * 🔴 `FIELD-FIXES-01-A` — **THE ONE PLACE A LAYER IS CLEARED AFTER A REFUSAL.**
+   *
+   * Every clean-up that follows a refused operation comes here — the take's rollback, the dropped
+   * preset, the live/switch teardown of the failed plate, and the graphic a refused take added —
+   * and the answer is {@link mayClearAfterRefusal}'s, never a local one: a layer is cleared only
+   * if this operation put a producer on it, and never if one of ours was on it before.
+   *
+   * A PLATE goes with its mixer (`CLEAR` + `MIXER CLEAR`, the pair every plate teardown sends).
+   * The GRAPHIC goes the way `out()` takes it: the `CLEAR`, the adoption that proves on the
+   * primary, and `B-253`'s mixer reset of a bank layer we have just emptied.
+   *
+   * Answers whether a `CLEAR` was acknowledged, so a caller's ledger keeps naming a layer whose
+   * `CLEAR` did not land — a producer of ours may still be on it.
+   */
+  async #clearAfterRefusal(
+    slot: CommandSlot,
+    seat: RefusalSeat,
+    what: 'plate' | 'page',
+  ): Promise<boolean> {
+    if (!mayClearAfterRefusal(seat)) return false;
+    const cleared = await this.#send(this.#builder.out(slot), this.#nextSeq(), 'urgent');
+    if (what === 'plate') {
+      await this.#send(this.#builder.mixerClear(slot), this.#nextSeq(), 'urgent');
+    } else {
+      if (cleared.ok && cleared.onPrimary) this.#markAdoptedOnPrimary(slot);
+      await this.#resetEmptiedLayerMixer(slot, cleared);
+    }
+    return cleared.ok;
+  }
+
   async #applyLivePlatesUnguarded(
     itemId: string,
     plan: LivePlateApplyPlan,
     mode: 'take' | 'live' | 'switch',
-  ): Promise<{ ok: boolean; errorCode?: string; message?: string }> {
+  ): Promise<LivePlateApplyResult> {
     const { placements, parked, resolved, offFrame, declared, unresolved } = plan;
     const previous = this.#liveLayers.get(itemId) ?? [];
     if (placements.length === 0 && parked.length === 0 && previous.length === 0)
       return { ok: true };
+    /*
+      🔴 `FIELD-FIXES-01-A` — EVERY LAYER A PRODUCER OF OURS WAS ON WHEN THIS ACTION BEGAN, any
+      row's, read ONCE here before anything below rewrites a ledger. It is the Rule's
+      `heldBefore` (`refusal-cleanup.ts`): a layer in this set is never cleared after a refusal.
+    */
+    const oursBefore = this.#liveLayerKeys();
 
     /*
       6.5f / 6.9c — THE PLATE'S AUDIO INTENT, READ FROM `#plateVolumes` AND NOT FROM
@@ -7212,6 +7412,16 @@ export class CasparRuntime {
           /** Did this plate send a `PLAY` at all (a re-seat), or only geometry (a re-fit)? */
           reseat: boolean;
           playLanded: boolean;
+          /**
+           * `FIELD-FIXES-01-A` — what the reply said about THIS seat's producer (the Rule's
+           * input): a `PLAY` refused 4xx put nothing on the layer; a line refused AFTER the
+           * `PLAY` means the `PLAY` landed; no usable reply leaves it unknown.
+           */
+          outcome: SeatOutcome;
+          /** The placement, so a refused TAKE can name the plate and its source. */
+          placement: LivePlatePlacement;
+          /** The refused line as `#send` summarised it (`B-209`) — for the record, never the sentence. */
+          command: string | undefined;
         }
       | undefined;
 
@@ -7382,7 +7592,18 @@ export class CasparRuntime {
           continue;
         }
         failure = sent.errorCode ?? 'amcp-error';
-        failedPlate = { record, prior, priorOnSlot: priorSlotRecord, reseat, playLanded };
+        failedPlate = {
+          record,
+          prior,
+          priorOnSlot: priorSlotRecord,
+          reseat,
+          playLanded,
+          // A re-seat's `PLAY` is `lines[0]`: refused there, the reply is about the producer
+          // itself; refused on a later line, the `PLAY` before it had landed.
+          outcome: reseat && i === 0 ? outcomeOf(sent) : 'landed',
+          placement,
+          command: sent.command,
+        };
         break;
       }
       // The mute is `lines[1]` for a fresh seat, so two landed lines is what confirms it.
@@ -7402,14 +7623,22 @@ export class CasparRuntime {
           from either direction.
 
           So a parked seat that will not seat is DROPPED and the action continues. The
-          coordinate is cleared first, because a `PLAY` that left this process may have taken
-          effect even when its ack did not, and an unmasked producer is a guest blown up
-          across the programme. Nothing is lost: the look that needs this input will try
-          again when it is entered, and refuse THERE — legibly, to an operator who is asking
-          for that look.
+          coordinate is cleared first when a producer of this action may be on it — a `PLAY`
+          that left this process may have taken effect even when its ack did not, and an
+          unmasked producer is a guest blown up across the programme — and through the ONE
+          rule (`FIELD-FIXES-01-A`): a `PLAY` the server refused put nothing there, and a layer
+          one of ours held before is never cleared. Nothing is lost: the look that needs this
+          input will try again when it is entered, and refuse THERE — legibly, to an operator
+          who is asking for that look.
         */
-        await this.#send(this.#builder.out(placement.slot), this.#nextSeq(), 'urgent');
-        await this.#send(this.#builder.mixerClear(placement.slot), this.#nextSeq(), 'urgent');
+        await this.#clearAfterRefusal(
+          placement.slot,
+          {
+            outcome: failedPlate?.outcome ?? 'unknown',
+            heldBefore: oursBefore.has(key(placement)),
+          },
+          'plate',
+        );
         next.pop();
         const dropped = touched.indexOf(record);
         if (dropped >= 0) touched.splice(dropped, 1);
@@ -7448,16 +7677,34 @@ export class CasparRuntime {
 
     if (failure !== undefined) {
       if (mode === 'take') {
+        /*
+          🔴 `FIELD-FIXES-01-A` DECISION 1 — ALL OR NOTHING, AND ONLY WHAT THIS TAKE PUT THERE.
+
+          The take has already stopped at the first refused plate (the loop's `break`: no later
+          plate is tried) and its graphic's `CG PLAY` is never sent (`#takeImpl` returns on
+          this). Undoing it is now ONE rule applied per seat, not a blanket: a seat whose `PLAY`
+          LANDED is cleared, because this take put that producer there; the seat whose `PLAY`
+          was REFUSED is not, because the server left that layer exactly as it was; and a layer
+          one of ours held before the take is never cleared at all. The blanket used to clear
+          the refused seat too — which, on a re-take of a row already on air, was the `CLEAR`
+          that took a working picture off air (`FIELD-FIXES-01` §0.5).
+        */
+        const ledger = new Map(previous.map((r) => [key(r), r] as const));
         for (const record of touched) {
-          await this.#send(this.#builder.out(record.slot), this.#nextSeq(), 'urgent');
-          await this.#send(this.#builder.mixerClear(record.slot), this.#nextSeq(), 'urgent');
+          const outcome = record === failedPlate?.record ? failedPlate.outcome : 'landed';
+          const cleared = await this.#clearAfterRefusal(
+            record.slot,
+            { outcome, heldBefore: oursBefore.has(key(record)) },
+            'plate',
+          );
+          // The ledger names what is on each layer NOW: nothing after a clear; our new producer
+          // where one landed and was not cleared; and, where the `PLAY` was refused, whatever was
+          // there before — still there, because the server did not touch the layer.
+          if (cleared) ledger.delete(key(record));
+          else if (outcome !== 'refused') ledger.set(key(record), record);
         }
-        const rolledBack = new Set(touched.map(key));
-        this.registerLiveLayers(
-          itemId,
-          previous.filter((record) => !rolledBack.has(key(record))),
-        );
-        return { ok: false, errorCode: failure };
+        this.registerLiveLayers(itemId, [...ledger.values()]);
+        return { ok: false, errorCode: failure, ...refusalOf(failedPlate) };
       }
       if (mode === 'switch') {
         /*
@@ -7576,18 +7823,22 @@ export class CasparRuntime {
       const failed = failedPlate;
       const replacedInPlace = failed !== undefined && failed.priorOnSlot !== undefined;
       let tornDown = false;
-      if (failed !== undefined && !replacedInPlace) {
+      if (failed !== undefined && failed.reseat) {
         /*
-          Nothing of ours was on this slot before this action, so there is no previous
-          picture to protect and `B-126`'s rule does not apply. A producer may nonetheless be
-          there — a `PLAY` that left this process may have taken effect even when its ack did
-          not — and its `MIXER FILL`/`CLIP` never landed, so it would be a live input at FULL
-          FRAME with no mask: a guest blown up across the programme. That is worse on air than
-          black, which is the same judgement the take's rollback makes.
+          Through the ONE rule (`FIELD-FIXES-01-A`, `refusal-cleanup.ts`). Where nothing of ours
+          was on this slot before this action, there is no previous picture to protect and
+          `B-126` does not apply — yet a producer of this action may be there: a `PLAY` that
+          landed, or one whose reply never came, with its `MIXER FILL`/`CLIP` refused or unsent,
+          which is a live input at FULL FRAME with no mask — a guest blown up across the
+          programme, worse on air than black. That is cleared. A `PLAY` the server REFUSED put
+          nothing there, so nothing is cleared; and a slot one of ours held before (a replace in
+          place) is never cleared, whatever the reply said.
         */
-        await this.#send(this.#builder.out(failed.record.slot), this.#nextSeq(), 'urgent');
-        await this.#send(this.#builder.mixerClear(failed.record.slot), this.#nextSeq(), 'urgent');
-        tornDown = true;
+        tornDown = await this.#clearAfterRefusal(
+          failed.record.slot,
+          { outcome: failed.outcome, heldBefore: oursBefore.has(key(failed.record)) },
+          'plate',
+        );
       }
 
       /*
@@ -7627,14 +7878,16 @@ export class CasparRuntime {
         failed !== undefined &&
         replacedInPlace &&
         ((failed.reseat && !failed.playLanded) || (mode === 'switch' && !failed.reseat));
+      // `FIELD-FIXES-01-A` — a `PLAY` refused onto a slot nothing of ours was on leaves that slot
+      // as it was: empty of ours, so the ledger must not name it (and the Rule cleared nothing).
+      const nothingLanded =
+        failed !== undefined && failed.reseat && failed.outcome === 'refused' && !replacedInPlace;
       const settledFailed =
-        failed === undefined
+        failed === undefined || tornDown || nothingLanded
           ? []
-          : tornDown
-            ? []
-            : revertToPrior && failed.priorOnSlot !== undefined
-              ? [failed.priorOnSlot]
-              : [failed.record];
+          : revertToPrior && failed.priorOnSlot !== undefined
+            ? [failed.priorOnSlot]
+            : [failed.record];
       /*
         Every other record this action built stands, unioned by SLOT with what we already
         owned — nothing may leave the ledger while a producer of ours may still be on it,
@@ -7687,6 +7940,7 @@ export class CasparRuntime {
             `plate "${failed.record.sourceId}" IS now on its new source, but CasparCG refused ` +
             `the command that followed it, so its geometry or volume may be wrong. Nothing was ` +
             `cleared — re-issue the change to correct it.`,
+          ...refusalOf(failed),
         };
       }
       if (mode === 'switch') {
@@ -7705,9 +7959,10 @@ export class CasparRuntime {
             `the look was NOT changed — CasparCG refused one of its plates, so every box was ` +
             `put back where it was and the graphic is still on the previous look. Nothing was ` +
             `cleared and nothing is on air that was not before. Fix the source, then re-issue.`,
+          ...refusalOf(failed),
         };
       }
-      return { ok: false, errorCode: failure };
+      return { ok: false, errorCode: failure, ...refusalOf(failed) };
     }
 
     /*
@@ -9612,6 +9867,8 @@ export class CasparRuntime {
       // than `CG PLAY` an empty layer. The slot stays RESERVED (the item is
       // still on the stack, idle) exactly as it does after `out()`.
       this.#loaded.delete(itemId);
+      // `FIELD-FIXES-01` B — a cleared row no longer carries its refusal line.
+      this.#takeRefusals.delete(itemId);
       this.#reconciler.applyIntent({ kind: 'out', itemId, immediate: true }, this.#nextSeq());
     }
   }
@@ -10000,6 +10257,8 @@ export class CasparRuntime {
     // publish a block for an item that no longer exists.
     this.#pendingRestore.delete(itemId);
     this.#restoreBlocked.delete(itemId);
+    // `FIELD-FIXES-01` B — and its refusal line: a re-used itemId starts with none.
+    this.#takeRefusals.delete(itemId);
     // C-015 phase 6 (6.0/6.6) — the plates die with the item, and BEFORE its own
     // CLEAR for `out()`'s reason. Unconditional on `slot`: the ledger is keyed by
     // itemId, so an item whose slot was already released can still own live

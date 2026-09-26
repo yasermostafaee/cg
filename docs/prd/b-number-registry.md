@@ -3022,3 +3022,12 @@ the highest `B` heading under `docs/prd/` was `B-264` and the highest `R` was `R
 
 ⇒ **Next free after this session is `B-271`**, **`D-161`**, **`C-044`**, **`R-070`** and
 **`P-055`**.
+
+### 2026-09-26 — `FIELD-FIXES-01-A` takes `B-271` onward
+
+- `B-271` — a refused fresh take left its graphic ADDed; a refused graphic left its plates unframed.
+- `B-272` — the take's rollback cleared the layer whose `PLAY` had been refused (the Rule).
+- `B-273` — a look switch on a refused plate shows a hole on air until the page is put back (OPEN).
+
+All in [bugs-runtime.md](bugs-runtime.md). Measured free before use: the highest `B` heading under
+`docs/prd/` was `B-270`, no ref and no stash claims `B-271`…`B-289`.
