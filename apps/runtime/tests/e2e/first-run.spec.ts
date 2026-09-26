@@ -594,11 +594,19 @@ test('FIELD-FIXES-01 I — first-run on two channels shows five rows per band on
   await channelOne.click();
   await channelTwo.click();
   await expect(firstRun.locator('#cg-first-run-serve')).not.toHaveValue('', { timeout: 20_000 });
-  await firstRun.getByRole('button', { name: 'Use these channels' }).click();
-  // The leftover on 2-90 is another system's content on a channel joining the set: first-run
-  // warns once, and the same press again declares.
-  const again = firstRun.getByRole('button', { name: 'Use these channels' });
-  if (await again.isVisible({ timeout: 3000 }).catch(() => false)) await again.click();
+  await firstRun.getByRole('button', { name: 'Use these channels', exact: true }).click();
+  /*
+    The leftover on 2-90 is another system's content on a channel joining the set: first-run warns
+    once, naming it, and "…anyway" declares. The warning is also this test's proof that the tap is
+    HEARING: an occupancy read that came back unknown warns of nothing, and the bank below would
+    then show every row. Waited for, never probed — `isVisible` does not wait, and read at once
+    after the press it met "Setting up…" and skipped the second press (CI run 36258166170).
+  */
+  await expect(firstRun.locator('[data-channel-on-air="2"]')).toContainText('layer 90', {
+    timeout: 20_000,
+  });
+  await expect(firstRun.locator('[data-channel-on-air="1"]')).toHaveCount(0);
+  await firstRun.getByRole('button', { name: 'Use these channels anyway', exact: true }).click();
   await expect(firstRun).toHaveCount(0, { timeout: 30_000 });
 
   const layers = page.getByRole('region', { name: 'Layers' });
