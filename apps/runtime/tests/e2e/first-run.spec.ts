@@ -61,8 +61,11 @@ function freePort(): Promise<number> {
   });
 }
 
-/** Start the bridge the way CG Control does, and wait until it says which auth mode it is in. */
-async function startBridge(port: number): Promise<void> {
+/**
+ * Start the bridge the way CG Control does, and wait until it says which auth mode it is in.
+ * `extra` is appended to the command line.
+ */
+async function startBridge(port: number, extra: readonly string[] = []): Promise<void> {
   const child = spawn(
     process.execPath,
     [
@@ -74,6 +77,7 @@ async function startBridge(port: number): Promise<void> {
       String(port),
       '--template-serve-port',
       '0',
+      ...extra,
     ],
     { stdio: ['ignore', 'pipe', 'pipe'] },
   );
@@ -269,8 +273,18 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
 });
 
 /**
+ * `FIELD-FIXES-01` — where the silent Playout listens. A test that needs no CasparCG dials nothing on
+ * this machine's standard port: here the check's one AMCP probe goes to 127.0.0.2:5250, where
+ * nothing is (CI's 127.0.0.1:5250 was as empty); the bridge's server is port 1, its OSC ephemeral.
+ */
+const SILENT_HOST = '127.0.0.2';
+
+/**
  * A Playout that is OFF as the owner met it: the connection opens and nothing ever replies. Each
  * check against it lasts the full line bound, which is the window a re-check is watched in.
+ *
+ * On {@link SILENT_HOST}, not 127.0.0.1: the check probes CasparCG at the Playout's own host on the
+ * standard port, and on a developer's machine 127.0.0.1:5250 is a running dev station's.
  */
 async function startSilentPlayout(): Promise<number> {
   const sockets = new Set<net.Socket>();
@@ -278,7 +292,7 @@ async function startSilentPlayout(): Promise<number> {
     sockets.add(socket);
     socket.on('close', () => sockets.delete(socket));
   });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve) => server.listen(0, SILENT_HOST, resolve));
   silent = async () => {
     for (const socket of sockets) socket.destroy();
     await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -300,7 +314,7 @@ test('CHECK-RERUN-01: the Playout off — said once, CORS not checked, AMCP its 
   const apiPort = await startSilentPlayout();
   stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-first-run-'));
   const port = await freePort();
-  await startBridge(port);
+  await startBridge(port, ['--amcp-port', '1', '--osc-port', '0']);
   await page.addInitScript(
     `window.__CG_BRIDGE_URL__ = ${JSON.stringify(`ws://127.0.0.1:${String(port)}`)};` +
       'window.__CG_SPLASH_DISABLED__ = true;',
@@ -309,7 +323,7 @@ test('CHECK-RERUN-01: the Playout off — said once, CORS not checked, AMCP its 
 
   const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
   await expect(firstRun).toHaveAttribute('data-first-run', 'target', { timeout: 20_000 });
-  await firstRun.getByLabel('Playout address').fill(`127.0.0.1:${String(apiPort)}`);
+  await firstRun.getByLabel('Playout address').fill(`${SILENT_HOST}:${String(apiPort)}`);
   const checkButton = firstRun.getByRole('button', { name: /^Check/ });
   await checkButton.click();
 
