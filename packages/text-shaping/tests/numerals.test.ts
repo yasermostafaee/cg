@@ -6,6 +6,7 @@ import {
   parseDurationMs,
   parseLocalizedNumber,
   parseTimeOfDay,
+  readLocalizedDuration,
   readLocalizedNumber,
 } from '../src/numerals.js';
 
@@ -135,6 +136,25 @@ describe('parseDurationMs — `۰۰:۳۰` is thirty seconds', () => {
   it('refuses what is not a duration (the control)', () => {
     for (const v of ['۰۰:۶۰', '1:5', '-۳۰', '۱۲a', '', '1:2:3:4', ':30']) {
       expect(parseDurationMs(v), v).toBeNull();
+    }
+  });
+});
+
+describe('readLocalizedDuration — the half-typed is INCOMPLETE, the impossible INVALID', () => {
+  it('reads a complete duration', () => {
+    expect(readLocalizedDuration('۰۰:۳۰')).toEqual({ kind: 'number', value: 30_000 });
+    expect(readLocalizedDuration('۲٫۵')).toEqual({ kind: 'number', value: 2_500 });
+  });
+
+  it('calls a duration on its way to being typed INCOMPLETE', () => {
+    for (const s of ['', '۰۰:', '۰۰:۳', '۱:۰۰:', '۱:۰۰:۵', '.']) {
+      expect(readLocalizedDuration(s), JSON.stringify(s)).toEqual({ kind: 'incomplete' });
+    }
+  });
+
+  it('calls what no more typing repairs INVALID', () => {
+    for (const s of ['۰۰:۶۰', '۱۲a', '-۳۰', ':30', '1:2:3:4', '۱:۰۰۰']) {
+      expect(readLocalizedDuration(s), s).toEqual({ kind: 'invalid' });
     }
   });
 });

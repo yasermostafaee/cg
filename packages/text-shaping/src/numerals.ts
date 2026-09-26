@@ -116,23 +116,44 @@ const CLOCK_PART = /^[0-9]{2}$/;
 const SECONDS_PART = /^([0-9]{2})(?:\.([0-9]+))?$/;
 
 /**
+ * A `[h:]m:` duration still being typed: every segment so far is whole, and the last one — after
+ * the last colon — has fewer than its two digits (`۰۰:`, `۰۰:۳`, `۱:۰۰:۵`).
+ */
+const DURATION_PREFIX = /^[0-9]+(?::[0-9]{2})?:[0-9]?$/;
+
+/**
  * A duration typed in any digit set, in milliseconds: `ss`, `m:ss` or `h:mm:ss` — `۰۰:۳۰` is
  * 30 000 — or a bare number, read as SECONDS so a field that always took seconds keeps its
- * meaning. `null` when it is not a duration. Never negative.
+ * meaning. Never negative. INCOMPLETE and INVALID mean what they mean for
+ * {@link readLocalizedNumber}.
  */
-export function parseDurationMs(text: string): number | null {
+export function readLocalizedDuration(text: string): NumberReading {
   const s = latinNumerals(clean(text));
-  if (s === '') return null;
   if (!s.includes(':')) {
-    const seconds = parseLocalizedNumber(s);
-    return seconds === null || seconds < 0 ? null : Math.round(seconds * 1000);
+    const reading = readLocalizedNumber(s);
+    if (reading.kind !== 'number') return reading;
+    return reading.value < 0
+      ? { kind: 'invalid' }
+      : { kind: 'number', value: Math.round(reading.value * 1000) };
   }
+  if (DURATION_PREFIX.test(s)) return { kind: 'incomplete' };
+  const ms = clockDurationMs(s);
+  return ms === null ? { kind: 'invalid' } : { kind: 'number', value: ms };
+}
+
+/** {@link readLocalizedDuration}'s milliseconds, or `null` for anything that is not one yet. */
+export function parseDurationMs(text: string): number | null {
+  const reading = readLocalizedDuration(text);
+  return reading.kind === 'number' ? reading.value : null;
+}
+
+/** `m:ss` / `h:mm:ss` over Latin digits → ms, or `null`. */
+function clockDurationMs(s: string): number | null {
   const parts = s.split(':');
   if (parts.length > 3) return null;
   const [first, ...rest] = parts;
   if (first === undefined || !/^[0-9]+$/.test(first)) return null;
-  const secondsText = rest[rest.length - 1] ?? '';
-  const sec = SECONDS_PART.exec(secondsText);
+  const sec = SECONDS_PART.exec(rest[rest.length - 1] ?? '');
   if (sec === null) return null;
   const seconds = Number(`${sec[1] ?? '0'}.${sec[2] ?? '0'}`);
   if (seconds >= 60) return null;
