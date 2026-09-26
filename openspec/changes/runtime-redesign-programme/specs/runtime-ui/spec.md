@@ -746,38 +746,53 @@ the import dialog rather than in a surface rendered beneath it.
   holding that package, and nothing is loaded until the import and then the load are each
   pressed
 
-### Requirement: A station-wide deletion is not offered on a row of the picker
+### Requirement: A station-wide deletion is offered on each row of the picker, behind the same gate
 
-The template picker SHALL NOT place `Delete from station` on any template row. It SHALL offer a
-`Manage` control that opens a management view, that view SHALL replace the selection layout rather
-than sit beside it, and the station-wide deletion SHALL be reachable only from there. What the
-deletion DOES SHALL be unchanged by its location: it confirms first, the confirm names the scope
-and the plate bindings it takes with it, the bridge remains the authority on the refusal, and a
-refused deletion still names the places that hold the template with a remedy beside each.
+The template picker SHALL offer the station-wide deletion on each template row as a small icon
+control, NEUTRAL at rest, whose accessible name reads `Delete <name> from this station`; it SHALL
+be a separate control from the row's select control, so selecting or double-clicking a row never
+reaches it. There SHALL be no `Manage` control or management view. What the deletion DOES SHALL be
+unchanged: it confirms first, the confirm names the scope and the plate bindings it takes with it,
+the bridge remains the authority on the refusal, and a refused deletion still names the places that
+hold the template with a remedy beside each.
 
-The management view MAY state how many rows hold each template, and that count SHALL NOT gate the
+The selected template's details MAY state how many rows hold it, and that count SHALL NOT gate the
 control: a snapshot the console has not yet received may not stand in front of a lawful deletion.
 
-#### Scenario: No row of the picker carries the deletion
+🔴 **REVERSED BY THE OWNER, 2026-09-26 (`UI-POLISH-01` C).** This requirement used to read _"The
+template picker SHALL NOT place `Delete from station` on any template row. It SHALL offer a
+`Manage` control that opens a management view … and the station-wide deletion SHALL be reachable
+only from there."_ (`RUNTIME-REPAIR-04`, `design.md` §18.4 / §21.2). The owner found `Manage` an
+extra view whose only act was the delete, so the act returns to the row — as a neutral ICON, not
+the red button §18.4 took off it, which keeps §18.4's reason (a red destructive control repeated
+down a list) answered. The management view's usage line moved to the selected template's details.
 
-- **WHEN** the operator opens the picker on a row **THEN** every template row offers its load
-  control and none offers a deletion, and a `Manage` control is visible in the same dialog
+#### Scenario: Every row carries its own deletion, and there is no Manage
+
+- **WHEN** the operator opens the picker on a row **THEN** every template row offers its select
+  control and, beside it, a neutral delete icon named `Delete <name> from this station`, and no
+  `Manage` control exists
+
+#### Scenario: Selecting or double-clicking never deletes
+
+- **WHEN** the operator selects a row, or double-clicks it **THEN** nothing is asked of the bridge's
+  removal and no confirm opens — a double-click commits the load, as it always did
 
 #### Scenario: The deletion is one press away, and unchanged
 
-- **WHEN** the operator presses `Manage` and then the deletion for a template **THEN** the confirm
-  appears BEFORE anything is asked of the bridge, names that the template goes for every browser
-  and cannot be undone, and names the plate bindings deleted with it
+- **WHEN** the operator presses a row's delete icon **THEN** the confirm appears BEFORE anything is
+  asked of the bridge, names that the template goes for every browser and cannot be undone, and
+  names the plate bindings deleted with it
 
 #### Scenario: A refused deletion still says where the template is held
 
 - **WHEN** the bridge refuses the deletion because a row still references the template **THEN** the
-  reason appears in the dialog's own message region, the template is still listed in the management
-  view, and each place that holds it is named with the way there beside it
+  reason appears in the dialog's own message region, the template is still listed, and each place
+  that holds it is named with the way there beside it
 
 #### Scenario: The count informs and does not forbid
 
-- **WHEN** the management view reports that a template is used by one or more rows **THEN** its
+- **WHEN** the selected template's details report that it is used by one or more rows **THEN** its
   deletion control is still pressable and the refusal, if any, comes from the bridge
 
 ### Requirement: The picker takes the reference's frame and its second column

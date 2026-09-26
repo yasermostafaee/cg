@@ -2,16 +2,19 @@ import type { Locator } from '@playwright/test';
 import { buildValidVcg, cssColour, expect, test } from './fixtures/runtime.js';
 
 /**
- * 🔴 `MODAL-CHROME-10` ADDENDUM C — **THE MANAGE LIST, AND A REFUSAL THAT RENDERED TWICE.**
+ * 🔴 `MODAL-CHROME-10` ADDENDUM C — **THE PICKER'S LIST, AND A REFUSAL THAT RENDERED TWICE.**
+ *
+ * This was `picker-manage-chrome.spec.ts`. 🔴 `UI-POLISH-01` C (the owner, 2026-09-26) retired
+ * `Manage`: its one act, the delete, is an icon on each row. The cases that measured the Manage
+ * view (its rows, its Import slot, its way back) went with it; the refusal and the confirm are
+ * reached from the row now and are asserted exactly as before.
  *
  * Everything here is layout, hover state or a rendered sentence: jsdom has neither hover nor
  * layout, so none of it can be asserted anywhere but a browser (golden rule 12c). The WORDS are
  * pinned in `templateRemoval.dom.test.ts`; this is what the operator actually sees.
  */
 
-test('§C1 — the selection list divides and responds; Manage divides and does NOT', async ({
-  app,
-}) => {
+test('§C1 — the selection list divides and responds', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1400, height: 900 });
   await app.openTemplatePicker();
@@ -36,75 +39,6 @@ test('§C1 — the selection list divides and responds; Manage divides and does 
     })
     .not.toBe(rest);
 
-  /*
-    MANAGE — the same hairline, and NO hover. `R-055`, generalised by golden rule 11: a control
-    shape that cannot be pressed is a lie, and a Manage row is not pressable — the only act on
-    it is the Delete inside it. Station setup's Outputs table lost its hover for this reason;
-    do not add one back here for symmetry.
-  */
-  await page.getByRole('button', { name: 'Manage' }).click();
-  const manageRows = page.locator('.cg-tpl-manage-row');
-  await expect(manageRows).not.toHaveCount(0);
-  const mRow = manageRows.first();
-  await expect(mRow).toHaveCSS('border-bottom-style', 'solid');
-  expect(
-    await mRow.evaluate((el) => getComputedStyle(el).borderBottomColor),
-    'the Manage rows lost their divider',
-  ).toBe(dividerColour);
-
-  const mRest = await mRow.evaluate((el) => getComputedStyle(el).backgroundColor);
-  await mRow.hover();
-  // A settle window, so this cannot pass merely by reading before a transition started.
-  await page.waitForTimeout(400);
-  expect(
-    await mRow.evaluate((el) => getComputedStyle(el).backgroundColor),
-    'a Manage row responds to the pointer — it is not pressable, so it must not',
-  ).toBe(mRest);
-
-  await app.closeTemplatePicker();
-});
-
-test('§C2/§C3 — Import is reachable from Manage, and the way out is not a primary', async ({
-  app,
-}) => {
-  const page = app.page;
-  await page.setViewportSize({ width: 1400, height: 900 });
-  await app.openTemplatePicker();
-
-  const importFromSelection = page.locator('[data-template-import-open]');
-  await expect(importFromSelection).toHaveCount(1);
-  const selectionPaint = await importFromSelection.evaluate(
-    (el) => getComputedStyle(el).backgroundColor,
-  );
-
-  await page.getByRole('button', { name: 'Manage' }).click();
-  const importFromManage = page.locator('[data-template-import-open]');
-  // ONE control, mounted by both views — so it is present here and looks identical.
-  await expect(importFromManage, 'Manage cannot reach Import').toHaveCount(1);
-  await expect(importFromManage).toHaveText('Import a .vcg');
-  expect(
-    await importFromManage.evaluate((el) => getComputedStyle(el).backgroundColor),
-    'the two views mount different import controls',
-  ).toBe(selectionPaint);
-
-  // …and it opens the same dialog. Cancelling leaves the operator in MANAGE, deliberately:
-  // the list he came to maintain is the outcome he needs to see.
-  await importFromManage.click();
-  await expect(page.getByRole('dialog', { name: 'Import a template' })).toBeVisible();
-  await page.getByRole('button', { name: 'Cancel' }).last().click();
-  await expect(page.locator('[data-template-manage]')).toBeVisible();
-
-  /*
-    §C3 — `Back to selection` is an ordinary button. Manage commits nothing, so nothing in its
-    footer may carry a primary's weight: it is asserted against the footer's OWN primary
-    elsewhere in the dialog family rather than against a hex, so a palette retune cannot make
-    this pass while the button is loud again.
-  */
-  const back = page.getByRole('button', { name: 'Back to selection' });
-  await expect(back).toHaveAttribute('data-modal-role', 'cancel');
-  await expect(back).toHaveClass(/cg-btn--neutral/);
-  await expect(back, 'the way out is a primary again').not.toHaveClass(/cg-btn--primary/);
-
   await app.closeTemplatePicker();
 });
 
@@ -121,8 +55,8 @@ test('§C4 — an in-use deletion is refused ONCE, in one place, with its way ou
   */
   await app.importVcg('held.vcg', await buildValidVcg('tpl-held'), 83);
   await app.openTemplatePicker();
-  await page.getByRole('button', { name: 'Manage' }).click();
 
+  // `UI-POLISH-01` C — the delete is the row's own icon; its accessible name is unchanged.
   const held = page.getByRole('button', { name: /^Delete held from this station$/ });
   await expect(held).toHaveCount(1);
   await held.click();
@@ -205,39 +139,13 @@ test('§C4 — an in-use deletion is refused ONCE, in one place, with its way ou
 });
 
 /**
- * 🔴 `MODAL-CHROME-10` ADDENDUM D — **IMPORT'S SLOT, THE ROW HOVER, AND THE DELETE CONFIRM.**
+ * 🔴 `MODAL-CHROME-10` ADDENDUM D — **THE ROW HOVER, AND THE DELETE CONFIRM.**
  *
- * All three are things only a browser can answer: a position, a painted background, and a
- * dialog's structure. jsdom has no layout and no hover (golden rule 12c).
+ * Both are things only a browser can answer: a painted background, and a dialog's structure.
+ * jsdom has no layout and no hover (golden rule 12c). (§D1 measured Import's slot across the
+ * two views; `UI-POLISH-01` C left one view, so it went with `Manage`.)
  */
-test('§D1 — Import occupies the SAME slot in both views', async ({ app }) => {
-  const page = app.page;
-  await page.setViewportSize({ width: 1400, height: 900 });
-  await app.openTemplatePicker();
-
-  const box = async () => {
-    const b = await page.locator('[data-template-import-open]').boundingBox();
-    if (b === null) throw new Error('the import door is not on this view');
-    return { x: +b.x.toFixed(2), right: +(b.x + b.width).toFixed(2), w: +b.width.toFixed(2) };
-  };
-
-  const selection = await box();
-  await page.getByRole('button', { name: 'Manage' }).click();
-  await expect(page.locator('[data-template-manage]')).toBeVisible();
-  const manage = await box();
-
-  /*
-    Measured before the fix: x 710.8 in selection, x 1160.5 in Manage — a 450 px jump on a view
-    switch. Trailing alignment alone could not close it, because the selection view's tools row
-    lives INSIDE `.cg-tpl-main` (which stops 367 px short of the frame to leave the 342 px
-    aside) while Manage has no aside. The row is the DIALOG's chrome now, rendered once above
-    the view switch — so this is not "two positions that agree", it is one element.
-  */
-  expect(manage, 'Import moves when the view changes').toEqual(selection);
-  await app.closeTemplatePicker();
-});
-
-test('§D2 — hover paints the whole ROW, and Manage still has none', async ({ app }) => {
+test('§D2 — hover paints the whole ROW', async ({ app }) => {
   const page = app.page;
   await page.setViewportSize({ width: 1400, height: 900 });
   await app.openTemplatePicker();
@@ -280,16 +188,6 @@ test('§D2 — hover paints the whole ROW, and Manage still has none', async ({ 
     geometry.ground,
   );
 
-  await page.getByRole('button', { name: 'Manage' }).click();
-  const mRow = page.locator('.cg-tpl-manage-row').first();
-  const mRest = await mRow.evaluate((el) => getComputedStyle(el).backgroundColor);
-  await mRow.hover();
-  await page.waitForTimeout(400);
-  expect(
-    await mRow.evaluate((el) => getComputedStyle(el).backgroundColor),
-    'Manage grew a row hover — its rows are not pressable (ADDENDUM C §C1)',
-  ).toBe(mRest);
-
   await app.closeTemplatePicker();
 });
 
@@ -297,7 +195,6 @@ test('§D3 — the delete confirm has the family’s mark, shape and red', async
   const page = app.page;
   await page.setViewportSize({ width: 1400, height: 900 });
   await app.openTemplatePicker();
-  await page.getByRole('button', { name: 'Manage' }).click();
   await page
     .getByRole('button', { name: /^Delete .* from this station$/ })
     .first()

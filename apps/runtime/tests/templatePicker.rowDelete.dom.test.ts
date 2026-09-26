@@ -13,30 +13,23 @@ import {
 import { clearPortals } from './support/dialog.js';
 
 /**
- * 🔴 `RUNTIME-REPAIR-04` §3.3 — `Delete from station` MOVES OFF THE ROW, INTO `Manage`.
+ * 🔴 `UI-POLISH-01` C — **`Manage` IS RETIRED; DELETE IS ON EACH ROW** (the owner, 2026-09-26).
  *
- * The owner decided the move in `design.md` §18.4 and bound its destination to the reference's
- * `Manage` view (audit row 101): _"A red destructive control on every row of a picker is what
- * gets pressed by accident under pressure on an on-air console"_ — and the reference has no
- * destructive control on a row at all.
+ * This file was `templatePicker.manage.dom.test.ts`, which pinned `RUNTIME-REPAIR-04`'s move of
+ * `Delete from station` OFF the row and into `Manage`. The owner has reversed that: `Manage` was
+ * one extra view whose only act was the delete, so the act comes back to the row as a small
+ * NEUTRAL icon and the view goes.
  *
  * ── WHAT THIS FILE GUARDS, AND WHAT IT DELIBERATELY DOES NOT ────────────────
  *
- * The relocation is a change of ROUTE, never of DECISION. So this file asserts the route —
- * the row is clean, the door exists, the control is behind it — and asserts that the
- * CONFIRM-FIRST and the CASCADE are still exactly what they were. What the refusal decides
- * is `templateRemoval.dom.test.ts`'s subject and stays there, byte for byte: ten cases that
- * were written against the control's old home and now press `Manage` first. If the two files
- * ever disagree about what a deletion does, that file is right.
+ * The move is a change of ROUTE, never of DECISION — again. So this file asserts the route (no
+ * `Manage`, a delete on each row that selecting and double-clicking can never reach, the usage
+ * line in the aside) and that CONFIRM-FIRST is exactly what it was. What the refusal decides is
+ * `templateRemoval.dom.test.ts`'s subject; its ten cases lost only their `Manage` press.
  *
- * ⚠ THE COUNT IS INFORMATION, NOT A GATE — and that is the one place this console
- * deliberately does NOT follow the drawing. The reference DISABLES its Delete whenever a
- * template is in use (every one of the six it ships is disabled, and its own footer says
- * _"Templates in use are protected in this demo"_). Here the BRIDGE decides: it refuses
- * `in-use` and names the places, and `B-212` turns each into a remedy. A count read from a
- * stack snapshot must never gate a destructive control's AVAILABILITY — during the `B-092`
- * bootstrap window that snapshot can be empty, and a disabled-on-count Delete would then
- * refuse a legitimate deletion with no reason the operator can act on.
+ * ⚠ THE COUNT IS STILL INFORMATION, NOT A GATE: the BRIDGE refuses `in-use` and names the
+ * places. A count read from a stack snapshot never disables the control (see the hook's note at
+ * `usage`).
  */
 
 const PLAIN: TemplateInfo = {
@@ -63,6 +56,7 @@ let container: HTMLDivElement | null = null;
 let registry: TemplateInfo[] = [];
 let stack: StackItemState[] = [];
 const removeCalls: string[] = [];
+let picked: unknown[] = [];
 
 function installBridge(): void {
   const stub = {
@@ -108,7 +102,9 @@ async function openPicker(): Promise<HTMLElement> {
   let open: (() => void) | null = null;
   function Host(): JSX.Element {
     const { pickTemplate, pickerDialog } = useTemplatePicker();
-    open = () => void pickTemplate('Load onto Layer 99', 'high');
+    open = () => {
+      void pickTemplate('Load onto Layer 99', 'high').then((choice) => picked.push(choice));
+    };
     return createElement('div', null, pickerDialog);
   }
   await act(async () => {
@@ -118,18 +114,25 @@ async function openPicker(): Promise<HTMLElement> {
   await act(async () => {
     open?.();
     await Promise.resolve();
+    await Promise.resolve();
   });
   const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
   if (dialog === null) throw new Error('picker did not open');
   return dialog;
 }
 
+/**
+ * The LAST button with this name — a confirm renders after the picker, and the picker's own
+ * `Cancel` is in its footer again now that `Manage` no longer hides it.
+ */
 function button(name: RegExp | string): HTMLButtonElement | null {
   return (
-    [...document.querySelectorAll('button')].find((b) => {
-      const label = b.getAttribute('aria-label') ?? b.textContent ?? '';
-      return typeof name === 'string' ? label === name : name.test(label);
-    }) ?? null
+    [...document.querySelectorAll('button')]
+      .filter((b) => {
+        const label = b.getAttribute('aria-label') ?? b.textContent ?? '';
+        return typeof name === 'string' ? label === name : name.test(label);
+      })
+      .at(-1) ?? null
   );
 }
 
@@ -139,6 +142,7 @@ async function press(name: RegExp | string): Promise<void> {
   await act(async () => {
     target.click();
     await Promise.resolve();
+    await Promise.resolve();
   });
 }
 
@@ -146,6 +150,7 @@ beforeEach(() => {
   registry = [PLAIN, BOUND];
   stack = [];
   removeCalls.length = 0;
+  picked = [];
   installBridge();
   initSources(window.cg);
 });
@@ -159,65 +164,64 @@ afterEach(() => {
   __resetSourcesForTest();
 });
 
-describe('§3.3 — the destructive control is off the row', () => {
-  it('🔴 no picker ROW offers a deletion, and the door to one is named', async () => {
+describe('`UI-POLISH-01` C — the delete is on the row, and `Manage` is gone', () => {
+  it('🔴 every row carries its own NEUTRAL delete, named in full; there is no `Manage`', async () => {
     const dialog = await openPicker();
-
-    // The rows are there …
-    expect(dialog.querySelectorAll('[data-template-id]').length).toBe(2);
-    // … and NOT ONE of them carries a delete. This is the whole of the move.
-    expect(dialog.querySelector('[data-template-id] .cg-tpl-delete')).toBeNull();
-    expect(button(/Delete .* from this station/)).toBeNull();
-
-    // The door is a control the operator can find, in the tools row beside the search.
-    const manage = button('Manage');
-    expect(manage, 'the picker offers a Manage view').not.toBeNull();
-    expect(dialog.contains(manage)).toBe(true);
+    expect(dialog.querySelectorAll('[data-template-list] [data-template-id]').length).toBe(2);
+    for (const id of ['tpl-plain', 'tpl-bound']) {
+      const del = dialog.querySelector<HTMLButtonElement>(`[data-template-delete="${id}"]`);
+      expect(del, `row ${id} carries a delete`).not.toBeNull();
+      // An ICON: no visible word, the long form on its accessible name.
+      expect(del?.textContent?.trim()).toBe('');
+      expect(del?.getAttribute('aria-label')).toMatch(/^Delete .* from this station$/);
+      // Neutral at rest — never the `danger` variant on a row (red's home is §29.2).
+      expect(del?.className).not.toContain('cg-btn--danger');
+    }
+    // The control: `Manage`, its view and its way back are gone.
+    expect(button('Manage')).toBeNull();
+    expect(button('Back to selection')).toBeNull();
+    expect(dialog.querySelector('[data-template-manage]')).toBeNull();
   });
 
-  it('🔴 Manage opens a list whose rows CAN delete, and closes back to the picker', async () => {
-    await openPicker();
-    expect(document.querySelector('[data-template-manage]')).toBeNull();
-
-    await press('Manage');
-    const manage = document.querySelector('[data-template-manage]');
-    expect(manage, 'the management list replaced the selection list').not.toBeNull();
-    // The selection half is GONE, not merely scrolled past — one surface at a time.
-    expect(document.querySelector('[data-template-list]')).toBeNull();
-    expect(manage?.querySelectorAll('[data-manage-template]').length).toBe(2);
-    expect(button(/Delete two-box from this station/)).not.toBeNull();
-
-    await press('Back to selection');
-    expect(document.querySelector('[data-template-manage]')).toBeNull();
-    expect(document.querySelector('[data-template-list]')).not.toBeNull();
+  it('🔴 selecting or double-clicking a row NEVER deletes', async () => {
+    const dialog = await openPicker();
+    const select = dialog.querySelector<HTMLButtonElement>(
+      '[data-template-id="tpl-bound"] .cg-tpl-row__load',
+    );
+    if (select === null) throw new Error('no select control');
+    await act(async () => {
+      select.click();
+      await Promise.resolve();
+    });
+    expect(removeCalls).toEqual([]);
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1); // no confirm opened
+    await act(async () => {
+      select.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+      await Promise.resolve();
+    });
+    expect(removeCalls).toEqual([]);
+    // The double-click did what it always did — it LOADED — and nothing else.
+    expect(picked).toEqual([BOUND]);
   });
 
-  it('names how many rows hold a template, from the stack the console already has', async () => {
+  it('the aside names how many rows hold the selected template — information, never a gate', async () => {
     stack = [
       { itemId: 'i1', templateId: 'tpl-bound', fields: {}, status: 'loaded', pending: false },
       { itemId: 'i2', templateId: 'tpl-bound', fields: {}, status: 'loaded', pending: false },
     ] as unknown as StackItemState[];
-    await openPicker();
-    await press('Manage');
-
-    const bound = document.querySelector('[data-manage-template="tpl-bound"]');
-    const plain = document.querySelector('[data-manage-template="tpl-plain"]');
-    expect(bound?.textContent).toContain('Used by 2 rows');
-    expect(plain?.textContent).toContain('Not on any row');
-
-    /*
-      ⚠ AND THE COUNT DOES NOT DISABLE THE CONTROL — see the file header. The reference
-      disables every Delete it ships; here the bridge is the authority and a stale snapshot
-      may not stand in front of it.
-    */
+    const dialog = await openPicker();
+    await press('Select two-box');
+    expect(dialog.querySelector('[data-template-usage]')?.textContent).toBe('Used by 2 rows');
+    await press('Select plain');
+    expect(dialog.querySelector('[data-template-usage]')?.textContent).toBe('Not on any row');
+    // AND THE COUNT DOES NOT DISABLE THE CONTROL.
     expect(button(/Delete two-box from this station/)?.disabled).toBe(false);
   });
 });
 
-describe('§3.3 — the move changed the ROUTE and nothing the deletion DECIDES', () => {
+describe('the move changed the ROUTE and nothing the deletion DECIDES', () => {
   it('🔴 still CONFIRMS FIRST, and the confirm still names the fallout', async () => {
     await openPicker();
-    await press('Manage');
     await press(/Delete two-box from this station/);
 
     // Nothing has been asked of the bridge yet: the confirm stands between.
@@ -232,10 +236,9 @@ describe('§3.3 — the move changed the ROUTE and nothing the deletion DECIDES'
 
   it('🔴 a cancelled confirm still deletes nothing', async () => {
     await openPicker();
-    await press('Manage');
     await press(/Delete two-box from this station/);
     await press(/^Cancel$/);
     expect(removeCalls).toEqual([]);
-    expect(document.querySelector('[data-manage-template="tpl-bound"]')).not.toBeNull();
+    expect(document.querySelector('[data-template-id="tpl-bound"]')).not.toBeNull();
   });
 });

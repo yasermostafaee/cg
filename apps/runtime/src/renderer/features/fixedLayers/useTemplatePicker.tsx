@@ -118,9 +118,13 @@ import { Tag } from '../../ui/Tag.js';
  * picker was opened from, and the drop zone — which the audit found sitting below the fold at
  * the foot of the list.
  *
- * `Manage` is where the owner's decided-but-unbuilt item lands (`design.md` §18.4): the red
- * `Delete from station` is OFF THE ROW. Its behaviour, its confirm and its refusal path are
- * untouched — this moved a control, it did not re-decide what the control does.
+ * ~~`Manage` is where the owner's decided-but-unbuilt item lands (`design.md` §18.4): the red
+ * `Delete from station` is OFF THE ROW.~~ 🔴 **`UI-POLISH-01` C — `Manage` IS RETIRED (the owner,
+ * 2026-09-26): it was an extra view.** Delete is back on each ROW, as a small NEUTRAL icon (red's
+ * home is `design.md` §29.2 — the confirm's commit, not the row), through the SAME
+ * `deleteTemplate`: the same confirm, the same bridge gate (`in-use`), the same refusal and
+ * `B-212` remedies in the pinned message region. Its `Used by N rows` line moved to the selected
+ * template's details in the aside. What a deletion decides did not change; where it is pressed did.
  *
  * `02-template-import.html`'s import dialog is theatre by its own disclaimer ("Simulated
  * checks"); the product's import is `importVcgFile` → `verify → unpack → runtimeShortfall →
@@ -228,17 +232,6 @@ const UNASSIGNED_TITLE =
  * reads it.
  */
 const FOOT_INFO = 'Loading prepares the row. Use Play when you’re ready to go on air.';
-
-/**
- * `RUNTIME-REPAIR-04` — the management view's own footer sentence.
- *
- * The reference says _"Deleting affects the station library. Templates in use are protected in
- * this demo."_ The second half is FALSE here and is not adopted: nothing is "protected" by this
- * surface at all. The BRIDGE refuses a template a row still references and names the places
- * (`B-212`), which is a refusal the operator can act on rather than a control they cannot press.
- */
-const MANAGE_FOOT_INFO =
-  'A row still holding a template must be cleared with its own REMOVE first.';
 
 /**
  * 🔴 `RUNTIME-REPAIR-05` §3 — THE ROW'S ONE REFUSAL, IN ONE PLACE, SAID THREE WAYS.
@@ -400,9 +393,13 @@ export function useTemplatePicker(): {
   /** Phase 8 — a package is being dragged over the dialog; lights the drop zone. */
   const [dragging, setDragging] = useState(false);
   /*
-    `RUNTIME-REPAIR-04` — the `Manage` view, and HOW MANY ROWS hold each template.
+    HOW MANY ROWS hold each template — read out in the aside for the SELECTED template.
 
-    The count is pulled when the view opens, not subscribed: this hook is mounted by every
+    🔴 `UI-POLISH-01` C — this was the `Manage` view's usage line (`RUNTIME-REPAIR-04`). The
+    owner retired `Manage` on 2026-09-26 and the line moved to the selected template's details,
+    which is where "every function except the list itself survives" put it.
+
+    The count is pulled when the picker opens, not subscribed: this hook is mounted by every
     `LayerRow`, and a stack subscription here would be thirty of them for a number that is
     read while one short-lived list is on screen. It is the same reason the template list and
     the bank are pulled rather than subscribed (see `bank`).
@@ -413,7 +410,6 @@ export function useTemplatePicker(): {
     refuse a lawful deletion with nothing the operator could do about it. The BRIDGE decides
     — it refuses `in-use` and names the places, and `B-212` turns each into a remedy.
   */
-  const [manage, setManage] = useState(false);
   const [usage, setUsage] = useState<ReadonlyMap<string, number>>(new Map());
   /*
     🔴 `RUNTIME-REPAIR-05` — THE SELECTION. The owner reversed the one-press contract
@@ -453,43 +449,13 @@ export function useTemplatePicker(): {
     [],
   );
 
-  const pickTemplate = useCallback(
-    async (
-      title: string,
-      accepts: 'low' | 'high',
-      destination?: PickDestination,
-    ): Promise<TemplateChoice> => {
-      const templates = await window.cg.templates.list();
-      return new Promise<TemplateChoice>((resolve) => {
-        resolver.current = resolve;
-        setQuery('');
-        setKind('all');
-        setDragging(false);
-        // The management view is never what a LOAD opens on — the door is always the list.
-        setManage(false);
-        setUsage(new Map());
-        // A selection is per-opening: the row that asked last time is not this row.
-        setSelected(null);
-        setImportOpen(false);
-        setImportMessage(null);
-        setStaged(null);
-        setRequest({ title, templates, accepts, destination: destination ?? null });
-      });
-    },
-    [],
-  );
-
   /**
-   * Open the management view, with the usage counts the stack already answers for.
+   * Read how many rows hold each template — the aside's usage line.
    *
-   * A failure to read the stack is NOT a failure to open: the counts are a courtesy line under
-   * each name, and withholding the whole surface because one of them is unknown would hide the
-   * only place a template can be deleted. An unknown count simply does not claim a number.
+   * A failure to read the stack is NOT a failure: the count is a courtesy line in the details,
+   * and an unknown count simply does not claim a number.
    */
-  const openManage = useCallback(async (): Promise<void> => {
-    setMessage(null);
-    setReferences([]);
-    setManage(true);
+  const readUsage = useCallback(async (): Promise<void> => {
     /*
       ⚠ `try`, not `.catch` — a bridge whose `stack` has no `snapshot` at all throws
       SYNCHRONOUSLY, and a rejection handler never sees it. That is not hypothetical here: this
@@ -506,6 +472,31 @@ export function useTemplatePicker(): {
     for (const item of items) counts.set(item.templateId, (counts.get(item.templateId) ?? 0) + 1);
     setUsage(counts);
   }, []);
+
+  const pickTemplate = useCallback(
+    async (
+      title: string,
+      accepts: 'low' | 'high',
+      destination?: PickDestination,
+    ): Promise<TemplateChoice> => {
+      const templates = await window.cg.templates.list();
+      return new Promise<TemplateChoice>((resolve) => {
+        resolver.current = resolve;
+        setQuery('');
+        setKind('all');
+        setDragging(false);
+        setUsage(new Map());
+        // A selection is per-opening: the row that asked last time is not this row.
+        setSelected(null);
+        setImportOpen(false);
+        setImportMessage(null);
+        setStaged(null);
+        setRequest({ title, templates, accepts, destination: destination ?? null });
+        void readUsage();
+      });
+    },
+    [readUsage],
+  );
 
   /**
    * R-005, re-homed. The BRIDGE decides whether a removal is allowed (it
@@ -616,7 +607,6 @@ export function useTemplatePicker(): {
     setMessage(null);
     setReferences([]);
     setDragging(false);
-    setManage(false);
     setSelected(null);
     setImportOpen(false);
     setImportMessage(null);
@@ -664,6 +654,8 @@ export function useTemplatePicker(): {
           return;
         }
         setReferences((current) => current.filter((r) => r.itemId !== reference.itemId));
+        // The count in the aside changed with it.
+        void readUsage();
         setMessage({
           role: 'notice',
           // The label this sentence quotes is now just `Delete` (§2(c)); a message that names
@@ -677,7 +669,7 @@ export function useTemplatePicker(): {
         });
       }
     },
-    [bank, confirm],
+    [bank, confirm, readUsage],
   );
 
   /*
@@ -771,7 +763,6 @@ export function useTemplatePicker(): {
       setSelected(template);
       setStaged(null);
       setImportOpen(false);
-      setManage(false);
     } catch (err) {
       /*
           IN THE IMPORT DIALOG'S OWN MESSAGE REGION. `importVcgFile` throws the operator-facing
@@ -886,7 +877,7 @@ export function useTemplatePicker(): {
               the surface where the operator is about to press the control it qualifies.
             */}
             <span className="cg-tpl-foot-info" data-template-foot-info="">
-              {manage ? MANAGE_FOOT_INFO : FOOT_INFO}
+              {FOOT_INFO}
             </span>
             {/*
               CANCEL FIRST IN DOM ORDER, like every other dialog. The row is
@@ -897,11 +888,9 @@ export function useTemplatePicker(): {
               which reads as a line of static text rather than a control. `cancel`
               resolves to `neutral`: neutral must not mean invisible.
             */}
-            {!manage && (
-              <ModalAction actionRole="cancel" onClick={() => settle(null)}>
-                Cancel
-              </ModalAction>
-            )}
+            <ModalAction actionRole="cancel" onClick={() => settle(null)}>
+              Cancel
+            </ModalAction>
             {/*
               §6 — IMPORT LIVES IN HERE, and it is not a convenience.
 
@@ -917,39 +906,7 @@ export function useTemplatePicker(): {
               ⭐ SUPERSEDED, `RUNTIME-REPAIR-05`: import has its own dialog and its own door on
               the tools row, so the footer's one primary is the LOAD — below.
             */}
-            {manage ? (
-              /*
-                `RUNTIME-REPAIR-04` — the reference swaps its footer's PRIMARY for this while its
-                management view is up, and the swap is the point: the way out of a destructive
-                surface should be the most obvious control on it.
-              */
-              <ModalAction
-                /*
-                  🔴 `MODAL-CHROME-10` ADDENDUM C §C3 — `cancel` (which resolves to `neutral`),
-                  not `primary`.
-
-                  ~~The reference swaps its footer's PRIMARY for this while its management view
-                  is up, and the swap is the point: the way out of a destructive surface should
-                  be the most obvious control on it.~~ **Reversed by the owner 2026-09-13.**
-                  Primary weight means "this is the committing action", and Manage COMMITS
-                  NOTHING — every act on it (a delete) has already happened by the time this
-                  button is reachable. A footer whose loudest control applies nothing teaches
-                  the operator that loud does not mean committing, on a console where it must.
-
-                  ⚠ `neutral` and not `ghost`: `ModalActionRole`'s own rule — neutral must not
-                  mean invisible. The way out stays plainly a control; it just stops
-                  outranking the ones that change something.
-                */
-                actionRole="cancel"
-                onClick={() => {
-                  setManage(false);
-                  setMessage(null);
-                  setReferences([]);
-                }}
-              >
-                Back to selection
-              </ModalAction>
-            ) : (
+            {
               /*
                 🔴 `RUNTIME-REPAIR-05` — THE PRIMARY IS THE LOAD, and it is the reference's own
                 footer (`Load into Layer 5`). It names the row in the OPERATOR'S word rather than
@@ -968,7 +925,7 @@ export function useTemplatePicker(): {
               >
                 Load onto {request.destination?.rowName ?? 'this row'}
               </ModalAction>
-            )}
+            }
           </>
         }
       >
@@ -1001,67 +958,35 @@ export function useTemplatePicker(): {
             are shaped differently. Import is the trailing control, so its right edge is the
             row's right edge in both.
 
-            ⚠ The KIND CHIPS stay inside `PickerList`: they filter that list and mean nothing in
-            Manage. Only the two STATION-level doors and the thing that scopes the view belong
-            to the chrome.
+            ⚠ The KIND CHIPS stay inside `PickerList`: they filter that list. Only the STATION-level
+            door and the thing that scopes the view belong to the chrome.
+
+            `UI-POLISH-01` C — there is one view again (`Manage` is retired), and the row stays
+            where it is: the tools row still reaches the divider, and the one door still ends it.
           */}
           <div className="cg-tpl-tools" data-template-tools="">
-            {manage ? (
-              <p className="cg-tpl-manage__note" data-template-manage-note="">
-                Deleting removes a template from this station, for every browser. It cannot be
-                undone.
-              </p>
-            ) : (
-              <label className="cg-tpl-search">
-                <Icon icon={Search} size={16} />
-                <input
-                  type="search"
-                  className="cg-field"
-                  placeholder="Search templates…"
-                  aria-label="Search templates"
-                  autoComplete="off"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </label>
-            )}
+            <label className="cg-tpl-search">
+              <Icon icon={Search} size={16} />
+              <input
+                type="search"
+                className="cg-field"
+                placeholder="Search templates…"
+                aria-label="Search templates"
+                autoComplete="off"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
             {/*
               `RUNTIME-REPAIR-05` — IMPORT LIVES OUT HERE, not in the footer, because the
-              footer's one primary is the LOAD. The two station-level doors sit together at the
-              end of the row, where the reference puts its own `Manage`: bring a package IN,
-              and manage what is already here. Neither is about the row this dialog was opened
-              from — which is also why they belong to the chrome rather than to a view.
-
-              `Manage` is hidden while the operator is IN Manage: the way back is the footer's
-              own control (§C3), and two ways out of one view is how a footer stops meaning
-              anything.
+              footer's one primary is the LOAD. It sits at the end of the row, where the reference
+              puts its own `Manage`: a station-level door, not about the row this dialog was
+              opened from — which is why it belongs to the chrome rather than to a view.
+              (`UI-POLISH-01` C — `Manage` itself is retired; delete is on each row.)
             */}
-            {!manage && (
-              <Button
-                variant="neutral"
-                className="cg-tpl-manage-btn"
-                data-template-manage-open=""
-                onClick={() => void openManage()}
-              >
-                Manage
-              </Button>
-            )}
             <ImportDoor onImport={openImport} />
           </div>
-          {manage ? (
-            <ManageView
-              templates={request.templates}
-              usage={usage}
-              onDelete={(t) => void deleteTemplate(t)}
-            >
-              {/*
-                `B-212`'s remedies USED TO BE HERE, as a block under the list. They moved into
-                the refusal's own message region (`MODAL-CHROME-10` ADDENDUM C §C4) — see
-                `remedies` above. Nothing is rendered here now, and nothing should be: the
-                management view's only message is the pinned one.
-              */}
-            </ManageView>
-          ) : (
+          {
             /*
               `RUNTIME-REPAIR-04` — the reference's `.template-layout`: a main column that reads
               the list DOWN, and a 342 px aside beside it. The aside is fixed and the main
@@ -1093,6 +1018,7 @@ export function useTemplatePicker(): {
                     selected={selected}
                     onSelect={setSelected}
                     onCommit={commit}
+                    onDelete={(t) => void deleteTemplate(t)}
                     onKeyDown={onListKeyDown}
                   />
                 )}
@@ -1157,6 +1083,13 @@ export function useTemplatePicker(): {
                       <dd>{String(selected.liveSources?.looks?.length ?? 0)}</dd>
                       <dt>Live plates</dt>
                       <dd>{String(selected.liveSources?.sources.length ?? 0)}</dd>
+                      {/* `UI-POLISH-01` C — `Manage`'s usage line, here now that `Manage` is gone. */}
+                      <dt>Rows</dt>
+                      <dd data-template-usage={String(usage.get(selected.templateId) ?? 0)}>
+                        {(usage.get(selected.templateId) ?? 0) === 0
+                          ? 'Not on any row'
+                          : `Used by ${count(usage.get(selected.templateId) ?? 0, 'row')}`}
+                      </dd>
                     </dl>
                     {(() => {
                       const ok = loadable(selected);
@@ -1180,7 +1113,7 @@ export function useTemplatePicker(): {
                 )}
               </aside>
             </div>
-          )}
+          }
         </div>
         {/*
           The dialog's OWN `.vcg` input. It used to be the ROW's, because the row owned the
@@ -1337,21 +1270,6 @@ function ImportDialog({
 }
 
 /**
- * 🔴 `RUNTIME-REPAIR-04` — THE MANAGEMENT VIEW, and the only place a template is deleted.
- *
- * `design.md` §18.4: the owner decided the red `Delete from station` comes OFF THE ROW, and
- * bound its destination to this view. The reason is the console it runs on — a destructive
- * control repeated down every row of a list is one mis-aimed press away from deleting a
- * template while something is on air, and the reference has no destructive control on a row
- * at all.
- *
- * It REPLACES the selection layout rather than sitting beside it, as the reference's does: the
- * operator is either choosing a template or maintaining the list, never both at once.
- *
- * ⚠ The counts are a line of information under a name. They do not disable anything — see
- * the note at `usage` for why this console does not follow the drawing there.
- */
-/**
  * 🔴 `MODAL-CHROME-10` ADDENDUM C §C2 — **THE IMPORT DOOR, DEFINED ONCE.**
  *
  * Import was reachable only from the selection view, and the operator who has just deleted a
@@ -1374,77 +1292,6 @@ function ImportDoor({ onImport }: { onImport: () => void }): JSX.Element {
     >
       Import a .vcg
     </Button>
-  );
-}
-
-function ManageView({
-  templates,
-  usage,
-  onDelete,
-  children,
-}: {
-  templates: readonly TemplateInfo[];
-  usage: ReadonlyMap<string, number>;
-  onDelete: (t: TemplateInfo) => void;
-  children?: React.ReactNode;
-}): JSX.Element {
-  return (
-    <div className="cg-tpl-manage" data-template-manage="">
-      {/*
-        §3 — thirty words to thirteen. What was cut is not information the operator loses:
-        the CONFIRM names the scope, the cascade and the re-import, at the moment of the act
-        and where it cannot be missed. A standing paragraph restating a confirm is prose
-        explaining what the confirm expresses.
-      */}
-      {/*
-        §D1 — the sentence and the import door moved UP into the dialog's own tools row, which
-        both views now share. Nothing is rendered here.
-
-        AFTER importing from Manage the operator STAYS in Manage, deliberately: the import
-        dialog is a sub-dialog over this one, so closing it returns to the view underneath, and
-        that view is the list he came to maintain — with the new template now in it. Bouncing
-        him to the selection list would hide the outcome of the act he just performed.
-      */}
-      {[...templates].reverse().map((t) => {
-        const label = templateDisplayName(t);
-        const used = usage.get(t.templateId) ?? 0;
-        return (
-          <div className="cg-tpl-manage-row" key={t.templateId} data-manage-template={t.templateId}>
-            <span className="cg-tpl-thumb" aria-hidden="true">
-              <Icon icon={kindOf(t) === 'bed' ? Rows3 : LayoutTemplate} size={22} />
-            </span>
-            <span className="cg-tpl-manage-row__text">
-              {/* Golden rule 11 — the operator's word in the sentence, the id on the `title`. */}
-              <IsolatedName className="cg-tpl-manage-row__name" title={t.templateId}>
-                {label}
-              </IsolatedName>
-              <span className="cg-tpl-manage-row__use" data-manage-usage={String(used)}>
-                {used === 0 ? 'Not on any row' : `Used by ${count(used, 'row')}`}
-              </span>
-            </span>
-            <Button
-              variant="danger"
-              className="cg-tpl-delete"
-              aria-label={`Delete ${label} from this station`}
-              onClick={() => onDelete(t)}
-            >
-              <Icon icon={Trash2} size={14} />
-              {/*
-                🔴 `MODAL-CHROME-10` §2(c) — THE LABEL IS SHORT AND THE CONSEQUENCE IS NOT.
-                The short word is safe precisely because the long one is stated twice around
-                it: the `aria-label` above still reads `Delete <name> from this station` —
-                which is also what every finder addresses this button by — and the confirm
-                this opens still names the `.vcg` re-import and the plate bindings, with its
-                own commit button still reading `Delete from station`. Shortening the LABEL
-                is not weakening the sentence.
-              */}
-              Delete
-            </Button>
-          </div>
-        );
-      })}
-      {children}
-    </div>
   );
 }
 
@@ -1477,6 +1324,7 @@ function PickerList({
   selected,
   onSelect,
   onCommit,
+  onDelete,
   onKeyDown,
 }: {
   request: PickRequest;
@@ -1487,6 +1335,7 @@ function PickerList({
   selected: TemplateInfo | null;
   onSelect: (t: TemplateInfo) => void;
   onCommit: (t: TemplateInfo) => void;
+  onDelete: (t: TemplateInfo) => void;
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void;
 }): JSX.Element {
   // Newest first: the template the operator most recently imported is the one they
@@ -1541,6 +1390,7 @@ function PickerList({
               isSelected={selected?.templateId === t.templateId}
               onSelect={() => onSelect(t)}
               onCommit={() => onCommit(t)}
+              onDelete={() => onDelete(t)}
             />
           ))
         )}
@@ -1556,6 +1406,7 @@ function PickerRow({
   isSelected,
   onSelect,
   onCommit,
+  onDelete,
 }: {
   template: TemplateInfo;
   accepts: 'low' | 'high';
@@ -1563,6 +1414,7 @@ function PickerRow({
   isSelected: boolean;
   onSelect: () => void;
   onCommit: () => void;
+  onDelete: () => void;
 }): JSX.Element {
   const label = templateDisplayName(t);
   const carrier = liveSourceCarrierState(t);
@@ -1661,6 +1513,25 @@ function PickerRow({
             )}
           </span>
         </span>
+      </Button>
+      {/*
+        🔴 `UI-POLISH-01` C — DELETE, ON THE ROW, AND NEVER BY SELECTING IT. The owner retired
+        `Manage` (2026-09-26); this is its one act, moved here. It is a SIBLING of the select
+        button, not inside it, so a click or a double-click on the row can never reach it — and it
+        runs the same `deleteTemplate` `Manage` did: the same confirm, the same bridge gate, the
+        same refusal. NEUTRAL at rest: red's home is the confirm's commit (`design.md` §29.2),
+        not a control repeated down a list. The accessible name is the long form every finder
+        already addresses it by.
+      */}
+      <Button
+        variant="icon"
+        className="cg-tpl-row__delete"
+        aria-label={`Delete ${label} from this station`}
+        title={`Delete ${label} from this station`}
+        data-template-delete={t.templateId}
+        onClick={onDelete}
+      >
+        <Icon icon={Trash2} size={14} />
       </Button>
       {/*
         🔴 THE TWO-LINE PARAGRAPH IS GONE. It said, under every refused row, what the chip

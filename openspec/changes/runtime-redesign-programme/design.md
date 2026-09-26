@@ -3558,6 +3558,14 @@ the fact it carried is now said.
 
 ### 21.2 THE `Manage` GATE — COUNTED, AND OPEN
 
+🔴 **SUPERSEDED BY THE OWNER, 2026-09-26 (`UI-POLISH-01` C): `Manage` is RETIRED.** It was one
+extra view whose only act was the delete. Each picker row now carries a small NEUTRAL delete icon
+(accessible name `Delete <name> from this station`) running the same `deleteTemplate` — the same
+confirm, the same bridge `in-use` gate, the same refusal and `B-212` remedies — and the usage line
+moved to the selected template's details in the aside. The icon is neutral, not the red button
+§18.4 took off the row, so §18.4's reason still holds. What follows is the record of what was
+built and then retired.
+
 The owner's gate: **≤ 6 new controls AND no data the console does not already hold.**
 
 | control in the reference's `Manage` body | equivalent in the app                                  |

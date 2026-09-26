@@ -1394,8 +1394,9 @@ export const STATION_SETUP_PX = {
  * checks by its own disclaimer — the product's verification is `verify → unpack → runtimeShortfall → render`,
  * unchanged). Each is argued in §15.3 and §21.1.
  *
- * ⭐ The `Manage` view and the aside's FRAME are no longer in that list — both are built, and
- * their measured values are in this record (`frameW`, `asideW`, `manageRow*`).
+ * ⭐ The aside's FRAME is no longer in that list — it is built, and its measured values are in
+ * this record (`frameW`, `asideW`). (`UI-POLISH-01` C retired the `Manage` view; its row and pad
+ * measurements went with it.)
  */
 export const LIBRARY_PX = {
   /**
@@ -1434,24 +1435,15 @@ export const LIBRARY_PX = {
   /** `.template-filter{padding:0 24px 17px}` — the same side inset as the tools row above it. */
   filterPadX: 24,
   /**
-   * `Manage` — `.btn.quiet.small`, 69.9 × 33, radius 7, `6px 10px`, 13 px. The reference puts
-   * it at the end of the tools row, beside the search, and hides it while its own view is up.
+   * The tools row's DOOR — the reference's `Manage` box, `.btn.quiet.small`, 69.9 × 33, radius 7,
+   * `6px 10px`, 13 px, at the end of the tools row beside the search. `UI-POLISH-01` C retired
+   * `Manage` itself; the Import door still wears this box (`.cg-tpl-manage-btn`).
    */
   manageBtnH: 33,
   manageBtnRadius: 7,
   manageBtnPadY: 6,
   manageBtnPadX: 10,
   manageBtnText: 13,
-  /**
-   * A `.manage-row` — 84 px, `padding:17px`, `gap:12px`, a rule under each. Its name is an
-   * `h3` and its usage line a `p`; the thumbnail is the picker row's own 56 × 49 tile.
-   */
-  manageRowH: 84,
-  manageRowPad: 17,
-  manageRowGap: 12,
-  /** The view's own notice — the reference wraps it `padding:20px 25px` above the first row. */
-  managePadY: 20,
-  managePadX: 25,
   /** The tools row — `.template-tools{padding:20px 24px 14px;gap:12px}`; the body is flush there, padded by the primitive here. */
   toolsPadBottom: 14,
   toolsGap: 12,
@@ -3564,10 +3556,6 @@ export const cssVars = {
   '--r-tpl-manage-btn-radius': `${String(LIBRARY_PX.manageBtnRadius)}px`,
   '--r-tpl-manage-btn-pad': `${String(LIBRARY_PX.manageBtnPadY)}px ${String(LIBRARY_PX.manageBtnPadX)}px`,
   '--r-tpl-manage-btn-text': `${String(LIBRARY_PX.manageBtnText)}px`,
-  '--r-tpl-manage-row-h': `${String(LIBRARY_PX.manageRowH)}px`,
-  '--r-tpl-manage-row-pad': `${String(LIBRARY_PX.manageRowPad)}px`,
-  '--r-tpl-manage-row-gap': `${String(LIBRARY_PX.manageRowGap)}px`,
-  '--r-tpl-manage-pad': `${String(LIBRARY_PX.managePadY)}px ${String(LIBRARY_PX.managePadX)}px`,
   '--r-tpl-tools-pad-bottom': `${String(LIBRARY_PX.toolsPadBottom)}px`,
   '--r-tpl-tools-gap': `${String(LIBRARY_PX.toolsGap)}px`,
   '--r-tpl-search-h': `${String(LIBRARY_PX.searchH)}px`,

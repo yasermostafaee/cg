@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { test, expect } from './fixtures/runtime.js';
+import { buildValidVcg, cssColour, test, expect } from './fixtures/runtime.js';
 
 /**
  * 🔴 `UI-POLISH-01` — the owner's first-run check of 2026-09-26, measured in a real engine. Every
@@ -130,6 +130,61 @@ test('B — the divider runs the full body height, with one template listed and 
   expect(Math.abs(one.layoutBottom - one.bodyBottom), JSON.stringify(one)).toBeLessThanOrEqual(1);
   // The same box either way: the list's length does not move the divider.
   expect(Math.abs(one.asideH - many.asideH)).toBeLessThanOrEqual(1);
+});
+
+test.describe('C — delete is on the row; `Manage` is retired', () => {
+  test('an unused template deletes through the existing confirm; one a row holds is refused with the existing line', async ({
+    app,
+  }) => {
+    const { page } = app;
+    await registerTemplates(page, 'Zzfree', 1);
+    await registerTemplates(page, 'Zzdbl', 1);
+    await app.importVcg('held.vcg', await buildValidVcg('tpl-held'));
+    await app.openTemplatePicker();
+    const picker = app.templatePicker;
+    await expect(picker.getByRole('button', { name: 'Manage' })).toHaveCount(0);
+
+    // The row's icon is NEUTRAL at rest — the muted ink, never a danger paint.
+    const icon = picker.locator('[data-template-delete="Zzfree-1"]');
+    await expect(icon).toBeVisible();
+    await expect(icon).toHaveCSS('color', await cssColour(page, 'var(--r-text-muted)'));
+    // …on the `icon` variant's own neutral ground, never the deletion family's red (§29.2).
+    await expect(icon).not.toHaveCSS(
+      'background-color',
+      await cssColour(page, 'var(--r-setup-danger-bg)'),
+    );
+    await expect(icon).not.toHaveCSS('color', await cssColour(page, 'var(--r-setup-danger-ink)'));
+
+    // Selecting a row opens no confirm and deletes nothing.
+    const before = await app.templateCount();
+    await picker.getByRole('button', { name: 'Select Zzfree 1' }).click();
+    await expect(page.getByRole('dialog', { name: /from this station\?$/ })).toHaveCount(0);
+    expect(await app.templateCount()).toBe(before);
+
+    // An UNUSED template: the existing confirm, then gone.
+    await icon.click();
+    const confirm = page.getByRole('dialog', { name: /^Delete .* from this station\?$/ });
+    await expect(confirm).toContainText('every browser');
+    await confirm.getByRole('button', { name: 'Delete from station', exact: true }).click();
+    await expect(app.templateRow('Zzfree-1')).toHaveCount(0);
+    expect(await app.templateCount()).toBe(before - 1);
+
+    // THE CONTROL — a template a row holds: refused, with the existing line, and still listed.
+    await picker.getByRole('button', { name: /^Delete held from this station$/ }).click();
+    await page
+      .getByRole('dialog', { name: /^Delete .* from this station\?$/ })
+      .getByRole('button', { name: 'Delete from station', exact: true })
+      .click();
+    await expect(picker.locator('[data-modal-message]')).toContainText(
+      '1 row still holds this template',
+    );
+    await expect(app.templateRow('tpl-held')).toHaveCount(1);
+
+    // A double-click LOADS — and deletes nothing.
+    await picker.getByRole('button', { name: 'Select Zzdbl 1' }).dblclick();
+    await expect(picker).toHaveCount(0);
+    expect(await app.templateCount()).toBe(before - 1);
+  });
 });
 
 test.describe('A — the channel tabs', () => {

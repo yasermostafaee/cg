@@ -195,7 +195,6 @@ test('§2(a)/§3 — a selected chip is the console selected BLUE, and the confi
   // …and the violet may never come back to this surface.
   expect(chipPaint.border, 'the PVW violet is back on a filter chip').not.toBe('rgb(124, 58, 237)');
 
-  await page.getByRole('button', { name: 'Manage' }).click();
   await page
     .getByRole('button', { name: /^Delete .* from this station$/ })
     .first()
