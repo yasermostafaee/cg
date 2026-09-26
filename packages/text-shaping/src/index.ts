@@ -3,5 +3,6 @@
 export * from './direction.js';
 export * from './zwnj.js';
 export * from './digits.js';
+export * from './numerals.js';
 export * from './date.js';
 export * from './truncate.js';
