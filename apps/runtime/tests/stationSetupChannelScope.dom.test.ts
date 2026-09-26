@@ -11,7 +11,7 @@ import {
   __resetChannelChoiceForTest,
   selectChannel,
 } from '../src/renderer/features/channels/channelStore.js';
-import { firstRunBank } from '../src/renderer/features/firstRun/firstRunStation.js';
+import { newChannelBank } from '../src/renderer/features/firstRun/firstRunStation.js';
 import { signedInStub, setupStub } from './support/authStub.js';
 import { clearPortals } from './support/dialog.js';
 import {
@@ -116,8 +116,10 @@ describe('e / M — Change channel… edits the station’s channel SET', () => 
     await press(rowOf(section, 2));
     await press(buttonNamed(section, /^Use these channels$/));
     expect(s.fixedSetBanks).toHaveBeenCalledTimes(1);
+    // `FIELD-FIXES-01` I — the ADDED channel, read EMPTY by this stub, gets the new bank: five rows of
+    // each band shown. It was `firstRunBank(2)` (every row shown) before the owner's five-row default.
     expect(s.fixedSetBanks.mock.calls[0]?.[0]).toEqual({
-      banks: [SETUP_BANK, firstRunBank(2)],
+      banks: [SETUP_BANK, newChannelBank(2, { state: 'empty', layers: [] })],
     });
     expect(s.fixedSetConfig).not.toHaveBeenCalled();
   });

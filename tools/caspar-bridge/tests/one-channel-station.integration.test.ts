@@ -375,3 +375,52 @@ describe('j — an item of ours on a channel this station does not declare', () 
     expect(addressing(await r.lines(), 2).length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * 🔴 `FIELD-FIXES-01` I — **THE FIVE-ROW BANK A NEW CHANNEL GETS IS INSTALLED LIVE**, and every row
+ * it hides must read EMPTY at that moment (`validateFixedBankInstall`'s fail-closed untick rule).
+ * The console builds it from the channel's occupancy read (`newChannelBank`); this is the bridge's
+ * half: it accepts the bank when the tap reads the channel, and refuses it — `untick-unknown` —
+ * when the tap cannot, which is exactly when the console falls back to every row shown.
+ */
+function fiveRowBank(channel: number): FixedLayerBank {
+  const ticks = (from: number, to: number): Record<string, boolean> => {
+    const v: Record<string, boolean> = {};
+    for (let l = from; l <= to; l++) v[String(l)] = l > to - 5;
+    return v;
+  };
+  return {
+    channel,
+    start: 80,
+    count: 20,
+    visibility: ticks(80, 99),
+    low: { start: 50, count: 10, visibility: ticks(50, 59) },
+  };
+}
+
+describe('FIELD-FIXES-01 I — the five-row bank, installed live at first-run', () => {
+  it('🔴 a channel the tap reads EMPTY takes it: fifteen template rows and five beds hidden', async () => {
+    const r = await rig({ firstRun: true });
+    await waitFor(
+      async () => (await r.handle.runtime.channelOccupancy(2, 0)).state === 'empty',
+      'the tap to read channel 2',
+    );
+    const five = fiveRowBank(2);
+    expect(r.handle.runtime.setFixedLayers(five)).toMatchObject({ ok: true });
+    // The install hid what it says it hid: 15 template rows and 5 beds.
+    const ticks = [
+      ...Object.values(five.visibility ?? {}),
+      ...Object.values(five.low.visibility ?? {}),
+    ];
+    expect(ticks.filter((shown) => !shown)).toHaveLength(20);
+  });
+
+  it('CONTROL — with no server to read, the same bank is refused untick-unknown; every row shown is accepted', async () => {
+    const r = await rig({ firstRun: true, deadAtBoot: true });
+    expect(r.handle.runtime.setFixedLayers(fiveRowBank(2))).toMatchObject({
+      ok: false,
+      reason: 'untick-unknown',
+    });
+    expect(r.handle.runtime.setFixedLayers(bank(2))).toMatchObject({ ok: true });
+  });
+});

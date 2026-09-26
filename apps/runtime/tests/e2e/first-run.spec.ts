@@ -252,6 +252,17 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
     start: 80,
     count: 20,
   });
+  /*
+    `FIELD-FIXES-01` I — CONTROL for the five-row default: this mock sends NO OSC, so the channel's
+    occupancy is unknown, and the new bank hides nothing — unknown is never hidden.
+  */
+  const persisted = stationFile('bridge-fixed-layers.json') as {
+    visibility?: Record<string, boolean>;
+    low?: { visibility?: Record<string, boolean> };
+  };
+  expect(Object.values(persisted.visibility ?? {})).toHaveLength(20);
+  expect(Object.values(persisted.visibility ?? {}).every(Boolean)).toBe(true);
+  expect(Object.values(persisted.low?.visibility ?? {}).every(Boolean)).toBe(true);
   expect(stationFile('bridge-connection.json')).toMatchObject({
     servers: { A: { host: '127.0.0.1', amcpPort: 5250, oscPort: 6250 } },
   });
@@ -492,4 +503,129 @@ test('CONTROL — a bridge that is not an installed station never shows first-ru
   // Positive control: the console is up and talking to this bridge (its bank shows).
   await expect(page.getByText(/CHANNEL 1/i).first()).toBeVisible({ timeout: 20_000 });
   await expect(page.getByRole('dialog', { name: 'Set up CG Control' })).toHaveCount(0);
+});
+
+/*
+  🔴 `FIELD-FIXES-01` I — **A NEW STATION SHOWS FIVE ROWS PER BAND, NOT THIRTY**, with the beds in
+  sight at 1920 × 1080. First-run reads each channel before declaring it; a channel the tap reads
+  gets templates 99–95 and beds 59–55 shown and the rest hidden — except a row whose layer already
+  carries a producer (here a leftover on 2-90), which stays shown. OSC is ON here, on the standard
+  port first-run writes, so the tap can read; the cases above run blind, and the station they set
+  up shows every row, which is the unknown-is-never-hidden control.
+*/
+test('FIELD-FIXES-01 I — first-run on two channels shows five rows per band on each; a row already carrying something stays shown', async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  playout = await startFakePlayout({
+    sealOnLoopback: false,
+    grants: {
+      admin: [
+        { host: '127.0.0.1', channel: 1 },
+        { host: '127.0.0.1', channel: 2 },
+      ],
+    },
+  });
+  const fake = playout;
+  amcp = await createMock({
+    amcpPort: 5250,
+    oscPort: 6250,
+    oscHost: '127.0.0.1',
+    oscHz: 20,
+    channels: 2,
+    admit: (ip) => fake.isTrusted(ip),
+  }).catch((err: unknown) => {
+    throw new Error(`the AMCP mock could not take TCP 5250 / OSC 6250: ${String(err)}`);
+  });
+  // A producer already on 2-90 before this station exists — a previous install's graphic, or
+  // anyone's. Seeded through a raw client, with admission opened for it and closed again.
+  const mock = amcp;
+  mock.setAdmission(null);
+  await new Promise<void>((resolve, reject) => {
+    const socket = net.connect(mock.amcpPort, '127.0.0.1', () => {
+      socket.write('PLAY 2-90 "leftover"\r\n');
+    });
+    socket.once('data', () => {
+      socket.end();
+      resolve();
+    });
+    socket.once('error', reject);
+  });
+  mock.setAdmission((ip) => fake.isTrusted(ip));
+
+  stateHome = fs.mkdtempSync(path.join(os.tmpdir(), 'cg-e2e-first-run-'));
+  const port = await freePort();
+  await startBridge(port);
+  await page.exposeFunction('__cgSetPlayoutAddress', async (address: string): Promise<string> => {
+    const written = spawnSync(
+      process.execPath,
+      [BRIDGE_CLI, '--state-home', stateHome as string, '--set-playout-address', address],
+      { encoding: 'utf8' },
+    );
+    if (written.status !== 0) throw new Error(written.stderr);
+    await stopBridge();
+    await startBridge(port);
+    return written.stderr.trim();
+  });
+  await page.addInitScript(
+    `window.__CG_BRIDGE_URL__ = ${JSON.stringify(`ws://127.0.0.1:${String(port)}`)};` +
+      'window.__CG_SPLASH_DISABLED__ = true;' +
+      'window.__TAURI_INTERNALS__ = { invoke: (command, args) => command === "set_playout_address"' +
+      ' ? window.__cgSetPlayoutAddress(args.address) : Promise.reject(new Error("unknown command")) };',
+  );
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto('/');
+
+  const firstRun = page.getByRole('dialog', { name: 'Set up CG Control' });
+  await expect(firstRun).toHaveAttribute('data-first-run', 'target', { timeout: 20_000 });
+  await firstRun.getByLabel('Playout address').fill(playout.baseUrl);
+  await firstRun.getByRole('button', { name: 'Check' }).click();
+  await expect(firstRun.locator('[data-check="cors"]')).toHaveAttribute('data-status', 'pass', {
+    timeout: 20_000,
+  });
+  await firstRun.getByRole('button', { name: 'Connect' }).click();
+  await expect(firstRun).toHaveAttribute('data-first-run', 'channel', { timeout: 30_000 });
+  await firstRun.locator('#cg-first-run-user').fill(FAKE_ADMIN.username);
+  await firstRun.locator('#cg-first-run-pass').fill(FAKE_PLAYOUT_PASSWORD);
+  await firstRun.getByRole('button', { name: 'Sign in' }).click();
+  const channelOne = firstRun.getByRole('button', { name: /آپاسای/ });
+  const channelTwo = firstRun.getByRole('button', { name: /کانال دوم/ });
+  await expect(channelTwo).toBeVisible({ timeout: 30_000 });
+  await channelOne.click();
+  await channelTwo.click();
+  await expect(firstRun.locator('#cg-first-run-serve')).not.toHaveValue('', { timeout: 20_000 });
+  await firstRun.getByRole('button', { name: 'Use these channels' }).click();
+  // The leftover on 2-90 is another system's content on a channel joining the set: first-run
+  // warns once, and the same press again declares.
+  const again = firstRun.getByRole('button', { name: 'Use these channels' });
+  if (await again.isVisible({ timeout: 3000 }).catch(() => false)) await again.click();
+  await expect(firstRun).toHaveCount(0, { timeout: 30_000 });
+
+  const layers = page.getByRole('region', { name: 'Layers' });
+  const shown = async (): Promise<number[]> =>
+    (
+      await layers
+        .locator('[data-layer]')
+        .evaluateAll((rows) => rows.map((r) => Number(r.getAttribute('data-layer'))))
+    ).sort((a, b) => b - a);
+  const strip = page.getByRole('tablist', { name: 'Channels' });
+
+  // Channel 1 — read empty: templates 99–95 and beds 59–55, nothing else.
+  await strip.getByRole('tab', { name: /آپاسای/ }).click();
+  await expect.poll(shown, { timeout: 20_000 }).toEqual([99, 98, 97, 96, 95, 59, 58, 57, 56, 55]);
+  // …and five and five fit at 1920 × 1080: the beds are in sight, the list does not scroll.
+  await expect(layers.locator('[data-layer="55"]')).toBeInViewport();
+  const scroll = await layers.locator('[data-layer="99"]').evaluate((row) => {
+    let el: HTMLElement | null = row.parentElement;
+    while (el !== null && getComputedStyle(el).overflowY !== 'auto') el = el.parentElement;
+    return el === null ? null : { scrollHeight: el.scrollHeight, clientHeight: el.clientHeight };
+  });
+  expect(scroll, 'the list has a scroll container').not.toBeNull();
+  expect(scroll?.scrollHeight ?? 1).toBeLessThanOrEqual(scroll?.clientHeight ?? 0);
+
+  // CONTROL — channel 2: the same five and five, AND row 90, which carried a producer at the read.
+  await strip.getByRole('tab', { name: /کانال دوم/ }).click();
+  await expect
+    .poll(shown, { timeout: 20_000 })
+    .toEqual([99, 98, 97, 96, 95, 90, 59, 58, 57, 56, 55]);
 });

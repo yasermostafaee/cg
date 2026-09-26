@@ -5,6 +5,7 @@ import {
   defaultFixedLayerBank,
   fixedBankSlots,
   isLayerVisible,
+  type ChannelOccupancy,
   type ConnectionConfig,
   type ConnectionCheckLine,
   type FixedLayerBank,
@@ -16,6 +17,8 @@ import {
   firstRunBank,
   firstRunConnection,
   groupByHost,
+  NEW_BANK_SHOWN_PER_BAND,
+  newChannelBank,
   nextChannelSet,
   normalisePlayoutAddress,
   signInBlocker,
@@ -184,6 +187,11 @@ describe('commit — the CasparCG host first, then the channel, each through its
             : { ok: true as const };
         },
       },
+      // `FIELD-FIXES-01` I — the channel's occupancy, read before it is declared: unknown here,
+      // which declares today's every-row-shown bank.
+      setup: {
+        channelOccupancy: async () => ({ state: 'unknown' as const, layers: [] }),
+      },
       fixedLayers: {
         setConfig: async (req: FixedLayerBank) => {
           calls.push(`fixedLayers:${String(req.channel)}`);
@@ -216,23 +224,36 @@ describe('commit — the CasparCG host first, then the channel, each through its
   });
 });
 
-/** A bridge recording which bank door was called, with what. */
-function bankDoors(refusal?: string): {
-  bridge: Pick<RuntimeBridge, 'fixedLayers'>;
+/**
+ * A bridge recording which bank door was called, with what. `FIELD-FIXES-01` I — it answers the
+ * occupancy read too: `unknown` unless a reading is given, which declares today's bank.
+ */
+function bankDoors(
+  refusal?: string,
+  occupancy: ChannelOccupancy = { state: 'unknown', layers: [] },
+  answers?: { ok: boolean; reason?: string; message?: string }[],
+): {
+  bridge: Pick<RuntimeBridge, 'fixedLayers' | 'setup'>;
   setConfig: ReturnType<typeof vi.fn>;
   setBanks: ReturnType<typeof vi.fn>;
+  channelOccupancy: ReturnType<typeof vi.fn>;
 } {
-  const answer = (): Promise<{ ok: boolean; message?: string }> =>
-    Promise.resolve(refusal === undefined ? { ok: true } : { ok: false, message: refusal });
+  const queue = [...(answers ?? [])];
+  const answer = (): Promise<{ ok: boolean; reason?: string; message?: string }> =>
+    Promise.resolve(
+      queue.shift() ?? (refusal === undefined ? { ok: true } : { ok: false, message: refusal }),
+    );
   const setConfig = vi.fn(answer);
   const setBanks = vi.fn(answer);
+  const channelOccupancy = vi.fn(() => Promise.resolve(occupancy));
   return {
-    bridge: { fixedLayers: { setConfig, setBanks } } as unknown as Pick<
-      RuntimeBridge,
-      'fixedLayers'
-    >,
+    bridge: {
+      fixedLayers: { setConfig, setBanks },
+      setup: { channelOccupancy },
+    } as unknown as Pick<RuntimeBridge, 'fixedLayers' | 'setup'>,
     setConfig,
     setBanks,
+    channelOccupancy,
   };
 }
 
@@ -291,5 +312,78 @@ describe('`MULTI-CHANNEL-01` §2 M — Station setup’s next channel set', () =
     await declareChannelSet(plural.bridge, [one], [choice(1), choice(2)]);
     expect(plural.setBanks.mock.calls).toEqual([[{ banks: [one, firstRunBank(2)] }]]);
     expect(plural.setConfig).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * 🔴 `FIELD-FIXES-01` I — **A NEW STATION SHOWS FIVE ROWS PER BAND, NOT THIRTY.** Templates 99–95 and
+ * beds 59–55 — the highest of each band — and the rest hidden, once the channel's occupancy is
+ * KNOWN. A row whose layer carries anything stays shown, and with no reading every row is shown:
+ * unknown is never hidden.
+ */
+describe('FIELD-FIXES-01 I — the bank a new channel gets', () => {
+  const EMPTY: ChannelOccupancy = { state: 'empty', layers: [] };
+  const shownOf = (bank: FixedLayerBank): number[] =>
+    [...fixedBankSlots(bank)]
+      .map((s) => s.layer)
+      .filter((layer) => isLayerVisible(bank, layer))
+      .sort((a, b) => b - a);
+
+  it('🔴 a channel read empty shows templates 99–95 and beds 59–55, and hides the rest', () => {
+    expect(NEW_BANK_SHOWN_PER_BAND).toBe(5);
+    const bank = newChannelBank(2, EMPTY);
+    expect(bank.channel).toBe(2);
+    expect(shownOf(bank)).toEqual([99, 98, 97, 96, 95, 59, 58, 57, 56, 55]);
+    // Every row of both bands is still DECLARED — hidden, not removed — so Station setup can show it.
+    expect([...fixedBankSlots(bank)].length).toBe(30);
+  });
+
+  it('🔴 CONTROL — a row that carries something at the read stays shown, whichever band', () => {
+    const bank = newChannelBank(2, {
+      state: 'occupied',
+      layers: [
+        { layer: 90, producer: 'html' },
+        { layer: 51, producer: 'ffmpeg' },
+      ],
+    });
+    expect(shownOf(bank)).toEqual([99, 98, 97, 96, 95, 90, 59, 58, 57, 56, 55, 51]);
+  });
+
+  it('with NO reading, or an unknown one, every row is shown — unknown is never hidden', () => {
+    expect(shownOf(newChannelBank(2, null))).toHaveLength(30);
+    expect(shownOf(newChannelBank(2, { state: 'unknown', layers: [] }))).toHaveLength(30);
+    expect(newChannelBank(2, null)).toEqual(firstRunBank(2));
+  });
+
+  it('first-run reads the channel and declares the five-row bank', async () => {
+    const doors = bankDoors(undefined, EMPTY);
+    expect(await declareFirstRunChannels(doors.bridge, [choice(2)])).toBeNull();
+    expect(doors.channelOccupancy).toHaveBeenCalledWith({ casparChannel: 2 });
+    expect(doors.setConfig.mock.calls).toEqual([[newChannelBank(2, EMPTY)]]);
+  });
+
+  it('🔴 if the bridge still refuses a hidden row, it declares every row shown — never a refusal', async () => {
+    const doors = bankDoors(undefined, EMPTY, [
+      { ok: false, reason: 'untick-unknown', message: 'cannot hide layer 80' },
+      { ok: true },
+    ]);
+    expect(await declareFirstRunChannels(doors.bridge, [choice(2)])).toBeNull();
+    expect(doors.setConfig.mock.calls).toEqual([[newChannelBank(2, EMPTY)], [firstRunBank(2)]]);
+  });
+
+  it('CONTROL — any other refusal is the bridge’s sentence, with no second write', async () => {
+    const doors = bankDoors(undefined, EMPTY, [
+      { ok: false, reason: 'channel-change-refused', message: 'not yours' },
+    ]);
+    expect(await declareFirstRunChannels(doors.bridge, [choice(2)])).toBe('not yours');
+    expect(doors.setConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it('🔴 Change channel…: an ADDED channel gets the new bank; the KEPT one is untouched and not read', async () => {
+    const kept: FixedLayerBank = { ...firstRunBank(1), aliases: { '99': 'ارم' } };
+    const doors = bankDoors(undefined, EMPTY);
+    expect(await declareChannelSet(doors.bridge, [kept], [choice(1), choice(2)])).toBeNull();
+    expect(doors.channelOccupancy.mock.calls).toEqual([[{ casparChannel: 2 }]]);
+    expect(doors.setBanks.mock.calls).toEqual([[{ banks: [kept, newChannelBank(2, EMPTY)] }]]);
   });
 });

@@ -127,3 +127,17 @@
       `contextMenuSuppression.dom.test.ts` retargeted to the header's spacer; the installer smoke reads
       both title bars. `turbo.json` `test` inputs widened.
 - [ ] 9.6 The owner sees one name, the Apasai logo in the title bar and taskbar, and no menu bar.
+
+## 10. I — five rows per band for a new bank (`R-070`)
+
+- [x] 10.1 `newChannelBank` from the occupancy read; the untick fallback; first-run and Change
+      channel… use it; `firstRunBank` is its unknown case.
+- [x] 10.2 Tests: `firstRunStation.test.ts` (five and five from an empty read; control: an occupied
+      row stays shown; unknown shows every row; the fallback on `untick-unknown`; control: any other
+      refusal is not retried; Change channel… reads only the added channel and keeps the other's bank);
+      `stationSetupChannelScope.dom.test.ts` re-pinned (the added channel read empty gets five and five);
+      bridge `one-channel-station` (a channel the tap reads takes the five-row bank live; control: with
+      no server it is refused `untick-unknown` and every row shown is accepted); e2e `first-run.spec.ts`
+      (two channels with OSC, five and five each, row 90 kept by its producer, 1920 × 1080 without a
+      scroll; control: the no-OSC first-run shows every row) — the e2e needs TCP 5250 and UDP 6250,
+      which a dev station held here, so it is CI's.

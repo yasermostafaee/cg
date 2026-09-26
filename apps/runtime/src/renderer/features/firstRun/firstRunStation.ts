@@ -3,7 +3,12 @@ import {
   CONNECTION_CHECK_IDS,
   connectionCheckSubject,
   defaultFixedLayerBank,
+  fixedBankEnd,
+  fixedBankSlots,
+  isLowBankLayer,
+  lowBankEnd,
   type CatalogueChannel,
+  type ChannelOccupancy,
   type ConnectionCheckId,
   type ConnectionCheckLine,
   type ConnectionConfig,
@@ -25,25 +30,84 @@ import type { RuntimeBridge } from '../../../shared/runtime-bridge.js';
 export const AMCP_PORT = 5250;
 export const OSC_PORT = 6250;
 
+/** `FIELD-FIXES-01` I — how many rows of each band a NEW bank shows: the highest of each band. */
+export const NEW_BANK_SHOWN_PER_BAND = 5;
+
 /**
- * The bank first-run declares: the chosen channel, the default bands (beds 50–59, the operator
- * rows 80–99), and EVERY row shown.
+ * 🔴 `FIELD-FIXES-01` I — **THE BANK A NEW CHANNEL GETS** (first-run, and a channel Station setup's
+ * Change channel… adds): the default bands (beds 50–59, the operator rows 80–99) with FIVE rows of
+ * each shown — templates 99–95 and beds 59–55, "highest layer first" — and the rest hidden. The
+ * owner's installed station came up showing 30 of 30, beds out of sight below twenty empty rows.
  *
- * ⚠ Every row, because there is no CasparCG link yet: occupancy is unknown, and installing a
- * bank that already hides a row of unknown occupancy is refused (`untick-unknown`) — the rule
- * that stops a live install sliding an on-air layer out of sight. Rows are hidden later, from
- * Station setup, once the link reads them.
+ * ⚠ **SAFETY IS UNCHANGED: a row is never hidden unless it is known to be empty.** A layer the
+ * channel's occupancy read (`setup.channel-occupancy`, taken after the connection is written and
+ * before the channel is declared) reports as carrying anything stays shown; and with NO reading, or
+ * an `unknown` one — no link yet, no fresh OSC — EVERY row is shown, because unknown is never
+ * treated as empty (`untick-unknown`). The bridge judges the install against its own reading too,
+ * and if it still refuses a hidden row the declare falls back to every row shown (see
+ * {@link declareWithFallback}). An existing station's saved rows are never touched: this is only
+ * ever a NEW bank.
+ */
+export function newChannelBank(
+  channel: number,
+  occupancy: ChannelOccupancy | null,
+): FixedLayerBank {
+  const base = defaultFixedLayerBank();
+  const known = occupancy !== null && occupancy.state !== 'unknown';
+  const occupied = new Set(known ? occupancy.layers.map((l) => l.layer) : []);
+  // Each band's rows through the ONE enumeration, and each band's top through its own end.
+  const visibility: Record<string, boolean> = {};
+  const low: Record<string, boolean> = {};
+  for (const { layer } of fixedBankSlots(base)) {
+    const bed = isLowBankLayer(base, layer);
+    const top = bed ? lowBankEnd(base) : fixedBankEnd(base);
+    (bed ? low : visibility)[String(layer)] =
+      !known || layer > top - NEW_BANK_SHOWN_PER_BAND || occupied.has(layer);
+  }
+  return { ...base, channel, visibility, low: { ...base.low, visibility: low } };
+}
+
+/**
+ * The bank first-run declares when nothing can be read about the channel: EVERY row shown (the
+ * unknown case of {@link newChannelBank}, and its fallback).
  */
 export function firstRunBank(channel: number): FixedLayerBank {
-  const base = defaultFixedLayerBank();
-  const shown = (visibility: Record<string, boolean> | undefined): Record<string, boolean> =>
-    Object.fromEntries(Object.keys(visibility ?? {}).map((layer) => [layer, true]));
-  return {
-    ...base,
-    channel,
-    visibility: shown(base.visibility),
-    low: { ...base.low, visibility: shown(base.low.visibility) },
-  };
+  return newChannelBank(channel, null);
+}
+
+/** What the channel's occupancy read says, or `unknown` when the read itself fails. */
+async function readOccupancy(
+  bridge: Pick<RuntimeBridge, 'setup'>,
+  channel: number,
+): Promise<ChannelOccupancy> {
+  return bridge.setup
+    .channelOccupancy({ casparChannel: channel })
+    .catch(() => ({ state: 'unknown' as const, layers: [] }));
+}
+
+/**
+ * 🔴 `FIELD-FIXES-01` I — write the banks; and if the bridge refuses a HIDDEN row (its own reading
+ * says occupied or unknown — `untick-occupied` / `untick-unknown`), write them again with every row
+ * of the new channels shown. The default never costs a station its channel: it degrades to today's
+ * bank rather than to a refusal.
+ */
+async function declareWithFallback(
+  write: (banks: readonly FixedLayerBank[]) => Promise<{
+    ok: boolean;
+    reason?: string | undefined;
+    message?: string | undefined;
+  }>,
+  banks: readonly FixedLayerBank[],
+  allShown: readonly FixedLayerBank[],
+  refusal: string,
+): Promise<string | null> {
+  const first = await write(banks);
+  if (first.ok) return null;
+  if (first.reason !== 'untick-unknown' && first.reason !== 'untick-occupied') {
+    return first.message ?? refusal;
+  }
+  const second = await write(allShown);
+  return second.ok ? null : (second.message ?? refusal);
 }
 
 /**
@@ -214,11 +278,16 @@ export async function writeFirstRunConnection(
 
 /** First-run's second write: the channel, declared. `null` on success, else the bridge's sentence. */
 export async function declareFirstRunChannel(
-  bridge: Pick<RuntimeBridge, 'fixedLayers'>,
+  bridge: Pick<RuntimeBridge, 'fixedLayers' | 'setup'>,
   choice: ChannelChoice,
 ): Promise<string | null> {
-  const declared = await bridge.fixedLayers.setConfig(firstRunBank(choice.channel));
-  return declared.ok ? null : (declared.message ?? 'The channel was not declared.');
+  const occupancy = await readOccupancy(bridge, choice.channel);
+  return declareWithFallback(
+    async ([bank]) => (bank === undefined ? { ok: false } : bridge.fixedLayers.setConfig(bank)),
+    [newChannelBank(choice.channel, occupancy)],
+    [firstRunBank(choice.channel)],
+    'The channel was not declared.',
+  );
 }
 
 /**
@@ -232,16 +301,21 @@ export async function declareFirstRunChannel(
  * refusal (a channel the principal holds no grant for is refused there, by name).
  */
 export async function declareFirstRunChannels(
-  bridge: Pick<RuntimeBridge, 'fixedLayers'>,
+  bridge: Pick<RuntimeBridge, 'fixedLayers' | 'setup'>,
   choices: readonly ChannelChoice[],
 ): Promise<string | null> {
   const [only, ...rest] = choices;
   if (only === undefined) return 'No channel was chosen.';
   if (rest.length === 0) return declareFirstRunChannel(bridge, only);
-  const declared = await bridge.fixedLayers.setBanks({
-    banks: choices.map((c) => firstRunBank(c.channel)),
-  });
-  return declared.ok ? null : (declared.message ?? 'The channels were not declared.');
+  const banks: FixedLayerBank[] = [];
+  for (const c of choices)
+    banks.push(newChannelBank(c.channel, await readOccupancy(bridge, c.channel)));
+  return declareWithFallback(
+    (next) => bridge.fixedLayers.setBanks({ banks: [...next] }),
+    banks,
+    choices.map((c) => firstRunBank(c.channel)),
+    'The channels were not declared.',
+  );
 }
 
 /**
@@ -249,8 +323,8 @@ export async function declareFirstRunChannels(
  * and the channels Station setup's Change channel… was left holding.
  *
  * - a channel KEPT keeps its own bank — its names, its shown rows — untouched;
- * - a channel ADDED gets first-run's bank (every row shown: its occupancy is not known yet, and a
- *   bank that hides a row of unknown occupancy is refused, `firstRunBank`'s own reason);
+ * - a channel ADDED gets a NEW bank (`newChannelBank`, `FIELD-FIXES-01` I): five rows of each band
+ *   shown when its occupancy read is known, every row shown when it is not;
  * - a ONE-FOR-ONE SWAP carries the station's bank to the new channel, which is what Change
  *   channel… did before the set could hold more than one (`DESKTOP-APPS-01-D` e) — the operator
  *   moved the station, and its layer names moved with it.
@@ -258,13 +332,14 @@ export async function declareFirstRunChannels(
 export function nextChannelSet(
   banks: readonly FixedLayerBank[],
   channels: readonly number[],
+  occupancyOf: (channel: number) => ChannelOccupancy | null = () => null,
 ): FixedLayerBank[] {
   const [only, ...others] = banks;
   const [target, ...more] = channels;
   if (only !== undefined && others.length === 0 && target !== undefined && more.length === 0) {
     return [{ ...only, channel: target }];
   }
-  return channels.map((c) => bankForChannel(banks, c) ?? firstRunBank(c));
+  return channels.map((c) => bankForChannel(banks, c) ?? newChannelBank(c, occupancyOf(c)));
 }
 
 /**
@@ -274,21 +349,29 @@ export function nextChannelSet(
  * set — and its sentence comes back as it is.
  */
 export async function declareChannelSet(
-  bridge: Pick<RuntimeBridge, 'fixedLayers'>,
+  bridge: Pick<RuntimeBridge, 'fixedLayers' | 'setup'>,
   banks: readonly FixedLayerBank[],
   choices: readonly ChannelChoice[],
 ): Promise<string | null> {
-  const next = nextChannelSet(
-    banks,
-    choices.map((c) => c.channel),
+  const channels = choices.map((c) => c.channel);
+  // `FIELD-FIXES-01` I — only a channel JOINING the set is read: one already in it keeps its bank.
+  const read = new Map<number, ChannelOccupancy>();
+  for (const c of channels) {
+    if (bankForChannel(banks, c) === null) read.set(c, await readOccupancy(bridge, c));
+  }
+  const next = nextChannelSet(banks, channels, (c) => read.get(c) ?? null);
+  if (next.length === 0) return 'No channel was chosen.';
+  return declareWithFallback(
+    ([only, ...rest]) =>
+      only === undefined
+        ? Promise.resolve({ ok: false })
+        : rest.length === 0
+          ? bridge.fixedLayers.setConfig(only)
+          : bridge.fixedLayers.setBanks({ banks: [only, ...rest] }),
+    next,
+    nextChannelSet(banks, channels),
+    'The channels were not changed.',
   );
-  const [only, ...rest] = next;
-  if (only === undefined) return 'No channel was chosen.';
-  const applied =
-    rest.length === 0
-      ? await bridge.fixedLayers.setConfig(only)
-      : await bridge.fixedLayers.setBanks({ banks: next });
-  return applied.ok ? null : (applied.message ?? 'The channels were not changed.');
 }
 
 /**
@@ -296,7 +379,7 @@ export async function declareChannelSet(
  * bridge's own sentence for the step that was refused.
  */
 export async function commitFirstRun(
-  bridge: Pick<RuntimeBridge, 'connections' | 'fixedLayers'>,
+  bridge: Pick<RuntimeBridge, 'connections' | 'fixedLayers' | 'setup'>,
   choice: ChannelChoice,
 ): Promise<string | null> {
   return (

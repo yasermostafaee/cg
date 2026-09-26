@@ -260,3 +260,24 @@ are. Our own Node stays as `.nvmrc` says (22). **Shared CI config.**
   one). `turbo.json`'s `test` inputs now hash `index.html`, `brand/**` and `public/favicon.svg` — which
   `splashCss.test.ts` already read without them, a pre-existing instance of the silent-cache hole — and
   `src-tauri/starting/**` for J. **Shared config.**
+
+## §12 I — five rows per band for a new bank
+
+- **What the owner met:** after first-run, `30/30 rows` — twenty template rows, then the ten beds
+  below them, out of sight. `firstRunBank` showed EVERY row on purpose: a live install that hides a row
+  of unknown occupancy is refused (`untick-unknown`), and first-run read nothing before declaring.
+- **Now:** `newChannelBank(channel, occupancy)` (`firstRun/firstRunStation.ts`) — five of each band, the
+  highest first (templates 99–95, beds 59–55), the rest hidden, built from the channel's occupancy
+  read (`setup.channel-occupancy`, taken after the connection is written and before the declare).
+  **How it honours the safety rule at first-run:** a row whose layer the read reports carrying
+  anything stays shown; with no reading or an `unknown` one every row is shown; and the bridge still
+  judges the install against its own reading — if it refuses a hidden row (`untick-unknown` /
+  `untick-occupied`), the console declares every row shown instead (`declareWithFallback`), so the
+  default never costs a station its channel. `firstRunBank` is now that unknown case.
+- **Where it applies:** first-run (one channel through `set-config`, two or more through `set-banks`),
+  and a channel Change channel… adds (only a channel joining the set is read; a kept channel keeps its
+  bank). An existing station's saved rows are never touched; the built-in default bank and the schema's
+  bed default (`defaultLowBankVisibility`, which old files fall back to) are unchanged.
+- **Live plates:** it lists seated plates and shows an empty state otherwise — no band of empty rows —
+  so it needs no default.
+- **1920 × 1080:** the e2e measures it (the ten rows, the beds in the viewport, no scroll).

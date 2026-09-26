@@ -4016,3 +4016,13 @@ programme channel, above the Playout's layers. **Acceptance:** WHEN the admin pi
 carrying another system's producer THEN one warning line appears and the channel is declared only
 on a second press; WHEN the channel is empty THEN no warning. Tests: `firstRunChannelStep.dom.test.ts`,
 `one-channel-station.integration.test.ts` (d).
+
+## [~] R-070 — A new station shows five rows per band, not thirty ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` I
+
+**What.** A bank made for a new channel (first-run, or a channel Change channel… adds) shows five rows
+of each band — templates 99–95 and beds 59–55 — and hides the rest, once the channel's occupancy is
+read. A row carrying anything stays shown; an unknown reading shows every row; a bridge refusal falls
+back to every row. **Why.** After first-run the owner's Layers tab read 30/30 rows with the beds out
+of sight. **Acceptance:** WHEN first-run declares two channels the tap reads THEN each shows 99–95 and
+59–55 and the rest hidden; WHEN a layer carries a producer at the read THEN its row stays shown; WHEN
+the channel cannot be read THEN every row is shown. An existing station's saved rows are unchanged.

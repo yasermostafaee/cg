@@ -1,5 +1,30 @@
 ## ADDED Requirements
 
+### Requirement: A new channel's bank SHALL show five rows of each band
+
+A bank made for a NEW channel — at first-run, and for a channel Change channel… adds — SHALL show five
+rows of each band, the highest of each (templates 99–95, beds 59–55), and hide the rest, once the
+channel's occupancy read is known. A row whose layer the read reports carrying anything SHALL stay
+shown, and with no reading or an unknown one every row SHALL be shown. When the bridge refuses the
+bank for a hidden row (its own reading occupied or unknown), the console SHALL declare the channel
+with every row shown instead. A channel already in the set SHALL keep its bank untouched.
+
+#### Scenario: A new station shows five and five
+
+- **WHEN** first-run declares two channels the tap reads
+- **THEN** each shows templates 99–95 and beds 59–55, and the rest are hidden
+- **AND** at 1920 × 1080 the ten rows fit with the beds in sight
+
+#### Scenario: A row carrying something stays shown
+
+- **WHEN** layer 90 of a channel carries a producer at the read
+- **THEN** that channel's new bank shows row 90 as well
+
+#### Scenario: Unknown is never hidden
+
+- **WHEN** the channel cannot be read
+- **THEN** the new bank shows every row
+
 ### Requirement: An AMCP refusal SHALL be said in the operator's words, from one mapping
 
 The console SHALL turn a server reply (`amcp-NNN`) into the operator's words in ONE place, tailored
