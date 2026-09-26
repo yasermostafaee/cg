@@ -83,6 +83,11 @@ declare module '*station-plan.mjs' {
   ): string[];
   export function setAddressArgs(paths: StationPaths, address: string): string[];
   export function viteArgs(ports?: StationPortOverrides): string[];
+  /** `FIELD-FIXES-01` H — the console server's environment: no HOST or PORT; the relay and the one host. */
+  export function viteEnv(
+    env: Readonly<Record<string, string | undefined>>,
+    bridgeConsole: string,
+  ): Record<string, string | undefined>;
   export function buildArgs(): string[];
   export function answerIsYes(answer: string | null | undefined): boolean;
   export function parseTasklist(text: string): ProcessRow[];

@@ -210,3 +210,23 @@ NOT AT ALL when their subset is empty — no idle noise.
 - **WHEN** a foreign producer then appears on layer 91 **THEN** the strip returns naming layers 90 and
   91, and the mark returns with it
 - **WHEN** a layer leaves the strip, or the same set is observed again **THEN** it stays dismissed
+
+### Requirement: The PROGRAM return is requested only while the PROGRAM pane is shown
+
+The console SHALL request the programme return only while the PROGRAM pane is rendered, and SHALL
+release it when the pane is hidden or its channel changes, so a console with the monitors hidden —
+the boot state — pulls nothing. It SHALL do so in every build of the console: a development build —
+the one the dev station's Vite serves, where React's StrictMode mounts each component twice — SHALL
+request the picture exactly as a production build does.
+
+#### Scenario: Hiding the monitors releases the return
+
+- **WHEN** the console boots with the monitors hidden
+- **THEN** the feed sees no connection; showing the monitors connects it (the positive control),
+  and hiding them again closes it within 2 s
+
+#### Scenario: The dev station shows the return through Vite
+
+- **WHEN** the console is served by the dev station's Vite and PROGRAM is shown for channel 2
+- **THEN** the relay has a viewer and the picture keeps arriving through Vite's proxy **AND WHEN**
+  the feed stops **THEN** the pane reads "No return signal"

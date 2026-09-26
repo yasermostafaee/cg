@@ -183,16 +183,26 @@ function ProgramPicture({
   onError: () => void;
 }): JSX.Element {
   const ref = useRef<HTMLImageElement>(null);
+  /*
+    🔴 `FIELD-FIXES-01` H — **THE EFFECT OWNS `src`, BOTH HALVES.** It used to be a prop, with only
+    its removal in the cleanup. React's StrictMode — every DEVELOPMENT build, which is what the dev
+    station's Vite serves — mounts, unmounts and mounts again, and never re-applies an unchanged
+    prop: the simulated unmount removed `src`, nothing put it back, and the pane requested NOTHING,
+    so the relay had no viewer and the pane read "No return signal" beside a working feed. A
+    production build (the installed app, and every e2e on `dist`) runs the effect once, which is
+    why nothing that loaded `dist` could see it. Set on every mount, removed on every unmount.
+  */
   useLayoutEffect(() => {
     const img = ref.current;
+    if (img === null) return undefined;
+    img.setAttribute('src', src);
     return () => {
-      img?.removeAttribute('src');
+      img.removeAttribute('src');
     };
-  }, []);
+  }, [src]);
   return (
     <img
       ref={ref}
-      src={src}
       alt=""
       data-pgm-picture=""
       onError={onError}

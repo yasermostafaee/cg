@@ -16,6 +16,7 @@ import type { UserConfig } from 'vite';
 
 const saved = process.env.HOST;
 const savedBridgeConsole = process.env.CG_BRIDGE_CONSOLE;
+const savedConsoleHost = process.env.CG_CONSOLE_HOST;
 
 async function loadConfig(): Promise<UserConfig> {
   vi.resetModules();
@@ -26,6 +27,7 @@ async function loadConfig(): Promise<UserConfig> {
 beforeEach(() => {
   delete process.env.HOST;
   delete process.env.CG_BRIDGE_CONSOLE;
+  delete process.env.CG_CONSOLE_HOST;
 });
 
 afterEach(() => {
@@ -33,6 +35,8 @@ afterEach(() => {
   else process.env.HOST = saved;
   if (savedBridgeConsole === undefined) delete process.env.CG_BRIDGE_CONSOLE;
   else process.env.CG_BRIDGE_CONSOLE = savedBridgeConsole;
+  if (savedConsoleHost === undefined) delete process.env.CG_CONSOLE_HOST;
+  else process.env.CG_CONSOLE_HOST = savedConsoleHost;
 });
 
 /**
@@ -80,5 +84,41 @@ describe('vite.config — dev server bind (P-041)', () => {
     const hmr = config.server?.hmr;
     if (typeof hmr === 'object' && hmr !== null) expect(hmr.host).toBeUndefined();
     else expect(hmr === undefined || hmr === true).toBe(true);
+  });
+});
+
+/**
+ * 🔴 `FIELD-FIXES-01` H — **A `localhost` PAGE IS SENT TO THE CONSOLE'S ONE HOST** on the dev station,
+ * because the Playout's CORS list admits `127.0.0.1:5174` and never `localhost`. Measured through a
+ * real Vite dev server in a real browser by `e2e/dev-station.spec.ts`; the rule and its scope here.
+ */
+describe('vite.config — the dev station sends localhost to its one host', () => {
+  const pluginNames = (config: UserConfig): string[] =>
+    (config.plugins ?? [])
+      .flat()
+      .map((p) => (typeof p === 'object' && p !== null && 'name' in p ? String(p.name) : ''));
+
+  it('🔴 a request under localhost goes to 127.0.0.1 on the same port, path and query kept', async () => {
+    const { consoleHostRedirect } = (await import('../vite.config.js')) as {
+      consoleHostRedirect: (
+        host: string | undefined,
+        url: string | undefined,
+        to: string,
+      ) => string | null;
+    };
+    expect(consoleHostRedirect('localhost:5174', '/', '127.0.0.1')).toBe('http://127.0.0.1:5174/');
+    expect(consoleHostRedirect('LOCALHOST:5174', '/pgm/2?v=0', '127.0.0.1')).toBe(
+      'http://127.0.0.1:5174/pgm/2?v=0',
+    );
+    // CONTROL — the one host itself, and a LAN address, are served where they are.
+    expect(consoleHostRedirect('127.0.0.1:5174', '/', '127.0.0.1')).toBeNull();
+    expect(consoleHostRedirect('192.168.21.93:5174', '/', '127.0.0.1')).toBeNull();
+    expect(consoleHostRedirect('localhost.example:5174', '/', '127.0.0.1')).toBeNull();
+  });
+
+  it('the redirect is the dev station’s: present with CG_CONSOLE_HOST, absent from a plain dev', async () => {
+    expect(pluginNames(await loadConfig())).not.toContain('cg-console-host');
+    process.env.CG_CONSOLE_HOST = '127.0.0.1';
+    expect(pluginNames(await loadConfig())).toContain('cg-console-host');
   });
 });

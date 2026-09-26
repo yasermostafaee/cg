@@ -23,6 +23,7 @@ import {
   setAddressArgs,
   stationPaths,
   viteArgs,
+  viteEnv,
 } from '../src/station-plan.mjs';
 
 /**
@@ -302,5 +303,19 @@ describe('the flags', () => {
     expect(parseArgs(['--playout'])).toHaveProperty('error');
     expect(parseArgs(['--fake', '--playout', 'x'])).toHaveProperty('error');
     expect(parseArgs(['--port', '1'])).toHaveProperty('error');
+  });
+});
+
+describe('`FIELD-FIXES-01` H — what the console server is started with', () => {
+  it('🔴 the relay’s listener and the one console host, and never a HOST or PORT that would move the bind', () => {
+    const env = viteEnv(
+      { HOST: '0.0.0.0', PORT: '80', PATH: 'C:\\bin', CG_BRIDGE_CONSOLE: 'stale' },
+      'http://127.0.0.1:5175',
+    );
+    expect(env).toEqual({
+      PATH: 'C:\\bin',
+      CG_BRIDGE_CONSOLE: 'http://127.0.0.1:5175',
+      CG_CONSOLE_HOST: '127.0.0.1',
+    });
   });
 });

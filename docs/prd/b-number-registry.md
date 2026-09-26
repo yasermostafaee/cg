@@ -3039,6 +3039,7 @@ the highest `B` heading under `docs/prd/` was `B-264` and the highest `R` was `R
 - `B-282` — the every-channel silence was bright amber with nothing to silence (K).
 - `B-283` — another system's layer below CG's bands raised a notice that could not be closed (L).
 - `B-284` — CG Control showed two loading screens, and both installed apps a white frame (J).
+- `B-285` — the dev station's PROGRAM monitor read "No return signal" beside a working feed (H).
 
 All in [bugs-runtime.md](bugs-runtime.md). Measured free before use: the highest `B` heading under
 `docs/prd/` was `B-270`, no ref and no stash claims `B-271`…`B-289`.

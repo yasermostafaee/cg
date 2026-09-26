@@ -12763,3 +12763,14 @@ first and between the two. **Fix:** the starting page is composed at staging fro
 splash continues it with no entrance replayed; both apps' windows paint the splash's ground from the
 first frame. Tests: `startingPage.test.ts`, `startingPage.dom.test.ts`, `splash.dom.test.ts`,
 `tauriWindows.test.ts`, `splash.spec.ts`.
+
+## [~] B-285 — the dev station's PROGRAM monitor read "No return signal" beside a working feed ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` H
+
+On `pnpm dev:station`, on `--fake` and against the real Playout, PROGRAM read _"No return signal"_
+while the installed CG Control showed the picture from the same feed. The frames did not stop in
+Vite's proxy, the bridge's listener or the relay — the relay was never asked: in a development build
+(what Vite serves) the picture's `<img>` lost its `src` to React StrictMode's second mount, and no
+request was made. **Fix:** the picture's layout effect sets `src` on every mount and removes it on
+every unmount. And `localhost`: the dev station sends a `localhost:5174` page to `127.0.0.1:5174`,
+the origin the Playout's CORS list admits. Tests: `dev-station.spec.ts` (through Vite),
+`programPicture.dom.test.ts`, `vite-config.test.ts`, `station-plan.test.ts`.

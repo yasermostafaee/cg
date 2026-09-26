@@ -227,6 +227,17 @@ export function setAddressArgs(paths, address) {
   ];
 }
 
+/**
+ * The console server's environment: the caller's, minus the two variables that would move its bind,
+ * plus the two the runtime's Vite config reads — the bridge's listener it relays `/pgm/` and
+ * `/__cg/` to, and (`FIELD-FIXES-01` H) the one host a page asked for under `localhost` is sent
+ * to, because the Playout's CORS list admits `127.0.0.1` and never `localhost`.
+ */
+export function viteEnv(env, bridgeConsole) {
+  const { HOST: _host, PORT: _port, ...rest } = env;
+  return { ...rest, CG_BRIDGE_CONSOLE: bridgeConsole, CG_CONSOLE_HOST: CONSOLE_HOST };
+}
+
 /** The console from SOURCE, with hot reload, on the one origin — and on nothing else. */
 export function viteArgs(ports = {}) {
   return [

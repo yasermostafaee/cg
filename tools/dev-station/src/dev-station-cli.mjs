@@ -38,6 +38,7 @@ import {
   setAddressArgs,
   stationPaths,
   viteArgs,
+  viteEnv,
 } from './station-plan.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -181,11 +182,10 @@ function start(paths, playout) {
     log.write(chunk);
   });
   bridge.once('exit', () => log.end());
-  const { HOST: _host, PORT: _port, ...env } = process.env;
   const vite = spawn(process.execPath, [VITE, ...viteArgs()], {
     cwd: RUNTIME,
     stdio: ['ignore', 'inherit', 'inherit'],
-    env: { ...env, CG_BRIDGE_CONSOLE: BRIDGE_CONSOLE },
+    env: viteEnv(process.env, BRIDGE_CONSOLE),
   });
   const children = { bridge, vite };
   const stop = async () => {

@@ -368,3 +368,37 @@ are. Our own Node stays as `.nvmrc` says (22). **Shared CI config.**
   every state and log folder.
 - **Owed:** the moving picture is the owner's to judge on the new installer; CI's installer smoke
   starts CG Control and reads its title bar, which the composed page keeps.
+
+## §16 H — the dev station's PROGRAM monitor, and `localhost`
+
+- **Where the frames stopped — established, link by link:**
+  - **Vite's proxy hands `/pgm/<n>` to the listener, and streams:** measured with the runtime's own
+    `vite.config.ts` and `CG_BRIDGE_CONSOLE` on free ports — `/pgm/2?v=0` with an image's headers
+    reached a stand-in listener from `127.0.0.1` (the string proxy rewrites `Host` to the target),
+    and twelve multipart parts came back in 1.2 s. It neither buffers nor closes the stream.
+  - **`CG_BRIDGE_CONSOLE` is set in the process that runs Vite:** `dev-station-cli.mjs` passes it.
+  - **The relay route refuses nothing proxied:** `console-http-server.ts` checks the SOCKET's peer
+    only (loopback — Vite's proxy connects from `127.0.0.1`), no `Host` or `Origin`.
+  - **The relay never dialled:** the owner's logs (read only) — the current `--fake` run and the run
+    against `.111` — carry no `programme return ch N: a console is watching` line at all: no
+    request ever reached the relay. (An earlier `--fake` run logged a watcher on channel 1, so the
+    proxied path itself had worked.)
+  - **So the request never left the page — and in a real browser through Vite, it did not:** the
+    PROGRAM picture's `<img>` was mounted with NO `src`, and the browser made no `/pgm/` request.
+    `ProgramPicture` set `src` as a prop and removed it in its unmount cleanup (to abort the stream).
+    React's StrictMode — in every DEVELOPMENT build, the only kind Vite's dev server serves — mounts,
+    unmounts and mounts again, and never re-applies an unchanged prop: the simulated unmount took the
+    URL away for good. A production build runs the effect once, which is why the installed app, and
+    every e2e on `dist`, showed the picture. `localhost` was not the cause.
+- **Fix, in the console, for every build:** the layout effect owns `src` — it sets it on every
+  mount and removes it on every unmount — so StrictMode's second mount asks again. Product code
+  learns nothing about the fake or the dev station.
+- **Why A1's tests passed:** A1's own test (`fake-station.integration.test.ts`) drives the station's
+  sign-in, AMCP link and a take, and never requests the picture. The C-016 e2e (`pgm-return.spec.ts`)
+  loads the BUILT console from the bridge's own listener — the installed app's path — so it never
+  went through Vite and never ran a development build, the one place StrictMode mounts twice. No dom
+  test rendered the picture under StrictMode. The new e2e goes through Vite's dev server.
+- **`localhost`:** the dev station now names its one console host in `CG_CONSOLE_HOST`
+  (`viteEnv`, `station-plan.mjs`), and the runtime's Vite config — only when it is set — sends any
+  request asked for under `localhost` to `127.0.0.1` on the same port, path and query kept (307).
+  A plain `dev` and a LAN browser are unchanged; the relay stays loopback-only.

@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { vanillaExtractPlugin } from '@vanilla-extract/vite-plugin';
 import { createBuildStamp } from '@cg/splash-kit/build-stamp';
@@ -40,8 +40,50 @@ const bridgeConsoleProxy =
     ? { proxy: { '/pgm/': bridgeConsole, '/__cg/': bridgeConsole } }
     : {};
 
+/**
+ * 🔴 `FIELD-FIXES-01` H — **`localhost` IS A TRAP ON THE DEV STATION.** The console has ONE origin,
+ * `http://127.0.0.1:5174`: the entry a Playout's CORS list holds, and the only one the real Playout
+ * admits. A page opened at `localhost:5174` is another origin, and its sign-in is refused. So when
+ * the dev station names its host in `CG_CONSOLE_HOST`, a request asked for under `localhost` is sent
+ * to that host on the same port, path and query kept — a 307, so nothing becomes a GET. Absent the
+ * variable (a plain `dev`, a LAN browser) nothing changes.
+ */
+export function consoleHostRedirect(
+  hostHeader: string | undefined,
+  url: string | undefined,
+  consoleHost: string,
+): string | null {
+  const match = /^localhost(:\d+)?$/i.exec(hostHeader ?? '');
+  if (match === null) return null;
+  return `http://${consoleHost}${match[1] ?? ''}${url ?? '/'}`;
+}
+
+const consoleHost = process.env.CG_CONSOLE_HOST;
+const consoleHostPlugins: Plugin[] =
+  consoleHost !== undefined && consoleHost !== ''
+    ? [
+        {
+          name: 'cg-console-host',
+          configureServer(server) {
+            // Registered here, ahead of Vite's own middlewares: the page, its modules and the
+            // relayed routes are all sent to the one origin.
+            server.middlewares.use((req, res, next) => {
+              const to = consoleHostRedirect(req.headers.host, req.url, consoleHost);
+              if (to === null) {
+                next();
+                return;
+              }
+              res.statusCode = 307;
+              res.setHeader('location', to);
+              res.end();
+            });
+          },
+        },
+      ]
+    : [];
+
 export default defineConfig({
-  plugins: [vanillaExtractPlugin(), react(), buildStampPlugin],
+  plugins: [vanillaExtractPlugin(), react(), buildStampPlugin, ...consoleHostPlugins],
   define: {
     __CG_BUILD__: JSON.stringify(buildStamp),
   },

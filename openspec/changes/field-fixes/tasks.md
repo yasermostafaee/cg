@@ -220,3 +220,24 @@
       window every entrance is already over — duration 0 s, opacity 1; control: in a browser the
       wordmark's entrance is 1 s). Looked at in Chrome: the composed page, waiting and failed.
 - [ ] 13.6 The owner launches the new CG Control and CG Designer: one splash, no white frame.
+
+## 14. H — the dev station's PROGRAM monitor, and `localhost` (`B-285`)
+
+- [x] 14.1 Established where the frames stopped (design §16): not the proxy, not the listener, not
+      the relay — the picture's `<img>` had no `src` in a development build.
+- [x] 14.2 `ProgramPicture`: the layout effect sets `src` on every mount and removes it on every
+      unmount.
+- [x] 14.3 `CG_CONSOLE_HOST` from the dev station (`viteEnv`); the Vite config's `cg-console-host`
+      middleware sends `localhost` to `127.0.0.1`, port, path and query kept. `turbo.json`: `test`
+      inputs hash `vite.config.*`, which `vite-config.test.ts` imports.
+- [x] 14.4 Tests: e2e `dev-station.spec.ts` through a real Vite dev server with the runtime's config
+      (channel 2's return arrives and is still live 3 s later, the relay logging its viewer; control:
+      the feed stopped reads "No return signal" — red first: `none` before the fix, the `<img>`
+      without `src`, no `/pgm/` request made; a `localhost` page lands on `127.0.0.1` through a 307;
+      control: `127.0.0.1` served directly); `programPicture.dom.test.ts` (the URL survives StrictMode
+      — red first against the previous panel; control: a production-shaped mount; the unmount still
+      aborts; no URL, no picture); `vite-config.test.ts` (the redirect's rule, control: the one host
+      and a LAN address are served where they are; present only with `CG_CONSOLE_HOST`);
+      `station-plan.test.ts` (`viteEnv`).
+- [ ] 14.5 The owner opens `pnpm dev:station --fake` and `pnpm dev:station`: the PROGRAM picture moves,
+      and `localhost:5174` lands on `127.0.0.1:5174`.
