@@ -3,8 +3,11 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import {
+  defaultFixedLayerBank,
   fixedBankEnd,
+  fixedBankSlots,
   isLayerVisible,
+  isLowBankLayer,
   type ConnectionConfig,
   type FixedLayerBank,
 } from '@cg/shared-ipc';
@@ -142,6 +145,42 @@ it('a deliberately narrow bank is not widened by the default, ticks and all', as
     // said nothing about them — so they come from the schema default, on channel 2.
     ...Array.from({ length: 9 }, (_, i) => ({ channel: 2, layer: i + 50 })),
   ]);
+});
+
+/*
+  `FIELD-FIXES-01` I — A STATION SET UP BEFORE THE FIVE-ROW DEFAULT KEEPS ITS ROWS. First-run used to
+  declare every row shown — twenty template rows and ten beds, the owner's "30/30 rows" — and a new
+  bank now shows five of each. That is the CONSOLE's choice, made at first-run and when a channel is
+  added; a saved bank is the station's, and an upgrade boots it exactly as written.
+*/
+it('a bank saved before the five-row default boots unchanged — every row still shown', async () => {
+  const fixedLayersPath = path.join(freshConfigDir(), 'bridge-fixed-layers.json');
+  const base = defaultFixedLayerBank();
+  // Every row of each band ticked, enumerated as the bank enumerates them.
+  const ticked = (bed: boolean): Record<string, boolean> =>
+    Object.fromEntries(
+      fixedBankSlots(base)
+        .filter(({ layer }) => isLowBankLayer(base, layer) === bed)
+        .map(({ layer }) => [String(layer), true]),
+    );
+  const declared: FixedLayerBank = {
+    ...base,
+    channel: 2,
+    visibility: ticked(false),
+    low: { ...base.low, visibility: ticked(true) },
+  };
+  fs.writeFileSync(fixedLayersPath, JSON.stringify(declared, null, 2), 'utf8');
+
+  bridge = await createBridge({ port: 0, connection: deadConnection(), fixedLayersPath });
+
+  const bank = bridge.runtime.fixedLayersConfig();
+  expect(bank).toEqual(declared);
+  if (bank === null) throw new Error('no bank');
+  // The owner's "30/30 rows": twenty template rows and ten beds, every one still shown.
+  const rows = fixedBankSlots(bank);
+  expect(rows).toHaveLength(30);
+  expect(rows.filter(({ layer }) => !isLayerVisible(bank, layer))).toEqual([]);
+  expect(JSON.parse(fs.readFileSync(fixedLayersPath, 'utf8'))).toEqual(declared);
 });
 
 it('a present-but-unusable file is still a hard boot failure — never quietly replaced by the default', async () => {
