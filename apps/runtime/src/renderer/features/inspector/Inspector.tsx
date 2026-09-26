@@ -28,6 +28,7 @@ import { IsolatedName } from '../../ui/OperatorNames.js';
 import { EDITOR_DIR } from '../../ui/editorTextDirection.js';
 import { templateDisplayName } from '../library/templateName.js';
 import { layerDetail } from '../stack/layerLabel.js';
+import { takeRefusalLine, TakeRefusalText } from '../layers/takeRefusalLine.js';
 import { defaultPositionOf } from '../stack/defaultPositionStore.js';
 import {
   REHEARSE_STATE_COLOR,
@@ -274,6 +275,8 @@ const styles = {
     textTransform: 'uppercase' as const,
     margin: '0 0 var(--r-space-1)',
   },
+  /** `FIELD-FIXES-01` B — a refused take's line, in the error WORD's ink, as the file error is. */
+  refusal: { fontSize: 'var(--r-text-sm)', color: colors.errorText, margin: 0 },
 } as const;
 
 /**
@@ -673,6 +676,16 @@ export function Inspector({ item, onApply, onDiscard, onClose, rehearsing }: Pro
             </>
           )}
         </div>
+        {/*
+          🔴 `FIELD-FIXES-01` B — A REFUSED TAKE, IN THE ROW'S OWN LINE: the same composition the
+          row shows (`takeRefusalLine`), right under the state it explains, named with this
+          heading's name. It stands until the bridge withdraws it (the row taken, or cleared).
+        */}
+        {item.takeRefusal !== undefined && (
+          <p style={styles.refusal} data-inspector-take-refusal="" dir="ltr">
+            <TakeRefusalText line={takeRefusalLine(heading, item.takeRefusal)} />
+          </p>
+        )}
         {/* R-011 — per-item on-air position; keyed so item switches re-seed. */}
         <PositionPicker key={`pos-${itemId}`} item={item} />
         {/* D-137 / C-015 — bind this template's live plates. Renders nothing at

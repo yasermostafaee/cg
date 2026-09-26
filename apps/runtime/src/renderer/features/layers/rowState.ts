@@ -226,6 +226,11 @@ export interface RowStateInput {
    */
   errorCode?: string | undefined;
   /**
+   * `FIELD-FIXES-01` B — the refused take's own line (`takeRefusalLine`), when the item carries
+   * one. It says more than the code — the source and the input — so it wins over it.
+   */
+  errorLine?: string | undefined;
+  /**
    * R-022 — this row is in REHEARSE: the graphic renders locally in PVW and PLAY
    * to air is interlocked off. Bridge-owned, so it is the same for every browser.
    */
@@ -323,6 +328,7 @@ export function rowState({
   rehearsing,
   restoreBlocked,
   errorCode,
+  errorLine,
 }: RowStateInput): RowStateVisual {
   const wire = occupancyLabel(observed, linkDown);
   /**
@@ -569,7 +575,8 @@ export function rowState({
       status === 'unverified'
         ? unverifiedTitle(oscBlind, linkDown)
         : status === 'error'
-          ? (errorCodeMessage(errorCode) ??
+          ? (errorLine ??
+            errorCodeMessage(errorCode) ??
             'CasparCG did not accept this row, and reported no reason.')
           : readyDetail(status),
       wire,

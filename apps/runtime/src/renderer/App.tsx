@@ -40,6 +40,8 @@ import { FirstRunScreen } from './features/firstRun/FirstRunScreen.js';
 import { useAuthCapabilities } from './hooks/useAuthCapabilities.js';
 import { CommandToast } from './features/status/CommandToast.js';
 import { RefusalBanner } from './features/status/RefusalBanner.js';
+import { takeRefusalChannels } from './features/layers/takeRefusalLine.js';
+import { useFixedSlots } from './hooks/useFixedLayers.js';
 import { StatusBar } from './features/status/StatusBar.js';
 import { Tooltip } from './ui/Tooltip.js';
 import { useConnections } from './hooks/useConnections.js';
@@ -120,6 +122,8 @@ export function App(): JSX.Element {
   const orphans = useOrphans();
   const ownedOccupancy = useOwnedOccupancy();
   const emptiedAir = useEmptiedAir();
+  // `FIELD-FIXES-01` B — a mock item carries no `slot`; the bank row it is bound to says its channel.
+  const fixedSlots = useFixedSlots();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // R-028 part B — the operator's own workspace geometry (persisted per browser).
   const layout = useShellLayout();
@@ -166,6 +170,8 @@ export function App(): JSX.Element {
               ...emptiedAirChannels(emptiedAir),
               ...orphanWarningChannels(orphans, ownedOccupancy),
               ...(standingRefusal?.channel != null ? [standingRefusal.channel] : []),
+              // `FIELD-FIXES-01` B — a row carrying a refused take's line, shown in ITS view only.
+              ...takeRefusalChannels(items, fixedSlots),
             ],
           })
         : undefined,
@@ -178,6 +184,8 @@ export function App(): JSX.Element {
       orphans,
       ownedOccupancy,
       standingRefusal,
+      items,
+      fixedSlots,
     ],
   );
 

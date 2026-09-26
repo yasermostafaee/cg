@@ -12699,3 +12699,12 @@ went wrong to anyone not reading CasparCG's source. **Fix:** one mapping,
 DeckLink input on 403 or 404; a file on 404 of a media or stream play; the graphic on 404 of
 `CG ADD`; one line per code otherwise), with each code's meaning read from CasparCG 2.5.0's source.
 The number goes to the log. Tests: `amcpRefusal.test.ts`.
+
+## [~] B-278 — A refused take was reported by a generic banner naming no row and no source ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` B
+
+On 2026-09-26 Bed 59 read ERROR while an amber banner at the top said only "CasparCG refused the
+command (AMCP 403)" — no row, no source, no reason. **Fix:** the refusal lives with the row: one line,
+_"Bed 59 · studio1 (DeckLink 1): the server has no such input, or it is in use."_, on the row and in
+its Inspector, in that channel's view only, with a mark on the strip for another channel's view and no
+banner; it clears on the next take that lands, or a clear. Tests: `takeRefusalLine.test.ts`,
+`take-refusal-line.spec.ts`.

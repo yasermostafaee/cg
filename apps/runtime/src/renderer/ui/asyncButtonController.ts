@@ -44,6 +44,13 @@ export interface AsyncResult {
    * the operator's own choice).
    */
   cancelled?: boolean | undefined;
+  /**
+   * `FIELD-FIXES-01` B — the refusal is carried ON THE ROW (the bridge recorded it as the item's
+   * `takeRefusal`, and the row and its Inspector say it in one line). So, like a cancel, the
+   * button settles straight back to idle with no success flash — and unlike one, it is a refusal
+   * that IS reported, just not here: no banner repeats what the row already says.
+   */
+  refusalOnRow?: boolean | undefined;
 }
 
 export interface AsyncButtonConfig {
@@ -80,6 +87,8 @@ export function asyncResultMessage(res: AsyncResult, notAccepted = 'Not accepted
   // phantom refusal toast).
   if (res.cancelled === true) return null;
   if (res.accepted) return null;
+  // `FIELD-FIXES-01` B — the row says this refusal itself; no second surface repeats it.
+  if (res.refusalOnRow === true) return null;
   /*
     🔴 `CONSOLE-LOOK-06` DELTA R — **THE ORDER IS REVERSED FOR THE CODES THAT NEED IT.**
 
@@ -144,7 +153,7 @@ export class AsyncButtonController {
   #cancels: (() => void)[] = [];
   #spinnerShown = false;
   #floorElapsed = false;
-  #settled: { error: string | null; cancelled: boolean } | undefined;
+  #settled: { error: string | null; cancelled: boolean; onRow: boolean } | undefined;
   #disposed = false;
 
   constructor(cfg: AsyncButtonConfig) {
@@ -197,11 +206,12 @@ export class AsyncButtonController {
         this.#settled = {
           error: asyncResultMessage(res, this.#cfg.notAcceptedMessage),
           cancelled: res.cancelled === true,
+          onRow: !res.accepted && res.refusalOnRow === true,
         };
         this.#tryFinish();
       },
       (err: unknown) => {
-        this.#settled = { error: asyncRejectionMessage(err), cancelled: false };
+        this.#settled = { error: asyncRejectionMessage(err), cancelled: false, onRow: false };
         this.#tryFinish();
       },
     );
@@ -217,7 +227,7 @@ export class AsyncButtonController {
     // If the spinner is showing, wait out the minimum-visible floor first.
     if (this.#spinnerShown && !this.#floorElapsed) return;
 
-    const { error, cancelled } = this.#settled;
+    const { error, cancelled, onRow } = this.#settled;
     this.#clearTimers();
     this.#spinnerShown = false;
     this.#floorElapsed = false;
@@ -227,7 +237,9 @@ export class AsyncButtonController {
     // succeeded), no message (nothing failed). `error` is already null here
     // (`asyncResultMessage` returns null for a cancel); the explicit flag is what
     // keeps the cancel out of the success branch below.
-    if (cancelled) {
+    // `FIELD-FIXES-01` B — a refusal the ROW carries settles the same way: nothing to flash, and
+    // nothing to say here that the row does not already say.
+    if (cancelled || onRow) {
       this.#set({ phase: 'idle', showSpinner: false, ariaBusy: false, inFlight: false });
       return;
     }

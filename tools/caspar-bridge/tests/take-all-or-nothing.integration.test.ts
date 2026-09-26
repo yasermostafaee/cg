@@ -309,6 +309,8 @@ describe('Decision 1 — a fresh take airs everything or nothing', () => {
       accepted: false,
       errorCode: 'amcp-403',
       command: 'PLAY 2-60 DECKLINK DEVICE 1',
+      // `FIELD-FIXES-01` B — the row carries it, so the console raises no banner for it.
+      refusalOnRow: true,
     });
     const lines = await sentSince(from);
     expect(lines.map(normalise)).toEqual([
@@ -399,7 +401,11 @@ describe('Decision 1 — a fresh take airs everything or nothing', () => {
     refusals = [{ match: /^CG 2-59 PLAY/, code: 403 }];
     const from = await mark();
 
-    expect(await r.take('bed-59')).toMatchObject({ accepted: false, errorCode: 'amcp-403' });
+    expect(await r.take('bed-59')).toMatchObject({
+      accepted: false,
+      errorCode: 'amcp-403',
+      refusalOnRow: true,
+    });
 
     const lines = await sentSince(from);
     // Both plates landed before the graphic was refused: both come down, and so does the graphic.
@@ -412,6 +418,16 @@ describe('Decision 1 — a fresh take airs everything or nothing', () => {
     expect(r.liveLayers().has('bed-59')).toBe(false);
     expect(row(r)?.takeRefusal).toMatchObject({ code: 'amcp-403', command: 'CG 2-59 PLAY 0' });
     expect(row(r)?.takeRefusal?.plateId).toBeUndefined();
+  });
+
+  it('`refusalOnRow` rides only a refusal the row carries — control: a refusal before the wire has none', async () => {
+    const r = await boot();
+    await bedOnLookTwo(r);
+    expect(await r.take('bed-59')).toEqual({ accepted: true });
+    // Decision 2's refusal happens before anything is sent, and records nothing on the row.
+    const onAir = await r.take('bed-59');
+    expect(onAir).toMatchObject({ accepted: false, errorCode: 'already-on-air' });
+    expect(onAir).not.toHaveProperty('refusalOnRow');
   });
 
   it('the refusal line is withdrawn by the next take that lands', async () => {

@@ -70,3 +70,20 @@
       file line; a stream is a file line and a route is not; every code 400–503 with and without a
       command never says "AMCP" or its number; control: non-reply codes are not the mapping's);
       `errorCodeMessage.test.ts` and `rowState.errorReason.test.ts` re-pinned to the words.
+
+## 5. B — the refusal lives with the row (`B-278`)
+
+- [x] 5.1 `takeRefusalLine` + `TakeRefusalText`: one line from `takeRefusal`, names isolated; on the row
+      (template cell, `data-take-refusal`) and in the state cell's ERROR title; in the Inspector
+      (`data-inspector-take-refusal`).
+- [x] 5.2 `StackTakeChannel` answers `refusalOnRow` where the bridge recorded the refusal; the console
+      raises no banner for it (`asyncResultMessage` → null, the controller settles idle).
+- [x] 5.3 The strip marks the channel whose row carries a refusal (`takeRefusalChannels` in `App`).
+- [x] 5.4 Mock parity: the refusal recorded, withdrawn by a take that lands and by OUT; the one-shot
+      seam `CG_E2E_REFUSE_NEXT_TAKE`.
+- [x] 5.5 Tests: `takeRefusalLine.test.ts` (the owner's line word for word; no source for the
+      graphic's own command; no banner, idle, with its control; the strip's channels);
+      `take-all-or-nothing` (`refusalOnRow` on both wire refusals; control: `already-on-air` has
+      none); e2e `take-refusal-line.spec.ts` (the row and the Inspector say the line, no banner, no
+      "AMCP"; the other channel shows only the mark, measured against a baseline; control: a take
+      that lands clears the line and the mark).

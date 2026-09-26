@@ -24,6 +24,31 @@ No operator surface SHALL show "AMCP" or the reply's number; the code and the co
 - **WHEN** any reply code from 400 to 503 is worded, with or without its command
 - **THEN** neither the sentence nor the clause contains "AMCP" or the code
 
+### Requirement: A refused take SHALL be said on its row and in its Inspector, in one line
+
+A take the bridge refused and carries on the row SHALL be said in ONE line naming the row, the
+refused source and the input it named, then what the refusal means (the one mapping): _"Bed 59 ·
+studio1 (DeckLink 1): the server has no such input, or it is in use."_ The line SHALL appear on the
+row and in its Inspector, in that channel's view only; another channel's view SHALL show only the
+mark on that channel's strip tab. No banner SHALL repeat it. It SHALL go when the row is next taken
+successfully, or cleared.
+
+#### Scenario: The refused row says it, and nothing else does
+
+- **WHEN** the take of the TICKER row is refused on its DeckLink plate
+- **THEN** the row reads ERROR with the line, and its Inspector shows the same line
+- **AND** no banner appears, and "AMCP" appears nowhere on the page
+
+#### Scenario: Another channel's view shows only the mark
+
+- **WHEN** the operator views the other channel
+- **THEN** neither the line nor a banner is shown, and the refused row's channel tab carries a mark
+
+#### Scenario: A take that lands clears it
+
+- **WHEN** the row is taken again and the take lands
+- **THEN** the line leaves the row and the Inspector, and the mark leaves the strip
+
 ### Requirement: A row's PLAY SHALL be unavailable while the bridge would refuse its take
 
 A row's PLAY SHALL be disabled while the bridge would refuse its take — the row is on air or

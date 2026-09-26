@@ -1,5 +1,11 @@
 import { isOnAirStatus, ownsLiveSeats } from '@cg/shared-schema';
-import type { AuditEntry, Position, StackItemState, StackItemStatus } from '@cg/shared-schema';
+import type {
+  AuditEntry,
+  Position,
+  StackItemState,
+  StackItemStatus,
+  TakeRefusal,
+} from '@cg/shared-schema';
 import type {
   ConnectionConfig,
   ConnectionHealth,
@@ -412,7 +418,7 @@ export class MockRuntime {
     return { accepted: true };
   }
 
-  take(itemId: string): { accepted: boolean; errorCode?: string } {
+  take(itemId: string): { accepted: boolean; errorCode?: string; refusalOnRow?: true } {
     // R-022 parity — THE INTERLOCK, and the mock must hold it too. If test mode
     // allowed a take the real bridge refuses, the interlock would be exercised
     // nowhere in the suite and the UI would be built against semantics the bridge
@@ -429,6 +435,30 @@ export class MockRuntime {
     if (ownsLiveSeats(item, this.#liveSeatedItems.has(itemId))) {
       return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
     }
+    /*
+      `FIELD-FIXES-01` B parity — a take REFUSED AT THE WIRE. The mock's sends always land, so this
+      is e2e-seeded ({@link takeNextWireRefusal}), and it is modelled as the bridge does it: all or
+      nothing (nothing seated, no page played), the row in its error state carrying the refusal it
+      says in one line, and `refusalOnRow` so no banner repeats it.
+    */
+    const wireRefusal = takeNextWireRefusal();
+    if (wireRefusal !== null) {
+      this.#audit.unshift(
+        auditEntry('take', {
+          ...this.#auditItem(itemId, item.templateId),
+          outcome: 'failed',
+          errorCode: wireRefusal.code,
+          ...(wireRefusal.command !== undefined && { command: wireRefusal.command }),
+        }),
+      );
+      this.#patch(itemId, {
+        status: 'error',
+        pending: false,
+        errorCode: wireRefusal.code,
+        takeRefusal: wireRefusal,
+      });
+      return { accepted: false, errorCode: wireRefusal.code, refusalOnRow: true };
+    }
     // B-070/B-039 parity — a take with no live producer re-ADDs first, so a
     // producer always exists afterwards.
     this.#loaded.add(itemId);
@@ -441,6 +471,8 @@ export class MockRuntime {
     */
     this.#mintTakeToken(itemId);
     this.#settleSlotObservation(itemId, 'producer');
+    // `FIELD-FIXES-01` B parity — the take that lands withdraws the row's refusal line.
+    this.#retireTakeRefusal(itemId);
     this.#transition(itemId, 'playing', true);
     this.#audit.unshift(auditEntry('take', this.#auditItem(itemId, item.templateId)));
     // 🔴 SESSION BP parity — THE TAKE PINS LEVEL 2. A row that is on air does not change its
@@ -578,6 +610,8 @@ export class MockRuntime {
     const item = this.#find(itemId);
     if (item === null) return { accepted: false };
     this.#transition(itemId, 'exiting', true);
+    // `FIELD-FIXES-01` B parity — a cleared row says nothing of a take refused before it.
+    this.#retireTakeRefusal(itemId);
     // B-070 parity — out's CLEAR DESTROYS the producer, so a later update
     // commits without a wire send and a later take re-ADDs.
     this.#loaded.delete(itemId);
@@ -2153,6 +2187,18 @@ export class MockRuntime {
     this.#emitStack();
   }
 
+  /** `FIELD-FIXES-01` B parity — withdraw the row's refusal line (the bridge's `#retireTakeRefusal`). */
+  #retireTakeRefusal(itemId: string): void {
+    const item = this.#find(itemId);
+    if (item?.takeRefusal === undefined) return;
+    this.#stack = this.#stack.map((i) => {
+      if (i.itemId !== itemId) return i;
+      const { takeRefusal: _refusal, errorCode: _code, ...rest } = i;
+      return rest;
+    });
+    this.#emitStack();
+  }
+
   #transition(itemId: string, status: StackItemStatus, pending: boolean): void {
     this.#patch(itemId, { status, pending });
   }
@@ -2207,6 +2253,20 @@ export class MockRuntime {
   #emitStack(): void {
     this.stackChanged.emit(this.stackSnapshot());
   }
+}
+
+/**
+ * `FIELD-FIXES-01` B — the e2e seam for a take REFUSED AT THE WIRE, one-shot: a spec sets
+ * `window.CG_E2E_REFUSE_NEXT_TAKE` to the refusal the bridge would record (`TakeRefusal`: the code,
+ * the refused command, and the plate and its source when a plate was refused), and the next take
+ * consumes it. Unset — the default everywhere but a spec — the mock takes as it always has.
+ */
+function takeNextWireRefusal(): TakeRefusal | null {
+  const w = globalThis as { CG_E2E_REFUSE_NEXT_TAKE?: TakeRefusal };
+  const armed = w.CG_E2E_REFUSE_NEXT_TAKE;
+  if (armed === undefined) return null;
+  delete w.CG_E2E_REFUSE_NEXT_TAKE;
+  return armed;
 }
 
 function auditEntry(action: AuditEntry['action'], extra: Partial<AuditEntry>): AuditEntry {

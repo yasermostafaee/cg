@@ -64,6 +64,14 @@ export const StackTakeChannel = defineChannel(
      * both are present the message wins — it is the more specific of the two.
      */
     message: z.string().optional(),
+    /**
+     * 🔴 `FIELD-FIXES-01` B — the refusal is CARRIED ON THE ROW: the take reached the wire, was
+     * refused, and the bridge recorded it as the item's `takeRefusal`, which the row and its
+     * Inspector say in one line. So no other surface repeats it — no banner. ABSENT for every
+     * refusal that never reached the wire (on air, rehearsing, disconnected, an unassigned plate),
+     * which keep their own surfaces.
+     */
+    refusalOnRow: z.literal(true).optional(),
   }),
 );
 

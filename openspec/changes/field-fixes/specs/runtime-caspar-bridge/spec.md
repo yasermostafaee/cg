@@ -60,13 +60,17 @@ When a take is refused, the bridge SHALL record on the row, and publish with it,
 the refused command with its payload elided, and — when a plate was refused — that plate and the
 catalog entry it resolved to (its id and its name). While the refusal stands the row SHALL publish the
 `error` status unless its reconciled status claims or may claim air. The refusal SHALL be withdrawn by
-the row's next take that lands, by clearing the row, and by removing it.
+the row's next take that lands, by clearing the row, and by removing it. The take's answer SHALL
+carry `refusalOnRow` exactly when it recorded such a refusal, and never for a refusal made before
+anything was sent.
 
 #### Scenario: The row names the plate that was refused
 
 - **WHEN** Bed 59's take is refused on plate `l1`, assigned to `studio1`
 - **THEN** the row publishes `status: error` and `takeRefusal` with `code: amcp-403`,
   `command: PLAY 2-60 DECKLINK DEVICE 1`, `plateId: l1`, `sourceId`, and `sourceName: studio1`
+- **AND** the take answers `refusalOnRow: true`; a take refused before the wire (`already-on-air`)
+  does not
 
 #### Scenario: The next take that lands withdraws it
 

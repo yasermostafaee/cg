@@ -29,6 +29,7 @@ import { lookSwitchRefusal } from './lookSwitch.js';
 import { LivePlateAudioDialog } from './LivePlateAudioDialog.js';
 import { announcePlateAudio, audioSummary, type RowPlateAudio } from './plateAudio.js';
 import { rowState, type RowBinding } from './rowState.js';
+import { takeRefusalLine, TakeRefusalText } from './takeRefusalLine.js';
 import {
   ROW_GEOMETRY,
   VERBS_GRID,
@@ -249,6 +250,8 @@ const styles = {
    * the template cell — so the two muted texts are the bank number and this marker.)
    */
   onMarkedRow: { color: colors.markedRowInk },
+  /** `FIELD-FIXES-01` B — a refused take's line, in the error WORD's ink (`colors.errorText`). */
+  refusal: { color: colors.errorText },
 } as const;
 
 /**
@@ -387,6 +390,18 @@ export function LayerRow({
       );
     }
   };
+
+  /*
+    🔴 `FIELD-FIXES-01` B — A REFUSED TAKE IS SAID ON THIS ROW, in one line naming the row and the
+    refused source (`takeRefusalLine`), read off the item's `takeRefusal`: the SAME line the
+    Inspector shows, in this channel's view only, and withdrawn by the bridge when the row is next
+    taken or cleared. It takes the template cell (the widest text column) while it stands, and the
+    state cell's title carries it at every density, so no banner has to.
+  */
+  const refusalLine =
+    item?.takeRefusal !== undefined
+      ? takeRefusalLine(operatorName?.names[0] ?? rowName, item.takeRefusal)
+      : null;
 
   const templateLabel =
     template !== null
@@ -722,6 +737,8 @@ export function LayerRow({
     // R-058 Part A — the bridge's reason for an `error`, which was published on the item all
     // along and read by nothing. See the title note in `rowState`.
     ...(item?.errorCode !== undefined ? { errorCode: item.errorCode } : {}),
+    // `FIELD-FIXES-01` B — and the refused take's own line, which says more than its code.
+    ...(refusalLine !== null ? { errorLine: refusalLine.text } : {}),
   });
 
   // The wire's occupancy report is no longer rendered as a column — `rowState` folds
@@ -1020,7 +1037,18 @@ export function LayerRow({
           })()}
       </span>
       {spec.showTemplate &&
-        (templateLabel !== null ? (
+        (refusalLine !== null ? (
+          <span
+            style={{ ...styles.secondary, ...styles.refusal }}
+            data-take-refusal=""
+            title={
+              templateLabel === null ? refusalLine.text : `${refusalLine.text} — ${templateLabel}`
+            }
+            dir="ltr"
+          >
+            <TakeRefusalText line={refusalLine} />
+          </span>
+        ) : templateLabel !== null ? (
           <span
             style={styles.secondary}
             /*

@@ -166,3 +166,23 @@ holdsSeats)` in `@cg/shared-schema` beside `isOnAirStatus`; the bridge's `#ownsL
   possibilities; 503 is not a failure while running but a lock, and says so.
 - **The number goes to the log**: the bridge's `logs/amcp.log` (§5) and the audit record's
   `command`. The audit panel keeps its code column — it is the log surface.
+
+## §7 B — the refusal lives with the row
+
+- **One line, one composition** (`features/layers/takeRefusalLine.tsx`), read off the item's
+  `takeRefusal`: the row's name (through `operatorRowName`), the refused plate's source name, the input
+  the command named (`DeckLink n`), then A's clause. Names are isolated in `<bdi>`s and the line is LTR
+  chrome (golden rule 11). A refusal of the graphic's own command names no source.
+- **On the row** the line takes the template cell (the widest text column) in the error word's ink,
+  with the whole line in its `title`; the state cell's ERROR title carries it too (`rowState`'s
+  `errorLine`), so it is readable at every density. **In the Inspector** it sits under the state chips.
+- **No banner.** The bridge answers the take with `refusalOnRow` exactly where it recorded the refusal
+  (`StackTakeChannel`); `asyncResultMessage` answers null for it and the button settles to idle, so
+  neither the button nor its context-menu twin raises the banner. A refusal made before the wire (on
+  air, rehearsing, disconnected, an unassigned plate) never carries it and keeps its own surface.
+- **Channel scope** (§2 L's rule): the line is on the row, which is in its channel's view only; the
+  strip marks the channel whose row carries one (`takeRefusalChannels` — the item's slot, else the
+  bank row it is bound to, because a mock item carries no slot).
+- **It clears** when the bridge withdraws it: the next take that lands, a clear, a removal.
+- **Test mode:** the mock's one-shot seam `CG_E2E_REFUSE_NEXT_TAKE` refuses the next take at the wire,
+  as the bridge would record it; unset, the mock takes as it always has.

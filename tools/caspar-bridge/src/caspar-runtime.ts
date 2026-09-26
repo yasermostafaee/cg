@@ -824,6 +824,19 @@ function restoreSkipNaming(item: RetainedStackItem): Pick<RestoreSkip, 'template
   };
 }
 
+/**
+ * A take's answer. `FIELD-FIXES-01` B — `refusalOnRow` is set exactly where the take reached the
+ * wire, was refused and RECORDED the refusal on the item (`#recordTakeRefusal`): the row and its
+ * Inspector say it, so no other surface repeats it. A refusal that never reached the wire (on air,
+ * rehearsing, disconnected, an unassigned plate) keeps its own surface and never carries it.
+ */
+interface TakeVerdict {
+  accepted: boolean;
+  errorCode?: string;
+  message?: string;
+  refusalOnRow?: true;
+}
+
 export class CasparRuntime {
   readonly stackChanged = new Emitter<readonly StackItemState[]>();
   /** `DESKTOP-APPS-01-D` j — the strays Station setup shows changed. */
@@ -3679,7 +3692,7 @@ export class CasparRuntime {
     }
   }
 
-  async take(itemId: string): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+  async take(itemId: string): Promise<TakeVerdict> {
     const verdict = await this.#audited('take', this.#itemDetail(itemId), () =>
       this.#takeImpl(itemId),
     );
@@ -3727,9 +3740,7 @@ export class CasparRuntime {
     this.#markDirty(itemId);
   }
 
-  async #takeImpl(
-    itemId: string,
-  ): Promise<{ accepted: boolean; errorCode?: string; message?: string }> {
+  async #takeImpl(itemId: string): Promise<TakeVerdict> {
     /**
      * R-022 — THE INTERLOCK. A rehearsing item cannot be taken to air, and the
      * refusal lives HERE rather than only in a disabled button.
@@ -3951,6 +3962,7 @@ export class CasparRuntime {
         return {
           accepted: false,
           errorCode: code,
+          refusalOnRow: true,
           ...(added.command !== undefined && { command: added.command }),
         };
       }
@@ -4085,6 +4097,7 @@ export class CasparRuntime {
       return {
         accepted: false,
         errorCode: code,
+        refusalOnRow: true,
         ...(seated.command !== undefined && { command: seated.command }),
       };
     }
@@ -4124,6 +4137,7 @@ export class CasparRuntime {
       return {
         accepted: false,
         errorCode: code,
+        refusalOnRow: true,
         ...(command !== undefined && { command }),
       };
     }
