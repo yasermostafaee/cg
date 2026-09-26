@@ -44,6 +44,21 @@ export const CONNECTION_CHECK_LINE_MS = 5000;
 /** How long the console waits for `setup.check`: the slowest line's bound, twice over. */
 export const SETUP_CHECK_WAIT_MS = CONNECTION_CHECK_LINE_MS * 2;
 
+/**
+ * `DESKTOP-APPS-01-B` — how long after a `station-admin` signs in the AMCP line still WAITS for the
+ * Playout to let this machine in, before it names the approval; the bridge's link retries promptly
+ * for this long. Here, not in the bridge, because the console's wait for the one re-run that holds
+ * the AMCP line ({@link SETUP_CHECK_LET_IN_WAIT_MS}) is derived from it.
+ */
+export const AMCP_TRUST_WINDOW_MS = 30_000;
+
+/**
+ * `DELTA-MULTI-CHANNEL-01-A` A2 — how long the console waits for a check that asked the bridge to
+ * hold its AMCP line ({@link ConnectionCheckRequest}'s `awaitLetIn`): the whole trust window, then a
+ * check's own wait on top — derived, so the wait can never be shorter than the hold.
+ */
+export const SETUP_CHECK_LET_IN_WAIT_MS = AMCP_TRUST_WINDOW_MS + SETUP_CHECK_WAIT_MS;
+
 /** `DESKTOP-APPS-01-C` C3 — the contract's API port: an `http://` Playout address with no port has it. */
 export const PLAYOUT_API_PORT = 8080;
 
@@ -162,6 +177,15 @@ export const ConnectionCheckRequestSchema = z.object({
   casparHost: z.string().min(1).optional(),
   /** The console's own origin, which the Playout's CORS list must carry. */
   origin: z.string().min(1),
+  /**
+   * 🔴 `DELTA-MULTI-CHANNEL-01-A` A2 — **HOLD THE AMCP LINE UNTIL THIS MACHINE IS LET IN.** Sent only
+   * by the console's ONE automatic re-run, after a `station-admin` has signed in, while the AMCP line
+   * waits. Within {@link AMCP_TRUST_WINDOW_MS} of that sign-in, the bridge asks CasparCG again ITSELF
+   * until it answers or the window ends, and only then answers — so the console asks once and waits
+   * ({@link SETUP_CHECK_LET_IN_WAIT_MS}) instead of re-running the whole check every two seconds,
+   * which is the loop the owner watched. The other lines run as in any check.
+   */
+  awaitLetIn: z.literal(true).optional(),
 });
 export type ConnectionCheckRequest = z.infer<typeof ConnectionCheckRequestSchema>;
 

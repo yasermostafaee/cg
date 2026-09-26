@@ -11,12 +11,17 @@ import { colors } from '../src/renderer/theme.js';
 import { fillBridgeStub, setupStub } from './support/authStub.js';
 
 /**
- * 🔴 `CHECK-RERUN-01` A — **A RE-CHECK STARTS CLEAN, AND ONLY THE LATEST RUN MAY WRITE.**
+ * 🔴 `CHECK-RERUN-01` A — **A RE-CHECK STARTS CLEAN, AND ONE CHECK RUNS AT A TIME.**
  *
  * The owner, 2026-09-24, with the Playout off: pressed Check, then again, and while the button read
  * "Checking…" the dialog still showed the last run's ticks and crosses as though they were current.
  * Each absence here has its positive control — the state it clears is shown on screen first, and
  * the reply it waits for does then fill the lines in.
+ *
+ * 🔴 `DELTA-MULTI-CHANNEL-01-A` A2 — **AND IT DOES NOT LOOP.** The owner, 2026-09-25, on the fake
+ * station: after the sign-in the check re-ran by itself every two seconds, flashing every line, for
+ * as long as the AMCP line waited. A check runs when Check is pressed; by itself once, when what a
+ * line waits for changes, touching only that line.
  */
 
 const ORIGIN = 'http://127.0.0.1:8080';
@@ -229,37 +234,195 @@ describe('CHECK-RERUN-01 A — a (re-)check starts clean', () => {
   });
 });
 
-describe('CHECK-RERUN-01 A — every run is tagged; a late reply never overwrites the current run', () => {
-  it('a slow reply from run 1, arriving after run 2 started, does not change run 2’s lines; control: run 2’s own reply does', async () => {
+/*
+  `CHECK-RERUN-01` tagged every run because the sign-in used to start a check of its own while a
+  pressed one was still out, and the slow reply then overwrote the new lines. `DELTA-MULTI-CHANNEL-01-A`
+  A2 closes that door instead: ONE check at a time, and a sign-in reads the reply of the check it
+  found running. So the late reply these specs used to plant can no longer be produced — what they
+  pin now is that no second check starts.
+*/
+describe('CHECK-RERUN-01 A, as DELTA-MULTI-CHANNEL-01-A A2 leaves it — one check at a time', () => {
+  it('a sign-in while a pressed check is still out starts NO second check — the sign-in reads that check’s reply; control: Check pressed again runs', async () => {
     const check = stub();
     const onJudged = vi.fn();
     const redraw = await render({ judgeNow: false, onJudged });
-    await pressCheck(); // run 1 — pressed, and slow
-    await redraw({ judgeNow: true, onJudged }); // run 2 — the sign-in's own check
-    expect(check).toHaveBeenCalledTimes(2);
+    await pressCheck(); // pressed, and slow
+    await redraw({ judgeNow: true, onJudged }); // the sign-in, while it is out
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(onJudged).not.toHaveBeenCalled();
 
-    await answer(0, PLAYOUT_OFF); // run 1's reply lands late
-    for (const l of shown()) expect(l.status, l.id ?? '').toBe('checking');
-    expect(verdictMarks()).toBe(0);
-    expect(checkButton().textContent).toBe('Checking…'); // run 2 is still running
-    expect(onJudged).not.toHaveBeenCalled(); // nor did run 1 judge anything
-
-    // CONTROL — run 2's own reply does change them, and it is what judges.
-    await answer(1, PLAYOUT_ON);
-    expect(shown()).toEqual(asShown(PLAYOUT_ON));
+    await answer(0, PLAYOUT_OFF); // no line waits in it, so it is judged on this reply
+    expect(shown()).toEqual(asShown(PLAYOUT_OFF));
     expect(checkButton().textContent).toBe('Check');
     expect(onJudged).toHaveBeenCalledTimes(1);
+    expect(check).toHaveBeenCalledTimes(1);
+
+    // CONTROL — pressing Check does run it again.
+    await pressCheck();
+    expect(check).toHaveBeenCalledTimes(2);
   });
 
-  it('…and a reply from run 1 landing AFTER run 2’s does not replace run 2’s lines either', async () => {
-    stub();
-    const redraw = await render({ judgeNow: false });
+  it('a console that mounts already signed in checks ONCE — StrictMode’s second mount effect finds the check out; control: its reply fills the lines', async () => {
+    const check = stub();
+    const onJudged = vi.fn();
+    await render({ judgeNow: true, onJudged });
+    expect(check).toHaveBeenCalledTimes(1);
+    await answer(0, PLAYOUT_ON);
+    expect(shown()).toEqual(asShown(PLAYOUT_ON));
+    expect(onJudged).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── DELTA-MULTI-CHANNEL-01-A A2 — the check does not loop ─────────────────────────
+
+/** The Playout on, with the AMCP line as given. */
+const withAmcp = (amcp: {
+  status: 'pass' | 'fail' | 'wait';
+  text: string;
+}): ConnectionCheckResult => ({
+  ...PLAYOUT_ON,
+  lines: PLAYOUT_ON.lines.map((l) => (l.id === 'amcp' ? { id: 'amcp', ...amcp } : l)),
+});
+
+/** Before the sign-in: the AMCP line waits for it (the bridge's own words). */
+const WAITS_FOR_SIGN_IN = withAmcp({
+  status: 'wait',
+  text: 'CasparCG on 127.0.0.1: waiting for sign-in.',
+});
+/** Just after it: the AMCP line waits for the Playout to let this machine in. */
+const WAITS_FOR_TRUST = withAmcp({
+  status: 'wait',
+  text: 'CasparCG on 127.0.0.1: waiting for the Playout to let this machine in.',
+});
+/** The trust window over and the machine not let in: the bridge names the approval. */
+const NEEDS_APPROVAL = withAmcp({
+  status: 'fail',
+  text: 'This machine (127.0.0.1) is waiting for approval in the Playout.',
+});
+
+/** What the spec asked the bridge for, run by run. */
+const asked = (check: ReturnType<typeof vi.fn>, run: number): Record<string, unknown> =>
+  (check.mock.calls[run] as [Record<string, unknown>] | undefined)?.[0] ?? {};
+
+const lineOf = (id: string): ReturnType<typeof shown>[number] | undefined =>
+  shown().find((l) => l.id === id);
+
+describe('DELTA-MULTI-CHANNEL-01-A A2 — a check runs when Check is pressed; by itself, once', () => {
+  it('one Check, then a sign-in while the AMCP line waits: the check runs at most TWICE — the one re-run holds the AMCP line and touches only it; control: pressing Check runs it', async () => {
+    const check = stub();
+    const onJudged = vi.fn();
+    const redraw = await render({ judgeNow: false, onJudged });
     await pressCheck();
-    await redraw({ judgeNow: true });
+    expect(asked(check, 0)['awaitLetIn']).toBeUndefined(); // a pressed check is never held
+    await answer(0, WAITS_FOR_SIGN_IN);
+    expect(shown()).toEqual(asShown(WAITS_FOR_SIGN_IN));
+
+    await redraw({ judgeNow: true, onJudged }); // the sign-in — the thing the AMCP line waited for
+    expect(check).toHaveBeenCalledTimes(2);
+    expect(asked(check, 1)['awaitLetIn']).toBe(true); // held until this machine is let in
+    expect(onJudged).not.toHaveBeenCalled();
+    // In flight: ONLY the waiting line is checking, as its subject — nothing flashes.
+    for (const l of shown()) {
+      expect(l.status, l.id ?? '').toBe(l.id === 'amcp' ? 'checking' : 'pass');
+    }
+    expect(lineOf('amcp')?.text).toBe('CasparCG on 127.0.0.1');
+    expect(verdictMarks()).toBe(PLAYOUT_ON.lines.length - 1);
+
     await answer(1, PLAYOUT_ON);
     expect(shown()).toEqual(asShown(PLAYOUT_ON));
-    await answer(0, PLAYOUT_OFF);
+    expect(onJudged).toHaveBeenCalledTimes(1);
+    await flush();
+    expect(check).toHaveBeenCalledTimes(2); // spent: nothing more by itself
+
+    // CONTROL — pressing Check runs it, and a pressed check starts clean.
+    await pressCheck();
+    expect(check).toHaveBeenCalledTimes(3);
+    for (const l of shown()) expect(l.status, l.id ?? '').toBe('checking');
+  });
+
+  it('the re-run updates ONLY the line that waited — a later reply for another line leaves that line’s verdict alone', async () => {
+    const check = stub();
+    const redraw = await render({ judgeNow: false });
+    await pressCheck();
+    await answer(0, WAITS_FOR_SIGN_IN);
+    await redraw({ judgeNow: true });
+    expect(check).toHaveBeenCalledTimes(2);
+    // The held reply says something new about the API line as well; the re-run was not asked that.
+    await answer(1, {
+      ...PLAYOUT_ON,
+      lines: PLAYOUT_ON.lines.map((l) =>
+        l.id === 'api'
+          ? { id: 'api', status: 'fail', text: 'No answer from 127.0.0.1 on port 8080.' }
+          : l,
+      ),
+    });
+    expect(lineOf('amcp')?.status).toBe('pass');
+    expect(lineOf('api')).toEqual(asShown(PLAYOUT_ON).find((l) => l.id === 'api'));
+  });
+
+  it('the bridge names the approval: the re-run shows it where the waiting line was, and the check is judged', async () => {
+    const check = stub();
+    const onJudged = vi.fn();
+    const redraw = await render({ judgeNow: false, onJudged });
+    await pressCheck();
+    await answer(0, WAITS_FOR_SIGN_IN);
+    await redraw({ judgeNow: true, onJudged });
+    await answer(1, NEEDS_APPROVAL);
+    expect(shown()).toEqual(asShown(NEEDS_APPROVAL));
+    expect(onJudged).toHaveBeenCalledTimes(1);
+    expect(check).toHaveBeenCalledTimes(2);
+  });
+
+  it('a re-run whose line STILL waits is judged, and is not run a third time', async () => {
+    const check = stub();
+    const onJudged = vi.fn();
+    const redraw = await render({ judgeNow: false, onJudged });
+    await pressCheck();
+    await answer(0, WAITS_FOR_SIGN_IN);
+    await redraw({ judgeNow: true, onJudged });
+    await answer(1, WAITS_FOR_TRUST);
+    expect(onJudged).toHaveBeenCalledTimes(1);
+    await flush();
+    expect(check).toHaveBeenCalledTimes(2);
+  });
+
+  it('a sign-in with nothing checked yet: one check, then at most the one held re-run — twice in all', async () => {
+    const check = stub();
+    const onJudged = vi.fn();
+    const redraw = await render({ judgeNow: false, onJudged });
+    expect(check).not.toHaveBeenCalled();
+    await redraw({ judgeNow: true, onJudged });
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(asked(check, 0)['awaitLetIn']).toBeUndefined();
+    await answer(0, WAITS_FOR_TRUST);
+    expect(check).toHaveBeenCalledTimes(2);
+    expect(asked(check, 1)['awaitLetIn']).toBe(true);
+    expect(onJudged).not.toHaveBeenCalled();
+    await answer(1, PLAYOUT_ON);
     expect(shown()).toEqual(asShown(PLAYOUT_ON));
+    expect(onJudged).toHaveBeenCalledTimes(1);
+    expect(check).toHaveBeenCalledTimes(2);
+  });
+
+  it('with no line waiting, the sign-in judges the check it has — and runs nothing', async () => {
+    const check = stub();
+    const onJudged = vi.fn();
+    const redraw = await render({ judgeNow: false, onJudged });
+    await pressCheck();
+    await answer(0, PLAYOUT_ON);
+    await redraw({ judgeNow: true, onJudged });
+    expect(onJudged).toHaveBeenCalledTimes(1);
+    expect(check).toHaveBeenCalledTimes(1);
+  });
+
+  it('without a sign-in nothing runs by itself — a waiting line stays as the bridge said it (Station setup)', async () => {
+    const check = stub();
+    await render({ judgeNow: false });
+    await pressCheck();
+    await answer(0, WAITS_FOR_SIGN_IN);
+    await flush();
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(shown()).toEqual(asShown(WAITS_FOR_SIGN_IN));
   });
 });
 

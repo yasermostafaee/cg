@@ -2,8 +2,10 @@ import http from 'node:http';
 import net from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  AMCP_TRUST_WINDOW_MS,
   CONNECTION_CHECK_IDS,
   CONNECTION_CHECK_LINE_MS,
+  SETUP_CHECK_LET_IN_WAIT_MS,
   SETUP_CHECK_WAIT_MS,
   type ConnectionCheckLine,
 } from '@cg/shared-ipc';
@@ -172,6 +174,100 @@ describe('§2F / C7 — AMCP: waiting for a sign-in, for the Playout, for approv
         text: 'CasparCG on 127.0.0.1 answered VERSION: 2.5.0 fake.',
       });
     }
+  });
+});
+
+/**
+ * 🔴 `DELTA-MULTI-CHANNEL-01-A` A2 — **THE HOLD.** The console's one automatic re-run, after a
+ * station admin's sign-in, asks the bridge to answer the AMCP line once the Playout has let this
+ * machine in (`awaitLetIn`). Within the window the bridge asks CasparCG again ITSELF, so the console
+ * gets one answer where it used to re-run the whole check every two seconds (the owner's loop).
+ */
+describe('DELTA-MULTI-CHANNEL-01-A A2 — a held AMCP line answers once this machine is let in', () => {
+  it('refused, then let in: the held line PASSES, having asked CasparCG again itself; control: the same check unheld only waits', async () => {
+    const refused = await closedPort();
+    const answering = await amcpThatAnswers();
+    const api = await fakeApi({ keys: [{}], allowOrigin: ORIGIN });
+    let letIn = false;
+    let asked = 0;
+    const amcp: CheckProbes['amcp'] = (host, _p, t) => {
+      asked += 1;
+      return realProbes().amcp(host, letIn ? answering : refused, t);
+    };
+    const inWindow = {
+      ports: PORTS,
+      amcpSignInAt: Date.now(),
+      amcpTrustWindowMs: 30_000,
+      letInRetryMs: 20,
+    };
+
+    // CONTROL — unheld, inside the window: one probe, and the line waits, as it always has.
+    const unheld = await runConnectionCheck(
+      { playoutAddress: api, origin: ORIGIN },
+      probes({ amcp }),
+      inWindow,
+    );
+    expect(line(unheld.lines, 'amcp').status).toBe('wait');
+    expect(asked).toBe(1);
+
+    asked = 0;
+    setTimeout(() => {
+      letIn = true;
+    }, 150);
+    const held = await runConnectionCheck(
+      { playoutAddress: api, origin: ORIGIN, awaitLetIn: true },
+      probes({ amcp }),
+      inWindow,
+    );
+    expect(line(held.lines, 'amcp')).toEqual({
+      id: 'amcp',
+      status: 'pass',
+      text: 'CasparCG on 127.0.0.1 answered VERSION: 2.5.0 fake.',
+    });
+    expect(asked).toBeGreaterThan(1);
+    // Only that line waited: every other line is the unheld check's.
+    expect(held.lines.filter((l) => l.id !== 'amcp')).toEqual(
+      unheld.lines.filter((l) => l.id !== 'amcp'),
+    );
+  });
+
+  it('never let in: the held line answers when the window ends — naming the approval, not waiting', async () => {
+    const refused = await closedPort();
+    const api = await fakeApi({ keys: [{}], allowOrigin: ORIGIN });
+    const signedInAt = Date.now();
+    const { lines } = await runConnectionCheck(
+      { playoutAddress: api, origin: ORIGIN, awaitLetIn: true },
+      probes({ amcp: (host, _p, t) => realProbes().amcp(host, refused, t) }),
+      { ports: PORTS, amcpSignInAt: signedInAt, amcpTrustWindowMs: 400, letInRetryMs: 20 },
+    );
+    expect(Date.now() - signedInAt).toBeGreaterThanOrEqual(400);
+    expect(line(lines, 'amcp').status).toBe('fail');
+    expect(line(lines, 'amcp').text).toContain('is waiting for approval in the Playout');
+  });
+
+  it('no hold before any sign-in, nor once the window has passed — one probe, as before', async () => {
+    const refused = await closedPort();
+    const api = await fakeApi({ keys: [{}], allowOrigin: ORIGIN });
+    let asked = 0;
+    const amcp: CheckProbes['amcp'] = (host, _p, t) => {
+      asked += 1;
+      return realProbes().amcp(host, refused, t);
+    };
+    for (const phase of [{}, PAST_WINDOW]) {
+      asked = 0;
+      await runConnectionCheck(
+        { playoutAddress: api, origin: ORIGIN, awaitLetIn: true },
+        probes({ amcp }),
+        { ports: PORTS, letInRetryMs: 20, ...phase },
+      );
+      expect(asked).toBe(1);
+    }
+  });
+
+  it('the console waits for a held check at least the window and a line’s bound', () => {
+    expect(SETUP_CHECK_LET_IN_WAIT_MS).toBeGreaterThanOrEqual(
+      AMCP_TRUST_WINDOW_MS + CONNECTION_CHECK_LINE_MS,
+    );
   });
 });
 

@@ -100,6 +100,50 @@ The console's chrome SHALL draw every Persian glyph in the self-hosted Vazirmatn
 
 ## MODIFIED Requirements
 
+### Requirement: A connection check that runs again starts clean
+
+The console SHALL clear every line of the connection check the moment a check is pressed — and when
+first-run checks by itself with nothing yet shown — showing each line's subject in a neutral
+checking state and no verdict until that check's own reply arrives (`CHECK-RERUN-01`). One check
+SHALL run at a time: no check SHALL start while another runs, so a sign-in during a check SHALL read
+that check's reply rather than start its own, and a reply SHALL always belong to the check on
+screen. A check SHALL run when CHECK is pressed; by itself, the console SHALL check once when a
+`station-admin` signs in during first-run with nothing yet shown, and SHALL re-run at most ONCE
+while a line still waits (`DELTA-MULTI-CHANNEL-01-A` A2). That re-run SHALL touch only the waiting
+line — its subject, checking, in place, while every other line keeps its verdict — and SHALL ask the
+bridge to hold the AMCP line until the Playout lets this machine in or names the approval. Nothing
+else SHALL start a check. While a check runs, CHECK SHALL stay disabled and the address read-only. A
+line not checked (`skip`) and a line checking SHALL wear the quiet inks, never the error ink, and
+the surface SHALL carry no explanatory prose.
+
+#### Scenario: A re-check
+
+- **WHEN** a check has finished and CHECK is pressed again **THEN** every line shows its subject,
+  checking, and no pass or fail mark until the new reply arrives **AND** the new reply then fills
+  the lines in
+- **WHEN** the bridge does not answer the re-check **THEN** no line is left checking and none of
+  the last run's lines is shown
+
+#### Scenario: A sign-in during a check
+
+- **WHEN** a station-admin signs in while a pressed check is still running **THEN** no second check
+  starts **AND** that check's reply is what the sign-in reads
+- **WHEN** the console opens already signed in **THEN** it checks once
+
+#### Scenario: The check does not loop
+
+- **WHEN** a check shows the AMCP line waiting for sign-in and a station-admin signs in **THEN** the
+  check runs once more by itself, the AMCP line alone checking and every other line keeping its
+  verdict, and asks the bridge to hold that line **AND** its reply fills in that line only, and the
+  check runs no more by itself — twice in all
+- **WHEN** CHECK is then pressed **THEN** the check runs, starting clean
+- **WHEN** no station-admin signs in **THEN** nothing runs by itself
+
+#### Scenario: Neutral is not red
+
+- **WHEN** a line is not checked or checking **THEN** it is drawn in a quiet ink with its own mark
+  **AND** a failed line is still drawn in the error ink
+
 ### Requirement: A console the lock does not reach does not present itself as locked
 
 The console SHALL derive how much of it an engaged lock covers from the lock's `channels` and the principal's `permittedChannels`: the lock screen and the status bar's `LOCKED` SHALL appear only when the lock covers every channel the console holds, or carries no `channels`. A console holding none of the covered channels SHALL show neither, and SHALL NOT offer the Lock control while any lock is engaged. With partial overlap, each covered channel's tab SHALL read `CHANNEL n · LOCKED` and the others SHALL not; a covered channel's view SHALL present as locked — a card reading `Channel n locked`, with the PIN field and `Unlock`, in place of that channel's view, its verbs absent rather than offered and refused — and every uncovered channel's view SHALL stay live. The every-channel PANIC SHALL be absent while any lock covers one of the console's channels.
@@ -143,9 +187,9 @@ Playout's host, and the channel. It SHALL carry no explanatory prose and no way 
 - **WHEN** the address is connected **THEN** only the address is written
 - **WHEN** an operator signs in before adoption **THEN** the bridge's "not set up yet" sentence shows
   **AND** AMCP still waits
-- **WHEN** a station-admin signs in **THEN** the check runs again, and again while the AMCP line
-  still waits, until the AMCP line turns OK or names the approval **AND** only then do the channels
-  appear
+- **WHEN** a station-admin signs in **THEN** the check runs once more by itself, touching only the
+  AMCP line, which the bridge holds until the Playout lets this machine in or names the approval
+  **AND** only then do the channels appear
 - **WHEN** the station-admin picks a channel **THEN** the station's connection and bank are written
   **AND** first-run ends
 

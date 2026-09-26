@@ -6,7 +6,10 @@ import { ConnectionCheckList } from './ConnectionCheckList.js';
 import {
   checkAllowsConnect,
   checkingLines,
+  markChecking,
   normalisePlayoutAddress,
+  updateOnly,
+  waitingIds,
   type ShownCheckLine,
 } from './firstRunStation.js';
 
@@ -29,9 +32,6 @@ const styles = {
   error: { fontSize: cssVars['--r-text-sm'], color: colors.errorText, lineHeight: 1.6 },
 } as const;
 
-/** After the sign-in, how soon a still-waiting AMCP line is asked again. */
-const JUDGE_AGAIN_MS = 2000;
-
 export function PlayoutConnection({
   origin,
   startEditing,
@@ -45,12 +45,15 @@ export function PlayoutConnection({
   /** May this surface write the address? The desktop door must exist as well. */
   mayChange: boolean;
   /**
-   * `DESKTOP-APPS-01-B` B2 — check again, on its own, when this turns true: first-run sets it once
-   * the station admin has signed in, which is when the bridge starts JUDGING the AMCP line (before,
-   * it is "waiting for sign-in").
+   * `DESKTOP-APPS-01-B` B2 — first-run sets it once the station admin has signed in, which is when
+   * the bridge starts JUDGING the AMCP line (before, it is "waiting for sign-in"). With nothing
+   * shown yet, that is one check; with a line still waiting, the one re-run (below).
    */
   judgeNow?: boolean;
-  /** Told when a check that ran with {@link judgeNow} set has finished, whatever it found. */
+  /**
+   * Told once the check is judged after {@link judgeNow}: the one re-run has answered, no line was
+   * waiting, or the bridge did not answer — whatever it found.
+   */
   onJudged?: () => void;
 }): JSX.Element {
   const canWrite = mayChange && window.cg.setup.canSetPlayoutAddress();
@@ -62,68 +65,122 @@ export function PlayoutConnection({
 
   const typed = normalisePlayoutAddress(address);
   /*
-    `DESKTOP-APPS-01-C` C7 — after the sign-in, an AMCP line that still WAITS (the Playout has not
-    let this machine in yet) is asked again until the bridge decides it: in, or waiting for the
-    administrator's approval. Each check is bounded (C2), so this is a short loop, not a hang.
+    🔴 `DELTA-MULTI-CHANNEL-01-A` A2 — **A CHECK RUNS WHEN CHECK IS PRESSED; BY ITSELF, ONCE.**
+
+    It used to re-run the WHOLE check every 2 s after the sign-in for as long as the AMCP line
+    waited — which, for the bridge's 30-s trust window, is fifteen runs, every one flashing every
+    line back to "checking". The owner watched it loop until the channel list appeared.
+
+    The rule now: a PRESSED check starts clean (`CHECK-RERUN-01`). By itself the console re-runs
+    ONCE, when the thing a waiting line waits for changes — the sign-in, for the AMCP line — and
+    that re-run updates only the waiting line, in place. It asks the bridge to HOLD the AMCP line
+    (`awaitLetIn`) until the Playout lets this machine in or the trust window ends, so it gets one
+    answer where the loop fished for one every two seconds. Watching the bridge's own link for the
+    moment instead would read the wrong axis (golden rule 8): on a first run that link still aims
+    at the loopback default, never at the CasparCG the check probes, and would never come up. The
+    channels come after the answer (`onJudged`), because the on-air warning needs AMCP to read a
+    channel's occupancy (`DESKTOP-APPS-01-B` B2).
   */
-  const [judgeRound, setJudgeRound] = useState(0);
-  const again = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (again.current !== null) clearTimeout(again.current);
-    },
-    [],
-  );
+  // Read at the moment a run settles, not when it started.
+  const judgeRef = useRef(judgeNow);
+  judgeRef.current = judgeNow;
+  const onJudgedRef = useRef(onJudged);
+  onJudgedRef.current = onJudged;
+  const linesRef = useRef(lines);
+  linesRef.current = lines;
+  /** The one automatic re-run has been spent; a PRESS starts a new cycle. */
+  const autoSpent = useRef(false);
   /*
-    `CHECK-RERUN-01` A — every run is TAGGED, and only the latest one may write. A check is started
-    by a press AND by the sign-in (`judgeNow`), so two can be in flight at once; a slow reply from
-    an earlier one must never overwrite the lines, the busy state or the judging of the current.
+    `CHECK-RERUN-01` A, as A2 leaves it — **ONE CHECK AT A TIME.** `CHECK-RERUN-01` tagged every run
+    because the sign-in used to start its own check while a pressed one was still out, and the slow
+    reply then overwrote the new lines. Now no door starts a check while one runs: Check is
+    disabled, a sign-in waits for the running check's reply and reads it, the re-run waits too, and
+    StrictMode's second mount effect finds this set. A reply therefore always belongs to the check
+    on screen, and the late reply the tag guarded against cannot exist.
   */
-  const latestRun = useRef(0);
-  const check = async (): Promise<void> => {
-    // After the sign-in the configured address is the one to judge, whatever the field holds.
-    const target = judgeNow && origin !== null ? origin : editing ? typed : origin;
-    if (target === null) {
-      if (judgeNow) onJudged?.();
+  const inFlight = useRef(false);
+
+  /** After the sign-in: the one re-run while a line still waits, else the check is judged. */
+  const settled = (shown: readonly ShownCheckLine[] | null): void => {
+    if (!judgeRef.current) return;
+    if (shown !== null && waitingIds(shown).size > 0 && !autoSpent.current) {
+      void check('auto');
       return;
     }
-    const run = ++latestRun.current;
+    onJudgedRef.current?.();
+  };
+
+  /**
+   * `press` — the operator's Check: every line starts clean. `first` — nothing was ever shown and
+   * the sign-in wants a verdict: the same, by itself. `auto` — the one re-run: only the lines that
+   * waited, in place, with the AMCP line held until this machine is let in.
+   */
+  const check = async (mode: 'press' | 'first' | 'auto'): Promise<void> => {
+    // After the sign-in the configured address is the one to judge, whatever the field holds.
+    const target = judgeRef.current && origin !== null ? origin : editing ? typed : origin;
+    if (inFlight.current) return;
+    if (target === null) {
+      if (judgeRef.current) onJudgedRef.current?.();
+      return;
+    }
+    inFlight.current = true;
+    if (mode === 'press') autoSpent.current = false;
+    if (mode === 'auto') autoSpent.current = true;
+    /*
+      The ref moves WITH the state: the one re-run starts from the previous run's `finally`, before
+      React has rendered that run's lines, and must read them — not the "checking" lines it
+      replaced, in which nothing waits.
+    */
+    const show = (next: readonly ShownCheckLine[] | null): void => {
+      linesRef.current = next;
+      setLines(next);
+    };
+    const before = linesRef.current;
+    const waiting = mode === 'auto' && before !== null ? waitingIds(before) : null;
     // C3 — the field shows the address actually checked: `192.168.21.111` → `http://…:8080`.
     if (editing && target === typed) setAddress(target);
-    // A — the last run's verdicts go at once: every line is its subject, checking.
-    setLines(checkingLines(target));
+    // A — a pressed (or first) run starts clean; the automatic one touches only what waited.
+    show(
+      waiting !== null && before !== null
+        ? markChecking(before, waiting, target)
+        : checkingLines(target),
+    );
     setBusy('checking');
     setError(null);
-    let amcpWaits = false;
+    let shown: readonly ShownCheckLine[] | null = null;
     try {
       const result = await window.cg.setup.check({
         playoutAddress: target,
         origin: window.location.origin,
+        ...(mode === 'auto' ? { awaitLetIn: true as const } : {}),
       });
-      if (run !== latestRun.current) return;
-      setLines(result.lines);
-      amcpWaits = result.lines.some((l) => l.id === 'amcp' && l.status === 'wait');
+      shown =
+        waiting !== null && before !== null
+          ? updateOnly(before, waiting, result.lines)
+          : result.lines;
+      show(shown);
     } catch (err) {
-      if (run !== latestRun.current) return;
       // C2 — a bridge that did not answer is said in words (`BridgeTimeoutError`'s message), and
       // no line is left checking under it.
-      setLines(null);
+      show(null);
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      if (run === latestRun.current) {
-        setBusy(null);
-        if (judgeNow && amcpWaits) {
-          again.current = setTimeout(() => setJudgeRound((n) => n + 1), JUDGE_AGAIN_MS);
-        } else if (judgeNow) {
-          onJudged?.();
-        }
-      }
+      inFlight.current = false;
+      setBusy(null);
+      settled(shown);
     }
   };
+
+  // The sign-in: nothing shown → one check, as if pressed; shown → the one re-run, or judged.
   useEffect(() => {
-    if (judgeNow) void check();
-    // Once when the sign-in turns it true, then once per round while AMCP still waits.
-  }, [judgeNow, judgeRound]);
+    if (!judgeNow) return;
+    // A check still out settles, and decides then — the sign-in reads ITS reply.
+    if (busy !== null || inFlight.current) return;
+    const shown = linesRef.current;
+    if (shown === null) void check('first');
+    else settled(shown);
+  }, [judgeNow]);
+
   const connect = async (): Promise<void> => {
     if (typed === null) return;
     setBusy('connecting');
@@ -157,14 +214,14 @@ export function PlayoutConnection({
               invalid={address !== '' && typed === null}
               disabled={busy !== null}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void check();
+                if (e.key === 'Enter') void check('press');
               }}
             />
           </div>
           <Button
             variant="secondary"
             disabled={typed === null || busy !== null}
-            onClick={() => void check()}
+            onClick={() => void check('press')}
           >
             {busy === 'checking' ? 'Checking…' : 'Check'}
           </Button>
@@ -178,7 +235,7 @@ export function PlayoutConnection({
           <Button
             variant="secondary"
             disabled={origin === null || busy !== null}
-            onClick={() => void check()}
+            onClick={() => void check('press')}
           >
             {busy === 'checking' ? 'Checking…' : 'Check'}
           </Button>

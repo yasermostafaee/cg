@@ -4,6 +4,7 @@ import {
   connectionCheckSubject,
   defaultFixedLayerBank,
   type CatalogueChannel,
+  type ConnectionCheckId,
   type ConnectionCheckLine,
   type ConnectionConfig,
   type FixedLayerBank,
@@ -119,6 +120,39 @@ export function checkingLines(address: string): readonly ShownCheckLine[] {
     status: 'checking',
     text: connectionCheckSubject(id, host, port),
   }));
+}
+
+/**
+ * 🔴 `DELTA-MULTI-CHANNEL-01-A` A2 — **AN AUTOMATIC RE-RUN TOUCHES ONLY THE LINES THAT WAITED.**
+ * A PRESSED check starts clean (above); the one re-run the console makes by itself — when the thing
+ * a waiting line waits for changes — updates those lines in place and leaves every other verdict
+ * exactly where it was, so nothing flashes to "checking" that nobody asked to see again.
+ */
+export function waitingIds(lines: readonly ShownCheckLine[]): ReadonlySet<ConnectionCheckId> {
+  return new Set(lines.filter((l) => l.status === 'wait').map((l) => l.id));
+}
+
+/** Those lines, as their subjects, checking; every other line untouched. */
+export function markChecking(
+  lines: readonly ShownCheckLine[],
+  ids: ReadonlySet<ConnectionCheckId>,
+  address: string,
+): readonly ShownCheckLine[] {
+  const subjects = checkingLines(address);
+  return lines.map((line) =>
+    ids.has(line.id) ? (subjects.find((s) => s.id === line.id) ?? line) : line,
+  );
+}
+
+/** Those lines replaced by the new run's; every other line keeps the verdict it had. */
+export function updateOnly(
+  lines: readonly ShownCheckLine[],
+  ids: ReadonlySet<ConnectionCheckId>,
+  fresh: readonly ShownCheckLine[],
+): readonly ShownCheckLine[] {
+  return lines.map((line) =>
+    ids.has(line.id) ? (fresh.find((f) => f.id === line.id) ?? line) : line,
+  );
 }
 
 /**

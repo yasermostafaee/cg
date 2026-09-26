@@ -6,6 +6,7 @@ import https from 'node:https';
 import net from 'node:net';
 import os from 'node:os';
 import {
+  AMCP_TRUST_WINDOW_MS,
   CONNECTION_CHECK_CONNECT_MS,
   CONNECTION_CHECK_LINE_MS,
   connectionCheckSubject,
@@ -42,8 +43,17 @@ const AMCP_PORT = 5250;
  * `DESKTOP-APPS-01-B` — how long AMCP is given, after a `station-admin` signs in, to be let in by
  * the Playout: the bridge's own link retries promptly for this long, and until it has passed the
  * check's AMCP line says it is still waiting (`-01-C` C7) rather than naming the approval.
+ * `DELTA-MULTI-CHANNEL-01-A` A2 — the ONE constant now lives in `@cg/shared-ipc`, because the
+ * console's wait for a check that holds its AMCP line is derived from it.
  */
-export const AMCP_TRUST_WINDOW_MS = 30_000;
+export { AMCP_TRUST_WINDOW_MS };
+
+/**
+ * `DELTA-MULTI-CHANNEL-01-A` A2 — while a check HOLDS its AMCP line (`awaitLetIn`), how long the
+ * bridge waits between one AMCP probe and the next. The Playout lets the first machine in within
+ * seconds, so a second is fine-grained enough, and each probe is bounded by its own connect bound.
+ */
+export const AMCP_LET_IN_RETRY_MS = 1000;
 
 /**
  * The Playout page where its administrator approves this machine, in the Playout's own words —
@@ -147,6 +157,8 @@ export interface CheckOptions {
   readonly amcpSignInAt?: number | null;
   /** TEST-ONLY — {@link AMCP_TRUST_WINDOW_MS} by default. */
   readonly amcpTrustWindowMs?: number;
+  /** TEST-ONLY — {@link AMCP_LET_IN_RETRY_MS} by default. */
+  readonly letInRetryMs?: number;
   /** TEST-ONLY — the per-line bound, {@link CONNECTION_CHECK_LINE_MS} by default. */
   readonly lineMs?: number;
   /** TEST-ONLY — the connect bound, {@link CONNECTION_CHECK_CONNECT_MS} by default. */
@@ -286,9 +298,14 @@ export async function runConnectionCheck(
   const apiPort = portOf(endpoints.jwksUrl);
   // C1 — when each line finished, and whether its bound did it; its outcome is read once worded.
   const finished = new Map<ConnectionCheckId, { ms: number; bound: boolean }>();
-  const line = <T>(id: ConnectionCheckId, work: () => Promise<T>, onBound: () => T): Promise<T> => {
+  const line = <T>(
+    id: ConnectionCheckId,
+    work: () => Promise<T>,
+    onBound: () => T,
+    boundMs = lineMs,
+  ): Promise<T> => {
     let bound = false;
-    return within(work(), lineMs, () => {
+    return within(work(), boundMs, () => {
       bound = true;
       return onBound();
     }).then((result) => {
@@ -296,6 +313,25 @@ export async function runConnectionCheck(
       return result;
     });
   };
+
+  /*
+    🔴 `DELTA-MULTI-CHANNEL-01-A` A2 — **THE HOLD.** Asked for (`awaitLetIn`) within the trust
+    window after a `station-admin`'s sign-in, the AMCP line asks CasparCG again, itself, until it
+    answers or the window ends — on the axis it judges (golden rule 8): the bridge's own link
+    targets the station's configured server, which on a first run is still the loopback default,
+    so it cannot say when the Playout let this machine in. Only this line waits; its bound covers
+    what is left of the window.
+  */
+  const signInAt = options.amcpSignInAt ?? null;
+  const windowMs = options.amcpTrustWindowMs ?? AMCP_TRUST_WINDOW_MS;
+  const holdUntil =
+    req.awaitLetIn === true && signInAt !== null && started - signInAt < windowMs
+      ? signInAt + windowMs
+      : null;
+  const amcpProbe = (ip: string): Promise<AmcpOutcome> =>
+    probes
+      .amcp(ip, AMCP_PORT, options.amcpTimeoutMs ?? AMCP_PROBE_TIMEOUT_MS)
+      .catch((): AmcpOutcome => ({ kind: 'unreachable', code: 'error' }));
 
   const [proxy, route, amcp, api, cors, ports, topology] = await Promise.all([
     // 1 — a VPN or proxy between this machine and the plant.
@@ -325,12 +361,18 @@ export async function runConnectionCheck(
       async (): Promise<AmcpReading | null> => {
         const ip = await casparIp;
         if (ip === null) return null;
-        const outcome = await probes
-          .amcp(ip, AMCP_PORT, options.amcpTimeoutMs ?? AMCP_PROBE_TIMEOUT_MS)
-          .catch((): AmcpOutcome => ({ kind: 'unreachable', code: 'error' }));
+        let outcome = await amcpProbe(ip);
+        // A2 — the hold: again, a beat apart, while it is refused or dropped and the window runs.
+        while (holdUntil !== null && isUntrusted(outcome) && now() < holdUntil) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, options.letInRetryMs ?? AMCP_LET_IN_RETRY_MS),
+          );
+          outcome = await amcpProbe(ip);
+        }
         return { outcome, localAddress: (await casparRoute)?.address ?? null, at: now() };
       },
       (): AmcpReading => ({ outcome: { kind: 'timeout' }, localAddress: null, at: now() }),
+      holdUntil === null ? lineMs : Math.max(0, holdUntil - started) + lineMs,
     ),
     // 4 — the Playout API publishes its signing keys — and so can sign someone in, or cannot.
     line(

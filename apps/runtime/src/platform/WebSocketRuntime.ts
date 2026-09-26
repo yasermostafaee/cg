@@ -1765,9 +1765,16 @@ export class WebSocketRuntime implements RuntimeBridge {
   // `DESKTOP-APPS-01` — first-run and the station's own check. The Playout address goes through
   // CG Control's IPC (`desktop.ts`), never through `#invoke`: auth config is not the socket's.
   readonly setup = {
-    // `DESKTOP-APPS-01-C` C2 — waits longer than the check's slowest line, from the one constant.
+    // `DESKTOP-APPS-01-C` C2 — waits longer than the check's slowest line, from the one constant;
+    // `DELTA-MULTI-CHANNEL-01-A` A2 — and a check that holds its AMCP line, the window on top.
     check: (req: ChannelRequest<typeof ipcChannels.SetupCheckChannel>) =>
-      this.#invoke(ipcChannels.SetupCheckChannel, req, ipcChannels.SETUP_CHECK_WAIT_MS),
+      this.#invoke(
+        ipcChannels.SetupCheckChannel,
+        req,
+        req.awaitLetIn === true
+          ? ipcChannels.SETUP_CHECK_LET_IN_WAIT_MS
+          : ipcChannels.SETUP_CHECK_WAIT_MS,
+      ),
     routeAddress: (req: ChannelRequest<typeof ipcChannels.SetupRouteAddressChannel>) =>
       this.#invoke(ipcChannels.SetupRouteAddressChannel, req),
     catalogue: () => this.#invoke(ipcChannels.ChannelsCatalogueChannel, undefined),
