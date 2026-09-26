@@ -48,7 +48,9 @@ auto-out, and `drivesHold` semantics SHALL be unchanged.
 ### Requirement: A scene field drives the countdown's target time, live
 
 The binding-target union SHALL accept `{ kind: 'clock-target', elementId }`, driven by a `text`
-field whose value is `HH:mm` or `HH:mm:ss`. No new dynamic-field TYPE SHALL be introduced: the
+field whose value is `HH:mm` or `HH:mm:ss`, its digits written in any of the three sets — Latin,
+Persian or Arabic-Indic — and read through `@cg/text-shaping`'s one time-of-day reader
+(`template-value-digits`). No new dynamic-field TYPE SHALL be introduced: the
 value is a text field constrained by the existing `pattern` mechanism (the `Time (HH:MM)`
 validation preset), so the exported GDD carries it as a `single-line` string with that pattern
 and the Runtime Inspector renders it as an ordinary editable text field with no new control.
@@ -73,6 +75,11 @@ replay. This limit SHALL be stated in the Designer's inspector copy.
   `CG UPDATE` while the countdown is running
 - **THEN** the Runtime Inspector showed it as an ordinary editable field, and the loaded template
   re-targets to the new time — repainting at once, without being replayed
+
+#### Scenario: A time typed on a Persian keyboard re-targets the countdown
+
+- **WHEN** an update carries `۲۰:۳۲` (or `٢٠:٣٢`) for the bound field
+- **THEN** the countdown re-targets to 20:32, exactly as it does for `20:32`
 
 #### Scenario: An unparseable value keeps the current target
 
