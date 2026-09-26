@@ -36,6 +36,16 @@ channel. `R-062` recorded this as a precondition of ever shipping real multi-cha
 - **K — `B-263`: Persian in both apps' chrome is drawn in Vazirmatn; Latin keeps its font.**
 - **L — a channel's messages stay in its view; other channels signal on the strip.**
 
+### `DELTA-MULTI-CHANNEL-01-A` — what the owner met on `pnpm dev:station --fake`
+
+- **A1** `--fake` runs a whole station: the Playout, CasparCG on channels 1 and 2 and their
+  programme feeds, on loopback. **A2** the connection check does not loop: it runs when pressed
+  and, by itself, once at a sign-in — the bridge holding the AMCP line until this machine is let
+  in. **A3** an automatic re-delivery waits for the sign-in and its notice withdraws itself.
+  **A4/A6** the rows, and the every-channel PANIC, arrive without a reload. **A5** a refusal is one
+  line in the operator's words. **A7** Station setup follows the channel on screen. **A8**
+  first-run's button follows the count, and a picked chip looks picked.
+
 ## Capabilities
 
 - **Modified:** `runtime-caspar-bridge`, `runtime-ui`, `designer-shell`.
@@ -46,6 +56,8 @@ channel. `R-062` recorded this as a precondition of ever shipping real multi-cha
   and new refusal conditions are added (the per-channel scoping, a removal of a channel holding our
   air, a load that names no channel on a two-channel station). Every bare call is byte-identical.
 - **Persisted key:** the bank file gains a plural shape; a one-channel station's file is unchanged.
+- **Wire (DELTA-A):** `setup.check` gains `awaitLetIn` (A2); the bank doors' refusal gains `layer`
+  (A5). Both optional; no AMCP playout verb changes — the hold repeats the check's `VERSION` probe.
 - **Shared config:** the CI `e2e` job cap and the Runtime suite's CI budget (`pr.yml`,
   `apps/runtime/playwright.config.ts`).
 - **Out of this change:** two CG Control installations on one channel; per-channel band layouts

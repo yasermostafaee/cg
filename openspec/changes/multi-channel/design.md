@@ -325,7 +325,45 @@ suite measured 7.7 / 7.7 / 7.9 min against 8.0, and `e78d1181`'s run went red ha
 nothing (246 passed, 10 did not run — the 480 s global timeout). Designer 8.0 + Runtime 10.0 = 18
 min against 24 − ~1.6 setup − ~1 build ≈ 21.4 usable: 3.4 min of margin.
 
-## §15 — Follow-ups (named, not done)
+## §15 — `DELTA-MULTI-CHANNEL-01-A` (the owner's run of `dev:station --fake`)
+
+- **A1 — the fake was not a station.** `fake-playout.ts:866` sealed loopback by default (no
+  approve button exists), and there was no CasparCG at all. `--fake` now starts the station
+  composition in `caspar-bridge/tests/support/fake-station.ts` (hashed by that workspace's `tests/**`
+  inputs, loaded by path): `sealOnLoopback: false`, the AMCP mock on 5250 with OSC on 6250 serving
+  channels 1 and 2, admitting what the Playout trusts, and the PGM feeds on 9250/9251 when free.
+  Product code knows nothing of it. The state dir is fresh every run (`.previous` kept).
+- **A2 — one held re-run, not a loop.** The console re-ran the whole check every 2 s while the AMCP
+  line waited (`PlayoutConnection.tsx`, fifteen runs over the 30-s trust window). Now a check runs
+  when pressed; by itself once at a station-admin's sign-in (with nothing shown), and at most once
+  more while a line waits, touching only that line and asking the bridge to HOLD the AMCP line
+  (`awaitLetIn`): within the window the bridge repeats the `VERSION` probe about once a second and
+  answers once. **Why not "when the bridge's link comes up":** on a first run the station's server
+  is the loopback default (`defaultConnection`), never the CasparCG the check probes, so that link
+  would never come up on the plant and the channels would wait the full 31 s (golden rule 8). One
+  check at a time replaces `CHECK-RERUN-01`'s run tags; `SETUP_CHECK_LET_IN_WAIT_MS` derives the
+  console's wait from `AMCP_TRUST_WINDOW_MS`, which moved to `@cg/shared-ipc`.
+- **A3 — the re-delivery before the sign-in.** `#resync` read the auth gate in the tick the socket
+  opened; with no token yet it read 'unknown' and sent `templates.import` unsigned — refused, and
+  the notice outlived the sign-in 86 ms later. It now awaits the capabilities and the token
+  handshake and returns while signed out; a successful re-delivery withdraws its own notice; the
+  notice is station-scoped (rule L). ADR 0010 rule 4 is kept: a never-authenticated socket gets
+  `bridge.capabilities` and `auth.*` only.
+- **A4 / A6 — reads wait until the console can be answered.** `useBridgeSnapshot` pulled once, while
+  signed out, was refused, and never pulled again; `initSources`/`initDelimiters` likewise. Reads
+  now wait for an answerable auth state and re-pull on it. The every-channel PANIC
+  (`EveryChannelPanic.tsx:53`: two or more channels, the operator role, no covering lock) was
+  withheld only because the refused banks read left `multiChannel` false.
+- **A5 — one line.** The Layers refusal put the bridge's `message` under the rule; now the line is
+  ours (`Refused — …, so it stays shown.`) and the layer comes as data (`layer` on the refusal).
+  Swept on three axes; the Live sources family changed with it (`CommitRefusal` lost `detail`);
+  the Audit panel, a diagnostic surface, keeps quoting a failure.
+- **A7 — already true**, now pinned: every per-channel pane reads the one selection and the Layers
+  editor is keyed on the whole bank, so a switch while open re-keys it and a draft never crosses.
+- **A8** — the label counts the picked channels, or the offered ones while none is; the chips joined
+  the console's one "chosen, not on air" selector family (`.is-on` paints no `secondary`).
+
+## §16 — Follow-ups (named, not done)
 
 - **A per-channel DISMISS for "did not come back".** The bridge's dismiss is notice-wide, so a view
   holding only part of a notice offers no DISMISS. A per-channel dismiss is a bridge API change.

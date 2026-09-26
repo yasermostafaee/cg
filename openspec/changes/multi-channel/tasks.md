@@ -53,3 +53,13 @@ discharged by the later one's run, which carries it.
 - [x] 5.7 The installer pair of the final head `230dd27f` — Desktop run https://github.com/yasermostafaee/cg/actions/runs/36054476598 (`Installers (Windows)` and `Installer smoke (clean Windows)` both `completed/success`):
   - CG Control — https://github.com/yasermostafaee/cg/actions/runs/36054476598/artifacts/10832367585
   - CG Designer — https://github.com/yasermostafaee/cg/actions/runs/36054476598/artifacts/10832047884
+
+## 6. `DELTA-MULTI-CHANNEL-01-A` (`design.md` §15)
+
+- [x] 6.1 A1 — `--fake` runs a whole station; its own integration test (a take on channel 1 reaches the mock on channel 1 only; control: the default seal leaves AMCP pending) — `1993515d`
+- [x] 6.2 A3 — a reconnect re-delivery waits for the sign-in, its notice withdraws itself — `cbc96797`
+- [x] 6.3 A4, A6 — rows and the every-channel PANIC without a reload — `93130ef6`
+- [x] 6.4 A2 — the check does not loop: one held re-run at the sign-in (`awaitLetIn`) — `b12f61ac`
+- [x] 6.5 A5 — a refusal reads one line; the refused hide's layer as data; the sweep — `c637b8df`
+- [x] 6.6 A7 — Station setup follows the channel on screen, switched while open (test) — `bfa6cd4c`
+- [x] 6.7 A8 — the button follows the count; a picked chip looks picked (e2e measures the fill) — `9af46b1e`
