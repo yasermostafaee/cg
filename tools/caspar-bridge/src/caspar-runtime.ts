@@ -35,7 +35,7 @@ import type {
   StackItemTimingOverride,
   TakeRefusal,
 } from '@cg/shared-schema';
-import { isOnAirStatus, isRetainedOnAir, withCgControl } from '@cg/shared-schema';
+import { isOnAirStatus, isRetainedOnAir, ownsLiveSeats, withCgControl } from '@cg/shared-schema';
 import {
   bankForChannel,
   firstBank,
@@ -104,6 +104,7 @@ import {
   type REHEARSE_ENTER_REASONS,
   type REHEARSE_EXIT_REASONS,
   REMOVE_ON_AIR_CODE,
+  TAKE_ON_AIR_CODE,
   EMPTIED_AIR_REFUSALS,
   type EmptiedAirNotice,
   type EmptiedAirRefusal,
@@ -3721,6 +3722,23 @@ export class CasparRuntime {
      * mutate nothing, and retiring a parked restore is a mutation.
      */
     if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
+    /*
+      🔴 `FIELD-FIXES-01-A` DECISION 2 — **A ROW ALREADY ON AIR IS NOT TAKEN, and neither is one
+      whose previous take has not resolved.** Refused HERE, for every console, with nothing sent.
+
+      The console has always greyed PLAY on an on-air row; that was a courtesy, and a second
+      console on a stale snapshot, or a take whose reply was slow, reached this method with the
+      page on air. A re-take then re-`PLAY`ed every plate — which on a DeckLink fails by
+      construction (`B-177`), and the rollback took the working pictures off air
+      (`FIELD-FIXES-01` §0.5). A changed look, changed fields and a dead input each have their
+      own door (the look picker, UPDATE, the `R-048` swap); a take is for a row that is not up.
+
+      ⚠ ONE PREDICATE, the one golden rule 10 names: {@link #ownsLiveSeats} — the row's status is
+      on air or unsettled (`isOnAirStatus`: a take in flight is `pending`, an overdue one reads
+      `unconfirmed`), OR the ledger holds its seats. BEFORE anything else below, because a refused
+      take must mutate nothing — including the parked restore the next line retires.
+    */
+    if (this.#ownsLiveSeats(itemId)) return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
     // B-093 — the operator is acting; any parked restore for this item is stale.
     this.#retirePendingRestore(itemId);
     const slot = this.#slots.get(itemId);
@@ -5971,11 +5989,13 @@ export class CasparRuntime {
    * puts it on air.
    */
   #ownsLiveSeats(itemId: string): boolean {
-    const item = this.#reconciler.get(itemId);
-    if (item !== null && item !== undefined && isOnAirStatus(item)) {
-      return true;
-    }
-    return (this.#liveLayers.get(itemId) ?? []).length > 0;
+    // `FIELD-FIXES-01-A` — the two halves are SPELLED in `@cg/shared-schema` now, where the
+    // console's PLAY and the mock's take ask the same question; this reads the bridge's own
+    // copy of each fact and hands them over.
+    return ownsLiveSeats(
+      this.#reconciler.get(itemId),
+      (this.#liveLayers.get(itemId) ?? []).length > 0,
+    );
   }
 
   async #applyBindingTransaction(
@@ -6986,16 +7006,17 @@ export class CasparRuntime {
    * to disagree (golden rule 7's shape: one condition, read once).
    *
    * - `'take'` — **the row is being put on air, from nothing.**
-   *   - _Re-asserts every plate._ 🔴 A re-take is the OPERATOR'S REPAIR VERB. The ledger is
-   *     a CLAIM, not a confirmation — nothing tracks live-layer liveness the way `#loaded`
-   *     tracks the CG producer (B-039) — so a plate whose producer the server has since
-   *     destroyed is indistinguishable here from a healthy one. A take that sent nothing
-   *     for it would leave the operator's one repair action doing nothing at all.
-   *   - _Rolls back everything on failure._ Nothing is on air yet, and the failure modes
+   *   - _Seats every plate._ 🔴 `FIELD-FIXES-01-A` Decision 2: a take reaches this only for a
+   *     row that owns no seats — `#takeImpl` refuses a row that is on air, unsettled, or whose
+   *     ledger holds seats — so there is no prior seat to re-assert. (It used to be argued here
+   *     that a re-take was the operator's repair verb; on a DeckLink that re-`PLAY` fails by
+   *     construction, `B-177`, and the rollback took working pictures off air.)
+   *   - _Undoes what it seated on failure._ Nothing is on air yet, and the failure modes
    *     are a producer with no geometry (a guest blown up across the programme, unmasked)
    *     and a fill without its clip (renders nothing at all — `design.md` §3). A layer in
-   *     either state is worse than a layer left black, so every layer this action touched
-   *     comes down and the take is refused.
+   *     either state is worse than a layer left black, so every layer this action put a
+   *     producer on comes down — through the one rule (`refusal-cleanup.ts`) — and the take is
+   *     refused.
    * - `'live'` — **a switch or a swap on a row ALREADY ON AIR.**
    *   - _Delta only._ 🔴 A plate whose seat has not changed gets NO `PLAY`. Re-seating
    *     would create a fresh producer, and on the plant a route re-acquires visibly — the

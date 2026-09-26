@@ -816,13 +816,20 @@ it('a fresh take enters the AUTHORED default look, and a re-take keeps the chose
   expect(r.activeLookId('item-1'), 'defaultLookId, not array order').toBe('six');
 
   await r.setActiveLook('item-1', 'solo');
+  // `FIELD-FIXES-01-A` Decision 2 — a row on air is not re-taken (this used to call the re-take
+  // the operator's repair verb). It is refused with nothing sent, and the look does not move.
   const before = (await recvLines()).length;
-  await r.take('item-1');
-
-  // A re-take re-asserts every plate (the operator's repair verb) but must NOT drag the
-  // row back to the default look while the operator is watching the one they chose.
+  expect((await r.take('item-1')).accepted).toBe(false);
+  expect(await since(before)).toEqual([]);
   expect(r.activeLookId('item-1')).toBe('solo');
-  expect(playsIn(await since(before)), 'a re-take re-asserts the seats').toHaveLength(1);
+
+  // Taken OUT and taken again, the row must NOT be dragged back to the default look: it enters
+  // the one the operator chose, and seats its inputs afresh.
+  expect((await r.out('item-1')).accepted).toBe(true);
+  const retake = (await recvLines()).length;
+  expect((await r.take('item-1')).accepted).toBe(true);
+  expect(r.activeLookId('item-1')).toBe('solo');
+  expect(playsIn(await since(retake)), 'the next take seats the inputs').not.toEqual([]);
   expect(recordOf(r, 'live-2')?.held).toBe(true);
 });
 
@@ -1086,6 +1093,9 @@ it('🔴 an ON-AIR row with an EMPTY ledger still reconciles — status, not sea
       ['live-2', 'src-2'],
     ]),
   );
+  // `FIELD-FIXES-01-A` Decision 2 — the row is still on air, so it is taken OUT before it is
+  // taken again (an on-air row is no longer re-taken); the next take is its own, as above.
+  expect((await r.out('item-1')).accepted).toBe(true);
   const beforeRetake = (await recvLines()).length;
   expect((await r.take('item-1')).accepted).toBe(true);
   expect(await r.setActiveLook('item-1', 'two')).toEqual({ ok: true });

@@ -71,6 +71,18 @@ async function takeRow(page: Page, itemId: string): Promise<void> {
   expect(accepted, 'the row must take').toBe(true);
 }
 
+async function stopRow(page: Page, itemId: string): Promise<void> {
+  await page.evaluate(
+    async (id) =>
+      (
+        window as unknown as {
+          cg: { stack: { stop: (r: { itemId: string }) => Promise<unknown> } };
+        }
+      ).cg.stack.stop({ itemId: id }),
+    itemId,
+  );
+}
+
 /** The token the row's page would be holding — asked of the mock, never invented. */
 async function takeToken(page: Page, itemId: string): Promise<string> {
   const token = await page.evaluate(
@@ -127,8 +139,15 @@ test('a STALE token does nothing to the row', async ({ app }) => {
   await takeRow(app.page, itemId);
 
   const stale = await takeToken(app.page, itemId);
-  // Re-take: the page is the same page, so the bridge refreshes its token and the one above
-  // now names a run that is over. A report from the FINISHED run must not stop this one.
+  // End that run, then take the row again: the page is the same resident page, so the bridge
+  // refreshes its token and the one above now names a run that is over. A report from the
+  // FINISHED run must not stop this one.
+  // `FIELD-FIXES-01-A` Decision 2 — the run is ended by the operator's STOP first: a take of a
+  // row already on air is refused at the bridge, so there is no re-take without it.
+  await stopRow(app.page, itemId);
+  // READY, not merely 'not ON AIR': a stop still in flight reads EXITING, which is unsettled, and
+  // the bridge refuses a take of an unsettled row just as it does an on-air one.
+  await expect(app.layerRow(layer)).toContainText('READY', { timeout: 3000 });
   await takeRow(app.page, itemId);
   const fresh = await takeToken(app.page, itemId);
   expect(fresh, 'the re-take did not refresh the token — the stale case is not set up').not.toBe(

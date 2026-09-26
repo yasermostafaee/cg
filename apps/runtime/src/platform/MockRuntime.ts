@@ -1,4 +1,4 @@
-import { isOnAirStatus } from '@cg/shared-schema';
+import { isOnAirStatus, ownsLiveSeats } from '@cg/shared-schema';
 import type { AuditEntry, Position, StackItemState, StackItemStatus } from '@cg/shared-schema';
 import type {
   ConnectionConfig,
@@ -60,6 +60,7 @@ import {
   SourceAssignmentsSchema,
   SourceCatalogSchema,
   CONSOLE_ACTOR,
+  TAKE_ON_AIR_CODE,
   videoModeRaster,
 } from '@cg/shared-ipc';
 import { Emitter } from './emitter.js';
@@ -419,6 +420,15 @@ export class MockRuntime {
     if (this.#rehearsing.has(itemId)) return { accepted: false, errorCode: 'rehearsing' };
     const item = this.#find(itemId);
     if (item === null) return { accepted: false, errorCode: 'unknown-item' };
+    /*
+      `FIELD-FIXES-01-A` Decision 2 parity — the bridge refuses a take of a row that is on air or
+      unsettled, or whose plates are seated, with nothing sent (`#ownsLiveSeats`). The mock refuses
+      it the same way, through the same shared predicate, so test mode never offers the console a
+      re-take the bridge would refuse.
+    */
+    if (ownsLiveSeats(item, this.#liveSeatedItems.has(itemId))) {
+      return { accepted: false, errorCode: TAKE_ON_AIR_CODE };
+    }
     // B-070/B-039 parity — a take with no live producer re-ADDs first, so a
     // producer always exists afterwards.
     this.#loaded.add(itemId);

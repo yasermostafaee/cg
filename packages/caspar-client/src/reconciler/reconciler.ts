@@ -112,6 +112,18 @@ interface ItemRecord {
    * the more dangerous error.
    */
   playedBeforeIntent?: boolean;
+  /**
+   * 🔴 `FIELD-FIXES-01-A` Decision 2 — **a TAKE whose reply is overdue is UNRESOLVED, not failed.**
+   *
+   * Set by {@link Reconciler.expireIntent} when a take's bounded wait (`INTENT_TIMEOUT_MS`, 5 s)
+   * ends with no answer. It used to retract the play evidence there (`B-079`), so a take whose
+   * `CG PLAY` HAD landed read `loaded` off the page's own producer, and PLAY came back on a row
+   * whose graphic was on air; a late OK then never restored the evidence either. While this is
+   * set the row reads `unconfirmed` whatever OSC says, and the bridge refuses another take
+   * (`isOnAirStatus` counts `unconfirmed`). The take's own late reply settles it either way
+   * ({@link Reconciler.applyAck}); any newer intent supersedes it.
+   */
+  takeOverdue?: boolean;
   slot?: LayerSlot;
   lastIntentSeq?: number;
   lastAckAt?: number;
@@ -313,7 +325,13 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
     if (rec.lastIntentSeq !== seq) return null; // stale ack — superseded intent
 
     rec.lastAckAt = this.now();
+    // `FIELD-FIXES-01-A` — an overdue take is resolved by its OWN late reply, whichever way it went.
+    const overdueTake = rec.takeOverdue === true;
+    delete rec.takeOverdue;
     if (ok) {
+      // The overdue take LANDED: it is a settled take again, so its ack reads `playing` and OSC
+      // promotes it to `on-air` — the claim it kept through the wait was the true one.
+      if (overdueTake) rec.intentStatus = 'playing';
       // B-079 — the command landed, so the take's claim is now proven: there is nothing
       // left to retract.
       delete rec.playedBeforeIntent;
@@ -344,8 +362,9 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       // `CG PLAY` never reached the wire. Restoring the PRIOR value (not forcing `false`)
       // is what makes it safe both ways: a failed RE-take of a genuinely on-air item leaves
       // it on air — a false `loaded` would hide a live graphic, the worse error direction.
-      // Only a take is retracted; a failed update/out never touched play evidence.
-      if (rec.intentStatus === 'playing') {
+      // Only a take is retracted; a failed update/out never touched play evidence. An OVERDUE
+      // take kept its claim through the wait (`takeOverdue`), and gives it back here the same way.
+      if (rec.intentStatus === 'playing' || overdueTake) {
         rec.played = rec.playedBeforeIntent ?? false;
       }
       // C-012 — and symmetrically for a failed graceful STOP, which retracted play
@@ -395,10 +414,27 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
       return null;
     }
 
-    // B-079 — an expired take never proved its claim either: retract it, exactly as a
-    // failed ack does (restore the prior evidence, so a real on-air item is never demoted).
-    if (rec.intentStatus === 'playing') {
-      rec.played = rec.playedBeforeIntent ?? false;
+    if (takeInFlight) {
+      /*
+        🔴 `FIELD-FIXES-01-A` DECISION 2 — **A SLOW REPLY LEAVES A TAKE UNRESOLVED, NOT FAILED.**
+
+        This used to retract the take's play evidence here (`B-079`: "an expired take never proved
+        its claim"). But the take had not FAILED — its `CG PLAY` may well have landed — and with
+        the evidence gone, the page's own producer on OSC read `loaded`: the row said it was not on
+        air while its graphic was, PLAY came back, and a second take re-`PLAY`ed plates that were
+        working. The late OK that followed restored nothing, so it stayed that way.
+
+        So the take stays unresolved: its evidence and `playedBeforeIntent` are KEPT, the row reads
+        `unconfirmed` (`takeOverdue`, above the OSC truth in {@link baseStatus}), and the bridge
+        refuses another take meanwhile. The take's own reply resolves it in `applyAck` — `on-air`
+        if it landed, the prior evidence restored if it failed — and the AMCP queue's own bound
+        guarantees that reply comes (a timeout or a closed socket is an answer too).
+      */
+      rec.takeOverdue = true;
+      rec.intentStatus = 'unconfirmed';
+      delete rec.ackedStatus;
+      rec.errorCode = 'unconfirmed';
+      return this.emitChange(rec);
     }
     // C-012 — an expired STOP never proved it landed either: give back the play
     // evidence it retracted, so an item that is still on air keeps saying so.
@@ -574,6 +610,10 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
   // ──────────────────────────────────────────────────────────────────────
 
   private applyIntentInternal(intent: Intent, seq: number): StackItemState | null {
+    // `FIELD-FIXES-01-A` — a newer intent supersedes an overdue take; the take's late reply is then
+    // a stale ack and settles nothing (`applyAck`'s `lastIntentSeq` guard).
+    const superseded = this.items.get((intent as { itemId?: string }).itemId ?? '');
+    if (superseded !== undefined) delete superseded.takeOverdue;
     switch (intent.kind) {
       case 'load': {
         const rec: ItemRecord = {
@@ -773,6 +813,9 @@ export class Reconciler extends EventEmitter<ReconcilerEvents> {
 
   /** The pre-link-state merge ladder: OSC truth → ack → intent. */
   private baseStatus(rec: ItemRecord): StackItemStatus {
+    // `FIELD-FIXES-01-A` — an overdue take is UNRESOLVED, and says so above everything OSC says:
+    // the page's own producer on the layer proves neither that the take landed nor that it did not.
+    if (rec.takeOverdue === true) return 'unconfirmed';
     const fresh = this.freshTruth(rec);
     if (fresh !== null) return fresh;
     if (rec.ackedStatus !== undefined) return rec.ackedStatus;

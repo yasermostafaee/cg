@@ -4,11 +4,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import type {
-  ConnectionConfig,
-  SourceAssignments,
-  SourceCatalog,
-  TemplateInfo,
+import {
+  TAKE_ON_AIR_CODE,
+  type ConnectionConfig,
+  type SourceAssignments,
+  type SourceCatalog,
+  type TemplateInfo,
 } from '@cg/shared-ipc';
 import type { LiveFitMode } from '@cg/shared-schema';
 import { CasparRuntime } from '../src/caspar-runtime.js';
@@ -290,22 +291,34 @@ it('three plates become three layers against ONE item, and all three come down t
   }
 });
 
-it('🔴 a RE-TAKE lands on the same layers — a moved plate would strand a live picture', async () => {
+it('🔴 a take of a row already on air is REFUSED — nothing re-seats, so no plate can move and strand a picture', async () => {
+  /*
+    This pinned "a RE-TAKE lands on the same layers": a re-take of an on-air row re-`PLAY`ed
+    every plate, and the guard was that it re-`PLAY`ed them in place. `FIELD-FIXES-01-A`
+    Decision 2 removed the re-take itself — on a DeckLink that re-`PLAY` fails by construction
+    (`B-177`) and the rollback took working pictures off air — so the stronger form of the same
+    guarantee is that nothing is sent at all and the plate stays exactly where it is.
+  */
   const r = await boot({ template: template([{ id: 'guest-1', rect: BOX }]) });
   await loadAndTake(r);
   const first = r.liveLayers().get('item-1')?.[0]?.slot;
+  const before = (await recvLines()).length;
 
-  await r.take('item-1');
+  expect(await r.take('item-1')).toMatchObject({ accepted: false, errorCode: TAKE_ON_AIR_CODE });
 
+  expect((await recvLines()).slice(before)).toEqual([]);
   const records = r.liveLayers().get('item-1') ?? [];
   expect(records).toHaveLength(1);
   expect(records[0]?.slot).toEqual(first);
-  // …and the ledger names exactly one coordinate, so teardown reaches everything
-  // this item ever put on air.
-  const lines = await recvLines();
-  const played = lines.filter((l) => l.startsWith(`PLAY 1-${String(BAND.start)} `));
-  expect(played).toHaveLength(2);
-  expect(lines.some((l) => l.startsWith(`PLAY 1-${String(BAND.start + 1)} `))).toBe(false);
+  // CONTROL — the same instrument sees a PLAY once the row has been taken out and taken again,
+  // and it lands on the same band layer.
+  expect((await r.out('item-1')).accepted).toBe(true);
+  expect((await r.take('item-1')).accepted).toBe(true);
+  expect(r.liveLayers().get('item-1')?.[0]?.slot).toEqual(first);
+  const played = (await recvLines())
+    .slice(before)
+    .filter((l) => l.startsWith(`PLAY 1-${String(BAND.start)} `));
+  expect(played).toHaveLength(1);
 });
 
 it('an UNASSIGNED plate refuses the take by name, and NOTHING reaches the wire', async () => {

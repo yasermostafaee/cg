@@ -10,8 +10,8 @@
  * Unknown codes are surfaced verbatim rather than swallowed: an unrecognised
  * reason the operator can quote to an engineer beats a generic dead end.
  */
-import { REMOVE_ON_AIR_CODE } from '@cg/shared-ipc';
-import { REMOVE_ON_AIR_REASON } from '../features/layers/layerRowActions.js';
+import { REMOVE_ON_AIR_CODE, TAKE_ON_AIR_CODE } from '@cg/shared-ipc';
+import { REMOVE_ON_AIR_REASON, takeOnAirReason } from '../features/layers/layerRowActions.js';
 
 const MESSAGES: Readonly<Record<string, string>> = {
   'unknown-item': 'That item is no longer on the stack.',
@@ -93,6 +93,9 @@ const MESSAGES: Readonly<Record<string, string>> = {
     the context menu on a stale render, the template picker's orphan remedy, a race.
   */
   [REMOVE_ON_AIR_CODE]: REMOVE_ON_AIR_REASON,
+  // `FIELD-FIXES-01-A` Decision 2 — the row's own verb says it in the row's name
+  // (`takeOnAirReason`); this is the same sentence for a surface that has no row to name.
+  [TAKE_ON_AIR_CODE]: takeOnAirReason('That row'),
   // The BANK-SCOPED clear's two structural refusals. Both are guard verdicts rather
   // than transient failures, so neither suggests retrying: the answer will not change
   // until the CONFIG does.

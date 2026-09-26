@@ -12659,3 +12659,23 @@ plate back, and only then re-tells the page the previous look. For that window t
 look's boxes with nothing in the refused plate's box — a few frames. If the re-tell is refused too, the
 page stays on the new look over the old geometry. What a switch should do is the owner's decision
 (`openspec/changes/field-fixes/design.md` §3).
+
+## [~] B-274 — The bridge took a row that was already on air: only the console's PLAY greyed it ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 2)
+
+A second console on a stale snapshot, or a take whose reply was slow, reached `take()` with the
+page on air; the re-take re-`PLAY`ed every plate (on a DeckLink that fails by construction, `B-177`)
+and the rollback took the working pictures off air. **Owner's decision:** the bridge refuses a take
+of a row that is on air, or whose previous take has not resolved, for every console, with nothing
+sent. **Fix:** `#takeImpl` refuses `already-on-air` on `#ownsLiveSeats` (on air or unsettled, or the
+ledger holds the row's seats); its two halves are one function, `ownsLiveSeats` in `@cg/shared-schema`,
+which the console's PLAY and `MockRuntime.take` call too, and PLAY names the row. Tests:
+`take-on-air-refusal.integration.test.ts`, `takeOnAirGate.test.ts`.
+
+## [~] B-275 — A take reply slower than 5 s turned an on-air row into "loaded", and a late OK never put it back ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 2)
+
+`INTENT_TIMEOUT_MS` (5 s) expired the take in `Reconciler.expireIntent`, which retracted its play
+evidence (`B-079`): with the page's producer on OSC the row read `loaded`, PLAY came back, and the
+late OK settled the ack without restoring the evidence. **Fix, in that one place:** an expired take is
+unresolved, not failed — it keeps its evidence, reads `unconfirmed`, PLAY stays unavailable, the
+bridge refuses a take meanwhile, and its own reply resolves it. Tests:
+`reconciler-failed-take.test.ts`, `take-on-air-refusal.integration.test.ts` (the slow reply).

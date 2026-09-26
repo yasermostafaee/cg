@@ -447,13 +447,18 @@ describe('LayerRow — buttons and menu derive from ONE list (5.2/5.5)', () => {
     ).toBe(false);
 
     // AND NOT ON `unconfirmed`, where the air result is UNKNOWN. Painting the air
-    // colour on a guess is what B-087 exists to prevent, and PLAY stays ENABLED
-    // there precisely because the take may still be needed.
+    // colour on a guess is what B-087 exists to prevent — so the fill stays off.
+    //
+    // 🔴 `FIELD-FIXES-01-A` Decision 2 REVERSED the second half of this. PLAY used to stay
+    // ENABLED here "because the take may still be needed"; the owner's rule is that a slow
+    // reply leaves the row `unconfirmed` with PLAY UNAVAILABLE until the bridge resolves the
+    // take — the bridge refuses one meanwhile, and a second take re-`PLAY`ed plates that were
+    // working. Disabled, and not lit.
     const unconfirmed = layerRowActions(deps(itemWith('unconfirmed'), true)).find(
       (a) => a.key === 'play',
     );
     expect(unconfirmed?.active).toBe(false);
-    expect(unconfirmed?.disabled).toBe(false);
+    expect(unconfirmed?.disabled).toBe(true);
   });
 
   it('every menu item is disabled exactly when its declaration is — no second door', () => {

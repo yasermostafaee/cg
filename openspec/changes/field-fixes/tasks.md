@@ -23,3 +23,25 @@
       control. Red first: 4/9 red against `459c3f64`'s runtime (plate 1, plate 2, `CG PLAY`,
       withdrawn); the success pin, both controls and the swap were green before and after.
 - [x] 1.5 The whole bridge suite green: 141 files, 1188 tests.
+
+## 2. Decision 2 and the 5 s (`B-274`, `B-275`)
+
+- [x] 2.1 `#takeImpl` refuses `already-on-air` (`TAKE_ON_AIR_CODE`) on `#ownsLiveSeats`, before any
+      mutation; `MockRuntime.take` refuses the same.
+- [x] 2.2 `Reconciler.expireIntent`: an expired take is `takeOverdue` — keeps its evidence, reads
+      `unconfirmed`, and its own late reply resolves it (`applyAck`); a newer intent supersedes it.
+- [x] 2.3 The row's PLAY is disabled on `ownsLiveSeats` (`@cg/shared-schema`: `isOnAirStatus` or a
+      seat in the published ledger — the bridge's `#ownsLiveSeats` and the mock's take call the same
+      function), titled `takeOnAirReason(row)`; a bridge refusal is worded the same;
+      `errorCodeMessage` carries the row-less form.
+- [x] 2.4 Tests: `take-on-air-refusal.integration.test.ts` 2/2 (two consoles through the real bridge;
+      the slow reply with the bound injected) — red first 2/2 against `d2920842`'s runtime and
+      Reconciler; `reconciler-failed-take.test.ts` (overdue, late OK, late failure, no OSC,
+      superseded, re-take); `takeOnAirGate.test.ts` 10/10; `layerRow.dom.test.ts`'s `unconfirmed`
+      case reversed to the owner's rule; the six on-air re-takes rewritten (design §4).
+- [x] 2.5 The seat half at the console: `takeOnAirGate.test.ts` "a row whose plates the ledger holds"
+      (+ control: the same row with no seat is offered PLAY); the five runtime e2e specs that pressed
+      PLAY on the seed's seated news row retargeted, and `fixed-layers` pins the refusal title with
+      PLAY back after CLEAR as its control (design §4). Local (Windows, not a discharge): the
+      whole runtime suite 261/261. `MockRuntime.test.ts`: the seated seed row's take is refused with
+      nothing seated twice, and the two out-then-take cases wait for OUT to settle.

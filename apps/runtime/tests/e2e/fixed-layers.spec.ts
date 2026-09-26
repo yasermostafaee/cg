@@ -204,12 +204,23 @@ test('CLEAR is confirm-gated and mirrored in the context menu; cancel does nothi
     button that no-ops while reporting success is worse than a disabled one.)
   */
   await expect(row.getByRole('button', { name: 'CLEAR' })).toBeEnabled();
-  await row.getByRole('button', { name: 'PLAY' }).click();
-  await expect(row.getByRole('button', { name: 'CLEAR' })).toBeEnabled();
+  /*
+    🔴 `FIELD-FIXES-01-A` Decision 2 — THIS ROW'S PLATES ARE SEATED (the seed's `B-145` case:
+    the ledger holds them while the status reads loaded), so the bridge refuses its take and
+    PLAY says so, in the row's name. CLEAR is the way out — the escape hatch's own job — and
+    the end of this spec is the control: once CLEAR has taken the row out, PLAY is back.
+    (PLAY used to be pressed here, before the CLEAR; this row no longer offers it.)
+  */
+  const play = row.getByRole('button', { name: 'PLAY' });
+  await expect(play).toBeDisabled();
+  await expect(play).toHaveAttribute('title', /is already on air — take it out first.$/);
 
   const confirmClear = page.getByRole('dialog', { name: /^Clear / });
 
   // The context menu MIRRORS the button (same declaration, same confirm gate).
+  // Scrolled into view FIRST: the menu closes on a scroll, and the PLAY press that used to come
+  // before this line was what had brought the row into view.
+  await row.scrollIntoViewIfNeeded();
   await row.click({ button: 'right' });
   const menu = page.getByRole('menu', { name: /actions$/ });
   await expect(menu).toBeVisible();

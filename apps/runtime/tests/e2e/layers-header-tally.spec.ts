@@ -45,12 +45,15 @@ test('B-224 — the state head and the longest real name are whole at the defaul
   const name = app.layerRow(83).locator('[data-row-body]').first();
   await expect(name).toContainText('میانبرنامه روی انتن');
 
-  // Put one more count on the head: layer 80 is the seed's loaded graphic. The seed already
+  // Put one more count on the head by taking a row. The seed already
   // has rows on air from "another console", so the assertion is RELATIVE — the same reading
   // `audit-legibility.spec.ts` takes — and the number is the whole visible text.
   const air = subbar.locator('[data-air-tally]');
   const before = Number((await air.getAttribute('data-air-tally')) ?? '0');
-  await app.layerRow(80).getByRole('button', { name: 'PLAY' }).click();
+  // `FIELD-FIXES-01-A` — NOT layer 80: the seed's loaded graphic there holds SEATED plates (the
+  // `B-145` adoption case), and a row that owns live seats is refused a take, so its PLAY is
+  // unavailable. Layer 96 is the seed's idle TICKER row, which owns nothing.
+  await app.layerRow(96).getByRole('button', { name: 'PLAY' }).click();
   await expect(air).toHaveAttribute('data-air-tally', String(before + 1));
   // ⭐ THE WORDS ARE BACK. `B-224` cut them because 160 px would not fit in a 132 px cell;
   // the sub-bar is a full-width line, so the count reads as a sentence again instead of

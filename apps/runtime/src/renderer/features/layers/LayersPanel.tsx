@@ -1862,6 +1862,9 @@ export function LayersPanel({
                         AUDIBILITY rather than intent. Same rows, same pass, two questions.
                       */
                       seatedPlates={item === null ? [] : rowPlateAudioOf(liveRows, item.itemId)}
+                      // `FIELD-FIXES-01-A` — the ledger half of PLAY's gate, off the RAW ledger
+                      // (every channel), exactly the fact the bridge's `#ownsLiveSeats` reads.
+                      holdsLiveSeats={item !== null && live.some((l) => l.itemId === item.itemId)}
                       /*
                         Golden rule 11 — the row's operator name for its audio dialog, through
                         the ONE composition, from the bank and the registry this panel holds.

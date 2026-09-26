@@ -236,7 +236,16 @@ test('every seated plate carries its own audio strip, and ON / OFF / SOLO / PANI
 
   // ── ON AIR, the same one press still works. Not a duplicate of the above: it is the case
   //    the OLD rule allowed, kept so removing the status filter cannot have broken it.
+  //    `FIELD-FIXES-01-A` Decision 2 — a row whose plates are seated is refused a take, so the
+  //    row is taken OUT first (CLEAR releases its seats), and the take seats them again.
+  await newsRow.getByRole('button', { name: 'CLEAR' }).click();
+  await app.page
+    .getByRole('dialog', { name: /^Clear / })
+    .getByRole('button', { name: 'Clear layer', exact: true })
+    .click();
   await newsRow.getByRole('button', { name: 'PLAY' }).click();
+  // Read ON AIR, so the section below is the on-air case and not the loaded one again.
+  await expect(newsRow).toContainText('ON AIR', { timeout: 3000 });
   await app.liveSourcesTab.click();
   await stripOf(onScreen, 'guest-1')
     .getByRole('button', { name: /^Full volume for guest-1/ })

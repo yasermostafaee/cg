@@ -39,8 +39,11 @@ test('settings panel: blocked while on air, Clear-All unblocks and the ROWS SURV
   // 1. Take an item to air, THEN open the panel → gate mirrored, Apply disabled.
   // R-028 part B — addressed by LAYER, not `.first()`: rows render newest-layer
   // first and most are empty, so the first PLAY on the page belongs to an empty
-  // row and is correctly disabled. Layer 70 is the seed's loaded graphic.
-  await app.layerRow(80).getByRole('button', { name: 'PLAY' }).click();
+  // row and is correctly disabled.
+  // `FIELD-FIXES-01-A` — NOT layer 80: the seed's loaded graphic there holds SEATED plates (the
+  // `B-145` adoption case), and a row that owns live seats is refused a take, so its PLAY is
+  // unavailable. Layer 96 is the seed's idle TICKER row, which owns nothing.
+  await app.layerRow(96).getByRole('button', { name: 'PLAY' }).click();
   await openServers(page);
   await expect(panel).toBeVisible();
   await expect(panel.getByLabel('Primary host')).toHaveValue('127.0.0.1');

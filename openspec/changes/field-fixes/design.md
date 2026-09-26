@@ -76,3 +76,46 @@ page the PREVIOUS look (`caspar-runtime.ts` `setActiveLook`). For that window �
 and the refused plate's box has no picture: **a hole on air, a few frames long.** If the re-tell is
 refused too, the page stays on the new look over the old geometry until the operator re-issues it.
 What a switch should do instead is the owner's decision; nothing here changes it.
+
+## §4 Decision 2 — a take of a row already on air is refused by the bridge
+
+- `#takeImpl` refuses, before it mutates anything, with `already-on-air` (`TAKE_ON_AIR_CODE`,
+  `@cg/shared-ipc`) whenever `#ownsLiveSeats` holds: the row is on air or unsettled
+  (`isOnAirStatus` — a take in flight is `pending`, an overdue one `unconfirmed`) or the ledger holds
+  its seats. One predicate, the one golden rule 10 names; every console meets the same refusal.
+- **One predicate, three callers.** The two halves are spelled once, as `ownsLiveSeats(item,
+holdsSeats)` in `@cg/shared-schema` beside `isOnAirStatus`; the bridge's `#ownsLiveSeats` hands it
+  its own two facts, `MockRuntime.take` its seated set, and the console's PLAY the row's status plus
+  whether the published live-layers ledger holds a seat for the row (`LayersPanel` reads the one
+  ledger snapshot, as it does for `rehearsing`). PLAY read `on-air`/`playing` alone before. Its
+  disabled title names the row: _"Bed 59 is already on air — take it out first."_
+  (`takeOnAirReason`), and a refusal the bridge answers (a race, another console) is said in the same
+  sentence.
+- **Why the ledger half, when the owner named the page.** A row whose plates are seated while its
+  status is not on air is `B-145`'s adopted row: the bridge restarted, the plates stayed on the
+  channel, the status did not come back. Its page is up too — CasparCG never stopped — and a take
+  would re-`PLAY` every seated plate, which on a DeckLink fails by construction (`B-177`). So the
+  bridge knows that page is on air by its ledger, and refuses. **Residual, not changed here:** such a
+  row reads READY, and STOP is still gated on the status, so its way out is CLEAR (the escape hatch,
+  offered whatever the status says); after CLEAR, PLAY is back.
+- **Where the 5 s came from.** `INTENT_TIMEOUT_MS = 5000` (`caspar-runtime.ts`), armed by
+  `#armExpiry(seq)` immediately before the take's `CG PLAY`, and expired by
+  `Reconciler.expireIntent`, which (since `B-079`) RETRACTED the take's play evidence. With the page's
+  own producer on OSC that read `loaded`, so PLAY came back on a graphic that was up; and a late OK
+  settled `ackedStatus` without restoring the evidence, so it stayed `loaded`. **Fixed in that one
+  place:** an expired take is `takeOverdue` — unresolved, not failed — keeps its evidence, reads
+  `unconfirmed` above OSC, and its own late reply resolves it. Note: every AMCP command also times out
+  at 2 s IN FLIGHT (`CommandQueue`'s default), so the 5 s expiry is reached only by a `CG PLAY` that
+  waited unsent (the queue paused for a resync, or its pipeline full); a reply slower than 2 s in
+  flight is already a failure (`amcp-timeout`), which Decision 1 undoes.
+- Six bridge tests re-took an on-air row as a step or a subject (`live-seating` "RE-TAKE lands on
+  the same layers", `server-restart-retake` ×2, `live-look-reconcile` ×2, `multibox-exclusivity`'s
+  door-1 boundary). Each now asserts the refusal and reaches its subject through OUT or STOP first.
+- Five runtime e2e specs pressed PLAY on the seed's news row (layer 80), which the seed models as
+  that `B-145` row — seats held while it reads loaded. `layers-header-tally`, `server-settings` and
+  `test-mode-honesty` take the idle TICKER row (96) instead; `live-source-layers` takes the news row
+  out with CLEAR first and then asserts it reads ON AIR, so its on-air section is not the loaded
+  case again; `fixed-layers` asserts the refusal title, and its closing CLEAR is the control (PLAY
+  back). `template-self-stop`'s stale-token case STOPs the first run before its re-take. In
+  `MockRuntime.test.ts` two `B-145` cases took the row inside OUT's 160 ms `exiting` window, which is
+  unsettled and now refused exactly as the bridge refuses it; they wait for the settle.

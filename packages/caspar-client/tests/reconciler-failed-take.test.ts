@@ -117,22 +117,69 @@ describe('B-079 — a failed take does not read on-air off a stale producer', ()
     expect(r.get(ITEM)).toMatchObject({ status: 'on-air' });
   });
 
-  it('a take with no ack EXPIRES to unconfirmed and retracts its claim (bounded)', () => {
+  it('🔴 FIELD-FIXES-01-A — a take whose reply is OVERDUE reads unconfirmed, never loaded: it is unresolved, not failed', () => {
     const r = loadedWithFreshProducer();
 
     r.applyIntent({ kind: 'take', itemId: ITEM }, 2);
     expect(r.get(ITEM)).toMatchObject({ status: 'on-air' });
 
     // Before B-079 `expireIntent` refused to expire a `playing` intent, and the bridge armed
-    // no timer for a take anyway — so this claim rested forever with nothing to bound it.
+    // no timer for a take anyway — so this claim rested forever with nothing to bound it. B-079
+    // then retracted the claim here, and the page's own producer read `loaded`: the owner's
+    // "a slow reply turns an on-air row into loaded", with PLAY back on a graphic that was up.
     r.expireIntent(2);
 
     const s = r.get(ITEM);
+    expect(s?.status).not.toBe('loaded');
     expect(s?.status).not.toBe('on-air');
-    expect(s).toMatchObject({ status: 'loaded', errorCode: 'unconfirmed' });
+    expect(s).toMatchObject({ status: 'unconfirmed', errorCode: 'unconfirmed', pending: false });
   });
 
-  it('an expired RE-take of an on-air item still reads on-air', () => {
+  it('CONTROL — the overdue take’s own late OK resolves it, and the row reads on air', () => {
+    const r = loadedWithFreshProducer();
+    r.applyIntent({ kind: 'take', itemId: ITEM }, 2);
+    r.expireIntent(2);
+
+    expect(r.applyAck(2, true)).toMatchObject({ status: 'on-air' });
+    expect(r.get(ITEM)?.errorCode).toBeUndefined();
+  });
+
+  it('the overdue take’s late FAILURE gives back its claim, exactly as a failed take does', () => {
+    const r = loadedWithFreshProducer();
+    r.applyIntent({ kind: 'take', itemId: ITEM }, 2);
+    r.expireIntent(2);
+
+    r.applyAck(2, false, 'amcp-timeout');
+
+    const s = r.get(ITEM);
+    expect(s?.status).not.toBe('on-air');
+    expect(s).toMatchObject({ status: 'loaded', errorCode: 'amcp-timeout' });
+  });
+
+  it('with NO OSC an overdue take reads unconfirmed too, and its late OK settles to playing', () => {
+    const r = new Reconciler({ now: vi.fn(() => 1000) });
+    r.applyIntent(loadIntent(), 1);
+    r.applyIntent({ kind: 'take', itemId: ITEM }, 2);
+    r.expireIntent(2);
+    expect(r.get(ITEM)).toMatchObject({ status: 'unconfirmed' });
+
+    expect(r.applyAck(2, true)).toMatchObject({ status: 'playing', pending: false });
+  });
+
+  it('a newer intent supersedes an overdue take, and the take’s late reply then settles nothing', () => {
+    const r = loadedWithFreshProducer();
+    r.applyIntent({ kind: 'take', itemId: ITEM }, 2);
+    r.expireIntent(2);
+    r.applyIntent({ kind: 'out', itemId: ITEM }, 3);
+
+    expect(r.applyAck(2, true)).toBeNull();
+    expect(r.get(ITEM)?.status).not.toBe('unconfirmed');
+  });
+
+  it('an expired RE-take of an on-air item reads unconfirmed until its reply — never loaded', () => {
+    // `FIELD-FIXES-01-A` Decision 2: the bridge no longer re-takes an on-air row at all; at this
+    // layer the overdue re-take is unresolved like any other, and it hides nothing — `unconfirmed`
+    // is inside `isOnAirStatus`, so the row still refuses PLAY and still counts as unsettled.
     const r = loadedWithFreshProducer();
     r.applyIntent({ kind: 'take', itemId: ITEM }, 2);
     r.applyAck(2, true);
@@ -140,7 +187,8 @@ describe('B-079 — a failed take does not read on-air off a stale producer', ()
     r.applyIntent({ kind: 'take', itemId: ITEM }, 3);
     r.expireIntent(3);
 
-    expect(r.get(ITEM)).toMatchObject({ status: 'on-air' });
+    expect(r.get(ITEM)).toMatchObject({ status: 'unconfirmed' });
+    expect(r.applyAck(3, true)).toMatchObject({ status: 'on-air' });
   });
 
   it('a SUCCESSFUL take still confirms on-air off a fresh producer (B-053 optimistic confirm)', () => {

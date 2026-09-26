@@ -1,11 +1,12 @@
 import * as dgram from 'node:dgram';
 import { afterEach, expect, it } from 'vitest';
 import { createMock, type MockHandle } from '@cg/amcp-mock';
-import type {
-  ConnectionConfig,
-  SourceAssignments,
-  SourceCatalog,
-  TemplateInfo,
+import {
+  TAKE_ON_AIR_CODE,
+  type ConnectionConfig,
+  type SourceAssignments,
+  type SourceCatalog,
+  type TemplateInfo,
 } from '@cg/shared-ipc';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { HEALTH_MS, TEST_LAYER_POLICY } from './support/harness.js';
@@ -169,13 +170,19 @@ it('DOOR 1 boundary — a SINGLE-box template is not refused: this rule is about
   expect((await r.take('item-2')).accepted, 'one box is not multi-box').toBe(true);
 });
 
-it('DOOR 1 boundary — the SAME item may be re-taken: the incumbent is never itself', async () => {
+it('DOOR 1 boundary — the incumbent is never itself: the SAME live item is refused as on air, never as a second multi-box', async () => {
   const r = await boot([template('three-box', 3)]);
   await r.load('item-1', 'three-box', {});
   expect((await r.take('item-1')).accepted).toBe(true);
-  // A re-take of a live row is an ordinary operator action. If the predicate counted the
-  // item against itself, the switch this feature exists to build could never re-take.
-  expect((await r.take('item-1')).accepted).toBe(true);
+  /*
+    This used to assert the re-take LANDED: "a re-take of a live row is an ordinary operator
+    action". `FIELD-FIXES-01-A` Decision 2 made it a refused one — an on-air row is not taken at
+    all. The boundary this test guards survives in the REASON: if the exclusivity predicate
+    counted the item against itself, the refusal would name a second multi-box instead.
+  */
+  const second = await r.take('item-1');
+  expect(second).toMatchObject({ accepted: false, errorCode: TAKE_ON_AIR_CODE });
+  expect(second.errorCode).not.toBe('multibox-already-on-air');
 });
 
 // ─────────────────────── DOOR 2 — `restore()`, the uncovered one ───────────────────────

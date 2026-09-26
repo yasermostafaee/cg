@@ -422,6 +422,30 @@ export function isOnAirStatus(item: Pick<StackItemState, 'status' | 'pending'>):
 }
 
 /**
+ * 🔴 **`B-216` / `FIELD-FIXES-01-A` — DOES THIS ROW OWN LIVE LAYERS RIGHT NOW? THE ONE
+ * DEFINITION, both sides of the bridge seam** — the bridge's `#ownsLiveSeats`, the mock's take
+ * and the console's PLAY all ask it here.
+ *
+ * Two halves, and golden rule 10 names both:
+ *
+ * - **on air or unsettled** — {@link isOnAirStatus}, reused rather than re-derived;
+ * - **the ledger holds seats for it** — `holdsSeats`: the plates the bridge SEATED and has not
+ *   released. `B-145`'s boot adoption restores those while the row's status is not, and they are
+ *   on the channel whatever any status claims.
+ *
+ * It is not a wrapper for `isOnAirStatus`: it asks a different question, and the ledger half is
+ * the one each of its callers would otherwise forget. The caller reads its own copy of the ledger
+ * (the bridge its `#liveLayers`, the console the published live-layers snapshot) and says only
+ * whether it holds a seat for this row.
+ */
+export function ownsLiveSeats(
+  item: Pick<StackItemState, 'status' | 'pending'> | null | undefined,
+  holdsSeats: boolean,
+): boolean {
+  return (item !== null && item !== undefined && isOnAirStatus(item)) || holdsSeats;
+}
+
+/**
  * B-092 — one stack item's INTENT as retained by the browser, so the stack
  * survives a restart of the bridge process (the stack otherwise lives only in
  * the bridge's in-memory Reconciler and dies with it).

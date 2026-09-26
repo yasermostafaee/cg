@@ -10,8 +10,8 @@ import {
   Trash2,
   XSquare,
 } from 'lucide-react';
-import type { FixedSlotState } from '@cg/shared-ipc';
-import type { StackItemState } from '@cg/shared-schema';
+import { TAKE_ON_AIR_CODE, type FixedSlotState } from '@cg/shared-ipc';
+import { ownsLiveSeats, type StackItemState } from '@cg/shared-schema';
 import type { RowAction } from '../../ui/rowAction.js';
 import type { AsyncResult } from '../../ui/asyncButtonController.js';
 import {
@@ -137,6 +137,16 @@ export const AWAITING_ROW_REASON =
 export const REMOVE_ON_AIR_REASON =
   'This row is on air, and REMOVE cannot be undone — it clears the layer and drops the item, with its fields and overrides. Take it off air first: STOP runs the template’s outro and keeps it loaded, CLEAR cuts it immediately.';
 
+/**
+ * 🔴 `FIELD-FIXES-01-A` Decision 2 — the ONE sentence for a take the bridge refuses because the
+ * row is already on air (or its previous take has not resolved): on PLAY's disabled title, and on
+ * the refusal a race or another console's snapshot reaches. `design.md` §29 grammar — the row in
+ * the operator's words (`operatorRowName`, passed in as `rowName`), what is true, the way out.
+ */
+export function takeOnAirReason(rowName: string): string {
+  return `${rowName} is already on air — take it out first.`;
+}
+
 export interface LayerRowActionDeps {
   /**
    * WHAT THIS ROW CARRIES — the union, and the ONLY input to what this row offers.
@@ -200,6 +210,17 @@ export interface LayerRowActionDeps {
    * would make rehearse "a preview pane we hope nobody plays from".
    */
   rehearsing: boolean;
+  /**
+   * `FIELD-FIXES-01-A` Decision 2 — does the bridge's published live-layers ledger hold a seat for
+   * this row's item? The second half of `ownsLiveSeats`, the question the bridge asks before it
+   * takes: a row whose plates are seated (`B-145` adopted them at boot while its status did not
+   * come back) is on the channel, and the bridge refuses its take.
+   *
+   * Resolved by the PANEL from the one ledger snapshot, for `rehearsing`'s reason. Optional, and
+   * absent means no seat — the bridge still refuses whatever this says; this only keeps PLAY from
+   * offering a take the bridge will not do.
+   */
+  holdsLiveSeats?: boolean;
   /**
    * R-021 stage 4 — the bridge's restore for this row PARKED: a producer that is
    * not ours holds the layer, so our item is NOT on it (`binding.restoreBlocked`).
@@ -424,10 +445,16 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
    */
   const blocked = deps.restoreBlocked;
   const onAir = item !== null && isOnAir(item);
-  // PLAY's own gate is narrower than `isOnAir`: an item already playing has
-  // nothing to take. Kept as the stack row had it so the two never disagree
-  // about what "already on air" means for THIS verb.
+  // The engaged fill: PLAY wears the air colour only while the row IS on air — never on a guess.
   const playing = item?.status === 'on-air' || item?.status === 'playing';
+  /*
+    🔴 `FIELD-FIXES-01-A` DECISION 2 — PLAY'S GATE IS THE BRIDGE'S OWN REFUSAL, not a narrower
+    local reading of it: `ownsLiveSeats`, the function its `#ownsLiveSeats` calls. The row is on
+    air OR UNSETTLED (`isOnAirStatus`: a take in flight, an overdue one reading `unconfirmed`, an
+    update or a stop still in flight), or the ledger holds its seats. This read `playing` alone, so
+    a slow reply that left the row `unconfirmed` gave PLAY back on a graphic that was up.
+  */
+  const takeRefused = ownsLiveSeats(item, deps.holdsLiveSeats === true);
 
   /**
    * The bound template is not in THIS browser's library.
@@ -742,15 +769,25 @@ export function layerRowActions(deps: LayerRowActionDeps): RowAction[] {
         // `CG ADD` + PLAY onto a layer carrying somebody else's producer, which
         // replaces it — the destructive act d1 says may only ever happen through
         // the operator's own explicit CLEAR.
-        empty || playing || deps.rehearsing || blocked || needsCaspar,
-        () => (item === null ? noop() : deps.play(item.itemId)),
+        empty || takeRefused || deps.rehearsing || blocked || needsCaspar,
+        async () => {
+          if (item === null) return noop();
+          const res = await deps.play(item.itemId);
+          // A refusal the bridge answered for a row this render did not yet see on air (a race,
+          // or another console's take) — said in the row's own name, like the disabled title.
+          return res.errorCode === TAKE_ON_AIR_CODE
+            ? { ...res, message: takeOnAirReason(deps.rowName) }
+            : res;
+        },
         Play,
       ),
       ...(blocked
         ? { title: RESTORE_BLOCKED_REASON }
         : needsCaspar || awaiting
           ? { title: casparVerbReason }
-          : {}),
+          : takeRefused
+            ? { title: takeOnAirReason(deps.rowName) }
+            : {}),
       tone: 'play',
       // ENGAGED = the state this verb produces is already true, which for PLAY is
       // ON AIR. It is disabled in exactly that case, so the fill lands on a

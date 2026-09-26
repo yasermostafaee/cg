@@ -160,6 +160,14 @@ export const StackOutChannel = defineChannel(
 export const REMOVE_ON_AIR_CODE = 'on-air';
 
 /**
+ * 🔴 `FIELD-FIXES-01-A` Decision 2 — the code a TAKE answers when the row is already on air, or its
+ * previous take has not resolved: the bridge refuses it for every console, with nothing sent. The
+ * console words it with the row's own name (`errorCodeMessage`); declared beside
+ * {@link REMOVE_ON_AIR_CODE} for that constant's reason — one literal, every reader.
+ */
+export const TAKE_ON_AIR_CODE = 'already-on-air';
+
+/**
  * 🔴 `R-017` — REMOVE ONE, and it can now be REFUSED.
  *
  * It answered a bare `{ accepted }` with no implementation that ever declined, so the

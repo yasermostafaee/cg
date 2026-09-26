@@ -26,8 +26,11 @@ test('test mode is loud, badges SIM, and claims no healthy server', async ({ app
   // Play an item: the simulation still runs (that is its value) …
   // R-028 part B — addressed by LAYER, not `.first()`. Rows render newest-layer-first and
   // most of them are empty, so `.first()` now lands on an empty row whose PLAY is correctly
-  // disabled. Layer 70 is the seed's loaded graphic.
-  await app.layerRow(80).getByRole('button', { name: 'PLAY' }).click();
+  // disabled.
+  // `FIELD-FIXES-01-A` — NOT layer 80: the seed's loaded graphic there holds SEATED plates (the
+  // `B-145` adoption case), and a row that owns live seats is refused a take, so its PLAY is
+  // unavailable. Layer 96 is the seed's idle TICKER row, which owns nothing.
+  await app.layerRow(96).getByRole('button', { name: 'PLAY' }).click();
 
   // … but it is badged SIM, never the broadcast-red ON AIR a real playout earns.
   const simBadge = page.getByLabel('status SIM ON AIR').first();

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { TAKE_ON_AIR_CODE } from '@cg/shared-ipc';
 import { MockRuntime } from '../src/platform/MockRuntime.js';
 
 describe('MockRuntime stack', () => {
@@ -259,28 +260,42 @@ describe('🔴 B-145 (2.8) — the mock releases live plates on the SAME verbs t
     expect(rt.liveLayersState()).toEqual([]);
   });
 
+  it('🔴 a TAKE of the SEATED row is refused, as the bridge refuses it — nothing is seated twice', () => {
+    // `FIELD-FIXES-01-A` Decision 2 parity: the seeded row reads loaded, but its plates are seated
+    // (the `B-145` adoption case), so it owns live seats and the take is refused with nothing done.
+    const rt = armed();
+    expect(rt.take('item-irib-news')).toEqual({ accepted: false, errorCode: TAKE_ON_AIR_CODE });
+    expect(rt.liveLayersState().map((r) => r.layer)).toEqual([60, 61]);
+  });
+
   it('REMOVE releases the plates', () => {
     const rt = armed();
     rt.remove('item-irib-news');
     expect(rt.liveLayersState()).toEqual([]);
   });
 
-  it('a TAKE seats them again — the verb that seats on air seats here', () => {
+  it('a TAKE seats them again — the verb that seats on air seats here', async () => {
     const rt = armed();
     rt.out('item-irib-news');
     expect(rt.liveLayersState()).toEqual([]);
 
-    rt.take('item-irib-news');
+    // `FIELD-FIXES-01-A` Decision 2 — OUT reads `exiting` until it settles, and a take of an
+    // unsettled row is refused exactly as the bridge refuses it; so the take waits for the settle.
+    await new Promise((r) => setTimeout(r, 220));
+    expect(rt.take('item-irib-news')).toEqual({ accepted: true });
 
     expect(rt.liveLayersState().map((r) => r.layer)).toEqual([60, 61]);
   });
 
-  it('every one of those transitions PUBLISHES, so a console never has to poll', () => {
+  it('every one of those transitions PUBLISHES, so a console never has to poll', async () => {
     const rt = armed();
     const seen: number[][] = [];
     rt.liveLayersChanged.subscribe((s) => seen.push(s.map((r) => r.layer)));
 
     rt.out('item-irib-news');
+    // `FIELD-FIXES-01-A` Decision 2 — OUT reads `exiting` until it settles, and a take of an
+    // unsettled row is refused exactly as the bridge refuses it; so the take waits for the settle.
+    await new Promise((r) => setTimeout(r, 220));
     rt.take('item-irib-news');
 
     expect(seen).toEqual([[], [60, 61]]);

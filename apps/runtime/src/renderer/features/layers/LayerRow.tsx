@@ -132,6 +132,12 @@ interface Props {
    */
   seatedPlates?: readonly RowPlateAudio[];
   /**
+   * `FIELD-FIXES-01-A` Decision 2 — does the bridge's ledger hold a seat for this row's item?
+   * Resolved by the PANEL from the one ledger snapshot, for `rehearsing`'s reason, and handed to
+   * PLAY's gate (`LayerRowActionDeps.holdsLiveSeats`). Defaults to false.
+   */
+  holdsLiveSeats?: boolean;
+  /**
    * `RUNTIME-REDESIGN-01` Phase 6 — the row named in the OPERATOR's words (golden rule 11),
    * resolved by the PANEL through `operatorRowName` (it holds the bank and the registry) and
    * handed to the audio dialog, which names the row it is about. Optional for a row rendered
@@ -300,6 +306,7 @@ export function LayerRow({
   dirty,
   rehearsing,
   seatedPlates = [],
+  holdsLiveSeats = false,
   operatorName,
   density = 'full',
   onSelect,
@@ -456,6 +463,7 @@ export function LayerRow({
     dirty,
     rehearsing,
     restoreBlocked,
+    holdsLiveSeats,
     // R-022 — one toggle, both directions. The bridge answers
     // `{ ok, reason?, message? }`; the row's verbs speak `AsyncResult`, so the
     // guard's `reason` rides through as `errorCode` for operator wording — the
