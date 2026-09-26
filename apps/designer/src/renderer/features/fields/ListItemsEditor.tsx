@@ -1,5 +1,8 @@
 import { Check, Link2 } from 'lucide-react';
 import type { ListItem } from '@cg/shared-schema';
+import { formatNumberLike, readLocalizedDuration } from '@cg/text-shaping';
+import { cx } from '../../cx.js';
+import { useTypedNumber } from '../../ui/typedNumber.js';
 import { Button } from '../../ui/Button.js';
 import { Control } from '../../ui/Control.js';
 import { Icon } from '../../ui/Icon.js';
@@ -117,25 +120,24 @@ function textOf(item: ListItem): string {
   return typeof t === 'string' ? t : '';
 }
 
-/** The item's dwell in SECONDS for display ('' = unset → element default). */
-function dwellSecondsOf(item: ListItem): string {
+/** The item's dwell in MILLISECONDS (`undefined` = unset → the element's default dwell). */
+function dwellMsOf(item: ListItem): number | undefined {
   const d = (item as Record<string, unknown>)['dwellMs'];
-  return typeof d === 'number' && d > 0 ? String(d / 1000) : '';
+  return typeof d === 'number' && d > 0 ? d : undefined;
 }
 
-/** Set/clear `dwellMs` from a seconds input, preserving every other field. */
-function withDwell(item: ListItem, secondsRaw: string): ListItem {
+/** Set/clear `dwellMs`, preserving every other field. Unset or zero clears it. */
+function withDwell(item: ListItem, ms: number | undefined): ListItem {
   const next: Record<string, unknown> = { ...item };
-  const secs = Number.parseFloat(secondsRaw);
-  if (secondsRaw.trim() === '' || !Number.isFinite(secs) || secs <= 0) {
+  if (ms === undefined || ms <= 0) {
     delete next['dwellMs'];
   } else {
-    next['dwellMs'] = Math.max(1, Math.round(secs * 1000));
+    next['dwellMs'] = Math.max(1, Math.round(ms));
   }
   return next as ListItem;
 }
 
-/** Display value for one column cell ('' when unset). */
+/** Display value for one TEXT column cell ('' when unset). */
 function cellOf(item: ListItem, key: string): string {
   const v = (item as Record<string, unknown>)[key];
   if (typeof v === 'string') return v;
@@ -143,17 +145,76 @@ function cellOf(item: ListItem, key: string): string {
   return '';
 }
 
-/** Set one column cell, preserving every other field (number columns coerce). */
+/** A NUMBER column cell's value (`undefined` when unset). */
+function numberCellOf(item: ListItem, key: string): number | undefined {
+  const v = (item as Record<string, unknown>)[key];
+  return typeof v === 'number' ? v : undefined;
+}
+
+/** Set one TEXT column cell, preserving every other field. */
 function withCell(item: ListItem, column: ListItemColumn, raw: string): ListItem {
+  return { ...item, [column.key]: raw } as ListItem;
+}
+
+/** Set/clear one NUMBER column cell, preserving every other field. */
+function withNumberCell(item: ListItem, key: string, n: number | undefined): ListItem {
   const next: Record<string, unknown> = { ...item };
-  if (column.kind === 'number') {
-    const n = Number.parseFloat(raw);
-    if (raw.trim() === '' || !Number.isFinite(n)) delete next[column.key];
-    else next[column.key] = n;
-  } else {
-    next[column.key] = raw;
-  }
+  if (n === undefined) delete next[key];
+  else next[key] = n;
   return next as ListItem;
+}
+
+/**
+ * `PERSIAN-DIGITS-01` — a list item's NUMBER, typed on the author's own keyboard: a repeater's
+ * number column (`read` a number) or the per-item dwell (`read` a duration — seconds, `m:ss`, or
+ * `h:mm:ss`, so `۰۰:۳۰` is thirty seconds). Both were native `type="number"` boxes that dropped
+ * Persian digits before script saw them. The text stays as typed; an EMPTY box unsets the value;
+ * a text that can never be a number changes nothing and says so on the box itself.
+ */
+function ItemNumberInput({
+  className,
+  invalidClassName,
+  value,
+  onValue,
+  kind,
+  placeholder,
+  title,
+  ariaLabel,
+}: {
+  className: string;
+  invalidClassName: string;
+  value: number | undefined;
+  onValue: (next: number | undefined) => void;
+  kind: 'number' | 'duration';
+  placeholder: string;
+  title: string;
+  ariaLabel: string;
+}): JSX.Element {
+  const typed = useTypedNumber(
+    value,
+    kind === 'duration'
+      ? { read: readLocalizedDuration, write: (ms, sample) => formatNumberLike(ms / 1000, sample) }
+      : {},
+  );
+  return (
+    <input
+      className={cx(className, typed.refusal !== null && invalidClassName)}
+      type="text"
+      inputMode="decimal"
+      placeholder={placeholder}
+      // In a row this narrow the refusal cannot take a line of its own: it is the box's tooltip
+      // and its danger edge instead.
+      title={typed.refusal ?? title}
+      value={typed.text}
+      aria-label={ariaLabel}
+      {...(typed.refusal !== null ? { 'aria-invalid': true } : {})}
+      onChange={(e) => {
+        const reading = typed.change(e.target.value);
+        if (reading.kind === 'number') onValue(reading.value);
+        else if (e.target.value.trim() === '') onValue(undefined);
+      }}
+    />
+  );
 }
 
 export function ListItemsEditor({
@@ -191,18 +252,15 @@ export function ListItemsEditor({
       {items.length === 0 && <p className={s.empty}>No items yet — add the first one.</p>}
       {items.map((item, i) => {
         const dwellInput = showDwell ? (
-          <input
+          <ItemNumberInput
             className={s.dwellInput}
-            type="number"
-            min={0.1}
-            step={0.5}
+            invalidClassName={s.inputInvalid}
+            kind="duration"
             placeholder="dwell"
             title="Per-item dwell in seconds (blank = the element's default dwell)"
-            value={dwellSecondsOf(item)}
-            aria-label={`${label} item ${String(i + 1)} dwell`}
-            onChange={(e) =>
-              onChange(items.map((it, j) => (j === i ? withDwell(it, e.target.value) : it)))
-            }
+            value={dwellMsOf(item)}
+            ariaLabel={`${label} item ${String(i + 1)} dwell`}
+            onValue={(ms) => onChange(items.map((it, j) => (j === i ? withDwell(it, ms) : it)))}
           />
         ) : null;
         const controls = (
@@ -353,22 +411,40 @@ export function ListItemsEditor({
           <div key={item.id} className={s.itemRow}>
             {columns !== undefined && columns.length > 0 ? (
               // D-030 — one input per child-composition field (column).
-              columns.map((col) => (
-                <input
-                  key={col.key}
-                  className={s.itemInput}
-                  type={col.kind === 'number' ? 'number' : 'text'}
-                  placeholder={col.label}
-                  title={col.label}
-                  value={cellOf(item, col.key)}
-                  aria-label={`${label} item ${String(i + 1)} ${col.label}`}
-                  onChange={(e) =>
-                    onChange(
-                      items.map((it, j) => (j === i ? withCell(it, col, e.target.value) : it)),
-                    )
-                  }
-                />
-              ))
+              columns.map((col) =>
+                col.kind === 'number' ? (
+                  <ItemNumberInput
+                    key={col.key}
+                    className={s.itemInput}
+                    invalidClassName={s.inputInvalid}
+                    kind="number"
+                    placeholder={col.label}
+                    title={col.label}
+                    value={numberCellOf(item, col.key)}
+                    ariaLabel={`${label} item ${String(i + 1)} ${col.label}`}
+                    onValue={(n) =>
+                      onChange(
+                        items.map((it, j) => (j === i ? withNumberCell(it, col.key, n) : it)),
+                      )
+                    }
+                  />
+                ) : (
+                  <input
+                    key={col.key}
+                    className={s.itemInput}
+                    type="text"
+                    placeholder={col.label}
+                    title={col.label}
+                    value={cellOf(item, col.key)}
+                    aria-label={`${label} item ${String(i + 1)} ${col.label}`}
+                    onChange={(e) =>
+                      onChange(
+                        items.map((it, j) => (j === i ? withCell(it, col, e.target.value) : it)),
+                      )
+                    }
+                  />
+                ),
+              )
             ) : multiline ? (
               // D-118 — sequence contexts (inspector + preview form): a multi-line textarea (Enter
               // inserts `\n`, does not commit), same per-change item-update path. RTL via `dir`.

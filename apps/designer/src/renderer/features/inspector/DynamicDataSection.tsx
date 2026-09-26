@@ -290,6 +290,8 @@ function FieldMeta({
           label="Value"
           value={field.type === 'number' ? field.default : 0}
           step={1}
+          // `PERSIAN-DIGITS-01` — a template value: the author's digits stay in the box.
+          digits="as-typed"
           onCommit={(n) => patch({ default: n })}
         />
       ) : (

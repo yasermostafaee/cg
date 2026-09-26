@@ -7,11 +7,13 @@ import type {
   NestedFieldValues,
 } from '@cg/shared-schema';
 import { Check, TriangleAlert } from 'lucide-react';
+import { latinNumerals } from '@cg/text-shaping';
 import { cx } from '../../cx.js';
 import { Button } from '../../ui/Button.js';
 import { Callout } from '../../ui/Callout.js';
 import { Icon } from '../../ui/Icon.js';
 import { Select } from '../../ui/Select.js';
+import { useTypedNumber } from '../../ui/typedNumber.js';
 import { ListItemsEditor } from './ListItemsEditor.js';
 import type { ListItemColumn } from './repeater-columns.js';
 import * as s from './PreviewFieldForm.css.js';
@@ -307,6 +309,51 @@ function FieldRow({
   );
 }
 
+/**
+ * `PERSIAN-DIGITS-01` — a `number` field's preview value, typed on the author's own keyboard.
+ *
+ * It was a native `type="number"` box, which drops every digit that is not ASCII before script
+ * sees it: measured in Chromium, `۱۲٫۵` typed here previewed as `0`. The box now keeps the text
+ * as typed, the one reader (`useTypedNumber`) decides the number, and only a NUMBER is handed on
+ * — so the template still receives a JSON number, exactly as it does on air. A text that can never
+ * be a number is refused in this form's own error line and changes nothing.
+ */
+function PreviewNumberInput({
+  className,
+  value,
+  onChange,
+  label,
+}: {
+  className: string;
+  value: number;
+  onChange: (v: FieldValue) => void;
+  label: string;
+}): JSX.Element {
+  const typed = useTypedNumber(value);
+  return (
+    <>
+      <input
+        className={cx(className, typed.refusal !== null && s.inputInvalid)}
+        type="text"
+        inputMode="decimal"
+        value={typed.text}
+        onChange={(e) => {
+          const reading = typed.change(e.target.value);
+          if (reading.kind === 'number') onChange(reading.value);
+        }}
+        aria-label={label}
+        {...(typed.refusal !== null ? { 'aria-invalid': true } : {})}
+      />
+      {typed.refusal !== null && (
+        <span className={s.error} role="alert">
+          <Icon icon={TriangleAlert} size={14} />
+          {typed.refusal}
+        </span>
+      )}
+    </>
+  );
+}
+
 /** D-106 — a textarea that auto-grows to its content (compact when short, full when long). */
 function GrowTextarea({
   className,
@@ -375,15 +422,11 @@ function renderInput(
       );
     case 'number':
       return (
-        <input
+        <PreviewNumberInput
           className={cls}
-          type="number"
           value={typeof value === 'number' ? value : field.default}
-          min={field.min}
-          max={field.max}
-          step={field.step}
-          onChange={(e) => onChange(Number(e.target.value))}
-          aria-label={label}
+          onChange={onChange}
+          label={label}
         />
       );
     case 'color':
@@ -510,7 +553,15 @@ export function validateField(field: DynamicField, value: FieldValue | undefined
   }
   if (field.pattern !== undefined && str !== '') {
     try {
-      if (!new RegExp(field.pattern).test(str)) return `Doesn't match ${field.pattern}`;
+      /*
+        `PERSIAN-DIGITS-01` — a pattern is written with Latin classes (`[0-9]`, `\d`), and the
+        author types on a Persian keyboard: the `Time (HH:MM)` preset refused `۲۱:۳۰`. So a value
+        is accepted when it matches as typed OR with its digits, `٫` and `٬` read as Latin. The
+        VALUE is not rewritten, and no stored pattern is — templates already exported carry the
+        old presets, and reading the value is the fix that reaches them.
+      */
+      const re = new RegExp(field.pattern);
+      if (!re.test(str) && !re.test(latinNumerals(str))) return `Doesn't match ${field.pattern}`;
     } catch {
       /* an invalid pattern is a field-config issue, not a value error */
     }

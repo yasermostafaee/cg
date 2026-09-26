@@ -47,6 +47,15 @@ export const dwellInput = style({
 });
 
 /**
+ * `PERSIAN-DIGITS-01` — a number cell whose text can never be a number: the danger edge, with the
+ * sentence on the box's tooltip. Declared AFTER the two input styles so it wins on equal
+ * specificity.
+ */
+export const inputInvalid = style({
+  borderColor: colors.danger,
+});
+
+/**
  * D-083 — a sequence item is TWO lines: a top control line (kind picker + dwell +
  * reorder/remove) and the VALUE on its own full-width line below, so a long headline
  * stays readable in the narrow inspector panel.

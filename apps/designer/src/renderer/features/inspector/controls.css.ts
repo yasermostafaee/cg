@@ -50,6 +50,18 @@ export const readout = style({
   minWidth: 0,
 });
 
+/**
+ * `PERSIAN-DIGITS-01` — the ONE line under a template number field whose text can never be a
+ * number. It takes the row's value column, so it sits directly under the box it refuses.
+ */
+export const fieldRefusal = style({
+  gridColumn: '2 / 3',
+  color: colors.danger,
+  fontSize: '0.66rem',
+  fontWeight: 600,
+  lineHeight: 1.3,
+});
+
 export const inputInner = style({
   background: 'transparent',
   color: colors.text,

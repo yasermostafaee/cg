@@ -5,10 +5,12 @@ import {
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
+import { formatNumberLike, readLocalizedNumber } from '@cg/text-shaping';
 import { ColorPicker } from './ColorPopover.js';
 import { cx } from '../../cx.js';
 import { normalizeHexColor } from '../../color.js';
 import { Select } from '../../ui/Select.js';
+import { NOT_A_NUMBER } from '../../ui/typedNumber.js';
 import * as s from './controls.css.js';
 
 /**
@@ -190,9 +192,16 @@ interface NumberFieldProps {
    * why is the state the prose used to stand in for.
    */
   withheld?: string | undefined;
+  /**
+   * `PERSIAN-DIGITS-01` — `as-typed` for a TEMPLATE VALUE (a number field's default): the box
+   * keeps the author's digits and reads them through `@cg/text-shaping`'s one reader, and an
+   * impossible entry is refused in one line under the field. Chrome numbers keep the default.
+   */
+  digits?: 'latin' | 'as-typed' | undefined;
 }
 
 export function NumberField(props: NumberFieldProps): JSX.Element {
+  const [refusal, setRefusal] = useState<string | null>(null);
   const withheld = props.withheld !== undefined;
   const opts = {
     value: props.value,
@@ -238,10 +247,17 @@ export function NumberField(props: NumberFieldProps): JSX.Element {
           ariaLabel={props.label}
           disabled={withheld}
           title={props.withheld}
+          digits={props.digits}
+          onRefusal={setRefusal}
         />
         {hasUnit && <span className="cg-unit">{props.suffix}</span>}
         {props.trailing !== undefined && <span className={s.point}>{props.trailing}</span>}
       </div>
+      {refusal !== null && (
+        <span className={s.fieldRefusal} role="alert">
+          {refusal}
+        </span>
+      )}
     </div>
   );
 }
@@ -349,6 +365,14 @@ interface RealtimeNumberInputProps {
   /** `DESIGNER-FIX-0905` — a withheld input: disabled, with the reason as its tooltip. */
   disabled?: boolean | undefined;
   title?: string | undefined;
+  /**
+   * `PERSIAN-DIGITS-01` — `as-typed`: a TEMPLATE VALUE. The box is a text box (a `type="number"`
+   * box drops Persian digits before script sees them), it keeps the author's digits, and it
+   * commits what `@cg/text-shaping`'s one reader says the text means. Default `latin`: unchanged.
+   */
+  digits?: 'latin' | 'as-typed' | undefined;
+  /** `as-typed` only: told the refusal sentence while the text can never be a number, else null. */
+  onRefusal?: ((message: string | null) => void) | undefined;
 }
 
 /**
@@ -365,6 +389,7 @@ interface RealtimeNumberInputProps {
  * as a draggable number with an `ew-resize` cursor.
  */
 export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Element {
+  const asTyped = props.digits === 'as-typed';
   // A "mixed" multi-selection field shows nothing (just the placeholder) until
   // the operator edits it — no value is coerced onto the differing elements.
   const display = props.mixed === true ? '' : formatNumberDisplay(props.value);
@@ -372,9 +397,25 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
   const [editing, setEditing] = useState(false);
   const focused = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  /*
+    `as-typed` — the text the box shows once the value is settled: the author's own text while it
+    still MEANS the value, else the value written in the author's digits. `latin` keeps `display`.
+  */
+  const settled = (prev: string): string => {
+    if (!asTyped || props.mixed === true) return display;
+    const reading = readLocalizedNumber(prev);
+    if (reading.kind === 'number' && reading.value === props.value) return prev;
+    return formatNumberLike(Number(display), prev);
+  };
+  const report = (text: string): void => {
+    if (asTyped)
+      props.onRefusal?.(readLocalizedNumber(text).kind === 'invalid' ? NOT_A_NUMBER : null);
+  };
 
   useEffect(() => {
-    if (!focused.current) setBuf(display);
+    if (focused.current) return;
+    // `settled` reads the props `display` is derived from; `display` is the change that matters.
+    setBuf((prev) => settled(prev));
   }, [display]);
 
   return (
@@ -386,13 +427,15 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
         cursor: props.disabled === true ? 'not-allowed' : editing ? 'text' : 'ew-resize',
         touchAction: 'none',
       }}
-      type="number"
+      type={asTyped ? 'text' : 'number'}
+      {...(asTyped ? { inputMode: 'decimal' as const } : {})}
       value={buf}
       step={props.step}
       min={props.min}
       max={props.max}
       placeholder={props.placeholder}
       aria-label={props.ariaLabel}
+      {...(asTyped && readLocalizedNumber(buf).kind === 'invalid' ? { 'aria-invalid': true } : {})}
       disabled={props.disabled}
       title={props.title}
       onPointerDown={(e) => {
@@ -426,7 +469,11 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
       onBlur={() => {
         focused.current = false;
         setEditing(false);
-        setBuf(display);
+        // `as-typed` keeps the author's text while it means the value; an entry that is not a
+        // number was never committed, so it gives way to the value — and its refusal with it.
+        const next = settled(buf);
+        setBuf(next);
+        report(next);
         // D-053 — commits already fired live on each keystroke; close the undo
         // group here so the whole typed edit is ONE entry (multi only — single
         // passes nothing).
@@ -434,6 +481,15 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
       }}
       onChange={(e) => {
         setBuf(e.target.value);
+        if (asTyped) {
+          // The one reader; only a NUMBER commits — a half-typed or impossible text commits nothing.
+          const reading = readLocalizedNumber(e.target.value);
+          report(e.target.value);
+          if (reading.kind === 'number' && reading.value !== props.value) {
+            props.onCommit(reading.value);
+          }
+          return;
+        }
         const n = Number(e.target.value);
         if (Number.isFinite(n) && n !== props.value) props.onCommit(n);
       }}
@@ -446,7 +502,7 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
           // Live model: keystrokes already applied; Escape just ends editing and
           // resyncs the buffer (parity with single — no separate discard). The
           // ensuing blur closes the undo group; Ctrl+Z reverts the whole edit.
-          setBuf(display);
+          setBuf(settled(buf));
           (e.target as HTMLInputElement).blur();
           return;
         }
@@ -463,7 +519,7 @@ export function RealtimeNumberInput(props: RealtimeNumberInputProps): JSX.Elemen
           if (Number.isNaN(next)) return;
           if (next !== props.value) {
             props.onCommit(next);
-            setBuf(formatNumberDisplay(next));
+            setBuf(asTyped ? formatNumberLike(next, buf) : formatNumberDisplay(next));
           }
         }
       }}

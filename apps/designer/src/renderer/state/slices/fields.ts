@@ -5,6 +5,7 @@ import {
   type FieldBinding,
   type ListItem,
 } from '@cg/shared-schema';
+import { parseLocalizedNumber } from '@cg/text-shaping';
 import { current, set } from '../store-core.js';
 import { activeFieldData, locate, withActiveFieldData } from '../scene-doc.js';
 import { designerStore } from '../store.js';
@@ -53,6 +54,17 @@ const DEFAULT_DATA_FIELD_MAX_LENGTH = 100;
 function defaultAsString(field: DynamicField): string {
   if (field.type === 'image') return '';
   return typeof field.default === 'string' ? field.default : String(field.default);
+}
+
+/**
+ * A default as the number a `number` field holds. `Number()` FIRST, so every value that converted
+ * before converts exactly as it did; the shared reader only when that is not a number
+ * (`PERSIAN-DIGITS-01`) — a text default of `۱۲` switched to Number used to become `0`.
+ */
+function numberFrom(value: string | number): number {
+  if (typeof value === 'number') return value;
+  const plain = Number(value);
+  return Number.isFinite(plain) ? plain : (parseLocalizedNumber(value) ?? Number.NaN);
 }
 
 /**
@@ -109,8 +121,8 @@ function rebuildField(field: DynamicField, patch: ElementFieldMetaPatch): Dynami
     // content, so switching to it DROPS the grant rather than parking it out of
     // sight — "un-settable rather than silently ignored", made real. Switching
     // back to `text` leaves the field un-granted until the author says otherwise.
-    const cur = field.type === 'number' ? field.default : Number(defaultAsString(field));
-    const raw = patch.default !== undefined ? Number(patch.default) : cur;
+    const cur = field.type === 'number' ? field.default : numberFrom(defaultAsString(field));
+    const raw = patch.default !== undefined ? numberFrom(patch.default) : cur;
     const next = Number.isFinite(raw) ? raw : 0;
     return {
       ...base,
