@@ -222,27 +222,28 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
   expect(fake.trustedSources).toEqual(['127.0.0.1']);
   await shot('2b-signed-in-amcp-ok');
   // ── 3 · …and only then the Playout's channels, in this account's grant ─────
-  const programme = firstRun.getByRole('button', { name: /آپاسای/ });
+  const programme = firstRun.getByRole('checkbox', { name: /آپاسای/ });
   await expect(programme).toBeVisible({ timeout: 20_000 });
   // The fake admin's grant names channel 1 only; channel 2 is in the catalogue and not offered.
-  await expect(firstRun.getByRole('button', { name: /کانال دوم/ })).toHaveCount(0);
+  await expect(firstRun.getByRole('checkbox', { name: /کانال دوم/ })).toHaveCount(0);
   // The issuer was learned from that sign-in, and persisted.
   expect(
     (stationFile('bridge-playout.json') as { playout: { issuer?: string } }).playout.issuer,
   ).toBe(playout.issuer);
   /*
-    `DELTA-MULTI-CHANNEL-01-A` A8 — A PICKED CHIP LOOKS PICKED. It wore nothing but `aria-pressed`:
-    the chips are `secondary` Buttons and `.is-on` paints no secondary. Measured here, in a browser,
-    because paint is not a jsdom fact (golden rule 12). The fill is the console's one "chosen, not
-    on air" treatment, `--r-look-btn-sel-bg` #2e4e67. Polled: `.cg-btn` transitions its background.
+    `DELTA-MULTI-CHANNEL-01-A` A8 — A PICKED CHANNEL LOOKS PICKED. Measured here, in a browser,
+    because paint is not a jsdom fact (golden rule 12). `UI-POLISH-01` E made each channel a ROW with
+    a checkbox: the box is ticked, and the ROW wears the console's one "chosen, not on air" fill,
+    `--r-look-btn-sel-bg` #2e4e67. Polled: the row transitions its background.
   */
+  const programmeRow = firstRun.locator('.cg-channel-row', { has: programme });
   const fill = (): Promise<string> =>
-    programme.evaluate((b) => getComputedStyle(b).backgroundColor);
+    programmeRow.evaluate((b) => getComputedStyle(b).backgroundColor);
   const PICKED = 'rgb(46, 78, 103)';
-  expect(await fill(), 'CONTROL — unpicked, the chip is not in the picked fill').not.toBe(PICKED);
+  expect(await fill(), 'CONTROL — unpicked, the row is not in the picked fill').not.toBe(PICKED);
   await programme.click();
   await page.mouse.move(5, 5);
-  await expect(programme).toHaveAttribute('aria-pressed', 'true');
+  await expect(programme).toBeChecked();
   await expect.poll(fill, { timeout: 4000 }).toBe(PICKED);
 
   // ── 4 · the serve address is detected; the station is written ─────────────
@@ -442,7 +443,7 @@ test('first-run on channel 2: the Layers tab is operable at once, with no reload
   await firstRun.locator('#cg-first-run-user').fill(FAKE_ADMIN.username);
   await firstRun.locator('#cg-first-run-pass').fill(FAKE_PLAYOUT_PASSWORD);
   await firstRun.getByRole('button', { name: 'Sign in' }).click();
-  const channelTwo = firstRun.getByRole('button', { name: /کانال دوم/ });
+  const channelTwo = firstRun.getByRole('checkbox', { name: /کانال دوم/ });
   await expect(channelTwo).toBeVisible({ timeout: 30_000 });
   await channelTwo.click();
   await expect(firstRun.locator('#cg-first-run-serve')).not.toHaveValue('', { timeout: 20_000 });
@@ -602,8 +603,8 @@ test('FIELD-FIXES-01 I — first-run on two channels shows five rows per band on
   await firstRun.locator('#cg-first-run-user').fill(FAKE_ADMIN.username);
   await firstRun.locator('#cg-first-run-pass').fill(FAKE_PLAYOUT_PASSWORD);
   await firstRun.getByRole('button', { name: 'Sign in' }).click();
-  const channelOne = firstRun.getByRole('button', { name: /آپاسای/ });
-  const channelTwo = firstRun.getByRole('button', { name: /کانال دوم/ });
+  const channelOne = firstRun.getByRole('checkbox', { name: /آپاسای/ });
+  const channelTwo = firstRun.getByRole('checkbox', { name: /کانال دوم/ });
   await expect(channelTwo).toBeVisible({ timeout: 30_000 });
   await channelOne.click();
   await channelTwo.click();

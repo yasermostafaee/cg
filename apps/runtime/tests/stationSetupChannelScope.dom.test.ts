@@ -68,7 +68,7 @@ function stub(options: StationSetupStubOptions): ReturnType<typeof stationSetupS
   return s;
 }
 
-async function press(button: HTMLButtonElement | null | undefined): Promise<void> {
+async function press(button: HTMLElement | null | undefined): Promise<void> {
   expect(button, 'the button exists').toBeTruthy();
   await act(async () => {
     button?.click();
@@ -81,16 +81,19 @@ const buttonNamed = (root: ParentNode, name: RegExp): HTMLButtonElement | undefi
     name.test(b.textContent ?? ''),
   );
 
-const rowOf = (section: HTMLElement, channel: number): HTMLButtonElement | null =>
-  section.querySelector<HTMLButtonElement>(`button[data-channel="${String(channel)}"]`);
+/** `UI-POLISH-01` E — a channel is a ROW with a checkbox (first-run's one `ChannelStep`); its box. */
+const rowOf = (section: HTMLElement, channel: number): HTMLInputElement | null =>
+  section.querySelector<HTMLInputElement>(
+    `[data-channel="${String(channel)}"] input[type="checkbox"]`,
+  );
 
 describe('e / M — Change channel… edits the station’s channel SET', () => {
   it('it opens on the station’s own set — channel 1 pressed, channel 2 not', async () => {
     stub({ auth: ADMIN });
     const section = sectionOf(await renderStationSetup({ section: 'channel' }), 'channel');
     await press(buttonNamed(section, /^Change channel…$/));
-    expect(rowOf(section, 1)?.getAttribute('aria-pressed')).toBe('true');
-    expect(rowOf(section, 2)?.getAttribute('aria-pressed')).toBe('false');
+    expect(rowOf(section, 1)?.checked).toBe(true);
+    expect(rowOf(section, 2)?.checked).toBe(false);
     // The set as it stands changes nothing, so there is nothing to press yet.
     expect(buttonNamed(section, /^Use this channel$/)?.disabled).toBe(true);
   });
@@ -129,7 +132,7 @@ describe('e / M — Change channel… edits the station’s channel SET', () => 
     const s = stub({ auth: ADMIN, banks: [SETUP_BANK, two] });
     const section = sectionOf(await renderStationSetup({ section: 'channel' }), 'channel');
     await press(buttonNamed(section, /^Change channel…$/));
-    expect(rowOf(section, 2)?.getAttribute('aria-pressed')).toBe('true');
+    expect(rowOf(section, 2)?.checked).toBe(true);
     await press(rowOf(section, 1));
     await press(buttonNamed(section, /^Use this channel$/));
     expect(s.fixedSetConfig.mock.calls).toEqual([[two]]);
@@ -141,8 +144,8 @@ describe('e / M — Change channel… edits the station’s channel SET', () => 
     const section = sectionOf(await renderStationSetup({ section: 'channel' }), 'channel');
     await press(buttonNamed(section, /^Change channel…$/));
     const row = rowOf(section, 3);
-    expect(row?.textContent).toBe('CH 3');
-    expect(row?.getAttribute('aria-pressed')).toBe('true');
+    expect(section.querySelector('[data-channel="3"]')?.textContent).toBe('CH 3');
+    expect(row?.checked).toBe(true);
     await press(row);
     await press(buttonNamed(section, /^Use this channel$/));
     expect(s.fixedSetConfig.mock.calls).toEqual([[SETUP_BANK]]);

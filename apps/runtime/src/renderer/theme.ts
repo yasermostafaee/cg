@@ -2761,6 +2761,13 @@ export const cssVars = {
   '--r-channel-tab-sel-bg': '#1e3348',
   '--r-channel-tab-sel-line': '#5985aa',
   '--r-channel-tab-sel-ink': '#ffffff',
+  /*
+   * `UI-POLISH-01` E — PICKING CHANNELS: one row per channel, a checkbox and its name. 8 px between
+   * rows, 10 px between the box and the name, and a row tall enough (18 px box + 2 × 9) to hit.
+   */
+  '--r-channel-row-gap': '8px',
+  '--r-channel-row-inner-gap': '10px',
+  '--r-channel-row-pad': '9px 12px',
   '--r-subbar-h': `${String(LAYER_SUBBAR_PX.h)}px`,
   '--r-subbar-pad': `${String(LAYER_SUBBAR_PX.padY)}px ${String(LAYER_SUBBAR_PX.padX)}px`,
   '--r-subbar-gap': `${String(LAYER_SUBBAR_PX.gap)}px`,

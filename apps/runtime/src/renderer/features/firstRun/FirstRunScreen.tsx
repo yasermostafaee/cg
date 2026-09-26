@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CatalogueChannel, SetupPhase } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { Checkbox } from '../../ui/Checkbox.js';
 import { NumericInput } from '../../ui/NumericInput.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
@@ -107,7 +108,6 @@ const styles = {
     fontSize: cssVars['--r-text-sm'],
     color: colors.textSecondary,
   },
-  channels: { display: 'flex', flexWrap: 'wrap' as const, gap: 8 },
 } as const;
 
 function hostOf(origin: string | null): string {
@@ -390,12 +390,17 @@ interface OnAirLine {
  * 🔴 `DESKTOP-APPS-01-D` — **THE CHANNEL CHOICE, first-run's and Station setup's alike.**
  *
  * a — NOTHING IS PRESELECTED in first-run: `initial` is empty there, and the commit stays disabled
- *     until the admin clicks a row. Each row names the Playout's channel AND its number
- *     (`… · CH 1`).
+ *     until the admin clicks a row. Each row names the channel's number AND the Playout's name
+ *     for it (`CH 1 · …`).
  * d — before the channels are DECLARED, `prepare` puts in force what the reading needs (first-run:
  *     the connection), each ADDED channel's occupancy is read, and a channel already on air with
  *     somebody else's content earns ONE line and a second press — a warning, never a block.
  * e — Station setup's Change channel… passes its own `prepare`/`declare` and reuses the rest.
+ *
+ * ⭐ `UI-POLISH-01` E — **EACH CHANNEL IS A ROW WITH A CHECKBOX** (`☐ CH 1 · <name>`), because a
+ * pill said nothing about picking more than one and a picked pill was hard to tell from an
+ * unpicked one. The row is a `<label>` round the shared `Checkbox`, so a click anywhere on it, a
+ * click on the box, and Space on the focused box all toggle through the browser's own checkbox.
  *
  * ⭐ `MULTI-CHANNEL-01` §2 E / M — **ONE OR MORE.** Every row is a toggle, and the choice is a SET
  * of channels on ONE CasparCG host — a station drives one server — so a row on another host starts
@@ -604,31 +609,36 @@ export function ChannelStep({
                   {group.host}
                 </h4>
               )}
-              {/* A8 — `cg-channel-choice`: a picked chip wears the console's one "chosen, not on
-                  air" treatment (`controls.css`); a secondary `Button` alone gets no fill for it. */}
-              <div style={styles.channels} className="cg-channel-choice">
+              {/* `UI-POLISH-01` E — a column of checkbox ROWS (`controls.css` `.cg-channel-row`);
+                  a checked row also wears the console's one "chosen, not on air" fill (A8). */}
+              <div className="cg-channel-choice">
                 {(group.rows as readonly ShownRow[]).map((row) => {
                   const on = isPicked(row);
+                  const channel = String(row.casparChannel);
                   return (
-                    <Button
+                    <label
                       key={`${row.casparHost}-${row.id}`}
-                      variant="secondary"
-                      active={on}
-                      aria-pressed={on}
-                      data-channel={row.casparChannel}
-                      onClick={() => {
-                        toggle(row);
-                      }}
+                      className="cg-channel-row"
+                      data-channel={channel}
+                      data-channel-picked={on ? 'true' : 'false'}
                     >
-                      {row.unnamed === true ? (
-                        `CH ${String(row.casparChannel)}`
-                      ) : (
-                        <>
-                          <IsolatedName>{row.name}</IsolatedName>
-                          {` · CH ${String(row.casparChannel)}`}
-                        </>
-                      )}
-                    </Button>
+                      <Checkbox
+                        checked={on}
+                        data-channel-box={channel}
+                        onChange={() => {
+                          toggle(row);
+                        }}
+                      />
+                      <span className="cg-channel-row__name">
+                        {`CH ${channel}`}
+                        {row.unnamed !== true && (
+                          <>
+                            {' · '}
+                            <IsolatedName>{row.name}</IsolatedName>
+                          </>
+                        )}
+                      </span>
+                    </label>
                   );
                 })}
               </div>

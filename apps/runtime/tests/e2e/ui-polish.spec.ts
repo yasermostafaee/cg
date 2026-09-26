@@ -294,6 +294,73 @@ test.describe('D — importing is one step: the OS chooser, or a drop on the lis
   });
 });
 
+/**
+ * E — the Playout's channel list, served at the bridge seam. The rows, their paint and the keyboard
+ * are what is under test; the list itself is data (golden rule 1), and on this harness there is no
+ * Playout to read it from. The rows sit on the station's own CasparCG host, so the declared channel
+ * is one of them rather than an extra `CH n` row.
+ */
+async function serveChannelList(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const cg = (window as unknown as { cg: typeof window.cg }).cg;
+    const host = (await cg.connections.config()).servers.A.host;
+    cg.setup.catalogue = () =>
+      Promise.resolve({
+        rows: [
+          { id: 'apasai', name: 'آپاسای', casparHost: host, casparChannel: 1 },
+          { id: 'cg', name: 'کانال دوم (تست CG)', casparHost: host, casparChannel: 2 },
+        ],
+      });
+  });
+}
+
+test.describe('E — channels are picked with checkboxes', () => {
+  test('Change channel… opens on the declared channel checked; the row and Space toggle; focus shows; the label follows the count', async ({
+    app,
+  }) => {
+    const { page } = app;
+    await serveChannelList(page);
+    await app.openStationSetupAt('Channel');
+    await page.getByRole('button', { name: 'Change channel…' }).click();
+    const one = page.getByRole('checkbox', { name: /^CH 1 · / });
+    const two = page.getByRole('checkbox', { name: /^CH 2 · / });
+    await expect(two).toBeVisible();
+    // Opens on the station's own set: channel 1 checked, channel 2 not.
+    await expect(one).toBeChecked();
+    await expect(two).not.toBeChecked();
+    // The row reads `CH n · <name>`, the name isolated.
+    const rowTwo = page.locator('.cg-channel-row[data-channel="2"]');
+    await expect(rowTwo).toHaveText('CH 2 · کانال دوم (تست CG)');
+    await expect(rowTwo.locator('bdi')).toHaveText('کانال دوم (تست CG)');
+
+    // The KEYBOARD: into the list with Tab (so focus is keyboard focus), Space toggles.
+    await one.focus();
+    await page.keyboard.press('Tab');
+    await expect(two).toBeFocused();
+    const outline = (row: Locator): Promise<string> =>
+      row.evaluate((el) => getComputedStyle(el).outlineStyle);
+    expect(await outline(rowTwo), 'the focused row shows it').toBe('solid');
+    const rowOne = page.locator('.cg-channel-row[data-channel="1"]');
+    expect(await outline(rowOne), 'CONTROL — the row without focus does not').toBe('none');
+    await page.keyboard.press('Space');
+    await expect(two).toBeChecked();
+    await expect(
+      page.getByRole('button', { name: 'Use these channels', exact: true }),
+    ).toBeVisible();
+
+    // A click on the ROW's name (not the box) toggles it back — and the label follows the count.
+    await rowTwo.locator('.cg-channel-row__name').click();
+    await expect(two).not.toBeChecked();
+    await expect(page.getByRole('button', { name: 'Use this channel', exact: true })).toBeVisible();
+    // A checked row wears the "chosen, not on air" fill; an unchecked one does not.
+    const bg = (row: Locator): Promise<string> =>
+      row.evaluate((el) => getComputedStyle(el).backgroundColor);
+    await expect.poll(() => bg(rowOne)).toBe(await cssColour(page, 'var(--r-look-btn-sel-bg)'));
+    await page.mouse.move(2, 2);
+    await expect.poll(() => bg(rowTwo)).not.toBe(await cssColour(page, 'var(--r-look-btn-sel-bg)'));
+  });
+});
+
 test.describe('A — the channel tabs', () => {
   test('the active tab is a filled box, AA, with no underline anywhere; switching moves it', async ({
     app,

@@ -79,14 +79,17 @@ async function render(): Promise<{
   return { el: container, prepare, declare, done };
 }
 
-const rowButton = (el: HTMLElement, channel: number): HTMLButtonElement | null =>
-  el.querySelector<HTMLButtonElement>(`button[data-channel="${String(channel)}"]`);
+/** `UI-POLISH-01` E — a channel is a ROW with a checkbox; these read its box and the row. */
+const rowBox = (el: HTMLElement, channel: number): HTMLInputElement | null =>
+  el.querySelector<HTMLInputElement>(`[data-channel="${String(channel)}"] input[type="checkbox"]`);
+const rowOf = (el: HTMLElement, channel: number): HTMLElement | null =>
+  el.querySelector<HTMLElement>(`[data-channel="${String(channel)}"]`);
 const useButton = (el: HTMLElement): HTMLButtonElement | undefined =>
   [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
     /^Use (this channel|these channels)/.test(b.textContent ?? ''),
   );
 
-async function press(button: HTMLButtonElement | null | undefined): Promise<void> {
+async function press(button: HTMLElement | null | undefined): Promise<void> {
   expect(button, 'the button exists').toBeTruthy();
   await act(async () => {
     button?.click();
@@ -101,10 +104,11 @@ describe('a — first-run never picks a channel for the admin', () => {
     stub(() => ({ state: 'empty', layers: [] }));
     const { el, declare } = await render();
     for (const row of ROWS) {
-      const button = rowButton(el, row.casparChannel);
-      expect(button?.getAttribute('aria-pressed')).toBe('false');
-      expect(button?.textContent).toContain(row.name);
-      expect(button?.textContent).toContain(`CH ${String(row.casparChannel)}`);
+      expect(rowBox(el, row.casparChannel)?.checked).toBe(false);
+      expect(rowOf(el, row.casparChannel)?.textContent).toContain(row.name);
+      expect(rowOf(el, row.casparChannel)?.textContent).toContain(
+        `CH ${String(row.casparChannel)}`,
+      );
     }
     expect(useButton(el)?.disabled).toBe(true);
     await press(useButton(el));
@@ -114,9 +118,9 @@ describe('a — first-run never picks a channel for the admin', () => {
   it('control — an explicit click declares that channel, and only that one', async () => {
     stub(() => ({ state: 'empty', layers: [] }));
     const { el, declare, done } = await render();
-    await press(rowButton(el, 2));
-    expect(rowButton(el, 2)?.getAttribute('aria-pressed')).toBe('true');
-    expect(rowButton(el, 1)?.getAttribute('aria-pressed')).toBe('false');
+    await press(rowBox(el, 2));
+    expect(rowBox(el, 2)?.checked).toBe(true);
+    expect(rowBox(el, 1)?.checked).toBe(false);
     await press(useButton(el));
     expect(declare).toHaveBeenCalledTimes(1);
     // `MULTI-CHANNEL-01` §2 E — the step declares a SET; here it holds the one channel clicked.
@@ -140,9 +144,9 @@ describe('A8 — first-run’s button follows the count', () => {
     const { el } = await render();
     expect(useButton(el)?.textContent).toBe('Use these channels');
     expect(useButton(el)?.disabled).toBe(true);
-    await press(rowButton(el, 2));
+    await press(rowBox(el, 2));
     expect(useButton(el)?.textContent).toBe('Use this channel');
-    await press(rowButton(el, 1));
+    await press(rowBox(el, 1));
     expect(useButton(el)?.textContent).toBe('Use these channels');
   });
 
@@ -158,18 +162,56 @@ describe('A8 — first-run’s button follows the count', () => {
     });
     const { el } = await render();
     expect(useButton(el)?.textContent).toBe('Use this channel');
-    await press(rowButton(el, 1));
+    await press(rowBox(el, 1));
     expect(useButton(el)?.textContent).toBe('Use this channel');
   });
 
-  it('the chips sit in the one "chosen, not on air" family, and a picked one says so', async () => {
+  it('the rows sit in the one "chosen, not on air" family, and a picked one says so', async () => {
     stub(() => ({ state: 'empty', layers: [] }));
     const { el } = await render();
-    await press(rowButton(el, 2));
+    await press(rowBox(el, 2));
     // Structural only — the paint is a browser's to measure (golden rule 12).
-    expect(rowButton(el, 2)?.closest('.cg-channel-choice')).not.toBeNull();
-    expect(rowButton(el, 2)?.getAttribute('aria-pressed')).toBe('true');
-    expect(rowButton(el, 1)?.getAttribute('aria-pressed')).toBe('false');
+    expect(rowOf(el, 2)?.closest('.cg-channel-choice')).not.toBeNull();
+    expect(rowOf(el, 2)?.getAttribute('data-channel-picked')).toBe('true');
+    expect(rowOf(el, 1)?.getAttribute('data-channel-picked')).toBe('false');
+    expect(rowBox(el, 2)?.checked).toBe(true);
+    expect(rowBox(el, 1)?.checked).toBe(false);
+  });
+});
+
+/*
+  🔴 `UI-POLISH-01` E — **A CHANNEL IS A ROW WITH A CHECKBOX.** The owner's first-run offered two pills
+  and nothing said more than one could be picked, and a picked pill was hard to tell from an unpicked
+  one. Each channel is now `☐ CH 1 · <name>`: a `<label>` round the shared `Checkbox`, so the row, the
+  box and Space all toggle it. (Space is the browser's own checkbox behaviour — jsdom does not
+  implement key activation, so it is proved in `e2e/ui-polish.spec.ts`.)
+*/
+describe('UI-POLISH-01 E — each channel is a row with a checkbox', () => {
+  it('each row is a label round ONE native checkbox, reading `CH n · <name>`, the name in its own <bdi>', async () => {
+    stub(() => ({ state: 'empty', layers: [] }));
+    const { el } = await render();
+    for (const row of ROWS) {
+      const label = rowOf(el, row.casparChannel);
+      expect(label?.tagName).toBe('LABEL');
+      expect(label?.querySelectorAll('input[type="checkbox"]')).toHaveLength(1);
+      expect(label?.textContent).toBe(`CH ${String(row.casparChannel)} · ${row.name}`);
+      expect(label?.querySelector('bdi')?.textContent).toBe(row.name);
+      // The primitive carries no local styling — the app's one checkbox rule paints it.
+      expect(rowBox(el, row.casparChannel)?.getAttribute('style')).toBeNull();
+    }
+    // No pill is left: the rows are not buttons.
+    expect(el.querySelector('button[data-channel]')).toBeNull();
+  });
+
+  it('clicking the ROW — its name, not the box — toggles it, and again takes it back out', async () => {
+    stub(() => ({ state: 'empty', layers: [] }));
+    const { el } = await render();
+    const name = rowOf(el, 2)?.querySelector<HTMLElement>('.cg-channel-row__name');
+    await press(name);
+    expect(rowBox(el, 2)?.checked).toBe(true);
+    expect(rowBox(el, 1)?.checked, 'CONTROL — the other row is untouched').toBe(false);
+    await press(name);
+    expect(rowBox(el, 2)?.checked).toBe(false);
   });
 });
 
@@ -177,10 +219,10 @@ describe('E — first-run picks ONE OR MORE channels (`MULTI-CHANNEL-01` §2 E)'
   it('two clicks pick two channels, and one press declares both', async () => {
     stub(() => ({ state: 'empty', layers: [] }));
     const { el, declare, done } = await render();
-    await press(rowButton(el, 1));
-    await press(rowButton(el, 2));
-    expect(rowButton(el, 1)?.getAttribute('aria-pressed')).toBe('true');
-    expect(rowButton(el, 2)?.getAttribute('aria-pressed')).toBe('true');
+    await press(rowBox(el, 1));
+    await press(rowBox(el, 2));
+    expect(rowBox(el, 1)?.checked).toBe(true);
+    expect(rowBox(el, 2)?.checked).toBe(true);
     expect(useButton(el)?.textContent).toBe('Use these channels');
     await press(useButton(el));
     expect(declare.mock.calls).toEqual([
@@ -197,10 +239,10 @@ describe('E — first-run picks ONE OR MORE channels (`MULTI-CHANNEL-01` §2 E)'
   it('a second click takes a channel back out — the control for "each click adds"', async () => {
     stub(() => ({ state: 'empty', layers: [] }));
     const { el, declare } = await render();
-    await press(rowButton(el, 1));
-    await press(rowButton(el, 2));
-    await press(rowButton(el, 1));
-    expect(rowButton(el, 1)?.getAttribute('aria-pressed')).toBe('false');
+    await press(rowBox(el, 1));
+    await press(rowBox(el, 2));
+    await press(rowBox(el, 1));
+    expect(rowBox(el, 1)?.checked).toBe(false);
     expect(useButton(el)?.textContent).toBe('Use this channel');
     await press(useButton(el));
     expect(declare.mock.calls[0]?.[0]).toEqual([expect.objectContaining({ channel: 2 })]);
@@ -220,15 +262,13 @@ describe('E — first-run picks ONE OR MORE channels (`MULTI-CHANNEL-01` §2 E)'
       },
     });
     const { el, declare } = await render();
-    await press(rowButton(el, 2));
-    const other = el.querySelector<HTMLButtonElement>(
-      '[data-caspar-host="10.0.0.9"] button[data-channel="1"]',
+    await press(rowBox(el, 2));
+    const other = el.querySelector<HTMLInputElement>(
+      '[data-caspar-host="10.0.0.9"] [data-channel="1"] input[type="checkbox"]',
     );
     await press(other);
-    expect(other?.getAttribute('aria-pressed')).toBe('true');
-    expect(rowButton(el, 2)?.getAttribute('aria-pressed'), 'the first host’s pick left').toBe(
-      'false',
-    );
+    expect(other?.checked).toBe(true);
+    expect(rowBox(el, 2)?.checked, 'the first host’s pick left').toBe(false);
     await press(useButton(el));
     expect(declare.mock.calls[0]?.[0]).toEqual([
       expect.objectContaining({ channel: 1, casparHost: '10.0.0.9' }),
@@ -245,7 +285,7 @@ describe('d — a channel already on air is declared only after one line and a s
   it('picking the programme channel warns once — its name, its number, the layer — and declares only on the second press', async () => {
     stub(programme);
     const { el, prepare, declare } = await render();
-    await press(rowButton(el, 1));
+    await press(rowBox(el, 1));
     await press(useButton(el));
     // The connection is in force (the reading needs it); the channel is NOT declared yet.
     expect(prepare).toHaveBeenCalledTimes(1);
@@ -266,8 +306,8 @@ describe('d — a channel already on air is declared only after one line and a s
   it('`MULTI-CHANNEL-01` — two picked, one on air: ONE line, about that channel alone', async () => {
     stub(programme);
     const { el, declare } = await render();
-    await press(rowButton(el, 1));
-    await press(rowButton(el, 2));
+    await press(rowBox(el, 1));
+    await press(rowBox(el, 2));
     await press(useButton(el));
     const lines = [...el.querySelectorAll('[data-channel-on-air]')];
     expect(lines.map((l) => l.getAttribute('data-channel-on-air'))).toEqual(['1']);
@@ -280,7 +320,7 @@ describe('d — a channel already on air is declared only after one line and a s
   it('control — an EMPTY channel gets no warning and is declared on the first press', async () => {
     stub(programme);
     const { el, declare } = await render();
-    await press(rowButton(el, 2));
+    await press(rowBox(el, 2));
     await press(useButton(el));
     expect(el.querySelector('[data-channel-on-air]')).toBeNull();
     expect(declare).toHaveBeenCalledTimes(1);
@@ -289,12 +329,12 @@ describe('d — a channel already on air is declared only after one line and a s
   it('changing the choice withdraws the warning — it was about the programme channel', async () => {
     stub(programme);
     const { el } = await render();
-    await press(rowButton(el, 1));
+    await press(rowBox(el, 1));
     await press(useButton(el));
     expect(el.querySelector('[data-channel-on-air]')).not.toBeNull();
     // `MULTI-CHANNEL-01` — each row is a toggle: the programme channel out, channel 2 in.
-    await press(rowButton(el, 1));
-    await press(rowButton(el, 2));
+    await press(rowBox(el, 1));
+    await press(rowBox(el, 2));
     expect(el.querySelector('[data-channel-on-air]')).toBeNull();
     expect(useButton(el)?.textContent).toBe('Use this channel');
   });

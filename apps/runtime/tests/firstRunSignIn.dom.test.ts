@@ -239,7 +239,7 @@ describe('DELTA-MULTI-CHANNEL-01-B B3 — one interface language', () => {
       );
     });
     await flush();
-    const chip = container.querySelector('button[data-channel="1"]');
+    const chip = container.querySelector('[data-channel="1"]');
     expect(chip?.textContent).toContain('آپاسای');
     expect(chip?.querySelector('bdi')?.textContent).toBe('آپاسای');
   });
