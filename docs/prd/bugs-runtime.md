@@ -12690,3 +12690,12 @@ bridge logs every exchange from the session queue into `<state-home>/logs/amcp.l
 (`%APPDATA%\CG Control\logs\amcp.log` for the installed app), 5 MB then one previous file, the take
 token redacted, fail-open. Tests: `amcp-log.integration.test.ts` (the bundled sidecar, red first
 against the old CLI), `command-queue.test.ts`.
+
+## [~] B-277 — An AMCP refusal reached the operator as "CasparCG refused the command (AMCP 403)" ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` A
+
+The console's one fallback for a server reply quoted its number, which says nothing about what
+went wrong to anyone not reading CasparCG's source. **Fix:** one mapping,
+`apps/runtime/src/renderer/ui/amcpRefusal.ts`, tailored by what the refused command was for (a
+DeckLink input on 403 or 404; a file on 404 of a media or stream play; the graphic on 404 of
+`CG ADD`; one line per code otherwise), with each code's meaning read from CasparCG 2.5.0's source.
+The number goes to the log. Tests: `amcpRefusal.test.ts`.

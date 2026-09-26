@@ -560,9 +560,10 @@ export function rowState({
       surface, because this cell already carries every other "why" it has and a second
       mechanism for one status is how one row comes to explain itself two ways.
 
-      ⚠ It claims exactly what it knows. `errorCodeMessage('amcp-404')` says *"CasparCG
-      refused the command (AMCP 404)"* — true and quotable. It does NOT say the config is
-      wrong; the console cannot see `casparcg.config` and must never imply that it can.
+      ⚠ It claims exactly what it knows. `errorCodeMessage('amcp-404')` says what the server's
+      reply means (`FIELD-FIXES-01` A's one mapping, `amcpRefusal.ts`) — never "AMCP 404", whose
+      number goes to the log. It does NOT say the config is wrong; the console cannot see
+      `casparcg.config` and must never imply that it can.
     */
     title: withWire(
       status === 'unverified'

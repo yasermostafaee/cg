@@ -56,11 +56,14 @@ describe('R-058 Part A — the error row carries its reason', () => {
     expect(title).toMatch(/bridge machine, not the playout server/i);
   });
 
-  it('🔴 an AMCP refusal is quoted with its NUMBER — the owner’s exact case', () => {
-    // A consumer that will not start makes CasparCG refuse commands on that channel. The
-    // console cannot know WHY it refused, but "AMCP 404" is quotable to an engineer, and
-    // quotable beats a dead end.
-    expect(titleFor('amcp-404')).toMatch(/CasparCG refused the command \(AMCP 404\)/);
+  it('🔴 an AMCP refusal is said in the operator’s words, never as its number (FIELD-FIXES-01 A)', () => {
+    // It read "CasparCG refused the command (AMCP 404)": quotable to an engineer, and of no use
+    // to the operator the owner watched on 2026-09-26. The code and the command go to the LOG
+    // (the bridge's `logs/amcp.log`, the audit record); the row says what the refusal means.
+    const title = titleFor('amcp-404');
+    expect(title).toMatch(/The server cannot find what this command names\./);
+    expect(title).not.toMatch(/AMCP/i);
+    expect(title).not.toMatch(/\b404\b/);
   });
 
   it('an UNKNOWN code is surfaced verbatim rather than swallowed', () => {

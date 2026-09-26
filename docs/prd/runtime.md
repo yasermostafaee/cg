@@ -3270,6 +3270,10 @@ the same tooltip that already carries `readyDetail` and the wire's own occupancy
 404)"_ — true and quotable to an engineer. It never says the config is wrong: the console cannot
 read `casparcg.config` and must not imply that it can.
 
+> **Superseded 2026-09-26 by `FIELD-FIXES-01` A:** the operator surface no longer quotes the number. One
+> mapping (`apps/runtime/src/renderer/ui/amcpRefusal.ts`) says what the reply means for the refused
+> command; the code and the command go to the log (`logs/amcp.log`, the audit record).
+
 ### Part B — a channel that stops ticking is an ALARM
 
 `/channel/N/framerate` is emitted on every channel tick and **nothing consumed it** (verified with

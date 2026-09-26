@@ -54,7 +54,9 @@ describe('errorCodeMessage — §8, the codes that used to name the wrong machin
     // Unchanged, and asserted here so the honesty fix above cannot be "tidied"
     // into making every failure vague.
     expect(errorCodeMessage('amcp-send-failed')).toContain('never reached CasparCG');
-    expect(errorCodeMessage('amcp-404')).toContain('CasparCG refused the command');
+    // `FIELD-FIXES-01` A — a server reply names the server, in the operator's words (the mapping
+    // in `amcpRefusal.ts`); the number goes to the log.
+    expect(errorCodeMessage('amcp-404')).toBe('The server cannot find what this command names.');
   });
 
   it('B-141 — a TIMEOUT is a THIRD fact, and must not borrow either of the other two', () => {

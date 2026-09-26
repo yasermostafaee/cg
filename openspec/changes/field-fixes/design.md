@@ -148,3 +148,21 @@ holdsSeats)` in `@cg/shared-schema` beside `isOnAirStatus`; the bridge's `#ownsL
   guard): the raw line, token included, must never be.
 - **Fail-open.** A file that cannot be written is said once on stderr and switched off; playout never
   waits on it. The bridge's own stderr lines are unchanged apart from one boot line naming the file.
+
+## §6 A — one mapping from an AMCP refusal to the operator's words
+
+- **Where.** `apps/runtime/src/renderer/ui/amcpRefusal.ts`: `amcpRefusalWords(code, command)` answers a
+  sentence (for a surface that names nothing else) and a clause (for the row's line after its row
+  and source names). `errorCodeMessage` calls it for every `amcp-NNN` code, so the banner and every
+  verb's refusal say the same generic line when there is no command to tailor it by.
+- **What each code means**, read from CasparCG 2.5.0-stable's source: execution failures reply
+  `<code> <CMD> FAILED` — 404 `file_not_found`, 403 a user error or a parameter that would not
+  convert, 402 a missing parameter, 501 anything else; parse failures reply `400 ERROR` with the line
+  echoed (not understood — and also a channel that does not exist, since `create_channel_command`
+  answers null for it), `401 <CMD> ERROR` (a channel that could not be parsed), `402`, `503`
+  (another client holds the channel's lock) and `500`. No reply carries a reason. A DeckLink index
+  the machine lacks is a user error (403); a busy device is swallowed and answers 404 (`B-177`).
+  So v6's 401 line stands as written, and a 400 on a channel-addressed command says both
+  possibilities; 503 is not a failure while running but a lock, and says so.
+- **The number goes to the log**: the bridge's `logs/amcp.log` (§5) and the audit record's
+  `command`. The audit panel keeps its code column — it is the log surface.

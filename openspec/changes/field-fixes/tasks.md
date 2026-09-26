@@ -60,3 +60,13 @@
       desktop shell starts it writing `<state-home>/logs/amcp.log` with no exchange on its stderr
       (the control) — red first against HEAD's CLI: `no AMCP log at …\CG Control\logs\amcp.log`;
       `command-queue.test.ts` +4; `station-plan.test.ts` (the dev station's path, inside its state).
+
+## 4. A — one mapping (`B-277`)
+
+- [x] 4.1 `amcpRefusal.ts`: the DeckLink line on 403 or 404 of a `DECKLINK` play; the file line on a
+      404 of a media or stream play; the graphic line on a 404 of `CG ADD`; one generic line per
+      code otherwise; never "AMCP" or the number. `errorCodeMessage` routes every `amcp-NNN` through it.
+- [x] 4.2 Tests: `amcpRefusal.test.ts` (DeckLink 403 and 404 → one line; control: 404 on a file → the
+      file line; a stream is a file line and a route is not; every code 400–503 with and without a
+      command never says "AMCP" or its number; control: non-reply codes are not the mapping's);
+      `errorCodeMessage.test.ts` and `rowState.errorReason.test.ts` re-pinned to the words.

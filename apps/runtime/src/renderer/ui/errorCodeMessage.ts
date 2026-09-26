@@ -12,6 +12,7 @@
  */
 import { REMOVE_ON_AIR_CODE, TAKE_ON_AIR_CODE } from '@cg/shared-ipc';
 import { REMOVE_ON_AIR_REASON, takeOnAirReason } from '../features/layers/layerRowActions.js';
+import { amcpRefusalWords } from './amcpRefusal.js';
 
 const MESSAGES: Readonly<Record<string, string>> = {
   'unknown-item': 'That item is no longer on the stack.',
@@ -196,8 +197,12 @@ export function errorCodeMessage(errorCode: string | undefined): string | null {
   if (errorCode === undefined || errorCode === '') return null;
   const known = MESSAGES[errorCode];
   if (known !== undefined) return known;
-  // `amcp-403` et al — CasparCG refused the command outright.
-  const amcp = /^amcp-(\d+)$/.exec(errorCode);
-  if (amcp !== null) return `CasparCG refused the command (AMCP ${String(amcp[1])}).`;
+  /*
+    🔴 `FIELD-FIXES-01` A — a server reply (`amcp-403` et al) in the operator's words, from the ONE
+    mapping (`amcpRefusal.ts`). The code and the command go to the log; "AMCP 403" never reaches
+    this sentence. With no command to tailor it by, each code says its generic line.
+  */
+  const amcp = amcpRefusalWords(errorCode);
+  if (amcp !== null) return amcp.sentence;
   return `Not accepted (${errorCode}).`;
 }
