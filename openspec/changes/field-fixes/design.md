@@ -298,3 +298,33 @@ are. Our own Node stays as `.nvmrc` says (22). **Shared CI config.**
   live. `silenceAllLivePlates` stays unscoped.
 - **Established:** the per-channel control lives in the plates toolbar, which exists only beside plate
   rows; a channel whose tab lists nothing shows its empty state, with no control to grey.
+
+## §14 L — another system's layers: below the bands normal, inside them dismissible
+
+- **Where the notice is decided — established, and changed there:** the console alone. The bridge's
+  orphan sweep reports every layer carrying a producer it did not place (`B-235`: the reserved
+  range excluded); the console's `OrphanLayersBanner` rendered all of them, and `orphanWarningChannels`
+  marked a tab for the html ones. The rule now lives in ONE module, `foreignNotice.ts`, which both
+  read, over ONE band predicate, `isInCgBands` (`@cg/shared-ipc`, beside `FIRST_ALLOCATABLE_LAYER`).
+  No bridge API change: the orphan set on the wire is unchanged, and so is the Station layers tab
+  that lists it.
+- **Below the bands** (1–49): no strip, no mark, for any producer — html included, because CG never
+  allocates below 50, so an html producer there is not ours either (and a CLEAR offered on the
+  Playout's own graphic was the wrong affordance).
+- **Inside the bands:** both strips stand and both mark the channel's tab. The video strip used to
+  mark nothing — R-015's "a warning colour here would permanently imply something is wrong" was about
+  the Playout's low-layer video, which is now out of the notice entirely; inside CG's bands another
+  system's video is a conflict with ours.
+- **Dismissal, per channel and per strip** (graphic, video): it records the strip's `layer:producer`
+  set, and the strip returns only when it holds a pair not recorded — "a new layer, or a different
+  producer". A layer leaving is not news, and neither is the same set seen again: a bridge restart
+  republishes an empty set and then re-observes, so forgetting on absence would bring every notice
+  back on every CG Control start (and would be acting on an absence that may be the bootstrap window,
+  `B-094`). One press on one strip never hides the other.
+- **Where it is kept:** this browser's `localStorage` (`cg.runtime.foreign-notice.dismissed.v1`,
+  read and written under try/catch; without storage a dismissal lasts the page). Hearing a notice is
+  a fact about the person at a console, not about the station, so no bridge state was added.
+- **The control:** `Notice`'s own dismiss, exported as `NoticeDismiss` so the strips wear the same
+  one, inside the box at its inline end in the box's ink — `Notice`'s DOM is unchanged.
+- **The Station layers note** said to use the warning strip to clear any undeclared layer; it now
+  says so for CG's layers (50 and up), because below them there is no strip.

@@ -278,37 +278,55 @@ export function Notice({
         </>
       )}
       {dismissable && (
-        /*
-          ⚠ `color: inherit` is the second half of §A2 and it is not cosmetic: the control
-          takes the MESSAGE's ink, so an amber refusal's dismiss is amber and a neutral
-          notice's is neutral. Without it the shared button ink wins and the control belongs
-          to the page instead of to the box it sits in.
-        */
-        <button
-          type="button"
-          onClick={onDismiss}
-          data-notice-dismiss=""
-          aria-label={dismissLabel ?? 'Dismiss this message'}
-          title={dismissLabel ?? 'Dismiss this message'}
-          style={{
-            flex: 'none',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: '22px',
-            height: '22px',
-            padding: 0,
-            border: '1px solid transparent',
-            borderRadius: cssVars['--r-radius-sm'],
-            background: 'transparent',
-            color: 'inherit',
-            cursor: 'pointer',
-            opacity: 0.75,
-          }}
-        >
-          <Icon icon={X} size={14} />
-        </button>
+        <NoticeDismiss onDismiss={onDismiss} label={dismissLabel ?? 'Dismiss this message'} />
       )}
     </div>
+  );
+}
+
+/**
+ * A message's dismiss control — `Notice`'s, and a message box that is not a `Notice` wears the
+ * same one (`FIELD-FIXES-01` L: the orphan strips, whose rows carry their own controls). Seat it
+ * INSIDE the box, at its inline end (§A2 above).
+ */
+export function NoticeDismiss({
+  onDismiss,
+  label,
+}: {
+  onDismiss: () => void;
+  /** The accessible name, also its title — an icon is not a label. */
+  label: string;
+}): JSX.Element {
+  return (
+    /*
+      ⚠ `color: inherit` is the second half of §A2 and it is not cosmetic: the control
+      takes the MESSAGE's ink, so an amber refusal's dismiss is amber and a neutral
+      notice's is neutral. Without it the shared button ink wins and the control belongs
+      to the page instead of to the box it sits in.
+    */
+    <button
+      type="button"
+      onClick={onDismiss}
+      data-notice-dismiss=""
+      aria-label={label}
+      title={label}
+      style={{
+        flex: 'none',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: '22px',
+        height: '22px',
+        padding: 0,
+        border: '1px solid transparent',
+        borderRadius: cssVars['--r-radius-sm'],
+        background: 'transparent',
+        color: 'inherit',
+        cursor: 'pointer',
+        opacity: 0.75,
+      }}
+    >
+      <Icon icon={X} size={14} />
+    </button>
   );
 }

@@ -12,6 +12,8 @@
  *   · "did not come back" (`EmptiedAirNotice`)                   — WARNING (its amber notice)
  *   · foreign content on a layer, owned-slot occupancy
  *     (`OrphanLayersBanner`)                                     — WARNING
+ *     (`FIELD-FIXES-01` L: foreign content only inside CG's bands, while its strip is not
+ *     dismissed — `foreignNotice.ts`)
  *   · a refusal (`RefusalBanner`), stamped with the channel on screen when it was raised
  *                                                                — WARNING
  *   · the on-air counts, the table's notices, the plates and playout tabs' dots, and the

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
 import { colors, cssVars } from '../../theme.js';
 import { Button } from '../../ui/Button.js';
+import { NoticeDismiss } from '../../ui/Notice.js';
 import { OperatorNames } from '../../ui/OperatorNames.js';
 import { operatorRowName } from '../../ui/operatorNaming.js';
 import { useConfirm } from '../../ui/useDialog.js';
@@ -12,25 +13,31 @@ import { useStack } from '../../hooks/useStack.js';
 import { useTemplateIndex } from '../../hooks/useTemplateIndex.js';
 import { casparRefusalReason } from '../../ui/reachWording.js';
 import { runCommand } from '../status/commandFeedback.js';
-
-/** R-015 — an orphaned GRAPHIC (an html producer): the alert strip, with its Clear. */
-function isOrphanedGraphic(o: OrphanLayer): boolean {
-  return o.producer === 'html';
-}
+import {
+  dismissForeignStrip,
+  foreignNoticeChannels,
+  isOrphanedGraphic,
+  noticedForeign,
+  useForeignDismissals,
+  type ForeignDismissals,
+} from './foreignNotice.js';
 
 /**
- * 🔴 `MULTI-CHANNEL-01` §2 L — the channels whose view this banner WARNS in: an orphaned graphic
- * or an owned-slot occupancy, both the amber alert strip. A layer another system is using is the
- * NEUTRAL status strip — "a warning colour here would permanently imply something is wrong" — so
- * it marks no tab. One predicate with the strips below (`isOrphanedGraphic`), never a second copy.
+ * 🔴 `MULTI-CHANNEL-01` §2 L — the channels whose view this banner WARNS in: an owned-slot
+ * occupancy, or a notice about another system's content that stands. `FIELD-FIXES-01` L: that is
+ * content INSIDE CG's bands, in a strip the operator has not dismissed — either strip, graphic or
+ * video, because inside the bands both are a conflict with ours. Below the bands it is the
+ * Playout's, and marks nothing. One rule with the strips below (`foreignNotice.ts`), never a
+ * second copy.
  */
 export function orphanWarningChannels(
   orphans: readonly OrphanLayer[],
   ownedOccupancy: readonly OwnedOccupancyWarning[],
+  dismissals: ForeignDismissals,
 ): number[] {
   return [
     ...new Set([
-      ...orphans.filter(isOrphanedGraphic).map((o) => o.channel),
+      ...foreignNoticeChannels(orphans, dismissals),
       ...ownedOccupancy.map((w) => w.channel),
     ]),
   ];
@@ -82,6 +89,16 @@ const styles = {
     justifyContent: 'space-between',
     gap: '0.75rem',
   },
+  // `FIELD-FIXES-01` L — a dismissible strip is a ROW: its lines in a column, the dismiss at the
+  // inline end, inside the box (`Notice`'s own arrangement for a message that carries a control).
+  dismissible: { flexDirection: 'row' as const, alignItems: 'start', gap: '0.6rem' },
+  lines: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '0.4rem',
+    flex: 1,
+    minWidth: 0,
+  },
   detail: { color: colors.textMuted, fontSize: '0.78rem' },
 } as const;
 
@@ -107,6 +124,11 @@ const styles = {
  * orphan persists (never auto-dismissed), and every html Clear is an
  * explicit, confirm-gated operator act — the row disappears when the bridge
  * observes the layer empty on a later sweep (never optimistically).
+ *
+ * `FIELD-FIXES-01` L — both strips speak only for layers INSIDE CG's bands, and each is
+ * DISMISSIBLE: the operator's dismissal holds until the strip holds a new layer or a different
+ * producer (`foreignNotice.ts`). Another system's layer below the bands is the Playout's and
+ * normal — it is listed on the Station layers tab, never here.
  *
  * B-056 — the same banner also renders the owned-slot occupancy warnings as
  * a DISTINCT strip: a load's adopt-CLEAR missed the primary over observed
@@ -136,6 +158,7 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
   const linkDown = useLink() === 'disconnected';
   const casparReach = useCasparReach();
   const clearRefusal = casparRefusalReason(linkDown, casparReach);
+  const dismissals = useForeignDismissals();
 
   /*
     🔴 `B-233` — WHAT THIS BANNER NEEDED IN ORDER TO NAME THE OWNING ROW.
@@ -192,76 +215,105 @@ export function OrphanLayersBanner({ orphans, ownedOccupancy }: Props): JSX.Elem
       templates,
     );
 
-  if (orphans.length === 0 && ownedOccupancy.length === 0) return null;
+  /*
+    `FIELD-FIXES-01` L — only what the notice speaks for: another system's content INSIDE CG's
+    bands, in a strip the operator has not dismissed.
+  */
+  const noticed = noticedForeign(orphans, dismissals);
+  if (noticed.length === 0 && ownedOccupancy.length === 0) return null;
 
-  // R-015 — the discriminator is the OBSERVED kind, never a layer number.
-  const htmlOrphans = orphans.filter(isOrphanedGraphic);
-  const foreignLayers = orphans.filter((o) => !isOrphanedGraphic(o));
+  // R-015 — the discriminator between the two strips is the OBSERVED kind, never a layer number.
+  const htmlOrphans = noticed.filter(isOrphanedGraphic);
+  const foreignLayers = noticed.filter((o) => !isOrphanedGraphic(o));
 
   return (
     <>
       {htmlOrphans.length > 0 && (
-        <div style={styles.strip} role="alert" aria-label="Orphaned on-air layers">
-          {htmlOrphans.map((o) => {
-            const name = `${String(o.channel)}-${String(o.layer)}`;
-            return (
-              <div key={name} style={styles.row}>
-                <span>
-                  ⚠ Layer {name} is on air but not on your stack{' '}
-                  <span style={styles.detail}>
-                    ({o.producer} producer — likely left by a previous session)
+        <div
+          style={{ ...styles.strip, ...styles.dismissible }}
+          role="alert"
+          aria-label="Orphaned on-air layers"
+        >
+          <div style={styles.lines}>
+            {htmlOrphans.map((o) => {
+              const name = `${String(o.channel)}-${String(o.layer)}`;
+              return (
+                <div key={name} style={styles.row}>
+                  <span>
+                    ⚠ Layer {name} is on air but not on your stack{' '}
+                    <span style={styles.detail}>
+                      ({o.producer} producer — likely left by a previous session)
+                    </span>
                   </span>
-                </span>
-                <Button
-                  variant="caution"
-                  aria-label={`Clear layer ${name}`}
-                  disabled={clearRefusal !== undefined}
-                  title={
-                    clearRefusal ??
-                    `Send CLEAR ${name} — removes whatever is on that layer from the output`
-                  }
-                  onClick={() => {
-                    // Explicit, confirm-gated operator act (the B-048 principle:
-                    // the operator decides, never a heuristic). Errors surface
-                    // via the command-error toast; success shows as the row
-                    // disappearing when the sweep observes the layer empty.
-                    void (async () => {
-                      const ok = await confirm({
-                        title: `Clear layer ${name}?`,
-                        body: 'This removes whatever is on that layer from air.',
-                        confirmLabel: 'Clear layer',
-                        tone: 'clear',
-                      });
-                      if (!ok) return;
-                      runCommand(
-                        `Clear layer ${name}`,
-                        window.cg.layers
-                          .clear({ channel: o.channel, layer: o.layer })
-                          .then((r) => ({ accepted: r.ok })),
-                      );
-                    })();
-                  }}
-                >
-                  CLEAR
-                </Button>
-              </div>
-            );
-          })}
+                  <Button
+                    variant="caution"
+                    aria-label={`Clear layer ${name}`}
+                    disabled={clearRefusal !== undefined}
+                    title={
+                      clearRefusal ??
+                      `Send CLEAR ${name} — removes whatever is on that layer from the output`
+                    }
+                    onClick={() => {
+                      // Explicit, confirm-gated operator act (the B-048 principle:
+                      // the operator decides, never a heuristic). Errors surface
+                      // via the command-error toast; success shows as the row
+                      // disappearing when the sweep observes the layer empty.
+                      void (async () => {
+                        const ok = await confirm({
+                          title: `Clear layer ${name}?`,
+                          body: 'This removes whatever is on that layer from air.',
+                          confirmLabel: 'Clear layer',
+                          tone: 'clear',
+                        });
+                        if (!ok) return;
+                        runCommand(
+                          `Clear layer ${name}`,
+                          window.cg.layers
+                            .clear({ channel: o.channel, layer: o.layer })
+                            .then((r) => ({ accepted: r.ok })),
+                        );
+                      })();
+                    }}
+                  >
+                    CLEAR
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+          <NoticeDismiss
+            label="Dismiss this notice"
+            onDismiss={() => {
+              dismissForeignStrip(orphans, 'graphic');
+            }}
+          />
         </div>
       )}
       {foreignLayers.length > 0 && (
-        <div style={styles.neutralStrip} role="status" aria-label="Layers in use by other systems">
-          {foreignLayers.map((o) => {
-            const name = `${String(o.channel)}-${String(o.layer)}`;
-            return (
-              <div key={name} style={styles.row}>
-                <span>
-                  Layer {name} is carrying video ({o.producer}) — placed by another system.{' '}
-                  <span style={styles.detail}>Not clearable from here.</span>
-                </span>
-              </div>
-            );
-          })}
+        <div
+          style={{ ...styles.neutralStrip, ...styles.dismissible }}
+          role="status"
+          aria-label="Layers in use by other systems"
+        >
+          <div style={styles.lines}>
+            {foreignLayers.map((o) => {
+              const name = `${String(o.channel)}-${String(o.layer)}`;
+              return (
+                <div key={name} style={styles.row}>
+                  <span>
+                    Layer {name} is carrying video ({o.producer}) — placed by another system.{' '}
+                    <span style={styles.detail}>Not clearable from here.</span>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <NoticeDismiss
+            label="Dismiss this notice"
+            onDismiss={() => {
+              dismissForeignStrip(orphans, 'video');
+            }}
+          />
         </div>
       )}
       {ownedOccupancy.length > 0 && (

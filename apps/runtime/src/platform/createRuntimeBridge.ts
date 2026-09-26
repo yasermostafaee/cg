@@ -131,6 +131,23 @@ function armCompletionSeam(mock: MockRuntime): void {
 }
 
 /**
+ * `FIELD-FIXES-01` L — **AN E2E SEAM FOR "ANOTHER SYSTEM PUT SOMETHING ON A LAYER"**, gated on
+ * `CG_E2E` exactly as the completion seam above. Offline there is no OSC tap and no sweep, so a
+ * spec that must watch a dismissed notice come back when a producer APPEARS has nothing to wait
+ * for. The seam reaches the mock's one entry point for an observation and adds no behaviour.
+ */
+function armOrphanSeam(mock: MockRuntime): void {
+  const w = globalThis as unknown as {
+    CG_E2E?: boolean;
+    CG_TEST_ORPHAN_APPEARS?: (orphan: { channel: number; layer: number; producer: string }) => void;
+  };
+  if (w.CG_E2E !== true) return;
+  w.CG_TEST_ORPHAN_APPEARS = (orphan) => {
+    mock.observeOrphanForTest(orphan);
+  };
+}
+
+/**
  * The in-memory simulation, wrapped to satisfy the `RuntimeBridge` contract. Its link
  * status is a constant `offline-mock`, which the UI renders as a loud, persistent TEST MODE
  * banner — not a pill among pills.
@@ -145,6 +162,7 @@ export function createMockBridge(): RuntimeBridge {
   const mock = new MockRuntime();
   const OFFLINE: BridgeLinkStatus = 'offline-mock';
   armCompletionSeam(mock);
+  armOrphanSeam(mock);
 
   return {
     getAppInfo: () => Promise.resolve(APP_INFO),

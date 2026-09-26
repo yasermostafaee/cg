@@ -44,6 +44,15 @@ export interface LayerBand {
 export const FIRST_ALLOCATABLE_LAYER = 50;
 
 /**
+ * `FIELD-FIXES-01` L — **IS THIS LAYER IN CG'S BANDS** (the floor and up)? Below the floor the layers are
+ * the playout server's, where another system's producer is NORMAL — the Playout's playlist plays on a
+ * low layer practically all the time; inside, a producer that is not ours is a conflict with ours.
+ */
+export function isInCgBands(layer: number): boolean {
+  return layer >= FIRST_ALLOCATABLE_LAYER;
+}
+
+/**
  * 🔴 **THE three bands, named for their ROLES and not for their numbers.**
  *
  * Every allocator reads THIS. A band bound written anywhere else — a constant, a bare

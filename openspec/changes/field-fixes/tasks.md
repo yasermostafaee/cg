@@ -152,3 +152,20 @@
       `silence-controls.spec.ts` (amber and live with the seeded plates; after CLEAR disabled, neutral
       by computed ground, the same height, the bridge's words — red first without the CSS rule);
       `fillBridgeStub` answers an empty ledger.
+
+## 12. L — another system's layers: below the bands normal, inside them dismissible (`B-283`)
+
+- [x] 12.1 `isInCgBands` (`@cg/shared-ipc`) and `foreignNotice.ts` — the one rule the strips and the
+      mark read; `isOrphanedGraphic` moved there.
+- [x] 12.2 Strips inside the bands only, each dismissible (`NoticeDismiss`); a dismissal per channel
+      and strip in this browser; the mark follows the strips; the Station layers note scoped.
+- [x] 12.3 Mock: the seed straddles the bands (1-5 and 1-90 `ffmpeg`, 1-60 `html`);
+      `CG_TEST_ORPHAN_APPEARS` (`CG_E2E` only) lets a spec make a producer appear.
+- [x] 12.4 Tests: `orphanLayersBanner.dom.test.ts` (layer 5 — video or html — no notice, no mark;
+      control: layer 90 and 60 give both; a dismissal survives a reload; a new layer or a different
+      producer returns it, a layer leaving or the same set again does not; the mark follows the
+      strips; storage denied → the page only; fixtures moved inside the bands; "no Clear control"
+      in place of "no button" — red first: 5 failed against the previous banner);
+      `channelSwitch.dom.test.ts` fixture moved to 2-65; e2e `orphan-layers.spec.ts` (layer 5 listed
+      on Station layers, no notice, no mark; layer 90's notice and mark; both strips dismissed; a
+      reload keeps them; layer 91 appearing brings the video strip and the mark back).

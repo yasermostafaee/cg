@@ -12741,3 +12741,14 @@ that answered "Nothing was sent — no channel holds a live plate". **Fix:** bot
 disabled and neutral, at the same size, while their scope holds no seat, by the predicate the bridge
 answers from (`ledgerChannels`), and amber as soon as a plate is live. Tests:
 `silenceHasTarget.test.ts`, `silence-controls.spec.ts`.
+
+## [~] B-283 — another system's layer below CG's bands raised a notice that could not be closed ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` L
+
+On channel 1 a blue notice sat under the header: _"Layer 1-5 is carrying video (ffmpeg) — placed by
+another system. Not clearable from here."_ The Playout's own playlist plays on a low layer
+practically all the time, the Station layers tab already lists it, and the notice could not be
+closed. **Fix:** the orphan strips speak only for layers inside CG's bands (`isInCgBands`, 50 and
+up); below them another system's layer raises no notice and no mark and is listed on Station layers
+as before. Inside the bands both strips stand and mark the channel, and each is dismissible: the
+dismissal holds, across a reload, until the strip holds a new layer or a different producer. Tests:
+`orphanLayersBanner.dom.test.ts`, `orphan-layers.spec.ts`.

@@ -134,3 +134,79 @@ take has resolved as refused.
 
 - **WHEN** the row's take was refused and it reads ERROR
 - **THEN** PLAY is available
+
+## MODIFIED Requirements
+
+### Requirement: Orphan-layer warning surface with per-layer Clear
+
+The Runtime UI SHALL split the bridge's orphan-layer set by observed producer kind, because the two
+kinds mean opposite things to a graphics operator (R-015), and SHALL speak only for the layers
+inside CG's bands (`FIELD-FIXES-01` L).
+
+A layer BELOW CG's bands (1–49) carrying a producer this system did not place is the Playout's, and
+normal: it SHALL raise no strip and no mark on its channel's tab, and it SHALL be listed on the
+Station layers tab, as before.
+
+An orphaned **`html`** layer inside the bands — plausibly this system's own graphic riding through a
+dead bridge session — SHALL surface as a warning strip: one row per orphan naming the channel-layer
+("Layer 1-60 is on air but not on your stack"), rendered with `role="alert"`, visible while the
+orphan persists until the operator dismisses the strip. Each html row SHALL offer an explicit Clear
+control gated by a confirmation; on confirm the UI issues `layers.clear` for that layer, surfaces a
+failure via the command-error channel, and treats the row's disappearance (the bridge's
+observed-empty resolution) as success. The UI SHALL never clear a layer without the operator's
+explicit confirmation.
+
+A **non-`html`** layer inside the bands — a video or any other producer this system does not place —
+SHALL surface as NEUTRAL information: a separate strip in the surface's normal text tones (never
+amber, never the on-air red), without `role="alert"`, naming the channel-layer and the observed
+producer kind and saying it was placed by another system and is not clearable from here. A non-html
+row SHALL offer NO Clear control — the affordance does not exist, rather than being disabled or
+confirm-gated harder. Unrecognised producer kinds SHALL be presented exactly as video ("not html"
+fails safe).
+
+Each strip SHALL carry a dismiss control inside its box. A dismissal SHALL record, per channel and
+per strip, the layers and producers the strip showed; the strip SHALL stay dismissed until it holds
+a layer or a producer the dismissal did not record — a new layer, or a different producer on a layer
+— and SHALL NOT return because a layer left it or because the same set was observed again. A
+dismissal SHALL belong to the browser it was made in and SHALL survive a reload. A channel's tab
+SHALL carry the warning mark while either strip of that channel stands, and not while both are
+dismissed.
+
+Both surfaces SHALL subscribe to the pushed orphan set, load the initial state on mount, and render
+NOT AT ALL when their subset is empty — no idle noise.
+
+#### Scenario: html orphans appear as warnings; idle is quiet
+
+- **WHEN** the bridge publishes orphans inside CG's bands whose producer kind is `html` **THEN** the
+  warning strip appears naming each channel-layer
+- **WHEN** the orphan set is empty **THEN** no orphan surface of either kind is rendered
+
+#### Scenario: Confirm-gated Clear on an html orphan
+
+- **WHEN** the operator clicks an html row's Clear and confirms **THEN** the UI issues
+  `layers.clear` for exactly that layer, and the row disappears when the bridge resolves it on
+  observed empty
+- **WHEN** the operator cancels the confirmation **THEN** nothing is sent
+
+#### Scenario: A video layer reads as normal and offers no Clear
+
+- **WHEN** the bridge publishes an orphan inside CG's bands whose producer kind is not `html` (e.g.
+  `ffmpeg`) **THEN** it renders in the neutral strip — normal text tones, no `role="alert"` —
+  naming the layer and kind, with NO Clear control present in the row
+- **WHEN** an orphan carries an unrecognised producer kind **THEN** it is rendered exactly as a video
+  layer (fail-safe: "not html" is not ours)
+
+#### Scenario: Below CG's bands another system's layer is normal
+
+- **WHEN** the bridge publishes an `ffmpeg` producer on layer 5 **THEN** no strip and no tab mark
+  appear, and the Station layers tab lists the layer
+- **WHEN** the same producer is on layer 90 **THEN** the neutral strip names it and the channel's tab
+  carries the mark
+
+#### Scenario: A dismissal holds until the strip's set changes
+
+- **WHEN** the operator dismisses the strip naming layer 90 and the console reloads **THEN** the strip
+  and its mark stay dismissed
+- **WHEN** a foreign producer then appears on layer 91 **THEN** the strip returns naming layers 90 and
+  91, and the mark returns with it
+- **WHEN** a layer leaves the strip, or the same set is observed again **THEN** it stays dismissed

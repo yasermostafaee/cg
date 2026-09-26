@@ -115,6 +115,16 @@ const BEFORE_AND_AFTER = {
       ⚠ Written ONLY when auth is on. A station with auth off never touches this key, which
       is what "byte-identical to today" means for the browser's storage.
     */
+    /*
+      🔴 `FIELD-FIXES-01` L — the notices this console's operator dismissed about another system's
+      layers inside CG's bands (`foreignNotice.ts`): per channel and strip, the `layer:producer`
+      set each strip showed. A per-console preference, like the shell layout — hearing a notice is
+      a fact about the person at this console, not about the station.
+
+      ⚠ **NEW, and no migration is owed:** nothing held it before, and ABSENT means nothing was
+      dismissed — every notice shows, which is the safe side. An unreadable value reads as absent.
+    */
+    'cg.runtime.foreign-notice.dismissed.v1',
     'cg.runtime.playoutSession',
     'cg.runtime.shell-layout.v1',
   ],

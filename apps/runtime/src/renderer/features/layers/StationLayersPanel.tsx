@@ -362,6 +362,9 @@ export function StationLayersPanel({ layers, orphans }: Props): JSX.Element {
  * sets are disjoint by construction (the bridge excludes the reserved range from the orphan
  * set on purpose, so a playout graphic is never offered a Clear it should not have).
  *
+ * `FIELD-FIXES-01` L — the strip speaks only for layers INSIDE CG's bands. Below them another
+ * system's layer is the Playout's, and normal; THIS group is where it is seen.
+ *
  * ⚠ **NO CLEAR HERE, DELIBERATELY.** The orphan strip owns that action, with its confirm
  * gate, its reachability gate and its `B-233` naming. A second Clear on a second surface is
  * two implementations of the single most dangerous control in the product — which is what
@@ -388,8 +391,8 @@ function UndeclaredLayers({ orphans }: { orphans: readonly OrphanLayer[] }): JSX
         Something is on these layers that this console did not put there, and they are{' '}
         <b>never declared</b> reserved — so they are not in the list above and never will be.
         Declare them with <span style={styles.code}>--reserved-layers</span> to see them as rows
-        here. To take one off air now, use the warning strip above the layer list: it owns that
-        Clear, with its confirm gate.
+        here. To take one in CG&rsquo;s layers (50 and up) off air now, use the warning strip above
+        the layer list: it owns that Clear, with its confirm gate.
       </p>
     </div>
   );

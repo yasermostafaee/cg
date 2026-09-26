@@ -4,7 +4,14 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
 import type { OrphanLayer, OwnedOccupancyWarning } from '@cg/shared-ipc';
-import { OrphanLayersBanner } from '../src/renderer/features/layers/OrphanLayersBanner.js';
+import {
+  OrphanLayersBanner,
+  orphanWarningChannels,
+} from '../src/renderer/features/layers/OrphanLayersBanner.js';
+import {
+  __reloadForeignDismissalsForTest,
+  dismissedStrip,
+} from '../src/renderer/features/layers/foreignNotice.js';
 import { clearPortals, clickDialogButton, openDialog } from './support/dialog.js';
 import { connectionsStub, type Reachability } from './support/reachability.js';
 import { fillBridgeStub } from './support/authStub.js';
@@ -17,6 +24,9 @@ import { fillBridgeStub } from './support/authStub.js';
  * B-056 — the owned-slot occupancy variant: a DISTINCT strip naming the
  * channel-layer AND the item, with NO Clear control (the remedy is
  * Out/Remove of the item), rendered alongside — not instead of — R-009 rows.
+ *
+ * `FIELD-FIXES-01` L — the orphan strips speak only for layers INSIDE CG's bands (50 and up), so
+ * every orphan fixture here sits in them; below the bands is its own case, at the end.
  */
 
 let container: HTMLDivElement | null = null;
@@ -26,6 +36,9 @@ afterEach(() => {
   container = null;
   clearPortals();
   vi.restoreAllMocks();
+  // `FIELD-FIXES-01` L — the dismissals are module state: back to this page's (empty) storage.
+  vi.unstubAllGlobals();
+  __reloadForeignDismissalsForTest();
 });
 
 function orphan(channel: number, layer: number): OrphanLayer {
@@ -122,11 +135,11 @@ describe('OrphanLayersBanner — R-009', () => {
 
   it('names each orphan channel-layer with the not-on-your-stack message', async () => {
     stubBridge();
-    const el = await renderBanner([orphan(1, 60), orphan(2, 15)]);
+    const el = await renderBanner([orphan(1, 60), orphan(2, 65)]);
     const alert = el.querySelector('[role="alert"]');
     expect(alert).not.toBeNull();
     expect(el.textContent).toContain('Layer 1-60 is on air but not on your stack');
-    expect(el.textContent).toContain('Layer 2-15 is on air but not on your stack');
+    expect(el.textContent).toContain('Layer 2-65 is on air but not on your stack');
   });
 
   it('confirming in the modal sends exactly one layers.clear for that layer', async () => {
@@ -212,12 +225,12 @@ describe('OrphanLayersBanner — B-056 owned-slot occupancy variant', () => {
 
   it('renders BOTH strips when orphans and owned warnings coexist — R-009 rows unchanged', async () => {
     stubBridge();
-    const el = await renderBanner([orphan(2, 15)], [warning]);
+    const el = await renderBanner([orphan(2, 65)], [warning]);
     expect(el.querySelector('[aria-label="Orphaned on-air layers"]')).not.toBeNull();
     expect(el.querySelector('[aria-label="Owned-layer occupancy warnings"]')).not.toBeNull();
-    expect(el.textContent).toContain('Layer 2-15 is on air but not on your stack');
+    expect(el.textContent).toContain('Layer 2-65 is on air but not on your stack');
     expect(
-      el.querySelector<HTMLButtonElement>('button[aria-label="Clear layer 2-15"]'),
+      el.querySelector<HTMLButtonElement>('button[aria-label="Clear layer 2-65"]'),
     ).not.toBeNull();
     // …and the owned strip still offers no buttons.
     expect(
@@ -280,34 +293,42 @@ describe('OrphanLayersBanner — R-015 video layers read as NORMAL and can never
     return { channel, layer, producer, since: '2026-07-19T12:00:00.000Z' };
   }
 
+  /** Every CLEAR control in the banner — the affordance R-015 keeps off a video layer. */
+  const clears = (el: ParentNode): NodeListOf<HTMLButtonElement> =>
+    el.querySelectorAll<HTMLButtonElement>('button[aria-label^="Clear"]');
+
   it('a video layer renders in the NEUTRAL strip: no alert role, no Clear control, kind named', async () => {
     stubBridge();
-    const el = await renderBanner([video(1, 1)]);
+    const el = await renderBanner([video(1, 90)]);
     // Not a problem: no alert strip exists at all for a video-only set.
     expect(el.querySelector('[role="alert"]')).toBeNull();
     const neutral = el.querySelector('[aria-label="Layers in use by other systems"]');
     expect(neutral).not.toBeNull();
     expect(neutral?.getAttribute('role')).toBe('status');
-    expect(el.textContent).toContain('Layer 1-1 is carrying video (ffmpeg)');
+    expect(el.textContent).toContain('Layer 1-90 is carrying video (ffmpeg)');
     expect(el.textContent).toContain('placed by another system');
-    // The affordance does not exist — not disabled, ABSENT.
-    expect(el.querySelector('button')).toBeNull();
+    // The affordance does not exist — not disabled, ABSENT. (`FIELD-FIXES-01` L: the strip's one
+    // control is its dismiss, which clears nothing.)
+    expect(clears(el)).toHaveLength(0);
+    expect(
+      [...(neutral?.querySelectorAll('button') ?? [])].map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Dismiss this notice']);
   });
 
   it('an unrecognised producer kind is presented exactly as video — "not html" fails safe', async () => {
     stubBridge();
-    const el = await renderBanner([video(1, 33, 'decklink')]);
+    const el = await renderBanner([video(1, 73, 'decklink')]);
     expect(el.querySelector('[role="alert"]')).toBeNull();
     expect(
       el.querySelector('[aria-label="Layers in use by other systems"]')?.getAttribute('role'),
     ).toBe('status');
-    expect(el.textContent).toContain('Layer 1-33 is carrying video (decklink)');
-    expect(el.querySelector('button')).toBeNull();
+    expect(el.textContent).toContain('Layer 1-73 is carrying video (decklink)');
+    expect(clears(el)).toHaveLength(0);
   });
 
   it('html and video coexist: the html orphan keeps its warning + Clear, the video row offers none', async () => {
     stubBridge();
-    const el = await renderBanner([orphan(1, 60), video(1, 1)]);
+    const el = await renderBanner([orphan(1, 60), video(1, 90)]);
     // The html orphan's R-009 surface is byte-for-byte alive…
     const alert = el.querySelector('[aria-label="Orphaned on-air layers"]');
     expect(alert?.getAttribute('role')).toBe('alert');
@@ -315,11 +336,184 @@ describe('OrphanLayersBanner — R-015 video layers read as NORMAL and can never
     expect(
       el.querySelector<HTMLButtonElement>('button[aria-label="Clear layer 1-60"]'),
     ).not.toBeNull();
-    // …the video row is neutral, and the ONLY button in the banner is the html Clear.
-    expect(el.textContent).toContain('Layer 1-1 is carrying video (ffmpeg)');
-    expect(el.querySelectorAll('button')).toHaveLength(1);
-    expect(
-      el.querySelector('[aria-label="Layers in use by other systems"]')?.querySelector('button'),
-    ).toBeNull();
+    // …the video row is neutral, and the ONLY Clear in the banner is the html one.
+    expect(el.textContent).toContain('Layer 1-90 is carrying video (ffmpeg)');
+    expect([...clears(el)].map((b) => b.getAttribute('aria-label'))).toEqual(['Clear layer 1-60']);
+    const neutral = el.querySelector('[aria-label="Layers in use by other systems"]');
+    expect(neutral === null ? 0 : clears(neutral).length).toBe(0);
+  });
+});
+
+/**
+ * 🔴 `FIELD-FIXES-01` L — **ANOTHER SYSTEM'S LAYER BELOW CG'S BANDS IS NORMAL; INSIDE THEM IT IS A
+ * CONFLICT, AND ITS NOTICE CAN BE DISMISSED.** The owner's channel 1 carried a blue notice for
+ * layer 1-5 — the Playout's own playlist, which plays on a low layer practically all the time —
+ * that could not be closed, and marked the channel's tab. The Station layers tab lists it; the
+ * e2e reads that half.
+ */
+describe('OrphanLayersBanner — FIELD-FIXES-01 L: CG’s bands, and a dismissal that holds', () => {
+  function video(channel: number, layer: number, producer = 'ffmpeg'): OrphanLayer {
+    return { channel, layer, producer, since: '2026-09-26T12:00:00.000Z' };
+  }
+
+  /** This page's storage, in memory: a reload below re-reads it. */
+  function memoryStorage(): Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> {
+    const data = new Map<string, string>();
+    return {
+      getItem: (key) => data.get(key) ?? null,
+      setItem: (key, value) => {
+        data.set(key, String(value));
+      },
+      removeItem: (key) => {
+        data.delete(key);
+      },
+    };
+  }
+
+  interface Mounted {
+    readonly el: HTMLDivElement;
+    /** The bridge publishes a new set. */
+    rerender(orphans: OrphanLayer[]): Promise<void>;
+    /** Unmount, re-read storage, mount again — a reload, as far as this banner can tell. */
+    reload(orphans: OrphanLayer[]): Promise<Mounted>;
+  }
+  const roots: { unmount(): void }[] = [];
+
+  async function mount(orphans: OrphanLayer[]): Promise<Mounted> {
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const root = createRoot(el);
+    roots.push(root);
+    const render = async (next: OrphanLayer[]): Promise<void> => {
+      await act(async () => {
+        root.render(
+          createElement(
+            StrictMode,
+            null,
+            createElement(OrphanLayersBanner, { orphans: next, ownedOccupancy: [] }),
+          ),
+        );
+      });
+    };
+    await render(orphans);
+    return {
+      el,
+      rerender: render,
+      reload: async (next) => {
+        roots.splice(roots.indexOf(root), 1);
+        await act(async () => {
+          root.unmount();
+        });
+        el.remove();
+        __reloadForeignDismissalsForTest();
+        return mount(next);
+      },
+    };
+  }
+
+  afterEach(async () => {
+    for (const root of roots.splice(0)) {
+      await act(async () => {
+        root.unmount();
+      });
+    }
+  });
+
+  const videoStrip = (el: ParentNode): Element | null =>
+    el.querySelector('[aria-label="Layers in use by other systems"]');
+  const graphicStrip = (el: ParentNode): Element | null =>
+    el.querySelector('[aria-label="Orphaned on-air layers"]');
+  async function dismissIn(strip: Element | null): Promise<void> {
+    const button = strip?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Dismiss this notice"]',
+    );
+    expect(button, 'the strip carries its dismiss').not.toBeNull();
+    await act(async () => {
+      button?.click();
+    });
+  }
+
+  function freshStorage(): void {
+    vi.stubGlobal('localStorage', memoryStorage());
+    __reloadForeignDismissalsForTest();
+  }
+
+  it('🔴 below the bands another system’s layer gets NO notice and NO mark — video or graphic (control: the same producers inside them do)', async () => {
+    stubBridge();
+    freshStorage();
+    const below = [video(1, 5), orphan(1, 20)];
+    const quiet = await mount(below);
+    expect(quiet.el.textContent, 'layer 5 is the Playout’s: no notice').toBe('');
+    expect(orphanWarningChannels(below, [], {}), 'and no mark').toEqual([]);
+
+    // CONTROL — the same two producers inside CG's bands: both strips, and the channel's mark.
+    const inside = [video(1, 90), orphan(1, 60)];
+    const loud = await mount(inside);
+    expect(videoStrip(loud.el)?.textContent).toContain('Layer 1-90 is carrying video (ffmpeg)');
+    expect(graphicStrip(loud.el)?.textContent).toContain(
+      'Layer 1-60 is on air but not on your stack',
+    );
+    expect(orphanWarningChannels(inside, [], {})).toEqual([1]);
+  });
+
+  it('🔴 a dismissed strip stays dismissed after a reload, and returns for a NEW layer or a DIFFERENT producer — not for a layer leaving, nor the same set seen again', async () => {
+    stubBridge();
+    freshStorage();
+    const first = await mount([orphan(1, 60), video(1, 90)]);
+    expect(videoStrip(first.el)).not.toBeNull();
+    await dismissIn(videoStrip(first.el));
+    expect(videoStrip(first.el), 'dismissed').toBeNull();
+    expect(graphicStrip(first.el), 'the other strip is its own notice').not.toBeNull();
+
+    const again = await first.reload([orphan(1, 60), video(1, 90)]);
+    expect(videoStrip(again.el), 'the dismissal survived the reload').toBeNull();
+    expect(graphicStrip(again.el)).not.toBeNull();
+
+    // A layer leaving, and the set seen again (a bridge restart re-observes it), are not news.
+    await again.rerender([orphan(1, 60)]);
+    await again.rerender([orphan(1, 60), video(1, 90)]);
+    expect(videoStrip(again.el)).toBeNull();
+
+    // A NEW layer is: the strip returns, naming everything on it.
+    await again.rerender([orphan(1, 60), video(1, 90), video(1, 91)]);
+    expect(videoStrip(again.el)?.textContent).toContain('Layer 1-91 is carrying video (ffmpeg)');
+    expect(videoStrip(again.el)?.textContent).toContain('Layer 1-90 is carrying video (ffmpeg)');
+
+    // …and so is a DIFFERENT producer on a layer already dismissed.
+    await dismissIn(videoStrip(again.el));
+    expect(videoStrip(again.el)).toBeNull();
+    await again.rerender([orphan(1, 60), video(1, 90, 'decklink'), video(1, 91)]);
+    expect(videoStrip(again.el)?.textContent).toContain('Layer 1-90 is carrying video (decklink)');
+  });
+
+  it('the mark follows the notice: gone while every strip of the channel is dismissed, back with the strip', () => {
+    const set = [orphan(1, 60), video(1, 90)];
+    const videoHeard = dismissedStrip({}, set, 'video');
+    expect(orphanWarningChannels(set, [], videoHeard), 'the graphic strip still stands').toEqual([
+      1,
+    ]);
+    const bothHeard = dismissedStrip(videoHeard, set, 'graphic');
+    expect(orphanWarningChannels(set, [], bothHeard)).toEqual([]);
+    expect(orphanWarningChannels([...set, video(1, 91)], [], bothHeard)).toEqual([1]);
+    // A dismissal is per channel: channel 2's new strip marks channel 2 alone.
+    expect(orphanWarningChannels([...set, video(2, 90)], [], bothHeard)).toEqual([2]);
+  });
+
+  it('with storage unavailable a dismissal lasts the page, and does not outlive it', async () => {
+    stubBridge();
+    vi.stubGlobal('localStorage', {
+      getItem: () => {
+        throw new Error('storage denied');
+      },
+      setItem: () => {
+        throw new Error('storage denied');
+      },
+    });
+    __reloadForeignDismissalsForTest();
+    const page = await mount([video(1, 90)]);
+    await dismissIn(videoStrip(page.el));
+    expect(videoStrip(page.el)).toBeNull();
+    const next = await page.reload([video(1, 90)]);
+    expect(videoStrip(next.el)).not.toBeNull();
   });
 });

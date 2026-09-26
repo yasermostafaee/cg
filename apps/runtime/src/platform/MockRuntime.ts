@@ -1581,6 +1581,18 @@ export class MockRuntime {
   }
 
   /**
+   * `FIELD-FIXES-01` L — e2e only (`CG_TEST_ORPHAN_APPEARS`): the sweep observes a producer on a
+   * layer, which replaces whatever it observed there before, and publishes the set.
+   */
+  observeOrphanForTest(orphan: Pick<OrphanLayer, 'channel' | 'layer' | 'producer'>): void {
+    this.#orphans = [
+      ...this.#orphans.filter((o) => !(o.channel === orphan.channel && o.layer === orphan.layer)),
+      { ...orphan, since: new Date().toISOString() },
+    ];
+    this.orphansChanged.emit(this.orphans());
+  }
+
+  /**
    * R-009 parity — the mock "clears" a surfaced orphan (removes it and
    * publishes the change), matching the bridge's resolve-on-observed-empty
    * from the operator's point of view. Owned-layer refusal can't be
@@ -2295,16 +2307,19 @@ function auditEntry(action: AuditEntry['action'], extra: Partial<AuditEntry>): A
  * surfaced orphan so Playwright can drive the banner + Clear flow. The
  * bridge-side truth (real OSC tap + sweep) is integration-tested.
  *
- * R-015 — the seed also carries one VIDEO layer (`ffmpeg`, the program feed
- * on layer 1) so Playwright can assert the neutral, Clear-less presentation
- * beside the html orphan's warning strip.
+ * R-015 — the seed also carries VIDEO layers so Playwright can assert the neutral, Clear-less
+ * presentation beside the html orphan's warning strip. `FIELD-FIXES-01` L — two of them, either
+ * side of CG's bands: `ffmpeg` on 1-5, the Playout's playlist as the owner's channel 1 carried it
+ * (normal: no notice, no mark, listed on Station layers), and `ffmpeg` on 1-90, a conflict inside
+ * the bands (the neutral strip, and the mark).
  */
 function seedOrphans(): OrphanLayer[] {
   const flagged = (globalThis as { CG_E2E_ORPHAN?: boolean }).CG_E2E_ORPHAN === true;
   return flagged
     ? [
         { channel: 1, layer: 60, producer: 'html', since: new Date().toISOString() },
-        { channel: 1, layer: 1, producer: 'ffmpeg', since: new Date().toISOString() },
+        { channel: 1, layer: 5, producer: 'ffmpeg', since: new Date().toISOString() },
+        { channel: 1, layer: 90, producer: 'ffmpeg', since: new Date().toISOString() },
       ]
     : [];
 }

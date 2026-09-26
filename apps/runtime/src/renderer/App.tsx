@@ -21,6 +21,7 @@ import {
   useStationSetupRequest,
 } from './features/stationSetup/stationSetupStore.js';
 import { OrphanLayersBanner, orphanWarningChannels } from './features/layers/OrphanLayersBanner.js';
+import { useForeignDismissals } from './features/layers/foreignNotice.js';
 import { EmptiedAirNotice, emptiedAirChannels } from './features/layers/EmptiedAirNotice.js';
 import { LayersPanel } from './features/layers/LayersPanel.js';
 import { ChannelScope } from './features/channels/ChannelScope.js';
@@ -120,6 +121,8 @@ export function App(): JSX.Element {
   const lockCovers = useLockCoverage().kind === 'all';
   const health = useConnections();
   const orphans = useOrphans();
+  // `FIELD-FIXES-01` L — the same dismissals the orphan strips read, so a mark and its notice agree.
+  const foreignDismissals = useForeignDismissals();
   const ownedOccupancy = useOwnedOccupancy();
   const emptiedAir = useEmptiedAir();
   // `FIELD-FIXES-01` B — a mock item carries no `slot`; the bank row it is bound to says its channel.
@@ -168,7 +171,7 @@ export function App(): JSX.Element {
             ],
             warnings: [
               ...emptiedAirChannels(emptiedAir),
-              ...orphanWarningChannels(orphans, ownedOccupancy),
+              ...orphanWarningChannels(orphans, ownedOccupancy, foreignDismissals),
               ...(standingRefusal?.channel != null ? [standingRefusal.channel] : []),
               // `FIELD-FIXES-01` B — a row carrying a refused take's line, shown in ITS view only.
               ...takeRefusalChannels(items, fixedSlots),
@@ -182,6 +185,7 @@ export function App(): JSX.Element {
       channelSettingsState,
       emptiedAir,
       orphans,
+      foreignDismissals,
       ownedOccupancy,
       standingRefusal,
       items,

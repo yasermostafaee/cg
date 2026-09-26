@@ -490,7 +490,8 @@ describe('the playout tab, split by channel (`MULTI-CHANNEL-01` §2 G)', () => {
 
 describe('a channel’s messages stay in its view (`MULTI-CHANNEL-01` §2 L)', () => {
   const since = new Date().toISOString();
-  const ORPHAN_ON_2 = { channel: 2, layer: 40, producer: 'html', since };
+  // `FIELD-FIXES-01` L — inside CG's bands: below them another system's layer is normal, and quiet.
+  const ORPHAN_ON_2 = { channel: 2, layer: 65, producer: 'html', since };
 
   afterEach(() => {
     clearRefusal();
