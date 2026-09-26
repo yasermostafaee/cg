@@ -40,3 +40,29 @@ export async function setPlayoutAddress(address: string): Promise<string> {
     );
   }
 }
+
+/**
+ * `FIELD-FIXES-01` G — **THE LOG FOLDER, from the console.** The native menu that held "Open bridge
+ * log" is gone (its "CG Control" submenu was the second line repeating the app's name), so the
+ * console carries the door instead: `open_bridge_log` opens Explorer on `bridge.log`, beside
+ * `amcp.log`. Only inside CG Control; a browser has no such door and renders no control for it.
+ */
+export function canOpenBridgeLog(): boolean {
+  return tauri() !== null;
+}
+
+/** Open the log folder in Explorer. Never throws: a refusal is reported, not raised. */
+export async function openBridgeLog(): Promise<{ accepted: boolean; message?: string }> {
+  const door = tauri();
+  if (door === null)
+    return { accepted: false, message: 'Only CG Control can open its log folder.' };
+  try {
+    await door.invoke('open_bridge_log');
+    return { accepted: true };
+  } catch (err) {
+    return {
+      accepted: false,
+      message: typeof err === 'string' ? err : err instanceof Error ? err.message : String(err),
+    };
+  }
+}

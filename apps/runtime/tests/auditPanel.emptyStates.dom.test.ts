@@ -73,6 +73,9 @@ function stubBridge(health: Health, entries: AuditEntry[] = []): void {
   let operatorName = '';
   const stub = {
     audit: {
+      // `FIELD-FIXES-01` G — the log-folder door (absent outside CG Control).
+      canOpenLogFolder: () => false,
+      openLogFolder: () => Promise.resolve({ accepted: false }),
       recent: () => Promise.resolve(entries),
       health: () => Promise.resolve(health),
       operatorName: () => operatorName,

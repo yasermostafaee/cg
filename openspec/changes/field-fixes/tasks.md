@@ -111,3 +111,19 @@
       fails for a window without the key; planted red: the runtime config without the key fails it
       (`expected [ 'main' ] to deeply equal []`). `turbo.json` `test` inputs hash the config.
 - [ ] 8.3 The owner drags an asset onto the canvas, and a file from Explorer, in the new installed apps.
+
+## 9. G — the name once, with the Apasai logo (`B-281`)
+
+- [x] 9.1 CG Control's native menu removed; Quit = the close button, Reload = F5, Open bridge log =
+      the audit log's `Open log folder` (`open_bridge_log`, `allow-open-bridge-log`, the bridge contract).
+- [x] 9.2 Titles `APASAI CG CONTROL` / `APASAI CG DESIGNER`: both windows, both pages, the starting page,
+      the Designer's empty-project tab title.
+- [x] 9.3 The Control header's brand and the Designer landing's brand removed.
+- [x] 9.4 Icons from `brand/apasai-icon.svg` (the logo on a white square) via `tauri icon`; the favicon.
+- [x] 9.5 Tests: `tauriWindows.test.ts` (titles; control: `productName` and `identifier` unchanged),
+      `appTitle.test.ts` (both pages), `monitorsDefault.dom.test.ts` (no brand; control: the channel
+      strip), `starter-landing.spec.ts` (no brand, the tab title; control: the toolbar),
+      `auditPanel.logFolder.dom.test.ts` (control: absent in a browser),
+      `contextMenuSuppression.dom.test.ts` retargeted to the header's spacer; the installer smoke reads
+      both title bars. `turbo.json` `test` inputs widened.
+- [ ] 9.6 The owner sees one name, the Apasai logo in the title bar and taskbar, and no menu bar.

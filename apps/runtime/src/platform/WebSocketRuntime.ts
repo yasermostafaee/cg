@@ -142,7 +142,12 @@ import {
   type StoredSession,
 } from './playoutSession.js';
 import { StackRetentionStore } from './stack/StackRetentionStore.js';
-import { canSetPlayoutAddress, setPlayoutAddress } from './desktop.js';
+import {
+  canOpenBridgeLog,
+  canSetPlayoutAddress,
+  openBridgeLog,
+  setPlayoutAddress,
+} from './desktop.js';
 
 const APP_INFO: AppInfo = { name: 'cg Runtime', version: '0.0.0', platform: 'browser' };
 
@@ -1989,6 +1994,9 @@ export class WebSocketRuntime implements RuntimeBridge {
     // list can be reported as a quiet session only when the instrument that
     // produced it is provably live.
     health: () => this.#invoke(AuditHealthChannel, {}),
+    // `FIELD-FIXES-01` G — the log folder, through CG Control's own door (never the socket).
+    canOpenLogFolder: (): boolean => canOpenBridgeLog(),
+    openLogFolder: () => openBridgeLog(),
   };
 
   readonly update = {

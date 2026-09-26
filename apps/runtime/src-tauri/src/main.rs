@@ -10,7 +10,6 @@
 
 mod sidecar;
 
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::webview::PageLoadEvent;
 use tauri::{Manager, RunEvent};
 
@@ -29,30 +28,15 @@ fn main() {
             }
         }))
         .manage(sidecar::Bridge::default())
-        .invoke_handler(tauri::generate_handler![sidecar::set_playout_address])
-        .menu(|app| {
-            let open_log =
-                MenuItem::with_id(app, "open-log", "Open bridge log", true, None::<&str>)?;
-            let reload = MenuItem::with_id(app, "reload", "Reload", true, None::<&str>)?;
-            let separator = PredefinedMenuItem::separator(app)?;
-            let quit = PredefinedMenuItem::quit(app, Some("Quit"))?;
-            let control = Submenu::with_items(
-                app,
-                "CG Control",
-                true,
-                &[&open_log, &reload, &separator, &quit],
-            )?;
-            Menu::with_items(app, &[&control])
-        })
-        .on_menu_event(|app, event| match event.id().0.as_str() {
-            "open-log" => sidecar::open_log(app),
-            "reload" => {
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.reload();
-                }
-            }
-            _ => {}
-        })
+        // `FIELD-FIXES-01` G — NO NATIVE MENU. Its one submenu, titled "CG Control", was the
+        // second line under the title bar that repeated the name. Its three items live on:
+        // Quit is the window's close button (the exit stops the bridge, below); Reload is F5,
+        // which the console leaves to WebView2; and "Open bridge log" is a console button
+        // (the audit log's tools row) through `open_bridge_log`.
+        .invoke_handler(tauri::generate_handler![
+            sidecar::set_playout_address,
+            sidecar::open_bridge_log
+        ])
         // A start failure can land before the starting page has loaded its script; replaying it
         // on every finished load is what makes the failure impossible to miss.
         .on_page_load(|webview, payload| {

@@ -233,3 +233,30 @@ are. Our own Node stays as `.nvmrc` says (22). **Shared CI config.**
   installer smoke does not perform an OS drag, and adding one is not cheap.
 - `turbo.json`'s `test` inputs gain `src-tauri/tauri.conf.json`, because the new tests read it: without
   it a change to the config alone would replay a cached green. **Shared config.**
+
+## §11 G — the name once, in the title bar, with the Apasai logo
+
+- **What "line 2" was:** CG Control's native menu bar — one submenu, titled "CG Control", holding
+  Open bridge log, Reload and Quit (`src-tauri/src/main.rs`). Line 3 was the header's brand block
+  (`CG CONTROL`), and the Designer's landing page opened with a `cg Designer` heading.
+- **Removed:** the menu; the Control header's brand (it pressed nothing, so no function moved) with
+  its CSS, token and constant; the Designer landing's brand heading. The menu's three items live on:
+  **Quit** is the window's close button (the exit stops the bridge); **Reload** is F5, which the console
+  leaves to WebView2 (no key handler takes it); **Open bridge log** is the audit log's `Open log folder`
+  — a new shell command, `open_bridge_log`, permitted to the console page only, reached through the
+  bridge contract (`audit.canOpenLogFolder` / `openLogFolder`) and absent in a browser.
+- **Titles:** both `tauri.conf.json` windows, both pages' `<title>`, the starting page's, and the
+  Designer's empty-project tab title read `APASAI CG CONTROL` / `APASAI CG DESIGNER`. The Designer's
+  project-open tab title keeps its project name (`D-088`). `productName`, identifiers, installer names
+  and folders are unchanged.
+- **Icons:** `brand/apasai-icon.svg` is the logo, its content byte for byte, centred on a white rounded
+  square — square as an icon must be, and legible on a dark title bar or taskbar, where the logo's
+  near-black bars would vanish. That plate is a choice the owner can reverse. `tauri icon` (CLI 2.11.5)
+  rendered the five files each bundle references; the same SVG is each page's `/favicon.svg`.
+- **Tests:** the window titles and the unchanged names; the pages' titles and favicon; the Control
+  header without a brand (control: the channel strip); the Designer landing without one (control: the
+  toolbar of an opened project); the log-folder door (control: absent in a browser); and the installer
+  smoke reads each app's title bar (`MainWindowTitle`, proven here against a live window and a missing
+  one). `turbo.json`'s `test` inputs now hash `index.html`, `brand/**` and `public/favicon.svg` — which
+  `splashCss.test.ts` already read without them, a pre-existing instance of the silent-cache hole — and
+  `src-tauri/starting/**` for J. **Shared config.**

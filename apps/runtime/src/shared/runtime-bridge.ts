@@ -766,6 +766,14 @@ export interface RuntimeBridge {
      * produced it.
      */
     health(): Promise<ChannelResponse<typeof AuditHealthChannel>>;
+    /**
+     * `FIELD-FIXES-01` G — can THIS console open the station's log folder (`bridge.log` and
+     * `amcp.log`)? Only inside CG Control, whose native menu held the door until it was removed;
+     * a browser has none, and the control that would use it is then absent.
+     */
+    canOpenLogFolder(): boolean;
+    /** Open the log folder in Explorer, through CG Control. A refusal is answered, never thrown. */
+    openLogFolder(): Promise<{ accepted: boolean; message?: string }>;
     /*
       🔴 `OPERATOR-NAME-SWEEP-01` — **THE TWO AUDIT MEMBERS THAT READ AND WROTE THE CONSOLE
       LABEL ARE GONE FROM THIS CONTRACT, and the removal is the point rather than a tidy-up.**

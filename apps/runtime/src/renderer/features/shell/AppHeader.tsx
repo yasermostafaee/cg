@@ -1,4 +1,4 @@
-import { Layers, Monitor, MonitorOff, ScrollText, Settings } from 'lucide-react';
+import { Monitor, MonitorOff, ScrollText, Settings } from 'lucide-react';
 import { Button } from '../../ui/Button.js';
 import { Icon } from '../../ui/Icon.js';
 import { ChannelStrip } from '../channels/ChannelStrip.js';
@@ -23,7 +23,7 @@ import type { ShellLayout } from '../../hooks/useShellLayout.js';
  *
  * The reference's bar carries: a brand block, a channel select, `Settings`, the monitors
  * toggle, a `PVW · N` badge, and `Templates` / `Import` / `Audit log` at the right. Taken:
- * the brand, the channel strip, the monitors toggle, `PVW · N`, Settings and the audit log.
+ * the channel strip, the monitors toggle, `PVW · N`, Settings and the audit log.
  *
  * NOT taken, and each for a reason of its own kind rather than a preference:
  *
@@ -36,6 +36,10 @@ import type { ShellLayout } from '../../hooks/useShellLayout.js';
  * this argument is untouched by the change: it is about WHICH ROW a load lands on, not about
  * how many presses land it. A header button would still have to invent a destination.
  *   - `PROTOTYPE` — the drawing labelling itself. There is nothing here to adopt.
+ *   - 🔴 **The BRAND block** (`FIELD-FIXES-01` G, the owner's rule: the name appears ONCE, in
+ *     the window's title bar — `APASAI CG CONTROL`, with the Apasai logo — and the browser tab
+ *     carries the title and the favicon). It was taken from the reference, and in the installed
+ *     app it made the third "CG Control" in one corner. It pressed nothing, so no function moved.
  *   - The lock and the manual failover stay on the status bar. The reference draws NEITHER,
  *     so there is no reference decision to follow; the failover control is guard item 17 and
  *     belongs beside the fault states it answers.
@@ -65,16 +69,6 @@ export function AppHeader({
 
   return (
     <header className="cg-app-header" data-app-header="">
-      {/*
-        THE BRAND BLOCK, in the reference's own words (`CG CONTROL`). It is a mark and a
-        name, not a control: nothing here is pressable, so it takes no focus and answers no
-        keyboard. The glyph is `aria-hidden` by `Icon`'s own default.
-      */}
-      <span className="cg-app-brand">
-        <Icon icon={Layers} size={16} />
-        <span className="cg-app-brand__name">CG</span>
-        <span className="cg-app-brand__word">CONTROL</span>
-      </span>
       {/*
         THE CHANNEL AXIS, moved here from `ChannelScope`'s own strip — the same tablist, the
         same store, the same ids. Only its PLACE changed, which is why `ChannelScope` still

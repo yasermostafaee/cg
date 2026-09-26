@@ -107,9 +107,11 @@ export function LandingView(): JSX.Element {
   return (
     <div className={s.page} aria-label="Designer landing">
       <div>
-        <div className={s.brand}>
-          <h1 className={s.brandTitle}>cg Designer</h1>
-        </div>
+        {/*
+          `FIELD-FIXES-01` G — NO IN-APP BRAND: the name appears once, in the window's title bar
+          (`APASAI CG DESIGNER`, with the Apasai logo), and the browser tab carries the title and
+          the favicon. The line below says what the page is for.
+        */}
         <p className={s.brandSub}>
           Broadcast template builder — pick a demo, open a recent project, or start fresh.
         </p>

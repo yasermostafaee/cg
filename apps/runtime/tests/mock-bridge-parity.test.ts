@@ -263,7 +263,8 @@ const BRIDGE_SURFACE: {
       them is red, and so is dropping a member that still exists. The guard is UPDATED as a
       consumer, which is the only correct way to move a census.
     */
-    audit: ['recent', 'health'],
+    // `FIELD-FIXES-01` G — and the log-folder door the native menu held until it was removed.
+    audit: ['recent', 'health', 'canOpenLogFolder', 'openLogFolder'],
     update: ['request', 'state', 'cancel', 'onStateChanged'],
     /**
      * R-022 — REHEARSE belongs in this guard for exactly the reason

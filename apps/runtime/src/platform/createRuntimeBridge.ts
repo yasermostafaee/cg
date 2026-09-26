@@ -395,6 +395,10 @@ export function createMockBridge(): RuntimeBridge {
     audit: {
       recent: (req) => Promise.resolve(mock.auditRecent(req.limit, req.action, req.actor)),
       health: () => Promise.resolve(mock.auditHealth()),
+      // `FIELD-FIXES-01` G — the simulation is not CG Control: no log folder to open.
+      canOpenLogFolder: () => false,
+      openLogFolder: () =>
+        Promise.resolve({ accepted: false, message: 'Only CG Control can open its log folder.' }),
     },
 
     update: {

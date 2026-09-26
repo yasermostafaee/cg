@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
-import { Check, Copy, RefreshCw, ScrollText, Search } from 'lucide-react';
+import { Check, Copy, FolderOpen, RefreshCw, ScrollText, Search } from 'lucide-react';
 import { AuditEntrySchema, type AuditEntry } from '@cg/shared-schema';
 import { type FixedLayerBank, type TemplateInfo } from '@cg/shared-ipc';
 import { AsyncButton } from '../../ui/AsyncButton.js';
@@ -403,6 +403,21 @@ export function AuditPanel({ open, onClose }: Props): JSX.Element | null {
         <AsyncButton variant="neutral" icon={RefreshCw} run={() => refresh()}>
           Refresh
         </AsyncButton>
+        {/*
+          `FIELD-FIXES-01` G — THE LOG FOLDER, inside CG Control only (`bridge.log` beside
+          `amcp.log`). CG Control's native menu held this door until it was removed; a browser
+          console has no such door, so the control is absent there rather than disabled.
+        */}
+        {window.cg.audit.canOpenLogFolder() && (
+          <AsyncButton
+            variant="neutral"
+            icon={FolderOpen}
+            run={() => window.cg.audit.openLogFolder()}
+            data-audit-open-logs=""
+          >
+            Open log folder
+          </AsyncButton>
+        )}
       </div>
       {/*
         🔴 `OPERATOR-NAME-SWEEP-01` — **THE CONSOLE-NAME FIELD AND ITS CAVEAT ARE GONE.**

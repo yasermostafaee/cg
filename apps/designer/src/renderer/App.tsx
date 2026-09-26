@@ -218,11 +218,11 @@ export function App(): JSX.Element {
   );
 
   // D-088 — the tab title reflects the open project + dirty state: `* name` dirty,
-  // `name` clean, `cg Designer` when nothing is open.
+  // `name` clean, and (`FIELD-FIXES-01` G) the product's name when nothing is open.
   const projectName = scene?.name ?? null;
   useEffect(() => {
     document.title =
-      projectName === null ? 'cg Designer' : dirty ? `* ${projectName}` : projectName;
+      projectName === null ? 'APASAI CG DESIGNER' : dirty ? `* ${projectName}` : projectName;
   }, [projectName, dirty]);
 
   // D-088 — warn on tab-close / refresh while there are unsaved changes. The browser shows

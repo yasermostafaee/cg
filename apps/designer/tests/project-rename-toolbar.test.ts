@@ -57,7 +57,7 @@ const storedName = (): string => designerStore.get().scene!.name;
 /** What App.tsx's `document.title` effect would show for the current store state. */
 function tabTitle(): string {
   const { scene, dirty } = designerStore.get();
-  if (scene === null) return 'cg Designer';
+  if (scene === null) return 'APASAI CG DESIGNER';
   return dirty ? `* ${scene.name}` : scene.name;
 }
 

@@ -464,8 +464,6 @@ export const APP_HEAD_PX = {
   padY: 6,
   padX: 12,
   gap: 10,
-  /** `.brand{gap:8px}`, 29 px tall. */
-  brandGap: 8,
   /** A door in this bar — `.btn.quiet{min-height:32px;padding:5px 9px;gap:7px;font-size:12px}`. */
   btnH: 32,
   btnPadY: 5,
@@ -2751,7 +2749,6 @@ export const cssVars = {
   '--r-app-head-pad': `${String(APP_HEAD_PX.padY)}px ${String(APP_HEAD_PX.padX)}px`,
   '--r-app-head-gap': `${String(APP_HEAD_PX.gap)}px`,
   '--r-app-head-bg': '#121b26',
-  '--r-app-brand-gap': `${String(APP_HEAD_PX.brandGap)}px`,
   '--r-app-head-btn-h': `${String(APP_HEAD_PX.btnH)}px`,
   '--r-app-head-btn-pad': `${String(APP_HEAD_PX.btnPadY)}px ${String(APP_HEAD_PX.btnPadX)}px`,
   '--r-app-head-btn-gap': `${String(APP_HEAD_PX.btnGap)}px`,

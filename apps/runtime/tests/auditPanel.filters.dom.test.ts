@@ -76,6 +76,9 @@ afterEach(async () => {
 function stubBridge(entries: AuditEntry[]): void {
   const stub = {
     audit: {
+      // `FIELD-FIXES-01` G — the log-folder door (absent outside CG Control).
+      canOpenLogFolder: () => false,
+      openLogFolder: () => Promise.resolve({ accepted: false }),
       recent: () => Promise.resolve(entries),
       health: () =>
         Promise.resolve({

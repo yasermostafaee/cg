@@ -99,6 +99,22 @@ function pidsOf(image) {
     .filter((l) => l.toLowerCase().startsWith(`"${image.toLowerCase()}"`))
     .map((l) => Number(l.split(',')[1]?.replace(/"/g, '')));
 }
+/**
+ * `FIELD-FIXES-01` G — the TITLE BAR's text, as Windows holds it: the main window title of the
+ * app's process. Read after its page is up, so the window exists. '' when none is found.
+ */
+function windowTitle(image) {
+  const name = image.replace(/\.exe$/i, '');
+  try {
+    return run('powershell', [
+      '-NoProfile',
+      '-Command',
+      `(Get-Process -Name '${name}' -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | Select-Object -First 1).MainWindowTitle`,
+    ]).trim();
+  } catch {
+    return '';
+  }
+}
 /** This process's mandatory integrity level, read from its own token: `High` or `Medium`. */
 function integrityLevel() {
   const groups = run('whoami', ['/groups', '/fo', 'csv', '/nh']);
@@ -391,6 +407,14 @@ async function designer() {
     `save ${facts.showSaveFilePicker}, open ${facts.showOpenFilePicker}, directory ${facts.showDirectoryPicker}`,
   );
   await page.screenshot(path.join(out, 'designer.png'));
+  {
+    const title = windowTitle('cg-designer.exe');
+    check(
+      "CG Designer's title bar reads APASAI CG DESIGNER",
+      title === 'APASAI CG DESIGNER',
+      title,
+    );
+  }
   const ffmpeg = await page.evaluate(ffmpegProbe);
   fs.writeFileSync(path.join(out, 'designer-ffmpeg.json'), JSON.stringify(ffmpeg, null, 2));
   check(
@@ -481,6 +505,10 @@ async function controlDrive() {
     );
     await sleep(3000);
     await page.screenshot(path.join(out, 'control.png'));
+    {
+      const title = windowTitle('cg-control.exe');
+      check("CG Control's title bar reads APASAI CG CONTROL", title === 'APASAI CG CONTROL', title);
+    }
 
     // DESKTOP-APPS-01-A — the one door that writes the Playout target: the app's own command,
     // callable from the console this window loaded, never over the control socket.

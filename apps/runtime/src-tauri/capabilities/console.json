@@ -1,9 +1,9 @@
 {
   "identifier": "console",
-  "description": "DESKTOP-APPS-01-A: the console the bridge serves on http://127.0.0.1:5174, in CG Control's own window, may set the Playout address. This is the one door that writes the Playout target, and it is not the control socket (ADR 0011).",
+  "description": "DESKTOP-APPS-01-A: the console the bridge serves on http://127.0.0.1:5174, in CG Control's own window, may set the Playout address, and (FIELD-FIXES-01 G) open the log folder. The first is the one door that writes the Playout target, and it is not the control socket (ADR 0011).",
   "windows": ["main"],
   "remote": {
     "urls": ["http://127.0.0.1:5174/*"]
   },
-  "permissions": ["allow-set-playout-address"]
+  "permissions": ["allow-set-playout-address", "allow-open-bridge-log"]
 }

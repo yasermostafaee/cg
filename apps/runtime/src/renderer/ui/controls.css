@@ -50,25 +50,6 @@
   flex-shrink: 0;
 }
 
-/* The mark and the name. Not a control: nothing here is pressable or focusable. */
-.cg-app-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--r-app-brand-gap);
-  color: var(--r-text);
-  flex-shrink: 0;
-}
-.cg-app-brand__name {
-  font-weight: var(--r-weight-bold);
-  letter-spacing: 0.04em;
-}
-.cg-app-brand__word {
-  color: var(--r-text-muted);
-  letter-spacing: 0.14em;
-  font-size: var(--r-app-head-btn-text);
-  text-transform: uppercase;
-}
-
 .cg-app-header__spacer {
   flex: 1;
   min-width: 0;

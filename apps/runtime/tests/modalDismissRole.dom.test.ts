@@ -119,6 +119,9 @@ describe('a dismiss-only footer is `cancel` — the rule AuditPanel states, appl
     // something nobody decided.
     (window as unknown as { cg: unknown }).cg = {
       audit: {
+        // `FIELD-FIXES-01` G — the log-folder door (absent outside CG Control).
+        canOpenLogFolder: () => false,
+        openLogFolder: () => Promise.resolve({ accepted: false }),
         recent: () => Promise.resolve([]),
         health: () => Promise.resolve({ path: null, writable: false, lastError: null }),
         // `B-141` — the panel reads the acting console's self-declared name on open.

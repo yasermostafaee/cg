@@ -378,6 +378,13 @@ fn change_playout_address(app: &AppHandle, address: &str) -> Result<String, Stri
 // ── Saying it on the starting screen ─────────────────────────────────────────
 
 /// Open Explorer on the bridge log, selected — the file a client sends us.
+/// `FIELD-FIXES-01` G — the console's door to the log folder, which the native menu held until it
+/// was removed: Explorer opens on `bridge.log`, beside `amcp.log`.
+#[tauri::command]
+pub fn open_bridge_log(app: AppHandle) {
+    open_log(&app);
+}
+
 pub fn open_log<R: Runtime>(app: &AppHandle<R>) {
     let state = app.state::<Bridge>();
     let log_file = state.log.lock().unwrap_or_else(|e| e.into_inner()).clone();

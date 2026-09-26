@@ -78,6 +78,9 @@ function stubBridge(entries: AuditEntry[]): {
   let operatorName = 'desk 2';
   const stub = {
     audit: {
+      // `FIELD-FIXES-01` G — the log-folder door (absent outside CG Control).
+      canOpenLogFolder: () => false,
+      openLogFolder: () => Promise.resolve({ accepted: false }),
       recent: (req: { actor?: string; action?: string }) => {
         recentCalls.push(req);
         const actor = req.actor;

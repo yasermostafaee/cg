@@ -124,8 +124,9 @@ function rightClick(target: Element): MouseEvent {
 describe('guard item 23 — native context-menu suppression, editable fields exempt', () => {
   it('🔴 (1) the operator SURFACE: a right-click on chrome with no menu of its own is cancelled', () => {
     /*
-     * The app header's BRAND BLOCK — plain chrome, not pressable, no `onContextMenu` of its
-     * own, so the only thing that can cancel this event is the app-wide suppressor.
+     * The app header's SPACER — plain chrome, not pressable, no `onContextMenu` of its own, so
+     * the only thing that can cancel this event is the app-wide suppressor. (It was the BRAND
+     * block until `FIELD-FIXES-01` G removed the brand: the name lives in the title bar now.)
      *
      * ⚠ IT USED TO BE `.cg-panel-title`, AND THAT SUBJECT HAD QUIETLY BECOME CONDITIONAL.
      * `AUDIT-CLOSE-01` B3 gave the Layers panel a `heading` instead of a title, so the only
@@ -134,11 +135,11 @@ describe('guard item 23 — native context-menu suppression, editable fields exe
      * right-click", which is the honest failure: it had been asserting the suppressor
      * through a surface that happened to be visible rather than one that always is.
      *
-     * The brand is the right subject precisely because it cannot go away: it is in the
+     * The spacer is the right subject precisely because it cannot go away: it is in the
      * header in every state, which is what "the operator surface" means here.
      */
-    const chrome = document.querySelector('.cg-app-brand');
-    if (chrome === null) throw new Error('no app-header brand to right-click');
+    const chrome = document.querySelector('.cg-app-header__spacer');
+    if (chrome === null) throw new Error('no app-header spacer to right-click');
     const ev = rightClick(chrome);
     expect(ev.defaultPrevented, 'the browser menu is suppressed on the surface').toBe(true);
     // …and it opened nothing of ours: suppression is silence, not a half-menu.

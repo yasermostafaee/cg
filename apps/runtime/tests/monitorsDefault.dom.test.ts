@@ -185,3 +185,17 @@ describe('MONITORS-01 — the shell boots with the monitors folded away', () => 
     expect(strip()).not.toBeNull();
   });
 });
+
+describe('FIELD-FIXES-01 G — the header carries no in-app brand', () => {
+  it('🔴 no brand block and no app name in the header', () => {
+    const header = document.querySelector('[data-app-header]');
+    expect(header, 'the app header is rendered').not.toBeNull();
+    expect(header?.querySelector('.cg-app-brand') ?? null).toBeNull();
+    expect(header?.textContent ?? '').not.toMatch(/CG\s*CONTROL/i);
+  });
+
+  it('CONTROL — the header still renders the channel strip', () => {
+    const header = document.querySelector('[data-app-header]');
+    expect(header?.querySelector('[role="tablist"][aria-label="Channels"]') ?? null).not.toBeNull();
+  });
+});

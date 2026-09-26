@@ -12723,3 +12723,13 @@ same drag works in the browser. Tauri 2's `dragDropEnabled` defaults to true, an
 handler then takes the drop before the page's HTML5 events fire. **Fix:** `"dragDropEnabled": false` on
 both apps' window (CG Control drops a `.vcg` into its picker and reorders list fields the same way).
 Tests: `tauriWindows.test.ts` in each app. The proof is a real OS drag in the new installer.
+
+## [~] B-281 — The installed apps said their name three times in one corner, without the Apasai logo ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` G
+
+CG Control's corner read "CG Control" in the title bar, again in a native menu bar under it (one
+submenu: Open bridge log, Reload, Quit), and a third time as the header's `CG CONTROL` brand; the
+Designer opened on a `cg Designer` heading. **Fix:** the name appears once, in the title bar —
+`APASAI CG CONTROL` / `APASAI CG DESIGNER` — with icons and a favicon made from the Apasai logo; the
+menu and both in-app brands are gone (the log folder opens from the audit log; Quit is the close
+button; Reload is F5). `productName`, identifiers and folders are unchanged. Tests:
+`tauriWindows.test.ts`, `appTitle.test.ts`, `starter-landing.spec.ts`, the installer smoke.

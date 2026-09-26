@@ -55,7 +55,11 @@
         "scripts/**",
         "vitest.config.*",
         "package.json",
-        "src-tauri/tauri.conf.json"
+        "src-tauri/tauri.conf.json",
+        "src-tauri/starting/**",
+        "index.html",
+        "brand/**",
+        "public/favicon.svg"
       ],
       "passThroughEnv": [
         "VITEST_MAX_FORKS",

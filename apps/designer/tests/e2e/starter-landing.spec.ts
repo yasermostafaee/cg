@@ -46,6 +46,21 @@ test.describe('D-119 — starter landing catalog', () => {
     await expect(badges.nth(4)).toHaveText('content-driven hold');
   });
 
+  test('🔴 FIELD-FIXES-01 G — no in-app brand; the tab is titled APASAI CG DESIGNER', async ({
+    app,
+  }) => {
+    await app.goto();
+    await expect(app.page).toHaveTitle('APASAI CG DESIGNER');
+    await expect(app.page.getByRole('heading', { name: /cg designer/i })).toHaveCount(0);
+    await expect(app.page.locator('body')).not.toContainText(/cg designer/i);
+    // CONTROL — the landing rendered (its New project door), and an opened project has its toolbar.
+    await expect(app.page.getByRole('button', { name: 'New project' })).toBeVisible();
+    await app.page.getByTestId('starter-card').first().click();
+    await app.expectStudio();
+    await expect(app.page.getByTestId('project-name')).toBeVisible();
+    await expect(app.page.locator('body')).not.toContainText(/cg designer/i);
+  });
+
   test('picking the composite starter loads it into the Studio', async ({ app }) => {
     await app.goto();
     await app.page.getByTestId('starter-card').first().click();

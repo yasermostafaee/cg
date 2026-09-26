@@ -16,20 +16,6 @@ export const page = style({
   fontSize: '0.85rem',
 });
 
-export const brand = style({
-  display: 'flex',
-  alignItems: 'center',
-  gap: '0.6rem',
-  marginBottom: '0.5rem',
-});
-
-export const brandTitle = style({
-  fontSize: '1.6rem',
-  fontWeight: 700,
-  margin: 0,
-  letterSpacing: '0.02em',
-});
-
 export const brandSub = style({
   fontSize: '0.82rem',
   color: colors.textMuted,

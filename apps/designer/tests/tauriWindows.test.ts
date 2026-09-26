@@ -17,12 +17,13 @@ import { describe, expect, it } from 'vitest';
 
 interface WindowConfig {
   readonly label?: string;
+  readonly title?: string;
   readonly dragDropEnabled?: boolean;
 }
 
 const conf = JSON.parse(
   fs.readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'),
-) as { app: { windows: WindowConfig[] } };
+) as { productName: string; identifier: string; app: { windows: WindowConfig[] } };
 
 /** The windows on which Tauri's native handler would take the drop (the key absent = ON). */
 function nativeDragDropWindows(windows: readonly WindowConfig[]): string[] {
@@ -38,5 +39,24 @@ describe('CG Designer — HTML5 drag and drop reaches the page', () => {
   it('CONTROL — the same check fails for a window without the key, because the default is ON', () => {
     const withoutKey = conf.app.windows.map(({ dragDropEnabled: _off, ...rest }) => rest);
     expect(nativeDragDropWindows(withoutKey)).toEqual(conf.app.windows.map((w) => w.label));
+  });
+});
+
+/**
+ * 🔴 `FIELD-FIXES-01` G — **THE NAME APPEARS ONCE, IN THE WINDOW'S TITLE BAR, AS `APASAI CG DESIGNER`.**
+ * The installed app's taskbar and installer name stay what they were: `productName`, the
+ * `identifier` and every state or log folder are the owner's to rename, and renaming them moves
+ * the user's settings.
+ */
+describe('CG Designer — the title bar says APASAI CG DESIGNER', () => {
+  it('🔴 every window is titled APASAI CG DESIGNER', () => {
+    expect(conf.app.windows.map((w) => w.title)).toEqual(
+      conf.app.windows.map(() => 'APASAI CG DESIGNER'),
+    );
+  });
+
+  it('CONTROL — the product name and identifier are unchanged', () => {
+    expect(conf.productName).toBe('CG Designer');
+    expect(conf.identifier).toBe('app.cgbroadcast.designer');
   });
 });
