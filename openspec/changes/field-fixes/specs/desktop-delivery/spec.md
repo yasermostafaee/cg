@@ -39,3 +39,42 @@ CG Control only, through the shell's own command; a console in a browser SHALL s
 
 - **WHEN** the audit log opens inside CG Control
 - **THEN** `Open log folder` is offered and opens it; in a browser the control is absent
+
+### Requirement: Each installed app's window SHALL paint its splash's ground before any page does
+
+CG Control's and CG Designer's windows SHALL declare, as their window and webview background, the
+ground of the app's own splash, so that no white frame shows before the first page paints or, in CG
+Control, while the starting page gives way to the console.
+
+#### Scenario: No white frame
+
+- **WHEN** either installed app opens its window **THEN** the window's background is its splash's
+  ground, read from that splash
+
+## MODIFIED Requirements
+
+### Requirement: CG Control starts its bridge and loads the console from it
+
+CG Control SHALL start its bridge sidecar with every path under the user's own data folder, wait
+until the bridge answers on `http://127.0.0.1:5174`, and then load the console from it. Until then
+it SHALL show the console's own splash — ONE design from one source: the starting page SHALL be
+composed at staging from the built console's `index.html` (its title, the splash's CSS and the
+splash markup, byte for byte, build stamp included) and SHALL take none of that splash's clock. While
+it waits, the splash's phase slot SHALL say what the window is waiting for; on failure the splash
+SHALL show, inside itself, the sentence, who holds each port and the log's path, with its progress
+hidden. When the console replaces the starting page inside CG Control, the console's splash SHALL
+continue the one on screen — its entrance already over — while in a browser it SHALL make its
+entrance as before.
+
+#### Scenario: The installed sidecar answers
+
+- **WHEN** CG Control starts **THEN** the bridge answering is the installed `cg-bridge.exe` **AND**
+  the window loads the console from `http://127.0.0.1:5174`
+
+#### Scenario: One splash from launch to ready
+
+- **WHEN** CG Control starts **THEN** the window shows the console's splash, its phase reading
+  `STARTING BRIDGE`, and the console's splash then continues it with no entrance replayed
+- **WHEN** the bridge cannot be started **THEN** the sentence, the port holders and the log's path
+  appear inside that splash
+- **WHEN** the console is opened in a browser **THEN** its splash makes its entrance as before

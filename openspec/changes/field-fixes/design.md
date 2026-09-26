@@ -328,3 +328,43 @@ are. Our own Node stays as `.nvmrc` says (22). **Shared CI config.**
   one, inside the box at its inline end in the box's ink — `Notice`'s DOM is unchanged.
 - **The Station layers note** said to use the warning strip to clear any undeclared layer; it now
   says so for CG's layers (50 and up), because below them there is no strip.
+
+## §15 J — one splash, not two
+
+- **Established — what each app showed from launch to ready:**
+  - **CG Control:** (1) the window opened maximized and visible on its own background — white, since
+    nothing set it — until the first page painted; (2) `src-tauri/starting/index.html`: a `#10151c`
+    ground, "CG Control" in a system font and a sliding blue bar, for as long as the bridge took to
+    answer (on failure a red sentence, the port holders and the log path); (3) `sidecar::start`
+    navigated the window to `http://127.0.0.1:5174` — a cross-origin navigation, so no paint is
+    held over it and the window's background shows between the two documents; (4) the console's own
+    splash (R-035, `apps/runtime/index.html`), entrance and all, with its cold floor; (5) the
+    console. Two designs one after the other — the owner's "second loading screen" — with white
+    frames at (1) and (3).
+  - **CG Designer:** (1) the same white window background, then (2) its own splash from its
+    `index.html`, then the Designer. No second design, but the white frame.
+- **Chosen: the starting page renders the same splash and hands over seamlessly** — not a hidden
+  window. A window that shows nothing while the bridge starts gives no sign the launch worked, and
+  the owner wants what the starting page reports to reach him.
+  - **One source.** `src-tauri/starting/compose.mjs` composes the starting page from the console's
+    `index.html`: the title, the splash's `<style>` block and the `#cg-splash` element, byte for
+    byte. `stage-control.mjs` runs it on the BUILT console it has just staged, so the build stamp is
+    the same too, into the gitignored `src-tauri/starting-dist/`, which `frontendDist` now names.
+    The old page is deleted; `starting/` keeps only `compose.mjs`, `start.js` and `start.css`.
+  - **The page's words, inside the splash.** `start.js` writes `STARTING BRIDGE` in the splash's
+    phase slot, and `cgStartFailed` (the shell's call, replayed on every page load, so idempotent)
+    puts the sentence, the held ports and the log path in a section inside `.cg-splash__stage`,
+    hides the progress and stops the scene. No colour of its own: the splash's no-red doctrine holds.
+  - **No clock.** The console's splash script is not composed in — the starting page never dismisses
+    itself, and it carries no inline script at all (its CSP allows none).
+  - **The hand-over.** Inside CG Control the console's splash marks itself `data-continued` — the
+    signal is `window.__TAURI_INTERNALS__`, which the shell's webview has before any page script and
+    a browser never has — and every entrance runs as a zero-length `forwards` animation, landing on
+    its own end state at once, so nothing rises in a second time. The scene's loops restart; the
+    readout goes from `STARTING BRIDGE 0%` to `INITIALIZING 0%`.
+- **No white frame:** both windows declare `backgroundColor` `#1a212d`, the ground of both splashes
+  (Tauri 2.11: "Set the window and webview background color").
+- **Unchanged:** the console's splash in a browser (entrance, floors, ceiling), the shell's Rust, and
+  every state and log folder.
+- **Owed:** the moving picture is the owner's to judge on the new installer; CI's installer smoke
+  starts CG Control and reads its title bar, which the composed page keeps.

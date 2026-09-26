@@ -12752,3 +12752,14 @@ up); below them another system's layer raises no notice and no mark and is liste
 as before. Inside the bands both strips stand and mark the channel, and each is dismissible: the
 dismissal holds, across a reload, until the strip holds a new layer or a different producer. Tests:
 `orphanLayersBanner.dom.test.ts`, `orphan-layers.spec.ts`.
+
+## [~] B-284 — CG Control showed two loading screens, and both installed apps a white frame ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` J
+
+Since the Tauri build a launch showed the window's own starting page (a name and a sliding bar)
+and then the console's splash — two designs one after the other — with a white window before the
+first and between the two. **Fix:** the starting page is composed at staging from the console's own
+`index.html` (the same splash, byte for byte, build stamp included); what it reports while it waits
+(`STARTING BRIDGE`) and a start failure appear inside that splash; inside CG Control the console's
+splash continues it with no entrance replayed; both apps' windows paint the splash's ground from the
+first frame. Tests: `startingPage.test.ts`, `startingPage.dom.test.ts`, `splash.dom.test.ts`,
+`tauriWindows.test.ts`, `splash.spec.ts`.

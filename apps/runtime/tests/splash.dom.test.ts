@@ -396,6 +396,30 @@ describe('the test-suite door', () => {
   });
 });
 
+/**
+ * `FIELD-FIXES-01` J — INSIDE CG CONTROL THE SPLASH CONTINUES THE ONE ALREADY ON SCREEN. The
+ * window's starting page is this same splash (composed from this file), so the console's copy is
+ * marked `data-continued` there and its entrance is already over (the CSS rule; measured in a real
+ * browser by `e2e/splash.spec.ts`). The shell's IPC global is the signal; a browser never has it.
+ */
+describe('FIELD-FIXES-01 J — inside CG Control the splash continues the one on screen', () => {
+  afterEach(() => {
+    delete (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
+  });
+
+  it('🔴 in the shell’s window the splash is marked continued — and keeps its clock', () => {
+    (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {};
+    runSplashScript();
+    expect(splashEl()?.getAttribute('data-continued')).toBe('true');
+    expect(() => splash()).not.toThrow();
+  });
+
+  it('CONTROL — in a browser it is not: its entrance plays', () => {
+    runSplashScript();
+    expect(splashEl()?.hasAttribute('data-continued')).toBe(false);
+  });
+});
+
 describe('the boot path may report to the splash and may never depend on it', () => {
   it('a document with no splash element leaves no control surface and throws nothing', () => {
     document.body.innerHTML = '<div id="root"></div>';

@@ -199,3 +199,24 @@
       `channelSwitch.dom.test.ts` fixture moved to 2-65; e2e `orphan-layers.spec.ts` (layer 5 listed
       on Station layers, no notice, no mark; layer 90's notice and mark; both strips dismissed; a
       reload keeps them; layer 91 appearing brings the video strip and the mark back).
+
+## 13. J — one splash, not two (`B-284`)
+
+- [x] 13.1 Established what each app shows from launch to ready (design §15).
+- [x] 13.2 `compose.mjs` (+ types); `stage-control.mjs` composes `starting-dist/` from the built console;
+      `frontendDist` names it; the old starting page deleted; `start.js` / `start.css` speak inside
+      the splash; `starting-dist` gitignored, lint-ignored and out of turbo's `lint` inputs; `typecheck`
+      inputs hash `src-tauri/starting/**`, which a test now imports.
+- [x] 13.3 Inside CG Control the console's splash continues the starting page (`data-continued`).
+- [x] 13.4 Both windows' `backgroundColor` is their splash's ground.
+- [x] 13.5 Tests: `startingPage.test.ts` (the console's splash CSS and markup in the starting page byte
+      for byte, read independently of the composer; its title; no inline script, no clock; the build
+      stamp carried; control: the console keeps its splash and clock; the shell loads the composed
+      page — which staging writes, and without which the desktop job cannot build); `startingPage.dom.test.ts` (`STARTING BRIDGE` in the phase slot;
+      a failure inside the splash with its sentence, port holders and log, the progress hidden;
+      replayed twice, shown once; control: no failure before one); `splash.dom.test.ts` (continued
+      in the shell's window, clock kept; control: not in a browser); `tauriWindows.test.ts` in both
+      apps (the window's background is the splash's ground); e2e `splash.spec.ts` (in the shell's
+      window every entrance is already over — duration 0 s, opacity 1; control: in a browser the
+      wordmark's entrance is 1 s). Looked at in Chrome: the composed page, waiting and failed.
+- [ ] 13.6 The owner launches the new CG Control and CG Designer: one splash, no white frame.

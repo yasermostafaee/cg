@@ -1,93 +1,46 @@
-:root {
-  color-scheme: dark;
-  --ground: #10151c;
-  --ink: #eef3f9;
-  --muted: #8a97a8;
-  --accent: #00aeef;
-  --alarm: #ff6b6b;
-}
+/*
+  FIELD-FIXES-01 J — how a start failure sits INSIDE the console's splash. Everything else this
+  page looks like is the splash's own CSS, composed in by `compose.mjs`.
 
-html,
-body {
-  height: 100%;
-  margin: 0;
-  background: var(--ground);
-  color: var(--ink);
-  font-family: system-ui, 'Segoe UI', sans-serif;
-}
+  No colour of its own: the splash's doctrine (the R-035 header in `apps/runtime/index.html` — no
+  red on the boot screen) holds here too. The failure speaks in the splash's ink, its detail in a
+  quieter weight of the same ink; and the scene stops, because a moving picture beside "could not
+  start" says the opposite of the sentence.
+*/
 
-main {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 20px;
-  padding: 0 32px;
-}
-
-.name {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.bar {
-  width: 220px;
-  height: 3px;
-  overflow: hidden;
-  border-radius: 2px;
-  background: rgba(238, 243, 249, 0.12);
-}
-
-.bar span {
-  display: block;
-  width: 40%;
-  height: 100%;
-  background: var(--accent);
-  animation: slide 1.1s ease-in-out infinite;
-}
-
-@keyframes slide {
-  from {
-    transform: translateX(-100%);
-  }
-  to {
-    transform: translateX(250%);
-  }
-}
-
-.failed {
+body[data-state='failed'] .cg-splash__progress {
   display: none;
+}
+
+body[data-state='failed'] .cg-splash *,
+body[data-state='failed'] .cg-splash::after {
+  animation-play-state: paused;
+}
+
+.cg-start-failed {
   max-width: 720px;
+  margin-top: 22px;
   text-align: center;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
 }
 
-body[data-state='failed'] .bar {
-  display: none;
+.cg-start-failed__message {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
-body[data-state='failed'] .failed {
-  display: block;
-}
-
-#message {
-  margin: 0 0 12px;
-  color: var(--alarm);
-  font-size: 16px;
-}
-
-#held {
-  margin: 0 0 12px;
+.cg-start-failed__held {
+  margin: 0 0 10px;
   padding: 0;
   list-style: none;
-  font-size: 14px;
+  opacity: 0.8;
 }
 
-#log {
+.cg-start-failed__log {
   margin: 0;
-  color: var(--muted);
-  font-size: 13px;
+  opacity: 0.65;
   user-select: text;
 }

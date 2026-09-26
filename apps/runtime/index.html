@@ -697,6 +697,25 @@
         }
       }
 
+      /* FIELD-FIXES-01 J — A CONTINUED SPLASH HAS ALREADY MADE ITS ENTRANCE. Inside CG Control this
+         page replaces the window's starting page, which IS this splash (composed from this file
+         by `src-tauri/starting/compose.mjs`); replaying the entrance there would be a second
+         loading screen in the same design. The script below marks the splash `data-continued`
+         in that window, and every entrance lands on its end state at once: a zero-length
+         `forwards` run of its own keyframe, so the end state is the keyframe's and not a second
+         copy of it. The scene's loops still run. */
+      .cg-splash[data-continued='true'] .cg-splash__marks i,
+      .cg-splash[data-continued='true'] .cg-splash__scene,
+      .cg-splash[data-continued='true'] .cg-splash__wordmark,
+      .cg-splash[data-continued='true'] .cg-splash__rule,
+      .cg-splash[data-continued='true'] .cg-splash__company,
+      .cg-splash[data-continued='true'] .cg-splash__tagline,
+      .cg-splash[data-continued='true'] .cg-splash__progress,
+      .cg-splash[data-continued='true'] .cg-splash__foot {
+        animation-delay: 0s;
+        animation-duration: 0s;
+      }
+
       @media (prefers-reduced-motion: reduce) {
         /* Everything stops — but the scene is NOT blanked. It settles on the FULL PACKAGE:
            both rows armed, the lower third, the bug and the ticker all on the monitor.
@@ -974,6 +993,11 @@
           el.remove();
           return;
         }
+
+        // FIELD-FIXES-01 J — inside CG Control this splash CONTINUES the one already on screen:
+        // the window's starting page is this same splash, shown while the bridge starts. The
+        // shell's IPC global is how the page knows it is in that window; a browser never has it.
+        if (window.__TAURI_INTERNALS__) el.setAttribute('data-continued', 'true');
 
         // Mirrors of `splashTiming.ts` — see this block's header.
         var COLD_FLOOR_MS = 8000;

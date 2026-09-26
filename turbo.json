@@ -25,6 +25,7 @@
         "tsconfig.typecheck.json",
         "vite.config.*",
         "vitest.config.*",
+        "src-tauri/starting/**",
         "package.json"
       ]
     },
@@ -40,6 +41,7 @@
         "src-tauri/**",
         "!src-tauri/payload/**",
         "!src-tauri/binaries/**",
+        "!src-tauri/starting-dist/**",
         ".eslintrc*",
         "eslint.config.*",
         "package.json"

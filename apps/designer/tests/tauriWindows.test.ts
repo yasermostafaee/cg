@@ -19,6 +19,7 @@ interface WindowConfig {
   readonly label?: string;
   readonly title?: string;
   readonly dragDropEnabled?: boolean;
+  readonly backgroundColor?: string;
 }
 
 const conf = JSON.parse(
@@ -58,5 +59,22 @@ describe('CG Designer — the title bar says APASAI CG DESIGNER', () => {
   it('CONTROL — the product name and identifier are unchanged', () => {
     expect(conf.productName).toBe('CG Designer');
     expect(conf.identifier).toBe('app.cgbroadcast.designer');
+  });
+});
+
+/**
+ * 🔴 `FIELD-FIXES-01` J — **NO WHITE FRAME: THE WINDOW AND ITS WEBVIEW ARE THE SPLASH'S GROUND.**
+ * Until the Designer's page paints its splash the window shows its own background — white unless
+ * told otherwise. It is told the splash's ground, read here from the splash itself.
+ */
+describe('CG Designer — the window paints the splash’s ground before the page does', () => {
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const ground = /--cg-ground: (#[0-9a-f]{6});/.exec(html)?.[1];
+
+  it('🔴 every window’s background is the splash’s ground', () => {
+    expect(ground, 'the splash declares its ground').toMatch(/^#[0-9a-f]{6}$/);
+    expect(conf.app.windows.map((w) => w.backgroundColor)).toEqual(
+      conf.app.windows.map(() => ground),
+    );
   });
 });

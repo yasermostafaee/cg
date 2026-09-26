@@ -244,3 +244,63 @@ test.describe('reduced motion', () => {
     expect(frame.scanDisplay).toBe('none');
   });
 });
+
+/**
+ * 🔴 `FIELD-FIXES-01` J — **INSIDE CG CONTROL THE SPLASH CONTINUES THE ONE ALREADY ON SCREEN.**
+ * The window's starting page is this splash (composed from `index.html`), shown while the bridge
+ * starts; when the console replaces it, replaying the entrance would be a second loading screen in
+ * the same design. Measured by each entrance's own timing in a real engine — jsdom runs no
+ * animation — because a zero-length `forwards` run is how the entrance is already over.
+ */
+test.describe('FIELD-FIXES-01 J — one splash inside CG Control', () => {
+  /** Each staged element's entrance, as the engine resolved it. */
+  async function entrances(
+    page: Page,
+  ): Promise<Record<string, { duration: string; opacity: string }>> {
+    return page.evaluate(() => {
+      const read = (selector: string): { duration: string; opacity: string } => {
+        const el = document.querySelector(selector);
+        if (el === null) throw new Error(`no element for ${selector}`);
+        const style = getComputedStyle(el);
+        return { duration: style.animationDuration, opacity: style.opacity };
+      };
+      return {
+        scene: read('.cg-splash__scene'),
+        wordmark: read('.cg-splash__wordmark'),
+        company: read('.cg-splash__company'),
+        tagline: read('.cg-splash__tagline'),
+        progress: read('.cg-splash__progress'),
+        foot: read('.cg-splash__foot'),
+      };
+    });
+  }
+
+  test('🔴 in the shell’s window every entrance is already over — it continues the starting page', async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      // The shell's IPC global, as CG Control's webview has it before any page script runs.
+      (window as unknown as { __TAURI_INTERNALS__: unknown }).__TAURI_INTERNALS__ = {
+        invoke: () => Promise.reject(new Error('no shell in this test')),
+      };
+    });
+    await armMockBoot(page);
+    await page.goto('/');
+    await expect(splash(page)).toHaveAttribute('data-continued', 'true');
+    for (const [name, style] of Object.entries(await entrances(page))) {
+      expect(style.duration, `${name} replays its entrance`).toBe('0s');
+      expect(style.opacity, `${name} is not already in place`).toBe('1');
+    }
+  });
+
+  test('CONTROL — in a browser the splash makes its entrance, as it always has', async ({
+    page,
+  }) => {
+    await armMockBoot(page);
+    await page.goto('/');
+    await expect(splash(page)).toBeVisible();
+    await expect(splash(page)).not.toHaveAttribute('data-continued', /.*/);
+    const wordmark = (await entrances(page)).wordmark;
+    expect(wordmark?.duration).toBe('1s');
+  });
+});

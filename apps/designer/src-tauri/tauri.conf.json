@@ -14,6 +14,7 @@
         "title": "APASAI CG DESIGNER",
         "url": "index.html",
         "dragDropEnabled": false,
+        "backgroundColor": "#1a212d",
         "width": 1600,
         "height": 900,
         "minWidth": 1100,

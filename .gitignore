@@ -62,6 +62,7 @@ desktop.ini
 apps/*/src-tauri/gen/
 apps/runtime/src-tauri/payload/
 apps/runtime/src-tauri/binaries/
+apps/runtime/src-tauri/starting-dist/
 
 # Logs
 *.log
