@@ -12629,7 +12629,7 @@ Found establishing the channel-1 AMCP record for the Playout team: `clearBankLay
 so whether the owner's CLEAR of `1-99` in the 16:01 run happened cannot be read from the station's
 records. Every other verb that reaches air is audited (`out`, `stop`, `take`, …). Not fixed here.
 
-## [~] B-271 — A refused fresh take left its graphic ADDed on the layer, and a graphic refused after its plates left them on air unframed ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 1)
+## [x] B-271 — A refused fresh take left its graphic ADDed on the layer, and a graphic refused after its plates left them on air unframed ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 1) · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 `FIELD-FIXES-01` §0 replayed the owner's Bed 59 take (2026-09-26 09:40Z, `amcp-403`) on the mock: the
 take `CG ADD`ed its graphic, the first plate's `PLAY 2-60 DECKLINK DEVICE 1` was refused, the plate
@@ -12639,9 +12639,9 @@ decision:** a fresh take airs everything or nothing. **Fix:** the take stops at 
 plate, never plays the graphic, undoes what it seated through the one rule (`B-272`) and removes the
 graphic it added the way `out()` does; the graphic's refused `CG PLAY` undoes the same way; the row
 ends in ERROR carrying `takeRefusal`. The success wire is pinned byte for byte. Change:
-`openspec/changes/field-fixes` §1. Test: `take-all-or-nothing.integration.test.ts`.
+`openspec/changes/archive/2026-09-26-field-fixes` §1. Test: `take-all-or-nothing.integration.test.ts`.
 
-## [~] B-272 — The take's rollback cleared the layer whose PLAY had just been refused — on a re-take of a row on air, a working picture ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (the Rule)
+## [x] B-272 — The take's rollback cleared the layer whose PLAY had just been refused — on a re-take of a row on air, a working picture ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (the Rule) · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 The take's rollback cleared every layer it had touched, including the one whose `PLAY` the server had
 refused — a layer CasparCG leaves exactly as it was. On a re-take of a row already on air that `CLEAR`
@@ -12658,9 +12658,9 @@ look needs that is refused (a preset dropped at the take) commits the fills that
 plate back, and only then re-tells the page the previous look. For that window the page shows the new
 look's boxes with nothing in the refused plate's box — a few frames. If the re-tell is refused too, the
 page stays on the new look over the old geometry. What a switch should do is the owner's decision
-(`openspec/changes/field-fixes/design.md` §3).
+(`openspec/changes/archive/2026-09-26-field-fixes/design.md` §3).
 
-## [~] B-274 — The bridge took a row that was already on air: only the console's PLAY greyed it ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 2)
+## [x] B-274 — The bridge took a row that was already on air: only the console's PLAY greyed it ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 2) · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 A second console on a stale snapshot, or a take whose reply was slow, reached `take()` with the
 page on air; the re-take re-`PLAY`ed every plate (on a DeckLink that fails by construction, `B-177`)
@@ -12671,7 +12671,7 @@ ledger holds the row's seats); its two halves are one function, `ownsLiveSeats` 
 which the console's PLAY and `MockRuntime.take` call too, and PLAY names the row. Tests:
 `take-on-air-refusal.integration.test.ts`, `takeOnAirGate.test.ts`.
 
-## [~] B-275 — A take reply slower than 5 s turned an on-air row into "loaded", and a late OK never put it back ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 2)
+## [x] B-275 — A take reply slower than 5 s turned an on-air row into "loaded", and a late OK never put it back ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` (Decision 2) · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 `INTENT_TIMEOUT_MS` (5 s) expired the take in `Reconciler.expireIntent`, which retracted its play
 evidence (`B-079`): with the page's producer on OSC the row read `loaded`, PLAY came back, and the
@@ -12680,7 +12680,7 @@ unresolved, not failed — it keeps its evidence, reads `unconfirmed`, PLAY stay
 bridge refuses a take meanwhile, and its own reply resolves it. Tests:
 `reconciler-failed-take.test.ts`, `take-on-air-refusal.integration.test.ts` (the slow reply).
 
-## [~] B-276 — No bridge wrote an AMCP log, so a refused take could not be read back from the station ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A`
+## [x] B-276 — No bridge wrote an AMCP log, so a refused take could not be read back from the station ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A` · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 On 2026-09-26 Bed 59's take was refused `amcp-403` and nothing on the owner's machine said which
 command was refused or what the server answered: the installed app keeps `bridge.log` and the audit,
@@ -12691,7 +12691,7 @@ bridge logs every exchange from the session queue into `<state-home>/logs/amcp.l
 token redacted, fail-open. Tests: `amcp-log.integration.test.ts` (the bundled sidecar, red first
 against the old CLI), `command-queue.test.ts`.
 
-## [~] B-277 — An AMCP refusal reached the operator as "CasparCG refused the command (AMCP 403)" ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` A
+## [x] B-277 — An AMCP refusal reached the operator as "CasparCG refused the command (AMCP 403)" ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` A · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 The console's one fallback for a server reply quoted its number, which says nothing about what
 went wrong to anyone not reading CasparCG's source. **Fix:** one mapping,
@@ -12700,7 +12700,7 @@ DeckLink input on 403 or 404; a file on 404 of a media or stream play; the graph
 `CG ADD`; one line per code otherwise), with each code's meaning read from CasparCG 2.5.0's source.
 The number goes to the log. Tests: `amcpRefusal.test.ts`.
 
-## [~] B-278 — A refused take was reported by a generic banner naming no row and no source ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` B
+## [x] B-278 — A refused take was reported by a generic banner naming no row and no source ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` B · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 On 2026-09-26 Bed 59 read ERROR while an amber banner at the top said only "CasparCG refused the
 command (AMCP 403)" — no row, no source, no reason. **Fix:** the refusal lives with the row: one line,
@@ -12709,14 +12709,14 @@ its Inspector, in that channel's view only, with a mark on the strip for another
 banner; it clears on the next take that lands, or a clear. Tests: `takeRefusalLine.test.ts`,
 `take-refusal-line.spec.ts`.
 
-## [~] B-279 — The Inspector said "ON AIR NOW" for the look of a take the server had refused ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` C
+## [x] B-279 — The Inspector said "ON AIR NOW" for the look of a take the server had refused ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` C · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 The look badge asked `isOnAir`, which is true for `error`, so after Bed 59's refused take the Inspector
 said `look-2 ON AIR NOW` under a row reading ERROR. **Fix:** it asks `claimsAir`, the row's own green ON
 AIR mark (`on-air`, or an acknowledged take), and so do its "actually on air" notes. Tests:
 `lookBindings.dom.test.ts`, `look-inputs.spec.ts`.
 
-## [~] B-280 — Drag and drop did nothing in the installed apps: Tauri's native handler took every drop ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` F
+## [x] B-280 — Drag and drop did nothing in the installed apps: Tauri's native handler took every drop ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` F · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 In the installed CG Designer an asset dragged from Assets onto the canvas was not added, though the
 same drag works in the browser. Tauri 2's `dragDropEnabled` defaults to true, and on Windows its native
@@ -12724,7 +12724,7 @@ handler then takes the drop before the page's HTML5 events fire. **Fix:** `"drag
 both apps' window (CG Control drops a `.vcg` into its picker and reorders list fields the same way).
 Tests: `tauriWindows.test.ts` in each app. The proof is a real OS drag in the new installer.
 
-## [~] B-281 — The installed apps said their name three times in one corner, without the Apasai logo ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` G
+## [x] B-281 — The installed apps said their name three times in one corner, without the Apasai logo ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` G · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 CG Control's corner read "CG Control" in the title bar, again in a native menu bar under it (one
 submenu: Open bridge log, Reload, Quit), and a third time as the header's `CG CONTROL` brand; the
@@ -12734,7 +12734,7 @@ menu and both in-app brands are gone (the log folder opens from the audit log; Q
 button; Reload is F5). `productName`, identifiers and folders are unchanged. Tests:
 `tauriWindows.test.ts`, `appTitle.test.ts`, `starter-landing.spec.ts`, the installer smoke.
 
-## [~] B-282 — "SILENCE ALL PLATES · EVERY CHANNEL" was bright amber with nothing to silence ⟨priority: low⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` K
+## [x] B-282 — "SILENCE ALL PLATES · EVERY CHANNEL" was bright amber with nothing to silence ⟨priority: low⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` K · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 With two channels and no live plate anywhere the header showed an amber, live every-channel silence
 that answered "Nothing was sent — no channel holds a live plate". **Fix:** both silence controls are
@@ -12742,7 +12742,7 @@ disabled and neutral, at the same size, while their scope holds no seat, by the 
 answers from (`ledgerChannels`), and amber as soon as a plate is live. Tests:
 `silenceHasTarget.test.ts`, `silence-controls.spec.ts`.
 
-## [~] B-283 — another system's layer below CG's bands raised a notice that could not be closed ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` L
+## [x] B-283 — another system's layer below CG's bands raised a notice that could not be closed ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` L · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 On channel 1 a blue notice sat under the header: _"Layer 1-5 is carrying video (ffmpeg) — placed by
 another system. Not clearable from here."_ The Playout's own playlist plays on a low layer
@@ -12753,7 +12753,7 @@ as before. Inside the bands both strips stand and mark the channel, and each is 
 dismissal holds, across a reload, until the strip holds a new layer or a different producer. Tests:
 `orphanLayersBanner.dom.test.ts`, `orphan-layers.spec.ts`.
 
-## [~] B-284 — CG Control showed two loading screens, and both installed apps a white frame ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` J
+## [x] B-284 — CG Control showed two loading screens, and both installed apps a white frame ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` J · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 Since the Tauri build a launch showed the window's own starting page (a name and a sliding bar)
 and then the console's splash — two designs one after the other — with a white window before the
@@ -12764,7 +12764,7 @@ splash continues it with no entrance replayed; both apps' windows paint the spla
 first frame. Tests: `startingPage.test.ts`, `startingPage.dom.test.ts`, `splash.dom.test.ts`,
 `tauriWindows.test.ts`, `splash.spec.ts`.
 
-## [~] B-285 — the dev station's PROGRAM monitor read "No return signal" beside a working feed ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` H
+## [x] B-285 — the dev station's PROGRAM monitor read "No return signal" beside a working feed ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` H · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 On `pnpm dev:station`, on `--fake` and against the real Playout, PROGRAM read _"No return signal"_
 while the installed CG Control showed the picture from the same feed. The frames did not stop in

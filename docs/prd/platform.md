@@ -3428,7 +3428,7 @@ conditionally: the owner's §7 step 2 measures it on a real install; close this 
 the permission holds. **Acceptance:** WHEN CG Designer restarts THEN a project opened before
 reopens without a picker.
 
-## [~] P-055 — CI actions ran on Node 20, which GitHub deprecates ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` E
+## [x] P-055 — CI actions ran on Node 20, which GitHub deprecates ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` E · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 **What.** Every action the workflows use moves to its latest major that runs on Node 24:
 `actions/checkout` v7, `actions/setup-node` v7, `actions/upload-artifact` v7, `actions/download-artifact` v8,

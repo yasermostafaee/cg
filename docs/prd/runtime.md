@@ -4017,7 +4017,7 @@ carrying another system's producer THEN one warning line appears and the channel
 on a second press; WHEN the channel is empty THEN no warning. Tests: `firstRunChannelStep.dom.test.ts`,
 `one-channel-station.integration.test.ts` (d).
 
-## [~] R-070 — A new station shows five rows per band, not thirty ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` I
+## [x] R-070 — A new station shows five rows per band, not thirty ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` I · archived 2026-09-27 (`openspec/changes/archive/2026-09-26-field-fixes`)
 
 **What.** A bank made for a new channel (first-run, or a channel Change channel… adds) shows five rows
 of each band — templates 99–95 and beds 59–55 — and hides the rest, once the channel's occupancy is

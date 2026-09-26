@@ -159,56 +159,77 @@ switch.
 
 ### Requirement: Orphan-layer warning surface with per-layer Clear
 
-The Runtime UI SHALL split the bridge's orphan-layer set by observed producer
-kind, because the two kinds mean opposite things to a graphics operator
-(R-015):
+The Runtime UI SHALL split the bridge's orphan-layer set by observed producer kind, because the two
+kinds mean opposite things to a graphics operator (R-015), and SHALL speak only for the layers
+inside CG's bands (`FIELD-FIXES-01` L).
 
-An orphaned **`html`** layer — plausibly this system's own graphic riding
-through a dead bridge session — SHALL surface as a persistent warning strip:
-one row per orphan naming the channel-layer ("Layer 1-60 is on air but not on
-your stack"), rendered with `role="alert"`, visible while the orphan persists
-(no auto-dismiss). Each html row SHALL offer an explicit Clear control gated
-by a confirmation; on confirm the UI issues `layers.clear` for that layer,
-surfaces a failure via the command-error channel, and treats the row's
-disappearance (the bridge's observed-empty resolution) as success. The UI
-SHALL never clear a layer without the operator's explicit confirmation.
+A layer BELOW CG's bands (1–49) carrying a producer this system did not place is the Playout's, and
+normal: it SHALL raise no strip and no mark on its channel's tab, and it SHALL be listed on the
+Station layers tab, as before.
 
-A **non-`html`** layer — a video or any other producer this system does not
-place — SHALL surface as NEUTRAL information, not a problem: a separate strip
-in the surface's normal text tones (never amber, never the on-air red),
-without `role="alert"`, naming the channel-layer and the observed producer
-kind and saying it was placed by another system and is not clearable from
-here. A non-html row SHALL offer NO Clear control — the affordance does not
-exist, rather than being disabled or confirm-gated harder. Unrecognised
-producer kinds SHALL be presented exactly as video ("not html" fails safe).
+An orphaned **`html`** layer inside the bands — plausibly this system's own graphic riding through a
+dead bridge session — SHALL surface as a warning strip: one row per orphan naming the channel-layer
+("Layer 1-60 is on air but not on your stack"), rendered with `role="alert"`, visible while the
+orphan persists until the operator dismisses the strip. Each html row SHALL offer an explicit Clear
+control gated by a confirmation; on confirm the UI issues `layers.clear` for that layer, surfaces a
+failure via the command-error channel, and treats the row's disappearance (the bridge's
+observed-empty resolution) as success. The UI SHALL never clear a layer without the operator's
+explicit confirmation.
 
-Both surfaces SHALL subscribe to the pushed orphan set, load the initial
-state on mount, and render NOT AT ALL when their subset is empty — no idle
-noise. (There is essentially always at least one video layer in play, so a
-warning-toned video row would permanently imply a problem where none exists.)
+A **non-`html`** layer inside the bands — a video or any other producer this system does not place —
+SHALL surface as NEUTRAL information: a separate strip in the surface's normal text tones (never
+amber, never the on-air red), without `role="alert"`, naming the channel-layer and the observed
+producer kind and saying it was placed by another system and is not clearable from here. A non-html
+row SHALL offer NO Clear control — the affordance does not exist, rather than being disabled or
+confirm-gated harder. Unrecognised producer kinds SHALL be presented exactly as video ("not html"
+fails safe).
+
+Each strip SHALL carry a dismiss control inside its box. A dismissal SHALL record, per channel and
+per strip, the layers and producers the strip showed; the strip SHALL stay dismissed until it holds
+a layer or a producer the dismissal did not record — a new layer, or a different producer on a layer
+— and SHALL NOT return because a layer left it or because the same set was observed again. A
+dismissal SHALL belong to the browser it was made in and SHALL survive a reload. A channel's tab
+SHALL carry the warning mark while either strip of that channel stands, and not while both are
+dismissed.
+
+Both surfaces SHALL subscribe to the pushed orphan set, load the initial state on mount, and render
+NOT AT ALL when their subset is empty — no idle noise.
 
 #### Scenario: html orphans appear as warnings; idle is quiet
 
-- **WHEN** the bridge publishes orphans whose producer kind is `html`
-  **THEN** the warning strip appears naming each channel-layer
-- **WHEN** the orphan set is empty **THEN** no orphan surface of either kind
-  is rendered
+- **WHEN** the bridge publishes orphans inside CG's bands whose producer kind is `html` **THEN** the
+  warning strip appears naming each channel-layer
+- **WHEN** the orphan set is empty **THEN** no orphan surface of either kind is rendered
 
 #### Scenario: Confirm-gated Clear on an html orphan
 
-- **WHEN** the operator clicks an html row's Clear and confirms **THEN** the
-  UI issues `layers.clear` for exactly that layer, and the row disappears
-  when the bridge resolves it on observed empty
+- **WHEN** the operator clicks an html row's Clear and confirms **THEN** the UI issues
+  `layers.clear` for exactly that layer, and the row disappears when the bridge resolves it on
+  observed empty
 - **WHEN** the operator cancels the confirmation **THEN** nothing is sent
 
 #### Scenario: A video layer reads as normal and offers no Clear
 
-- **WHEN** the bridge publishes an orphan whose producer kind is not `html`
-  (e.g. `ffmpeg`) **THEN** it renders in the neutral strip — normal text
-  tones, no `role="alert"` — naming the layer and kind, with NO Clear
-  control present in the row
-- **WHEN** an orphan carries an unrecognised producer kind **THEN** it is
-  rendered exactly as a video layer (fail-safe: "not html" is not ours)
+- **WHEN** the bridge publishes an orphan inside CG's bands whose producer kind is not `html` (e.g.
+  `ffmpeg`) **THEN** it renders in the neutral strip — normal text tones, no `role="alert"` —
+  naming the layer and kind, with NO Clear control present in the row
+- **WHEN** an orphan carries an unrecognised producer kind **THEN** it is rendered exactly as a video
+  layer (fail-safe: "not html" is not ours)
+
+#### Scenario: Below CG's bands another system's layer is normal
+
+- **WHEN** the bridge publishes an `ffmpeg` producer on layer 5 **THEN** no strip and no tab mark
+  appear, and the Station layers tab lists the layer
+- **WHEN** the same producer is on layer 90 **THEN** the neutral strip names it and the channel's tab
+  carries the mark
+
+#### Scenario: A dismissal holds until the strip's set changes
+
+- **WHEN** the operator dismisses the strip naming layer 90 and the console reloads **THEN** the strip
+  and its mark stay dismissed
+- **WHEN** a foreign producer then appears on layer 91 **THEN** the strip returns naming layers 90 and
+  91, and the mark returns with it
+- **WHEN** a layer leaves the strip, or the same set is observed again **THEN** it stays dismissed
 
 ### Requirement: Owned-slot occupancy warning surface without a direct Clear
 
@@ -1385,13 +1406,21 @@ pane SHALL carry no explanatory prose; the strip keeps the rows-on-air count bes
 
 The console SHALL request the programme return only while the PROGRAM pane is rendered, and SHALL
 release it when the pane is hidden or its channel changes, so a console with the monitors hidden —
-the boot state — pulls nothing.
+the boot state — pulls nothing. It SHALL do so in every build of the console: a development build —
+the one the dev station's Vite serves, where React's StrictMode mounts each component twice — SHALL
+request the picture exactly as a production build does.
 
 #### Scenario: Hiding the monitors releases the return
 
 - **WHEN** the console boots with the monitors hidden
 - **THEN** the feed sees no connection; showing the monitors connects it (the positive control),
   and hiding them again closes it within 2 s
+
+#### Scenario: The dev station shows the return through Vite
+
+- **WHEN** the console is served by the dev station's Vite and PROGRAM is shown for channel 2
+- **THEN** the relay has a viewer and the picture keeps arriving through Vite's proxy **AND WHEN**
+  the feed stops **THEN** the pane reads "No return signal"
 
 ### Requirement: Selecting a channel switches the whole console to it
 
@@ -1513,3 +1542,138 @@ MAY quote a failure beneath its sentence.
 
 - **WHEN** a live source's stream URL is refused **THEN** the rule is the one line **AND** the
   bridge's own sentence is not shown
+
+### Requirement: A silence control SHALL be live only while its scope holds a live plate
+
+`SILENCE ALL PLATES · EVERY CHANNEL` and each channel's `Silence all plates · CH n` SHALL be shown
+disabled, in the neutral style and at the same size, while the live-layers ledger holds no seat in
+their scope — any channel, or that channel — and amber and live as soon as it does. Their state
+SHALL come from the predicate the bridge answers "nothing to silence" from (`ledgerChannels`), and a
+ledger that has not arrived SHALL leave them live. The verbs themselves are unchanged.
+
+#### Scenario: Nothing to silence
+
+- **WHEN** no declared channel holds a live plate
+- **THEN** the every-channel control is disabled and neutral, the same height, titled _"Nothing to
+  silence — no channel holds a live plate."_
+
+#### Scenario: Keyed to the channel
+
+- **WHEN** one live plate is seated on channel 2
+- **THEN** the every-channel control and channel 2's are live, and channel 1's is not
+
+### Requirement: A new channel's bank SHALL show five rows of each band
+
+A bank made for a NEW channel — at first-run, and for a channel Change channel… adds — SHALL show five
+rows of each band, the highest of each (templates 99–95, beds 59–55), and hide the rest, once the
+channel's occupancy read is known. A row whose layer the read reports carrying anything SHALL stay
+shown, and with no reading or an unknown one every row SHALL be shown. When the bridge refuses the
+bank for a hidden row (its own reading occupied or unknown), the console SHALL declare the channel
+with every row shown instead. A channel already in the set SHALL keep its bank untouched.
+
+#### Scenario: A new station shows five and five
+
+- **WHEN** first-run declares two channels the tap reads
+- **THEN** each shows templates 99–95 and beds 59–55, and the rest are hidden
+- **AND** at 1920 × 1080 the ten rows fit with the beds in sight
+
+#### Scenario: A row carrying something stays shown
+
+- **WHEN** layer 90 of a channel carries a producer at the read
+- **THEN** that channel's new bank shows row 90 as well
+
+#### Scenario: Unknown is never hidden
+
+- **WHEN** the channel cannot be read
+- **THEN** the new bank shows every row
+
+### Requirement: An AMCP refusal SHALL be said in the operator's words, from one mapping
+
+The console SHALL turn a server reply (`amcp-NNN`) into the operator's words in ONE place, tailored
+by what the refused command was for: a `DECKLINK` play refused with 403 or 404 SHALL read _"The
+server has no DeckLink input n, or it is in use."_; a 404 on a media or stream play SHALL read _"The
+server cannot find the file …"_; every other reply SHALL read its code's generic line (a channel
+the server does not have, a setting it refused, what it cannot find, a failure while running it).
+No operator surface SHALL show "AMCP" or the reply's number; the code and the command go to the log.
+
+#### Scenario: A DeckLink play refused with 403 or 404
+
+- **WHEN** the refused command is `PLAY 2-60 DECKLINK DEVICE 1` and the reply is 403, or 404
+- **THEN** the words are _"The server has no DeckLink input 1, or it is in use."_
+
+#### Scenario: A file that is not there
+
+- **WHEN** the refused command is a media play and the reply is 404
+- **THEN** the words are _"The server cannot find the file <name>."_, not the DeckLink line
+
+#### Scenario: No surface shows the number
+
+- **WHEN** any reply code from 400 to 503 is worded, with or without its command
+- **THEN** neither the sentence nor the clause contains "AMCP" or the code
+
+### Requirement: A refused take SHALL be said on its row and in its Inspector, in one line
+
+A take the bridge refused and carries on the row SHALL be said in ONE line naming the row, the
+refused source and the input it named, then what the refusal means (the one mapping): _"Bed 59 ·
+studio1 (DeckLink 1): the server has no such input, or it is in use."_ The line SHALL appear on the
+row and in its Inspector, in that channel's view only; another channel's view SHALL show only the
+mark on that channel's strip tab. No banner SHALL repeat it. It SHALL go when the row is next taken
+successfully, or cleared.
+
+#### Scenario: The refused row says it, and nothing else does
+
+- **WHEN** the take of the TICKER row is refused on its DeckLink plate
+- **THEN** the row reads ERROR with the line, and its Inspector shows the same line
+- **AND** no banner appears, and "AMCP" appears nowhere on the page
+
+#### Scenario: Another channel's view shows only the mark
+
+- **WHEN** the operator views the other channel
+- **THEN** neither the line nor a banner is shown, and the refused row's channel tab carries a mark
+
+#### Scenario: A take that lands clears it
+
+- **WHEN** the row is taken again and the take lands
+- **THEN** the line leaves the row and the Inspector, and the mark leaves the strip
+
+### Requirement: The Inspector SHALL say a look is on air only when the server confirmed it
+
+The Inspector's look badge SHALL read `ON AIR NOW` only while the row itself claims air — the row's
+own green ON AIR mark: `on-air`, or a take the server acknowledged. A row in error (a refused take),
+unconfirmed, unverified, or with its take still in flight SHALL NOT have its look said to be on air,
+and neither SHALL the section's notes about what is actually on air.
+
+#### Scenario: A refused take does not put its look on air
+
+- **WHEN** the row's take was refused and the row reads ERROR
+- **THEN** its selected look's badge does not say `ON AIR NOW`
+
+#### Scenario: A take that lands does
+
+- **WHEN** the row is taken and the server acknowledges it
+- **THEN** the badge says `ON AIR NOW`
+
+### Requirement: A row's PLAY SHALL be unavailable while the bridge would refuse its take
+
+A row's PLAY SHALL be disabled while the bridge would refuse its take — the row is on air or
+unsettled, or the published live-layers ledger holds a seat for it; the same `ownsLiveSeats` the
+bridge refuses with — naming the row: _"<row> is already on air — take it out first."_ A take
+the bridge refuses with `already-on-air` (a race, or another console's take) SHALL be reported in the
+same sentence, in the row's own name. PLAY SHALL be available again once the row has left air or its
+take has resolved as refused.
+
+#### Scenario: An unconfirmed row does not offer PLAY
+
+- **WHEN** a take's reply is overdue and the row reads `unconfirmed`
+- **THEN** PLAY is disabled, is not lit in the air colour, and its title is the row's sentence
+
+#### Scenario: A row whose plates are seated does not offer PLAY
+
+- **WHEN** the ledger holds a seat for a row whose status reads loaded (adopted at a bridge restart)
+- **THEN** PLAY is disabled with the row's sentence
+- **AND** once CLEAR has taken the row out, PLAY is available
+
+#### Scenario: A refused take can be tried again
+
+- **WHEN** the row's take was refused and it reads ERROR
+- **THEN** PLAY is available

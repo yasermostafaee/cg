@@ -802,10 +802,10 @@ If no ack arrives within a bounded time (5 s), the bridge SHALL expire the
 intent to an explicit **`unconfirmed`** status (with an `errorCode`), surfaced
 to the operator UI — never a silent revert to the prior status, never a fake
 success, never an indefinite `playing`/`updating`/`exiting`. **A take SHALL arm the same
-bounded timer** — without it an unsettled take rests on its optimistic `playing`/`on-air`
-claim forever, with nothing to bound it. A late OK ack after expiry
-SHALL settle the item honestly. Any subsequent operator intent SHALL overwrite
-an `unconfirmed` state.
+bounded timer.** An expired TAKE is UNRESOLVED, not failed: it SHALL keep its play evidence, SHALL
+read `unconfirmed` whatever OSC reports about its layer, and SHALL be settled by its own late ack —
+on air if it landed, its prior evidence given back if it failed. A late OK ack after expiry SHALL
+settle the item honestly. Any subsequent operator intent SHALL overwrite an `unconfirmed` state.
 
 #### Scenario: An update settles when CasparCG acks it
 
@@ -826,11 +826,12 @@ an `unconfirmed` state.
   `unconfirmed` (or `error`, for a detected send failure) state visible in the
   UI — the badge never sticks on "UPDATING"
 
-#### Scenario: A take whose ack never arrives expires, and gives back its claim
+#### Scenario: A take whose reply is overdue reads unconfirmed until the reply resolves it
 
 - **WHEN** the bridge sends a `CG PLAY` and no ack arrives within the bound **THEN** the
-  item lands in the explicit `unconfirmed` state and the take's unproven play evidence is
-  retracted — the badge never rests on an unbounded optimistic `playing`/`on-air`
+  item reads `unconfirmed` — never `loaded` off its page's own producer — and keeps its play
+  evidence; **AND WHEN** the reply then arrives OK **THEN** the item reads on air; **AND WHEN** it
+  arrives as a failure **THEN** the take's play evidence is given back
 
 #### Scenario: A subsequent intent clears unconfirmed
 
@@ -2798,3 +2799,125 @@ layer in its own sentence and never reads it out of the message.
   carries `reason: untick-unknown` and `layer: 74`
 - **WHEN** hiding bed layer 6 is refused because a producer is on it **THEN** the refusal carries
   `reason: untick-occupied` and `layer: 6`
+
+### Requirement: A fresh take SHALL air everything or nothing
+
+A take SHALL stop at the first plate whose `PLAY` is refused, SHALL NOT try the plates after it, and
+SHALL NOT send the graphic's `CG PLAY`. It SHALL then take back exactly what it put there, through the
+one clean-up rule: the plates it seated, and the graphic it added with `CG ADD`, removed from its
+layer the way `out()` removes it. When the graphic's own `CG PLAY` is refused after its plates were
+seated, the take SHALL be undone the same way. A take whose plates are all accepted SHALL send the
+same AMCP, in the same order, as before this requirement. A refused preset — a seat only a look not on
+screen uses — SHALL NOT refuse the take.
+
+#### Scenario: The first plate is refused on a fresh take
+
+- **WHEN** a fresh take of a two-plate row reaches `PLAY 2-60 DECKLINK DEVICE 1` and the server
+  answers `403 PLAY FAILED`
+- **THEN** no `CG PLAY` is sent, `PLAY 2-61` is never sent, no `CLEAR 2-60` is sent (the server left
+  that layer as it was), `CLEAR 2-59` removes the graphic the take added, and nothing of the take is
+  left on 2-59 or 2-60
+
+#### Scenario: A later plate is refused after an earlier one was seated
+
+- **WHEN** plate 1's `PLAY` landed and plate 2's `PLAY` is refused
+- **THEN** plate 1's layer is cleared with its mixer, because this take seated it; plate 2's layer is
+  not cleared; the graphic the take added is removed; and no `CG PLAY` is sent
+
+#### Scenario: The graphic's own CG PLAY is refused after its plates were seated
+
+- **WHEN** every plate landed and the graphic's `CG PLAY` is refused
+- **THEN** every plate this take seated comes down and the graphic it added comes off its layer
+
+#### Scenario: A take whose plates are all accepted is unchanged
+
+- **WHEN** every plate's `PLAY` and every line after it is accepted
+- **THEN** the take sends the thirteen lines recorded before this requirement, in the same order
+
+### Requirement: After a refusal the bridge SHALL clear only a layer the refused operation put a producer on
+
+The bridge SHALL decide every clean-up that follows a refused operation by one rule — a take's
+rollback, a dropped preset, the teardown of a live or switch reconcile's failed plate, and the graphic
+a refused take added: a layer SHALL be cleared only if the operation put a producer on it (its `PLAY`
+was acknowledged, or no usable reply came), and SHALL NEVER be cleared if a producer of ours was on it
+before the operation began. A `PLAY` answered with a 4xx code SHALL be read as having put nothing on
+the layer.
+
+#### Scenario: An R-048 swap whose PLAY is refused leaves the working picture
+
+- **WHEN** an on-air plate is pointed at another source and the replacing `PLAY` is refused
+- **THEN** no `CLEAR` and no `MIXER … CLEAR` is sent for that layer, the old producer stays on air,
+  and the ledger still names it
+
+#### Scenario: A refusal on a layer the same operation seated is cleared
+
+- **WHEN** a swap seats its new producer on a fresh layer and the line after that `PLAY` is refused
+- **THEN** that layer is cleared with its mixer, and no layer the operation did not seat is touched
+
+### Requirement: A refused take SHALL be carried on its row
+
+When a take is refused, the bridge SHALL record on the row, and publish with it, the refusal's code,
+the refused command with its payload elided, and — when a plate was refused — that plate and the
+catalog entry it resolved to (its id and its name). While the refusal stands the row SHALL publish the
+`error` status unless its reconciled status claims or may claim air. The refusal SHALL be withdrawn by
+the row's next take that lands, by clearing the row, and by removing it. The take's answer SHALL
+carry `refusalOnRow` exactly when it recorded such a refusal, and never for a refusal made before
+anything was sent.
+
+#### Scenario: The row names the plate that was refused
+
+- **WHEN** Bed 59's take is refused on plate `l1`, assigned to `studio1`
+- **THEN** the row publishes `status: error` and `takeRefusal` with `code: amcp-403`,
+  `command: PLAY 2-60 DECKLINK DEVICE 1`, `plateId: l1`, `sourceId`, and `sourceName: studio1`
+- **AND** the take answers `refusalOnRow: true`; a take refused before the wire (`already-on-air`)
+  does not
+
+#### Scenario: The next take that lands withdraws it
+
+- **WHEN** the same row is taken again and every command is accepted
+- **THEN** the row publishes no `takeRefusal`
+
+### Requirement: The bridge SHALL refuse a take of a row that is on air or whose previous take is unresolved
+
+The bridge SHALL refuse a take, sending nothing to CasparCG, while the row is on air or unsettled
+(`isOnAirStatus`: on air, playing, updating, exiting, `unconfirmed`, or a command still pending) or
+while the ledger holds its live seats — the one predicate `#ownsLiveSeats` — and SHALL answer the
+code `already-on-air`. The refusal SHALL be the same for every console. A changed look, changed fields
+and a dead input SHALL keep their own doors (the look picker, UPDATE, the `R-048` swap).
+
+#### Scenario: A second console gets the same refusal
+
+- **WHEN** a row is on air and a second console, and then the first, send `stack.take` for it
+- **THEN** both are answered `accepted: false`, `already-on-air`, no AMCP line is written, and the
+  graphic on air is unchanged
+
+#### Scenario: After the row is taken out, a take works
+
+- **WHEN** the same row is taken out and then taken again
+- **THEN** the take is accepted and its `CG PLAY` is sent
+
+#### Scenario: A take while the previous take is unresolved is refused
+
+- **WHEN** a take's reply is later than the bound and the row reads `unconfirmed`
+- **THEN** another take of that row is refused with nothing sent
+
+### Requirement: The bridge SHALL log every AMCP command with its reply line and its time
+
+The bridge SHALL write every AMCP command it sends, the reply's header line exactly as CasparCG sent
+it (or why none came), the server, the round trip and the time, one line per exchange, to a
+size-capped file that rotates to one previous file. Launched with a state home, the file SHALL be
+`<state-home>/logs/amcp.log`, beside the installed app's `bridge.log`. No token SHALL be written: the
+take token in a `CG ADD`/`CG UPDATE` payload SHALL be redacted. A file that cannot be written SHALL
+never stop or delay playout.
+
+#### Scenario: The installed app's sidecar writes the log
+
+- **WHEN** the bundled sidecar is started as the desktop shell starts it, with `--state-home`
+- **THEN** `<state-home>/logs/amcp.log` receives each command and its reply line
+- **AND** the sidecar's stderr carries no exchange line
+
+#### Scenario: A take is logged without its token
+
+- **WHEN** a row is taken
+- **THEN** its `CG ADD` and `CG PLAY` lines are written with their replies
+- **AND** the take token in the `CG ADD` payload reads `<redacted>`
