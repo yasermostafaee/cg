@@ -1,5 +1,6 @@
 import { isOnAirStatus } from '@cg/shared-schema';
 import type { StackItemState } from '@cg/shared-schema';
+import { badgeTone } from '../../theme.js';
 
 /**
  * Does this item have something on air that a GRACEFUL verb can act on?
@@ -36,6 +37,20 @@ import type { StackItemState } from '@cg/shared-schema';
  */
 export function isOnAir(item: StackItemState): boolean {
   return item.status !== 'idle' && item.status !== 'loaded';
+}
+
+/**
+ * 🔴 `FIELD-FIXES-01` C — **DOES THIS ROW CLAIM AIR: the row's own green ON AIR mark, and nothing
+ * looser.** `on-air`, or a take the server has ACKNOWLEDGED (`playing`, no longer pending) — the
+ * one tone (`badgeTone` → `onair`) the state cell and `StatusBadge` paint in the air colour.
+ *
+ * ⚠ **NOT {@link isOnAir}**, which answers "may it be showing something?" and is therefore true for
+ * `error`, `unconfirmed` and `unverified`. The Inspector's look badge wore it, and on 2026-09-26 it
+ * said `ON AIR NOW` for Bed 59's look while the row above it read ERROR over a take the server had
+ * refused. Anything that says "on air" in the air colour asks THIS.
+ */
+export function claimsAir(item: Pick<StackItemState, 'status' | 'pending'>): boolean {
+  return badgeTone(item.status, item.pending) === 'onair';
 }
 
 /*

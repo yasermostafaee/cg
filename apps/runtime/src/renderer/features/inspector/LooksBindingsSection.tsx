@@ -17,7 +17,7 @@ import { appliedPlateSources, frozenPlateSource, onAirPlateSource } from './live
 import { reportCommandError } from '../status/commandFeedback.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { SourceDefaultsLink } from './SourceDefaultsLink.js';
-import { isOnAir } from '../stack/onAir.js';
+import { claimsAir } from '../stack/onAir.js';
 
 /**
  * ⭐ **SESSION BM-2 (`design.md` §12.9.1b) — WHAT THIS ROW SHOWS IN EACH LOOK.**
@@ -115,14 +115,17 @@ const styles = {
    * **That was correct while the badge lied.** It was gated on `activeLookOf` — *which look
    * this ROW is set to* — which is true the moment a row is loaded, so the badge genuinely
    * did mean something other than "playing", and green would have been a second meaning on
-   * the sacred hue. `B-156` rewired it to {@link isOnAir}, the layer table's OWN predicate,
-   * and the two meanings MERGED: when this badge says `ON AIR NOW` it is the same claim the
+   * the sacred hue. `B-156` rewired it to `isOnAir` — which it took for the layer table's own
+   * predicate and was not: that one is true for `error` and `unconfirmed` too, so on 2026-09-26
+   * this badge said `ON AIR NOW` over a take the server had REFUSED (`FIELD-FIXES-01` C). It now
+   * asks {@link claimsAir}, the row's OWN green mark, and the two meanings MERGE for real: when
+   * this badge says `ON AIR NOW` it is the same claim the
    * row's green mark is making, from the same derivation.
    *
    * 🔴 **The comment is replaced, not merely overridden, because a warning that outlives its
    * premise is how amber gets "restored" by a later reader citing a fact that is no longer
    * true.** This repo has been bitten by that shape before. If the badge is ever ungated from
-   * `isOnAir` again, the green must go with it.
+   * `claimsAir` again, the green must go with it.
    *
    * ── THE THREE HUES ARE THE THREE STATES' OWN, TAKEN AS TOKENS ───────────────
    *
@@ -205,7 +208,7 @@ const styles = {
  * | rehearsing | it is what PVW is showing — `R-022` keeps the row off air |
  * | loaded / idle | it is what a TAKE would show. Not air. |
  *
- * ⚠ **Both predicates are IMPORTED.** `isOnAir` is the layer table's own (the section above
+ * ⚠ **Both predicates are IMPORTED.** `claimsAir` is the row's own ON AIR claim (the section above
  * already calls it); `isRehearsing` is `@cg/shared-ipc`'s, the one `LayersPanel` reads for the
  * row picker's `PVW LOOK` / `LOOK` label. Session BL shipped that distinction on the row and
  * this section never learned it — the `B-151` shape, one surface knowing a state and its
@@ -301,7 +304,7 @@ export function LooksBindingsSection({
   if (carrier === undefined || looks.length === 0) return null;
 
   const liveLookId = activeLookOf(carrier, item.activeLookId)?.id;
-  const badge = badgeFor(isOnAir(item), rehearsing);
+  const badge = badgeFor(claimsAir(item), rehearsing);
   const defaults = appliedPlateSources(item.templateId, carrier.sources ?? []);
   const patches = item.sourceOverride ?? {};
   /*
@@ -310,7 +313,8 @@ export function LooksBindingsSection({
     local re-derivation. Same attributes (`data-plate-overridden` / `data-plate-frozen`), same
     wording, same gating; only the host moved.
   */
-  const rowOnAir = isOnAir(item);
+  // `FIELD-FIXES-01` C — "what is actually on air" is said only for air the server confirmed.
+  const rowOnAir = claimsAir(item);
   const divergenceOf = (plateId: string): JSX.Element | null => {
     if (!rowOnAir) return null;
     const appliedSource = defaults.get(plateId) ?? null;

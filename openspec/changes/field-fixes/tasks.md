@@ -87,3 +87,12 @@
       none); e2e `take-refusal-line.spec.ts` (the row and the Inspector say the line, no banner, no
       "AMCP"; the other channel shows only the mark, measured against a baseline; control: a take
       that lands clears the line and the mark).
+
+## 6. C — the Inspector never claims unconfirmed air (`B-279`)
+
+- [x] 6.1 `claimsAir` (the row's own ON AIR mark) beside `isOnAir`; `LooksBindingsSection`'s badge and
+      its divergence notes ask it.
+- [x] 6.2 Tests: `lookBindings.dom.test.ts` (a refused take, unconfirmed, unverified and a take in
+      flight are not `ON AIR NOW` — red first 4/4 against the old badge; control: an acknowledged
+      take is); e2e `look-inputs.spec.ts` (a refused take does not claim air for its look; control: a
+      take that lands does).

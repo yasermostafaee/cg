@@ -328,11 +328,45 @@ it('B-156 — an ON-AIR row DOES say so, which is the state the label was right 
   /*
     🔴 SESSION BP §1.3 — GREEN, and this reverses a decision the file shipped with. Amber was
     right while the badge was gated on `activeLookOf` and therefore meant something other than
-    "playing"; `B-156` rewired it to `isOnAir`, the layer table's own predicate, and the two
-    meanings merged. The badge and the row's green mark now make ONE claim from ONE derivation
-    in ONE colour, which is the whole argument for taking the sacred hue here.
+    "playing"; `B-156` rewired it to `isOnAir`, and `FIELD-FIXES-01` C to `claimsAir` — the row's
+    own green mark, which `isOnAir` was not (it is true for `error`). The badge and the row's
+    green mark now make ONE claim from ONE derivation in ONE colour, which is the whole argument
+    for taking the sacred hue here.
   */
   expect((badge as HTMLElement | null)?.style.color).toBe(asRendered(colors.onAir));
+});
+
+/**
+ * 🔴 `FIELD-FIXES-01` C — **A LOOK IS ON AIR ONLY WHEN THE SERVER CONFIRMED IT.** The badge asked
+ * `isOnAir`, which is true for `error` too: on 2026-09-26 it said `ON AIR NOW` for Bed 59's
+ * `look-2` while the row read ERROR over a take the server had refused. It now asks `claimsAir`,
+ * the row's own green mark: `on-air`, or a take the server acknowledged.
+ */
+it('🔴 FIELD-FIXES-01 C — a row whose take was REFUSED does not claim air for its look', async () => {
+  const el = await render({
+    status: 'error',
+    errorCode: 'amcp-403',
+    takeRefusal: { code: 'amcp-403', command: 'PLAY 2-60 DECKLINK DEVICE 1' },
+  });
+  const badge = el.querySelector('[data-look-live="two"]');
+  expect(badge?.textContent).not.toContain('ON AIR');
+  expect(badge?.getAttribute('data-look-badge')).toBe('not-on-air');
+});
+
+it.each([
+  ['unconfirmed — the take is unresolved', { status: 'unconfirmed' as const }],
+  ['unverified — the link cannot confirm it', { status: 'unverified' as const }],
+  ['a take still in flight', { status: 'playing' as const, pending: true }],
+])('C — %s: not ON AIR NOW', async (_, over) => {
+  const el = await render(over);
+  expect(el.querySelector('[data-look-live="two"]')?.textContent).not.toContain('ON AIR');
+});
+
+it('C — CONTROL: a take the server ACKNOWLEDGED (playing, settled) says ON AIR NOW', async () => {
+  const el = await render({ status: 'playing', pending: false });
+  const badge = el.querySelector('[data-look-live="two"]');
+  expect(badge?.textContent).toContain('ON AIR NOW');
+  expect(badge?.getAttribute('data-look-badge')).toBe('on-air');
 });
 
 it('🔴 B-156 — a REHEARSING row says PVW, the distinction session BL shipped on the row', async () => {

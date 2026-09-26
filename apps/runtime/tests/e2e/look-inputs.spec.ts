@@ -196,3 +196,36 @@ test('🔴 B-156 — a LOADED row does not claim air; the badge names what is ac
   // …and it still marks the look, so the operator can tell which one a take would show.
   await expect(badge).toContainText('TAKE');
 });
+
+test('🔴 FIELD-FIXES-01 C — a REFUSED take does not claim air for its look; control: a take that lands does', async ({
+  app,
+}) => {
+  /*
+    The owner's report of 2026-09-26: `ERROR` on the row, and `look-2 ON AIR NOW` in its Inspector
+    over a take the server had refused. The refusal comes from the mock's one-shot seam, shaped as
+    the bridge records it.
+  */
+  await registerLooksTemplate(app);
+  const row = await app.loadTemplate(LOOKS_TPL);
+  await app.selectLayerRow(row);
+  await app.page.evaluate(() => {
+    (window as unknown as { CG_E2E_REFUSE_NEXT_TAKE?: unknown }).CG_E2E_REFUSE_NEXT_TAKE = {
+      code: 'amcp-403',
+      command: 'PLAY 1-60 DECKLINK DEVICE 1',
+    };
+  });
+  await app.layerRow(row).getByRole('button', { name: 'PLAY' }).click();
+  await expect(app.layerRow(row)).toContainText('ERROR');
+
+  const badge = app.inspector.locator('[data-look-live="two"]');
+  await expect(badge).toBeVisible();
+  // 🔴 THE ASSERTION — the look the refused take was for is not on air, and the words say so.
+  await expect(badge).not.toContainText('ON AIR');
+  await expect(badge).toHaveAttribute('data-look-badge', 'not-on-air');
+
+  // CONTROL — the take that lands: the same badge now makes the claim.
+  await app.layerRow(row).getByRole('button', { name: 'PLAY' }).click();
+  await expect(app.layerRow(row)).toContainText('ON AIR');
+  await expect(badge).toContainText('ON AIR NOW');
+  await expect(badge).toHaveAttribute('data-look-badge', 'on-air');
+});

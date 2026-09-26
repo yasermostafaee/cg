@@ -12708,3 +12708,10 @@ _"Bed 59 · studio1 (DeckLink 1): the server has no such input, or it is in use.
 its Inspector, in that channel's view only, with a mark on the strip for another channel's view and no
 banner; it clears on the next take that lands, or a clear. Tests: `takeRefusalLine.test.ts`,
 `take-refusal-line.spec.ts`.
+
+## [~] B-279 — The Inspector said "ON AIR NOW" for the look of a take the server had refused ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` C
+
+The look badge asked `isOnAir`, which is true for `error`, so after Bed 59's refused take the Inspector
+said `look-2 ON AIR NOW` under a row reading ERROR. **Fix:** it asks `claimsAir`, the row's own green ON
+AIR mark (`on-air`, or an acknowledged take), and so do its "actually on air" notes. Tests:
+`lookBindings.dom.test.ts`, `look-inputs.spec.ts`.

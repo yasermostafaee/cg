@@ -186,3 +186,16 @@ holdsSeats)` in `@cg/shared-schema` beside `isOnAirStatus`; the bridge's `#ownsL
 - **It clears** when the bridge withdraws it: the next take that lands, a clear, a removal.
 - **Test mode:** the mock's one-shot seam `CG_E2E_REFUSE_NEXT_TAKE` refuses the next take at the wire,
   as the bridge would record it; unset, the mock takes as it always has.
+
+## §8 C — what `ON AIR NOW` on a look means
+
+- **Established.** The Inspector's look badge (`LooksBindingsSection.badgeFor`) said `ON AIR NOW` for
+  the row's selected look whenever `isOnAir(item)` held — and `isOnAir` is "may it be showing
+  something?": `status` other than `idle` and `loaded`, so TRUE for `error`, `unconfirmed`,
+  `unverified` and `disconnected`. Its comment claimed it was the layer table's own air predicate; it
+  never was (the row's green mark is `badgeTone` → `onair`). So after Bed 59's refused take the badge
+  read `look-2 ON AIR NOW` under a row reading ERROR — the owner's screenshot.
+- **Fixed:** `claimsAir(item)` (`stack/onAir.ts`) is the row's own green mark — `on-air`, or a take the
+  server acknowledged (`playing`, no longer pending) — named once, and the badge and the section's
+  "actually on air" notes ask it. An error, an unresolved take, an unverifiable link or a take in
+  flight is not said to be on air.

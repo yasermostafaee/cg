@@ -49,6 +49,23 @@ successfully, or cleared.
 - **WHEN** the row is taken again and the take lands
 - **THEN** the line leaves the row and the Inspector, and the mark leaves the strip
 
+### Requirement: The Inspector SHALL say a look is on air only when the server confirmed it
+
+The Inspector's look badge SHALL read `ON AIR NOW` only while the row itself claims air — the row's
+own green ON AIR mark: `on-air`, or a take the server acknowledged. A row in error (a refused take),
+unconfirmed, unverified, or with its take still in flight SHALL NOT have its look said to be on air,
+and neither SHALL the section's notes about what is actually on air.
+
+#### Scenario: A refused take does not put its look on air
+
+- **WHEN** the row's take was refused and the row reads ERROR
+- **THEN** its selected look's badge does not say `ON AIR NOW`
+
+#### Scenario: A take that lands does
+
+- **WHEN** the row is taken and the server acknowledges it
+- **THEN** the badge says `ON AIR NOW`
+
 ### Requirement: A row's PLAY SHALL be unavailable while the bridge would refuse its take
 
 A row's PLAY SHALL be disabled while the bridge would refuse its take — the row is on air or
