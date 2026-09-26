@@ -69,6 +69,9 @@ discharged by the later one's run, which carries it.
 
 ## 7. `DELTA-MULTI-CHANNEL-01-B` (`design.md` §16)
 
-- [x] 7.1 B1 — the check answers before a sign-in, for this station's Playout only; a refusal names nothing not involved (auth, lock, skew) — `27ddb19c`
-- [x] 7.2 B3 (log) — the Playout's answer to a failed sign-in reaches the bridge's log, as one untrusted line — `27ddb19c`
-- [x] 7.3 B2, B3 — a sign-in is offered only when it can work, in English; only a wrong username or password marks a field — `e0fcbdb1`
+- [x] 7.1 B1 — the check answers before a sign-in, for this station's Playout only; a refusal names nothing not involved (auth, lock, skew) — `27ddb19c`; e2e https://github.com/yasermostafaee/cg/actions/runs/36236895294
+- [x] 7.2 B3 (log) — the Playout's answer to a failed sign-in reaches the bridge's log, as one untrusted line — `27ddb19c`; e2e https://github.com/yasermostafaee/cg/actions/runs/36236895294
+- [x] 7.3 B2, B3 — a sign-in is offered only when it can work, in English; only a wrong username or password marks a field — `e0fcbdb1`; e2e https://github.com/yasermostafaee/cg/actions/runs/36236895294
+- [x] 7.4 The DELTA-B head `cae42a52` — PR run https://github.com/yasermostafaee/cg/actions/runs/36236895294 (`E2E (Playwright)` and `Lint • Typecheck • Test • Build` both `completed/success`); Desktop run https://github.com/yasermostafaee/cg/actions/runs/36236895221 (`Installers (Windows)` and `Installer smoke (clean Windows)` both `completed/success`):
+  - CG Control — https://github.com/yasermostafaee/cg/actions/runs/36236895221/artifacts/10904453227
+  - CG Designer — https://github.com/yasermostafaee/cg/actions/runs/36236895221/artifacts/10904119429
