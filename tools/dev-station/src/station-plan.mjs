@@ -118,7 +118,38 @@ export function stationPaths(stateDir, platform) {
     playoutConfig: p.join(runtime, 'bridge-playout.json'),
     /** A one-page stub for the bridge's console listener, which needs an `index.html` to start. */
     consoleDir: p.join(stateDir, 'console'),
+    /**
+     * `DELTA-MULTI-CHANNEL-01-A` — everything the bridge prints, as the terminal shows it. The
+     * owner's first `--fake` check left nothing behind to read but the audit log: the connection
+     * check's own timing line, written for exactly that question, had gone to a closed terminal.
+     */
+    bridgeLog: p.join(stateDir, 'bridge.log'),
   };
+}
+
+/**
+ * 🔴 `DELTA-MULTI-CHANNEL-01-A` A1 — **THE FAKE STATION'S FOUR MODULES, LOADED BY PATH** (the dev
+ * station is zero-dependency): the three fakes, and `fake-station.ts`, the one composition that wires
+ * them — which the bridge's own suite drives against a real bridge. The TypeScript three run under
+ * Node's type stripping, which is why `--fake` needs Node 23; CasparCG's stand-in runs from its build,
+ * which `buildArgs()` already includes (`@cg/amcp-mock` is the bridge's own dependency).
+ */
+export function fakeModulePaths(repo) {
+  const support = path.join(repo, 'tools', 'caspar-bridge', 'tests', 'support');
+  return {
+    playout: path.join(support, 'fake-playout.ts'),
+    pgmFeed: path.join(support, 'fake-pgm-feed.ts'),
+    station: path.join(support, 'fake-station.ts'),
+    caspar: path.join(repo, 'tools', 'amcp-mock', 'dist', 'index.js'),
+  };
+}
+
+/**
+ * Where the last `--fake` station is kept when a run starts a fresh one: beside it, one run back —
+ * so the state a check was made on can still be read after the next start.
+ */
+export function previousStateDir(stateDir) {
+  return `${stateDir}.previous`;
 }
 
 /** The path flags, each with its value — `--state-home` first, so a default could only land here. */
@@ -273,17 +304,35 @@ export function blockedLine(b) {
   return `Port ${port} is held by ${b.name} (PID ${String(b.pid)}) — stop it, then run pnpm dev:station again.`;
 }
 
-/** The one short banner: where the console is, where its state is, which Playout, how to stop. */
-export function banner({ stateDir, playout, fake }) {
-  return [
+/**
+ * The one short banner: where the console is, where its state and its log are, which Playout — and,
+ * with `--fake`, which CasparCG — and how to stop.
+ *
+ * `DELTA-MULTI-CHANNEL-01-A` A1(c) — the connection check's "The Playout and CasparCG run on this
+ * machine" warning STAYS: it is true of a fake station, whose every part is on loopback. One line
+ * here says it is expected, so the owner does not read a true warning as a fault of the tool.
+ */
+export function banner({ stateDir, playout, fake, log }) {
+  const lines = [
     '',
     '  ── CG Control · dev station ──────────────────────────────',
     `  console  ${CONSOLE_URL}`,
-    `  state    ${stateDir}`,
-    `  Playout  ${playout}${fake === undefined ? '' : `  (fake · sign in as ${fake.username} / ${fake.password})`}`,
-    '  Ctrl+C stops it.',
-    '',
+    `  state    ${stateDir}${fake === undefined ? '' : '  (fresh every --fake run; the last one is kept beside it as .previous)'}`,
   ];
+  if (log !== undefined) lines.push(`  log      ${log}`);
+  lines.push(
+    `  Playout  ${playout}${fake === undefined ? '' : `  (fake · sign in as ${fake.username} / ${fake.password})`}`,
+  );
+  if (fake?.caspar !== undefined) {
+    const feeds = fake.feeds ?? [];
+    lines.push(
+      `  CasparCG ${fake.caspar}  (fake · channels 1 and 2${feeds.length > 0 ? ` · programme feeds on ${feeds.join(', ')}` : ''})`,
+      '  check    "The Playout and CasparCG run on this machine" is expected here: they do.',
+    );
+  }
+  for (const note of fake?.notes ?? []) lines.push(`  note     ${note}`);
+  lines.push('  Ctrl+C stops it.', '');
+  return lines;
 }
 
 /** The launcher's own flags: `--playout <url>`, `--fake`, `--no-open`. Anything else is refused. */

@@ -6,7 +6,8 @@
  *
  *   pnpm dev:station                  the remembered Playout (asked for once, the first time)
  *   pnpm dev:station --playout <url>  change it
- *   pnpm dev:station --fake           the fake Playout `dev:playout-auth` runs (Node 23+)
+ *   pnpm dev:station --fake           a whole fake station on loopback — the Playout, CasparCG
+ *                                     serving channels 1 and 2, and their programme feeds (Node 23+)
  *   pnpm dev:station --no-open        do not open the browser
  *
  * It runs INSTEAD of CG Control, never beside it: the Playout's CORS admits one origin, UDP 6250
@@ -29,9 +30,11 @@ import {
   bridgeArgs,
   buildArgs,
   devStateDir,
+  fakeModulePaths,
   installedStateDir,
   isInside,
   parseArgs,
+  previousStateDir,
   setAddressArgs,
   stationPaths,
   viteArgs,
@@ -43,14 +46,7 @@ const BRIDGE_CLI = path.join(repo, 'tools', 'caspar-bridge', 'bin', 'caspar-brid
 const TURBO = path.join(repo, 'node_modules', 'turbo', 'bin', 'turbo');
 const RUNTIME = path.join(repo, 'apps', 'runtime');
 const VITE = path.join(RUNTIME, 'node_modules', 'vite', 'bin', 'vite.js');
-const FAKE_PLAYOUT = path.join(
-  repo,
-  'tools',
-  'caspar-bridge',
-  'tests',
-  'support',
-  'fake-playout.ts',
-);
+const FAKES = fakeModulePaths(repo);
 const BRIDGE_CONSOLE = `http://127.0.0.1:${String(BRIDGE_CONSOLE_PORT)}`;
 const START_TIMEOUT_MS = 120_000;
 
@@ -98,29 +94,55 @@ function setPlayoutAddress(paths, address) {
   if (written.status !== 0) throw new Error(said.replace(/^\[caspar-bridge\] /, ''));
 }
 
+/**
+ * `DELTA-MULTI-CHANNEL-01-A` A1 — THE WHOLE FAKE STATION: `fake-station.ts`'s composition (the fake
+ * Playout with its automatic path open to this loopback machine, CasparCG's stand-in behind that
+ * Playout's allow list, and the channels' programme feeds), with every port explicit. Nothing here
+ * reaches the product: the bridge meets this station exactly as it meets a real one.
+ */
 async function startFake() {
   const major = Number(process.versions.node.split('.')[0]);
   if (!(major >= 23)) {
     throw new Error(
-      `--fake needs Node 23 or newer (it runs the test suite's fake Playout from its TypeScript) — this is Node ${process.versions.node}.`,
+      `--fake needs Node 23 or newer (it runs the test suite's fakes from their TypeScript) — this is Node ${process.versions.node}.`,
     );
   }
-  const mod = await import(pathToFileURL(FAKE_PLAYOUT).href);
-  // The test Playout's real cg-admin holds channels 1 AND 2; the fake admin does here too.
-  const fake = await mod.startFakePlayout({
-    grants: {
-      admin: [
-        { host: '127.0.0.1', channel: 1 },
-        { host: '127.0.0.1', channel: 2 },
-      ],
+  const load = (file) => import(pathToFileURL(file).href);
+  const [playoutMod, feedMod, stationMod, casparMod] = await Promise.all([
+    load(FAKES.playout),
+    load(FAKES.pgmFeed),
+    load(FAKES.station),
+    load(FAKES.caspar),
+  ]);
+  const station = await stationMod.startFakeStation(
+    {
+      startFakePlayout: playoutMod.startFakePlayout,
+      createMock: casparMod.createMock,
+      startFakePgmFeed: feedMod.startFakePgmFeed,
     },
-  });
+    stationMod.FAKE_STATION_PORTS,
+  );
   return {
-    address: fake.baseUrl,
-    username: mod.FAKE_ADMIN.username,
-    password: mod.FAKE_PLAYOUT_PASSWORD,
-    stop: () => fake.stop(),
+    address: station.playout.baseUrl,
+    username: playoutMod.FAKE_ADMIN.username,
+    password: playoutMod.FAKE_PLAYOUT_PASSWORD,
+    caspar: `${stationMod.FAKE_STATION_HOST}:${String(station.caspar.amcpPort)}`,
+    feeds: station.feeds.map((feed) => feed.port),
+    notes: station.notes,
+    stop: () => station.stop(),
   };
+}
+
+/**
+ * `DELTA-MULTI-CHANNEL-01-A` A1 — a fresh fake station: the last one moves aside to `.previous`
+ * (replacing the one before it), and the folder starts empty. Called only for `--fake`, only after
+ * the build, and only on the fake station's own folder.
+ */
+function freshFakeState(stateDir) {
+  const previous = previousStateDir(stateDir);
+  fs.rmSync(previous, { recursive: true, force: true });
+  if (fs.existsSync(stateDir)) fs.renameSync(stateDir, previous);
+  fs.mkdirSync(stateDir, { recursive: true });
 }
 
 function get(url) {
@@ -150,8 +172,15 @@ function start(paths, playout) {
   const bridge = spawn(process.execPath, [BRIDGE_CLI, ...bridgeArgs(paths, playout)], {
     cwd: repo,
     // stdin is the LIFELINE (`--exit-on-stdin-close`): if this launcher dies, the bridge stops.
-    stdio: ['pipe', 'inherit', 'inherit'],
+    // stderr is where the bridge speaks: shown in the terminal AND kept in `bridge.log`.
+    stdio: ['pipe', 'inherit', 'pipe'],
   });
+  const log = fs.createWriteStream(paths.bridgeLog, { flags: 'w' });
+  bridge.stderr?.on('data', (chunk) => {
+    process.stderr.write(chunk);
+    log.write(chunk);
+  });
+  bridge.once('exit', () => log.end());
   const { HOST: _host, PORT: _port, ...env } = process.env;
   const vite = spawn(process.execPath, [VITE, ...viteArgs()], {
     cwd: RUNTIME,
@@ -247,7 +276,7 @@ async function main() {
   fs.mkdirSync(stateDir, { recursive: true });
 
   const result = await runDevStation(
-    { ...options, stateDir },
+    { ...options, stateDir, log: paths.bridgeLog },
     {
       probe: () => probeStation(platform),
       ask,
@@ -255,6 +284,7 @@ async function main() {
       build,
       readPlayoutAddress: () => readPlayoutAddress(paths),
       setPlayoutAddress: async (address) => setPlayoutAddress(paths, address),
+      freshFakeState: () => freshFakeState(stateDir),
       startFake,
       start: (playout) => start(paths, playout),
       open: openBrowser,

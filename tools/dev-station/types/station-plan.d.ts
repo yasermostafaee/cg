@@ -34,6 +34,13 @@ declare module '*station-plan.mjs' {
     readonly audit: string;
     readonly playoutConfig: string;
     readonly consoleDir: string;
+    readonly bridgeLog: string;
+  }
+  export interface FakeModulePaths {
+    readonly playout: string;
+    readonly pgmFeed: string;
+    readonly station: string;
+    readonly caspar: string;
   }
   export interface StationPortOverrides {
     readonly bridge?: number;
@@ -66,6 +73,8 @@ declare module '*station-plan.mjs' {
   ): string;
   export function isInside(child: string, parent: string, platform: string): boolean;
   export function stationPaths(stateDir: string, platform: string): StationPaths;
+  export function fakeModulePaths(repo: string): FakeModulePaths;
+  export function previousStateDir(stateDir: string): string;
   export function bridgeArgs(
     paths: StationPaths,
     playoutAddress: string,
@@ -86,7 +95,16 @@ declare module '*station-plan.mjs' {
   export function banner(input: {
     stateDir: string;
     playout: string;
-    fake?: { username: string; password: string } | undefined;
+    fake?:
+      | {
+          username: string;
+          password: string;
+          caspar?: string;
+          feeds?: readonly number[];
+          notes?: readonly string[];
+        }
+      | undefined;
+    log?: string | undefined;
   }): string[];
   export function parseArgs(
     argv: readonly string[],

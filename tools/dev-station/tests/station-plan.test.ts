@@ -13,11 +13,13 @@ import {
   bridgeArgs,
   buildArgs,
   devStateDir,
+  fakeModulePaths,
   installedStateDir,
   isInside,
   parseArgs,
   parseNetstat,
   parseTasklist,
+  previousStateDir,
   setAddressArgs,
   stationPaths,
   viteArgs,
@@ -146,6 +148,73 @@ describe('isolation — its own state folder, every path named', () => {
       '/s/.cg-runtime/bridge-playout.json',
       '--set-playout-address',
       '192.168.21.111',
+    ]);
+  });
+});
+
+describe('`DELTA-MULTI-CHANNEL-01-A` A1 — `--fake` is a whole station', () => {
+  const repo = path.resolve(here, '..', '..', '..');
+
+  it('the four modules the launcher loads by path are there — the three fakes, their composition, and CasparCG’s stand-in from its build', () => {
+    const files = fakeModulePaths(repo);
+    expect(Object.keys(files).sort()).toEqual(['caspar', 'pgmFeed', 'playout', 'station']);
+    for (const [name, file] of Object.entries(files)) {
+      expect(fs.existsSync(file), `${name}: ${file}`).toBe(true);
+    }
+    // Control: the instrument can say "not there".
+    expect(fs.existsSync(path.join(repo, 'tools', 'amcp-mock', 'dist', 'no-such-file.js'))).toBe(
+      false,
+    );
+  });
+
+  it('the bridge’s log is kept inside the dev state; the last fake station is kept beside it', () => {
+    const stateDir = 'C:\\Users\\op\\AppData\\Local\\CG Control Dev\\fake';
+    const paths = stationPaths(stateDir, 'win32');
+    expect(paths.bridgeLog).toBe(`${stateDir}\\bridge.log`);
+    expect(isInside(paths.bridgeLog, stateDir, 'win32')).toBe(true);
+    expect(previousStateDir(stateDir)).toBe(`${stateDir}.previous`);
+    expect(isInside(previousStateDir(stateDir), stateDir, 'win32')).toBe(false);
+  });
+
+  it('the banner names the fake CasparCG, and says in one line that the same-machine warning is expected', () => {
+    const lines = banner({
+      stateDir: 'C:\\x\\fake',
+      playout: 'http://127.0.0.1:63114',
+      fake: {
+        username: 'cg-admin',
+        password: 'pw',
+        caspar: '127.0.0.1:5250',
+        feeds: [9250, 9251],
+        notes: [],
+      },
+      log: 'C:\\x\\fake\\bridge.log',
+    });
+    expect(lines).toContain(
+      '  CasparCG 127.0.0.1:5250  (fake · channels 1 and 2 · programme feeds on 9250, 9251)',
+    );
+    expect(lines.filter((l) => l.includes('The Playout and CasparCG run on this machine'))).toEqual(
+      ['  check    "The Playout and CasparCG run on this machine" is expected here: they do.'],
+    );
+    expect(lines).toContain('  log      C:\\x\\fake\\bridge.log');
+    // Control: a dev station on a real Playout has no fake CasparCG and no such line.
+    const plain = banner({ stateDir: 'C:\\x', playout: 'http://192.168.21.111:8080' });
+    expect(plain.some((l) => l.includes('CasparCG'))).toBe(false);
+  });
+
+  it('a part that could not start is said on the banner, one line each', () => {
+    const lines = banner({
+      stateDir: 'C:\\x\\fake',
+      playout: 'http://127.0.0.1:63114',
+      fake: {
+        username: 'cg-admin',
+        password: 'pw',
+        caspar: '127.0.0.1:5250',
+        feeds: [9250],
+        notes: ['Channel 2’s programme feed did not start.'],
+      },
+    });
+    expect(lines.filter((l) => l.startsWith('  note '))).toEqual([
+      '  note     Channel 2’s programme feed did not start.',
     ]);
   });
 });

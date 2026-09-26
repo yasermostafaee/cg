@@ -106,12 +106,21 @@ function harness(
       calls.push(`set-address ${value}`);
       address = value;
     },
-    startFake: async () => ({
-      address: 'http://127.0.0.1:43111',
-      username: 'admin',
-      password: 'pw',
-      stop: async () => undefined,
-    }),
+    freshFakeState: () => {
+      calls.push('fresh-fake');
+    },
+    startFake: async () => {
+      calls.push('start-fake');
+      return {
+        address: 'http://127.0.0.1:43111',
+        username: 'admin',
+        password: 'pw',
+        caspar: '127.0.0.1:5250',
+        feeds: [9250, 9251],
+        notes: [],
+        stop: async () => undefined,
+      };
+    },
     start: async (playout) => {
       calls.push(`start ${playout}`);
       return { stop: async () => undefined };
@@ -249,5 +258,34 @@ describe('the Playout address — asked once, remembered, changed by --playout',
     expect(h.calls).toContain('set-address http://127.0.0.1:43111');
     expect(h.calls).toContain('start http://127.0.0.1:43111');
     expect(h.printed.join('\n')).toContain('sign in as admin / pw');
+  });
+});
+
+describe('`DELTA-MULTI-CHANNEL-01-A` A1 — `--fake` starts a whole station, fresh', () => {
+  it('the last fake station moves aside AFTER the build and BEFORE the fake starts and its address is written', async () => {
+    const h = harness();
+    expect((await runDevStation({ ...OPTIONS, fake: true }, h.deps)).outcome).toBe('running');
+    const at = (call: string): number => h.calls.indexOf(call);
+    expect(at('fresh-fake')).toBeGreaterThan(at('build'));
+    expect(at('fresh-fake')).toBeLessThan(at('start-fake'));
+    expect(at('fresh-fake')).toBeLessThan(at('set-address http://127.0.0.1:43111'));
+    // The banner carries the fake CasparCG, and says the same-machine warning is expected.
+    expect(h.printed).toContain(
+      '  CasparCG 127.0.0.1:5250  (fake · channels 1 and 2 · programme feeds on 9250, 9251)',
+    );
+    expect(h.printed.join('\n')).toContain('is expected here: they do.');
+  });
+
+  it('CONTROL — a dev station on a real Playout keeps its state: nothing is moved aside', async () => {
+    const h = harness();
+    expect((await runDevStation(OPTIONS, h.deps)).outcome).toBe('running');
+    expect(h.calls).not.toContain('fresh-fake');
+    expect(h.calls).not.toContain('start-fake');
+  });
+
+  it('a failed build leaves the last fake station exactly as it was', async () => {
+    const h = harness({ build: () => 2 });
+    expect((await runDevStation({ ...OPTIONS, fake: true }, h.deps)).outcome).toBe('build-failed');
+    expect(h.calls).not.toContain('fresh-fake');
   });
 });

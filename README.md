@@ -76,8 +76,9 @@ session-only there.
 
 ### Checking a change in the browser
 
-`pnpm dev:station` builds, then runs the current source as CG Control does — same ports, its own state in `%LOCALAPPDATA%\CG Control Dev`.
-The console opens at **http://127.0.0.1:5174** (`--playout <url>` changes the Playout; `--fake` needs none).
+`pnpm dev:station` builds, then runs the current source as CG Control does — same ports, its own state in `%LOCALAPPDATA%\CG Control Dev`, the bridge's output kept in `bridge.log` there.
+The console opens at **http://127.0.0.1:5174** (`--playout <url>` changes the Playout).
+`--fake` runs a whole station on loopback — a fake Playout, CasparCG's stand-in serving channels 1 and 2, and their programme feeds — fresh every run, the last one kept as `fake.previous`.
 Close CG Control first — the launcher offers to, and asks before it does.
 
 ### The CasparCG bridge

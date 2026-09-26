@@ -5,7 +5,8 @@
  *   1. the installed CG Control in the way? ASK — and stop it only on a yes. Never without asking;
  *      any other program on the station's ports is NAMED and left alone;
  *   2. BUILD — before anything starts, so no stale compiled code ever runs;
- *   3. the Playout — `--fake`'s own, `--playout <url>`, the remembered one, or asked for ONCE;
+ *   3. the Playout — `--fake`'s own (a whole fake station, started fresh), `--playout <url>`, the
+ *      remembered one, or asked for ONCE;
  *   4. START the bridge and the console, then the banner, then the browser.
  */
 import { ASK, CONSOLE_URL, DECLINED, answerIsYes, banner, blockedLine } from './station-plan.mjs';
@@ -13,7 +14,7 @@ import { ASK, CONSOLE_URL, DECLINED, answerIsYes, banner, blockedLine } from './
 const ASK_ADDRESS = 'Playout address (for example 192.168.21.111): ';
 
 /**
- * @param {{ fake: boolean, playout: string | undefined, open: boolean, stateDir: string }} options
+ * @param {{ fake: boolean, playout: string | undefined, open: boolean, stateDir: string, log?: string }} options
  * @param {object} deps — see `types/station-sequence.d.ts`
  */
 export async function runDevStation(options, deps) {
@@ -46,6 +47,15 @@ export async function runDevStation(options, deps) {
   let playout;
   let fake;
   if (options.fake) {
+    /*
+      `DELTA-MULTI-CHANNEL-01-A` A1 — A FRESH FAKE STATION EVERY RUN. The fake Playout is new at
+      every start — new keys, new issuer, new port — so a remembered fake station holds a session,
+      an issuer and a CasparCG connection that nothing of this run answers: the owner's still named
+      CasparCG on the bridge's own port 5280, and no first-run would ever run again to correct it.
+      The last one is kept beside it (`.previous`), so a check can still be read after the next start.
+      After the build, so a failed build leaves the last station as it was.
+    */
+    await deps.freshFakeState();
     fake = await deps.startFake();
     playout = fake.address;
     // Its port is new every start, so its issuer is too: the one writer clears the old one.
@@ -91,7 +101,9 @@ export async function runDevStation(options, deps) {
     await fake?.stop();
     return { outcome: 'failed' };
   }
-  for (const line of banner({ stateDir: options.stateDir, playout, fake })) deps.print(line);
+  for (const line of banner({ stateDir: options.stateDir, playout, fake, log: options.log })) {
+    deps.print(line);
+  }
   if (options.open) deps.open(CONSOLE_URL);
   return { outcome: 'running', running, fake };
 }
