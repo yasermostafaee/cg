@@ -19,10 +19,13 @@ import type { ShownCheckLine } from './firstRunStation.js';
  * Station setup. Each line is the bridge's own sentence; a line that needs somebody else to act
  * carries the ONE command or CORS entry they must use, shown on its own to be copied.
  *
- * ⚠ Pass is NOT the on-air green: that colour means a graphic is on the output. A passing link is
- * the quiet ink with a check mark; a failure is the error ink; the topology advice is a warning;
- * a link not judged yet (`DESKTOP-APPS-01-B`: AMCP before a station admin signs in) is the quiet
- * ink with a clock — neutral, never a failure.
+ * ⚠ Pass is NOT the on-air green: that colour means a graphic is on the output. 🔴 `UI-POLISH-01`
+ * F (the owner, 2026-09-26): a passing line's ✓ IS green now — in its OWN token, `checkPass`, a
+ * quieter green of a third the saturation (`theme.ts` measures the two side by side), so the rule
+ * above still holds: `onAir` stays reserved for air. Only the ICON takes it; the line's text keeps
+ * its ink. A failure is the error ink; the topology advice is a warning; a link not judged yet
+ * (`DESKTOP-APPS-01-B`: AMCP before a station admin signs in) is the quiet ink with a clock —
+ * neutral, never a failure.
  *
  * `CHECK-RERUN-01` — two more neutral states, in the layer table's own grammar: a line NOT CHECKED
  * because a line it needs failed (`skip`) wears the dashed ring of "nothing here", and a line whose
@@ -37,6 +40,9 @@ const INK: Record<ShownCheckLine['status'], string> = {
   skip: colors.textSecondary,
   checking: colors.textMuted,
 };
+
+/** The ICON's ink: the line's own, except a pass's ✓, which wears `checkPass`. */
+const ICON_INK: Record<ShownCheckLine['status'], string> = { ...INK, pass: colors.checkPass };
 
 const ICON: Record<ShownCheckLine['status'], LucideIcon> = {
   pass: Check,
@@ -92,7 +98,11 @@ export function ConnectionCheckList({ lines }: { lines: readonly ShownCheckLine[
     <ul style={styles.list} aria-label="Connection check" aria-busy={checking}>
       {lines.map((line) => (
         <li key={line.id} style={styles.line} data-check={line.id} data-status={line.status}>
-          <span style={{ color: INK[line.status], paddingTop: 2 }} aria-label={line.status}>
+          <span
+            style={{ color: ICON_INK[line.status], paddingTop: 2 }}
+            aria-label={line.status}
+            data-check-icon=""
+          >
             <Icon
               icon={ICON[line.status]}
               size={14}

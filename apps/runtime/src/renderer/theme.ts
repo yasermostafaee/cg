@@ -207,6 +207,17 @@ export const colors = {
    * owner is the one to settle it** — not something to tidy away in a later phase.
    */
   onAir: 'rgb(44 255 122)',
+  /**
+   * 🔴 `UI-POLISH-01` F — **A PASSING CHECK'S ✓, AND ONLY THAT.** The owner (2026-09-26) asked for
+   * the connection check's pass mark to be green; `onAir` is reserved for air (a graphic on the
+   * output), so the pass mark has its OWN green, quieter by construction. Measured against `onAir`
+   * `rgb(44 255 122)` (HSL 142° / 100% / V 100%): this is HSL 145° / 33% / V 68% — the same hue
+   * family, a third of the saturation, two-thirds of the brightness; ΔE76 57.6 from `onAir` and
+   * 2.00:1 in lightness against it; AA on every panel ground (5.79 on `panelMuted` … 7.13 on
+   * `background`). ⚠ NOT `REF_MINT` (`--r-success`): the mint is 1.14:1 against `onAir` in
+   * lightness — too close to tell apart at a glance, which is the one thing this token must do.
+   */
+  checkPass: '#5fae80',
   /** EXIT. Shares `pending`'s amber, and is held for the same reason — see there. */
   exit: '#F59E0B',
   /**
@@ -1647,6 +1658,8 @@ export const cssVars = {
   '--r-field-bg': REF_INSET,
   '--r-field-line': '#435367',
   '--r-onair': colors.onAir, // sacred GREEN — ON AIR only (see the header)
+  /** `UI-POLISH-01` F — a passing check's ✓; see `colors.checkPass`. Never an air claim. */
+  '--r-check-pass': colors.checkPass,
   /**
    * 🔴 **AUDIBLE — the reference's own green, and an OWNER AMENDMENT to §29's grammar.**
    *

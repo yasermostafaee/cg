@@ -5400,6 +5400,15 @@ is AUDIBLE, on the LIVE PLATES tab and in the Live audio modal.** Its own role t
 `--r-onair` and `--r-ok-text` so the air mark and the healthy mint are not collapsed into it.
 The owner's decision, recorded rather than argued; §34.3 carries what was weighed.
 
+🔴 **AMENDED BY THE OWNER, 2026-09-26 (`UI-POLISH-01` F): a PASSING connection-check line's ✓ is
+green — in its OWN token, `checkPass` `#5fae80`, never `onAir`.** `ConnectionCheckList` had
+recorded "pass is NOT the on-air green", and that still holds: `checkPass` is the same hue family
+at a third of the saturation and two-thirds of the brightness (HSL 145° / 33% / V 68% against
+`onAir`'s 142° / 100% / V 100%; ΔE76 57.6; 2.00:1 in lightness against it; AA on every panel
+ground). Only the ICON wears it — the line's text keeps its ink, and fail / warn / wait / skip /
+checking are unchanged. `onAir` stays reserved for air. (The mint was measured and rejected for
+this job: 1.14:1 in lightness against `onAir`, too close to tell apart at a glance.)
+
 ### 29.1 Why amber does NOT split, though it carries two jobs
 
 Amber is both the refusal banner and the row's PENDING mark, and "one token doing two jobs"
