@@ -1,6 +1,24 @@
 import type { ClockTarget, ClockZones } from '@cg/shared-schema';
+import { parseTimeOfDay } from '@cg/text-shaping';
 import { formatCountClock, formatWallClock, type ClockDigits } from './clock-format.js';
 import type { RuntimeClock } from './types.js';
+
+/**
+ * D-141 — validate an operator-supplied value as a time of day: the CANONICAL Latin
+ * `HH:mm[:ss]` when it parses, `undefined` when it does not.
+ *
+ * `PERSIAN-DIGITS-01` — it lives in `@cg/text-shaping` now, the one reader both apps
+ * and this bundle share, and it reads a time in ANY digit set: `۲۰:۳۲`, `٢٠:٣٢` and
+ * `20:32` are the same time. The copy that stood here matched `\d` without the `u`
+ * flag — ASCII only — so an operator on a Persian keyboard had the correct time
+ * reported as unparseable while the OLD target stayed on air.
+ *
+ * A GDD client is NOT obliged to enforce a field's `pattern`, so a bound value
+ * reaching the runtime is untrusted and is validated before it can touch a live
+ * countdown. The caller applies NOTHING on `undefined` — the current, possibly
+ * on-air target is kept.
+ */
+export { parseTimeOfDay };
 
 /**
  * D-027 — the digital-clock driver, on the ticker's self-wire pattern.
@@ -98,35 +116,15 @@ export interface ClockDriverOptions {
  * never throw; the format is guaranteed upstream by `ClockTargetSchema` at author
  * time and by the binding's own parse at playout.
  */
-/**
- * The `HH:mm[:ss]` shape, as ONE copy inside this package — shared by
- * {@link resolveTimeOfDay} and {@link parseTimeOfDay} so a value the runtime
- * accepts and the instant it resolves to can never disagree. `ClockTargetSchema`
- * in `@cg/shared-schema` is the canonical spelling of the constraint; keep the two
- * in step (the schema is not imported here to keep zod out of the on-air bundle).
- */
-const TIME_OF_DAY = /^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/;
-
-/**
- * D-141 — validate an operator-supplied value as a time of day: the string when it
- * parses, `undefined` when it does not.
- *
- * A GDD client is NOT obliged to enforce a field's `pattern`, so a bound value
- * reaching the runtime is untrusted and is validated here before it can touch a
- * live countdown. The caller applies NOTHING on `undefined` — the current,
- * possibly on-air target is kept.
- */
-export function parseTimeOfDay(raw: unknown): string | undefined {
-  if (typeof raw !== 'string') return undefined;
-  return TIME_OF_DAY.test(raw) ? raw : undefined;
-}
-
 export function resolveTimeOfDay(time: string, nowMs: number): number {
-  const m = TIME_OF_DAY.exec(time);
-  if (m === null) return nowMs;
-  const hh = Number(m[1]);
-  const mm = Number(m[2]);
-  const ss = m[3] === undefined ? 0 : Number(m[3]);
+  /*
+    Read through the SAME function the binding validates with (`parseTimeOfDay`, re-exported
+    below), so a value the runtime accepts and the instant it resolves to can never disagree —
+    and a time an author or operator wrote in Persian digits resolves like its Latin twin.
+  */
+  const canonical = parseTimeOfDay(time);
+  if (canonical === undefined) return nowMs;
+  const [hh = 0, mm = 0, ss = 0] = canonical.split(':').map(Number);
   const d = new Date(nowMs);
   const candidate = new Date(d.getFullYear(), d.getMonth(), d.getDate(), hh, mm, ss, 0);
   if (candidate.getTime() < nowMs) candidate.setDate(candidate.getDate() + 1);

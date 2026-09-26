@@ -144,6 +144,46 @@ describe('applyFieldValues', () => {
     expect(elementMap.get('name')?.textContent).toBe('Episode ۱۲');
   });
 
+  /*
+    `PERSIAN-DIGITS-01` §2 B — a `transform` target reads its value as a NUMBER. `Number('۰٫۵')` is
+    NaN, so a value typed on a Persian keyboard was dropped without a word. The Latin value and
+    the not-a-number value are the controls.
+  */
+  it('a transform target reads a number typed in Persian digits', () => {
+    const sceneCopy = structuredClone(lowerThirdScene);
+    sceneCopy.fields.push({
+      id: 'fade',
+      label: 'Fade',
+      required: false,
+      type: 'text',
+      default: '',
+    });
+    sceneCopy.bindings.push({
+      fieldId: 'fade',
+      target: { kind: 'transform', elementId: 'bg', property: 'opacity' },
+    });
+    const { container, elementMap, textOriginals } = buildScene(sceneCopy);
+    const opacity = (value: string): string => {
+      applyFieldValues(sceneCopy, { fade: value }, elementMap, textOriginals, container);
+      return elementMap.get('bg')?.style.opacity ?? '';
+    };
+    expect(opacity('۰٫۵')).toBe('0.5');
+    expect(opacity('٠٫٢٥')).toBe('0.25');
+    expect(opacity('0.75')).toBe('0.75');
+    // Not a number in any set: the element keeps what it had.
+    expect(opacity('نیم')).toBe('0.75');
+  });
+
+  it('a text binding renders a Persian, an Arabic-Indic and a Latin number exactly as sent', () => {
+    const sceneCopy = structuredClone(lowerThirdScene);
+    sceneCopy.bindings[0]!.target = { kind: 'text', elementId: 'name' };
+    const { container, elementMap, textOriginals } = buildScene(sceneCopy);
+    for (const v of ['۱۲۳', '١٢٣', '123', 'ساعت ۱۲:۳۰']) {
+      applyFieldValues(sceneCopy, { anchor: v }, elementMap, textOriginals, container);
+      expect(elementMap.get('name')?.textContent).toBe(v);
+    }
+  });
+
   it('ignores bindings targeting unknown elements', () => {
     const sceneCopy = structuredClone(lowerThirdScene);
     sceneCopy.bindings.push({

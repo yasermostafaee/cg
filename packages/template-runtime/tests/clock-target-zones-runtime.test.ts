@@ -188,6 +188,38 @@ describe('clock-target binding — re-target through the driver seam (D-141)', (
     expect(timeText(document.body)).toBe('01:59:00');
   });
 
+  /*
+    `PERSIAN-DIGITS-01` §2 B — the operator's keyboard is Persian. `۲۱:۰۰` used to fail the ASCII
+    `\d` of the old parse, so the template kept the OLD target and reported the operator's own
+    correct time as unparseable. The Latin case above is this one's control.
+  */
+  it('a time typed in Persian or Arabic-Indic digits re-targets exactly as a Latin one', async () => {
+    const clock = makeClock();
+    clock.advance(AT(19, 0));
+    const rt = createRuntime(boundScene(), { clock });
+    const errors: { code: string }[] = [];
+    rt.on('error', (e) => errors.push(e));
+    await rt.ready;
+    await rt.play({});
+    await flush();
+    expect(timeText(document.body)).toBe('01:32:00');
+
+    await rt.update({ azanTime: '۲۱:۰۰' });
+    await flush();
+    expect(timeText(document.body)).toBe('02:00:00');
+
+    await rt.update({ azanTime: '٢١:٣٠' });
+    await flush();
+    expect(timeText(document.body)).toBe('02:30:00');
+    expect(errors, 'a Persian time is not an unparseable one').toEqual([]);
+
+    // The control: a value that is not a time is still refused, in any digit set.
+    await rt.update({ azanTime: '۲۵:۳۲' });
+    await flush();
+    expect(timeText(document.body)).toBe('02:30:00');
+    expect(errors.map((e) => e.code)).toEqual(['clock-target-unparseable']);
+  });
+
   it('the field DEFAULT applies at play() when the operator sent nothing', async () => {
     const clock = makeClock();
     clock.advance(AT(19, 0));

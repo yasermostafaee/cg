@@ -12,6 +12,22 @@ import { textRenderNode } from './text-render-node.js';
 import { coerceTickerItems, tickerDriverFor } from './ticker-driver.js';
 import { lottiePlayerFor } from './lottie-registry.js';
 import { applyTransform, stringifyValue } from './transforms.js';
+import { parseLocalizedNumber } from '@cg/text-shaping';
+
+/**
+ * A `transform` target's value as a number.
+ *
+ * `Number()` FIRST, so every value that reached this line before keeps exactly the meaning it had
+ * (`'1e3'`, `'0x10'`, `' 12 '` — a GDD client may send any of them). Only when that is not a
+ * number does the shared reader get a turn (`PERSIAN-DIGITS-01`): `Number('۰٫۵')` is NaN, and a
+ * value typed on a Persian keyboard used to be dropped here without a word.
+ */
+function transformNumber(raw: unknown): number {
+  if (typeof raw === 'number') return raw;
+  const plain = Number(raw);
+  if (Number.isFinite(plain)) return plain;
+  return typeof raw === 'string' ? (parseLocalizedNumber(raw) ?? Number.NaN) : Number.NaN;
+}
 
 /**
  * Apply a snapshot of field values to the live DOM by walking the scene's
@@ -187,7 +203,7 @@ function applyOne(
     case 'transform': {
       const el = elementMap.get(target.elementId);
       if (!el) return;
-      const num = typeof raw === 'number' ? raw : Number(raw);
+      const num = transformNumber(raw);
       if (!Number.isFinite(num)) return;
       switch (target.property) {
         case 'opacity':
