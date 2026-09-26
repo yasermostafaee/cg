@@ -13,6 +13,7 @@ import {
 import { onCommandError } from '../src/renderer/features/status/commandFeedback.js';
 import { clearPortals, openDialog } from './support/dialog.js';
 import { connectionsStub, type Reachability } from './support/reachability.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * R-028 part B — the PLAYOUT tab, and above all its CLEAR GATE.
@@ -85,7 +86,7 @@ function stubBridge(
       onPlateReleased: () => () => undefined,
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   return { clear };
 }
 

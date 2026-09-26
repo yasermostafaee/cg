@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { ChannelSettingsState } from '@cg/shared-ipc';
 import { RasterMismatchBanner } from '../src/renderer/features/status/RasterMismatchBanner.js';
 import { colors, cssVars } from '../src/renderer/theme.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * `RUNTIME-REDESIGN-01` Phase 9 — deletion guard item 7, the raster-mismatch banner (`R-030`).
@@ -61,7 +62,7 @@ async function mount(
       },
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);

@@ -7,6 +7,7 @@ import type { OrphanLayer, PlayoutLayerState } from '@cg/shared-ipc';
 import { StationLayersPanel } from '../src/renderer/features/layers/StationLayersPanel.js';
 import { clearPortals } from './support/dialog.js';
 import { connectionsStub } from './support/reachability.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * 🔴 `B-235` — **the panel whose job is "this is not yours" stayed silent about a layer
@@ -83,7 +84,7 @@ function stubBridge(): void {
       onPlateReleased: () => () => undefined,
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
 }
 
 async function render(

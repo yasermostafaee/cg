@@ -168,9 +168,11 @@ async function signIn(page: Page, username: string): Promise<void> {
   layer ROWS come from `fixedLayers.state`, which needs a reachable CasparCG, and §0.3 forbids
   this suite from reaching one — the AMCP port is deliberately `127.0.0.1:1`, where nothing
   answers. Probed rather than assumed: signed in as the operator, against a station with a
-  declared bank, the panel reads _"The layer list was refused"_ and there are ZERO verb blocks
+  declared bank, the panel read _"The layer list was refused"_ and there were ZERO verb blocks
   for EITHER principal. A spec asserting "no verbs" there would have passed for the viewer
-  having measured nothing at all.
+  having measured nothing at all. (That refusal was `DELTA-MULTI-CHANNEL-01-A` A4's defect — a
+  read refused before the first sign-in was never asked again — and is fixed; the assertions stay
+  on the bulk verbs, which need no CasparCG answer to render.)
 
   So these assert on the BULK verbs, which live in the panel bar and render without CasparCG —
   measured present for the operator and absent for the viewer — plus the read-only pill and the

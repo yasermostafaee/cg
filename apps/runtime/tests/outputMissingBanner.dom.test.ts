@@ -8,6 +8,7 @@ import {
   OutputMissingBanner,
   OutputMissingStrip,
 } from '../src/renderer/features/status/OutputMissingBanner.js';
+import { fillBridgeStub } from './support/authStub.js';
 
 /**
  * `C-029` — the program-output banner, driven by the plant's own fixture (2026-09-04):
@@ -67,7 +68,7 @@ async function renderBanner(
       onHealthChanged: () => () => undefined,
     },
   };
-  (window as unknown as { cg: typeof stub }).cg = stub;
+  (window as unknown as { cg: typeof stub }).cg = fillBridgeStub(stub);
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);

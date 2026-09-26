@@ -13,6 +13,7 @@ import { getRefusal, onRefusal } from './features/status/refusalStore.js';
 import { channelSignals, inScope } from './features/channels/channelSignals.js';
 import { useChannelSettings } from './hooks/useChannelSettings.js';
 import { useLink } from './hooks/useLink.js';
+import { useBridgeReadable } from './hooks/useBridgeSnapshot.js';
 import { StationSetupDialog } from './features/stationSetup/StationSetupDialog.js';
 import {
   closeStationSetup,
@@ -209,14 +210,19 @@ export function App(): JSX.Element {
   // rather than in the control that uses it: the list is per-STATION, not per
   // field, and a subscription per rendered field would open and close one every
   // time the operator changed selection.
-  useEffect(() => initDelimiters(window.cg), []);
+  //
+  // `DELTA-MULTI-CHANNEL-01-A` A4 — "once" means once each time the console can READ: a pull
+  // refused before the first sign-in left these stores empty for the life of the page (the
+  // bridge pushes nothing to a socket nobody has signed in on, and a sign-in pushes nothing).
+  const readable = useBridgeReadable();
+  useEffect(() => (readable ? initDelimiters(window.cg) : undefined), [readable]);
 
   // D-137 / C-015 — the installation's source CATALOG and the per-plate
   // ASSIGNMENTS, pulled once and kept subscribed for the same reason: both are
   // per-STATION, a second console must gain a binding this one just made without
   // either operator reloading, and a catalog DELETION cascades into the
   // assignments without any browser asking.
-  useEffect(() => initSources(window.cg), []);
+  useEffect(() => (readable ? initSources(window.cg) : undefined), [readable]);
 
   // Stack housekeeping — the prune of per-item state for items that have left the
   // stack, plus the file-attachment restore. HERE because `App` is the one
