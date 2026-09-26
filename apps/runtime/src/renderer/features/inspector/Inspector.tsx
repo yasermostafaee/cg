@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useCasparReach } from '../../hooks/useCasparReachable.js';
 import { useLink } from '../../hooks/useLink.js';
 import { useFixedSlots } from '../../hooks/useFixedLayers.js';
@@ -52,9 +52,11 @@ import {
   isItemDirty,
   stageField,
   subscribeDrafts,
+  unstageField,
   valueAt,
   type FieldPath,
 } from './draftStore.js';
+import { formatNumberLike, parseLocalizedNumber, readLocalizedNumber } from '@cg/text-shaping';
 
 /** The shared field class, plus the dirty accent (border only — no layout shift). */
 function fieldClass(dirty: boolean): string {
@@ -981,6 +983,7 @@ function FieldEditor({
   const kind = field?.type ?? inferKind(value);
   const dirty = isFieldDirty(itemId, path, applied);
   const stage = (next: FieldValue): void => stageField(itemId, path, next);
+  const unstage = (): void => unstageField(itemId, path);
   /*
    * R-018 + TEXT-FILE-OPT-01 — a field sources its value from a text file only when
    * its AUTHOR granted it one. The kind test is still the outer condition, but it is
@@ -1040,9 +1043,11 @@ function FieldEditor({
           kind={kind}
           field={field}
           value={value}
+          applied={applied}
           fieldId={fieldId}
           dirty={dirty}
           onStage={stage}
+          onUnstage={unstage}
           {...(fromFileKind !== undefined ? { fromFile } : {})}
         />
         {/* A LIST field's from-file control is rendered INSIDE the editor, beside
@@ -1060,17 +1065,23 @@ function FieldControl({
   kind,
   field,
   value,
+  applied,
   fieldId,
   dirty,
   onStage,
+  onUnstage,
   fromFile,
 }: {
   kind: DynamicField['type'] | 'unknown';
   field: DynamicField | null;
   value: FieldValue | undefined;
+  /** The value on air for this field — what a withdrawn draft falls back to. */
+  applied: FieldValue | undefined;
   fieldId: string;
   dirty: boolean;
   onStage: (next: FieldValue) => void;
+  /** Withdraw this field's draft (`unstageField`). */
+  onUnstage: () => void;
   /** Only a LIST consumes this — it shares its footer row with "Add item". */
   fromFile?: ReactNode;
 }): JSX.Element {
@@ -1086,7 +1097,16 @@ function FieldControl({
     );
   }
   if (kind === 'number') {
-    return <NumberField value={value} fieldId={fieldId} dirty={dirty} onStage={onStage} />;
+    return (
+      <NumberField
+        value={value}
+        applied={applied}
+        fieldId={fieldId}
+        dirty={dirty}
+        onStage={onStage}
+        onUnstage={onUnstage}
+      />
+    );
   }
   if (kind === 'color') {
     // NOT CHROME, AND DELIBERATELY NOT A TOKEN (STATION-CHROME-01 §1): this is the
@@ -1182,55 +1202,89 @@ function FieldControl({
  * via the standard "adjust state during render" pattern. This is the fix for
  * the review finding that the old frozen-key trick dropped focus on the first
  * digit and could diverge across same-id fields.
+ *
+ * 🔴 `PERSIAN-DIGITS-01` — **THE OPERATOR'S DIGITS STAY ON SCREEN; THE NUMBER GOES TO AIR.**
+ *
+ * - The text is the operator's, exactly as typed (`digits="as-typed"`): `۱۲٫۵` stays `۱۲٫۵`. It
+ *   is READ through `@cg/text-shaping`'s one reader, and the staged value is the NUMBER — the wire
+ *   contract of a `number` field is unchanged, so the template renders it through `String(n)`.
+ * - Text that is not a number WITHDRAWS the draft (`unstageField`) instead of leaving the last
+ *   parsing prefix staged. Measured before: `۱۲a` sent 12 and `۱٬۲۳۴` sent 1, with nothing on
+ *   screen saying so. Now Update leaves this field exactly as it is on air.
+ * - Only an IMPOSSIBLE text is refused aloud, in one line. A half-typed one (empty, `-`, `۱٬`)
+ *   stages nothing and says nothing — refuse the impossible, never the incomplete.
  */
 function NumberField({
   value,
+  applied,
   fieldId,
   dirty,
   onStage,
+  onUnstage,
 }: {
   value: FieldValue | undefined;
+  applied: FieldValue | undefined;
   fieldId: string;
   dirty: boolean;
   onStage: (next: FieldValue) => void;
+  onUnstage: () => void;
 }): JSX.Element {
-  const external = typeof value === 'number' ? String(value) : '';
-  const [text, setText] = useState(external);
+  const refusalId = useId();
+  const [text, setText] = useState(typeof value === 'number' ? String(value) : '');
   const [seen, setSeen] = useState(value);
   if (value !== seen) {
     setSeen(value);
-    // Keep the in-progress text if it already represents the new value; else
-    // reseed from outside (push / discard / apply changed the applied value).
-    const parsed = Number(text);
-    const represents = text.trim() !== '' && Number.isFinite(parsed) && parsed === value;
-    if (!represents) setText(external);
+    // Keep the in-progress text if it already represents the new value; else reseed from
+    // outside (push / discard / apply changed the value) — in the digits the operator was
+    // using, so a Discard on `۱۲` does not answer in Latin.
+    const represents = typeof value === 'number' && parseLocalizedNumber(text) === value;
+    if (!represents) setText(typeof value === 'number' ? formatNumberLike(value, text) : '');
   }
-  // R-020 — the shared NumericInput (type="text" under the hood) so Persian /
-  // Arabic-Indic digits are accepted and commit as Latin. `step`/`min`/`max`
-  // are not rendered any more: on the old `type="number"` they only drove the
-  // spinner and the :invalid style — the staged value was never clamped.
-  // `scrub` — drag horizontally or press ↑/↓ to adjust, the Designer's feel (owner
-  // request). `step: 1` with Shift for tenths and Ctrl/Cmd for tens; no min/max,
-  // because a dynamic field's range is not declared here (R-020 removed the old
-  // `step`/`min`/`max` rendering precisely because they never clamped the value).
+  const refused = readLocalizedNumber(text).kind === 'invalid';
+  // R-020 — the shared NumericInput (type="text" under the hood: a `type="number"` box drops
+  // Persian digits before script sees them). `step`/`min`/`max` are not rendered: on the old
+  // `type="number"` they only drove the spinner and the :invalid style — the staged value was
+  // never clamped. `scrub` — drag horizontally or press ↑/↓ to adjust, the Designer's feel
+  // (owner request). `step: 1` with Shift for tenths and Ctrl/Cmd for tens; no min/max, because
+  // a dynamic field's range is not declared here.
   return (
-    <NumericInput
-      className={fieldClass(dirty)}
-      decimal
-      scrub={{ step: 1 }}
-      value={text}
-      onValueChange={(raw) => {
-        setText(raw);
-        const n = Number(raw);
-        if (raw.trim() !== '' && Number.isFinite(n)) {
-          setSeen(n); // our own edit — don't let the resync reseed over it
-          onStage(n);
-        }
-      }}
-      aria-label={fieldId}
-    />
+    <>
+      <NumericInput
+        className={fieldClass(dirty)}
+        decimal
+        digits="as-typed"
+        scrub={{ step: 1 }}
+        value={text}
+        {...(refused ? { 'aria-invalid': true, 'aria-describedby': refusalId } : {})}
+        onValueChange={(raw) => {
+          setText(raw);
+          const reading = readLocalizedNumber(raw);
+          if (reading.kind === 'number') {
+            setSeen(reading.value); // our own edit — don't let the resync reseed over it
+            onStage(reading.value);
+          } else {
+            // The withdrawn draft makes the effective value the APPLIED one; seeing it first
+            // keeps the resync from overwriting the text the operator is still editing.
+            setSeen(applied);
+            onUnstage();
+          }
+        }}
+        aria-label={fieldId}
+      />
+      {refused && (
+        <p id={refusalId} className="cg-field-refusal" data-field-refusal="">
+          {NOT_A_NUMBER}
+        </p>
+      )}
+    </>
   );
 }
+
+/**
+ * The one sentence a template number field says when its text can never be a number. It states
+ * the fact and its consequence — the air is not touched — and nothing else.
+ */
+const NOT_A_NUMBER = 'Not a number — Update will not change it.';
 
 function inferKind(value: FieldValue | undefined): DynamicField['type'] | 'unknown' {
   if (typeof value === 'boolean') return 'boolean';

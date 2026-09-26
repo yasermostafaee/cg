@@ -103,14 +103,20 @@ describe('normalizeDigits — R-020', () => {
 function Harness({
   onValue,
   decimal,
+  asTyped,
+  scrub,
 }: {
   onValue: (v: string) => void;
   decimal?: boolean;
+  asTyped?: boolean;
+  scrub?: boolean;
 }): JSX.Element {
   const [value, setValue] = useState('');
   return createElement(NumericInput, {
     value,
     ...(decimal === true ? { decimal } : {}),
+    ...(asTyped === true ? { digits: 'as-typed' as const } : {}),
+    ...(scrub === true ? { scrub: { step: 1 } } : {}),
     onValueChange: (next: string) => {
       setValue(next);
       onValue(next);
@@ -148,6 +154,43 @@ describe('NumericInput — R-020', () => {
     await setInput(input, '٥٢٥٠');
     expect(input.value).toBe('5250');
     expect(seen.at(-1)).toBe('5250');
+  });
+
+  it('`digits="as-typed"` hands over the operator\'s text UNCHANGED (a template value)', async () => {
+    const seen: string[] = [];
+    const el = await render(
+      createElement(Harness, { onValue: (v) => seen.push(v), decimal: true, asTyped: true }),
+    );
+    const input = inputByLabel(el, 'num');
+    await setInput(input, '۱۲٫۵');
+    expect(input.value).toBe('۱۲٫۵');
+    expect(seen.at(-1)).toBe('۱۲٫۵');
+    await setInput(input, '١٢٫٥');
+    expect(seen.at(-1)).toBe('١٢٫٥');
+  });
+
+  it('`as-typed` arrows step the NUMBER and write it back in the typed digits', async () => {
+    const seen: string[] = [];
+    const el = await render(
+      createElement(Harness, {
+        onValue: (v) => seen.push(v),
+        decimal: true,
+        asTyped: true,
+        scrub: true,
+      }),
+    );
+    const input = inputByLabel(el, 'num');
+    await setInput(input, '۱۲٫۵');
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    });
+    expect(seen.at(-1)).toBe('۱۳٫۵');
+    // The control: Latin text steps in Latin.
+    await setInput(input, '12.5');
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+    });
+    expect(seen.at(-1)).toBe('13.5');
   });
 
   it('decimal mode: ۱۲٫۵ commits as 12.5', async () => {
@@ -222,12 +265,65 @@ describe('Inspector fields — R-020', () => {
     );
   }
 
-  it('a NUMBER field typed in Persian stages the canonical number', async () => {
+  /*
+    🔴 `PERSIAN-DIGITS-01` — RE-EXPRESSED, NOT LOOSENED. This used to assert the field DISPLAYED
+    `128`: R-020 normalised a template number to Latin on screen. The owner's rule supersedes
+    that for TEMPLATE VALUES — the operator's digits stay exactly as typed — while the staged
+    value is still the canonical NUMBER, which is the half of the claim that reaches the wire and
+    is asserted exactly as before. Console numbers (the ports, the offsets, the PIN, below) keep
+    R-020's Latin display unchanged.
+  */
+  it('a NUMBER field typed in Persian keeps its digits on screen and stages the number', async () => {
     const el = await renderInspector();
     await setInput(inputByLabel(el, 'fontSize'), '۱۲۸');
     // Stored value: the NUMBER 128 — not a Persian-digit string.
     expect(effectiveValue('item-1', ['fontSize'], undefined)).toBe(128);
-    expect(inputByLabel(el, 'fontSize').value).toBe('128');
+    expect(inputByLabel(el, 'fontSize').value).toBe('۱۲۸');
+  });
+
+  it('reads ٫ and ٬ — `۱۲٫۵` stages 12.5 and `۱٬۲۳۴` stages 1234, the text untouched', async () => {
+    const el = await renderInspector();
+    const input = inputByLabel(el, 'fontSize');
+    await setInput(input, '۱۲٫۵');
+    expect(effectiveValue('item-1', ['fontSize'], 5)).toBe(12.5);
+    expect(input.value).toBe('۱۲٫۵');
+    await setInput(input, '۱٬۲۳۴');
+    // Measured before this change: the wire carried 1 — the last prefix that parsed.
+    expect(effectiveValue('item-1', ['fontSize'], 5)).toBe(1234);
+    expect(input.value).toBe('۱٬۲۳۴');
+  });
+
+  it('`۱۲a` is refused in ONE line and stages NOTHING — not even the `۱۲` typed on the way', async () => {
+    const el = await renderInspector();
+    const input = inputByLabel(el, 'fontSize');
+    // The control: a number stages, with no refusal.
+    await setInput(input, '۱۲');
+    expect(effectiveValue('item-1', ['fontSize'], 5)).toBe(12);
+    expect(el.querySelector('[data-field-refusal]')).toBeNull();
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+
+    await setInput(input, '۱۲a');
+    const refusal = el.querySelectorAll('[data-field-refusal]');
+    expect(refusal, 'exactly one refusal line').toHaveLength(1);
+    expect(refusal[0]?.textContent).toBe('Not a number — Update will not change it.');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.getAttribute('aria-describedby')).toBe(refusal[0]?.id);
+    // The draft is WITHDRAWN: the value an Update would send is the one on air (5).
+    // Measured before this change: `۱۲a` reached air as 12.
+    expect(effectiveValue('item-1', ['fontSize'], 5)).toBe(5);
+    // …and the operator's text is still there to correct, not reset under him.
+    expect(input.value).toBe('۱۲a');
+  });
+
+  it('a half-typed number says NOTHING and stages nothing', async () => {
+    const el = await renderInspector();
+    const input = inputByLabel(el, 'fontSize');
+    for (const partial of ['-', '۱٬', '']) {
+      await setInput(input, partial);
+      expect(el.querySelector('[data-field-refusal]'), JSON.stringify(partial)).toBeNull();
+      expect(effectiveValue('item-1', ['fontSize'], 5), JSON.stringify(partial)).toBe(5);
+      expect(input.value).toBe(partial);
+    }
   });
 
   it('a TEXT field keeps Persian digits verbatim — display text is display text', async () => {

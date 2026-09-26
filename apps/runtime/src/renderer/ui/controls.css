@@ -1545,6 +1545,17 @@
 .cg-field[aria-invalid='true'] {
   border-color: var(--r-danger-text);
 }
+/*
+ * …and the SENTENCE, for a field that is not inside a dialog's own field frame — the
+ * Inspector's template number field (`PERSIAN-DIGITS-01`). One line, in the danger ink, directly
+ * under the control it refuses and bound to it by `aria-describedby`.
+ */
+.cg-field-refusal {
+  margin: 0;
+  font-size: var(--r-text-xs);
+  line-height: 1.4;
+  color: var(--r-danger-text);
+}
 
 /*
  * THE ONE CONTROL ON A FULL-WINDOW GATE — `SignInOverlay`'s submit.

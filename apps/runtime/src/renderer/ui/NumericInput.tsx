@@ -1,5 +1,5 @@
 import type { InputHTMLAttributes } from 'react';
-import { latinDigits } from '@cg/text-shaping';
+import { formatNumberLike, latinDigits, parseLocalizedNumber } from '@cg/text-shaping';
 import { arrowStep, runScrubGesture } from './scrubGesture.js';
 
 /**
@@ -10,7 +10,8 @@ import { arrowStep, runScrubGesture } from './scrubGesture.js';
  * `latinDigits` (from @cg/text-shaping, same helper the render path uses) maps
  * Persian ۰–۹ and Arabic-Indic ٠–٩ to Latin and preserves everything else, so
  * the value a caller receives — and therefore everything stored or put on the
- * wire — is always canonical Latin digits.
+ * wire — is always canonical Latin digits. The one exception is a TEMPLATE VALUE
+ * (`digits="as-typed"`, `PERSIAN-DIGITS-01`): the operator's own text, kept as typed.
  *
  * Deliberately `type="text"` + `inputMode`: a browser `type="number"` input
  * SILENTLY DROPS non-Latin digits before `onChange` ever fires, so a
@@ -36,7 +37,10 @@ interface NumericInputProps extends Omit<
   'type' | 'inputMode' | 'value' | 'onChange'
 > {
   value: string;
-  /** Receives the NORMALIZED value (canonical Latin digits) on every change. */
+  /**
+   * Receives the NORMALIZED value (canonical Latin digits) on every change — or, with
+   * `digits="as-typed"`, the operator's text exactly as typed.
+   */
   onValueChange: (next: string) => void;
   /** Accept a decimal value: ٫ also normalizes to "." and the OSK offers one. */
   decimal?: boolean;
@@ -70,6 +74,21 @@ interface NumericInputProps extends Omit<
    * actually carries `port 5250 (AMCP)` into a field.
    */
   allow?: 'digits';
+  /**
+   * 🔴 `PERSIAN-DIGITS-01` — **WHOSE NUMBER IS THIS?** A CONSOLE number (a port, an offset, a
+   * PIN) is the console's own, and it normalises to Latin as above: `latin`, the default. A
+   * TEMPLATE VALUE is the operator's, and the owner's rule is that it keeps its digits exactly as
+   * the keyboard typed them: `as-typed` hands the text over UNCHANGED and leaves reading it to
+   * the caller, through `@cg/text-shaping`'s one reader.
+   *
+   * The scrub still works in `as-typed`: it reads the current text through the same reader and
+   * writes the new number back in the text's own digit set and decimal mark
+   * (`formatNumberLike`) — a drag on `۱۲٫۵` shows `۱۳٫۵`, never `13.5`.
+   *
+   * ⚠ `allow="digits"` is a console-number filter and is not applied in `as-typed`: filtering
+   * after NOT normalising would delete every Persian digit the operator typed.
+   */
+  digits?: 'latin' | 'as-typed';
 }
 
 export function NumericInput({
@@ -78,15 +97,19 @@ export function NumericInput({
   decimal = false,
   scrub,
   allow,
+  digits = 'latin',
   ...rest
 }: NumericInputProps): JSX.Element {
+  const asTyped = digits === 'as-typed';
   // The gestures operate on a NUMBER while the input is controlled by a STRING (so
   // "-", "1." and "" survive typing). A value that is not yet a number simply has
   // no magnitude to adjust, so both gestures no-op rather than guessing at 0.
-  const numeric = scrub === undefined ? null : Number(value);
+  const numeric =
+    scrub === undefined ? null : asTyped ? (parseLocalizedNumber(value) ?? NaN) : Number(value);
   const current =
     numeric !== null && value.trim() !== '' && Number.isFinite(numeric) ? numeric : null;
-  const emit = (next: number): void => onValueChange(String(next));
+  const emit = (next: number): void =>
+    onValueChange(asTyped ? formatNumberLike(next, value) : String(next));
   /*
    * 🔴🔴 **DISABLED IS A BEHAVIOUR, NOT A RENDERING** — `INSPECTOR-DELTA` §1, measured.
    *
@@ -164,6 +187,11 @@ export function NumericInput({
       onChange={(e) => {
         const el = e.currentTarget;
         const raw = el.value;
+        // A template value is the operator's text, verbatim — see `digits`.
+        if (asTyped) {
+          onValueChange(raw);
+          return;
+        }
         const normalized = normalizeDigits(raw, { decimal });
         /*
           §10.3 — normalise FIRST, then filter. The order is the whole of §10.2: a Persian

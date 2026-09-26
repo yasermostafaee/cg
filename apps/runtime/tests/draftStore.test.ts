@@ -16,6 +16,7 @@ import {
   stageField,
   stagePosition,
   stagedValue,
+  unstageField,
 } from '../src/renderer/features/inspector/draftStore.js';
 
 /**
@@ -62,6 +63,35 @@ describe('staging + effective value', () => {
     stageField(A, ['title'], 'one');
     stageField(A, ['title'], 'two');
     expect(stagedValue(A, ['title'])).toBe('two');
+  });
+
+  /*
+    `PERSIAN-DIGITS-01` — a number field whose text stops being a number WITHDRAWS its draft, so
+    an Update leaves that field as it is on air instead of sending the last prefix that parsed.
+  */
+  it('unstageField withdraws ONE field and leaves the item’s other drafts alone', () => {
+    stageField(A, ['score'], 12);
+    stageField(A, ['title'], 'kept');
+    stageField(A, ['home', 'score'], 3);
+    unstageField(A, ['score']);
+    expect(hasStaged(A, ['score'])).toBe(false);
+    expect(effectiveValue(A, ['score'], 5)).toBe(5);
+    expect(stagedValue(A, ['title'])).toBe('kept');
+    // A namespaced sibling of the same name is a different field.
+    expect(stagedValue(A, ['home', 'score'])).toBe(3);
+    expect(buildApplyPayload(A, { score: 5, title: 'x' })).toEqual({
+      score: 5,
+      title: 'kept',
+      home: { score: 3 },
+    });
+  });
+
+  it('unstageField on a field that was never staged changes nothing (the control)', () => {
+    stageField(A, ['title'], 'kept');
+    unstageField(A, ['score']);
+    unstageField(B, ['score']);
+    expect(snapshotDraft(A)).toEqual({ title: 'kept' });
+    expect(snapshotDraft(B)).toEqual({});
   });
 });
 

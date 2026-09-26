@@ -502,6 +502,22 @@ export function stageField(itemId: string, path: FieldPath, value: FieldValue): 
   bump();
 }
 
+/**
+ * WITHDRAW one field's draft, leaving the item's other staged edits alone.
+ *
+ * `PERSIAN-DIGITS-01` — a number field staged on every keystroke that parsed and IGNORED the
+ * rest, so its draft held the last PREFIX that parsed: `۱۲a` staged 12 and `۱٬۲۳۴` staged 1, and
+ * an Update put that on air with nothing on screen saying so. A field whose text is not a number
+ * now withdraws its draft instead, so Update leaves that field exactly as it is on air.
+ */
+export function unstageField(itemId: string, path: FieldPath): void {
+  const item = drafts.get(itemId);
+  if (item === undefined || !hasDraftAt(item, path)) return;
+  deleteAt(item, path);
+  if (Object.keys(item).length === 0) drafts.delete(itemId);
+  bump();
+}
+
 /** True iff the field currently has a staged draft value. */
 export function hasStaged(itemId: string, path: FieldPath): boolean {
   return hasDraftAt(drafts.get(itemId), path);
