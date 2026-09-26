@@ -50,13 +50,31 @@ export type SignInFailure =
   | 'unreachable'
   | 'unexpected';
 
+/**
+ * `DELTA-MULTI-CHANNEL-01-B` B3 — **WHAT THE PLAYOUT ACTUALLY ANSWERED, FOR THE RECORD.** The
+ * surface shows this console's own sentence for the `code`, never the Playout's text; the text is
+ * kept here so the station's log can carry it (`auth.sign-in-failure`), which is where a person
+ * diagnosing a refusal looks.
+ */
+export interface SignInFailureDetail {
+  /** The HTTP status, or `null` when nothing answered at all. */
+  readonly status: number | null;
+  /** The body as the Playout sent it, cut to {@link RECORD_BODY_MAX}; empty when there was none. */
+  readonly body: string;
+}
+
+/** The most of a Playout body the record keeps. */
+export const RECORD_BODY_MAX = 2000;
+
 /** Thrown by {@link signInToPlayout} / {@link refreshPlayoutToken}; the surface maps `code`. */
 export class PlayoutSignInError extends Error {
   readonly code: SignInFailure;
-  constructor(code: SignInFailure) {
+  readonly detail: SignInFailureDetail | null;
+  constructor(code: SignInFailure, detail: SignInFailureDetail | null = null) {
     super(`playout sign-in failed: ${code}`);
     this.name = 'PlayoutSignInError';
     this.code = code;
+    this.detail = detail;
   }
 }
 
@@ -138,9 +156,17 @@ export function savePlayoutSession(session: StoredSession | null): void {
  * snake_case code and a status can be reused (both `invalid_credentials` and
  * `invalid_refresh_token` are `401`). Reading the body first is what keeps the two apart.
  */
-async function failureFrom(res: Response): Promise<SignInFailure> {
+async function failureFrom(res: Response): Promise<PlayoutSignInError> {
+  // B3 — the body is read as TEXT first and kept, whatever it turns out to be.
+  let text = '';
   try {
-    const body: unknown = await res.json();
+    text = await res.text();
+  } catch {
+    // No body to keep.
+  }
+  const detail: SignInFailureDetail = { status: res.status, body: text.slice(0, RECORD_BODY_MAX) };
+  try {
+    const body: unknown = JSON.parse(text);
     const code = (body as { error?: unknown } | null)?.error;
     if (
       code === 'invalid_credentials' ||
@@ -149,16 +175,22 @@ async function failureFrom(res: Response): Promise<SignInFailure> {
       code === 'rate_limited' ||
       code === 'invalid_refresh_token'
     ) {
-      return code;
+      return new PlayoutSignInError(code, detail);
     }
   } catch {
     // No body, or not JSON. Fall through to the status.
   }
-  if (res.status === 401) return 'invalid_credentials';
-  if (res.status === 403) return 'no_cg_access';
-  if (res.status === 423) return 'account_locked';
-  if (res.status === 429) return 'rate_limited';
-  return 'unexpected';
+  const byStatus: SignInFailure =
+    res.status === 401
+      ? 'invalid_credentials'
+      : res.status === 403
+        ? 'no_cg_access'
+        : res.status === 423
+          ? 'account_locked'
+          : res.status === 429
+            ? 'rate_limited'
+            : 'unexpected';
+  return new PlayoutSignInError(byStatus, detail);
 }
 
 function sessionFrom(body: TokenResponse, nowMs: number): StoredSession {
@@ -203,7 +235,7 @@ async function postJson(url: string, payload: unknown, fetchImpl: typeof fetch):
       "Wrong password" and "the Playout cannot be reached" send the operator to two different
       places, and flattening them would send half of them to the wrong one.
     */
-    throw new PlayoutSignInError('unreachable');
+    throw new PlayoutSignInError('unreachable', { status: null, body: '' });
   }
 }
 
@@ -217,7 +249,7 @@ export async function signInToPlayout(
   const fetchImpl = deps.fetchImpl ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
   const nowMs = deps.nowMs ?? ((): number => Date.now());
   const res = await postJson(tokenUrl, { username, password }, fetchImpl);
-  if (!res.ok) throw new PlayoutSignInError(await failureFrom(res));
+  if (!res.ok) throw await failureFrom(res);
   let body: TokenResponse;
   try {
     body = (await res.json()) as TokenResponse;
@@ -236,7 +268,7 @@ export async function refreshPlayoutToken(
   const fetchImpl = deps.fetchImpl ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
   const nowMs = deps.nowMs ?? ((): number => Date.now());
   const res = await postJson(refreshUrl, { refresh_token: refreshToken }, fetchImpl);
-  if (!res.ok) throw new PlayoutSignInError(await failureFrom(res));
+  if (!res.ok) throw await failureFrom(res);
   let body: TokenResponse;
   try {
     body = (await res.json()) as TokenResponse;

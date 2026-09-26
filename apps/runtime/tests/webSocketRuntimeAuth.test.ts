@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as ipc from '@cg/shared-ipc';
 import { MemoryWorkspace } from '@cg/storage';
 import { LibraryStore } from '../src/platform/library/LibraryStore.js';
+import { PlayoutSignInError } from '../src/platform/playoutSession.js';
 import { WebSocketRuntime, type WebSocketLike } from '../src/platform/WebSocketRuntime.js';
 import { installMemoryStorage } from './support/localStorage.js';
 
@@ -556,6 +557,57 @@ describe("R-066 — the bridge's answer is what the console shows", () => {
     expect(JSON.stringify(state)).toContain(VERIFIED_NAME);
     // …and it is held per console, so a reload finds it (the other half of the acceptance).
     expect(storage.getItem(SESSION_KEY)).toContain('jwt-from-playout');
+  });
+});
+
+// ── `DELTA-MULTI-CHANNEL-01-B` B3 — the Playout's own answer reaches the station's log ──────────
+
+describe('`DELTA-MULTI-CHANNEL-01-B` B3 — a failed sign-in hands the Playout’s answer to the log', () => {
+  it('🔴 a 401 with the Playout’s own (Persian) words: the surface gets OUR code, and the bridge is sent those words verbatim; control: a sign-in that works sends nothing', async () => {
+    const bridge = new FakeBridge();
+    bridge.capabilities = playoutCapabilities();
+    bridge.authAnswer = { kind: 'accept', principal: principalNamed('مریم قاسمی') };
+    bridge.succeed.set('auth.sign-in-failure', { ok: true });
+    const said = { error: 'invalid_credentials', message: 'نام کاربری یا رمز عبور اشتباه است' };
+    globalThis.fetch = (): Promise<Response> =>
+      Promise.resolve(
+        new Response(JSON.stringify(said), {
+          status: 401,
+          headers: { 'content-type': 'application/json' },
+        }),
+      );
+    const runtime = start(bridge);
+    bridge.socket().open();
+    await settle();
+
+    const attempt = runtime.auth.signIn('cg-op1', 'wrong').then(
+      () => null,
+      (err: unknown) => err,
+    );
+    await settle();
+    const err = await attempt;
+    expect(err).toBeInstanceOf(PlayoutSignInError);
+    expect((err as PlayoutSignInError).code).toBe('invalid_credentials');
+    const notes = (): unknown[] =>
+      bridge
+        .socket()
+        .sent.filter((f) => f.type === 'request' && f.channel === 'auth.sign-in-failure')
+        .map((f) => (f.type === 'request' ? f.payload : null));
+    expect(notes()).toEqual([
+      { code: 'invalid_credentials', status: 401, body: JSON.stringify(said) },
+    ]);
+
+    // CONTROL — the same console, a Playout that answers with a token: nothing more is noted.
+    stubPlayout({
+      access_token: 'jwt-from-playout',
+      refresh_token: 'refresh-from-playout',
+      expires_in: TOKEN_LIFE_MS / 1000,
+    });
+    const signingIn = runtime.auth.signIn('cg-op1', 'test-only-not-a-secret');
+    await settle();
+    await signingIn;
+    await settle();
+    expect(notes()).toHaveLength(1);
   });
 });
 

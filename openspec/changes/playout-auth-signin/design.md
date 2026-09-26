@@ -48,8 +48,11 @@ true and gives no hint why, so the boot line says so.
 
 **Decided: ONE sentence, `AUTH_REQUIRED_REFUSAL`, shared by never-signed-in, expired and revoked.**
 
-> This console is not signed in, so that command was refused — nothing was sent to CasparCG.
-> Sign in, then try again.
+> This console is not signed in, so that was refused and nothing was done. Sign in, then try again.
+
+**Reworded 2026-09-26 (`DELTA-MULTI-CHANNEL-01-B` B1).** It read "…so that command was refused —
+nothing was sent to CasparCG", and the owner met it on a connection check, which is not sent to
+CasparCG at all. One sentence answers every channel, so it names only what is true of all of them.
 
 **Why they share it: the operator's remedy is identical in all three — sign in.** A second sentence
 would ask them to tell apart two situations that differ in nothing they can act on, in the one
@@ -119,8 +122,9 @@ reduction for verified names would be a predicate that agrees today.
 
 `refusedByAuth(route, state)` takes four states — `off`, `signed-in`, `invalid`, `absent` — rather
 than a boolean, because ADR 0010 rule 4 spells two different answers: a never-authenticated socket
-gets `bridge.capabilities` and the `auth.*` door and nothing else, while an expired one refuses
-new intents and keeps answering reads.
+gets `bridge.capabilities` and the `auth.*` door and nothing else — and, since
+`DELTA-MULTI-CHANNEL-01-B` B1, the connection check, for this station's own Playout only — while an
+expired one refuses new intents and keeps answering reads.
 
 For the EXPIRED case it reads `route.lock`. That is not a re-derivation: `LockPolicy` already
 classifies every route as answering-a-question (`read`), the client's own reconnect machinery
@@ -176,14 +180,20 @@ rule 8's shape.
 
 ---
 
-## 8. Persian on the sign-in, English everywhere else
+## 8. ~~Persian on the sign-in, English everywhere else~~ — English everywhere
 
-The sign-in card is `dir="rtl"` and its copy is Persian. **It is the console's first Persian
+🔴 **SUPERSEDED 2026-09-26 by the owner (`DELTA-MULTI-CHANNEL-01-B` B3): one interface language.**
+He met "پلی‌اوت پاسخ نمی‌دهد." under a Password field on an English first-run screen and ruled
+that the interface and every message of ours are English, with Persian only in names that come
+from the Playout. The sign-in card is LTR and English; the reasoning below is kept, struck in
+spirit, as the record of what was decided and why it was reversed.
+
+~~The sign-in card is `dir="rtl"` and its copy is Persian. **It is the console's first Persian
 chrome** — every other surface is English, and the Persian in the tree today is operator DATA (row
-names, template names) and comments quoting the owner.
+names, template names) and comments quoting the owner.~~
 
-It is deliberate and it is scoped: the sign-in is the one screen an operator meets before they
-have done anything. The identity pill keeps the status bar's existing English vocabulary, because
+~~It is deliberate and it is scoped: the sign-in is the one screen an operator meets before they
+have done anything.~~ The identity pill keeps the status bar's existing English vocabulary, because
 it sits in a row of English pills and changing that row is a redesign this change was not licensed
 to do.
 

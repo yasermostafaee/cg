@@ -1,13 +1,21 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { AUTH_REQUIRED_REFUSAL, capabilitiesAuthMode } from '@cg/shared-ipc';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  AUTH_REQUIRED_REFUSAL,
+  CHECK_BEFORE_SIGN_IN_REFUSAL,
+  capabilitiesAuthMode,
+  type ConnectionCheckResult,
+} from '@cg/shared-ipc';
 import {
   buildRoutes,
   createBridge,
   openToUnauthenticated,
+  realProbes,
   refusedByAuth,
   refusedWhileLocked,
   type BridgeHandle,
+  type CheckProbes,
 } from '../src/index.js';
+import { SIGN_IN_NOTE_MAX, SIGN_IN_NOTES_PER_MINUTE, signInFailureLine } from '../src/bridge.js';
 import { CasparRuntime } from '../src/caspar-runtime.js';
 import { TEST_LAYER_POLICY } from './support/harness.js';
 import type { FakePlayout } from './support/fake-playout.js';
@@ -165,6 +173,168 @@ describe('C-037 §1 — an unauthenticated socket gets two answers, not every an
   });
 });
 
+/*
+  🔴 `DELTA-MULTI-CHANNEL-01-B` B1 — **THE CHECK RUNS BEFORE A SIGN-IN.** The owner, 2026-09-26, on
+  `pnpm dev:station` with the Playout down: Check showed no line at all, only "This console is not
+  signed in, so that command was refused — nothing was sent to CasparCG." The check is how a console
+  learns whether a sign-in CAN work, so it answers before one — for this station's Playout only.
+*/
+describe('DELTA-MULTI-CHANNEL-01-B B1 — the check answers before any sign-in, for this station', () => {
+  /** The network probes are real; the Windows-only readers are pinned (`connection-check.test.ts`). */
+  const quietProbes = (): CheckProbes => ({
+    ...realProbes(),
+    processes: async () => [],
+    systemProxy: async () => null,
+    portHolder: async () => ({ kind: 'free' }),
+    localAddresses: () => [],
+    resolve: async (host) => [host],
+  });
+  const CONSOLE = 'http://127.0.0.1:5174';
+
+  it('🔴 the Playout DOWN and nobody signed in: Check answers with its lines, not a refusal; control: a take on the same socket is still refused', async () => {
+    const started = await startAuthedBridge({ connectionCheckProbes: quietProbes() });
+    handle = started.handle;
+    const origin = new URL(started.playout.tokenUrl).origin;
+    await started.playout.stop(); // the Playout is down
+    const client = await openClient(handle);
+
+    const res = await client.ask('k', 'setup.check', { playoutAddress: origin, origin: CONSOLE });
+    expect(res.error, 'the check was refused before a sign-in').toBeUndefined();
+    const lines = (res.payload as ConnectionCheckResult).lines;
+    // The Playout's API line says what did not answer; CORS is not checked — it needs the API.
+    expect(lines.find((l) => l.id === 'api')?.status).toBe('fail');
+    expect(lines.find((l) => l.id === 'api')?.text).toContain('127.0.0.1');
+    expect(lines.find((l) => l.id === 'cors')?.status).toBe('skip');
+
+    // CONTROL — the door is the check's alone: a station command on the same socket is refused.
+    const take = await client.ask('t', 'stack.take', { itemId: 'nope' });
+    expectRefusedWith(take.error, AUTH_REQUIRED_REFUSAL, 'an unsigned take was accepted');
+  });
+
+  it('before a sign-in it checks THIS station only — another address, or a named CasparCG host, is refused; control: with auth OFF another address is checked', async () => {
+    const started = await startAuthedBridge({ connectionCheckProbes: quietProbes() });
+    handle = started.handle;
+    playout = started.playout;
+    const client = await openClient(handle);
+    const origin = new URL(started.playout.tokenUrl).origin;
+
+    const other = await client.ask('x', 'setup.check', {
+      playoutAddress: 'http://127.0.0.1:1',
+      origin: CONSOLE,
+    });
+    expectRefusedWith(
+      other.error,
+      CHECK_BEFORE_SIGN_IN_REFUSAL,
+      'an unsigned check probed elsewhere',
+    );
+    const named = await client.ask('y', 'setup.check', {
+      playoutAddress: origin,
+      casparHost: '127.0.0.1',
+      origin: CONSOLE,
+    });
+    expectRefusedWith(named.error, CHECK_BEFORE_SIGN_IN_REFUSAL, 'an unsigned check named a host');
+
+    // CONTROL — the narrowing is the unsigned door's, not the check's: with auth OFF (first-run's
+    // `target` phase, where an address is still being typed) any address is checked.
+    await handle.close();
+    handle = await createBridge({
+      port: 0,
+      connection: deadConnection(),
+      connectionCheckProbes: quietProbes(),
+    });
+    const open = await openClient(handle);
+    const typed = await open.ask('z', 'setup.check', {
+      playoutAddress: 'http://127.0.0.1:1',
+      origin: CONSOLE,
+    });
+    expect(typed.error, 'with auth OFF the check was refused').toBeUndefined();
+  });
+});
+
+/*
+  🔴 `DELTA-MULTI-CHANNEL-01-B` B3 — **THE PLAYOUT'S ANSWER TO A FAILED SIGN-IN REACHES THE LOG.**
+  The sign-in is browser → Playout; the console shows its own English sentence for the code and
+  hands the Playout's own answer to the bridge, which writes ONE line — untrusted text, so it can
+  never forge a second line, and a flood cannot fill the log.
+*/
+describe('DELTA-MULTI-CHANNEL-01-B B3 — a failed sign-in, as the Playout answered it, in the log', () => {
+  it('🔴 an unsigned socket’s note is ONE log line carrying the Playout’s own words; control: nothing is written without one', async () => {
+    const started = await startAuthedBridge();
+    handle = started.handle;
+    playout = started.playout;
+    const written: string[] = [];
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+    try {
+      const client = await openClient(handle);
+      // CONTROL — the socket is live and nothing about a sign-in has been written yet.
+      await client.ask('c', 'bridge.capabilities', {});
+      expect(written.filter((l) => l.includes('sign-in refused'))).toEqual([]);
+
+      const note = await client.ask('n', 'auth.sign-in-failure', {
+        code: 'invalid_credentials',
+        status: 401,
+        body: '{"error":"invalid_credentials","message":"نام کاربری یا رمز عبور اشتباه است"}',
+      });
+      expect(note.error, 'the note was refused before a sign-in').toBeUndefined();
+      const lines = written.filter((l) => l.includes('sign-in refused by the Playout'));
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain('invalid_credentials (HTTP 401)');
+      expect(lines[0]).toContain('نام کاربری یا رمز عبور اشتباه است');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('the text is untrusted: a line break cannot forge a second log line, and it is cut short', () => {
+    const forged = signInFailureLine({
+      code: 'unexpected',
+      status: 500,
+      body: `boom\n[caspar-bridge] auth: OFF — forged\r\n${'x'.repeat(2000)}`,
+    });
+    expect(forged.split('\n')).toHaveLength(1);
+    const control = [...forged].filter((ch) => {
+      const cp = ch.codePointAt(0) ?? 0;
+      return cp < 0x20 || cp === 0x7f;
+    });
+    expect(control, 'a control character reached the log line').toEqual([]);
+    expect(forged.length).toBeLessThan(SIGN_IN_NOTE_MAX + 120);
+    // A Playout that did not answer has no body to quote — and says so plainly.
+    expect(signInFailureLine({ code: 'unreachable', status: null, body: '' })).toBe(
+      '[caspar-bridge] sign-in: the Playout did not answer (unreachable)',
+    );
+  });
+
+  it('a flood of notes cannot fill the log — at most SIGN_IN_NOTES_PER_MINUTE lines a minute', async () => {
+    const started = await startAuthedBridge();
+    handle = started.handle;
+    playout = started.playout;
+    const written: string[] = [];
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation((chunk) => {
+      written.push(String(chunk));
+      return true;
+    });
+    try {
+      const client = await openClient(handle);
+      for (let i = 0; i < SIGN_IN_NOTES_PER_MINUTE + 5; i++) {
+        const res = await client.ask(`n${String(i)}`, 'auth.sign-in-failure', {
+          code: 'rate_limited',
+          status: 429,
+          body: '',
+        });
+        expect(res.error).toBeUndefined();
+      }
+      expect(written.filter((l) => l.includes('sign-in refused by the Playout'))).toHaveLength(
+        SIGN_IN_NOTES_PER_MINUTE,
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
 describe('C-037 §1 — THE CENSUS: every route, not a sample', () => {
   /**
    * 🔴 **THE CENSUS, in `refusedWhileLocked`'s own shape and for its own reason.**
@@ -179,7 +349,7 @@ describe('C-037 §1 — THE CENSUS: every route, not a sample', () => {
    * channel named, and the fix is to reclassify it or to add it to this list deliberately,
    * which is a decision with a diff rather than an omission.
    */
-  it('only `bridge.capabilities` and `auth.*` are reachable with NO principal', () => {
+  it('only `bridge.capabilities`, `auth.*` and the connection check are reachable with NO principal', () => {
     const runtime = new CasparRuntime(deadConnection(), {}, { layerPolicy: TEST_LAYER_POLICY });
     const routes = buildRoutes(runtime);
     expect(routes.size, 'the census is looking at the real table').toBeGreaterThan(50);
@@ -189,7 +359,17 @@ describe('C-037 §1 — THE CENSUS: every route, not a sample', () => {
       .map(([name]) => name)
       .sort();
 
-    expect(reachable).toEqual(['auth.sign-out', 'auth.state', 'bridge.capabilities']);
+    // `DELTA-MULTI-CHANNEL-01-B` B1 — `setup.check` joined the door deliberately: it is how a
+    // console learns whether a sign-in can work, and before one it checks this station only.
+    // B3 — `auth.sign-in-failure` is `auth.*`, the sign-in's own door: the Playout's answer to a
+    // failed sign-in, for the log — and it is only ever sent before a sign-in.
+    expect(reachable).toEqual([
+      'auth.sign-in-failure',
+      'auth.sign-out',
+      'auth.state',
+      'bridge.capabilities',
+      'setup.check',
+    ]);
   });
 
   it('🔴 an EXPIRED session keeps every READ and NOTHING ELSE — not even the resync', () => {
@@ -262,6 +442,10 @@ describe('C-037 §1 — THE CENSUS: every route, not a sample', () => {
     // The two shapes that must NOT be mistaken for the door.
     expect(openToUnauthenticated('stack.take')).toBe(false);
     expect(openToUnauthenticated('authoring.something')).toBe(false);
+    // B1 — the check by NAME, and not its `setup.*` neighbours.
+    expect(openToUnauthenticated('setup.check')).toBe(true);
+    expect(openToUnauthenticated('setup.route-address')).toBe(false);
+    expect(openToUnauthenticated('setup.channel-occupancy')).toBe(false);
   });
 });
 
@@ -391,7 +575,7 @@ describe('C-037 — `auth.state` answers with THE GATE VERDICT, never a second o
 });
 
 describe('C-037 — the refusal is ONE exported constant, written for an operator', () => {
-  it('names the state, the remedy and that nothing was sent — and is not a SKEW shape', () => {
+  it('names the state, the remedy and that nothing was done — and is not a SKEW shape', () => {
     /*
       The `R-017` discipline and `B-152`'s constraint together, asserted exactly as
       `LOCK_ENGAGED_REFUSAL`'s own spec asserts them. A refusal worded like one of the three
@@ -402,7 +586,10 @@ describe('C-037 — the refusal is ONE exported constant, written for an operato
     expect(AUTH_REQUIRED_REFUSAL).not.toMatch(/^(unknown channel|invalid (request|response) for)/i);
     expect(AUTH_REQUIRED_REFUSAL.toLowerCase()).toContain('signed in');
     expect(AUTH_REQUIRED_REFUSAL.toLowerCase()).toContain('sign in');
-    expect(AUTH_REQUIRED_REFUSAL.toLowerCase()).toContain('nothing was sent');
+    expect(AUTH_REQUIRED_REFUSAL.toLowerCase()).toContain('nothing was done');
+    // `DELTA-MULTI-CHANNEL-01-B` B1 — it answers every channel, so it names nothing it cannot
+    // know is involved: a refused connection check was never going to CasparCG.
+    expect(AUTH_REQUIRED_REFUSAL).not.toContain('CasparCG');
     // No channel name and no code: the operator is looking at a sign-in screen.
     expect(AUTH_REQUIRED_REFUSAL).not.toContain('stack.take');
     expect(AUTH_REQUIRED_REFUSAL).not.toContain('auth.');

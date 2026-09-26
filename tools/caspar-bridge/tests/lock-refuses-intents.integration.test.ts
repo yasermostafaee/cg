@@ -179,9 +179,12 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
     expect(LOCK_ENGAGED_REFUSAL.toLowerCase()).toContain('locked');
     expect(LOCK_ENGAGED_REFUSAL.toLowerCase()).toContain('pin');
     expect(LOCK_ENGAGED_REFUSAL).not.toContain('stack.take');
-    // Says plainly that nothing was sent — the `R-006` rule for a pre-send refusal: an
-    // operator who thinks a command is queued will not reissue it.
-    expect(LOCK_ENGAGED_REFUSAL.toLowerCase()).toContain('nothing was sent');
+    // Says plainly that nothing was done — the `R-006` rule for a pre-send refusal: an
+    // operator who thinks a command is queued will not reissue it. And it names nothing it
+    // cannot know is involved: the lock refuses Station setup writes too, which never reach
+    // CasparCG (`DELTA-MULTI-CHANNEL-01-B` B1).
+    expect(LOCK_ENGAGED_REFUSAL.toLowerCase()).toContain('nothing was done');
+    expect(LOCK_ENGAGED_REFUSAL).not.toContain('CasparCG');
   });
 
   it('the WAY OUT still works, and so does every read', async () => {
@@ -269,6 +272,12 @@ describe('B-229 — a locked bridge refuses operator intents', () => {
         'app.info',
         'audit.health',
         'audit.recent',
+        /*
+          `DELTA-MULTI-CHANNEL-01-B` B3 — the Playout's answer to a failed sign-in, into the LOG.
+          It is a record, not an act: it touches nothing the lock protects, and a sign-in tried
+          behind a lock is exactly the attempt worth a line.
+        */
+        'auth.sign-in-failure',
         /*
           🔴 `C-037` — **`auth.state` IS A READ, AND IT IS REACHABLE WHILE LOCKED. This spec
           is what said so, by going red on the commit that added the route.**

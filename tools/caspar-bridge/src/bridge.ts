@@ -13,6 +13,8 @@ import {
   StationChannelsChangedChannel,
   StationChannelsListChannel,
   ChannelsCatalogueChannel,
+  CHECK_BEFORE_SIGN_IN_REFUSAL,
+  normalisePlayoutAddress,
   SetupCheckChannel,
   SetupRouteAddressChannel,
   SetupChannelOccupancyChannel,
@@ -28,6 +30,7 @@ import {
   grantsChannel,
   grantedChannels,
   holdsPermissionClass,
+  AuthSignInFailureChannel,
   AuthSignOutChannel,
   AuthStateChannel,
   type AuthState,
@@ -812,9 +815,70 @@ export type AuthGateState = AuthStatus;
  * must sign in (`B-153`); `auth.*` because it is the sign-in itself. Both are open in every
  * not-signed-in state, EXPIRED included — the way back in must not need the thing that
  * expired, which is the inverse half `B-229` insisted on for the lock.
+ *
+ * 🔴 `DELTA-MULTI-CHANNEL-01-B` B1 — **AND `setup.check`, because it is how a console learns
+ * whether a sign-in CAN work.** The owner pressed Check on a station whose Playout was down and
+ * was told to sign in — the one thing the check was there to tell him he could not do. It probes,
+ * reports and changes nothing; and before a sign-in it is NARROW — this station's own Playout
+ * only (`checksThisStation` in `buildRoutes`), so the open door cannot turn the station into a
+ * network probe for an unsigned caller.
  */
 export function openToUnauthenticated(channelName: string): boolean {
-  return channelName === BridgeCapabilitiesChannel.name || channelName.startsWith('auth.');
+  return (
+    channelName === BridgeCapabilitiesChannel.name ||
+    channelName === SetupCheckChannel.name ||
+    channelName.startsWith('auth.')
+  );
+}
+
+/**
+ * 🔴 `DELTA-MULTI-CHANNEL-01-B` B3 — **THE PLAYOUT'S ANSWER TO A FAILED SIGN-IN, AS ONE LOG LINE.**
+ *
+ * It arrives on an `auth.*` channel — open before a sign-in, which is the only time it is sent —
+ * so its text is UNTRUSTED: every control character (line breaks included) becomes a space, so it
+ * can never forge a second log line, and it is cut to {@link SIGN_IN_NOTE_MAX} characters. The
+ * code is the console's mapping; the body is the Playout's own words, kept for whoever reads the
+ * log and never shown on a console.
+ */
+export const SIGN_IN_NOTE_MAX = 500;
+export const SIGN_IN_NOTES_PER_MINUTE = 10;
+
+export function signInFailureLine(note: {
+  readonly code: string;
+  readonly status: number | null;
+  readonly body: string;
+}): string {
+  const clean = (text: string, max: number): string => {
+    let out = '';
+    for (const ch of text) {
+      const cp = ch.codePointAt(0) ?? 0;
+      out += cp < 0x20 || cp === 0x7f ? ' ' : ch;
+    }
+    out = out.replace(/ {2,}/g, ' ').trim();
+    return out.length > max ? `${out.slice(0, max)}…` : out;
+  };
+  const code = clean(note.code, 64);
+  if (note.status === null) {
+    return `[caspar-bridge] sign-in: the Playout did not answer (${code})`;
+  }
+  const body = clean(note.body, SIGN_IN_NOTE_MAX);
+  return (
+    `[caspar-bridge] sign-in refused by the Playout: ${code} (HTTP ${String(note.status)})` +
+    (body === '' ? '' : ` - ${body}`)
+  );
+}
+
+/** At most `limit` admissions in any `windowMs` — a sliding window, no timers. */
+function rateWindow(limit: number, windowMs: number): { admit: (nowMs: number) => boolean } {
+  const recent: number[] = [];
+  return {
+    admit: (nowMs) => {
+      while (recent.length > 0 && nowMs - (recent[0] ?? 0) >= windowMs) recent.shift();
+      if (recent.length >= limit) return false;
+      recent.push(nowMs);
+      return true;
+    },
+  };
 }
 
 /**
@@ -2668,6 +2732,8 @@ export function buildRoutes(
     ((session: AuthSession | null): StationChannels =>
       stationChannelsFor(session, 'off', 'off', b, null));
   const setupPhase = paths.setupPhase ?? ((): SetupPhase | null => null);
+  // B3 — the sign-in failure notes this bridge will write, bridge-wide: a flood cannot fill the log.
+  const signInNotes = rateWindow(SIGN_IN_NOTES_PER_MINUTE, 60_000);
   const catalogueRows = paths.catalogueRows ?? ((): readonly CatalogueRow[] | null => null);
   const connectionCheck =
     paths.connectionCheck ??
@@ -2680,6 +2746,24 @@ export function buildRoutes(
           osc: b.config().servers.A.oscPort,
         },
       }));
+  /*
+    🔴 `DELTA-MULTI-CHANNEL-01-B` B1 — **BEFORE ANY SIGN-IN, THE CHECK PROBES THIS STATION'S
+    PLAYOUT AND NOTHING ELSE.** The check reaches out — HTTP to the address it is given, AMCP to
+    that host — so an open door that took any address would let an unsigned caller use the station
+    to probe the network. The console asks for exactly this Playout before a sign-in (the origin it
+    reads off `signInUrl`, which is this `tokenUrl`'s), so the narrowing costs it nothing. A named
+    CasparCG host is a signed-in principal's question.
+  */
+  const checksThisStation = (r: ConnectionCheckRequest): boolean => {
+    if (playoutUrls === null || r.casparHost !== undefined) return false;
+    const typed = normalisePlayoutAddress(r.playoutAddress);
+    if (typed === null) return false;
+    try {
+      return new URL(typed).origin === new URL(playoutUrls.tokenUrl).origin;
+    } catch {
+      return false;
+    }
+  };
   const routeAddress =
     paths.routeAddress ??
     (async (host: string): Promise<string | null> =>
@@ -2782,6 +2866,21 @@ export function buildRoutes(
       const session = currentAuthSession();
       return authStateFor(session, authState(session), authMode, b);
     }),
+    /*
+      🔴 `DELTA-MULTI-CHANNEL-01-B` B3 — the Playout's own answer to a failed sign-in, into this
+      bridge's log (the sign-in itself is browser → Playout; nothing else of it reaches a log).
+      `read` on both axes: it changes nothing. The text is untrusted — see `signInFailureLine`.
+    */
+    route(
+      AuthSignInFailureChannel,
+      'read',
+      'read',
+      (r: { code: string; status: number | null; body: string }) => {
+        const line = signInNotes.admit(Date.now()) ? signInFailureLine(r) : null;
+        if (line !== null) process.stderr.write(`${line}\n`);
+        return { ok: true as const };
+      },
+    ),
     route(AuthSignOutChannel, 'operator', 'read', () => {
       const session = currentAuthSession();
       const leaving = session?.token?.principal ?? null;
@@ -3136,10 +3235,16 @@ export function buildRoutes(
 
     /*
       `DESKTOP-APPS-01` §2F — the connection check and the route address. Reads: they probe and
-      report and change nothing, so `read` on both axes — open with auth OFF (first-run's `target`
-      phase) and to any signed-in principal, never to an unauthenticated socket.
+      report and change nothing, so `read` on both axes. The route address is for a signed-in
+      principal; the CHECK is open before any sign-in too (`DELTA-MULTI-CHANNEL-01-B` B1,
+      {@link openToUnauthenticated}) — and then it checks this station's own Playout, nothing else.
     */
-    route(SetupCheckChannel, 'read', 'read', (r: ConnectionCheckRequest) => connectionCheck(r)),
+    route(SetupCheckChannel, 'read', 'read', (r: ConnectionCheckRequest) => {
+      if (authState(currentAuthSession()) === 'absent' && !checksThisStation(r)) {
+        throw new Error(CHECK_BEFORE_SIGN_IN_REFUSAL);
+      }
+      return connectionCheck(r);
+    }),
     route(SetupRouteAddressChannel, 'read', 'read', async (r: { host: string }) => ({
       address: await routeAddress(r.host),
     })),

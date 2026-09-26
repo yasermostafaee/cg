@@ -192,6 +192,12 @@ describe('C-038 — the census: every route, classified', () => {
       'audit.health',
       'audit.recent',
       /*
+        `DELTA-MULTI-CHANNEL-01-B` B3 — the Playout's answer to a failed sign-in, for the LOG. It
+        writes one line of the bridge's own log and nothing of the station's; it is sent only
+        before a sign-in, through the `auth.*` door, so any rung (and no rung) may send it.
+      */
+      'auth.sign-in-failure',
+      /*
         ⚠ **`auth.sign-out` IS HERE AND IT WRITES.** `read` names the bottom rung of the
         principal hierarchy, not a promise about the verb — ADR 0010 rule 2 is a statement
         about WHO ("any signed-in principal, a viewer included"). A viewer must be able to

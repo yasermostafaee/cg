@@ -194,6 +194,28 @@ export const AuthSignOutChannel = defineChannel(
 );
 
 /**
+ * 🔴 `DELTA-MULTI-CHANNEL-01-B` B3 — **THE PLAYOUT'S OWN ANSWER TO A FAILED SIGN-IN, FOR THE LOG.**
+ *
+ * The sign-in is browser → Playout, directly (the bridge never sees a password), so the Playout's
+ * answer reached no log at all: the console showed its own sentence for the code and dropped the
+ * rest. The console now hands the answer to the bridge, which writes ONE line to its log — where a
+ * person diagnosing a refusal looks. `code` is the console's mapping; `status` is `null` when
+ * nothing answered.
+ *
+ * ⚠ An `auth.*` channel, so it is open before a sign-in — the only time it is used — and the
+ * bridge treats the text as UNTRUSTED: control characters out, one line, cut short, rate-limited.
+ */
+export const AuthSignInFailureChannel = defineChannel(
+  'auth.sign-in-failure',
+  z.object({
+    code: z.string().min(1).max(64),
+    status: z.number().int().nullable(),
+    body: z.string().max(4000),
+  }),
+  z.object({ ok: z.literal(true) }),
+);
+
+/**
  * 🔴 `C-037` — **WHAT A BRIDGE WITH AUTH ON ANSWERS TO AN INTENT FROM A SOCKET WITH NO VALID
  * PRINCIPAL, and it is ONE string.**
  *
@@ -219,12 +241,17 @@ export const AuthSignOutChannel = defineChannel(
  * existing `err.message` surface with no renderer change — and why a refusal opening with one
  * of those words would reach the operator as the wrong instruction.
  *
- * ⭐ It names the STATE, the REMEDY and the fact that nothing was sent — the `R-006` rule for
+ * ⭐ It names the STATE, the REMEDY and the fact that nothing was done — the `R-006` rule for
  * a pre-send refusal, because an operator who believes a command is queued will not reissue
  * it. No channel name and no code.
+ *
+ * 🔴 `DELTA-MULTI-CHANNEL-01-B` B1 — **AND NOTHING IT DOES NOT KNOW IS INVOLVED.** It said
+ * "nothing was sent to CasparCG" for every refused command, and the owner met it on a
+ * connection check — which is not sent to CasparCG at all. One sentence answers every channel
+ * here, so it names only what is true of all of them: nothing was done.
  */
 export const AUTH_REQUIRED_REFUSAL =
-  'This console is not signed in, so that command was refused — nothing was sent to CasparCG. ' +
+  'This console is not signed in, so that was refused and nothing was done. ' +
   'Sign in, then try again.';
 
 /**

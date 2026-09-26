@@ -189,6 +189,15 @@ export const ConnectionCheckRequestSchema = z.object({
 });
 export type ConnectionCheckRequest = z.infer<typeof ConnectionCheckRequestSchema>;
 
+/**
+ * `DELTA-MULTI-CHANNEL-01-B` B1 — the check before a sign-in asked about another address. The
+ * check is open before a sign-in so a console can learn whether a sign-in can work; a check of any
+ * other address would make the station probe the network for a caller nobody has vouched for. One
+ * sentence, sent by the bridge and shown as it comes (`R-017`), naming only what is involved.
+ */
+export const CHECK_BEFORE_SIGN_IN_REFUSAL =
+  "Before a sign-in, only this station's Playout can be checked.";
+
 export const ConnectionCheckResultSchema = z.object({
   lines: z.array(ConnectionCheckLineSchema),
   /** This machine's address on the route to the CasparCG host — the serve-host default. */
@@ -198,8 +207,10 @@ export type ConnectionCheckResult = z.infer<typeof ConnectionCheckResultSchema>;
 
 /**
  * `DESKTOP-APPS-01` §2F — the connection check. A read: it probes and reports and changes
- * nothing. Reachable with auth off (first-run's `target` phase) and to any signed-in principal
- * (Station setup) — never to an unauthenticated socket on a station that authenticates.
+ * nothing. Reachable with auth off (first-run's `target` phase), to any signed-in principal
+ * (Station setup), and — `DELTA-MULTI-CHANNEL-01-B` B1 — BEFORE ANY SIGN-IN, because it is how a
+ * console learns whether a sign-in can work at all. Before a sign-in it checks this station's own
+ * Playout and nothing else ({@link CHECK_BEFORE_SIGN_IN_REFUSAL}).
  */
 export const SetupCheckChannel = defineChannel(
   'setup.check',

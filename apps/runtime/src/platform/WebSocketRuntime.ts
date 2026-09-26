@@ -1562,7 +1562,24 @@ export class WebSocketRuntime implements RuntimeBridge {
         throw new PlayoutSignInError('unexpected');
       }
       // ADR 0010 rule 9 — browser → Playout, DIRECTLY. The bridge never sees the password.
-      const { session } = await signInToPlayout(signInUrl, username, password);
+      let session: StoredSession;
+      try {
+        ({ session } = await signInToPlayout(signInUrl, username, password));
+      } catch (err) {
+        /*
+          `DELTA-MULTI-CHANNEL-01-B` B3 — the Playout's own answer goes to the station's LOG (the
+          surface shows this console's sentence for the code, never the Playout's text). Fire and
+          forget: the log is a record, and the operator's answer must not wait on it.
+        */
+        if (err instanceof PlayoutSignInError) {
+          void this.#invoke(ipcChannels.AuthSignInFailureChannel, {
+            code: err.code,
+            status: err.detail?.status ?? null,
+            body: err.detail?.body ?? '',
+          }).catch(() => undefined);
+        }
+        throw err;
+      }
       this.#authGeneration += 1;
       this.#refreshFailures = 0;
       this.#session = session;

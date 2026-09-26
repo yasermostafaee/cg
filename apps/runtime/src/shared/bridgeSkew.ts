@@ -63,10 +63,14 @@ export function isBridgeSkewMessage(raw: string): boolean {
  * It names what happened, why, and the one action that fixes it. `channel` is carried on the
  * error OBJECT instead, so a developer reading a console log still has it and the operator
  * never does.
+ *
+ * `DELTA-MULTI-CHANNEL-01-B` B1 — "nothing was done", not "nothing was sent to CasparCG": any
+ * channel can meet a skewed bridge, most of them never reach CasparCG, and a refusal names
+ * nothing it cannot know is involved.
  */
 export const BRIDGE_SKEW_MESSAGE =
   'This bridge is running an older build than this page — that command is not available ' +
-  'until the bridge is restarted with a matching build. Nothing was sent to CasparCG.';
+  'until the bridge is restarted with a matching build. Nothing was done.';
 
 /**
  * A command the running bridge cannot serve because its build predates this page.

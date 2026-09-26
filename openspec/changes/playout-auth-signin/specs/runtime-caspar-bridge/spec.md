@@ -139,13 +139,16 @@ place.
   or control route — only the template files and `POST /complete` — and its route KINDS are
   exactly the two it has always had, so a route at an unguessed path cannot be added silently
 
-### Requirement: An unauthenticated socket is answered by the capability handshake and the sign-in door, and nothing else
+### Requirement: An unauthenticated socket is answered by the capability handshake, the sign-in door and the connection check, and nothing else
 
 While authentication is ON, a socket that has not presented a valid token SHALL be refused every
-request except `bridge.capabilities` and the `auth.*` channels, with ONE shared sentence that
-names the state, names the remedy and states that nothing was sent to CasparCG. The refusal SHALL
-be decided at the one chokepoint every request passes, beside the lock gate, and SHALL be
-evaluated per request rather than latched at connect.
+request except `bridge.capabilities`, the `auth.*` channels and the connection check
+(`setup.check`), with ONE shared sentence that names the state, names the remedy and states that
+nothing was done — never naming CasparCG, which a refused request need not involve
+(`DELTA-MULTI-CHANNEL-01-B` B1). Before any sign-in the connection check SHALL probe only this
+station's own Playout: a check that names another address, or a CasparCG host, SHALL be refused
+with its own one sentence. The refusal SHALL be decided at the one chokepoint every request passes,
+beside the lock gate, and SHALL be evaluated per request rather than latched at connect.
 
 Such a socket SHALL also receive no PUBLISH frames, because a stream of state is something other
 than the two doors it is entitled to.
@@ -158,8 +161,14 @@ anything.
 #### Scenario: Every route is censused, not sampled
 
 - **WHEN** the route table is walked with no principal held **THEN** exactly
-  `bridge.capabilities`, `auth.state` and `auth.sign-out` are reachable and every other route is
-  refused
+  `bridge.capabilities`, `auth.state`, `auth.sign-out` and `setup.check` are reachable and every
+  other route is refused
+
+#### Scenario: The check answers before a sign-in, for this station only
+
+- **WHEN** the Playout is down and a socket that never signed in checks this station's Playout
+  **THEN** the check answers with its lines **AND** a take on the same socket is refused
+- **WHEN** that socket checks another address **THEN** it is refused, and nothing is probed
 
 #### Scenario: The refusal is one sentence and it reaches the operator unchanged
 

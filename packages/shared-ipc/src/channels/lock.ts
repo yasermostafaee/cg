@@ -71,13 +71,17 @@ export const LockStateChannel = defineChannel('lock.state', z.void(), LockStateS
  * why no renderer change is needed for this to reach the operator, and exactly why a
  * refusal that started with one of those words would reach them as the wrong instruction.
  *
- * ⭐ It names the STATE, the REMEDY, and the fact that nothing was sent — the `R-006` rule
+ * ⭐ It names the STATE, the REMEDY, and the fact that nothing was done — the `R-006` rule
  * for a pre-send refusal, because an operator who believes a command is queued will not
  * reissue it. No channel name and no code: the operator is looking at a lock screen and
  * the answer is on it.
+ *
+ * `DELTA-MULTI-CHANNEL-01-B` B1 — "nothing was done", not "nothing was sent to CasparCG": the
+ * lock refuses every intent, a Station setup write included, and a refusal names nothing it
+ * cannot know is involved (the rule `AUTH_REQUIRED_REFUSAL` met first, on a connection check).
  */
 export const LOCK_ENGAGED_REFUSAL =
-  'The console is locked, so that command was refused — nothing was sent to CasparCG. ' +
+  'The console is locked, so that was refused and nothing was done. ' +
   'Enter the PIN to unlock, then try again.';
 
 /** Main → Renderer push: emitted whenever the lock state flips. */

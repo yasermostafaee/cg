@@ -195,13 +195,24 @@ describe('OPERATOR-NAME-SWEEP-01 — the retirement holds', () => {
    * lives as a two-line concatenation in `@cg/shared-ipc` — and must find it.
    */
   it('the multi-line matcher finds a sentence that IS split across lines', () => {
-    const found = sourceFiles().filter((f) =>
-      /This console is not signed in,\s*so that command was refused/i.test(flatten(f.text)),
-    );
+    /*
+      `DELTA-MULTI-CHANNEL-01-B` B1 reworded the refusal ("…so that was refused and nothing was
+      done. Sign in, then try again."). The match is taken ACROSS its two source lines — the
+      concatenation's `' + '` included — so it proves the multi-line mechanism, not a line grep.
+    */
+    const SPLIT = /nothing was done\.\s*'\s*\+\s*'\s*Sign in, then try again/i;
+    const found = sourceFiles().filter((f) => SPLIT.test(flatten(f.text)));
     expect(
       found.map((f) => f.file),
       'the multi-line matcher found nothing — every absence above is void',
     ).not.toEqual([]);
+    // …and it IS split: no single line of those files carries the whole match.
+    for (const f of found) {
+      expect(
+        f.text.split('\n').some((line) => SPLIT.test(line)),
+        f.file,
+      ).toBe(false);
+    }
   });
 });
 
