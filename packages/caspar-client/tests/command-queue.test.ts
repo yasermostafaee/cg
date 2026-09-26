@@ -6,6 +6,7 @@ import {
   AmcpTimeoutError,
   AmcpTransport,
   CommandQueue,
+  type AmcpExchange,
   type QueueResult,
 } from '../src/index.js';
 
@@ -297,5 +298,70 @@ describe('CommandQueue', () => {
     }
     expect(results.length).toBe(2);
     expect(queue.depth).toBe(0);
+  });
+});
+
+/**
+ * 🔴 `FIELD-FIXES-01-A` — **THE EXCHANGE EVENT: what the bridge's AMCP log writes.** Every command
+ * is said once when it settles — its line, the reply's header EXACTLY as the server sent it, and
+ * its round trip — and a reply that comes after its timeout is said again, marked late, so the log
+ * shows it did come. Nothing in the queue waits on a listener.
+ */
+describe('CommandQueue — every exchange is said', () => {
+  it('a reply: the line, the header as sent, and the time', async () => {
+    const { queue } = await setup();
+    const seen: AmcpExchange[] = [];
+    queue.on('exchange', (e) => seen.push(e));
+    await queue.enqueue('VERSION');
+    expect(seen).toEqual([{ line: 'VERSION', reply: '201 VERSION OK', ms: expect.any(Number) }]);
+  });
+
+  it('a refusal: the failure header is carried as sent, with no reason invented', async () => {
+    const { queue, mock } = await setup();
+    mock.setHandler('PLAY', () => ({ kind: 'err', code: 403, verb: 'PLAY' }));
+    const seen: AmcpExchange[] = [];
+    queue.on('exchange', (e) => seen.push(e));
+    await queue.enqueue('PLAY 2-60 DECKLINK DEVICE 1');
+    expect(seen).toEqual([
+      { line: 'PLAY 2-60 DECKLINK DEVICE 1', reply: '403 ERROR', ms: expect.any(Number) },
+    ]);
+  });
+
+  it('a timeout says so — and the reply that comes after it is said again, marked late', async () => {
+    const { queue, mock } = await setup();
+    mock.setHandler('SLOW', async () => {
+      await delay(150);
+      return { kind: 'ok', code: 202, verb: 'SLOW' };
+    });
+    const seen: AmcpExchange[] = [];
+    queue.on('exchange', (e) => seen.push(e));
+    await expect(queue.enqueue('SLOW', { timeoutMs: 50 })).rejects.toBeInstanceOf(AmcpTimeoutError);
+    expect(seen).toEqual([{ line: 'SLOW', error: 'timeout', ms: expect.any(Number) }]);
+    await vi.waitFor(() => {
+      expect(seen).toHaveLength(2);
+    });
+    expect(seen[1]).toEqual({
+      line: 'SLOW',
+      reply: '202 SLOW',
+      ms: expect.any(Number),
+      late: true,
+    });
+  });
+
+  it('a dropped socket says disconnected, for each command it took with it', async () => {
+    const { queue, mock } = await setup();
+    mock.setHandler('SLOW', async () => {
+      await delay(200);
+      return { kind: 'ok', code: 202, verb: 'SLOW' };
+    });
+    const seen: AmcpExchange[] = [];
+    queue.on('exchange', (e) => seen.push(e));
+    const p1 = queue.enqueue('SLOW');
+    const p2 = queue.enqueue('SLOW');
+    await delay(10);
+    mock.closeAllAmcpConnections();
+    await expect(p1).rejects.toBeInstanceOf(AmcpDisconnectedError);
+    await expect(p2).rejects.toBeInstanceOf(AmcpDisconnectedError);
+    expect(seen.map((e) => e.error)).toEqual(['disconnected', 'disconnected']);
   });
 });

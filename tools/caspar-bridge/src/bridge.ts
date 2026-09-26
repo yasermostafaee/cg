@@ -148,6 +148,7 @@ import {
 } from '@cg/shared-ipc';
 import { DEFAULT_LAYER_POLICY, type LayerPolicy, type LayerSlot } from '@cg/caspar-client';
 import { currentAuthSession, runAsActor } from './actor-context.js';
+import { AmcpLog, type AmcpLogEntry } from './amcp-log.js';
 import { CasparRuntime, configuredCasparHosts } from './caspar-runtime.js';
 import { loadPersistedConnection, savePersistedConnection } from './connection-store.js';
 import {
@@ -350,6 +351,14 @@ export interface BridgeOptions {
    */
   auditLogPath?: string;
   /**
+   * 🔴 `FIELD-FIXES-01-A` — where the AMCP log is written: every command the bridge sends, its
+   * reply line and its time (`amcp-log.ts`). The CLI derives it from `--state-home` —
+   * `<state-home>/logs/amcp.log`, beside the installed app's `bridge.log` — so every launcher gets
+   * it without a flag of its own. ABSENT means no AMCP log (unit tests, embedders). Like the audit
+   * log, a file that cannot be written is never a boot failure.
+   */
+  amcpLogPath?: string;
+  /**
    * `B-174` — the look switch's mixer hold, in ms (`--look-mixer-hold-ms`). ABSENT means
    * ONE CHANNEL FRAME of the channel's observed video mode (40 ms at the plant's
    * `1080i5000`), which is the measured page lag; `0` disables the hold while keeping the
@@ -498,6 +507,8 @@ export interface BridgeHandle {
    * on, and on 2026-09-04 it was the first question with no line to answer it.
    */
   readonly templates: { loaded: number; skipped: number; dir: string | null };
+  /** `FIELD-FIXES-01-A` — the AMCP log being written, or `null` when none was asked for. */
+  readonly amcpLog: AmcpLog | null;
   /**
    * D-137 / C-015 — the source catalog in force AND where it came from, so the
    * CLI can SAY it at boot.
@@ -1617,8 +1628,20 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
         ]);
   const amcpAddressFor = (host: string): string =>
     playoutIPv4 !== null && host.toLowerCase() === playoutName?.toLowerCase() ? playoutIPv4 : host;
+  /*
+    🔴 `FIELD-FIXES-01-A` — THE AMCP LOG, handed to the runtime at construction, so the first
+    command it sends (the connect handshake) is written too. Every exchange of every session.
+  */
+  const amcpLog = options.amcpLogPath === undefined ? null : new AmcpLog(options.amcpLogPath);
   const runtime = new CasparRuntime(connection, options.templateServe ?? {}, {
     amcpAddressFor,
+    ...(amcpLog !== null
+      ? {
+          onAmcpExchange: (exchange: AmcpLogEntry) => {
+            amcpLog.write(exchange);
+          },
+        }
+      : {}),
     // `DESKTOP-APPS-01-D` j — an installed station in first-run declares nothing until its bank.
     declaresNothingWithoutBank: options.firstRun === true,
     fixedSlots,
@@ -2054,6 +2077,7 @@ export async function createBridge(options: BridgeOptions = {}): Promise<BridgeH
     pgmReturn,
     fixedBankSource: { bank: firstBank(fixedBanks), source: fixedBankSource },
     templates: runtime.templateProvenance,
+    amcpLog,
     sourceCatalog,
     sourceAssignments: {
       value: prunedAssignments.value,

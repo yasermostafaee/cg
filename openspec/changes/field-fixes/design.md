@@ -119,3 +119,32 @@ holdsSeats)` in `@cg/shared-schema` beside `isOnAirStatus`; the bridge's `#ownsL
   back). `template-self-stop`'s stale-token case STOPs the first run before its re-take. In
   `MockRuntime.test.ts` two `B-145` cases took the row inside OUT's 160 ms `exiting` window, which is
   unsettled and now refused exactly as the bridge refuses it; they wait for the settle.
+
+## §5 The AMCP log — every command, its reply line and its time (`B-276`)
+
+- **Why the installed app wrote none of this.** No bridge ever wrote an AMCP log: not the installed
+  sidecar, and not the dev bridge either. The only AMCP trace in the tree was the mock's own, which the
+  tests switch on. The installed app keeps `bridge.log` (the sidecar's stderr, `sidecar.rs`) and the
+  audit NDJSON, and neither carries the exchange: the audit keeps the refusal's code, not the command
+  and the reply line. So `FIELD-FIXES-01` §0 had to replay the take on the fake to recover the wire.
+- **Fixed in one place.** The bridge writes it, at the session queue every command passes: `CommandQueue`
+  says each settled command once (`exchange`: its line, the reply's header exactly as sent, its round
+  trip), a timeout or a dropped socket by name, and a reply that comes after its timeout again, marked
+  late. The runtime hands each one, with its server and address, to the one sink it is given at
+  construction; `createBridge` gives it an `AmcpLog` when `amcpLogPath` is set.
+- **Where.** The CLI derives the path from `--state-home`: `<state-home>/logs/amcp.log`, which for the
+  installed app is `%APPDATA%\CG Control\logs\amcp.log`, beside its `bridge.log`. No launcher needs a new
+  flag. `--amcp-log-path` names another file; the dev station passes it, beside its own `bridge.log`
+  (its guard requires every path flag the CLI reads to be passed inside the dev state). A bare dev
+  bridge writes `~/.cg-runtime/logs/amcp.log`.
+- **One line per exchange:**
+  `2026-09-26T09:40:00.296Z A 192.168.21.111:5250 4ms >> PLAY 2-60 DECKLINK DEVICE 1 << 403 PLAY FAILED`.
+  5 MB, then the file becomes `amcp.previous.log` and a fresh one starts. A command longer than 2,000
+  characters is cut with its length said. Measured: an idle bridge wrote 34 lines in 30 s, all of
+  them the connect handshake and the boot volume blanket, so 5 MB holds about 64,000 exchanges.
+- **No token.** The one token an AMCP line carries is the take token in a `CG ADD`/`CG UPDATE` payload;
+  it is redacted in both spellings (escaped and bare). The Playout's sign-in token never travels over
+  AMCP. It is a SINK and not an emitter because every emitter is pushed to every console (`B-247`'s
+  guard): the raw line, token included, must never be.
+- **Fail-open.** A file that cannot be written is said once on stderr and switched off; playout never
+  waits on it. The bridge's own stderr lines are unchanged apart from one boot line naming the file.

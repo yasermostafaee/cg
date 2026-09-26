@@ -3030,6 +3030,7 @@ the highest `B` heading under `docs/prd/` was `B-264` and the highest `R` was `R
 - `B-273` — a look switch on a refused plate shows a hole on air until the page is put back (OPEN).
 - `B-274` — the bridge took a row that was already on air (Decision 2).
 - `B-275` — a slow take reply turned an on-air row into `loaded` (the 5 s expiry).
+- `B-276` — no bridge wrote an AMCP log; the installed app now writes `logs/amcp.log`.
 
 All in [bugs-runtime.md](bugs-runtime.md). Measured free before use: the highest `B` heading under
 `docs/prd/` was `B-270`, no ref and no stash claims `B-271`…`B-289`.

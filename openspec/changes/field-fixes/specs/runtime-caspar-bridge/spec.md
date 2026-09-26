@@ -97,6 +97,27 @@ and a dead input SHALL keep their own doors (the look picker, UPDATE, the `R-048
 - **WHEN** a take's reply is later than the bound and the row reads `unconfirmed`
 - **THEN** another take of that row is refused with nothing sent
 
+### Requirement: The bridge SHALL log every AMCP command with its reply line and its time
+
+The bridge SHALL write every AMCP command it sends, the reply's header line exactly as CasparCG sent
+it (or why none came), the server, the round trip and the time, one line per exchange, to a
+size-capped file that rotates to one previous file. Launched with a state home, the file SHALL be
+`<state-home>/logs/amcp.log`, beside the installed app's `bridge.log`. No token SHALL be written: the
+take token in a `CG ADD`/`CG UPDATE` payload SHALL be redacted. A file that cannot be written SHALL
+never stop or delay playout.
+
+#### Scenario: The installed app's sidecar writes the log
+
+- **WHEN** the bundled sidecar is started as the desktop shell starts it, with `--state-home`
+- **THEN** `<state-home>/logs/amcp.log` receives each command and its reply line
+- **AND** the sidecar's stderr carries no exchange line
+
+#### Scenario: A take is logged without its token
+
+- **WHEN** a row is taken
+- **THEN** its `CG ADD` and `CG PLAY` lines are written with their replies
+- **AND** the take token in the `CG ADD` payload reads `<redacted>`
+
 ## MODIFIED Requirements
 
 ### Requirement: Transient stack intents complete on ack or expire

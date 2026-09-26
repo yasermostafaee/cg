@@ -172,6 +172,9 @@ describe('`DELTA-MULTI-CHANNEL-01-A` A1 — `--fake` is a whole station', () => 
     const paths = stationPaths(stateDir, 'win32');
     expect(paths.bridgeLog).toBe(`${stateDir}\\bridge.log`);
     expect(isInside(paths.bridgeLog, stateDir, 'win32')).toBe(true);
+    // `FIELD-FIXES-01-A` — and the AMCP log beside it.
+    expect(paths.amcpLog).toBe(`${stateDir}\\amcp.log`);
+    expect(isInside(paths.amcpLog, stateDir, 'win32')).toBe(true);
     expect(previousStateDir(stateDir)).toBe(`${stateDir}.previous`);
     expect(isInside(previousStateDir(stateDir), stateDir, 'win32')).toBe(false);
   });

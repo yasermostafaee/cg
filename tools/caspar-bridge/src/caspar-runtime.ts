@@ -135,6 +135,7 @@ import {
   type SlotOccupancy,
   type ValidateChangeOptions,
 } from './fixed-layers-store.js';
+import type { AmcpLogEntry } from './amcp-log.js';
 import { CommandBuilder, summarizeWireLine, type CommandSlot } from './command-builder.js';
 import { OrphanTracker } from './orphan-tracker.js';
 import {
@@ -1465,6 +1466,8 @@ export class CasparRuntime {
    * the observed video mode at each switch. See the constructor option of the same name.
    */
   readonly #lookMixerHoldMs: number | undefined;
+  /** `FIELD-FIXES-01-A` — where every settled AMCP exchange goes (the bridge's AMCP log). */
+  readonly #onAmcpExchange: ((entry: AmcpLogEntry) => void) | undefined;
   /**
    * TEST-ONLY seam (B-100): per-`ServerSession` health-timer overrides. Empty in
    * production, so the ServerSession defaults apply. A test uses it to drive and
@@ -1648,6 +1651,16 @@ export class CasparRuntime {
        * remembered it re-delivered it, and the bank-less bridge took it as its own.
        */
       declaresNothingWithoutBank?: boolean;
+      /**
+       * 🔴 `FIELD-FIXES-01-A` — every AMCP command a session settles, with its reply line and the
+       * server it went to: the bridge's AMCP log (`amcp-log.ts`) is the one consumer.
+       *
+       * ⚠ **A SINK, NOT AN EMITTER, and deliberately.** Every emitter this class declares is pushed
+       * to every console (`B-247`'s guard, `publish-coverage.test.ts`), and an exchange must never
+       * be: its raw line carries the page's take token, which the log redacts and a console must
+       * not be handed. A file sink is not a publication, so it is not shaped like one.
+       */
+      onAmcpExchange?: (entry: AmcpLogEntry) => void;
     } = {},
   ) {
     this.#declaresNothingWithoutBank = options.declaresNothingWithoutBank === true;
@@ -1700,6 +1713,7 @@ export class CasparRuntime {
     // `undefined` is MEANINGFUL here (derive from the observed mode per switch), so this
     // one is not defaulted at construction the way its siblings below are.
     this.#lookMixerHoldMs = options.lookMixerHoldMs;
+    this.#onAmcpExchange = options.onAmcpExchange;
     this.#sweepMs = options.sweepMs ?? SWEEP_MS;
     this.#occupancyStaleMs = options.occupancyStaleMs ?? OCCUPANCY_STALE_MS;
     this.#channelTickStaleMs = options.channelTickStaleMs ?? CHANNEL_TICK_STALE_MS;
@@ -1793,6 +1807,21 @@ export class CasparRuntime {
         if (this.#adapter.currentPrimary !== label) return;
         for (const event of events) this.#reconciler.applyOsc(event);
       });
+      /*
+        `FIELD-FIXES-01-A` — EVERY AMCP COMMAND THIS SESSION SETTLES, AND ITS REPLY LINE, for the
+        bridge's AMCP log. At the session's queue, the one place every command it sends passes —
+        the take, the seating, the mode and output reads, the heartbeat — so the log cannot miss a
+        path that forgot to report itself.
+      */
+      const sink = this.#onAmcpExchange;
+      if (sink !== undefined) {
+        const server = this.#config.servers[label];
+        const host = server === undefined ? '' : `${server.host}:${String(server.amcpPort)}`;
+        session.queue.on('exchange', (exchange) => {
+          if (this.#sessions[label] !== session) return; // torn-down era
+          sink({ ...exchange, server: label, host, at: Date.now() });
+        });
+      }
       // B-054 — 'healthy' fires only when a session completes a full AMCP
       // (re)connect cycle (never on degraded→healthy OSC recovery): the
       // server behind it may have restarted with EMPTY layers, so producer

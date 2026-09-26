@@ -35,6 +35,7 @@ declare module '*station-plan.mjs' {
     readonly playoutConfig: string;
     readonly consoleDir: string;
     readonly bridgeLog: string;
+    readonly amcpLog: string;
   }
   export interface FakeModulePaths {
     readonly playout: string;

@@ -124,6 +124,11 @@ export function stationPaths(stateDir, platform) {
      * check's own timing line, written for exactly that question, had gone to a closed terminal.
      */
     bridgeLog: p.join(stateDir, 'bridge.log'),
+    /**
+     * `FIELD-FIXES-01-A` — every AMCP command the bridge sends, its reply line and its time. Beside
+     * `bridge.log`, as the installed app keeps its own beside its `bridge.log`.
+     */
+    amcpLog: p.join(stateDir, 'amcp.log'),
   };
 }
 
@@ -175,6 +180,8 @@ function pathFlags(paths) {
     paths.audit,
     '--playout-config-path',
     paths.playoutConfig,
+    '--amcp-log-path',
+    paths.amcpLog,
   ];
 }
 

@@ -45,3 +45,18 @@
       PLAY back after CLEAR as its control (design §4). Local (Windows, not a discharge): the
       whole runtime suite 261/261. `MockRuntime.test.ts`: the seated seed row's take is refused with
       nothing seated twice, and the two out-then-take cases wait for OUT to settle.
+
+## 3. The AMCP log (`B-276`)
+
+- [x] 3.1 `CommandQueue` says every settled exchange (`exchange`): the line, the reply header as sent,
+      the round trip; a timeout, a disconnect or an abort by name; a late reply again, marked late.
+- [x] 3.2 `amcp-log.ts`: one line per exchange, the take token redacted in both spellings, 5 MB then
+      one previous file, fail-open. The runtime takes it as a construction-time SINK (not an emitter:
+      `B-247`'s guard pushes every emitter to consoles); `createBridge` wires it from `amcpLogPath`.
+- [x] 3.3 The CLI derives `<state-home>/logs/amcp.log` (`%APPDATA%\CG Control\logs\amcp.log` for the
+      installed app); `--amcp-log-path` overrides; the dev station passes it beside its `bridge.log`.
+- [x] 3.4 Tests: `amcp-log.integration.test.ts` 6/6 — the line, the redaction with its control, the cap
+      and rotation, fail-open, a take through a real bridge, and the BUNDLED sidecar started as the
+      desktop shell starts it writing `<state-home>/logs/amcp.log` with no exchange on its stderr
+      (the control) — red first against HEAD's CLI: `no AMCP log at …\CG Control\logs\amcp.log`;
+      `command-queue.test.ts` +4; `station-plan.test.ts` (the dev station's path, inside its state).

@@ -12679,3 +12679,14 @@ late OK settled the ack without restoring the evidence. **Fix, in that one place
 unresolved, not failed — it keeps its evidence, reads `unconfirmed`, PLAY stays unavailable, the
 bridge refuses a take meanwhile, and its own reply resolves it. Tests:
 `reconciler-failed-take.test.ts`, `take-on-air-refusal.integration.test.ts` (the slow reply).
+
+## [~] B-276 — No bridge wrote an AMCP log, so a refused take could not be read back from the station ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01-A`
+
+On 2026-09-26 Bed 59's take was refused `amcp-403` and nothing on the owner's machine said which
+command was refused or what the server answered: the installed app keeps `bridge.log` and the audit,
+and neither carries the exchange. The dev bridge wrote none either — the only AMCP trace in the tree
+was the mock's. `FIELD-FIXES-01` §0 had to replay the take on the fake. **Fix, in one place:** the
+bridge logs every exchange from the session queue into `<state-home>/logs/amcp.log`
+(`%APPDATA%\CG Control\logs\amcp.log` for the installed app), 5 MB then one previous file, the take
+token redacted, fail-open. Tests: `amcp-log.integration.test.ts` (the bundled sidecar, red first
+against the old CLI), `command-queue.test.ts`.

@@ -34,6 +34,8 @@
 //                                                     # DESKTOP-APPS-01: serve the built console on its own
 //                                                     #   loopback origin (never the template port)
 //   caspar-bridge --exit-on-stdin-close               # DESKTOP-APPS-01: stop when the parent's pipe closes
+//   caspar-bridge --amcp-log-path C:\cg\amcp.log      # FIELD-FIXES-01-A: every AMCP command and its reply
+//                                                     #   (default <state-home>\logs\amcp.log)
 //
 // R-010 boot precedence: explicit --caspar-*/--backup-* flags > the persisted
 // config file (~/.cg-runtime/bridge-connection.json by default) > built-in
@@ -220,6 +222,25 @@ const auditLogPath =
   typeof args['audit-log-path'] === 'string'
     ? args['audit-log-path']
     : path.join(stateHome, '.cg-runtime', 'bridge-audit.ndjson');
+
+// 🔴 `FIELD-FIXES-01-A` — the AMCP LOG: every command sent to CasparCG, its reply line and its
+// time, size-capped with one previous file kept. In the station's LOGS folder when a state home
+// is named — `%APPDATA%\CG Control\logs\amcp.log` for the installed app, beside the `bridge.log`
+// its sidecar writes — so the installed app and the dev station get it from the flag they already
+// pass, and no launcher needs a flag of its own. A bare dev bridge keeps it with its other files.
+// A file that cannot be written is never a boot failure (`amcp-log.ts`).
+if (args['amcp-log-path'] === true) {
+  console.error(
+    '[caspar-bridge] --amcp-log-path needs a value (the file the AMCP log is written to).',
+  );
+  process.exit(1);
+}
+const amcpLogPath =
+  typeof args['amcp-log-path'] === 'string'
+    ? args['amcp-log-path']
+    : typeof args['state-home'] === 'string'
+      ? path.join(args['state-home'], 'logs', 'amcp.log')
+      : path.join(os.homedir(), '.cg-runtime', 'logs', 'amcp.log');
 
 // 🔴 B-162 / C-024 — THE ADVERTISED TEMPLATE HOST, from CONFIGURATION.
 //
@@ -476,6 +497,7 @@ const bridgeOptions = {
   sourceAssignmentsPath,
   ...(liveLayersPath !== null ? { liveLayersPath } : {}),
   auditLogPath,
+  amcpLogPath,
   templateServe,
   ...(lookMixerHoldMs !== undefined ? { lookMixerHoldMs } : {}),
   createMissingConsumers,
@@ -572,6 +594,12 @@ function describeBoot(handle) {
   console.error(`[caspar-bridge] live layer ledger: ${describeLiveLayers(handle.liveLayers)}`);
   // C-031 — the one number every take depends on, said at boot like the rest.
   console.error(`[caspar-bridge] templates: ${describeTemplates(handle.templates)}`);
+  // `FIELD-FIXES-01-A` — where every AMCP command and its reply is written.
+  if (handle.amcpLog !== null) {
+    console.error(
+      `[caspar-bridge] AMCP log: ${handle.amcpLog.file} - every command, its reply line and its time (5 MB, then one previous file)`,
+    );
+  }
   // Longer than any real channel frame (the slowest, 1080p2398, is ~41.7 ms; an interlaced
   // 24p-family mode ~83). Not a limit — a threshold for saying so out loud on the boot line.
   const LOOK_MIXER_HOLD_IMPLAUSIBLE_MS = 200;

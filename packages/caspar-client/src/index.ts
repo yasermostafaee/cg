@@ -21,6 +21,7 @@ export { messageToEvent } from './osc/event-mapper.js';
 
 export { CommandQueue } from './queue/command-queue.js';
 export type {
+  AmcpExchange,
   CommandQueueEvents,
   CommandQueueOptions,
   EnqueueOptions,
