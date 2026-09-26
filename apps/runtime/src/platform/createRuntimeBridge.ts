@@ -20,6 +20,8 @@ export interface CreateRuntimeBridgeOptions {
    * reporter). Only used by the live `WebSocketRuntime` backend.
    */
   onResyncError?: (message: string) => void;
+  /** `DELTA-MULTI-CHANNEL-01-A` A3 — a message `onResyncError` raised is no longer true. */
+  onResyncResolved?: (message: string) => void;
 }
 
 /**
@@ -64,6 +66,9 @@ export async function createRuntimeBridge(
     library,
     stackRetention,
     ...(options.onResyncError !== undefined ? { onResyncError: options.onResyncError } : {}),
+    ...(options.onResyncResolved !== undefined
+      ? { onResyncResolved: options.onResyncResolved }
+      : {}),
   });
   try {
     await withTimeout(ws.whenReady(), PROBE_TIMEOUT_MS);

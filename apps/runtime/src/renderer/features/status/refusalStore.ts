@@ -85,12 +85,17 @@ export function getRefusal(): Refusal | null {
  */
 export function raiseRefusal(
   message: string,
-  opts: { detail?: string | null; code?: string | null } = {},
+  opts: { detail?: string | null; code?: string | null; station?: boolean } = {},
 ): void {
   const detail = opts.detail ?? null;
   const code = opts.code ?? null;
-  // `MULTI-CHANNEL-01` §2 L — the same sentence on ANOTHER channel is another refusal.
-  const channel = readMessageScope();
+  /*
+    `MULTI-CHANNEL-01` §2 L — the same sentence on ANOTHER channel is another refusal.
+    `DELTA-MULTI-CHANNEL-01-A` A3 — unless it is about the STATION (a template re-delivery, the
+    retained stack): the console raised it on its own at (re)connect, not for the channel that
+    happened to be on screen, so it stands in every view (`channel: null`).
+  */
+  const channel = opts.station === true ? null : readMessageScope();
   current =
     current !== null && current.message === message && current.channel === channel
       ? { ...current, count: current.count + 1, detail, code }
@@ -101,6 +106,16 @@ export function raiseRefusal(
 /** The operator dismissed it, or the condition that caused it no longer holds. */
 export function clearRefusal(): void {
   if (current === null) return;
+  current = null;
+  emit();
+}
+
+/**
+ * `DELTA-MULTI-CHANNEL-01-A` A3 — the condition behind THIS sentence no longer holds: take it down
+ * if it is the one standing, and leave any other refusal exactly where it is.
+ */
+export function withdrawRefusal(message: string): void {
+  if (current === null || current.message !== message) return;
   current = null;
   emit();
 }

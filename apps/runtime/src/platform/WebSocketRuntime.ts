@@ -185,6 +185,12 @@ export interface WebSocketRuntimeOptions {
    */
   onResyncError?: (message: string) => void;
   /**
+   * `DELTA-MULTI-CHANNEL-01-A` A3 — called with a message `onResyncError` raised, once a later
+   * resync has done what it said failed (that template re-delivered, the stack restored): the
+   * notice is no longer true, so it withdraws itself. Default: nothing.
+   */
+  onResyncResolved?: (message: string) => void;
+  /**
    * B-085 — the browser-local template library (source of truth). Injected by
    * `createRuntimeBridge` backed by OPFS (persistent). Defaults to an in-memory
    * store so transport/reconnect tests can construct the runtime with no library
@@ -388,6 +394,28 @@ export class WebSocketRuntime implements RuntimeBridge {
    */
   #authHandshake: Promise<void> | null = null;
   /**
+   * 🔴 `DELTA-MULTI-CHANNEL-01-A` A3 — **THE CAPABILITIES ANSWER, WHICH SAYS WHETHER THIS BRIDGE
+   * AUTHENTICATES AT ALL.** Recorded at the one connect site, resolved when `#checkSkew` settles
+   * (it never throws: answered, skewed, timed out or dropped).
+   *
+   * `#resync` waits on it before reading the gate. `#authHandshake` covers a console that HOLDS a
+   * token; a console holding none has nothing to wait for there, so it read the state in the tick
+   * the socket opened — UNKNOWN, not SIGNED OUT — and re-delivered to a gate with nobody on the
+   * socket. The owner then read "this console is not signed in" beside `SIGNED IN AS …`, because
+   * the sign-in's own resync delivered it a moment later and nothing took the refusal down.
+   *
+   * ⚠ ONLY the resync waits here. The renderer's reads do not (see `useBridgeSnapshot`), and a
+   * pressed command must not either: a bridge too old to answer is answered by its own skew.
+   */
+  #capsHandshake: Promise<void> | null = null;
+  /**
+   * `DELTA-MULTI-CHANNEL-01-A` A3 — every resync failure this console has SAID and not yet seen
+   * undone, by what failed (`template:<id>`, `restore`). A later resync that does it withdraws the
+   * message through `#onResyncResolved`.
+   */
+  readonly #resyncFailures = new Map<string, string>();
+  readonly #onResyncResolved: (message: string) => void;
+  /**
    * 🔴 The bridge has told us it is refusing this console's intents for want of a principal.
    *
    * The only thing that can know about a REVOCATION: the token is unexpired, the socket is up,
@@ -467,6 +495,7 @@ export class WebSocketRuntime implements RuntimeBridge {
       options.createWebSocket ?? ((u) => new WebSocket(u) as unknown as WebSocketLike);
     this.#onResyncError =
       options.onResyncError ?? ((message) => console.error(`[WebSocketRuntime] ${message}`));
+    this.#onResyncResolved = options.onResyncResolved ?? (() => undefined);
     // Default to an in-memory (unhydrated, empty) library so tests can construct
     // the runtime with no store and still exercise delivery + reconcile. The boot
     // path injects an OPFS-backed, hydrated store.
@@ -547,7 +576,8 @@ export class WebSocketRuntime implements RuntimeBridge {
         frames that would otherwise be refused, not by the connect handler.
       */
       this.#authHandshake = this.#session === null ? null : this.#presentToken();
-      void this.#checkSkew();
+      // `DELTA-MULTI-CHANNEL-01-A` A3 — recorded, not awaited here (B-153): the resync waits on it.
+      this.#capsHandshake = this.#checkSkew();
       // B-085 — reconcile the browser-local library to the bridge on EVERY connect:
       // deliver the retained templates so the bridge can serve them. On the FIRST
       // connect this delivers a library imported while boot-disconnected (offline
@@ -978,8 +1008,17 @@ export class WebSocketRuntime implements RuntimeBridge {
 
       ⚠ It reads the state AFTER the connect-time handshake has settled, because `#invoke`
       waits on it and so does this: an early read would see `unknown` on every connect.
+
+      🔴 `DELTA-MULTI-CHANNEL-01-A` A3 — **AND AFTER THE BRIDGE HAS SAID WHETHER IT
+      AUTHENTICATES.** With no token held there is no `auth` handshake to wait for, and the read
+      above came back `unknown` — not `signed-out` — so this guard let the re-delivery through to a
+      gate with nobody on the socket. ADR 0010 rule 4 gives such a socket the capabilities door and
+      `auth.*`, nothing else: an automatic delivery cannot run under anyone before a sign-in, so it
+      WAITS for it (the sign-in runs this resync). A bridge too old to answer stays `unknown` and
+      delivers as it always did.
     */
     if (this.#authHandshake !== null) await this.#authHandshake;
+    if (this.#capsHandshake !== null) await this.#capsHandshake;
     const gate = this.#authState();
     if (gate.kind === 'signed-out' || gate.kind === 'expired') return;
     /*
@@ -1036,6 +1075,8 @@ export class WebSocketRuntime implements RuntimeBridge {
           html: req.html,
           redelivery: true,
         });
+        // A3 — delivered: whatever this console said about its failure is no longer true.
+        this.#resyncSucceeded(`template:${req.template.templateId}`);
       } catch (err) {
         // A fresh drop mid-resync re-triggers the whole resync on the next
         // reconnect — stay quiet; only a real per-template rejection surfaces.
@@ -1049,7 +1090,8 @@ export class WebSocketRuntime implements RuntimeBridge {
           joining prose onto its end is editing it at a call site. Our clause goes FIRST and
           the bridge's sentence is last, intact, with nothing after it.
         */
-        this.#onResyncError(
+        this.#resyncFailed(
+          `template:${req.template.templateId}`,
           `Re-delivery of template “${req.template.templateId}” failed on reconnect — ` +
             `re-import it manually. ${err instanceof Error ? err.message : String(err)}`,
         );
@@ -1109,10 +1151,14 @@ export class WebSocketRuntime implements RuntimeBridge {
       } catch (err) {
         if (err instanceof BridgeDisconnectedError) throw err;
       }
+      // A3 — the stack is back (or there was none to restore): a restore failure said earlier is
+      // no longer true.
+      this.#resyncSucceeded('restore');
     } catch (err) {
       restoreOk = false;
       if (!(err instanceof BridgeDisconnectedError)) {
-        this.#onResyncError(
+        this.#resyncFailed(
+          'restore',
           `Restoring the retained stack failed on reconnect: ` +
             `${err instanceof Error ? err.message : String(err)}. ` +
             `The stack is kept locally and will be retried on the next connect.`,
@@ -1144,6 +1190,27 @@ export class WebSocketRuntime implements RuntimeBridge {
       /* a fresh drop during resync will re-trigger reconnect */
       this.#setResyncing(false);
     }
+  }
+
+  /**
+   * `DELTA-MULTI-CHANNEL-01-A` A3 — say a resync failure, and REMEMBER having said it, by what
+   * failed: a refusal persists until dismissed or until its condition no longer holds
+   * (`refusalStore`), and only this side knows when that is.
+   */
+  #resyncFailed(key: string, message: string): void {
+    const said = this.#resyncFailures.get(key);
+    // A different sentence for the same failure replaces the one on screen.
+    if (said !== undefined && said !== message) this.#onResyncResolved(said);
+    this.#resyncFailures.set(key, message);
+    this.#onResyncError(message);
+  }
+
+  /** …and withdraw it once a later resync has done the thing it said failed. */
+  #resyncSucceeded(key: string): void {
+    const said = this.#resyncFailures.get(key);
+    if (said === undefined) return;
+    this.#resyncFailures.delete(key);
+    this.#onResyncResolved(said);
   }
 
   /**

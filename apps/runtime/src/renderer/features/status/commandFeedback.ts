@@ -20,7 +20,7 @@
  * move; what changed is where it lands.
  */
 
-import { getRefusal, onRefusal, raiseRefusal } from './refusalStore.js';
+import { getRefusal, onRefusal, raiseRefusal, withdrawRefusal } from './refusalStore.js';
 
 type Listener = (message: string) => void;
 
@@ -77,9 +77,22 @@ export function onCommandSuccess(listener: Listener): () => void {
  */
 export function reportCommandError(
   message: string,
-  opts: { detail?: string | null; code?: string | null } = {},
+  opts: { detail?: string | null; code?: string | null; station?: boolean } = {},
 ): void {
   raiseRefusal(message, opts);
+}
+
+/**
+ * `DELTA-MULTI-CHANNEL-01-A` A3 — a refusal the console raised on its own at (re)connect is about
+ * the STATION, not the channel on screen (§2 L), and the runtime withdraws it once a later resync
+ * has done the thing it said failed.
+ */
+export function reportResyncError(message: string): void {
+  raiseRefusal(message, { station: true });
+}
+
+export function withdrawCommandError(message: string): void {
+  withdrawRefusal(message);
 }
 
 /** Emit a command-success message to all subscribers. */

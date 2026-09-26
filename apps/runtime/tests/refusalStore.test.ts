@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { setMessageScope } from '../src/renderer/features/channels/messageScope.js';
 import {
   clearRefusal,
   getRefusal,
   onRefusal,
   raiseRefusal,
+  withdrawRefusal,
 } from '../src/renderer/features/status/refusalStore.js';
 
 /**
@@ -75,5 +77,33 @@ describe('refusalStore — a refusal is a state, not an announcement', () => {
     clearRefusal();
     expect(seen).toEqual(['standing', 'another', null]);
     off();
+  });
+});
+
+describe('`DELTA-MULTI-CHANNEL-01-A` A3 — a refusal that is no longer true takes itself down', () => {
+  beforeEach(() => {
+    clearRefusal();
+  });
+  afterEach(() => {
+    setMessageScope(null);
+  });
+
+  it('WITHDRAWN when its condition no longer holds — and only that sentence: another refusal stays', () => {
+    raiseRefusal('Re-delivery of template “x” failed on reconnect.');
+    withdrawRefusal('Re-delivery of template “x” failed on reconnect.');
+    expect(getRefusal()).toBeNull();
+
+    // CONTROL — a withdrawal about one thing leaves a refusal about another standing.
+    raiseRefusal('Take it off air first.');
+    withdrawRefusal('Re-delivery of template “x” failed on reconnect.');
+    expect(getRefusal()?.message).toBe('Take it off air first.');
+  });
+
+  it('a STATION refusal stands in every channel’s view — control: an ordinary one is the channel on screen’s', () => {
+    setMessageScope(2);
+    raiseRefusal('Re-delivery of template “x” failed on reconnect.', { station: true });
+    expect(getRefusal()?.channel).toBeNull();
+    raiseRefusal('Take it off air first.');
+    expect(getRefusal()?.channel).toBe(2);
   });
 });

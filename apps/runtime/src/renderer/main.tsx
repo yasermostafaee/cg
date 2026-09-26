@@ -9,7 +9,7 @@ import { StrictMode, useEffect, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { createRuntimeBridge } from '../platform/createRuntimeBridge.js';
-import { reportCommandError } from './features/status/commandFeedback.js';
+import { reportResyncError, withdrawCommandError } from './features/status/commandFeedback.js';
 import { applyThemeVars } from './theme.js';
 
 /**
@@ -79,9 +79,13 @@ function BootComplete({ children }: { children: ReactNode }): JSX.Element {
 
 async function boot(): Promise<void> {
   window.__CG_SPLASH__?.phase('PROBING BRIDGE');
-  // Reconnect-reconciliation — a failed template re-delivery during the
-  // post-reconnect resync surfaces on the operator's command-error toast.
-  window.cg = await createRuntimeBridge({ onResyncError: reportCommandError });
+  // Reconnect-reconciliation — a failed template re-delivery during the post-reconnect resync
+  // stands as a refusal about the STATION, and withdraws itself once a later resync has done it
+  // (`DELTA-MULTI-CHANNEL-01-A` A3).
+  window.cg = await createRuntimeBridge({
+    onResyncError: reportResyncError,
+    onResyncResolved: withdrawCommandError,
+  });
   window.__CG_SPLASH__?.phase('STARTING INTERFACE');
   root.render(
     <StrictMode>
