@@ -23,6 +23,8 @@
       control. Red first: 4/9 red against `459c3f64`'s runtime (plate 1, plate 2, `CG PLAY`,
       withdrawn); the success pin, both controls and the swap were green before and after.
 - [x] 1.5 The whole bridge suite green: 141 files, 1188 tests.
+- [x] 1.6 CI at `d2920842`: https://github.com/yasermostafaee/cg/actions/runs/36244252292 — every job RAN, `e2e` success; Desktop
+      https://github.com/yasermostafaee/cg/actions/runs/36244252261.
 
 ## 2. Decision 2 and the 5 s (`B-274`, `B-275`)
 
@@ -199,6 +201,9 @@
       `channelSwitch.dom.test.ts` fixture moved to 2-65; e2e `orphan-layers.spec.ts` (layer 5 listed
       on Station layers, no notice, no mark; layer 90's notice and mark; both strips dismissed; a
       reload keeps them; layer 91 appearing brings the video strip and the mark back).
+- [x] 12.5 CI at `59a1ff4b`: https://github.com/yasermostafaee/cg/actions/runs/36262765138 — every job RAN, `e2e` success; Desktop
+      https://github.com/yasermostafaee/cg/actions/runs/36262765118. Again at `3cec412d` (carries it): https://github.com/yasermostafaee/cg/actions/runs/36264378884 —
+      `orphan-layers.spec.ts:20` and `:76` passed.
 
 ## 13. J — one splash, not two (`B-284`)
 
@@ -220,6 +225,9 @@
       window every entrance is already over — duration 0 s, opacity 1; control: in a browser the
       wordmark's entrance is 1 s). Looked at in Chrome: the composed page, waiting and failed.
 - [ ] 13.6 The owner launches the new CG Control and CG Designer: one splash, no white frame.
+- [x] 13.7 CI at `3cec412d`: https://github.com/yasermostafaee/cg/actions/runs/36264378884 — every job RAN, `e2e` success, both
+      `splash.spec.ts` J cases passed; Desktop https://github.com/yasermostafaee/cg/actions/runs/36264378891 — staging wrote
+      `starting-dist`, `tauri build` took it, and the smoke read "APASAI CG CONTROL" off the new window.
 
 ## 14. H — the dev station's PROGRAM monitor, and `localhost` (`B-285`)
 
@@ -241,3 +249,4 @@
       `station-plan.test.ts` (`viteEnv`).
 - [ ] 14.5 The owner opens `pnpm dev:station --fake` and `pnpm dev:station`: the PROGRAM picture moves,
       and `localhost:5174` lands on `127.0.0.1:5174`.
+- [x] 14.6 CI at `97973e95`: https://github.com/yasermostafaee/cg/actions/runs/36265980234 — every job RAN, `e2e` success: `dev-station.spec.ts:109` and `:135` passed, the relay reading 127.0.0.2:9251 on Linux; Desktop https://github.com/yasermostafaee/cg/actions/runs/36265980225.
