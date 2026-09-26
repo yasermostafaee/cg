@@ -6582,9 +6582,15 @@ input[type='checkbox']:disabled:checked {
  *
  * ⚠ Ink is `--r-look-btn-sel-ink` (white on `#2e4e67`, measured 9.42:1 when that pair was
  * adopted). The WEIGHT lifts to semibold, because a chip carries no other mark of selection.
+ *
+ * ⭐ `DELTA-MULTI-CHANNEL-01-A` A8 — first-run's and Change channel…'s CHANNEL chips are named
+ * here as well. They are `secondary` Buttons with `active`, and `.is-on` fills only the verb,
+ * neutral and icon variants — so a picked channel read exactly like an unpicked one, with nothing
+ * but `aria-pressed` to tell them apart. A picked channel is a chosen thing that is not on air.
  */
 .cg-tpl-filter .cg-btn[aria-pressed='true'],
-.cg-timing-choice .cg-btn[aria-pressed='true'] {
+.cg-timing-choice .cg-btn[aria-pressed='true'],
+.cg-channel-choice .cg-btn[aria-pressed='true'] {
   background: var(--r-look-btn-sel-bg);
   border-color: var(--r-look-btn-sel-line);
   box-shadow: inset 0 0 0 1px var(--r-look-btn-sel-ring);
@@ -6592,7 +6598,8 @@ input[type='checkbox']:disabled:checked {
   font-weight: var(--r-weight-semibold);
 }
 .cg-tpl-filter .cg-btn[aria-pressed='true']:hover:not(:disabled),
-.cg-timing-choice .cg-btn[aria-pressed='true']:hover:not(:disabled) {
+.cg-timing-choice .cg-btn[aria-pressed='true']:hover:not(:disabled),
+.cg-channel-choice .cg-btn[aria-pressed='true']:hover:not(:disabled) {
   /* LIFT, never swap to the neutral hover — an engaged chip must not read as switched off
      under the pointer. Same direction the `.is-on` family uses. */
   background: var(--r-look-btn-sel-line);

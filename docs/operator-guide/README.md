@@ -42,7 +42,7 @@ password, and that `http://127.0.0.1:5174` is in the Playout's CORS list.
    warning, not a refusal: at a client, CG graphics do go on the programme channel, above the
    Playout's layers. On the test Playout, use `cg-test2` (channel 2).
 6. **Serve address** — CG Control fills in this machine's address; change it only if the Playout's
-   administrator tells you to. Press **Use this channel** (or **Use these 2 channels**).
+   administrator tells you to. Press **Use this channel** (or **Use these channels**).
 
 **Wrong channels, or one more?** **SETTINGS → Channel → Change channel…** (a station admin only) shows
 the same list and the same warning, with the station's channels already picked: add one, take one

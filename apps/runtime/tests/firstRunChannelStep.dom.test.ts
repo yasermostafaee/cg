@@ -83,7 +83,7 @@ const rowButton = (el: HTMLElement, channel: number): HTMLButtonElement | null =
   el.querySelector<HTMLButtonElement>(`button[data-channel="${String(channel)}"]`);
 const useButton = (el: HTMLElement): HTMLButtonElement | undefined =>
   [...el.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
-    /^Use (this channel|these \d+ channels)/.test(b.textContent ?? ''),
+    /^Use (this channel|these channels)/.test(b.textContent ?? ''),
   );
 
 async function press(button: HTMLButtonElement | null | undefined): Promise<void> {
@@ -127,6 +127,52 @@ describe('a — first-run never picks a channel for the admin', () => {
   });
 });
 
+/*
+  🔴 `DELTA-MULTI-CHANNEL-01-A` A8 — **THE BUTTON FOLLOWS THE COUNT.** The owner's first-run offered
+  two channels, nothing picked, and the button read "Use this channel". It reads `Use this channel`
+  for one and `Use these channels` for two or more — the channels picked, or while none is, the ones
+  offered. (Whether a picked chip LOOKS picked is paint, and is measured in a browser:
+  `e2e/first-run.spec.ts`.)
+*/
+describe('A8 — first-run’s button follows the count', () => {
+  it('two offered and none picked reads "Use these channels"; one picked reads "Use this channel"; two picked, plural again', async () => {
+    stub(() => ({ state: 'empty', layers: [] }));
+    const { el } = await render();
+    expect(useButton(el)?.textContent).toBe('Use these channels');
+    expect(useButton(el)?.disabled).toBe(true);
+    await press(rowButton(el, 2));
+    expect(useButton(el)?.textContent).toBe('Use this channel');
+    await press(rowButton(el, 1));
+    expect(useButton(el)?.textContent).toBe('Use these channels');
+  });
+
+  it('control — a list of one reads "Use this channel", picked or not', async () => {
+    const [only] = ROWS;
+    (window as unknown as { cg: unknown }).cg = fillBridgeStub({
+      setup: {
+        ...setupStub(),
+        catalogue: () => Promise.resolve({ rows: only === undefined ? [] : [only] }),
+        routeAddress: () => Promise.resolve({ address: '127.0.0.1' }),
+        channelOccupancy: () => Promise.resolve({ state: 'empty', layers: [] }),
+      },
+    });
+    const { el } = await render();
+    expect(useButton(el)?.textContent).toBe('Use this channel');
+    await press(rowButton(el, 1));
+    expect(useButton(el)?.textContent).toBe('Use this channel');
+  });
+
+  it('the chips sit in the one "chosen, not on air" family, and a picked one says so', async () => {
+    stub(() => ({ state: 'empty', layers: [] }));
+    const { el } = await render();
+    await press(rowButton(el, 2));
+    // Structural only — the paint is a browser's to measure (golden rule 12).
+    expect(rowButton(el, 2)?.closest('.cg-channel-choice')).not.toBeNull();
+    expect(rowButton(el, 2)?.getAttribute('aria-pressed')).toBe('true');
+    expect(rowButton(el, 1)?.getAttribute('aria-pressed')).toBe('false');
+  });
+});
+
 describe('E — first-run picks ONE OR MORE channels (`MULTI-CHANNEL-01` §2 E)', () => {
   it('two clicks pick two channels, and one press declares both', async () => {
     stub(() => ({ state: 'empty', layers: [] }));
@@ -135,7 +181,7 @@ describe('E — first-run picks ONE OR MORE channels (`MULTI-CHANNEL-01` §2 E)'
     await press(rowButton(el, 2));
     expect(rowButton(el, 1)?.getAttribute('aria-pressed')).toBe('true');
     expect(rowButton(el, 2)?.getAttribute('aria-pressed')).toBe('true');
-    expect(useButton(el)?.textContent).toBe('Use these 2 channels');
+    expect(useButton(el)?.textContent).toBe('Use these channels');
     await press(useButton(el));
     expect(declare.mock.calls).toEqual([
       [
@@ -226,7 +272,7 @@ describe('d — a channel already on air is declared only after one line and a s
     const lines = [...el.querySelectorAll('[data-channel-on-air]')];
     expect(lines.map((l) => l.getAttribute('data-channel-on-air'))).toEqual(['1']);
     expect(declare).not.toHaveBeenCalled();
-    expect(useButton(el)?.textContent).toBe('Use these 2 channels anyway');
+    expect(useButton(el)?.textContent).toBe('Use these channels anyway');
     await press(useButton(el));
     expect(declare).toHaveBeenCalledTimes(1);
   });

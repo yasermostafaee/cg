@@ -189,8 +189,9 @@ otherwise).
 ## §5 — First-run and the channel set (E, M)
 
 First-run's channel step is a toggle set on one CasparCG host (a pick on another host starts the
-set there); `Use this channel` / `Use these N channels`, and `… anyway` after the occupancy lines —
-one line per ADDED channel already on air. One channel → `set-config(firstRunBank(ch))`,
+set there); `Use this channel` / `Use these channels` — the count picked, or offered while none is
+(`DELTA-MULTI-CHANNEL-01-A` A8) — and `… anyway` after the occupancy lines — one line per ADDED
+channel already on air. A picked chip wears the console's one "chosen, not on air" fill. One channel → `set-config(firstRunBank(ch))`,
 byte-identical; two or more → one `set-banks`. Station setup's **Change channel…** is the same step,
 opened on the declared set (a declared channel the Playout does not list shows as `CH n`), and
 `nextChannelSet` builds the set: a kept channel keeps its bank, an added one gets first-run's, and a

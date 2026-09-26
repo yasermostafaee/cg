@@ -306,9 +306,14 @@ type ShownRow = CatalogueChannel & { readonly unnamed?: true };
 const sameCoordinate = (a: ChannelCoordinate, b: ChannelCoordinate): boolean =>
   a.casparHost === b.casparHost && a.casparChannel === b.casparChannel;
 
-/** The commit's label: one channel reads as it always did; a set says its size. */
+/**
+ * `DELTA-MULTI-CHANNEL-01-A` A8 — the commit's label FOLLOWS THE COUNT: `Use this channel` for one,
+ * `Use these channels` for two or more. `count` is the channels picked — or, while none is, the
+ * channels offered, so a list of two never reads "this channel" before anything is chosen (the
+ * owner's first-run, 2026-09-25).
+ */
 function commitLabel(count: number, warned: boolean): string {
-  const what = count > 1 ? `Use these ${String(count)} channels` : 'Use this channel';
+  const what = count > 1 ? 'Use these channels' : 'Use this channel';
   return warned ? `${what} anyway` : what;
 }
 
@@ -322,8 +327,8 @@ interface OnAirLine {
 /**
  * 🔴 `DESKTOP-APPS-01-D` — **THE CHANNEL CHOICE, first-run's and Station setup's alike.**
  *
- * a — NOTHING IS PRESELECTED in first-run: `initial` is empty there, and "Use this channel" stays
- *     disabled until the admin clicks a row. Each row names the Playout's channel AND its number
+ * a — NOTHING IS PRESELECTED in first-run: `initial` is empty there, and the commit stays disabled
+ *     until the admin clicks a row. Each row names the Playout's channel AND its number
  *     (`… · CH 1`).
  * d — before the channels are DECLARED, `prepare` puts in force what the reading needs (first-run:
  *     the connection), each ADDED channel's occupancy is read, and a channel already on air with
@@ -537,7 +542,9 @@ export function ChannelStep({
                   {group.host}
                 </h4>
               )}
-              <div style={styles.channels}>
+              {/* A8 — `cg-channel-choice`: a picked chip wears the console's one "chosen, not on
+                  air" treatment (`controls.css`); a secondary `Button` alone gets no fill for it. */}
+              <div style={styles.channels} className="cg-channel-choice">
                 {(group.rows as readonly ShownRow[]).map((row) => {
                   const on = isPicked(row);
                   return (
@@ -637,7 +644,9 @@ export function ChannelStep({
       )}
       <div style={styles.row}>
         <Button variant="primary" disabled={!ready} onClick={() => void commit()}>
-          {busy ? 'Setting up…' : commitLabel(channels.length, warned)}
+          {busy
+            ? 'Setting up…'
+            : commitLabel(channels.length > 0 ? channels.length : rows.length, warned)}
         </Button>
       </div>
     </>

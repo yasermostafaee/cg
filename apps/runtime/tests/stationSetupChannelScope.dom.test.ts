@@ -114,7 +114,7 @@ describe('e / M — Change channel… edits the station’s channel SET', () => 
     const section = sectionOf(await renderStationSetup({ section: 'channel' }), 'channel');
     await press(buttonNamed(section, /^Change channel…$/));
     await press(rowOf(section, 2));
-    await press(buttonNamed(section, /^Use these 2 channels$/));
+    await press(buttonNamed(section, /^Use these channels$/));
     expect(s.fixedSetBanks).toHaveBeenCalledTimes(1);
     expect(s.fixedSetBanks.mock.calls[0]?.[0]).toEqual({
       banks: [SETUP_BANK, firstRunBank(2)],

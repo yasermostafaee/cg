@@ -220,7 +220,9 @@ Playout's host, and the channel. It SHALL carry no explanatory prose and no way 
 
 #### Scenario: Two channels in one write
 
-- **WHEN** the station-admin picks two channels and presses `Use these 2 channels` **THEN** one `fixedLayers.set-banks` declares both, each with first-run's bank **AND** a second press on a picked channel takes it back out
+- **WHEN** the station-admin picks two channels and presses `Use these channels` **THEN** one `fixedLayers.set-banks` declares both, each with first-run's bank **AND** a second press on a picked channel takes it back out
+- **WHEN** two channels are offered and none is picked **THEN** the button reads `Use these channels` **AND** with one picked it reads `Use this channel` (`DELTA-MULTI-CHANNEL-01-A` A8)
+- **WHEN** a channel is picked **THEN** its chip wears the console's chosen-not-on-air fill, and an unpicked one does not
 - **WHEN** a channel on another CasparCG host is picked **THEN** the set starts again on that host
 
 ### Requirement: A channel's view shows only that channel
@@ -271,7 +273,7 @@ The Channel section SHALL offer a station-admin **Change channel…**, the edito
 
 ### Requirement: Choosing a channel warns before declaring one already on air
 
-First-run's channel step SHALL preselect nothing, SHALL name each channel and its number, and, after putting the connection in force, SHALL read the occupancy of each channel being added; each channel already on air SHALL earn one line — its name, `CH n` and the layers — and the set SHALL be declared only on a second press, reading `Use this channel anyway` or `Use these N channels anyway`. An empty channel SHALL get no warning. Station setup's Change channel… SHALL apply the same step, opening on the declared set, reading the occupancy only of the channels it adds.
+First-run's channel step SHALL preselect nothing, SHALL name each channel and its number, and, after putting the connection in force, SHALL read the occupancy of each channel being added; each channel already on air SHALL earn one line — its name, `CH n` and the layers — and the set SHALL be declared only on a second press, reading `Use this channel anyway` or `Use these channels anyway`. An empty channel SHALL get no warning. Station setup's Change channel… SHALL apply the same step, opening on the declared set, reading the occupancy only of the channels it adds.
 
 #### Scenario: The programme channel
 

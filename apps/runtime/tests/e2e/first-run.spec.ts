@@ -226,7 +226,20 @@ test('first-run: the address, the check, a station-admin sign-in, the channel �
   expect(
     (stationFile('bridge-playout.json') as { playout: { issuer?: string } }).playout.issuer,
   ).toBe(playout.issuer);
+  /*
+    `DELTA-MULTI-CHANNEL-01-A` A8 — A PICKED CHIP LOOKS PICKED. It wore nothing but `aria-pressed`:
+    the chips are `secondary` Buttons and `.is-on` paints no secondary. Measured here, in a browser,
+    because paint is not a jsdom fact (golden rule 12). The fill is the console's one "chosen, not
+    on air" treatment, `--r-look-btn-sel-bg` #2e4e67. Polled: `.cg-btn` transitions its background.
+  */
+  const fill = (): Promise<string> =>
+    programme.evaluate((b) => getComputedStyle(b).backgroundColor);
+  const PICKED = 'rgb(46, 78, 103)';
+  expect(await fill(), 'CONTROL — unpicked, the chip is not in the picked fill').not.toBe(PICKED);
   await programme.click();
+  await page.mouse.move(5, 5);
+  await expect(programme).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(fill, { timeout: 4000 }).toBe(PICKED);
 
   // ── 4 · the serve address is detected; the station is written ─────────────
   await expect(firstRun.locator('#cg-first-run-serve')).not.toHaveValue('', { timeout: 20_000 });
