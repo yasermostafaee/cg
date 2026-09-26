@@ -6358,6 +6358,15 @@ input[type='checkbox']:disabled:checked {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /*
+    🔴 `UI-POLISH-01` B — THE BODY FILLS THE DIALOG, SO THE DIVIDER DOES. The owner saw the line
+    between the list and the details stop a short way down with one template: this box was
+    CONTENT-SIZED, so `.cg-tpl-layout`'s `flex: 1` below had no free space to grow into and the
+    aside — whose left border IS the divider — ended where the one row did. The frame's height is
+    already fixed (`size="library"` is framed); this only lets the layout take it. Not a fixed
+    height: a long list still scrolls inside `.cg-tpl-list`.
+  */
+  flex: 1 1 auto;
 }
 /* `.template-layout{grid-template-columns:776px 342px}` — the ASIDE is the fixed half. */
 .cg-tpl-layout {
