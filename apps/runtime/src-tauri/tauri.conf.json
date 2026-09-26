@@ -13,6 +13,7 @@
         "label": "main",
         "title": "CG Control",
         "url": "index.html",
+        "dragDropEnabled": false,
         "width": 1600,
         "height": 900,
         "minWidth": 1100,

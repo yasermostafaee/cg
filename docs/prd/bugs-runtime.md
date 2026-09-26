@@ -12715,3 +12715,11 @@ The look badge asked `isOnAir`, which is true for `error`, so after Bed 59's ref
 said `look-2 ON AIR NOW` under a row reading ERROR. **Fix:** it asks `claimsAir`, the row's own green ON
 AIR mark (`on-air`, or an acknowledged take), and so do its "actually on air" notes. Tests:
 `lookBindings.dom.test.ts`, `look-inputs.spec.ts`.
+
+## [~] B-280 — Drag and drop did nothing in the installed apps: Tauri's native handler took every drop ⟨priority: high⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` F
+
+In the installed CG Designer an asset dragged from Assets onto the canvas was not added, though the
+same drag works in the browser. Tauri 2's `dragDropEnabled` defaults to true, and on Windows its native
+handler then takes the drop before the page's HTML5 events fire. **Fix:** `"dragDropEnabled": false` on
+both apps' window (CG Control drops a `.vcg` into its picker and reorders list fields the same way).
+Tests: `tauriWindows.test.ts` in each app. The proof is a real OS drag in the new installer.

@@ -213,3 +213,23 @@ auto-cached on `packageManager`, and v6 limited that to npm (ours is pnpm, so v7
 here); `download-artifact` v5 changed the path of a download BY ID (ours is by name pattern with
 `merge-multiple`) and v8 errors on a hash mismatch; the runners need 2.327.1, which GitHub-hosted ones
 are. Our own Node stays as `.nvmrc` says (22). **Shared CI config.**
+
+## §10 F — drag and drop in the installed apps
+
+- **Cause, confirmed in the source of the locked version** (`tauri` 2.11.6, `tauri-utils` 2.9.3):
+  `drag_drop_enabled` defaults to true — _"Disabling it is required to use HTML5 drag and drop on the
+  frontend on Windows."_ With it on, WebView2's drops go to Tauri's native handler and the page's
+  `dragover`/`drop` never fire. Neither `tauri.conf.json` set it, so both apps had it on.
+- **Which gestures:** the Designer's Assets-panel drag onto the canvas is HTML5
+  (`AssetThumb` sets `application/x-cg-asset-id`), and so is a file dragged from Explorer (the page reads
+  `dataTransfer.files`); both were taken by the native handler, and both reach the page with it off —
+  WebView2 then delivers Explorer's files as HTML5 `File` drops. Nothing listens for Tauri's native
+  drag-drop events in either app.
+- **CG Control too:** its template picker takes a `.vcg` dropped from Explorer, and the Inspector's list
+  field reorders by HTML5 drag — so its window gets the same setting.
+- **Fixed:** `"dragDropEnabled": false` on each app's one window (`main`); the shells build no window at
+  run time. A synthetic JavaScript drag cannot prove it — Tauri's handler takes only real OS drags — so
+  the test pins the configuration, and the proof is the owner's hand on the new installer. The
+  installer smoke does not perform an OS drag, and adding one is not cheap.
+- `turbo.json`'s `test` inputs gain `src-tauri/tauri.conf.json`, because the new tests read it: without
+  it a change to the config alone would replay a cached green. **Shared config.**

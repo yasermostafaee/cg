@@ -103,3 +103,11 @@
       `cache` and `cache/restore`@v6, `paths-filter`@v4 — in `pr.yml`, `desktop.yml` and `b078-soak.yml`
       (31 references); each confirmed `node24` from its own `action.yml` at the release tag.
 - [ ] 7.2 The next CI run shows no Node 20 warning — its URL recorded here.
+
+## 8. F — drag and drop in the installed apps (`B-280`)
+
+- [x] 8.1 `"dragDropEnabled": false` on the `main` window of both apps (`tauri.conf.json`).
+- [x] 8.2 Tests: `tauriWindows.test.ts` in each app — every window declares it; control: the same check
+      fails for a window without the key; planted red: the runtime config without the key fails it
+      (`expected [ 'main' ] to deeply equal []`). `turbo.json` `test` inputs hash the config.
+- [ ] 8.3 The owner drags an asset onto the canvas, and a file from Explorer, in the new installed apps.
