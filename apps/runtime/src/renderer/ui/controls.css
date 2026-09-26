@@ -3333,6 +3333,48 @@ input[type='checkbox']:disabled:checked {
   border-bottom-color: var(--r-ready);
 }
 
+/*
+ * 🔴 `UI-POLISH-01` A — **THE CHANNEL TABS, THE OUTER LEVEL, ARE A FINISHED CONTROL.**
+ *
+ * Seen by the owner (2026-09-26, two channels declared): a rule ran under both tabs and the
+ * active one was hard to tell — its fill (`#141b25`) sat one unit off the header's own ground
+ * (`#121b26`). They were inline style objects; they are classes now, like every other level.
+ *
+ * - NO RULE under the strip or under an inactive tab: the header draws its own bottom edge.
+ * - The ACTIVE tab is a FILLED BOX in the reference's own channel-switcher colours
+ *   (`docs/ui-reference/runtime-redesign/01-template-picker.html:202-205`, `.channel-switcher
+ *   select`: fill `#1e3348`, line `#5985aa`, radius 5 px). ⚠ The reference draws that switcher
+ *   as a `<select>`, not as tabs; the TABS are ours (arrow keys, a mark on either tab, a dot
+ *   before each name — `UI-POLISH-01` A and G), and only their colours are borrowed.
+ * - The strip marks (`.cg-tab-signal`) sit after the name on either fill.
+ *
+ * Declared AFTER `.cg-tab[aria-selected='true']`, which ties on specificity: the later wins, so
+ * the outer level never takes the inner level's blue underline.
+ */
+.cg-tab-strip--outer {
+  gap: var(--r-space-1);
+  border-bottom: none;
+  align-items: center;
+}
+
+.cg-tab--outer {
+  padding: var(--r-channel-tab-pad-y) var(--r-channel-tab-pad-x);
+  font-size: var(--r-channel-tab-text);
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: var(--r-channel-tab-radius);
+}
+
+.cg-tab--outer:hover:not([aria-selected='true']) {
+  background: var(--r-channel-tab-hover-bg);
+}
+
+.cg-tab--outer[aria-selected='true'] {
+  color: var(--r-channel-tab-sel-ink);
+  background: var(--r-channel-tab-sel-bg);
+  border-color: var(--r-channel-tab-sel-line);
+}
+
 /* ── RECORD TABLES — the delimiter list, the catalogue, the candidate rows ───
  *
  * ONE row height, ONE cell padding, ONE hover, and REAL column headers, because a

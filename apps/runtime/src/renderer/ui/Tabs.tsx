@@ -1,6 +1,6 @@
-import { Fragment, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, type KeyboardEvent, type ReactNode } from 'react';
 import { Lock, OctagonAlert, TriangleAlert, type LucideIcon } from 'lucide-react';
-import { STATION_SETUP_PX, colors, cssVars } from '../theme.js';
+import { STATION_SETUP_PX, cssVars } from '../theme.js';
 import { Icon } from './Icon.js';
 
 /**
@@ -131,83 +131,15 @@ interface Props extends StripProps {
   children: ReactNode;
 }
 
-const styles = {
-  /*
-   * 🔴 `CONSOLE-LOOK-06` DELTA D2 — THE HORIZONTAL TAB'S OWN STYLES LEFT THIS FILE, AND THAT
-   * IS A BUG FIX. It is the SAME bug `STATION-CHROME-02` found on the rail, in the same file,
-   * on the surface next door — see the block below `styles`, which had already written the
-   * mechanism down.
-   *
-   * The base carried `borderBottom: '2px solid transparent'` (a SHORTHAND) and the selected
-   * state merged `borderBottomColor` (a LONGHAND) over it. React removes the longhand on
-   * deselect, and removing it also drops the border-*-color the shorthand contributed, so the
-   * tab is left holding a WIDTH and a STYLE with no colour. Measured in Chromium: a tab that
-   * had been clicked once read `border-bottom-color: rgb(255, 255, 255)` for the rest of the
-   * session — the owner's "light underline after they have been clicked", on `Live plates`
-   * and `Station layers` both, while an untouched strip read `rgba(0, 0, 0, 0)`.
-   *
-   * `.cg-tab` in `controls.css` is the fix and it is the rail's fix exactly: the selected
-   * state is a SELECTOR (`[aria-selected='true']`), so there is no style diff for React to get
-   * wrong and the border is a pure function of the ARIA state — which is also what the
-   * reference does. Only the OUTER (channel) level still uses the objects below; its selected
-   * state merges shorthand over shorthand, which has no such hole.
-   */
-  strip: {
-    display: 'flex',
-    alignItems: 'stretch',
-    gap: '22px',
-    borderBottom: `1px solid ${colors.border}`,
-    flexShrink: 0,
-  },
-  tab: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.4rem',
-    padding: '12px 0 9px',
-    fontSize: '13px',
-    fontWeight: 550,
-    letterSpacing: '0.04em',
-    background: 'transparent',
-    border: 'none',
-    borderBottom: '2px solid transparent',
-    color: colors.textMuted,
-    cursor: 'pointer',
-  },
-  activeTab: { color: colors.ready, borderBottomColor: colors.ready },
-  /**
-   * The CHANNEL level. Distinguished by SHAPE (a raised, boxed tab that sits on a
-   * sunken strip) rather than by colour alone, so the outer axis is obvious even
-   * when only one channel exists — the point being that adding a second channel
-   * changes nothing structural.
-   */
-  outerStrip: { background: colors.background, padding: '0.25rem 0.25rem 0', gap: '0.25rem' },
-  /**
-   * `AUDIT-CLOSE-01` B3 — the strip AS A FLEX ITEM inside a panel bar.
-   *
-   * The bar already draws the rule and the ground, so the strip drops both; `alignSelf`
-   * stretches it so a tab's selected underline still lands on the bar's own bottom edge,
-   * which is what makes it read as a tab rather than as a button with a line under it.
-   */
-  stripInBar: {
-    borderBottom: 'none',
-    alignSelf: 'stretch',
-    marginBlock: `calc(-1 * ${cssVars['--r-space-3']})`,
-    minWidth: 0,
-  },
-  outerTab: {
-    fontSize: '0.72rem',
-    padding: '0.35rem 0.85rem',
-    borderRadius: '0.25rem 0.25rem 0 0',
-    border: `1px solid transparent`,
-    borderBottom: 'none',
-  },
-  outerActiveTab: {
-    color: colors.text,
-    background: colors.panel,
-    border: `1px solid ${colors.border}`,
-    borderBottom: 'none',
-  },
-} as const satisfies Record<string, CSSProperties>;
+/*
+ * 🔴 `UI-POLISH-01` A — THE OUTER (CHANNEL) LEVEL'S INLINE STYLE OBJECTS LEFT THIS FILE TOO.
+ *
+ * `CONSOLE-LOOK-06` DELTA D2 moved the INNER tab here to `.cg-tab` and `STATION-CHROME-02` moved
+ * the RAIL to `.cg-rail*`, each fixing a style-diff hole a selector cannot have. The channel level
+ * was the last one on inline objects, and it is what the owner saw as unfinished: a rule under both
+ * tabs and an active fill one unit off the header's ground. It is `.cg-tab-strip--outer` /
+ * `.cg-tab--outer` in `controls.css` now — the selected state a SELECTOR, the colours tokens.
+ */
 
 /*
  * 🔴 `STATION-CHROME-02` §3 — **THE RAIL'S STYLES LEFT THIS FILE, AND THAT IS A BUG FIX.**
@@ -253,12 +185,43 @@ export function TabStrip({
   const outer = level === 'outer';
   const vertical = orientation === 'vertical';
   let lastGroup: string | undefined;
+  /*
+    `UI-POLISH-01` A — the CHANNEL tabs answer the arrow keys: ← / → move focus to the previous /
+    next tab (wrapping), Home / End to the ends. MANUAL activation — focus moves, and the channel
+    changes only on Enter or Space — because switching channels changes what every verb on the
+    screen addresses, and an arrow press is not the moment to do that. Every tab stays its own
+    Tab stop, as before. Outer level only: the inner strips and the rail are unchanged.
+  */
+  const moveFocus = (e: KeyboardEvent<HTMLButtonElement>): void => {
+    const step =
+      e.key === 'ArrowRight'
+        ? 1
+        : e.key === 'ArrowLeft'
+          ? -1
+          : e.key === 'Home' || e.key === 'End'
+            ? 0
+            : null;
+    if (step === null) return;
+    const list = e.currentTarget.parentElement;
+    if (list === null) return;
+    const tabs = [...list.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const at = tabs.indexOf(e.currentTarget);
+    if (at < 0 || tabs.length === 0) return;
+    e.preventDefault();
+    const next =
+      e.key === 'Home'
+        ? 0
+        : e.key === 'End'
+          ? tabs.length - 1
+          : (at + step + tabs.length) % tabs.length;
+    tabs[next]?.focus();
+  };
   const list = (
     <div
       {...(vertical
         ? { className: 'cg-rail-tabs' }
         : outer
-          ? { style: { ...styles.strip, ...styles.outerStrip } }
+          ? { className: 'cg-tab-strip cg-tab-strip--outer' }
           : { className: `cg-tab-strip${inPanelBar ? ' cg-tab-strip--in-bar' : ''}` })}
       role="tablist"
       aria-label={ariaLabel}
@@ -266,8 +229,6 @@ export function TabStrip({
     >
       {tabs.map((tab) => {
         const active = tab.id === activeId;
-        const base = outer ? { ...styles.tab, ...styles.outerTab } : styles.tab;
-        const activeStyle = outer ? styles.outerActiveTab : styles.activeTab;
         const heading = vertical && tab.group !== undefined && tab.group !== lastGroup;
         if (vertical) lastGroup = tab.group;
         return (
@@ -287,7 +248,7 @@ export function TabStrip({
               {...(vertical
                 ? { className: 'cg-rail-tab' }
                 : outer
-                  ? { style: active ? { ...base, ...activeStyle } : base }
+                  ? { className: 'cg-tab cg-tab--outer', onKeyDown: moveFocus }
                   : { className: 'cg-tab' })}
               onClick={() => onSelect(tab.id)}
             >

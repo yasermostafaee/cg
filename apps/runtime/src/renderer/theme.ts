@@ -2754,6 +2754,22 @@ export const cssVars = {
   '--r-app-head-btn-gap': `${String(APP_HEAD_PX.btnGap)}px`,
   '--r-app-head-btn-text': `${String(APP_HEAD_PX.btnText)}px`,
   '--r-app-head-btn-radius': `${String(APP_HEAD_PX.btnRadius)}px`,
+  /*
+   * 🔴 `UI-POLISH-01` A — THE CHANNEL TABS. The selected tab is a FILLED BOX in the reference's
+   * own channel-switcher colours (`01-template-picker.html:202-205`, `.channel-switcher select`:
+   * `background:#1e3348; border-color:#5985aa; border-radius:5px; font-size:13px`). The old
+   * selected fill was `--r-surface` `#141b25` on the header's `#121b26` — one unit apart, which is
+   * why the owner could not tell the active channel. White ink on `#1e3348` is ~12.8:1; the
+   * inactive tab's muted ink on the header ground is ~6.2:1 — both past AA.
+   */
+  '--r-channel-tab-pad-y': '5px',
+  '--r-channel-tab-pad-x': '12px',
+  '--r-channel-tab-text': '13px',
+  '--r-channel-tab-radius': '5px',
+  '--r-channel-tab-hover-bg': 'rgba(89, 133, 170, 0.14)',
+  '--r-channel-tab-sel-bg': '#1e3348',
+  '--r-channel-tab-sel-line': '#5985aa',
+  '--r-channel-tab-sel-ink': '#ffffff',
   '--r-subbar-h': `${String(LAYER_SUBBAR_PX.h)}px`,
   '--r-subbar-pad': `${String(LAYER_SUBBAR_PX.padY)}px ${String(LAYER_SUBBAR_PX.padX)}px`,
   '--r-subbar-gap': `${String(LAYER_SUBBAR_PX.gap)}px`,
