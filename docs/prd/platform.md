@@ -3437,3 +3437,16 @@ Each was confirmed from the runtime its own `action.yml` declares at the release
 crossed major's release notes were read against these workflows. Our own Node stays as `.nvmrc`
 says (22). **Why.** GitHub warned "Node.js 20 is deprecated" on every run. **Acceptance:** WHEN CI
 runs THEN no step warns that it runs on Node 20. **Shared CI config.**
+
+## [ ] P-056 — Bridge tests on the default connection would dial a running dev station's 127.0.0.1:5250 ⟨priority: low⟩ — FILED 2026-09-26 by `FIELD-FIXES-01`
+
+**What.** `reconfigure.integration.test.ts` starts bridges with `createBridge({ port: 0 })` — the
+default connection, server A `127.0.0.1:5250` with OSC on 6250. On a machine running
+`pnpm dev:station` those are the station's ports. On 2026-09-26 the test bridges could not dial it
+only because the station also held `127.0.0.1:6250`: a bridge that cannot bind its OSC port never
+dials AMCP (`server-session.ts`, the session loop). Were the OSC port free, each would open a session
+to the station and send `VERSION`, `INFO` and `INFO CONFIG`. The first of them tests the default
+itself (`bridge.host` is `127.0.0.1`), so it cannot simply be pointed elsewhere. First-run's
+Check-rerun e2e had the same reach and was moved off it (`eac4e7c0`). **Why.** The gate runs these on
+every push, and a developer's dev station is not a test's to reach. **Acceptance:** WHEN the gate
+runs beside a running dev station THEN no test bridge opens a connection to `127.0.0.1:5250`.
