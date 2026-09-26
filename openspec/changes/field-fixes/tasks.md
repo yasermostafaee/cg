@@ -45,6 +45,8 @@
       PLAY back after CLEAR as its control (design §4). Local (Windows, not a discharge): the
       whole runtime suite 261/261. `MockRuntime.test.ts`: the seated seed row's take is refused with
       nothing seated twice, and the two out-then-take cases wait for OUT to settle.
+- [x] 2.6 CI at `85f39125`: https://github.com/yasermostafaee/cg/actions/runs/36247677294 — every job RAN, `e2e` success; Desktop
+      https://github.com/yasermostafaee/cg/actions/runs/36247677409.
 
 ## 3. The AMCP log (`B-276`)
 
@@ -60,6 +62,8 @@
       desktop shell starts it writing `<state-home>/logs/amcp.log` with no exchange on its stderr
       (the control) — red first against HEAD's CLI: `no AMCP log at …\CG Control\logs\amcp.log`;
       `command-queue.test.ts` +4; `station-plan.test.ts` (the dev station's path, inside its state).
+- [x] 3.5 CI at `c22845e3`: https://github.com/yasermostafaee/cg/actions/runs/36248396193 — every job RAN, `e2e` success; Desktop
+      https://github.com/yasermostafaee/cg/actions/runs/36248396177.
 
 ## 4. A — one mapping (`B-277`)
 
@@ -70,6 +74,8 @@
       file line; a stream is a file line and a route is not; every code 400–503 with and without a
       command never says "AMCP" or its number; control: non-reply codes are not the mapping's);
       `errorCodeMessage.test.ts` and `rowState.errorReason.test.ts` re-pinned to the words.
+- [x] 4.3 CI at `65a863d8`: https://github.com/yasermostafaee/cg/actions/runs/36249527939 — every job RAN, `e2e` success; Desktop
+      https://github.com/yasermostafaee/cg/actions/runs/36249527953.
 
 ## 5. B — the refusal lives with the row (`B-278`)
 
@@ -87,6 +93,8 @@
       none); e2e `take-refusal-line.spec.ts` (the row and the Inspector say the line, no banner, no
       "AMCP"; the other channel shows only the mark, measured against a baseline; control: a take
       that lands clears the line and the mark).
+- [x] 5.6 CI at `5f594ed2` (carries B, `4ff40c5c`): https://github.com/yasermostafaee/cg/actions/runs/36252793158 — every job RAN, `e2e`
+      success; Desktop https://github.com/yasermostafaee/cg/actions/runs/36252793177.
 
 ## 6. C — the Inspector never claims unconfirmed air (`B-279`)
 
@@ -96,13 +104,18 @@
       flight are not `ON AIR NOW` — red first 4/4 against the old badge; control: an acknowledged
       take is); e2e `look-inputs.spec.ts` (a refused take does not claim air for its look; control: a
       take that lands does).
+- [x] 6.3 CI at `b6ac0c47`: https://github.com/yasermostafaee/cg/actions/runs/36253740906 — every job RAN, `e2e` success; Desktop
+      https://github.com/yasermostafaee/cg/actions/runs/36253740912.
 
 ## 7. E — CI actions on Node 24 (`P-055`)
 
 - [x] 7.1 `checkout`@v7, `setup-node`@v7, `upload-artifact`@v7, `download-artifact`@v8, `pnpm/action-setup`@v6,
       `cache` and `cache/restore`@v6, `paths-filter`@v4 — in `pr.yml`, `desktop.yml` and `b078-soak.yml`
       (31 references); each confirmed `node24` from its own `action.yml` at the release tag.
-- [ ] 7.2 The next CI run shows no Node 20 warning — its URL recorded here.
+- [x] 7.2 No Node 20 warning in the next runs, read from each job's annotations: `76bc9628`'s own
+      https://github.com/yasermostafaee/cg/actions/runs/36254145850 (its `e2e` SKIPPED — a workflow-only diff), and `f9c9b816`'s
+      https://github.com/yasermostafaee/cg/actions/runs/36257436440, whose `e2e` RAN and passed — the annotations there are the lint warnings
+      and the runner-image notice, nothing about Node 20.
 
 ## 8. F — drag and drop in the installed apps (`B-280`)
 
@@ -110,6 +123,8 @@
 - [x] 8.2 Tests: `tauriWindows.test.ts` in each app — every window declares it; control: the same check
       fails for a window without the key; planted red: the runtime config without the key fails it
       (`expected [ 'main' ] to deeply equal []`). `turbo.json` `test` inputs hash the config.
+- [x] 8.4 CI at `ef254448`: https://github.com/yasermostafaee/cg/actions/runs/36254981826 — every job RAN, `e2e` success; Desktop
+      https://github.com/yasermostafaee/cg/actions/runs/36254981823.
 - [ ] 8.3 The owner drags an asset onto the canvas, and a file from Explorer, in the new installed apps.
 
 ## 9. G — the name once, with the Apasai logo (`B-281`)
@@ -126,6 +141,8 @@
       `auditPanel.logFolder.dom.test.ts` (control: absent in a browser),
       `contextMenuSuppression.dom.test.ts` retargeted to the header's spacer; the installer smoke reads
       both title bars. `turbo.json` `test` inputs widened.
+- [x] 9.7 CI at `f9c9b816`: https://github.com/yasermostafaee/cg/actions/runs/36257436440 — every job RAN, `e2e` success; Desktop
+      https://github.com/yasermostafaee/cg/actions/runs/36257436445 (the installer smoke read both new title bars).
 - [ ] 9.6 The owner sees one name, the Apasai logo in the title bar and taskbar, and no menu bar.
 
 ## 10. I — five rows per band for a new bank (`R-070`)
@@ -141,6 +158,16 @@
       (two channels with OSC, five and five each, row 90 kept by its producer, 1920 × 1080 without a
       scroll; control: the no-OSC first-run shows every row) — the e2e needs TCP 5250 and UDP 6250,
       which a dev station held here, so it is CI's.
+- [x] 10.3 CI RED at `b1fb8d00`, https://github.com/yasermostafaee/cg/actions/runs/36258166170: the new first-run test never closed the dialog
+      — it probed for its second press with `isVisible({ timeout })`, which does not wait, met
+      "Setting up…", and left the on-air warning for 2-90 waiting for "Use these channels anyway".
+      Fixed in `378f1052` (the test waits for the warning and presses "anyway"; the product was not at
+      fault), reproduced and verified locally first on 127.0.0.2 in an uncommitted copy. Green there:
+      https://github.com/yasermostafaee/cg/actions/runs/36260734471 — `e2e` RAN, `first-run.spec.ts:516` passed; Desktop https://github.com/yasermostafaee/cg/actions/runs/36260734359.
+- [x] 10.4 An existing saved bank is unchanged after an upgrade: `default-bank-boot` boots a bank saved
+      with every row shown — the pre-I first-run bank, 30 rows — and reads it back as written.
+- [x] 10.5 `eac4e7c0`: first-run's Check-rerun case no longer dials this machine's 127.0.0.1:5250 (a
+      dev station's); https://github.com/yasermostafaee/cg/actions/runs/36261324201 — `e2e` RAN and passed; Desktop https://github.com/yasermostafaee/cg/actions/runs/36261324191.
 
 ## 11. K — silence controls live only when there is something to silence (`B-282`)
 
@@ -152,6 +179,9 @@
       `silence-controls.spec.ts` (amber and live with the seeded plates; after CLEAR disabled, neutral
       by computed ground, the same height, the bridge's words — red first without the CSS rule);
       `fillBridgeStub` answers an empty ledger.
+- [x] 11.4 CI at `44a4e625`, https://github.com/yasermostafaee/cg/actions/runs/36259622599: `e2e` RAN; red only on I's first-run test (10.3),
+      `silence-controls.spec.ts` passed. Discharged at `378f1052`, which carries it: https://github.com/yasermostafaee/cg/actions/runs/36260734471
+      — `silence-controls.spec.ts:31` passed.
 
 ## 12. L — another system's layers: below the bands normal, inside them dismissible (`B-283`)
 
