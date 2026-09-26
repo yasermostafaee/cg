@@ -1003,6 +1003,15 @@ payloads are dropped silently (a broadcast frame can't write logs).
 - **New value transform** (e.g. a new formatter): add it to `BindingTransformSchema`
   and `applyTransform` (`transforms.ts`); reuse `@cg/text-shaping` for
   Persian/RTL-aware formatting.
+- **Reading a NUMBER, a TIME OF DAY or a DURATION out of a field value** (a
+  `transform` target, the `clock-target` binding): read it through
+  `@cg/text-shaping`'s one reader — `readLocalizedNumber` / `parseTimeOfDay` /
+  `parseDurationMs` (`numerals.ts`) — never a bare `Number()` or a local `\d`
+  regex. An operator on a Persian keyboard sends `۲۰:۳۲` and `۰٫۵`; `\d` without
+  the `u` flag and `Number()` both reject them (`PERSIAN-DIGITS-01`). Where a
+  value may already arrive in a Latin form another client relies on, keep
+  `Number()` FIRST and fall back to the reader (`bindings.ts`'s
+  `transformNumber`).
 
 ### Add a new animatable property
 

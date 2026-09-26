@@ -66,8 +66,9 @@ data; the Designer's exported single-file page driven through `update()`):
   (a `transform` target reads a localized number when `Number()` cannot). **On-air source.**
 - `apps/runtime` — `NumericInput` gains an as-typed mode; the Inspector's number field uses it,
   refuses in one line and withdraws its draft on text that is not a number (`unstageField`).
-- `apps/designer` — `LocalizedNumberInput` primitive; the number-field default, preview form,
-  repeater number cells and dwell use it; `validateField` reads patterns through
+- `apps/designer` — `ui/typedNumber.ts` (`useTypedNumber`) backs the preview form's number
+  field, the repeater number cells and the dwell; `RealtimeNumberInput` / `NumberField` gain an
+  opt-in `digits="as-typed"` for the number-field default; `validateField` reads patterns through
   `latinNumerals`; `rebuildField` reads a text default through the shared reader.
 - Specs: NEW capability `template-value-digits`; MODIFIED `runtime-ui` (the R-020 requirement is
   scoped to console numbers); the pending `add-azan-countdown` delta amended in place.

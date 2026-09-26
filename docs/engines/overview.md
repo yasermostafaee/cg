@@ -197,15 +197,15 @@ reference that resolves in neither store is reported by `Exporter.preflight`
 
 ## Where the engines live
 
-| Engine / package                                          | Responsibility                                                                                         |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| [`@cg/shared-schema`](../../packages/shared-schema)       | The data model (Zod): scenes, elements, fields, bindings, animation, lifecycle, playout, compositions. |
-| [`@cg/template-runtime`](../../packages/template-runtime) | Build DOM from a scene, bind data, animate, drive lifecycle/playout. **The heart.**                    |
-| [`@cg/vcg-format`](../../packages/vcg-format)             | Isomorphic pack / unpack / verify of `.vcg` template packages.                                         |
-| [`@cg/text-shaping`](../../packages/text-shaping)         | Persian/RTL-aware transforms (digits, dates, truncation) used by bindings.                             |
-| [`@cg/lottie-bridge`](../../packages/lottie-bridge)       | Lottie import allowlist, marker→phase mapping, and the `lottie_light` player mount (D-125).            |
-| `apps/designer`                                           | Canvas editor, inspector, preview, exporters.                                                          |
-| `apps/runtime`                                            | Playout controller (CasparCG via the local bridge / mock).                                             |
+| Engine / package                                          | Responsibility                                                                                                                                                  |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@cg/shared-schema`](../../packages/shared-schema)       | The data model (Zod): scenes, elements, fields, bindings, animation, lifecycle, playout, compositions.                                                          |
+| [`@cg/template-runtime`](../../packages/template-runtime) | Build DOM from a scene, bind data, animate, drive lifecycle/playout. **The heart.**                                                                             |
+| [`@cg/vcg-format`](../../packages/vcg-format)             | Isomorphic pack / unpack / verify of `.vcg` template packages.                                                                                                  |
+| [`@cg/text-shaping`](../../packages/text-shaping)         | Persian/RTL-aware transforms (digits, dates, truncation) used by bindings; the one reader of a number, time or duration typed in any digit set (`numerals.ts`). |
+| [`@cg/lottie-bridge`](../../packages/lottie-bridge)       | Lottie import allowlist, marker→phase mapping, and the `lottie_light` player mount (D-125).                                                                     |
+| `apps/designer`                                           | Canvas editor, inspector, preview, exporters.                                                                                                                   |
+| `apps/runtime`                                            | Playout controller (CasparCG via the local bridge / mock).                                                                                                      |
 
 ## Deeper reading
 
