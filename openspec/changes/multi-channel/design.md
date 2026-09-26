@@ -363,7 +363,30 @@ min against 24 − ~1.6 setup − ~1 build ≈ 21.4 usable: 3.4 min of margin.
 - **A8** — the label counts the picked channels, or the offered ones while none is; the chips joined
   the console's one "chosen, not on air" selector family (`.is-on` paints no `secondary`).
 
-## §16 — Follow-ups (named, not done)
+## §16 — `DELTA-MULTI-CHANNEL-01-B` (the owner's run of `dev:station` against a Playout that was off)
+
+- **The run, from the record.** `%LOCALAPPDATA%\CG Control Dev\bridge.log` (this checkout — the
+  file exists only since A1's `1993515d`): `auth: PLAYOUT` against `192.168.21.111:8080`, first-run
+  `channel` phase, the console served by Vite from the working tree (the stub `console/index.html`,
+  written 12:34:03 local, points at `:5174`). `HEAD` then was `93130ef6` (12:23:28), with A2 in
+  progress uncommitted; the bridge stopped at 12:49:44. No `connection check` line — the check never
+  reached its handler.
+- **B1 — refused at the door, since the check shipped.** `setup.check` is a `read` route behind the
+  auth gate, and `openToUnauthenticated` admits capabilities and `auth.*` only (`1ebc76b2`, C-037);
+  the check has been refused to an unsigned socket on an authenticating station since `292dd9ec`.
+  `CHECK-RERUN-01`'s lines-with-the-Playout-off were the `target` phase, auth OFF. Now the check is at
+  the door and NARROW before a sign-in — this station's Playout, no named host — because it makes
+  the bridge reach out, and an open door must not be a network probe. ADR 0010 rule 4 amended.
+- **"Nothing was done", not "nothing was sent to CasparCG"** — for the three refusals that answer
+  any channel (auth, lock, skew). The channel-scoped two keep CasparCG: it is involved.
+- **B2 — one predicate, two doors.** `signInCanWork` (API and CORS pass) gates Connect and every
+  sign-in form; `signInBlocker` is the one line in the check's words. A silent Playout during a
+  sign-in re-runs the check instead of marking a field.
+- **B3 — reverses `R-066`'s Persian sign-in** (`playout-auth-signin` design §8, struck). The
+  Playout's own answer goes to the LOG through `auth.sign-in-failure`: the bridge treats it as
+  untrusted (one line, no control characters, capped, rate-limited).
+
+## §17 — Follow-ups (named, not done)
 
 - **A per-channel DISMISS for "did not come back".** The bridge's dismiss is notice-wide, so a view
   holding only part of a notice offers no DISMISS. A per-channel dismiss is a bridge API change.

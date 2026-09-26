@@ -212,6 +212,10 @@ Playout's host, and the channel. It SHALL carry no explanatory prose and no way 
 - **WHEN** the address is connected **THEN** only the address is written
 - **WHEN** an operator signs in before adoption **THEN** the bridge's "not set up yet" sentence shows
   **AND** AMCP still waits
+- **WHEN** the sign-in step opens and the check says a sign-in cannot work — the Playout's keys or
+  this console's CORS entry do not pass **THEN** the fields and Sign in are disabled with the check's
+  one line, in English, and Check stays available (`DELTA-MULTI-CHANNEL-01-B` B2) **AND** only a
+  wrong username or password marks a field
 - **WHEN** a station-admin signs in **THEN** the check runs once more by itself, touching only the
   AMCP line, which the bridge holds until the Playout lets this machine in or names the approval
   **AND** only then do the channels appear

@@ -56,10 +56,19 @@ discharged by the later one's run, which carries it.
 
 ## 6. `DELTA-MULTI-CHANNEL-01-A` (`design.md` §15)
 
-- [x] 6.1 A1 — `--fake` runs a whole station; its own integration test (a take on channel 1 reaches the mock on channel 1 only; control: the default seal leaves AMCP pending) — `1993515d`
-- [x] 6.2 A3 — a reconnect re-delivery waits for the sign-in, its notice withdraws itself — `cbc96797`
-- [x] 6.3 A4, A6 — rows and the every-channel PANIC without a reload — `93130ef6`
-- [x] 6.4 A2 — the check does not loop: one held re-run at the sign-in (`awaitLetIn`) — `b12f61ac`
-- [x] 6.5 A5 — a refusal reads one line; the refused hide's layer as data; the sweep — `c637b8df`
-- [x] 6.6 A7 — Station setup follows the channel on screen, switched while open (test) — `bfa6cd4c`
-- [x] 6.7 A8 — the button follows the count; a picked chip looks picked (e2e measures the fill) — `9af46b1e`
+- [x] 6.1 A1 — `--fake` runs a whole station; its own integration test (a take on channel 1 reaches the mock on channel 1 only; control: the default seal leaves AMCP pending) — `1993515d`; e2e https://github.com/yasermostafaee/cg/actions/runs/36231411641
+- [x] 6.2 A3 — a reconnect re-delivery waits for the sign-in, its notice withdraws itself — `cbc96797`; e2e https://github.com/yasermostafaee/cg/actions/runs/36231411641
+- [x] 6.3 A4, A6 — rows and the every-channel PANIC without a reload — `93130ef6`; e2e https://github.com/yasermostafaee/cg/actions/runs/36231411641 (Desktop https://github.com/yasermostafaee/cg/actions/runs/36231411501, both installer jobs `completed/success`)
+- [x] 6.4 A2 — the check does not loop: one held re-run at the sign-in (`awaitLetIn`) — `b12f61ac`; e2e https://github.com/yasermostafaee/cg/actions/runs/36234622859
+- [x] 6.5 A5 — a refusal reads one line; the refused hide's layer as data; the sweep — `c637b8df`; e2e https://github.com/yasermostafaee/cg/actions/runs/36234622859
+- [x] 6.6 A7 — Station setup follows the channel on screen, switched while open (test) — `bfa6cd4c`; e2e https://github.com/yasermostafaee/cg/actions/runs/36234622859
+- [x] 6.7 A8 — the button follows the count; a picked chip looks picked (e2e measures the fill) — `9af46b1e`; e2e https://github.com/yasermostafaee/cg/actions/runs/36234622859
+- [x] 6.8 The DELTA-A head `8fc556a5` — PR run https://github.com/yasermostafaee/cg/actions/runs/36234622859 (`E2E (Playwright)` and `Lint • Typecheck • Test • Build` both `completed/success`); Desktop run https://github.com/yasermostafaee/cg/actions/runs/36234622912 (`Installers (Windows)` and `Installer smoke (clean Windows)` both `completed/success`):
+  - CG Control — https://github.com/yasermostafaee/cg/actions/runs/36234622912/artifacts/10903493131
+  - CG Designer — https://github.com/yasermostafaee/cg/actions/runs/36234622912/artifacts/10903453349
+
+## 7. `DELTA-MULTI-CHANNEL-01-B` (`design.md` §16)
+
+- [x] 7.1 B1 — the check answers before a sign-in, for this station's Playout only; a refusal names nothing not involved (auth, lock, skew) — `27ddb19c`
+- [x] 7.2 B3 (log) — the Playout's answer to a failed sign-in reaches the bridge's log, as one untrusted line — `27ddb19c`
+- [x] 7.3 B2, B3 — a sign-in is offered only when it can work, in English; only a wrong username or password marks a field — `e0fcbdb1`

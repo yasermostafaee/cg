@@ -46,6 +46,14 @@ channel. `R-062` recorded this as a precondition of ever shipping real multi-cha
   line in the operator's words. **A7** Station setup follows the channel on screen. **A8**
   first-run's button follows the count, and a picked chip looks picked.
 
+### `DELTA-MULTI-CHANNEL-01-B` — what the owner met on `pnpm dev:station` with the Playout off
+
+- **B1** the connection check answers before a sign-in — for this station's Playout only — and a
+  refusal names nothing it cannot know is involved. **B2** a sign-in is offered only when the check
+  says it can work, and only a wrong username or password marks a field. **B3** one interface
+  language: English, with Persian only in names from the Playout; the Playout's own answer to a
+  failed sign-in goes to the log.
+
 ## Capabilities
 
 - **Modified:** `runtime-caspar-bridge`, `runtime-ui`, `designer-shell`.
@@ -58,6 +66,9 @@ channel. `R-062` recorded this as a precondition of ever shipping real multi-cha
 - **Persisted key:** the bank file gains a plural shape; a one-channel station's file is unchanged.
 - **Wire (DELTA-A):** `setup.check` gains `awaitLetIn` (A2); the bank doors' refusal gains `layer`
   (A5). Both optional; no AMCP playout verb changes — the hold repeats the check's `VERSION` probe.
+- **Wire and auth door (DELTA-B):** `setup.check` joins ADR 0010's unsigned door, narrowed to this
+  station's Playout (B1); a new `auth.sign-in-failure` note (B3); the auth, lock and skew refusal
+  sentences reworded.
 - **Shared config:** the CI `e2e` job cap and the Runtime suite's CI budget (`pr.yml`,
   `apps/runtime/playwright.config.ts`).
 - **Out of this change:** two CG Control installations on one channel; per-channel band layouts
