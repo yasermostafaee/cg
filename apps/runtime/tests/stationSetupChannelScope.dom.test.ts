@@ -1,7 +1,16 @@
 // @vitest-environment jsdom
 import { act } from 'react-dom/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { CatalogueChannel, StationStray } from '@cg/shared-ipc';
+import type {
+  CatalogueChannel,
+  FixedLayerBank,
+  FixedSlotState,
+  StationStray,
+} from '@cg/shared-ipc';
+import {
+  __resetChannelChoiceForTest,
+  selectChannel,
+} from '../src/renderer/features/channels/channelStore.js';
 import { firstRunBank } from '../src/renderer/features/firstRun/firstRunStation.js';
 import { signedInStub, setupStub } from './support/authStub.js';
 import { clearPortals } from './support/dialog.js';
@@ -234,6 +243,83 @@ describe('H — the subtitle names the channel as the Playout does (`MULTI-CHANN
     const dialog = await renderStationSetup({ section: 'channel' });
     expect(dialog.querySelector('[data-setup-channel-name]')).toBeNull();
     expect(dialog.textContent).toContain('Channel 1');
+  });
+});
+
+/*
+  🔴 `DELTA-MULTI-CHANNEL-01-A` A7 — **STATION SETUP FOLLOWS THE CHANNEL ON SCREEN**, opened on one
+  and switched while open. The channel can move under an open dialog: Change channel… taking the
+  channel on screen out of the set moves the console to the lowest declared channel. The channel's
+  own panes follow it — the subtitle, the Layers pane and its rows — and an unapplied edit made for
+  one channel never lands on the other.
+*/
+describe('A7 — Station setup follows the channel on screen', () => {
+  const BOTH = signedInStub('زهرا موسوی', [1, 2], ['station-admin', 'operator', 'viewer']);
+  const CH1: FixedLayerBank = { ...SETUP_BANK, channel: 1, aliases: { '70': 'LOGO-ONE' } };
+  const CH2: FixedLayerBank = { ...SETUP_BANK, channel: 2, aliases: { '70': 'CLOCK-TWO' } };
+  const empty = (channel: number, layer: number): FixedSlotState => ({
+    channel,
+    layer,
+    observed: { kind: 'empty' },
+    binding: null,
+  });
+
+  afterEach(() => {
+    __resetChannelChoiceForTest();
+  });
+
+  const subtitle = (dialog: HTMLElement): string =>
+    dialog.querySelector('[data-modal-subtitle]')?.textContent ?? '';
+  const names = (dialog: HTMLElement): string[] =>
+    [
+      ...sectionOf(dialog, 'candidate-layers').querySelectorAll<HTMLInputElement>(
+        'input[type="text"]',
+      ),
+    ]
+      .map((i) => i.value)
+      .filter((v) => v !== '');
+  const showTick = (dialog: HTMLElement, layer: number): HTMLInputElement | null =>
+    sectionOf(dialog, 'candidate-layers').querySelector<HTMLInputElement>(
+      `input[type="checkbox"][aria-label="Show layer ${String(layer)}"]`,
+    );
+
+  it('opens on the channel on screen and follows a switch while open — subtitle, Layers pane, rows; an edit made for channel 2 never lands on channel 1', async () => {
+    const s = stub({
+      auth: BOTH,
+      banks: [CH1, CH2],
+      slots: [empty(1, 70), empty(1, 71), empty(2, 70), empty(2, 71)],
+    });
+    selectChannel(2);
+    const dialog = await renderStationSetup({ section: 'candidate-layers' });
+
+    // Opened on channel 2: its subtitle, its bank, its row names.
+    expect(subtitle(dialog)).toMatch(/^Channel 2\b/);
+    expect(sectionOf(dialog, 'candidate-layers').textContent).toContain('Channel 2');
+    expect(names(dialog)).toContain('CLOCK-TWO');
+    expect(names(dialog)).not.toContain('LOGO-ONE');
+    // An unapplied edit on channel 2 — CONTROL: the instrument sees a draft when there is one.
+    await act(async () => {
+      showTick(dialog, 71)?.click();
+    });
+    await settleSetup();
+    expect(showTick(dialog, 71)?.checked).toBe(false);
+
+    // The channel moves under the open dialog.
+    await act(async () => {
+      selectChannel(1);
+    });
+    await settleSetup();
+
+    expect(subtitle(dialog)).toMatch(/^Channel 1\b/);
+    expect(sectionOf(dialog, 'candidate-layers').textContent).toContain('Channel 1');
+    expect(names(dialog)).toContain('LOGO-ONE');
+    expect(names(dialog)).not.toContain('CLOCK-TWO');
+    // Channel 2's draft did not follow onto channel 1…
+    expect(showTick(dialog, 71)?.checked).toBe(true);
+    // …and applying here writes channel 1 as it is, and channel 2 as it is — nothing hidden anywhere.
+    await press(buttonNamed(dialog, /^Apply layers$/));
+    expect(s.fixedSetBanks).toHaveBeenCalledTimes(1);
+    expect(s.fixedSetBanks.mock.calls[0]?.[0]).toEqual({ banks: [CH1, CH2] });
   });
 });
 
