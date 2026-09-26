@@ -3036,6 +3036,7 @@ the highest `B` heading under `docs/prd/` was `B-264` and the highest `R` was `R
 - `B-279` — the Inspector said ON AIR NOW for the look of a refused take (C).
 - `B-280` — drag and drop did nothing in the installed apps: Tauri's native handler took it (F).
 - `B-281` — the installed apps said their name three times, without the Apasai logo (G).
+- `B-282` — the every-channel silence was bright amber with nothing to silence (K).
 
 All in [bugs-runtime.md](bugs-runtime.md). Measured free before use: the highest `B` heading under
 `docs/prd/` was `B-270`, no ref and no stash claims `B-271`…`B-289`.

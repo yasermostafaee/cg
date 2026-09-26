@@ -141,3 +141,14 @@
       (two channels with OSC, five and five each, row 90 kept by its producer, 1920 × 1080 without a
       scroll; control: the no-OSC first-run shows every row) — the e2e needs TCP 5250 and UDP 6250,
       which a dev station held here, so it is CI's.
+
+## 11. K — silence controls live only when there is something to silence (`B-282`)
+
+- [x] 11.1 `ledgerChannels` (shared) — the bridge's `liveLedgerChannels` and `silenceHasTarget` ask it.
+- [x] 11.2 Both controls disabled and neutral with nothing in scope; the chip's neutral rule.
+- [x] 11.3 Tests: `silenceHasTarget.test.ts` (no plate anywhere → no scope live; control: one plate on
+      channel 2 → every channel and channel 2 live, channel 1 not; before arrival → live); `panicScope`
+      (disabled and neutral with an empty ledger; the existing cases seeded with a plate); e2e
+      `silence-controls.spec.ts` (amber and live with the seeded plates; after CLEAR disabled, neutral
+      by computed ground, the same height, the bridge's words — red first without the CSS rule);
+      `fillBridgeStub` answers an empty ledger.

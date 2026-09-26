@@ -281,3 +281,20 @@ are. Our own Node stays as `.nvmrc` says (22). **Shared CI config.**
 - **Live plates:** it lists seated plates and shows an empty state otherwise — no band of empty rows —
   so it needs no default.
 - **1920 × 1080:** the e2e measures it (the ten rows, the beds in the viewport, no scroll).
+
+## §13 K — the silence controls are live only when there is something to silence
+
+- **The predicate, once:** `ledgerChannels(ledger)` in `@cg/shared-ipc` — the channels the live-layers
+  ledger holds a seat on. The bridge's PANIC reach `liveLedgerChannels` (`B-257`) now calls it over the
+  ledger it publishes, and the console calls it over the snapshot it receives; a channel absent from it
+  is where the bridge answers "nothing to silence". `silenceHasTarget(ledger, ready, scope)`
+  (`panicReport.ts`) is the one console decision both controls ask.
+- **The controls:** the header's every-channel control and the plates toolbar's per-channel one take
+  the neutral variant and `disabled` while their scope has no seat, with a title in the bridge's own
+  words (`nothingToSilence`). `.cg-plate-panic.cg-btn--neutral` gives the chip the neutral ground at the
+  same size — the chip's own amber rule is 0,2,0 and would otherwise win over the variant (measured in
+  Chromium: without it the disabled chip stays `rgb(60, 48, 25)`).
+- **Never withheld on a value that may be wrong** (`B-122`): before the ledger snapshot arrives both stay
+  live. `silenceAllLivePlates` stays unscoped.
+- **Established:** the per-channel control lives in the plates toolbar, which exists only beside plate
+  rows; a channel whose tab lists nothing shows its empty state, with no control to grey.

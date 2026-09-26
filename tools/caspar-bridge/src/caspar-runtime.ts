@@ -112,7 +112,7 @@ import {
   type StationStray,
 } from '@cg/shared-ipc';
 import { randomBytes } from 'node:crypto';
-import { templateAdmitsPassTiming } from '@cg/shared-ipc';
+import { ledgerChannels, templateAdmitsPassTiming } from '@cg/shared-ipc';
 import { operatorActor, operatorSub, runAsTemplate } from './actor-context.js';
 import {
   ChannelSettingsStore,
@@ -8827,11 +8827,8 @@ export class CasparRuntime {
    * different question — whether a covered-set lock should refuse this press at all.
    */
   liveLedgerChannels(): readonly number[] {
-    const channels = new Set<number>();
-    for (const records of this.#liveLayers.values()) {
-      for (const record of records) channels.add(record.slot.channel);
-    }
-    return [...channels].sort((a, b) => a - b);
+    // `FIELD-FIXES-01` K — the ONE definition, which the console's silence controls ask too.
+    return ledgerChannels(this.liveLayersState());
   }
 
   /**

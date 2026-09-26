@@ -20,7 +20,7 @@ import {
   type LiveLayerRowView,
 } from './liveLayerRows.js';
 import { PlateAudioStrip } from './PlateAudioStrip.js';
-import { readPanicReport, type PanicReport } from './panicReport.js';
+import { nothingToSilence, readPanicReport, type PanicReport } from './panicReport.js';
 
 interface Props {
   /**
@@ -37,6 +37,13 @@ interface Props {
    * the zero-row branch would otherwise assert that nothing is on air (B-094).
    */
   ledgerReady: boolean;
+  /**
+   * `FIELD-FIXES-01` K — does this panel's silence have anything to act on: the ledger's own
+   * channels (`ledgerChannels`) hold its channel, or — on one channel — any. Computed by the
+   * panel that holds the raw ledger. `true` while the ledger has not arrived: an emergency control
+   * is never withheld on a value that may be wrong (`B-122`). Absent means true.
+   */
+  silenceable?: boolean;
   /** Why the owner verdict cannot be trusted, if it cannot. Shapes the empty state. */
   blind: LiveLayerBlindness | null;
   /** Select the owning row, so its verbs are one click away. */
@@ -228,6 +235,7 @@ function toolbarPanicLabel(channel: number | null): { text: string; name: string
 export function LiveSourcesPanel({
   rows,
   ledgerReady,
+  silenceable = true,
   blind,
   onSelectOwner,
   onApplyVolumes,
@@ -550,11 +558,21 @@ export function LiveSourcesPanel({
         */}
         {offersPanic && (
           <AsyncButton
-            variant="caution-strong"
+            variant={silenceable ? 'caution-strong' : 'neutral'}
             run={panic}
             onError={reportCommandError}
-            disabled={audioRefusal !== undefined}
-            title={audioRefusal ?? panicLabel.title}
+            disabled={audioRefusal !== undefined || !silenceable}
+            data-silence-live={silenceable ? 'true' : 'false'}
+            title={
+              audioRefusal ??
+              (silenceable
+                ? panicLabel.title
+                : nothingToSilence(
+                    panicChannel === null
+                      ? { kind: 'station' }
+                      : { kind: 'channel', channel: panicChannel },
+                  ))
+            }
             className="cg-plate-panic"
             data-plate-panic=""
             data-plate-panic-channel={panicChannel === null ? undefined : String(panicChannel)}

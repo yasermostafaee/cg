@@ -1,5 +1,24 @@
 ## ADDED Requirements
 
+### Requirement: A silence control SHALL be live only while its scope holds a live plate
+
+`SILENCE ALL PLATES · EVERY CHANNEL` and each channel's `Silence all plates · CH n` SHALL be shown
+disabled, in the neutral style and at the same size, while the live-layers ledger holds no seat in
+their scope — any channel, or that channel — and amber and live as soon as it does. Their state
+SHALL come from the predicate the bridge answers "nothing to silence" from (`ledgerChannels`), and a
+ledger that has not arrived SHALL leave them live. The verbs themselves are unchanged.
+
+#### Scenario: Nothing to silence
+
+- **WHEN** no declared channel holds a live plate
+- **THEN** the every-channel control is disabled and neutral, the same height, titled _"Nothing to
+  silence — no channel holds a live plate."_
+
+#### Scenario: Keyed to the channel
+
+- **WHEN** one live plate is seated on channel 2
+- **THEN** the every-channel control and channel 2's are live, and channel 1's is not
+
 ### Requirement: A new channel's bank SHALL show five rows of each band
 
 A bank made for a NEW channel — at first-run, and for a channel Change channel… adds — SHALL show five

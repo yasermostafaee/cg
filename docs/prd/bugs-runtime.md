@@ -12733,3 +12733,11 @@ Designer opened on a `cg Designer` heading. **Fix:** the name appears once, in t
 menu and both in-app brands are gone (the log folder opens from the audit log; Quit is the close
 button; Reload is F5). `productName`, identifiers and folders are unchanged. Tests:
 `tauriWindows.test.ts`, `appTitle.test.ts`, `starter-landing.spec.ts`, the installer smoke.
+
+## [~] B-282 — "SILENCE ALL PLATES · EVERY CHANNEL" was bright amber with nothing to silence ⟨priority: low⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` K
+
+With two channels and no live plate anywhere the header showed an amber, live every-channel silence
+that answered "Nothing was sent — no channel holds a live plate". **Fix:** both silence controls are
+disabled and neutral, at the same size, while their scope holds no seat, by the predicate the bridge
+answers from (`ledgerChannels`), and amber as soon as a plate is live. Tests:
+`silenceHasTarget.test.ts`, `silence-controls.spec.ts`.

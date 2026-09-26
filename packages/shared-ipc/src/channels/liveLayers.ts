@@ -216,3 +216,16 @@ export const LivePlateReleasedChannel = definePublishChannel(
   'liveLayers.plate-released',
   LivePlateReleaseSchema,
 );
+
+/**
+ * 🔴 `FIELD-FIXES-01` K — **THE CHANNELS THE LIVE-LAYERS LEDGER HOLDS A SEAT ON: where a silence
+ * has something to act on.** THE ONE DEFINITION, asked over each side's own copy of the ledger:
+ * the bridge's PANIC reach (`liveLedgerChannels`, `B-257`, over the ledger it publishes) and the
+ * console's silence controls, which are live only while their channel is in this list (over the
+ * snapshot it receives). A channel absent here is where the bridge answers "nothing to silence".
+ */
+export function ledgerChannels(ledger: Iterable<Pick<LiveLayerState, 'channel'>>): number[] {
+  const channels = new Set<number>();
+  for (const row of ledger) channels.add(row.channel);
+  return [...channels].sort((a, b) => a - b);
+}

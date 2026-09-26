@@ -89,10 +89,15 @@ const plate = (channel: number): LiveLayerState => ({
   unverified: false,
 });
 
-/** A bridge declaring `banks`, signed in as `auth`, with both PANIC doors as spies. */
+/**
+ * A bridge declaring `banks`, signed in as `auth`, with both PANIC doors as spies. `FIELD-FIXES-01`
+ * K — and a ledger: one live plate on channel 1 unless told otherwise, so the controls this file
+ * presses have something to silence.
+ */
 function stubBridge(
   banks: FixedLayerBank[],
   auth: AuthSessionState = { kind: 'off' },
+  ledger: readonly { channel: number }[] = [{ channel: 1 }],
 ): {
   silenceAllLivePlates: ReturnType<typeof vi.fn>;
   silenceChannelLivePlates: ReturnType<typeof vi.fn>;
@@ -118,7 +123,7 @@ function stubBridge(
     },
     stack: { silenceAllLivePlates, silenceChannelLivePlates, remove: vi.fn() },
     liveLayers: {
-      state: () => Promise.resolve([]),
+      state: () => Promise.resolve(ledger),
       onStateChanged: () => () => undefined,
       onPlateReleased: () => () => undefined,
     },
@@ -290,6 +295,19 @@ describe('the every-channel control, beside the channel strip', () => {
     expect(button?.textContent).toBe('SILENCE ALL PLATES · EVERY CHANNEL');
     expect(button?.getAttribute('aria-label')).toMatch(/^Silence all boxes on every channel/);
     expect(button?.getAttribute('title')).toMatch(/on EVERY channel this bridge drives/);
+  });
+
+  it('🔴 FIELD-FIXES-01 K — with no live plate anywhere it is DISABLED and NEUTRAL, saying so (control: above)', async () => {
+    stubBridge([bankOn(1), bankOn(2)], { kind: 'off' }, []);
+    const el = await mount(createElement(EveryChannelPanic));
+    const button = everyPanic(el) as HTMLButtonElement | null;
+    expect(button, 'still there: the header does not jump').not.toBeNull();
+    expect(button?.disabled).toBe(true);
+    expect(button?.className).toContain('cg-btn--neutral');
+    expect(button?.className).not.toContain('cg-btn--caution-strong');
+    expect(button?.getAttribute('title')).toBe(
+      'Nothing to silence — no channel holds a live plate.',
+    );
   });
 
   it('ABSENT on a one-channel station — the toolbar’s PANIC already IS this verb (control: above)', async () => {

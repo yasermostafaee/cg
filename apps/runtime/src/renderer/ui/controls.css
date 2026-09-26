@@ -7225,6 +7225,16 @@ input[type='checkbox']:disabled:checked {
   border-color: var(--r-caution-fill);
   color: var(--r-ink-on-caution);
 }
+/*
+ * `FIELD-FIXES-01` K — NOTHING TO SILENCE: the chip takes the NEUTRAL variant's ground, edge and
+ * ink, at the same size, so the header does not jump. Amber is kept for a silence with something
+ * to act on. Same specificity as the chip above and later, so it wins by order.
+ */
+.cg-plate-panic.cg-btn--neutral {
+  background: var(--r-surface-raised);
+  border-color: var(--r-border-strong);
+  color: var(--r-text);
+}
 
 /*
  * `MULTI-CHANNEL-01` §2 L — the small mark on a channel's strip tab: that channel's view holds a

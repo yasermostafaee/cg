@@ -1,3 +1,4 @@
+import { ledgerChannels, type LiveLayerState } from '@cg/shared-ipc';
 import { reportCommandError, reportCommandSuccess } from '../status/commandFeedback.js';
 
 /**
@@ -95,4 +96,31 @@ export function readPanicReport(
         : ''),
   );
   return { accepted: true };
+}
+
+/**
+ * `FIELD-FIXES-01` K — a silence control's title while there is nothing to silence: the SAME words
+ * the bridge's answer would come back with, so the disabled control and a press say one thing.
+ */
+export function nothingToSilence(scope: PanicScope): string {
+  return `Nothing to silence — ${nothingWhere(scope)}.`;
+}
+
+/**
+ * 🔴 `FIELD-FIXES-01` K — **DOES A SILENCE OF `scope` HAVE ANYTHING TO ACT ON**, as this console
+ * knows it: the ledger's channels (`ledgerChannels`, the bridge's own predicate) hold the scope's
+ * channel — or any channel, for the every-channel and one-channel scopes. Both silence controls ask
+ * it; a `false` shows the control disabled and neutral.
+ *
+ * ⚠ TRUE while the ledger has not arrived: an emergency control is never withheld on a value that
+ * may be wrong (`B-122`). The verb itself stays unscoped and the bridge answers it either way.
+ */
+export function silenceHasTarget(
+  ledger: readonly Pick<LiveLayerState, 'channel'>[],
+  ready: boolean,
+  scope: PanicScope,
+): boolean {
+  if (!ready) return true;
+  const channels = ledgerChannels(ledger);
+  return scope.kind === 'channel' ? channels.includes(scope.channel) : channels.length > 0;
 }

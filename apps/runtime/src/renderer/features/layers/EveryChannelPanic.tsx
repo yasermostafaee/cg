@@ -1,11 +1,12 @@
 import { useHoldsOperatorRole } from '../../hooks/useCanOperate.js';
 import { useLink } from '../../hooks/useLink.js';
+import { useLiveLayers } from '../../hooks/useLiveLayers.js';
 import { useLockCoverage } from '../../hooks/useLock.js';
 import { AsyncButton } from '../../ui/AsyncButton.js';
 import { BRIDGE_DOWN_REASON } from '../../ui/reachWording.js';
 import { useSelectedChannel } from '../channels/useSelectedChannel.js';
 import { reportCommandError } from '../status/commandFeedback.js';
-import { readPanicReport } from './panicReport.js';
+import { nothingToSilence, readPanicReport, silenceHasTarget } from './panicReport.js';
 
 /**
  * 🔴 `MULTI-CHANNEL-01` §2 C — **THE EVERY-CHANNEL SILENCE, a control of its own.**
@@ -50,21 +51,34 @@ export function EveryChannelPanic(): JSX.Element | null {
     PANIC stays in that channel's view. (`all` coverage is the console's lock screen anyway.)
   */
   const locked = useLockCoverage().kind !== 'none';
+  /*
+    🔴 `FIELD-FIXES-01` K — LIVE ONLY WHEN THERE IS SOMETHING TO SILENCE. While the ledger holds no
+    seat on any channel (`ledgerChannels`, the predicate the bridge answers "nothing to silence"
+    from) the control is shown DISABLED in the neutral style, so the header does not jump; it turns
+    amber and live as soon as any channel holds a plate. ⚠ Only a ledger KNOWN empty disables it:
+    before the snapshot arrives it stays live, because an emergency control is never withheld on a
+    value that may be wrong (`B-122`). The verb itself stays unscoped.
+  */
+  const { value: live, ready } = useLiveLayers();
+  const nothing = !silenceHasTarget(live, ready, { kind: 'every' });
   if (!multiChannel || !holdsOperator || locked) return null;
   return (
     <AsyncButton
-      variant="caution-strong"
+      variant={nothing ? 'neutral' : 'caution-strong'}
       run={async () =>
         readPanicReport(await window.cg.stack.silenceAllLivePlates(), { kind: 'every' })
       }
       onError={reportCommandError}
-      disabled={linkDown}
+      disabled={linkDown || nothing}
+      data-silence-live={nothing ? 'false' : 'true'}
       title={
         linkDown
           ? BRIDGE_DOWN_REASON
-          : 'Set EVERY live plate the bridge has seated to zero, on EVERY channel this bridge ' +
-            'drives, including rows this console does not show as on air. The pictures stay on ' +
-            'air. There is no un-panic — raise what you need again on its own fader.'
+          : nothing
+            ? nothingToSilence({ kind: 'every' })
+            : 'Set EVERY live plate the bridge has seated to zero, on EVERY channel this bridge ' +
+              'drives, including rows this console does not show as on air. The pictures stay on ' +
+              'air. There is no un-panic — raise what you need again on its own fader.'
       }
       className="cg-plate-panic"
       data-every-channel-panic=""

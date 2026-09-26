@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalSto
 // predicate: the bridge's answer is `isOnAirStatus` MINUS two published exemptions, so a count
 // gated on the predicate disables a press the wire would have accepted.
 import { removeIsRefused } from './removeGate.js';
+import { silenceHasTarget } from './panicReport.js';
 /*
   ⚠ THIS COMMENT USED TO SAY «this panel no longer imports that predicate directly», and the
   import below now makes that false — so it is corrected rather than left to mislead.
@@ -1924,6 +1925,14 @@ export function LayersPanel({
             // is PANIC's scope.
             rows={liveRowsWithFrames}
             ledgerReady={ledgerReady}
+            // `FIELD-FIXES-01` K — through the bridge's own predicate, over the raw ledger.
+            silenceable={silenceHasTarget(
+              live,
+              ledgerReady,
+              scopeChannel === null
+                ? { kind: 'station' }
+                : { kind: 'channel', channel: scopeChannel },
+            )}
             blind={liveBlind}
             /*
               OPEN ROW means OPEN THE ROW, so it selects the item AND returns to the

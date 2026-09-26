@@ -118,6 +118,15 @@ export function fillBridgeStub<T extends object>(stub: T): T {
   };
   cg['setup'] ??= setupStub();
   /*
+    `FIELD-FIXES-01` K — the header's every-channel silence reads the live-layers ledger now. EMPTY
+    is the quiet default: a stub that seats nothing measures exactly what it measured before.
+  */
+  cg['liveLayers'] ??= {
+    state: () => Promise.resolve([]),
+    onStateChanged: () => () => undefined,
+    onPlateReleased: () => () => undefined,
+  };
+  /*
     `MULTI-CHANNEL-01` §2 F — `useCanOperate` now asks whether a covered-set lock covers the
     selected channel, so every surface with an operator control reads the lock. RELEASED is the
     quiet answer: a filled stub measures exactly what it measured before the question existed.
