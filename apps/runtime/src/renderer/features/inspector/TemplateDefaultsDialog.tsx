@@ -139,12 +139,12 @@ export function TemplateDefaultsDialog({
     const res = await commitSourceAssignments({ assignments: [...untouched, ...written] });
     if (res !== null) {
       /*
-        🔴 REFUSED WITH A REASON, NEVER SILENTLY REWRITTEN (§6). The rule sentence and the
-        bridge's own specifics are shown together in the dialog's message region, the staged
-        values stay exactly as the operator left them, and the dialog stays open so the edit
-        is still theirs to correct.
+        🔴 REFUSED WITH A REASON, NEVER SILENTLY REWRITTEN (§6). The rule sentence is shown in
+        the dialog's message region — one line, never the bridge's words beside it
+        (`DELTA-MULTI-CHANNEL-01-A` A5) — the staged values stay exactly as the operator left
+        them, and the dialog stays open so the edit is still theirs to correct.
       */
-      setRefusal(res.detail === undefined ? res.text : `${res.text} ${res.detail}`);
+      setRefusal(res.text);
       return { accepted: false };
     }
     setDraft(null);

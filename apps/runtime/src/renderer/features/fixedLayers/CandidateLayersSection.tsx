@@ -471,10 +471,17 @@ function BankEditor({
           report({ role: 'notice', text: 'Candidate layers applied.' });
           return;
         }
+        /*
+          `DELTA-MULTI-CHANNEL-01-A` A5 — ONE line: our sentence, naming the layer from the
+          refusal's data. The bridge's `message` never rides beneath it; it is the line only when
+          the refusal carries no code, since then it is the whole of what is known.
+        */
         report({
           role: 'refusal',
-          text: fixedLayersReasonMessage(res.reason) ?? 'Not accepted.',
-          ...(res.message !== undefined ? { detail: res.message } : {}),
+          text:
+            fixedLayersReasonMessage(res.reason, { layer: res.layer }) ??
+            res.message ??
+            'Not accepted.',
         });
       },
       (err: unknown) => {

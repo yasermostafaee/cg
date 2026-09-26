@@ -100,7 +100,7 @@ export interface StationSetupStubOptions {
    */
   banks?: readonly FixedLayerBank[];
   slots?: FixedSlotState[];
-  fixedSetConfigResult?: { ok: boolean; reason?: string; message?: string };
+  fixedSetConfigResult?: { ok: boolean; reason?: string; message?: string; layer?: number };
   /** `MULTI-CHANNEL-01` — what `fixedLayers.set-banks` resolves with. */
   fixedSetBanksResult?: { ok: boolean; reason?: string; message?: string };
   raster?: ChannelSettingsState;

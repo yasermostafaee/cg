@@ -115,6 +115,20 @@ The development Playout (`scripts/dev-playout.ts`) SHALL offer `cg-admin-ch2` �
 
 - **WHEN** `cg-admin-ch2` signs in and sends `fixedLayers.set-config` on channel 2 **THEN** it is accepted **AND** `cg-admin` sending the same is refused with the channel sentence
 
+### Requirement: A refused hide names its layer as data
+
+The bank doors — `fixedLayers.set-config` and `fixedLayers.set-banks` — SHALL carry, on an
+`untick-occupied` or `untick-unknown` refusal, the layer the refusal is about as `layer`, beside
+the reason and the bridge's own `message` (`DELTA-MULTI-CHANNEL-01-A` A5), so a console names the
+layer in its own sentence and never reads it out of the message.
+
+#### Scenario: The layer rides the refusal
+
+- **WHEN** hiding layer 74 is refused because what is on it cannot be verified **THEN** the refusal
+  carries `reason: untick-unknown` and `layer: 74`
+- **WHEN** hiding bed layer 6 is refused because a producer is on it **THEN** the refusal carries
+  `reason: untick-occupied` and `layer: 6`
+
 ## MODIFIED Requirements
 
 ### Requirement: The station fence refuses a channel this station does not declare

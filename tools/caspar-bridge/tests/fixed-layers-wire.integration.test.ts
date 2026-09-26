@@ -323,7 +323,9 @@ it('S10 — R-028 fail-closed untick over the REAL occupancy: unknown refuses, e
     bank: { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 10 },
   });
   if (mock === null) throw new Error('mock not booted');
-  const untick = (layer: number): { ok: boolean; reason?: string; message?: string } =>
+  const untick = (
+    layer: number,
+  ): { ok: boolean; reason?: string; message?: string; layer?: number } =>
     b.runtime.setFixedLayers({
       channel: 1,
       low: { start: 50, count: 9 },
@@ -338,6 +340,8 @@ it('S10 — R-028 fail-closed untick over the REAL occupancy: unknown refuses, e
   expect(blind.ok).toBe(false);
   expect(blind.reason).toBe('untick-unknown');
   expect(blind.message).toContain('74');
+  // `DELTA-MULTI-CHANNEL-01-A` A5 — the layer rides as DATA, for the console's own sentence.
+  expect(blind.layer).toBe(74);
   expect(b.runtime.fixedLayersConfig()?.visibility).toBeUndefined(); // nothing applied
 
   // Healthy + hearing tap, layer provably empty → the untick applies.
@@ -362,6 +366,7 @@ it('S10 — R-028 fail-closed untick over the REAL occupancy: unknown refuses, e
   expect(occupied.ok).toBe(false);
   expect(occupied.reason).toBe('untick-occupied');
   expect(occupied.message).toContain('75');
+  expect(occupied.layer).toBe(75);
   // The refusal applied NOTHING: 74 keeps its earlier tick state only.
   expect(b.runtime.fixedLayersConfig()?.visibility).toEqual({ '74': false });
 });
@@ -381,7 +386,7 @@ it('🔴 B-205 — fail-closed untick on a BED row: unknown refuses, empty appli
   if (mock === null) throw new Error('mock not booted');
   const untickBed = (
     visibility: Record<string, boolean>,
-  ): { ok: boolean; reason?: string; message?: string } =>
+  ): { ok: boolean; reason?: string; message?: string; layer?: number } =>
     b.runtime.setFixedLayers({ channel: 1, low: { ...low, visibility }, start: 70, count: 10 });
 
   // Tap has never heard: UNKNOWN refuses, naming the bed layer, applying nothing.
@@ -389,6 +394,7 @@ it('🔴 B-205 — fail-closed untick on a BED row: unknown refuses, empty appli
   expect(blind.ok).toBe(false);
   expect(blind.reason).toBe('untick-unknown');
   expect(blind.message).toContain('layer 4');
+  expect(blind.layer).toBe(4);
   expect(b.runtime.fixedLayersConfig()?.low.visibility).toBeUndefined();
 
   // Healthy + hearing, bed provably empty → the untick applies, on the BED record.
@@ -407,6 +413,7 @@ it('🔴 B-205 — fail-closed untick on a BED row: unknown refuses, empty appli
   expect(occupied.ok).toBe(false);
   expect(occupied.reason).toBe('untick-occupied');
   expect(occupied.message).toContain('layer 6');
+  expect(occupied.layer).toBe(6);
   // The refusal applied NOTHING: 4 keeps its earlier tick state only.
   expect(b.runtime.fixedLayersConfig()?.low.visibility).toEqual({ '4': false });
 });

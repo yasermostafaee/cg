@@ -19,6 +19,7 @@ import {
   currentSourceAssignments,
   initSources,
 } from '../src/renderer/features/sources/sourceStore.js';
+import { clearRefusal, getRefusal } from '../src/renderer/features/status/refusalStore.js';
 
 /**
  * D-137 / C-015 (A8) — the plate picker STAGES, through the Inspector's own
@@ -250,6 +251,7 @@ describe('Update writes it, through the same apply the fields use', () => {
   });
 
   it('a REFUSED assignment keeps its draft and reports the apply as not accepted', async () => {
+    clearRefusal();
     assignmentRefusal = { reason: 'unknown-source', message: 'no such source' };
     stagePlateSource('item-1', 'guest-1', 'src-aaa');
 
@@ -258,6 +260,13 @@ describe('Update writes it, through the same apply the fields use', () => {
     // Staged, exactly as a rejected field update keeps its drafts — there is no
     // other copy of this edit anywhere.
     expect(snapshotPlateDraft('item-1').get('guest-1')).toBe('src-aaa');
+    /*
+      `DELTA-MULTI-CHANNEL-01-A` A5 — the banner reads the RULE, one line: the bridge's own
+      sentence used to be glued onto it (`${text} ${detail}`) and is the record's, not this line's.
+    */
+    expect(getRefusal()?.message).toBe(
+      'That source is no longer defined on this station — pick another, or define it again under Live sources.',
+    );
   });
 
   it('an item with NO plate draft never calls the assignments channel', async () => {

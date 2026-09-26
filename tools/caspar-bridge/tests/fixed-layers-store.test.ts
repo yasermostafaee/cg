@@ -62,11 +62,17 @@ function bank(overrides: Partial<FixedLayerBank> = {}): FixedLayerBank {
   return { channel: 1, low: { start: 50, count: 9 }, start: 70, count: 10, ...overrides };
 }
 
-function codeOf(fn: () => unknown): { code: string; message: string } {
+function codeOf(fn: () => unknown): { code: string; message: string; layer?: number } {
   try {
     fn();
   } catch (err) {
-    if (err instanceof FixedLayersConfigError) return { code: err.code, message: err.message };
+    if (err instanceof FixedLayersConfigError) {
+      return {
+        code: err.code,
+        message: err.message,
+        ...(err.layer !== undefined ? { layer: err.layer } : {}),
+      };
+    }
     throw err;
   }
   throw new Error('expected FixedLayersConfigError');
@@ -256,7 +262,7 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
   });
 
   it('R-028 (2.3) — unticking an OCCUPIED layer is refused, naming the layer and the remedy', () => {
-    const { code, message } = codeOf(() =>
+    const { code, message, layer } = codeOf(() =>
       validateFixedBankChange(bank(), bank({ visibility: { '74': false } }), {
         policy: POLICY,
         reservedLayers: [],
@@ -264,13 +270,15 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
       }),
     );
     expect(code).toBe('untick-occupied');
+    // `DELTA-MULTI-CHANNEL-01-A` A5 — the layer rides as DATA, for the console's own sentence.
+    expect(layer).toBe(74);
     expect(message).toContain('74');
     expect(message).toContain('OCCUPIED');
     expect(message).toContain('remove its template first');
   });
 
   it('R-028 (2.3) — unticking with UNKNOWN occupancy is refused too (fail closed), distinguishably', () => {
-    const { code, message } = codeOf(() =>
+    const { code, message, layer } = codeOf(() =>
       validateFixedBankChange(bank(), bank({ visibility: { '74': false } }), {
         policy: POLICY,
         reservedLayers: [],
@@ -278,6 +286,7 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
       }),
     );
     expect(code).toBe('untick-unknown');
+    expect(layer).toBe(74);
     expect(message).toContain('74');
     expect(message).toContain('UNKNOWN');
     expect(message).toContain('never treated as empty');
@@ -305,7 +314,7 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
   it('🔴 B-205 — unticking an OCCUPIED bed row is refused like an operator row, naming the layer', () => {
     const current = bank({ low: { start: 51, count: 5 } });
     const next = bank({ low: { start: 51, count: 5, visibility: { '53': false } } });
-    const { code, message } = codeOf(() =>
+    const { code, message, layer } = codeOf(() =>
       validateFixedBankChange(current, next, {
         policy: POLICY,
         reservedLayers: [],
@@ -313,6 +322,7 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
       }),
     );
     expect(code).toBe('untick-occupied');
+    expect(layer).toBe(53);
     expect(message).toContain('layer 53');
     expect(message).toContain('OCCUPIED');
   });
@@ -320,7 +330,7 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
   it('🔴 B-205 — unticking a bed row with UNKNOWN occupancy fails closed, like an operator row', () => {
     const current = bank({ low: { start: 51, count: 5 } });
     const next = bank({ low: { start: 51, count: 5, visibility: { '55': false } } });
-    const { code, message } = codeOf(() =>
+    const { code, message, layer } = codeOf(() =>
       validateFixedBankChange(current, next, {
         policy: POLICY,
         reservedLayers: [],
@@ -328,6 +338,7 @@ describe('validateFixedBankChange (R-028 — the ceiling is fixed; live changes 
       }),
     );
     expect(code).toBe('untick-unknown');
+    expect(layer).toBe(55);
     expect(message).toContain('layer 55');
     expect(message).toContain('UNKNOWN');
     expect(message).not.toContain('OCCUPIED (');

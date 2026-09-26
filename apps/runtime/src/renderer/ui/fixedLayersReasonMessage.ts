@@ -10,10 +10,33 @@ import { LAYER_BANDS, type FIXED_LAYERS_SET_CONFIG_REASONS } from '@cg/shared-ip
  * stack `errorCode`s (a different channel family with a different vocabulary),
  * and folding this union in would blur which codes belong to which contract.
  *
- * These sentences carry the RULE; the bridge's `message` carries the SPECIFICS
- * (both ranges, or the occupied slot numbers) — the config modal shows both.
+ * 🔴 `DELTA-MULTI-CHANNEL-01-A` A5 — **ONE LINE, AND IT IS OURS.** These sentences used to
+ * carry the rule while the bridge's `message` rode beneath as the "specifics", and the owner
+ * read the result with no CasparCG running: a rule, then `cannot hide layer 99: its occupancy
+ * is UNKNOWN (no healthy CasparCG link or no fresh OSC) … then untick` — two lines, and the
+ * second in the bridge's words. The bridge's `message` is written for the record; the facts a
+ * sentence needs come as DATA (`layer`), and the sentence is one line in the house refusal
+ * shape: `Refused — …, so …`, in the words of the pane it answers (a row is SHOWN or HIDDEN).
  */
 type FixedLayersSetConfigReason = (typeof FIXED_LAYERS_SET_CONFIG_REASONS)[number];
+
+/** The facts a refusal carries as data — the layer an `untick-*` refusal is about. */
+export interface FixedLayersRefusalFacts {
+  readonly layer?: number | undefined;
+}
+
+const whichLayer = (facts: FixedLayersRefusalFacts): string =>
+  facts.layer === undefined ? 'that layer' : `layer ${String(facts.layer)}`;
+
+/** The two refusals that keep a row shown, named after the layer they are about. */
+const occupiedRefusal = (facts: FixedLayersRefusalFacts): string =>
+  `Refused — ${whichLayer(facts)} is not empty, so it stays shown.`;
+const unknownRefusal = (facts: FixedLayersRefusalFacts): string =>
+  `Refused — what is on ${whichLayer(facts)} cannot be verified right now, so it stays shown.`;
+const HIDE_REFUSALS: Readonly<Record<string, (facts: FixedLayersRefusalFacts) => string>> = {
+  'untick-occupied': occupiedRefusal,
+  'untick-unknown': unknownRefusal,
+};
 
 const MESSAGES = {
   /*
@@ -39,10 +62,9 @@ const MESSAGES = {
   // R-028 — the ceiling is fixed at install; ticks + aliases are the live surface.
   'resize-refused':
     'The number of candidate layers cannot change mid-session — edit the bridge’s fixed-layers config and restart it.',
-  'untick-occupied':
-    'That row is occupied — remove its template first (removal implies clear), then untick.',
-  'untick-unknown':
-    'That row’s occupancy cannot be verified right now — unknown is never treated as empty, so the row cannot be hidden.',
+  // A5 — the layer-less spelling of the one sentence; it names the layer when the refusal does.
+  'untick-occupied': occupiedRefusal({}),
+  'untick-unknown': unknownRefusal({}),
   'banks-overlap':
     'The graphics-bed rows and the operator’s candidate layers claim a layer in common — a layer cannot be both, because one composites above the live plates and the other below them. Edit the bridge’s fixed-layers config and restart it.',
 } satisfies Record<FixedLayersSetConfigReason, string>;
@@ -52,7 +74,12 @@ const MESSAGES = {
  * explain. Unknown codes surface verbatim rather than being swallowed — a
  * quotable code beats a generic dead end (the B-070 stance).
  */
-export function fixedLayersReasonMessage(reason: string | undefined): string | null {
+export function fixedLayersReasonMessage(
+  reason: string | undefined,
+  facts: FixedLayersRefusalFacts = {},
+): string | null {
   if (reason === undefined || reason === '') return null;
+  const hide = HIDE_REFUSALS[reason];
+  if (hide !== undefined) return hide(facts);
   return (MESSAGES as Readonly<Record<string, string>>)[reason] ?? `Not accepted (${reason}).`;
 }

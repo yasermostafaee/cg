@@ -98,6 +98,31 @@ The console's chrome SHALL draw every Persian glyph in the self-hosted Vazirmatn
 
 - **WHEN** a row's Persian name and a row's Latin name are measured with CDP `CSS.getPlatformFontsForNode` **THEN** the Persian one is drawn in Vazirmatn **AND** the Latin one in exactly the font the previous stack gives it at the same weight and size
 
+### Requirement: A refusal reads one line, in the operator's words
+
+The console SHALL show a refused change as ONE line in its own words, naming what was refused and
+what became of it (`DELTA-MULTI-CHANNEL-01-A` A5). An operator surface SHALL NOT show the bridge's
+own `message` beneath a sentence of its own — that message is written for the record — and a fact
+the sentence needs SHALL come as data, as the layer does on a refused hide. A refusal that carries
+no code SHALL show the bridge's sentence as its one line. The Audit panel, a diagnostic surface,
+MAY quote a failure beneath its sentence.
+
+#### Scenario: Hiding a row with no CasparCG
+
+- **WHEN** a station-admin hides layer 99 while what is on it cannot be verified **THEN** the
+  refusal reads "Refused — what is on layer 99 cannot be verified right now, so it stays shown."
+  and nothing else, with none of the bridge's words **AND** the row stays shown
+
+#### Scenario: Hiding a row that is not empty
+
+- **WHEN** layer 71 is not empty and a station-admin hides it **THEN** the refusal reads
+  "Refused — layer 71 is not empty, so it stays shown."
+
+#### Scenario: A Live sources refusal
+
+- **WHEN** a live source's stream URL is refused **THEN** the rule is the one line **AND** the
+  bridge's own sentence is not shown
+
 ## MODIFIED Requirements
 
 ### Requirement: A connection check that runs again starts clean

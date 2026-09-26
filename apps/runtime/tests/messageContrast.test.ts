@@ -40,7 +40,7 @@ const MESSAGE_CLASSES: readonly { name: string; ink: string; ground: string }[] 
     ground: cssVars['--r-notice-fill'],
   },
   {
-    // …and its quieter second line, which carries the bridge's own specifics.
+    // …and its quieter second line — ours, never the bridge's own words (`DELTA-MULTI-CHANNEL-01-A` A5).
     name: 'Notice refusal detail',
     ink: colors.text,
     ground: cssVars['--r-notice-fill'],

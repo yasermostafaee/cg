@@ -121,6 +121,12 @@ export class FixedLayersConfigError extends Error {
   constructor(
     readonly code: FixedLayersErrorCode,
     message: string,
+    /**
+     * `DELTA-MULTI-CHANNEL-01-A` A5 — the layer an `untick-*` refusal is about, as DATA: the
+     * console names it in its own one-line sentence and never shows `message`, which is written
+     * for the record.
+     */
+    readonly layer?: number,
   ) {
     super(message);
   }
@@ -408,6 +414,7 @@ function assertMayHide(layer: number, occupancy: SlotOccupancy): void {
       'untick-occupied',
       `cannot hide layer ${String(layer)}: it is OCCUPIED (an item or producer is on it) — ` +
         `remove its template first (removal implies clear), then untick`,
+      layer,
     );
   }
   if (occupancy === 'unknown') {
@@ -416,6 +423,7 @@ function assertMayHide(layer: number, occupancy: SlotOccupancy): void {
       `cannot hide layer ${String(layer)}: its occupancy is UNKNOWN (no healthy CasparCG ` +
         `link or no fresh OSC), and unknown is never treated as empty — a hidden row may ` +
         `be on air. Restore the link/OSC so the layer reads empty, then untick`,
+      layer,
     );
   }
 }

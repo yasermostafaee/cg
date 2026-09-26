@@ -4558,6 +4558,7 @@ export class CasparRuntime {
     ok: boolean;
     reason?: FixedLayersErrorCode;
     message?: string;
+    layer?: number;
   } {
     const current = this.#fixedBanks;
     if (current.length > 1) return this.setFixedLayerBanks([next]);
@@ -4582,6 +4583,7 @@ export class CasparRuntime {
     ok: boolean;
     reason?: FixedLayersErrorCode;
     message?: string;
+    layer?: number;
   } {
     const current = this.#fixedBanks;
     const options = this.#bankChangeOptions();
@@ -4606,13 +4608,19 @@ export class CasparRuntime {
   #applyBanks(
     next: readonly FixedLayerBank[],
     validate: () => readonly LayerSlot[],
-  ): { ok: boolean; reason?: FixedLayersErrorCode; message?: string } {
+  ): { ok: boolean; reason?: FixedLayersErrorCode; message?: string; layer?: number } {
     let slots: readonly LayerSlot[];
     try {
       slots = validate();
     } catch (err) {
       if (err instanceof FixedLayersConfigError) {
-        return { ok: false, reason: err.code, message: err.message };
+        // A5 — the layer rides as data, so the console never has to read it out of `message`.
+        return {
+          ok: false,
+          reason: err.code,
+          message: err.message,
+          ...(err.layer !== undefined ? { layer: err.layer } : {}),
+        };
       }
       throw err;
     }

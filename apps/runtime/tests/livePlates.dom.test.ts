@@ -543,8 +543,11 @@ describe('the Inspector binds THIS template plates', () => {
     const dialog = await pick(el, 'guest-1', 'src-aaa');
     await saveDefaults(dialog);
 
-    // The reason is ON the dialog — never swallowed, never shown optimistically.
-    expect(dialog.textContent).toContain('No such source');
+    // The reason is ON the dialog — never swallowed, never shown optimistically — and it is the
+    // RULE, in the operator's words: the bridge's own sentence is the record's, never this line's
+    // (`DELTA-MULTI-CHANNEL-01-A` A5).
+    expect(dialog.textContent).toContain('That source is no longer defined on this station');
+    expect(dialog.textContent).not.toContain('No such source');
     // The operator's edit is exactly where they left it, and the dialog is still open for it.
     expect(defaultsSelect(dialog, 'guest-1').value).toBe('src-aaa');
   });

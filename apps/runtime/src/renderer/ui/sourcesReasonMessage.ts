@@ -10,8 +10,9 @@ import { BRIDGE_SKEW_MESSAGE, isBridgeSkewMessage } from '../../shared/bridgeSke
  * channel family keeps its own vocabulary, and folding them together blurs which
  * codes belong to which contract.
  *
- * These sentences carry the RULE; the bridge's `message` carries the SPECIFICS
- * (which name collided, which two ranges overlap) — the surface shows both.
+ * These sentences are the whole line an operator reads. `DELTA-MULTI-CHANNEL-01-A` A5 —
+ * the bridge's `message` used to ride beneath them as the "specifics"; it is written for
+ * the record, and no operator surface shows it under a sentence of ours any more.
  *
  * ── 🔴 AND THE TRANSPORT HALF, WHICH IS WHERE THE WIRE LEAKED ───────────────
  *

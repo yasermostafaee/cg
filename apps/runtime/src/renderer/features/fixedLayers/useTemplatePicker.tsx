@@ -592,10 +592,11 @@ export function useTemplatePicker(): {
         const refusal = await forgetTemplateAssignments(template.templateId);
         reportCommandSuccess(`Deleted · ${label}`);
         if (refusal !== null) {
+          // A5 — one line. Its second used to be the refusal's own sentence, the bridge's words
+          // whenever the refusal carried no code; why the bindings stayed is the record's to keep.
           setMessage({
             role: 'notice',
             text: `“${label}” was deleted, but its plate bindings could not be cleared.`,
-            detail: refusal.text,
           });
         }
         const templates = await window.cg.templates.list();

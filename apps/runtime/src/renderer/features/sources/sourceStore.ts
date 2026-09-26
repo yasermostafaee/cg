@@ -32,16 +32,20 @@ let version = 0;
 const listeners = new Set<() => void>();
 
 /**
- * A refusal, split the way the pinned message region shows it: the RULE, and the
- * bridge's own SPECIFICS beneath it.
+ * A refusal, as the operator reads it: ONE line.
  *
- * Deliberately not a bare string. The rule comes from `sourcesReasonMessage`,
- * which is keyed off the wire's reason union, so a validator code that gains no
- * sentence fails typecheck rather than reaching an operator as a code.
+ * The rule comes from `sourcesReasonMessage`, which is keyed off the wire's reason
+ * union, so a validator code that gains no sentence fails typecheck rather than
+ * reaching an operator as a code.
+ *
+ * 🔴 `DELTA-MULTI-CHANNEL-01-A` A5 — it used to carry the bridge's `message` as a
+ * `detail` beneath the rule, and three surfaces showed it: under the rule in the
+ * Live sources pane, and glued onto it in one line on the refusal banner and in
+ * Template defaults. The bridge's words are written for the record, so the field
+ * is gone from the TYPE — no consumer can put them back under a headline.
  */
 export interface CommitRefusal {
   text: string;
-  detail?: string;
 }
 
 /**
@@ -124,17 +128,15 @@ function noteBridgeDown(): void {
   // with no file has. The first push after reconnect corrects it.
 }
 
-/** The rule sentence plus the bridge's specifics, for a refusal that carried a code. */
+/** The rule sentence, for a refusal that carried a code — one line (A5). */
 function refusalOf(res: {
   reason?: string | undefined;
   message?: string | undefined;
 }): CommitRefusal {
   const rule = sourcesReasonMessage(res.reason);
-  if (rule !== null) {
-    return res.message === undefined ? { text: rule } : { text: rule, detail: res.message };
-  }
-  // No code at all: the bridge's own sentence is the best there is, and a
-  // generic fallback is better than an empty region.
+  if (rule !== null) return { text: rule };
+  // No code at all: the bridge's own sentence is the best there is — as the ONE line, never
+  // under another — and a generic fallback is better than an empty region.
   return { text: res.message ?? 'The change could not be saved.' };
 }
 

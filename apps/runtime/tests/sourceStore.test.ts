@@ -163,10 +163,11 @@ describe('a refusal never becomes a local truth, and never shows a wire identifi
 
     const { refusal } = await commitSourceCatalog(studioA);
     expect(refusal).not.toBeNull();
-    // The RULE comes from the wire's own reason union; the bridge's sentence is
-    // the DETAIL beneath it.
-    expect(refusal?.text).toContain('Another source already has that name');
-    expect(refusal?.detail).toContain('Studio A');
+    // The RULE comes from the wire's own reason union, and it is the ONE line: the bridge's
+    // sentence no longer rides beneath it (`DELTA-MULTI-CHANNEL-01-A` A5).
+    expect(refusal).toEqual({
+      text: 'Another source already has that name. The name is what you pick from when binding a plate, so two the same would leave you choosing blind.',
+    });
     // The cache is what the STATION has, which is nothing.
     expect(currentSourceCatalog()).toEqual(EMPTY_SOURCE_CATALOG);
   });

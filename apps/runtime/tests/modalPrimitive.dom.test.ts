@@ -251,8 +251,9 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
       // The refusal the owner hit: a row far down the list is occupied.
       fixedSetConfigResult: {
         ok: false,
-        reason: 'occupied-layer',
+        reason: 'untick-occupied',
         message: 'Layer 95 has a template on it.',
+        layer: 95,
       },
     });
     const dialog = await renderStationSetup({ section: 'candidate-layers' });
@@ -294,13 +295,13 @@ describe('§3 — a refusal is pinned beside the action row, never appended to t
     );
   });
 
-  it('does not shorten the message — the cause AND the remedy both survive', async () => {
+  it('does not shorten the message — the layer AND the outcome both survive, in one line', async () => {
     const dialog = await openAndRefuse();
     const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
-    // The bridge's own sentence, verbatim: it names the layer.
-    expect(text).toContain('Layer 95 has a template on it.');
-    // …and the mapped rule, which is the remedy.
-    expect(text.length).toBeGreaterThan('Layer 95 has a template on it.'.length);
+    // `DELTA-MULTI-CHANNEL-01-A` A5 — the layer comes from the refusal's data, into our sentence,
+    // with what became of the row; the bridge's own sentence is the record's, not this line's.
+    expect(text).toContain('Refused — layer 95 is not empty, so it stays shown.');
+    expect(text).not.toContain('Layer 95 has a template on it.');
   });
 
   /**

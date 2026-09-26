@@ -147,7 +147,7 @@ settings dialog, also reached from the status bar's SERVERS and SOURCES: **alias
 row's **visibility** tick can change live, applied by the section's own button. The channel, the start layer and the COUNT are all
 fixed at install and cannot change mid-session — the set of candidate layers is an
 agreement with whoever else uses the machine, so it is not something to renegotiate during
-a show. A refused change tells you the rule it broke and the specific layers involved. A
+a show. A refused change says so in one line — which layer, and what became of it. A
 row cannot be hidden while it is occupied, or while the Runtime cannot see whether it is:
 unknown fails closed, because hiding a row that may be on air would leave you no surface
 for a live graphic.

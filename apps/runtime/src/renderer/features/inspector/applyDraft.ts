@@ -318,9 +318,7 @@ function sendPlateAssignments(
     // The same command-feedback channel every other refusal on this surface
     // uses — never swallowed, never shown optimistically. The staged plates
     // stay staged, exactly as a rejected field update keeps its drafts.
-    reportCommandError(
-      refusal.detail === undefined ? refusal.text : `${refusal.text} ${refusal.detail}`,
-    );
+    reportCommandError(refusal.text);
     return false;
   });
 }

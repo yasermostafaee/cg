@@ -21,8 +21,9 @@ import {
  *  - `channel`, `start` AND `count` are READ-ONLY facts (R-028: the ceiling is
  *    fixed at install — no input invites a click that only rejects);
  *  - each candidate layer carries a visibility tick + an alias input;
- *  - a refusal surfaces the mapped reason sentence AND the bridge's own
- *    `message` (which names the layer / both ranges) — in the dialog's pinned region;
+ *  - a refusal surfaces ONE line in the dialog's pinned region — the mapped reason sentence,
+ *    naming the layer from the refusal's data; never the bridge's own `message` beneath it
+ *    (`DELTA-MULTI-CHANNEL-01-A` A5);
  *  - an accepted change REPORTS and stays open (the bridge republishes itself; there is
  *    no dialog of this section's own to close) — the one behaviour the move changed;
  *  - R-028 (2.4) — an occupied row offers a REMOVE behind the row's own confirm gate,
@@ -81,12 +82,35 @@ describe('Station setup — Candidate layers', () => {
     expect(section.textContent).toContain('Graphics beds');
   });
 
-  it('a refused change surfaces the mapped reason AND the bridge message, in the pinned region, and stays open', async () => {
+  /*
+    🔴 `DELTA-MULTI-CHANNEL-01-A` A5 — the owner unticked rows with no CasparCG running and read a
+    rule, then the bridge's own sentence beneath it: `cannot hide layer 99: its occupancy is
+    UNKNOWN (no healthy CasparCG link or no fresh OSC) … then untick`. The RULE is kept — the bridge
+    still refuses — and the operator reads ONE line, ours, naming the layer from the refusal's data.
+
+    ⭐ `STATION-CHROME-01` §2 dropped the "Candidate layers: " PREFIX this line used to carry: with a
+    tab per section the sentence already sits under that section's heading and above that section's
+    own footer. `modalMessageRegion.dom.test.ts` asserts the stronger property that replaced it:
+    the message does not follow the operator to another tab, and the RAIL says which section is
+    blocked from wherever he is standing.
+  */
+  const UNKNOWN_WORDS =
+    'cannot hide layer 71: its occupancy is UNKNOWN (no healthy CasparCG link or no fresh OSC), ' +
+    'and unknown is never treated as empty — a hidden row may be on air. Restore the link/OSC so ' +
+    'the layer reads empty, then untick';
+  const OCCUPIED_WORDS =
+    'cannot hide layer 71: it is OCCUPIED (an item or producer is on it) — remove its template ' +
+    'first (removal implies clear), then untick';
+  const linesOf = (el: Element | null): (string | null)[] =>
+    [...(el?.querySelectorAll('span[dir="auto"]') ?? [])].map((l) => l.textContent);
+
+  it('A5 — an untick refused because the layer cannot be verified reads ONE line naming it, with none of the bridge’s words; control: it is still refused, and the dialog stays open', async () => {
     const stub = stationSetupStub({
       fixedSetConfigResult: {
         ok: false,
-        reason: 'untick-occupied',
-        message: 'cannot hide layer 71: it is OCCUPIED (an item or producer is on it)',
+        reason: 'untick-unknown',
+        message: UNKNOWN_WORDS,
+        layer: 71,
       },
     });
     const onClose = vi.fn();
@@ -94,25 +118,44 @@ describe('Station setup — Candidate layers', () => {
 
     await clickSetupButton(dialog, 'Apply layers');
 
+    // CONTROL — the rule holds: the bridge was asked and refused, and the refusal is on screen.
     expect(stub.fixedSetConfig).toHaveBeenCalledTimes(1);
     const refusal = dialog.querySelector('[data-modal-message] [role="alert"]');
     expect(refusal).not.toBeNull();
-    /*
-      The RULE in operator wording (from the FIXED_LAYERS_SET_CONFIG_REASONS map)… and the
-      SPECIFICS, verbatim from the bridge.
-
-      ⭐ `STATION-CHROME-01` §2 dropped the "Candidate layers: " PREFIX this line used to
-      assert. It existed because one region carried seven sections' messages at once; with a
-      tab per section the sentence already sits under that section's heading and above that
-      section's own footer, and repeating the name is the redundant labelling golden rule 11
-      warns about. `modalMessageRegion.dom.test.ts` asserts the stronger property that
-      replaced it: the message does not follow the operator to another tab, and the RAIL says
-      which section is blocked from wherever he is standing.
-    */
-    expect(refusal?.textContent).toContain('occupied');
-    expect(refusal?.textContent).toContain('remove its template first');
-    expect(refusal?.textContent).toContain('layer 71');
     expect(onClose).not.toHaveBeenCalled();
+    // ONE line, in the operator's words, naming the layer.
+    expect(linesOf(refusal)).toEqual([
+      'Refused — what is on layer 71 cannot be verified right now, so it stays shown.',
+    ]);
+    // None of the bridge's words — its sentence, or its vocabulary.
+    expect(refusal?.textContent).not.toContain(UNKNOWN_WORDS);
+    expect(refusal?.textContent).not.toMatch(/unknown|osc|untick/i);
+  });
+
+  it('A5 — an untick refused because the layer is not empty reads one line too', async () => {
+    stationSetupStub({
+      fixedSetConfigResult: {
+        ok: false,
+        reason: 'untick-occupied',
+        message: OCCUPIED_WORDS,
+        layer: 71,
+      },
+    });
+    const dialog = await renderStationSetup({ section: 'candidate-layers' });
+    await clickSetupButton(dialog, 'Apply layers');
+    const refusal = dialog.querySelector('[data-modal-message] [role="alert"]');
+    expect(linesOf(refusal)).toEqual(['Refused — layer 71 is not empty, so it stays shown.']);
+    expect(refusal?.textContent).not.toMatch(/occupied|untick/i);
+  });
+
+  it('A5 — a refusal with no code shows the bridge’s sentence as the ONE line, never beneath another', async () => {
+    stationSetupStub({
+      fixedSetConfigResult: { ok: false, message: 'The station is being set up elsewhere.' },
+    });
+    const dialog = await renderStationSetup({ section: 'candidate-layers' });
+    await clickSetupButton(dialog, 'Apply layers');
+    const refusal = dialog.querySelector('[data-modal-message] [role="alert"]');
+    expect(linesOf(refusal)).toEqual(['The station is being set up elsewhere.']);
   });
 
   it('an accepted change submits ticks + aliases with the UNCHANGED ceiling, reports, and does NOT close the dialog', async () => {

@@ -151,22 +151,25 @@ describe('the census — every section of Station setup that can speak, speaks t
         ok: false,
         reason: 'untick-occupied',
         message: 'Layer 95 has a template on it.',
+        layer: 95,
       },
     });
     const dialog = await renderStationSetup({ section: 'candidate-layers' });
     await clickSetupButton(dialog, 'Apply layers');
 
     expectMessageThroughTheRegion(dialog, 'refusal');
-    // BOTH lines survive the move into the primitive: the RULE and the bridge's own
-    // sentence, which names the layer.
+    /*
+      `DELTA-MULTI-CHANNEL-01-A` A5 — ONE line survives the move into the primitive: ours,
+      naming the layer from the refusal's data. The bridge's own sentence is the record's, and
+      no longer rides beneath it.
+    */
+    const sentence = 'Refused — layer 95 is not empty, so it stays shown.';
     const text = dialog.querySelector('[data-modal-message]')?.textContent ?? '';
-    expect(text).toContain('remove its template first');
-    expect(text).toContain('Layer 95 has a template on it.');
+    expect(text).toContain(sentence);
+    expect(text).not.toContain('Layer 95 has a template on it.');
     // …and it does NOT follow the operator to another section's work.
     await selectSetupTab(dialog, 'delimiters');
-    expect(dialog.querySelector('[data-modal-message]')?.textContent ?? '').not.toContain(
-      'Layer 95 has a template on it.',
-    );
+    expect(dialog.querySelector('[data-modal-message]')?.textContent ?? '').not.toContain(sentence);
     // …but the RAIL still says Layers is blocked, from wherever he is standing.
     expect(
       tabOf(dialog, 'candidate-layers').querySelector('[data-tab-badge="warn"]'),

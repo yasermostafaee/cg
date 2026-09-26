@@ -646,6 +646,19 @@ export const FixedSlotStateSchema = z.object({
 });
 export type FixedSlotState = z.infer<typeof FixedSlotStateSchema>;
 
+/**
+ * What a bank door answers. `message` is the bridge's own sentence, written for the RECORD (the
+ * audit log, a technical read) — `DELTA-MULTI-CHANNEL-01-A` A5: an operator surface never shows it
+ * under its own sentence. `layer` is the layer an `untick-*` refusal is about, carried as DATA, so
+ * the console names it in its one line instead of leaning on the bridge's words.
+ */
+const FixedLayersSetResultSchema = z.object({
+  ok: z.boolean(),
+  reason: z.enum(FIXED_LAYERS_SET_CONFIG_REASONS).optional(),
+  message: z.string().optional(),
+  layer: z.number().int().nonnegative().optional(),
+});
+
 /** Pull the configured bank; null when no bank is declared. */
 export const FixedLayersConfigChannel = defineChannel(
   'fixedLayers.config',
@@ -665,11 +678,7 @@ export const FixedLayersConfigChannel = defineChannel(
 export const FixedLayersSetConfigChannel = defineChannel(
   'fixedLayers.set-config',
   FixedLayerBankSchema,
-  z.object({
-    ok: z.boolean(),
-    reason: z.enum(FIXED_LAYERS_SET_CONFIG_REASONS).optional(),
-    message: z.string().optional(),
-  }),
+  FixedLayersSetResultSchema,
 );
 
 /** Pushed when a bank change is applied (null = no bank declared). */
@@ -714,11 +723,7 @@ export const FixedLayersSetBanksChannel = defineChannel(
   z.object({
     banks: z.array(FixedLayerBankSchema).min(1).superRefine(oneBankPerChannel),
   }),
-  z.object({
-    ok: z.boolean(),
-    reason: z.enum(FIXED_LAYERS_SET_CONFIG_REASONS).optional(),
-    message: z.string().optional(),
-  }),
+  FixedLayersSetResultSchema,
 );
 
 /** `MULTI-CHANNEL-01` — pushed with the whole list whenever the set is applied. */

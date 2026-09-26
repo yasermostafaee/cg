@@ -71,8 +71,9 @@ const ROLE_STYLE: Record<NoticeRole, CSSProperties> = {
 };
 
 /**
- * The quieter second line — the bridge's own sentence, which names the layer or
- * both ranges while the first line carries the rule.
+ * The quieter second line — ours: a row's name, the places a refusal names. Never the
+ * bridge's own `message` on an operator surface (`DELTA-MULTI-CHANNEL-01-A` A5); the Audit
+ * panel, a diagnostic surface, is the one reader that quotes a failure there.
  *
  * It was `colors.textMuted` inside the amber box. The hierarchy now comes from SIZE
  * and not from a grey that has to survive an unusual backdrop: `colors.text` on the

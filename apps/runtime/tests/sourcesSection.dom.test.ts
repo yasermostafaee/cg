@@ -45,18 +45,20 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-function stubBridge(): { sent: SourceCatalog[] } {
+function stubBridge(): { sent: SourceCatalog[]; refused: string[] } {
   const sent: SourceCatalog[] = [];
+  const refused: string[] = [];
   stationSetupStub({
     sourcesSetConfig: (next: SourceCatalog) => {
       sent.push(next);
       const verdict = checkSourceCatalog(next, { fixedBank: null, reservedLayers: [] });
+      if (!verdict.ok) refused.push(verdict.message);
       return Promise.resolve(
         verdict.ok ? { ok: true } : { ok: false, reason: verdict.reason, message: verdict.message },
       );
     },
   });
-  return { sent };
+  return { sent, refused };
 }
 
 async function renderSources(): Promise<{ dialog: HTMLElement; section: HTMLElement }> {
@@ -167,7 +169,7 @@ describe('C-025 — the fifth producer kind, in the Add dialog', () => {
   });
 
   it('a URL outside the allowlist is REFUSED with the named sentence — never a silent accept', async () => {
-    stubBridge();
+    const { refused } = stubBridge();
     const { dialog, section } = await renderSources();
     await click(section, 'Add source');
     await setSetupInput(subDialog(), 'Source name', 'Backhaul');
@@ -183,10 +185,12 @@ describe('C-025 — the fifth producer kind, in the Add dialog', () => {
     */
     const region = dialog.querySelector('[data-modal-message]');
     expect(region, 'the refusal reaches the operator through a message region').not.toBeNull();
-    // The RULE sentence (sourcesReasonMessage) …
+    // The RULE sentence (sourcesReasonMessage), as the ONE line …
     expect(region?.textContent).toContain('accepted scheme');
-    // … and the validator's SPECIFICS, naming what was refused.
-    expect(region?.textContent).toContain('ftp');
+    // … and never the validator's own words beneath it (`DELTA-MULTI-CHANNEL-01-A` A5).
+    // Positive control: the bridge DID refuse, with a sentence of its own to leave out.
+    expect(refused).toHaveLength(1);
+    expect(region?.textContent).not.toContain(refused[0]);
     // 🔴 And the catalogue in force did NOT adopt it — the strongest form of this
     // assertion, now that the row shows the stored record rather than a draft.
     expect(sectionOf(dialog, 'sources').textContent).not.toContain('ftp://');
