@@ -66,7 +66,14 @@
 
 ## 7. Gate and discharge
 
-- [ ] 7.1 `pnpm gate` green.
-- [ ] 7.2 Linux `e2e` on GitHub Actions for the commit carrying the change — run URL here, with the
-      job confirmed RAN.
-- [ ] 7.3 Installer (`desktop.yml`) run URL here, with the job confirmed RAN.
+- [x] 7.1 `pnpm gate` green — the pre-push gate for `27542771`: 96/96 tasks, 0 cached,
+      control-bytes clean, OpenSpec 87/87.
+- [x] 7.2 Linux `e2e` — DISCHARGED. Run for `27542771` (the `dev` head carrying every commit of
+      this change), COMPLETED `success`, with `E2E (Playwright)` RUN and `success` (not skipped):
+      https://github.com/yasermostafaee/cg/actions/runs/36275176167 — the six new specs ran and
+      passed on `ubuntu-latest` (designer `persian-digits.spec.ts:59, 99, 121`; runtime
+      `persian-digits.spec.ts:128, 148, 230`). Designer 286 passed; runtime 272 passed + 1 flaky,
+      `modal-frame-chrome.spec.ts:173` (a modal chip's colour, unrelated), green on its retry.
+- [x] 7.3 Installer — run for `27542771`, COMPLETED `success`, both jobs RUN and `success`
+      (`Installers (Windows)`, `Installer smoke (clean Windows)`):
+      https://github.com/yasermostafaee/cg/actions/runs/36275176165

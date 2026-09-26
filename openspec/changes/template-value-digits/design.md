@@ -32,6 +32,12 @@ in-process bridge and the `@cg/amcp-mock` fake CasparCG (the bytes read back wit
 | `Tahoma`                       | Tahoma ×10    | Tahoma ×5                                 | Tahoma           |
 | `Georgia` (no Persian digits)  | Vazirmatn ×10 | **digits Vazirmatn ×4, colon Georgia ×1** | Vazirmatn        |
 
+CG Control's Inspector field (the chrome stack, `'Vazirmatn Arabic'` leading — `B-263`), measured
+after the change the same way: `۱۲۳۴۵۶۷۸۹۰` and `١٢٣٤٥٦٧٨٩٠` Vazirmatn ×10; `1234567890` Segoe UI
+×10; `ساعت ۱۲:۳۰` Segoe UI ×2 (the space and the colon) + Vazirmatn ×8 — the same colon seam as a
+Latin-only face on air. CG Control's PVW renders the template's own exported page, so it draws
+exactly what the on-air rows above draw.
+
 No face ever drew a box. **The fallback is Vazirmatn**, which every element's stack names second
 (`scene-builder.ts` — `${family}, Vazirmatn, "Noto Sans Arabic", …`) and which the single-file
 export inlines, so it is present on a CasparCG host with no network. All the DIGITS of one number
