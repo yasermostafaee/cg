@@ -96,3 +96,10 @@
       flight are not `ON AIR NOW` — red first 4/4 against the old badge; control: an acknowledged
       take is); e2e `look-inputs.spec.ts` (a refused take does not claim air for its look; control: a
       take that lands does).
+
+## 7. E — CI actions on Node 24 (`P-055`)
+
+- [x] 7.1 `checkout`@v7, `setup-node`@v7, `upload-artifact`@v7, `download-artifact`@v8, `pnpm/action-setup`@v6,
+      `cache` and `cache/restore`@v6, `paths-filter`@v4 — in `pr.yml`, `desktop.yml` and `b078-soak.yml`
+      (31 references); each confirmed `node24` from its own `action.yml` at the release tag.
+- [ ] 7.2 The next CI run shows no Node 20 warning — its URL recorded here.

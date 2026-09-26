@@ -199,3 +199,17 @@ holdsSeats)` in `@cg/shared-schema` beside `isOnAirStatus`; the bridge's `#ownsL
   server acknowledged (`playing`, no longer pending) — named once, and the badge and the section's
   "actually on air" notes ask it. An error, an unresolved take, an unverifiable link or a take in
   flight is not said to be on air.
+
+## §9 E — CI actions on Node 24
+
+Each action's latest release, and the runtime its own `action.yml` declares at that tag, read from the
+action's repository (not from memory): `actions/checkout` v7.0.1, `actions/setup-node` v7.0.0,
+`actions/upload-artifact` v7.0.1, `actions/download-artifact` v8.0.1, `pnpm/action-setup` v6.1.0 — the
+five the warning named — and `actions/cache` (and `cache/restore`) v6.1.0 and `dorny/paths-filter`
+v4.0.3, which ran on Node 20 too and would have kept the warning: all `node24`. `Swatinem/rust-cache@v2`
+already resolves to a `node24` release (v2.9.2), and `dtolnay/rust-toolchain` is a composite action.
+Every crossed major's release notes were read for what could break these workflows: `setup-node` v5
+auto-cached on `packageManager`, and v6 limited that to npm (ours is pnpm, so v7 changes nothing
+here); `download-artifact` v5 changed the path of a download BY ID (ours is by name pattern with
+`merge-multiple`) and v8 errors on a hash mismatch; the runners need 2.327.1, which GitHub-hosted ones
+are. Our own Node stays as `.nvmrc` says (22). **Shared CI config.**

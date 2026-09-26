@@ -3427,3 +3427,13 @@ permission across a restart, so the Designer would ask for the file again on eac
 conditionally: the owner's §7 step 2 measures it on a real install; close this as not needed if
 the permission holds. **Acceptance:** WHEN CG Designer restarts THEN a project opened before
 reopens without a picker.
+
+## [~] P-055 — CI actions ran on Node 20, which GitHub deprecates ⟨priority: medium⟩ — FILED AND CLOSED IN CODE 2026-09-26 by `FIELD-FIXES-01` E
+
+**What.** Every action the workflows use moves to its latest major that runs on Node 24:
+`actions/checkout` v7, `actions/setup-node` v7, `actions/upload-artifact` v7, `actions/download-artifact` v8,
+`pnpm/action-setup` v6, and `actions/cache` v6 and `dorny/paths-filter` v4, which ran on Node 20 too.
+Each was confirmed from the runtime its own `action.yml` declares at the release tag, and every
+crossed major's release notes were read against these workflows. Our own Node stays as `.nvmrc`
+says (22). **Why.** GitHub warned "Node.js 20 is deprecated" on every run. **Acceptance:** WHEN CI
+runs THEN no step warns that it runs on Node 20. **Shared CI config.**

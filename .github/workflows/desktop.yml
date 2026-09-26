@@ -34,17 +34,17 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       # The Node installed here is also the one the CG Control installer ships: the staging step
       # copies this official node.exe as the bridge sidecar (`cg-bridge.exe`).
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -81,7 +81,7 @@ jobs:
           }
 
       - name: Upload CG Control
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CG-Control-installer
           path: |
@@ -91,7 +91,7 @@ jobs:
           retention-days: 30
 
       - name: Upload CG Designer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: CG-Designer-installer
           path: |
@@ -109,7 +109,7 @@ jobs:
     steps:
       # Only the smoke script is needed; nothing is installed or built from the checkout.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 1
           sparse-checkout: apps/runtime/tests/desktop
@@ -118,12 +118,12 @@ jobs:
       # Node runs the smoke SCRIPT only. The installed app runs its own cg-bridge.exe, and the
       # script's health check proves that is the process that answered.
       - name: Set up Node (test harness only)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
       - name: Download the installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: CG-*-installer
           path: installers
@@ -162,7 +162,7 @@ jobs:
 
       - name: Upload the smoke evidence
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installer-smoke
           path: smoke/
