@@ -3621,7 +3621,7 @@ Neither is in `PROMPT.md` §5, and Phase 9 re-dresses the Inspector's chrome any
 - **Number verification:** as for `R-060` — `R-061` returned no headings anywhere, only the
   registry's prose. **Nothing is implemented by this item.**
 
-## [~] R-062 — the bridge is single-channel in exactly three places: five bulk verbs take `z.void()`, there is no channel-discovery call, and the fixed bank is the app's only channel authority ⟨priority: medium⟩ — ALL THREE GAPS DONE: gap 2 2026-09-23 (`CHANNEL-AUTHORITY-01`), gaps 1 and 3 2026-09-24 (`MULTI-CHANNEL-01`, `openspec/changes/multi-channel`)
+## [x] R-062 — the bridge is single-channel in exactly three places: five bulk verbs take `z.void()`, there is no channel-discovery call, and the fixed bank is the app's only channel authority ⟨priority: medium⟩ — ALL THREE GAPS DONE: gap 2 2026-09-23 (`CHANNEL-AUTHORITY-01`), gaps 1 and 3 2026-09-24 (`MULTI-CHANNEL-01`, `openspec/changes/archive/2026-09-26-multi-channel`)
 
 **Filed by `RUNTIME-REDESIGN-01` Phase 7 (2026-09-08), from `design.md` §4 as corrected by owner
 answer A3 — a GAP FILED, not a design.** The earlier finding that _"a second channel's rows cannot
@@ -3633,7 +3633,7 @@ single-channel is exactly this:
 
 **What (the three gaps):**
 
-1. ✅ **DONE 2026-09-24 — `MULTI-CHANNEL-01` §2 B and C (`openspec/changes/multi-channel`).**
+1. ✅ **DONE 2026-09-24 — `MULTI-CHANNEL-01` §2 B and C (`openspec/changes/archive/2026-09-26-multi-channel`).**
    ~~Five verbs take `z.void()` — `stack.removeAll`, `clearAll`, `stopAll`, `snapshot` and
    `silenceAllLivePlates` — and therefore mean "everything the bridge knows about".~~ The four
    housekeeping verbs take an OPTIONAL `{ channel }` — a bare call is byte-identical, and with a
@@ -3653,7 +3653,7 @@ single-channel is exactly this:
    which channels exist. The renderer's list today is the union of `fixedLayers.config.channel`
    and `channelSettings.settings[].channel` — and is the one function a discovery call would
    feed."_
-3. ✅ **DONE 2026-09-24 — `MULTI-CHANNEL-01` §2 A (`openspec/changes/multi-channel`).**
+3. ✅ **DONE 2026-09-24 — `MULTI-CHANNEL-01` §2 A (`openspec/changes/archive/2026-09-26-multi-channel`).**
    ~~`fixedLayers` declares ONE bank on ONE channel (`FixedLayerBankSchema.channel`, documented "one
    channel per bank, v1"), and the bank is the app's channel authority.~~ The station declares ONE
    BANK PER CHANNEL (`FixedLayerBanksSchema`; `fixedLayers.banks` / `set-banks` / `banks-changed`,
@@ -3731,7 +3731,7 @@ is done.
 - [x] The bank's cardinality (one bank, one channel) is either kept and stated as the v1 constraint, or
       changed by its own item naming every producer and consumer of `FixedLayerBankSchema` first.
       — **gap 3, changed 2026-09-24 by `MULTI-CHANNEL-01`, which named them first**
-      (`openspec/changes/multi-channel/design.md` §1).
+      (`openspec/changes/archive/2026-09-26-multi-channel/design.md` §1).
 
 - **Cross-refs:** `openspec/changes/runtime-redesign-programme/design.md` §4 (the corrected
   finding, per namespace) and §14 (Phase 7's UI shape); golden rule 10 (a configuration verb is

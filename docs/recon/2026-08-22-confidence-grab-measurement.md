@@ -4,7 +4,7 @@
 **Scope:** MEASUREMENT ONLY — no production code, no fixes, no config changes.
 
 > ⚠ **2026-09-24 — §A is no longer needed for C-016.** C-016 was built from the Playout's own
-> `pgm` feed (owner decision 2026-09-23, `openspec/changes/pgm-return`), not from grabs, so no grab
+> `pgm` feed (owner decision 2026-09-23, `openspec/changes/archive/2026-09-26-pgm-return`), not from grabs, so no grab
 > verb has to be found for it. §A still stands for **C-023**: that feed is per channel, and a live
 > source is not a channel. §B and §C are untouched.
 

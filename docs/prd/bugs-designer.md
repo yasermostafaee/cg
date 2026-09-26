@@ -4059,7 +4059,7 @@ root IS the entry there, so the pointer has nothing to say) rather than to rewri
 "fix" this by making a consumer tolerate it — `DELTA B1` already had to delete one such
 tolerance, and it is what made the defect invisible.
 
-## [x] B-263 — The Designer's chrome renders Persian in Segoe UI, not Vazirmatn ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §2B · FIXED 2026-09-24 by `MULTI-CHANNEL-01` §2 K (`4858c84b`, `openspec/changes/multi-channel`)
+## [x] B-263 — The Designer's chrome renders Persian in Segoe UI, not Vazirmatn ⟨priority: low⟩ — FILED 2026-09-23 by `DESKTOP-APPS-01` §2B · FIXED 2026-09-24 by `MULTI-CHANNEL-01` §2 K (`4858c84b`, `openspec/changes/archive/2026-09-26-multi-channel`)
 
 **Observed:** `apps/designer/src/renderer/index.css` sets the body stack to
 `'Exo 2', Inter, system-ui, …, 'Segoe UI', Vazirmatn`; on Windows `system-ui` has Arabic glyphs, so
@@ -4073,7 +4073,7 @@ the same fault.** `'Vazirmatn Arabic'` — Vazirmatn's own Arabic files, each fa
 inlined into every export) — now leads the three chrome stacks: the Designer's `index.css` body and
 `App.css.ts` page, and the Runtime's `layout.ts` page. Persian comes from it; any other character
 matches none of its faces and falls through as before, so Latin keeps Exo 2 by construction. Every
-`font-family` in both apps was walked (`openspec/changes/multi-channel/design.md` §11). Measured with
+`font-family` in both apps was walked (`openspec/changes/archive/2026-09-26-multi-channel/design.md` §11). Measured with
 CDP `CSS.getPlatformFontsForNode` (`chrome-persian-font.spec.ts` in each app); red with the old
 stacks planted — the Runtime's Persian row name in `Segoe UI Semibold`, the Designer's probe in
 `Segoe UI, Exo 2`.

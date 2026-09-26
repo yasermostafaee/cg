@@ -287,7 +287,7 @@ cited.
 **For an installer at any station, not only the one this was written at.**
 
 > ⚠ **2026-09-24 — C-016 no longer depends on this kit.** It was built from the Playout's own `pgm`
-> feed (`openspec/changes/pgm-return`), not from a grab. The kit still answers **C-023**, whose
+> feed (`openspec/changes/archive/2026-09-26-pgm-return`), not from a grab. The kit still answers **C-023**, whose
 > per-source thumbnail that feed cannot serve (a live source is not a channel).
 
 `C-016` (an operator PGM confidence view) requires that the capture mechanism's **cost on the

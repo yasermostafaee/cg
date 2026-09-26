@@ -587,9 +587,9 @@ can spare a channel; if this plant cannot, the multi-box story needs a different
   encoded — build targets, polyfills, design-doc refusals — is recon owed; raising it is a
   behaviour change that ships silently and belongs on its own session with its own `gate:e2e`.
 
-## [~] C-016 — operator PGM confidence view: the programme return, from the Playout's own `pgm` feed, relayed by the bridge ⟨priority: medium⟩
+## [x] C-016 — operator PGM confidence view: the programme return, from the Playout's own `pgm` feed, relayed by the bridge ⟨priority: medium⟩ — DONE 2026-09-24 (`PGM-RETURN-01`), archived 2026-09-26 (`openspec/changes/archive/2026-09-26-pgm-return`)
 
-**🔴 BUILT 2026-09-24 — `openspec/changes/pgm-return` (`PGM-RETURN-01` v2). Read this block first;
+**🔴 BUILT 2026-09-24 — `openspec/changes/archive/2026-09-26-pgm-return` (`PGM-RETURN-01` v2). Read this block first;
 the text below it is the item's history.** Title until 2026-09-23: _"periodic program-channel
 grabs served over the bridge's HTTP server"_.
 

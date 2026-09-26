@@ -5,7 +5,7 @@
 their core's source and measured on `192.168.21.111`, build 2.8.54), which answers our
 [`CG-CONTROL-REQUEST-PGM-FEED-2026-09-23.md`](CG-CONTROL-REQUEST-PGM-FEED-2026-09-23.md). Where this
 page and theirs disagree, theirs wins. This page records what CG Control does with the feed; the
-code is `tools/caspar-bridge/src/pgm-return.ts`, the change `openspec/changes/pgm-return`.
+code is `tools/caspar-bridge/src/pgm-return.ts`, the change `openspec/changes/archive/2026-09-26-pgm-return`.
 
 ## The port rule
 
