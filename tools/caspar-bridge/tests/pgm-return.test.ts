@@ -378,9 +378,15 @@ describe('the relay — a well-behaved client', () => {
   });
 
   it('dials the RULE port by default — channel 2 on 9251', async () => {
-    const f = await feed({ port: pgmPort(2) });
+    /*
+      ON `127.0.0.2`, not `127.0.0.1`: the rule port is a FIXED port, and a dev station on this
+      host (`pnpm dev:station --fake`) holds `127.0.0.1:9251` with its own fake feed, which failed
+      the gate with EADDRINUSE. The port under test is unchanged — the relay's own rule, 9251, a
+      real listener and a real dial — only the loopback address is one no station binds.
+    */
+    const f = await feed({ port: pgmPort(2), host: '127.0.0.2' });
     const relay = new PgmReturnRelay({
-      resolveTarget: () => Promise.resolve({ address: '127.0.0.1', hostHeader: '127.0.0.1' }),
+      resolveTarget: () => Promise.resolve({ address: '127.0.0.2', hostHeader: '127.0.0.2' }),
       log: () => undefined,
     });
     relays.push(relay);
