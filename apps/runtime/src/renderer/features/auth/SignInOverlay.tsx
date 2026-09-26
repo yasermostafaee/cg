@@ -6,9 +6,17 @@ import { Icon } from '../../ui/Icon.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { IsolatedName } from '../../ui/OperatorNames.js';
 import { useFocusTrap } from '../../ui/focusTrap.js';
+import { useAuthCapabilities } from '../../hooks/useAuthCapabilities.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { PlayoutSignInError } from '../../../platform/playoutSession.js';
-import { signInMessage } from './signInMessages.js';
+import { PlayoutConnection } from '../firstRun/PlayoutConnection.js';
+import {
+  playoutOriginOf,
+  signInBlocker,
+  signInCanWork,
+  type ShownCheckLine,
+} from '../firstRun/firstRunStation.js';
+import { signInMarksField, signInMessage } from './signInMessages.js';
 
 /**
  * 🔴 `R-066` / `C-037` — **THE SIGN-IN, OVER THE LIVE STACK.**
@@ -40,12 +48,22 @@ import { signInMessage } from './signInMessages.js';
  * is the order the screen shows. Neither gate strands the operator: each has its own way
  * through, two seconds apart.
  *
- * ── PERSIAN / RTL ───────────────────────────────────────────────────────────
+ * ── ONE INTERFACE LANGUAGE ──────────────────────────────────────────────────
  *
- * ⚠ The card is `dir="rtl"` and its copy is Persian — the console's first Persian chrome, and
- * scoped to this surface (see `signInMessages.ts` for why). Operator and Playout NAMES go
- * through {@link IsolatedName}, because a name is data whose language we do not control and
- * whose placement beside neutral separators must not be left to the bidi algorithm.
+ * 🔴 `DELTA-MULTI-CHANNEL-01-B` B3 — the card was `dir="rtl"` and Persian (`R-066`'s scoping);
+ * the owner ruled that the interface and every message of ours are English, and Persian appears
+ * only in names from the Playout. Operator and Playout NAMES go through {@link IsolatedName},
+ * because a name is data whose language we do not control and whose placement beside neutral
+ * separators must not be left to the bidi algorithm.
+ *
+ * ── SIGN-IN ONLY WHEN IT CAN WORK ───────────────────────────────────────────
+ *
+ * 🔴 `DELTA-MULTI-CHANNEL-01-B` B2 — the connection check is on the gate: the Playout's address,
+ * CHECK, and ONE line in the check's own words. The fields and the button are enabled only while
+ * that check says a sign-in can work (`signInCanWork`); the check runs once when the gate opens
+ * (the unsigned door allows it, for this station's Playout — B1). A sign-in that finds the Playout
+ * silent runs it again, so the silence is said under the address, never on a field; and only a
+ * wrong username or password marks one.
  *
  * ── WHAT IS NOT ON IT ───────────────────────────────────────────────────────
  *
@@ -117,8 +135,9 @@ const styles = {
     marginBottom: 6,
   },
   field: { marginBottom: 14 },
+  // B3 — a message is ATTENTION, never red (`design.md` §29).
   error: {
-    color: colors.errorText,
+    color: cssVars['--r-caution-text'],
     fontSize: cssVars['--r-text-sm'],
     minHeight: '1.25rem',
     marginTop: 4,
@@ -129,14 +148,27 @@ const styles = {
     borderTop: `1px solid ${colors.border}`,
     background: colors.panelMuted,
   },
+  check: { marginBottom: 16 },
 } as const;
+
+/** B2 — the gate shows ONE line of the check: the one that decides, or the Playout's own when all is well. */
+function decidingLine(lines: readonly ShownCheckLine[]): readonly ShownCheckLine[] {
+  const blocker = signInBlocker(lines);
+  if (blocker !== null) return [blocker];
+  const api = lines.find((l) => l.id === 'api');
+  return api === undefined ? [] : [api];
+}
 
 export function SignInOverlay(): JSX.Element | null {
   const auth = useAuthSession();
+  const capabilities = useAuthCapabilities();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ text: string; marksField: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  // B2 — the check's lines, which decide whether a sign-in can work; and the one re-check.
+  const [lines, setLines] = useState<readonly ShownCheckLine[] | null>(null);
+  const [recheck, setRecheck] = useState(0);
   const cardRef = useRef<HTMLDivElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
 
@@ -156,10 +188,11 @@ export function SignInOverlay(): JSX.Element | null {
 
     ⚠ This attempt's own error WINS. The operator has just pressed the button; answering them
     with a sentence about a token they presented ten seconds ago would be answering the wrong
-    question.
+    question. And neither is a field's fault unless it is a wrong username or password (B2).
   */
   const bridgeReason = auth.kind === 'signed-out' ? auth.reason : undefined;
-  const message = error ?? bridgeReason ?? null;
+  const message =
+    error ?? (bridgeReason !== undefined ? { text: bridgeReason, marksField: false } : null);
 
   /*
     The trap arms and disarms WITH the gate, exactly as `LockOverlay`'s does with the lock:
@@ -174,8 +207,11 @@ export function SignInOverlay(): JSX.Element | null {
 
   if (!gated) return null;
 
+  const canWork = lines !== null && signInCanWork(lines);
+  const locked = busy || !canWork;
+
   const submit = async (): Promise<void> => {
-    if (busy) return;
+    if (busy || !canWork || username === '' || password === '') return;
     setBusy(true);
     setError(null);
     try {
@@ -184,17 +220,18 @@ export function SignInOverlay(): JSX.Element | null {
     } catch (err) {
       /*
         ⚠ The CODE is mapped to this console's own sentence — the contract says the Playout's
-        free-text `message` is never shown verbatim. Anything that is not a
-        `PlayoutSignInError` is a fault this surface cannot name, and it says so rather than
-        naming a mechanism it is guessing at.
+        free-text `message` is never shown verbatim (it goes to the station's log instead). A
+        Playout that did not answer is the CHECK's to say, under the address (B2).
       */
-      setError(signInMessage(err instanceof PlayoutSignInError ? err.code : 'unexpected'));
+      const code = err instanceof PlayoutSignInError ? err.code : 'unexpected';
+      if (code === 'unreachable') setRecheck((n) => n + 1);
+      else setError({ text: signInMessage(code), marksField: signInMarksField(code) });
       setPassword('');
     } finally {
       setBusy(false);
       /*
-        ⚠ **PUT THE CURSOR BACK.** Both fields carry `disabled={busy}`, and a disabled element
-        loses focus to `document.body` in every browser — so after a failed attempt the retry
+        ⚠ **PUT THE CURSOR BACK.** Both fields carry `disabled`, and a disabled element loses
+        focus to `document.body` in every browser — so after a failed attempt the retry
         keystrokes went nowhere and the operator had to reach for the mouse to answer a wrong
         password. The focus trap does not re-run: its dependency is `enabled`, which has not
         changed. Deferred one frame because the field is still disabled in this tick.
@@ -205,12 +242,12 @@ export function SignInOverlay(): JSX.Element | null {
 
   return (
     <div style={styles.scrim} role="dialog" aria-label="Playout sign-in" aria-modal="true">
-      <div ref={cardRef} style={styles.card} dir="rtl">
+      <div ref={cardRef} style={styles.card}>
         <div style={styles.body}>
           <div style={styles.iconBox}>
             <Icon icon={LogIn} size={LOCK_PX.iconGlyph} />
           </div>
-          <h2 style={styles.title}>ورود به کنسول</h2>
+          <h2 style={styles.title}>Sign in</h2>
           {/*
             Two facts and no third. The first line is true in both states — the stack is on
             air and this console is not driving it — and the expired case adds WHOSE session
@@ -218,17 +255,30 @@ export function SignInOverlay(): JSX.Element | null {
             wrong with the station.
           */}
           <p style={styles.sub}>
-            پخش ادامه دارد. تا زمانی که وارد نشوید، هیچ فرمانی از این کنسول اجرا نمی‌شود.
+            The broadcast continues. Until you sign in, this console sends nothing.
             {auth.kind === 'expired' && (
               <>
                 <br />
-                نشستِ <IsolatedName>{auth.name}</IsolatedName> به پایان رسیده است.
+                The session of <IsolatedName>{auth.name}</IsolatedName> has ended.
               </>
             )}
           </p>
 
+          {/* B2 — the check, on the gate: the Playout, CHECK, and the one line that decides. */}
+          <div style={styles.check} data-sign-in-check="">
+            <PlayoutConnection
+              origin={playoutOriginOf(capabilities?.signInUrl ?? null)}
+              startEditing={false}
+              mayChange={false}
+              checkOnOpen
+              onLines={setLines}
+              recheck={recheck}
+              lineFilter={decidingLine}
+            />
+          </div>
+
           <label htmlFor="cg-signin-user" style={styles.label}>
-            نام کاربری
+            Username
           </label>
           <div style={styles.field}>
             <TextInput
@@ -239,8 +289,8 @@ export function SignInOverlay(): JSX.Element | null {
               // The username is a machine account name (`cg-op1`), not prose: LTR is a
               // statement about the CONTENT, which is what the primitive's header asks for.
               dir="ltr"
-              disabled={busy}
-              aria-label="نام کاربری"
+              disabled={locked}
+              aria-label="Username"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void submit();
               }}
@@ -248,7 +298,7 @@ export function SignInOverlay(): JSX.Element | null {
           </div>
 
           <label htmlFor="cg-signin-pass" style={styles.label}>
-            گذرواژه
+            Password
           </label>
           <div style={styles.field}>
             <TextInput
@@ -258,10 +308,11 @@ export function SignInOverlay(): JSX.Element | null {
               onChange={setPassword}
               autoComplete="current-password"
               dir="ltr"
-              disabled={busy}
+              disabled={locked}
               ref={passwordRef}
-              invalid={message !== null}
-              aria-label="گذرواژه"
+              // B2 — only a wrong username or password marks the field.
+              invalid={message?.marksField === true}
+              aria-label="Password"
               aria-describedby="cg-signin-error"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void submit();
@@ -276,18 +327,18 @@ export function SignInOverlay(): JSX.Element | null {
             does not jump under the pointer as the message arrives.
           */}
           <div id="cg-signin-error" style={styles.error} role="status">
-            {message}
+            {message?.text}
           </div>
         </div>
-        {/* ONE control. No ✕, no Cancel — there is nothing behind this to go back to. */}
+        {/* The one way through. No ✕, no Cancel — there is nothing behind this to go back to. */}
         <div style={styles.foot}>
           <Button
             variant="primary"
             className="cg-gate-submit"
-            disabled={busy || username === '' || password === ''}
+            disabled={locked || username === '' || password === ''}
             onClick={() => void submit()}
           >
-            {busy ? 'در حال ورود…' : 'ورود'}
+            {busy ? 'Signing in…' : 'Sign in'}
           </Button>
         </div>
       </div>

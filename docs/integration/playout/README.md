@@ -160,7 +160,10 @@ the build to name in the recon record**. apasai-core, which is what `C-040` actu
     the fake Playout serves permissive CORS. Before the joint sign-in run, confirm the port the
     console is actually served on and make sure that exact origin is on their list — the
     symptom otherwise is a sign-in that fails with no HTTP answer at all, which this console
-    reports as "پلی‌اوت پاسخ نمی‌دهد" and reads as the Playout being down.
+    reported as "پلی‌اوت پاسخ نمی‌دهد" and read as the Playout being down. Since
+    `DELTA-MULTI-CHANNEL-01-B` (2026-09-26) the sign-in is offered only once the connection check
+    shows the Playout's keys AND this console's CORS entry pass, so a missing origin now reads as
+    the check's own CORS line, in English, before anybody types a password.
 13. 🔴 **2026-09-23 — `BRIDGE-TRUTH-01` §2 and §3: what changed on OUR side for the joint run.**
     All of it inside our own band; nothing of yours is addressed.
     - **Our clear now resets the layer's mixer.** After a `CLEAR` of a declared bank row that

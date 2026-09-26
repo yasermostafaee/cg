@@ -8,15 +8,19 @@ import { IsolatedName } from '../../ui/OperatorNames.js';
 import { useFocusTrap } from '../../ui/focusTrap.js';
 import { useAuthSession } from '../../hooks/useAuthSession.js';
 import { PlayoutSignInError } from '../../../platform/playoutSession.js';
-import { signInMessage } from '../auth/signInMessages.js';
+import { signInMarksField, signInMessage } from '../auth/signInMessages.js';
+import { ConnectionCheckList } from './ConnectionCheckList.js';
 import { PlayoutConnection } from './PlayoutConnection.js';
 import {
   declareFirstRunChannels,
   groupByHost,
   onAirWarning,
   playoutOriginOf,
+  signInBlocker,
+  signInCanWork,
   writeFirstRunConnection,
   type ChannelChoice,
+  type ShownCheckLine,
 } from './firstRunStation.js';
 
 /**
@@ -87,7 +91,11 @@ const styles = {
   label: { fontSize: cssVars['--r-text-sm'], color: colors.textSecondary, minWidth: 120 },
   fact: { fontSize: cssVars['--r-text-md'] },
   note: { fontSize: cssVars['--r-text-sm'], color: colors.textMuted },
-  error: { fontSize: cssVars['--r-text-sm'], color: colors.errorText, lineHeight: 1.6 },
+  /*
+    `DELTA-MULTI-CHANNEL-01-B` B3 — a message on this screen is ATTENTION, never red (`design.md`
+    §29): red belongs to controls that destroy. The owner met a red line here twice.
+  */
+  error: { fontSize: cssVars['--r-text-sm'], color: cssVars['--r-caution-text'], lineHeight: 1.6 },
   // `DESKTOP-APPS-01-D` d — the on-air warning: the console's caution ink, one line.
   warning: {
     fontSize: cssVars['--r-text-sm'],
@@ -123,6 +131,12 @@ export function FirstRunScreen({
   const [done, setDone] = useState(false);
   // B2 — the AMCP line is judged after the sign-in, and the channels come after that.
   const [amcpJudged, setAmcpJudged] = useState(false);
+  /*
+    `DELTA-MULTI-CHANNEL-01-B` B2 — the check's lines, which decide whether a sign-in can work;
+    and the one re-check a sign-in asks for when it finds the Playout silent.
+  */
+  const [checkLines, setCheckLines] = useState<readonly ShownCheckLine[] | null>(null);
+  const [recheck, setRecheck] = useState(0);
   useFocusTrap(cardRef, !done, { initialFocusSelector: 'input' });
   if (done) return null;
 
@@ -146,9 +160,19 @@ export function FirstRunScreen({
             onJudged={() => {
               setAmcpJudged(true);
             }}
+            // B2 — the sign-in below needs a verdict before anybody types: one check on open.
+            checkOnOpen={phase === 'channel' && auth.kind !== 'signed-in'}
+            onLines={setCheckLines}
+            recheck={recheck}
           />
           {phase === 'channel' && auth.kind !== 'signed-in' && (
-            <SignInStep reason={auth.kind === 'signed-out' ? auth.reason : undefined} />
+            <SignInStep
+              reason={auth.kind === 'signed-out' ? auth.reason : undefined}
+              lines={checkLines}
+              onPlayoutSilent={() => {
+                setRecheck((n) => n + 1);
+              }}
+            />
           )}
           {signedIn && amcpJudged && (
             <ChannelStep
@@ -171,11 +195,17 @@ function PlayoutStep({
   origin,
   judgeNow,
   onJudged,
+  checkOnOpen,
+  onLines,
+  recheck,
 }: {
   phase: SetupPhase;
   origin: string | null;
   judgeNow: boolean;
   onJudged: () => void;
+  checkOnOpen: boolean;
+  onLines: (lines: readonly ShownCheckLine[] | null) => void;
+  recheck: number;
 }): JSX.Element {
   return (
     <section style={styles.step} aria-label="Playout">
@@ -186,6 +216,9 @@ function PlayoutStep({
         mayChange
         judgeNow={judgeNow}
         onJudged={onJudged}
+        checkOnOpen={checkOnOpen}
+        onLines={onLines}
+        recheck={recheck}
       />
     </section>
   );
@@ -193,36 +226,64 @@ function PlayoutStep({
 
 // ── 2 · Sign in with a station-admin account ─────────────────────────────────
 
-function SignInStep({ reason }: { reason: string | undefined }): JSX.Element {
+function SignInStep({
+  reason,
+  lines,
+  onPlayoutSilent,
+}: {
+  reason: string | undefined;
+  /** The connection check's lines, which decide whether a sign-in can work (B2). */
+  lines: readonly ShownCheckLine[] | null;
+  /** B2 — the Playout did not answer the sign-in: the check says so, under the address. */
+  onPlayoutSilent: () => void;
+}): JSX.Element {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<{ text: string; rtl: boolean } | null>(null);
+  const [error, setError] = useState<{ text: string; marksField: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  /*
+    🔴 `DELTA-MULTI-CHANNEL-01-B` B2 — **A SIGN-IN IS OFFERED ONLY WHEN IT CAN WORK.** The owner,
+    with the Playout down, could type and press Sign in, and got his Password field turned red over
+    a Playout that was not answering. The fields and the button are enabled only while the check
+    says a sign-in can work (the one predicate, `signInCanWork`), and while it does not, ONE line
+    says why in the check's own words. Check stays where it is, above.
+  */
+  const canWork = lines !== null && signInCanWork(lines);
+  const blocker = canWork ? null : signInBlocker(lines);
 
   const submit = async (): Promise<void> => {
-    if (busy || username === '' || password === '') return;
+    if (busy || !canWork || username === '' || password === '') return;
     setBusy(true);
     setError(null);
     try {
       await window.cg.auth.signIn(username, password);
     } catch (err) {
-      // The Playout's own refusals keep the sign-in gate's sentences (Persian, right to left).
-      setError({
-        text: signInMessage(err instanceof PlayoutSignInError ? err.code : 'unexpected'),
-        rtl: true,
-      });
+      const code = err instanceof PlayoutSignInError ? err.code : 'unexpected';
+      if (code === 'unreachable') {
+        // B2 — the Playout stopped answering since the check: the CHECK says so, under the
+        // address, in its own words. Never a sentence on a field.
+        onPlayoutSilent();
+      } else {
+        setError({ text: signInMessage(code), marksField: signInMarksField(code) });
+      }
       setPassword('');
     } finally {
       setBusy(false);
     }
   };
   // What the BRIDGE said about the token it was shown — "not set up yet" for an account that
-  // cannot set the station up, "not for this station" for another Playout's.
-  const shown = error ?? (reason !== undefined ? { text: reason, rtl: false } : null);
+  // cannot set the station up, "not for this station" for another Playout's. Never a field's fault.
+  const shown = error ?? (reason !== undefined ? { text: reason, marksField: false } : null);
+  const locked = busy || !canWork;
 
   return (
     <section style={styles.step} aria-label="Sign in">
       <h3 style={styles.stepHead}>Sign in</h3>
+      {blocker !== null && (
+        <div data-sign-in-blocker="">
+          <ConnectionCheckList lines={[blocker]} />
+        </div>
+      )}
       <div style={styles.row}>
         <label htmlFor="cg-first-run-user" style={styles.label}>
           Username
@@ -234,7 +295,7 @@ function SignInStep({ reason }: { reason: string | undefined }): JSX.Element {
             onChange={setUsername}
             autoComplete="username"
             dir="ltr"
-            disabled={busy}
+            disabled={locked}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void submit();
             }}
@@ -253,8 +314,9 @@ function SignInStep({ reason }: { reason: string | undefined }): JSX.Element {
             onChange={setPassword}
             autoComplete="current-password"
             dir="ltr"
-            disabled={busy}
-            invalid={shown !== null}
+            disabled={locked}
+            // B2 — only a wrong username or password marks the field.
+            invalid={shown?.marksField === true}
             onKeyDown={(e) => {
               if (e.key === 'Enter') void submit();
             }}
@@ -262,14 +324,14 @@ function SignInStep({ reason }: { reason: string | undefined }): JSX.Element {
         </div>
       </div>
       {shown !== null && (
-        <div style={styles.error} role="status" dir={shown.rtl ? 'rtl' : 'ltr'}>
+        <div style={styles.error} role="status">
           {shown.text}
         </div>
       )}
       <div style={styles.row}>
         <Button
           variant="primary"
-          disabled={busy || username === '' || password === ''}
+          disabled={locked || username === '' || password === ''}
           onClick={() => void submit()}
         >
           {busy ? 'Signing in…' : 'Sign in'}

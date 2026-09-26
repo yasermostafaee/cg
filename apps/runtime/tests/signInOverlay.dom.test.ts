@@ -2,32 +2,37 @@
 import { StrictMode, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { ConnectionCheckResult } from '@cg/shared-ipc';
 import { SignInOverlay } from '../src/renderer/features/auth/SignInOverlay.js';
 import { signInMessage } from '../src/renderer/features/auth/signInMessages.js';
 import { PlayoutSignInError } from '../src/platform/playoutSession.js';
-import type { AuthSessionState } from '../src/shared/runtime-bridge.js';
+import type { AuthCapabilities, AuthSessionState } from '../src/shared/runtime-bridge.js';
+import { fillBridgeStub, setupStub } from './support/authStub.js';
 
 /**
  * 🔴 `R-066` acceptance 1 — **WHEN the bridge advertises `auth: 'playout'` THEN the console
- * shows a sign-in (Persian/RTL, shared primitives, no raw controls) over the live stack; PANIC
- * and every intent are refused underneath until signed in.**
+ * shows a sign-in (shared primitives, no raw controls) over the live stack; PANIC and every
+ * intent are refused underneath until signed in.**
+ *
+ * 🔴 `DELTA-MULTI-CHANNEL-01-B` — and, since the owner's run of 2026-09-26 with the Playout down:
+ *
+ *   B2 — the sign-in is OFFERED ONLY WHEN IT CAN WORK: the connection check is on the gate, the
+ *        fields and the button are enabled only while it says a sign-in can work, and while it
+ *        does not ONE line says why, in the check's words. A Playout that stops answering is said
+ *        by the check, under the address; only a wrong username or password marks a field.
+ *   B3 — ONE INTERFACE LANGUAGE: every word of ours is English; Persian appears only in names.
  *
  * ── WHAT THIS FILE ASSERTS, AND WHAT IT DELIBERATELY DOES NOT ───────────────
  *
  * It asserts what the SURFACE SAYS, over the real lifecycle, on ONE mounted instance. A spec
  * that mounted a fresh component per state would be testing a constructor: every transition
- * this surface actually makes — signed-out → signing in → refused → signed in → expired —
- * happens on a component that is already on screen, holding a password the operator typed, and
- * that is where the defects live.
+ * this surface actually makes happens on a component already on screen, holding a password the
+ * operator typed, and that is where the defects live.
  *
- * ⚠ It does NOT assert that intents are refused. That is the BRIDGE's job and it is pinned in
- * `tools/caspar-bridge/tests/auth-gate.integration.test.ts`, route by route, over the whole
- * table. This overlay is not a second gate — it exists so the console does not PRESENT
- * controls as live when they are not, which is the half a bridge cannot do.
- *
- * ⚠ It does NOT measure geometry. jsdom has no layout (golden rule 12(c)): a box assertion
- * here would pass against a surface of any shape. Placement is the e2e's to measure.
+ * ⚠ It does NOT assert that intents are refused. That is the BRIDGE's job, pinned route by route
+ * in `tools/caspar-bridge/tests/auth-gate.integration.test.ts`. And it does NOT measure geometry:
+ * jsdom has no layout (golden rule 12(c)).
  */
 
 // React's own act() gate — without it every `act` here warns and the flush is not guaranteed.
@@ -46,7 +51,42 @@ afterEach(async () => {
   root = null;
   container?.remove();
   container = null;
+  vi.restoreAllMocks();
 });
+
+const SIGN_IN_URL = 'http://127.0.0.1:8080/api/cg/auth/token';
+const CAPS: AuthCapabilities = {
+  mode: 'playout',
+  signInUrl: SIGN_IN_URL,
+  refreshUrl: 'http://127.0.0.1:8080/api/cg/auth/refresh',
+  contractVersion: '1.1',
+  setupPhase: null,
+};
+
+const line = (
+  id: 'api' | 'cors' | 'amcp',
+  status: 'pass' | 'fail' | 'skip',
+  text: string,
+): ConnectionCheckResult['lines'][number] => ({ id, status, text });
+
+/** The Playout answering, and taking sign-in from this console: a sign-in can work. */
+const PLAYOUT_UP: ConnectionCheckResult = {
+  lines: [
+    line('amcp', 'pass', 'CasparCG on 127.0.0.1 answered VERSION: 2.3.2.'),
+    line('api', 'pass', 'The Playout answers and publishes 1 signing key.'),
+    line('cors', 'pass', 'The Playout accepts sign-in from this console.'),
+  ],
+  localAddress: '127.0.0.1',
+};
+/** The Playout down: its API does not answer, and CORS is not checked. */
+const PLAYOUT_DOWN: ConnectionCheckResult = {
+  lines: [
+    line('amcp', 'fail', '127.0.0.1 refused the connection on port 5250.'),
+    line('api', 'fail', 'No answer from 127.0.0.1 on port 8080.'),
+    line('cors', 'skip', 'Sign-in from this console: not checked — the Playout does not answer.'),
+  ],
+  localAddress: '127.0.0.1',
+};
 
 type Listener = (state: AuthSessionState) => void;
 
@@ -58,19 +98,36 @@ interface Harness {
   readonly calls: { username: string; password: string }[];
   /** What the next `signIn` will do. Default: resolve. */
   setSignInResult(result: Error | null): void;
+  /** What the next connection check answers. */
+  setCheck(result: ConnectionCheckResult): void;
+  readonly checks: ReturnType<typeof vi.fn>;
   type(selector: string, value: string): Promise<void>;
   click(selector: string): Promise<void>;
+  clickButton(label: RegExp): Promise<void>;
   text(): string;
 }
 
-async function mount(initial: AuthSessionState): Promise<Harness> {
+async function flush(): Promise<void> {
+  await act(async () => {
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+  });
+}
+
+async function mount(
+  initial: AuthSessionState,
+  check: ConnectionCheckResult = PLAYOUT_UP,
+): Promise<Harness> {
   const listeners = new Set<Listener>();
   let state = initial;
+  let checkResult = check;
   const calls: { username: string; password: string }[] = [];
   let signInResult: Error | null = null;
+  const checks = vi.fn(() => Promise.resolve(checkResult));
 
-  const stub = {
+  const stub = fillBridgeStub({
     auth: {
+      capabilities: () => (initial.kind === 'off' ? null : CAPS),
+      onCapabilitiesChanged: () => () => undefined,
       state: () => state,
       onStateChanged: (l: Listener) => {
         listeners.add(l);
@@ -80,8 +137,10 @@ async function mount(initial: AuthSessionState): Promise<Harness> {
         calls.push({ username, password });
         return signInResult === null ? Promise.resolve() : Promise.reject(signInResult);
       },
+      signOut: () => Promise.resolve(),
     },
-  };
+    setup: { ...setupStub(), check: checks },
+  });
   (window as unknown as { cg: typeof stub }).cg = stub;
 
   container = document.createElement('div');
@@ -91,6 +150,7 @@ async function mount(initial: AuthSessionState): Promise<Harness> {
   await act(async () => {
     r.render(createElement(StrictMode, null, createElement(SignInOverlay)));
   });
+  await flush();
 
   const el = container;
   const find = (selector: string): HTMLElement => {
@@ -102,14 +162,19 @@ async function mount(initial: AuthSessionState): Promise<Harness> {
   return {
     el,
     calls,
+    checks,
     setSignInResult: (result) => {
       signInResult = result;
+    },
+    setCheck: (result) => {
+      checkResult = result;
     },
     push: async (next) => {
       await act(async () => {
         state = next;
         for (const l of [...listeners]) l(next);
       });
+      await flush();
     },
     type: async (selector, value) => {
       const input = find(selector) as HTMLInputElement;
@@ -129,12 +194,40 @@ async function mount(initial: AuthSessionState): Promise<Harness> {
       await act(async () => {
         node.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
+      await flush();
+    },
+    clickButton: async (label) => {
+      const node = [...el.querySelectorAll('button')].find((b) => label.test(b.textContent ?? ''));
+      if (node === undefined) throw new Error(`no button ${String(label)}`);
+      await act(async () => {
+        node.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      await flush();
     },
     text: () => el.textContent ?? '',
   };
 }
 
 const SIGNED_OUT: AuthSessionState = { kind: 'signed-out' };
+const submitButton = (h: Harness): HTMLButtonElement | null =>
+  h.el.querySelector<HTMLButtonElement>('button.cg-gate-submit');
+const checkButton = (h: Harness): HTMLButtonElement | undefined =>
+  [...h.el.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+    /^Check/.test(b.textContent ?? ''),
+  );
+const field = (h: Harness, id: string): HTMLInputElement | null =>
+  h.el.querySelector<HTMLInputElement>(`#${id}`);
+/** The check's lines as the gate shows them. */
+const shownLines = (h: Harness): { id: string | null; text: string | null }[] =>
+  [...h.el.querySelectorAll('[data-check]')].map((li) => ({
+    id: li.getAttribute('data-check'),
+    text: li.textContent,
+  }));
+
+async function fill(h: Harness): Promise<void> {
+  await h.type('#cg-signin-user', 'cg-op1');
+  await h.type('#cg-signin-pass', 'test-only-not-a-secret');
+}
 
 describe('R-066 §1 — the sign-in appears when the bridge says so, and not otherwise', () => {
   it('🔴 auth OFF renders NOTHING — byte-identical to a console without this change', async () => {
@@ -143,12 +236,6 @@ describe('R-066 §1 — the sign-in appears when the bridge says so, and not oth
   });
 
   it('UNKNOWN renders nothing either — an unanswered handshake is not "you are signed out"', async () => {
-    /*
-      The connect window, before `bridge.capabilities` lands. A sign-in that flashed here on
-      every reload would be a gate reporting its own latency, and `B-153`'s banner refuses the
-      mirror-image mistake one surface over: `null` skew renders nothing because an unanswered
-      handshake is not evidence.
-    */
     const h = await mount({ kind: 'unknown' });
     expect(h.el.innerHTML).toBe('');
   });
@@ -161,8 +248,11 @@ describe('R-066 §1 — the sign-in appears when the bridge says so, and not oth
       'the gate must be a dialog so assistive tech announces it as one',
     ).not.toBeNull();
     expect(dialog?.getAttribute('aria-modal')).toBe('true');
-    // ONE control. A ✕ or a Cancel would be a way past a gate, which is not a gate.
-    expect(h.el.querySelectorAll('button').length).toBe(1);
+    // Two controls and no way past: CHECK (B2) and SIGN IN. A ✕ or a Cancel would be a way out.
+    expect([...h.el.querySelectorAll('button')].map((b) => b.textContent)).toEqual([
+      'Check',
+      'Sign in',
+    ]);
   });
 
   it('SIGNED IN renders nothing — the same instance, after a real transition', async () => {
@@ -184,160 +274,157 @@ describe('R-066 §1 — the sign-in appears when the bridge says so, and not oth
   });
 });
 
-describe('R-066 §1 — Persian, RTL, and the shared primitives', () => {
-  it('🔴 the card is RTL and its copy is Persian', async () => {
+describe('DELTA-MULTI-CHANNEL-01-B B3 — one interface language, and the shared primitives', () => {
+  it('🔴 every word of ours is English — the card is not RTL, and no Arabic-script character is ours', async () => {
     const h = await mount(SIGNED_OUT);
     const card = h.el.querySelector('[role="dialog"] > div');
-    expect(card?.getAttribute('dir'), 'a Persian card must declare its own direction').toBe('rtl');
-    // The heading and the state sentence, by their meaning rather than by a class.
-    expect(h.text()).toContain('ورود به کنسول');
-    expect(h.text()).toContain('پخش ادامه دارد');
-    /*
-      ⚠ The POSITIVE CONTROL for "this is really Persian": at least one Arabic-script codepoint
-      is present. A spec that only compared strings would pass against a file whose Persian had
-      been mangled into mojibake by a bad round trip — which `P-025` records as a real event in
-      this tree.
-    */
-    expect(/[؀-ۿ]/.test(h.text())).toBe(true);
+    expect(card?.getAttribute('dir'), 'the card still declares a Persian direction').toBeNull();
+    expect(h.text()).toContain('Sign in');
+    expect(h.text()).toContain('The broadcast continues.');
+    expect(/[؀-ۿ]/.test(h.text()), 'a Persian word of ours is still on the gate').toBe(false);
+  });
+
+  it('CONTROL — a NAME from the Playout still renders Persian, isolated, beside the English', async () => {
+    const h = await mount(SIGNED_OUT);
+    await h.push({ kind: 'expired', name: 'علی رضایی' });
+    expect(h.text()).toContain('The session of');
+    const bdi = h.el.querySelector('bdi');
+    expect(bdi, 'the name is not isolated').not.toBeNull();
+    expect(bdi?.textContent).toBe('علی رضایی');
+  });
+
+  it('every failure sentence of ours is English, and all seven are different', () => {
+    const codes = [
+      'invalid_credentials',
+      'no_cg_access',
+      'account_locked',
+      'rate_limited',
+      'unreachable',
+      'invalid_refresh_token',
+      'unexpected',
+    ] as const;
+    const sentences = codes.map((c) => signInMessage(c));
+    for (const s of sentences) expect(/[؀-ۿ]/.test(s), s).toBe(false);
+    expect(new Set(sentences).size).toBe(codes.length);
+    // The one with a different remedy NAMES THE PLAYOUT.
+    expect(signInMessage('unreachable')).toBe('The Playout does not answer.');
   });
 
   it('🔴 both fields are the SHARED primitive — `.cg-field`, no locally styled input', async () => {
-    /*
-      `R-066` asks for "shared primitives, no raw controls". `cg/raw-control` refuses a raw
-      `<input>` outside `renderer/ui/` at lint time; this asserts the PROPERTY the rule exists
-      to protect — that the console's skin is actually on the control — which lint cannot see
-      (a local wrapper would satisfy the rule and fail this).
-    */
     const h = await mount(SIGNED_OUT);
-    const inputs = [...h.el.querySelectorAll('input')];
-    expect(inputs.length).toBe(2);
-    for (const input of inputs) {
-      expect(input.classList.contains('cg-field'), `${input.id} is not on the shared skin`).toBe(
-        true,
-      );
-      expect(input.getAttribute('style'), `${input.id} carries a local style`).toBeNull();
+    for (const id of ['cg-signin-user', 'cg-signin-pass']) {
+      const input = field(h, id);
+      expect(input?.classList.contains('cg-field'), `${id} is not on the shared skin`).toBe(true);
+      expect(input?.getAttribute('style'), `${id} carries a local style`).toBeNull();
     }
-    expect(inputs[0]?.type).toBe('text');
-    expect(inputs[1]?.type).toBe('password');
+    expect(field(h, 'cg-signin-pass')?.type).toBe('password');
   });
 
   it('the submit is the shared Button wearing a DECLARED class, not an inline treatment', async () => {
     const h = await mount(SIGNED_OUT);
-    const button = h.el.querySelector('button');
-    expect(button?.className).toContain('cg-gate-submit');
-    expect(button?.getAttribute('style')).toBeNull();
+    expect(submitButton(h)?.getAttribute('style')).toBeNull();
   });
 });
 
-describe('R-066 §1 — the whole lifecycle, on one instance', () => {
-  it('🔴 the action is REFUSED until both fields carry something', async () => {
-    const h = await mount(SIGNED_OUT);
-    const button = h.el.querySelector('button');
-    expect(button?.disabled, 'an empty form must not be submittable').toBe(true);
+describe('DELTA-MULTI-CHANNEL-01-B B2 — a sign-in is offered only when it can work', () => {
+  it('🔴 the Playout DOWN: the fields and Sign in are disabled, ONE line says why in the check’s words, and Check stays available', async () => {
+    const h = await mount(SIGNED_OUT, PLAYOUT_DOWN);
+    // The check ran once, by itself, when the gate opened — StrictMode's second mount included.
+    expect(h.checks).toHaveBeenCalledTimes(1);
+    expect(field(h, 'cg-signin-user')?.disabled).toBe(true);
+    expect(field(h, 'cg-signin-pass')?.disabled).toBe(true);
+    expect(submitButton(h)?.disabled).toBe(true);
+    // ONE line, and it is the check's own: the API line.
+    expect(shownLines(h)).toEqual([{ id: 'api', text: 'No answer from 127.0.0.1 on port 8080.' }]);
+    expect(checkButton(h)?.disabled).toBe(false);
+  });
 
+  it('CONTROL — the Playout UP: the fields and Sign in are enabled once both fields carry something', async () => {
+    const h = await mount(SIGNED_OUT, PLAYOUT_UP);
+    expect(field(h, 'cg-signin-user')?.disabled).toBe(false);
+    expect(field(h, 'cg-signin-pass')?.disabled).toBe(false);
+    expect(submitButton(h)?.disabled, 'an empty form must not be submittable').toBe(true);
     await h.type('#cg-signin-user', 'cg-op1');
-    expect(h.el.querySelector('button')?.disabled, 'a username alone is not a sign-in').toBe(true);
-
+    expect(submitButton(h)?.disabled, 'a username alone is not a sign-in').toBe(true);
     await h.type('#cg-signin-pass', 'whatever');
-    expect(h.el.querySelector('button')?.disabled).toBe(false);
+    expect(submitButton(h)?.disabled).toBe(false);
   });
 
-  it('🔴 pressing it hands the typed pair to the bridge, verbatim', async () => {
+  it('pressing Check with the Playout back makes a sign-in possible — no reload, no retyping', async () => {
+    const h = await mount(SIGNED_OUT, PLAYOUT_DOWN);
+    expect(field(h, 'cg-signin-pass')?.disabled).toBe(true);
+    h.setCheck(PLAYOUT_UP);
+    await h.clickButton(/^Check$/);
+    expect(h.checks).toHaveBeenCalledTimes(2);
+    expect(field(h, 'cg-signin-pass')?.disabled).toBe(false);
+  });
+
+  it('🔴 a wrong password marks the field, in English; the password is cleared and the username kept', async () => {
     const h = await mount(SIGNED_OUT);
-    await h.type('#cg-signin-user', 'cg-op1');
-    await h.type('#cg-signin-pass', 'test-only-not-a-secret');
-    await h.click('button');
-    expect(h.calls).toEqual([{ username: 'cg-op1', password: 'test-only-not-a-secret' }]);
+    h.setSignInResult(new PlayoutSignInError('invalid_credentials'));
+    await fill(h);
+    await h.click('button.cg-gate-submit');
+    expect(h.text()).toContain('The username or password is wrong.');
+    expect(field(h, 'cg-signin-pass')?.getAttribute('aria-invalid')).toBe('true');
+    expect(field(h, 'cg-signin-pass')?.value).toBe('');
+    expect(field(h, 'cg-signin-user')?.value).toBe('cg-op1');
   });
 
-  it('Enter in either field submits, so the operator never has to reach for the mouse', async () => {
-    const h = await mount(SIGNED_OUT);
-    await h.type('#cg-signin-user', 'cg-op1');
-    await h.type('#cg-signin-pass', 'pw');
-    const pass = h.el.querySelector<HTMLInputElement>('#cg-signin-pass');
-    await act(async () => {
-      pass?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-    });
-    expect(h.calls.length).toBe(1);
-  });
-});
-
-describe('R-066 §1 — every failure has its own sentence, and it is this console"s', () => {
-  /*
-    The contract's four credential codes plus the one that is ours. Driven as a TABLE over ONE
-    mounted instance per case, because each has to be shown on a surface the operator is
-    already looking at — and because a table is how the fifth one stops being forgotten.
-  */
-  const cases = [
-    'invalid_credentials',
-    'no_cg_access',
-    'account_locked',
-    'rate_limited',
-    'unreachable',
-  ] as const;
-
-  for (const code of cases) {
-    it(`${code} → its own sentence, on the same instance, and the password is cleared`, async () => {
+  for (const code of ['no_cg_access', 'account_locked', 'rate_limited'] as const) {
+    it(`${code} → its own sentence, and NO field is marked — the password was not what was wrong`, async () => {
       const h = await mount(SIGNED_OUT);
       h.setSignInResult(new PlayoutSignInError(code));
-      await h.type('#cg-signin-user', 'cg-op1');
-      await h.type('#cg-signin-pass', 'wrong');
-      await h.click('button');
-
-      const expected = signInMessage(code);
-      expect(typeof expected, 'the sentence table resolved to nothing').toBe('string');
-      expect(expected.length, `${code} has no sentence`).toBeGreaterThan(0);
-      expect(h.text(), `${code} did not reach the surface`).toContain(expected);
-
-      // The password is cleared so the next attempt starts clean; the username is NOT, because
-      // retyping a username the operator already got right is friction with no purpose.
-      expect(h.el.querySelector<HTMLInputElement>('#cg-signin-pass')?.value).toBe('');
-      expect(h.el.querySelector<HTMLInputElement>('#cg-signin-user')?.value).toBe('cg-op1');
-      // …and the field says it is wrong where the operator is already looking.
-      expect(h.el.querySelector('#cg-signin-pass')?.getAttribute('aria-invalid')).toBe('true');
+      await fill(h);
+      await h.click('button.cg-gate-submit');
+      expect(h.text()).toContain(signInMessage(code));
+      expect(field(h, 'cg-signin-pass')?.getAttribute('aria-invalid')).not.toBe('true');
     });
   }
 
-  it('the five sentences are all DIFFERENT — a table that collapsed would pass every spec above', async () => {
-    /*
-      🔴 The control for the table. Each spec above asserts "the surface contains
-      `signInMessage(code)`", which is satisfied by a table returning one sentence for
-      everything. This is what makes them mean what they read as.
-    */
-    const sentences = cases.map((c) => signInMessage(c));
-    expect(new Set(sentences).size).toBe(cases.length);
+  it('🔴 the Playout stops answering between the check and Sign in: the CHECK says so, under the address — no field is marked, no sentence under it', async () => {
+    const h = await mount(SIGNED_OUT, PLAYOUT_UP);
+    await fill(h);
+    h.setSignInResult(new PlayoutSignInError('unreachable'));
+    h.setCheck(PLAYOUT_DOWN);
+    await h.click('button.cg-gate-submit');
+    // The check ran again, and its API line is the one line now shown.
+    expect(h.checks).toHaveBeenCalledTimes(2);
+    expect(shownLines(h)).toEqual([{ id: 'api', text: 'No answer from 127.0.0.1 on port 8080.' }]);
+    expect(field(h, 'cg-signin-pass')?.getAttribute('aria-invalid')).not.toBe('true');
+    expect(h.el.querySelector('#cg-signin-error')?.textContent).toBe('');
+    expect(h.text()).not.toContain(signInMessage('unreachable'));
+    expect(field(h, 'cg-signin-pass')?.disabled).toBe(true);
   });
 
-  it('the UNREACHABLE sentence NAMES THE PLAYOUT — it is the one with a different remedy', async () => {
-    expect(signInMessage('unreachable')).toContain('پلی‌اوت');
+  it('pressing Sign in hands the typed pair to the bridge verbatim; Enter submits too', async () => {
+    const h = await mount(SIGNED_OUT);
+    await fill(h);
+    await h.click('button.cg-gate-submit');
+    expect(h.calls).toEqual([{ username: 'cg-op1', password: 'test-only-not-a-secret' }]);
+    await h.type('#cg-signin-pass', 'again');
+    await act(async () => {
+      field(h, 'cg-signin-pass')?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      );
+    });
+    expect(h.calls.length).toBe(2);
   });
 
   it('an error that is not a PlayoutSignInError falls back without naming a mechanism', async () => {
     const h = await mount(SIGNED_OUT);
     h.setSignInResult(new Error('something else entirely'));
-    await h.type('#cg-signin-user', 'u');
-    await h.type('#cg-signin-pass', 'p');
-    await h.click('button');
+    await fill(h);
+    await h.click('button.cg-gate-submit');
     expect(h.text()).toContain(signInMessage('unexpected'));
-    // 🔴 And the raw error NEVER reaches the operator. Naming the wrong mechanism is worse
-    // than naming none, because a wrong name gets acted on.
     expect(h.text()).not.toContain('something else entirely');
   });
 });
 
 describe('R-066 §1 — a token the BRIDGE refused is said out loud, not swallowed', () => {
-  /**
-   * 🔴 **THE SILENT FORM.** A review found this and nothing covered it.
-   *
-   * A token can be refused by the bridge with nobody having pressed anything — on a reload, on
-   * a reconnect. The console caught that refusal and threw the sentence away, so on a bridge
-   * whose `playout.issuer` carries a typo the operator met a form that did nothing: the
-   * credentials are right, the Playout mints a token, the bridge answers "that sign-in is not
-   * for this station", and the card comes back blank. Every retry behaves identically.
-   */
-  it('🔴 the BRIDGE sentence is shown when no attempt was made here', async () => {
+  it('🔴 the BRIDGE sentence is shown when no attempt was made here — and marks no field', async () => {
     const h = await mount({ kind: 'signed-out', reason: 'That sign-in is not for this station.' });
     expect(h.text()).toContain('That sign-in is not for this station.');
+    expect(field(h, 'cg-signin-pass')?.getAttribute('aria-invalid')).not.toBe('true');
   });
 
   it('…and a plain signed-out gate shows NO message — the control for it', async () => {
@@ -348,12 +435,9 @@ describe('R-066 §1 — a token the BRIDGE refused is said out loud, not swallow
   it('THIS attempt beats the carried one — the operator just pressed the button', async () => {
     const h = await mount({ kind: 'signed-out', reason: 'That sign-in has expired.' });
     expect(h.text()).toContain('That sign-in has expired.');
-
     h.setSignInResult(new PlayoutSignInError('invalid_credentials'));
-    await h.type('#cg-signin-user', 'cg-op1');
-    await h.type('#cg-signin-pass', 'wrong');
-    await h.click('button');
-
+    await fill(h);
+    await h.click('button.cg-gate-submit');
     expect(h.text(), 'a stale sentence answered a question nobody asked').not.toContain(
       'That sign-in has expired.',
     );
@@ -364,31 +448,17 @@ describe('R-066 §1 — a token the BRIDGE refused is said out loud, not swallow
 describe('R-066 §1 — an EXPIRED session says whose, and says it here', () => {
   it('🔴 names the operator whose session ended, on the gate they now face', async () => {
     const h = await mount(SIGNED_OUT);
-    // The real transition: a console that WAS signed in and lapsed, not a fresh mount.
     await h.push({ kind: 'expired', name: 'علی رضایی' });
     expect(
       h.el.querySelector('[role="dialog"]'),
       'an expired session is still gated',
     ).not.toBeNull();
     expect(h.text()).toContain('علی رضایی');
-    expect(h.text()).toContain('به پایان رسیده است');
+    expect(h.text()).toContain('has ended');
   });
 
   it('…and a SIGNED-OUT gate does NOT name anybody — the control for the spec above', async () => {
     const h = await mount(SIGNED_OUT);
-    expect(h.text()).not.toContain('به پایان رسیده است');
-  });
-
-  it('the name is bidi-ISOLATED, so Persian beside English chrome is placed by us', async () => {
-    /*
-      Four surfaces learned this separately before it was written down (`B-210`/`B-211`,
-      `B-223`, the template header, `B-232`). A Persian name joined into one text node with
-      English or neutral characters has its placement decided by the bidi algorithm.
-    */
-    const h = await mount(SIGNED_OUT);
-    await h.push({ kind: 'expired', name: 'علی رضایی' });
-    const bdi = h.el.querySelector('bdi');
-    expect(bdi, 'the name is not isolated').not.toBeNull();
-    expect(bdi?.textContent).toBe('علی رضایی');
+    expect(h.text()).not.toContain('has ended');
   });
 });

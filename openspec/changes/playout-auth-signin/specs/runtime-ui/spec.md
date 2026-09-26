@@ -7,9 +7,16 @@
 The console SHALL show a sign-in over the live stack when the bridge advertises that it
 authenticates and this console holds no valid principal.
 
-That sign-in SHALL be Persian, right-to-left, and built from the shared control primitives with no
-raw control and no locally styled one. It SHALL carry a username, a password, ONE action and ONE
-message line, and nothing else — no explanation of how sign-in works and no advice.
+That sign-in SHALL be in English — every word of the console's own, with Persian only in names
+that come from the Playout (`DELTA-MULTI-CHANNEL-01-B` B3) — and built from the shared control
+primitives with no raw control and no locally styled one. It SHALL carry the Playout's address with
+CHECK beside it and ONE line of the connection check, a username, a password, ONE action and ONE
+message line, and nothing else — no explanation of how sign-in works and no advice. The check SHALL
+run once when the sign-in opens, and the username, the password and the action SHALL be enabled
+only while the check says a sign-in can work — the Playout's keys and this console's CORS entry
+both pass; while it does not, the one line SHALL be the check's own line saying why, and CHECK SHALL
+stay available (`DELTA-MULTI-CHANNEL-01-B` B2). Only a wrong username or password SHALL mark a
+field.
 
 The console SHALL post the credentials to the PLAYOUT directly, at the address the bridge
 advertised, so that the bridge never sees a password; it SHALL NOT route them through the bridge
@@ -31,14 +38,22 @@ closing the socket.
 - **WHEN** the bridge reports that it does not authenticate, or has not answered yet **THEN** no
   sign-in is rendered and no surface changes
 - **WHEN** the bridge reports that it authenticates and no principal is held **THEN** a modal
-  sign-in is rendered over the console with exactly one action and no way past it
+  sign-in is rendered over the console with CHECK and one action, and no way past it
+
+#### Scenario: A sign-in is offered only when it can work
+
+- **WHEN** the Playout does not answer **THEN** the fields and the action are disabled and the one
+  line is the check's own, in English **AND WHEN** the Playout answers and takes sign-in from this
+  console **THEN** they are enabled
+- **WHEN** the Playout stops answering between the check and the sign-in **THEN** the check runs
+  again and its line says so, and no field is marked
 
 #### Scenario: Each failure has its own sentence, on the surface the operator is looking at
 
 - **WHEN** the Playout answers `invalid_credentials`, `no_cg_access`, `account_locked` or
-  `rate_limited`, or cannot be reached at all **THEN** the sign-in shows this console's own
-  sentence for that case, the five sentences differ from one another, the unreachable one names
-  the Playout, and the password field is cleared while the username is kept
+  `rate_limited` **THEN** the sign-in shows this console's own English sentence for that case, the
+  sentences differ from one another, only `invalid_credentials` marks the password field, and the
+  password field is cleared while the username is kept
 
 #### Scenario: The token is presented before anything else on every connect
 

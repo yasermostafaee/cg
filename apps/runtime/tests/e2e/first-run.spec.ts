@@ -448,7 +448,7 @@ test('first-run on channel 2: the Layers tab is operable at once, with no reload
     await expect(user).toBeVisible({ timeout: 20_000 });
     await user.fill(FAKE_OPERATOR.username);
     await view.locator('#cg-signin-pass').fill(FAKE_PLAYOUT_PASSWORD);
-    await view.getByRole('button', { name: 'ورود' }).click();
+    await view.getByRole('button', { name: 'Sign in', exact: true }).click();
     await expect(user).toHaveCount(0, { timeout: 20_000 });
     await expect(
       view.getByRole('tablist', { name: 'Channels' }).getByRole('tab').first(),

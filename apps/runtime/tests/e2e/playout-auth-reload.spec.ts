@@ -173,7 +173,7 @@ test('🔴 DELTA B — five RELOADS of the real page write ONE sign-in row', asy
 
   await username.fill(FAKE_OPERATOR.username);
   await page.locator('#cg-signin-pass').fill(FAKE_PLAYOUT_PASSWORD);
-  await page.getByRole('button', { name: 'ورود' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
   // Signed in: the gate lifts and the footer names the operator.
   await expect(username).toHaveCount(0, { timeout: 20_000 });
@@ -229,7 +229,7 @@ test('🔴 DELTA A — a reload is refused NOTHING, and the layer list arrives',
   await expect(username).toBeVisible({ timeout: 20_000 });
   await username.fill(FAKE_OPERATOR.username);
   await page.locator('#cg-signin-pass').fill(FAKE_PLAYOUT_PASSWORD);
-  await page.getByRole('button', { name: 'ورود' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(username).toHaveCount(0, { timeout: 20_000 });
 
   for (let reload = 1; reload <= 5; reload += 1) {

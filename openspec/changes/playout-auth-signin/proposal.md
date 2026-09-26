@@ -36,9 +36,10 @@ This change makes that day. It implements `C-037` in full and the sign-in half o
   missing `issuer` or `jwksUrl` is a boot failure with a sentence naming the key.
 - **`bridge.capabilities` gains** the auth mode, the sign-in and refresh addresses, and the
   contract version — answered to an unauthenticated socket, because it is asked at connect.
-- **A console sign-in** over the live stack (Persian/RTL, shared primitives), the token held per
-  console and presented on every (re)connect, refreshed about ten minutes before expiry, cleared
-  on sign-out; and an identity pill naming the state in the operator's words.
+- **A console sign-in** over the live stack (English since `DELTA-MULTI-CHANNEL-01-B` B3 — it was
+  Persian/RTL; shared primitives; offered only while the connection check says a sign-in can work,
+  B2), the token held per console and presented on every (re)connect, refreshed about ten minutes
+  before expiry, cleared on sign-out; and an identity pill naming the state in the operator's words.
 
 ## What does NOT change
 

@@ -78,17 +78,34 @@ export function groupByHost(
   return [...groups.entries()].map(([host, grouped]) => ({ host, rows: grouped }));
 }
 
+/** The two links a SIGN-IN needs — the Playout's keys, and its CORS list for this console. */
+const SIGN_IN_LINKS: readonly ConnectionCheckLine['id'][] = ['api', 'cors'];
+
 /**
- * May first-run go on to the Playout? The two links a SIGN-IN needs — the Playout's keys and its
- * CORS list — must pass. AMCP and the rest are reported, never gating: they are CasparCG's links,
- * and a station can be set up while an engine firewall is still being opened.
+ * 🔴 **CAN A SIGN-IN WORK?** — the two links a sign-in needs, the Playout's keys and its CORS
+ * list, both pass. AMCP and the rest are reported, never gating: they are CasparCG's links, and a
+ * station can be set up while an engine firewall is still being opened.
+ *
+ * ONE predicate for both doors that ask it (golden rule 6): first-run's CONNECT, and — since
+ * `DELTA-MULTI-CHANNEL-01-B` B2 — every sign-in form, whose fields and button are enabled only
+ * while it holds. (It was `checkAllowsConnect`, named for the first door alone.)
  */
-export function checkAllowsConnect(
-  lines: readonly Pick<ShownCheckLine, 'id' | 'status'>[],
-): boolean {
-  const passed = (id: ConnectionCheckLine['id']): boolean =>
-    lines.some((l) => l.id === id && l.status === 'pass');
-  return passed('api') && passed('cors');
+export function signInCanWork(lines: readonly Pick<ShownCheckLine, 'id' | 'status'>[]): boolean {
+  return SIGN_IN_LINKS.every((id) => lines.some((l) => l.id === id && l.status === 'pass'));
+}
+
+/**
+ * `DELTA-MULTI-CHANNEL-01-B` B2 — the ONE line a disabled sign-in shows, in the check's own
+ * words: the first of the sign-in's links that has not passed, as the check left it (failed, not
+ * checked, or checking). `null` when a sign-in can work — or when nothing has been checked yet.
+ */
+export function signInBlocker(lines: readonly ShownCheckLine[] | null): ShownCheckLine | null {
+  if (lines === null) return null;
+  for (const id of SIGN_IN_LINKS) {
+    const line = lines.find((l) => l.id === id);
+    if (line !== undefined && line.status !== 'pass') return line;
+  }
+  return null;
 }
 
 /**

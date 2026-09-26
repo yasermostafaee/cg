@@ -4,10 +4,10 @@ import { Button } from '../../ui/Button.js';
 import { TextInput } from '../../ui/TextInput.js';
 import { ConnectionCheckList } from './ConnectionCheckList.js';
 import {
-  checkAllowsConnect,
   checkingLines,
   markChecking,
   normalisePlayoutAddress,
+  signInCanWork,
   updateOnly,
   waitingIds,
   type ShownCheckLine,
@@ -29,7 +29,11 @@ const styles = {
   grow: { flex: 1, minWidth: 0 },
   label: { fontSize: cssVars['--r-text-sm'], color: colors.textSecondary, minWidth: 120 },
   fact: { fontSize: cssVars['--r-text-md'] },
-  error: { fontSize: cssVars['--r-text-sm'], color: colors.errorText, lineHeight: 1.6 },
+  /*
+    `DELTA-MULTI-CHANNEL-01-B` B1/B3 — a message is ATTENTION, never red (`design.md` §29): the
+    owner met a red "not signed in" here. Red belongs to controls that destroy.
+  */
+  error: { fontSize: cssVars['--r-text-sm'], color: cssVars['--r-caution-text'], lineHeight: 1.6 },
 } as const;
 
 export function PlayoutConnection({
@@ -38,6 +42,10 @@ export function PlayoutConnection({
   mayChange,
   judgeNow = false,
   onJudged,
+  checkOnOpen = false,
+  onLines,
+  recheck = 0,
+  lineFilter,
 }: {
   /** The configured Playout's origin, or `null` when this station has none. */
   origin: string | null;
@@ -55,6 +63,20 @@ export function PlayoutConnection({
    * waiting, or the bridge did not answer — whatever it found.
    */
   onJudged?: () => void;
+  /**
+   * `DELTA-MULTI-CHANNEL-01-B` B2 — a SIGN-IN FORM's check: run once when this opens with nothing
+   * shown, so the form knows whether a sign-in can work before anybody types into it.
+   */
+  checkOnOpen?: boolean;
+  /** B2 — told whenever the lines on screen change (the sign-in form gates on them). */
+  onLines?: (lines: readonly ShownCheckLine[] | null) => void;
+  /**
+   * B2 — bumped by a sign-in that found the Playout silent: each bump runs the check once, clean,
+   * so the silence is said as the check's own line under the address, never on a field.
+   */
+  recheck?: number;
+  /** B2 — what a compact surface shows of the lines: the sign-in overlay shows the one that decides. */
+  lineFilter?: (lines: readonly ShownCheckLine[]) => readonly ShownCheckLine[];
 }): JSX.Element {
   const canWrite = mayChange && window.cg.setup.canSetPlayoutAddress();
   const [editing, setEditing] = useState(startEditing);
@@ -181,6 +203,26 @@ export function PlayoutConnection({
     else settled(shown);
   }, [judgeNow]);
 
+  // B2 — a sign-in form's own first check, once, when it opens with nothing shown.
+  useEffect(() => {
+    if (checkOnOpen && linesRef.current === null) void check('first');
+  }, []);
+
+  // B2 — the lines, to whoever gates on them.
+  const onLinesRef = useRef(onLines);
+  onLinesRef.current = onLines;
+  useEffect(() => {
+    onLinesRef.current?.(lines);
+  }, [lines]);
+
+  // B2 — a sign-in found the Playout silent: check once more, clean.
+  const lastRecheck = useRef(recheck);
+  useEffect(() => {
+    if (recheck === lastRecheck.current) return;
+    lastRecheck.current = recheck;
+    void check('press');
+  }, [recheck]);
+
   const connect = async (): Promise<void> => {
     if (typed === null) return;
     setBusy('connecting');
@@ -253,8 +295,10 @@ export function PlayoutConnection({
           )}
         </div>
       )}
-      {lines !== null && <ConnectionCheckList lines={lines} />}
-      {editing && lines !== null && checkAllowsConnect(lines) && canWrite && (
+      {lines !== null && (
+        <ConnectionCheckList lines={lineFilter === undefined ? lines : lineFilter(lines)} />
+      )}
+      {editing && lines !== null && signInCanWork(lines) && canWrite && (
         <div style={styles.row}>
           <Button variant="primary" disabled={busy !== null} onClick={() => void connect()}>
             {busy === 'connecting' ? 'Connecting…' : 'Connect'}

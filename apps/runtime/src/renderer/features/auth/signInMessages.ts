@@ -1,7 +1,7 @@
 import type { SignInFailure } from '../../../platform/playoutSession.js';
 
 /**
- * 🔴 `R-066` — **WHAT THE SIGN-IN SAYS WHEN IT DID NOT WORK. Five sentences, and no sixth.**
+ * 🔴 `R-066` — **WHAT THE SIGN-IN SAYS WHEN IT DID NOT WORK. Seven sentences, and no eighth.**
  *
  * ── WHY THE CONSOLE WRITES THEM AND NOT THE PLAYOUT ─────────────────────────
  *
@@ -10,15 +10,16 @@ import type { SignInFailure } from '../../../platform/playoutSession.js';
  * own sentence"_. A sentence written by another team, in another product's voice, rendered
  * unread onto a gallery console at 21:00 is exactly the surface text this repo refuses; and a
  * code shown raw is worse, because `no_cg_access` tells the one person who cannot fix it
- * nothing they can act on.
+ * nothing they can act on. The Playout's own answer is kept for the RECORD instead — the
+ * bridge's log, `playoutSession.ts`'s `detail`.
  *
- * ── WHY THEY ARE IN PERSIAN ─────────────────────────────────────────────────
+ * ── WHY THEY ARE IN ENGLISH ─────────────────────────────────────────────────
  *
- * ⚠ This is the console's FIRST Persian chrome — every other surface is English and the
- * Persian in the tree is operator DATA (row names, template names) and comments quoting the
- * owner. It is deliberate and it is scoped to this surface: the sign-in is the one screen an
- * operator meets before they have done anything, in their own language, and `R-066` asks for
- * it in as many words. Nothing else in the console is touched.
+ * 🔴 `DELTA-MULTI-CHANNEL-01-B` B3 — **ONE INTERFACE LANGUAGE.** `R-066` made these the console's
+ * first Persian chrome; the owner, 2026-09-26, met "پلی‌اوت پاسخ نمی‌دهد." under a Password field
+ * on an English first-run screen and ruled: the interface and every message of ours are English,
+ * and Persian appears only in names that come from the Playout. So these are English, in the
+ * house grammar (`design.md` §29: a message is attention, never red).
  *
  * ── WHAT IS NOT HERE ────────────────────────────────────────────────────────
  *
@@ -29,30 +30,31 @@ import type { SignInFailure } from '../../../platform/playoutSession.js';
  */
 const MESSAGES: Readonly<Record<SignInFailure, string>> = {
   /** `401` — the pair did not match. The one an operator can fix by trying again. */
-  invalid_credentials: 'نام کاربری یا گذرواژه درست نیست.',
+  invalid_credentials: 'The username or password is wrong.',
   /**
    * `403` — a real account with no CG grant. Named apart from a wrong password because the
    * remedies are opposite: retyping will never help, and the operator needs to know that
    * rather than trying five more times. (The ADR's `cg-noch` fixture is this case.)
    */
-  no_cg_access: 'این حساب اجازهٔ دسترسی به CG Control را ندارد.',
+  no_cg_access: 'This account has no access to CG Control.',
   /** `423` — locked on the Playout side. */
-  account_locked: 'این حساب قفل شده است.',
+  account_locked: 'This account is locked.',
   /** `429` — too many failed attempts. The remedy is time, so the sentence says time. */
-  rate_limited: 'تلاش‌های ناموفق زیاد بوده است؛ کمی بعد دوباره تلاش کنید.',
+  rate_limited: 'Too many failed attempts. Try again in a few minutes.',
   /**
    * 🔴 No HTTP answer at all — and it NAMES THE PLAYOUT, which is the whole point of keeping
    * it apart from the four above. "Wrong password" and "the Playout is not answering" send
    * the operator to two different places, and a flattened sentence sends half of them to the
-   * wrong one.
+   * wrong one. (`DELTA-MULTI-CHANNEL-01-B` B2: where a connection check is on screen, the check's
+   * own line says this instead, under the address — never under a field.)
    */
-  unreachable: 'پلی‌اوت پاسخ نمی‌دهد.',
+  unreachable: 'The Playout does not answer.',
   /**
    * The refresh path's own `401`. It cannot normally reach the sign-in form — it is raised by
    * a background refresh — and it is mapped rather than left to the fallback so that a console
    * which does surface it says something true instead of "unknown".
    */
-  invalid_refresh_token: 'این نشست دیگر معتبر نیست؛ دوباره وارد شوید.',
+  invalid_refresh_token: 'This session is no longer valid. Sign in again.',
   /**
    * Anything else: a shape the contract does not define, a proxy page, a 500.
    *
@@ -60,10 +62,19 @@ const MESSAGES: Readonly<Record<SignInFailure, string>> = {
    * is worse than naming none, because a wrong name gets acted on — the `errorCodeMessage`
    * lesson, one surface over.
    */
-  unexpected: 'ورود انجام نشد.',
+  unexpected: 'The sign-in did not go through.',
 };
 
 /** The sentence for a failure code. Total by construction — the record is keyed by the union. */
 export function signInMessage(code: SignInFailure): string {
   return MESSAGES[code];
+}
+
+/**
+ * `DELTA-MULTI-CHANNEL-01-B` B2 — **ONLY A WRONG USERNAME OR PASSWORD MARKS A FIELD.** Every
+ * other failure is about the account, the Playout or the attempt, and a red field would send the
+ * operator to retype something that was never wrong.
+ */
+export function signInMarksField(code: SignInFailure): boolean {
+  return code === 'invalid_credentials';
 }

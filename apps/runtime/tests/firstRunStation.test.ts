@@ -10,7 +10,6 @@ import {
   type FixedLayerBank,
 } from '@cg/shared-ipc';
 import {
-  checkAllowsConnect,
   commitFirstRun,
   declareChannelSet,
   declareFirstRunChannels,
@@ -19,6 +18,8 @@ import {
   groupByHost,
   nextChannelSet,
   normalisePlayoutAddress,
+  signInBlocker,
+  signInCanWork,
   type ChannelChoice,
 } from '../src/renderer/features/firstRun/firstRunStation.js';
 import type { RuntimeBridge } from '../src/shared/runtime-bridge.js';
@@ -121,7 +122,7 @@ describe('the channel list, grouped by the host it plays on', () => {
   });
 });
 
-describe('Connect needs the two links a sign-in needs', () => {
+describe('a sign-in can work — the two links it needs (Connect, and every sign-in form)', () => {
   const line = (
     id: ConnectionCheckLine['id'],
     status: ConnectionCheckLine['status'],
@@ -131,13 +132,27 @@ describe('Connect needs the two links a sign-in needs', () => {
     text: id,
   });
   it('passes on the keys and CORS, whatever AMCP says', () => {
-    expect(
-      checkAllowsConnect([line('api', 'pass'), line('cors', 'pass'), line('amcp', 'fail')]),
-    ).toBe(true);
+    expect(signInCanWork([line('api', 'pass'), line('cors', 'pass'), line('amcp', 'fail')])).toBe(
+      true,
+    );
   });
   it('refuses when either the keys or CORS fail', () => {
-    expect(checkAllowsConnect([line('api', 'fail'), line('cors', 'pass')])).toBe(false);
-    expect(checkAllowsConnect([line('api', 'pass'), line('cors', 'fail')])).toBe(false);
+    expect(signInCanWork([line('api', 'fail'), line('cors', 'pass')])).toBe(false);
+    expect(signInCanWork([line('api', 'pass'), line('cors', 'fail')])).toBe(false);
+  });
+
+  /*
+    `DELTA-MULTI-CHANNEL-01-B` B2 — while a sign-in cannot work, the form says why in ONE line, the
+    check's own: the first of the two links that has not passed.
+  */
+  it('the blocker is the first sign-in link that has not passed — the API line before CORS', () => {
+    expect(
+      signInBlocker([line('api', 'fail'), line('cors', 'skip'), line('amcp', 'wait')])?.id,
+    ).toBe('api');
+    expect(signInBlocker([line('api', 'pass'), line('cors', 'fail')])?.id).toBe('cors');
+    // Control: nothing blocks a sign-in that can work, and nothing is said before a check ran.
+    expect(signInBlocker([line('api', 'pass'), line('cors', 'pass')])).toBeNull();
+    expect(signInBlocker(null)).toBeNull();
   });
 });
 

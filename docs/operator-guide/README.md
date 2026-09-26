@@ -207,9 +207,12 @@ graphic has no row of its own.
 ## Signing in
 
 Some stations require a sign-in before the console will do anything. On those, a sign-in sits over
-the stack when you open the console: type your Apasai username and password, in Persian, and press
-ورود. Until you do, nothing you press reaches CasparCG — including PANIC — and the console says so
-rather than letting you find out by pressing something.
+the stack when you open the console: the Playout's address with **Check** beside it, then your
+Apasai username and password, and **Sign in**. The fields open only once the check shows the
+Playout can sign you in; until then one line says why, in the check's words — press **Check** again
+when the Playout is back. Only a wrong username or password marks a field. Until you sign in,
+nothing you press reaches CasparCG — including PANIC — and the console says so rather than letting
+you find out by pressing something.
 
 Once you are in, the status bar names you beside the link pill, and the audit log records every
 action under your name instead of the console's label. A session lasts one shift; when it ends the

@@ -157,7 +157,7 @@ async function signIn(page: Page, username: string): Promise<void> {
   await expect(user).toBeVisible({ timeout: 20_000 });
   await user.fill(username);
   await page.locator('#cg-signin-pass').fill(FAKE_PLAYOUT_PASSWORD);
-  await page.getByRole('button', { name: 'ورود' }).click();
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(user).toHaveCount(0, { timeout: 20_000 });
 }
 
