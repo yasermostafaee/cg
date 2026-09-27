@@ -1,5 +1,10 @@
 # template-value-digits — a template value takes digits exactly as the keyboard types them
 
+> **Amended 2026-09-27 by `field-digits` (`FIELD-DIGITS-01`):** a template field now says which digits its value
+> is written in, because a real Windows keyboard types Latin digits whatever its layout. "As typed" below is now
+> the `as-typed` choice (and a text field with no setting); a number field is drawn in its field's digits. The
+> requirements are amended in place; see `design.md`.
+
 Prompt `PERSIAN-DIGITS-01`. Builds on [[R-020]] (archived — the Runtime numeric-input half) and
 [[D-130]] (queued — the Designer numeric-input half). Supersedes the part of both that said a
 template value's number is DISPLAYED in Latin digits.

@@ -32,6 +32,9 @@
 - [x] 3.2 `draftStore.unstageField`.
 - [x] 3.3 Inspector `NumberField`: as-typed display, the shared reader, the one-line refusal and
       `aria-invalid` for an impossible entry, the draft withdrawn for any entry that is not a number.
+      ⚠ The DISPLAY is amended by `field-digits` (2026-09-27): the box is written in the field's
+      `digits` — as typed only while the template schema is unresolved. The reader, the refusal
+      and the staging are unchanged.
 - [x] 3.4 Dom tests — `۱۲۸` shows `۱۲۸` and stages 128; `۱۲a` refuses in one line and stages
       nothing; `۱٬` says nothing. `numericInput.dom.test.ts` "a NUMBER field typed in Persian"
       re-expressed (it pinned the superseded Latin display).
