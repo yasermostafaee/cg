@@ -793,6 +793,25 @@ const CHANNEL_TICK_STALE_MS = 3000;
  */
 const LOOK_MIXER_HOLD_FALLBACK_MS = 40;
 
+/**
+ * 🔴 `LOOK-SWITCH-01` — **A FRESHLY SEATED PLATE RUNS HIDDEN FOR THIS MANY HOLDS BEFORE THE PAGE IS
+ * TOLD**, so its producer has produced its own picture by the reveal.
+ *
+ * MEASURED, not chosen (`design.md` §3 v3, the owner's CasparCG 2.5.0, `--fixture ghab`, 10 runs):
+ * with the reveal one hold after the `PLAY`'s reply, the new box showed no picture of its own for
+ * 2, 2 and 4 fields in 3 runs of 10 — a media clip's first decoded frame arriving after the reveal
+ * (term (b), `B-192`). Four fields is two channel frames; three holds cover it with one to spare.
+ * Counted in the hold's own unit (`#lookMixerHoldMsFor`: one frame of the observed mode, or the
+ * configured `--look-mixer-hold-ms`), so it moves with it. Only a switch that SEATED something waits:
+ * a switch of held plates sends no `PLAY` and lands exactly as it did.
+ */
+const PRE_SEAT_PREROLL_HOLDS = 3;
+
+/** The one sentence for a row taken off air while its switch was in flight — before or after the tell. */
+const ROW_LEFT_AIR_MID_SWITCH =
+  'The row left the air while the switch was in flight — nothing was moved. ' +
+  'Re-issue the look once it is back on air.';
+
 /** The one timer this file sleeps on (`B-174`'s mixer hold). Not cancellable on purpose:
  * the hold is at most a frame or two, far inside every teardown bound, and a cancellation
  * path would be a second way for the fills to go out early. */
@@ -6950,13 +6969,7 @@ export class CasparRuntime {
             (ownedSeats && !this.#ownsLiveSeats(itemId)) ||
             (heldSeats && !this.#liveLayers.has(itemId))
           ) {
-            return {
-              ok: false,
-              errorCode: 'not-live',
-              message:
-                'The row left the air while the switch was in flight — nothing was moved. ' +
-                'Re-issue the look once it is back on air.',
-            };
+            return { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
           }
           return { ok: true };
         },
@@ -7238,9 +7251,38 @@ export class CasparRuntime {
     */
     let preSeated: ReadonlyMap<string, SeatResult> | undefined;
     if (opts.mode === 'switch') {
+      // Read BEFORE the pre-seat: its awaits are a window an emergency verb can land in.
+      const ownedBefore = this.#ownsLiveSeats(itemId);
+      const heldBefore = this.#liveLayers.has(itemId);
       const pre = await this.#preSeatSwitch(itemId, plan);
       if (!pre.ok) return pre.refusal;
       preSeated = pre.seats;
+      /*
+        🔴 THE PREROLL ({@link PRE_SEAT_PREROLL_HOLDS}): a plate this switch seated runs HIDDEN for
+        three holds before the page is told, so its producer has its own picture by the reveal —
+        measured, 3 runs in 10 revealed a media clip before its first frame. A switch that seated
+        nothing waits for nothing.
+      */
+      if ([...pre.seats.values()].some((seat) => seat.outcome === 'landed')) {
+        const preroll = PRE_SEAT_PREROLL_HOLDS * this.#lookMixerHoldMsFor(slot.channel);
+        if (preroll > 0) await sleepMs(preroll);
+      }
+      /*
+        🔴 AND THE ROW MAY HAVE LEFT THE AIR MEANWHILE. `out`, `stopItem` and `clearAll` are
+        un-gated by design (an emergency verb never queues behind what it repairs), and the
+        pre-seat and its preroll are awaits between the plan and the page tell. Before them, that
+        span was synchronous. A row taken off air inside it must not reach the apply, which would
+        reveal the pre-seated plates and register a ledger for a row with no page — `B-161`'s
+        shape. So the same BEFORE → AFTER re-ask `beforeApply` makes after its hold is made here,
+        and what the pre-seat started comes back off.
+      */
+      if (
+        (ownedBefore && !this.#ownsLiveSeats(itemId)) ||
+        (heldBefore && !this.#liveLayers.has(itemId))
+      ) {
+        await this.#undoPreSeat(preSeated);
+        return { ok: false, errorCode: 'not-live', message: ROW_LEFT_AIR_MID_SWITCH };
+      }
     }
     if (opts.beforeApply !== undefined) {
       const gate = await opts.beforeApply();

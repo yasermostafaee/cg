@@ -171,16 +171,19 @@ async function newMock(): Promise<{ mock: MockHandle; oscPort: number; trace: st
   return { mock, oscPort, trace };
 }
 
-async function traceOf(
-  m: MockHandle,
-  trace: string,
-): Promise<{ dir: 'recv' | 'send'; line: string }[]> {
+interface TraceLine {
+  readonly ts: string;
+  readonly dir: 'recv' | 'send';
+  readonly line: string;
+}
+
+async function traceOf(m: MockHandle, trace: string): Promise<TraceLine[]> {
   await m.traceFlush();
   return fs
     .readFileSync(trace, 'utf-8')
     .split('\n')
     .filter((l) => l.length > 0)
-    .map((l) => JSON.parse(l) as { dir: 'recv' | 'send'; line: string });
+    .map((l) => JSON.parse(l) as TraceLine);
 }
 
 interface Rig {
@@ -190,7 +193,7 @@ interface Rig {
   sentSince(from: number): Promise<string[]>;
   mark(): Promise<number>;
   /** The raw trace from `from`: the bridge's lines (`recv`) AND the mock's replies (`send`). */
-  exchangeSince(from: number): Promise<{ dir: 'recv' | 'send'; line: string }[]>;
+  exchangeSince(from: number): Promise<TraceLine[]>;
 }
 
 async function boot(
@@ -198,6 +201,8 @@ async function boot(
     readonly bank?: FixedLayerBank;
     readonly catalog?: SourceCatalog;
     readonly fixedSlots?: readonly { channel: number; layer: number }[];
+    /** The look-switch hold; 0 (the default here) keeps the order and skips the sleeps. */
+    readonly holdMs?: number;
   } = {},
 ): Promise<Rig> {
   refusals = [];
@@ -218,7 +223,7 @@ async function boot(
       fixedBanks: [bank],
       layerPolicy: DEFAULT_LAYER_POLICY,
       reservedLayers: [],
-      lookMixerHoldMs: 0,
+      lookMixerHoldMs: options.holdMs ?? 0,
       sourceCatalog: options.catalog ?? CATALOG,
       sourceAssignments: ASSIGNMENTS,
     },
@@ -471,6 +476,83 @@ describe('order', () => {
     expect(after.indexOf('MIXER 2-60 FILL 0 0.238542 0.522917 0.522917 DEFER')).toBeLessThan(
       after.indexOf('MIXER 2 COMMIT'),
     );
+  });
+});
+
+// ─────────────────────────────── THE PRE-SEAT'S WINDOW ───────────────────────────────
+
+describe('the pre-seat’s window — the preroll, and a row that leaves the air inside it', () => {
+  it('🔴 a freshly seated plate runs hidden for three holds before the page is told — CONTROL: a switch of held plates tells the page first', async () => {
+    const HOLD = 40;
+    const { r, mark, exchangeSince, sentSince } = await boot({ holdMs: HOLD });
+    refusals = [{ match: /^PLAY 2-\d+ DECKLINK DEVICE 2$/, code: 404 }];
+    await takeOnLookOne(r);
+    refusals = [];
+
+    let from = await mark();
+    expect(await r.setActiveLook('bed-59', 'look-2')).toEqual({ ok: true });
+    const ex = await exchangeSince(from);
+    const playAt = ex.findIndex((e) => e.dir === 'recv' && e.line.startsWith('PLAY 2-61 '));
+    const replyAt = ex.findIndex(
+      (e, i) => i > playAt && e.dir === 'send' && /^\d{3} PLAY\b/.test(e.line),
+    );
+    const tellAt = ex.findIndex((e) => e.dir === 'recv' && e.line.startsWith('CG 2-59 UPDATE'));
+    const ms = (i: number): number => Date.parse(ex[i]?.ts ?? '');
+    expect(replyAt).toBeGreaterThan(playAt);
+    expect(tellAt).toBeGreaterThan(replyAt);
+    // Three holds, less a few ms of timer and clock granularity.
+    expect(
+      ms(tellAt) - ms(replyAt),
+      'the plate ran hidden before the page was told',
+    ).toBeGreaterThanOrEqual(3 * HOLD - 5);
+
+    // CONTROL — back to look-1 and forward again: plate 2 is now HELD, so the switch seats nothing
+    // and its first line is the page tell itself.
+    expect(await r.setActiveLook('bed-59', 'look-1')).toEqual({ ok: true });
+    from = await mark();
+    expect(await r.setActiveLook('bed-59', 'look-2')).toEqual({ ok: true });
+    const held = await sentSince(from);
+    expect(held[0]).toMatch(/^CG 2-59 UPDATE /);
+    expect(held.some((l) => l.startsWith('PLAY '))).toBe(false);
+  });
+
+  it('🔴 a row taken OUT while its pre-seat is in flight: no page UPDATE, nothing revealed, the pre-seat undone', async () => {
+    /*
+      The production hold (40 ms), so the switch prerolls 120 ms after its PLAY is answered. The
+      emergency verb is pressed while that PLAY is in flight; one AMCP connection answers in order,
+      so `out`'s own commands run behind the PLAY and complete inside the preroll — the window this
+      guards. (With no preroll there is no such window: nothing interleaves between the answer and
+      the re-ask.)
+    */
+    const { r, mock, mark, sentSince } = await boot({ holdMs: 40 });
+    refusals = [{ match: /^PLAY 2-\d+ DECKLINK DEVICE 2$/, code: 404 }];
+    await takeOnLookOne(r);
+    refusals = [];
+    // Slow plate 2's PLAY, so the emergency verb is pressed INSIDE the pre-seat.
+    const play = defaultHandlers().get('PLAY');
+    if (play === undefined) throw new Error('no default PLAY');
+    mock.setHandler('PLAY', async (req, ctx) => {
+      if (/DECKLINK DEVICE 2$/.test(req.raw)) await new Promise((res) => setTimeout(res, 150));
+      return play(req, ctx);
+    });
+
+    const from = await mark();
+    const switching = r.setActiveLook('bed-59', 'look-2');
+    await new Promise((res) => setTimeout(res, 50));
+    const out = r.out('bed-59');
+    const verdict = await switching;
+    expect((await out).accepted).toBe(true);
+
+    expect(verdict).toMatchObject({ ok: false, reason: 'not-live' });
+    const lines = await sentSince(from);
+    // The positive control: the pre-seat's PLAY IS on this wire…
+    expect(lines).toContain('PLAY 2-61 DECKLINK DEVICE 2');
+    // …the page was never told, nothing was revealed, and what the pre-seat started came off.
+    expect(lines.some((l) => l.startsWith('CG 2-59 UPDATE'))).toBe(false);
+    expect(lines).not.toContain('MIXER 2-61 OPACITY 1 DEFER');
+    expect(lines).toContain('CLEAR 2-61');
+    expect(layerOf(mock, 61)?.producer ?? 'empty').toBe('empty');
+    expect(r.liveLayers().has('bed-59'), 'no ledger resurrected for a row off air').toBe(false);
   });
 });
 
